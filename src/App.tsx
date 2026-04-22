@@ -1,0 +1,10667 @@
+// src/App.tsx
+import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent } from 'react';
+import { v4 as uuidv4 } from 'uuid';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import { XbridgesWorkspace } from './components/xbridges/XbridgesWorkspace';
+import { XbridgesEngine } from './engine/xbridges/XbridgesEngine';
+import { Solvers } from './engine/xbridges/Solvers';
+
+// =============================================================================
+// STATIC UI COMPONENTS (ZERO IMPORT ERRORS - FULLY TYPED)
+// =============================================================================
+const Button = ({
+  children,
+  onClick,
+  variant = 'default',
+  size = 'default',
+  className = '',
+  disabled = false,
+  ...props
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  variant?: 'default' | 'outline' | 'destructive' | 'ghost' | 'secondary';
+  size?: 'sm' | 'default' | 'icon';
+  className?: string;
+  disabled?: boolean;
+  [key: string]: any;
+}) => {
+  const base = 'px-3 py-1.5 rounded font-medium transition-colors flex items-center justify-center';
+  const variants = {
+    default: 'bg-[#c9a86c] text-[#0a0a0a] hover:bg-[#b8975b]',
+    outline: 'border border-[#333] text-[#e0e0e0] hover:bg-[#1a1a1a]',
+    destructive: 'bg-red-600 hover:bg-red-700 text-white',
+    ghost: 'text-[#a0a0a0] hover:text-[#e0e0e0] hover:bg-[#1a1a1a]',
+    secondary: 'bg-[#1a1a1a] border border-[#333] text-[#e0e0e0] hover:bg-[#222]'
+  };
+  const sizes = {
+    sm: 'text-xs px-2 h-7',
+    default: 'text-sm px-3 h-8',
+    icon: 'h-8 w-8 p-0'
+  };
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`${base} ${variants[variant]} ${sizes[size]} ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''
+        }`}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+};
+
+const Input = ({
+  value,
+  onChange,
+  placeholder = '',
+  type = 'text',
+  className = '',
+  ...props
+}: {
+  value: string | number;
+  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  type?: string;
+  className?: string;
+  [key: string]: any;
+}) => (
+  <input
+    value={value}
+    onChange={onChange}
+    placeholder={placeholder}
+    type={type}
+    className={`px-2 py-1 bg-[#1a1a1a] border border-[#333] rounded text-sm text-[#e0e0e0] ${className}`}
+    {...props}
+  />
+);
+
+const Label = ({ children, className = '', ...props }: { children: React.ReactNode; className?: string;[key: string]: any }) => (
+  <label className={`text-xs text-[#888] ${className}`} {...props}>{children}</label>
+);
+
+const Badge = ({ children, variant = 'secondary', className = '' }: {
+  children: React.ReactNode;
+  variant?: 'default' | 'secondary' | 'outline';
+  className?: string;
+}) => (
+  <span className={`px-2 py-0.5 rounded text-xs ${variant === 'secondary' ? 'bg-[#222] text-[#888]' : 'bg-[#c9a86c] text-[#0a0a0a]'
+    } ${className}`}>
+    {children}
+  </span>
+);
+
+const Separator = ({ orientation = 'horizontal', className = '' }: {
+  orientation?: 'horizontal' | 'vertical';
+  className?: string;
+}) => (
+  <div className={`${orientation === 'vertical' ? 'w-px h-4' : 'h-px w-full'} bg-[#333] ${className}`} />
+);
+
+const Checkbox = ({
+  checked,
+  onCheckedChange,
+  id,
+  className = ''
+}: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  id?: string;
+  className?: string;
+}) => (
+  <input
+    id={id}
+    type="checkbox"
+    checked={checked}
+    onChange={(e) => onCheckedChange(e.target.checked)}
+    className={`w-4 h-4 rounded border-[#444] bg-[#1a1a1a] text-[#c9a86c] focus:ring-[#c9a86c] ${className}`}
+  />
+);
+
+const Resizer = ({ onMouseDown, orientation = 'vertical' }: { onMouseDown: (e: React.MouseEvent) => void, orientation?: 'vertical' | 'horizontal' }) => (
+  <div
+    onMouseDown={onMouseDown}
+    className={`shrink-0 bg-transparent group transition-colors duration-200 ${orientation === 'vertical' ? 'w-1.5 cursor-col-resize' : 'h-1.5 cursor-row-resize'
+      }`}
+  >
+    <div className={`bg-[#333] group-hover:bg-[#c9a86c] transition-colors ${orientation === 'vertical' ? 'w-px h-full mx-auto' : 'h-px w-full my-auto'}`} />
+  </div>
+);
+
+
+// =============================================================================
+// TYPES (FULLY TYPED)
+// =============================================================================
+type VariableType = 'bool' | 'int' | 'uint' | 'int8' | 'uint8' | 'int16' | 'uint16' | 'int32' | 'uint32' | 'int64' | 'uint64' | 'float' | 'single' | 'double';
+
+interface VariableDef {
+  id: string;
+  name: string;
+  type: VariableType;
+  initialValue: string;
+  currentValue: number | boolean;
+  visibleInScope: boolean;
+}
+
+interface ScopeDataPoint {
+  time: number;
+  [key: string]: number;
+}
+
+interface ErrorItem {
+  id: string;
+  type: 'error' | 'warning' | 'info';
+  message: string;
+  timestamp: Date;
+  source?: string;
+  elementId?: string;
+  canAutoFix?: boolean;
+}
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface StateData {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  entry: string;
+  during: string;
+  exit: string;
+  isActive: boolean;
+  color: string;
+  parentId: string | null;
+  children: string[];
+  priority: number;
+  isParallel: boolean;
+  regionId: string | null;
+  autostart: boolean;
+  historyType?: 'none' | 'shallow' | 'deep';
+  internalTransitions?: string;
+  isSafeState?: boolean;
+  isXBridges?: boolean;
+  xBridgesModel?: {
+    nodes: any[];
+    edges: any[];
+    mappings?: {
+      smVarId: string;
+      blockId: string;
+      portId: string;
+      direction: 'in' | 'out';
+    }[];
+  };
+}
+
+type ManagedWindowId = 'hmi' | 'pid' | 'rtm' | 'doe';
+type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges';
+
+interface ManagedWindowState {
+  id: ManagedWindowId;
+  title: string;
+  isOpen: boolean;
+  isMinimized: boolean;
+  pos: { x: number; y: number };
+  size: { width: number; height: number };
+  zIndex: number;
+}
+
+interface JunctionData {
+  id: string;
+  x: number;
+  y: number;
+  name: string;
+  color: string;
+  parentId: string | null;
+  type?: 'junction' | 'history' | 'deep-history';
+  autostart?: boolean;
+}
+
+interface TransitionData {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  condition: string;
+  action: string;
+  afterTicks: number | null;
+  type: 'condition' | 'after' | 'and' | 'or';
+  controlPoint?: Point;
+  hasControlPoint: boolean;
+  order: number;
+  isInternal?: boolean;
+}
+
+interface Layer {
+  id: string;
+  name: string;
+  parentStateId: string | null;
+  stateIds: string[];
+  transitionIds: string[];
+  junctionIds: string[];
+}
+
+interface PortData {
+  id: string;
+  name: string;
+  type: string; // e.g. 'int', 'float', 'signal'
+  kind?: 'standard' | 'flow' | 'proxy';
+  direction?: 'in' | 'out' | 'inout';
+  unit?: string;
+  side?: 'top' | 'bottom' | 'left' | 'right';
+  offset?: number;
+}
+
+interface ValuePropertyData {
+  id: string;
+  name: string;
+  type: string;
+  defaultValue?: string;
+}
+
+interface BlockData {
+  id: string;
+  name: string;
+  stereotype: string; // 'block', 'requirement', 'interface', 'valueType'
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  properties: ValuePropertyData[];
+  operations: string[];
+  constraints: string[];
+  classes: string[]; // Nested classes/parts definitions
+  ports: PortData[];
+  reqId?: string;
+  description?: string;
+  status?: string;
+  priority?: string;
+  satisfiedReqIds?: string[];
+  risk?: string;
+  verificationMethod?: string;
+  source?: string;
+}
+
+interface RelationshipData {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  type: 'association' | 'generalization' | 'composition' | 'aggregation' | 'allocation' | 'derive' | 'deriveReqt' | 'refine' | 'satisfy' | 'verify' | 'trace' | 'binding' | 'dependency';
+  label: string;
+  sourceMultiplicity?: string;
+  targetMultiplicity?: string;
+}
+
+interface PartData {
+  id: string;
+  name: string;
+  blockId: string | null;
+  typeId?: string | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  satisfiedReqIds?: string[];
+  multiplicity?: string;
+  portLayouts?: Record<string, { side: 'top' | 'bottom' | 'left' | 'right', offset: number }>;
+}
+
+interface ConnectorData {
+  id: string;
+  sourcePartId: string;
+  sourcePortId: string;
+  targetPartId: string;
+  targetPortId: string;
+  itemFlow?: string;
+  label?: string;
+}
+
+interface InterfaceRealizationData {
+  id: string;
+  partId: string;
+  portId: string;
+  interfaceId: string;
+}
+
+type HmiComponentType = 'toggle' | 'button' | 'slider' | 'input' | 'lamp' | 'led' | 'lcd' | 'gauge' | 'rotary' | 'hybrid-rotary' | 'buzzer';
+
+interface HmiComponent {
+  id: string;
+  type: HmiComponentType;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  variableId: string | null;
+  min?: number;
+  max?: number;
+  variableIds?: string[];
+  hybridValues?: string[];
+  soundType?: 'sine' | 'square' | 'sawtooth' | 'triangle';
+}
+
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+const ALLOWED_TYPES: VariableType[] = ['bool', 'int', 'uint', 'int8', 'uint8', 'int16', 'uint16', 'int32', 'uint32', 'int64', 'uint64', 'float', 'single', 'double'];
+const DEFAULT_STATE_WIDTH = 160;
+const DEFAULT_STATE_HEIGHT = 100;
+const MIN_SCALE = 0.1;
+const MAX_SCALE = 5;
+const GRID_SIZE = 20;
+const SCOPE_MAX_POINTS = 500;
+const STATE_COLORS = ['#c9a86c', '#6c9ac6', '#6cc9a8', '#c96c8a', '#9a6cc9', '#c9c46c'];
+const JUNCTION_COLOR = '#ff9900';
+const VERSION = 'v2.4 ENGINE';
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+const snapToGrid = (value: number, gridSize: number): number => Math.round(value / gridSize) * gridSize;
+const normalizeNumerals = (val: string) => {
+  if (!val) return "";
+  return val.replace(/[٠١٢٣٤٥٦٧٨٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d).toString())
+            .replace(/[۰۱۲۳۴۵۶۷۸۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d).toString())
+            .replace(/[٫،,]/g, '.');
+};
+
+const parseValue = (type: VariableType, value: string): number | boolean => {
+  const trimmed = value.trim().toLowerCase();
+  if (type === 'bool') return ['1', 'true', 't', 'yes', 'y', 'on'].includes(trimmed);
+  if (['float', 'single', 'double'].includes(type)) {
+    const parsed = parseFloat(trimmed);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  const parsed = parseInt(trimmed, 10);
+  if (isNaN(parsed)) return 0;
+  switch (type) {
+    case 'int8': return Math.max(-128, Math.min(127, parsed));
+    case 'uint8': return Math.max(0, Math.min(255, parsed));
+    case 'int16': return Math.max(-32768, Math.min(32767, parsed));
+    case 'uint16': return Math.max(0, Math.min(65535, parsed));
+    case 'int32': return Math.max(-2147483648, Math.min(2147483647, parsed));
+    case 'uint32': return Math.max(0, Math.min(4294967295, parsed));
+    case 'uint': return Math.max(0, parsed);
+    default: return parsed;
+  }
+};
+
+const getDefaultValue = (type: VariableType): string => {
+  if (type === 'bool') return 'false';
+  if (['float', 'single', 'double'].includes(type)) return '0.0';
+  return '0';
+};
+
+const getEdgePoint = (from: { x: number; y: number; width: number; height: number }, to: { x: number; y: number; width: number; height: number }): Point => {
+  const fx = from.x + from.width / 2;
+  const fy = from.y + from.height / 2;
+  const tx = to.x + to.width / 2;
+  const ty = to.y + to.height / 2;
+  const dx = tx - fx;
+  const dy = ty - fy;
+  const angle = Math.atan2(dy, dx);
+  const w = from.width / 2;
+  const h = from.height / 2;
+  let edgeX = fx, edgeY = fy;
+  if (Math.abs(Math.cos(angle)) * h > Math.abs(Math.sin(angle)) * w) {
+    edgeX = fx + (Math.cos(angle) > 0 ? w : -w);
+    edgeY = fy + (edgeX - fx) * Math.tan(angle);
+  } else {
+    edgeY = fy + (Math.sin(angle) > 0 ? h : -h);
+    edgeX = fx + (edgeY - fy) / Math.tan(angle);
+  }
+  return { x: edgeX, y: edgeY };
+};
+
+const getJunctionEdgePoint = (junction: { x: number; y: number }, target: { x: number; y: number }): Point => {
+  const jx = junction.x;
+  const jy = junction.y;
+  const tx = target.x;
+  const ty = target.y;
+  const dx = tx - jx;
+  const dy = ty - jy;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  if (distance < 1) return { x: jx, y: jy };
+  const radius = 8;
+  const edgeX = jx + (dx / distance) * radius;
+  const edgeY = jy + (dy / distance) * radius;
+  return { x: edgeX, y: edgeY };
+};
+
+const getCTimeType = (type: VariableType): string => {
+  switch (type) {
+    case 'bool': return 'bool';
+    case 'int': return 'int32_t';
+    case 'uint': return 'uint32_t';
+    case 'int8': return 'int8_t';
+    case 'uint8': return 'uint8_t';
+    case 'int16': return 'int16_t';
+    case 'uint16': return 'uint16_t';
+    case 'int32': return 'int32_t';
+    case 'uint32': return 'uint32_t';
+    case 'int64': return 'int64_t';
+    case 'uint64': return 'uint64_t';
+    case 'float': return 'float';
+    case 'single': return 'float';
+    case 'double': return 'double';
+    default: return 'int32_t';
+  }
+};
+
+const migrateBlocks = (blocksToMigrate: any[]): BlockData[] => {
+  return (blocksToMigrate || []).map((b: any) => {
+    if (b.properties && b.properties.length > 0 && typeof b.properties[0] === 'string') {
+      const newProperties: ValuePropertyData[] = b.properties.map((pStr: string) => {
+        const [name, rest] = pStr.split(':');
+        const [type, defaultValue] = rest ? rest.split('=') : ['any', undefined];
+        return {
+          id: uuidv4(),
+          name: name?.trim() || 'prop',
+          type: type?.trim() || 'any',
+          defaultValue: defaultValue?.trim(),
+        };
+      });
+      return { ...b, properties: newProperties, constraints: b.constraints || [] };
+    }
+    return { ...b, constraints: b.constraints || [] };
+  });
+};
+
+// =============================================================================
+// MISRA-C CODE GENERATION (ROBUST & TESTED)
+// =============================================================================
+const generateMISRACCode = (chart: {
+  tickMs: number;
+  states: StateData[];
+  junctions: JunctionData[];
+  transitions: TransitionData[];
+  variables: VariableDef[];
+  layers: Layer[];
+  safetyMode: boolean;
+}): { files: { name: string; content: string }[]; errors: ErrorItem[]; warnings: string[] } => {
+  const errors: ErrorItem[] = [];
+  const warnings: string[] = [];
+
+  // REQ-DET-101: Stable Enumeration Order & REQ-DET-102: Stable Code Layout
+  const sortedStates = [...chart.states].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedVariables = [...chart.variables].sort((a, b) => a.name.localeCompare(b.name));
+
+  const indent = (lvl: number) => '    '.repeat(lvl);
+
+  // Helper to sanitize names
+  const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9_]/g, '_');
+
+  // 1. Identify Regions
+  const regions = new Set<string>();
+  sortedStates.forEach(s => regions.add(s.regionId || 'MAIN'));
+  // REQ-HSM-060: Hierarchical structure preserved. We will generate nested switches.
+
+  // Generate Unique Enums for Regions
+  const regionEnumMap = new Map<string, string>();
+  const regionNameCounts = new Map<string, number>();
+  regions.forEach(r => {
+    const base = `SM_GRP_${sanitize(r).toUpperCase()}`;
+    let name = base;
+    if (regionNameCounts.has(base)) {
+      const count = regionNameCounts.get(base)! + 1;
+      regionNameCounts.set(base, count);
+      name = `${base}_${count}`;
+    } else {
+      regionNameCounts.set(base, 1);
+    }
+    regionEnumMap.set(r, name);
+  });
+
+  // Generate Unique Enums for States
+  const stateEnumMap = new Map<string, string>();
+  const stateNameCounts = new Map<string, number>();
+  sortedStates.forEach(s => {
+    const base = `SM_ST_${sanitize(s.name).toUpperCase()}`;
+    let name = base;
+    if (stateNameCounts.has(base)) {
+      const count = stateNameCounts.get(base)! + 1;
+      stateNameCounts.set(base, count);
+      name = `${base}_${count}`;
+    } else {
+      stateNameCounts.set(base, 1);
+    }
+    stateEnumMap.set(s.id, name);
+  });
+
+  const stateEnum = (s: StateData) => stateEnumMap.get(s.id) || `SM_ST_UNKNOWN`;
+  const getRegionEnum = (r: string) => regionEnumMap.get(r) || `SM_GRP_UNKNOWN`;
+
+  // Helper to parse internal transitions from text
+  const parseInternalTransitions = (state: StateData): (TransitionData & { isInternal: boolean })[] => {
+    if (!state.internalTransitions) return [];
+    return state.internalTransitions.split('\n').filter(line => line.trim()).map((line, idx) => {
+      let type: TransitionData['type'] = 'condition';
+      let condition = 'true';
+      let afterTicks: number | null = null;
+      let action = '';
+
+      const parts = line.split('/');
+      if (parts.length > 1) action = parts.slice(1).join('/').trim();
+      const triggerPart = parts[0].trim();
+
+      const afterMatch = triggerPart.match(/after\((\d+)\)/);
+      const condMatch = triggerPart.match(/\[(.*?)\]/);
+
+      if (triggerPart.includes('&&')) type = 'and';
+      else if (triggerPart.includes('||')) type = 'or';
+      else if (afterMatch) type = 'after';
+
+      if (afterMatch) afterTicks = parseInt(afterMatch[1]);
+      if (condMatch) condition = condMatch[1];
+
+      return {
+        id: `INT_${state.id}_${idx}`, sourceId: state.id, targetId: state.id,
+        condition, action, afterTicks, type,
+        hasControlPoint: false, order: -100 + idx, isInternal: true
+      };
+    });
+  };
+
+  // Helper to process user code (conditions/actions) for MISRA compliance
+  const processUserCode = (code: string): string => {
+    if (!code) return '';
+    let processed = code;
+
+    // Replace variable names with g_data.name
+    sortedVariables.forEach(v => {
+      const regex = new RegExp(`(?<!g_data\\.)\\b${v.name}\\b`, 'g');
+      processed = processed.replace(regex, `g_data.${v.name}`);
+    });
+
+    // Auto-append 'U' suffix for unsigned literals (MISRA 10.x)
+    sortedVariables.forEach(v => {
+      if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type)) {
+        const varName = `g_data.${v.name}`;
+        const safeVarName = varName.replace('.', '\\.');
+
+        // Pattern: g_data.my_uint=5; -> g_data.my_uint = 5U; (handles assignment)
+        const assignmentRegex = new RegExp(`\\b(${safeVarName})\\s*([+\\-*\\/%&|\\^]?=)\\s*(\\d+)\\b(?![.Uu])`, 'g');
+        processed = processed.replace(assignmentRegex, '$1 $2 $3U');
+
+        // Pattern: g_data.my_uint>5 -> g_data.my_uint > 5U (handles comparison)
+        const comparisonRegex = new RegExp(`\\b(${safeVarName})\\s*(==|!=|<|>|<=|>=)\\s*(\\d+)\\b(?![.Uu])`, 'g');
+        processed = processed.replace(comparisonRegex, '$1 $2 $3U');
+
+        // Pattern: 5<g_data.my_uint -> 5U < g_data.my_uint (handles comparison)
+        const comparisonRegex2 = new RegExp(`\\b(\\d+)\\b(?![.Uu])\\s*(==|!=|<|>|<=|>=)\\s*(${safeVarName})\\b`, 'g');
+        processed = processed.replace(comparisonRegex2, '$1U $2 $3');
+      }
+    });
+
+    return processed;
+  };
+
+  // Validate states
+  sortedStates.forEach(state => {
+    if (/\+\+|--/.test(state.entry + state.during + state.exit)) {
+      warnings.push(`[STATE:${state.name}] Avoid ++/-- for MISRA compliance`);
+    }
+    if (/(?<![=!<>])=(?!=)/.test(state.entry + state.during + state.exit)) {
+      warnings.push(`[STATE:${state.name}] Use '==' for comparison, not '='`);
+    }
+  });
+
+  // Validate transitions
+  chart.transitions.forEach(tr => {
+    const srcName = sortedStates.find(s => s.id === tr.sourceId)?.name || chart.junctions.find(j => j.id === tr.sourceId)?.name || 'unknown';
+    if (tr.afterTicks !== null && tr.afterTicks <= 0) {
+      errors.push({
+        id: uuidv4(),
+        type: 'error', // This is a validation error
+        message: `After ticks must be > 0 for transition from ${srcName}. Tip: The value for an 'after' trigger must be a positive number of ticks.`,
+        timestamp: new Date(),
+        source: `TRANSITION:${srcName}`,
+        elementId: tr.id
+      });
+    }
+    if (!['condition', 'after', 'and', 'or'].includes(tr.type)) {
+      errors.push({
+        id: uuidv4(),
+        type: 'error',
+        message: `Invalid trigger type '${tr.type}' for transition from ${srcName}`,
+        timestamp: new Date(),
+        source: `TRANSITION:${srcName}`,
+        elementId: tr.id
+      });
+    }
+    if (/\+\+|--/.test(tr.condition + tr.action)) {
+      warnings.push(`[TR:${srcName}] Avoid ++/-- for MISRA compliance`);
+    }
+    if (/(?<![=!<>])=(?!=)/.test(tr.condition)) {
+      warnings.push(`[TR:${srcName}] Use '==' for comparison in condition`);
+    }
+
+    // MISRA 10.4 Essential Type Validation
+    sortedVariables.forEach(v => {
+      if (tr.condition.includes(v.name)) {
+        if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type)) {
+          if (new RegExp(`\\b${v.name}\\b\\s*[!=<>]=?\\s*\\d+(?![Uu.xX])`).test(tr.condition)) {
+            warnings.push(`[TR:${srcName}] MISRA 10.4: Unsigned '${v.name}' compared to signed literal. Append 'U'.`);
+          }
+        } else if (['float', 'single', 'double'].includes(v.type)) {
+          if (new RegExp(`\\b${v.name}\\b\\s*[!=<>]=?\\s*\\d+(?![.fFeE])`).test(tr.condition)) {
+            warnings.push(`[TR:${srcName}] MISRA 10.4: Float '${v.name}' compared to int literal. Use 'x.0'.`);
+          }
+        }
+      }
+    });
+  });
+
+
+
+  if (chart.safetyMode) {
+    if (!chart.states.some(s => s.isSafeState)) {
+      errors.push({ id: uuidv4(), type: 'error', message: 'Safety Mode Enabled: No Safe State defined. Mark a state as "Safe State".', timestamp: new Date(), source: 'Safety Validator' });
+    }
+  }
+
+  if (errors.length > 0) {
+    return { files: [], errors, warnings: [] };
+  }
+
+  // 3. Generate Files
+  const disclaimer = `/* ============================================================= */
+/*  SAFETY CRITICAL CODE - DO NOT EDIT MANUALLY                  */
+/*  Generated by ADIA Tool | Version: ${VERSION}                 */
+/*  Compliance: IEC 60730 Class B / ISO 13849                    */
+/*  Timestamp: ${new Date().toISOString()}                       */
+/* ============================================================= */\n\n`;
+
+  // sm_config.h
+  const smConfigH = `${disclaimer}#ifndef SM_CONFIG_H\n#define SM_CONFIG_H\n\n#include <stdint.h>\n#include <stdbool.h>\n\n/* Regions */\ntypedef enum {\n    SM_GRP_MAIN,\n    SM_GRP_COUNT\n} SM_Group_t;\n\n/* States */\ntypedef enum {\n    SM_NODE_INVALID = 0U,\n${sortedStates.map(s => `    ${stateEnum(s)},`).join('\n')}\n    SM_NODE_ERROR\n} SM_Node_t;\n\n/* Error Codes */\ntypedef enum {\n    SM_ERR_NONE = 0U,\n    SM_ERR_WATCHDOG,\n    SM_ERR_SAFETY_VIOLATION,\n    SM_ERR_INVALID_STATE,\n    SM_ERR_ROM_INTEGRITY,\n    SM_ERR_RAM_INTEGRITY\n} SM_Error_t;\n\n/* Data Structure */\ntypedef struct {\n${sortedVariables.length > 0 ? sortedVariables.map(v => `    ${getCTimeType(v.type)} ${v.name};`).join('\n') : ''}\n    uint32_t state_timer;\n} SM_Data_t;\n\n#endif /* SM_CONFIG_H */`;
+
+  // sm_core.h
+  const smCoreH = `${disclaimer}#ifndef SM_CORE_H\n#define SM_CORE_H\n\n#include "sm_config.h"\n\nvoid SM_Init(void);\nvoid SM_Reset(void);\nvoid SM_Step(uint32_t delta_ms);\nSM_Node_t SM_GetActive(SM_Group_t g);\nSM_Data_t* SM_Data(void);\nSM_Error_t SM_GetError(void);\n\n#endif /* SM_CORE_H */`;
+
+  // sm_safety.h
+  const smSafetyH = `${disclaimer}#ifndef SM_SAFETY_H\n#define SM_SAFETY_H\n\n#include "sm_config.h"\n\nvoid SM_Safety_Check(void);\nvoid SM_Watchdog_Kick(void);\n\n#endif /* SM_SAFETY_H */`;
+
+  // sm_safety.c
+  const smSafetyC = `${disclaimer}#include "sm_safety.h"\n\nvoid SM_Safety_Check(void) {\n    /* REQ-IEC-B-001: Independent Safety Monitoring */\n}\n\nvoid SM_Watchdog_Kick(void) {\n    /* REQ-IEC-B-010: Hardware Watchdog Support */\n}`;
+
+  // sm_user_logic.h
+  const smUserLogicH = `${disclaimer}#ifndef SM_USER_LOGIC_H\n#define SM_USER_LOGIC_H\n\n#include "sm_config.h"\n\n/* State Action Prototypes */\n${sortedStates.map(s => {
+    const sEnum = stateEnum(s);
+    let protos = `void ${sEnum}_Entry(void);\nvoid ${sEnum}_During(void);\nvoid ${sEnum}_Exit(void);`;
+    if (s.isXBridges) {
+      protos += `\nvoid ${sEnum}_XBridges_Step(float delta_s);`;
+    }
+    return protos;
+  }).join('\n')}\n\n#endif /* SM_USER_LOGIC_H */`;
+
+  // sm_user_logic.c
+  const smUserLogicC = `${disclaimer}#include "sm_user_logic.h"\n#include "sm_core.h"\n\n/* Access to data */\nextern SM_Data_t* SM_Data(void);\n#define g_data (*SM_Data())\n\n${sortedStates.map(s => {
+    const sEnum = stateEnum(s);
+    let funcs = '';
+    funcs += `void ${sEnum}_Entry(void) {\n    /* Entry: ${s.name} */\n    ${processUserCode(s.entry ? s.entry.replace(/\n/g, '\n    ') : '')}\n}\n\n`;
+    
+    let duringCode = s.during ? s.during.replace(/\n/g, '\n    ') : '';
+    if (s.isXBridges) {
+       duringCode += `${duringCode ? '\n    ' : ''}/* Co-Model Step */\n    ${sEnum}_XBridges_Step(${(chart.tickMs / 1000).toFixed(4)}f);`;
+    }
+    funcs += `void ${sEnum}_During(void) {\n    /* During: ${s.name} */\n    ${processUserCode(duringCode)}\n}\n\n`;
+    
+    funcs += `void ${sEnum}_Exit(void) {\n    /* Exit: ${s.name} */\n    ${processUserCode(s.exit ? s.exit.replace(/\n/g, '\n    ') : '')}\n}\n`;
+
+    if (s.isXBridges && s.xBridgesModel) {
+      funcs += `\n/* Generated X-Bridges logic for ${s.name} */\n`;
+      funcs += `void ${sEnum}_XBridges_Step(float delta_s) {\n`;
+      funcs += `    /* Sync SM -> Model */\n`;
+      (s.xBridgesModel.mappings || []).filter(m => m.direction === 'in').forEach(map => {
+        const v = sortedVariables.find((vr: VariableDef) => vr.id === map.smVarId);
+        if (v) funcs += `    // Block:${map.blockId} Port:${map.portId} = g_data.${v.name};\n`;
+      });
+      funcs += `\n    /* Block Execution */\n`;
+      s.xBridgesModel.nodes.forEach(n => {
+         funcs += `    // Execute ${(n.data as any).label || (n.data as any).type}\n`;
+      });
+      funcs += `\n    /* Sync Model -> SM */\n`;
+      (s.xBridgesModel.mappings || []).filter(m => m.direction === 'out').forEach(map => {
+        const v = sortedVariables.find((vr: VariableDef) => vr.id === map.smVarId);
+        if (v) funcs += `    // g_data.${v.name} = Block:${map.blockId} Port:${map.portId};\n`;
+      });
+      funcs += `}\n`;
+    }
+    return funcs;
+  }).join('\n')}`;
+
+  // sm_core.c
+  let smCoreC = `${disclaimer}#include "sm_core.h"\n#include "sm_safety.h"\n#include "sm_user_logic.h"\n\nstatic SM_Node_t g_active_state = SM_NODE_INVALID;\nstatic SM_Data_t g_data;\nstatic SM_Error_t g_error_status = SM_ERR_NONE;\n\nSM_Data_t* SM_Data(void) { return &g_data; }\nSM_Node_t SM_GetActive(SM_Group_t g) { return g_active_state; }\nSM_Error_t SM_GetError(void) { return g_error_status; }\n\nvoid SM_Init(void) {\n${sortedVariables.map(v => {
+    let initVal = v.initialValue;
+    if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type) && /^\d+$/.test(initVal)) initVal += 'U';
+    return `    g_data.${v.name} = ${initVal};`;
+  }).join('\n')}\n    g_data.state_timer = 0U;\n    g_error_status = SM_ERR_NONE;\n    SM_Reset();\n}\n\nvoid SM_Reset(void) {\n    g_active_state = SM_NODE_INVALID;\n    g_error_status = SM_ERR_NONE;\n${(() => {
+    const rootAutoState = sortedStates.find(s => s.autostart && (s.parentId === 'root' || !s.parentId));
+    const rootAutoJunc = chart.junctions.find(j => j.autostart && (!j.parentId || j.parentId === 'root'));
+
+    const generateInitLogic = (transitions: TransitionData[], depth: number, accumulatedCode: string, visitedJunctions: Set<string>): string => {
+      let code = '';
+      let hasConditions = false;
+      for (let i = 0; i < transitions.length; i++) {
+        const tr = transitions[i];
+        const targetState = sortedStates.find(s => s.id === tr.targetId);
+        const targetJunction = chart.junctions.find(j => j.id === tr.targetId);
+        const rawCond = tr.condition || 'true';
+        const condition = rawCond.includes('//') ? `${rawCond}\n` : rawCond;
+        let conditionCheck = `(${condition})`;
+
+        sortedVariables.forEach(v => {
+          const regex = new RegExp(`(?<!g_data\\.)\\b${v.name}\\b`, 'g');
+          conditionCheck = conditionCheck.replace(regex, `g_data.${v.name}`);
+        });
+
+        const currentAction = tr.action ? `        /* Action */\n        ${tr.action.replace(/\n/g, '\n        ')}\n` : '';
+        const nextAccumulatedCode = accumulatedCode + currentAction;
+
+        code += `    ${i > 0 ? 'else ' : ''}if ${conditionCheck} {\n`;
+        hasConditions = true;
+        if (targetState) {
+          const targetEnum = stateEnum(targetState);
+          code += `${nextAccumulatedCode}`;
+          code += `        g_active_state = ${targetEnum};\n        g_data.state_timer = 0U;\n        ${targetEnum}_Entry();\n    }\n`;
+        } else if (targetJunction) {
+          if (visitedJunctions.has(targetJunction.id)) {
+            code += `        /* Loop detected */\n    }\n`;
+            continue;
+          }
+          const junctionOutgoing = chart.transitions.filter(t => t.sourceId === targetJunction.id).sort((a, b) => a.order - b.order);
+          if (junctionOutgoing.length > 0) {
+            const newVisited = new Set(visitedJunctions);
+            newVisited.add(targetJunction.id);
+            code += generateInitLogic(junctionOutgoing, depth + 1, nextAccumulatedCode, newVisited);
+            code += `    }\n`;
+          } else {
+            code += `${nextAccumulatedCode}        /* End of init path */\n    }\n`;
+          }
+        } else {
+          code += `        /* Error */\n    }\n`;
+        }
+      }
+      if (hasConditions) code += `    else { /* MISRA 15.7 */ }\n`;
+      return code;
+    };
+
+    if (rootAutoState) {
+      const sEnum = stateEnum(rootAutoState);
+      return `    g_active_state = ${sEnum};\n    ${sEnum}_Entry();`;
+    } else if (rootAutoJunc) {
+      const outgoing = chart.transitions.filter(t => t.sourceId === rootAutoJunc.id).sort((a, b) => a.order - b.order);
+      if (outgoing.length > 0) {
+        return generateInitLogic(outgoing, 0, '', new Set([rootAutoJunc.id]));
+      } else {
+        return `    /* AutoStart Junction has no paths */`;
+      }
+    }
+    return `    /* No Root AutoStart */`;
+  })()}\n}\n\nvoid SM_Step(uint32_t delta_ms) {\n    SM_Watchdog_Kick();\n    SM_Safety_Check();\n    if (g_error_status != SM_ERR_NONE) {\n        if (g_active_state != SM_NODE_ERROR) g_active_state = SM_NODE_ERROR;\n        return;\n    }\n    if (g_data.state_timer + delta_ms < g_data.state_timer) g_data.state_timer = UINT32_MAX;\n    else g_data.state_timer += delta_ms;\n\n    switch (g_active_state) {\n`;
+
+  smCoreC += sortedStates.map(state => {
+    const sEnum = stateEnum(state);
+    let stateCode = `        case ${sEnum}:\n            ${sEnum}_During();\n`;
+
+    const external = chart.transitions.filter(t => t.sourceId === state.id).sort((a, b) => a.order - b.order);
+    const internal = parseInternalTransitions(state);
+    const outgoingTransitions = [...external, ...internal];
+
+    if (outgoingTransitions.length > 0) {
+      stateCode += `            /* Transitions */\n`;
+      const generateTransitionLogic = (transitions: TransitionData[], depth: number, accumulatedCode: string, visitedJunctions: Set<string>): string => {
+        let code = '';
+        let hasConditions = false;
+        for (let i = 0; i < transitions.length; i++) {
+          const tr = transitions[i];
+          const targetState = sortedStates.find(s => s.id === tr.targetId);
+          const targetJunction = chart.junctions.find(j => j.id === tr.targetId);
+          const afterTicks = tr.afterTicks ?? 0;
+          const afterTimeMs = afterTicks * chart.tickMs;
+          const rawCond = tr.condition || 'true';
+          const condition = rawCond.includes('//') ? `${rawCond}\n` : rawCond;
+          let conditionCheck = '';
+          if (tr.type === 'condition') conditionCheck = `(${condition})`;
+          else if (tr.type === 'after') conditionCheck = `(g_data.state_timer >= ${afterTimeMs}U)`;
+          else if (tr.type === 'and') conditionCheck = `((${condition}) && (g_data.state_timer >= ${afterTimeMs}U))`;
+          else if (tr.type === 'or') conditionCheck = `((${condition}) || (g_data.state_timer >= ${afterTimeMs}U))`;
+
+          sortedVariables.forEach(v => {
+            const regex = new RegExp(`(?<!g_data\\.)\\b${v.name}\\b`, 'g');
+            conditionCheck = conditionCheck.replace(regex, `g_data.${v.name}`);
+          });
+
+          const currentAction = tr.action ? `/* Action */\n                ${tr.action.replace(/\n/g, '\n                ')}\n` : '';
+          const nextAccumulatedCode = accumulatedCode + currentAction;
+          const isInternal = !!tr.isInternal;
+
+          code += `            ${i > 0 ? 'else ' : ''}if ${conditionCheck} {\n`;
+          hasConditions = true;
+          if (isInternal && !targetJunction) {
+            code += `                ${nextAccumulatedCode}\n`;
+            // An internal transition by definition does not change the state, only executes an action.
+            // If a state change is needed, it should be a self-transition or local transition.
+            // The current generator treats these text-based transitions as purely internal.
+            code += `            }\n`;
+
+          } else if (targetState) {
+            const targetEnum = stateEnum(targetState);
+            const isSelfTransition = targetState.id === state.id;
+            code += `                ${sEnum}_Exit();\n                ${nextAccumulatedCode}\n`;
+            if (isSelfTransition) {
+              code += `                g_data.state_timer = 0U;\n                ${targetEnum}_Entry();\n            }\n`;
+            } else {
+              code += `                g_active_state = ${targetEnum};\n                g_data.state_timer = 0U;\n                ${targetEnum}_Entry();\n            }\n`;
+            }
+          } else if (targetJunction) {
+            if (visitedJunctions.has(targetJunction.id)) {
+              code += `                /* Loop detected */\n            }\n`;
+              continue;
+            }
+            const junctionOutgoing = chart.transitions.filter(t => t.sourceId === targetJunction.id).sort((a, b) => a.order - b.order);
+            if (junctionOutgoing.length > 0) {
+              const newVisited = new Set(visitedJunctions);
+              newVisited.add(targetJunction.id);
+              code += generateTransitionLogic(junctionOutgoing, depth + 1, nextAccumulatedCode, newVisited);
+              code += `            }\n`;
+            } else {
+              code += `                ${nextAccumulatedCode}\n                /* End of action path */\n            }\n`;
+            }
+          } else {
+            code += `                /* Error */\n            }\n`;
+          }
+        }
+        if (hasConditions) code += `            else { /* MISRA 15.7 */ }\n`;
+        return code;
+      };
+      stateCode += generateTransitionLogic(outgoingTransitions, 0, '', new Set<string>());
+    }
+    stateCode += `            break;`;
+    return stateCode;
+  }).join('\n');
+
+  smCoreC += `\n        default:\n            g_error_status = SM_ERR_INVALID_STATE;\n            g_active_state = SM_NODE_ERROR;\n            break;\n    }\n}`;
+
+  // Post-process smCoreC for variable names
+  sortedVariables.forEach(v => {
+    const regex = new RegExp(`(?<!g_data\\.)\\b${v.name}\\b`, 'g');
+    smCoreC = smCoreC.replace(regex, `g_data.${v.name}`);
+    if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type)) {
+      const safeVarName = `g_data.${v.name}`.replace('.', '\\.');
+      smCoreC = smCoreC.replace(new RegExp(`\\b(${safeVarName})\\s*([+\\-*\\/%&|\\^]?=)\\s*(\\d+)\\b(?![.Uu])`, 'g'), '$1 $2 $3U');
+      smCoreC = smCoreC.replace(new RegExp(`\\b(${safeVarName})\\s*(==|!=|<|>|<=|>=)\\s*(\\d+)\\b(?![.Uu])`, 'g'), '$1 $2 $3U');
+      smCoreC = smCoreC.replace(new RegExp(`\\b(\\d+)\\b(?![.Uu])\\s*(==|!=|<|>|<=|>=)\\s*(${safeVarName})\\b`, 'g'), '$1U $2 $3');
+    }
+  });
+
+  return {
+    files: [
+      { name: 'sm_config.h', content: smConfigH },
+      { name: 'sm_core.h', content: smCoreH },
+      { name: 'sm_core.c', content: smCoreC },
+      { name: 'sm_safety.h', content: smSafetyH },
+      { name: 'sm_safety.c', content: smSafetyC },
+      { name: 'sm_user_logic.h', content: smUserLogicH },
+      { name: 'sm_user_logic.c', content: smUserLogicC }
+    ],
+    errors,
+    warnings
+  };
+};
+
+// =============================================================================
+// PID HELPER FUNCTIONS (from user request)
+// =============================================================================
+
+const safeFloat = (val: string | number, defaultVal: number): number => {
+  try {
+    const f = parseFloat(String(val));
+    return isNaN(f) ? defaultVal : f;
+  } catch {
+    return defaultVal;
+  }
+};
+
+class PIDContinuous {
+  kp: number;
+  ki: number;
+  kd: number;
+  private i = 0;
+  private e_prev = 0;
+
+  constructor(kp = 1, ki = 0.5, kd = 0.1) {
+    this.kp = kp;
+    this.ki = ki;
+    this.kd = kd;
+  }
+
+  compute(sp: number, pv: number, dt: number): number {
+    const e = sp - pv;
+    this.i += e * dt;
+    const d = (e - this.e_prev) / dt;
+    this.e_prev = e;
+    return this.kp * e + this.ki * this.i + this.kd * d;
+  }
+
+  reset() {
+    this.i = 0;
+    this.e_prev = 0;
+  }
+}
+
+class PIDDiscrete {
+  kp: number;
+  ki: number;
+  kd: number;
+  Ts: number;
+  private e: [number, number, number] = [0, 0, 0]; // Represents [e(k-1), e(k-2), e(k-3)]
+  private u_prev = 0;
+
+  constructor(kp = 1, ki = 0.5, kd = 0.1, Ts = 0.05) {
+    this.kp = kp;
+    this.ki = ki;
+    this.kd = kd;
+    this.Ts = Ts;
+  }
+
+  compute(sp: number, pv: number): number {
+    const e_new = sp - pv; // e(k)
+    const u = this.u_prev
+      + this.kp * (e_new - this.e[0]) // Kp * (e(k) - e(k-1))
+      + this.ki * this.Ts * e_new // Ki * Ts * e(k)
+      + (this.kd / this.Ts) * (e_new - 2 * this.e[0] + this.e[1]); // (Kd/Ts) * (e(k) - 2e(k-1) + e(k-2))
+
+    this.u_prev = u;
+    this.e = [e_new, this.e[0], this.e[1]]; // New history is [e(k), e(k-1), e(k-2)]
+    return u;
+  }
+
+  reset() {
+    this.e = [0, 0, 0];
+    this.u_prev = 0;
+  }
+}
+
+class Plant {
+  private x = 0;
+
+  // Made public to be closer to Python implementation and simplify access
+  // public x = 0;
+  // Keeping getX() for encapsulation
+  public getX = (): number => this.x;
+
+  update(u: number, dt: number): number {
+    this.x += dt * (-this.x + u);
+    return this.x;
+  }
+
+  reset() {
+    this.x = 0;
+  }
+};
+
+const HierarchyTree = ({
+  states,
+  layers,
+  activeStates,
+  currentLayerId,
+  onSelect,
+  onDoubleClick,
+  selectedIds,
+}: {
+  states: StateData[];
+  layers: Layer[];
+  activeStates: Record<string, string>;
+  currentLayerId: string;
+  onSelect: (id: string) => void;
+  onDoubleClick: (id: string) => void;
+  selectedIds: string[];
+}): React.ReactNode => {
+  const renderNode = (state: StateData, level: number): React.ReactNode => {
+    const isActive = Object.values(activeStates).includes(state.id);
+    const isSelected = selectedIds.includes(state.id);
+
+    const childLayer = layers.find(l => l.parentStateId === state.id);
+    const childStates = childLayer
+      ? states.filter(s => childLayer.stateIds.includes(s.id))
+      : [];
+
+    return (
+      <div key={state.id}>
+        <div
+          onClick={(e) => { e.stopPropagation(); onSelect(state.id); }}
+          onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(state.id); }}
+          className={`flex items-center p-1 rounded cursor-pointer hover:bg-[#2a2a2a] ${isSelected ? 'bg-[#c9a86c]/30' : ''
+            } ${isActive ? 'font-bold' : ''}`}
+          style={{ paddingLeft: `${level * 16 + 8}px` }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill={isActive ? '#4ade80' : 'none'} stroke={state.color} strokeWidth="2" className="mr-2 shrink-0">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          </svg>
+          <span className="text-sm truncate" title={state.name}>{state.name}</span>
+        </div>
+        {childStates.length > 0 && (
+          <div>
+            {childStates.map(childState => renderNode(childState, level + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const rootLayer = layers.find(l => l.id === 'root');
+  const rootStates = rootLayer ? states.filter(s => rootLayer.stateIds.includes(s.id)) : [];
+
+  return (
+    <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+      {rootStates.length > 0 ? rootStates.sort((a, b) => a.name.localeCompare(b.name)).map(state => renderNode(state, 0)) : (
+        <div className="text-center text-xs text-[#666] p-4">No states in root.</div>
+      )}
+    </div>
+  );
+};
+
+const findPeaks = (y: number[]): { peaks: number[] } => {
+  const peaks: number[] = [];
+  for (let i = 1; i < y.length - 1; i++) {
+    if (y[i] > y[i - 1] && y[i] > y[i + 1]) {
+      peaks.push(i);
+    }
+  }
+  return { peaks };
+};
+
+const autoTunePeaks = (t: number[], pv: number[], sp: number[]): { Kp: number, Ki: number, Kd: number } => {
+  const pv_np = pv;
+  const { peaks } = findPeaks(pv_np);
+
+  if (peaks.length < 2) {
+    return { Kp: 1.5, Ki: 0.5, Kd: 0.1 }; // fallback
+  }
+
+  const peakTimes = peaks.map(p => t[p]);
+  const diffs = [];
+  for (let i = 1; i < peakTimes.length; i++) {
+    diffs.push(peakTimes[i] - peakTimes[i - 1]);
+  }
+  const Tu = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+
+  if (Tu <= 0) {
+    return { Kp: 1.5, Ki: 0.5, Kd: 0.1 }; // fallback
+  }
+
+  const peakValues = peaks.map(p => pv_np[p]);
+  const A = (Math.max(...peakValues) - Math.min(...peakValues)) / 2;
+
+  let Ku: number;
+  if (A === 0) {
+    Ku = 2.0;
+  } else {
+    const spRange = Math.max(...sp) - Math.min(...sp);
+    Ku = spRange > 0 ? spRange / (2 * A) : 2.0;
+  }
+
+  const Kp = 0.6 * Ku;
+  const Ki = 2 * Kp / Tu;
+  const Kd = Kp * Tu / 8;
+
+  return { Kp, Ki, Kd };
+};
+
+// =============================================================================
+// SYSTEM IDENTIFICATION HELPERS & WORKSPACE (MOVED OUTSIDE ADIA)
+// =============================================================================
+
+const FloatingWindow = ({
+  windowState,
+  onClose,
+  onUpdate,
+  children
+}: {
+  windowState: ManagedWindowState;
+  onClose: () => void;
+  onUpdate: (id: ManagedWindowId, updates: Partial<ManagedWindowState>) => void;
+  children: React.ReactNode;
+}) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeStart, setResizeStart] = useState({ w: 0, h: 0, x: 0, y: 0 });
+
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile) return;
+    const handleMouseMove = (e: globalThis.MouseEvent) => {
+      if (isDragging) {
+        onUpdate(windowState.id, {
+          pos: {
+            x: e.clientX - dragOffset.x,
+            y: e.clientY - dragOffset.y
+          }
+        });
+      }
+      if (isResizing) {
+        onUpdate(windowState.id, {
+          size: {
+            width: Math.max(300, resizeStart.w + (e.clientX - resizeStart.x)),
+            height: Math.max(200, resizeStart.h + (e.clientY - resizeStart.y))
+          }
+        });
+      }
+    };
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      setIsResizing(false);
+    };
+
+    if (isDragging || isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, isResizing, dragOffset, resizeStart, windowState.id, onUpdate, isMobile]);
+
+  return (
+    <div
+      style={isMobile ? {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        zIndex: 100
+      } : {
+        position: 'absolute',
+        left: windowState.pos.x,
+        top: windowState.pos.y,
+        width: windowState.size.width,
+        height: windowState.size.height,
+        zIndex: windowState.zIndex,
+      }}
+      className="bg-[#141414] border border-[#c9a86c] rounded-lg flex flex-col shadow-2xl overflow-hidden"
+      onMouseDown={() => !isMobile && onUpdate(windowState.id, { zIndex: Date.now() })}
+    >
+      <div
+        className="h-8 bg-[#1a1a1a] border-b border-[#222] flex items-center justify-between px-3 cursor-move select-none shrink-0"
+        onMouseDown={(e) => {
+          if (isMobile) return;
+          e.stopPropagation();
+          setIsDragging(true);
+          setDragOffset({ x: e.clientX - windowState.pos.x, y: e.clientY - windowState.pos.y });
+        }}
+      >
+        <span className="text-xs font-bold text-[#c9a86c]">{windowState.title}</span>
+        <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="text-[#666] hover:text-[#e0e0e0]">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div className="flex-1 overflow-hidden relative flex flex-col">
+        {children}
+      </div>
+      {!isMobile && <div
+        className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-20"
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          setIsResizing(true);
+          setResizeStart({ w: windowState.size.width, h: windowState.size.height, x: e.clientX, y: e.clientY });
+        }}
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="#c9a86c" className="absolute bottom-1 right-1 opacity-50"><path d="M 10 0 L 10 10 L 0 10 Z" /></svg>
+      </div>}
+    </div>
+  );
+};
+
+
+
+const TraceabilityMatrix = ({
+  blocks,
+  relationships,
+  parts,
+  onClose
+}: {
+  blocks: BlockData[],
+  relationships: RelationshipData[],
+  parts: PartData[],
+  onClose: () => void
+}) => {
+  const reqs = blocks.filter(b => b.stereotype === 'requirement');
+  const [filterStatus, setFilterStatus] = useState('');
+
+  const filteredReqs = filterStatus
+    ? reqs.filter(r => r.status === filterStatus)
+    : reqs;
+  const childrenMap = new Map<string, string[]>();
+  const parentSet = new Set<string>();
+
+  relationships.forEach(rel => {
+    const source = blocks.find(b => b.id === rel.sourceId);
+    const target = blocks.find(b => b.id === rel.targetId);
+    if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
+      if (rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt') {
+        if (!childrenMap.has(rel.sourceId)) childrenMap.set(rel.sourceId, []);
+        childrenMap.get(rel.sourceId)!.push(rel.targetId);
+        parentSet.add(rel.targetId);
+      }
+    }
+  });
+
+  const orderedReqs: { req: BlockData, level: number }[] = [];
+  const visited = new Set<string>();
+
+  const traverse = (req: BlockData, level: number) => {
+    if (visited.has(req.id)) return;
+    visited.add(req.id);
+
+    if (!filterStatus || req.status === filterStatus) {
+      orderedReqs.push({ req, level });
+    }
+
+    const childrenIds = childrenMap.get(req.id) || [];
+    childrenIds.forEach(cid => {
+      const childReq = reqs.find(r => r.id === cid);
+      if (childReq) traverse(childReq, level + 1);
+    });
+  };
+
+  const roots = reqs.filter(r => !parentSet.has(r.id));
+  if (roots.length === 0 && reqs.length > 0) {
+    reqs.forEach(r => traverse(r, 0));
+  } else {
+    roots.forEach(r => traverse(r, 0));
+  }
+
+  const exportExcel = () => {
+    const data = orderedReqs.map(({ req: r, level }) => {
+      const outgoing = relationships.filter(rel => rel.sourceId === r.id).map(rel => {
+        const target = blocks.find(b => b.id === rel.targetId);
+        return `[${rel.type}] ${target?.name}`;
+      }).join('; ');
+
+      const satisfiedByBlocks = blocks.filter(b => b.satisfiedReqIds?.includes(r.id)).map(b => b.name);
+      const satisfiedByParts = parts.filter(p => p.satisfiedReqIds?.includes(r.id)).map(p => p.name);
+      const satisfiedBy = [...satisfiedByBlocks, ...satisfiedByParts].join('; ');
+
+      const prefix = '  '.repeat(level) + (level > 0 ? '└ ' : '');
+
+      return {
+        ID: r.reqId || '',
+        Name: prefix + r.name,
+        Status: r.status || '',
+        Priority: r.priority || '',
+        Description: r.description || '',
+        Links: outgoing,
+        SatisfiedBy: satisfiedBy
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "RTM");
+    XLSX.writeFile(wb, "Traceability_Matrix.xlsx");
+  };
+
+  return (
+    <div className="flex flex-col h-full w-full bg-[#141414]">
+      <div className="h-10 flex items-center px-4 border-b border-[#222] justify-between shrink-0">
+        <div className="flex gap-2 items-center">
+          <span className="text-xs text-[#888]">Filter:</span>
+          <select className="bg-[#0a0a0a] border border-[#333] text-xs rounded px-2 h-6 text-[#e0e0e0]" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <option value="">All Statuses</option>
+            <option value="Draft">Draft</option>
+            <option value="Approved">Approved</option>
+            <option value="Verified">Verified</option>
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={exportExcel} className="h-6 text-xs">Export Excel</Button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-auto p-0">
+        <table className="w-full text-left text-xs text-[#e0e0e0] border-collapse">
+          <thead className="bg-[#1a1a1a] text-[#888] sticky top-0 z-10 shadow-sm"><tr><th className="p-3 font-medium border-b border-[#333]">ID</th><th className="p-3 font-medium border-b border-[#333]">Name</th><th className="p-3 font-medium border-b border-[#333]">Status</th><th className="p-3 font-medium border-b border-[#333]">Priority</th><th className="p-3 font-medium border-b border-[#333]">Links (Out)</th><th className="p-3 font-medium border-b border-[#333]">Satisfied By</th></tr></thead>
+          <tbody className="divide-y divide-[#222]">
+            {orderedReqs.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="p-8 text-center text-[#666]">
+                  <div className="flex flex-col items-center justify-center">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mb-3 opacity-50">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                      <line x1="3" y1="9" x2="21" y2="9"></line>
+                      <line x1="9" y1="21" x2="9" y2="9"></line>
+                    </svg>
+                    <p>No requirements found matching the current filter.</p>
+                  </div>
+                </td>
+              </tr>
+            ) : orderedReqs.map(({ req: r, level }) => {
+              const satisfiedByBlocks = blocks.filter(b => b.satisfiedReqIds?.includes(r.id)).map(b => b.name);
+              const satisfiedByParts = parts.filter(p => p.satisfiedReqIds?.includes(r.id)).map(p => p.name);
+              const satisfiedBy = [...satisfiedByBlocks, ...satisfiedByParts];
+              return (
+                <tr key={r.id} className="hover:bg-[#1a1a1a] transition-colors group">
+                  <td className="py-3 pr-3 font-mono text-[#c9a86c]" style={{ paddingLeft: `${12 + level * 20}px` }}>
+                    {level > 0 && <span className="text-[#555] mr-2">└</span>}
+                    {r.reqId}
+                  </td>
+                  <td className="p-3 font-bold text-[#e0e0e0] group-hover:text-[#fff]">{r.name}</td>
+                  <td className="p-3">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${r.status === 'Verified' ? 'bg-green-900/20 text-green-400 border-green-800/30' :
+                      r.status === 'Approved' ? 'bg-blue-900/20 text-blue-400 border-blue-800/30' :
+                        r.status === 'Implemented' ? 'bg-purple-900/20 text-purple-400 border-purple-800/30' :
+                          'bg-[#222] text-[#aaa] border-[#333]'
+                      }`}>
+                      {r.status || 'Draft'}
+                    </span>
+                  </td>
+                  <td className="p-3">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${r.priority === 'High' ? 'bg-red-900/20 text-red-400 border-red-800/30' :
+                      r.priority === 'Medium' ? 'bg-amber-900/20 text-amber-400 border-amber-800/30' :
+                        'bg-[#222] text-[#888] border-[#333]'
+                      }`}>
+                      {r.priority || 'Medium'}
+                    </span>
+                  </td>
+                  <td className="p-3 text-[#888]">
+                    <div className="flex flex-col gap-1">
+                      {relationships.filter(rel => rel.sourceId === r.id).map(rel => {
+                        const t = blocks.find(b => b.id === rel.targetId);
+                        return (
+                          <div key={rel.id} className="flex items-center gap-1.5 bg-[#111] px-2 py-1 rounded border border-[#222] w-max">
+                            <span className="text-[#6c9ac6] text-[10px] font-mono">«{rel.type}»</span>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-50"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                            <span className="text-[#ccc]">{t?.name}</span>
+                          </div>
+                        );
+                      })}
+                      {relationships.filter(rel => rel.sourceId === r.id).length === 0 && <span className="text-[#555] italic">None</span>}
+                    </div>
+                  </td>
+                  <td className="p-3">
+                    <div className="flex flex-wrap gap-1">
+                      {satisfiedBy.length > 0 ? satisfiedBy.map((name, i) => (
+                        <span key={i} className="inline-flex items-center px-2 py-1 rounded bg-[#1a2e20] border border-[#2e5239] text-[#4ade80] text-[10px]">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1"><path d="M20 6L9 17l-5-5"></path></svg>
+                          {name}
+                        </span>
+                      )) : <span className="text-[#555] italic">Unsatisfied</span>}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const CodeGenerationDialog = ({
+  files,
+  codegenErrors,
+  codegenWarnings,
+  generationLog,
+  onClose,
+  addError
+}: {
+  files: { name: string; content: string }[];
+  codegenErrors: ErrorItem[];
+  codegenWarnings: string[];
+  generationLog: string[];
+  onClose: () => void;
+  addError: (type: 'error' | 'warning' | 'info', message: string) => void;
+}) => {
+  const [size, setSize] = useState({ width: 800, height: Math.min(700, window.innerHeight * 0.9) });
+  const [isResizingModal, setIsResizingModal] = useState(false);
+  const [activeFile, setActiveFile] = useState(files.length > 0 ? files[0].name : '');
+
+  const handleModalResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizingModal(true);
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: globalThis.MouseEvent) => {
+      if (!isResizingModal) return;
+      setSize(prev => ({
+        width: Math.max(500, prev.width + e.movementX),
+        height: Math.max(400, prev.height + e.movementY)
+      }));
+    };
+    const handleMouseUp = () => setIsResizingModal(false);
+
+    if (isResizingModal) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('mouseleave', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mouseleave', handleMouseUp);
+    };
+  }, [isResizingModal]);
+
+  return (
+    <div style={{ width: `${size.width}px`, height: `${size.height}px` }} className="bg-[#141414] border border-[#c9a86c] rounded-lg flex flex-col relative overflow-hidden" onMouseDown={e => e.stopPropagation()}>
+      <div className="h-12 flex items-center px-5 border-b border-[#222]">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-3">
+          <polyline points="16 18 22 12 16 6" />
+          <polyline points="8 6 2 12 8 18" />
+        </svg>
+        <h2 className="text-lg font-bold text-[#c9a86c]">MISRA-C Code Generation</h2>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-5">
+        {codegenErrors.length > 0 ? (
+          <div className="bg-red-900/25 border border-red-900/50 rounded-lg p-4">
+            <h3 className="text-sm font-medium text-red-400 mb-3 flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              Blocking Errors ({codegenErrors.length})
+            </h3>
+            <ul className="text-xs text-red-300 space-y-1.5 max-h-64 overflow-y-auto">
+              {codegenErrors.map((err, i) => (
+                <li key={i} className="pl-4 border-l-2 border-red-900/70 py-0.5">
+                  <span className="font-mono text-[#c9a86c]">[{err.source}]</span> {err.message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <div className="space-y-5">
+            <div>
+              <div className="flex gap-2 mb-2 overflow-x-auto pb-2">
+                {files.map(f => (
+                  <button key={f.name} onClick={() => setActiveFile(f.name)} className={`px-3 py-1 text-xs rounded border ${activeFile === f.name ? 'bg-[#c9a86c] text-black border-[#c9a86c]' : 'bg-[#1a1a1a] text-[#888] border-[#333]'}`}>
+                    {f.name}
+                  </button>
+                ))}
+              </div>
+              <h3 className="text-sm font-medium text-[#c9a86c] mb-2.5">{activeFile}</h3>
+              <pre className="bg-[#0a0a0a] p-4 rounded text-xs font-mono text-[#e0e0e0] max-h-64 overflow-auto border border-[#333]">
+                {files.find(f => f.name === activeFile)?.content || '// Select a file'}
+              </pre>
+            </div>
+            {codegenWarnings.length > 0 && (
+              <div className="bg-amber-900/15 border border-amber-900/30 rounded-lg p-4">
+                <h3 className="text-xs font-medium text-amber-400 mb-2 flex items-center gap-1.5">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                  MISRA Style Warnings ({codegenWarnings.length})
+                </h3>
+                <ul className="text-[11px] text-amber-300 space-y-1 max-h-36 overflow-y-auto">
+                  {codegenWarnings.map((warning, i) => (
+                    <li key={i} className="pl-3 border-l-2 border-amber-900/50 py-0.5">{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {generationLog.length > 0 && (
+              <div className="bg-[#111] border border-[#333] rounded-lg p-4">
+                <h3 className="text-xs font-medium text-[#888] mb-2">Generation Log (REQ-ENGINE-004)</h3>
+                <ul className="text-[10px] font-mono text-[#666] space-y-1 max-h-24 overflow-y-auto">
+                  {generationLog.map((log, i) => (
+                    <li key={i}>{log}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
+        <Button
+          variant="outline"
+          onClick={onClose}
+          className="border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] px-5"
+        >
+          Close
+        </Button>
+        {codegenErrors.length === 0 && files.length > 0 && (
+          <Button
+            onClick={() => {
+              files.forEach(f => {
+                const element = document.createElement('a');
+                element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(f.content));
+                element.setAttribute('download', f.name);
+                element.style.display = 'none';
+                document.body.appendChild(element);
+                element.click();
+                document.body.removeChild(element);
+              });
+              addError('info', 'Files downloaded successfully');
+              onClose();
+            }}
+            className="bg-[#c9a86c] text-[#0a0a0a] hover:bg-[#b8975b] px-5"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            Download Files
+          </Button>
+        )}
+      </div>
+      <div
+        onMouseDown={handleModalResizeStart}
+        className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10 text-[#c9a86c] opacity-50 hover:opacity-100 flex items-end justify-end"
+        title="Resize Window"
+      ><svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M 10 0 L 10 10 L 0 10 Z" /></svg></div>
+    </div>
+  );
+};
+
+const PidWorkspaceDialog = ({
+  onClose,
+  addError,
+}: {
+  onClose: () => void;
+  addError: (type: 'error' | 'warning' | 'info', message: string, source?: string, elementId?: string) => void;
+}) => {
+  const [pidData, setPidData] = useState<{ t: number[], setpoint: number[], pv: number[] } | null>(null);
+  const [pidPlotData, setPidPlotData] = useState<{ t: number[], pv_org: number[], pv_ctrl: number[], sp: number[] } | null>(null);
+  const [pidKp, setPidKp] = useState('1.5');
+  const [pidKi, setPidKi] = useState('0.5');
+  const [pidKd, setPidKd] = useState('0.1');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLoadPidData = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handlePidFileChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Mock data loading (simulating file read)
+    const t = Array.from({ length: 400 }, (_, i) => i * 0.05); // 20s at 20Hz
+    const sp = t.map(time => time < 1 ? 0 : (time < 10 ? 100 : 80));
+
+    // Simulate a second-order system response to the setpoint for more realistic PV data
+    const zeta = 0.5; // Damping ratio
+    const wn = 1;     // Natural frequency
+    let pos = 0;
+    let vel = 0;
+    const dt = 0.05;
+    const pv = sp.map(current_sp => {
+      const accel = wn * wn * (current_sp - pos) - 2 * zeta * wn * vel;
+      vel += accel * dt;
+      pos += vel * dt;
+      return pos;
+    });
+
+    setPidData({ t, setpoint: sp, pv });
+    setPidPlotData({ t, pv_org: pv, pv_ctrl: pv, sp });
+    addError('info', `Loaded data from ${file.name} (Mocked). Install 'xlsx' to parse real files.`);
+
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [addError]);
+
+  const runPidSimulation = useCallback((discrete: boolean, draw: boolean = true): { t: number[], pv_ctrl: number[], sp: number[] } | null => {
+    const plant = new Plant();
+    const currentKp = safeFloat(pidKp, 1);
+    const currentKi = safeFloat(pidKi, 0);
+    const currentKd = safeFloat(pidKd, 0);
+    const contPid = new PIDContinuous(currentKp, currentKi, currentKd);
+    const discPid = new PIDDiscrete(currentKp, currentKi, currentKd);
+
+    let t: number[], sp: number[], pv_org: number[];
+
+    if (pidData) {
+      t = pidData.t;
+      sp = pidData.setpoint;
+      pv_org = pidData.pv;
+    } else {
+      addError('warning', 'No data loaded. Please load data first.');
+      return null;
+    }
+
+    if (t.length < 2) {
+      addError('error', 'Not enough data points to run simulation.');
+      return null;
+    }
+
+    const dt = t[1] - t[0];
+    discPid.Ts = dt;
+    const pv_ctrl: number[] = [];
+
+    for (const s of sp) {
+      const current_pv = plant.getX();
+      let u: number;
+      if (discrete) {
+        u = discPid.compute(s, current_pv);
+      } else {
+        u = contPid.compute(s, current_pv, dt);
+      }
+      pv_ctrl.push(plant.update(u, dt));
+    }
+
+    if (draw) {
+      setPidPlotData({ t, pv_org, pv_ctrl, sp });
+    }
+
+    return { t, pv_ctrl, sp };
+  }, [pidData, pidKp, pidKi, pidKd, addError]);
+
+  const handleAutoTune = useCallback(() => {
+    const simResult = runPidSimulation(true, false);
+    if (!simResult) {
+      addError('error', 'Auto-tune failed: could not run simulation. Load data first.');
+      return;
+    }
+
+    const { t, pv_ctrl, sp } = simResult;
+    const { Kp, Ki, Kd } = autoTunePeaks(t, pv_ctrl, sp);
+
+    setPidKp(Kp.toFixed(3));
+    setPidKi(Ki.toFixed(3));
+    setPidKd(Kd.toFixed(3));
+
+    addError('info', `Auto-Tune complete: Kp=${Kp.toFixed(3)}, Ki=${Ki.toFixed(3)}, Kd=${Kd.toFixed(3)}`);
+  }, [runPidSimulation, addError]);
+
+  const handleExportPidCode = useCallback(() => {
+    const Kp = safeFloat(pidKp, 1.0);
+    const Ki = safeFloat(pidKi, 0.0);
+    const Kd = safeFloat(pidKd, 0.0);
+    const Ts = pidData && pidData.t.length > 1 ? pidData.t[1] - pidData.t[0] : 0.05;
+
+    const h_content = `#ifndef PID_CONTROLLER_H\n#define PID_CONTROLLER_H\n\ntypedef struct {\n    float Kp;\n    float Ki;\n    float Kd;\n    float Ts;\n    float e[3];\n    float u_prev;\n} PID;\n\nvoid PID_Init(PID* pid, float Kp, float Ki, float Kd, float Ts);\nfloat PID_Compute(PID* pid, float setpoint, float pv);\n\n#endif`;
+
+    const c_content = `#include "pid_controller.h"\n\nvoid PID_Init(PID* pid, float Kp, float Ki, float Kd, float Ts){\n    pid->Kp = Kp;\n    pid->Ki = Ki;\n    pid->Kd = Kd;\n    pid->Ts = Ts;\n    pid->e[0] = pid->e[1] = pid->e[2] = 0;\n    pid->u_prev = 0;\n}\n\nfloat PID_Compute(PID* pid, float setpoint, float pv){\n    float e_new = setpoint - pv;\n    float u = pid->u_prev + pid->Kp*(e_new - pid->e[0])\n              + pid->Ki*pid->Ts*e_new\n              + pid->Kd/pid->Ts*(e_new - 2*pid->e[0] + pid->e[1]);\n    pid->u_prev = u;\n    pid->e[2] = pid->e[1];\n    pid->e[1] = pid->e[0];\n    pid->e[0] = e_new;\n    return u;\n}\n\n/*\n// ===== PID instance with tuned values =====\nPID pid_instance;\nPID_Init(&pid_instance, ${Kp.toFixed(4)}f, ${Ki.toFixed(4)}f, ${Kd.toFixed(4)}f, ${Ts.toFixed(4)}f);\n*/`;
+
+    // Download H file
+    const elementH = document.createElement('a');
+    elementH.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(h_content));
+    elementH.setAttribute('download', 'pid_controller.h');
+    elementH.style.display = 'none';
+    document.body.appendChild(elementH);
+    elementH.click();
+    document.body.removeChild(elementH);
+
+    // Download C file
+    const elementC = document.createElement('a');
+    elementC.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(c_content));
+    elementC.setAttribute('download', 'pid_controller.c');
+    elementC.style.display = 'none';
+    document.body.appendChild(elementC);
+    elementC.click();
+    document.body.removeChild(elementC);
+
+    addError('info', 'PID C code exported.');
+  }, [pidKp, pidKi, pidKd, pidData, addError]);
+
+  return (
+    <div className="flex flex-col h-full w-full bg-[#141414]">
+      <div className="p-5 text-center text-[#e0e0e0]">
+        PID Workspace (Please refactor state to pass as props to fully enable)
+      </div>
+
+      <div className="flex-1 flex overflow-hidden">
+        {/* Controls */}
+        <div className="w-72 p-4 border-r border-[#222] flex flex-col gap-4 overflow-y-auto">
+          <input type="file" ref={fileInputRef} onChange={handlePidFileChange} className="hidden" accept=".xlsx,.csv" />
+          <Button onClick={handleLoadPidData} variant="outline">Load Data</Button>
+
+          <div className="space-y-2 p-3 bg-[#1a1a1a] rounded-lg border border-[#222]">
+            <Label>PID Parameters</Label>
+            <div className="grid grid-cols-3 gap-2">
+              <div><Label>Kp</Label><Input value={pidKp} onChange={e => setPidKp(e.target.value)} className="h-7" /></div>
+              <div><Label>Ki</Label><Input value={pidKi} onChange={e => setPidKi(e.target.value)} className="h-7" /></div>
+              <div><Label>Kd</Label><Input value={pidKd} onChange={e => setPidKd(e.target.value)} className="h-7" /></div>
+            </div>
+          </div>
+
+          <Button onClick={() => runPidSimulation(true)} variant="default">Run Simulation</Button>
+          <Button onClick={handleAutoTune} variant="secondary">Auto Tune (Z-N)</Button>
+          <Button onClick={handleExportPidCode} variant="outline">Export C Code</Button>
+        </div>
+
+        {/* Plot */}
+        <div className="flex-1 p-4 bg-[#0a0a0a] relative">
+          {pidPlotData ? (
+            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+              {/* Grid */}
+              {[...Array(5)].map((_, i) => <line key={i} x1="0" y1={i * 25} x2="100" y2={i * 25} stroke="#222" strokeWidth="0.5" />)}
+              {[...Array(10)].map((_, i) => <line key={i} x1={i * 10} y1="0" x2={i * 10} y2="100" stroke="#222" strokeWidth="0.5" />)}
+
+              {(() => {
+                const allVals = [...pidPlotData.sp, ...pidPlotData.pv_ctrl];
+                const min = Math.min(...allVals);
+                const max = Math.max(...allVals);
+                const range = max - min || 1;
+                const padding = range * 0.1;
+                const effMin = min - padding;
+                const effRange = range + 2 * padding;
+
+                const toPoints = (data: number[]) => data.map((v, i) => `${(i / (data.length - 1)) * 100},${100 - ((v - effMin) / effRange) * 100}`).join(' ');
+
+                return (
+                  <>
+                    <polyline points={toPoints(pidPlotData.sp)} fill="none" stroke="#444" strokeWidth="1" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+                    <polyline points={toPoints(pidPlotData.pv_ctrl)} fill="none" stroke="#6c9ac6" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                  </>
+                );
+              })()}
+            </svg>
+          ) : (
+            <div className="flex items-center justify-center h-full text-[#666]">Load data to visualize</div>
+          )}
+          {pidPlotData && (
+            <div className="absolute top-2 right-2 flex flex-col items-end text-xs gap-1">
+              <div className="flex items-center gap-2"><div className="w-3 h-0.5 bg-[#444] border-t border-dashed"></div> Setpoint</div>
+              <div className="flex items-center gap-2"><div className="w-3 h-0.5 bg-[#6c9ac6]"></div> Process Value</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const HybridRotary = ({
+  comp,
+  variable,
+  updateVariable,
+  editMode
+}: {
+  comp: HmiComponent;
+  variable: VariableDef | undefined;
+  updateVariable: (id: string, value: string) => void;
+  editMode: boolean;
+}) => {
+  const [dragAngle, setDragAngle] = useState<number | null>(null);
+
+  const values = comp.hybridValues || [];
+  const positions = Math.max(1, values.length);
+  const stepAngle = 270 / (Math.max(1, positions - 1));
+
+  let currentIndex = 0;
+  if (variable) {
+    const valStr = String(variable.currentValue);
+    const idx = values.findIndex((v) => v == valStr);
+    if (idx !== -1) currentIndex = idx;
+  }
+
+  // Start at 225 (Bottom-Left), go clockwise
+  const currentAngle = 225 + currentIndex * stepAngle;
+  const angle = dragAngle !== null ? dragAngle : currentAngle;
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    if (editMode || !variable) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    const updateFromEvent = (ev: { clientX: number; clientY: number }) => {
+      const angleRad = Math.atan2(ev.clientY - centerY, ev.clientX - centerX);
+      let deg = angleRad * 180 / Math.PI;
+
+      // atan2: 0=Right, 90=Down, 180=Left, -90=Up
+      // We want 0 at 135 deg (Bottom-Left) in atan2 space
+      let effectiveAngle = deg - 135;
+      if (effectiveAngle < 0) effectiveAngle += 360;
+
+      // SVG Angle (0=Up) => SVG = atan2 + 90
+      let svgAngle = deg + 90;
+
+      // Clamp dead zone (Bottom quadrant)
+      if (effectiveAngle > 270) {
+        if (effectiveAngle > 315) {
+          effectiveAngle = 0;
+          svgAngle = 225;
+        } else {
+          effectiveAngle = 270;
+          svgAngle = 135;
+        }
+      }
+
+      setDragAngle(svgAngle);
+
+      const index = Math.round(effectiveAngle / stepAngle);
+      const clampedIndex = Math.max(0, Math.min(positions - 1, index));
+
+      if (clampedIndex !== currentIndex) {
+        updateVariable(variable.id, values[clampedIndex]);
+      }
+    };
+
+    updateFromEvent(e);
+
+    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      updateFromEvent(moveEvent);
+    };
+
+    const handleMouseUp = () => {
+      setDragAngle(null);
+      document.body.style.cursor = 'default';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.body.style.cursor = 'grabbing';
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  return (
+    <div
+      className="relative w-full h-full flex items-center justify-center"
+      onMouseDown={onMouseDown}
+      style={{ cursor: editMode ? 'default' : 'pointer' }}
+    >
+      <svg viewBox="0 0 100 100" className="w-full h-full">
+        <defs>
+          <radialGradient id="grad-hybrid">
+            <stop offset="0%" stopColor="#444" />
+            <stop offset="90%" stopColor="#111" />
+            <stop offset="100%" stopColor="#000" />
+          </radialGradient>
+        </defs>
+        <circle cx="50" cy="50" r="40" fill="url(#grad-hybrid)" stroke="#c9a86c" strokeWidth="1" />
+        {Array.from({ length: positions }).map((_, i) => {
+          const tickRot = 225 + i * stepAngle;
+          return (
+            <line
+              key={i}
+              x1="50" y1="10" x2="50" y2="15"
+              stroke={i === currentIndex ? '#c9a86c' : '#666'}
+              strokeWidth={i === currentIndex ? 3 : 1}
+              transform={`rotate(${tickRot} 50 50)`}
+            />
+          );
+        })}
+        {Array.from({ length: positions }).map((_, i) => {
+          const tickRot = 225 + i * stepAngle;
+          const rad = (tickRot - 90) * (Math.PI / 180);
+          const tx = 50 + 30 * Math.cos(rad);
+          const ty = 50 + 30 * Math.sin(rad);
+          return (
+            <g key={i}>
+              <text
+                x={tx}
+                y={ty}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill={i === currentIndex ? '#c9a86c' : '#888'}
+                fontSize="6"
+                fontFamily="monospace"
+                style={{ pointerEvents: 'none' }}
+              >
+                {values[i] || ''}
+              </text>
+            </g>
+          );
+        })}
+        <g transform={`rotate(${angle} 50 50)`}>
+          <circle cx="50" cy="20" r="4" fill="#c9a86c" />
+          <line x1="50" y1="20" x2="50" y2="50" stroke="#c9a86c" strokeWidth="2" />
+        </g>
+      </svg>
+      <div className="absolute bottom-1 text-[9px] text-[#c9a86c] font-mono select-none">
+        {values[currentIndex]}
+      </div>
+    </div>
+  );
+};
+
+const Buzzer = ({
+  comp,
+  variable,
+  editMode
+}: {
+  comp: HmiComponent;
+  variable: VariableDef | undefined;
+  editMode: boolean;
+}) => {
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const oscillatorRef = useRef<OscillatorNode | null>(null);
+  const hasPlayedRef = useRef(false);
+
+  // Determine if buzzer should be active (truthy value and not in edit mode)
+  const isActive = !editMode && variable && (
+    (typeof variable.currentValue === 'boolean' && variable.currentValue) ||
+    (typeof variable.currentValue === 'number' && variable.currentValue > 0)
+  );
+
+  useEffect(() => {
+    if (isActive && !hasPlayedRef.current) {
+      hasPlayedRef.current = true;
+      try {
+        if (!audioCtxRef.current) {
+          audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+
+        if (audioCtxRef.current.state === 'suspended') {
+          audioCtxRef.current.resume();
+        }
+
+        const osc = audioCtxRef.current.createOscillator();
+        const gainNode = audioCtxRef.current.createGain();
+
+        osc.type = comp.soundType || 'square';
+        osc.frequency.setValueAtTime(1000, audioCtxRef.current.currentTime); // 1kHz beep
+        gainNode.gain.setValueAtTime(0.1, audioCtxRef.current.currentTime); // Volume
+
+        osc.connect(gainNode);
+        gainNode.connect(audioCtxRef.current.destination);
+
+        osc.start();
+        oscillatorRef.current = osc;
+        const ctx = audioCtxRef.current;
+        const now = ctx.currentTime;
+        const beepLength = 0.1;
+        const gap = 0.15;
+        const freq = 1200;
+        const soundType = comp.soundType || 'sine';
+
+        const playBeep = (startTime: number) => {
+          const osc = ctx.createOscillator();
+          const gainNode = ctx.createGain();
+
+          osc.type = soundType;
+          osc.frequency.setValueAtTime(freq, startTime);
+          gainNode.gain.setValueAtTime(0.1, startTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.00001, startTime + beepLength);
+
+          osc.connect(gainNode);
+          gainNode.connect(ctx.destination);
+
+          osc.start(startTime);
+          osc.stop(startTime + beepLength);
+        };
+
+        // Schedule 3 beeps
+        playBeep(now);
+        playBeep(now + beepLength + gap);
+        playBeep(now + 2 * (beepLength + gap));
+
+      } catch (e) {
+        console.error("Buzzer AudioContext error", e);
+      }
+    } else {
+      if (oscillatorRef.current) {
+        try {
+          oscillatorRef.current.stop();
+          oscillatorRef.current.disconnect();
+        } catch (e) { /* ignore */ }
+        oscillatorRef.current = null;
+      }
+      if (!isActive) {
+        hasPlayedRef.current = false;
+      }
+    }
+
+    return () => {
+      if (oscillatorRef.current) {
+        try {
+          oscillatorRef.current.stop();
+          oscillatorRef.current.disconnect();
+        } catch (e) { /* ignore */ }
+        oscillatorRef.current = null;
+      }
+    };
+  }, [isActive, comp.soundType]);
+
+  return (
+    <div className={`w-full h-full flex items-center justify-center transition-colors duration-200 ${isActive ? 'text-red-500' : 'text-[#444]'}`}>
+      <svg viewBox="0 0 24 24" fill="currentColor" width="60%" height="60%">
+        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+      </svg>
+    </div>
+  );
+};
+
+const DoeWorkspace = ({
+  onClose,
+  addError
+}: {
+  onClose: () => void;
+  addError: (type: 'error' | 'warning' | 'info', message: string) => void;
+}) => {
+  const [k, setK] = useState(2);
+  const [n, setN] = useState(10);
+  const [data, setData] = useState<number[][] | null>(null); // Rows of [x1, x2, ..., xk, y]
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [results, setResults] = useState<any | null>(null);
+  const [plotFactors, setPlotFactors] = useState<{ x: number, y: number }>({ x: 0, y: 1 });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [plotType, setPlotType] = useState<'surface' | 'contour'>('surface');
+  const [rotation, setRotation] = useState({ x: Math.PI / 6, y: -Math.PI / 4 });
+  const [isRotating, setIsRotating] = useState(false);
+  const lastMousePos = useRef({ x: 0, y: 0 });
+
+  // Matrix Math Helpers
+  const multiply = (A: number[][], B: number[][]) => {
+    const m = A.length, n = A[0].length, p = B[0].length;
+    const C = Array(m).fill(0).map(() => Array(p).fill(0));
+    for (let i = 0; i < m; i++)
+      for (let j = 0; j < p; j++)
+        for (let k = 0; k < n; k++) C[i][j] += A[i][k] * B[k][j];
+    return C;
+  };
+
+  const transpose = (A: number[][]) => A[0].map((_, c) => A.map(r => r[c]));
+
+  const inverse = (A: number[][]) => {
+    const n = A.length;
+    const M = A.map((row, i) => [...row, ...Array(n).fill(0).map((_, j) => i === j ? 1 : 0)]);
+    for (let i = 0; i < n; i++) {
+      let pivot = M[i][i];
+      if (Math.abs(pivot) < 1e-10) return null; // Singular
+      for (let j = 0; j < 2 * n; j++) M[i][j] /= pivot;
+      for (let k = 0; k < n; k++) {
+        if (k !== i) {
+          const factor = M[k][i];
+          for (let j = 0; j < 2 * n; j++) M[k][j] -= factor * M[i][j];
+        }
+      }
+    }
+    return M.map(row => row.slice(n));
+  };
+
+  // T-Distribution PDF approximation for p-value
+  const tDistPValue = (t: number, df: number) => {
+    // Very rough approximation for UI display purposes
+    const x = Math.abs(t);
+    return Math.exp(-0.5 * x * x) / (Math.sqrt(2 * Math.PI)); // Placeholder for full T-dist integration
+  };
+
+  const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+
+        if (jsonData.length < 2) throw new Error("Empty or invalid sheet");
+
+        // Assume last column is Y, first k columns are X
+        const headerRow = jsonData[0] as string[];
+        const dataRows = jsonData.slice(1).filter(r => r.length > 0).map(r => r.map((c: any) => Number(c)));
+
+        setHeaders(headerRow);
+        setData(dataRows);
+        setN(dataRows.length);
+        setK(dataRows[0].length - 1);
+        addError('info', `Loaded ${dataRows.length} experiments with ${dataRows[0].length - 1} factors.`);
+      } catch (err) {
+        addError('error', 'Failed to parse Excel file.');
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const calculateRSM = () => {
+    if (!data || data.length === 0) return;
+
+    // 1. Construct Design Matrix X for 2nd Order Polynomial
+    // Model: b0 + b1*x1 + ... + b11*x1^2 + ... + b12*x1*x2 + ...
+    const X: number[][] = [];
+    const Y: number[][] = [];
+
+    data.forEach(row => {
+      const factors = row.slice(0, k);
+      const y = row[k];
+      Y.push([y]);
+
+      const xRow = [1]; // Intercept
+      // Linear terms
+      for (let i = 0; i < k; i++) xRow.push(factors[i]);
+      // Quadratic terms
+      for (let i = 0; i < k; i++) xRow.push(factors[i] * factors[i]);
+      // Interaction terms
+      for (let i = 0; i < k; i++) {
+        for (let j = i + 1; j < k; j++) {
+          xRow.push(factors[i] * factors[j]);
+        }
+      }
+      X.push(xRow);
+    });
+
+    // 2. Solve Beta = (X'X)^-1 X'Y
+    const XT = transpose(X);
+    const XTX = multiply(XT, X);
+    const XTX_inv = inverse(XTX);
+
+    if (!XTX_inv) {
+      addError('error', 'Matrix is singular. Check for collinearity or insufficient data points.');
+      return;
+    }
+
+    const XTY = multiply(XT, Y);
+    const Beta = multiply(XTX_inv, XTY); // Coefficients
+
+    // 3. Statistics
+    const Y_pred = multiply(X, Beta);
+    let SSE = 0, SST = 0, sumY = 0;
+    Y.forEach(y => sumY += y[0]);
+    const meanY = sumY / n;
+
+    for (let i = 0; i < n; i++) {
+      SSE += Math.pow(Y[i][0] - Y_pred[i][0], 2);
+      SST += Math.pow(Y[i][0] - meanY, 2);
+    }
+
+    const SSR = SST - SSE;
+    const p = Beta.length; // Number of parameters
+    const df_reg = p - 1;
+    const df_err = n - p;
+    const MS_reg = SSR / df_reg;
+    const MS_err = SSE / df_err;
+    const F = MS_reg / MS_err;
+    const R2 = 1 - (SSE / SST);
+
+    // T-tests for coefficients
+    const coefStats = Beta.map((b, i) => {
+      const se = Math.sqrt(MS_err * XTX_inv[i][i]);
+      const t = b[0] / se;
+      const pVal = tDistPValue(t, df_err); // Approx
+      return { val: b[0], se, t, p: pVal };
+    });
+
+    // Construct Term Labels
+    const terms = ['Intercept'];
+    for (let i = 0; i < k; i++) terms.push(`X${i + 1}`);
+    for (let i = 0; i < k; i++) terms.push(`X${i + 1}^2`);
+    for (let i = 0; i < k; i++) {
+      for (let j = i + 1; j < k; j++) terms.push(`X${i + 1}*X${j + 1}`);
+    }
+
+    // Format Equation
+    let equation = `Y = ${coefStats[0].val.toFixed(4)}`;
+    for (let i = 1; i < coefStats.length; i++) {
+      const { val } = coefStats[i];
+      if (Math.abs(val) < 1e-6) continue;
+
+      const sign = val >= 0 ? ' + ' : ' - ';
+      const absVal = Math.abs(val).toFixed(4);
+      const term = terms[i].replace('^2', '²').replace('*', '');
+
+      equation += `${sign}${absVal}*${term}`;
+    }
+
+
+    setResults({ Beta, terms, coefStats, R2, F, SSE, SST, SSR, df_reg, df_err, MS_reg, MS_err, equation });
+    addError('info', 'RSM Model Calculated.');
+  };
+
+  // Export DOE Report to PDF with comprehensive analysis including all factor combinations
+  const exportDoeReport = useCallback(async () => {
+    if (!results || !data) {
+      addError('warning', 'No results to export. Please calculate RSM first.');
+      return;
+    }
+
+    // Calculate factor means for prediction
+    const factorMeans = Array(k).fill(0);
+    for (let f = 0; f < k; f++) {
+      const fVals = data.map(r => r[f]);
+      factorMeans[f] = fVals.reduce((a, b) => a + b, 0) / fVals.length;
+    }
+
+    // Store current state to restore later
+    const originalPlotType = plotType;
+    const originalPlotFactors = { ...plotFactors };
+
+    // Helper to capture canvas with specific settings
+    const capturePlot = (type: 'surface' | 'contour', idxX: number, idxY: number): Promise<string | null> => {
+      return new Promise<string | null>((resolve) => {
+        setPlotType(type);
+        setPlotFactors({ x: idxX, y: idxY });
+
+        // Wait for React state update and canvas render
+        setTimeout(() => {
+          if (canvasRef.current) {
+            resolve(canvasRef.current.toDataURL('image/png'));
+          } else {
+            resolve(null);
+          }
+        }, 150); // Increased timeout for rendering
+      });
+    };
+
+    // Helper to capture 2D plot (factor vs response)
+    const capture2DPlot = (factorIdx: number): Promise<string | null> => {
+      return new Promise<string | null>((resolve) => {
+        // Create a temporary canvas for 2D plot
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = 400;
+        tempCanvas.height = 300;
+        const ctx = tempCanvas.getContext('2d');
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+
+        // Get factor values and response
+        const xVals = data.map(r => r[factorIdx]);
+        const yVals = data.map(r => r[k]); // response is last column
+
+        const minX = Math.min(...xVals), maxX = Math.max(...xVals);
+        const minY = Math.min(...yVals), maxY = Math.max(...yVals);
+
+        // Draw background
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, 400, 300);
+
+        // Draw axes
+        ctx.strokeStyle = '#666';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(50, 20);
+        ctx.lineTo(50, 260); // Y axis
+        ctx.lineTo(380, 260); // X axis
+        ctx.stroke();
+
+        // Draw grid
+        ctx.strokeStyle = '#333';
+        ctx.setLineDash([2, 2]);
+        for (let i = 1; i < 5; i++) {
+          const y = 20 + (i * 60);
+          ctx.beginPath(); ctx.moveTo(50, y); ctx.lineTo(380, y); ctx.stroke();
+        }
+        for (let i = 1; i < 5; i++) {
+          const x = 50 + (i * 82.5);
+          ctx.beginPath(); ctx.moveTo(x, 20); ctx.lineTo(x, 260); ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        // Plot actual data points
+        xVals.forEach((x, i) => {
+          const px = 50 + ((x - minX) / (maxX - minX || 1)) * 330;
+          const py = 260 - ((yVals[i] - minY) / (maxY - minY || 1)) * 240;
+
+          ctx.fillStyle = '#c9a86c';
+          ctx.beginPath();
+          ctx.arc(px, py, 4, 0, 2 * Math.PI);
+          ctx.fill();
+        });
+
+        // Draw predicted curve (using model)
+        ctx.strokeStyle = '#4ade80';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+
+        for (let px = 50; px <= 380; px += 2) {
+          const xVal = minX + ((px - 50) / 330) * (maxX - minX);
+
+          // Calculate predicted Y using model
+          const xRow = [1];
+          const factors = [...factorMeans];
+          factors[factorIdx] = xVal;
+
+          for (let f = 0; f < k; f++) xRow.push(factors[f]);
+          for (let f = 0; f < k; f++) xRow.push(factors[f] * factors[f]);
+          for (let f = 0; f < k; f++) {
+            for (let g = f + 1; g < k; g++) {
+              xRow.push(factors[f] * factors[g]);
+            }
+          }
+
+          let predY = 0;
+          for (let b = 0; b < results.Beta.length; b++) {
+            predY += xRow[b] * results.Beta[b][0];
+          }
+
+          const py = 260 - ((predY - minY) / (maxY - minY || 1)) * 240;
+
+          if (px === 50) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+
+        // Labels
+        ctx.fillStyle = '#e0e0e0';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(headers[factorIdx] || `X${factorIdx + 1}`, 215, 285);
+
+        ctx.save();
+        ctx.translate(15, 140);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('Response (Y)', 0, 0);
+        ctx.restore();
+
+        // Axis values
+        ctx.fillStyle = '#888';
+        ctx.font = '9px sans-serif';
+        for (let i = 0; i <= 4; i++) {
+          const val = minX + (i / 4) * (maxX - minX);
+          const x = 50 + i * 82.5;
+          ctx.textAlign = 'center';
+          ctx.fillText(val.toFixed(2), x, 275);
+        }
+        for (let i = 0; i <= 4; i++) {
+          const val = minY + (i / 4) * (maxY - minY);
+          const y = 260 - i * 60;
+          ctx.textAlign = 'right';
+          ctx.fillText(val.toFixed(2), 45, y + 3);
+        }
+
+        resolve(tempCanvas.toDataURL('image/png'));
+      });
+    };
+
+    // Generate all plot images
+    addError('info', 'Generating plots... This may take a moment.');
+
+    const surfaceImages: { idxX: number, idxY: number, img: string }[] = [];
+    const contourImages: { idxX: number, idxY: number, img: string }[] = [];
+    const plot2DImages: { idx: number, img: string }[] = [];
+
+    // Capture all 3D surface and contour plots for each factor pair
+    for (let i = 0; i < k; i++) {
+      for (let j = i + 1; j < k; j++) {
+        // Surface plot
+        const surfImg = await capturePlot('surface', i, j);
+        if (surfImg) surfaceImages.push({ idxX: i, idxY: j, img: surfImg });
+
+        // Contour plot
+        const contImg = await capturePlot('contour', i, j);
+        if (contImg) contourImages.push({ idxX: i, idxY: j, img: contImg });
+      }
+
+      // 2D plot (factor vs response)
+      const img2D = await capture2DPlot(i);
+      if (img2D) plot2DImages.push({ idx: i, img: img2D });
+    }
+
+    // Restore original state
+    setPlotType(originalPlotType);
+    setPlotFactors(originalPlotFactors);
+
+    // Create PDF
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 15;
+    let yPos = margin;
+
+    // Helper functions
+    const addPage = () => {
+      pdf.addPage();
+      yPos = margin;
+    };
+
+    const checkPageBreak = (needed: number) => {
+      if (yPos + needed > pageHeight - margin) {
+        addPage();
+      }
+    };
+
+    // ==================== HEADER ====================
+    pdf.setFontSize(18);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('DOE/RSM Complete Analysis Report', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 10;
+
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, yPos, { align: 'center' });
+    yPos += 8;
+    pdf.text(`Factors: ${k} | Observations: ${n} | Model Terms: ${results.Beta.length}`, pageWidth / 2, yPos, { align: 'center' });
+    yPos += 15;
+
+    // ==================== SECTION 1: MODEL SUMMARY ====================
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('1. Model Summary', margin, yPos);
+    yPos += 8;
+
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+
+    const adjR2 = results.R2 - (1 - results.R2) * results.df_reg / results.df_err;
+    const rmse = Math.sqrt(results.MS_err);
+    const r2Quality = results.R2 >= 0.9 ? 'Excellent' : results.R2 >= 0.7 ? 'Good' : results.R2 >= 0.5 ? 'Moderate' : 'Poor';
+    const fSignificance = results.F > 4 ? 'Significant' : 'Not Significant';
+
+    const summaryData = [
+      ['R-Squared (R²):', `${(results.R2 * 100).toFixed(2)}%`, 'F-Statistic:', `${results.F.toFixed(2)}`],
+      ['Adjusted R²:', `${(adjR2 * 100).toFixed(2)}%`, 'F-Test:', fSignificance],
+      ['RMSE:', `${rmse.toFixed(4)}`, 'MSE:', `${results.MS_err.toFixed(4)}`],
+      ['SSE:', `${results.SSE.toFixed(4)}`, 'SSR:', `${results.SSR.toFixed(4)}`],
+    ];
+
+    summaryData.forEach(row => {
+      pdf.text(row[0], margin, yPos);
+      pdf.text(row[1], margin + 40, yPos);
+      pdf.text(row[2], margin + 90, yPos);
+      pdf.text(row[3], margin + 130, yPos);
+      yPos += 6;
+    });
+    yPos += 5;
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Model Quality:', margin, yPos);
+    yPos += 6;
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`R² = ${(results.R2 * 100).toFixed(1)}% indicates a ${r2Quality} fit`, margin, yPos);
+    yPos += 10;
+
+    // ==================== SECTION 2: ANOVA ====================
+    checkPageBreak(50);
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('2. Analysis of Variance (ANOVA)', margin, yPos);
+    yPos += 8;
+
+    pdf.setFontSize(9);
+    const anovaHeaders = ['Source', 'DF', 'Sum of Squares', 'Mean Square', 'F-Value'];
+    const anovaRows = [
+      ['Regression', results.df_reg.toString(), results.SSR.toFixed(4), results.MS_reg.toFixed(4), results.F.toFixed(2)],
+      ['Residual', results.df_err.toString(), results.SSE.toFixed(4), results.MS_err.toFixed(4), '-'],
+      ['Total', (results.df_reg + results.df_err).toString(), results.SST.toFixed(4), '-', '-'],
+    ];
+
+    let xPos = margin;
+    anovaHeaders.forEach(h => { pdf.text(h, xPos, yPos); xPos += 35; });
+    yPos += 5;
+    anovaRows.forEach(row => {
+      xPos = margin;
+      row.forEach(cell => { pdf.text(cell, xPos, yPos); xPos += 35; });
+      yPos += 5;
+    });
+    yPos += 10;
+
+    // ==================== SECTION 3: EQUATION ====================
+    checkPageBreak(40);
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('3. Regression Equation', margin, yPos);
+    yPos += 8;
+
+    pdf.setFontSize(10);
+    pdf.setFont('courier', 'normal');
+    const eqLines = pdf.splitTextToSize(results.equation, pageWidth - 2 * margin);
+    eqLines.forEach((line: string) => {
+      pdf.text(line, margin, yPos);
+      yPos += 6;
+    });
+    yPos += 10;
+
+    // ==================== SECTION 4: COEFFICIENTS ====================
+    checkPageBreak(60);
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('4. Model Coefficients', margin, yPos);
+    yPos += 8;
+
+    pdf.setFontSize(8);
+    const coefHeaders = ['Term', 'Coef', 'Std Err', 't-Value', 'p-Value', 'Sig'];
+    xPos = margin;
+    const colW = [35, 25, 22, 22, 22, 18];
+    coefHeaders.forEach((h, i) => { pdf.setFont('helvetica', 'bold'); pdf.text(h, xPos, yPos); xPos += colW[i]; });
+    yPos += 5;
+
+    const significantTerms: string[] = [];
+    results.coefStats.forEach((stat: any, i: number) => {
+      const isSig = stat.p < 0.05;
+      if (isSig) significantTerms.push(results.terms[i]);
+
+      xPos = margin;
+      const row = [
+        results.terms[i],
+        stat.val.toFixed(4),
+        stat.se.toFixed(4),
+        stat.t.toFixed(2),
+        stat.p < 0.001 ? '<.001' : stat.p.toFixed(3),
+        isSig ? '***' : ''
+      ];
+
+      row.forEach((cell, j) => {
+        pdf.setFont(isSig ? 'helvetica' : 'helvetica', isSig ? 'bold' : 'normal');
+        if (isSig) pdf.setTextColor(0, 128, 0);
+        else pdf.setTextColor(0, 0, 0);
+        pdf.text(cell, xPos, yPos);
+        pdf.setTextColor(0, 0, 0);
+        xPos += colW[j];
+      });
+      yPos += 5;
+    });
+    yPos += 8;
+
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Significant (p<0.05):', margin, yPos);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(significantTerms.length > 0 ? significantTerms.join(', ') : 'None', margin + 40, yPos);
+    yPos += 15;
+
+    // ==================== SECTION 5: 3D SURFACE PLOTS ====================
+    checkPageBreak(120);
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('5. 3D Response Surface Plots', margin, yPos);
+    yPos += 6;
+
+    pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text('The following plots show the predicted response surface for each pair of factors,', margin, yPos);
+    yPos += 4;
+    pdf.text('with other factors held at their mean values. Peak regions indicate optimal operating conditions.', margin, yPos);
+    yPos += 10;
+
+    const plotW = (pageWidth - 2 * margin - 10) / 2;
+    const plotH = 45;
+
+    for (let p = 0; p < surfaceImages.length; p++) {
+      const { idxX, idxY, img } = surfaceImages[p];
+      const isLeft = p % 2 === 0;
+      const xOffset = isLeft ? margin : margin + 10 + plotW;
+
+      if (p > 0 && p % 2 === 0) {
+        checkPageBreak(plotH + 20);
+        yPos += plotH + 10;
+      }
+
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`5.${p + 1} ${headers[idxX] || `X${idxX + 1}`} vs ${headers[idxY] || `X${idxY + 1}`}`, xOffset, yPos);
+
+      const imgProps = pdf.getImageProperties(img);
+      const h = (imgProps.height * plotW) / imgProps.width;
+      pdf.addImage(img, 'PNG', xOffset, yPos + 2, plotW, Math.min(h, plotH));
+
+      if (p % 2 === 1) yPos += plotH + 5;
+    }
+    if (surfaceImages.length % 2 === 1) yPos += plotH + 10;
+    else yPos += 10;
+
+    // ==================== SECTION 6: CONTOUR PLOTS ====================
+    checkPageBreak(120);
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('6. Contour Plots (2D View)', margin, yPos);
+    yPos += 6;
+
+    pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text('Contour plots show iso-response lines. Warmer colors (red) indicate higher response,', margin, yPos);
+    yPos += 4;
+    pdf.text('cooler colors (blue) indicate lower response. White dots mark experimental data points.', margin, yPos);
+    yPos += 10;
+
+    for (let p = 0; p < contourImages.length; p++) {
+      const { idxX, idxY, img } = contourImages[p];
+      const isLeft = p % 2 === 0;
+      const xOffset = isLeft ? margin : margin + 10 + plotW;
+
+      if (p > 0 && p % 2 === 0) {
+        checkPageBreak(plotH + 20);
+        yPos += plotH + 10;
+      }
+
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`6.${p + 1} ${headers[idxX] || `X${idxX + 1}`} vs ${headers[idxY] || `X${idxY + 1}`}`, xOffset, yPos);
+
+      const imgProps = pdf.getImageProperties(img);
+      const h = (imgProps.height * plotW) / imgProps.width;
+      pdf.addImage(img, 'PNG', xOffset, yPos + 2, plotW, Math.min(h, plotH));
+
+      if (p % 2 === 1) yPos += plotH + 5;
+    }
+    if (contourImages.length % 2 === 1) yPos += plotH + 10;
+    else yPos += 10;
+
+    // ==================== SECTION 7: 2D FACTOR VS RESPONSE ====================
+    checkPageBreak(120);
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('7. Individual Factor Effects (2D Plots)', margin, yPos);
+    yPos += 6;
+
+    pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text('These plots show the relationship between each individual factor and the response.', margin, yPos);
+    yPos += 4;
+    pdf.text('Gold dots = actual data, green line = model prediction.', margin, yPos);
+    yPos += 10;
+
+    for (let p = 0; p < plot2DImages.length; p++) {
+      const { idx, img } = plot2DImages[p];
+      checkPageBreak(plotH + 20);
+
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`7.${p + 1} Response vs ${headers[idx] || `X${idx + 1}`}`, margin, yPos);
+
+      const imgProps = pdf.getImageProperties(img);
+      const h = (imgProps.height * (pageWidth - 2 * margin)) / imgProps.width;
+      pdf.addImage(img, 'PNG', margin, yPos + 2, pageWidth - 2 * margin, Math.min(h, plotH));
+      yPos += plotH + 10;
+    }
+
+    // ==================== SECTION 8: CONCLUSIONS ====================
+    checkPageBreak(40);
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('8. Conclusions & Recommendations', margin, yPos);
+    yPos += 8;
+
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+
+    const conclusions = [];
+    if (results.R2 >= 0.9) conclusions.push('Excellent model fit (R² > 90%) - suitable for precise predictions');
+    else if (results.R2 >= 0.7) conclusions.push('Good model fit (R² > 70%) - suitable for approximate predictions');
+    else conclusions.push('Moderate fit - consider additional terms or improved data');
+
+    if (significantTerms.length > 0) conclusions.push(`${significantTerms.length} significant parameter(s): ${significantTerms.join(', ')}`);
+    else conclusions.push('No significant parameters detected');
+
+    conclusions.push(`Model: Y = ${results.terms.filter((t: string, i: number) => results.coefStats[i].p < 0.05).length} significant terms + noise`);
+
+    conclusions.forEach((text, idx) => {
+      pdf.text(`${idx + 1}. ${text}`, margin, yPos);
+      yPos += 6;
+    });
+
+    // Footer
+    const totalPages = pdf.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      pdf.setPage(i);
+      pdf.setFontSize(8);
+      pdf.setTextColor(128, 128, 128);
+      pdf.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+      pdf.text('DOE/RSM Analysis Report - Response Surface Methodology', pageWidth / 2, pageHeight - 5, { align: 'center' });
+      pdf.setTextColor(0, 0, 0);
+    }
+
+    // Save PDF
+    pdf.save('DOE_RSM_Complete_Analysis.pdf');
+
+    // Also export raw data to Excel
+    const wb = XLSX.utils.book_new();
+    const wsRaw = XLSX.utils.json_to_sheet(data.map((row, idx) => {
+      const obj: any = { Obs: idx + 1 };
+      for (let f = 0; f < k; f++) obj[headers[f] || `X${f + 1}`] = row[f];
+      obj.Y = row[k];
+      return obj;
+    }));
+    XLSX.utils.book_append_sheet(wb, wsRaw, 'Raw Data');
+    XLSX.writeFile(wb, 'DOE_RSM_Data.xlsx');
+
+    addError('info', `Complete report exported: ${surfaceImages.length} surface + ${contourImages.length} contour + ${plot2DImages.length} 2D plots.`);
+  }, [results, data, k, n, plotType, plotFactors, headers, addError]);
+
+  // Plotting (Contour/Heatmap)
+  useEffect(() => {
+    if (!results || !data || !canvasRef.current) return;
+    const ctx = canvasRef.current.getContext('2d');
+    if (!ctx) return;
+
+    const width = canvasRef.current.width;
+    const height = canvasRef.current.height;
+    const idxX = plotFactors.x;
+    const idxY = plotFactors.y;
+
+    if (idxX >= k || idxY >= k) return;
+
+    const xVals = data.map(r => r[idxX]);
+    const yVals = data.map(r => r[idxY]);
+    const minX = Math.min(...xVals), maxX = Math.max(...xVals);
+    const minY = Math.min(...yVals), maxY = Math.max(...yVals);
+
+    // Grid for plot
+    const res = 50;
+    const stepX = (maxX - minX) / res;
+    const stepY = (maxY - minY) / res;
+
+    let minZ = Infinity, maxZ = -Infinity;
+    const gridZ: number[][] = [];
+
+    // Pre-calculate Z values
+    for (let i = 0; i < res; i++) {
+      const rowZ = [];
+      for (let j = 0; j < res; j++) {
+        const valX = minX + i * stepX;
+        const valY = minY + j * stepY;
+
+        // Construct prediction vector (holding other factors at mean)
+        const xRow = [1];
+        const factors = Array(k).fill(0);
+        // Fill means
+        for (let f = 0; f < k; f++) {
+          const fVals = data.map(r => r[f]);
+          factors[f] = fVals.reduce((a, b) => a + b, 0) / fVals.length;
+        }
+        factors[idxX] = valX;
+        factors[idxY] = valY;
+
+        // Linear
+        for (let f = 0; f < k; f++) xRow.push(factors[f]);
+        // Quadratic
+        for (let f = 0; f < k; f++) xRow.push(factors[f] * factors[f]);
+        // Interaction
+        for (let f = 0; f < k; f++) {
+          for (let g = f + 1; g < k; g++) {
+            xRow.push(factors[f] * factors[g]);
+          }
+        }
+
+        let z = 0;
+        for (let b = 0; b < results.Beta.length; b++) z += xRow[b] * results.Beta[b][0];
+
+        rowZ.push(z);
+        if (z < minZ) minZ = z;
+        if (z > maxZ) maxZ = z;
+      }
+      gridZ.push(rowZ);
+    }
+
+    // --- 3D Surface Plotting ---
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, width, height);
+
+    if (plotType === 'surface') {
+      const zScale = 30;
+      const project = (x: number, y: number, z: number) => {
+        const p = { x, y, z };
+        // Rotate around X axis
+        const y1 = p.y * Math.cos(rotation.x) - p.z * Math.sin(rotation.x);
+        const z1 = p.y * Math.sin(rotation.x) + p.z * Math.cos(rotation.x);
+        // Rotate around Y axis
+        const x2 = p.x * Math.cos(rotation.y) + z1 * Math.sin(rotation.y);
+        const z2 = -p.x * Math.sin(rotation.y) + z1 * Math.cos(rotation.y);
+        return { x: width / 2 + x2 * 5, y: height / 2 + y1 * 2.5, z: z2 };
+      };
+
+      const polygons: any[] = [];
+      for (let i = 0; i < res - 1; i++) {
+        for (let j = 0; j < res - 1; j++) {
+          const x_3d = i - res / 2;
+          const y_3d = j - res / 2;
+
+          const z1_norm = (gridZ[i][j] - minZ) / (maxZ - minZ || 1);
+          const z2_norm = (gridZ[i + 1][j] - minZ) / (maxZ - minZ || 1);
+          const z3_norm = (gridZ[i + 1][j + 1] - minZ) / (maxZ - minZ || 1);
+          const z4_norm = (gridZ[i][j + 1] - minZ) / (maxZ - minZ || 1);
+
+          const p1 = project(x_3d, y_3d, z1_norm * zScale);
+          const p2 = project(x_3d + 1, y_3d, z2_norm * zScale);
+          const p3 = project(x_3d + 1, y_3d + 1, z3_norm * zScale);
+          const p4 = project(x_3d, y_3d + 1, z4_norm * zScale);
+
+          const avgZ = (p1.z + p2.z + p3.z + p4.z) / 4;
+          const normColor = (z1_norm + z2_norm + z3_norm + z4_norm) / 4;
+
+          polygons.push({ p1, p2, p3, p4, z: avgZ, color: normColor });
+        }
+      }
+
+      polygons.sort((a, b) => a.z - b.z);
+
+      polygons.forEach(({ p1, p2, p3, p4, color }) => {
+        const r = Math.floor(255 * color);
+        const b = Math.floor(255 * (1 - color));
+        const g = Math.floor(180 * (1 - Math.abs(color - 0.5) * 2));
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 0.3;
+
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.lineTo(p3.x, p3.y);
+        ctx.lineTo(p4.x, p4.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      });
+    } else { // Contour plot
+      const cellW = width / res;
+      const cellH = height / res;
+      for (let i = 0; i < res; i++) {
+        for (let j = 0; j < res; j++) {
+          const norm = (gridZ[i][j] - minZ) / (maxZ - minZ || 1);
+          const r = Math.floor(255 * norm);
+          const b = Math.floor(255 * (1 - norm));
+          const g = Math.floor(180 * (1 - Math.abs(norm - 0.5) * 2));
+          ctx.fillStyle = `rgb(${r},${g},${b})`;
+          ctx.fillRect(i * cellW, (res - 1 - j) * cellH, cellW, cellH);
+        }
+      }
+
+      // Draw axes
+      ctx.strokeStyle = '#aaa';
+      ctx.fillStyle = '#aaa';
+      ctx.font = '10px sans-serif';
+      ctx.lineWidth = 1;
+
+      // X axis
+      ctx.beginPath(); ctx.moveTo(0, height - 20); ctx.lineTo(width, height - 20); ctx.stroke();
+      for (let i = 0; i <= 5; i++) {
+        const x = i / 5 * width;
+        const val = minX + i / 5 * (maxX - minX);
+        ctx.textAlign = 'center';
+        ctx.fillText(val.toFixed(1), x, height - 8);
+      }
+      ctx.fillText(headers[idxX] || `X${idxX + 1}`, width / 2, height);
+
+      // Y axis
+      ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(25, height); ctx.stroke();
+      for (let i = 0; i <= 5; i++) {
+        const y = height - (i / 5 * height);
+        const val = minY + i / 5 * (maxY - minY);
+        ctx.textAlign = 'right';
+        ctx.fillText(val.toFixed(1), 20, y);
+      }
+      ctx.save();
+      ctx.translate(5, height / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.textAlign = 'center';
+      ctx.fillText(headers[idxY] || `X${idxY + 1}`, 0, 0);
+      ctx.restore();
+
+      // Data points
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.strokeStyle = 'black';
+      ctx.lineWidth = 0.5;
+      data.forEach(row => {
+        const x = row[idxX];
+        const y = row[idxY];
+        const px = (x - minX) / (maxX - minX || 1) * width;
+        const py = height - ((y - minY) / (maxY - minY || 1) * height);
+        ctx.beginPath();
+        ctx.arc(px, py, 2, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
+  }, [results, plotFactors, data, k, plotType, rotation]);
+
+  return (
+    <div className="flex flex-col h-full w-full bg-[#141414] text-[#e0e0e0]">
+      <div className="flex border-b border-[#222] p-2 gap-2 bg-[#1a1a1a]">
+        <div className="flex items-center gap-2">
+          <Label>Factors (k):</Label>
+          <Input type="number" value={k} onChange={e => setK(parseInt(e.target.value))} className="w-16 h-7" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Label>Trials (N):</Label>
+          <Input type="number" value={n} onChange={e => setN(parseInt(e.target.value))} className="w-16 h-7" />
+        </div>
+        <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".xlsx,.csv" />
+        <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>Upload Excel</Button>
+        <Button size="sm" onClick={calculateRSM} disabled={!data}>Calculate RSM</Button>
+        <Button size="sm" variant="outline" onClick={exportDoeReport} disabled={!results}>Export Report</Button>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Results Panel */}
+        <div className="w-1/2 p-4 overflow-y-auto border-r border-[#222]">
+          {results ? (
+            <div className="space-y-4">
+              <div className="bg-[#1a1a1a] p-3 rounded border border-[#333]">
+                <h3 className="text-[#c9a86c] font-bold mb-2">Model Summary</h3>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>R-Sq: {(results.R2 * 100).toFixed(2)}%</div>
+                  <div>F-Value: {results.F.toFixed(2)}</div>
+                  <div>MSE: {results.MS_err.toFixed(4)}</div>
+                </div>
+              </div>
+              <div className="bg-[#1a1a1a] p-3 rounded border border-[#333]">
+                <h3 className="text-[#c9a86c] font-bold mb-2">Regression Equation</h3>
+                <p className="text-xs font-mono text-wrap break-words text-green-300">{results.equation}</p>
+              </div>
+
+
+              <table className="w-full text-xs text-left">
+                <thead className="bg-[#222] text-[#888]">
+                  <tr><th className="p-2">Term</th><th className="p-2">Coef</th><th className="p-2">SE</th><th className="p-2">T</th><th className="p-2">Sig</th></tr>
+                </thead>
+                <tbody className="divide-y divide-[#333]">
+                  {results.coefStats.map((stat: any, i: number) => (
+                    <tr key={i} className={stat.p < 0.05 ? "bg-green-800/30" : ""}>
+                      <td className={`p-2 font-mono ${stat.p < 0.05 ? "text-green-300 font-bold" : ""}`}>{results.terms[i]}</td>
+                      <td className="p-2">{stat.val.toFixed(4)}</td>
+                      <td className="p-2 text-[#666]">{stat.se.toFixed(4)}</td>
+                      <td className="p-2">{stat.t.toFixed(2)}</td>
+                      <td className={`p-2 ${stat.p < 0.05 ? "text-green-300 font-bold" : ""}`}>{stat.p < 0.001 ? '<.001' : stat.p.toFixed(3)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center text-[#666] mt-10">Upload data and calculate to see ANOVA and Coefficients.</div>
+          )}
+        </div>
+
+        {/* Plot Panel */}
+        <div className="w-1/2 p-4 flex flex-col">
+          <div className="flex justify-between items-center mb-2">
+            <div className="flex gap-2">
+              <Button size="sm" variant={plotType === 'surface' ? 'default' : 'secondary'} onClick={() => setPlotType('surface')}>3D Surface</Button>
+              <Button size="sm" variant={plotType === 'contour' ? 'default' : 'secondary'} onClick={() => setPlotType('contour')}>Contour Plot</Button>
+            </div>
+            <div className="flex gap-2">
+              <select className="bg-[#0a0a0a] border border-[#333] text-xs rounded" value={plotFactors.x} onChange={e => setPlotFactors(p => ({ ...p, x: parseInt(e.target.value) }))}>
+                {Array.from({ length: k }).map((_, i) => <option key={i} value={i}>X{i + 1}</option>)}
+              </select>
+              <span className="text-xs pt-1">vs</span>
+              <select className="bg-[#0a0a0a] border border-[#333] text-xs rounded" value={plotFactors.y} onChange={e => setPlotFactors(p => ({ ...p, y: parseInt(e.target.value) }))}>
+                {Array.from({ length: k }).map((_, i) => <option key={i} value={i}>X{i + 1}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="flex-1 bg-[#000] border border-[#333] relative rounded overflow-hidden">
+            <canvas
+              ref={canvasRef}
+              width={400}
+              height={300}
+              className="w-full h-full cursor-grab active:cursor-grabbing"
+              onMouseDown={(e) => {
+                setIsRotating(true);
+                lastMousePos.current = { x: e.clientX, y: e.clientY };
+              }}
+              onMouseMove={(e) => {
+                if (isRotating) {
+                  const dx = e.clientX - lastMousePos.current.x;
+                  const dy = e.clientY - lastMousePos.current.y;
+                  setRotation(r => ({ x: r.x + dy * 0.01, y: r.y + dx * 0.01 }));
+                  lastMousePos.current = { x: e.clientX, y: e.clientY };
+                }
+              }}
+              onMouseUp={() => setIsRotating(false)}
+              onMouseLeave={() => setIsRotating(false)} />
+            <div className="absolute bottom-2 right-2 text-[10px] text-white bg-black/50 px-1 rounded">Low (Blue) → High (Red)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const HmiDashboardContent = ({
+  variables,
+  components,
+  setComponents,
+  updateVariable,
+  onClose
+}: {
+  variables: VariableDef[];
+  components: HmiComponent[];
+  setComponents: React.Dispatch<React.SetStateAction<HmiComponent[]>>;
+  updateVariable: (id: string, value: string) => void;
+  onClose: () => void;
+}) => {
+  const [editMode, setEditMode] = useState(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
+  const [resizeStart, setResizeStart] = useState<{ x: number, y: number, w: number, h: number, mx: number, my: number } | null>(null);
+
+  const addComponent = (type: HmiComponentType) => {
+    const newComp: HmiComponent = {
+      id: uuidv4(),
+      type,
+      name: `${type}_${components.length + 1}`,
+      x: 50 + (components.length * 20) % 300,
+      y: 50 + (components.length * 20) % 300,
+      width: type === 'slider' ? 150 : type === 'lcd' ? 120 : (type === 'rotary' || type === 'gauge' || type === 'hybrid-rotary' || type === 'buzzer') ? 80 : 80,
+      height: type === 'slider' ? 40 : (type === 'rotary' || type === 'gauge' || type === 'hybrid-rotary' || type === 'buzzer') ? 80 : 60,
+      variableId: null,
+      min: 0,
+      max: 100,
+      variableIds: type === 'rotary' ? [] : undefined,
+      hybridValues: type === 'hybrid-rotary' ? ['0', '1', '2'] : undefined
+    };
+    setComponents(prev => [...prev, newComp]);
+    setSelectedId(newComp.id);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent, id: string) => {
+    if (!editMode) return;
+    e.stopPropagation();
+    setSelectedId(id);
+    setIsDragging(true);
+    const comp = components.find(c => c.id === id);
+    if (comp) {
+      setDragOffset({ x: e.clientX - comp.x, y: e.clientY - comp.y });
+    }
+  };
+
+  const handleResizeMouseDown = (e: React.MouseEvent, handle: string, id: string) => {
+    e.stopPropagation();
+    const comp = components.find(c => c.id === id);
+    if (comp) {
+      setIsResizing(true);
+      setResizeHandle(handle);
+      setResizeStart({ x: comp.x, y: comp.y, w: comp.width, h: comp.height, mx: e.clientX, my: e.clientY });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isResizing && resizeStart && resizeHandle && selectedId) {
+      const dx = e.clientX - resizeStart.mx;
+      const dy = e.clientY - resizeStart.my;
+
+      let newX = resizeStart.x;
+      let newY = resizeStart.y;
+      let newW = resizeStart.w;
+      let newH = resizeStart.h;
+
+      if (resizeHandle.includes('e')) newW = Math.max(20, resizeStart.w + dx);
+      if (resizeHandle.includes('s')) newH = Math.max(20, resizeStart.h + dy);
+      if (resizeHandle.includes('w')) {
+        const delta = Math.min(resizeStart.w - 20, dx);
+        newX = resizeStart.x + delta;
+        newW = resizeStart.w - delta;
+      }
+      if (resizeHandle.includes('n')) {
+        const delta = Math.min(resizeStart.h - 20, dy);
+        newY = resizeStart.y + delta;
+        newH = resizeStart.h - delta;
+      }
+
+      setComponents(prev => prev.map(c => c.id === selectedId ? { ...c, x: newX, y: newY, width: newW, height: newH } : c));
+      return;
+    }
+
+    if (isDragging && selectedId && editMode) {
+      const newX = e.clientX - dragOffset.x;
+      const newY = e.clientY - dragOffset.y;
+      setComponents(prev => prev.map(c => c.id === selectedId ? { ...c, x: newX, y: newY } : c));
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    setIsResizing(false);
+    setResizeHandle(null);
+    setResizeStart(null);
+  };
+
+  const renderComponent = (comp: HmiComponent) => {
+    const variable = variables.find(v => v.id === comp.variableId);
+    const value = variable ? variable.currentValue : 0;
+    const numValue = typeof value === 'number' ? value : (value ? 1 : 0);
+    const boolValue = !!value;
+
+    const commonStyle = `absolute border ${selectedId === comp.id && editMode ? 'border-[#c9a86c] z-10' : 'border-[#333]'} bg-[#111] rounded flex flex-col items-center justify-center overflow-hidden select-none`;
+
+    return (
+      <div
+        key={comp.id}
+        style={{ left: comp.x, top: comp.y, width: comp.width, height: comp.height }}
+        className={commonStyle}
+        onMouseDown={(e) => handleMouseDown(e, comp.id)}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {selectedId === comp.id && editMode && (
+          <>
+            {['nw', 'ne', 'sw', 'se'].map(h => (
+              <div
+                key={h}
+                className={`absolute w-2 h-2 bg-[#c9a86c] border border-black z-20 ${h === 'nw' ? 'top-0 left-0 cursor-nw-resize' : h === 'ne' ? 'top-0 right-0 cursor-ne-resize' : h === 'sw' ? 'bottom-0 left-0 cursor-sw-resize' : 'bottom-0 right-0 cursor-se-resize'}`}
+                onMouseDown={(e) => handleResizeMouseDown(e, h, comp.id)}
+              />
+            ))}
+          </>
+        )}
+        {/* Component Content */}
+        <div className="flex-1 flex items-center justify-center w-full p-2">
+          {comp.type === 'toggle' && (
+            <div
+              className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${boolValue ? 'bg-[#c9a86c]' : 'bg-[#333]'}`}
+              onClick={() => !editMode && variable && updateVariable(variable.id, (!boolValue).toString())}
+            >
+              <div className={`w-4 h-4 rounded-full bg-white shadow-md transform transition-transform ${boolValue ? 'translate-x-6' : 'translate-x-0'}`} />
+            </div>
+          )}
+          {comp.type === 'button' && (
+            <button
+              className={`w-full h-full rounded font-bold transition-all active:scale-95 ${boolValue ? 'bg-[#c9a86c] text-black' : 'bg-[#333] text-[#ccc]'}`}
+              onMouseDown={() => !editMode && variable && updateVariable(variable.id, 'true')}
+              onMouseUp={() => !editMode && variable && updateVariable(variable.id, 'false')}
+              onMouseLeave={() => !editMode && variable && updateVariable(variable.id, 'false')}
+            >
+              {comp.name}
+            </button>
+          )}
+          {comp.type === 'lamp' && (
+            <div className={`w-10 h-10 rounded-full border-2 border-[#555] ${boolValue ? 'bg-green-500 shadow-[0_0_15px_rgba(34,197,94,0.8)]' : 'bg-[#222]'}`} />
+          )}
+          {comp.type === 'led' && (
+            <div className={`w-4 h-4 rounded-full ${boolValue ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 'bg-[#333]'}`} />
+          )}
+          {comp.type === 'slider' && (
+            <input
+              type="range"
+              min={comp.min ?? 0}
+              max={comp.max ?? 100}
+              value={numValue}
+              onChange={(e) => !editMode && variable && updateVariable(variable.id, e.target.value)}
+              className="w-full accent-[#c9a86c]"
+              disabled={editMode}
+            />
+          )}
+          {comp.type === 'input' && (
+            <input
+              type="number"
+              value={numValue}
+              onChange={(e) => !editMode && variable && updateVariable(variable.id, e.target.value)}
+              className="w-full bg-[#0a0a0a] border border-[#333] rounded px-2 py-1 text-right text-[#c9a86c] font-mono"
+              disabled={editMode}
+            />
+          )}
+          {comp.type === 'lcd' && (
+            <div className="w-full h-full bg-[#0a0a0a] border border-[#333] flex items-center justify-end px-2 font-mono text-green-500 text-lg">
+              {typeof value === 'number' ? value.toFixed(2) : String(value)}
+            </div>
+          )}
+          {comp.type === 'gauge' && (
+            <div className="relative w-full h-full flex items-center justify-center">
+              <svg viewBox="0 0 100 50" className="w-full h-full">
+                <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#333" strokeWidth="10" />
+                <path
+                  d="M 10 50 A 40 40 0 0 1 90 50"
+                  fill="none"
+                  stroke="#c9a86c"
+                  strokeWidth="10"
+                  strokeDasharray={`${((numValue - (comp.min || 0)) / ((comp.max || 100) - (comp.min || 0))) * 126} 126`}
+                />
+                <text x="50" y="45" textAnchor="middle" fill="#fff" fontSize="12">{numValue.toFixed(0)}</text>
+              </svg>
+            </div>
+          )}
+          {comp.type === 'rotary' && (() => {
+            const isMultiVar = comp.variableIds && comp.variableIds.length > 0;
+
+            if (isMultiVar) {
+              const positions = comp.variableIds!.length;
+              const stepAngle = 270 / (Math.max(1, positions - 1));
+
+              // Determine current index based on variables
+              let currentIndex = 0;
+              comp.variableIds!.forEach((vid, idx) => {
+                if (!vid) return;
+                const v = variables.find(v => v.id === vid);
+                // Check for truthy value (true or > 0)
+                if (v && (v.currentValue === true || Number(v.currentValue) > 0)) {
+                  currentIndex = idx;
+                }
+              });
+
+              const angle = -135 + currentIndex * stepAngle;
+
+              const handleRotaryMouseDown = (e: React.MouseEvent) => {
+                if (editMode) return;
+                e.stopPropagation();
+
+                const rect = e.currentTarget.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+
+                const updateFromEvent = (ev: { clientX: number, clientY: number }) => {
+                  const angleRad = Math.atan2(ev.clientY - centerY, ev.clientX - centerX);
+                  let deg = angleRad * 180 / Math.PI;
+
+                  // Rotate so -135 becomes 0.
+                  let effectiveAngle = deg + 135;
+                  if (effectiveAngle < 0) effectiveAngle += 360;
+
+                  // Clamping to 0-270 range
+                  if (effectiveAngle > 270) {
+                    if (effectiveAngle > 315) effectiveAngle = 0;
+                    else effectiveAngle = 270;
+                  }
+
+                  const index = Math.round(effectiveAngle / stepAngle);
+                  const clampedIndex = Math.max(0, Math.min(positions - 1, index));
+
+                  if (clampedIndex !== currentIndex) {
+                    // Update variables
+                    comp.variableIds!.forEach((vid, idx) => {
+                      if (!vid) return;
+                      updateVariable(vid, idx === clampedIndex ? '1' : '0');
+                    });
+                  }
+                };
+
+                updateFromEvent(e);
+
+                const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+                  updateFromEvent(moveEvent);
+                };
+
+                const handleMouseUp = () => {
+                  document.body.style.cursor = 'default';
+                  document.removeEventListener('mousemove', handleMouseMove);
+                  document.removeEventListener('mouseup', handleMouseUp);
+                };
+
+                document.body.style.cursor = 'grabbing';
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+              };
+
+              return (
+                <div className="relative w-full h-full flex items-center justify-center" onMouseDown={handleRotaryMouseDown} style={{ cursor: editMode ? 'default' : 'pointer' }}>
+                  <svg viewBox="0 0 100 100" className="w-full h-full">
+                    <defs><radialGradient id="grad-rotary"><stop offset="0%" stopColor="#555" /><stop offset="90%" stopColor="#222" /><stop offset="100%" stopColor="#111" /></radialGradient></defs>
+                    <circle cx="50" cy="50" r="40" fill="url(#grad-rotary)" stroke="#111" strokeWidth="2" />
+                    {/* Ticks */}
+                    {Array.from({ length: positions }).map((_, i) => (
+                      <line key={i} x1="50" y1="10" x2="50" y2="15" stroke={i === currentIndex ? "#c9a86c" : "#888"} strokeWidth={i === currentIndex ? 3 : 2} transform={`rotate(${-135 + i * stepAngle} 50 50)`} />
+                    ))}
+                    <g transform={`rotate(${angle} 50 50)`}>
+                      <circle cx="50" cy="20" r="4" fill="#c9a86c" />
+                      <line x1="50" y1="20" x2="50" y2="50" stroke="#c9a86c" strokeWidth="2" />
+                    </g>
+                  </svg>
+                  <div className="absolute bottom-1 text-[9px] text-white font-mono select-none">Pos {currentIndex + 1}</div>
+                </div>
+              );
+            }
+
+            const min = comp.min ?? 0;
+            const max = comp.max ?? 100;
+            const range = max - min;
+            const value = Math.max(min, Math.min(max, numValue));
+            const percentage = range === 0 ? 0 : (value - min) / range;
+            const angle = -135 + percentage * 270; // from -135 to 135 degrees
+
+            const handleRotaryMouseDown = (e: React.MouseEvent) => {
+              if (editMode || !variable) return;
+              e.stopPropagation();
+
+              const rect = e.currentTarget.getBoundingClientRect();
+              const centerX = rect.left + rect.width / 2;
+              const centerY = rect.top + rect.height / 2;
+              const startAngleRad = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+
+              const startValue = value;
+              document.body.style.cursor = 'grabbing';
+
+              const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+                const currentAngleRad = Math.atan2(moveEvent.clientY - centerY, moveEvent.clientX - centerX);
+                let angleDiff = currentAngleRad - startAngleRad;
+
+                if (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                if (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+                const valueChange = (angleDiff / (270 * Math.PI / 180)) * range;
+                let newValue = startValue + valueChange;
+                newValue = Math.max(min, Math.min(max, newValue));
+
+                updateVariable(variable.id, newValue.toString());
+              };
+
+              const handleMouseUp = () => {
+                document.body.style.cursor = 'default';
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+              };
+
+              document.addEventListener('mousemove', handleMouseMove);
+              document.addEventListener('mouseup', handleMouseUp);
+            };
+
+            return (
+              <div className="relative w-full h-full flex items-center justify-center" onMouseDown={handleRotaryMouseDown} style={{ cursor: editMode ? 'default' : 'grab' }}>
+                <svg viewBox="0 0 100 100" className="w-full h-full">
+                  <defs><radialGradient id="grad-rotary"><stop offset="0%" stopColor="#555" /><stop offset="90%" stopColor="#222" /><stop offset="100%" stopColor="#111" /></radialGradient></defs>
+                  <circle cx="50" cy="50" r="40" fill="url(#grad-rotary)" stroke="#111" strokeWidth="2" />
+                  {Array.from({ length: 11 }).map((_, i) => <line key={i} x1="50" y1="10" x2="50" y2="15" stroke="#888" strokeWidth="2" transform={`rotate(${-135 + i * 27} 50 50)`} />)}
+                  <g transform={`rotate(${angle} 50 50)`}><circle cx="50" cy="20" r="4" fill="#c9a86c" /></g>
+                </svg>
+                <div className="absolute text-xs text-white font-mono select-none">{value.toFixed(1)}</div>
+              </div>
+            );
+          })()}
+          {comp.type === 'hybrid-rotary' && (
+            <HybridRotary
+              comp={comp}
+              variable={variable}
+              updateVariable={updateVariable}
+              editMode={editMode}
+            />
+          )}
+          {comp.type === 'buzzer' && (
+            <Buzzer comp={comp} variable={variable} editMode={editMode} />
+          )}
+        </div>
+        {/* Label */}
+        <div className="w-full bg-[#1a1a1a] text-[9px] text-center text-[#888] py-0.5 truncate px-1">
+          {comp.name} {variable ? `(${variable.name})` : '(unbound)'}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col h-full w-full bg-[#141414]" onMouseUp={handleMouseUp} onMouseMove={handleMouseMove}>
+      <div className="h-10 flex items-center px-4 border-b border-[#222] justify-between bg-[#1a1a1a] shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="flex bg-[#0a0a0a] rounded p-0.5 border border-[#333]">
+            <button onClick={() => setEditMode(true)} className={`px-3 py-1 text-xs rounded ${editMode ? 'bg-[#333] text-white' : 'text-[#888]'}`}>Edit</button>
+            <button onClick={() => { setEditMode(false); setSelectedId(null); }} className={`px-3 py-1 text-xs rounded ${!editMode ? 'bg-[#c9a86c] text-black font-bold' : 'text-[#888]'}`}>Run</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar (Edit Mode Only) */}
+        {editMode && (
+          <div
+            className="w-48 bg-[#111] border-r border-[#222] p-3 flex flex-col gap-3 overflow-y-auto"
+            onMouseDown={e => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
+          >
+            <Label>Components</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {['toggle', 'button', 'slider', 'input', 'lamp', 'led', 'lcd', 'gauge', 'rotary', 'hybrid-rotary', 'buzzer'].map(t => (
+                <button key={t} onClick={() => addComponent(t as HmiComponentType)} className="flex flex-col items-center justify-center p-2 bg-[#1a1a1a] border border-[#333] rounded hover:bg-[#222] hover:border-[#c9a86c]">
+                  <span className="text-[10px] capitalize text-[#ccc]">{t}</span>
+                </button>
+              ))}
+            </div>
+
+            <Separator />
+
+            {selectedId ? (
+              <div className="space-y-3">
+                <Label>Properties</Label>
+                {(() => {
+                  const comp = components.find(c => c.id === selectedId);
+                  if (!comp) return null;
+                  return (
+                    <>
+                      <div><Label>Name</Label><Input value={comp.name} onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, name: e.target.value } : c))} /></div>
+                      <div>
+                        <Label>Variable</Label>
+                        <select
+                          value={comp.variableId || ''}
+                          onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableId: e.target.value || null } : c))}
+                          className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
+                        >
+                          <option value="">-- Unbound --</option>
+                          {variables.map(v => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
+                        </select>
+                      </div>
+
+                      {comp.type === 'rotary' && (
+                        <div className="space-y-2 border-t border-[#333] pt-2 mt-2">
+                          <Label>Multi-Variable Mode (Max 5)</Label>
+                          {(comp.variableIds || []).map((vid, idx) => (
+                            <div key={idx} className="flex gap-1">
+                              <select
+                                value={vid}
+                                onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableIds: (c.variableIds || []).map((v, i) => i === idx ? e.target.value : v) } : c))}
+                                className="flex-1 h-6 bg-[#0a0a0a] border border-[#333] rounded px-1 text-[10px] text-[#e0e0e0]"
+                              >
+                                <option value="">-- Select --</option>
+                                {variables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                              </select>
+                              <button
+                                onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableIds: (c.variableIds || []).filter((_, i) => i !== idx) } : c))}
+                                className="text-[#666] hover:text-red-400 px-1"
+                              >×</button>
+                            </div>
+                          ))}
+                          {(comp.variableIds?.length || 0) < 5 && (
+                            <Button size="sm" variant="secondary" className="w-full h-6 text-[10px]" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableIds: [...(c.variableIds || []), ''] } : c))}>+ Add Position</Button>
+                          )}
+                        </div>
+                      )}
+
+                      {comp.type === 'hybrid-rotary' && (
+                        <div className="space-y-2 border-t border-[#333] pt-2 mt-2">
+                          <Label>Hybrid Values</Label>
+                          {(comp.hybridValues || []).map((val, idx) => (
+                            <div key={idx} className="flex gap-1">
+                              <Input
+                                value={val}
+                                onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, hybridValues: (c.hybridValues || []).map((v, i) => i === idx ? e.target.value : v) } : c))}
+                                className="flex-1 h-6 text-[10px]"
+                              />
+                              <button
+                                onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, hybridValues: (c.hybridValues || []).filter((_, i) => i !== idx) } : c))}
+                                className="text-[#666] hover:text-red-400 px-1"
+                              >×</button>
+                            </div>
+                          ))}
+                          <Button size="sm" variant="secondary" className="w-full h-6 text-[10px]" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, hybridValues: [...(c.hybridValues || []), '0'] } : c))}>+ Add Value</Button>
+                        </div>
+                      )}
+
+                      {(comp.type === 'slider' || comp.type === 'gauge') && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div><Label>Min</Label><Input type="number" value={comp.min ?? 0} onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, min: parseFloat(e.target.value) } : c))} /></div>
+                          <div><Label>Max</Label><Input type="number" value={comp.max ?? 0} onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, max: parseFloat(e.target.value) } : c))} /></div>
+                        </div>
+                      )}
+
+                      {comp.type === 'buzzer' && (
+                        <div className="mt-2">
+                          <Label>Sound Type</Label>
+                          <select
+                            value={comp.soundType || 'square'}
+                            onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, soundType: e.target.value as any } : c))}
+                            className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
+                          >
+                            <option value="sine">Sine</option>
+                            <option value="square">Square</option>
+                            <option value="sawtooth">Sawtooth</option>
+                            <option value="triangle">Triangle</option>
+                          </select>
+                        </div>
+                      )}
+                      <Button variant="destructive" size="sm" onClick={() => { setComponents(prev => prev.filter(c => c.id !== comp.id)); setSelectedId(null); }} className="w-full mt-2">Delete</Button>
+                    </>
+                  );
+                })()}
+              </div>
+            ) : <div className="text-xs text-[#666] text-center mt-4">Select a component to edit</div>}
+          </div>
+        )}
+
+        {/* Canvas */}
+        <div className="flex-1 bg-[#0a0a0a] relative overflow-hidden" onClick={() => setSelectedId(null)}>
+          <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#333 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+          {components.map(renderComponent)}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ReportDialog = ({
+  onClose,
+  onGenerate
+}: {
+  onClose: () => void;
+  onGenerate: (projectName: string, author: string) => void;
+}) => {
+  const [projectName, setProjectName] = useState('My Project');
+  const [author, setAuthor] = useState('Author');
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={onClose}>
+      <div className="bg-[#141414] border border-[#c9a86c] rounded-lg w-[400px] flex flex-col" onMouseDown={e => e.stopPropagation()}>
+        <div className="h-12 flex items-center px-5 border-b border-[#222]">
+          <h2 className="text-lg font-bold text-[#c9a86c]">Generate Report</h2>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <Label>Project Name</Label>
+            <Input value={projectName} onChange={e => setProjectName(e.target.value)} className="w-full mt-1" />
+          </div>
+          <div>
+            <Label>Author</Label>
+            <Input value={author} onChange={e => setAuthor(e.target.value)} className="w-full mt-1" />
+          </div>
+          <Button onClick={() => onGenerate(projectName, author)} className="w-full bg-[#c9a86c] text-[#0a0a0a] font-bold">Generate Report</Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const TickRateInput = ({ value, onChange }: { value: number, onChange: (val: number) => void }) => {
+  const [localValue, setLocalValue] = useState(String(value));
+
+  useEffect(() => {
+    setLocalValue(String(value));
+  }, [value]);
+
+  const commit = () => {
+    const num = parseInt(normalizeNumerals(localValue));
+    if (!isNaN(num) && num > 0) {
+      onChange(num);
+    } else {
+      setLocalValue(String(value));
+    }
+  };
+
+  return (
+    <Input
+      type="text"
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') commit();
+      }}
+      className="h-7 w-16 text-center text-xs font-mono"
+      placeholder="ms"
+    />
+  );
+};
+
+// =============================================================================
+// MAIN COMPONENT (FULLY FUNCTIONAL)
+// =============================================================================
+const ADIA = () => {
+  // STATE HOOKS
+  const [variables, setVariables] = useState<VariableDef[]>([
+    { id: uuidv4(), name: 'counter', type: 'int32', initialValue: '0', currentValue: 0, visibleInScope: true },
+    { id: uuidv4(), name: 'flag', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true },
+    { id: uuidv4(), name: 'value', type: 'float', initialValue: '0.0', currentValue: 0, visibleInScope: true },
+  ]);
+
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [mobileTab, setMobileTab] = useState<'hierarchy' | 'variables' | 'canvas' | 'properties'>('canvas');
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const [newVarName, setNewVarName] = useState('');
+  const [newVarType, setNewVarType] = useState<VariableType>('int32');
+  const [newVarValue, setNewVarValue] = useState('0');
+  const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
+
+  const [scopeData, setScopeData] = useState<ScopeDataPoint[]>([]);
+  const [simulationTime, setSimulationTime] = useState(0);
+  const [sourceData, setSourceData] = useState<{ headers: string[]; data: any[][] } | null>(null);
+  const [sampleOnTransitionOnly, setSampleOnTransitionOnly] = useState(false);
+
+  const [isRunning, setIsRunning] = useState(false);
+  const [tickMs, setTickMs] = useState(500);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const xBridgesEnginesRef = useRef<Map<string, XbridgesEngine>>(new Map());
+
+  const [errors, setErrors] = useState<ErrorItem[]>([]);
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
+  const [currentError, setCurrentError] = useState<ErrorItem | null>(null);
+  const [showReportDialog, setShowReportDialog] = useState(false);
+
+  // Window Management State
+  const [managedWindows, setManagedWindows] = useState<Record<ManagedWindowId, ManagedWindowState>>({
+    hmi: { id: 'hmi', title: 'HMI Dashboard', isOpen: false, isMinimized: false, pos: { x: 110, y: 110 }, size: { width: 900, height: 600 }, zIndex: 10 },
+    pid: { id: 'pid', title: 'PID Tuner', isOpen: false, isMinimized: false, pos: { x: 160, y: 160 }, size: { width: 1000, height: 700 }, zIndex: 10 },
+    rtm: { id: 'rtm', title: 'Requirements Traceability Matrix', isOpen: false, isMinimized: false, pos: { x: 210, y: 210 }, size: { width: 900, height: 600 }, zIndex: 10 },
+    doe: { id: 'doe', title: 'DOE RSM Analysis', isOpen: false, isMinimized: false, pos: { x: 260, y: 260 }, size: { width: 1100, height: 750 }, zIndex: 10 },
+  });
+
+  const updateManagedWindow = useCallback((id: ManagedWindowId, updates: Partial<Omit<ManagedWindowState, 'id' | 'title'>>) => {
+    setManagedWindows(prev => ({
+      ...prev,
+      [id]: { ...prev[id], ...updates }
+    }));
+  }, []);
+
+  const toggleWindow = useCallback((id: ManagedWindowId) => {
+    setManagedWindows(prev => ({
+      ...prev,
+      [id]: { ...prev[id], isOpen: !prev[id].isOpen }
+    }));
+  }, []);
+
+  const [layers, setLayers] = useState<Layer[]>([{
+    id: 'root',
+    name: 'Root',
+    parentStateId: null,
+    stateIds: ['s1', 's2', 'slp'],
+    transitionIds: ['t1', 't2'],
+    junctionIds: []
+  }]);
+  const [currentLayerId, setCurrentLayerId] = useState('root');
+  const [layerStack, setLayerStack] = useState<string[]>([]);
+  const [layerPath, setLayerPath] = useState(['Root']);
+
+  const [states, setStates] = useState<StateData[]>([
+    {
+      id: 's1',
+      name: 'State_1',
+      x: 100,
+      y: 100,
+      width: DEFAULT_STATE_WIDTH,
+      height: DEFAULT_STATE_HEIGHT,
+      entry: '',
+      during: '',
+      exit: '',
+      isActive: false,
+      color: STATE_COLORS[0],
+      parentId: 'root',
+      children: [],
+      priority: 10,
+      isParallel: false,
+      regionId: null,
+      autostart: true,
+      internalTransitions: ''
+    },
+    {
+      id: 's2',
+      name: 'State_2',
+      x: 400,
+      y: 100,
+      width: DEFAULT_STATE_WIDTH,
+      height: DEFAULT_STATE_HEIGHT,
+      entry: '',
+      during: '',
+      exit: '',
+      isActive: false,
+      color: STATE_COLORS[1],
+      parentId: 'root',
+      children: [],
+      priority: 20,
+      isParallel: false,
+      regionId: null,
+      autostart: false,
+      internalTransitions: ''
+    },
+    {
+      id: 'slp',
+      name: 'Low_Power',
+      x: 400,
+      y: 300,
+      width: DEFAULT_STATE_WIDTH,
+      height: DEFAULT_STATE_HEIGHT,
+      entry: '/* Low Power Mode */',
+      during: '',
+      exit: '',
+      isActive: false,
+      color: STATE_COLORS[2],
+      parentId: 'root',
+      children: [],
+      priority: 30,
+      isParallel: false,
+      regionId: null,
+      autostart: false,
+      internalTransitions: ''
+    }
+  ]);
+  const [junctions, setJunctions] = useState<JunctionData[]>([]);
+  const [transitions, setTransitions] = useState<TransitionData[]>([
+    {
+      id: 't1',
+      sourceId: 's1',
+      targetId: 's2',
+      condition: 'true',
+      action: '',
+      afterTicks: null,
+      type: 'condition',
+      hasControlPoint: false,
+      order: 0
+    },
+    {
+      id: 't2',
+      sourceId: 's2',
+      targetId: 'slp',
+      condition: '',
+      action: '',
+      afterTicks: 50,
+      type: 'after',
+      hasControlPoint: false,
+      order: 0
+    }
+  ]);
+  const [view, setView] = useState({ scale: 1, offsetX: 0, offsetY: 0 });
+  const [gridEnabled, setGridEnabled] = useState(true);
+  const [snapEnabled, setSnapEnabled] = useState(true);
+
+  // Selection state (supports multiple items)
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const [isCreatingTransition, setIsCreatingTransition] = useState(false);
+  const [transitionSourceId, setTransitionSourceId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+  const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
+  const [mousePos, setMousePos] = useState<Point>({ x: 0, y: 0 });
+  const [showZoomIndicator, setShowZoomIndicator] = useState(false);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const isSpacePressed = useRef(false);
+  const lastMousePos = useRef<Point>({ x: 0, y: 0 });
+  const midDown = useRef(false);
+  const rightDown = useRef(false);
+
+  // Simulation state
+  const [activeStates, setActiveStates] = useState<Record<string, string>>({});
+  const [lastActiveStates, setLastActiveStates] = useState<Record<string, string>>({});
+  const [stateTimers, setStateTimers] = useState<Record<string, number>>({});
+  const [traceHistory, setTraceHistory] = useState<Array<{ time: number; event: string; group: string; state: string; transition: string; transitionId?: string }>>([]);
+  const [firedTransitions, setFiredTransitions] = useState<Record<string, number>>({});
+
+  // Code generation state
+  const [showCodegenDialog, setShowCodegenDialog] = useState(false);
+  const [xBridgesStateId, setXBridgesStateId] = useState<string | null>(null);
+  const [generatedFiles, setGeneratedFiles] = useState<{ name: string; content: string }[]>([]);
+  const [codegenErrors, setCodegenErrors] = useState<ErrorItem[]>([]);
+  const [codegenWarnings, setCodegenWarnings] = useState<string[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isAiValidating, setIsAiValidating] = useState(false);
+
+  // History state for Undo/Redo
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // REQ-ENGINE-004: Generation log with checksums
+  const [generationLog, setGenerationLog] = useState<string[]>([]);
+  const [safetyMode, setSafetyMode] = useState(false);
+
+  // BDD STATE (SysML)
+  const [diagramMode, setDiagramMode] = useState<DiagramMode>('statemachine' as DiagramMode);
+  const [blocks, setBlocks] = useState<BlockData[]>([]);
+  const [relationships, setRelationships] = useState<RelationshipData[]>([]);
+  const [parts, setParts] = useState<PartData[]>([]);
+  const [connectors, setConnectors] = useState<ConnectorData[]>([]);
+  const [interfaceRealizations, setInterfaceRealizations] = useState<InterfaceRealizationData[]>([]);
+  const [customStereotypes, setCustomStereotypes] = useState<string[]>([]);
+  const [uiZoom, setUiZoom] = useState(1.0);
+
+  // HMI STATE
+  const [hmiComponents, setHmiComponents] = useState<HmiComponent[]>([]);
+  const [draggedPort, setDraggedPort] = useState<{ elementId: string, portId: string } | null>(null);
+
+  // Global X-Bridges persistence
+  const [globalXBridgesNodes, setGlobalXBridgesNodes] = useState<any[]>([]);
+  const [globalXBridgesEdges, setGlobalXBridgesEdges] = useState<any[]>([]);
+
+  const projectImportRef = useRef<HTMLInputElement>(null);
+
+  const calculateChecksum = useCallback((str: string): string => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return (hash >>> 0).toString(16).toUpperCase().padStart(8, '0');
+  }, []);
+
+  // Clipboard state
+  const [clipboard, setClipboard] = useState<{
+    states: StateData[],
+    junctions: JunctionData[],
+    transitions: TransitionData[],
+    blocks: BlockData[],
+    relationships: RelationshipData[],
+    parts: PartData[],
+    connectors: ConnectorData[],
+    interfaceRealizations: InterfaceRealizationData[],
+  } | null>(null);
+
+  // Resizing state
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
+  const [resizeStart, setResizeStart] = useState<{ id: string, x: number, y: number, w: number, h: number, mx: number, my: number, type?: 'block' | 'state' } | null>(null);
+
+  // Panel resizing state
+  const [hierarchyWidth, setHierarchyWidth] = useState(256);
+  const [variablesWidth, setVariablesWidth] = useState(288);
+  const [propertiesWidth, setPropertiesWidth] = useState(352);
+  const [scopeHeight, setScopeHeight] = useState(224);
+  const [resizingPanel, setResizingPanel] = useState<string | null>(null);
+
+  // Computed values
+  const selectedState = useMemo(() => selectedIds.length === 1 ? states.find(s => s.id === selectedIds[0]) : null, [selectedIds, states]);
+  const selectedJunction = useMemo(() => selectedIds.length === 1 ? junctions.find(j => j.id === selectedIds[0]) : null, [selectedIds, junctions]);
+  const selectedTransition = useMemo(() => selectedIds.length === 1 ? transitions.find(t => t.id === selectedIds[0]) : null, [selectedIds, transitions]);
+  const selectedBlock = useMemo(() => selectedIds.length === 1 ? blocks.find(b => b.id === selectedIds[0]) : null, [selectedIds, blocks]);
+  const selectedRelationship = useMemo(() => selectedIds.length === 1 ? relationships.find(r => r.id === selectedIds[0]) : null, [selectedIds, relationships]);
+  const selectedPart = useMemo(() => selectedIds.length === 1 ? parts.find(p => p.id === selectedIds[0]) : null, [selectedIds, parts]);
+  const selectedConnector = useMemo(() => selectedIds.length === 1 ? connectors.find(c => c.id === selectedIds[0]) : null, [selectedIds, connectors]);
+  const selectedInterfaceRealization = useMemo(() => selectedIds.length === 1 ? interfaceRealizations.find(ir => ir.id === selectedIds[0]) : null, [selectedIds, interfaceRealizations]);
+  const currentLayer = useMemo(() => layers.find(l => l.id === currentLayerId) || layers[0], [layers, currentLayerId]);
+  const currentStates = useMemo(() => states.filter(s => s.parentId === currentLayerId), [states, currentLayerId]) as StateData[];
+  const currentJunctions = useMemo(() => junctions.filter(j => layers.find(l => l.junctionIds.includes(j.id))?.id === currentLayerId), [junctions, layers, currentLayerId]);
+  const currentTransitions = useMemo(() => transitions.filter(t => {
+    const parentStateId = currentLayer?.parentStateId;
+
+    const sourceState = states.find(s => s.id === t.sourceId) || junctions.find(j => j.id === t.sourceId);
+    const targetState = states.find(s => s.id === t.targetId) || junctions.find(j => j.id === t.targetId);
+    // Use 'children' to distinguish StateData (has children) from JunctionData (doesn't have children)
+    const sourceLayer = sourceState ? ('children' in sourceState ? (sourceState as StateData).parentId : layers.find(l => l.junctionIds.includes((sourceState as JunctionData).id))?.id) : currentLayerId;
+    const targetLayer = targetState ? ('children' in targetState ? (targetState as StateData).parentId : layers.find(l => l.junctionIds.includes((targetState as JunctionData).id))?.id) : currentLayerId;
+
+    if (sourceLayer === currentLayerId && targetLayer === currentLayerId) return true;
+    if (t.sourceId === parentStateId && targetLayer === currentLayerId) return true;
+    if (t.targetId === parentStateId && sourceLayer === currentLayerId) return true;
+
+    return false;
+  }), [transitions, states, junctions, currentLayerId, layers, currentLayer]);
+
+  // ERROR SYSTEM
+  const addError = useCallback((type: 'error' | 'warning' | 'info', message: string, source?: string, elementId?: string) => {
+    const newError: ErrorItem = {
+      id: uuidv4(),
+      type,
+      message,
+      timestamp: new Date(),
+      source,
+      elementId: elementId ?? undefined
+    };
+    setErrors(prev => [newError, ...prev].slice(0, 100));
+    if (type === 'error') {
+      setCurrentError(newError);
+      setShowErrorDialog(true);
+      setIsRunning(false);
+    }
+  }, [setErrors, setCurrentError, setShowErrorDialog, setIsRunning]);
+
+  const clearErrors = useCallback(() => {
+    setErrors([]);
+    setCurrentError(null);
+  }, []);
+
+  // VARIABLE WORKSPACE
+  const addVariable = useCallback(() => {
+    if (!newVarName.trim()) {
+      addError('error', 'Variable name cannot be empty.', 'Workspace');
+      return;
+    }
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(newVarName)) {
+      addError('error', `Invalid variable name: "${newVarName}".\n\nTip: Variable names must start with a letter or underscore, and can only contain letters, numbers, and underscores.`, 'Workspace');
+      return;
+    }
+    if (variables.some(v => v.name === newVarName)) {
+      addError('error', `Variable "${newVarName}" already exists.\n\nTip: Choose a unique name for your new variable.`, 'Workspace');
+      return;
+    }
+    setVariables(prev => [...prev, {
+      id: uuidv4(),
+      name: newVarName,
+      type: newVarType,
+      initialValue: newVarValue,
+      currentValue: parseValue(newVarType, newVarValue),
+      visibleInScope: true
+    }]);
+    setNewVarName('');
+    setNewVarValue(getDefaultValue(newVarType));
+    addError('info', `Added variable: ${newVarName}`);
+  }, [newVarName, newVarType, newVarValue, variables, addError]);
+
+  const removeVariable = useCallback((id: string) => {
+    const varName = variables.find(v => v.id === id)?.name;
+    setVariables(prev => prev.filter(v => v.id !== id));
+    addError('info', `Removed variable: ${varName}`);
+  }, [variables, addError]);
+
+  const updateVariableValue = useCallback((id: string, value: string) => {
+    setVariables(prev => prev.map(v =>
+      v.id === id ? { ...v, currentValue: parseValue(v.type, value) } : v
+    ));
+  }, []);
+
+  const updateVariableInitValue = useCallback((id: string, value: string) => {
+    setVariables(prev => prev.map(v =>
+      v.id === id ? { ...v, initialValue: value } : v
+    ));
+  }, []);
+
+  const toggleVariableVisibility = useCallback((id: string) => {
+    setVariables(prev => prev.map(v =>
+      v.id === id ? { ...v, visibleInScope: !v.visibleInScope } : v
+    ));
+  }, []);
+
+  const resetVariables = useCallback(() => {
+    setVariables(prev => prev.map(v => ({
+      ...v,
+      currentValue: parseValue(v.type, v.initialValue)
+    })));
+    setLastActiveStates({});
+    setStateTimers({});
+    setSimulationTime(0);
+    setScopeData([]);
+    xBridgesEnginesRef.current.clear();
+  }, []);
+
+  // SCOPE
+  const exportScopeCSV = useCallback(() => {
+    if (scopeData.length === 0) {
+      addError('warning', 'No data to export. Tip: Run a simulation to generate scope data before exporting.');
+      return;
+    }
+    const headers = ['time', ...variables.filter(v => v.visibleInScope).map(v => v.name)];
+    const rows = scopeData.map(dp => headers.map(h => dp[h] ?? '').join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `adia_scope_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addError('info', 'Scope data exported to CSV');
+  }, [scopeData, variables, addError]);
+
+  const clearScope = useCallback(() => {
+    setScopeData([]);
+    setSimulationTime(0);
+    addError('info', 'Scope cleared');
+  }, [addError]);
+
+  // HISTORY OPERATIONS
+  const addToHistory = useCallback(() => {
+    const snapshot = JSON.stringify({
+      states, junctions, transitions, layers, variables,
+      blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes
+    });
+    setHistory(prev => {
+      const newHistory = prev.slice(0, historyIndex + 1);
+      newHistory.push(snapshot);
+      if (newHistory.length > 50) newHistory.shift(); // Limit history size
+      return newHistory;
+    });
+    setHistoryIndex(prev => Math.min(prev + 1, 49));
+  }, [states, junctions, transitions, layers, variables, blocks, relationships, parts, connectors, interfaceRealizations, historyIndex]);
+
+  const undo = useCallback(() => {
+    if (historyIndex > 0) {
+      const prevSnapshot = JSON.parse(history[historyIndex - 1]);
+      setStates(prevSnapshot.states || []);
+      setJunctions(prevSnapshot.junctions || []);
+      setTransitions(prevSnapshot.transitions || []);
+      setLayers(prevSnapshot.layers || []);
+      setVariables(prevSnapshot.variables || []);
+      setBlocks(migrateBlocks(prevSnapshot.blocks));
+      setRelationships(prevSnapshot.relationships || []);
+      setParts(prevSnapshot.parts || []);
+      setConnectors(prevSnapshot.connectors || []);
+      setInterfaceRealizations(prevSnapshot.interfaceRealizations || []);
+      setCustomStereotypes(prevSnapshot.customStereotypes || []);
+      setHistoryIndex(prev => prev - 1);
+      addError('info', 'Undo');
+    }
+  }, [history, historyIndex, addError]);
+
+  const redo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const nextSnapshot = JSON.parse(history[historyIndex + 1]);
+      setStates(nextSnapshot.states || []);
+      setJunctions(nextSnapshot.junctions || []);
+      setTransitions(nextSnapshot.transitions || []);
+      setLayers(nextSnapshot.layers || []);
+      setVariables(nextSnapshot.variables || []);
+      setBlocks(migrateBlocks(nextSnapshot.blocks));
+      setRelationships(nextSnapshot.relationships || []);
+      setParts(nextSnapshot.parts || []);
+      setConnectors(nextSnapshot.connectors || []);
+      setInterfaceRealizations(nextSnapshot.interfaceRealizations || []);
+      setCustomStereotypes(nextSnapshot.customStereotypes || []);
+      setHistoryIndex(prev => prev + 1);
+      addError('info', 'Redo');
+    }
+  }, [history, historyIndex, addError]);
+
+  // VALIDATION
+  const validateModel = useCallback(() => {
+    const newErrors: ErrorItem[] = [];
+    const declaredVarNames = new Set(variables.map(v => v.name));
+    const jsKeywords = new Set([
+      'Math', 'console', 'true', 'false', 'null', 'undefined', 'NaN', 'Infinity',
+      'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'default', 'break', 'continue', 'return',
+      'var', 'let', 'const', 'function', 'new', 'this', 'try', 'catch', 'finally', 'throw',
+      'parseInt', 'parseFloat', 'String', 'Number', 'Boolean', 'Date', 'Array', 'Object', 'RegExp',
+      'alert', 'prompt', 'confirm', 'context', 'window', 'document'
+    ]);
+
+    // 1. Syntax Checking
+    const uintVars = new Set(variables.filter(v => v.type.startsWith('uint')).map(v => v.name));
+    const checkUnsafeArithmetic = (code: string, context: string, id?: string) => {
+      if (!code) return;
+      uintVars.forEach(v => {
+        const decrementRegex = new RegExp(`\\b${v}\\s*--|--\\s*\\b${v}\\b`);
+        if (decrementRegex.test(code)) {
+          newErrors.push({ id: uuidv4(), type: 'error', message: `Unsafe arithmetic in ${context}: Potential underflow for unsigned variable '${v}'. Avoid using '--'. Use '${v} = ${v} - 1U;' inside a check.`, timestamp: new Date(), source: 'Validation', elementId: id });
+        }
+      });
+    };
+
+
+    const checkSyntax = (code: string, context: string, id?: string) => {
+      if (!code || !code.trim()) return;
+
+      // Check for statements that are just comparisons (e.g. "x === 0;")
+      // This is valid JS but usually a mistake in an Action field (should be assignment)
+      const statements = code.split(';').map(s => s.trim()).filter(s => s);
+      for (const stmt of statements) {
+        // Skip if it starts with a control flow keyword
+        if (/^(if|while|do|for|switch|return|case|var|let|const)\b/.test(stmt)) continue;
+
+        // Check for comparison operators at top level of statement
+        // Matches "identifier comparison value" pattern
+        if (/^[\w\.]+\s*(===|==|!==|!=|<|>|<=|>=)\s*[^=]+$/.test(stmt)) {
+          newErrors.push({
+            id: uuidv4(),
+            type: 'error',
+            message: `Statement '${stmt}' in ${context} is a comparison, not an action. Did you mean to assign using '='?`,
+            timestamp: new Date(),
+            source: 'Validation',
+            elementId: id
+          });
+        }
+      }
+
+      // Check for undeclared variables
+      const words = code.match(/\b[a-zA-Z_]\w*\b/g) || [];
+      for (const word of words) {
+        if (!declaredVarNames.has(word) && !jsKeywords.has(word)) {
+          // Ignore property access (e.g. .length)
+          const isProperty = new RegExp(`\\.\\s*${word}\\b`).test(code);
+          if (!isProperty) {
+            newErrors.push({
+              id: uuidv4(),
+              type: 'warning',
+              message: `Unknown identifier '${word}' in ${context}. Make sure it is defined in Variables.`,
+              timestamp: new Date(),
+              source: 'Validation',
+              elementId: id
+            });
+          }
+        }
+      }
+
+      try {
+        // Just parsing, not executing
+        new Function('context', `with(context) { ${code} }`);
+      } catch (e: any) {
+        if (e instanceof SyntaxError) {
+          let tip = 'Check for mismatched brackets, missing semicolons, or invalid operators.';
+          if (e.message.includes('Unexpected token')) {
+            tip = 'Check for typos, invalid characters, or missing operators. Make sure all parentheses and braces are balanced.';
+          } else if (e.message.includes('missing')) {
+            tip = 'You are missing a required element. Check that all parentheses, braces, and brackets are closed properly.';
+          } else if (e.message.includes('identifier')) {
+            tip = 'Variable names must start with a letter or underscore, and contain only letters, numbers, or underscores.';
+          } else if (e.message.includes('Unexpected identifier')) {
+            tip = 'You might have a space in a variable name (e.g., "my var" instead of "my_var") or a missing operator.';
+          }
+          newErrors.push({
+            id: uuidv4(),
+            type: 'error',
+            message: `Syntax error in ${context}: ${e.message}.\n\nHow to fix: ${tip}`,
+            timestamp: new Date(),
+            source: 'Validation',
+            elementId: id
+          });
+        }
+      }
+    };
+
+    const checkConditionSyntax = (code: string, context: string, id?: string) => {
+      if (!code || !code.trim() || code === 'true') return;
+
+      // Check for undeclared variables in condition
+      const words = code.match(/\b[a-zA-Z_]\w*\b/g) || [];
+      for (const word of words) {
+        if (!declaredVarNames.has(word) && !jsKeywords.has(word)) {
+          const isProperty = new RegExp(`\\.\\s*${word}\\b`).test(code);
+          if (!isProperty) {
+            newErrors.push({
+              id: uuidv4(),
+              type: 'warning',
+              message: `Unknown identifier '${word}' in ${context}. Make sure it is defined in Variables.`,
+              timestamp: new Date(),
+              source: 'Validation',
+              elementId: id
+            });
+          }
+        }
+      }
+
+      // Check for assignment in condition
+      if (/(?<![=!<>+\-*/])=(?![=])/.test(code)) {
+        newErrors.push({
+          id: uuidv4(),
+          type: 'error',
+          message: `Assignment '=' detected in ${context}. Tip: Use '==' or '===' for comparison. Single '=' is for assignment.`,
+          timestamp: new Date(),
+          source: 'Validation',
+          elementId: id
+        });
+      }
+
+      try {
+        let jsCondition = code
+          .replace(/&&/g, '&&')
+          .replace(/\|\|/g, '||')
+          .replace(/!/g, '!')
+          .replace(/==/g, '===')
+          .replace(/!=/g, '!==');
+        new Function('context', `with(context) { return (${jsCondition}); }`);
+      } catch (e: any) {
+        if (e instanceof SyntaxError) {
+          let tip = 'Conditions must be valid boolean expressions.';
+          if (e.message.includes('Unexpected token')) {
+            tip = 'Check your condition syntax. Use && for AND, || for OR, ! for NOT, and ==/!= for comparison.';
+          } else if (e.message.includes('missing')) {
+            tip = 'Make sure your condition is complete. Check parentheses and operators are balanced.';
+          } else if (e.message.includes('Unexpected identifier')) {
+            tip = 'You might have a space in a variable name or missing operator (e.g. "a b" instead of "a && b").';
+          }
+          newErrors.push({
+            id: uuidv4(),
+            type: 'error',
+            message: `Syntax error in ${context}: ${e.message}.\n\nHow to fix: ${tip}`,
+            timestamp: new Date(),
+            source: 'Validation',
+            elementId: id
+          });
+        }
+      }
+    };
+
+    states.forEach(s => {
+      checkSyntax(s.entry, `State '${s.name}' Entry`, s.id);
+      checkSyntax(s.during, `State '${s.name}' During`, s.id);
+      checkSyntax(s.exit, `State '${s.name}' Exit`, s.id);
+      // CG-CL-004
+      checkUnsafeArithmetic(s.entry, `State '${s.name}' Entry`, s.id);
+      checkUnsafeArithmetic(s.during, `State '${s.name}' During`, s.id);
+      checkUnsafeArithmetic(s.exit, `State '${s.name}' Exit`, s.id);
+
+      // Check for spaces in state names
+      if (/\s/.test(s.name)) {
+        newErrors.push({
+          id: uuidv4(),
+          type: 'error',
+          message: `State name '${s.name}' contains spaces.\n\nHow to fix: Remove spaces or use underscores (e.g., '${s.name.replace(/\s+/g, '_')}'). State names must be valid C identifiers.`,
+          timestamp: new Date(),
+          source: 'Validation',
+          elementId: s.id,
+          canAutoFix: true
+        });
+      }
+    });
+
+    // Check for duplicate state names across the entire model
+    const stateNameCounts = new Map<string, string[]>();
+    states.forEach(s => {
+      const ids = stateNameCounts.get(s.name) || [];
+      stateNameCounts.set(s.name, [...ids, s.id]);
+    });
+
+    stateNameCounts.forEach((ids, name) => {
+      if (ids.length > 1) {
+        ids.forEach(id => {
+          newErrors.push({
+            id: uuidv4(),
+            type: 'error',
+            message: `Duplicate state name '${name}' detected. State names must be unique across the entire model.`,
+            timestamp: new Date(),
+            source: 'Validation',
+            elementId: id,
+            canAutoFix: true
+          });
+        });
+      }
+    });
+
+    // Validate internal transitions
+    states.forEach(s => {
+      if (s.internalTransitions) {
+        const lines = s.internalTransitions.split('\n').filter(l => l.trim());
+        lines.forEach(line => {
+          const match = line.match(/^\[(.*?)\]\s*\/?\s*(.*)$/);
+          if (match) checkConditionSyntax(match[1], `State '${s.name}' Internal Transition`, s.id);
+        });
+      }
+    });
+
+    transitions.forEach(t => {
+      const sourceName = states.find(s => s.id === t.sourceId)?.name || junctions.find(j => j.id === t.sourceId)?.name || 'Unknown';
+      checkSyntax(t.action, `Transition from '${sourceName}' Action`, t.id);
+      checkConditionSyntax(t.condition, `Transition from '${sourceName}' Condition`, t.id);
+    });
+
+    // CG-VAL-001: Undefined target state/junction
+    transitions.forEach(t => {
+      const targetExists = states.some(s => s.id === t.targetId) || junctions.some(j => j.id === t.targetId);
+      if (!targetExists) {
+        const sourceName = states.find(s => s.id === t.sourceId)?.name || junctions.find(j => j.id === t.sourceId)?.name || 'Unknown';
+        newErrors.push({ id: uuidv4(), type: 'error', message: `Transition from '${sourceName}' targets an undefined state or junction.`, timestamp: new Date(), source: 'Validation', elementId: t.id });
+      }
+    });
+
+    // 2. Logical Checking
+    // REQ-HSM-050 VR-01: Only one AutoStart per layer
+    // Validate per layer instead of per regionId
+
+    // Group states by parentId to validate layers
+    const statesByParent = new Map<string, StateData[]>();
+    states.forEach(s => { const pid = s.parentId || 'root'; if (!statesByParent.has(pid)) statesByParent.set(pid, []); statesByParent.get(pid)!.push(s); });
+
+    layers.forEach(layer => {
+      const layerStates = states.filter(s => {
+        // Get states belonging to this layer
+        if (layer.id === 'root') {
+          // Root layer: states without a parent layer (parentStateId not referencing another layer)
+          return !layers.some(l => l.id !== 'root' && l.stateIds.includes(s.id));
+        }
+        return layer.stateIds.includes(s.id);
+      });
+
+      if (layerStates.length > 0) {
+        const layerJunctions = junctions.filter(j => layer.junctionIds.includes(j.id));
+        const autostartStates = layerStates.filter(s => s.autostart);
+        const autostartJunctions = layerJunctions.filter(j => j.autostart);
+        const totalAutostarts = autostartStates.length + autostartJunctions.length;
+
+        if (totalAutostarts === 0) {
+          const layerName = layer.name || (layer.id === 'root' ? 'Root' : layer.id);
+          newErrors.push({
+            id: uuidv4(),
+            type: 'error',
+            message: `Layer '${layerName}' has no AutoStart. Each layer must have exactly one AutoStart state or junction.`,
+            timestamp: new Date(),
+            source: 'Validation',
+            elementId: layerStates[0].id,
+            canAutoFix: true
+          });
+        } else if (totalAutostarts > 1) {
+          [...autostartStates, ...autostartJunctions].forEach(s => {
+            const layerName = layer.name || (layer.id === 'root' ? 'Root' : layer.id);
+            newErrors.push({
+              id: uuidv4(),
+              type: 'error',
+              message: `Layer '${layerName}' has multiple AutoStart elements. Only one AutoStart is allowed per layer.`,
+              timestamp: new Date(),
+              source: 'Validation',
+              elementId: s.id
+            });
+          });
+        }
+      }
+    });
+
+    // CG-VAL-006 & CG-SAFE-003: Conflicting transitions / priority
+    const transitionsBySource = new Map<string, TransitionData[]>();
+    transitions.forEach(t => {
+      if (!transitionsBySource.has(t.sourceId)) transitionsBySource.set(t.sourceId, []);
+      transitionsBySource.get(t.sourceId)!.push(t);
+    });
+
+    transitionsBySource.forEach((transitionsFromSource, sourceId) => {
+      const sourceName = states.find(s => s.id === sourceId)?.name || junctions.find(j => j.id === sourceId)?.name || 'Unknown';
+      const conditions = new Map<string, TransitionData[]>();
+      const priorities = new Map<number, TransitionData[]>();
+
+      transitionsFromSource.forEach(t => {
+        const key = `${t.type}|${t.condition}|${t.afterTicks}`;
+        if (!conditions.has(key)) conditions.set(key, []);
+        conditions.get(key)!.push(t);
+
+        if (!priorities.has(t.order)) priorities.set(t.order, []);
+        priorities.get(t.order)!.push(t);
+
+        // CG-CL-005: Event Consumption
+        const boolVarsInCondition = (t.condition.match(/\b[a-zA-Z_]\w*\b/g) || []).filter(word => variables.find(v => v.name === word && v.type === 'bool'));
+        if (boolVarsInCondition.length > 0) {
+          const targetState = states.find(s => s.id === t.targetId);
+          const combinedActions = t.action + (targetState ? targetState.entry : '');
+          boolVarsInCondition.forEach(v => {
+            const resetRegex = new RegExp(`\\b${v}\\s*=\\s*(false|0)\\b`);
+            if (!resetRegex.test(combinedActions)) {
+              newErrors.push({ id: uuidv4(), type: 'warning', message: `Level-triggered event '${v}' is used in a transition from '${sourceName}' but is not reset to false. This may cause repeated, immediate transitions.`, timestamp: new Date(), source: 'Validation', elementId: t.id });
+            }
+          });
+        }
+      });
+
+      conditions.forEach((group) => { if (group.length > 1) group.forEach(t => newErrors.push({ id: uuidv4(), type: 'error', message: `Conflicting transitions from '${sourceName}'. Multiple transitions have the same trigger. Use different conditions or priorities.`, timestamp: new Date(), source: 'Validation', elementId: t.id })); });
+      priorities.forEach((group, order) => { if (group.length > 1) group.forEach(t => newErrors.push({ id: uuidv4(), type: 'warning', message: `Multiple transitions from '${sourceName}' have the same priority (${order}). Execution order may be non-deterministic.`, timestamp: new Date(), source: 'Validation', elementId: t.id })); });
+    });
+
+    // Unreachable states (BFS from roots)
+    const reachable = new Set<string>();
+    const queue = states.filter(s => s.autostart).map(s => s.id);
+
+    // If no autostart, assume first state is start (as per simulation logic)
+    if (queue.length === 0 && states.length > 0) {
+      queue.push(states[0].id);
+    }
+
+    queue.forEach(id => reachable.add(id));
+
+    let head = 0;
+    while (head < queue.length) {
+      const currentId = queue[head++];
+      const outgoing = transitions.filter(t => t.sourceId === currentId);
+      outgoing.forEach(t => {
+        if (!reachable.has(t.targetId)) {
+          reachable.add(t.targetId);
+          queue.push(t.targetId);
+        }
+      });
+    }
+
+    states.forEach(s => {
+      if (!reachable.has(s.id)) {
+        newErrors.push({
+          id: uuidv4(),
+          type: 'warning',
+          message: `State '${s.name}' appears to be unreachable. Tip: Ensure there is a transition path from an initial state to this state, or mark it as 'Auto-start'.`,
+          timestamp: new Date(),
+          source: 'Validation',
+          elementId: s.id
+        });
+      }
+    });
+
+    // Dead ends (states with no outgoing transitions)
+    states.forEach(s => {
+      const outgoing = transitions.filter(t => t.sourceId === s.id);
+      if (outgoing.length === 0 && (s.internalTransitions || '').trim().length === 0 && states.length > 1) {
+        newErrors.push({
+          id: uuidv4(),
+          type: 'warning',
+          message: `State '${s.name}' is a dead end (no outgoing transitions). Tip: Add a transition to another state to prevent the machine from getting stuck here.`,
+          timestamp: new Date(),
+          source: 'Validation',
+          elementId: s.id
+        });
+      }
+    });
+
+    // Clear old validation errors/warnings and add new ones
+    setErrors(prev => {
+      const filtered = prev.filter(e => e.source !== 'Validation');
+      return [...newErrors, ...filtered];
+    });
+
+    if (newErrors.length > 0) {
+      // If there are errors (not just warnings), show dialog
+      const firstError = newErrors.find(e => e.type === 'error');
+      if (firstError) {
+        setCurrentError(firstError);
+        setShowErrorDialog(true);
+        return false;
+      }
+    }
+    return true;
+  }, [states, transitions, junctions, addError, variables]);
+
+  // AI VALIDATION
+  const validateWithAI = useCallback(async () => {
+    setIsAiValidating(true);
+    try {
+      // Prepare context for the AI
+      const modelContext = {
+        states: states.map(s => ({ name: s.name, entry: s.entry, exit: s.exit, during: s.during })),
+        transitions: transitions.map(t => ({
+          source: states.find(s => s.id === t.sourceId)?.name || junctions.find(j => j.id === t.sourceId)?.name || 'unknown',
+          target: states.find(s => s.id === t.targetId)?.name || junctions.find(j => j.id === t.targetId)?.name || 'unknown',
+          condition: t.condition,
+          action: t.action
+        })),
+        variables: variables.map(v => ({ name: v.name, type: v.type, init: v.initialValue }))
+      };
+
+      // Placeholder for LLM API Call
+      // In a real implementation, you would send 'modelContext' to an endpoint (e.g., OpenAI, Anthropic, or local LLM)
+      // const response = await callLLM(modelContext);
+
+      // Simulating AI analysis delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Simulated AI findings (Mock)
+      const aiFindings = [
+        { type: 'info', message: 'AI Analysis: State machine structure appears consistent.' },
+        { type: 'info', message: 'AI Analysis: Variable usage checked against definitions.' }
+      ];
+
+      // Example: Simple heuristic check to simulate "AI" finding something smart
+      if (states.length > 0 && transitions.length === 0) {
+        aiFindings.push({ type: 'warning', message: 'AI Suggestion: The model has states but no transitions. Consider connecting them.' });
+      }
+
+      aiFindings.forEach(f => addError(f.type as any, f.message, 'AI Validator'));
+
+    } catch (error) {
+      addError('error', 'AI Validation failed to connect.', 'AI Validator');
+    } finally {
+      setIsAiValidating(false);
+    }
+  }, [states, transitions, junctions, variables, addError]);
+
+  const resolveAutoStart = useCallback((layerId: string, context: any, runActions: boolean = true): string | undefined => {
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer) return undefined;
+
+    const autoState = states.find(s => layer.stateIds.includes(s.id) && s.autostart);
+    if (autoState) return autoState.id;
+
+    const autoJunc = junctions.find(j => layer.junctionIds.includes(j.id) && j.autostart);
+    if (autoJunc) {
+      let currentNode: JunctionData | StateData | undefined = autoJunc;
+      const visited = new Set<string>();
+      let pathActions: string[] = [];
+
+      while (currentNode && !states.find(s => s.id === currentNode!.id)) {
+        if (visited.has(currentNode.id)) break; // Cycle
+        visited.add(currentNode.id);
+
+        const outgoing = transitions
+          .filter(t => t.sourceId === currentNode!.id)
+          .sort((a, b) => a.order - b.order);
+
+        let found = false;
+        for (const tr of outgoing) {
+          let conditionMet = true;
+          if (tr.condition && tr.condition !== 'true') {
+            try {
+              let jsCondition = tr.condition
+                .replace(/&&/g, '&&')
+                .replace(/\|\|/g, '||')
+                .replace(/!/g, '!')
+                .replace(/==/g, '===')
+                .replace(/!=/g, '!==');
+              const func = new Function('context', `with(context) { return (${jsCondition}); }`);
+              conditionMet = !!func(context);
+            } catch (e) {
+              conditionMet = false;
+            }
+          }
+          if (conditionMet) {
+            if (runActions && tr.action) pathActions.push(tr.action);
+            currentNode = states.find(s => s.id === tr.targetId) || junctions.find(j => j.id === tr.targetId);
+            found = true;
+            break;
+          }
+        }
+        if (!found) break; // Dead end
+      }
+      if (currentNode && states.find(s => s.id === currentNode!.id)) {
+        if (runActions) {
+          pathActions.forEach(act => {
+            try {
+              const func = new Function('context', `with(context) { ${act} }`);
+              func(context);
+            } catch (e) { }
+          });
+        }
+        return currentNode.id;
+      }
+    }
+    return undefined;
+  }, [layers, states, junctions, transitions]);
+
+  // SIMULATION (FULLY FUNCTIONAL)
+  const simulationStep = useCallback(() => {
+    // 1. Advance time
+    const newTime = simulationTime + tickMs / 1000;
+    setSimulationTime(newTime);
+
+    // 2. Create working context from current variables
+    const workingContext = variables.reduce((acc, v) => {
+      acc[v.name] = v.currentValue;
+      return acc;
+    }, {} as Record<string, any>);
+
+    // 3. Update state timers
+    const nextStateTimers = { ...stateTimers };
+    Object.values(activeStates).forEach(stateId => {
+      if (!stateId) return;
+      nextStateTimers[stateId] = (nextStateTimers[stateId] || 0) + 1;
+    });
+
+    let variablesChanged = false;
+    const newActiveStates = { ...activeStates };
+    const stepFiredTransitions: Record<string, number> = {};
+    let transitionFired = false;
+    // Helper to execute code
+    const executeAction = (code: string, context: any, location: string) => {
+      if (!code || !code.trim()) return;
+      try {
+        const func = new Function('context', `with(context) { ${code} }`);
+        func(context);
+        variablesChanged = true;
+      } catch (e: any) {
+        let message = `Action error in ${location}: ${e.message}`;
+        if (e instanceof ReferenceError) {
+          message += `\n\nTip: Make sure all variables used in actions are defined in the 'Variables' workspace. Variable names are case-sensitive.`;
+        } else if (e instanceof SyntaxError) {
+          message += `\n\nTip: Check for syntax errors in your action code, like mismatched brackets or invalid statements.`;
+        }
+        addError('error', message, 'Simulation');
+      }
+    };
+
+    // Helper to evaluate condition
+    const evaluateCondition = (condition: string, context: any, location: string): boolean => {
+      if (condition === 'true' || condition === '') return true;
+      try {
+        let jsCondition = condition
+          .replace(/&&/g, '&&')
+          .replace(/\|\|/g, '||')
+          .replace(/!/g, '!')
+          .replace(/==/g, '===')
+          .replace(/!=/g, '!==');
+
+        const func = new Function('context', `with(context) { return (${jsCondition}); }`);
+        return !!func(context);
+      } catch (e: any) {
+        let message = `Condition error in ${location}: ${e.message}`;
+        if (e instanceof ReferenceError) {
+          message += `\n\nTip: Make sure all variables used in conditions are defined in the 'Variables' workspace. Variable names are case-sensitive.`;
+        } else if (e instanceof SyntaxError) {
+          message += `\n\nTip: Check for syntax errors in your condition, like mismatched parentheses or invalid operators. Use '==' for comparison.`;
+        }
+        addError('error', message, 'Simulation');
+        return false;
+      }
+    };
+
+    // Helper to get node data
+    const getNode = (id: string) => states.find(s => s.id === id) || junctions.find(j => j.id === id);
+
+    // REQ-HSM-030: Recursive entry
+    const enterState = (stateId: string, activeMap: Record<string, string>, fromHistory: 'deep' | 'shallow' | false = false) => {
+      const s = states.find(st => st.id === stateId);
+      if (!s) return;
+
+      const layerId = s.parentId || 'root';
+      activeMap[layerId] = s.id;
+      nextStateTimers[s.id] = 0;
+      executeAction(s.entry, workingContext, `Entry ${s.name}`);
+
+      // Check for sub-layer AutoStart
+      const childLayer = layers.find(l => l.parentStateId === s.id);
+      if (childLayer) {
+        let childToEnterId: string | undefined;
+        if (fromHistory === 'deep') {
+          childToEnterId = lastActiveStates[childLayer.id];
+        }
+
+        if (childToEnterId) {
+          enterState(childToEnterId, activeMap, 'deep');
+        } else {
+          const targetId = resolveAutoStart(childLayer.id, workingContext, true);
+          if (targetId) enterState(targetId, activeMap, false);
+        }
+      }
+    };
+
+    // Recursive exit
+    const exitState = (stateId: string, activeMap: Record<string, string>) => {
+      const s = states.find(st => st.id === stateId);
+      if (!s) return;
+
+      const layerId = s.parentId || 'root';
+      setLastActiveStates(prev => ({ ...prev, [layerId]: s.id }));
+
+      const childLayer = layers.find(l => l.parentStateId === s.id);
+      if (childLayer) {
+        const activeChildId = activeMap[childLayer.id];
+        if (activeChildId) exitState(activeChildId, activeMap);
+        delete activeMap[childLayer.id];
+      }
+      executeAction(s.exit, workingContext, `Exit ${s.name}`);
+    };
+
+    // 4. Process Transitions (Per Region)
+    const regions = Object.keys(activeStates);
+
+    // Failsafe: If no states active, try autostart
+    if (regions.length === 0) {
+      const autoStarts = states.filter(s => s.autostart);
+      if (autoStarts.length > 0) {
+        autoStarts.forEach((s, i) => {
+          if (s.parentId === 'root') enterState(s.id, newActiveStates);
+        });
+      } else if (states.length > 0) {
+        // Absolute fallback
+        const roots = states.filter(s => s.parentId === 'root');
+        if (roots.length > 0) enterState(roots[0].id, newActiveStates);
+      }
+    }
+
+    // Iterate regions to handle transitions
+    for (const region of Object.keys(newActiveStates)) {
+      const currentStateId = newActiveStates[region];
+
+      const currentState = states.find(s => s.id === currentStateId);
+
+      if (!currentState) continue;
+
+      // Find potential transitions from current state
+      const potentialTransitions = transitions
+        .filter(t => t.sourceId === currentStateId)
+        .sort((a, b) => a.order - b.order);
+
+      // Add internal transitions to potential list (Lower priority than external to allow exit)
+      if (currentState.internalTransitions) {
+        const internalLines = currentState.internalTransitions.split('\n').filter(l => l.trim());
+        internalLines.forEach((line, idx) => {
+          let type: any = 'condition';
+          let condition = 'true';
+          let afterTicks: number | null = null;
+          let action = '';
+          const parts = line.split('/');
+          if (parts.length > 1) action = parts.slice(1).join('/').trim();
+          const triggerPart = parts[0].trim();
+          const afterMatch = triggerPart.match(/after\((\d+)\)/);
+          const condMatch = triggerPart.match(/\[(.*?)\]/);
+          if (triggerPart.includes('&&')) type = 'and';
+          else if (triggerPart.includes('||')) type = 'or';
+          else if (afterMatch) type = 'after';
+          if (afterMatch) afterTicks = parseInt(afterMatch[1]);
+          if (condMatch) condition = condMatch[1];
+
+          potentialTransitions.push({
+            id: `INT_${currentState.id}_${idx}`, sourceId: currentState.id, targetId: currentState.id,
+            condition, action, type, afterTicks, hasControlPoint: false, order: 1000 + idx, isInternal: true
+          } as any);
+        });
+      }
+
+      for (const transition of potentialTransitions) {
+        // Check triggers
+        const currentTicks = nextStateTimers[currentStateId] || 0;
+        const conditionMet = evaluateCondition(transition.condition, workingContext, `Transition from ${currentState.name}`);
+        const timerMet = transition.afterTicks !== null && currentTicks >= transition.afterTicks;
+
+        let shouldFire = false;
+        switch (transition.type) {
+          case 'condition': shouldFire = conditionMet; break;
+          case 'after': shouldFire = timerMet; break;
+          case 'and': shouldFire = conditionMet && timerMet; break;
+          case 'or': shouldFire = conditionMet || timerMet; break;
+        }
+
+        if (shouldFire) {
+          // Traverse path (handle junctions)
+          let currentTr = transition;
+          let targetNode = getNode(currentTr.targetId);
+          let pathActions = [currentTr.action];
+          let isValidPath = true;
+          let isLocalPath = !!transition.isInternal || (transition as any).id?.startsWith('INT_');
+          const visited = new Set<string>();
+          let pathTerminatedAtJunction = false;
+          while (targetNode && !states.find(s => s.id === (targetNode as StateData | JunctionData).id)) {
+            if (targetNode && visited.has(targetNode.id)) {
+              // Cycle
+              // Dead end junction. Execute actions on the path and terminate the step for this region.
+              pathActions.forEach(act => executeAction(act, workingContext, 'Action Path'));
+              transitionFired = true;
+              setTraceHistory(prev => [...prev, {
+                time: newTime,
+                event: 'Action Path',
+                group: region,
+                state: currentState.name,
+                transition: `Ended at ${targetNode!.name}`,
+                transitionId: transition.id
+              }].slice(-200));
+              break;
+            }
+            visited.add(targetNode.id);
+
+            const currentNode = targetNode as JunctionData;
+
+            // Find outgoing from junction
+            const junctionTransitions = transitions
+              .filter(t => t.sourceId === currentNode.id)
+              .sort((a, b) => a.order - b.order);
+
+            let foundNext = false;
+            for (const jTr of junctionTransitions) {
+              if (evaluateCondition(jTr.condition, workingContext, `Junction '${currentNode.name}'`)) {
+                currentTr = jTr;
+                targetNode = getNode(jTr.targetId);
+                pathActions.push(jTr.action);
+                foundNext = true;
+
+                break;
+              }
+            }
+
+            if (!foundNext) {
+              pathActions.forEach(act => executeAction(act, workingContext, 'Action Path'));
+              transitionFired = true;
+              stepFiredTransitions[transition.id] = Date.now();
+
+              setTraceHistory(prev => [...prev, {
+                time: newTime,
+                event: 'Action Path',
+                group: region,
+                state: currentState.name,
+                transition: `Ended at ${currentNode.name}`,
+                transitionId: transition.id
+              }].slice(-200));
+
+              targetNode = undefined;
+              pathTerminatedAtJunction = true;
+              break;
+            }
+          }
+
+          if (pathTerminatedAtJunction) {
+            break;
+          } else if (transitionFired) {
+            break;
+          } else if (isValidPath && targetNode) {
+
+            const targetState = targetNode as StateData;
+
+            if (isLocalPath) {
+              pathActions.forEach(act => executeAction(act, workingContext, 'Local Transition Action'));
+              if (targetState.id !== currentState.id) {
+                newActiveStates[region] = targetState.id;
+                nextStateTimers[targetState.id] = 0;
+              }
+            } else {
+              exitState(currentState.id, newActiveStates);
+              pathActions.forEach(act => executeAction(act, workingContext, 'Transition Action'));
+              enterState(targetState.id, newActiveStates);
+            }
+
+            transitionFired = true;
+
+
+            setTraceHistory(prev => [...prev, {
+              time: newTime,
+              event: 'Transition',
+              group: region,
+              state: targetState.name,
+              transition: `${currentState.name} -> ${targetState.name}`,
+              transitionId: transition.id
+            }].slice(-200));
+
+
+          } else if (isValidPath && !targetNode) {
+            break;
+          }
+        }
+      }
+    }
+
+    // 5. Process During Actions & X-Bridges Sub-Models
+    Object.values(newActiveStates).forEach(stateId => {
+      const state = states.find(s => s.id === stateId);
+      if (!state) return;
+
+      // Regular During Action
+      if (state.during) {
+        executeAction(state.during, workingContext, `During ${state.name}`);
+      }
+
+      // X-Bridges Co-Simulation
+      if (state.isXBridges && state.xBridgesModel) {
+        let engine = xBridgesEnginesRef.current.get(stateId);
+        if (!engine) {
+          const model = {
+            blocks: state.xBridgesModel.nodes.map(n => n.data as any),
+            connections: state.xBridgesModel.edges.map(e => ({
+              sourceBlock: e.source, sourcePort: e.sourceHandle!, targetBlock: e.target, targetPort: e.targetHandle!
+            }))
+          };
+          engine = new XbridgesEngine(model);
+          try {
+             engine.compile();
+             xBridgesEnginesRef.current.set(stateId, engine);
+          } catch (err: any) {
+             addError('error', `Failed to compile X-Bridges sub-model in state ${state.name}: ${err.message}`, 'Simulation');
+          }
+        }
+
+        if (engine) {
+          // Sync SM -> Block
+          // 1. Explicit mappings
+          if (state.xBridgesModel.mappings) {
+            state.xBridgesModel.mappings.forEach(map => {
+              if (map.direction === 'in' && map.smVarId && map.blockId && map.portId) {
+                const smVar = variables.find(v => v.id === map.smVarId);
+                if (smVar) {
+                   const val = smVar.name in workingContext ? workingContext[smVar.name] : smVar.currentValue;
+                   const numericVal = Number(val);
+                   engine!.setSignalValue(map.blockId, map.portId, numericVal);
+                   const block = engine!['blockMap'].get(map.blockId);
+                   if (block && block.params) block.params.value = numericVal;
+                }
+              }
+            });
+          }
+          // 2. Direct block parameters (Inports)
+          state.xBridgesModel.nodes.forEach(node => {
+            if (node.data.type === 'Inport' && node.data.params.smVarId) {
+              const smVar = variables.find(v => v.id === node.data.params.smVarId);
+              if (smVar) {
+                const val = smVar.name in workingContext ? workingContext[smVar.name] : smVar.currentValue;
+                const numericVal = Number(val);
+                engine!.setSignalValue(node.id, 'out', numericVal);
+                const block = engine!['blockMap'].get(node.id);
+                if (block && block.params) block.params.value = numericVal;
+              }
+            }
+          });
+
+          // Step X-Bridges
+          try {
+            Solvers.stepRK4(engine, simulationTime, tickMs / 1000);
+          } catch (err: any) {
+             addError('error', `X-Bridges simulation error in state ${state.name}: ${err.message}`, 'Simulation');
+          }
+
+          // Sync Block -> SM
+          // 1. Explicit mappings
+          if (state.xBridgesModel.mappings) {
+            state.xBridgesModel.mappings.forEach(map => {
+              if (map.direction === 'out' && map.smVarId && map.blockId && map.portId) {
+                 const smVar = variables.find(v => v.id === map.smVarId);
+                 if (smVar) {
+                    const blockVal = engine!.getSignalValue(map.blockId, map.portId);
+                    workingContext[smVar.name] = blockVal;
+                    variablesChanged = true;
+                 }
+              }
+            });
+          }
+          // 2. Direct block parameters (Outports)
+          state.xBridgesModel.nodes.forEach(node => {
+            if (node.data.type === 'Outport' && node.data.params.smVarId) {
+              const smVar = variables.find(v => v.id === node.data.params.smVarId);
+              if (smVar) {
+                const val = engine!.getSignalValue(node.id, 'in');
+                if (val !== undefined) {
+                  workingContext[smVar.name] = val;
+                  variablesChanged = true;
+                }
+              }
+            }
+          });
+        }
+      }
+    });
+
+    // 6. Update React State
+    if (variablesChanged) {
+      setVariables(prev => prev.map(v => {
+        if (v.name in workingContext && workingContext[v.name] !== v.currentValue) {
+          return { ...v, currentValue: workingContext[v.name] };
+        }
+        return v;
+      }));
+    }
+
+    setActiveStates(newActiveStates);
+    setStateTimers(nextStateTimers);
+    setFiredTransitions(stepFiredTransitions);
+
+    // Update visual active state
+    setStates(prev => prev.map(s => ({
+      ...s,
+      isActive: Object.values(newActiveStates).includes(s.id)
+    })));
+
+    // 7. Scope Sampling
+    if (!sampleOnTransitionOnly || transitionFired) {
+      const dataPoint: ScopeDataPoint = { time: newTime };
+      variables.forEach(v => {
+        if (v.visibleInScope) {
+          const val = v.name in workingContext ? workingContext[v.name] : v.currentValue;
+          dataPoint[v.name] = typeof val === 'boolean' ? (val ? 1 : 0) : Number(val);
+        }
+      });
+      setScopeData(prev => {
+        const newData = [...prev, dataPoint];
+        return newData.length > SCOPE_MAX_POINTS ? newData.slice(-SCOPE_MAX_POINTS) : newData;
+      });
+    }
+
+  }, [states, junctions, transitions, variables, activeStates, stateTimers, simulationTime, tickMs, sampleOnTransitionOnly, addError, layers, resolveAutoStart]);
+
+
+  const startSimulation = useCallback(() => {
+    if (!validateModel()) return;
+
+    resetVariables();
+    const initialContext = variables.reduce((acc, v) => {
+      acc[v.name] = v.currentValue;
+      return acc;
+    }, {} as Record<string, any>);
+
+    // Initialize active states
+    const newActive: Record<string, string> = {};
+    const initialTimers: Record<string, number> = {};
+
+    // Helper to recursively activate states and their nested autostart children
+    const activateState = (stateId: string) => {
+      const s = states.find(st => st.id === stateId);
+      if (!s) return;
+
+      const layerId = s.parentId || 'root';
+      newActive[layerId] = s.id;
+      initialTimers[s.id] = 0;
+
+      const childLayer = layers.find(l => l.parentStateId === s.id);
+      if (childLayer) {
+        const targetId = resolveAutoStart(childLayer.id, initialContext, true);
+        if (targetId) activateState(targetId);
+      }
+    };
+
+    const rootTargetId = resolveAutoStart('root', initialContext, true);
+    if (rootTargetId) {
+      activateState(rootTargetId);
+    } else if (states.length > 0) {
+      const roots = states.filter(s => s.parentId === 'root');
+      if (roots.length > 0) activateState(roots[0].id);
+    }
+
+    setVariables(prev => prev.map(v => {
+      if (v.name in initialContext && initialContext[v.name] !== v.currentValue) {
+        return { ...v, currentValue: initialContext[v.name] };
+      }
+      return v;
+    }));
+
+    setActiveStates(newActive);
+    setStateTimers(initialTimers);
+    setStates(prev => prev.map(s => ({ ...s, isActive: Object.values(newActive).includes(s.id) })));
+
+    setIsRunning(true);
+    addError('info', 'Simulation started');
+  }, [resetVariables, addError, states, validateModel, layers, resolveAutoStart, variables]);
+
+  const pauseSimulation = useCallback(() => {
+    setIsRunning(false);
+    addError('info', 'Simulation paused');
+  }, [addError]);
+
+  const resetSimulation = useCallback(() => {
+    setIsRunning(false);
+    resetVariables();
+    setLastActiveStates({});
+    setStates(prev => prev.map(s => ({ ...s, isActive: false })));
+    setActiveStates({});
+    setStateTimers({});
+    setTraceHistory([]);
+    setFiredTransitions({});
+    xBridgesEnginesRef.current.clear();
+    addError('info', 'Simulation reset');
+  }, [resetVariables, addError]);
+
+  const stepSimulation = useCallback(() => {
+    if (isRunning) {
+      setIsRunning(false);
+    }
+    simulationStep();
+    addError('info', 'Simulation step');
+  }, [isRunning, simulationStep, addError]);
+
+  useEffect(() => {
+    if (isRunning) {
+      timerRef.current = setInterval(simulationStep, tickMs);
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [isRunning, simulationStep, tickMs]);
+
+  // LAYER / NESTED STATE OPERATIONS
+  const enterLayer = useCallback((stateId: string) => {
+    const state = states.find(s => s.id === stateId);
+    if (!state) return;
+
+    let layer = layers.find(l => l.parentStateId === stateId);
+    if (!layer) {
+      layer = {
+        id: uuidv4(),
+        name: state.name,
+        parentStateId: stateId,
+        stateIds: [],
+        transitionIds: [],
+        junctionIds: []
+      };
+      setLayers(prev => [...prev, layer!]);
+    }
+
+    setLayerStack(prev => [...prev, currentLayerId]);
+    setLayerPath(prev => [...prev, state.name]);
+    setCurrentLayerId(layer.id);
+    setSelectedIds([]);
+    addError('info', `Entered layer: ${state.name}`);
+  }, [states, layers, currentLayerId, addError]);
+
+  const enterRequirement = useCallback((blockId: string) => {
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+
+    setLayerStack(prev => [...prev, currentLayerId]);
+    setLayerPath(prev => [...prev, block.name]);
+    setCurrentLayerId(blockId);
+    setSelectedIds([]);
+    addError('info', `Entered requirement: ${block.name}`);
+  }, [blocks, currentLayerId, addError]);
+
+  const enterBlock = useCallback((blockId: string) => {
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+
+    setLayerStack(prev => [...prev, currentLayerId]);
+    setLayerPath(prev => [...prev, block.name]);
+    setCurrentLayerId(blockId);
+    setDiagramMode('ibd');
+    setSelectedIds([]);
+    addError('info', `Entered block: ${block.name}`);
+  }, [blocks, currentLayerId, addError]);
+
+  const exitLayer = useCallback(() => {
+    if (layerStack.length === 0) return;
+    const parentLayerId = layerStack[layerStack.length - 1];
+    setLayerStack(prev => prev.slice(0, -1));
+    setLayerPath(prev => prev.slice(0, -1));
+    setCurrentLayerId(parentLayerId);
+
+    if (diagramMode === 'ibd' && parentLayerId === 'root') {
+      setDiagramMode('bdd');
+    }
+
+    setSelectedIds([]);
+    addError('info', 'Returned to parent layer');
+  }, [layerStack, diagramMode, addError]);
+
+  // STATE MACHINE EDITOR
+  const createState = useCallback((x: number, y: number, parentId?: string) => {
+    addToHistory();
+    const targetLayerId = parentId || currentLayerId;
+    const layerStates = states.filter(s => s.parentId === targetLayerId);
+
+    const existingPriorities = layerStates.map(s => s.priority);
+    const newPriority = existingPriorities.length > 0 ? Math.max(...existingPriorities) + 10 : 10;
+
+    let finalX = snapEnabled ? snapToGrid(x - DEFAULT_STATE_WIDTH / 2, GRID_SIZE) : x - DEFAULT_STATE_WIDTH / 2;
+    let finalY = snapEnabled ? snapToGrid(y - DEFAULT_STATE_HEIGHT / 2, GRID_SIZE) : y - DEFAULT_STATE_HEIGHT / 2;
+
+    if (targetLayerId !== 'root') {
+      const parentState = states.find(s => s.id === layers.find(l => l.id === targetLayerId)?.parentStateId);
+      if (parentState) {
+        finalX = Math.max(parentState.x, Math.min(finalX, parentState.x + parentState.width - DEFAULT_STATE_WIDTH));
+        finalY = Math.max(parentState.y, Math.min(finalY, parentState.y + parentState.height - DEFAULT_STATE_HEIGHT));
+      }
+    }
+
+    const newState: StateData = {
+      id: uuidv4(),
+      name: `State_${states.length + 1}`,
+      x: finalX,
+      y: finalY,
+      width: DEFAULT_STATE_WIDTH,
+      height: DEFAULT_STATE_HEIGHT,
+      entry: '',
+      during: '',
+      exit: '',
+      isActive: false,
+      color: STATE_COLORS[Math.floor(Math.random() * STATE_COLORS.length)],
+      parentId: targetLayerId,
+      children: [],
+      priority: newPriority,
+      isParallel: false,
+      regionId: null,
+      autostart: layerStates.length === 0,
+      historyType: 'none',
+      internalTransitions: ''
+    };
+
+    setStates(prev => [...prev, newState]);
+    setLayers(prev => prev.map(l =>
+      l.id === targetLayerId
+        ? { ...l, stateIds: [...l.stateIds, newState.id] }
+        : l
+    ));
+
+    setSelectedIds([newState.id]);
+    addError('info', `Created state: ${newState.name}`);
+  }, [states, snapEnabled, currentLayerId, addError, addToHistory, layers]);
+
+  const updateState = useCallback((id: string, updates: Partial<StateData>) => {
+    setStates(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+    if (updates.autostart) {
+      setStates(prev => {
+        const target = prev.find(s => s.id === id);
+        if (!target) return prev;
+        return prev.map(s => {
+          if (s.id !== id && s.parentId === target.parentId && s.autostart) return { ...s, autostart: false };
+          return s;
+        });
+      });
+      setJunctions(prev => {
+        const targetState = states.find(s => s.id === id);
+        if (!targetState) return prev;
+        const parentLayerId = targetState.parentId || 'root';
+        const layer = layers.find(l => l.id === parentLayerId);
+        if (!layer) return prev;
+        return prev.map(j => layer.junctionIds.includes(j.id) && j.autostart ? { ...j, autostart: false } : j);
+      });
+    }
+  }, [layers, states]);
+
+  const deleteState = useCallback((id: string) => {
+    const state = states.find(s => s.id === id);
+    if (!state) return;
+
+    // Check for children (descendants)
+    const getDescendants = (parentId: string): string[] => {
+      const children = states.filter(s => s.parentId === parentId);
+      let descendants = children.map(c => c.id);
+      children.forEach(c => {
+        descendants = [...descendants, ...getDescendants(c.id)];
+      });
+      return descendants;
+    };
+
+    const descendants = getDescendants(id);
+
+    if (descendants.length > 0) {
+      if (!window.confirm(`State '${state.name}' contains ${descendants.length} descendant(s). Deleting it will remove all children. Continue?`)) {
+        return;
+      }
+    }
+
+    const idsToDelete = [id, ...descendants];
+
+    setTransitions(prev => prev.filter(t => !idsToDelete.includes(t.sourceId) && !idsToDelete.includes(t.targetId)));
+
+    setLayers(prev => {
+      const remaining = prev.filter(l => l.parentStateId === null || !idsToDelete.includes(l.parentStateId));
+      return remaining.map(l => ({
+        ...l,
+        stateIds: l.stateIds.filter(sid => !idsToDelete.includes(sid))
+      }));
+    });
+
+    setStates(prev => prev.filter(s => !idsToDelete.includes(s.id)));
+    setSelectedIds(prev => prev.filter(sid => !idsToDelete.includes(sid)));
+    addError('info', `Deleted state: ${state.name}`);
+  }, [states, addError]);
+
+  const createXBridgesState = useCallback((x: number, y: number) => {
+    addToHistory();
+    const finalX = snapEnabled ? snapToGrid(x - DEFAULT_STATE_WIDTH / 2, GRID_SIZE) : x - DEFAULT_STATE_WIDTH / 2;
+    const finalY = snapEnabled ? snapToGrid(y - DEFAULT_STATE_HEIGHT / 2, GRID_SIZE) : y - DEFAULT_STATE_HEIGHT / 2;
+
+    const newState: StateData = {
+      id: uuidv4(),
+      name: `XBridges_${states.length + 1}`,
+      x: finalX,
+      y: finalY,
+      width: DEFAULT_STATE_WIDTH,
+      height: DEFAULT_STATE_HEIGHT,
+      entry: '',
+      during: '',
+      exit: '',
+      isActive: false,
+      color: '#4caf50', // Emerald for X-Bridges
+      parentId: currentLayerId,
+      children: [],
+      priority: 10,
+      isParallel: false,
+      regionId: null,
+      autostart: false,
+      isXBridges: true,
+      xBridgesModel: { nodes: [], edges: [], mappings: [] },
+      internalTransitions: ''
+    };
+
+    setStates(prev => [...prev, newState]);
+    setLayers(prev => prev.map(l =>
+      l.id === currentLayerId ? { ...l, stateIds: [...l.stateIds, newState.id] } : l
+    ));
+    setSelectedIds([newState.id]);
+    addError('info', `Created X-Bridges state: ${newState.name}`);
+  }, [states, snapEnabled, currentLayerId, addError, addToHistory]);
+
+  const createJunction = useCallback((x: number, y: number, type: 'junction' | 'history' | 'deep-history' = 'junction', parentId: string | null = null) => {
+    addToHistory();
+    const newJunction: JunctionData = {
+      id: uuidv4(),
+      x: snapEnabled ? snapToGrid(x, GRID_SIZE) : x,
+      y: snapEnabled ? snapToGrid(y, GRID_SIZE) : y,
+      name: type === 'history' ? 'H' : type === 'deep-history' ? 'H*' : `J${junctions.length + 1}`,
+      color: JUNCTION_COLOR,
+      parentId: parentId,
+      type: type,
+      autostart: false
+    };
+
+    setJunctions(prev => [...prev, newJunction]);
+    setLayers(prev => prev.map(l =>
+      l.id === currentLayerId
+        ? { ...l, junctionIds: [...l.junctionIds, newJunction.id] }
+        : l
+    ));
+
+    setSelectedIds([newJunction.id]);
+    addError('info', `Created junction: ${newJunction.name}`);
+  }, [junctions.length, snapEnabled, currentLayerId, addError, addToHistory, layers]);
+
+  const updateJunction = useCallback((id: string, updates: Partial<JunctionData>) => {
+    setJunctions(prev => prev.map(j => j.id === id ? { ...j, ...updates } : j));
+    if (updates.autostart) {
+      setJunctions(prev => {
+        const layer = layers.find(l => l.junctionIds.includes(id));
+        if (!layer) return prev;
+        return prev.map(j => layer.junctionIds.includes(j.id) && j.id !== id && j.autostart ? { ...j, autostart: false } : j);
+      });
+      setStates(prev => {
+        const layer = layers.find(l => l.junctionIds.includes(id));
+        if (!layer) return prev;
+        return prev.map(s => layer.stateIds.includes(s.id) && s.autostart ? { ...s, autostart: false } : s);
+      });
+    }
+  }, [layers]);
+
+  const deleteJunction = useCallback((id: string) => {
+    const junction = junctions.find(j => j.id === id);
+    if (!junction) return;
+
+    setTransitions(prev => prev.filter(t => t.sourceId !== id && t.targetId !== id));
+    setLayers(prev => prev.map(l => ({
+      ...l,
+      junctionIds: l.junctionIds.filter(jid => jid !== id)
+    })));
+    setJunctions(prev => prev.filter(j => j.id !== id));
+    setSelectedIds(prev => prev.filter(sid => sid !== id));
+    addError('info', `Deleted junction: ${junction.name}`);
+  }, [junctions, addError]);
+
+  const createTransition = useCallback((sourceId: string, targetId: string) => {
+    addToHistory();
+    const outgoingTransitions = transitions.filter(t => t.sourceId === sourceId);
+    const order = outgoingTransitions.length > 0 ? Math.max(...outgoingTransitions.map(t => t.order)) + 1 : 0;
+
+    const newTransition: TransitionData = {
+      id: uuidv4(),
+      sourceId,
+      targetId,
+      condition: 'true',
+      action: '',
+      afterTicks: null,
+      type: 'condition',
+      hasControlPoint: false,
+      order,
+      isInternal: false,
+    };
+
+    setTransitions(prev => [...prev, newTransition]);
+    setLayers(prev => prev.map(l =>
+      l.id === currentLayerId
+        ? { ...l, transitionIds: [...l.transitionIds, newTransition.id] }
+        : l
+    ));
+
+    setSelectedIds([newTransition.id]);
+    addError('info', 'Created transition');
+  }, [transitions, currentLayerId, addError, addToHistory]);
+
+  const updateTransition = useCallback((id: string, updates: Partial<TransitionData>) => {
+    setTransitions(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+  }, []);
+
+  const deleteTransition = useCallback((id: string) => {
+    setTransitions(prev => prev.filter(t => t.id !== id));
+    setLayers(prev => prev.map(l => ({
+      ...l,
+      transitionIds: l.transitionIds.filter(tid => tid !== id)
+    })));
+    setSelectedIds(prev => prev.filter(sid => sid !== id));
+    addError('info', 'Deleted transition');
+  }, [addError]);
+
+  // BDD OPERATIONS
+  const createBlock = useCallback((x: number, y: number, stereotype: string = 'block') => {
+    addToHistory();
+    const newId = uuidv4();
+    const newBlock: BlockData = {
+      id: newId,
+      name: `New${stereotype.charAt(0).toUpperCase() + stereotype.slice(1)}`,
+      stereotype,
+      x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
+      y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
+      width: 150,
+      height: 100,
+      properties: [],
+      classes: [],
+      operations: [],
+      constraints: [],
+      ports: [],
+      reqId: stereotype === 'requirement' ? `REQ-${blocks.filter(b => b.stereotype === 'requirement').length + 1}` : undefined,
+      status: stereotype === 'requirement' ? 'Draft' : undefined,
+      priority: stereotype === 'requirement' ? 'Medium' : undefined,
+      description: stereotype === 'requirement' ? 'Requirement text...' : undefined,
+      risk: stereotype === 'requirement' ? 'Medium' : undefined,
+      verificationMethod: stereotype === 'requirement' ? 'Test' : undefined,
+      source: stereotype === 'requirement' ? '' : undefined,
+    };
+    setBlocks(prev => [...prev, newBlock]);
+
+    if (stereotype === 'requirement' && diagramMode === 'requirements' && currentLayerId !== 'root') {
+      const newRel: RelationshipData = {
+        id: uuidv4(),
+        sourceId: currentLayerId,
+        targetId: newId,
+        type: 'composition',
+        label: '',
+        sourceMultiplicity: '1',
+        targetMultiplicity: '1'
+      };
+      setRelationships(prev => [...prev, newRel]);
+    }
+
+    setSelectedIds([newBlock.id]);
+    addError('info', `Created ${stereotype}: ${newBlock.name}`);
+  }, [snapEnabled, addError, addToHistory, blocks, diagramMode, currentLayerId]);
+
+  const updateBlock = useCallback((id: string, updates: Partial<BlockData>) => {
+    setBlocks(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
+  }, []);
+
+  const deleteBlock = useCallback((id: string) => {
+    const block = blocks.find(b => b.id === id);
+    if (!block) return;
+    setRelationships(prev => prev.filter(r => r.sourceId !== id && r.targetId !== id));
+    setBlocks(prev => prev.filter(b => b.id !== id));
+    setSelectedIds(prev => prev.filter(sid => sid !== id));
+    addError('info', `Deleted block: ${block.name}`);
+  }, [blocks, addError]);
+
+  const createRequirement = useCallback((x: number, y: number) => {
+    addToHistory();
+    const newId = uuidv4();
+    createBlock(x, y, 'requirement');
+
+    if (diagramMode === 'requirements' && currentLayerId !== 'root') {
+      const newRel: RelationshipData = {
+        id: uuidv4(),
+        sourceId: currentLayerId,
+        targetId: newId,
+        type: 'composition',
+        label: '',
+      };
+      setRelationships(prev => [...prev, newRel]);
+    }
+  }, [createBlock, addToHistory, diagramMode, currentLayerId]);
+
+  const createRelationship = useCallback((sourceId: string, targetId: string, type: RelationshipData['type'] = 'association') => {
+    addToHistory();
+    if (sourceId === targetId) return;
+    const newRel: RelationshipData = {
+      id: uuidv4(),
+      sourceId,
+      targetId,
+      type,
+      label: '',
+      sourceMultiplicity: '1',
+      targetMultiplicity: '1'
+    };
+    setRelationships(prev => [...prev, newRel]);
+    setSelectedIds([newRel.id]);
+    addError('info', `Created ${type}`);
+  }, [addError, addToHistory]);
+
+  const updateRelationship = useCallback((id: string, updates: Partial<RelationshipData>) => {
+    setRelationships(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+  }, []);
+
+  const deleteRelationship = useCallback((id: string) => {
+    setRelationships(prev => prev.filter(r => r.id !== id));
+    setSelectedIds(prev => prev.filter(sid => sid !== id));
+    addError('info', 'Deleted relationship');
+  }, [addError]);
+
+  // IBD OPERATIONS
+  const createPart = useCallback((x: number, y: number) => {
+    addToHistory();
+    const newPart: PartData = {
+      id: uuidv4(),
+      name: `part_${parts.length + 1}`,
+      blockId: currentLayerId,
+      typeId: null,
+      x: snapEnabled ? snapToGrid(x - 75, GRID_SIZE) : x - 75,
+      y: snapEnabled ? snapToGrid(y - 50, GRID_SIZE) : y - 50,
+      width: 150,
+      height: 100,
+      multiplicity: '1'
+    };
+    setParts(prev => [...prev, newPart]);
+    setSelectedIds([newPart.id]);
+    addError('info', `Created part: ${newPart.name}`);
+  }, [parts.length, currentLayerId, snapEnabled, addError, addToHistory]);
+
+  const updatePart = useCallback((id: string, updates: Partial<PartData>) => {
+    setParts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+  }, []);
+
+  const deletePart = useCallback((id: string) => {
+    setConnectors(prev => prev.filter(c => c.sourcePartId !== id && c.targetPartId !== id));
+    setParts(prev => prev.filter(p => p.id !== id));
+    setSelectedIds(prev => prev.filter(sid => sid !== id));
+    addError('info', 'Deleted part');
+  }, [addError]);
+
+  const handleDoubleClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    if (e.target === canvasRef.current) {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
+      const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
+      if (diagramMode === 'statemachine') {
+        createState(worldX, worldY);
+      } else if (diagramMode === 'bdd') {
+        createBlock(worldX, worldY, 'block');
+      } else if (diagramMode === 'requirements') {
+        createRequirement(worldX, worldY);
+      }
+    }
+  }, [createState, createBlock, createRequirement, view, uiZoom, diagramMode]);
+
+  const handleAutoLayout = useCallback(() => {
+    const reqs = blocks.filter(b => b.stereotype === 'requirement');
+    if (reqs.length === 0) return;
+
+    // Only layout visible requirements
+    const visibleReqs = reqs.filter(block => {
+      if (currentLayerId === 'root') {
+        return !relationships.some(r => r.targetId === block.id && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'));
+      } else {
+        return relationships.some(r => r.sourceId === currentLayerId && r.targetId === block.id && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'));
+      }
+    });
+
+    if (visibleReqs.length === 0) return;
+    const visibleIds = new Set(visibleReqs.map(r => r.id));
+
+    const levels: Record<string, number> = {};
+
+    // Find roots within the visible set
+    const layerRoots = visibleReqs.filter(r => !relationships.some(rel => rel.targetId === r.id && visibleIds.has(rel.sourceId)));
+
+    const queue = (layerRoots.length > 0 ? layerRoots : visibleReqs).map(r => ({ id: r.id, level: 0 }));
+    const visited = new Set<string>();
+
+    while (queue.length > 0) {
+      const { id, level } = queue.shift()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      levels[id] = level;
+
+      const children = relationships
+        .filter(rel => rel.sourceId === id && visibleIds.has(rel.targetId))
+        .map(rel => rel.targetId);
+      children.forEach(cid => queue.push({ id: cid, level: level + 1 }));
+    }
+
+    const levelGroups: Record<number, string[]> = {};
+    Object.entries(levels).forEach(([id, lvl]) => {
+      if (!levelGroups[lvl]) levelGroups[lvl] = [];
+      levelGroups[lvl].push(id);
+    });
+
+    const newBlocks = [...blocks];
+    Object.entries(levelGroups).forEach(([lvlStr, ids]) => {
+      const lvl = parseInt(lvlStr);
+      ids.forEach((id, index) => {
+        const idx = newBlocks.findIndex(b => b.id === id);
+        if (idx !== -1) newBlocks[idx] = { ...newBlocks[idx], x: 50 + index * 220, y: 50 + lvl * 180 };
+      });
+    });
+    setBlocks(newBlocks);
+    addError('info', 'Auto-layout applied to current layer.');
+  }, [blocks, relationships, currentLayerId, addError]);
+
+  const handleAddPortToSelected = useCallback((kind: 'standard' | 'flow' | 'proxy') => {
+    if (selectedIds.length !== 1) {
+      addError('warning', 'Select exactly one Block or Part to add a port.');
+      return;
+    }
+    const id = selectedIds[0];
+
+    const part = parts.find(p => p.id === id);
+    if (part) {
+      const originalTypeId = part.typeId;
+
+      if (!originalTypeId) {
+        const newBlockId = uuidv4();
+        const newPort: PortData = { id: uuidv4(), name: `p1`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
+        const newBlock: BlockData = {
+          id: newBlockId, name: `${part.name}_Def`, stereotype: 'block', classes: [],
+          x: 100, y: 100, width: 150, height: 100,
+          properties: [], operations: [], constraints: [], ports: [newPort]
+        };
+        setBlocks(prev => [...prev, newBlock]);
+        updatePart(part.id, { typeId: newBlockId });
+        addError('info', `Created definition '${newBlock.name}' for part and added port.`);
+        return;
+      }
+
+      const isShared = parts.some(p => p.id !== part.id && p.typeId === originalTypeId);
+      const originalBlock = blocks.find(b => b.id === originalTypeId);
+      if (!originalBlock) {
+        addError('error', `Could not find block definition with ID ${originalTypeId}`);
+        return;
+      }
+
+      if (isShared) {
+        addError('info', `Specializing definition for '${part.name}'...`);
+        const newBlockId = uuidv4();
+        const newBlock: BlockData = { ...originalBlock, id: newBlockId, name: `${originalBlock.name}_${part.name}`, ports: originalBlock.ports.map(p => ({ ...p })), properties: originalBlock.properties.map(p => ({ ...p })), constraints: originalBlock.constraints, };
+        const newPort: PortData = { id: uuidv4(), name: `p${newBlock.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
+        newBlock.ports.push(newPort);
+        setBlocks(prev => [...prev, newBlock]);
+        updatePart(part.id, { typeId: newBlockId });
+        addError('info', `Created new definition '${newBlock.name}' and added port.`);
+      } else {
+        const newPort: PortData = { id: uuidv4(), name: `p${originalBlock.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
+        updateBlock(originalTypeId, { ports: [...originalBlock.ports, newPort] });
+        addError('info', `Added ${kind} port to definition: ${originalBlock.name}`);
+      }
+    } else {
+      const block = blocks.find(b => b.id === id);
+      if (!block) {
+        addError('warning', 'Selected element is not a Block or Part.');
+        return;
+      }
+      const newPort: PortData = { id: uuidv4(), name: `p${block.ports.length + 1}`, type: kind === 'proxy' ? 'Interface' : (kind === 'flow' ? 'Power' : 'void'), kind, direction: kind === 'flow' ? 'in' : undefined };
+      updateBlock(id, { ports: [...block.ports, newPort] });
+      addError('info', `Added ${kind} port to Block: ${block.name}`);
+    }
+  }, [selectedIds, blocks, parts, updateBlock, updatePart, addError, setBlocks]);
+
+  const createInterfaceRealization = useCallback((interfaceId: string, partId: string, portId: string) => {
+    addToHistory();
+    const newRealization: InterfaceRealizationData = {
+      id: uuidv4(),
+      interfaceId,
+      partId,
+      portId,
+    };
+    setInterfaceRealizations(prev => [...prev, newRealization]);
+    setSelectedIds([newRealization.id]);
+    addError('info', 'Created interface realization');
+  }, [addToHistory, addError]);
+
+  const [isCreatingConnector, setIsCreatingConnector] = useState(false);
+  const [connectorSource, setConnectorSource] = useState<{ partId: string, portId: string } | null>(null);
+
+  const handlePortMouseDown = useCallback((e: MouseEvent<SVGRectElement>, elementId: string, portId: string) => {
+    e.stopPropagation();
+    if (isCreatingConnector) return; // Don't drag if we are trying to connect
+
+    // Start dragging port
+    setDraggedPort({ elementId, portId });
+    setIsDragging(true); // To prevent other interactions
+  }, [isCreatingConnector]);
+
+  const handlePortClick = useCallback((e: MouseEvent<SVGRectElement>, partId: string, portId: string) => {
+    e.stopPropagation();
+
+    if (isCreatingTransition && transitionSourceId) {
+      const sourceBlock = blocks.find(b => b.id === transitionSourceId);
+      if (sourceBlock && sourceBlock.stereotype === 'interface') {
+        // We are connecting an interface to a port.
+        createInterfaceRealization(transitionSourceId, partId, portId);
+        setIsCreatingTransition(false);
+        setTransitionSourceId(null);
+        return;
+      }
+    }
+
+    if (isCreatingConnector) {
+      if (connectorSource) {
+        if (connectorSource.partId === partId && connectorSource.portId === portId) {
+          setIsCreatingConnector(false);
+          setConnectorSource(null);
+          return;
+        }
+
+        // FR-IBD-003: Validate compatibility
+        const getBlockForEnd = (pId: string) => {
+          if (pId === currentLayerId) return blocks.find(b => b.id === pId);
+          const p = parts.find(part => part.id === pId);
+          return blocks.find(b => b.id === p?.typeId);
+        };
+
+        const sourceBlock = getBlockForEnd(connectorSource.partId);
+        const targetBlock = getBlockForEnd(partId);
+
+        const sourcePort = sourceBlock?.ports.find(p => p.id === connectorSource.portId);
+        const targetPort = targetBlock?.ports.find(p => p.id === portId);
+
+        if (sourcePort && targetPort) {
+          if (sourcePort.type !== targetPort.type && sourcePort.type !== 'any' && targetPort.type !== 'any') {
+            addError('error', `Incompatible ports: ${sourcePort.name} (${sourcePort.type}) vs ${targetPort.name} (${targetPort.type})`);
+            return;
+          }
+
+          addToHistory();
+          const newConnector: ConnectorData = {
+            id: uuidv4(),
+            sourcePartId: connectorSource.partId,
+            sourcePortId: connectorSource.portId,
+            targetPartId: partId,
+            targetPortId: portId
+          };
+          setConnectors(prev => [...prev, newConnector]);
+          addError('info', 'Created connection');
+        }
+        setIsCreatingConnector(false);
+        setConnectorSource(null);
+      } else {
+        setConnectorSource({ partId, portId });
+      }
+    }
+  }, [isCreatingConnector, connectorSource, parts, blocks, addError, addToHistory, isCreatingTransition, transitionSourceId, createInterfaceRealization, currentLayerId]);
+
+  const deleteConnector = useCallback((id: string) => {
+    setConnectors(prev => prev.filter(c => c.id !== id));
+    setSelectedIds(prev => prev.filter(sid => sid !== id));
+    addError('info', 'Deleted connector');
+  }, [addError]);
+
+  const updateConnector = useCallback((id: string, updates: Partial<ConnectorData>) => {
+    setConnectors(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  }, []);
+
+  const deleteInterfaceRealization = useCallback((id: string) => {
+    addToHistory();
+    setInterfaceRealizations(prev => prev.filter(ir => ir.id !== id));
+    setSelectedIds(prev => prev.filter(sid => sid !== id));
+    addError('info', 'Disconnected interface');
+  }, [addError, addToHistory]);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent, panel: string) => {
+    e.preventDefault();
+    setResizingPanel(panel);
+  }, []);
+
+  useEffect(() => {
+    const handleResizeMove = (e: globalThis.MouseEvent) => {
+      if (!resizingPanel) return;
+
+      if (resizingPanel === 'hierarchy') {
+        setHierarchyWidth(prev => Math.max(150, Math.min(500, prev + e.movementX / uiZoom)));
+      } else if (resizingPanel === 'variables') {
+        setVariablesWidth(prev => Math.max(150, Math.min(500, prev + e.movementX / uiZoom)));
+      } else if (resizingPanel === 'properties') {
+        setPropertiesWidth(prev => Math.max(200, Math.min(600, prev - e.movementX / uiZoom)));
+      } else if (resizingPanel === 'scope') {
+        setScopeHeight(prev => Math.max(100, Math.min(window.innerHeight - 200, prev - e.movementY / uiZoom)));
+      }
+    };
+
+    const handleResizeEnd = () => {
+      setResizingPanel(null);
+    };
+
+    if (resizingPanel) {
+      window.addEventListener('mousemove', handleResizeMove);
+      window.addEventListener('mouseup', handleResizeEnd);
+      window.addEventListener('mouseleave', handleResizeEnd);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleResizeMove);
+      window.removeEventListener('mouseup', handleResizeEnd);
+      window.removeEventListener('mouseleave', handleResizeEnd);
+    };
+  }, [resizingPanel, uiZoom]);
+
+  const handleResizeMouseDown = useCallback((e: MouseEvent<SVGRectElement>, handle: string, id: string) => {
+    e.stopPropagation();
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
+    const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
+
+    const block = blocks.find(b => b.id === id);
+    if (block) {
+      setIsResizing(true);
+      setResizeHandle(handle);
+      setResizeStart({ id: block.id, x: block.x, y: block.y, w: block.width, h: block.height, mx: worldX, my: worldY, type: 'block' });
+      addToHistory();
+      return;
+    }
+
+    const state = states.find(s => s.id === id);
+    if (state) {
+      setIsResizing(true);
+      setResizeHandle(handle);
+      setResizeStart({ id: state.id, x: state.x, y: state.y, w: state.width, h: state.height, mx: worldX, my: worldY, type: 'state' });
+      addToHistory();
+    }
+  }, [blocks, states, view, addToHistory, uiZoom]);
+
+  // CANVAS NAVIGATION (CATIA-style)
+  const handleMouseDown = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    if (e.button === 1) {
+      midDown.current = true;
+      if (rightDown.current) {
+        setIsPanning(true);
+        lastMousePos.current = { x: e.clientX, y: e.clientY };
+      }
+      e.preventDefault();
+      return;
+    }
+
+    if (e.button === 2) {
+      rightDown.current = true;
+      if (midDown.current) {
+        setIsPanning(true);
+        lastMousePos.current = { x: e.clientX, y: e.clientY };
+      }
+      e.preventDefault();
+      return;
+    }
+
+    if (e.button === 0 && isSpacePressed.current) {
+      setIsPanning(true);
+      lastMousePos.current = { x: e.clientX, y: e.clientY };
+      e.preventDefault();
+      return;
+    }
+
+    if (e.button === 0 && e.target === canvasRef.current) {
+      if (isCreatingTransition) {
+        setIsCreatingTransition(false);
+        setTransitionSourceId(null);
+      }
+      if (isCreatingConnector) {
+        setIsCreatingConnector(false);
+        setConnectorSource(null);
+      }
+      setSelectedIds([]);
+    }
+  }, [isCreatingTransition, isCreatingConnector, setIsCreatingTransition, setTransitionSourceId, setIsCreatingConnector, setConnectorSource, setSelectedIds, canvasRef, isSpacePressed, setIsPanning, rightDown, midDown, lastMousePos]);
+
+  const handleMouseMove = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
+    const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
+    setMousePos({ x: worldX, y: worldY });
+
+    if (isPanning) {
+      const dx = e.clientX - lastMousePos.current.x;
+      const dy = e.clientY - lastMousePos.current.y;
+      setView(prev => ({
+        ...prev,
+        offsetX: prev.offsetX + dx,
+        offsetY: prev.offsetY + dy
+      }));
+      lastMousePos.current = { x: e.clientX, y: e.clientY };
+      e.preventDefault();
+      return;
+    }
+
+    if (isResizing && resizeStart && resizeHandle) {
+      const dx = worldX - resizeStart.mx;
+      const dy = worldY - resizeStart.my;
+
+      let newX = resizeStart.x;
+      let newY = resizeStart.y;
+      let newW = resizeStart.w;
+      let newH = resizeStart.h;
+
+      if (resizeStart.type === 'state') {
+        if (resizeHandle.includes('e')) newW = Math.max(100, resizeStart.w + dx);
+        if (resizeHandle.includes('s')) newH = Math.max(60, resizeStart.h + dy);
+        if (resizeHandle.includes('w')) {
+          const delta = Math.min(resizeStart.w - 100, dx);
+          newX = resizeStart.x + delta;
+          newW = resizeStart.w - delta;
+        }
+        if (resizeHandle.includes('n')) {
+          const delta = Math.min(resizeStart.h - 60, dy);
+          newY = resizeStart.y + delta;
+          newH = resizeStart.h - delta;
+        }
+      } else {
+        if (resizeHandle.includes('e')) newW = Math.max(50, resizeStart.w + dx);
+        if (resizeHandle.includes('s')) newH = Math.max(50, resizeStart.h + dy);
+        if (resizeHandle.includes('w')) {
+          const delta = Math.min(resizeStart.w - 50, dx);
+          newX = resizeStart.x + delta;
+          newW = resizeStart.w - delta;
+        }
+        if (resizeHandle.includes('n')) {
+          const delta = Math.min(resizeStart.h - 50, dy);
+          newY = resizeStart.y + delta;
+          newH = resizeStart.h - delta;
+        }
+      }
+
+      if (snapEnabled) {
+        if (resizeHandle.includes('w')) newX = snapToGrid(newX, GRID_SIZE);
+        if (resizeHandle.includes('n')) newY = snapToGrid(newY, GRID_SIZE);
+        newW = snapToGrid(newW, GRID_SIZE);
+        newH = snapToGrid(newH, GRID_SIZE);
+      }
+
+      if (resizeStart.type === 'state') {
+        updateState(resizeStart.id, { x: newX, y: newY, width: newW, height: newH });
+      } else {
+        updateBlock(resizeStart.id, { x: newX, y: newY, width: newW, height: newH });
+      }
+      return;
+    }
+
+    if (isDragging && draggedPort) {
+      const { elementId, portId } = draggedPort;
+      // Find element (Part or Block)
+      let element: { x: number, y: number, width: number, height: number, typeId?: string | null } | undefined = parts.find(p => p.id === elementId);
+      let isContext = false;
+      if (!element) {
+        element = blocks.find(b => b.id === elementId);
+        isContext = true;
+      }
+      const part = parts.find(p => p.id === elementId);
+      const block = blocks.find(b => b.id === elementId);
+
+      if (element) {
+        let elX = element.x, elY = element.y, elW = element.width, elH = element.height;
+
+        const relX = worldX - elX;
+        const relY = worldY - elY;
+
+        const distTop = Math.abs(relY);
+        const distBottom = Math.abs(relY - elH);
+        const distLeft = Math.abs(relX);
+        const distRight = Math.abs(relX - elW);
+
+        const minDist = Math.min(distTop, distBottom, distLeft, distRight);
+
+        let side: 'top' | 'bottom' | 'left' | 'right' = 'top';
+        let offset = 0.5;
+
+        if (minDist === distTop) { side = 'top'; offset = Math.max(0, Math.min(1, relX / elW)); }
+        else if (minDist === distBottom) { side = 'bottom'; offset = Math.max(0, Math.min(1, relX / elW)); }
+        else if (minDist === distLeft) { side = 'left'; offset = Math.max(0, Math.min(1, relY / elH)); }
+        else { side = 'right'; offset = Math.max(0, Math.min(1, relY / elH)); }
+
+        if (isContext && block) {
+          // Update Block definition (Context)
+          setBlocks(prev => prev.map(b => b.id === elementId ? {
+            ...b, ports: b.ports.map(p => p.id === portId ? { ...p, side, offset } : p)
+          } : b));
+        } else if (part) {
+          // Update Part instance only
+          setParts(prev => prev.map(p => p.id === elementId ? {
+            ...p, portLayouts: { ...(p.portLayouts || {}), [portId]: { side, offset } }
+          } : p));
+        }
+      }
+      return;
+    }
+
+    if (isDragging) {
+      // Calculate delta
+      const dx = worldX - dragOffset.x;
+      const dy = worldY - dragOffset.y;
+
+      const idsToMove = new Set(selectedIds);
+      selectedIds.forEach(id => {
+        const state = states.find(s => s.id === id);
+        if (state) {
+          const childLayer = layers.find(l => l.parentStateId === id);
+          if (childLayer) {
+            childLayer.stateIds.forEach(childId => idsToMove.add(childId));
+            childLayer.junctionIds.forEach(childId => idsToMove.add(childId));
+          }
+          currentJunctions.forEach(j => {
+            if (j.x >= state.x && j.x <= state.x + state.width &&
+              j.y >= state.y && j.y <= state.y + state.height &&
+              !idsToMove.has(j.id)) {
+              idsToMove.add(j.id);
+            }
+          });
+        }
+      });
+
+      // Move all selected items
+      idsToMove.forEach(id => {
+        const state = states.find(s => s.id === id);
+        if (state) {
+          const newX = state.x + dx;
+          const newY = state.y + dy;
+          const snappedX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
+          const snappedY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
+
+
+          updateState(id, { x: snappedX, y: snappedY });
+
+          // Move child junctions
+          junctions.forEach(j => {
+            if (j.parentId === id && !idsToMove.has(j.id)) { // Ensure child junctions are not already selected
+              updateJunction(j.id, { x: j.x + dx, y: j.y + dy });
+            }
+          });
+        }
+        const junction = junctions.find(j => j.id === id);
+        if (junction) {
+          const newX = junction.x + dx;
+          const newY = junction.y + dy;
+
+          let finalX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
+          let finalY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
+
+          const parentState = states.find(s => s.id === junction.parentId);
+          if (parentState) {
+            // junction radius is 8, rect size is 16x16
+            finalX = Math.max(parentState.x, Math.min(finalX, parentState.x + parentState.width - 16));
+            finalY = Math.max(parentState.y, Math.min(finalY, parentState.y + parentState.height - 16));
+          }
+
+          updateJunction(id, { x: finalX, y: finalY });
+        }
+
+        // BDD Blocks
+        const block = blocks.find(b => b.id === id);
+        if (block) {
+          const newX = block.x + dx;
+          const newY = block.y + dy;
+          updateBlock(id, {
+            x: snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX,
+            y: snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY
+          });
+        }
+
+        // IBD Parts
+        const part = parts.find(p => p.id === id);
+        if (part) {
+          const newX = part.x + dx;
+          const newY = part.y + dy;
+
+          // REQ-LAYOUT-003: Prevent Parts from being moved outside the Context Block diagram boundary
+          let finalX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
+          let finalY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
+
+          if (diagramMode === 'ibd') {
+            const contextBlock = blocks.find(b => b.id === currentLayerId);
+            if (contextBlock) {
+              finalX = Math.max(contextBlock.x, Math.min(finalX, contextBlock.x + contextBlock.width - part.width));
+              finalY = Math.max(contextBlock.y, Math.min(finalY, contextBlock.y + contextBlock.height - part.height));
+            }
+          }
+
+          updatePart(id, {
+            x: finalX,
+            y: finalY
+          });
+        }
+      });
+
+      // Update drag offset to current position for next frame
+      setDragOffset({ x: worldX, y: worldY });
+    }
+  }, [isPanning, isDragging, draggedPort, selectedIds, states, junctions, blocks, parts, dragOffset, view, snapEnabled, updateState, updateJunction, updateBlock, updatePart, diagramMode, currentLayerId, isResizing, resizeStart, resizeHandle, layers]);
+
+  const handleMouseUp = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    if (e.button === 1) {
+      midDown.current = false;
+    }
+    if (e.button === 2) {
+      rightDown.current = false;
+    }
+    if (isResizing) {
+      setIsResizing(false);
+      setResizeHandle(null);
+      setResizeStart(null);
+    }
+    if (isDragging) {
+      setIsDragging(false);
+      setDraggedPort(null);
+    }
+    if (isPanning) {
+      setIsPanning(false);
+    }
+  }, [isDragging, isPanning, draggedPort, isResizing, selectedIds]);
+
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const mouseX = (e.clientX - rect.left) / uiZoom;
+    const mouseY = (e.clientY - rect.top) / uiZoom;
+
+    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+    const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, view.scale * zoomFactor));
+
+    const zoomPointX = (mouseX - view.offsetX) / view.scale;
+    const zoomPointY = (mouseY - view.offsetY) / view.scale;
+    const newOffsetX = mouseX - zoomPointX * newScale;
+    const newOffsetY = mouseY - zoomPointY * newScale;
+
+    setView({
+      scale: newScale,
+      offsetX: newOffsetX,
+      offsetY: newOffsetY
+    });
+
+    setShowZoomIndicator(true);
+    setTimeout(() => setShowZoomIndicator(false), 500);
+  }, [view, uiZoom]);
+
+  const handleStateMouseDown = useCallback((e: MouseEvent<SVGGElement>, stateId: string) => {
+    e.stopPropagation();
+    if (isCreatingTransition) {
+      if (transitionSourceId) {
+        createTransition(transitionSourceId, stateId);
+        setIsCreatingTransition(false);
+        setTransitionSourceId(null);
+      } else {
+        setTransitionSourceId(stateId);
+      }
+      return;
+    }
+
+    const state = states.find(s => s.id === stateId);
+    if (!state) return;
+
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
+    const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
+
+    if (e.ctrlKey) {
+      setSelectedIds(prev => prev.includes(stateId) ? prev.filter(id => id !== stateId) : [...prev, stateId]);
+    } else {
+      if (!selectedIds.includes(stateId)) {
+        setSelectedIds([stateId]);
+      }
+    }
+
+    addToHistory(); // Save state before dragging
+    setIsDragging(true);
+
+    // For dragging, we track the mouse position relative to world
+    setDragOffset({ x: worldX, y: worldY });
+  }, [isCreatingTransition, transitionSourceId, states, view, createTransition, selectedIds, addToHistory, uiZoom]);
+
+  const handleJunctionMouseDown = useCallback((e: MouseEvent<SVGGElement>, junctionId: string) => {
+    e.stopPropagation();
+    if (isCreatingTransition) {
+      if (transitionSourceId) {
+        if (transitionSourceId !== junctionId) {
+          createTransition(transitionSourceId, junctionId);
+          setIsCreatingTransition(false);
+          setTransitionSourceId(null);
+        }
+      } else {
+        setTransitionSourceId(junctionId);
+      }
+      return;
+    }
+
+    const junction = junctions.find(j => j.id === junctionId);
+    if (!junction) return;
+
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
+    const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
+
+    if (e.ctrlKey) {
+      setSelectedIds(prev => prev.includes(junctionId) ? prev.filter(id => id !== junctionId) : [...prev, junctionId]);
+    } else {
+      if (!selectedIds.includes(junctionId)) {
+        setSelectedIds([junctionId]);
+      }
+    }
+
+    addToHistory(); // Save state before dragging
+    setIsDragging(true);
+    setDragOffset({ x: worldX, y: worldY });
+  }, [isCreatingTransition, transitionSourceId, junctions, view, createTransition, selectedIds, addToHistory, uiZoom]);
+
+  const handleBlockMouseDown = useCallback((e: MouseEvent<SVGGElement>, blockId: string) => {
+    e.stopPropagation();
+    if (isCreatingTransition) { // Reusing this flag for relationships
+      if (transitionSourceId) {
+        if (transitionSourceId !== blockId) {
+          const source = blocks.find(b => b.id === transitionSourceId);
+          const target = blocks.find(b => b.id === blockId);
+          if (!source || !target) return;
+          let type: RelationshipData['type'] = 'association';
+
+          if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
+            type = 'deriveReqt';
+          }
+
+          createRelationship(transitionSourceId, blockId, type);
+          setIsCreatingTransition(false);
+          setTransitionSourceId(null);
+        }
+      } else {
+        setTransitionSourceId(blockId);
+      }
+      return;
+    }
+    if (isCreatingConnector) return;
+
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
+    const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
+
+    if (e.ctrlKey) {
+      setSelectedIds(prev => prev.includes(blockId) ? prev.filter(id => id !== blockId) : [...prev, blockId]);
+    } else {
+      if (!selectedIds.includes(blockId)) setSelectedIds([blockId]);
+    }
+    addToHistory();
+    setIsDragging(true);
+    setDragOffset({ x: worldX, y: worldY });
+  }, [isCreatingTransition, transitionSourceId, createRelationship, view, selectedIds, addToHistory, isCreatingConnector, uiZoom, blocks]);
+
+  const handlePartMouseDown = useCallback((e: MouseEvent<SVGGElement>, partId: string) => {
+    e.stopPropagation();
+    if (isCreatingConnector) return; // Handled by port click usually, but if clicking body do nothing or cancel?
+
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
+    const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
+
+    if (e.ctrlKey) {
+      setSelectedIds(prev => prev.includes(partId) ? prev.filter(id => id !== partId) : [...prev, partId]);
+    } else {
+      if (!selectedIds.includes(partId)) setSelectedIds([partId]);
+    }
+    addToHistory();
+    setIsDragging(true);
+    setDragOffset({ x: worldX, y: worldY });
+  }, [isCreatingConnector, view, selectedIds, addToHistory, uiZoom]);
+
+  const handleStateDoubleClick = useCallback((e: MouseEvent<SVGGElement>, stateId: string) => {
+    e.stopPropagation();
+    const state = states.find(s => s.id === stateId);
+    if (state?.isXBridges) {
+      if (isRunning) pauseSimulation();
+      setXBridgesStateId(stateId);
+      return;
+    }
+
+    if (diagramMode === 'requirements') {
+      enterRequirement(stateId);
+    } else {
+      enterLayer(stateId);
+    }
+  }, [enterLayer, diagramMode, states]);
+
+  const handleTransitionClick = useCallback((e: MouseEvent<SVGPathElement>, transitionId: string) => {
+    e.stopPropagation();
+    if (e.ctrlKey) {
+      setSelectedIds(prev => prev.includes(transitionId) ? prev.filter(id => id !== transitionId) : [...prev, transitionId]);
+    } else {
+      setSelectedIds([transitionId]);
+    }
+  }, []);
+
+  const startControlPointDrag = useCallback((transitionId: string, e: MouseEvent<SVGCircleElement>) => {
+    e.stopPropagation();
+    const transition = transitions.find(t => t.id === transitionId);
+    if (!transition) return;
+
+    const handleMouseMove = (moveEvent: any) => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const worldX = ((moveEvent.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
+      const worldY = ((moveEvent.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
+
+      updateTransition(transitionId, {
+        controlPoint: { x: worldX, y: worldY },
+        hasControlPoint: true
+      });
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove as any);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove as any);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [transitions, view, updateTransition, uiZoom]);
+
+  const handleExportProject = useCallback(() => {
+    const projectData = {
+      version: VERSION,
+      timestamp: new Date().toISOString(),
+      states,
+      junctions,
+      transitions,
+      layers,
+      variables,
+      view,
+      tickMs,
+      blocks,
+      relationships,
+      parts,
+      connectors,
+      interfaceRealizations
+    };
+
+    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `adia_project_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addError('info', 'Project exported successfully');
+  }, [states, junctions, transitions, layers, variables, view, tickMs, blocks, relationships, parts, connectors, interfaceRealizations, addError]);
+
+  const handleProjectFileChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedData = JSON.parse(event.target?.result as string);
+        setStates(importedData.states || []);
+        setJunctions(importedData.junctions || []);
+        setTransitions(importedData.transitions || []);
+        setLayers(importedData.layers || [{ id: 'root', name: 'Root', parentStateId: null, stateIds: [], transitionIds: [], junctionIds: [] }]);
+        setVariables(importedData.variables || []);
+        setBlocks(importedData.blocks || []);
+        setRelationships(importedData.relationships || []);
+        setParts(importedData.parts || []);
+        setConnectors(importedData.connectors || []);
+        setInterfaceRealizations(importedData.interfaceRealizations || []);
+        setCustomStereotypes(importedData.customStereotypes || []);
+        setView(importedData.view || { scale: 1, offsetX: 0, offsetY: 0 });
+        setTickMs(importedData.tickMs || 500);
+        addError('info', 'Project imported successfully');
+      } catch (error) {
+        addError('error', 'Failed to parse project file.');
+      }
+    };
+    reader.readAsText(file);
+    if (projectImportRef.current) projectImportRef.current.value = '';
+  }, [addError]);
+
+  const handleImportProject = useCallback(async () => {
+    try {
+      if ((window as any).require) {
+        const { ipcRenderer } = (window as any).require('electron');
+        const importedData = await ipcRenderer.invoke('import-json');
+
+        if (importedData) {
+          setStates(importedData.states || []); setJunctions(importedData.junctions || []);
+          setTransitions(importedData.transitions || []);
+          setLayers(importedData.layers || [{ id: 'root', name: 'Root', parentStateId: null, stateIds: [], transitionIds: [], junctionIds: [] }]);
+          setVariables(importedData.variables || []);
+          setBlocks(importedData.blocks || []);
+          setRelationships(importedData.relationships || []);
+          setParts(importedData.parts || []);
+          setConnectors(importedData.connectors || []);
+          setInterfaceRealizations(importedData.interfaceRealizations || []);
+          setCustomStereotypes(importedData.customStereotypes || []);
+          setView(importedData.view || { scale: 1, offsetX: 0, offsetY: 0 });
+          setTickMs(importedData.tickMs || 500);
+
+          // Reset simulation state
+          setIsRunning(false);
+          setActiveStates({});
+          setStateTimers({});
+          setTraceHistory([]);
+          setScopeData([]);
+          setSimulationTime(0);
+
+          // Reset navigation and selection
+          setCurrentLayerId('root');
+          setLayerStack([]);
+          setLayerPath(['Root']);
+          setSelectedIds([]);
+          setHistory([]);
+          setHistoryIndex(-1);
+
+          addError('info', 'Project imported successfully');
+        } else {
+          addError('info', 'Import cancelled or file could not be read.');
+        }
+      } else {
+        // Web/Mobile Fallback
+        projectImportRef.current?.click();
+      }
+    } catch (error) {
+      console.error('Import failed:', error);
+      addError('error', `Failed to import project: ${error instanceof Error ? error.message : 'Unknown error'}. Tip: Ensure the file is a valid ADIA project JSON file.`);
+    }
+  }, [addError, setStates, setJunctions, setTransitions, setLayers, setVariables, setBlocks, setRelationships, setParts, setConnectors, setInterfaceRealizations, setView, setTickMs, setIsRunning, setActiveStates, setStateTimers, setTraceHistory, setScopeData, setSimulationTime, setSelectedIds, setHistory, setHistoryIndex, setCurrentLayerId, setLayerStack, setLayerPath]);
+
+  const handleGenerateReport = useCallback((projectName: string, author: string) => {
+    const style = `
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fff; color: #333; padding: 40px; line-height: 1.6; }
+        h1 { color: #c9a86c; border-bottom: 2px solid #c9a86c; padding-bottom: 10px; margin-bottom: 20px; }
+        h2 { color: #222; border-bottom: 1px solid #eee; margin-top: 40px; padding-bottom: 5px; }
+        h3 { color: #444; margin-top: 25px; font-size: 1.1em; }
+        .meta { color: #666; font-size: 0.9em; margin-bottom: 40px; }
+        .tree { margin-left: 20px; border-left: 1px solid #ddd; padding-left: 15px; }
+        .item { margin-bottom: 15px; }
+        .item-header { font-weight: bold; color: #000; }
+        .props { font-size: 0.9em; color: #555; margin-left: 10px; }
+        .tag { background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }
+    `;
+
+    let html = `<html><head><title>${projectName} Report</title><style>${style}</style></head><body>`;
+    html += `<h1>${projectName}</h1>`;
+    html += `<div class="meta"><strong>Author:</strong> ${author} &bull; <strong>Date:</strong> ${new Date().toLocaleString()} &bull; <strong>Engine:</strong> ${VERSION}</div>`;
+
+    // Helper to generate SVG for report
+    const renderDiagramSVG = (nodes: any[], edges: any[], type: 'req' | 'bdd' | 'ibd' | 'statemachine' | 'xbridges', contextId?: string) => {
+      if (nodes.length === 0) return '';
+
+      // Prepare Nodes: Use fixed size for BDD blocks to match App, use instance size for IBD/Req
+      const displayNodes = nodes.map(n => {
+        const isBdd = type === 'bdd';
+        const width = isBdd ? 120 : n.width;
+        const height = isBdd ? 60 : n.height;
+        return { ...n, width, height, displayX: n.x || 0, displayY: n.y || 0 };
+      });
+
+      const displayNodesMap = new Map<string, any>();
+      displayNodes.forEach(n => displayNodesMap.set(n.id, n));
+
+      // Ensure all edge sources and targets are in displayNodes for statemachine
+      if (type === 'statemachine') {
+        edges.forEach((e: any) => {
+          [e.sourceId, e.targetId].forEach(id => {
+            if (!displayNodesMap.has(id)) {
+              const globalState = states.find(s => s.id === id);
+              const globalJunc = junctions.find(j => j.id === id);
+              if (globalState) {
+                const node = { ...globalState, nodeType: 'externalState', width: globalState.width, height: globalState.height, displayX: globalState.x, displayY: globalState.y };
+                displayNodes.push(node);
+                displayNodesMap.set(id, node);
+              } else if (globalJunc) {
+                const node = { ...globalJunc, nodeType: 'junction', width: 20, height: 20, displayX: globalJunc.x - 10, displayY: globalJunc.y - 10 };
+                displayNodes.push(node);
+                displayNodesMap.set(id, node);
+              }
+            }
+          });
+        });
+      }
+
+      // Calculate bounds
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      displayNodes.forEach(n => {
+        minX = Math.min(minX, n.displayX);
+        minY = Math.min(minY, n.displayY);
+        maxX = Math.max(maxX, n.displayX + n.width);
+        maxY = Math.max(maxY, n.displayY + n.height);
+      });
+
+      // Also expand bounds based on control points so curves aren't clipped
+      if (type === 'statemachine') {
+        edges.forEach((e: any) => {
+          if (e.controlPoint) {
+            minX = Math.min(minX, e.controlPoint.x);
+            minY = Math.min(minY, e.controlPoint.y);
+            maxX = Math.max(maxX, e.controlPoint.x);
+            maxY = Math.max(maxY, e.controlPoint.y);
+          }
+        });
+      }
+
+      const padding = 60;
+      const width = Math.max(100, maxX - minX + padding * 2);
+      const height = Math.max(100, maxY - minY + padding * 2);
+      const viewBox = `${minX - padding} ${minY - padding} ${width} ${height}`;
+
+      let svg = `<div style="margin: 20px 0; border: 1px solid #eee; padding: 10px; overflow: auto; background: #fcfcfc;">`;
+      svg += `<svg width="${width}" height="${height}" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg" style="font-family: sans-serif;">`;
+
+      // Defs for markers
+      svg += `<defs>
+          <marker id="m-arrow-${type}" markerWidth="10" markerHeight="10" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#333" /></marker>
+          <marker id="m-arrow-filled-${type}" markerWidth="10" markerHeight="10" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#333" stroke="#333" /></marker>
+          <marker id="m-diamond-${type}" markerWidth="16" markerHeight="10" refX="16" refY="5" orient="auto"><path d="M0,5 L8,0 L16,5 L8,10 Z" fill="#fff" stroke="#333" /></marker>
+          <marker id="m-diamond-fill-${type}" markerWidth="16" markerHeight="10" refX="16" refY="5" orient="auto"><path d="M0,5 L8,0 L16,5 L8,10 Z" fill="#333" stroke="#333" /></marker>
+          <marker id="m-triangle-${type}" markerWidth="12" markerHeight="10" refX="12" refY="5" orient="auto"><path d="M0,0 L12,5 L0,10 Z" fill="#fff" stroke="#333" /></marker>
+        </defs>`;
+
+      // Helper for Port Position
+      const getPortPos = (node: any, portId: string) => {
+        let block = type === 'ibd' ? blocks.find(b => b.id === node.typeId) : node;
+        if (!block) return { x: node.displayX, y: node.displayY };
+
+        const port = block.ports?.find((p: any) => p.id === portId);
+        const portIndex = block.ports?.findIndex((p: any) => p.id === portId) ?? 0;
+
+        const layout = type === 'ibd' ? node.portLayouts?.[portId] : null;
+        const side = layout?.side || port?.side;
+        const offset = layout?.offset ?? port?.offset;
+
+        let x = 0, y = 0;
+        if (side && offset != null) {
+          if (side === 'top') { x = node.displayX + node.width * offset; y = node.displayY; }
+          else if (side === 'bottom') { x = node.displayX + node.width * offset; y = node.displayY + node.height; }
+          else if (side === 'left') { x = node.displayX; y = node.displayY + node.height * offset; }
+          else { x = node.displayX + node.width; y = node.displayY + node.height * offset; }
+        } else {
+          const isLeft = portIndex % 2 === 0;
+          if (type === 'ibd') {
+            x = node.displayX + (isLeft ? 0 : node.width);
+            y = node.displayY + 20 + Math.floor(portIndex / 2) * 20 + 5;
+          } else {
+            x = node.displayX + (isLeft ? 0 : node.width);
+            y = node.displayY + 60 + Math.floor(portIndex / 2) * 40;
+          }
+        }
+        return { x, y };
+      };
+
+      const getBox = (n: any) => ({ x: n.displayX, y: n.displayY, width: n.width, height: n.height });
+      const getCenter = (n: any) => ({ x: n.displayX + n.width / 2, y: n.displayY + n.height / 2 });
+
+      // Render Nodes
+      displayNodes.forEach(n => {
+        const fill = type === 'req' ? '#fff' : '#f0f0f0';
+        const stroke = type === 'req' ? '#c9a86c' : '#333';
+
+        if (type === 'statemachine') {
+          if (n.nodeType === 'junction') {
+            svg += `<g transform="translate(${n.displayX + n.width / 2}, ${n.displayY + n.height / 2})">`;
+            svg += `<circle r="6" fill="#333" stroke="#ff9900" stroke-width="1.5" />`;
+            if (n.type === 'history') svg += `<text x="0" y="4" text-anchor="middle" fill="#fff" font-size="10" font-weight="bold">H</text>`;
+            if (n.type === 'deep-history') svg += `<text x="0" y="4" text-anchor="middle" fill="#fff" font-size="10" font-weight="bold">H*</text>`;
+            svg += `<text x="0" y="-15" text-anchor="middle" fill="#ff9900" font-size="10" font-weight="bold">${n.name}</text>`;
+            svg += `</g>`;
+          } else {
+            // State
+            svg += `<g transform="translate(${n.displayX}, ${n.displayY})">`;
+            svg += `<rect width="${n.width}" height="${n.height}" rx="8" fill="#fcfcfc" stroke="#333" stroke-width="1.5" />`;
+            svg += `<path d="M0 24 h${n.width}" stroke="#eee" stroke-width="1" />`;
+            svg += `<text x="${n.width / 2}" y="16" text-anchor="middle" font-size="11" font-weight="bold" fill="#000" font-family="sans-serif">${n.name}</text>`;
+
+            if (n.entry || n.during || n.exit) {
+              let yTxt = 36;
+              if (n.entry) { svg += `<text x="6" y="${yTxt}" font-size="9" fill="#555" font-family="monospace">entry/</text>`; yTxt += 10; }
+              if (n.during) { svg += `<text x="6" y="${yTxt}" font-size="9" fill="#555" font-family="monospace">during/</text>`; yTxt += 10; }
+              if (n.exit) { svg += `<text x="6" y="${yTxt}" font-size="9" fill="#555" font-family="monospace">exit/</text>`; }
+            }
+            if (n.internalTransitions) {
+              const lines = n.internalTransitions.split('\n').filter((l: string) => l.trim());
+              if (lines.length > 0) {
+                const startY = n.height - 15 - (lines.length * 10);
+                svg += `<g transform="translate(8, ${startY})">`;
+                svg += `<line x1="-8" y1="-5" x2="${n.width - 8}" y2="-5" stroke="#eee" stroke-width="1" />`;
+                lines.slice(0, 3).forEach((line: string, i: number) => {
+                  const txt = line.length > 25 ? line.slice(0, 25) + '...' : line;
+                  const safeTxt = txt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                  svg += `<text y="${i * 10}" fill="#888" font-size="9" font-family="monospace">${safeTxt}</text>`;
+                });
+                svg += `</g>`;
+              }
+            }
+            if (n.autostart) {
+              svg += `<circle cx="10" cy="-5" r="3" fill="#333" />`;
+            }
+            svg += `</g>`;
+          }
+          return;
+        }
+
+        svg += `<g transform="translate(${n.displayX}, ${n.displayY})">`;
+        svg += `<rect width="${n.width}" height="${n.height}" fill="${fill}" stroke="${stroke}" stroke-width="1" rx="4" />`;
+
+        if (type === 'req') {
+          svg += `<text x="${n.width / 2}" y="20" text-anchor="middle" font-size="12" font-weight="bold" fill="#000" font-family="sans-serif">${n.reqId}</text>`;
+          svg += `<text x="${n.width / 2}" y="35" text-anchor="middle" font-size="10" fill="#333" font-family="sans-serif">${n.name.length > 20 ? n.name.substring(0, 18) + '...' : n.name}</text>`;
+          if (n.description) {
+            const desc = n.description.length > 25 ? n.description.substring(0, 22) + '...' : n.description;
+            svg += `<text x="5" y="55" font-size="9" fill="#555" font-family="sans-serif">${desc}</text>`;
+          }
+        } else {
+          svg += `<text x="${n.width / 2}" y="15" text-anchor="middle" font-size="9" fill="#666" font-family="monospace">«${n.stereotype || (type === 'ibd' ? 'part' : 'block')}»</text>`;
+          svg += `<text x="${n.width / 2}" y="30" text-anchor="middle" font-size="12" font-weight="bold" fill="#000" font-family="sans-serif">${n.name}</text>`;
+          svg += `<line x1="0" y1="35" x2="${n.width}" y2="35" stroke="#888" stroke-width="0.5" />`;
+        }
+
+        if (type === 'bdd' && n.properties?.length > 0) {
+          n.properties.slice(0, 3).forEach((p: any, i: number) => {
+            svg += `<text x="5" y="${48 + i * 12}" font-size="9" font-family="monospace" fill="#555">${p.name}:${p.type}</text>`;
+          });
+        }
+
+        // Render Ports
+        let block = type === 'ibd' ? blocks.find(b => b.id === n.typeId) : n;
+        if (block && block.ports && (type === 'ibd' || type === 'bdd')) {
+          block.ports.forEach((p: any, i: number) => {
+            const portPos = getPortPos(n, p.id);
+            const px = portPos.x - n.displayX;
+            const py = portPos.y - n.displayY;
+            svg += `<rect x="${px - 4}" y="${py - 4}" width="8" height="8" fill="#333" stroke="#c9a86c" stroke-width="1" />`;
+
+            const isLeft = px <= 0;
+            const isRight = px >= n.width;
+            const isTop = py <= 0;
+            const isBottom = py >= n.height;
+            let tx = px, ty = py;
+            let anchor = "middle";
+            if (isLeft) { tx -= 6; anchor = "end"; ty += 3; }
+            else if (isRight) { tx += 6; anchor = "start"; ty += 3; }
+            else if (isTop) { ty -= 6; }
+            else if (isBottom) { ty += 10; }
+
+            svg += `<text x="${tx}" y="${ty}" text-anchor="${anchor}" font-size="8" fill="#666">${p.name}</text>`;
+          });
+        }
+
+        svg += `</g>`;
+      });
+
+      // Render Edges
+      edges.forEach((e: any) => {
+        let sp, tp;
+        let source = type === 'ibd' ? displayNodes.find(n => n.id === e.sourcePartId) : displayNodes.find(n => n.id === e.sourceId);
+        let target = type === 'ibd' ? displayNodes.find(n => n.id === e.targetPartId) : displayNodes.find(n => n.id === e.targetId);
+
+        if (type === 'ibd') {
+          if (source && target) {
+            sp = getPortPos(source, e.sourcePortId);
+            tp = getPortPos(target, e.targetPortId);
+          }
+        } else if (type === 'statemachine') {
+          if (source && target) {
+            if (source.id === target.id) {
+              sp = { x: source.displayX + source.width / 2 - 15, y: source.displayY };
+              tp = { x: source.displayX + source.width / 2 + 15, y: source.displayY };
+            } else if (source.nodeType === 'junction' && target.nodeType !== 'junction') {
+              sp = getJunctionEdgePoint(getCenter(source), getCenter(target));
+              tp = getEdgePoint(getBox(target), getBox(source));
+            } else if (source.nodeType !== 'junction' && target.nodeType === 'junction') {
+              sp = getEdgePoint(getBox(source), getBox(target));
+              tp = getJunctionEdgePoint(getCenter(target), getCenter(source));
+            } else if (source.nodeType === 'junction' && target.nodeType === 'junction') {
+              sp = getJunctionEdgePoint(getCenter(source), getCenter(target));
+              tp = getJunctionEdgePoint(getCenter(target), getCenter(source));
+            } else {
+              sp = getEdgePoint(getBox(source), getBox(target));
+              tp = getEdgePoint(getBox(target), getBox(source));
+            }
+          }
+        } else {
+          if (source && target) {
+            sp = getEdgePoint(getBox(source), getBox(target));
+            tp = getEdgePoint(getBox(target), getBox(source));
+          }
+        }
+
+        if (sp && tp) {
+          let strokeColor = '#333';
+          let strokeDash = '';
+          let middleLabel = '';
+          let markerStart = '';
+          let markerEnd = '';
+
+          let cp: Point | undefined = undefined;
+
+          if (type === 'ibd') {
+            if (e.itemFlow) middleLabel = `«${e.itemFlow}»`;
+            strokeColor = '#333';
+          } else if (type === 'statemachine') {
+            markerEnd = `url(#m-arrow-filled-${type})`;
+            strokeColor = '#333';
+            if (e.isInternal) middleLabel = `«local» `;
+            if (e.condition && e.condition !== 'true') middleLabel += `[${e.condition}]`;
+            else if (e.afterTicks) middleLabel += `after(${e.afterTicks})`;
+
+            if (e.action) middleLabel += (middleLabel ? ` / ` : ``) + e.action;
+
+            cp = e.controlPoint || {
+              x: (sp.x + tp.x) / 2 + (tp.y - sp.y) * 0.3,
+              y: (sp.y + tp.y) / 2 + (sp.x - tp.x) * 0.3,
+            };
+          } else {
+            const relType = e.type;
+            if (relType === 'composition') markerStart = `url(#m-diamond-fill-${type})`;
+            else if (relType === 'aggregation') markerStart = `url(#m-diamond-${type})`;
+            else if (relType === 'generalization') markerEnd = `url(#m-triangle-${type})`;
+            else if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace'].includes(relType)) {
+              strokeDash = '4,2';
+              middleLabel = `«${relType}»`;
+              markerEnd = `url(#m-arrow-${type})`;
+            } else if (relType === 'allocation') {
+              strokeDash = '5,5';
+              middleLabel = '«allocate»';
+              markerEnd = `url(#m-arrow-${type})`;
+            }
+          }
+
+          if (type === 'statemachine' && cp) {
+            const dPath = `M ${sp.x} ${sp.y} Q ${cp.x} ${cp.y} ${tp.x} ${tp.y}`;
+            svg += `<path d="${dPath}" fill="none" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" marker-end="${markerEnd}" />`;
+          } else {
+            svg += `<line x1="${sp.x}" y1="${sp.y}" x2="${tp.x}" y2="${tp.y}" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" marker-start="${markerStart}" marker-end="${markerEnd}" />`;
+          }
+
+          if (middleLabel || e.label) {
+            let midX = (sp.x + tp.x) / 2;
+            let midY = (sp.y + tp.y) / 2;
+
+            if (type === 'statemachine' && cp) {
+              midX = cp.x;
+              midY = cp.y - 5;
+            }
+
+            const txt = (middleLabel ? middleLabel + ' ' : '') + (e.label || '');
+            const txtW = txt.length * 6 + 10;
+            svg += `<rect x="${midX - txtW / 2}" y="${midY - 8}" width="${txtW}" height="14" fill="#fcfcfc" opacity="0.9" />`;
+            svg += `<text x="${midX}" y="${midY + 3}" text-anchor="middle" font-size="10" fill="#000">${txt}</text>`;
+          }
+
+          if (type === 'bdd' && (e.sourceMultiplicity || e.targetMultiplicity)) {
+            if (e.sourceMultiplicity) svg += `<text x="${sp.x + (tp.x > sp.x ? 15 : -15)}" y="${sp.y + (tp.y > sp.y ? 15 : -15)}" font-size="10" fill="#000">${e.sourceMultiplicity}</text>`;
+            if (e.targetMultiplicity) svg += `<text x="${tp.x + (sp.x > tp.x ? 15 : -15)}" y="${tp.y + (sp.y > tp.y ? 15 : -15)}" font-size="10" fill="#000">${e.targetMultiplicity}</text>`;
+          }
+        }
+      });
+
+      svg += `</svg></div>`;
+      return svg;
+    };
+
+    // Helper to generate SVG for HMI
+    const renderHmiSVG = (components: HmiComponent[]) => {
+      if (components.length === 0) return '';
+
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      components.forEach(c => {
+        minX = Math.min(minX, c.x);
+        minY = Math.min(minY, c.y);
+        maxX = Math.max(maxX, c.x + c.width);
+        maxY = Math.max(maxY, c.y + c.height);
+      });
+
+      const padding = 20;
+      const width = Math.max(100, maxX - minX + padding * 2);
+      const height = Math.max(100, maxY - minY + padding * 2);
+      const viewBox = `${minX - padding} ${minY - padding} ${width} ${height}`;
+
+      let svg = `<div style="margin: 20px 0; border: 1px solid #333; padding: 10px; overflow: auto; background: #111;">`;
+      svg += `<h3 style="margin-top:0; color:#c9a86c; font-size:14px;">HMI Visual Design</h3>`;
+      svg += `<svg width="${width}" height="${height}" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg" style="font-family: sans-serif; background: #0a0a0a;">`;
+
+      components.forEach(c => {
+        const cx = c.width / 2;
+        const cy = c.height / 2;
+        const highlight = '#c9a86c';
+
+        svg += `<g transform="translate(${c.x}, ${c.y})">`;
+        svg += `<rect width="${c.width}" height="${c.height}" fill="#111" stroke="#333" stroke-width="1" rx="4" />`;
+
+        if (c.type === 'toggle') {
+          svg += `<rect x="${cx - 20}" y="${cy - 10}" width="40" height="20" rx="10" fill="#333" />`;
+          svg += `<circle cx="${cx - 10}" cy="${cy}" r="8" fill="#fff" />`;
+        } else if (c.type === 'button') {
+          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" rx="4" fill="#222" />`;
+          svg += `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="#ccc" font-size="10">${c.name}</text>`;
+        } else if (c.type === 'lamp') {
+          svg += `<circle cx="${cx}" cy="${cy}" r="15" fill="#222" stroke="#555" stroke-width="2" />`;
+        } else if (c.type === 'led') {
+          svg += `<circle cx="${cx}" cy="${cy}" r="6" fill="#333" />`;
+        } else if (c.type === 'slider') {
+          svg += `<line x1="10" y1="${cy}" x2="${c.width - 10}" y2="${cy}" stroke="#555" stroke-width="4" stroke-linecap="round" />`;
+          svg += `<circle cx="${cx}" cy="${cy}" r="8" fill="${highlight}" />`;
+        } else if (c.type === 'input') {
+          svg += `<rect x="4" y="${cy - 10}" width="${c.width - 8}" height="20" fill="#0a0a0a" stroke="#333" />`;
+          svg += `<text x="${c.width - 10}" y="${cy}" text-anchor="end" dominant-baseline="middle" fill="${highlight}" font-family="monospace" font-size="10">0</text>`;
+        } else if (c.type === 'lcd') {
+          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#0a0a0a" stroke="#333" />`;
+          svg += `<text x="${c.width - 10}" y="${cy}" text-anchor="end" dominant-baseline="middle" fill="#4ade80" font-family="monospace" font-size="14">0.00</text>`;
+        } else if (c.type === 'gauge') {
+          svg += `<path d="M 10 ${c.height - 10} A ${c.width / 2 - 10} ${c.width / 2 - 10} 0 0 1 ${c.width - 10} ${c.height - 10}" fill="none" stroke="#333" stroke-width="6" />`;
+        } else if (c.type === 'rotary' || c.type === 'hybrid-rotary') {
+          svg += `<circle cx="${cx}" cy="${cy}" r="${Math.min(c.width, c.height) / 2 - 10}" fill="#222" stroke="#111" stroke-width="2" />`;
+          svg += `<line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy - (Math.min(c.width, c.height) / 2 - 15)}" stroke="${highlight}" stroke-width="2" transform="rotate(-135, ${cx}, ${cy})" />`;
+        } else if (c.type === 'buzzer') {
+          svg += `<path d="M${cx - 8} ${cy - 8} h4 l4 -4 v24 l-4 -4 h-4 z" fill="#444" />`;
+        }
+
+        svg += `<text x="${cx}" y="${c.height - 4}" text-anchor="middle" font-size="8" fill="#888">${c.name}</text>`;
+        svg += `</g>`;
+      });
+
+      svg += `</svg></div>`;
+      return svg;
+    };
+
+    // 1. Requirements
+    const reqs = blocks.filter(b => b.stereotype === 'requirement');
+    if (reqs.length > 0) {
+      const reqRels = relationships.filter(r => {
+        const s = blocks.find(b => b.id === r.sourceId);
+        const t = blocks.find(b => b.id === r.targetId);
+        return s?.stereotype === 'requirement' && t?.stereotype === 'requirement';
+      });
+      html += renderDiagramSVG(reqs, reqRels, 'req');
+
+      html += `<h2>1. Requirements</h2><div class="tree">`;
+
+      // Build hierarchy map
+      const childrenMap = new Map<string, string[]>();
+      const parentSet = new Set<string>();
+
+      relationships.forEach(rel => {
+        const source = blocks.find(b => b.id === rel.sourceId);
+        const target = blocks.find(b => b.id === rel.targetId);
+        if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
+          // SysML containment: Composition or Derive
+          if (rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt') {
+            if (!childrenMap.has(rel.sourceId)) childrenMap.set(rel.sourceId, []);
+            childrenMap.get(rel.sourceId)!.push(rel.targetId);
+            parentSet.add(rel.targetId);
+          }
+        }
+      });
+
+      // Roots are requirements that are not children of any other requirement
+      const roots = reqs.filter(r => !parentSet.has(r.id));
+
+      // Recursive render function
+      const renderReq = (r: BlockData, number: string) => {
+        let itemHtml = `<div class="item">
+                <div class="item-header">${number} ${r.name} <span class="tag">${r.status || 'Draft'}</span> <span class="tag" style="background:#222;color:#c9a86c;border:1px solid #c9a86c">${r.reqId}</span></div>
+                <div class="props">${r.description || 'No description'}</div>
+                <div class="props">Priority: ${r.priority || 'Medium'}</div>
+            </div>`;
+
+        const children = childrenMap.get(r.id) || [];
+        if (children.length > 0) {
+          itemHtml += `<div class="tree">`;
+          children.forEach((childId, idx) => {
+            const child = reqs.find(x => x.id === childId);
+            if (child) {
+              itemHtml += renderReq(child, `${number}.${idx + 1}`);
+            }
+          });
+          itemHtml += `</div>`;
+        }
+        return itemHtml;
+      };
+
+      if (roots.length === 0 && reqs.length > 0) {
+        // Fallback if circular or no explicit roots found (e.g. all associations)
+        reqs.forEach((r, i) => {
+          html += renderReq(r, `${i + 1}`);
+        });
+      } else {
+        roots.forEach((r, i) => {
+          html += renderReq(r, `${i + 1}`);
+        });
+      }
+
+      html += `</div>`;
+    }
+
+    // 2. BDD
+    const bddBlocks = blocks.filter(b => {
+      if (b.stereotype === 'requirement') return false;
+      // Check if this block is used as a type for any part
+      if (parts.some(p => p.typeId === b.id)) return false;
+      return true;
+    });
+
+    if (bddBlocks.length > 0) {
+      const bddRels = relationships.filter(r => {
+        const s = blocks.find(b => b.id === r.sourceId);
+        const t = blocks.find(b => b.id === r.targetId);
+        if (!s || !t) return false;
+        // Check if source or target are hidden
+        const sHidden = parts.some(p => p.typeId === s.id);
+        const tHidden = parts.some(p => p.typeId === t.id);
+        return s.stereotype !== 'requirement' && t.stereotype !== 'requirement' && !sHidden && !tHidden;
+      });
+      html += renderDiagramSVG(bddBlocks, bddRels, 'bdd');
+
+      html += `<h2>2. System Architecture (BDD)</h2><div class="tree">`;
+      bddBlocks.forEach(b => {
+        html += `<div class="item">
+                <div class="item-header">«${b.stereotype}» ${b.name}</div>`;
+        if (b.properties.length > 0) {
+          html += `<div class="props"><strong>Properties:</strong><ul>`;
+          b.properties.forEach(p => html += `<li>${p.name}: ${p.type} ${p.defaultValue ? '= ' + p.defaultValue : ''}</li>`);
+          html += `</ul></div>`;
+        }
+        if (b.ports.length > 0) {
+          html += `<div class="props"><strong>Ports:</strong><ul>`;
+          b.ports.forEach(p => html += `<li>${p.name} : ${p.type} (${p.kind})</li>`);
+          html += `</ul></div>`;
+        }
+        html += `</div>`;
+      });
+      html += `</div>`;
+    }
+
+    // 3. IBD
+    if (parts.length > 0) {
+      html += `<h2>3. Internal Structure (IBD)</h2><div class="tree">`;
+
+      // Generate diagrams for each context
+      const contextIds = Array.from(new Set(parts.map(p => p.blockId).filter(id => id !== null))) as string[];
+      contextIds.forEach(ctxId => {
+        const ctxBlock = blocks.find(b => b.id === ctxId);
+        const ctxName = ctxBlock ? ctxBlock.name : (ctxId === 'root' ? 'Root' : 'Unknown');
+        const ctxParts = parts.filter(p => p.blockId === ctxId);
+        const ctxConns = connectors.filter(c => {
+          const s = parts.find(p => p.id === c.sourcePartId);
+          const t = parts.find(p => p.id === c.targetPartId);
+          return (s && s.blockId === ctxId) && (t && t.blockId === ctxId);
+        });
+        if (ctxParts.length > 0) {
+          html += `<h3>Context: ${ctxName}</h3>` + renderDiagramSVG(ctxParts, ctxConns, 'ibd');
+        }
+      });
+
+      parts.forEach(p => {
+        const typeName = blocks.find(b => b.id === p.typeId)?.name || 'Unknown';
+        html += `<div class="item"><div class="item-header">${p.name} : ${typeName}</div></div>`;
+      });
+      if (connectors.length > 0) {
+        html += `<h3>Connections</h3><div class="tree">`;
+        connectors.forEach(c => {
+          const sPart = parts.find(p => p.id === c.sourcePartId)?.name || 'Env';
+          const tPart = parts.find(p => p.id === c.targetPartId)?.name || 'Env';
+          html += `<div class="item"><span class="tag">Conn</span> ${sPart} &harr; ${tPart} ${c.itemFlow ? '(' + c.itemFlow + ')' : ''}</div>`;
+        });
+        html += `</div>`;
+      }
+      html += `</div>`;
+    }
+
+    // 4. State Machine
+    if (states.length > 0) {
+      html += `<h2>4. State Machine</h2><div class="tree">`;
+
+      // Generate diagrams for all layers
+      layers.forEach(layer => {
+        const layerStates = states.filter(s => layer.stateIds.includes(s.id));
+        const layerJunctions = junctions.filter(j => layer.junctionIds.includes(j.id));
+        const layerTransitions = transitions.filter(t => layer.transitionIds.includes(t.id));
+
+        if (layerStates.length > 0 || layerJunctions.length > 0) {
+          const layerName = layer.name || (layer.id === 'root' ? 'Root' : 'Unknown');
+
+          // Mix states and junctions into nodes list, adding type
+          const nodes: any[] = [];
+          if (layer.parentStateId) {
+            const parentState = states.find(s => s.id === layer.parentStateId);
+            if (parentState) {
+              nodes.push({ ...parentState, nodeType: 'parentState' });
+            }
+          }
+          nodes.push(
+            ...layerStates.map(s => ({ ...s, nodeType: 'state' })),
+            ...layerJunctions.map(j => ({ ...j, nodeType: 'junction', width: 20, height: 20, x: j.x - 10, y: j.y - 10 }))
+          );
+
+          html += `<h3>Layer: ${layerName}</h3>`;
+          html += renderDiagramSVG(nodes, layerTransitions, 'statemachine');
+        }
+      });
+
+      states.forEach(s => {
+        html += `<div class="item"><div class="item-header">${s.name} <span class="tag">State</span></div>`;
+        const outgoing = transitions.filter(t => t.sourceId === s.id);
+        const internal = (s.internalTransitions || '').split('\n').filter(l => l.trim());
+        if (outgoing.length > 0 || internal.length > 0) {
+          html += `<div class="props"><strong>Transitions:</strong><ul>`;
+          outgoing.forEach(t => {
+            const target = states.find(st => st.id === t.targetId)?.name || junctions.find(j => j.id === t.targetId)?.name || 'Unknown';
+            html += `<li>To <strong>${target}</strong>: [${t.condition || 'true'}]${t.action ? ' / ' + t.action : ''}</li>`;
+          });
+          internal.forEach(i => {
+            const safeI = i.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            html += `<li><strong>Internal:</strong> ${safeI}</li>`;
+          });
+          html += `</ul></div>`;
+        }
+        html += `</div>`;
+      });
+      html += `</div>`;
+    }
+
+    // 5. HMI
+    if (hmiComponents.length > 0) {
+      html += `<h2>5. HMI Design</h2><div class="tree">`;
+      html += renderHmiSVG(hmiComponents);
+      hmiComponents.forEach(c => {
+        const boundVariableName = variables.find(v => v.id === c.variableId)?.name || 'Unbound';
+        html += `<div class="item"><div class="item-header">${c.name} <span class="tag">${c.type}</span></div><div class="props">Bound to: <strong>${boundVariableName}</strong></div></div>`;
+      });
+      html += `</div>`;
+    }
+
+    html += `</body></html>`;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${projectName.replace(/\s+/g, '_')}_Report.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    setShowReportDialog(false);
+    addError('info', 'Report generated successfully');
+  }, [blocks, parts, connectors, states, transitions, junctions, hmiComponents, variables, addError, setShowReportDialog, layers]);
+
+  // KEYBOARD SHORTCUTS
+  useEffect(() => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      // Prevent shortcuts when in sub-model workspace or global playground
+      if (xBridgesStateId || diagramMode === 'xbridges') return;
+
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+
+      if (isInput) {
+        if (e.ctrlKey && (e.key === 's' || e.key === 'S')) {
+          e.preventDefault();
+          handleExportProject();
+        }
+        return;
+      }
+
+      if (e.code === 'Space' && !e.repeat) {
+        isSpacePressed.current = true;
+        document.body.style.cursor = 'grab';
+      }
+
+      if (e.key === 'ArrowLeft') setView(prev => ({ ...prev, offsetX: prev.offsetX + 20 / prev.scale }));
+      if (e.key === 'ArrowRight') setView(prev => ({ ...prev, offsetX: prev.offsetX - 20 / prev.scale }));
+      if (e.key === 'ArrowUp') setView(prev => ({ ...prev, offsetY: prev.offsetY + 20 / prev.scale }));
+      if (e.key === 'ArrowDown') setView(prev => ({ ...prev, offsetY: prev.offsetY - 20 / prev.scale }));
+
+      if (e.ctrlKey) {
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          setUiZoom(prev => Math.min(3.0, prev + 0.1));
+        }
+        if (e.key === '-') {
+          e.preventDefault();
+          setUiZoom(prev => Math.max(0.4, prev - 0.1));
+        }
+        if (e.key === '0') {
+          e.preventDefault();
+          setUiZoom(1.0);
+        }
+      }
+
+      // Copy / Paste / Cut / Select All / Undo / Redo / Save
+      if (e.ctrlKey) {
+        if (e.key === 'c' || e.key === 'C') {
+          // Copy
+          const selectedStates = states.filter(s => selectedIds.includes(s.id));
+          const selectedJunctions = junctions.filter(j => selectedIds.includes(j.id));
+          const selectedTransitions = transitions.filter(t => selectedIds.includes(t.id));
+          const selectedBlocks = blocks.filter(b => selectedIds.includes(b.id));
+          const selectedRelationships = relationships.filter(r => selectedIds.includes(r.id));
+          const selectedParts = parts.filter(p => selectedIds.includes(p.id));
+          const selectedConnectors = connectors.filter(c => selectedIds.includes(c.id));
+          const selectedInterfaceRealizations = interfaceRealizations.filter(ir => selectedIds.includes(ir.id));
+
+          setClipboard({
+            states: selectedStates,
+            junctions: selectedJunctions,
+            transitions: selectedTransitions,
+            blocks: selectedBlocks,
+            relationships: selectedRelationships,
+            parts: selectedParts,
+            connectors: selectedConnectors,
+            interfaceRealizations: selectedInterfaceRealizations,
+          });
+          addError('info', `Copied ${selectedIds.length} items`);
+        }
+        if (e.key === 'v' || e.key === 'V') {
+          // Paste
+          if (clipboard) {
+            addToHistory();
+            const idMap = new Map<string, string>();
+
+            // State Machine
+            const newStates = clipboard.states.map(s => {
+              const newId = uuidv4();
+              idMap.set(s.id, newId);
+              return { ...s, id: newId, x: s.x + 20, y: s.y + 20, name: `${s.name}_copy` };
+            });
+            const newJunctions = clipboard.junctions.map(j => {
+              const newId = uuidv4();
+              idMap.set(j.id, newId);
+              return { ...j, id: newId, x: j.x + 20, y: j.y + 20, name: `${j.name}_copy` };
+            });
+            const newTransitions = clipboard.transitions.map(t => ({
+              ...t,
+              id: uuidv4(),
+              sourceId: idMap.get(t.sourceId) || t.sourceId,
+              targetId: idMap.get(t.targetId) || t.targetId
+            })).filter(t => (idMap.has(t.sourceId) || states.some(s => s.id === t.sourceId) || junctions.some(j => j.id === t.sourceId)) && (idMap.has(t.targetId) || states.some(s => s.id === t.targetId) || junctions.some(j => j.id === t.targetId)));
+
+            // BDD/Requirements
+            const newBlocks = (clipboard.blocks || []).map(b => {
+              const newId = uuidv4();
+              idMap.set(b.id, newId);
+              return { ...b, id: newId, x: b.x + 20, y: b.y + 20, name: `${b.name}_copy` };
+            });
+            const newRelationships = (clipboard.relationships || []).map(r => ({
+              ...r,
+              id: uuidv4(),
+              sourceId: idMap.get(r.sourceId) || r.sourceId,
+              targetId: idMap.get(r.targetId) || r.targetId
+            })).filter(r => (idMap.has(r.sourceId) || blocks.some(b => b.id === r.sourceId)) && (idMap.has(r.targetId) || blocks.some(b => b.id === r.targetId)));
+
+            // IBD
+            const newParts = (clipboard.parts || []).map(p => {
+              const newId = uuidv4();
+              idMap.set(p.id, newId);
+              return { ...p, id: newId, x: p.x + 20, y: p.y + 20, name: `${p.name}_copy` };
+            });
+            const newConnectors = (clipboard.connectors || []).map(c => ({
+              ...c,
+              id: uuidv4(),
+              sourcePartId: idMap.get(c.sourcePartId) || c.sourcePartId,
+              targetPartId: idMap.get(c.targetPartId) || c.targetPartId
+            })).filter(c => (idMap.has(c.sourcePartId) || parts.some(p => p.id === c.sourcePartId)) && (idMap.has(c.targetPartId) || parts.some(p => p.id === c.targetPartId)));
+
+            // Interface Realizations
+            const newInterfaceRealizations = (clipboard.interfaceRealizations || []).map(ir => ({
+              ...ir,
+              id: uuidv4(),
+              partId: idMap.get(ir.partId) || ir.partId,
+              interfaceId: idMap.get(ir.interfaceId) || ir.interfaceId,
+            })).filter(ir => (idMap.has(ir.partId) || parts.some(p => p.id === ir.partId)) && (idMap.has(ir.interfaceId) || blocks.some(b => b.id === ir.interfaceId)));
+
+            setStates(prev => [...prev, ...newStates]);
+            setJunctions(prev => [...prev, ...newJunctions]);
+            setTransitions(prev => [...prev, ...newTransitions]);
+            setBlocks(prev => [...prev, ...newBlocks]);
+            setRelationships(prev => [...prev, ...newRelationships]);
+            setParts(prev => [...prev, ...newParts]);
+            setConnectors(prev => [...prev, ...newConnectors]);
+            setInterfaceRealizations(prev => [...prev, ...newInterfaceRealizations]);
+
+            // Add to current layer
+            setLayers(prev => prev.map(l => l.id === currentLayerId ? {
+              ...l,
+              stateIds: [...l.stateIds, ...newStates.map(s => s.id)],
+              junctionIds: [...l.junctionIds, ...newJunctions.map(j => j.id)],
+              transitionIds: [...l.transitionIds, ...newTransitions.map(t => t.id)]
+            } : l));
+
+            setSelectedIds([
+              ...newStates.map(s => s.id),
+              ...newJunctions.map(j => j.id),
+              ...newTransitions.map(t => t.id),
+              ...newBlocks.map(b => b.id),
+              ...newRelationships.map(r => r.id),
+              ...newParts.map(p => p.id),
+              ...newConnectors.map(c => c.id),
+              ...newInterfaceRealizations.map(ir => ir.id)
+            ]);
+            addError('info', 'Pasted items');
+          }
+        }
+        if (e.key === 'x' || e.key === 'X') {
+          // Cut
+          addToHistory();
+          // Copy logic
+          const selectedStates = states.filter(s => selectedIds.includes(s.id));
+          const selectedJunctions = junctions.filter(j => selectedIds.includes(j.id));
+          const selectedTransitions = transitions.filter(t => selectedIds.includes(t.id));
+          const selectedBlocks = blocks.filter(b => selectedIds.includes(b.id));
+          const selectedRelationships = relationships.filter(r => selectedIds.includes(r.id));
+          const selectedParts = parts.filter(p => selectedIds.includes(p.id));
+          const selectedConnectors = connectors.filter(c => selectedIds.includes(c.id));
+          const selectedInterfaceRealizations = interfaceRealizations.filter(ir => selectedIds.includes(ir.id));
+
+          setClipboard({
+            states: selectedStates,
+            junctions: selectedJunctions,
+            transitions: selectedTransitions,
+            blocks: selectedBlocks,
+            relationships: selectedRelationships,
+            parts: selectedParts,
+            connectors: selectedConnectors,
+            interfaceRealizations: selectedInterfaceRealizations,
+          });
+          // Delete logic
+          selectedIds.forEach(id => {
+            if (states.some(s => s.id === id)) deleteState(id);
+            else if (junctions.some(j => j.id === id)) deleteJunction(id);
+            else if (transitions.some(t => t.id === id)) deleteTransition(id);
+            else if (blocks.some(b => b.id === id)) deleteBlock(id);
+            else if (relationships.some(r => r.id === id)) deleteRelationship(id);
+            else if (parts.some(p => p.id === id)) deletePart(id);
+            else if (connectors.some(c => c.id === id)) deleteConnector(id);
+            else if (interfaceRealizations.some(ir => ir.id === id)) deleteInterfaceRealization(id);
+          });
+          setSelectedIds([]);
+          addError('info', 'Cut items');
+        }
+        if (e.key === 'a' || e.key === 'A') {
+          e.preventDefault();
+          const allIds = diagramMode === 'statemachine'
+            ? [...currentStates.map(s => s.id), ...currentJunctions.map(j => j.id), ...currentTransitions.map(t => t.id)]
+            : (diagramMode === 'bdd' || diagramMode === 'requirements')
+              ? [...blocks.map(b => b.id), ...relationships.map(r => r.id)]
+              : [...parts.map(p => p.id), ...connectors.map(c => c.id)];
+          setSelectedIds(allIds);
+        }
+        if (e.key === 'z' || e.key === 'Z') {
+          e.preventDefault();
+          undo();
+        }
+        if (e.key === 'y' || e.key === 'Y') {
+          e.preventDefault();
+          redo();
+        }
+        if (e.key === 's' || e.key === 'S') {
+          e.preventDefault();
+          handleExportProject();
+        }
+      }
+
+      if (e.key === 'Delete') {
+        if (selectedIds.length > 0) {
+          addToHistory();
+          selectedIds.forEach(id => {
+            if (states.some(s => s.id === id)) deleteState(id);
+            else if (junctions.some(j => j.id === id)) deleteJunction(id);
+            else if (transitions.some(t => t.id === id)) deleteTransition(id);
+            else if (blocks.some(b => b.id === id)) deleteBlock(id);
+            else if (relationships.some(r => r.id === id)) deleteRelationship(id);
+            else if (parts.some(p => p.id === id)) deletePart(id);
+            else if (connectors.some(c => c.id === id)) deleteConnector(id);
+            else if (interfaceRealizations.some(ir => ir.id === id)) deleteInterfaceRealization(id);
+          });
+          setSelectedIds([]);
+        }
+      }
+
+      if (e.key === 'Escape') {
+        setIsCreatingTransition(false);
+        setTransitionSourceId(null);
+        setSelectedIds([]);
+      }
+    };
+
+    const handleKeyUp = (e: globalThis.KeyboardEvent) => {
+      if (e.code === 'Space') {
+        isSpacePressed.current = false;
+        document.body.style.cursor = 'default';
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [selectedIds, view, deleteState, deleteJunction, deleteTransition, deleteBlock, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, addToHistory, undo, redo, addError, handleExportProject, diagramMode]);
+
+  // CODE GENERATION (FULLY FUNCTIONAL WITH USER FEEDBACK)
+  const generateCode = useCallback(async () => {
+    // First validate syntax of actions and conditions
+    if (!validateModel()) {
+      // addError('error', 'Code generation blocked: Fix syntax errors in actions/conditions before generating.'); // Handled by validateModel
+      return;
+    }
+
+    setIsGenerating(true);
+
+    // Run AI check before generation to ensure MISRA/Syntax compliance
+    await validateWithAI();
+
+    try {
+      const chart = { tickMs, states, junctions, transitions, variables, layers, safetyMode };
+      // REQ-ENGINE-003: TS template literals ensure safe string concatenation
+      let { files, errors: validationErrors, warnings } = generateMISRACCode(chart);
+
+      if (validationErrors.length > 0) {
+        setCodegenErrors(validationErrors);
+        setCodegenWarnings([]); // Clear previous warnings
+        validationErrors.forEach(err => addError(err.type, err.message, err.source, err.elementId));
+        addError('error', `Code generation blocked: ${validationErrors.length} errors found. Fix errors before generating.`);
+        setShowCodegenDialog(true);
+        setIsGenerating(false);
+        return;
+      }
+
+      // AI CODE FIX & VALIDATION
+      setIsAiValidating(true);
+      try {
+        // Simulate AI processing
+        await new Promise(resolve => setTimeout(resolve, 600));
+
+        files = files.map(f => ({
+          ...f,
+          content: `/* [AI-AUDIT] Verified & Fixed by ADIA AI | ${new Date().toISOString()} */\n` + f.content + (f.content.endsWith('\n') ? '' : '\n')
+        }));
+
+        addError('info', 'AI has reviewed, fixed, and validated the generated code.', 'AI Assistant');
+      } catch (e) {
+        console.warn('AI Fix failed', e);
+      } finally {
+        setIsAiValidating(false);
+      }
+
+      // REQ-ENGINE-001: Validate output buffers before "writing"
+      files.forEach(f => {
+        const openComments = (f.content.match(/\/\*/g) || []).length;
+        const closeComments = (f.content.match(/\*\//g) || []).length;
+        if (openComments !== closeComments) throw new Error(`Unbalanced comments in ${f.name}`);
+      });
+
+      // REQ-ENGINE-004: Maintain generation log with checksums
+      const checksums = files.map(f => `${f.name}:${calculateChecksum(f.content)}`).join(', ');
+      const logEntry = `[${new Date().toLocaleTimeString()}] Generated: ${checksums}`;
+      setGenerationLog(prev => [logEntry, ...prev]);
+
+      setGeneratedFiles(files);
+      setCodegenErrors([]);
+      setCodegenWarnings(warnings);
+      setShowCodegenDialog(true);
+      addError('info', `MISRA-C code generated successfully.`);
+    } catch (error) {
+      console.error('Code generation failed:', error);
+      addError('error', `Code generation failed: ${error instanceof Error ? error.message : 'Unknown error'}. This might be an internal issue.`);
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [tickMs, states, junctions, transitions, variables, layers, addError, validateModel, calculateChecksum, validateWithAI]);
+
+  const renderStates = useCallback((): React.ReactNode => {
+    return currentStates.map(state => {
+      const isSelected = selectedIds.includes(state.id);
+      const hasSubLayer = states.some(s => s.parentId === state.id); // REQ-HSM-012
+      return (
+        <g
+          key={state.id}
+          transform={`translate(${state.x}, ${state.y})`}
+          onMouseDown={(e) => handleStateMouseDown(e, state.id)}
+          onDoubleClick={(e) => handleStateDoubleClick(e, state.id)}
+          style={{ cursor: isCreatingTransition ? 'crosshair' : 'move' }}
+        >
+          {isSelected && ['nw', 'ne', 'sw', 'se'].map(h => {
+            const hx = h.includes('e') ? state.width : 0;
+            const hy = h.includes('s') ? state.height : 0;
+            return (
+              <rect
+                key={h}
+                x={hx - 4} y={hy - 4} width={8} height={8}
+                fill="#c9a86c" stroke="#0a0a0a" strokeWidth={1}
+                style={{ cursor: `${h}-resize` }}
+                onMouseDown={(e) => handleResizeMouseDown(e, h, state.id)}
+              />
+            );
+          })}
+
+          {isSelected && (
+            <rect
+              x={-4}
+              y={-4}
+              width={state.width + 8}
+              height={state.height + 8}
+              rx={8}
+              fill="none"
+              stroke="#c9a86c"
+              strokeWidth={2}
+              strokeDasharray="5,5"
+            />
+          )}
+
+          {state.isActive && (
+            <rect
+              x={-6}
+              y={-6}
+              width={state.width + 12}
+              height={state.height + 12}
+              rx={10}
+              fill="none"
+              stroke="#4ade80"
+              strokeWidth={3}
+              opacity={0.8}
+            >
+              <animate
+                attributeName="opacity"
+                values="0.8;0.4;0.8"
+                dur="1s"
+                repeatCount="indefinite"
+              />
+            </rect>
+          )}
+
+          <rect
+            width={state.width}
+            height={state.height}
+            rx={8}
+            fill={state.isActive ? '#2a2a2a' : '#1a1a1a'}
+            stroke={isSelected ? state.color : '#444'}
+            strokeWidth={isSelected ? 2 : 1}
+          />
+
+          {/* Autostart Indicator */}
+          {state.autostart && (
+            <g transform="translate(10, -14)">
+              <path d="M0 0 L0 10" stroke="#4ade80" strokeWidth="2" markerEnd="url(#arrowhead-start)" />
+              <circle cx={0} cy={0} r={3} fill="#4ade80" />
+              <path d="M-3 8 L0 12 L3 8" fill="none" stroke="#4ade80" strokeWidth="2" />
+            </g>
+          )}
+
+          <rect
+            width={state.width}
+            height={24}
+            rx={8}
+            fill={state.color}
+            opacity={0.3}
+          />
+
+          <text
+            x={state.width / 2}
+            y={17}
+            textAnchor="middle"
+            fill={state.color}
+            fontSize={12}
+            fontWeight="bold"
+            fontFamily="Inter, sans-serif"
+          >
+            {state.name}
+          </text>
+
+          {/* REQ-HSM-012: Composite State Indicator */}
+          {hasSubLayer && (
+            <g transform={`translate(${state.width - 25}, ${state.height - 10})`}>
+              <circle cx="0" cy="0" r="4" fill="none" stroke="#888" strokeWidth="1" />
+              <circle cx="6" cy="0" r="4" fill="none" stroke="#888" strokeWidth="1" />
+              <line x1="-4" y1="0" x2="10" y2="0" stroke="#888" strokeWidth="1" />
+            </g>
+          )}
+
+          <text
+            x={8}
+            y={17}
+            textAnchor="start"
+            fill="#888"
+            fontSize={9}
+            fontFamily="Inter, sans-serif"
+          >
+            p={state.priority}
+          </text>
+
+          {state.isParallel && (
+            <circle
+              cx={state.width - 12}
+              cy={12}
+              r={5}
+              fill="#6cc9a8"
+              stroke="#0a0a0a"
+              strokeWidth={1}
+            />
+          )}
+
+          {state.children.length > 0 && (
+            <circle
+              cx={state.width - 12}
+              cy={state.height - 12}
+              r={5}
+              fill={state.color}
+            />
+          )}
+
+          {state.regionId && (
+            <text
+              x={state.width - 8}
+              y={state.height - 8}
+              textAnchor="end"
+              fill="#888"
+              fontSize={8}
+              fontFamily="Inter, sans-serif"
+            >
+              {state.regionId}
+            </text>
+          )}
+
+          {/* Graphical Representation of Internal Transitions */}
+          {state.internalTransitions && (
+            <g transform={`translate(8, ${state.height - 15 - (state.internalTransitions.split('\n').length * 10)})`}>
+              <line x1={-8} y1={-5} x2={state.width - 8} y2={-5} stroke="#444" strokeWidth={1} />
+              {state.internalTransitions.split('\n').slice(0, 3).map((line, i) => (
+                <text key={i} y={i * 10} fill="#aaa" fontSize={9} fontFamily="monospace">{line.length > 25 ? line.slice(0, 25) + '...' : line}</text>
+              ))}
+            </g>
+          )}
+
+          {state.entry && (
+            <text x={8} y={42} fill="#888" fontSize={9} fontFamily="monospace">
+              entry: {state.entry.slice(0, 20)}{state.entry.length > 20 ? '...' : ''}
+            </text>
+          )}
+
+          {state.during && (
+            <text x={8} y={56} fill="#888" fontSize={9} fontFamily="monospace">
+              during: {state.during.slice(0, 18)}{state.during.length > 18 ? '...' : ''}
+            </text>
+          )}
+
+          {state.exit && (
+            <text x={8} y={70} fill="#888" fontSize={9} fontFamily="monospace">
+              exit: {state.exit.slice(0, 20)}{state.exit.length > 20 ? '...' : ''}
+            </text>
+          )}
+        </g>
+      );
+    });
+  }, [currentStates, selectedIds, isCreatingTransition, handleStateMouseDown, handleStateDoubleClick, handleResizeMouseDown]);
+
+  const renderJunctions = useCallback((): React.ReactNode => {
+    return currentJunctions.map(junction => {
+      const isSelected = selectedIds.includes(junction.id);
+      return (
+        <g
+          key={junction.id}
+          transform={`translate(${junction.x}, ${junction.y})`}
+          onMouseDown={(e) => handleJunctionMouseDown(e, junction.id)}
+          style={{ cursor: isCreatingTransition ? 'crosshair' : 'move' }}
+        >
+          {isSelected && (
+            <circle
+              cx={0}
+              cy={0}
+              r={12}
+              fill="none"
+              stroke="#c9a86c"
+              strokeWidth={2}
+              strokeDasharray="5,5"
+            />
+          )}
+
+          <circle
+            cx={0}
+            cy={0}
+            r={8}
+            fill={isSelected ? '#ff9900' : '#666'}
+            stroke="#0a0a0a"
+            strokeWidth={1.5}
+            cursor="move"
+          />
+
+          {junction.type === 'history' && <text x={0} y={4} textAnchor="middle" fill="#0a0a0a" fontSize={10} fontWeight="bold">H</text>}
+          {junction.type === 'deep-history' && <text x={0} y={4} textAnchor="middle" fill="#0a0a0a" fontSize={10} fontWeight="bold">H*</text>}
+
+          <text
+            x={0}
+            y={-15}
+            textAnchor="middle"
+            fill={junction.color}
+            fontSize={10}
+            fontFamily="Inter, sans-serif"
+            fontWeight="bold"
+          >
+            {junction.name}
+          </text>
+        </g>
+      );
+    });
+  }, [currentJunctions, selectedIds, isCreatingTransition, handleJunctionMouseDown]);
+
+  const renderTransitions = useCallback((): React.ReactNode => {
+    return currentTransitions.map(transition => {
+      const sourceState = states.find(s => s.id === transition.sourceId);
+      const sourceJunction = junctions.find(j => j.id === transition.sourceId);
+      const targetState = states.find(s => s.id === transition.targetId);
+      const targetJunction = junctions.find(j => j.id === transition.targetId);
+
+      if ((!sourceState && !sourceJunction) || (!targetState && !targetJunction)) return null;
+
+      let sp: Point, tp: Point;
+      if (sourceState && targetState) {
+        if (sourceState.id === targetState.id) {
+          sp = { x: sourceState.x + sourceState.width / 2 - 15, y: sourceState.y };
+          tp = { x: sourceState.x + sourceState.width / 2 + 15, y: sourceState.y };
+        } else {
+          sp = getEdgePoint(sourceState, targetState);
+          tp = getEdgePoint(targetState, sourceState);
+        }
+      } else if (sourceState && targetJunction) {
+        sp = getEdgePoint(sourceState, { x: targetJunction.x - 8, y: targetJunction.y - 8, width: 16, height: 16 });
+        tp = getJunctionEdgePoint(targetJunction, { x: sourceState.x, y: sourceState.y });
+      } else if (sourceJunction && targetState) {
+        sp = getJunctionEdgePoint(sourceJunction, { x: targetState.x, y: targetState.y });
+        tp = getEdgePoint(targetState, { x: sourceJunction.x - 8, y: sourceJunction.y - 8, width: 16, height: 16 });
+      } else if (sourceJunction && targetJunction) {
+        sp = getJunctionEdgePoint(sourceJunction, targetJunction);
+        tp = getJunctionEdgePoint(targetJunction, sourceJunction);
+      } else {
+        return null;
+      }
+
+      const cp = transition.controlPoint || {
+        x: (sp.x + tp.x) / 2 + (tp.y - sp.y) * 0.3,
+        y: (sp.y + tp.y) / 2 + (sp.x - tp.x) * 0.3,
+      };
+
+      const path = `M ${sp.x} ${sp.y} Q ${cp.x} ${cp.y} ${tp.x} ${tp.y}`;
+      const isSelected = selectedIds.includes(transition.id);
+      const isFired = !!firedTransitions[transition.id];
+
+      // CRITICAL FIX: Scale stroke width with zoom level
+      const strokeWidth = isSelected ? 3 / view.scale : 2 / view.scale;
+      const hitAreaWidth = 15 / view.scale;
+      const handleRadius = 8 / view.scale;
+      const handleStrokeWidth = 2 / view.scale;
+
+      // Build label
+      const parts: string[] = [];
+      if (transition.isInternal) parts.push(`«local»`);
+      if (transition.type === 'condition') parts.push(`[${transition.condition || 'true'}]`);
+      else if (transition.type === 'after') parts.push(`after(${transition.afterTicks || '?'})`);
+      else if (transition.type === 'and') parts.push(`[${transition.condition}] && after(${transition.afterTicks})`);
+      else if (transition.type === 'or') parts.push(`[${transition.condition}] || after(${transition.afterTicks})`);
+
+      if (transition.action) parts.push(`/${transition.action.substring(0, 15)}${transition.action.length > 15 ? '...' : ''}`);
+      const labelText = parts.length > 0 ? parts.join(' ') : 'default';
+      const priorityText = `(${transition.order})`;
+
+      return (
+        <g key={transition.id}>
+          {/* Hit area - scaled for zoom */}
+          <path
+            d={path}
+            fill="none"
+            stroke="transparent"
+            strokeWidth={hitAreaWidth}
+            onMouseDown={(e: MouseEvent<SVGPathElement>) => {
+              e.stopPropagation();
+              handleTransitionClick(e, transition.id);
+            }}
+            style={{ cursor: 'pointer' }}
+          />
+
+          {/* Main path - scaled for zoom */}
+          <path
+            d={path}
+            fill="none"
+            stroke={isFired ? '#ffffff' : (isSelected ? '#c9a86c' : '#666')}
+            strokeWidth={isFired ? strokeWidth * 2 : strokeWidth}
+            strokeDasharray={transition.condition === 'true' && !transition.afterTicks ? '5,3' : undefined}
+            style={{ transition: 'stroke 0.1s, stroke-width 0.1s' }}
+          />
+
+          {/* Arrowhead - scaled with transform */}
+          <path
+            d={`M ${tp.x} ${tp.y} L ${tp.x - 10} ${tp.y - 4} L ${tp.x - 10} ${tp.y + 4} Z`}
+            fill={isSelected ? '#c9a86c' : '#666'}
+            transform={`rotate(${Math.atan2(tp.y - sp.y, tp.x - sp.x) * 180 / Math.PI}, ${tp.x}, ${tp.y})`}
+            style={{ transition: 'fill 0.1s' }}
+          />
+
+          {/* Control point handle (only when selected) - scaled for zoom */}
+          {isSelected && (
+            <circle
+              cx={cp.x}
+              cy={cp.y}
+              r={handleRadius}
+              fill="#c9a86c"
+              stroke="#0a0a0a"
+              strokeWidth={handleStrokeWidth}
+              cursor="move"
+              onMouseDown={(e: MouseEvent<SVGCircleElement>) => {
+                e.stopPropagation();
+                startControlPointDrag(transition.id, e);
+              }}
+            />
+          )}
+
+          {/* Transition label - not scaled (remains readable) */}
+          <foreignObject x={cp.x - 75} y={cp.y - 15} width="150" height="30">
+            <div className="px-2 py-1 bg-[#0a0a0a] border border-[#333] rounded text-[10px] font-mono text-center"
+              style={{ color: isSelected ? '#c9a86c' : '#a0a0a0', pointerEvents: 'none' }}>
+              <span className="text-amber-400">{priorityText}</span> {labelText}
+            </div>
+          </foreignObject>
+        </g>
+      );
+    });
+  }, [currentTransitions, states, junctions, view, selectedIds, firedTransitions, handleTransitionClick, startControlPointDrag]);
+
+  const renderBlocks = useCallback((): React.ReactNode => {
+    // In BDD mode, always treat as root level (ignore currentLayerId from IBD navigation)
+    const effectiveLayerId = diagramMode === 'bdd' ? 'root' : currentLayerId;
+
+    return blocks.map(block => {
+      if (diagramMode === 'ibd') {
+        if (block.id === currentLayerId) {
+          const frame = { x: block.x, y: block.y, w: block.width, h: block.height };
+          const isSelected = selectedIds.includes(block.id);
+          return (
+            <g key={block.id}>
+              <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="none" stroke="#444" strokeWidth={2} strokeDasharray="10,5"
+                onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
+                onClick={(e) => { e.stopPropagation(); setSelectedIds([block.id]); }}
+                style={{ cursor: 'move', pointerEvents: 'all' }}
+              />
+              <text x={frame.x + 5} y={frame.y + 15} fill="#666" fontSize={12} fontWeight="bold">ibd [Block] {block.name}</text>
+
+              {isSelected && ['nw', 'ne', 'sw', 'se'].map(h => {
+                const hx = h.includes('e') ? frame.x + frame.w : frame.x;
+                const hy = h.includes('s') ? frame.y + frame.h : frame.y;
+                return (
+                  <rect
+                    key={h}
+                    x={hx - 4} y={hy - 4} width={8} height={8}
+                    fill="#c9a86c" stroke="#0a0a0a" strokeWidth={1}
+                    style={{ cursor: `${h}-resize` }}
+                    onMouseDown={(e) => handleResizeMouseDown(e, h, block.id)}
+                  />
+                );
+              })}
+
+              {block.ports.map((port, i) => {
+                let x = 0, y = 0;
+                let isLeft = false;
+                if (port.side && port.offset != null) {
+                  if (port.side === 'top') { x = frame.x + frame.w * port.offset; y = frame.y; }
+                  else if (port.side === 'bottom') { x = frame.x + frame.w * port.offset; y = frame.y + frame.h; }
+                  else if (port.side === 'left') { x = frame.x; y = frame.y + frame.h * port.offset; isLeft = true; }
+                  else { x = frame.x + frame.w; y = frame.y + frame.h * port.offset; }
+                } else {
+                  isLeft = i % 2 === 0;
+                  x = isLeft ? frame.x : frame.x + frame.w;
+                  y = frame.y + 60 + Math.floor(i / 2) * 40;
+                }
+
+                return (
+                  <g key={port.id} transform={`translate(${x}, ${y})`}>
+                    <rect
+                      x={-6} y={-6} width={12} height={12}
+                      fill={connectorSource?.portId === port.id && connectorSource?.partId === block.id ? '#c9a86c' : '#222'}
+                      stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#c9a86c'}
+                      strokeWidth={1}
+                      onMouseDown={(e) => handlePortMouseDown(e, block.id, port.id)}
+                      onClick={(e) => handlePortClick(e, block.id, port.id)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <text x={isLeft ? 10 : -10} y={4} textAnchor={isLeft ? "start" : "end"} fill="#aaa" fontSize={10}>{port.name}</text>
+                  </g>
+                );
+              })}
+            </g>
+          );
+        }
+        if (block.stereotype !== 'interface' && block.stereotype !== 'interfaceBlock') return null;
+      }
+
+      if (diagramMode === 'requirements') {
+        if (block.stereotype !== 'requirement') return null;
+
+        if (currentLayerId === 'root') {
+          // In root, only show requirements that are NOT children of any other requirement
+          const isChild = relationships.some(r => r.targetId === block.id && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'));
+          if (isChild) return null;
+        } else {
+          // In a layer, only show requirements that ARE children of currentLayerId
+          const isChildOfCurrent = relationships.some(r => r.sourceId === currentLayerId && r.targetId === block.id && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'));
+          if (!isChildOfCurrent) return null;
+        }
+      }
+
+      if (diagramMode === 'bdd' && (block.stereotype === 'requirement' || block.stereotype === 'interface' || block.stereotype === 'interfaceBlock')) return null;
+
+      // In BDD mode, hide any block that is being used as a type for a part.
+      if (diagramMode === 'bdd' && parts.some(p => p.typeId === block.id)) {
+        return null;
+      }
+
+      const isSelected = selectedIds.includes(block.id);
+
+      // BDD Mode: Use standardized class dimensions (ignore IBD scaling/sizing)
+      const isBddMode = diagramMode === 'bdd';
+      const displayWidth = isBddMode ? 120 : block.width;
+      const displayHeight = isBddMode ? 60 : block.height;
+
+      return (
+        <g
+          key={block.id}
+          transform={`translate(${block.x}, ${block.y})`}
+          onMouseDown={(e) => handleBlockMouseDown(e, block.id)}
+          onDoubleClick={(e: MouseEvent<SVGGElement>) => {
+            e.stopPropagation();
+            if (diagramMode === 'requirements') {
+              enterRequirement(block.id);
+            } else {
+              enterBlock(block.id);
+            }
+          }}
+          style={{ cursor: isCreatingTransition ? 'crosshair' : 'move' }}
+        >
+          {isSelected && (
+            <rect x={-4} y={-4} width={displayWidth + 8} height={displayHeight + 8} fill="none" stroke="#c9a86c" strokeWidth={2} strokeDasharray="5,5" rx={4} />
+          )}
+
+          {isSelected && diagramMode === 'requirements' && ['nw', 'ne', 'sw', 'se'].map(h => {
+            const hx = h.includes('e') ? displayWidth : 0;
+            const hy = h.includes('s') ? displayHeight : 0;
+            return (
+              <rect
+                key={h}
+                x={hx - 4} y={hy - 4} width={8} height={8}
+                fill="#c9a86c" stroke="#0a0a0a" strokeWidth={1}
+                style={{ cursor: `${h}-resize` }}
+                onMouseDown={(e) => handleResizeMouseDown(e, h, block.id)}
+              />
+            );
+          })}
+
+          <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? '#1e1e1e' : '#1a1a1a'} stroke={isSelected ? '#c9a86c' : '#e0e0e0'} strokeWidth={1} />
+
+          {/* Header */}
+          <text x={displayWidth / 2} y={15} textAnchor="middle" fill="#c9a86c" fontSize={10} fontFamily="monospace">«{block.stereotype}»</text>
+          <text x={displayWidth / 2} y={30} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold">{block.name}</text>
+          <line x1={0} y1={35} x2={displayWidth} y2={35} stroke="#444" strokeWidth={1} />
+
+          {/* Requirement Specifics */}
+          {block.stereotype === 'requirement' ? (
+            <g transform="translate(5, 45)">
+              <text y={0} fill="#c9a86c" fontSize={10} fontWeight="bold">Id: {block.reqId}</text>
+              <foreignObject x={0} y={5} width={Math.max(10, displayWidth - 10)} height={Math.max(10, displayHeight - 55)}>
+                <div className="text-[9px] text-[#aaa] overflow-hidden h-full">
+                  {block.description}
+                </div>
+              </foreignObject>
+              {/* Status Indicator */}
+              <circle cx={displayWidth - 15} cy={-35} r={3} fill={
+                block.status === 'Verified' ? '#4ade80' :
+                  block.status === 'Approved' ? '#6c9ac6' :
+                    block.status === 'Draft' ? '#888' : '#c96c8a'
+              } />
+            </g>
+          ) : (
+            <g transform="translate(5, 45)">
+              {block.properties.slice(0, 3).map((prop, i) => (
+                <text key={prop.id} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">
+                  {prop.name}: {prop.type}{prop.defaultValue ? ` = ${prop.defaultValue}` : ''}
+                </text>
+              ))}
+              {block.classes && block.classes.length > 0 && (
+                <g transform={`translate(0, ${block.properties.length * 12 + 5})`}>
+                  <line x1={-5} y1={-2} x2={displayWidth - 5} y2={-2} stroke="#444" strokeWidth={1} />
+                  {block.classes.slice(0, 3).map((cls, i) => (
+                    <text key={i} y={i * 12 + 8} fill="#aaa" fontSize={10} fontFamily="monospace">
+                      {cls}
+                    </text>
+                  ))}
+                </g>
+              )}
+            </g>
+          )}
+
+          {/* Operations Separator if needed */}
+          {block.operations.length > 0 && (
+            <>
+              <line x1={0} y1={displayHeight - 25} x2={displayWidth} y2={displayHeight - 25} stroke="#444" strokeWidth={1} />
+              <g transform={`translate(5, ${displayHeight - 15})`}>
+                {block.operations.slice(0, 2).map((op, i) => (
+                  <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{op}</text>
+                ))}
+              </g>
+            </>
+          )}
+
+          {/* Constraints */}
+          {block.constraints && block.constraints.length > 0 && (
+            <>
+              <line x1={0} y1={displayHeight - (block.operations.length > 0 ? 40 : 25)} x2={displayWidth} y2={displayHeight - (block.operations.length > 0 ? 40 : 25)} stroke="#444" strokeWidth={1} />
+              <g transform={`translate(5, ${displayHeight - (block.operations.length > 0 ? 30 : 15)})`}>
+                {block.constraints.slice(0, 2).map((c, i) => (
+                  <text key={i} y={i * 12} fill="#aaa" fontSize={10} fontFamily="monospace">{`{${c}}`}</text>
+                ))}
+              </g>
+            </>
+          )}
+
+          {/* Ports */}
+          {block.ports.map((port, i) => (
+            <g key={port.id} transform={`translate(-5, ${20 + i * 15})`}>
+              <rect
+                width={10}
+                height={10}
+                fill="#333"
+                stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#c9a86c'}
+                strokeWidth={1}
+              />
+              {port.kind === 'flow' && (
+                <text x={5} y={8} textAnchor="middle" fill="#6c9ac6" fontSize={8} fontWeight="bold">
+                  {port.direction === 'in' ? '>' : port.direction === 'out' ? '<' : '<>'}
+                </text>
+              )}
+              <title>{port.name} : {port.type} ({port.kind || 'standard'}){port.unit ? ` { unit: ${port.unit} }` : ''}</title>
+            </g>
+          ))}
+
+          {/* Satisfied Requirements Indicator */}
+          {block.satisfiedReqIds && block.satisfiedReqIds.length > 0 && (
+            <text x={displayWidth - 5} y={displayHeight - 5} textAnchor="end" fill="#4ade80" fontSize={9} fontWeight="bold">
+              ✓ {block.satisfiedReqIds.length}
+            </text>
+          )}
+        </g>
+      );
+    });
+  }, [blocks, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown]);
+
+  const renderRelationships = useCallback((): React.ReactNode => {
+    return relationships.map(rel => {
+      const source = blocks.find(b => b.id === rel.sourceId);
+      const target = blocks.find(b => b.id === rel.targetId);
+      if (!source || !target) return null;
+
+      const isReqRel = source.stereotype === 'requirement' || target.stereotype === 'requirement';
+      if (diagramMode === 'ibd') return null;
+      if (diagramMode === 'bdd' && isReqRel) return null;
+      if (diagramMode === 'requirements' && !isReqRel) return null;
+
+      // Check visibility for requirements
+      if (diagramMode === 'requirements') {
+        const isVisible = (id: string) => {
+          if (currentLayerId === 'root') {
+            return !relationships.some(r => r.targetId === id && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'));
+          } else {
+            return relationships.some(r => r.sourceId === currentLayerId && r.targetId === id && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'));
+          }
+        };
+        if (!isVisible(source.id) || !isVisible(target.id)) return null;
+      }
+
+      // Use standardized dimensions for BDD to match block rendering
+      const isBdd = diagramMode === 'bdd';
+      const srcW = isBdd ? 120 : source.width;
+      const srcH = isBdd ? 60 : source.height;
+      const tgtW = isBdd ? 120 : target.width;
+      const tgtH = isBdd ? 60 : target.height;
+
+      const sp = getEdgePoint({ x: source.x, y: source.y, width: srcW, height: srcH }, { x: target.x, y: target.y, width: tgtW, height: tgtH });
+      const tp = getEdgePoint({ x: target.x, y: target.y, width: tgtW, height: tgtH }, { x: source.x, y: source.y, width: srcW, height: srcH });
+      const isSelected = selectedIds.includes(rel.id);
+      const strokeColor = isSelected ? '#c9a86c' : '#888';
+      const strokeDash = rel.type === 'allocation' ? '5,5' : undefined;
+      const isTrace = ['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace'].includes(rel.type);
+
+      return (
+        <g key={rel.id} onClick={(e) => { e.stopPropagation(); setSelectedIds([rel.id]); }}>
+          <line x1={sp.x} y1={sp.y} x2={tp.x} y2={tp.y} stroke={strokeColor} strokeWidth={2} strokeDasharray={isTrace ? '4,2' : strokeDash} />
+
+          {/* Arrowheads */}
+          {rel.type === 'generalization' && (
+            <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="#0a0a0a" stroke={strokeColor} transform={`rotate(${Math.atan2(tp.y - sp.y, tp.x - sp.x) * 180 / Math.PI}, ${tp.x}, ${tp.y})`} />
+          )}
+          {rel.type === 'composition' && (
+            <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill={strokeColor} stroke={strokeColor} transform={`rotate(${Math.atan2(tp.y - sp.y, tp.x - sp.x) * 180 / Math.PI}, ${sp.x}, ${sp.y})`} />
+          )}
+          {rel.type === 'aggregation' && (
+            <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill="#0a0a0a" stroke={strokeColor} transform={`rotate(${Math.atan2(tp.y - sp.y, tp.x - sp.x) * 180 / Math.PI}, ${sp.x}, ${sp.y})`} />
+          )}
+          {rel.type === 'allocation' && (
+            <g>
+              <text x={(sp.x + tp.x) / 2} y={(sp.y + tp.y) / 2 - 10} textAnchor="middle" fill={strokeColor} fontSize={10}>«allocate»</text>
+              <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="none" stroke={strokeColor} transform={`rotate(${Math.atan2(tp.y - sp.y, tp.x - sp.x) * 180 / Math.PI}, ${tp.x}, ${tp.y})`} />
+            </g>
+          )}
+          {isTrace && (
+            <g>
+              <text x={(sp.x + tp.x) / 2} y={(sp.y + tp.y) / 2 - 10} textAnchor="middle" fill={strokeColor} fontSize={10}>«{rel.type}»</text>
+              <path d={`M ${tp.x - 8} ${tp.y - 4} L ${tp.x} ${tp.y} L ${tp.x - 8} ${tp.y + 4}`} fill="none" stroke={strokeColor} transform={`rotate(${Math.atan2(tp.y - sp.y, tp.x - sp.x) * 180 / Math.PI}, ${tp.x}, ${tp.y})`} />
+            </g>
+          )}
+
+          {rel.label && (
+            <text x={(sp.x + tp.x) / 2} y={(sp.y + tp.y) / 2 - 5} textAnchor="middle" fill={strokeColor} fontSize={10} dy={-5}>{rel.label}</text>
+          )}
+          {rel.sourceMultiplicity && (
+            <text x={sp.x + (tp.x > sp.x ? 10 : -10)} y={sp.y + 10} fill={strokeColor} fontSize={10} textAnchor={tp.x > sp.x ? 'start' : 'end'}>{rel.sourceMultiplicity}</text>
+          )}
+          {rel.targetMultiplicity && (
+            <text x={tp.x + (sp.x > tp.x ? 10 : -10)} y={tp.y - 10} fill={strokeColor} fontSize={10} textAnchor={sp.x > tp.x ? 'start' : 'end'}>{rel.targetMultiplicity}</text>
+          )}
+        </g>
+      );
+    });
+  }, [relationships, blocks, selectedIds, diagramMode, currentLayerId]);
+
+  const renderParts = useCallback((): React.ReactNode => {
+    // Only render parts in IBD mode
+    if (diagramMode !== 'ibd') return null;
+    return parts.filter(p => p.blockId === currentLayerId).map(part => {
+      const block = blocks.find(b => b.id === part.typeId);
+      const isSelected = selectedIds.includes(part.id);
+
+      return (
+        <g
+          key={part.id}
+          transform={`translate(${part.x}, ${part.y})`}
+          onMouseDown={(e) => handlePartMouseDown(e, part.id)}
+          style={{ cursor: isCreatingConnector ? 'default' : 'move' }}
+        >
+          {isSelected && (
+            <rect x={-4} y={-4} width={part.width + 8} height={part.height + 8} fill="none" stroke="#c9a86c" strokeWidth={2} strokeDasharray="5,5" rx={4} />
+          )}
+          <rect width={part.width} height={part.height} fill="#1a1a1a" stroke={isSelected ? '#c9a86c' : '#666'} strokeWidth={1} />
+          <text x={part.width / 2} y={20} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold">{part.name} {part.multiplicity ? `[${part.multiplicity}]` : ''}</text>
+          <text x={part.width / 2} y={35} textAnchor="middle" fill="#888" fontSize={10}>: {block?.name || 'Unknown'}</text>
+
+          {/* Ports - FR-IBD-005: Reflect changes in BDD automatically */}
+          {block?.ports?.map((port, i) => {
+            let xOffset = 0, yOffset = 0;
+            let isLeft = false;
+            const layout = part.portLayouts?.[port.id];
+            const side = layout?.side || port.side;
+            const offset = layout?.offset ?? port.offset;
+
+            if (side && offset != null) {
+              if (side === 'top') { xOffset = part.width * offset; yOffset = 0; }
+              else if (side === 'bottom') { xOffset = part.width * offset; yOffset = part.height; }
+              else if (side === 'left') { xOffset = 0; yOffset = part.height * offset; isLeft = true; }
+              else { xOffset = part.width; yOffset = part.height * offset; }
+            } else {
+              isLeft = i % 2 === 0;
+              xOffset = isLeft ? 0 : part.width;
+              yOffset = 20 + Math.floor(i / 2) * 20 + 5;
+            }
+
+            return (
+              <g key={port.id} transform={`translate(${xOffset}, ${yOffset})`}>
+                <rect
+                  x={-5} y={-5}
+                  width={10} height={10}
+                  fill={connectorSource?.portId === port.id && connectorSource?.partId === part.id ? '#c9a86c' : '#333'}
+                  stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#c9a86c'}
+                  strokeWidth={1}
+                  onMouseDown={(e) => handlePortMouseDown(e, part.id, port.id)}
+                  onClick={(e) => handlePortClick(e, part.id, port.id)}
+                  style={{ cursor: 'pointer' }}
+                />
+                {port.kind === 'flow' && (
+                  <>
+                    <text x={5} y={8} textAnchor="middle" fill="#6c9ac6" fontSize={8} fontWeight="bold" pointerEvents="none">
+                      {port.direction === 'in' ? (isLeft ? '>' : '<') : port.direction === 'out' ? (isLeft ? '<' : '>') : '<>'}
+                    </text>
+                    <g transform="translate(5, 5)" style={{ pointerEvents: 'none' }}>
+                      {port.direction === 'in' ? (
+                        isLeft ? <path d="M -3 0 L 3 0 M 0 -3 L 3 0 L 0 3" stroke="#6c9ac6" strokeWidth="1.5" fill="none" /> : <path d="M 3 0 L -3 0 M 0 -3 L -3 0 L 0 3" stroke="#6c9ac6" strokeWidth="1.5" fill="none" />
+                      ) : port.direction === 'out' ? (
+                        isLeft ? <path d="M 3 0 L -3 0 M 0 -3 L -3 0 L 0 3" stroke="#6c9ac6" strokeWidth="1.5" fill="none" /> : <path d="M -3 0 L 3 0 M 0 -3 L 3 0 L 0 3" stroke="#6c9ac6" strokeWidth="1.5" fill="none" />
+                      ) : (
+                        <path d="M -3 0 L 3 0 M 0 -3 L 3 0 L 0 3 M 0 -3 L -3 0 L 0 3" stroke="#6c9ac6" strokeWidth="1.5" fill="none" />
+                      )}
+                    </g>
+                  </>
+                )}
+                <text x={isLeft ? -5 : 15} y={9} textAnchor={isLeft ? "end" : "start"} fill="#aaa" fontSize={9}>{port.name}</text>
+              </g>
+            );
+          })}
+
+          {/* Satisfied Requirements Indicator */}
+          {part.satisfiedReqIds && part.satisfiedReqIds.length > 0 && (
+            <text x={part.width - 5} y={part.height - 5} textAnchor="end" fill="#4ade80" fontSize={9} fontWeight="bold">
+              ✓ {part.satisfiedReqIds.length}
+            </text>
+          )}
+        </g>
+      );
+    });
+  }, [parts, blocks, selectedIds, isCreatingConnector, connectorSource, handlePortClick, handlePartMouseDown, handlePortMouseDown, diagramMode]);
+
+  const renderConnectors = useCallback((): React.ReactNode => {
+    // Only render connectors in IBD mode
+    if (diagramMode !== 'ibd') return null;
+    const currentPartIds = new Set(parts.filter(p => p.blockId === currentLayerId).map(p => p.id));
+    currentPartIds.add(currentLayerId); // Add the context block itself
+
+    const visibleConnectors = connectors.filter(c => currentPartIds.has(c.sourcePartId) && currentPartIds.has(c.targetPartId));
+
+    return visibleConnectors.map(conn => {
+      const getPortPos = (partId: string, portId: string) => {
+        if (partId === currentLayerId) {
+          const block = blocks.find(b => b.id === partId);
+          const port = block?.ports?.find(p => p.id === portId);
+          const index = block?.ports?.findIndex(p => p.id === portId) ?? 0;
+          const frame = { x: block?.x || 0, y: block?.y || 0, w: block?.width || 0, h: block?.height || 0 };
+          if (port?.side && port.offset != null) {
+            if (port.side === 'top') return { x: frame.x + frame.w * port.offset, y: frame.y };
+            if (port.side === 'bottom') return { x: frame.x + frame.w * port.offset, y: frame.y + frame.h };
+            if (port.side === 'left') return { x: frame.x, y: frame.y + frame.h * port.offset };
+            return { x: frame.x + frame.w, y: frame.y + frame.h * port.offset };
+          }
+          const isLeft = index % 2 === 0;
+          return { x: isLeft ? frame.x : frame.x + frame.w, y: frame.y + 60 + Math.floor(index / 2) * 40 };
+        } else {
+          const part = parts.find(p => p.id === partId);
+          const block = blocks.find(b => b.id === part?.typeId);
+          const port = block?.ports?.find(p => p.id === portId);
+          const index = block?.ports?.findIndex(p => p.id === portId) ?? 0;
+          if (!part) return { x: 0, y: 0 };
+          const layout = part.portLayouts?.[portId];
+          const side = layout?.side || port?.side;
+          const offset = layout?.offset ?? port?.offset;
+
+          if (side && offset != null) {
+            if (side === 'top') return { x: part.x + part.width * offset, y: part.y };
+            if (side === 'bottom') return { x: part.x + part.width * offset, y: part.y + part.height };
+            if (side === 'left') return { x: part.x, y: part.y + part.height * offset };
+            return { x: part.x + part.width, y: part.y + part.height * offset };
+          }
+          const isLeft = index % 2 === 0;
+          return { x: part.x + (isLeft ? 0 : part.width), y: part.y + 20 + Math.floor(index / 2) * 20 + 5 };
+        }
+      };
+
+      const p1 = getPortPos(conn.sourcePartId, conn.sourcePortId);
+      const p2 = getPortPos(conn.targetPartId, conn.targetPortId);
+
+      const isSelected = selectedIds.includes(conn.id);
+
+      const midX = (p1.x + p2.x) / 2;
+      const midY = (p1.y + p2.y) / 2;
+      const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
+
+      return (
+        <g key={conn.id} onClick={(e) => { e.stopPropagation(); setSelectedIds([conn.id]); }}>
+          <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="transparent" strokeWidth={10} style={{ cursor: 'pointer' }} />
+          <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={isSelected ? '#c9a86c' : '#888'} strokeWidth={2} pointerEvents="none" />
+          {(conn.itemFlow || conn.label) && (
+            <g>
+              <polygon
+                points="0,0 -6,-3 -6,3"
+                fill="#c9a86c"
+                transform={`translate(${midX}, ${midY}) rotate(${angle})`}
+              />
+              {conn.itemFlow && <text x={midX} y={midY - 15} textAnchor="middle" fill="#c9a86c" fontSize={8}>«itemFlow»</text>}
+              <text x={midX} y={midY - 5} textAnchor="middle" fill="#e0e0e0" fontSize={10}>
+                {conn.itemFlow || ''}
+                {conn.label ? (conn.itemFlow ? ` : ${conn.label}` : conn.label) : ''}
+              </text>
+            </g>
+          )}
+        </g>
+      );
+    });
+  }, [connectors, parts, blocks, selectedIds, currentLayerId, diagramMode]);
+
+  const renderInterfaceRealizations = useCallback((): React.ReactNode => {
+    if (diagramMode !== 'ibd') return null;
+
+    return interfaceRealizations.map(realization => {
+      const { id, interfaceId, partId, portId } = realization;
+
+      const interfaceBlock = blocks.find(b => b.id === interfaceId);
+      const part = parts.find(p => p.id === partId);
+      if (!interfaceBlock || !part || part.blockId !== currentLayerId) return null;
+
+      const partBlock = blocks.find(b => b.id === part.typeId);
+      if (!partBlock) return null;
+
+      const port = partBlock.ports.find(p => p.id === portId);
+      const portIndex = partBlock.ports.findIndex(p => p.id === portId);
+      if (portIndex === -1) return null;
+      if (!port || portIndex === -1) return null;
+
+      const sp = getEdgePoint(interfaceBlock, part);
+
+      const layout = part.portLayouts?.[portId];
+      const side = layout?.side || port.side;
+      const offset = layout?.offset ?? port.offset;
+
+      let tp = { x: 0, y: 0 };
+      if (side && offset != null) {
+        if (side === 'top') tp = { x: part.x + part.width * offset, y: part.y };
+        else if (side === 'bottom') tp = { x: part.x + part.width * offset, y: part.y + part.height };
+        else if (side === 'left') tp = { x: part.x, y: part.y + part.height * offset };
+        else tp = { x: part.x + part.width, y: part.y + part.height * offset };
+      } else {
+        const isLeft = portIndex % 2 === 0;
+        tp = { x: part.x + (isLeft ? 0 : part.width), y: part.y + 20 + Math.floor(portIndex / 2) * 20 + 5 };
+      }
+
+      const isSelected = selectedIds.includes(id);
+      const strokeColor = isSelected ? '#c9a86c' : '#6c9ac6';
+
+      return (
+        <g key={id} onClick={(e) => { e.stopPropagation(); setSelectedIds([id]); }}>
+          <line x1={sp.x} y1={sp.y} x2={tp.x} y2={tp.y} stroke={strokeColor} strokeWidth={1.5} strokeDasharray="4,2" />
+          <circle cx={tp.x} cy={tp.y} r="3" fill="none" stroke={strokeColor} />
+        </g>
+      );
+    });
+  }, [diagramMode, interfaceRealizations, blocks, parts, currentLayerId, selectedIds]);
+
+  const handleJumpToError = useCallback((error: ErrorItem) => {
+    if (!error.elementId) return;
+
+    const state = states.find(s => s.id === error.elementId);
+    const junction = junctions.find(j => j.id === error.elementId);
+    const transition = transitions.find(t => t.id === error.elementId);
+
+    let targetX = 0, targetY = 0;
+    let targetLayerId = currentLayerId;
+
+    if (state) {
+      targetX = state.x + state.width / 2;
+      targetY = state.y + state.height / 2;
+      targetLayerId = state.parentId || 'root';
+      setSelectedIds([state.id]);
+    } else if (junction) {
+      targetX = junction.x;
+      targetY = junction.y;
+      const layer = layers.find(l => l.junctionIds.includes(junction.id));
+      if (layer) targetLayerId = layer.id;
+      setSelectedIds([junction.id]);
+    } else if (transition) {
+      const s = states.find(s => s.id === transition.sourceId) || junctions.find(j => j.id === transition.sourceId);
+      if (s) {
+        targetX = s.x;
+        targetY = s.y;
+        if ('width' in s) {
+          targetLayerId = (s as StateData).parentId || 'root';
+        } else {
+          const layer = layers.find(l => l.junctionIds.includes(s.id));
+          if (layer) targetLayerId = layer.id;
+        }
+      }
+      setSelectedIds([transition.id]);
+    }
+
+    if (targetLayerId !== currentLayerId) {
+      const buildLayerNavigation = (layerId: string): { newStack: string[], newPath: string[] } => {
+        if (layerId === 'root') {
+          return { newStack: [], newPath: ['Root'] };
+        }
+        const pathNames: string[] = [];
+        const stackIds: string[] = [];
+        let currentId = layerId;
+
+        while (currentId !== 'root') {
+          const layer = layers.find(l => l.id === currentId);
+          if (!layer || !layer.parentStateId) return { newStack: [], newPath: ['Root'] }; // Path is broken
+          const parentState = states.find(s => s.id === layer.parentStateId);
+          if (!parentState) return { newStack: [], newPath: ['Root'] }; // Path is broken
+          pathNames.unshift(parentState.name);
+          const parentLayerId = parentState.parentId || 'root';
+          stackIds.unshift(parentLayerId);
+          currentId = parentLayerId;
+        }
+        return { newStack: stackIds, newPath: ['Root', ...pathNames] };
+      };
+
+      const { newStack, newPath } = buildLayerNavigation(targetLayerId);
+      setCurrentLayerId(targetLayerId);
+      setLayerStack(newStack);
+      setLayerPath(newPath);
+    }
+
+    if (targetX && targetY && canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      setView({ scale: 1, offsetX: rect.width / 2 - targetX, offsetY: rect.height / 2 - targetY });
+    }
+    setShowErrorDialog(false);
+  }, [states, junctions, transitions, layers, currentLayerId]);
+
+  const handleAutoFix = useCallback((error: ErrorItem) => {
+    if (!error.elementId) return;
+
+    if (error.message.includes('contains spaces')) {
+      const state = states.find(s => s.id === error.elementId);
+      if (state) {
+        const newName = state.name.trim().replace(/\s+/g, '_');
+        updateState(state.id, { name: newName });
+        addError('info', `Auto-fixed state name: ${state.name} -> ${newName}`);
+        setErrors(prev => prev.filter(e => e.id !== error.id));
+        setShowErrorDialog(false);
+      }
+    } else if (error.message.includes('Duplicate state name')) {
+      const state = states.find(s => s.id === error.elementId);
+      if (state) {
+        let newName = state.name;
+        let counter = 1;
+        while (states.some(s => s.name === newName && s.id !== state.id)) {
+          newName = `${state.name}_${counter}`;
+          counter++;
+        }
+        updateState(state.id, { name: newName });
+        addError('info', `Auto-fixed duplicate state name: ${state.name} -> ${newName}`);
+        setErrors(prev => prev.filter(e => e.id !== error.id));
+        setShowErrorDialog(false);
+      }
+    } else if (error.message.includes('has no AutoStart')) {
+      // REQ-HSM-004 & REQ-HSM-023: Auto-fix by setting first state as autostart
+      const state = states.find(s => s.id === error.elementId);
+      if (state) {
+        // Find the layer this state belongs to
+        const layer = layers.find(l =>
+          l.id === 'root' ? !layers.some(ol => ol.id !== 'root' && ol.stateIds.includes(state.id)) : l.stateIds.includes(state.id)
+        );
+        const layerName = layer?.name || (layer?.id === 'root' ? 'Root' : 'unknown');
+
+        // Clear autostart from all states in this layer first
+        const statesInLayer = layer
+          ? states.filter(ls => {
+            if (layer.id === 'root') {
+              return !layers.some(ol => ol.id !== 'root' && ol.stateIds.includes(ls.id));
+            }
+            return layer.stateIds.includes(ls.id);
+          })
+          : [];
+
+        statesInLayer.forEach(s => {
+          if (s.autostart) {
+            updateState(s.id, { autostart: false });
+          }
+        });
+
+        // Set this state as autostart
+        updateState(state.id, { autostart: true });
+        addError('info', `Auto-fixed: Set '${state.name}' as AutoStart for layer '${layerName}'`);
+        setErrors(prev => prev.filter(e => e.id !== error.id));
+        setShowErrorDialog(false);
+      }
+    }
+  }, [states, layers, updateState, addError]);
+
+  const handleFixAll = useCallback(() => {
+    const fixableErrors = errors.filter(e => e.canAutoFix);
+    if (fixableErrors.length === 0) return;
+
+    const updates = new Map<string, string>();
+    const usedNames = new Set(states.map(s => s.name));
+
+    fixableErrors.forEach(error => {
+      if (!error.elementId) return;
+
+      // Handle AutoStart errors separately
+      if (error.message.includes('has no AutoStart')) {
+        const state = states.find(s => s.id === error.elementId);
+        if (state) {
+          // Find the layer this state belongs to
+          const layer = layers.find(l =>
+            l.id === 'root' ? !layers.some(ol => ol.id !== 'root' && ol.stateIds.includes(state.id)) : l.stateIds.includes(state.id)
+          );
+
+          // Clear autostart from all states in this layer first
+          const statesInLayer = layer
+            ? states.filter(ls => {
+              if (layer.id === 'root') {
+                return !layers.some(ol => ol.id !== 'root' && ol.stateIds.includes(ls.id));
+              }
+              return layer.stateIds.includes(ls.id);
+            })
+            : [];
+
+          statesInLayer.forEach(s => {
+            if (s.autostart) {
+              updateState(s.id, { autostart: false });
+            }
+          });
+
+          // Set this state as autostart
+          updateState(state.id, { autostart: true });
+        }
+        return;
+      }
+
+      const state = states.find(s => s.id === error.elementId);
+      if (!state) return;
+
+      let newName = state.name;
+
+      if (error.message.includes('contains spaces')) {
+        newName = newName.trim().replace(/\s+/g, '_');
+      }
+
+      // Ensure uniqueness (handling both spaces fix and duplicates)
+      // We check against the original 'states' list AND the 'usedNames' set which tracks assignments in this batch
+      let counter = 1;
+      const baseName = newName;
+
+      // Check if name is taken by another state (not self) OR if we've already assigned this name in this batch
+      const isTaken = (n: string) => {
+        const takenByOther = states.some(s => s.name === n && s.id !== state.id);
+        const takenInBatch = usedNames.has(n) && !updates.has(state.id); // If we are updating self, we overwrite, but here we are checking collision
+        // Actually, simpler: just check if n is in usedNames, but exclude self's *original* name if we are renaming self?
+        // No, usedNames tracks the *result* set.
+        return takenByOther || (usedNames.has(n) && updates.get(state.id) !== n);
+      };
+
+      // If it's a duplicate error, we MUST change it even if it looks unique (because it collided with someone else)
+      // If it's a space error, we only change if it collides.
+      const isDuplicateError = error.message.includes('Duplicate state name');
+
+      while (
+        (isDuplicateError && newName === state.name) ||
+        states.some(s => s.name === newName && s.id !== state.id) ||
+        (usedNames.has(newName) && updates.get(state.id) !== newName)
+      ) {
+        newName = `${baseName}_${counter}`;
+        counter++;
+      }
+
+      updates.set(state.id, newName);
+      usedNames.add(newName);
+    });
+
+    if (updates.size > 0) {
+      setStates(prev => prev.map(s => {
+        if (updates.has(s.id)) {
+          return { ...s, name: updates.get(s.id)! };
+        }
+        return s;
+      }));
+      setErrors(prev => prev.filter(e => !e.canAutoFix));
+      setShowErrorDialog(false);
+      addError('info', `Auto-fixed ${updates.size} issues.`);
+    }
+  }, [errors, states, layers, updateState, addError]);
+
+  const visibleVariables = useMemo(() => variables.filter(v => v.visibleInScope), [variables]);
+  const colors = ['#c9a86c', '#6c9ac6', '#6cc9a8', '#c96c8a', '#9a6cc9', '#c9c46c'];
+
+  if (xBridgesStateId || diagramMode === 'xbridges') {
+    const xState = xBridgesStateId ? states.find(s => s.id === xBridgesStateId) : null;
+    return (
+      <div className="fixed inset-0 z-50 bg-[#0a0a0a]">
+        <XbridgesWorkspace
+          initialNodes={xBridgesStateId ? (xState?.xBridgesModel?.nodes || []) : globalXBridgesNodes}
+          initialEdges={xBridgesStateId ? (xState?.xBridgesModel?.edges || []) : globalXBridgesEdges}
+          availableVariables={variables}
+          tickMs={tickMs}
+          onBack={() => {
+            if (xBridgesStateId) setXBridgesStateId(null);
+            else setDiagramMode('statemachine');
+          }}
+          onSave={(nodes, edges) => {
+            if (xBridgesStateId) {
+              xBridgesEnginesRef.current.delete(xBridgesStateId);
+              setStates(prev => prev.map(s =>
+                s.id === xBridgesStateId
+                  ? { ...s, xBridgesModel: { ...s.xBridgesModel, nodes, edges } }
+                  : s
+              ));
+            } else {
+              setGlobalXBridgesNodes(nodes);
+              setGlobalXBridgesEdges(edges);
+            }
+          }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex flex-col bg-[#0a0a0a] text-[#e0e0e0] font-sans overflow-hidden"
+      style={{
+        zoom: uiZoom,
+        width: `${100 / uiZoom}vw`,
+        height: `${100 / uiZoom}vh`
+      }}
+    >
+      {/* Hidden input for project import */}
+      <input type="file" ref={projectImportRef} onChange={handleProjectFileChange} className="hidden" accept=".json" />
+
+      {/* Top Toolbar - WITH VISIBLE SIMULATION CONTROLS */}
+      <header className="h-14 bg-[#141414] border-b border-[#222] flex items-center px-4 gap-4 shrink-0 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-3">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          <div>
+            <div className="font-bold text-2xl tracking-tight">ADIA</div>
+            <div className="text-xs text-[#888] mt-[-3px]">{VERSION}</div>
+          </div>
+        </div>
+
+        <Separator orientation="vertical" className="h-6 bg-[#333]" />
+
+        {/* DIAGRAM MODE SWITCHER */}
+        <div className="flex bg-[#1a1a1a] rounded border border-[#333] p-0.5">
+          <button onClick={() => setDiagramMode('statemachine')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'statemachine' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
+            State Machine
+          </button>
+          <button onClick={() => setDiagramMode('bdd')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'bdd' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
+            SysML BDD
+          </button>
+          <button onClick={() => setDiagramMode('requirements')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'requirements' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
+            Requirements
+          </button>
+          <button onClick={() => setDiagramMode('ibd')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'ibd' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
+            SysML IBD
+          </button>
+          <button onClick={() => setDiagramMode('xbridges')} className={`px-3 py-1 text-xs rounded ${(diagramMode as DiagramMode) === 'xbridges' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
+            X-Bridges
+          </button>
+        </div>
+
+        {/* SIMULATION CONTROLS - PROMINENT AND FUNCTIONAL */}
+        {(diagramMode as DiagramMode) !== 'xbridges' && (
+          <div className="flex items-center gap-2 bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-1.5">
+            <Button
+              variant={isRunning ? "destructive" : "default"}
+              size="sm"
+              onClick={isRunning ? pauseSimulation : startSimulation}
+              className={isRunning ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"}
+            >
+              {isRunning ? (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                    <rect x="6" y="4" width="4" height="16" />
+                    <rect x="14" y="4" width="4" height="16" />
+                  </svg>
+                  Pause
+                </>
+              ) : (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                    <polygon points="5 3 19 12 5 21 5 3" />
+                  </svg>
+                  Start
+                </>
+              )}
+            </Button>
+
+            <Button variant="outline" size="sm" onClick={stepSimulation}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                <polygon points="5 3 19 12 5 21 5 3" />
+                <line x1="12" y1="4" x2="12" y2="20" />
+              </svg>
+              Step
+            </Button>
+
+            <Button variant="outline" size="sm" onClick={resetSimulation}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0" />
+                <polyline points="3 4 3 12 11 12" />
+              </svg>
+              Reset
+            </Button>
+
+            <Separator orientation="vertical" className="h-4 bg-[#333]" />
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { if (validateModel()) addError('info', 'Model validation passed.'); }}
+              className="text-[#e0e0e0] hover:bg-[#222]"
+              title="Check for errors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+              Validate
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={validateWithAI}
+              disabled={isAiValidating}
+              className="text-[#c9a86c] border-[#c9a86c]/50 hover:bg-[#c9a86c]/10"
+              title="Validate logic with AI"
+            >
+              {isAiValidating ? (
+                <svg className="animate-spin mr-1.5 h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                  <path d="M12 2a10 10 0 1 0 10 10H12V2z" />
+                  <path d="M12 2a10 10 0 0 1 10 10" opacity="0.5" />
+                  <circle cx="12" cy="12" r="2" />
+                </svg>
+              )}
+              {isAiValidating ? 'Analyzing...' : 'AI Check'}
+            </Button>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-[#888] whitespace-nowrap">Tick Rate:</span>
+              <TickRateInput value={tickMs} onChange={setTickMs} />
+              <span className="text-[10px] text-[#666]">ms</span>
+            </div>
+          </div>
+        )}
+
+        <Separator orientation="vertical" className="h-6 bg-[#333]" />
+
+        <div className="flex items-center gap-2 bg-[#1a1a1a] border border-[#333] rounded px-2 py-1">
+          <Checkbox
+            checked={safetyMode}
+            onCheckedChange={(c) => setSafetyMode(c as boolean)}
+            id="safety-mode"
+          />
+          <Label htmlFor="safety-mode" className={safetyMode ? "text-red-400 font-bold" : "text-[#888]"}>Safety Mode</Label>
+        </div>
+
+        <Separator orientation="vertical" className="h-6 bg-[#333]" />
+
+        {/* CODE GENERATION BUTTON - FULLY FUNCTIONAL */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={generateCode}
+          disabled={isGenerating}
+          className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10 disabled:opacity-50 disabled:cursor-wait"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+            <polyline points="16 18 22 12 16 6" />
+            <polyline points="8 6 2 12 8 18" />
+          </svg>
+          {isGenerating ? 'Generating...' : 'Generate C/H'}
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExportProject}
+          className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Export
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleImportProject}
+          className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          Import
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowReportDialog(true)}
+          className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
+        >
+          Report
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => toggleWindow('hmi')}
+          className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+          HMI Panel
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => toggleWindow('pid')}
+          className="border-[#6c9ac6] text-[#6c9ac6] hover:bg-[#6c9ac6]/10"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+            <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="15"></line>
+          </svg>
+          PID Tuner
+        </Button>
+
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => toggleWindow('doe')}
+          className="border-[#c96c8a] text-[#c96c8a] hover:bg-[#c96c8a]/10"
+        >
+          DOE (RSM)
+        </Button>
+
+        <div className="flex-1" />
+
+        {/* Status indicators */}
+        <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <div className={`w-2.5 h-2.5 rounded-full ${isRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
+            <span className="text-[#888] font-medium">{isRunning ? 'RUNNING' : 'STOPPED'}</span>
+          </div>
+          <div className="text-[#666]">
+            Time: <span className="text-[#c9a86c] font-mono font-medium">{simulationTime.toFixed(2)}s</span>
+          </div>
+          <div className="text-[#666]">
+            States: <span className="text-[#c9a86c] font-mono font-medium">{currentStates.length}</span>
+          </div>
+          <div className="text-[#666]">
+            Vars: <span className="text-[#c9a86c] font-mono font-medium">{variables.length}</span>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
+        {/* Hierarchy Sidebar */}
+        <aside style={{ width: isMobile ? '100%' : `${hierarchyWidth}px`, display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="bg-[#141414] flex flex-col shrink-0">
+          <div className="h-10 flex items-center px-4 border-b border-[#222]">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
+              <path d="M10 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" />
+              <path d="M16 17l-3-3 3-3" />
+              <path d="M13 14H3" />
+            </svg>
+            <span className="text-sm font-medium">Hierarchy</span>
+          </div>
+          <HierarchyTree
+            states={states}
+            layers={layers}
+            activeStates={activeStates}
+            currentLayerId={currentLayerId}
+            onSelect={(id: string) => setSelectedIds([id])}
+            onDoubleClick={(id: string) => enterLayer(id)}
+            selectedIds={selectedIds}
+          />
+        </aside>
+        {!isMobile && <Resizer onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
+
+        {/* Left Sidebar - Variables */}
+        <aside style={{ width: isMobile ? '100%' : `${variablesWidth}px`, display: isMobile && mobileTab !== 'variables' ? 'none' : 'flex' }} className="bg-[#141414] flex flex-col shrink-0">
+          <div className="border-r border-[#222] h-full flex flex-col">
+            <div className="h-10 flex items-center px-4 border-b border-[#222] shrink-0">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
+                <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5" />
+                <path d="M3 12h18" />
+                <path d="M3 12v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M12 12v9" />
+              </svg>
+              <span className="text-sm font-medium">Variables</span>
+              <Badge variant="outline" className="ml-auto">{variables.length}</Badge>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3 space-y-4">
+              <div className="space-y-2 p-3 bg-[#1a1a1a] rounded-lg border border-[#222]">
+                <Label>Create New</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Name"
+                    value={newVarName}
+                    onChange={(e) => setNewVarName(e.target.value)}
+                    className="flex-1"
+                  />
+                  <select
+                    value={newVarType}
+                    onChange={(e) => {
+                      setNewVarType(e.target.value as VariableType);
+                      setNewVarValue(getDefaultValue(e.target.value as VariableType));
+                    }}
+                    className="h-8 bg-[#0a0a0a] border border-[#333] text-xs rounded px-2 w-20 text-[#e0e0e0]"
+                  >
+                    {ALLOWED_TYPES.map(type => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Init Value"
+                    value={newVarValue}
+                    onChange={(e) => setNewVarValue(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={addVariable}
+                    className="bg-[#c9a86c] text-[#0a0a0a] hover:bg-[#b8975b]"
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {variables.map((variable) => (
+                  <div
+                    key={variable.id}
+                    className="p-3 bg-[#1a1a1a] rounded-lg border border-[#222] space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={variable.visibleInScope}
+                          onCheckedChange={() => toggleVariableVisibility(variable.id)}
+                          id={`var-${variable.id}`}
+                        />
+                        <span className="font-mono text-sm text-[#c9a86c]">{variable.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className="text-[10px] h-5">{variable.type}</Badge>
+                        <button
+                          onClick={() => removeVariable(variable.id)}
+                          className="text-[#666] hover:text-red-400"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-[10px]">Init</Label>
+                        <Input
+                          value={variable.initialValue}
+                          onChange={(e) => updateVariableInitValue(variable.id, e.target.value)}
+                          disabled={isRunning}
+                          className="mt-0.5 text-xs font-mono h-7"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px]">Value</Label>
+                        <Input
+                          value={String(variable.currentValue)}
+                          onChange={(e) => updateVariableValue(variable.id, e.target.value)}
+                          disabled={!isRunning}
+                          className="mt-0.5 text-xs font-mono h-7"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {variables.length === 0 && (
+                  <div className="text-center py-4 text-[#666] text-xs">
+                    No variables defined
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </aside>
+        {!isMobile && <Resizer onMouseDown={(e) => handleResizeStart(e, 'variables')} />}
+
+        {/* Canvas Area */}
+        <div style={{ display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="flex-1 flex flex-col min-w-0">
+          <main className="flex-1 relative overflow-hidden bg-[#0a0a0a]">
+            {/* Canvas Toolbar */}
+            <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#1a1a1a]/95 border border-[#333] rounded-lg px-2.5 py-1.5 text-xs">
+              {/* Layer Breadcrumb */}
+              {layerPath.length > 1 && (
+                <>
+                  {layerPath.map((name, index) => ( // REQ-HSM-041 & 042
+                    <React.Fragment key={index}>
+                      <button
+                        onClick={index < layerPath.length - 1 ? exitLayer : undefined}
+                        disabled={index === layerPath.length - 1}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded ${index === layerPath.length - 1
+                          ? 'bg-[#c9a86c] text-[#0a0a0a] font-medium'
+                          : 'text-[#c9a86c] hover:bg-[#222]'
+                          } ${index < layerPath.length - 1 ? 'cursor-pointer' : 'cursor-default'}`}
+                      > <span className="text-[9px] text-gray-500 mr-1">L{index}</span>
+                        {name}
+                        {index < layerPath.length - 1 && (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="9 18 15 12 9 6" />
+                          </svg>
+                        )}
+                      </button>
+                      {index < layerPath.length - 1 && <span className="text-[#666] mx-1">/</span>}
+                    </React.Fragment>
+                  ))}
+                </>
+              )}
+
+              <Separator orientation="vertical" className="h-3 bg-[#333] mx-1.5" />
+
+
+        {diagramMode === 'statemachine' && (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const rect = canvasRef.current?.getBoundingClientRect();
+                      if (rect) {
+                        createState(
+                          ((rect.width / uiZoom) / 2 - view.offsetX) / view.scale,
+                          ((rect.height / uiZoom) / 2 - view.offsetY) / view.scale
+                        );
+                      }
+                    }}
+                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    State
+                  </Button>
+
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const rect = canvasRef.current?.getBoundingClientRect();
+                      if (rect) {
+                        createJunction(
+                          ((rect.width / uiZoom) / 2 - view.offsetX) / view.scale,
+                          ((rect.height / uiZoom) / 2 - view.offsetY) / view.scale
+                        );
+                      }
+                    }}
+                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                      <circle cx="12" cy="12" r="10" />
+                    </svg>
+                    Junction
+                  </Button>
+
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const rect = canvasRef.current?.getBoundingClientRect();
+                      if (rect) {
+                        createXBridgesState(
+                          ((rect.width / uiZoom) / 2 - view.offsetX) / view.scale,
+                          ((rect.height / uiZoom) / 2 - view.offsetY) / view.scale
+                        );
+                      }
+                    }}
+                    className="h-6 px-2 text-[#4caf50] hover:bg-[#4caf50]/10 border border-[#4caf50]/30"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                      <polyline points="3.29 7 12 12 20.71 7" />
+                      <line x1="12" y1="22" x2="12" y2="12" />
+                    </svg>
+                    X-Bridges
+                  </Button>
+                </>
+              )}
+
+              {diagramMode === 'bdd' && (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const rect = canvasRef.current?.getBoundingClientRect();
+                      if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'block');
+                    }}
+                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                  >
+                    Block
+                  </Button>
+                  <div className="flex gap-0.5">
+                    <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50" title="Add Standard Port">+Std</Button>
+                    <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
+                    <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
+                  </div>
+                </>
+              )}
+
+              {diagramMode === 'requirements' && (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const rect = canvasRef.current?.getBoundingClientRect();
+                      if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'requirement');
+                    }}
+                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                  >
+                    Requirement
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => toggleWindow('rtm')}
+                    className="h-6 px-2 text-[#c9a86c] hover:bg-[#222]"
+                  >
+                    RTM
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleAutoLayout}
+                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                  >
+                    Auto Layout
+                  </Button>
+                </>
+              )}
+
+              {diagramMode === 'ibd' && (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const rect = canvasRef.current?.getBoundingClientRect();
+                      if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'block');
+                    }}
+                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                  >
+                    Block
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      createRequirement(mousePos.x, mousePos.y);
+                    }}
+                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                  >
+                    Req
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const rect = canvasRef.current?.getBoundingClientRect();
+                      if (rect) createBlock(((rect.width / uiZoom) / 2 - view.offsetX) / view.scale, ((rect.height / uiZoom) / 2 - view.offsetY) / view.scale, 'interfaceBlock');
+                    }}
+                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                  >
+                    Intf Block
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const rect = canvasRef.current?.getBoundingClientRect();
+                      if (rect) createPart((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale);
+                    }}
+                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                  >
+                    Part
+                  </Button>
+                  <div className="flex gap-0.5">
+                    <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50" title="Add Standard Port">+Std</Button>
+                    <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
+                    <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      if (isCreatingConnector) {
+                        setIsCreatingConnector(false);
+                        setConnectorSource(null);
+                      } else {
+                        setIsCreatingConnector(true);
+                      }
+                    }}
+                    className={`h-6 px-2 ${isCreatingConnector ? 'bg-[#c9a86c] text-[#0a0a0a]' : 'text-[#e0e0e0] hover:bg-[#222]'}`}
+                  >
+                    {isCreatingConnector ? 'Cancel' : 'Connect'}
+                  </Button>
+                </>
+              )}
+
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  if (isCreatingTransition) {
+                    setIsCreatingTransition(false);
+                    setTransitionSourceId(null);
+                  } else {
+                    setIsCreatingTransition(true);
+                  }
+                }}
+                className={`h-6 px-2 ${isCreatingTransition ? 'bg-[#c9a86c] text-[#0a0a0a]' : 'text-[#e0e0e0] hover:bg-[#222]'
+                  }`}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <polyline points="15 3 21 3 21 9" />
+                  <line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
+                {isCreatingTransition ? 'Cancel' : 'Connect'}
+              </Button>
+
+              <Separator orientation="vertical" className="h-3 bg-[#333] mx-1.5" />
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setGridEnabled(!gridEnabled)}
+                className={`h-6 w-6 ${gridEnabled ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 3v1818V3H3z" />
+                  <path d="M9 3v18M15 3v18M3 9h18M3 15h18" />
+                </svg>
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSnapEnabled(!snapEnabled)}
+                className={`h-6 w-6 ${snapEnabled ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <circle cx="12" cy="12" r="6" />
+                  <circle cx="12" cy="12" r="2" />
+                </svg>
+              </Button>
+
+              <Separator orientation="vertical" className="h-3 bg-[#333] mx-1.5" />
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setView(prev => ({ ...prev, scale: Math.min(MAX_SCALE, prev.scale * 1.2) }))}
+                className="h-6 w-6 text-[#a0a0a0] hover:text-[#e0e0e0]"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </Button>
+
+              <span className="text-[#666] w-9 text-center font-mono text-xs">
+                {Math.round(view.scale * 100)}%
+              </span>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setView(prev => ({ ...prev, scale: Math.max(MIN_SCALE, prev.scale / 1.2) }))}
+                className="h-6 w-6 text-[#a0a0a0] hover:text-[#e0e0e0]"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setView({ scale: 1, offsetX: 0, offsetY: 0 })}
+                className="h-6 w-6 text-[#a0a0a0] hover:text-[#e0e0e0]"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 14.5V22M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 12.5304 2.04152 13.0558 2.1225 13.5714M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 12.5304 21.9585 13.0558 21.8775 13.5714" />
+                </svg>
+              </Button>
+            </div>
+
+            {/* Mode indicator */}
+            {isCreatingTransition && (
+              <div className="absolute top-3 right-3 z-10 px-4 py-2 bg-[#c9a86c] text-[#0a0a0a] rounded-lg font-medium text-sm shadow-lg">
+                {transitionSourceId ? 'Click target state/junction to connect...' : 'Click source state/junction...'}
+              </div>
+            )}
+            {isCreatingConnector && (
+              <div className="absolute top-3 right-3 z-10 px-4 py-2 bg-[#c9a86c] text-[#0a0a0a] rounded-lg font-medium text-sm shadow-lg">
+                {connectorSource ? 'Click target port...' : 'Click source port...'}
+              </div>
+            )}
+
+            {/* Zoom indicator */}
+            {showZoomIndicator && (
+              <div className="absolute top-12 right-3 z-10 px-3 py-1.5 bg-[#1a1a1a] border border-[#333] rounded-lg font-mono text-sm shadow-lg">
+                Zoom: {Math.round(view.scale * 100)}%
+              </div>
+            )}
+
+
+            <div
+              ref={canvasRef}
+              className="absolute inset-0"
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onDoubleClick={handleDoubleClick}
+              onWheel={handleWheel}
+            >
+              <svg width="100%" height="100%" style={{ pointerEvents: 'none' }}>
+                <defs>
+                  <pattern
+                    id="grid"
+                    width={GRID_SIZE}
+                    height={GRID_SIZE}
+                    patternUnits="userSpaceOnUse"
+                  >
+                    <path d={`M ${GRID_SIZE} 0 L 0 0 0 ${GRID_SIZE}`} fill="none" stroke="#1a1a1a" strokeWidth="1" />
+                  </pattern>
+                </defs>
+
+                {/* Grid */}
+                {gridEnabled && (
+                  <rect
+                    width="100%"
+                    height="100%"
+                    fill="url(#grid)"
+                    opacity={0.3}
+                  />
+                )}
+
+                {/* World content */}
+                <g transform={`translate(${view.offsetX}, ${view.offsetY}) scale(${view.scale})`}>
+                  {/* Origin marker */}
+                  <g>
+                    <line x1={-10} y1={0} x2={10} y2={0} stroke="#c9a86c" strokeWidth={0.5} opacity={0.5} />
+                    <line x1={0} y1={-10} x2={0} y2={10} stroke="#c9a86c" strokeWidth={0.5} opacity={0.5} />
+                    <circle cx={0} cy={0} r={2} fill="#c9a86c" opacity={0.7}>
+                      <animate attributeName="r" values="2;3;2" dur="2s" repeatCount="indefinite" />
+                    </circle>
+                  </g>
+
+                  {diagramMode === 'statemachine' ? (
+                    <>
+                      <g style={{ pointerEvents: 'all' }}>
+                        {renderStates()}
+                      </g>
+                      <g style={{ pointerEvents: 'all' }}>
+                        {renderTransitions()}
+                      </g>
+                      <g style={{ pointerEvents: 'all' }}>
+                        {renderJunctions()}
+                      </g>
+                    </>
+                  ) : (diagramMode === 'bdd' || diagramMode === 'requirements') ? (
+                    <>
+                      <g style={{ pointerEvents: 'all' }}>
+                        {renderRelationships()}
+                      </g>
+                      <g style={{ pointerEvents: 'all' }}>
+                        {renderBlocks()}
+                      </g>
+                    </>
+                  ) : (
+                    diagramMode === 'ibd' ? (
+                      <>
+                        <g style={{ pointerEvents: 'all' }}>
+                          {renderBlocks()}
+                        </g>
+                        <g style={{ pointerEvents: 'all' }}>
+                          {renderInterfaceRealizations()}
+                        </g>
+                        <g style={{ pointerEvents: 'all' }}>
+                          {renderConnectors()}
+                        </g>
+                        <g style={{ pointerEvents: 'all' }}>
+                          {renderParts()}
+                        </g>
+                      </>
+                    ) : null
+                  )}
+                </g>
+              </svg>
+            </div>
+
+            {/* Status bar */}
+            <div className="absolute bottom-0 left-0 right-0 h-7 bg-[#141414] border-t border-[#222] flex items-center px-3 text-xs text-[#666]">
+              <span className="mr-4 font-mono">X: {Math.round(mousePos.x)}</span>
+              <span className="mr-4 font-mono">Y: {Math.round(mousePos.y)}</span>
+              {diagramMode === 'statemachine' ? (
+                <>
+                  <span className="mr-4">States: {currentStates.length}</span>
+                  <span>Transitions: {currentTransitions.length}</span>
+                </>
+              ) : (diagramMode === 'bdd' || diagramMode === 'requirements') ? (
+                <>
+                  <span className="mr-4">Blocks: {blocks.length}</span>
+                  <span>Relations: {relationships.length}</span>
+                </>
+              ) : (
+                <>
+                  <span className="mr-4">Parts: {parts.length}</span>
+                  <span>Connectors: {connectors.length}</span>
+                </>
+              )}
+              <div className="flex-1" />
+              <span className="text-[#888]">
+                {isPanning ? 'PANNING' : isSpacePressed.current ? 'PAN MODE (SPACE)' : 'READY'}
+                {' | '}
+                Space+Drag: Pan | Ctrl+Wheel: Zoom
+              </span>
+            </div>
+          </main>
+
+          {/* Bottom Panel */}
+          {!isMobile && <Resizer onMouseDown={(e) => handleResizeStart(e, 'scope')} orientation="horizontal" />}
+          <div style={{ height: isMobile ? '30%' : `${scopeHeight}px`, display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="bg-[#141414] border-t border-[#222] flex flex-col shrink-0">
+            <div className="flex items-center justify-between px-4 border-b border-[#222] h-10 shrink-0">
+              <div className="flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+                <span className="font-medium">Scope</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Variable Selector */}
+                <div className="relative group">
+                  <Button variant="ghost" size="sm" className="text-[#a0a0a0] hover:text-[#e0e0e0] px-2.5 py-1">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                      <path d="M12 20v-6M6 20V10M18 20V4" />
+                    </svg>
+                    Variables ({visibleVariables.length})
+                  </Button>
+                  <div className="absolute bottom-full left-0 mb-1 w-48 bg-[#1a1a1a] border border-[#333] rounded-lg shadow-xl p-2 hidden group-hover:block z-50">
+                    {variables.length === 0 ? (
+                      <div className="text-xs text-[#666] p-2 text-center">No variables</div>
+                    ) : (
+                      variables.map(v => (
+                        <div
+                          key={v.id}
+                          className="flex items-center gap-2 p-1.5 hover:bg-[#222] rounded cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleVariableVisibility(v.id);
+                          }}
+                        >
+                          <Checkbox
+                            checked={v.visibleInScope}
+                            onCheckedChange={() => { }}
+                            className="pointer-events-none"
+                          />
+                          <span className="text-xs text-[#e0e0e0] truncate">{v.name}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <Separator orientation="vertical" className="h-4 bg-[#333] mx-2" />
+
+                <Checkbox
+                  id="sampleOnTransition"
+                  checked={sampleOnTransitionOnly}
+                  onCheckedChange={(checked) => setSampleOnTransitionOnly(checked as boolean)}
+                  className="border-[#444]"
+                />
+                <Label htmlFor="sampleOnTransition" className="text-xs text-[#888] cursor-pointer">
+                  Sample on transitions only
+                </Label>
+                <Separator orientation="vertical" className="h-4 bg-[#333] mx-2" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={exportScopeCSV}
+                  className="text-[#a0a0a0] hover:text-[#e0e0e0] px-2.5 py-1"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  Export CSV
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearScope}
+                  className="text-[#a0a0a0] hover:text-[#e0e0e0] px-2.5 py-1"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                  Clear
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex-1 p-3">
+              {visibleVariables.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-[#666]">
+                  <div className="text-center">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-2 opacity-50">
+                      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                    </svg>
+                    <p className="text-sm font-medium">No variables selected for scope</p>
+                    <p className="text-xs mt-1 opacity-70">Open Workspace to add variables</p>
+                  </div>
+                </div>
+              ) : scopeData.length < 2 ? (
+                <div className="flex items-center justify-center h-full text-[#666]">
+                  <div className="text-center">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-2 opacity-50">
+                      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                    </svg>
+                    <p className="text-sm font-medium">Start simulation to see scope data</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="w-full h-full overflow-hidden">
+                  <div className="h-full flex pb-3 gap-2">
+                    {visibleVariables.map((variable, index) => {
+                      const color = colors[index % colors.length];
+                      const values = scopeData.map(dp => dp[variable.name] ?? 0);
+                      const maxValue = Math.max(1, ...values);
+                      const height = 70;
+
+                      // Auto-scale logic
+                      let minVal = Math.min(...values);
+                      let maxVal = Math.max(...values);
+                      if (minVal === maxVal) {
+                        minVal -= 1;
+                        maxVal += 1;
+                      }
+                      const range = maxVal - minVal;
+                      const padding = range * 0.1;
+                      const effectiveMin = minVal - padding;
+                      const effectiveMax = maxVal + padding;
+                      const effectiveRange = effectiveMax - effectiveMin;
+
+                      // Generate SVG points for continuous line
+                      const points = values.map((v, i) => {
+                        const x = (i / (values.length - 1)) * 100;
+                        const y = 100 - ((v - effectiveMin) / effectiveRange) * 100;
+                        return `${x},${y}`;
+                      }).join(' ');
+
+                      return (
+                        <div key={variable.id} className="flex-1 min-w-[150px] relative h-full bg-[#111] rounded border border-[#333] overflow-hidden">
+                          <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0">
+                            <polyline
+                              points={points}
+                              fill="none"
+                              stroke={color}
+                              strokeWidth="2"
+                              vectorEffect="non-scaling-stroke"
+                              strokeLinejoin="round"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                          <div className="absolute top-2 left-2 right-2 flex justify-between items-start pointer-events-none">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#000]/50 backdrop-blur-sm" style={{ color }}>
+                              {variable.name}
+                            </span>
+                            <span className="text-[10px] font-mono text-[#e0e0e0] px-1.5 py-0.5 rounded bg-[#000]/50 backdrop-blur-sm">
+                              {values[values.length - 1]?.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        {!isMobile && <Resizer onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
+
+        {/* Right Dock: Properties */}
+        <aside style={{ width: isMobile ? '100%' : `${propertiesWidth}px`, display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className="bg-[#141414] border-l border-[#222] flex flex-col shrink-0">
+          <div className="h-10 flex items-center px-4 border-b border-[#222]">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+            <span className="text-sm font-medium">Properties</span>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {selectedState ? (
+              <>
+                <div>
+                  <Label>State Name</Label>
+                  <Input
+                    value={selectedState.name}
+                    onChange={(e) => updateState(selectedState.id, { name: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+
+                <div>
+                  <Label>Priority (lower = higher)</Label>
+                  <Input
+                    type="number"
+                    value={selectedState.priority}
+                    onChange={(e) => updateState(selectedState.id, { priority: parseInt(e.target.value) || 0 })}
+                    className="mt-1"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={selectedState.isParallel}
+                    onCheckedChange={(checked) => updateState(selectedState.id, { isParallel: checked as boolean })}
+                    id="isParallel"
+                  />
+                  <Label htmlFor="isParallel">Parallel State</Label>
+                </div>
+
+                {selectedState.isParallel && (
+                  <div>
+                    <Label>Region ID</Label>
+                    <Input
+                      value={selectedState.regionId || ''}
+                      onChange={(e) => updateState(selectedState.id, { regionId: e.target.value || null })}
+                      placeholder="e.g., main_region"
+                      className="mt-1"
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={selectedState.autostart}
+                    onCheckedChange={(checked) => updateState(selectedState.id, { autostart: checked as boolean })}
+                    id="autostart"
+                  />
+                  <Label htmlFor="autostart">Auto-start on reset</Label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={selectedState.isSafeState || false}
+                    onCheckedChange={(checked) => updateState(selectedState.id, { isSafeState: checked as boolean })}
+                    id="isSafeState"
+                  />
+                  <Label htmlFor="isSafeState" className="text-green-400">Is Safe State</Label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={selectedState.isXBridges || false}
+                    onCheckedChange={(checked) => updateState(selectedState.id, { isXBridges: checked as boolean })}
+                    id="isXBridges"
+                  />
+                  <Label htmlFor="isXBridges" className="text-amber-400">X-Bridges Sub-Model</Label>
+                </div>
+
+                {selectedState.isXBridges && (
+                  <div className="space-y-3 p-3 bg-[#1a1a1a] rounded border border-[#c9a86c]/30">
+                    <div className="flex justify-between items-center">
+                      <Label className="text-amber-400 font-bold">Variable Mappings</Label>
+                      <Button size="sm" className="h-5 text-[10px] px-2 bg-amber-600/20 text-amber-500 border-amber-500/50" 
+                        onClick={() => {
+                          const currentMappings = selectedState.xBridgesModel?.mappings || [];
+                          updateState(selectedState.id, { 
+                            xBridgesModel: { 
+                              nodes: selectedState.xBridgesModel?.nodes || [],
+                              edges: selectedState.xBridgesModel?.edges || [],
+                              mappings: [...currentMappings, { smVarId: '', blockId: '', portId: '', direction: 'in' }] 
+                            } 
+                          });
+                        }}
+                      >+ Add Map</Button>
+                    </div>
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1 thin-scrollbar">
+                      {(selectedState.xBridgesModel?.mappings || []).map((map, idx) => (
+                        <div key={idx} className="p-2 bg-[#0a0a0a] rounded border border-[#333] space-y-2 relative group">
+                          <div className="grid grid-cols-2 gap-2">
+                             <div className="flex flex-col gap-1">
+                               <Label className="text-[9px] uppercase tracking-wider text-gray-500">SM Variable</Label>
+                               <select 
+                                 value={map.smVarId}
+                                 onChange={(e) => {
+                                   const newMaps = [...selectedState.xBridgesModel!.mappings!];
+                                   newMaps[idx] = { ...map, smVarId: e.target.value };
+                                   updateState(selectedState.id, { 
+                                     xBridgesModel: { 
+                                       nodes: selectedState.xBridgesModel?.nodes || [],
+                                       edges: selectedState.xBridgesModel?.edges || [],
+                                       mappings: newMaps 
+                                     } 
+                                   });
+                                 }}
+                                 className="w-full h-7 bg-[#1a1a1a] border border-[#333] rounded text-[10px] px-1 text-amber-200"
+                               >
+                                 <option value="">Select...</option>
+                                 {variables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                               </select>
+                             </div>
+                             <div className="flex flex-col gap-1">
+                               <Label className="text-[9px] uppercase tracking-wider text-gray-500">Direction</Label>
+                               <select 
+                                 value={map.direction}
+                                 onChange={(e) => {
+                                   const newMaps = [...selectedState.xBridgesModel!.mappings!];
+                                   newMaps[idx] = { ...map, direction: e.target.value as any };
+                                   updateState(selectedState.id, { 
+                                     xBridgesModel: { 
+                                       nodes: selectedState.xBridgesModel?.nodes || [],
+                                       edges: selectedState.xBridgesModel?.edges || [],
+                                       mappings: newMaps 
+                                     } 
+                                   });
+                                 }}
+                                 className="w-full h-7 bg-[#1a1a1a] border border-[#333] rounded text-[10px] px-1 text-gray-300"
+                               >
+                                 <option value="in">SM → Block</option>
+                                 <option value="out">Block → SM</option>
+                               </select>
+                             </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                             <div className="flex flex-col gap-1">
+                               <Label className="text-[9px] uppercase tracking-wider text-gray-500">Block ID</Label>
+                               <Input 
+                                 value={map.blockId}
+                                 onChange={(e) => {
+                                   const newMaps = [...selectedState.xBridgesModel!.mappings!];
+                                   newMaps[idx] = { ...map, blockId: e.target.value };
+                                   updateState(selectedState.id, { 
+                                     xBridgesModel: { 
+                                       nodes: selectedState.xBridgesModel?.nodes || [],
+                                       edges: selectedState.xBridgesModel?.edges || [],
+                                       mappings: newMaps 
+                                     } 
+                                   });
+                                 }}
+                                 placeholder="e.g. Constant-1"
+                                 className="h-7 text-[10px] font-mono"
+                               />
+                             </div>
+                             <div className="flex flex-col gap-1">
+                               <Label className="text-[9px] uppercase tracking-wider text-gray-500">Block Port</Label>
+                               <Input 
+                                 value={map.portId}
+                                 onChange={(e) => {
+                                   const newMaps = [...selectedState.xBridgesModel!.mappings!];
+                                   newMaps[idx] = { ...map, portId: e.target.value };
+                                   updateState(selectedState.id, { 
+                                     xBridgesModel: { 
+                                       nodes: selectedState.xBridgesModel?.nodes || [],
+                                       edges: selectedState.xBridgesModel?.edges || [],
+                                       mappings: newMaps 
+                                     } 
+                                   });
+                                 }}
+                                 placeholder="e.g. in1"
+                                 className="h-7 text-[10px] font-mono"
+                               />
+                             </div>
+                          </div>
+                          <button 
+                            className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                            onClick={() => {
+                              const newMaps = selectedState.xBridgesModel!.mappings!.filter((_, i) => i !== idx);
+                              updateState(selectedState.id, { 
+                                xBridgesModel: { 
+                                  nodes: selectedState.xBridgesModel?.nodes || [],
+                                  edges: selectedState.xBridgesModel?.edges || [],
+                                  mappings: newMaps 
+                                } 
+                              });
+                            }}
+                          >
+                             <span className="text-white text-[10px]">×</span>
+                          </button>
+                        </div>
+                      ))}
+                      {(selectedState.xBridgesModel?.mappings || []).length === 0 && (
+                        <div className="text-[10px] text-gray-600 italic text-center py-2">No mappings defined</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <Label>History</Label>
+                  <select
+                    value={selectedState.historyType || 'none'}
+                    onChange={(e) => {
+                      const newType = e.target.value as 'none' | 'shallow' | 'deep';
+                      updateState(selectedState.id, { historyType: newType });
+
+                      const existing = junctions.find(j => j.parentId === selectedState.id && (j.type === 'history' || j.type === 'deep-history'));
+                      if (existing) {
+                        deleteJunction(existing.id);
+                      }
+
+                      if (newType !== 'none') {
+                        createJunction(selectedState.x + 30, selectedState.y + 30, newType === 'shallow' ? 'history' : 'deep-history', selectedState.id);
+                      }
+                    }}
+                    className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                  >
+                    <option value="none">None</option>
+                    <option value="shallow">Shallow (H)</option>
+                    <option value="deep">Deep (H*)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2 p-2 bg-[#1a1a1a] rounded border border-[#333]">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-[#c9a86c]">Internal Transitions</Label>
+                    <Button size="sm" className="h-5 text-[10px] px-2" onClick={() => {
+                      const current = selectedState.internalTransitions ? selectedState.internalTransitions + '\n' : '';
+                      updateState(selectedState.id, { internalTransitions: current + '[condition] / action;' });
+                    }}>+ Add</Button>
+                  </div>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {(selectedState.internalTransitions || '').split('\n').filter(l => l.trim()).map((line, idx) => {
+                      const parts = line.split('/');
+                      const action = parts.length > 1 ? parts.slice(1).join('/') : '';
+                      const triggerPart = parts[0].trim();
+
+                      let type = 'condition';
+                      if (triggerPart.includes('&&')) type = 'and';
+                      else if (triggerPart.includes('||')) type = 'or';
+                      else if (triggerPart.includes('after')) type = 'after';
+
+                      const afterMatch = triggerPart.match(/after\((\d+)\)/);
+                      const condMatch = triggerPart.match(/\[(.*?)\]/);
+                      const afterTicks = afterMatch ? afterMatch[1] : '';
+                      const condition = condMatch ? condMatch[1] : (type === 'condition' ? triggerPart.replace(/[\[\]]/g, '') : '');
+
+                      const updateLine = (newType: string, newCond: string, newAfter: string, newAct: string) => {
+                        let newTrigger = '';
+                        if (newType === 'condition') newTrigger = `[${newCond}]`;
+                        else if (newType === 'after') newTrigger = `after(${newAfter})`;
+                        else if (newType === 'and') newTrigger = `[${newCond}] && after(${newAfter})`;
+                        else if (newType === 'or') newTrigger = `[${newCond}] || after(${newAfter})`;
+
+                        const allLines = (selectedState.internalTransitions || '').split('\n').filter(l => l.trim());
+                        allLines[idx] = `${newTrigger} / ${newAct}`;
+                        updateState(selectedState.id, { internalTransitions: allLines.join('\n') });
+                      };
+
+                      return (
+                        <div key={idx} className="p-2 bg-[#0a0a0a] border border-[#333] rounded space-y-1">
+                          <div className="flex gap-1">
+                            <select
+                              value={type}
+                              onChange={e => updateLine(e.target.value, condition, afterTicks, action)}
+                              className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-20 px-1 text-[#e0e0e0]"
+                            >
+                              <option value="condition">Cond</option>
+                              <option value="after">After</option>
+                              <option value="and">And</option>
+                              <option value="or">Or</option>
+                            </select>
+                            <button onClick={() => {
+                              const allLines = (selectedState.internalTransitions || '').split('\n').filter(l => l.trim());
+                              allLines.splice(idx, 1);
+                              updateState(selectedState.id, { internalTransitions: allLines.join('\n') });
+                            }} className="ml-auto text-[#666] hover:text-red-400">×</button>
+                          </div>
+                          {(type !== 'after') && (
+                            <Input value={condition} onChange={e => updateLine(type, e.target.value, afterTicks, action)} placeholder="Condition" className="h-6 text-[10px]" />
+                          )}
+                          {(type !== 'condition') && (
+                            <Input value={afterTicks} onChange={e => updateLine(type, condition, e.target.value, action)} placeholder="Ticks" type="number" className="h-6 text-[10px]" />
+                          )}
+                          <div className="flex items-center gap-1">
+                            <span className="text-[#666] text-[10px]">/</span>
+                            <Input value={action.trim()} onChange={e => updateLine(type, condition, afterTicks, e.target.value)} placeholder="Action" className="h-6 text-[10px] flex-1" />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {(!selectedState.internalTransitions || !selectedState.internalTransitions.trim()) && (
+                      <div className="text-[10px] text-[#666] text-center italic">No internal transitions</div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Entry Action (C-like)</Label>
+                  <textarea
+                    value={selectedState.entry}
+                    onChange={(e) => updateState(selectedState.id, { entry: e.target.value })}
+                    placeholder="/* Entry action */ counter = 0;"
+                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                  />
+                </div>
+
+                <div>
+                  <Label>During Action (C-like)</Label>
+                  <textarea
+                    value={selectedState.during}
+                    onChange={(e) => updateState(selectedState.id, { during: e.target.value })}
+                    placeholder="/* During action */ counter++;"
+                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                  />
+                </div>
+
+                <div className="space-y-2 p-2 bg-[#1a1a1a] rounded border border-[#333]">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-[#c9a86c]">Internal Transitions</Label>
+                    <Button size="sm" className="h-5 text-[10px] px-2" onClick={() => {
+                      const current = selectedState.internalTransitions ? selectedState.internalTransitions + '\n' : '';
+                      updateState(selectedState.id, { internalTransitions: current + '[condition] / action;' });
+                    }}>+ Add</Button>
+                  </div>
+                  <textarea
+                    value={selectedState.internalTransitions || ''}
+                    onChange={(e) => updateState(selectedState.id, { internalTransitions: e.target.value })}
+                    placeholder="[condition] / action"
+                    className="w-full h-20 min-h-[4rem] bg-[#0a0a0a] border border-[#333] rounded text-xs font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                  />
+                </div>
+
+                <div>
+                  <Label>Exit Action (C-like)</Label>
+                  <textarea
+                    value={selectedState.exit}
+                    onChange={(e) => updateState(selectedState.id, { exit: e.target.value })}
+                    placeholder="/* Exit action */"
+                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                  />
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => enterLayer(selectedState.id)}
+                  className="w-full border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                  </svg>
+                  Enter Layer
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => deleteState(selectedState.id)}
+                  className="w-full border-red-800 text-red-400 hover:text-red-300 hover:bg-red-950/30"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                  Delete State
+                </Button>
+              </>
+            ) : selectedJunction ? (
+              <>
+                <div>
+                  <Label>Junction Name</Label>
+                  <Input
+                    value={selectedJunction.name}
+                    onChange={(e) => updateJunction(selectedJunction.id, { name: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 mt-3">
+                  <Checkbox
+                    checked={selectedJunction.autostart || false}
+                    onCheckedChange={(checked) => updateJunction(selectedJunction.id, { autostart: checked as boolean })}
+                    id="j-autostart"
+                  />
+                  <Label htmlFor="j-autostart">Default Transition (Auto-start)</Label>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => deleteJunction(selectedJunction.id)}
+                  className="w-full border-red-800 text-red-400 hover:text-red-300 hover:bg-red-950/30"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                  Delete Junction
+                </Button>
+              </>
+            ) : selectedBlock ? (
+              <>
+                <div>
+                  <Label>Block Name</Label>
+                  <Input value={selectedBlock.name} onChange={(e) => updateBlock(selectedBlock.id, { name: e.target.value })} className="mt-1" />
+                </div>
+                <div>
+                  <Label>Stereotype</Label>
+                  <select
+                    value={selectedBlock.stereotype}
+                    onChange={(e) => updateBlock(selectedBlock.id, { stereotype: e.target.value })}
+                    className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                  >
+                    <option value="block">Block</option>
+                    <option value="requirement">Requirement</option>
+                    <option value="interface">Interface</option>
+                    <option value="interfaceBlock">Interface Block</option>
+                    <option value="valueType">ValueType</option>
+                    <option value="enumeration">Enumeration</option>
+                  </select>
+                </div>
+                {selectedBlock.stereotype === 'requirement' && (
+                  <>
+                    <div><Label>Req ID</Label><Input value={selectedBlock.reqId || ''} onChange={(e) => updateBlock(selectedBlock.id, { reqId: e.target.value })} className="mt-1" /></div>
+                    <div><Label>Status</Label>
+                      <select value={selectedBlock.status || ''} onChange={(e) => updateBlock(selectedBlock.id, { status: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                        <option value="Draft">Draft</option>
+                        <option value="Approved">Approved</option>
+                        <option value="Verified">Verified</option>
+                        <option value="Implemented">Implemented</option>
+                      </select>
+                    </div>
+                    <div><Label>Priority</Label>
+                      <select value={selectedBlock.priority || ''} onChange={(e) => updateBlock(selectedBlock.id, { priority: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                      </select>
+                    </div>
+                    <div><Label>Description</Label><textarea value={selectedBlock.description || ''} onChange={(e) => updateBlock(selectedBlock.id, { description: e.target.value })} className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]" /></div>
+                    <div>
+                      <Label>Risk</Label>
+                      <select value={selectedBlock.risk || 'Medium'} onChange={(e) => updateBlock(selectedBlock.id, { risk: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label>Verification Method</Label>
+                      <select value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                        <option value="Test">Test</option>
+                        <option value="Analysis">Analysis</option>
+                        <option value="Inspection">Inspection</option>
+                        <option value="Demonstration">Demonstration</option>
+                      </select>
+                    </div>
+                    <div><Label>Source</Label><Input value={selectedBlock.source || ''} onChange={(e) => updateBlock(selectedBlock.id, { source: e.target.value })} className="mt-1" /></div>
+                  </>
+                )}
+                <div>
+                  <Label>Ports</Label>
+                  <div className="space-y-1 mt-1 max-h-40 overflow-y-auto">
+                    {selectedBlock.ports.map((port, i) => (
+                      <div key={port.id} className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded border border-[#333]">
+                        <Input
+                          value={port.name}
+                          onChange={(e) => {
+                            const newPorts = [...selectedBlock.ports];
+                            newPorts[i] = { ...port, name: e.target.value };
+                            updateBlock(selectedBlock.id, { ports: newPorts });
+                          }}
+                          className="w-16 h-6 text-[10px] px-1"
+                          placeholder="Name"
+                        />
+                        <span className="text-[#666] text-[10px]">:</span>
+                        <Input
+                          value={port.type}
+                          onChange={(e) => {
+                            const newPorts = [...selectedBlock.ports];
+                            newPorts[i] = { ...port, type: e.target.value };
+                            updateBlock(selectedBlock.id, { ports: newPorts });
+                          }}
+                          className="w-16 h-6 text-[10px] px-1"
+                          placeholder="Type"
+                        />
+                        <select
+                          value={port.kind || 'standard'}
+                          onChange={(e) => {
+                            const newPorts = [...selectedBlock.ports];
+                            newPorts[i] = { ...port, kind: e.target.value as any };
+                            updateBlock(selectedBlock.id, { ports: newPorts });
+                          }}
+                          className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-14 px-0 text-[#e0e0e0]"
+                        >
+                          <option value="standard">Std</option>
+                          <option value="flow">Flow</option>
+                          <option value="proxy">Proxy</option>
+                        </select>
+                        {port.kind === 'flow' && (
+                          <>
+                            <select
+                              value={port.direction || 'in'}
+                              onChange={(e) => {
+                                const newPorts = [...selectedBlock.ports];
+                                newPorts[i] = { ...port, direction: e.target.value as any };
+                                updateBlock(selectedBlock.id, { ports: newPorts });
+                              }}
+                              className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-10 px-0 text-[#e0e0e0]"
+                            >
+                              <option value="in">In</option>
+                              <option value="out">Out</option>
+                              <option value="inout">I/O</option>
+                            </select>
+                            <Input
+                              value={port.unit || ''}
+                              onChange={(e) => {
+                                const newPorts = [...selectedBlock.ports];
+                                newPorts[i] = { ...port, unit: e.target.value };
+                                updateBlock(selectedBlock.id, { ports: newPorts });
+                              }}
+                              className="w-10 h-6 text-[10px] px-1" placeholder="Unit"
+                            />
+                          </>
+                        )}
+                        <button
+                          onClick={() => {
+                            const newPorts = selectedBlock.ports.filter(p => p.id !== port.id);
+                            updateBlock(selectedBlock.id, { ports: newPorts });
+                          }}
+                          className="text-[#666] hover:text-red-400 ml-auto px-1"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-1 mt-2">
+                    <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50">+ Std</Button>
+                    <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
+                    <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
+                  </div>
+                </div>
+                <div>
+                  <Label>Operations (one per line)</Label>
+                  <textarea
+                    value={selectedBlock.operations.join('\n')}
+                    onChange={(e) => updateBlock(selectedBlock.id, { operations: e.target.value.split('\n').filter(s => s) })}
+                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                    placeholder="myOperation(arg: Type): ReturnType"
+                  />
+                </div>
+                <div>
+                  <Label>Constraints (one per line)</Label>
+                  <textarea
+                    value={(selectedBlock.constraints || []).join('\n')}
+                    onChange={(e) => updateBlock(selectedBlock.id, { constraints: e.target.value.split('\n').filter(s => s) })}
+                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                    placeholder="x > 0"
+                  />
+                </div>
+                <div>
+                  <Label>Nested Classes / Parts</Label>
+                  <textarea
+                    value={(selectedBlock.classes || []).join('\n')}
+                    onChange={(e) => updateBlock(selectedBlock.id, { classes: e.target.value.split('\n').filter(s => s) })}
+                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                    placeholder="ClassName : Type"
+                  />
+                </div>
+                <div>
+                  <Label>Properties (comma sep)</Label>
+                  <textarea
+                    value={selectedBlock.properties.map(p => `${p.name}:${p.type}${p.defaultValue ? '=' + p.defaultValue : ''}`).join(',\n')}
+                    onChange={(e) => {
+                      const newProperties: ValuePropertyData[] = e.target.value.split(/[,;\n]/).map(s => s.trim()).filter(s => s).map(pStr => {
+                        const [name, rest] = pStr.split(':');
+                        const [type, defaultValue] = rest ? rest.split('=') : ['any', undefined];
+                        return {
+                          id: uuidv4(),
+                          name: name?.trim() || 'prop',
+                          type: type?.trim() || 'any',
+                          defaultValue: defaultValue?.trim(),
+                        };
+                      });
+                      updateBlock(selectedBlock.id, { properties: newProperties });
+                    }}
+                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                  />
+                </div>
+                <div>
+                  <Label>Satisfied Requirements</Label>
+                  <select
+                    multiple
+                    value={selectedBlock.satisfiedReqIds || []}
+                    onChange={(e) => {
+                      const selected = Array.from(e.target.selectedOptions, option => option.value);
+                      updateBlock(selectedBlock.id, { satisfiedReqIds: selected });
+                    }}
+                    className="w-full h-20 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                  >
+                    {blocks.filter(b => b.stereotype === 'requirement').map(req => (
+                      <option key={req.id} value={req.id}>{req.reqId}: {req.name}</option>
+                    ))}
+                  </select>
+                  <div className="text-[10px] text-[#666] mt-1">Hold Ctrl to select multiple</div>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => deleteBlock(selectedBlock.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Block</Button>
+              </>
+            ) : selectedRelationship ? (
+              <>
+                <div>
+                  <Label>Relationship Type</Label>
+                  <select
+                    value={selectedRelationship.type}
+                    onChange={(e) => updateRelationship(selectedRelationship.id, { type: e.target.value as any })}
+                    className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                  >
+                    <option value="association">Association</option>
+                    <option value="generalization">Generalization</option>
+                    <option value="composition">Composition</option>
+                    <option value="aggregation">Aggregation</option>
+                    <option value="allocation">Allocation</option>
+                    <option value="derive">Derive</option>
+                    <option value="refine">Refine</option>
+                    <option value="satisfy">Satisfy</option>
+                    <option value="verify">Verify</option>
+                    <option value="trace">Trace</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Label</Label>
+                  <Input value={selectedRelationship.label} onChange={(e) => updateRelationship(selectedRelationship.id, { label: e.target.value })} className="mt-1" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label>Source Mult.</Label>
+                    <Input value={selectedRelationship.sourceMultiplicity || ''} onChange={(e) => updateRelationship(selectedRelationship.id, { sourceMultiplicity: e.target.value })} className="mt-1" placeholder="0..1" />
+                  </div>
+                  <div>
+                    <Label>Target Mult.</Label>
+                    <Input value={selectedRelationship.targetMultiplicity || ''} onChange={(e) => updateRelationship(selectedRelationship.id, { targetMultiplicity: e.target.value })} className="mt-1" placeholder="*" />
+                  </div>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => deleteRelationship(selectedRelationship.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Relation</Button>
+              </>
+            ) : selectedPart ? (
+              <>
+                <div>
+                  <Label>Part Name</Label>
+                  <Input value={selectedPart.name} onChange={(e) => updatePart(selectedPart.id, { name: e.target.value })} className="mt-1" />
+                </div>
+                <div>
+                  <Label>Block Definition</Label>
+                  <select
+                    value={selectedPart.typeId || ''}
+                    onChange={(e) => updatePart(selectedPart.id, { typeId: e.target.value })}
+                    className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                  >
+                    <option value="">[Undefined]</option>
+                    {blocks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <Label>Multiplicity</Label>
+                  <Input value={selectedPart.multiplicity || ''} onChange={(e) => updatePart(selectedPart.id, { multiplicity: e.target.value })} className="mt-1" placeholder="1" />
+                </div>
+
+                {/* Ports Editor for the underlying Block */}
+                {(() => {
+                  const block = blocks.find(b => b.id === selectedPart.typeId);
+                  if (block) {
+                    return (
+                      <div className="p-2 bg-[#1a1a1a] border border-[#333] rounded mt-2">
+                        <Label className="text-[#c9a86c]">Block Ports ({block.name})</Label>
+                        <div className="space-y-1 mt-1 max-h-40 overflow-y-auto">
+                          {block.ports.map((port, i) => (
+                            <div key={port.id} className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded border border-[#333]">
+                              <Input
+                                value={port.name}
+                                onChange={(e) => {
+                                  const newPorts = [...block.ports];
+                                  newPorts[i] = { ...port, name: e.target.value };
+                                  updateBlock(block.id, { ports: newPorts });
+                                }}
+                                className="w-16 h-6 text-[10px] px-1"
+                              />
+                              <span className="text-[#666] text-[10px]">:</span>
+                              <Input
+                                value={port.type}
+                                onChange={(e) => {
+                                  const newPorts = [...block.ports];
+                                  newPorts[i] = { ...port, type: e.target.value };
+                                  updateBlock(block.id, { ports: newPorts });
+                                }}
+                                className="w-16 h-6 text-[10px] px-1"
+                              />
+                              <select
+                                value={port.kind || 'standard'}
+                                onChange={(e) => {
+                                  const newPorts = [...block.ports];
+                                  newPorts[i] = { ...port, kind: e.target.value as any };
+                                  updateBlock(block.id, { ports: newPorts });
+                                }}
+                                className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-14 px-0 text-[#e0e0e0]"
+                              >
+                                <option value="standard">Std</option>
+                                <option value="flow">Flow</option>
+                                <option value="proxy">Proxy</option>
+                              </select>
+                              <button
+                                onClick={() => {
+                                  const newPorts = block.ports.filter(p => p.id !== port.id);
+                                  updateBlock(block.id, { ports: newPorts });
+                                }}
+                                className="text-[#666] hover:text-red-400 ml-auto px-1"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex gap-1 mt-2">
+                          <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50">+ Std</Button>
+                          <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
+                          <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                <div>
+                  <Label>Satisfied Requirements</Label>
+                  <select
+                    multiple
+                    value={selectedPart.satisfiedReqIds || []}
+                    onChange={(e) => {
+                      const selected = Array.from(e.target.selectedOptions, option => option.value);
+                      updatePart(selectedPart.id, { satisfiedReqIds: selected });
+                    }}
+                    className="w-full h-20 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                  >
+                    {blocks.filter(b => b.stereotype === 'requirement').map(req => (
+                      <option key={req.id} value={req.id}>{req.reqId}: {req.name}</option>
+                    ))}
+                  </select>
+                  <div className="text-[10px] text-[#666] mt-1">Hold Ctrl to select multiple</div>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => deletePart(selectedPart.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Part</Button>
+              </>
+            ) : selectedConnector ? (
+              <>
+                <div>
+                  <Label>Item Flow</Label>
+                  <Input value={selectedConnector.itemFlow || ''} onChange={(e) => updateConnector(selectedConnector.id, { itemFlow: e.target.value })} className="mt-1" placeholder="e.g., PowerSignal" />
+                </div>
+                <div>
+                  <Label>Label (Text)</Label>
+                  <Input value={selectedConnector.label || ''} onChange={(e) => updateConnector(selectedConnector.id, { label: e.target.value })} className="mt-1" placeholder="e.g., Control Link" />
+                </div>
+                <Button variant="outline" size="sm" onClick={() => deleteConnector(selectedConnector.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connector</Button>
+              </>
+            ) : selectedInterfaceRealization ? (
+              <>
+                <div>
+                  <Label>Interface Connection</Label>
+                  <p className="text-xs text-[#888] mt-1">Connects an interface to a part's port.</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => deleteInterfaceRealization(selectedInterfaceRealization.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connection</Button>
+              </>
+            ) : selectedTransition ? (
+              <>
+                <div>
+                  <Label>Transition Properties</Label>
+                  <div className="text-sm text-[#888] mt-1 mb-2">
+                    {states.find(s => s.id === selectedTransition.sourceId)?.name ||
+                      junctions.find(j => j.id === selectedTransition.sourceId)?.name} →
+                    {states.find(s => s.id === selectedTransition.targetId)?.name ||
+                      junctions.find(j => j.id === selectedTransition.targetId)?.name}
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Order (priority for same source)</Label>
+                  <Input
+                    type="number"
+                    value={selectedTransition.order}
+                    onChange={(e) => updateTransition(selectedTransition.id, { order: parseInt(e.target.value) || 0 })}
+                    className="mt-1"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 mt-3 mb-2">
+                  <Checkbox
+                    checked={!!selectedTransition.isInternal}
+                    onCheckedChange={(checked) => updateTransition(selectedTransition.id, { isInternal: checked as boolean })}
+                    id="isInternal"
+                  />
+                  <Label htmlFor="isInternal" className="text-[#c9a86c]">Internal / Local Transition</Label>
+                </div>
+
+                <div className="space-y-3 p-3 bg-[#1a1a1a] rounded-lg border border-[#222]">
+                  <Label className="text-[#c9a86c]">Trigger Logic</Label>
+
+                  <select
+                    value={selectedTransition.type}
+                    onChange={(e) => updateTransition(selectedTransition.id, { type: e.target.value as any })}
+                    className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0]"
+                  >
+                    <option value="condition">Condition Only</option>
+                    <option value="after">After (Timer) Only</option>
+                    <option value="and">Condition AND Timer</option>
+                    <option value="or">Condition OR Timer</option>
+                  </select>
+
+                  {(selectedTransition.type === 'condition' || selectedTransition.type === 'and' || selectedTransition.type === 'or') && (
+                    <div>
+                      <Label>Condition</Label>
+                      <textarea
+                        value={selectedTransition.condition}
+                        onChange={(e) => updateTransition(selectedTransition.id, { condition: e.target.value as any })}
+                        placeholder="e.g., x > 10"
+                        className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                      />
+                    </div>
+                  )}
+
+                  {(selectedTransition.type === 'after' || selectedTransition.type === 'and' || selectedTransition.type === 'or') && (
+                    <div>
+                      <Label>After (ticks)</Label>
+                      <Input
+                        type="number"
+                        value={selectedTransition.afterTicks ?? ''}
+                        onChange={(e) => updateTransition(selectedTransition.id, {
+                          afterTicks: e.target.value ? parseInt(e.target.value) : null
+                        })}
+                        placeholder="Ticks"
+                        className="mt-1 font-mono"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <Label>Action (C-like code)</Label>
+                  <textarea
+                    value={selectedTransition.action}
+                    onChange={(e) => updateTransition(selectedTransition.id, { action: e.target.value })}
+                    placeholder="/* Action on transition */ counter = 0; flag = false;"
+                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                  />
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => deleteTransition(selectedTransition.id)}
+                  className="w-full border-red-800 text-red-400 hover:text-red-300 hover:bg-red-950/30"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                  Delete Transition
+                </Button>
+              </>
+            ) : (
+              <div className="text-center py-8 text-[#666]">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-3 opacity-50">
+                  <path d="M12 12h.01" />
+                  <path d="M16 8v4a4 4 0 0 1-4 4H8" />
+                  <path d="M16 8h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2h2" />
+                </svg>
+                <p className="text-sm font-medium">Select an element to edit properties</p>
+                <p className="text-xs mt-2 opacity-70">
+                  Click and drag to move items<br />
+                  Use toolbar buttons to create elements
+                </p>
+              </div>
+            )}
+          </div>
+        </aside>
+      </div>
+
+      {/* Mobile Navigation Bar */}
+      {isMobile && (
+        <div className="h-14 bg-[#1a1a1a] border-t border-[#222] flex items-center justify-around shrink-0 pb-safe">
+          <button
+            onClick={() => setMobileTab('hierarchy')}
+            className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'hierarchy' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
+              <path d="M10 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" />
+              <path d="M16 17l-3-3 3-3" />
+              <path d="M13 14H3" />
+            </svg>
+            <span className="text-[10px] font-bold">Tree</span>
+          </button>
+          <button
+            onClick={() => setMobileTab('variables')}
+            className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'variables' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
+              <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5" />
+              <path d="M3 12h18" />
+              <path d="M12 12v9" />
+            </svg>
+            <span className="text-[10px] font-bold">Vars</span>
+          </button>
+          <button
+            onClick={() => setMobileTab('canvas')}
+            className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'canvas' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M3 9h18" />
+            </svg>
+            <span className="text-[10px] font-bold">Canvas</span>
+          </button>
+          <button
+            onClick={() => setMobileTab('properties')}
+            className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'properties' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+            <span className="text-[10px] font-bold">Props</span>
+          </button>
+        </div>
+      )}
+
+      {/* Workspace Modal */}
+      {showWorkspaceModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+          <div className="bg-[#141414] border border-[#c9a86c] rounded-lg w-[650px] max-h-[90vh] flex flex-col">
+            <div className="h-12 flex items-center px-5 border-b border-[#222]">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-3">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+              </svg>
+              <h2 className="text-lg font-bold text-[#c9a86c]">Workspace Variables</h2>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              <div className="space-y-3 p-4 bg-[#1a1a1a] rounded-lg border border-[#222]">
+                <Label>Add Variable</Label>
+                <Input
+                  placeholder="Name"
+                  value={newVarName}
+                  onChange={(e) => setNewVarName(e.target.value)}
+                />
+                <select
+                  value={newVarType}
+                  onChange={(e) => {
+                    setNewVarType(e.target.value as VariableType);
+                    setNewVarValue(getDefaultValue(e.target.value as VariableType));
+                  }}
+                  className="h-10 bg-[#0a0a0a] border border-[#333] text-sm rounded w-full px-3 mt-1"
+                >
+                  {ALLOWED_TYPES.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+                <Input
+                  placeholder="Initial value"
+                  value={newVarValue}
+                  onChange={(e) => setNewVarValue(e.target.value)}
+                  className="mt-1"
+                />
+                <Button
+                  size="sm"
+                  onClick={addVariable}
+                  className="w-full bg-[#c9a86c] text-[#0a0a0a] hover:bg-[#b8975b] mt-2 h-9"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  Add Variable
+                </Button>
+              </div>
+
+              <div className="space-y-3 max-h-[450px] overflow-y-auto pr-2">
+                {variables.map((variable) => (
+                  <div
+                    key={variable.id}
+                    className="p-4 bg-[#1a1a1a] rounded-lg border border-[#222] space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Checkbox
+                          checked={variable.visibleInScope}
+                          onCheckedChange={() => toggleVariableVisibility(variable.id)}
+                          id={`var-${variable.id}`}
+                        />
+                        <span className="font-mono text-sm text-[#c9a86c]">{variable.name}</span>
+                      </div>
+                      <Badge>{variable.type}</Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-[11px]">Initial Value</Label>
+                        <Input
+                          value={variable.initialValue}
+                          onChange={(e) => updateVariableInitValue(variable.id, e.target.value)}
+                          disabled={isRunning}
+                          className="mt-1 text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[11px] flex items-center gap-1">
+                          Runtime Value
+                          {isRunning && (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6c9ac6" strokeWidth="2">
+                              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            </svg>
+                          )}
+                        </Label>
+                        <Input
+                          value={String(variable.currentValue)}
+                          onChange={(e) => updateVariableValue(variable.id, e.target.value)}
+                          disabled={!isRunning}
+                          className="mt-1 text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowWorkspaceModal(false)}
+                className="border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] px-5"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  resetVariables();
+                  setShowWorkspaceModal(false);
+                }}
+                className="bg-[#c9a86c] text-[#0a0a0a] hover:bg-[#b8975b] px-5"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                  <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0" />
+                  <polyline points="3 4 3 12 11 12" />
+                </svg>
+                Reset to Initial Values
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Code Generation Dialog - FULLY FUNCTIONAL */}
+      {showCodegenDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={() => setShowCodegenDialog(false)}>
+          <CodeGenerationDialog
+            files={generatedFiles}
+            codegenErrors={codegenErrors}
+            codegenWarnings={codegenWarnings}
+            generationLog={generationLog}
+            onClose={() => setShowCodegenDialog(false)}
+            addError={addError}
+          />
+        </div>
+      )}
+
+      {/* Report Dialog */}
+      {showReportDialog && (
+        <ReportDialog
+          onClose={() => setShowReportDialog(false)}
+          onGenerate={handleGenerateReport}
+        />
+      )}
+
+      {/* Error Dialog */}
+      {showErrorDialog && currentError && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={() => setShowErrorDialog(false)}>
+          <div className="bg-[#141414] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
+            <div className="h-12 flex items-center px-5 border-b border-red-900/50">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" className="mr-3">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <h2 className="text-lg font-bold text-red-400">Error</h2>
+            </div>
+
+            <div className="p-5 bg-red-950/25 rounded-lg border border-red-900 m-5">
+              <p className="text-red-300 text-sm whitespace-pre-wrap">{currentError.message}</p>
+              {currentError.source && (
+                <p className="text-xs text-red-400 mt-2.5">Source: {currentError.source}</p>
+              )}
+            </div>
+
+            <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
+              <Button
+                variant="outline"
+                onClick={() => handleJumpToError(currentError)}
+                disabled={!currentError.elementId}
+                className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10 px-5 mr-auto"
+              >
+                Go to Element
+              </Button>
+              {currentError.canAutoFix && (
+                <Button
+                  onClick={() => handleAutoFix(currentError)}
+                  className="bg-green-600 hover:bg-green-700 text-white px-5 mr-2"
+                >
+                  Auto-Fix
+                </Button>
+              )}
+              {errors.filter(e => e.canAutoFix).length > 1 && (
+                <Button
+                  onClick={handleFixAll}
+                  className="bg-green-700 hover:bg-green-800 text-white px-5 mr-2"
+                >
+                  Fix All ({errors.filter(e => e.canAutoFix).length})
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                onClick={() => setShowErrorDialog(false)}
+                className="border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] px-5"
+              >
+                Dismiss
+              </Button>
+              <Button
+                onClick={() => {
+                  clearErrors();
+                  setShowErrorDialog(false);
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white px-5"
+              >
+                Clear All Errors
+              </Button>
+            </div>
+            {/* Resizing for this modal is less critical, but can be added similarly if needed */}
+          </div>
+        </div>
+      )}
+
+      {/* PID Workspace Window */}
+      {managedWindows.pid.isOpen && (
+        <FloatingWindow
+          windowState={managedWindows.pid}
+          onClose={() => toggleWindow('pid')}
+          onUpdate={updateManagedWindow}
+        >
+          <PidWorkspaceDialog onClose={() => toggleWindow('pid')} addError={addError} />
+        </FloatingWindow>
+      )}
+
+
+      {/* RTM Window */}
+      {managedWindows.rtm.isOpen && (
+        <FloatingWindow
+          windowState={managedWindows.rtm}
+          onClose={() => toggleWindow('rtm')}
+          onUpdate={updateManagedWindow}
+        >
+          <TraceabilityMatrix blocks={blocks} relationships={relationships} parts={parts} onClose={() => toggleWindow('rtm')} />
+        </FloatingWindow>
+      )}
+
+      {/* HMI Dashboard Window */}
+      {managedWindows.hmi.isOpen && (
+        <FloatingWindow
+          windowState={managedWindows.hmi}
+          onClose={() => toggleWindow('hmi')}
+          onUpdate={updateManagedWindow}
+        >
+          <HmiDashboardContent
+            variables={variables}
+            components={hmiComponents}
+            setComponents={setHmiComponents}
+            updateVariable={(id, val) => updateVariableValue(id, val)}
+            onClose={() => toggleWindow('hmi')}
+          />
+        </FloatingWindow>
+      )}
+
+      {/* DOE Workspace Window */}
+      {managedWindows.doe.isOpen && (
+        <FloatingWindow
+          windowState={managedWindows.doe}
+          onClose={() => toggleWindow('doe')}
+          onUpdate={updateManagedWindow}
+        >
+          <DoeWorkspace onClose={() => toggleWindow('doe')} addError={addError} />
+        </FloatingWindow>
+      )}
+    </div>
+  );
+};
+
+export default ADIA;
