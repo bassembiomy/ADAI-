@@ -1362,4 +1362,113 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       return [di, dd];
     }
   }),
+
+  // --- Linear Systems ---
+  'STATE_SPACE': (id, params) => ({
+    id, type: 'STATE_SPACE',
+    params: {
+      A: params.A || [[-1]], B: params.B || [[1]],
+      C: params.C || [[1]], D: params.D || [[0]],
+      x0: params.x0 || [0],
+      representation: params.representation || 'continuous'
+    },
+    isStateful: true,
+    inputs: [createPort('u', 'u', 'input', 0, 'left', 'vector')],
+    outputs: [
+      createPort('y', 'y', 'output', 0, 'right', 'vector'),
+      createPort('x', 'x', 'output', 0, 'top', 'vector')
+    ],
+    state: { x: params.x0 || [0], lastTime: 0 },
+    execute: (ins, p, state, time) => {
+      const u = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
+      const x = state.x;
+      
+      // y = C*x + D*u
+      const y = p.C.map((row: number[]) => {
+        const cx = row.reduce((sum, val, i) => sum + val * (x[i] || 0), 0);
+        const du = p.D[0].reduce((sum: number, _: any, i: number) => sum + (p.D[0][i] || 0) * (u[i] || 0), 0);
+        return cx + du;
+      });
+
+      if (p.representation === 'discrete') {
+        const dt = Math.max(1e-6, time - (state.lastTime || 0));
+        // x[k+1] = A*x[k] + B*u[k]
+        const nextX = p.A.map((row: number[], i: number) => {
+          const ax = row.reduce((sum, val, j) => sum + val * (x[j] || 0), 0);
+          const bu = p.B[i].reduce((sum: number, val: number, j: number) => sum + val * (u[j] || 0), 0);
+          return ax + bu;
+        });
+        return { outputs: [y, x], nextState: { x: nextX, lastTime: time } };
+      }
+
+      return { outputs: [y, x], nextState: { ...state, lastTime: time } };
+    },
+    evaluateDerivatives: (ins, p, state) => {
+      const u = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
+      const x = state.x;
+      // dx/dt = A*x + B*u
+      return p.A.map((row: number[], i: number) => {
+        const ax = row.reduce((sum, val, j) => sum + val * (x[j] || 0), 0);
+        const bu = p.B[i].reduce((sum: number, val: number, j: number) => sum + val * (u[j] || 0), 0);
+        return ax + bu;
+      });
+    }
+  }),
+
+  'TRANSFER_FUNCTION': (id, params) => {
+    const num = params.numerator || [1];
+    const den = params.denominator || [1, 1];
+    const n = den.length - 1;
+    const a0 = den[0] || 1;
+    
+    // Normalize denominator (a0 = 1)
+    const d = den.map((val: number) => val / a0);
+    const b = num.map((val: number) => val / a0);
+    
+    // Pad numerator with leading zeros if needed
+    while (b.length <= n) b.unshift(0);
+    
+    // Convert to CCF State-Space
+    const A = Array.from({ length: n }, (_, i) => 
+      Array.from({ length: n }, (__, j) => {
+        if (i < n - 1) return j === i + 1 ? 1 : 0;
+        return -d[n - j];
+      })
+    );
+    const B = Array.from({ length: n }, (_, i) => [i === n - 1 ? 1 : 0]);
+    const b0 = b[0];
+    const C = [Array.from({ length: n }, (_, i) => b[n - i] - d[n - i] * b0)];
+    const D = [[b0]];
+
+    return BLOCK_LIBRARY['STATE_SPACE'](id, { ...params, A, B, C, D });
+  },
+
+  'ZERO_POLE_GAIN': (id, params) => {
+    const z = params.zeros || [];
+    const p = params.poles || [-1];
+    const k = params.gain !== undefined ? params.gain : 1;
+
+    // Helper to multiply (s - r) terms
+    const poly = (roots: number[]) => {
+      let coeffs = [1];
+      for (const r of roots) {
+        let next = new Array(coeffs.length + 1).fill(0);
+        for (let i = 0; i < coeffs.length; i++) {
+          next[i] += coeffs[i];
+          next[i+1] -= coeffs[i] * r;
+        }
+        coeffs = next;
+      }
+      return coeffs;
+    };
+
+    const num = poly(z).map(c => c * k);
+    const den = poly(p);
+
+    return BLOCK_LIBRARY['TRANSFER_FUNCTION'](id, { ...params, numerator: num, denominator: den });
+  },
+
+  'DISCRETE_TRANSFER_FUNCTION': (id, params) => {
+    return BLOCK_LIBRARY['TRANSFER_FUNCTION'](id, { ...params, representation: 'discrete' });
+  },
 };

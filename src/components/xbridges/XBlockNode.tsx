@@ -86,7 +86,7 @@ export const XBlockNode: React.FC<XBlockNodeProps> = ({ data, selected, id }) =>
 
   const getColor = (type: string) => {
     if (['Constant', 'WaveformGen', 'Clock', 'Scope', 'DELAY', 'MUX', 'DEMUX', 'TERMINATOR', 'DATA_TYPE_CONVERSION'].includes(type)) return '#007acc'; // Signal (Blue)
-    if (['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow', 'UnaryNeg', 'Abs', 'SumElements', 'Mean', 'Max', 'MatrixMul', 'Transpose', 'Inverse', 'Determinant', 'GAIN', 'PRODUCT', 'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC'].includes(type)) return '#28a745'; // Math (Green)
+    if (['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow', 'UnaryNeg', 'Abs', 'SumElements', 'Mean', 'Max', 'MatrixMul', 'Transpose', 'Inverse', 'Determinant', 'GAIN', 'PRODUCT', 'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'TRANSFER_FUNCTION', 'STATE_SPACE', 'ZERO_POLE_GAIN', 'DISCRETE_TRANSFER_FUNCTION'].includes(type)) return '#28a745'; // Math (Green)
     if (['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR', 'SWITCH', 'IF_ELSE', 'SWITCH_CASE'].includes(type)) return '#6f42c1'; // Logic (Purple)
     if (['BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight'].includes(type)) return '#563d7c'; // Bitwise (Indigo)
     if (['DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Integrator', 'INTEGRATOR_CONTINUOUS', 'INTEGRATOR_DISCRETE'].includes(type)) return '#d73a49'; // Sequential/Control (Red)
@@ -139,6 +139,9 @@ export const XBlockNode: React.FC<XBlockNodeProps> = ({ data, selected, id }) =>
       case 'DATA_TYPE_CONVERSION': return <Hash size={12} />;
       case 'TERMINATOR': return <ZapOff size={12} />;
       case 'PID_CONTROLLER': return <Cpu size={12} />;
+      case 'TRANSFER_FUNCTION':
+      case 'STATE_SPACE':
+      case 'ZERO_POLE_GAIN': return <Activity size={12} />;
       case 'SIN':
       case 'COS':
       case 'TAN': return <TrendingUp size={12} />;

@@ -196,5 +196,14 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'SEC', label: 'Secant', icon: 'trending-up' },
       { type: 'COSEC', label: 'Cosecant', icon: 'trending-up' },
     ]
+  },
+  {
+    name: 'Linear Systems',
+    blocks: [
+      { type: 'TRANSFER_FUNCTION', label: 'Transfer Function', icon: 'activity' },
+      { type: 'STATE_SPACE', label: 'State-Space', icon: 'activity' },
+      { type: 'ZERO_POLE_GAIN', label: 'Zero-Pole-Gain', icon: 'activity' },
+      { type: 'DISCRETE_TRANSFER_FUNCTION', label: 'Discrete TF', icon: 'activity' },
+    ]
   }
 ];
