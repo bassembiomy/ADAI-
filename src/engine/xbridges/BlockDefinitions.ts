@@ -1819,7 +1819,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         const r_val = Array.isArray(ins[1]) ? ins[1] : [Number(ins[1])];
         
         if (!state.solver) {
-          state.solver = new MpcSolver({ A: p.A, B: p.B, C: p.C, D: p.D }, p);
+          state.solver = new MpcSolver({ A: p.A, B: p.B, C: p.C, D: p.D }, p as any);
         }
 
         const ref_seq = Array(p.Np).fill(r_val).flat();
