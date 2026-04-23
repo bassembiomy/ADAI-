@@ -388,21 +388,24 @@ export const XbridgesWorkspace: React.FC<{
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
 
   const addBlockAtPos = (type: string, x: number, y: number) => {
-    if (!reactFlowInstance) return;
-    const rfBounds = document.querySelector('.react-flow')?.getBoundingClientRect();
-    if (!rfBounds) return;
+    if (!reactFlowInstance || !BLOCK_LIBRARY[type]) return;
+    saveHistory();
     
-    const position = reactFlowInstance.project({
-      x: x - rfBounds.left,
-      y: y - rfBounds.top,
-    });
+    const position = reactFlowInstance.screenToFlowPosition({ x, y });
+    const blockDef = BLOCK_LIBRARY[type](`${type}-${Date.now()}`, {});
     
-    const newNode = {
-      id: `${type}_${Date.now()}`,
+    const newNode: Node = {
+      id: blockDef.id,
       type: 'xblock',
       position,
-      data: { type, label: type, params: {} }
+      data: { 
+        ...blockDef,
+        // Ensure UI callbacks are present
+        onUpdate: (newData: any) => updateBlock(blockDef.id, newData),
+        onOpenScope: (blockId: string) => setOpenScopes(prev => prev.includes(blockId) ? prev : [...prev, blockId])
+      }
     };
+
     setNodes(nds => [...nds, newNode]);
     setSearchMenuPos(null);
     setSearchTerm('');
