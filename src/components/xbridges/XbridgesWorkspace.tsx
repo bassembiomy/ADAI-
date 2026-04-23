@@ -354,13 +354,18 @@ export const XbridgesWorkspace: React.FC<{
       if (n.id === blockId) {
         const updatedData = { ...n.data, ...data };
         
-        // Handle parameter-driven port changes (e.g., numInputs, bitWidth)
+        // Handle parameter-driven port changes (e.g., numInputs, bitWidth, cases)
         if (data.params && BLOCK_LIBRARY[n.data.type]) {
             // Check if critical params changed
             const oldParams = n.data.params || {};
             const newParams = data.params;
             
-            if (newParams.numInputs !== oldParams.numInputs) {
+            const hasChanged = 
+              newParams.numInputs !== oldParams.numInputs || 
+              newParams.cases !== oldParams.cases ||
+              newParams.numOutputs !== oldParams.numOutputs;
+
+            if (hasChanged) {
                 // Re-instantiate block definition to get new ports
                 const freshDef = BLOCK_LIBRARY[n.data.type](blockId, newParams);
                 updatedData.inputs = freshDef.inputs;

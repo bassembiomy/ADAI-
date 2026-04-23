@@ -138,6 +138,7 @@ export const XBlockNode: React.FC<XBlockNodeProps> = ({ data, selected, id }) =>
       case 'SWITCH_CASE': return <Settings size={12} />;
       case 'DATA_TYPE_CONVERSION': return <Hash size={12} />;
       case 'TERMINATOR': return <ZapOff size={12} />;
+      case 'PID_CONTROLLER': return <Cpu size={12} />;
       case 'SIN':
       case 'COS':
       case 'TAN': return <TrendingUp size={12} />;
@@ -219,13 +220,20 @@ export const XBlockNode: React.FC<XBlockNodeProps> = ({ data, selected, id }) =>
               className="text-[12px] font-bold tracking-wide text-white bg-black/50 border border-emerald-500 rounded px-1 w-full text-center focus:outline-none"
             />
           ) : (
-            <div className="flex items-center gap-1.5">
-              <span className="opacity-70 group-hover/header:opacity-100 transition-opacity" style={{ color: color }}>
-                {getIcon(data.type)}
-              </span>
-              <div className="text-[12px] font-bold tracking-wide text-white truncate px-1">
-                {data.params?.smVarId ? `[${data.label || data.type}]` : (data.label || data.type)}
+            <div className="px-2.5 py-1.5 flex items-center justify-between border-b border-black/10 group-hover:bg-white/5 transition-colors">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <div className="p-1 rounded-sm bg-black/20 text-white/90">
+                  {getIcon(data.type)}
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-wider truncate">
+                  {data.params?.smVarId ? `[${data.label || data.type}]` : (data.label || data.type)}
+                </span>
               </div>
+              {data.type === 'PID_CONTROLLER' && (
+                <div className="px-1.5 py-0.5 rounded-full bg-black/30 border border-white/10 text-[8px] font-black text-[#c9a86c]">
+                  {data.params?.mode || 'PID'}
+                </div>
+              )}
             </div>
           )}
         </div>

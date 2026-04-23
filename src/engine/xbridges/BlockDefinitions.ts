@@ -1261,4 +1261,105 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       return { outputs: [1 / Math.sin(u)] };
     }
   }),
+
+  'PID_CONTROLLER': (id, params) => ({
+    id, type: 'PID_CONTROLLER',
+    params: {
+      mode: params.mode || 'PID',
+      Kp: params.Kp !== undefined ? params.Kp : 1,
+      Ki: params.Ki !== undefined ? params.Ki : 1,
+      Kd: params.Kd !== undefined ? params.Kd : 0.01,
+      N: params.N !== undefined ? params.N : 100,
+      beta: params.beta !== undefined ? params.beta : 1,
+      gamma: params.gamma !== undefined ? params.gamma : 0,
+      min: params.min !== undefined ? params.min : -100,
+      max: params.max !== undefined ? params.max : 100,
+      method: params.method || 'forward_euler'
+    },
+    isStateful: true,
+    inputs: [
+      createPort('r', 'Ref', 'input'),
+      createPort('y', 'Feedback', 'input'),
+      createPort('enable', 'Enable', 'input', 1, 'bottom', 'control'),
+      createPort('reset', 'Reset', 'input', 0, 'bottom', 'control')
+    ],
+    outputs: [
+      createPort('u', 'Control', 'output', 0, 'right', 'control'),
+      createPort('error', 'Error', 'output', 0, 'top', 'measurement'),
+      createPort('p_term', 'P', 'output', 0, 'top', 'measurement'),
+      createPort('i_term', 'I', 'output', 0, 'top', 'measurement'),
+      createPort('d_term', 'D', 'output', 0, 'top', 'measurement')
+    ],
+    state: { i_state: 0, d_state: 0, last_ed: 0, last_time: 0 },
+    execute: (ins, p, state, time) => {
+      const r = Number(ins[0]);
+      const y = Number(ins[1]);
+      const enable = Number(ins[2]);
+      const reset = Number(ins[3]);
+      
+      if (reset > 0.5) {
+        return { 
+          outputs: [0, 0, 0, 0, 0], 
+          nextState: { i_state: 0, d_state: 0, last_ed: 0, last_time: time } 
+        };
+      }
+      
+      if (enable < 0.5) {
+        return { outputs: [0, 0, 0, 0, 0], nextState: { ...state, last_time: time } };
+      }
+
+      const dt = Math.max(1e-6, time - (state.last_time || 0));
+      const error = r - y;
+      
+      // 1. Proportional Term (with setpoint weighting beta)
+      const P = p.Kp * (p.beta * r - y);
+      
+      // 2. Integral Term (with clamping anti-windup)
+      let nextI = state.i_state;
+      if (p.mode === 'PI' || p.mode === 'PID') {
+        const i_inc = p.Ki * error * dt;
+        nextI = state.i_state + i_inc;
+      }
+      
+      // 3. Derivative Term (with filter N and setpoint weighting gamma)
+      let D = 0;
+      let nextD = state.d_state;
+      if (p.mode === 'PD' || p.mode === 'PID') {
+        const ed = p.gamma * r - y;
+        const diff_e = (ed - (state.last_ed || 0));
+        // D(s) = (Kd * N * s) / (s + N)
+        D = (p.Kd * p.N * diff_e + state.d_state) / (1 + p.N * dt);
+        nextD = D;
+      }
+      
+      const u_unlimited = P + nextI + D;
+      const u = Math.max(p.min, Math.min(p.max, u_unlimited));
+      
+      // Anti-Windup Clamping
+      if (p.Ki !== 0) {
+        if ((u_unlimited > p.max && error > 0) || (u_unlimited < p.min && error < 0)) {
+           nextI = state.i_state;
+        }
+      }
+
+      return {
+        outputs: [u, error, P, nextI, D],
+        nextState: {
+          i_state: nextI,
+          d_state: nextD,
+          last_ed: p.gamma * r - y,
+          last_time: time
+        }
+      };
+    },
+    evaluateDerivatives: (ins, p, state) => {
+      const r = Number(ins[0]);
+      const y = Number(ins[1]);
+      const error = r - y;
+      const di = p.Ki * error;
+      const ed = p.gamma * r - y;
+      const dd = p.N * (p.Kd * p.N * (ed - (state.last_ed || 0)) - state.d_state);
+      return [di, dd];
+    }
+  }),
 };

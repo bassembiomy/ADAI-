@@ -117,6 +117,7 @@ export const XBRIDGES_CATEGORIES = [
     blocks: [
       { type: 'CURRENT_CONTROLLER_DQ', label: 'DQ Current Controller', icon: 'cpu' },
       { type: 'SPEED_CONTROLLER', label: 'Speed Controller', icon: 'cpu' },
+      { type: 'PID_CONTROLLER', label: 'PID Controller', icon: 'cpu' },
       { type: 'FLUX_REFERENCE', label: 'Flux Reference', icon: 'activity' },
       { type: 'ROTOR_POSITION_ESTIMATOR', label: 'Rotor Estimator', icon: 'bar-chart' },
       { type: 'VOLTAGE_REFERENCE_GENERATOR', label: 'Voltage Ref Gen', icon: 'activity' },
