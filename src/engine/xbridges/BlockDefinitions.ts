@@ -1556,16 +1556,29 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   }),
 
-  'BAND_LIMITED_NOISE': (id, params) => {
-    // Conceptually white noise + internal LPF
-    // For simplicity, we define it as white noise with a lower variance or a discrete LPF wrapper
-    const noise = BLOCK_LIBRARY['WHITE_NOISE'](id, params);
-    return {
-      ...noise,
-      type: 'BAND_LIMITED_NOISE',
-      params: { ...params, cutoff: params.cutoff || 100 }
-    };
-  },
+  'BAND_LIMITED_NOISE': (id, params) => ({
+    id, type: 'BAND_LIMITED_NOISE',
+    params: { mean: params.mean || 0, variance: params.variance || 1, fc: params.fc || 100 },
+    isStateful: true,
+    inputs: [],
+    outputs: [createPort('y', 'y', 'output')],
+    state: { y: 0, lastTime: 0 },
+    execute: (ins, p, state, time) => {
+      // 1. Generate White Noise
+      const u1 = Math.random();
+      const u2 = Math.random();
+      const standardNormal = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+      const whiteNoise = Number(p.mean) + Math.sqrt(Number(p.variance)) * standardNormal;
+
+      // 2. Apply LPF
+      const dt = Math.max(1e-6, time - (state.lastTime || 0));
+      const tau = 1 / (2 * Math.PI * Number(p.fc));
+      const alpha = dt / (tau + dt);
+      const y = alpha * whiteNoise + (1 - alpha) * state.y;
+      
+      return { outputs: [y], nextState: { y, lastTime: time } };
+    }
+  }),
 
   // --- Basic Filters ---
   'LOW_PASS_FILTER': (id, params) => ({
@@ -1692,4 +1705,19 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       };
     }
   }),
+
+  'EXTENDED_KALMAN_FILTER': (id, params) => {
+    // EKF is essentially Linear Kalman where A and C are recalculated (linearized)
+    // For our block, the user provides the functions or current Jacobians
+    const kf = BLOCK_LIBRARY['KALMAN_FILTER'](id, params);
+    return {
+      ...kf,
+      type: 'EXTENDED_KALMAN_FILTER',
+      execute: (ins, p, state, time) => {
+        // Linearization would happen here if we had function strings to parse
+        // For now, it behaves like a Kalman Filter with dynamic matrices from params
+        return kf.execute(ins, p, state, time);
+      }
+    };
+  },
 };
