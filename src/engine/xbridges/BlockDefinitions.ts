@@ -1200,21 +1200,71 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   },
 
   // --- Signal Management ---
-  'DATA_TYPE_CONVERSION': (id, params) => ({
-    id, type: 'DATA_TYPE_CONVERSION',
-    params: { output_type: params.output_type || 'float64', rounding: params.rounding || 'floor' },
-    inputs: [createPort('u', 'u', 'input')],
-    outputs: [createPort('y', 'y', 'output')],
-    execute: (ins, p) => {
-      let val = Number(ins[0]);
-      if (p.rounding === 'floor') val = Math.floor(val);
-      else if (p.rounding === 'ceil') val = Math.ceil(val);
-      else if (p.rounding === 'nearest') val = Math.round(val);
-      
-      if (p.output_type === 'boolean') return { outputs: [!!val] };
-      return { outputs: [val] };
-    }
-  }),
+  'DATA_TYPE_CONVERSION': (id, params) => {
+    const output_type = params.output_type || 'float64';
+    const rounding = params.rounding || 'floor';
+    const overflow = params.overflow || 'saturate';
+    const wl = Number(params.wordLength) || 16;
+    const fl = Number(params.fractionLength) || 8;
+
+    return {
+      id, type: 'DATA_TYPE_CONVERSION',
+      params: { output_type, rounding, overflow, wordLength: wl, fractionLength: fl },
+      inputs: [createPort('u', 'u', 'input')],
+      outputs: [createPort('y', 'y', 'output')],
+      execute: (ins, p) => {
+        let u = Number(ins[0]);
+        let y = u;
+
+        // 1. Rounding
+        if (p.rounding === 'floor') y = Math.floor(u);
+        else if (p.rounding === 'ceil') y = Math.ceil(u);
+        else if (p.rounding === 'round' || p.rounding === 'nearest') y = Math.round(u);
+        else if (p.rounding === 'convergent') {
+            const d = Math.floor(u);
+            const f = u - d;
+            if (f < 0.5) y = d;
+            else if (f > 0.5) y = d + 1;
+            else y = (d % 2 === 0) ? d : d + 1;
+        }
+
+        // 2. Type Simulation & Overflow
+        const limits: Record<string, [number, number]> = {
+          'int8': [-128, 127],
+          'uint8': [0, 255],
+          'int16': [-32768, 32767],
+          'uint16': [0, 65535],
+          'int32': [-2147483648, 2147483647],
+          'uint32': [0, 4294967295],
+          'boolean': [0, 1]
+        };
+
+        if (p.output_type === 'fixed_point') {
+            const scale = Math.pow(2, p.fractionLength);
+            let raw = Math.round(u * scale);
+            const maxRaw = Math.pow(2, p.wordLength - 1) - 1;
+            const minRaw = -Math.pow(2, p.wordLength - 1);
+            
+            if (p.overflow === 'saturate') raw = Math.max(minRaw, Math.min(maxRaw, raw));
+            else if (p.overflow === 'wrap') {
+                const range = maxRaw - minRaw + 1;
+                raw = ((((raw - minRaw) % range) + range) % range) + minRaw;
+            }
+            y = raw / scale;
+        } else if (limits[p.output_type]) {
+            const [min, max] = limits[p.output_type];
+            if (p.overflow === 'saturate') y = Math.max(min, Math.min(max, y));
+            else if (p.overflow === 'wrap') {
+                const range = max - min + 1;
+                y = ((((Math.floor(y) - min) % range) + range) % range) + min;
+            }
+            if (p.output_type === 'boolean') y = y > 0.5 ? 1 : 0;
+        }
+
+        return { outputs: [y] };
+      }
+    };
+  },
 
   'TERMINATOR': (id) => ({
     id, type: 'TERMINATOR', params: {},

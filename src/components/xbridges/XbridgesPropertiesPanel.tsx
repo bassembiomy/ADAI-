@@ -125,13 +125,41 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                   {key.replace(/([A-Z])/g, ' $1').trim()}
                 </label>
                 
-                {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'type', 'numCases', 'numSignals', 'bufferSize'].includes(key) && 
+                {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'numCases', 'numSignals', 'bufferSize'].includes(key) && 
                  (key !== 'type' || block.type === 'WaveformGen') ? (
                   <select
                     value={displayValue as string}
                     onChange={(e) => onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } })}
                     className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-emerald-400 font-bold rounded focus:border-[#c9a86c] outline-none transition-all cursor-pointer"
                   >
+                    {key === 'output_type' && (
+                      <>
+                        <option value="float64">Double (float64)</option>
+                        <option value="float32">Single (float32)</option>
+                        <option value="int8">Int8</option>
+                        <option value="uint8">UInt8</option>
+                        <option value="int16">Int16</option>
+                        <option value="uint16">UInt16</option>
+                        <option value="int32">Int32</option>
+                        <option value="uint32">UInt32</option>
+                        <option value="boolean">Boolean</option>
+                        <option value="fixed_point">Fixed-Point</option>
+                      </>
+                    )}
+                    {key === 'rounding' && (
+                      <>
+                        <option value="floor">Floor</option>
+                        <option value="ceil">Ceil</option>
+                        <option value="round">Round (Nearest)</option>
+                        <option value="convergent">Convergent (Even)</option>
+                      </>
+                    )}
+                    {key === 'overflow' && (
+                      <>
+                        <option value="saturate">Saturate</option>
+                        <option value="wrap">Wrap</option>
+                      </>
+                    )}
                     {key === 'numSignals' && (
                       <>
                         {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (

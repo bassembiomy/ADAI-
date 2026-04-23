@@ -273,6 +273,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
               <div style={{ color }} className="scale-125 mb-1">{getIcon(data.type)}</div>
               {data.type === 'Constant' && <span className="text-[10px] font-bold text-white/50">{data.params?.value}</span>}
               {data.type === 'GAIN' && <span className="text-[10px] font-bold text-white/50">K={data.params?.gain}</span>}
+              {data.type === 'DATA_TYPE_CONVERSION' && <span className="text-[10px] font-bold text-emerald-400/70">{data.params?.output_type}</span>}
             </div>
           )}
         </div>
