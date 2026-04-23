@@ -89,7 +89,9 @@ export const XBlockNode: React.FC<XBlockNodeProps> = ({ data, selected, id }) =>
     if (['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow', 'UnaryNeg', 'Abs', 'SumElements', 'Mean', 'Max', 'MatrixMul', 'Transpose', 'Inverse', 'Determinant', 'GAIN', 'PRODUCT', 'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'TRANSFER_FUNCTION', 'STATE_SPACE', 'ZERO_POLE_GAIN', 'DISCRETE_TRANSFER_FUNCTION'].includes(type)) return '#28a745'; // Math (Green)
     if (['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR', 'SWITCH', 'IF_ELSE', 'SWITCH_CASE'].includes(type)) return '#6f42c1'; // Logic (Purple)
     if (['BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight'].includes(type)) return '#563d7c'; // Bitwise (Indigo)
-    if (['DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Integrator', 'INTEGRATOR_CONTINUOUS', 'INTEGRATOR_DISCRETE'].includes(type)) return '#d73a49'; // Sequential/Control (Red)
+    if (['DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Integrator', 'INTEGRATOR_CONTINUOUS', 'INTEGRATOR_DISCRETE', 'PID_CONTROLLER', 'PID_BASIC'].includes(type)) return '#d73a49'; // Sequential/Control (Red)
+    if (['WHITE_NOISE', 'BAND_LIMITED_NOISE', 'LOW_PASS_FILTER', 'HIGH_PASS_FILTER', 'MOVING_AVERAGE'].includes(type)) return '#17a2b8'; // Signal Processing (Cyan/Teal)
+    if (['KALMAN_FILTER', 'EXTENDED_KALMAN_FILTER'].includes(type)) return '#20c997'; // Estimation (Mint)
     if (['THREE_PHASE_INVERTER', 'SINGLE_PHASE_H_BRIDGE'].includes(type)) return '#ef4444'; // Power (Red)
     if (['PWM_GENERATOR', 'THREE_PHASE_PWM', 'SIX_STEP_COMMUTATION', 'SVPWM_GATE_GENERATOR', 'SVPWM_MODULATOR'].includes(type)) return '#3b82f6'; // Control (Blue)
     if (['FIELD_ORIENTED_CONTROL', 'VOLTAGE_REFERENCE_GENERATOR', 'CURRENT_CONTROLLER_DQ', 'SPEED_CONTROLLER', 'FLUX_REFERENCE', 'ROTOR_POSITION_ESTIMATOR'].includes(type)) return '#10b981'; // Control/Feedback (Emerald)
@@ -142,6 +144,13 @@ export const XBlockNode: React.FC<XBlockNodeProps> = ({ data, selected, id }) =>
       case 'TRANSFER_FUNCTION':
       case 'STATE_SPACE':
       case 'ZERO_POLE_GAIN': return <Activity size={12} />;
+      case 'WHITE_NOISE':
+      case 'BAND_LIMITED_NOISE': return <Wind size={12} />;
+      case 'LOW_PASS_FILTER':
+      case 'HIGH_PASS_FILTER':
+      case 'MOVING_AVERAGE': return <Filter size={12} />;
+      case 'KALMAN_FILTER':
+      case 'EXTENDED_KALMAN_FILTER': return <Eye size={12} />;
       case 'SIN':
       case 'COS':
       case 'TAN': return <TrendingUp size={12} />;

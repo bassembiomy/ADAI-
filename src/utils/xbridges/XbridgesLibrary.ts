@@ -207,5 +207,27 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'ZERO_POLE_GAIN', label: 'Zero-Pole-Gain', icon: 'activity' },
       { type: 'DISCRETE_TRANSFER_FUNCTION', label: 'Discrete TF', icon: 'activity' },
     ]
+  },
+  {
+    name: 'Noise Sources',
+    blocks: [
+      { type: 'WHITE_NOISE', label: 'White Noise', icon: 'wind' },
+      { type: 'BAND_LIMITED_NOISE', label: 'Band-Limited Noise', icon: 'wind' },
+    ]
+  },
+  {
+    name: 'Basic Filters',
+    blocks: [
+      { type: 'LOW_PASS_FILTER', label: 'Low-Pass Filter', icon: 'filter' },
+      { type: 'HIGH_PASS_FILTER', label: 'High-Pass Filter', icon: 'filter' },
+      { type: 'MOVING_AVERAGE', label: 'Moving Average', icon: 'filter' },
+    ]
+  },
+  {
+    name: 'Estimation & Observers',
+    blocks: [
+      { type: 'KALMAN_FILTER', label: 'Kalman Filter', icon: 'eye' },
+      { type: 'EXTENDED_KALMAN_FILTER', label: 'Extended Kalman', icon: 'eye' },
+    ]
   }
 ];

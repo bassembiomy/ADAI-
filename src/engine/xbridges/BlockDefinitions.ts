@@ -1539,4 +1539,157 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       return [di, dd];
     }
   }),
+
+  // --- Noise Sources ---
+  'WHITE_NOISE': (id, params) => ({
+    id, type: 'WHITE_NOISE',
+    params: { mean: params.mean || 0, variance: params.variance || 1 },
+    inputs: [],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      // Box-Muller transform for Gaussian noise
+      const u1 = Math.random();
+      const u2 = Math.random();
+      const standardNormal = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+      const y = Number(p.mean) + Math.sqrt(Number(p.variance)) * standardNormal;
+      return { outputs: [y] };
+    }
+  }),
+
+  'BAND_LIMITED_NOISE': (id, params) => {
+    // Conceptually white noise + internal LPF
+    // For simplicity, we define it as white noise with a lower variance or a discrete LPF wrapper
+    const noise = BLOCK_LIBRARY['WHITE_NOISE'](id, params);
+    return {
+      ...noise,
+      type: 'BAND_LIMITED_NOISE',
+      params: { ...params, cutoff: params.cutoff || 100 }
+    };
+  },
+
+  // --- Basic Filters ---
+  'LOW_PASS_FILTER': (id, params) => ({
+    id, type: 'LOW_PASS_FILTER',
+    params: { fc: params.fc || 10, method: params.method || 'discrete' },
+    isStateful: true,
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    state: { y: 0, lastTime: 0 },
+    execute: (ins, p, state, time) => {
+      const u = Number(ins[0]);
+      const dt = Math.max(1e-6, time - (state.lastTime || 0));
+      const tau = 1 / (2 * Math.PI * Number(p.fc));
+      const alpha = dt / (tau + dt);
+      const y = alpha * u + (1 - alpha) * state.y;
+      return { outputs: [y], nextState: { y, lastTime: time } };
+    },
+    evaluateDerivatives: (ins, p, state) => {
+      const u = Number(ins[0]);
+      const tau = 1 / (2 * Math.PI * Number(p.fc));
+      return [(u - state.y) / tau];
+    }
+  }),
+
+  'HIGH_PASS_FILTER': (id, params) => ({
+    id, type: 'HIGH_PASS_FILTER',
+    params: { fc: params.fc || 10 },
+    isStateful: true,
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    state: { y: 0, last_u: 0, lastTime: 0 },
+    execute: (ins, p, state, time) => {
+      const u = Number(ins[0]);
+      const dt = Math.max(1e-6, time - (state.lastTime || 0));
+      const tau = 1 / (2 * Math.PI * Number(p.fc));
+      const alpha = tau / (tau + dt);
+      const y = alpha * (state.y + u - state.last_u);
+      return { outputs: [y], nextState: { y, last_u: u, lastTime: time } };
+    }
+  }),
+
+  'MOVING_AVERAGE': (id, params) => ({
+    id, type: 'MOVING_AVERAGE',
+    params: { window_size: params.window_size || 10 },
+    isStateful: true,
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    state: { buffer: [], index: 0 },
+    execute: (ins, p, state) => {
+      const u = Number(ins[0]);
+      const N = Number(p.window_size);
+      let buffer = state.buffer.length === 0 ? new Array(N).fill(u) : [...state.buffer];
+      buffer[state.index] = u;
+      const nextIndex = (state.index + 1) % N;
+      const y = buffer.reduce((a: number, b: number) => a + b, 0) / N;
+      return { outputs: [y], nextState: { buffer, index: nextIndex } };
+    }
+  }),
+
+  'KALMAN_FILTER': (id, params) => ({
+    id, type: 'KALMAN_FILTER',
+    params: {
+      A: params.A || [[1, 0.01], [0, 1]],
+      B: params.B || [[0.00005], [0.01]],
+      C: params.C || [[1, 0]],
+      Q: params.Q || [[0.01, 0], [0, 0.01]],
+      R: params.R || [[0.1]],
+      P0: params.P0 || [[1, 0], [0, 1]]
+    },
+    isStateful: true,
+    inputs: [
+      createPort('u', 'u', 'input', 0, 'left', 'vector'),
+      createPort('y_meas', 'y_meas', 'input', 0, 'left', 'vector')
+    ],
+    outputs: [
+      createPort('x_hat', 'x_hat', 'output', 0, 'right', 'vector'),
+      createPort('y_hat', 'y_hat', 'output', 0, 'right', 'vector'),
+      createPort('innovation', 'Inn', 'output', 0, 'top', 'vector'),
+      createPort('kg', 'K', 'output', 0, 'top', 'vector')
+    ],
+    state: { x: null, P: null },
+    execute: (ins, p, state) => {
+      // Ensure inputs are matrices
+      const uArr = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
+      const yArr = Array.isArray(ins[1]) ? ins[1] : [Number(ins[1])];
+      
+      const u = math.matrix(uArr.map(v => [v])); // Column vector
+      const y = math.matrix(yArr.map(v => [v])); // Column vector
+      
+      const A = math.matrix(p.A);
+      const B = math.matrix(p.B);
+      const C = math.matrix(p.C);
+      const Q = math.matrix(p.Q);
+      const R = math.matrix(p.R);
+
+      let x = state.x ? math.matrix(state.x) : math.zeros(A.size()[0], 1);
+      let P = state.P ? math.matrix(state.P) : math.matrix(p.P0);
+
+      // 1. Predict
+      const x_minus = math.add(math.multiply(A, x), math.multiply(B, u)) as math.Matrix;
+      const P_minus = math.add(math.multiply(math.multiply(A, P), math.transpose(A)), Q) as math.Matrix;
+
+      // 2. Kalman Gain
+      // S = C*P_minus*C' + R
+      const S = math.add(math.multiply(math.multiply(C, P_minus), math.transpose(C)), R) as math.Matrix;
+      const K = math.multiply(math.multiply(P_minus, math.transpose(C)), math.inv(S)) as math.Matrix;
+
+      // 3. Update
+      const innovation = math.subtract(y, math.multiply(C, x_minus)) as math.Matrix;
+      const x_new = math.add(x_minus, math.multiply(K, innovation)) as math.Matrix;
+      const I = math.identity(A.size()[0]) as math.Matrix;
+      const P_new = math.multiply(math.subtract(I, math.multiply(K, C)), P_minus) as math.Matrix;
+
+      const y_hat = math.multiply(C, x_new) as math.Matrix;
+
+      return {
+        outputs: [
+          x_new.toArray().map((v: any) => v[0]), 
+          y_hat.toArray().map((v: any) => v[0]),
+          innovation.toArray().map((v: any) => v[0]),
+          K.toArray().flat()
+        ],
+        nextState: { x: x_new.toArray(), P: P_new.toArray() }
+      };
+    }
+  }),
 };
