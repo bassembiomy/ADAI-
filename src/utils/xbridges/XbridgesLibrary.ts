@@ -229,5 +229,11 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'KALMAN_FILTER', label: 'Kalman Filter', icon: 'eye' },
       { type: 'EXTENDED_KALMAN_FILTER', label: 'Extended Kalman', icon: 'eye' },
     ]
+  },
+  {
+    name: 'Advanced Control & MPC',
+    blocks: [
+      { type: 'MPC_CONTROLLER', label: 'MPC Controller', icon: 'cpu' }
+    ]
   }
 ];

@@ -50,6 +50,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
     if (['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR', 'SWITCH', 'IF_ELSE', 'SWITCH_CASE'].includes(type)) return '#6f42c1'; // Logic (Purple)
     if (['BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight'].includes(type)) return '#563d7c'; // Bitwise (Indigo)
     if (['DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Integrator', 'INTEGRATOR_CONTINUOUS', 'INTEGRATOR_DISCRETE', 'PID_CONTROLLER', 'PID_BASIC'].includes(type)) return '#d73a49'; // Sequential/Control (Red)
+    if (type === 'MPC_CONTROLLER') return '#c9a86c'; // MPC (Copper)
     if (['WHITE_NOISE', 'BAND_LIMITED_NOISE', 'LOW_PASS_FILTER', 'HIGH_PASS_FILTER', 'MOVING_AVERAGE'].includes(type)) return '#17a2b8'; // Signal Processing (Cyan/Teal)
     if (['KALMAN_FILTER', 'EXTENDED_KALMAN_FILTER'].includes(type)) return '#20c997'; // Estimation (Mint)
     if (['THREE_PHASE_INVERTER', 'SINGLE_PHASE_H_BRIDGE'].includes(type)) return '#ef4444'; // Power (Red)
@@ -103,7 +104,8 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       case 'SWITCH_CASE': return <Settings size={12} />;
       case 'DATA_TYPE_CONVERSION': return <Hash size={12} />;
       case 'TERMINATOR': return <ZapOff size={12} />;
-      case 'PID_CONTROLLER': return <Cpu size={12} />;
+      case 'PID_CONTROLLER':
+      case 'MPC_CONTROLLER': return <Cpu size={12} />;
       case 'TRANSFER_FUNCTION':
       case 'STATE_SPACE':
       case 'ZERO_POLE_GAIN': return <Activity size={12} />;
@@ -246,6 +248,23 @@ export const XBlockNode = ({ data, id, selected }: any) => {
                       isAnimationActive={false}
                     />
                   ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : data.type === 'MPC_CONTROLLER' ? (
+            <div className="w-[120px] h-[60px] bg-black/40 rounded border border-white/5 p-1">
+              <div className="text-[7px] text-gray-500 uppercase font-black mb-1">Prediction Horizon</div>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={(data.outputs?.[1]?.value || []).map((v: any, i: number) => ({ i, v }))}>
+                  <YAxis hide domain={['auto', 'auto']} />
+                  <Line 
+                    type="monotone" 
+                    dataKey="v" 
+                    stroke="#c9a86c" 
+                    strokeWidth={1.5} 
+                    dot={false} 
+                    isAnimationActive={false}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </div>

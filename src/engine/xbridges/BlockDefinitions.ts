@@ -2,6 +2,7 @@
 import { XBlock, XPort } from './types';
 import { VectorUtils } from './VectorUtils';
 import * as math from 'mathjs';
+import { MpcSolver } from './MpcSolver';
 
 const createPort = (id: string, name: string, dir: 'input'|'output', val: any = 0, pos?: 'left'|'right'|'top'|'bottom', type: any = 'auto'): XPort => ({
   id, name, type: type || 'auto', direction: dir, value: val, position: pos || (dir === 'input' ? 'left' : 'right')
@@ -1728,17 +1729,57 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'EXTENDED_KALMAN_FILTER': (id, params) => {
-    // EKF is essentially Linear Kalman where A and C are recalculated (linearized)
-    // For our block, the user provides the functions or current Jacobians
     const kf = BLOCK_LIBRARY['KALMAN_FILTER'](id, params);
     return {
       ...kf,
       type: 'EXTENDED_KALMAN_FILTER',
       execute: (ins, p, state, time) => {
-        // Linearization would happen here if we had function strings to parse
-        // For now, it behaves like a Kalman Filter with dynamic matrices from params
         return kf.execute(ins, p, state, time);
       }
     };
   },
+
+  'MPC_CONTROLLER': (id, params) => {
+    const Np = Number(params.Np) || 10;
+    const Nc = Number(params.Nc) || 3;
+    const A = params.A || [[1, 0.1], [0, 1]];
+    const B = params.B || [[0], [0.1]];
+    const C = params.C || [[1, 0]];
+    const D = params.D || [[0]];
+    const Q = params.Q || [[10, 0], [0, 10]];
+    const R = params.R || [[1]];
+    const u_min = params.u_min !== undefined ? params.u_min : -10;
+    const u_max = params.u_max !== undefined ? params.u_max : 10;
+
+    return {
+      id, type: 'MPC_CONTROLLER',
+      params: { Np, Nc, A, B, C, D, Q, R, u_min, u_max },
+      isStateful: true,
+      inputs: [
+        createPort('x', 'x(k)', 'input', [0, 0], 'left', 'vector'),
+        createPort('r', 'r(k)', 'input', [1], 'left', 'vector')
+      ],
+      outputs: [
+        createPort('u', 'u(k)', 'output', 0, 'right', 'control'),
+        createPort('pred_y', 'Predicted Y', 'output', [], 'top', 'vector')
+      ],
+      state: { solver: null, u_seq: null },
+      execute: (ins, p, state) => {
+        const x = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
+        const r_val = Array.isArray(ins[1]) ? ins[1] : [Number(ins[1])];
+        
+        if (!state.solver) {
+          state.solver = new MpcSolver({ A: p.A, B: p.B, C: p.C, D: p.D }, p);
+        }
+
+        const ref_seq = Array(p.Np).fill(r_val).flat();
+        const result = state.solver.solve(x, ref_seq, state.u_seq);
+
+        return { 
+          outputs: [result.u[0], result.pred_y],
+          nextState: { solver: state.solver, u_seq: result.u }
+        };
+      }
+    };
+  }
 };
