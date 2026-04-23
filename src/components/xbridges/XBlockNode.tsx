@@ -137,6 +137,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
   };
 
   const color = getColor(data.type);
+  const allPorts = [...(data.inputs || []), ...(data.outputs || [])];
 
   return (
     <div 
@@ -171,26 +172,28 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       <div className="flex p-2 gap-4">
         {/* Inputs */}
         <div className="flex flex-col flex-1 justify-center">
-          {data.ports?.filter((p: XPort) => p.position === 'left').map(renderPort)}
+          {allPorts.filter((p: XPort) => p.position === 'left').map(renderPort)}
         </div>
 
         {/* Center Content / Parameters Preview */}
-        <div className="flex flex-col items-center justify-center py-2 opacity-20 pointer-events-none">
-          <div style={{ color }}>{getIcon(data.type)}</div>
+        <div className="flex flex-col items-center justify-center py-2 opacity-100 pointer-events-none min-w-[30px]">
+          <div style={{ color }} className="scale-125 mb-1">{getIcon(data.type)}</div>
+          {data.type === 'Constant' && <span className="text-[10px] font-bold text-white/50">{data.params?.value}</span>}
+          {data.type === 'GAIN' && <span className="text-[10px] font-bold text-white/50">K={data.params?.gain}</span>}
         </div>
 
         {/* Outputs */}
         <div className="flex flex-col flex-1 justify-center items-end">
-          {data.ports?.filter((p: XPort) => p.position === 'right').map(renderPort)}
+          {allPorts.filter((p: XPort) => p.position === 'right').map(renderPort)}
         </div>
       </div>
 
       {/* Top/Bottom Ports */}
       <div className="absolute top-0 left-0 w-full flex justify-center -translate-y-full pb-1">
-        {data.ports?.filter((p: XPort) => p.position === 'top').map(renderPort)}
+        {allPorts.filter((p: XPort) => p.position === 'top').map(renderPort)}
       </div>
       <div className="absolute bottom-0 left-0 w-full flex justify-center translate-y-full pt-1">
-        {data.ports?.filter((p: XPort) => p.position === 'bottom').map(renderPort)}
+        {allPorts.filter((p: XPort) => p.position === 'bottom').map(renderPort)}
       </div>
     </div>
   );
