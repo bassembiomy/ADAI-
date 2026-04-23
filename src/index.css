@@ -74,3 +74,45 @@ body {
   border-bottom: 1px solid #333;
   fill: #fff;
 }
+
+/* Range Input Styling */
+input[type=range] {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type=range]:focus {
+  outline: none;
+}
+
+input[type=range]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: #333;
+  border-radius: 2px;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  background: #c9a86c;
+  margin-top: -5px; /* Centers thumb on track */
+  box-shadow: 0 0 5px rgba(0,0,0,0.5);
+}
+
+input[type=range]::-moz-range-track {
+  height: 4px;
+  background: #333;
+  border-radius: 2px;
+}
+
+input[type=range]::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  background: #c9a86c;
+  border: none;
+}

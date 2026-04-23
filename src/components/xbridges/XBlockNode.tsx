@@ -4,7 +4,7 @@ import { Handle, Position, useUpdateNodeInternals, NodeResizer } from 'reactflow
 import { 
   Square, Activity, Plus, Minus, X, Divide, ChevronUp, MinusCircle, Maximize, 
   Sigma, BarChart, ArrowUp, Grid, RotateCw, RefreshCcw, Hash, TrendingUp, Monitor, Box, Download,
-  LogIn, LogOut
+  LogIn, LogOut, ChevronLeft, ChevronRight, Zap, Settings, ZapOff, Cpu, Layers
 } from 'lucide-react';
 import { XPort } from '../../engine/xbridges/types';
 
@@ -85,19 +85,35 @@ export const XBlockNode: React.FC<XBlockNodeProps> = ({ data, selected, id }) =>
   }, [data.inputs?.length, data.outputs?.length, id, updateNodeInternals]);
 
   const getColor = (type: string) => {
-    if (['Constant', 'WaveformGen'].includes(type)) return '#007acc'; // Signal (Blue)
-    if (['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow', 'UnaryNeg', 'Abs'].includes(type)) return '#28a745'; // Math (Green)
-    if (['SumElements', 'Mean', 'Max', 'MatrixMul', 'Transpose', 'Inverse', 'Determinant'].includes(type)) return '#28a745'; // Math (Green)
-    if (['Integrator'].includes(type)) return '#fd7e14'; // Control (Orange)
-    if (['Scope'].includes(type)) return '#007acc'; // Signal (Blue)
+    if (['Constant', 'WaveformGen', 'Clock', 'Scope'].includes(type)) return '#007acc'; // Signal (Blue)
+    if (['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow', 'UnaryNeg', 'Abs', 'SumElements', 'Mean', 'Max', 'MatrixMul', 'Transpose', 'Inverse', 'Determinant'].includes(type)) return '#28a745'; // Math (Green)
+    if (['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR'].includes(type)) return '#6f42c1'; // Logic (Purple)
+    if (['BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight'].includes(type)) return '#563d7c'; // Bitwise (Indigo)
+    if (['DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Integrator'].includes(type)) return '#d73a49'; // Sequential/Control (Red)
+    if (['THREE_PHASE_INVERTER', 'SINGLE_PHASE_H_BRIDGE'].includes(type)) return '#ef4444'; // Power (Red)
+    if (['PWM_GENERATOR', 'THREE_PHASE_PWM', 'SIX_STEP_COMMUTATION', 'SVPWM_GATE_GENERATOR', 'SVPWM_MODULATOR'].includes(type)) return '#3b82f6'; // Control (Blue)
+    if (['FIELD_ORIENTED_CONTROL', 'VOLTAGE_REFERENCE_GENERATOR', 'CURRENT_CONTROLLER_DQ', 'SPEED_CONTROLLER', 'FLUX_REFERENCE', 'ROTOR_POSITION_ESTIMATOR'].includes(type)) return '#10b981'; // Control/Feedback (Emerald)
+    if (['CLARKE_TRANSFORM', 'PARK_TRANSFORM', 'INVERSE_PARK', 'INVERSE_CLARKE', 'SVPWM_CORE', 'SECTOR_SELECTOR', 'SWITCHING_TIME_CALCULATOR', 'ZERO_SEQUENCE_INJECTION'].includes(type)) return '#a855f7'; // Transform/Math (Purple)
     if (['Inport', 'Outport'].includes(type)) return '#c9a86c'; // Port (Gold)
     return '#007acc';
+  };
+
+  const getPortColor = (type: string) => {
+    switch (type) {
+      case 'power': return '#ef4444';
+      case 'control': return '#3b82f6';
+      case 'measurement': return '#10b981';
+      case 'logical': return '#a855f7';
+      case 'transform': return '#a855f7';
+      default: return '#4caf50';
+    }
   };
 
   const getIcon = (type: string) => {
     switch (type) {
       case 'Constant': return <Square size={12} />;
       case 'WaveformGen': return <Activity size={12} />;
+      case 'Clock': return <RotateCw size={12} />;
       case 'VectorAdd': return <Plus size={12} />;
       case 'VectorSub': return <Minus size={12} />;
       case 'VectorMul': return <X size={12} />;
@@ -112,10 +128,43 @@ export const XBlockNode: React.FC<XBlockNodeProps> = ({ data, selected, id }) =>
       case 'Transpose': return <RotateCw size={12} />;
       case 'Inverse': return <RefreshCcw size={12} />;
       case 'Determinant': return <Hash size={12} />;
+      case 'AND': return <Plus size={12} />;
+      case 'OR': return <Grid size={12} />;
+      case 'NOT': return <MinusCircle size={12} />;
+      case 'BitwiseAND': return <Plus size={12} />;
+      case 'BitwiseOR': return <Grid size={12} />;
+      case 'BitwiseXOR': return <Plus size={12} />;
+      case 'BitwiseNOT': return <MinusCircle size={12} />;
+      case 'ShiftLeft': return <ChevronLeft size={12} />;
+      case 'ShiftRight': return <ChevronRight size={12} />;
+      case 'DFlipFlop':
+      case 'JKFlipFlop': return <RefreshCcw size={12} />;
+      case 'Register': return <Box size={12} />;
+      case 'Counter': return <TrendingUp size={12} />;
       case 'Integrator': return <TrendingUp size={12} />;
       case 'Scope': return <Monitor size={12} />;
       case 'Inport': return <LogIn size={12} />;
       case 'Outport': return <LogOut size={12} />;
+      case 'THREE_PHASE_INVERTER':
+      case 'SINGLE_PHASE_H_BRIDGE': return <Zap size={12} />;
+      case 'PWM_GENERATOR':
+      case 'THREE_PHASE_PWM': return <Layers size={12} />;
+      case 'SIX_STEP_COMMUTATION': return <Settings size={12} />;
+      case 'SVPWM_CORE':
+      case 'SVPWM_MODULATOR':
+      case 'SVPWM_GATE_GENERATOR': return <Activity size={12} />;
+      case 'SECTOR_SELECTOR': return <RotateCw size={12} />;
+      case 'ZERO_SEQUENCE_INJECTION': return <Plus size={12} />;
+      case 'FIELD_ORIENTED_CONTROL':
+      case 'CURRENT_CONTROLLER_DQ':
+      case 'SPEED_CONTROLLER': return <Cpu size={12} />;
+      case 'FLUX_REFERENCE': return <Activity size={12} />;
+      case 'ROTOR_POSITION_ESTIMATOR': return <BarChart size={12} />;
+      case 'CLARKE_TRANSFORM':
+      case 'PARK_TRANSFORM':
+      case 'INVERSE_PARK':
+      case 'INVERSE_CLARKE': return <RefreshCcw size={12} />;
+      case 'VOLTAGE_REFERENCE_GENERATOR': return <Activity size={12} />;
       default: return <Box size={12} />;
     }
   };
@@ -217,64 +266,91 @@ export const XBlockNode: React.FC<XBlockNodeProps> = ({ data, selected, id }) =>
         </div>
 
         {/* Input Ports (Standard ReactFlow Absolute Positioning) */}
-        {data.inputs?.map((input, i) => (
-          <div key={input.id}>
-            <Handle
-              type="target"
-              position={Position.Left}
-              id={input.id}
-              className="border-2 rounded-full cursor-crosshair hover:scale-125 transition-transform"
-              style={{
-                width: 8,
-                height: 8,
-                background: '#4caf50', // Continuous Signal (Green)
-                borderColor: '#1e1e1e',
-                left: -4,
-                top: `${((i + 1) / (data.inputs.length + 1)) * 100}%`
-              }}
-            />
-            {/* Port Label inside the node */}
-            <span
-              className="absolute text-[8px] font-mono text-gray-400 pointer-events-none"
-              style={{
-                left: 6,
-                top: `calc(${((i + 1) / (data.inputs.length + 1)) * 100}% - 6px)`
-              }}
-            >
-              {input.name}
-            </span>
-          </div>
-        ))}
+        {data.inputs?.map((input, i) => {
+          const position = input.position || 'left';
+          const reactFlowPos = position === 'top' ? Position.Top : (position === 'bottom' ? Position.Bottom : Position.Left);
+          const isLogical = input.type === 'logical' || ['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR'].includes(data.type);
+          const isClock = input.id.includes('clk');
+
+          return (
+            <div key={input.id}>
+              <Handle
+                type="target"
+                position={reactFlowPos}
+                id={input.id}
+                className="border-2 rounded-full cursor-crosshair hover:scale-125 transition-transform"
+                style={{
+                  width: 8,
+                  height: 8,
+                  background: getPortColor(input.type),
+                  borderColor: '#1e1e1e',
+                  left: position === 'left' ? -4 : (position === 'right' ? 'auto' : `${((i + 1) / (data.inputs.length + 1)) * 100}%`),
+                  right: position === 'right' ? -4 : 'auto',
+                  top: position === 'top' ? -4 : (position === 'bottom' ? 'auto' : `${((i + 1) / (data.inputs.length + 1)) * 100}%`),
+                  bottom: position === 'bottom' ? -4 : 'auto',
+                  transform: position === 'top' || position === 'bottom' ? 'translateX(-50%)' : 'none'
+                }}
+              />
+              {/* Port Label inside the node */}
+              <span
+                className="absolute text-[8px] font-mono text-gray-400 pointer-events-none"
+                style={{
+                  left: position === 'left' ? 6 : (position === 'top' || position === 'bottom' ? `${((i + 1) / (data.inputs.length + 1)) * 100}%` : 'auto'),
+                  right: position === 'right' ? 6 : 'auto',
+                  top: position === 'top' ? 6 : (position === 'bottom' ? 'auto' : `calc(${((i + 1) / (data.inputs.length + 1)) * 100}% - 6px)`),
+                  bottom: position === 'bottom' ? 6 : 'auto',
+                  transform: position === 'top' || position === 'bottom' ? 'translateX(-50%)' : 'none',
+                  textAlign: position === 'right' ? 'right' : 'left'
+                }}
+              >
+                {input.name}
+              </span>
+            </div>
+          );
+        })}
 
         {/* Output Ports (Standard ReactFlow Absolute Positioning) */}
-        {data.outputs?.map((output, i) => (
-          <div key={output.id}>
-            <Handle
-              type="source"
-              position={Position.Right}
-              id={output.id}
-              className="border-2 rounded-full cursor-crosshair hover:scale-125 transition-transform"
-              style={{
-                width: 8,
-                height: 8,
-                background: '#4caf50', // Continuous Signal (Green)
-                borderColor: '#1e1e1e',
-                right: -4,
-                top: `${((i + 1) / (data.outputs.length + 1)) * 100}%`
-              }}
-            />
-            {/* Port Label inside the node */}
-            <span
-              className="absolute text-[8px] font-mono text-gray-400 pointer-events-none text-right"
-              style={{
-                right: 6,
-                top: `calc(${((i + 1) / (data.outputs.length + 1)) * 100}% - 6px)`
-              }}
-            >
-              {output.name}
-            </span>
-          </div>
-        ))}
+        {data.outputs?.map((output, i) => {
+          const position = output.position || 'right';
+          const reactFlowPos = position === 'top' ? Position.Top : (position === 'bottom' ? Position.Bottom : Position.Right);
+          const isLogical = output.type === 'logical' || ['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR'].includes(data.type);
+
+          return (
+            <div key={output.id}>
+              <Handle
+                type="source"
+                position={reactFlowPos}
+                id={output.id}
+                className="border-2 rounded-full cursor-crosshair hover:scale-125 transition-transform"
+                style={{
+                  width: 8,
+                  height: 8,
+                  background: getPortColor(output.type),
+                  borderColor: '#1e1e1e',
+                  left: position === 'left' ? -4 : (position === 'right' ? 'auto' : `${((i + 1) / (data.outputs.length + 1)) * 100}%`),
+                  right: position === 'right' ? -4 : 'auto',
+                  top: position === 'top' ? -4 : (position === 'bottom' ? 'auto' : `${((i + 1) / (data.outputs.length + 1)) * 100}%`),
+                  bottom: position === 'bottom' ? -4 : 'auto',
+                  transform: position === 'top' || position === 'bottom' ? 'translateX(-50%)' : 'none'
+                }}
+              />
+              {/* Port Label inside the node */}
+              <span
+                className="absolute text-[8px] font-mono text-gray-400 pointer-events-none text-right"
+                style={{
+                  left: position === 'left' ? 6 : (position === 'top' || position === 'bottom' ? `${((i + 1) / (data.outputs.length + 1)) * 100}%` : 'auto'),
+                  right: position === 'right' ? 6 : 'auto',
+                  top: position === 'top' ? 6 : (position === 'bottom' ? 'auto' : `calc(${((i + 1) / (data.outputs.length + 1)) * 100}% - 6px)`),
+                  bottom: position === 'bottom' ? 6 : 'auto',
+                  transform: position === 'top' || position === 'bottom' ? 'translateX(-50%)' : 'none',
+                  textAlign: position === 'right' ? 'right' : 'left'
+                }}
+              >
+                {output.name}
+              </span>
+            </div>
+          );
+        })}
 
       </div>
     </>

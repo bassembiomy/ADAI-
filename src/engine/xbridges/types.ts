@@ -7,13 +7,14 @@ export type XMatrix = number[][] | boolean[][];
 export type XValue = XScalar | XVector | XMatrix;
 
 // --- Signal Types ---
-export type XSignalType = 'continuous' | 'discrete' | 'logical' | 'vector' | 'matrix' | 'auto';
+export type XSignalType = 'continuous' | 'discrete' | 'logical' | 'vector' | 'matrix' | 'bit_array' | 'power' | 'measurement' | 'transform' | 'auto';
 
 export interface XPort {
   id: string;
   name: string;
   type: XSignalType;
   direction: 'input' | 'output';
+  position?: 'left' | 'right' | 'top' | 'bottom'; // NEW: For specialized layout (Clock on top, etc)
   value: XValue;
   dimensions?: number[]; // [length] for vector, [rows, cols] for matrix. Empty/undefined for scalar.
   inferredType?: string; // For UI display in properties panel
@@ -26,7 +27,8 @@ export interface XBlock {
   params: Record<string, any>;
   inputs: XPort[];
   outputs: XPort[];
-  state?: any; // For blocks with memory (integrators, unit delays)
+  state?: any; // For blocks with memory (integrators, unit delays, flip-flops)
+  isStateful?: boolean; // NEW: Indicates if the block breaks algebraic loops
   allowDynamicInputs?: boolean; // Can the user add more inputs? (e.g. Sum, Mul, Concat)
   
   // The execute function now handles arrays and matrices

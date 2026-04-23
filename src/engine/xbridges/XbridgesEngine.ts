@@ -15,6 +15,7 @@ export class XbridgesEngine {
 
   public compile() {
     // 1. Build adjacency list for Topological Sort
+    // To handle feedback loops, we "break" edges that come from stateful blocks.
     const adjList = new Map<string, string[]>();
     const inDegree = new Map<string, number>();
 
@@ -24,10 +25,18 @@ export class XbridgesEngine {
     });
 
     this.model.connections.forEach(conn => {
-      // Directed edge from source to target
-      if (adjList.has(conn.sourceBlock) && inDegree.has(conn.targetBlock)) {
+      const sourceBlock = this.blockMap.get(conn.sourceBlock);
+      const targetBlock = this.blockMap.get(conn.targetBlock);
+      
+      if (sourceBlock && targetBlock) {
+        // Only count in-degree if the source is NOT stateful OR if we want to allow feedback.
+        // Actually, we ALWAYS build the adjList for execution, but for Kahn's we ignore feedback edges.
         adjList.get(conn.sourceBlock)!.push(conn.targetBlock);
-        inDegree.set(conn.targetBlock, inDegree.get(conn.targetBlock)! + 1);
+        
+        // Break algebraic loop: If source is stateful, it doesn't contribute to in-degree for sorting.
+        if (!sourceBlock.isStateful) {
+          inDegree.set(conn.targetBlock, inDegree.get(conn.targetBlock)! + 1);
+        }
       }
     });
 
@@ -44,15 +53,22 @@ export class XbridgesEngine {
       this.executionOrder.push(block);
 
       adjList.get(u)!.forEach(v => {
-        inDegree.set(v, inDegree.get(v)! - 1);
-        if (inDegree.get(v) === 0) {
-          queue.push(v);
+        // Only decrement in-degree if it was counted (i.e., source u is NOT stateful)
+        if (!block.isStateful) {
+          inDegree.set(v, inDegree.get(v)! - 1);
+          if (inDegree.get(v) === 0) {
+            queue.push(v);
+          }
         }
       });
     }
 
+    // Validation: Check if all blocks are in execution order
     if (this.executionOrder.length !== this.model.blocks.length) {
-      throw new Error("Algebraic loop detected in model topology.");
+      const missing = this.model.blocks.filter(b => !this.executionOrder.includes(b));
+      console.warn("Algebraic loop detected without stateful components. These blocks might not execute correctly:", missing.map(m => m.type));
+      // Add missing blocks anyway to avoid complete failure, though they might have stale inputs
+      missing.forEach(m => this.executionOrder.push(m));
     }
 
     // 3. Initialize signal map

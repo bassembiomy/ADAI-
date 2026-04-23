@@ -65,6 +65,8 @@ export const XbridgesWorkspace: React.FC<{
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
     'Sources': true,
     'Continuous': true,
+    'Logic Gates': true,
+    'Sequential': true,
     'Sinks': true
   });
 
@@ -350,7 +352,23 @@ export const XbridgesWorkspace: React.FC<{
   const updateBlock = (blockId: string, data: any) => {
     setNodes(nds => nds.map(n => {
       if (n.id === blockId) {
-        return { ...n, data: { ...n.data, ...data } };
+        const updatedData = { ...n.data, ...data };
+        
+        // Handle parameter-driven port changes (e.g., numInputs, bitWidth)
+        if (data.params && BLOCK_LIBRARY[n.data.type]) {
+            // Check if critical params changed
+            const oldParams = n.data.params || {};
+            const newParams = data.params;
+            
+            if (newParams.numInputs !== oldParams.numInputs) {
+                // Re-instantiate block definition to get new ports
+                const freshDef = BLOCK_LIBRARY[n.data.type](blockId, newParams);
+                updatedData.inputs = freshDef.inputs;
+                updatedData.outputs = freshDef.outputs;
+            }
+        }
+
+        return { ...n, data: updatedData };
       }
       return n;
     }));

@@ -3,12 +3,229 @@ import { XBlock, XPort } from './types';
 import { VectorUtils } from './VectorUtils';
 import * as math from 'mathjs';
 
-const createPort = (id: string, name: string, dir: 'input'|'output', val: any = 0): XPort => ({
-  id, name, type: 'auto', direction: dir, value: val
+const createPort = (id: string, name: string, dir: 'input'|'output', val: any = 0, pos?: 'left'|'right'|'top'|'bottom', type: any = 'auto'): XPort => ({
+  id, name, type: type || 'auto', direction: dir, value: val, position: pos
 });
 
 export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> = {
-  // --- Sources ---
+  // --- Logic Gates ---
+  'AND': (id, params) => ({
+    id, type: 'AND', params: { numInputs: params.numInputs || 2 },
+    allowDynamicInputs: true,
+    inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, String.fromCharCode(65 + i), 'input')),
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [ins.every(val => !!val)] })
+  }),
+
+  'OR': (id, params) => ({
+    id, type: 'OR', params: { numInputs: params.numInputs || 2 },
+    allowDynamicInputs: true,
+    inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, String.fromCharCode(65 + i), 'input')),
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [ins.some(val => !!val)] })
+  }),
+
+  'NOT': (id) => ({
+    id, type: 'NOT', params: {},
+    inputs: [createPort('in', 'In', 'input')],
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [!ins[0]] })
+  }),
+
+  'NAND': (id, params) => ({
+    id, type: 'NAND', params: { numInputs: params.numInputs || 2 },
+    allowDynamicInputs: true,
+    inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, String.fromCharCode(65 + i), 'input')),
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [!ins.every(val => !!val)] })
+  }),
+
+  'NOR': (id, params) => ({
+    id, type: 'NOR', params: { numInputs: params.numInputs || 2 },
+    allowDynamicInputs: true,
+    inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, String.fromCharCode(65 + i), 'input')),
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [!ins.some(val => !!val)] })
+  }),
+
+  'XOR': (id, params) => ({
+    id, type: 'XOR', params: { numInputs: params.numInputs || 2 },
+    allowDynamicInputs: true,
+    inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, String.fromCharCode(65 + i), 'input')),
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [ins.filter(val => !!val).length % 2 !== 0] })
+  }),
+
+  // --- Bitwise Operations ---
+  'BitwiseAND': (id) => ({
+    id, type: 'BitwiseAND', params: {},
+    inputs: [createPort('in1', 'A', 'input'), createPort('in2', 'B', 'input')],
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [Number(ins[0]) & Number(ins[1])] })
+  }),
+
+  'BitwiseOR': (id) => ({
+    id, type: 'BitwiseOR', params: {},
+    inputs: [createPort('in1', 'A', 'input'), createPort('in2', 'B', 'input')],
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [Number(ins[0]) | Number(ins[1])] })
+  }),
+
+  'BitwiseXOR': (id) => ({
+    id, type: 'BitwiseXOR', params: {},
+    inputs: [createPort('in1', 'A', 'input'), createPort('in2', 'B', 'input')],
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [Number(ins[0]) ^ Number(ins[1])] })
+  }),
+
+  'BitwiseNOT': (id) => ({
+    id, type: 'BitwiseNOT', params: {},
+    inputs: [createPort('in', 'In', 'input')],
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [~Number(ins[0])] })
+  }),
+
+  'ShiftLeft': (id) => ({
+    id, type: 'ShiftLeft', params: {},
+    inputs: [createPort('in', 'In', 'input'), createPort('sh', 'Shift', 'input')],
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [Number(ins[0]) << Number(ins[1])] })
+  }),
+
+  'ShiftRight': (id) => ({
+    id, type: 'ShiftRight', params: {},
+    inputs: [createPort('in', 'In', 'input'), createPort('sh', 'Shift', 'input')],
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [Number(ins[0]) >> Number(ins[1])] })
+  }),
+  // --- Sequential Logic ---
+  'DFlipFlop': (id) => ({
+    id, type: 'DFlipFlop', params: {},
+    isStateful: true,
+    inputs: [
+      createPort('d', 'D', 'input'),
+      createPort('clk', 'CLK', 'input', 0, 'top'),
+      createPort('rst', 'RST', 'input', 0, 'bottom')
+    ],
+    outputs: [createPort('q', 'Q', 'output'), createPort('qbar', 'Q!', 'output', 1)],
+    state: { q: 0, lastClk: 0 },
+    execute: (ins, p, state) => {
+      const d = !!ins[0];
+      const clk = !!ins[1];
+      const rst = !!ins[2];
+      let nextQ = state.q;
+      
+      if (rst) {
+        nextQ = 0;
+      } else if (clk && !state.lastClk) { // Rising edge
+        nextQ = d ? 1 : 0;
+      }
+      
+      return { 
+        outputs: [nextQ, nextQ ? 0 : 1],
+        nextState: { q: nextQ, lastClk: clk ? 1 : 0 }
+      };
+    }
+  }),
+
+  'JKFlipFlop': (id) => ({
+    id, type: 'JKFlipFlop', params: {},
+    isStateful: true,
+    inputs: [
+      createPort('j', 'J', 'input'),
+      createPort('k', 'K', 'input'),
+      createPort('clk', 'CLK', 'input', 0, 'top'),
+      createPort('rst', 'RST', 'input', 0, 'bottom')
+    ],
+    outputs: [createPort('q', 'Q', 'output'), createPort('qbar', 'Q!', 'output', 1)],
+    state: { q: 0, lastClk: 0 },
+    execute: (ins, p, state) => {
+      const j = !!ins[0];
+      const k = !!ins[1];
+      const clk = !!ins[2];
+      const rst = !!ins[3];
+      let nextQ = state.q;
+      
+      if (rst) {
+        nextQ = 0;
+      } else if (clk && !state.lastClk) {
+        if (j && k) nextQ = state.q ? 0 : 1; // Toggle
+        else if (j) nextQ = 1;
+        else if (k) nextQ = 0;
+      }
+      
+      return { 
+        outputs: [nextQ, nextQ ? 0 : 1],
+        nextState: { q: nextQ, lastClk: clk ? 1 : 0 }
+      };
+    }
+  }),
+
+  'Register': (id, params) => ({
+    id, type: 'Register', params: { bitWidth: params.bitWidth || 8 },
+    isStateful: true,
+    inputs: [
+      createPort('in', 'Data', 'input'),
+      createPort('clk', 'CLK', 'input', 0, 'top'),
+      createPort('en', 'EN', 'input', 1, 'bottom'),
+      createPort('rst', 'RST', 'input', 0, 'bottom')
+    ],
+    outputs: [createPort('out', 'Out', 'output')],
+    state: { value: 0, lastClk: 0 },
+    execute: (ins, p, state) => {
+      const data = Number(ins[0]);
+      const clk = !!ins[1];
+      const en = !!ins[2];
+      const rst = !!ins[3];
+      let nextVal = state.value;
+      
+      if (rst) {
+        nextVal = 0;
+      } else if (en && clk && !state.lastClk) {
+        nextVal = data & ((1 << p.bitWidth) - 1);
+      }
+      
+      return { outputs: [nextVal], nextState: { value: nextVal, lastClk: clk ? 1 : 0 } };
+    }
+  }),
+
+  'Counter': (id, params) => ({
+    id, type: 'Counter', params: { maxValue: params.maxValue || 255 },
+    isStateful: true,
+    inputs: [
+      createPort('clk', 'CLK', 'input', 0, 'top'),
+      createPort('en', 'EN', 'input', 1, 'bottom'),
+      createPort('rst', 'RST', 'input', 0, 'bottom')
+    ],
+    outputs: [createPort('out', 'Count', 'output')],
+    state: { count: 0, lastClk: 0 },
+    execute: (ins, p, state) => {
+      const clk = !!ins[0];
+      const en = !!ins[1];
+      const rst = !!ins[2];
+      let nextCount = state.count;
+      
+      if (rst) {
+        nextCount = 0;
+      } else if (en && clk && !state.lastClk) {
+        nextCount = (state.count + 1) % (p.maxValue + 1);
+      }
+      
+      return { outputs: [nextCount], nextState: { count: nextCount, lastClk: clk ? 1 : 0 } };
+    }
+  }),
+
+  'Clock': (id, params) => ({
+    id, type: 'Clock', params: { freq: params.freq || 1 },
+    inputs: [],
+    outputs: [createPort('clk', 'CLK', 'output')],
+    execute: (ins, p, state, time) => {
+      const period = 1 / p.freq;
+      const clk = (time % period) < (period / 2) ? 1 : 0;
+      return { outputs: [clk] };
+    }
+  }),
+
   'WaveformGen': (id, params) => ({
     id, type: 'WaveformGen', params: { 
       type: params.type || 'Sine', 
@@ -173,6 +390,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   // --- Continuous ---
   'Integrator': (id, params) => ({
     id, type: 'Integrator', params: { initialCondition: params.initialCondition ?? 0 },
+    isStateful: true,
     inputs: [createPort('in', 'In', 'input')],
     outputs: [createPort('out', 'Out', 'output', params.initialCondition ?? 0)],
     state: params.initialCondition ?? 0,
@@ -208,5 +426,597 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('in', 'In', 'input')],
     outputs: [],
     execute: () => ({ outputs: [] })
-  })
+  }),
+
+  // --- PWM Generators ---
+  'PWM_GENERATOR': (id, params) => ({
+    id, type: 'PWM_GENERATOR', 
+    params: { frequency: params.frequency || 5000, carrierType: params.carrierType || 'triangle' },
+    inputs: [createPort('duty', 'Duty', 'input', 0, 'left', 'control')],
+    outputs: [createPort('pwm', 'PWM', 'output', 0, 'right', 'logical')],
+    execute: (ins, p, state, time) => {
+      const freq = Number(p.frequency);
+      const period = 1 / freq;
+      const tRel = time % period;
+      let carrier = 0;
+      
+      if (p.carrierType === 'triangle') {
+        carrier = tRel < period / 2 ? (2 * tRel) / (period / 2) - 1 : 1 - (2 * (tRel - period / 2)) / (period / 2);
+        // Normalize to 0-1
+        carrier = (carrier + 1) / 2;
+      } else { // sawtooth
+        carrier = tRel / period;
+      }
+      
+      const duty = Math.max(0, Math.min(1, Number(ins[0])));
+      return { outputs: [duty > carrier ? 1 : 0] };
+    }
+  }),
+
+  'THREE_PHASE_PWM': (id, params) => ({
+    id, type: 'THREE_PHASE_PWM',
+    params: { frequency: params.frequency || 5000, method: params.method || 'SPWM' },
+    inputs: [
+      createPort('va_ref', 'Va*', 'input', 0, 'left', 'control'),
+      createPort('vb_ref', 'Vb*', 'input', 0, 'left', 'control'),
+      createPort('vc_ref', 'Vc*', 'input', 0, 'left', 'control')
+    ],
+    outputs: [
+      createPort('ga', 'Ga', 'output', 0, 'right', 'logical'),
+      createPort('gb', 'Gb', 'output', 0, 'right', 'logical'),
+      createPort('gc', 'Gc', 'output', 0, 'right', 'logical')
+    ],
+    execute: (ins, p, state, time) => {
+      const freq = Number(p.frequency);
+      const period = 1 / freq;
+      const tRel = (time % period) / period; // Sawtooth carrier 0-1
+      
+      const refs = ins.map(v => Math.max(0, Math.min(1, (Number(v) + 1) / 2))); // Map -1..1 to 0..1
+      
+      return { outputs: refs.map(ref => (ref > tRel ? 1 : 0)) };
+    }
+  }),
+
+  'SIX_STEP_COMMUTATION': (id) => ({
+    id, type: 'SIX_STEP_COMMUTATION', params: {},
+    inputs: [
+      createPort('h1', 'H1', 'input', 0, 'left', 'logical'),
+      createPort('h2', 'H2', 'input', 0, 'left', 'logical'),
+      createPort('h3', 'H3', 'input', 0, 'left', 'logical')
+    ],
+    outputs: [
+      createPort('ga', 'Ga', 'output', 0, 'right', 'logical'),
+      createPort('gb', 'Gb', 'output', 0, 'right', 'logical'),
+      createPort('gc', 'Gc', 'output', 0, 'right', 'logical')
+    ],
+    execute: (ins) => {
+      const h = (Number(ins[0]) << 2) | (Number(ins[1]) << 1) | Number(ins[2]);
+      let gates = [0, 0, 0]; // A, B, C (Simplified: 1=High, -1=Low, 0=Off)
+      switch(h) {
+        case 5: gates = [1, -1, 0]; break; // Step 1
+        case 1: gates = [1, 0, -1]; break; // Step 2
+        case 3: gates = [0, 1, -1]; break; // Step 3
+        case 2: gates = [-1, 1, 0]; break; // Step 4
+        case 6: gates = [-1, 0, 1]; break; // Step 5
+        case 4: gates = [0, -1, 1]; break; // Step 6
+      }
+      return { outputs: gates };
+    }
+  }),
+
+  // --- DC-AC Inverters ---
+  'THREE_PHASE_INVERTER': (id, params) => ({
+    id, type: 'THREE_PHASE_INVERTER',
+    params: { Ron: params.Ron || 0.01, Vf: params.Vf || 0.7 },
+    inputs: [
+      createPort('vdc_p', 'Vdc+', 'input', 24, 'left', 'power'),
+      createPort('vdc_n', 'Vdc-', 'input', 0, 'left', 'power'),
+      createPort('ga', 'Gate_A', 'input', 0, 'bottom', 'logical'),
+      createPort('gb', 'Gate_B', 'input', 0, 'bottom', 'logical'),
+      createPort('gc', 'Gate_C', 'input', 0, 'bottom', 'logical')
+    ],
+    outputs: [
+      createPort('va', 'Va', 'output', 0, 'right', 'power'),
+      createPort('vb', 'Vb', 'output', 0, 'right', 'power'),
+      createPort('vc', 'Vc', 'output', 0, 'right', 'power')
+    ],
+    execute: (ins) => {
+      const vdc = Number(ins[0]) - Number(ins[1]);
+      const gates = [Number(ins[2]), Number(ins[3]), Number(ins[4])];
+      
+      // Phase voltages relative to negative DC bus
+      const vPh = gates.map(g => (g > 0.5 ? vdc : 0));
+      
+      // Optional: Neutral point voltage if balanced load (vPh_avg)
+      const vNeut = (vPh[0] + vPh[1] + vPh[2]) / 3;
+      
+      return { outputs: vPh.map(v => v - vNeut) }; // Line-to-neutral voltages
+    }
+  }),
+
+  'SINGLE_PHASE_H_BRIDGE': (id, params) => ({
+    id, type: 'SINGLE_PHASE_H_BRIDGE',
+    params: { Ron: params.Ron || 0.01 },
+    inputs: [
+      createPort('vdc_p', 'Vdc+', 'input', 12, 'left', 'power'),
+      createPort('vdc_n', 'Vdc-', 'input', 0, 'left', 'power'),
+      createPort('g1', 'Gate_1', 'input', 0, 'bottom', 'logical'),
+      createPort('g2', 'Gate_2', 'input', 0, 'bottom', 'logical')
+    ],
+    outputs: [createPort('vout', 'Vout', 'output', 0, 'right', 'power')],
+    execute: (ins) => {
+      const vdc = Number(ins[0]) - Number(ins[1]);
+      const s1 = Number(ins[2]) > 0.5;
+      const s2 = Number(ins[3]) > 0.5;
+      
+      // H-bridge output: (S1 - S2) * Vdc
+      const vout = (s1 ? vdc : 0) - (s2 ? vdc : 0);
+      return { outputs: [vout] };
+    }
+  }),
+
+  // --- Control & Modulation ---
+  'VOLTAGE_REFERENCE_GENERATOR': (id, params) => ({
+    id, type: 'VOLTAGE_REFERENCE_GENERATOR',
+    params: { frequency: params.frequency || 50, amplitude: params.amplitude || 1 },
+    inputs: [createPort('f', 'Freq', 'input', params.frequency || 50, 'left', 'control')],
+    outputs: [
+      createPort('va', 'Va*', 'output', 0, 'right', 'control'),
+      createPort('vb', 'Vb*', 'output', 0, 'right', 'control'),
+      createPort('vc', 'Vc*', 'output', 0, 'right', 'control')
+    ],
+    execute: (ins, p, state, time) => {
+      const f = Number(ins[0]);
+      const amp = Number(p.amplitude);
+      const w = 2 * Math.PI * f;
+      
+      const va = amp * Math.sin(w * time);
+      const vb = amp * Math.sin(w * time - (2 * Math.PI) / 3);
+      const vc = amp * Math.sin(w * time - (4 * Math.PI) / 3);
+      
+      return { outputs: [va, vb, vc] };
+    }
+  }),
+
+  'FIELD_ORIENTED_CONTROL': (id, params) => ({
+    id, type: 'FIELD_ORIENTED_CONTROL',
+    params: { Kp: params.Kp || 1, Ki: params.Ki || 10 },
+    isStateful: true,
+    inputs: [
+      createPort('id_ref', 'Id*', 'input', 0, 'left', 'control'),
+      createPort('iq_ref', 'Iq*', 'input', 0, 'left', 'control'),
+      createPort('ia', 'Ia', 'input', 0, 'top', 'measurement'),
+      createPort('ib', 'Ib', 'input', 0, 'top', 'measurement'),
+      createPort('theta', 'θ', 'input', 0, 'top', 'measurement')
+    ],
+    outputs: [
+      createPort('vd', 'Vd*', 'output', 0, 'right', 'control'),
+      createPort('vq', 'Vq*', 'output', 0, 'right', 'control'),
+      createPort('va_ref', 'Va*', 'output', 0, 'right', 'control'),
+      createPort('vb_ref', 'Vb*', 'output', 0, 'right', 'control'),
+      createPort('vc_ref', 'Vc*', 'output', 0, 'right', 'control')
+    ],
+    state: { integralD: 0, integralQ: 0, lastTime: 0 },
+    execute: (ins, p, state, time) => {
+      const id_ref = Number(ins[0]);
+      const iq_ref = Number(ins[1]);
+      const ia = Number(ins[2]);
+      const ib = Number(ins[3]);
+      const theta = Number(ins[4]);
+      
+      // 1. Clarke Transform (abc -> alpha-beta)
+      const ic = -ia - ib;
+      const iAlpha = ia;
+      const iBeta = (ia + 2 * ib) / Math.sqrt(3);
+      
+      // 2. Park Transform (alpha-beta -> dq)
+      const cosT = Math.cos(theta);
+      const sinT = Math.sin(theta);
+      const id = iAlpha * cosT + iBeta * sinT;
+      const iq = -iAlpha * sinT + iBeta * cosT;
+      
+      // 3. PI Control
+      const dt = Math.max(1e-6, time - (state.lastTime || 0));
+      const errD = id_ref - id;
+      const errQ = iq_ref - iq;
+      
+      const nextIntD = state.integralD + errD * dt;
+      const nextIntQ = state.integralQ + errQ * dt;
+      
+      const vd = p.Kp * errD + p.Ki * nextIntD;
+      const vq = p.Kp * errQ + p.Ki * nextIntQ;
+      
+      // 4. Inverse Park (dq -> alpha-beta)
+      const vAlpha = vd * cosT - vq * sinT;
+      const vBeta = vd * sinT + vq * cosT;
+      
+      // 5. Inverse Clarke (alpha-beta -> abc)
+      const va = vAlpha;
+      const vb = (-0.5 * vAlpha) + (Math.sqrt(3) / 2) * vBeta;
+      const vc = (-0.5 * vAlpha) - (Math.sqrt(3) / 2) * vBeta;
+      
+      return { 
+        outputs: [vd, vq, va, vb, vc],
+        nextState: { integralD: nextIntD, integralQ: nextIntQ, lastTime: time }
+      };
+    }
+  }),
+
+  // --- Reference Frame Transformations ---
+  'CLARKE_TRANSFORM': (id, params) => ({
+    id, type: 'CLARKE_TRANSFORM', 
+    params: { mode: params.mode || 'amplitude_invariant' },
+    inputs: [
+      createPort('ia', 'Ia', 'input', 0, 'left', 'measurement'),
+      createPort('ib', 'Ib', 'input', 0, 'left', 'measurement'),
+      createPort('ic', 'Ic', 'input', 0, 'left', 'measurement')
+    ],
+    outputs: [
+      createPort('alpha', 'Iα', 'output', 0, 'right', 'transform'),
+      createPort('beta', 'Iβ', 'output', 0, 'right', 'transform')
+    ],
+    execute: (ins, p) => {
+      const ia = Number(ins[0]);
+      const ib = Number(ins[1]);
+      const ic = Number(ins[2]);
+      
+      let iAlpha = 0;
+      let iBeta = 0;
+      
+      if (p.mode === 'amplitude_invariant') {
+        // Standard Clarke (Amplitude Invariant) assuming balanced system (Ia+Ib+Ic=0)
+        iAlpha = ia;
+        iBeta = (ia + 2 * ib) / Math.sqrt(3);
+      } else {
+        // Power Invariant Clarke
+        const k = Math.sqrt(2/3);
+        iAlpha = k * (ia - 0.5 * ib - 0.5 * ic);
+        iBeta = k * (Math.sqrt(3)/2 * ib - Math.sqrt(3)/2 * ic);
+      }
+      
+      return { outputs: [iAlpha, iBeta] };
+    }
+  }),
+
+  'PARK_TRANSFORM': (id) => ({
+    id, type: 'PARK_TRANSFORM', params: {},
+    inputs: [
+      createPort('alpha', 'Iα', 'input', 0, 'left', 'transform'),
+      createPort('beta', 'Iβ', 'input', 0, 'left', 'transform'),
+      createPort('theta', 'θ', 'input', 0, 'top', 'measurement')
+    ],
+    outputs: [
+      createPort('id', 'Id', 'output', 0, 'right', 'transform'),
+      createPort('iq', 'Iq', 'output', 0, 'right', 'transform')
+    ],
+    execute: (ins) => {
+      const iAlpha = Number(ins[0]);
+      const iBeta = Number(ins[1]);
+      const theta = Number(ins[2]);
+      const cosT = Math.cos(theta);
+      const sinT = Math.sin(theta);
+      const id = iAlpha * cosT + iBeta * sinT;
+      const iq = -iAlpha * sinT + iBeta * cosT;
+      return { outputs: [id, iq] };
+    }
+  }),
+
+  'INVERSE_PARK': (id) => ({
+    id, type: 'INVERSE_PARK', params: {},
+    inputs: [
+      createPort('vd', 'Vd', 'input', 0, 'left', 'transform'),
+      createPort('vq', 'Vq', 'input', 0, 'left', 'transform'),
+      createPort('theta', 'θ', 'input', 0, 'top', 'measurement')
+    ],
+    outputs: [
+      createPort('alpha', 'Vα', 'output', 0, 'right', 'transform'),
+      createPort('beta', 'Vβ', 'output', 0, 'right', 'transform')
+    ],
+    execute: (ins) => {
+      const vd = Number(ins[0]);
+      const vq = Number(ins[1]);
+      const theta = Number(ins[2]);
+      const cosT = Math.cos(theta);
+      const sinT = Math.sin(theta);
+      const vAlpha = vd * cosT - vq * sinT;
+      const vBeta = vd * sinT + vq * cosT;
+      return { outputs: [vAlpha, vBeta] };
+    }
+  }),
+
+  'INVERSE_CLARKE': (id) => ({
+    id, type: 'INVERSE_CLARKE', params: {},
+    inputs: [
+      createPort('alpha', 'Vα', 'input', 0, 'left', 'transform'),
+      createPort('beta', 'Vβ', 'input', 0, 'left', 'transform')
+    ],
+    outputs: [
+      createPort('va', 'Va', 'output', 0, 'right', 'power'),
+      createPort('vb', 'Vb', 'output', 0, 'right', 'power'),
+      createPort('vc', 'Vc', 'output', 0, 'right', 'power')
+    ],
+    execute: (ins) => {
+      const vAlpha = Number(ins[0]);
+      const vBeta = Number(ins[1]);
+      const va = vAlpha;
+      const vb = (-0.5 * vAlpha) + (Math.sqrt(3) / 2) * vBeta;
+      const vc = (-0.5 * vAlpha) - (Math.sqrt(3) / 2) * vBeta;
+      return { outputs: [va, vb, vc] };
+    }
+  }),
+
+  // --- FOC Control Blocks ---
+  'CURRENT_CONTROLLER_DQ': (id, params) => ({
+    id, type: 'CURRENT_CONTROLLER_DQ',
+    params: { 
+      Kp_d: params.Kp_d || 1, Ki_d: params.Ki_d || 10,
+      Kp_q: params.Kp_q || 1, Ki_q: params.Ki_q || 10 
+    },
+    isStateful: true,
+    inputs: [
+      createPort('id_ref', 'Id*', 'input', 0, 'left', 'control'),
+      createPort('iq_ref', 'Iq*', 'input', 0, 'left', 'control'),
+      createPort('id', 'Id', 'input', 0, 'top', 'measurement'),
+      createPort('iq', 'Iq', 'input', 0, 'top', 'measurement')
+    ],
+    outputs: [
+      createPort('vd', 'Vd*', 'output', 0, 'right', 'control'),
+      createPort('vq', 'Vq*', 'output', 0, 'right', 'control')
+    ],
+    state: { intD: 0, intQ: 0, lastTime: 0 },
+    execute: (ins, p, state, time) => {
+      const dt = Math.max(1e-6, time - (state.lastTime || 0));
+      const errD = Number(ins[0]) - Number(ins[2]);
+      const errQ = Number(ins[1]) - Number(ins[3]);
+      
+      const nextIntD = state.intD + errD * dt;
+      const nextIntQ = state.intQ + errQ * dt;
+      
+      const vd = p.Kp_d * errD + p.Ki_d * nextIntD;
+      const vq = p.Kp_q * errQ + p.Ki_q * nextIntQ;
+      
+      return { 
+        outputs: [vd, vq],
+        nextState: { intD: nextIntD, intQ: nextIntQ, lastTime: time }
+      };
+    }
+  }),
+
+  'SPEED_CONTROLLER': (id, params) => ({
+    id, type: 'SPEED_CONTROLLER',
+    params: { Kp: params.Kp || 0.5, Ki: params.Ki || 5, maxIq: params.maxIq || 10 },
+    isStateful: true,
+    inputs: [
+      createPort('speed_ref', 'ω*', 'input', 0, 'left', 'control'),
+      createPort('speed_actual', 'ω', 'input', 0, 'top', 'measurement')
+    ],
+    outputs: [createPort('iq_ref', 'Iq*', 'output', 0, 'right', 'control')],
+    state: { integral: 0, lastTime: 0 },
+    execute: (ins, p, state, time) => {
+      const dt = Math.max(1e-6, time - (state.lastTime || 0));
+      const err = Number(ins[0]) - Number(ins[1]);
+      const nextInt = state.integral + err * dt;
+      
+      let iq = p.Kp * err + p.Ki * nextInt;
+      // Saturation
+      iq = Math.max(-p.maxIq, Math.min(p.maxIq, iq));
+      
+      return { 
+        outputs: [iq],
+        nextState: { integral: nextInt, lastTime: time }
+      };
+    }
+  }),
+
+  'FLUX_REFERENCE': (id, params) => ({
+    id, type: 'FLUX_REFERENCE',
+    params: { mode: params.mode || 'constant', value: params.value || 0 },
+    inputs: [],
+    outputs: [createPort('id_ref', 'Id*', 'output', params.value || 0, 'right', 'control')],
+    execute: (_, p) => {
+      // In a real implementation, 'field_weakening' would adjust 'value' based on speed.
+      return { outputs: [Number(p.value)] };
+    }
+  }),
+
+  'ROTOR_POSITION_ESTIMATOR': (id, params) => ({
+    id, type: 'ROTOR_POSITION_ESTIMATOR',
+    params: { method: params.method || 'Hall_sensor' },
+    inputs: [
+      createPort('ia', 'Ia', 'input', 0, 'left', 'measurement'),
+      createPort('ib', 'Ib', 'input', 0, 'left', 'measurement'),
+      createPort('ic', 'Ic', 'input', 0, 'left', 'measurement'),
+      createPort('va', 'Va', 'input', 0, 'top', 'measurement'),
+      createPort('vb', 'Vb', 'input', 0, 'top', 'measurement'),
+      createPort('vc', 'Vc', 'input', 0, 'top', 'measurement')
+    ],
+    outputs: [
+      createPort('theta', 'θ', 'output', 0, 'right', 'measurement'),
+      createPort('speed', 'ω', 'output', 0, 'right', 'measurement')
+    ],
+    execute: () => {
+      // Placeholder for actual estimator logic
+      return { outputs: [0, 0] };
+    }
+  }),
+
+  // --- SVPWM Core ---
+  'SVPWM_CORE': (id, params) => ({
+    id, type: 'SVPWM_CORE',
+    params: { Ts: params.Ts || 0.0001, Vdc: params.Vdc || 400 },
+    inputs: [
+      createPort('v_alpha', 'Vα', 'input', 0, 'left', 'transform'),
+      createPort('v_beta', 'Vβ', 'input', 0, 'left', 'transform')
+    ],
+    outputs: [
+      createPort('sector', 'Sec', 'output', 1, 'top', 'measurement'),
+      createPort('t1', 'T1', 'output', 0, 'top', 'measurement'),
+      createPort('t2', 'T2', 'output', 0, 'top', 'measurement'),
+      createPort('t0', 'T0', 'output', 0, 'top', 'measurement')
+    ],
+    execute: (ins, p) => {
+      const vAlpha = Number(ins[0]);
+      const vBeta = Number(ins[1]);
+      const Vdc = Number(p.Vdc);
+      const Ts = Number(p.Ts);
+
+      const theta = Math.atan2(vBeta, vAlpha);
+      const thetaDeg = (theta * 180 / Math.PI + 360) % 360;
+      const sector = Math.floor(thetaDeg / 60) + 1;
+      
+      const Vref = Math.sqrt(vAlpha * vAlpha + vBeta * vBeta);
+      const thetaS = (thetaDeg % 60) * Math.PI / 180;
+
+      const T1 = Ts * (Math.sqrt(3) * Vref / Vdc) * Math.sin(Math.PI / 3 - thetaS);
+      const T2 = Ts * (Math.sqrt(3) * Vref / Vdc) * Math.sin(thetaS);
+      const T0 = Ts - T1 - T2;
+
+      return { outputs: [sector, Math.max(0, T1), Math.max(0, T2), Math.max(0, T0)] };
+    }
+  }),
+
+  'SECTOR_SELECTOR': (id) => ({
+    id, type: 'SECTOR_SELECTOR', params: {},
+    inputs: [createPort('theta', 'θ', 'input', 0, 'left', 'measurement')],
+    outputs: [createPort('sector', 'Sec', 'output', 1, 'right', 'discrete')],
+    execute: (ins) => {
+      const thetaDeg = (Number(ins[0]) * 180 / Math.PI + 360) % 360;
+      const sector = Math.floor(thetaDeg / 60) + 1;
+      return { outputs: [sector] };
+    }
+  }),
+
+  'SWITCHING_TIME_CALCULATOR': (id, params) => ({
+    id, type: 'SWITCHING_TIME_CALCULATOR',
+    params: { Vdc: params.Vdc || 400, Ts: params.Ts || 0.0001 },
+    inputs: [
+      createPort('vref', 'Vref', 'input', 0, 'left', 'control'),
+      createPort('theta_s', 'θs', 'input', 0, 'left', 'measurement'),
+      createPort('vdc', 'Vdc', 'input', 400, 'bottom', 'control'),
+      createPort('ts', 'Ts', 'input', 0.0001, 'bottom', 'control')
+    ],
+    outputs: [
+      createPort('t1', 'T1', 'output', 0, 'right', 'measurement'),
+      createPort('t2', 'T2', 'output', 0, 'right', 'measurement'),
+      createPort('t0', 'T0', 'output', 0, 'right', 'measurement')
+    ],
+    execute: (ins) => {
+      const Vref = Number(ins[0]);
+      const thetaS = Number(ins[1]);
+      const Vdc = Number(ins[2]);
+      const Ts = Number(ins[3]);
+
+      const T1 = Ts * (Math.sqrt(3) * Vref / Vdc) * Math.sin(Math.PI / 3 - thetaS);
+      const T2 = Ts * (Math.sqrt(3) * Vref / Vdc) * Math.sin(thetaS);
+      const T0 = Ts - T1 - T2;
+
+      return { outputs: [Math.max(0, T1), Math.max(0, T2), Math.max(0, T0)] };
+    }
+  }),
+
+  'SVPWM_GATE_GENERATOR': (id, params) => ({
+    id, type: 'SVPWM_GATE_GENERATOR',
+    params: { Ts: params.Ts || 0.0001 },
+    isStateful: true,
+    inputs: [
+      createPort('sector', 'Sec', 'input', 1, 'left', 'discrete'),
+      createPort('t1', 'T1', 'input', 0, 'left', 'measurement'),
+      createPort('t2', 'T2', 'input', 0, 'left', 'measurement'),
+      createPort('t0', 'T0', 'input', 0, 'left', 'measurement')
+    ],
+    outputs: [
+      createPort('ga', 'Ga', 'output', 0, 'right', 'logical'),
+      createPort('gb', 'Gb', 'output', 0, 'right', 'logical'),
+      createPort('gc', 'Gc', 'output', 0, 'right', 'logical')
+    ],
+    state: { lastTime: 0 },
+    execute: (ins, p, state, time) => {
+      const Ts = Number(p.Ts);
+      const sector = Number(ins[0]);
+      const T1 = Number(ins[1]);
+      const T2 = Number(ins[2]);
+      const T0 = Number(ins[3]);
+      
+      const tRel = time % Ts;
+      const tHalf = Ts / 2;
+      
+      // Symmetrical PWM: 0 -> Ts/2 -> Ts
+      // For first half: 0 -> Ts/2
+      const t = tRel > tHalf ? Ts - tRel : tRel;
+      
+      // Pulse widths for each phase (normalized to 0..Ts/2)
+      let da = 0, db = 0, dc = 0;
+      
+      // Timing calculation based on sector (Standard Symmetrical pattern)
+      const t0_4 = T0 / 4;
+      const t1_2 = T1 / 2;
+      const t2_2 = T2 / 2;
+
+      switch(sector) {
+        case 1: da = t0_4; db = t0_4 + t1_2; dc = t0_4 + t1_2 + t2_2; break;
+        case 2: da = t0_4 + t2_2; db = t0_4; dc = t0_4 + t1_2 + t2_2; break;
+        case 3: da = t0_4 + t1_2 + t2_2; db = t0_4; dc = t0_4 + t1_2; break;
+        case 4: da = t0_4 + t1_2 + t2_2; db = t0_4 + t2_2; dc = t0_4; break;
+        case 5: da = t0_4 + t1_2; db = t0_4 + t1_2 + t2_2; dc = t0_4; break;
+        case 6: da = t0_4; db = t0_4 + t1_2 + t2_2; dc = t0_4 + t2_2; break;
+      }
+
+      // Gate = 1 if t > threshold (comparing with triangle carrier)
+      // Actually, standard SVPWM centers the pulses.
+      // High pulse is between threshold and tHalf.
+      return { 
+        outputs: [
+          t > da ? 1 : 0,
+          t > db ? 1 : 0,
+          t > dc ? 1 : 0
+        ],
+        nextState: { lastTime: time }
+      };
+    }
+  }),
+
+  'ZERO_SEQUENCE_INJECTION': (id) => ({
+    id, type: 'ZERO_SEQUENCE_INJECTION', params: {},
+    inputs: [
+      createPort('va', 'Va*', 'input', 0, 'left', 'control'),
+      createPort('vb', 'Vb*', 'input', 0, 'left', 'control'),
+      createPort('vc', 'Vc*', 'input', 0, 'left', 'control')
+    ],
+    outputs: [
+      createPort('va_mod', 'Va_mod', 'output', 0, 'right', 'control'),
+      createPort('vb_mod', 'Vb_mod', 'output', 0, 'right', 'control'),
+      createPort('vc_mod', 'Vc_mod', 'output', 0, 'right', 'control')
+    ],
+    execute: (ins) => {
+      const v = ins.map(Number);
+      const vOffset = (Math.max(...v) + Math.min(...v)) / 2;
+      return { outputs: v.map(val => val - vOffset) };
+    }
+  }),
+
+  'SVPWM_MODULATOR': (id, params) => ({
+    id, type: 'SVPWM_MODULATOR',
+    params: { Ts: params.Ts || 0.0001, Vdc: params.Vdc || 400 },
+    isStateful: true,
+    inputs: [
+      createPort('v_alpha', 'Vα', 'input', 0, 'left', 'transform'),
+      createPort('v_beta', 'Vβ', 'input', 0, 'left', 'transform')
+    ],
+    outputs: [
+      createPort('ga', 'Ga', 'output', 0, 'right', 'logical'),
+      createPort('gb', 'Gb', 'output', 0, 'right', 'logical'),
+      createPort('gc', 'Gc', 'output', 0, 'right', 'logical')
+    ],
+    state: { lastTime: 0 },
+    execute: (ins, p, state, time) => {
+      // Internal pipeline: CORE -> GATE_GEN
+      const core = BLOCK_LIBRARY['SVPWM_CORE'](id, p);
+      const coreResult = core.execute(ins, p, {}, time);
+      
+      const gateGen = BLOCK_LIBRARY['SVPWM_GATE_GENERATOR'](id, p);
+      const gateResult = gateGen.execute(coreResult.outputs, p, state, time);
+      
+      return gateResult;
+    }
+  }),
 };
