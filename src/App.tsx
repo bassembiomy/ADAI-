@@ -101,6 +101,22 @@ const Separator = ({ orientation = 'horizontal', className = '' }: {
   <div className={`${orientation === 'vertical' ? 'w-px h-4' : 'h-px w-full'} bg-[#333] ${className}`} />
 );
 
+const Triangle = ({ size, className, fill }: { size: number, className?: string, fill?: string }) => (
+  <svg 
+    width={size} 
+    height={size} 
+    viewBox="0 0 24 24" 
+    fill={fill || "none"} 
+    stroke="currentColor" 
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className}
+  >
+    <path d="M3 20h18L12 4z" />
+  </svg>
+);
+
 const Checkbox = ({
   checked,
   onCheckedChange,
@@ -130,6 +146,117 @@ const Resizer = ({ onMouseDown, orientation = 'vertical' }: { onMouseDown: (e: R
     <div className={`bg-[#333] group-hover:bg-[#c9a86c] transition-colors ${orientation === 'vertical' ? 'w-px h-full mx-auto' : 'h-px w-full my-auto'}`} />
   </div>
 );
+
+const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
+  const [isVisible, setIsVisible] = useState(true);
+
+  useEffect(() => {
+    // Voice message logic with reliability fixes
+    let speechDone = false;
+    const speak = () => {
+      if (speechDone) return;
+      
+      // Cancel any ongoing speech
+      window.speechSynthesis.cancel();
+      
+      const msg = new SpeechSynthesisUtterance("Ah-dee-uh Go Beyond");
+      msg.rate = 0.9;
+      msg.pitch = 1.0;
+      msg.volume = 1.0;
+      msg.lang = 'en-US';
+      
+      const voices = window.speechSynthesis.getVoices();
+      const usVoice = voices.find(v => v.lang.includes('en-US') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha')));
+      msg.voice = usVoice || voices.find(v => v.lang.includes('en-US')) || voices[0];
+      
+      window.speechSynthesis.speak(msg);
+      speechDone = true;
+    };
+
+    // Trigger on mount (if browser allows)
+    if (window.speechSynthesis.getVoices().length > 0) {
+      setTimeout(speak, 500);
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => setTimeout(speak, 500);
+    }
+
+    // Fallback: Trigger on first interaction with the splash screen
+    const handleInteraction = () => speak();
+    window.addEventListener('click', handleInteraction);
+    window.addEventListener('keydown', handleInteraction);
+
+    const timer = setTimeout(() => {
+      setIsVisible(false);
+      setTimeout(onComplete, 800);
+    }, 4500);
+
+    return () => {
+      clearTimeout(timer);
+      window.speechSynthesis.onvoiceschanged = null;
+      window.removeEventListener('click', handleInteraction);
+      window.removeEventListener('keydown', handleInteraction);
+    };
+
+  }, [onComplete]);
+
+  return (
+    <div className={`fixed inset-0 z-[9999] bg-[#0a0a0a] flex flex-col items-center justify-center transition-opacity duration-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+      <div className="relative flex flex-col items-center">
+        {/* Animated Glow */}
+        <div className="absolute inset-0 bg-[#c9a86c] rounded-full blur-[80px] opacity-10 animate-pulse" />
+        
+        {/* Professional Logo */}
+        <div className="relative mb-12 scale-125 md:scale-150">
+          <svg width="100" height="100" viewBox="0 0 100 100" fill="none" className="animate-float">
+            <path d="M50 5 L90 25 L90 75 L50 95 L10 75 L10 25 Z" stroke="#c9a86c" strokeWidth="2.5" strokeLinejoin="round" />
+            <path d="M50 15 L80 30 L80 70 L50 85 L20 70 L20 30 Z" stroke="#c9a86c" strokeWidth="1" opacity="0.3" />
+            <path d="M40 45 L50 35 L60 45 L60 55 L50 65 L40 55 Z" fill="#c9a86c" className="animate-pulse" />
+            <circle cx="50" cy="50" r="30" stroke="#c9a86c" strokeWidth="0.5" strokeDasharray="6 6" className="animate-spin-slow" />
+          </svg>
+        </div>
+
+        <div className="text-center">
+          <h1 className="text-6xl font-black tracking-[0.3em] text-white drop-shadow-2xl mb-4">
+            ADIA<span className="text-[#c9a86c]">.</span>
+          </h1>
+          <div className="h-6 overflow-hidden flex items-center justify-center">
+            <p className="text-[#c9a86c] text-xs font-bold uppercase tracking-[0.8em] animate-slide-up">
+              Go Beyond
+            </p>
+          </div>
+        </div>
+
+        {/* Loading Indicator */}
+        <div className="mt-16 w-48 h-[2px] bg-[#222] rounded-full overflow-hidden">
+          <div className="h-full bg-[#c9a86c] animate-loading-bar" />
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-15px); }
+        }
+        @keyframes spin-slow {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes slide-up {
+          0% { transform: translateY(100%); opacity: 0; }
+          100% { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes loading-bar {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        .animate-float { animation: float 6s ease-in-out infinite; }
+        .animate-spin-slow { animation: spin-slow 20s linear infinite; transform-origin: center; }
+        .animate-slide-up { animation: slide-up 2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; animation-delay: 0.5s; }
+        .animate-loading-bar { animation: loading-bar 3s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+      `}</style>
+    </div>
+  );
+};
 
 
 // =============================================================================
@@ -3682,6 +3809,7 @@ const TickRateInput = ({ value, onChange }: { value: number, onChange: (val: num
 // MAIN COMPONENT (FULLY FUNCTIONAL)
 // =============================================================================
 const ADIA = () => {
+  const [showWelcome, setShowWelcome] = useState(true);
   // STATE HOOKS
   const [variables, setVariables] = useState<VariableDef[]>([
     { id: uuidv4(), name: 'counter', type: 'int32', initialValue: '0', currentValue: 0, visibleInScope: true },
@@ -3725,6 +3853,11 @@ const ADIA = () => {
     rtm: { id: 'rtm', title: 'Requirements Traceability Matrix', isOpen: false, isMinimized: false, pos: { x: 210, y: 210 }, size: { width: 900, height: 600 }, zIndex: 10 },
     doe: { id: 'doe', title: 'DOE RSM Analysis', isOpen: false, isMinimized: false, pos: { x: 260, y: 260 }, size: { width: 1100, height: 750 }, zIndex: 10 },
   });
+
+  const [isHierarchyCollapsed, setIsHierarchyCollapsed] = useState(false);
+  const [isVariablesCollapsed, setIsVariablesCollapsed] = useState(false);
+  const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState(false);
+  const [isScopeCollapsed, setIsScopeCollapsed] = useState(false);
 
   const updateManagedWindow = useCallback((id: ManagedWindowId, updates: Partial<Omit<ManagedWindowState, 'id' | 'title'>>) => {
     setManagedWindows(prev => ({
@@ -8553,8 +8686,10 @@ const ADIA = () => {
   }
 
   return (
-    <div
-      className="flex flex-col bg-[#0a0a0a] text-[#e0e0e0] font-sans overflow-hidden"
+    <>
+      {showWelcome && <WelcomeOverlay onComplete={() => setShowWelcome(false)} />}
+      <div
+        className="flex flex-col bg-[#0a0a0a] text-[#e0e0e0] font-sans overflow-hidden"
       style={{
         zoom: uiZoom,
         width: `${100 / uiZoom}vw`,
@@ -8803,140 +8938,162 @@ const ADIA = () => {
 
       {/* Main Content Area */}
       <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
-        {/* Hierarchy Sidebar */}
-        <aside style={{ width: isMobile ? '100%' : `${hierarchyWidth}px`, display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="bg-[#141414] flex flex-col shrink-0">
-          <div className="h-10 flex items-center px-4 border-b border-[#222]">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
-              <path d="M10 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" />
-              <path d="M16 17l-3-3 3-3" />
-              <path d="M13 14H3" />
-            </svg>
-            <span className="text-sm font-medium">Hierarchy</span>
+        {/* Left Sidebar - Hierarchy */}
+        <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="bg-[#141414] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+          <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
+            {!isHierarchyCollapsed && (
+              <div className="flex items-center overflow-hidden whitespace-nowrap">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
+                  <path d="M10 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" />
+                  <path d="M16 17l-3-3 3-3" />
+                  <path d="M13 14H3" />
+                </svg>
+                <span className="text-sm font-medium">Hierarchy</span>
+              </div>
+            )}
+            <button 
+              onClick={() => setIsHierarchyCollapsed(!isHierarchyCollapsed)}
+              className={`p-1.5 rounded hover:bg-[#222] text-[#c9a86c] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
+            >
+              <Triangle size={10} className={`transition-transform duration-300 ${isHierarchyCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
+            </button>
           </div>
-          <HierarchyTree
-            states={states}
-            layers={layers}
-            activeStates={activeStates}
-            currentLayerId={currentLayerId}
-            onSelect={(id: string) => setSelectedIds([id])}
-            onDoubleClick={(id: string) => enterLayer(id)}
-            selectedIds={selectedIds}
-          />
+          {!isHierarchyCollapsed && (
+            <HierarchyTree
+              states={states}
+              layers={layers}
+              activeStates={activeStates}
+              currentLayerId={currentLayerId}
+              onSelect={(id: string) => setSelectedIds([id])}
+              onDoubleClick={(id: string) => enterLayer(id)}
+              selectedIds={selectedIds}
+            />
+          )}
         </aside>
-        {!isMobile && <Resizer onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
+        {!isMobile && !isHierarchyCollapsed && <Resizer onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
 
         {/* Left Sidebar - Variables */}
-        <aside style={{ width: isMobile ? '100%' : `${variablesWidth}px`, display: isMobile && mobileTab !== 'variables' ? 'none' : 'flex' }} className="bg-[#141414] flex flex-col shrink-0">
-          <div className="border-r border-[#222] h-full flex flex-col">
-            <div className="h-10 flex items-center px-4 border-b border-[#222] shrink-0">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
-                <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5" />
-                <path d="M3 12h18" />
-                <path d="M3 12v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M12 12v9" />
-              </svg>
-              <span className="text-sm font-medium">Variables</span>
-              <Badge variant="outline" className="ml-auto">{variables.length}</Badge>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-3 space-y-4">
-              <div className="space-y-2 p-3 bg-[#1a1a1a] rounded-lg border border-[#222]">
-                <Label>Create New</Label>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Name"
-                    value={newVarName}
-                    onChange={(e) => setNewVarName(e.target.value)}
-                    className="flex-1"
-                  />
-                  <select
-                    value={newVarType}
-                    onChange={(e) => {
-                      setNewVarType(e.target.value as VariableType);
-                      setNewVarValue(getDefaultValue(e.target.value as VariableType));
-                    }}
-                    className="h-8 bg-[#0a0a0a] border border-[#333] text-xs rounded px-2 w-20 text-[#e0e0e0]"
-                  >
-                    {ALLOWED_TYPES.map(type => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Init Value"
-                    value={newVarValue}
-                    onChange={(e) => setNewVarValue(e.target.value)}
-                    className="flex-1"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={addVariable}
-                    className="bg-[#c9a86c] text-[#0a0a0a] hover:bg-[#b8975b]"
-                  >
-                    Add
-                  </Button>
-                </div>
+        <aside style={{ width: isMobile ? '100%' : (isVariablesCollapsed ? '48px' : `${variablesWidth}px`), display: isMobile && mobileTab !== 'variables' ? 'none' : 'flex' }} className="bg-[#141414] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+          <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
+            {!isVariablesCollapsed && (
+              <div className="flex items-center overflow-hidden whitespace-nowrap">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
+                  <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5" />
+                  <path d="M3 12h18" />
+                  <path d="M12 12v9" />
+                </svg>
+                <span className="text-sm font-medium text-[#e0e0e0]">Variables</span>
               </div>
-
-              <div className="space-y-2">
-                {variables.map((variable) => (
-                  <div
-                    key={variable.id}
-                    className="p-3 bg-[#1a1a1a] rounded-lg border border-[#222] space-y-2"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          checked={variable.visibleInScope}
-                          onCheckedChange={() => toggleVariableVisibility(variable.id)}
-                          id={`var-${variable.id}`}
-                        />
-                        <span className="font-mono text-sm text-[#c9a86c]">{variable.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge className="text-[10px] h-5">{variable.type}</Badge>
-                        <button
-                          onClick={() => removeVariable(variable.id)}
-                          className="text-[#666] hover:text-red-400"
-                        >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="18" y1="6" x2="6" y2="18" />
-                            <line x1="6" y1="6" x2="18" y2="18" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <Label className="text-[10px]">Init</Label>
-                        <Input
-                          value={variable.initialValue}
-                          onChange={(e) => updateVariableInitValue(variable.id, e.target.value)}
-                          disabled={isRunning}
-                          className="mt-0.5 text-xs font-mono h-7"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-[10px]">Value</Label>
-                        <Input
-                          value={String(variable.currentValue)}
-                          onChange={(e) => updateVariableValue(variable.id, e.target.value)}
-                          disabled={!isRunning}
-                          className="mt-0.5 text-xs font-mono h-7"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {variables.length === 0 && (
-                  <div className="text-center py-4 text-[#666] text-xs">
-                    No variables defined
-                  </div>
-                )}
-              </div>
-            </div>
+            )}
+            <button 
+              onClick={() => setIsVariablesCollapsed(!isVariablesCollapsed)}
+              className={`p-1.5 rounded hover:bg-[#222] text-[#c9a86c] transition-all ${isVariablesCollapsed ? 'w-full flex justify-center' : ''}`}
+            >
+              <Triangle size={10} className={`transition-transform duration-300 ${isVariablesCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
+            </button>
           </div>
+          
+          {!isVariablesCollapsed && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto no-scrollbar">
+                {/* Compact Create Section */}
+                <div className="p-3 border-b border-[#222] bg-[#1a1a1a]/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-bold text-[#c9a86c] uppercase tracking-wider">New Variable</span>
+                  </div>
+                  <div className="flex gap-1.5 mb-1.5">
+                    <Input
+                      placeholder="Name"
+                      value={newVarName}
+                      onChange={(e) => setNewVarName(e.target.value)}
+                      className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#c9a86c]/50"
+                    />
+                    <select
+                      value={newVarType}
+                      onChange={(e) => setNewVarType(e.target.value as VariableType)}
+                      className="h-7 w-24 bg-[#0d0d0d] border border-[#333] rounded text-[10px] px-1 text-[#e0e0e0] outline-none"
+                    >
+                      {ALLOWED_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Input
+                      placeholder="Init Value"
+                      value={newVarValue}
+                      onChange={(e) => setNewVarValue(e.target.value)}
+                      className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#c9a86c]/50"
+                    />
+                    <Button size="sm" onClick={addVariable} className="h-7 px-3 bg-[#c9a86c] text-[#0a0a0a] text-[10px] font-bold hover:bg-[#b8975b]">ADD</Button>
+                  </div>
+                </div>
+
+                {/* Compact List */}
+                <div className="py-2">
+                  {variables.map((variable, idx) => {
+                    const color = colors[idx % colors.length];
+                    const typeColors: Record<string, string> = {
+                      'int32': 'text-emerald-400',
+                      'float': 'text-sky-400',
+                      'bool': 'text-amber-400'
+                    };
+                    
+                    return (
+                      <div key={variable.id} className="group border-b border-[#1a1a1a] last:border-0">
+                        <div className="flex items-center h-8 px-4 hover:bg-[#222] transition-colors">
+                          <div className="flex items-center gap-2 flex-1 overflow-hidden">
+                            <Checkbox
+                              checked={variable.visibleInScope}
+                              onCheckedChange={() => toggleVariableVisibility(variable.id)}
+                              className="w-3.5 h-3.5 border-[#333] data-[state=checked]:bg-[#c9a86c] data-[state=checked]:border-[#c9a86c]"
+                            />
+                            <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                            <span className="text-xs font-mono text-[#e0e0e0] truncate flex-1" title={variable.name}>{variable.name}</span>
+                            <span className={`text-[9px] font-bold uppercase shrink-0 w-8 text-center ${typeColors[variable.type.toLowerCase()] || 'text-gray-500'}`}>
+                              {variable.type.substring(0, 3)}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => removeVariable(variable.id)}
+                            className="ml-2 text-[#444] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M18 6L6 18M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                        
+                        <div className="px-4 pb-2 pt-0.5 grid grid-cols-2 gap-3 group-hover:bg-[#1a1a1a]/30 transition-colors">
+                          <div className="space-y-0.5">
+                            <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Initial</span>
+                            <Input
+                              value={variable.initialValue}
+                              onChange={(e) => updateVariableInitValue(variable.id, e.target.value)}
+                              disabled={isRunning}
+                              className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] focus:border-[#c9a86c]/30 px-1.5"
+                            />
+                          </div>
+                          <div className="space-y-0.5">
+                            <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Current</span>
+                            <Input
+                              value={String(variable.currentValue)}
+                              onChange={(e) => updateVariableValue(variable.id, e.target.value)}
+                              className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] text-emerald-400 focus:border-[#c9a86c]/30 px-1.5"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {variables.length === 0 && (
+                    <div className="py-10 text-center opacity-30">
+                      <p className="text-[10px] font-bold uppercase tracking-widest">No Signals</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </aside>
         {!isMobile && <Resizer onMouseDown={(e) => handleResizeStart(e, 'variables')} />}
 
@@ -9388,16 +9545,23 @@ const ADIA = () => {
           </main>
 
           {/* Bottom Panel */}
-          {!isMobile && <Resizer onMouseDown={(e) => handleResizeStart(e, 'scope')} orientation="horizontal" />}
-          <div style={{ height: isMobile ? '30%' : `${scopeHeight}px`, display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="bg-[#141414] border-t border-[#222] flex flex-col shrink-0">
+          {!isMobile && !isScopeCollapsed && <Resizer onMouseDown={(e) => handleResizeStart(e, 'scope')} orientation="horizontal" />}
+          <div style={{ height: isMobile ? '30%' : (isScopeCollapsed ? '40px' : `${scopeHeight}px`), display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="bg-[#141414] border-t border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
             <div className="flex items-center justify-between px-4 border-b border-[#222] h-10 shrink-0">
               <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setIsScopeCollapsed(!isScopeCollapsed)}
+                  className="p-1 hover:bg-[#222] rounded text-[#c9a86c] transition-colors"
+                >
+                  <Triangle size={10} className={`transition-transform duration-300 ${isScopeCollapsed ? 'rotate-0' : 'rotate-180'}`} fill="currentColor" />
+                </button>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2">
                   <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                 </svg>
                 <span className="font-medium">Scope</span>
               </div>
-              <div className="flex items-center gap-2">
+              {!isScopeCollapsed && (
+                <div className="flex items-center gap-2">
                 {/* Variable Selector */}
                 <div className="relative group">
                   <Button variant="ghost" size="sm" className="text-[#a0a0a0] hover:text-[#e0e0e0] px-2.5 py-1">
@@ -9469,9 +9633,11 @@ const ADIA = () => {
                   Clear
                 </Button>
               </div>
-            </div>
+            )}
+          </div>
 
-            <div className="flex-1 p-3">
+            {!isScopeCollapsed && (
+              <div className="flex-1 p-3">
               {visibleVariables.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-[#666]">
                   <div className="text-center">
@@ -9548,21 +9714,32 @@ const ADIA = () => {
                 </div>
               )}
             </div>
-          </div>
+          )}
         </div>
+      </div>
         {!isMobile && <Resizer onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
 
         {/* Right Dock: Properties */}
-        <aside style={{ width: isMobile ? '100%' : `${propertiesWidth}px`, display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className="bg-[#141414] border-l border-[#222] flex flex-col shrink-0">
-          <div className="h-10 flex items-center px-4 border-b border-[#222]">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-            <span className="text-sm font-medium">Properties</span>
+        <aside style={{ width: isMobile ? '100%' : (isPropertiesCollapsed ? '48px' : `${propertiesWidth}px`), display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className="bg-[#141414] border-l border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+          <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
+            {!isPropertiesCollapsed && (
+              <div className="flex items-center overflow-hidden whitespace-nowrap">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+                <span className="text-sm font-medium">Properties</span>
+              </div>
+            )}
+            <button 
+              onClick={() => setIsPropertiesCollapsed(!isPropertiesCollapsed)}
+              className={`p-1.5 rounded hover:bg-[#222] text-[#c9a86c] transition-all ${isPropertiesCollapsed ? 'w-full flex justify-center' : ''}`}
+            >
+              <Triangle size={10} className={`transition-transform duration-300 ${isPropertiesCollapsed ? '-rotate-90' : 'rotate-90'}`} fill="currentColor" />
+            </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className={`flex-1 overflow-y-auto p-4 space-y-4 ${isPropertiesCollapsed ? 'hidden' : 'block'}`}>
             {selectedState ? (
               <>
                 <div>
@@ -10763,7 +10940,8 @@ const ADIA = () => {
           <DoeWorkspace onClose={() => toggleWindow('doe')} addError={addError} />
         </FloatingWindow>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 
