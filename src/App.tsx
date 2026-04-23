@@ -679,8 +679,20 @@ const generateMISRACCode = (chart: {
 /*  Timestamp: ${new Date().toISOString()}                       */
 /* ============================================================= */\n\n`;
 
+  // Identify all X-Bridges blocks that need state storage in SM_Data_t
+  const blockStates: string[] = [];
+  chart.states.forEach(s => {
+    if (s.isXBridges && s.xBridgesModel) {
+      s.xBridgesModel.nodes.forEach(n => {
+        if (['Integrator', 'INTEGRATOR_CONTINUOUS', 'DELAY'].includes((n.data as any).type)) {
+          blockStates.push(`    float ${sanitize(n.id)}_state;`);
+        }
+      });
+    }
+  });
+
   // sm_config.h
-  const smConfigH = `${disclaimer}#ifndef SM_CONFIG_H\n#define SM_CONFIG_H\n\n#include <stdint.h>\n#include <stdbool.h>\n\n/* Regions */\ntypedef enum {\n    SM_GRP_MAIN,\n    SM_GRP_COUNT\n} SM_Group_t;\n\n/* States */\ntypedef enum {\n    SM_NODE_INVALID = 0U,\n${sortedStates.map(s => `    ${stateEnum(s)},`).join('\n')}\n    SM_NODE_ERROR\n} SM_Node_t;\n\n/* Error Codes */\ntypedef enum {\n    SM_ERR_NONE = 0U,\n    SM_ERR_WATCHDOG,\n    SM_ERR_SAFETY_VIOLATION,\n    SM_ERR_INVALID_STATE,\n    SM_ERR_ROM_INTEGRITY,\n    SM_ERR_RAM_INTEGRITY\n} SM_Error_t;\n\n/* Data Structure */\ntypedef struct {\n${sortedVariables.length > 0 ? sortedVariables.map(v => `    ${getCTimeType(v.type)} ${v.name};`).join('\n') : ''}\n    uint32_t state_timer;\n} SM_Data_t;\n\n#endif /* SM_CONFIG_H */`;
+  const smConfigH = `${disclaimer}#ifndef SM_CONFIG_H\n#define SM_CONFIG_H\n\n#include <stdint.h>\n#include <stdbool.h>\n\n/* Regions */\ntypedef enum {\n    SM_GRP_MAIN,\n    SM_GRP_COUNT\n} SM_Group_t;\n\n/* States */\ntypedef enum {\n    SM_NODE_INVALID = 0U,\n${sortedStates.map(s => `    ${stateEnum(s)},`).join('\n')}\n    SM_NODE_ERROR\n} SM_Node_t;\n\n/* Error Codes */\ntypedef enum {\n    SM_ERR_NONE = 0U,\n    SM_ERR_WATCHDOG,\n    SM_ERR_SAFETY_VIOLATION,\n    SM_ERR_INVALID_STATE,\n    SM_ERR_ROM_INTEGRITY,\n    SM_ERR_RAM_INTEGRITY\n} SM_Error_t;\n\n/* Data Structure */\ntypedef struct {\n${sortedVariables.length > 0 ? sortedVariables.map(v => `    ${getCTimeType(v.type)} ${v.name};`).join('\n') : ''}\n${blockStates.length > 0 ? blockStates.join('\n') + '\n' : ''}    uint32_t state_timer;\n} SM_Data_t;\n\n#endif /* SM_CONFIG_H */`;
 
   // sm_core.h
   const smCoreH = `${disclaimer}#ifndef SM_CORE_H\n#define SM_CORE_H\n\n#include "sm_config.h"\n\nvoid SM_Init(void);\nvoid SM_Reset(void);\nvoid SM_Step(uint32_t delta_ms);\nSM_Node_t SM_GetActive(SM_Group_t g);\nSM_Data_t* SM_Data(void);\nSM_Error_t SM_GetError(void);\n\n#endif /* SM_CORE_H */`;
@@ -718,19 +730,110 @@ const generateMISRACCode = (chart: {
     if (s.isXBridges && s.xBridgesModel) {
       funcs += `\n/* Generated X-Bridges logic for ${s.name} */\n`;
       funcs += `void ${sEnum}_XBridges_Step(float delta_s) {\n`;
-      funcs += `    /* Sync SM -> Model */\n`;
-      (s.xBridgesModel.mappings || []).filter(m => m.direction === 'in').forEach(map => {
+      
+      const model = s.xBridgesModel;
+      const bMap = new Map<string, any>();
+      model.nodes.forEach(n => bMap.set(n.id, n.data));
+
+      // 1. Topological Sort (Simplified Kahn's for C generation)
+      const executionOrder: any[] = [];
+      const inDegree = new Map<string, number>();
+      const adj = new Map<string, string[]>();
+      
+      model.nodes.forEach(n => {
+        inDegree.set(n.id, 0);
+        adj.set(n.id, []);
+      });
+
+      model.edges.forEach(e => {
+        const src = bMap.get(e.source);
+        // Break feedback loops via stateful blocks for sorting
+        const isStateful = ['Integrator', 'INTEGRATOR_CONTINUOUS', 'DELAY', 'MPC_CONTROLLER'].includes(src.type);
+        adj.get(e.source)!.push(e.target);
+        if (!isStateful) {
+          inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1);
+        }
+      });
+
+      const queue = Array.from(inDegree.keys()).filter(id => inDegree.get(id) === 0);
+      while (queue.length > 0) {
+        const u = queue.shift()!;
+        executionOrder.push(model.nodes.find(n => n.id === u));
+        adj.get(u)!.forEach(v => {
+          const src = bMap.get(u);
+          const isStateful = ['Integrator', 'INTEGRATOR_CONTINUOUS', 'DELAY', 'MPC_CONTROLLER'].includes(src.type);
+          if (!isStateful) {
+            inDegree.set(v, inDegree.get(v)! - 1);
+            if (inDegree.get(v) === 0) queue.push(v);
+          }
+        });
+      }
+
+      funcs += `    /* Local Signal Variables */\n`;
+      model.nodes.forEach(n => {
+        const block = n.data as any;
+        const outCount = block.outputs?.length || 1;
+        for (let i = 0; i < outCount; i++) {
+          funcs += `    float ${sanitize(n.id)}_out${i} = 0.0f;\n`;
+        }
+      });
+
+      funcs += `\n    /* Sync SM -> Model */\n`;
+      (model.mappings || []).filter(m => m.direction === 'in').forEach(map => {
         const v = sortedVariables.find((vr: VariableDef) => vr.id === map.smVarId);
-        if (v) funcs += `    // Block:${map.blockId} Port:${map.portId} = g_data.${v.name};\n`;
+        if (v) {
+          const portIdx = map.portId.replace(/[^0-9]/g, '') || '0';
+          funcs += `    ${sanitize(map.blockId)}_out${portIdx} = g_data.${v.name};\n`;
+        }
       });
-      funcs += `\n    /* Block Execution */\n`;
-      s.xBridgesModel.nodes.forEach(n => {
-         funcs += `    // Execute ${(n.data as any).label || (n.data as any).type}\n`;
+
+      funcs += `\n    /* Block Execution Loop */\n`;
+      executionOrder.forEach(n => {
+        const b = n.data as any;
+        const id = sanitize(n.id);
+        const p = b.params || {};
+        
+        // Gather input variable names
+        const ins = (b.inputs || []).map((inPort: any) => {
+          const edge = model.edges.find(e => e.target === n.id && e.targetHandle === inPort.id);
+          if (edge) return `${sanitize(edge.source)}_out${edge.sourceHandle?.replace(/[^0-9]/g, '') || '0'}`;
+          return `${Number(inPort.value || 0).toFixed(4)}f`;
+        });
+
+        funcs += `    /* Block: ${b.label || b.type} (${id}) */\n`;
+        switch(b.type) {
+          case 'Constant': funcs += `    ${id}_out0 = ${Number(p.value || 0).toFixed(4)}f;\n`; break;
+          case 'GAIN': funcs += `    ${id}_out0 = ${ins[0] || '0.0f'} * ${Number(p.gain || 1).toFixed(4)}f;\n`; break;
+          case 'VectorAdd': funcs += `    ${id}_out0 = ${ins[0] || '0.0f'} + ${ins[1] || '0.0f'};\n`; break;
+          case 'VectorSub': funcs += `    ${id}_out0 = ${ins[0] || '0.0f'} - ${ins[1] || '0.0f'};\n`; break;
+          case 'VectorMul': funcs += `    ${id}_out0 = ${ins[0] || '0.0f'} * ${ins[1] || '0.0f'};\n`; break;
+          case 'Integrator':
+          case 'INTEGRATOR_CONTINUOUS':
+            funcs += `    g_data.${id}_state += ${ins[0] || '0.0f'} * delta_s;\n`;
+            funcs += `    ${id}_out0 = g_data.${id}_state;\n`;
+            break;
+          case 'DATA_TYPE_CONVERSION':
+          case 'NUMERIC_REPRESENTATION':
+            // Simplified C casting for MISRA (no complex rounding/overflow logic in this version)
+            funcs += `    ${id}_out0 = (float)${ins[0] || '0.0f'};\n`;
+            break;
+          case 'MPC_CONTROLLER':
+            funcs += `    /* MPC Step: Implementation should call a fixed-memory solver */\n`;
+            funcs += `    ${id}_out0 = SM_MPC_Step(${ins[0] || '0.0f'}, ${ins[1] || '0.0f'});\n`;
+            break;
+          default:
+            funcs += `    /* Logic for ${b.type} not implemented in C generator */\n`;
+            funcs += `    ${id}_out0 = ${ins[0] || '0.0f'};\n`;
+        }
       });
+
       funcs += `\n    /* Sync Model -> SM */\n`;
-      (s.xBridgesModel.mappings || []).filter(m => m.direction === 'out').forEach(map => {
+      (model.mappings || []).filter(m => m.direction === 'out').forEach(map => {
         const v = sortedVariables.find((vr: VariableDef) => vr.id === map.smVarId);
-        if (v) funcs += `    // g_data.${v.name} = Block:${map.blockId} Port:${map.portId};\n`;
+        if (v) {
+          const portIdx = map.portId.replace(/[^0-9]/g, '') || '0';
+          funcs += `    g_data.${v.name} = ${sanitize(map.blockId)}_out${portIdx};\n`;
+        }
       });
       funcs += `}\n`;
     }
@@ -742,7 +845,7 @@ const generateMISRACCode = (chart: {
     let initVal = v.initialValue;
     if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type) && /^\d+$/.test(initVal)) initVal += 'U';
     return `    g_data.${v.name} = ${initVal};`;
-  }).join('\n')}\n    g_data.state_timer = 0U;\n    g_error_status = SM_ERR_NONE;\n    SM_Reset();\n}\n\nvoid SM_Reset(void) {\n    g_active_state = SM_NODE_INVALID;\n    g_error_status = SM_ERR_NONE;\n${(() => {
+  }).join('\n')}\n${blockStates.length > 0 ? blockStates.map(bs => bs.replace('float ', 'g_data.').replace(';', ' = 0.0f;')).join('\n') + '\n' : ''}    g_data.state_timer = 0U;\n    g_error_status = SM_ERR_NONE;\n    SM_Reset();\n}\n\nvoid SM_Reset(void) {\n    g_active_state = SM_NODE_INVALID;\n    g_error_status = SM_ERR_NONE;\n${(() => {
     const rootAutoState = sortedStates.find(s => s.autostart && (s.parentId === 'root' || !s.parentId));
     const rootAutoJunc = chart.junctions.find(j => j.autostart && (!j.parentId || j.parentId === 'root'));
 
