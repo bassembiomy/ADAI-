@@ -1831,5 +1831,64 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         };
       }
     };
+  },
+
+  'NUMERIC_REPRESENTATION': (id, params) => {
+    const mode = params.mode || 'fixed_point';
+    const output_type = params.output_type || 'float64';
+    const rounding = params.rounding || 'floor';
+    const overflow = params.overflow || 'saturate';
+    const wl = Number(params.wordLength) || 16;
+    const fl = Number(params.fractionLength) || 8;
+
+    return {
+      id, type: 'NUMERIC_REPRESENTATION',
+      params: { mode, output_type, rounding, overflow, wordLength: wl, fractionLength: fl },
+      isStateful: false,
+      inputs: [createPort('u', 'u', 'input')],
+      outputs: [
+        createPort('y', 'y', 'output'),
+        createPort('e', 'error', 'output', 0, 'top', 'measurement')
+      ],
+      execute: (ins, p) => {
+        let u = Number(ins[0]);
+        let y = u;
+        let isOverflow = false;
+
+        if (p.mode === 'floating_point') {
+            if (p.output_type === 'float32') y = Math.fround(u);
+            else if (p.output_type === 'float16') y = Number(u.toPrecision(4));
+        } else {
+            const scale = Math.pow(2, p.fractionLength);
+            let raw = u * scale;
+            
+            if (p.rounding === 'floor') raw = Math.floor(raw);
+            else if (p.rounding === 'ceil') raw = Math.ceil(raw);
+            else if (p.rounding === 'round') raw = Math.round(raw);
+            else if (p.rounding === 'convergent') {
+                const d = Math.floor(raw);
+                const f = raw - d;
+                if (f < 0.5) raw = d;
+                else if (f > 0.5) raw = d + 1;
+                else raw = (d % 2 === 0) ? d : d + 1;
+            }
+
+            const maxRaw = Math.pow(2, p.wordLength - 1) - 1;
+            const minRaw = -Math.pow(2, p.wordLength - 1);
+            
+            if (raw > maxRaw || raw < minRaw) isOverflow = true;
+
+            if (p.overflow === 'saturate') raw = Math.max(minRaw, Math.min(maxRaw, raw));
+            else if (p.overflow === 'wrap') {
+                const range = maxRaw - minRaw + 1;
+                raw = ((((raw - minRaw) % range) + range) % range) + minRaw;
+            }
+            y = raw / scale;
+        }
+
+        const error = Math.abs(u - y);
+        return { outputs: [y, error] };
+      }
+    };
   }
 };

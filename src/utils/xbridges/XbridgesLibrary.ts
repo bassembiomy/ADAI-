@@ -185,6 +185,7 @@ export const XBRIDGES_CATEGORIES = [
     name: 'Signal Management',
     blocks: [
       { type: 'DATA_TYPE_CONVERSION', label: 'Type Conversion', icon: 'hash' },
+      { type: 'NUMERIC_REPRESENTATION', label: 'Numeric Rep', icon: 'bar-chart' },
       { type: 'TERMINATOR', label: 'Terminator', icon: 'zap-off' },
     ]
   },

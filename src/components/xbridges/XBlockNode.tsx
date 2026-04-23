@@ -103,6 +103,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       case 'IF_ELSE':
       case 'SWITCH_CASE': return <Settings size={12} />;
       case 'DATA_TYPE_CONVERSION': return <Hash size={12} />;
+      case 'NUMERIC_REPRESENTATION': return <Activity size={12} />;
       case 'TERMINATOR': return <ZapOff size={12} />;
       case 'PID_CONTROLLER':
       case 'MPC_CONTROLLER': return <Cpu size={12} />;
@@ -274,6 +275,14 @@ export const XBlockNode = ({ data, id, selected }: any) => {
               {data.type === 'Constant' && <span className="text-[10px] font-bold text-white/50">{data.params?.value}</span>}
               {data.type === 'GAIN' && <span className="text-[10px] font-bold text-white/50">K={data.params?.gain}</span>}
               {data.type === 'DATA_TYPE_CONVERSION' && <span className="text-[10px] font-bold text-emerald-400/70">{data.params?.output_type}</span>}
+              {data.type === 'NUMERIC_REPRESENTATION' && (
+                <div className="flex flex-col items-center">
+                  <span className="text-[8px] font-black text-white/30 uppercase">Quant Error</span>
+                  <span className="text-[10px] font-mono font-bold text-amber-500">
+                    {(data.outputs?.[1]?.value || 0).toExponential(2)}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -132,6 +132,12 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                     onChange={(e) => onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } })}
                     className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-emerald-400 font-bold rounded focus:border-[#c9a86c] outline-none transition-all cursor-pointer"
                   >
+                    {key === 'mode' && (
+                      <>
+                        <option value="floating_point">Floating-Point</option>
+                        <option value="fixed_point">Fixed-Point</option>
+                      </>
+                    )}
                     {key === 'output_type' && (
                       <>
                         <option value="float64">Double (float64)</option>
