@@ -363,6 +363,7 @@ export const XbridgesWorkspace: React.FC<{
             const hasChanged = 
               newParams.numInputs !== oldParams.numInputs || 
               newParams.cases !== oldParams.cases ||
+              newParams.numCases !== oldParams.numCases ||
               newParams.numOutputs !== oldParams.numOutputs;
 
             if (hasChanged) {

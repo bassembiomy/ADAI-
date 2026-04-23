@@ -1157,25 +1157,25 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     execute: (ins) => ({ outputs: [ins[0] ? ins[1] : ins[2]] })
   }),
 
-  'SWITCH_CASE': (id, params) => ({
-    id, type: 'SWITCH_CASE',
-    params: { cases: params.cases || '1:1,2:2' },
-    inputs: [
-      createPort('sel', 'selector', 'input', 0, 'bottom', 'discrete'),
-      ...Array.from({ length: (params.cases?.split(',').length || 2) }, (_, i) => createPort(`in${i+1}`, `u${i+1}`, 'input'))
-    ],
-    outputs: [createPort('y', 'y', 'output')],
-    execute: (ins, p) => {
-      const sel = Number(ins[0]);
-      const caseMap = p.cases.split(',').reduce((acc: any, c: string) => {
-        const [k, v] = c.split(':');
-        acc[k.trim()] = parseInt(v.trim());
-        return acc;
-      }, {});
-      const inputIdx = caseMap[sel] || 1;
-      return { outputs: [ins[inputIdx]] };
-    }
-  }),
+  'SWITCH_CASE': (id, params) => {
+    const numCases = Number(params.numCases) || 2;
+    return {
+      id, type: 'SWITCH_CASE',
+      params: { numCases },
+      inputs: [
+        createPort('sel', 'selector', 'input', 0, 'bottom', 'discrete'),
+        ...Array.from({ length: numCases }, (_, i) => createPort(`in${i+1}`, `case ${i+1}`, 'input'))
+      ],
+      outputs: [createPort('y', 'y', 'output')],
+      execute: (ins) => {
+        const sel = Math.floor(Number(ins[0]));
+        // selector is 1-indexed for the cases (input 1 is case 1, input 2 is case 2, etc.)
+        // ins[0] is selector. ins[1] is case 1, ins[2] is case 2...
+        const val = ins[sel] !== undefined ? ins[sel] : ins[1];
+        return { outputs: [val] };
+      }
+    };
+  },
 
   // --- Signal Management ---
   'DATA_TYPE_CONVERSION': (id, params) => ({
