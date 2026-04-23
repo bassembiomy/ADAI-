@@ -104,17 +104,17 @@ export const XBlockNode = ({ data, id, selected }: any) => {
   const renderPort = (port: XPort, index: number) => {
     const isInput = port.direction === 'input';
     const position = 
-      port.side === 'left' ? Position.Left :
-      port.side === 'right' ? Position.Right :
-      port.side === 'top' ? Position.Top : Position.Bottom;
+      port.position === 'left' ? Position.Left :
+      port.position === 'right' ? Position.Right :
+      port.position === 'top' ? Position.Top : Position.Bottom;
 
     return (
       <div 
         key={port.id} 
         className="relative group flex items-center"
         style={{
-          flexDirection: port.side === 'right' ? 'row-reverse' : 'row',
-          margin: port.side === 'top' || port.side === 'bottom' ? '0 10px' : '5px 0'
+          flexDirection: port.position === 'right' ? 'row-reverse' : 'row',
+          margin: port.position === 'top' || port.position === 'bottom' ? '0 10px' : '5px 0'
         }}
       >
         <Handle
@@ -122,7 +122,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
           position={position}
           id={port.id}
           style={{
-            background: getHandleColor(port.dataType),
+            background: getHandleColor(port.type),
             width: 8,
             height: 8,
             border: '2px solid #1a1a1a',
@@ -130,7 +130,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
           }}
         />
         <span className={`text-[8px] font-mono text-gray-500 uppercase tracking-tighter mx-1.5 transition-opacity duration-200 group-hover:text-white`}>
-          {port.label}
+          {port.name}
         </span>
       </div>
     );
@@ -171,7 +171,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       <div className="flex p-2 gap-4">
         {/* Inputs */}
         <div className="flex flex-col flex-1 justify-center">
-          {data.ports?.filter((p: XPort) => p.side === 'left').map(renderPort)}
+          {data.ports?.filter((p: XPort) => p.position === 'left').map(renderPort)}
         </div>
 
         {/* Center Content / Parameters Preview */}
@@ -181,16 +181,16 @@ export const XBlockNode = ({ data, id, selected }: any) => {
 
         {/* Outputs */}
         <div className="flex flex-col flex-1 justify-center items-end">
-          {data.ports?.filter((p: XPort) => p.side === 'right').map(renderPort)}
+          {data.ports?.filter((p: XPort) => p.position === 'right').map(renderPort)}
         </div>
       </div>
 
       {/* Top/Bottom Ports */}
       <div className="absolute top-0 left-0 w-full flex justify-center -translate-y-full pb-1">
-        {data.ports?.filter((p: XPort) => p.side === 'top').map(renderPort)}
+        {data.ports?.filter((p: XPort) => p.position === 'top').map(renderPort)}
       </div>
       <div className="absolute bottom-0 left-0 w-full flex justify-center translate-y-full pt-1">
-        {data.ports?.filter((p: XPort) => p.side === 'bottom').map(renderPort)}
+        {data.ports?.filter((p: XPort) => p.position === 'bottom').map(renderPort)}
       </div>
     </div>
   );

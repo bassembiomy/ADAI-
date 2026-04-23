@@ -1652,8 +1652,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       const uArr = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
       const yArr = Array.isArray(ins[1]) ? ins[1] : [Number(ins[1])];
       
-      const u = math.matrix(uArr.map(v => [v])); // Column vector
-      const y = math.matrix(yArr.map(v => [v])); // Column vector
+      const u = math.matrix(uArr.map(v => [Number(v)])); // Column vector
+      const y = math.matrix(yArr.map(v => [Number(v)])); // Column vector
       
       const A = math.matrix(p.A as number[][]);
       const B = math.matrix(p.B as number[][]);
