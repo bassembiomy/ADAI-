@@ -2,7 +2,7 @@
 import React from 'react';
 import { Handle, Position, useUpdateNodeInternals, NodeResizer } from 'reactflow';
 import { 
-  Square, Activity, Plus, Minus, X, Divide, ChevronUp, MinusCircle, Maximize, 
+  Square, Activity, Plus, Minus, X, Divide, ChevronUp, MinusCircle, Maximize, Maximize2,
   Sigma, BarChart, ArrowUp, Grid, RotateCw, RefreshCcw, Hash, TrendingUp, Monitor, Box, Download,
   LogIn, LogOut, ChevronLeft, ChevronRight, Zap, Settings, ZapOff, Cpu, Layers, Wind, Filter, Eye
 } from 'lucide-react';
