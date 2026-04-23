@@ -4,7 +4,7 @@ import { VectorUtils } from './VectorUtils';
 import * as math from 'mathjs';
 
 const createPort = (id: string, name: string, dir: 'input'|'output', val: any = 0, pos?: 'left'|'right'|'top'|'bottom', type: any = 'auto'): XPort => ({
-  id, name, type: type || 'auto', direction: dir, value: val, position: pos
+  id, name, type: type || 'auto', direction: dir, value: val, position: pos || (dir === 'input' ? 'left' : 'right')
 });
 
 export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> = {
