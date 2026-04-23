@@ -21,6 +21,8 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
   if (!block) return null;
 
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [localLabel, setLocalLabel] = useState(block.label || block.type);
+  const [localParams, setLocalParams] = useState(JSON.stringify(block.params, null, 2));
 
   // Sync when block changes
   useEffect(() => {
