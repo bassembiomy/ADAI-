@@ -85,11 +85,11 @@ export const XBlockNode: React.FC<XBlockNodeProps> = ({ data, selected, id }) =>
   }, [data.inputs?.length, data.outputs?.length, id, updateNodeInternals]);
 
   const getColor = (type: string) => {
-    if (['Constant', 'WaveformGen', 'Clock', 'Scope'].includes(type)) return '#007acc'; // Signal (Blue)
-    if (['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow', 'UnaryNeg', 'Abs', 'SumElements', 'Mean', 'Max', 'MatrixMul', 'Transpose', 'Inverse', 'Determinant'].includes(type)) return '#28a745'; // Math (Green)
-    if (['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR'].includes(type)) return '#6f42c1'; // Logic (Purple)
+    if (['Constant', 'WaveformGen', 'Clock', 'Scope', 'DELAY', 'MUX', 'DEMUX', 'TERMINATOR', 'DATA_TYPE_CONVERSION'].includes(type)) return '#007acc'; // Signal (Blue)
+    if (['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow', 'UnaryNeg', 'Abs', 'SumElements', 'Mean', 'Max', 'MatrixMul', 'Transpose', 'Inverse', 'Determinant', 'GAIN', 'PRODUCT', 'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC'].includes(type)) return '#28a745'; // Math (Green)
+    if (['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR', 'SWITCH', 'IF_ELSE', 'SWITCH_CASE'].includes(type)) return '#6f42c1'; // Logic (Purple)
     if (['BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight'].includes(type)) return '#563d7c'; // Bitwise (Indigo)
-    if (['DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Integrator'].includes(type)) return '#d73a49'; // Sequential/Control (Red)
+    if (['DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Integrator', 'INTEGRATOR_CONTINUOUS', 'INTEGRATOR_DISCRETE'].includes(type)) return '#d73a49'; // Sequential/Control (Red)
     if (['THREE_PHASE_INVERTER', 'SINGLE_PHASE_H_BRIDGE'].includes(type)) return '#ef4444'; // Power (Red)
     if (['PWM_GENERATOR', 'THREE_PHASE_PWM', 'SIX_STEP_COMMUTATION', 'SVPWM_GATE_GENERATOR', 'SVPWM_MODULATOR'].includes(type)) return '#3b82f6'; // Control (Blue)
     if (['FIELD_ORIENTED_CONTROL', 'VOLTAGE_REFERENCE_GENERATOR', 'CURRENT_CONTROLLER_DQ', 'SPEED_CONTROLLER', 'FLUX_REFERENCE', 'ROTOR_POSITION_ESTIMATOR'].includes(type)) return '#10b981'; // Control/Feedback (Emerald)
@@ -128,6 +128,21 @@ export const XBlockNode: React.FC<XBlockNodeProps> = ({ data, selected, id }) =>
       case 'Transpose': return <RotateCw size={12} />;
       case 'Inverse': return <RefreshCcw size={12} />;
       case 'Determinant': return <Hash size={12} />;
+      case 'DELAY': return <TrendingUp size={12} />;
+      case 'MUX': return <Layers size={12} />;
+      case 'DEMUX': return <Grid size={12} />;
+      case 'GAIN': return <Maximize size={12} />;
+      case 'PRODUCT': return <X size={12} />;
+      case 'SWITCH':
+      case 'IF_ELSE':
+      case 'SWITCH_CASE': return <Settings size={12} />;
+      case 'DATA_TYPE_CONVERSION': return <Hash size={12} />;
+      case 'TERMINATOR': return <ZapOff size={12} />;
+      case 'SIN':
+      case 'COS':
+      case 'TAN': return <TrendingUp size={12} />;
+      case 'INTEGRATOR_CONTINUOUS':
+      case 'INTEGRATOR_DISCRETE': return <TrendingUp size={12} />;
       case 'AND': return <Plus size={12} />;
       case 'OR': return <Grid size={12} />;
       case 'NOT': return <MinusCircle size={12} />;

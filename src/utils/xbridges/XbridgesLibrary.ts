@@ -142,5 +142,58 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'ZERO_SEQUENCE_INJECTION', label: 'Zero Sequence Injection', icon: 'plus' },
       { type: 'SVPWM_MODULATOR', label: 'SVPWM Modulator', icon: 'activity' },
     ]
+  },
+  {
+    name: 'Memory & Delay',
+    blocks: [
+      { type: 'DELAY', label: 'Delay', icon: 'trending-up' },
+    ]
+  },
+  {
+    name: 'Integrators',
+    blocks: [
+      { type: 'INTEGRATOR_CONTINUOUS', label: 'Continuous Integrator', icon: 'trending-up' },
+      { type: 'INTEGRATOR_DISCRETE', label: 'Discrete Integrator', icon: 'trending-up' },
+    ]
+  },
+  {
+    name: 'Signal Routing',
+    blocks: [
+      { type: 'MUX', label: 'Mux', icon: 'layers' },
+      { type: 'DEMUX', label: 'Demux', icon: 'grid' },
+    ]
+  },
+  {
+    name: 'Math Operations',
+    blocks: [
+      { type: 'GAIN', label: 'Gain', icon: 'maximize' },
+      { type: 'PRODUCT', label: 'Product', icon: 'x' },
+    ]
+  },
+  {
+    name: 'Logic & Control Flow',
+    blocks: [
+      { type: 'SWITCH', label: 'Switch', icon: 'settings' },
+      { type: 'IF_ELSE', label: 'If-Else', icon: 'settings' },
+      { type: 'SWITCH_CASE', label: 'Switch-Case', icon: 'settings' },
+    ]
+  },
+  {
+    name: 'Signal Management',
+    blocks: [
+      { type: 'DATA_TYPE_CONVERSION', label: 'Type Conversion', icon: 'hash' },
+      { type: 'TERMINATOR', label: 'Terminator', icon: 'zap-off' },
+    ]
+  },
+  {
+    name: 'Trigonometric Functions',
+    blocks: [
+      { type: 'SIN', label: 'Sine', icon: 'trending-up' },
+      { type: 'COS', label: 'Cosine', icon: 'trending-up' },
+      { type: 'TAN', label: 'Tangent', icon: 'trending-up' },
+      { type: 'COT', label: 'Cotangent', icon: 'trending-up' },
+      { type: 'SEC', label: 'Secant', icon: 'trending-up' },
+      { type: 'COSEC', label: 'Cosecant', icon: 'trending-up' },
+    ]
   }
 ];

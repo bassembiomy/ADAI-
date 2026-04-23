@@ -1019,4 +1019,246 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       return gateResult;
     }
   }),
+
+  // --- Memory & Delay ---
+  'DELAY': (id, params) => ({
+    id, type: 'DELAY',
+    params: { delay_length: params.delay_length || 1, initial_condition: params.initial_condition || 0 },
+    isStateful: true,
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    state: { buffer: [], index: 0 },
+    execute: (ins, p, state) => {
+      const N = Number(p.delay_length);
+      const u = ins[0];
+      let buffer = state.buffer.length === 0 
+        ? new Array(N).fill(p.initial_condition) 
+        : [...state.buffer];
+      
+      const y = buffer[state.index];
+      buffer[state.index] = u;
+      const nextIndex = (state.index + 1) % N;
+      
+      return { outputs: [y], nextState: { buffer, index: nextIndex } };
+    }
+  }),
+
+  // --- Integrators ---
+  'INTEGRATOR_CONTINUOUS': (id, params) => ({
+    id, type: 'INTEGRATOR_CONTINUOUS',
+    params: { initial_condition: params.initial_condition || 0 },
+    isStateful: true,
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    state: { y: params.initial_condition || 0 },
+    execute: (ins, p, state) => ({ outputs: [state.y] }),
+    evaluateDerivatives: (ins) => [Number(ins[0])]
+  }),
+
+  'INTEGRATOR_DISCRETE': (id, params) => ({
+    id, type: 'INTEGRATOR_DISCRETE',
+    params: { initial_condition: params.initial_condition || 0, sample_time: params.sample_time || 0.001, method: params.method || 'forward_euler' },
+    isStateful: true,
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    state: { y: params.initial_condition || 0, u_prev: 0, lastTime: 0 },
+    execute: (ins, p, state, time) => {
+      const dt = Math.max(1e-6, time - (state.lastTime || 0));
+      const u = Number(ins[0]);
+      let nextY = state.y;
+      
+      if (p.method === 'forward_euler') {
+        nextY = state.y + dt * state.u_prev;
+      } else if (p.method === 'backward_euler') {
+        nextY = state.y + dt * u;
+      } else if (p.method === 'tustin') {
+        nextY = state.y + (dt / 2) * (u + state.u_prev);
+      }
+      
+      return { outputs: [nextY], nextState: { y: nextY, u_prev: u, lastTime: time } };
+    }
+  }),
+
+  // --- Signal Routing ---
+  'MUX': (id, params) => ({
+    id, type: 'MUX',
+    params: { numInputs: params.numInputs || 2 },
+    allowDynamicInputs: true,
+    inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, `u${i+1}`, 'input')),
+    outputs: [createPort('y', 'y', 'output', 0, 'right', 'vector')],
+    execute: (ins) => ({ outputs: [ins] })
+  }),
+
+  'DEMUX': (id, params) => ({
+    id, type: 'DEMUX',
+    params: { numOutputs: params.numOutputs || 2 },
+    inputs: [createPort('u', 'u', 'input', 0, 'left', 'vector')],
+    outputs: Array.from({ length: params.numOutputs || 2 }, (_, i) => createPort(`out${i+1}`, `y${i+1}`, 'output')),
+    execute: (ins) => ({ outputs: Array.isArray(ins[0]) ? ins[0] : [ins[0]] })
+  }),
+
+  // --- Math Operations ---
+  'GAIN': (id, params) => ({
+    id, type: 'GAIN',
+    params: { gain: params.gain || 1 },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => ({ outputs: [Number(ins[0]) * Number(p.gain)] })
+  }),
+
+  'PRODUCT': (id, params) => ({
+    id, type: 'PRODUCT',
+    params: { numInputs: params.numInputs || 2, operation: params.operation || 'multiply' },
+    allowDynamicInputs: true,
+    inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, `u${i+1}`, 'input')),
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      if (p.operation === 'divide') {
+        return { outputs: [ins.reduce((acc, val) => acc / (Number(val) || 1))] };
+      }
+      return { outputs: [ins.reduce((acc, val) => acc * Number(val), 1)] };
+    }
+   }),
+
+  // --- Logic & Control Flow ---
+  'SWITCH': (id, params) => ({
+    id, type: 'SWITCH',
+    params: { threshold: params.threshold || 0, criteria: params.criteria || '>' },
+    inputs: [
+      createPort('u1', 'u1', 'input'),
+      createPort('u2', 'u2', 'input'),
+      createPort('ctrl', 'ctrl', 'input', 0, 'bottom', 'control')
+    ],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      const u1 = ins[0];
+      const u2 = ins[1];
+      const ctrl = Number(ins[2]);
+      const th = Number(p.threshold);
+      let pass = false;
+      switch(p.criteria) {
+        case '>': pass = ctrl > th; break;
+        case '<': pass = ctrl < th; break;
+        case '>=': pass = ctrl >= th; break;
+        case '<=': pass = ctrl <= th; break;
+      }
+      return { outputs: [pass ? u1 : u2] };
+    }
+  }),
+
+  'IF_ELSE': (id) => ({
+    id, type: 'IF_ELSE', params: {},
+    inputs: [
+      createPort('cond', 'cond', 'input', 0, 'bottom', 'logical'),
+      createPort('u_true', 'u_true', 'input'),
+      createPort('u_false', 'u_false', 'input')
+    ],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins) => ({ outputs: [ins[0] ? ins[1] : ins[2]] })
+  }),
+
+  'SWITCH_CASE': (id, params) => ({
+    id, type: 'SWITCH_CASE',
+    params: { cases: params.cases || '1:1,2:2' },
+    inputs: [
+      createPort('sel', 'selector', 'input', 0, 'bottom', 'discrete'),
+      ...Array.from({ length: (params.cases?.split(',').length || 2) }, (_, i) => createPort(`in${i+1}`, `u${i+1}`, 'input'))
+    ],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      const sel = Number(ins[0]);
+      const caseMap = p.cases.split(',').reduce((acc: any, c: string) => {
+        const [k, v] = c.split(':');
+        acc[k.trim()] = parseInt(v.trim());
+        return acc;
+      }, {});
+      const inputIdx = caseMap[sel] || 1;
+      return { outputs: [ins[inputIdx]] };
+    }
+  }),
+
+  // --- Signal Management ---
+  'DATA_TYPE_CONVERSION': (id, params) => ({
+    id, type: 'DATA_TYPE_CONVERSION',
+    params: { output_type: params.output_type || 'float64', rounding: params.rounding || 'floor' },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      let val = Number(ins[0]);
+      if (p.rounding === 'floor') val = Math.floor(val);
+      else if (p.rounding === 'ceil') val = Math.ceil(val);
+      else if (p.rounding === 'nearest') val = Math.round(val);
+      
+      if (p.output_type === 'boolean') return { outputs: [!!val] };
+      return { outputs: [val] };
+    }
+  }),
+
+  'TERMINATOR': (id) => ({
+    id, type: 'TERMINATOR', params: {},
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [],
+    execute: () => ({ outputs: [] })
+  }),
+
+  // --- Trigonometric Functions ---
+  'SIN': (id, params) => ({
+    id, type: 'SIN', params: { angle_unit: params.angle_unit || 'radians' },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      const u = p.angle_unit === 'degrees' ? (Number(ins[0]) * Math.PI) / 180 : Number(ins[0]);
+      return { outputs: [Math.sin(u)] };
+    }
+  }),
+
+  'COS': (id, params) => ({
+    id, type: 'COS', params: { angle_unit: params.angle_unit || 'radians' },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      const u = p.angle_unit === 'degrees' ? (Number(ins[0]) * Math.PI) / 180 : Number(ins[0]);
+      return { outputs: [Math.cos(u)] };
+    }
+  }),
+
+  'TAN': (id, params) => ({
+    id, type: 'TAN', params: { angle_unit: params.angle_unit || 'radians' },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      const u = p.angle_unit === 'degrees' ? (Number(ins[0]) * Math.PI) / 180 : Number(ins[0]);
+      return { outputs: [Math.tan(u)] };
+    }
+  }),
+
+  'COT': (id, params) => ({
+    id, type: 'COT', params: { angle_unit: params.angle_unit || 'radians' },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      const u = p.angle_unit === 'degrees' ? (Number(ins[0]) * Math.PI) / 180 : Number(ins[0]);
+      return { outputs: [1 / Math.tan(u)] };
+    }
+  }),
+
+  'SEC': (id, params) => ({
+    id, type: 'SEC', params: { angle_unit: params.angle_unit || 'radians' },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      const u = p.angle_unit === 'degrees' ? (Number(ins[0]) * Math.PI) / 180 : Number(ins[0]);
+      return { outputs: [1 / Math.cos(u)] };
+    }
+  }),
+
+  'COSEC': (id, params) => ({
+    id, type: 'COSEC', params: { angle_unit: params.angle_unit || 'radians' },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      const u = p.angle_unit === 'degrees' ? (Number(ins[0]) * Math.PI) / 180 : Number(ins[0]);
+      return { outputs: [1 / Math.sin(u)] };
+    }
+  }),
 };
