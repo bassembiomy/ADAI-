@@ -1655,14 +1655,14 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       const u = math.matrix(uArr.map(v => [v])); // Column vector
       const y = math.matrix(yArr.map(v => [v])); // Column vector
       
-      const A = math.matrix(p.A);
-      const B = math.matrix(p.B);
-      const C = math.matrix(p.C);
-      const Q = math.matrix(p.Q);
-      const R = math.matrix(p.R);
+      const A = math.matrix(p.A as number[][]);
+      const B = math.matrix(p.B as number[][]);
+      const C = math.matrix(p.C as number[][]);
+      const Q = math.matrix(p.Q as number[][]);
+      const R = math.matrix(p.R as number[][]);
 
-      let x = state.x ? math.matrix(state.x) : math.zeros(A.size()[0], 1);
-      let P = state.P ? math.matrix(state.P) : math.matrix(p.P0);
+      let x = state.x ? math.matrix(state.x as number[][]) : math.zeros(A.size()[0], 1);
+      let P = state.P ? math.matrix(state.P as number[][]) : math.matrix(p.P0 as number[][]);
 
       // 1. Predict
       const x_minus = math.add(math.multiply(A, x), math.multiply(B, u)) as math.Matrix;
