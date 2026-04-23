@@ -14,7 +14,7 @@ import ReactFlow, {
   MiniMap
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Play, Pause, Square, Save, Trash2, Box, Layers, MousePointer2, Settings2, ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { Play, Pause, Square, Save, Trash2, Box, Layers, MousePointer2, Settings2, ChevronDown, ChevronRight, Search, Triangle } from 'lucide-react';
 import { XBRIDGES_CATEGORIES } from '../../utils/xbridges/XbridgesLibrary';
 import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import { XbridgesEngine } from '../../engine/xbridges/XbridgesEngine';
@@ -44,6 +44,8 @@ export const XbridgesWorkspace: React.FC<{
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isLibCollapsed, setIsLibCollapsed] = useState(false);
+  const [isPropsCollapsed, setIsPropsCollapsed] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [openScopes, setOpenScopes] = useState<string[]>([]);
   const [searchMenuPos, setSearchMenuPos] = useState<{ x: number, y: number } | null>(null);
@@ -490,12 +492,23 @@ export const XbridgesWorkspace: React.FC<{
         </div>
       )}
       {/* Sidebar Library */}
-      <div className="w-64 bg-[#141414] border-r border-[#222] flex flex-col shadow-sm z-10">
-        <div className="p-4 border-b border-[#222] flex items-center gap-2">
-          <Layers size={18} className="text-[#c9a86c]" />
-          <span className="text-sm font-black uppercase tracking-wider text-[#c9a86c]">X-Bridges</span>
+      <div className={`${isLibCollapsed ? 'w-12' : 'w-64'} bg-[#141414] border-r border-[#222] flex flex-col shadow-sm z-10 transition-all duration-300 relative`}>
+        <div className="p-4 border-b border-[#222] flex items-center justify-between overflow-hidden">
+          {!isLibCollapsed && (
+            <div className="flex items-center gap-2 animate-in fade-in duration-300">
+              <Layers size={18} className="text-[#c9a86c]" />
+              <span className="text-sm font-black uppercase tracking-wider text-[#c9a86c]">X-Bridges</span>
+            </div>
+          )}
+          <button 
+            onClick={() => setIsLibCollapsed(!isLibCollapsed)}
+            className={`p-1.5 rounded bg-[#1a1a1a] border border-[#333] text-[#c9a86c] hover:bg-[#c9a86c]/10 transition-all ${isLibCollapsed ? 'w-full' : ''}`}
+            title={isLibCollapsed ? "Expand Library" : "Collapse Library"}
+          >
+            <Triangle size={12} className={`transition-transform duration-300 ${isLibCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
+          </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        <div className={`flex-1 overflow-y-auto p-2 space-y-1 ${isLibCollapsed ? 'hidden' : 'block'}`}>
           {XBRIDGES_CATEGORIES.map((cat) => {
             const isExpanded = !!expandedCategories[cat.name];
             return (

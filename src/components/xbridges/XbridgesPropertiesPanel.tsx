@@ -20,13 +20,13 @@ const normalizeNumerals = (val: string) => {
 export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVariables, onUpdate, onClose }) => {
   if (!block) return null;
 
-  const [localLabel, setLocalLabel] = useState(block.label || block.type);
-  const [localParams, setLocalParams] = useState(JSON.stringify(block.params, null, 2));
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Sync when block changes
   useEffect(() => {
     setLocalLabel(block.label || block.type);
     setLocalParams(JSON.stringify(block.params, null, 2));
+    setIsCollapsed(false); // Auto-expand when a new block is selected
   }, [block.id]);
 
   const handleLabelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -62,20 +62,49 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
     onUpdate(block.id, isInput ? { inputs: updated } : { outputs: updated });
   };
 
+  const Triangle = ({ size, className, fill }: { size: number, className?: string, fill?: string }) => (
+    <svg 
+      width={size} 
+      height={size} 
+      viewBox="0 0 24 24" 
+      fill={fill || "none"} 
+      stroke="currentColor" 
+      strokeWidth="2" 
+      strokeLinecap="round" 
+      strokeLinejoin="round" 
+      className={className}
+    >
+      <path d="M3 20h18L12 4z" />
+    </svg>
+  );
+
   return (
-    <div className="w-80 bg-[#141414] border-l border-[#222] flex flex-col h-full shadow-2xl z-50 text-gray-300">
+    <div className={`${isCollapsed ? 'w-12' : 'w-80'} bg-[#141414] border-l border-[#222] flex flex-col h-full shadow-2xl z-50 text-gray-300 transition-all duration-300 overflow-hidden`}>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-[#222] bg-[#1a1a1a]">
-        <div className="flex items-center gap-2 text-[#c9a86c] font-bold">
-          <Settings2 size={16} />
-          Properties
+        {!isCollapsed && (
+          <div className="flex items-center gap-2 text-[#c9a86c] font-bold animate-in fade-in duration-300">
+            <Settings2 size={16} />
+            Properties
+          </div>
+        )}
+        <div className={`flex items-center gap-2 ${isCollapsed ? 'flex-col w-full' : ''}`}>
+          <button 
+            onClick={() => setIsCollapsed(!isCollapsed)} 
+            className="p-1.5 rounded bg-[#0a0a0a] border border-[#333] text-[#c9a86c] hover:bg-[#c9a86c]/10 transition-all"
+            title={isCollapsed ? "Expand Properties" : "Collapse Properties"}
+          >
+            <Triangle size={12} className={`transition-transform duration-300 ${isCollapsed ? '-rotate-90' : 'rotate-90'}`} fill="currentColor" />
+          </button>
+          {!isCollapsed && (
+            <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors p-1">
+              <X size={16} />
+            </button>
+          )}
         </div>
-        <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
-          <X size={16} />
-        </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
+      <div className={`flex-1 overflow-y-auto p-4 space-y-6 ${isCollapsed ? 'hidden' : 'block'}`}>
         {/* General */}
         <section className="space-y-3">
           <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">General</h3>
