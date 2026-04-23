@@ -1086,7 +1086,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     allowDynamicInputs: true,
     inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, `u${i+1}`, 'input')),
     outputs: [createPort('y', 'y', 'output', 0, 'right', 'vector')],
-    execute: (ins) => ({ outputs: [ins] })
+    execute: (ins) => ({ outputs: [ins as any] })
   }),
 
   'DEMUX': (id, params) => ({
@@ -1114,9 +1114,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('y', 'y', 'output')],
     execute: (ins, p) => {
       if (p.operation === 'divide') {
-        return { outputs: [ins.reduce((acc, val) => acc / (Number(val) || 1))] };
+        return { outputs: [ins.reduce((acc: number, val) => acc / (Number(val) || 1), Number(ins[0]) || 1)] };
       }
-      return { outputs: [ins.reduce((acc, val) => acc * Number(val), 1)] };
+      return { outputs: [ins.reduce((acc: number, val) => acc * Number(val), 1)] };
     }
    }),
 
@@ -1381,12 +1381,12 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     state: { x: params.x0 || [0], lastTime: 0 },
     execute: (ins, p, state, time) => {
       const u = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
-      const x = state.x;
+      const x = state.x as number[];
       
       // y = C*x + D*u
       const y = p.C.map((row: number[]) => {
-        const cx = row.reduce((sum, val, i) => sum + val * (x[i] || 0), 0);
-        const du = p.D[0].reduce((sum: number, _: any, i: number) => sum + (p.D[0][i] || 0) * (u[i] || 0), 0);
+        const cx = row.reduce((sum, val, i) => sum + val * (Number(x[i]) || 0), 0);
+        const du = p.D[0].reduce((sum: number, _: any, i: number) => sum + (Number(p.D[0][i]) || 0) * (Number(u[i]) || 0), 0);
         return cx + du;
       });
 
@@ -1394,8 +1394,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         const dt = Math.max(1e-6, time - (state.lastTime || 0));
         // x[k+1] = A*x[k] + B*u[k]
         const nextX = p.A.map((row: number[], i: number) => {
-          const ax = row.reduce((sum, val, j) => sum + val * (x[j] || 0), 0);
-          const bu = p.B[i].reduce((sum: number, val: number, j: number) => sum + val * (u[j] || 0), 0);
+          const ax = row.reduce((sum, val, j) => sum + val * (Number(x[j]) || 0), 0);
+          const bu = p.B[i].reduce((sum: number, val: number, j: number) => sum + val * (Number(u[j]) || 0), 0);
           return ax + bu;
         });
         return { outputs: [y, x], nextState: { x: nextX, lastTime: time } };
@@ -1405,11 +1405,11 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     },
     evaluateDerivatives: (ins, p, state) => {
       const u = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
-      const x = state.x;
+      const x = state.x as number[];
       // dx/dt = A*x + B*u
       return p.A.map((row: number[], i: number) => {
-        const ax = row.reduce((sum, val, j) => sum + val * (x[j] || 0), 0);
-        const bu = p.B[i].reduce((sum: number, val: number, j: number) => sum + val * (u[j] || 0), 0);
+        const ax = row.reduce((sum, val, j) => sum + val * (Number(x[j]) || 0), 0);
+        const bu = p.B[i].reduce((sum: number, val: number, j: number) => sum + val * (Number(u[j]) || 0), 0);
         return ax + bu;
       });
     }
