@@ -21,6 +21,7 @@ import { XbridgesEngine } from '../../engine/xbridges/XbridgesEngine';
 import { Solvers } from '../../engine/xbridges/Solvers';
 import { XBlockNode } from './XBlockNode';
 import { XbridgesPropertiesPanel } from './XbridgesPropertiesPanel';
+import { XbridgesScopeWindow } from './XbridgesScopeWindow';
 
 const nodeTypes = { xblock: XBlockNode };
 
@@ -43,6 +44,7 @@ export const XbridgesWorkspace: React.FC<{
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [isSimulating, setIsSimulating] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [openScopes, setOpenScopes] = useState<string[]>([]);
   const [copiedNode, setCopiedNode] = useState<Node | null>(null);
   const [history, setHistory] = useState<{nodes: Node[], edges: Edge[]}[]>([]);
 
@@ -364,6 +366,7 @@ export const XbridgesWorkspace: React.FC<{
               newParams.numInputs !== oldParams.numInputs || 
               newParams.cases !== oldParams.cases ||
               newParams.numCases !== oldParams.numCases ||
+              newParams.numSignals !== oldParams.numSignals ||
               newParams.numOutputs !== oldParams.numOutputs;
 
             if (hasChanged) {
@@ -518,7 +521,8 @@ export const XbridgesWorkspace: React.FC<{
               ...n, 
               data: { 
                 ...n.data, 
-                onUpdate: (newData: any) => updateBlock(n.id, newData)
+                onUpdate: (newData: any) => updateBlock(n.id, newData),
+                onOpenScope: (blockId: string) => setOpenScopes(prev => prev.includes(blockId) ? prev : [...prev, blockId])
               } 
             }))}
             edges={edges}
@@ -579,6 +583,19 @@ export const XbridgesWorkspace: React.FC<{
               onClose={() => setSelectedNodeId(null)}
             />
           )}
+
+          {/* Floating Scope Windows */}
+          {openScopes.map(scopeId => {
+            const scopeNode = nodes.find(n => n.id === scopeId);
+            if (!scopeNode) return null;
+            return (
+              <XbridgesScopeWindow 
+                key={scopeId}
+                block={scopeNode.data}
+                onClose={() => setOpenScopes(prev => prev.filter(id => id !== scopeId))}
+              />
+            );
+          })}
         </div>
       </div>
     </div>

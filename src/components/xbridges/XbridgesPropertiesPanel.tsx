@@ -125,13 +125,27 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                   {key.replace(/([A-Z])/g, ' $1').trim()}
                 </label>
                 
-                {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'type', 'numCases'].includes(key) && 
+                {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'type', 'numCases', 'numSignals', 'bufferSize'].includes(key) && 
                  (key !== 'type' || block.type === 'WaveformGen') ? (
                   <select
                     value={displayValue as string}
                     onChange={(e) => onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } })}
                     className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-emerald-400 font-bold rounded focus:border-[#c9a86c] outline-none transition-all cursor-pointer"
                   >
+                    {key === 'numSignals' && (
+                      <>
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                          <option key={n} value={n}>{n} Channels</option>
+                        ))}
+                      </>
+                    )}
+                    {key === 'bufferSize' && (
+                      <>
+                        {[100, 500, 1000, 2000, 5000, 10000].map(n => (
+                          <option key={n} value={n}>{n} Samples</option>
+                        ))}
+                      </>
+                    )}
                     {key === 'numCases' && (
                       <>
                         {[2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (

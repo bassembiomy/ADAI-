@@ -16,9 +16,15 @@ export const XBlockNode = ({ data, id, selected }: any) => {
     const history = data.state?.history || [];
     if (history.length === 0) return;
     
+    const numSignals = data.params?.numSignals || 1;
+    const headers = ['Time', ...Array.from({ length: numSignals }, (_, i) => `In${i+1}`)];
+    
     const csvRows = [
-      ['Time', 'Value'],
-      ...history.map((h: any) => [h.t, h.y])
+      headers,
+      ...history.map((h: any) => [
+        h.t, 
+        ...Array.from({ length: numSignals }, (_, i) => h[`y${i+1}`])
+      ])
     ];
     
     const csvContent = csvRows.map(row => row.join(',')).join('\n');
@@ -31,6 +37,11 @@ export const XBlockNode = ({ data, id, selected }: any) => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const getSignalColor = (index: number) => {
+    const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7', '#ec4899', '#06b6d4', '#8b5cf6'];
+    return colors[index % colors.length];
   };
 
   const getColor = (type: string) => {
@@ -186,13 +197,22 @@ export const XBlockNode = ({ data, id, selected }: any) => {
         </div>
         <div className="flex items-center gap-2">
           {data.type === 'Scope' && (
-            <button 
-              onClick={(e) => { e.stopPropagation(); downloadCSV(); }}
-              className="p-1 hover:bg-white/10 rounded transition-colors text-emerald-400"
-              title="Download CSV"
-            >
-              <Download size={12} />
-            </button>
+            <>
+              <button 
+                onClick={(e) => { e.stopPropagation(); data.onOpenScope && data.onOpenScope(id); }}
+                className="p-1 hover:bg-white/10 rounded transition-colors text-blue-400"
+                title="Expand Scope"
+              >
+                <Maximize2 size={12} />
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); downloadCSV(); }}
+                className="p-1 hover:bg-white/10 rounded transition-colors text-emerald-400"
+                title="Download CSV"
+              >
+                <Download size={12} />
+              </button>
+            </>
           )}
           {(data.type === 'PID_CONTROLLER' || data.type === 'PID_BASIC') && (
             <div className="px-1.5 py-0.5 rounded-full bg-black/30 border border-white/10 text-[8px] font-black text-[#c9a86c]">
@@ -215,14 +235,17 @@ export const XBlockNode = ({ data, id, selected }: any) => {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data.state?.history || []}>
                   <YAxis hide domain={['auto', 'auto']} />
-                  <Line 
-                    type="monotone" 
-                    dataKey="y" 
-                    stroke={color} 
-                    strokeWidth={2} 
-                    dot={false} 
-                    isAnimationActive={false}
-                  />
+                  {Array.from({ length: data.params?.numSignals || 1 }, (_, i) => (
+                    <Line 
+                      key={i}
+                      type="monotone" 
+                      dataKey={`y${i+1}`} 
+                      stroke={getSignalColor(i)} 
+                      strokeWidth={2} 
+                      dot={false} 
+                      isAnimationActive={false}
+                    />
+                  ))}
                 </LineChart>
               </ResponsiveContainer>
             </div>

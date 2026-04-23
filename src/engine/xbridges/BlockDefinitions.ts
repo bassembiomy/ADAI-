@@ -405,23 +405,34 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   // --- Sinks ---
-  'Scope': (id, params) => ({
-    id, type: 'Scope',
-    params: { bufferSize: params.bufferSize || 1000 },
-    isStateful: true,
-    inputs: [createPort('in1', 'In', 'input')],
-    outputs: [],
-    state: { history: [] },
-    execute: (ins, p, state, time) => {
-      const val = Number(ins[0]);
-      const history = [...(state.history || [])];
-      history.push({ t: time, y: val });
-      if (history.length > Number(p.bufferSize)) {
-        history.shift();
+  'Scope': (id, params) => {
+    const numSignals = Number(params.numSignals) || 1;
+    const bufferSize = Number(params.bufferSize) || 1000;
+    
+    return {
+      id, type: 'Scope',
+      params: { numSignals, bufferSize },
+      isStateful: true,
+      inputs: Array.from({ length: numSignals }, (_, i) => 
+        createPort(`in${i+1}`, `In ${i+1}`, 'input')
+      ),
+      outputs: [],
+      state: { history: [] },
+      execute: (ins, p, state, time) => {
+        const history = [...(state.history || [])];
+        const sample: any = { t: time };
+        for (let i = 0; i < numSignals; i++) {
+          sample[`y${i+1}`] = Number(ins[i] || 0);
+        }
+        
+        history.push(sample);
+        if (history.length > bufferSize) {
+          history.shift();
+        }
+        return { outputs: [], nextState: { history } };
       }
-      return { outputs: [], nextState: { history } };
-    }
-  }),
+    };
+  },
 
   // --- Ports ---
   'Inport': (id, params) => ({
