@@ -14,7 +14,7 @@ import ReactFlow, {
   MiniMap
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Play, Square, Save, Trash2, Box, Layers, MousePointer2, Settings2, ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { Play, Pause, Square, Save, Trash2, Box, Layers, MousePointer2, Settings2, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { XBRIDGES_CATEGORIES } from '../../utils/xbridges/XbridgesLibrary';
 import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import { XbridgesEngine } from '../../engine/xbridges/XbridgesEngine';
@@ -43,6 +43,7 @@ export const XbridgesWorkspace: React.FC<{
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [openScopes, setOpenScopes] = useState<string[]>([]);
   const [searchMenuPos, setSearchMenuPos] = useState<{ x: number, y: number } | null>(null);
@@ -100,7 +101,7 @@ export const XbridgesWorkspace: React.FC<{
       engineRef.current.compile();
 
       const tick = () => {
-        if (engineRef.current) {
+        if (engineRef.current && !isPaused) {
            // Sync SM Variables to Inports (Data Connectivity)
            nodes.forEach(node => {
               if (node.data.type === 'Inport' && node.data.params?.smVarId && availableVariables) {
@@ -146,6 +147,7 @@ export const XbridgesWorkspace: React.FC<{
       animationFrameId = requestAnimationFrame(tick);
     } else {
       timeRef.current = 0; // Reset time when stopped
+      setIsPaused(false);
     }
 
     return () => cancelAnimationFrame(animationFrameId);
@@ -385,6 +387,30 @@ export const XbridgesWorkspace: React.FC<{
     }));
   };
 
+  const stepSimulation = () => {
+    if (!engineRef.current) return;
+    
+    if (solverType === 'rk4') Solvers.stepRK4(engineRef.current, timeRef.current, fixedStep);
+    else Solvers.stepEuler(engineRef.current, timeRef.current, fixedStep);
+    
+    timeRef.current += fixedStep;
+
+    setNodes(nds => nds.map(n => {
+        const engineBlock = engineRef.current!['blockMap'].get(n.id);
+        if (engineBlock && n.type === 'xblock') {
+            let dataUpdate: any = { state: engineBlock.state };
+            if (engineBlock.type === 'Scope') {
+                const currentInputs = engineRef.current!.gatherInputs(engineBlock);
+                const val = currentInputs[0];
+                const prevHistory = n.data.history || [];
+                dataUpdate.history = [...prevHistory.slice(-99), typeof val === 'number' ? val : 0];
+            }
+            return { ...n, data: { ...n.data, ...dataUpdate }}; 
+        }
+        return n;
+    }));
+  };
+
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
 
   const addBlockAtPos = (type: string, x: number, y: number) => {
@@ -520,6 +546,38 @@ export const XbridgesWorkspace: React.FC<{
               {isSimulating ? <Square size={14} className="fill-current" /> : <Play size={14} className="fill-current" />}
               {isSimulating ? 'Stop Simulation' : 'Run Simulation'}
             </button>
+
+            {isSimulating && (
+              <div className="flex items-center gap-2 animate-in slide-in-from-left-2 duration-300">
+                <button
+                  onClick={() => setIsPaused(!isPaused)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold transition-all ${
+                    isPaused 
+                      ? 'bg-amber-500/20 text-amber-500 border border-amber-500/50' 
+                      : 'bg-white/5 text-white/50 hover:bg-white/10 border border-white/10'
+                  }`}
+                  title={isPaused ? "Resume Simulation" : "Pause Simulation"}
+                >
+                  {isPaused ? <Play size={12} fill="currentColor" /> : <Pause size={12} fill="currentColor" />}
+                  {isPaused ? 'Resume' : 'Pause'}
+                </button>
+
+                <button
+                  onClick={stepSimulation}
+                  disabled={!isPaused}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold transition-all ${
+                    isPaused 
+                      ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30' 
+                      : 'opacity-30 cursor-not-allowed text-white/30 border border-white/5'
+                  }`}
+                  title="Advance by one time step"
+                >
+                  <ChevronRight size={14} />
+                  Step
+                </button>
+              </div>
+            )}
+
             <div className="h-6 w-px bg-[#333] mx-2" />
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <Settings2 size={14} />
