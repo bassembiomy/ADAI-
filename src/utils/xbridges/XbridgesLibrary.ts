@@ -145,16 +145,18 @@ export const XBRIDGES_CATEGORIES = [
     ]
   },
   {
-    name: 'Memory & Delay',
+    name: 'Control Systems',
     blocks: [
-      { type: 'DELAY', label: 'Delay', icon: 'trending-up' },
+      { type: 'PID_CONTROLLER', label: 'PID Controller (Ind)', icon: 'settings' },
+      { type: 'PID_BASIC', label: 'PID Controller (Signal)', icon: 'settings' },
+      { type: 'INTEGRATOR_CONTINUOUS', label: 'Continuous Integrator', icon: 'trending-up' },
+      { type: 'INTEGRATOR_DISCRETE', label: 'Discrete Integrator', icon: 'trending-up' },
     ]
   },
   {
-    name: 'Integrators',
+    name: 'Memory & Delay',
     blocks: [
-      { type: 'INTEGRATOR_CONTINUOUS', label: 'Continuous Integrator', icon: 'trending-up' },
-      { type: 'INTEGRATOR_DISCRETE', label: 'Discrete Integrator', icon: 'trending-up' },
+      { type: 'DELAY', label: 'Delay', icon: 'trending-up' },
     ]
   },
   {

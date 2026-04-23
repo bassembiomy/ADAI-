@@ -232,7 +232,7 @@ export const XBlockNode: React.FC<XBlockNodeProps> = ({ data, selected, id }) =>
                   {data.params?.smVarId ? `[${data.label || data.type}]` : (data.label || data.type)}
                 </span>
               </div>
-              {data.type === 'PID_CONTROLLER' && (
+              {(data.type === 'PID_CONTROLLER' || data.type === 'PID_BASIC') && (
                 <div className="px-1.5 py-0.5 rounded-full bg-black/30 border border-white/10 text-[8px] font-black text-[#c9a86c]">
                   {data.params?.mode || 'PID'}
                 </div>

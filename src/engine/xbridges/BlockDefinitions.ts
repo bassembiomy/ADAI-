@@ -1471,4 +1471,72 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   'DISCRETE_TRANSFER_FUNCTION': (id, params) => {
     return BLOCK_LIBRARY['TRANSFER_FUNCTION'](id, { ...params, representation: 'discrete' });
   },
+
+  'PID_BASIC': (id, params) => ({
+    id, type: 'PID_BASIC',
+    params: {
+      mode: params.mode || 'PID',
+      Kp: params.Kp !== undefined ? params.Kp : 1,
+      Ki: params.Ki !== undefined ? params.Ki : 1,
+      Kd: params.Kd !== undefined ? params.Kd : 0,
+      N: params.N !== undefined ? params.N : 100,
+      min: params.min !== undefined ? params.min : -100,
+      max: params.max !== undefined ? params.max : 100,
+      method: params.method || 'forward_euler'
+    },
+    isStateful: true,
+    inputs: [
+      createPort('e', 'Error', 'input'),
+      createPort('enable', 'Enable', 'input', 1, 'bottom', 'control'),
+      createPort('reset', 'Reset', 'input', 0, 'bottom', 'control')
+    ],
+    outputs: [
+      createPort('u', 'Control', 'output', 0, 'right', 'control')
+    ],
+    state: { i_state: 0, d_state: 0, last_e: 0, last_time: 0 },
+    execute: (ins, p, state, time) => {
+      const error = Number(ins[0]);
+      const enable = Number(ins[1]);
+      const reset = Number(ins[2]);
+      
+      if (reset > 0.5) return { outputs: [0], nextState: { i_state: 0, d_state: 0, last_e: 0, last_time: time } };
+      if (enable < 0.5) return { outputs: [0], nextState: { ...state, last_time: time } };
+
+      const dt = Math.max(1e-6, time - (state.last_time || 0));
+      
+      const P = p.Kp * error;
+      
+      let nextI = state.i_state;
+      if (p.mode === 'PI' || p.mode === 'PID') {
+        nextI = state.i_state + p.Ki * error * dt;
+      }
+      
+      let D = 0;
+      let nextD = state.d_state;
+      if (p.mode === 'PD' || p.mode === 'PID') {
+        const diff_e = (error - (state.last_e || 0));
+        D = (p.Kd * p.N * diff_e + state.d_state) / (1 + p.N * dt);
+        nextD = D;
+      }
+      
+      const u_unlimited = P + nextI + D;
+      const u = Math.max(p.min, Math.min(p.max, u_unlimited));
+      
+      // Anti-Windup Clamping
+      if (p.Ki !== 0 && ((u_unlimited > p.max && error > 0) || (u_unlimited < p.min && error < 0))) {
+        nextI = state.i_state;
+      }
+
+      return {
+        outputs: [u],
+        nextState: { i_state: nextI, d_state: nextD, last_e: error, last_time: time }
+      };
+    },
+    evaluateDerivatives: (ins, p, state) => {
+      const error = Number(ins[0]);
+      const di = p.Ki * error;
+      const dd = p.N * (p.Kd * p.N * (error - (state.last_e || 0)) - state.d_state);
+      return [di, dd];
+    }
+  }),
 };
