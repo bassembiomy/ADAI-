@@ -405,12 +405,22 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   // --- Sinks ---
-  'Scope': (id) => ({
-    id, type: 'Scope', params: {},
-    allowDynamicInputs: true,
+  'Scope': (id, params) => ({
+    id, type: 'Scope',
+    params: { bufferSize: params.bufferSize || 1000 },
+    isStateful: true,
     inputs: [createPort('in1', 'In', 'input')],
     outputs: [],
-    execute: () => ({ outputs: [] })
+    state: { history: [] },
+    execute: (ins, p, state, time) => {
+      const val = Number(ins[0]);
+      const history = [...(state.history || [])];
+      history.push({ t: time, y: val });
+      if (history.length > Number(p.bufferSize)) {
+        history.shift();
+      }
+      return { outputs: [], nextState: { history } };
+    }
   }),
 
   // --- Ports ---

@@ -6,10 +6,32 @@ import {
   Sigma, BarChart, ArrowUp, Grid, RotateCw, RefreshCcw, Hash, TrendingUp, Monitor, Box, Download,
   LogIn, LogOut, ChevronLeft, ChevronRight, Zap, Settings, ZapOff, Cpu, Layers, Wind, Filter, Eye
 } from 'lucide-react';
+import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
 import { XPort } from '../../engine/xbridges/types';
 
 export const XBlockNode = ({ data, id, selected }: any) => {
   const updateNodeInternals = useUpdateNodeInternals();
+
+  const downloadCSV = () => {
+    const history = data.state?.history || [];
+    if (history.length === 0) return;
+    
+    const csvRows = [
+      ['Time', 'Value'],
+      ...history.map((h: any) => [h.t, h.y])
+    ];
+    
+    const csvContent = csvRows.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `scope_data_${id}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const getColor = (type: string) => {
     if (['Constant', 'WaveformGen', 'Clock', 'Scope', 'DELAY', 'MUX', 'DEMUX', 'TERMINATOR', 'DATA_TYPE_CONVERSION'].includes(type)) return '#007acc'; // Signal (Blue)
@@ -145,7 +167,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       style={{ 
         background: '#1a1a1a',
         borderColor: color,
-        minWidth: 120,
+        minWidth: data.type === 'Scope' ? 240 : 120,
         boxShadow: selected ? `0 0 20px ${color}44` : '0 10px 30px -10px rgba(0,0,0,0.5)'
       }}
     >
@@ -158,15 +180,26 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       >
         <div className="flex items-center gap-2">
           <div style={{ color }}>{getIcon(data.type)}</div>
-          <span className="text-[10px] font-black text-white uppercase tracking-widest truncate max-w-[80px]">
+          <span className="text-[10px] font-black text-white uppercase tracking-widest truncate max-w-[120px]">
             {data.params?.smVarId ? `[${data.label || data.type}]` : (data.label || data.type)}
           </span>
         </div>
-        {(data.type === 'PID_CONTROLLER' || data.type === 'PID_BASIC') && (
-          <div className="px-1.5 py-0.5 rounded-full bg-black/30 border border-white/10 text-[8px] font-black text-[#c9a86c]">
-            {data.params?.mode || 'PID'}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {data.type === 'Scope' && (
+            <button 
+              onClick={(e) => { e.stopPropagation(); downloadCSV(); }}
+              className="p-1 hover:bg-white/10 rounded transition-colors text-emerald-400"
+              title="Download CSV"
+            >
+              <Download size={12} />
+            </button>
+          )}
+          {(data.type === 'PID_CONTROLLER' || data.type === 'PID_BASIC') && (
+            <div className="px-1.5 py-0.5 rounded-full bg-black/30 border border-white/10 text-[8px] font-black text-[#c9a86c]">
+              {data.params?.mode || 'PID'}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex p-2 gap-4">
@@ -176,10 +209,30 @@ export const XBlockNode = ({ data, id, selected }: any) => {
         </div>
 
         {/* Center Content / Parameters Preview */}
-        <div className="flex flex-col items-center justify-center py-2 opacity-100 pointer-events-none min-w-[30px]">
-          <div style={{ color }} className="scale-125 mb-1">{getIcon(data.type)}</div>
-          {data.type === 'Constant' && <span className="text-[10px] font-bold text-white/50">{data.params?.value}</span>}
-          {data.type === 'GAIN' && <span className="text-[10px] font-bold text-white/50">K={data.params?.gain}</span>}
+        <div className="flex flex-col items-center justify-center py-2 min-w-[30px] flex-[3]">
+          {data.type === 'Scope' ? (
+            <div className="w-full h-[80px] bg-black/40 rounded border border-white/5 p-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data.state?.history || []}>
+                  <YAxis hide domain={['auto', 'auto']} />
+                  <Line 
+                    type="monotone" 
+                    dataKey="y" 
+                    stroke={color} 
+                    strokeWidth={2} 
+                    dot={false} 
+                    isAnimationActive={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center opacity-100 pointer-events-none">
+              <div style={{ color }} className="scale-125 mb-1">{getIcon(data.type)}</div>
+              {data.type === 'Constant' && <span className="text-[10px] font-bold text-white/50">{data.params?.value}</span>}
+              {data.type === 'GAIN' && <span className="text-[10px] font-bold text-white/50">K={data.params?.gain}</span>}
+            </div>
+          )}
         </div>
 
         {/* Outputs */}
