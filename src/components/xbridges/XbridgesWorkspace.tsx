@@ -389,7 +389,14 @@ export const XbridgesWorkspace: React.FC<{
 
   const addBlockAtPos = (type: string, x: number, y: number) => {
     if (!reactFlowInstance) return;
-    const position = reactFlowInstance.screenToFlowPosition({ x, y });
+    const rfBounds = document.querySelector('.react-flow')?.getBoundingClientRect();
+    if (!rfBounds) return;
+    
+    const position = reactFlowInstance.project({
+      x: x - rfBounds.left,
+      y: y - rfBounds.top,
+    });
+    
     const newNode = {
       id: `${type}_${Date.now()}`,
       type: 'xblock',
@@ -406,11 +413,11 @@ export const XbridgesWorkspace: React.FC<{
   ).filter(b => b.label.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="flex flex-col h-screen bg-[#0a0a0a] text-white overflow-hidden font-sans select-none relative">
+    <div className="flex h-full w-full bg-[#0a0a0a] text-gray-300 font-sans overflow-hidden select-none relative">
       {/* Quick Search Menu */}
       {searchMenuPos && (
         <div 
-          className="fixed z-[9999] w-[260px] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200"
+          className="fixed z-[9999] w-[260px] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl overflow-hidden"
           style={{ left: searchMenuPos.x, top: searchMenuPos.y }}
           onClick={(e) => e.stopPropagation()}
         >
