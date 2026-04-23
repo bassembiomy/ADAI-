@@ -125,14 +125,73 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                   {key.replace(/([A-Z])/g, ' $1').trim()}
                 </label>
                 
-                {key === 'type' && block.type === 'WaveformGen' ? (
+                {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'type'].includes(key) && 
+                 (key !== 'type' || block.type === 'WaveformGen') ? (
                   <select
                     value={displayValue as string}
                     onChange={(e) => onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } })}
-                    className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-white rounded focus:border-[#emerald-500] outline-none transition-all"
+                    className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-emerald-400 font-bold rounded focus:border-[#c9a86c] outline-none transition-all cursor-pointer"
                   >
-                    <option value="Sine">Sine Wave</option>
-                    <option value="Square">Square Wave</option>
+                    {key === 'representation' && (
+                      <>
+                        <option value="continuous">Continuous-Time</option>
+                        <option value="discrete">Discrete-Time</option>
+                      </>
+                    )}
+                    {key === 'mode' && (
+                      <>
+                        <option value="P">P - Proportional</option>
+                        <option value="PI">PI - Prop-Integral</option>
+                        <option value="PD">PD - Prop-Deriv</option>
+                        <option value="PID">PID - Full Control</option>
+                      </>
+                    )}
+                    {key === 'method' && (
+                      <>
+                        <option value="forward_euler">Forward Euler</option>
+                        <option value="backward_euler">Backward Euler</option>
+                        <option value="tustin">Tustin / Trapezoidal</option>
+                      </>
+                    )}
+                    {key === 'criteria' && (
+                      <>
+                        <option value=">">&gt; (Greater Than)</option>
+                        <option value="<">&lt; (Less Than)</option>
+                        <option value=">=">&gt;= (Greater or Equal)</option>
+                        <option value="<=">&lt;= (Less or Equal)</option>
+                      </>
+                    )}
+                    {key === 'operation' && (
+                      <>
+                        <option value="multiply">Multiply</option>
+                        <option value="divide">Divide</option>
+                      </>
+                    )}
+                    {key === 'angle_unit' && (
+                      <>
+                        <option value="radians">Radians</option>
+                        <option value="degrees">Degrees</option>
+                      </>
+                    )}
+                    {key === 'output_type' && (
+                      <>
+                        <option value="float64">Float64</option>
+                        <option value="boolean">Boolean</option>
+                      </>
+                    )}
+                    {key === 'rounding' && (
+                      <>
+                        <option value="floor">Floor</option>
+                        <option value="ceil">Ceil</option>
+                        <option value="nearest">Nearest</option>
+                      </>
+                    )}
+                    {key === 'type' && block.type === 'WaveformGen' && (
+                      <>
+                        <option value="Sine">Sine Wave</option>
+                        <option value="Square">Square Wave</option>
+                      </>
+                    )}
                   </select>
                 ) : (
                   <input 
