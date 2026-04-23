@@ -14,7 +14,7 @@ import ReactFlow, {
   MiniMap
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Play, Square, Save, Trash2, Box, Layers, MousePointer2, Settings2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Play, Square, Save, Trash2, Box, Layers, MousePointer2, Settings2, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { XBRIDGES_CATEGORIES } from '../../utils/xbridges/XbridgesLibrary';
 import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import { XbridgesEngine } from '../../engine/xbridges/XbridgesEngine';
@@ -45,6 +45,8 @@ export const XbridgesWorkspace: React.FC<{
   const [isSimulating, setIsSimulating] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [openScopes, setOpenScopes] = useState<string[]>([]);
+  const [searchMenuPos, setSearchMenuPos] = useState<{ x: number, y: number } | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [copiedNode, setCopiedNode] = useState<Node | null>(null);
   const [history, setHistory] = useState<{nodes: Node[], edges: Edge[]}[]>([]);
 
@@ -385,8 +387,72 @@ export const XbridgesWorkspace: React.FC<{
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
 
+  const addBlockAtPos = (type: string, x: number, y: number) => {
+    if (!reactFlowInstance) return;
+    const position = reactFlowInstance.screenToFlowPosition({ x, y });
+    const newNode = {
+      id: `${type}_${Date.now()}`,
+      type: 'xblock',
+      position,
+      data: { type, label: type, params: {} }
+    };
+    setNodes(nds => [...nds, newNode]);
+    setSearchMenuPos(null);
+    setSearchTerm('');
+  };
+
+  const filteredBlocks = XBRIDGES_CATEGORIES.flatMap(cat => 
+    cat.blocks.map(b => ({ ...b, category: cat.name }))
+  ).filter(b => b.label.toLowerCase().includes(searchTerm.toLowerCase()));
+
   return (
-    <div className="flex h-full w-full bg-[#0a0a0a] text-gray-300 font-sans overflow-hidden">
+    <div className="flex flex-col h-screen bg-[#0a0a0a] text-white overflow-hidden font-sans select-none relative">
+      {/* Quick Search Menu */}
+      {searchMenuPos && (
+        <div 
+          className="fixed z-[9999] w-[260px] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200"
+          style={{ left: searchMenuPos.x, top: searchMenuPos.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-3 border-b border-white/5 flex items-center gap-2">
+            <Search size={14} className="text-emerald-500" />
+            <input 
+              autoFocus
+              placeholder="Search blocks..."
+              className="bg-transparent border-none outline-none text-sm w-full text-white placeholder-white/20 font-bold"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && filteredBlocks.length > 0) {
+                  addBlockAtPos(filteredBlocks[0].type, searchMenuPos.x, searchMenuPos.y);
+                } else if (e.key === 'Escape') {
+                  setSearchMenuPos(null);
+                }
+              }}
+            />
+          </div>
+          <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-1">
+            {filteredBlocks.map((b, i) => (
+              <div 
+                key={i}
+                className="flex items-center justify-between p-2 hover:bg-emerald-500/10 rounded cursor-pointer group transition-colors"
+                onClick={() => addBlockAtPos(b.type, searchMenuPos.x, searchMenuPos.y)}
+              >
+                <div className="flex flex-col">
+                  <span className="text-xs font-bold text-white/90 group-hover:text-emerald-400">{b.label}</span>
+                  <span className="text-[9px] text-white/30 uppercase tracking-widest">{b.category}</span>
+                </div>
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Box size={10} className="text-emerald-500" />
+                </div>
+              </div>
+            ))}
+            {filteredBlocks.length === 0 && (
+              <div className="p-4 text-center text-xs text-white/20 italic">No blocks found</div>
+            )}
+          </div>
+        </div>
+      )}
       {/* Sidebar Library */}
       <div className="w-64 bg-[#141414] border-r border-[#222] flex flex-col shadow-sm z-10">
         <div className="p-4 border-b border-[#222] flex items-center gap-2">
@@ -532,7 +598,16 @@ export const XbridgesWorkspace: React.FC<{
             onDrop={onDrop}
             onDragOver={(e) => e.preventDefault()}
             onNodeClick={onNodeClick}
-            onPaneClick={onPaneClick}
+            onPaneClick={(e) => {
+              if (e.detail === 2) {
+                // Double click
+                setSearchMenuPos({ x: e.clientX, y: e.clientY });
+              } else {
+                setSearchMenuPos(null);
+                setSearchTerm('');
+              }
+              setSelectedNodeId(null);
+            }}
             onSelectionChange={({ nodes: selectedNodes }) => {
               if (selectedNodes.length === 1) {
                 setSelectedNodeId(selectedNodes[0].id);
