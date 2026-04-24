@@ -1,12 +1,13 @@
 // src/components/xbridges/XbridgesPropertiesPanel.tsx
 import React, { useState, useEffect } from 'react';
 import { XBlock, XPort } from '../../engine/xbridges/types';
-import { X, Plus, Trash2, Settings2, Hash } from 'lucide-react';
+import { X, Plus, Trash2, Settings2, Hash, Layers } from 'lucide-react';
 
 interface Props {
   block: XBlock | null;
   availableVariables?: any[];
   onUpdate: (blockId: string, data: Partial<XBlock>) => void;
+  onLaunchDoe?: () => void;
   onClose: () => void;
 }
 
@@ -17,7 +18,7 @@ const normalizeNumerals = (val: string) => {
             .replace(/[٫،,]/g, '.');
 };
 
-export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVariables, onUpdate, onClose }) => {
+export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVariables, onUpdate, onLaunchDoe, onClose }) => {
   if (!block) return null;
 
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -123,6 +124,14 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
             <span className="text-xs text-gray-500">Block Type</span>
             <span className="text-xs font-mono font-medium text-[#c9a86c]">{block.type}</span>
           </div>
+          {block.type === 'DOE_MODULE' && onLaunchDoe && (
+            <button 
+              onClick={onLaunchDoe}
+              className="w-full p-3 bg-[#c9a86c] text-black rounded font-bold text-xs flex items-center justify-center gap-2 hover:bg-[#b8975a] transition-all shadow-lg"
+            >
+              <Layers size={14} /> Launch Modeling Workspace
+            </button>
+          )}
         </section>
 
         {/* Parameters */}

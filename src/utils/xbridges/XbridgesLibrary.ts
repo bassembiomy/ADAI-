@@ -236,5 +236,11 @@ export const XBRIDGES_CATEGORIES = [
     blocks: [
       { type: 'MPC_CONTROLLER', label: 'MPC Controller', icon: 'cpu' }
     ]
+  },
+  {
+    name: 'Analysis & DOE',
+    blocks: [
+      { type: 'DOE_MODULE', label: 'DOE Module', icon: 'bar-chart' }
+    ]
   }
 ];

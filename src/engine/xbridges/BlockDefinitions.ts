@@ -1850,10 +1850,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         createPort('y', 'y', 'output'),
         createPort('e', 'error', 'output', 0, 'top', 'measurement')
       ],
-      execute: (ins, p) => {
+      execute: (ins: any[], p: any) => {
         let u = Number(ins[0]);
         let y = u;
-        let isOverflow = false;
+
 
         if (p.mode === 'floating_point') {
             if (p.output_type === 'float32') y = Math.fround(u);
@@ -1876,7 +1876,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
             const maxRaw = Math.pow(2, p.wordLength - 1) - 1;
             const minRaw = -Math.pow(2, p.wordLength - 1);
             
-            if (raw > maxRaw || raw < minRaw) isOverflow = true;
+
 
             if (p.overflow === 'saturate') raw = Math.max(minRaw, Math.min(maxRaw, raw));
             else if (p.overflow === 'wrap') {
@@ -1890,5 +1890,29 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         return { outputs: [y, error] };
       }
     };
-  }
+  },
+
+  'DOE_MODULE': (id, params) => ({
+    id, type: 'DOE_MODULE',
+    params: { 
+      modelType: params.modelType || 'RSM',
+      factors: params.factors || ['X1', 'X2'],
+      response: params.response || 'Y',
+      maxLayers: params.maxLayers || 5,
+      neuronsPerLayer: params.neuronsPerLayer || 10
+    },
+    isStateful: true,
+    inputs: [
+      createPort('dataset', 'Data', 'input', null, 'left', 'data'),
+      createPort('trigger', 'Train', 'input', 0, 'top', 'logical')
+    ],
+    outputs: [
+      createPort('model', 'Model', 'output', null, 'right', 'object'),
+      createPort('pred', 'Pred', 'output', 0, 'right', 'control')
+    ],
+    state: { model: null, results: null },
+    execute: (ins: any[], p: any, state: any) => {
+      return { outputs: [state.model || null, 0] };
+    }
+  })
 };

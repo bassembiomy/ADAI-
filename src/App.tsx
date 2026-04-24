@@ -1,11 +1,19 @@
-// src/App.tsx
 import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent } from 'react';
+import * as math from 'mathjs';
+import Plot from 'react-plotly.js';
 import { v4 as uuidv4 } from 'uuid';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import { XbridgesWorkspace } from './components/xbridges/XbridgesWorkspace';
 import { XbridgesEngine } from './engine/xbridges/XbridgesEngine';
 import { Solvers } from './engine/xbridges/Solvers';
+import { GMDHEngine, solveLeastSquares } from './engine/gmdh/gmdh_core/combi';
+import { 
+  Trash2, Plus, Layers, Settings2, Search, Save, Box, 
+  ChevronDown, ChevronRight, Play, Pause, Square, 
+  MousePointer2, Upload, FileText, Download,
+  Activity, Zap, Database, Cpu, Layout, Maximize2, X
+} from 'lucide-react';
 
 // =============================================================================
 // STATIC UI COMPONENTS (ZERO IMPORT ERRORS - FULLY TYPED)
@@ -151,112 +159,159 @@ const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
-    // Voice message logic with reliability fixes
-    let speechDone = false;
-    const speak = () => {
-      if (speechDone) return;
-      
-      // Cancel any ongoing speech
-      window.speechSynthesis.cancel();
-      
-      const msg = new SpeechSynthesisUtterance("Ah-dee-uh Go Beyond");
-      msg.rate = 0.9;
-      msg.pitch = 1.0;
-      msg.volume = 1.0;
-      msg.lang = 'en-US';
-      
-      const voices = window.speechSynthesis.getVoices();
-      const usVoice = voices.find(v => v.lang.includes('en-US') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha')));
-      msg.voice = usVoice || voices.find(v => v.lang.includes('en-US')) || voices[0];
-      
-      window.speechSynthesis.speak(msg);
-      speechDone = true;
-    };
-
-    // Trigger on mount (if browser allows)
-    if (window.speechSynthesis.getVoices().length > 0) {
-      setTimeout(speak, 500);
-    } else {
-      window.speechSynthesis.onvoiceschanged = () => setTimeout(speak, 500);
-    }
-
-    // Fallback: Trigger on first interaction with the splash screen
-    const handleInteraction = () => speak();
-    window.addEventListener('click', handleInteraction);
-    window.addEventListener('keydown', handleInteraction);
-
     const timer = setTimeout(() => {
       setIsVisible(false);
-      setTimeout(onComplete, 800);
-    }, 4500);
+      setTimeout(onComplete, 1200);
+    }, 5500);
 
-    return () => {
-      clearTimeout(timer);
-      window.speechSynthesis.onvoiceschanged = null;
-      window.removeEventListener('click', handleInteraction);
-      window.removeEventListener('keydown', handleInteraction);
-    };
-
+    return () => clearTimeout(timer);
   }, [onComplete]);
 
   return (
-    <div className={`fixed inset-0 z-[9999] bg-[#0a0a0a] flex flex-col items-center justify-center transition-opacity duration-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+    <div className={`fixed inset-0 z-[9999] bg-[#050505] flex flex-col items-center justify-center transition-opacity duration-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+      {/* Background Mist/Particles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-[#c9a86c]/5 rounded-full blur-[120px] animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#c9a86c]/5 rounded-full blur-[120px] animate-pulse-slow" />
+      </div>
+
       <div className="relative flex flex-col items-center">
-        {/* Animated Glow */}
-        <div className="absolute inset-0 bg-[#c9a86c] rounded-full blur-[80px] opacity-10 animate-pulse" />
-        
-        {/* Professional Logo */}
-        <div className="relative mb-12 scale-125 md:scale-150">
-          <svg width="100" height="100" viewBox="0 0 100 100" fill="none" className="animate-float">
-            <path d="M50 5 L90 25 L90 75 L50 95 L10 75 L10 25 Z" stroke="#c9a86c" strokeWidth="2.5" strokeLinejoin="round" />
-            <path d="M50 15 L80 30 L80 70 L50 85 L20 70 L20 30 Z" stroke="#c9a86c" strokeWidth="1" opacity="0.3" />
-            <path d="M40 45 L50 35 L60 45 L60 55 L50 65 L40 55 Z" fill="#c9a86c" className="animate-pulse" />
-            <circle cx="50" cy="50" r="30" stroke="#c9a86c" strokeWidth="0.5" strokeDasharray="6 6" className="animate-spin-slow" />
-          </svg>
+        {/* Cinematic Logo Container */}
+        <div className="relative mb-16 group">
+          {/* Outer Ring */}
+          <div className="absolute inset-0 scale-[1.8] border border-[#c9a86c]/10 rounded-full animate-ping-slow" />
+          
+          {/* Main Logo SVG */}
+          <div className="relative z-10 transform scale-[1.6]">
+            <svg width="120" height="120" viewBox="0 0 100 100" fill="none">
+              {/* Outer Hexagon with Draw Animation */}
+              <path 
+                d="M50 5 L90 25 L90 75 L50 95 L10 75 L10 25 Z" 
+                stroke="#c9a86c" 
+                strokeWidth="1.5" 
+                strokeLinejoin="round"
+                className="animate-draw-path"
+              />
+              
+              {/* Inner Scanning Hexagon */}
+              <path 
+                d="M50 15 L80 30 L80 70 L50 85 L20 70 L20 30 Z" 
+                stroke="#c9a86c" 
+                strokeWidth="0.5" 
+                opacity="0.2"
+                className="animate-pulse"
+              />
+              
+              {/* Core Gem */}
+              <path 
+                d="M40 45 L50 35 L60 45 L60 55 L50 65 L40 55 Z" 
+                fill="#c9a86c" 
+                className="animate-glow-cycle"
+              />
+              
+              {/* Scanning Beam */}
+              <rect x="0" y="0" width="100" height="2" fill="url(#beamGradient)" className="animate-scan" />
+              
+              <defs>
+                <linearGradient id="beamGradient" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="transparent" />
+                  <stop offset="50%" stopColor="#c9a86c" stopOpacity="0.8" />
+                  <stop offset="100%" stopColor="transparent" />
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
         </div>
 
-        <div className="text-center">
-          <h1 className="text-6xl font-black tracking-[0.3em] text-white drop-shadow-2xl mb-4">
-            ADIA<span className="text-[#c9a86c]">.</span>
-          </h1>
-          <div className="h-6 overflow-hidden flex items-center justify-center">
-            <p className="text-[#c9a86c] text-xs font-bold uppercase tracking-[0.8em] animate-slide-up">
+        {/* Text Reveal Section */}
+        <div className="text-center relative">
+          <div className="flex gap-1 mb-6">
+            {['A', 'D', 'I', 'A'].map((char, i) => (
+              <span 
+                key={i} 
+                className="text-7xl font-black tracking-tighter text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] animate-reveal-letter"
+                style={{ animationDelay: `${i * 0.2 + 0.5}s` }}
+              >
+                {char}
+              </span>
+            ))}
+            <span className="text-7xl font-black text-[#c9a86c] animate-reveal-letter" style={{ animationDelay: '1.5s' }}>.</span>
+          </div>
+          
+          <div className="h-8 relative overflow-hidden flex items-center justify-center">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#c9a86c]/20 to-transparent animate-shimmer" />
+            <p className="text-[#c9a86c] text-[10px] font-bold uppercase tracking-[1em] opacity-0 animate-fade-in-up">
               Go Beyond
             </p>
           </div>
         </div>
 
-        {/* Loading Indicator */}
-        <div className="mt-16 w-48 h-[2px] bg-[#222] rounded-full overflow-hidden">
-          <div className="h-full bg-[#c9a86c] animate-loading-bar" />
+        {/* Futuristic Status Bar */}
+        <div className="mt-20 w-64 h-[1px] bg-[#222] relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#c9a86c] to-transparent animate-loading-slide" />
+          <div className="absolute top-2 left-0 right-0 flex justify-between text-[8px] font-mono text-[#444] tracking-widest uppercase">
+            <span>System</span>
+            <span className="animate-pulse">Active</span>
+            <span>2024</span>
+          </div>
         </div>
       </div>
 
       <style>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-15px); }
+        @keyframes draw-path {
+          0% { stroke-dasharray: 0 400; stroke-dashoffset: 0; opacity: 0; }
+          50% { opacity: 1; }
+          100% { stroke-dasharray: 400 0; stroke-dashoffset: 0; }
         }
-        @keyframes spin-slow {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
+        @keyframes scan {
+          0% { transform: translateY(0); opacity: 0; }
+          20% { opacity: 1; }
+          80% { opacity: 1; }
+          100% { transform: translateY(100px); opacity: 0; }
         }
-        @keyframes slide-up {
-          0% { transform: translateY(100%); opacity: 0; }
+        @keyframes reveal-letter {
+          0% { transform: translateY(20px) scale(0.8); opacity: 0; filter: blur(10px); }
+          100% { transform: translateY(0) scale(1); opacity: 1; filter: blur(0); }
+        }
+        @keyframes fade-in-up {
+          0% { transform: translateY(20px); opacity: 0; }
           100% { transform: translateY(0); opacity: 1; }
         }
-        @keyframes loading-bar {
+        @keyframes glow-cycle {
+          0%, 100% { filter: drop-shadow(0 0 5px #c9a86c); }
+          50% { filter: drop-shadow(0 0 20px #c9a86c); }
+        }
+        @keyframes shimmer {
           0% { transform: translateX(-100%); }
           100% { transform: translateX(100%); }
         }
-        .animate-float { animation: float 6s ease-in-out infinite; }
-        .animate-spin-slow { animation: spin-slow 20s linear infinite; transform-origin: center; }
-        .animate-slide-up { animation: slide-up 2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; animation-delay: 0.5s; }
-        .animate-loading-bar { animation: loading-bar 3s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+        @keyframes loading-slide {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        @keyframes ping-slow {
+          0% { transform: scale(1.4); opacity: 0.3; }
+          100% { transform: scale(2.2); opacity: 0; }
+        }
+        @keyframes pulse-slow {
+          0%, 100% { opacity: 0.05; }
+          50% { opacity: 0.1; }
+        }
+        .animate-draw-path { animation: draw-path 3s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        .animate-scan { animation: scan 3s linear infinite; }
+        .animate-reveal-letter { animation: reveal-letter 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; opacity: 0; }
+        .animate-fade-in-up { animation: fade-in-up 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; animation-delay: 2s; }
+        .animate-glow-cycle { animation: glow-cycle 3s ease-in-out infinite; }
+        .animate-shimmer { animation: shimmer 2s linear infinite; }
+        .animate-loading-slide { animation: loading-slide 2.5s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+        .animate-ping-slow { animation: ping-slow 4s cubic-bezier(0, 0, 0.2, 1) infinite; }
+        .animate-pulse-slow { animation: pulse-slow 5s ease-in-out infinite; }
       `}</style>
     </div>
   );
 };
+
+
 
 
 // =============================================================================
@@ -2282,54 +2337,28 @@ const DoeWorkspace = ({
   onClose: () => void;
   addError: (type: 'error' | 'warning' | 'info', message: string) => void;
 }) => {
-  const [k, setK] = useState(2);
-  const [n, setN] = useState(10);
-  const [data, setData] = useState<number[][] | null>(null); // Rows of [x1, x2, ..., xk, y]
-  const [headers, setHeaders] = useState<string[]>([]);
+  const [activeModel, setActiveModel] = useState<'RSM' | 'GMDH'>('RSM');
+  const [data, setData] = useState<number[][]>([[0, 0, 0], [1, 0, 1], [0, 1, 1], [1, 1, 4]]);
+  const [headers, setHeaders] = useState<string[]>(['X1', 'X2', 'Y']);
   const [results, setResults] = useState<any | null>(null);
   const [plotFactors, setPlotFactors] = useState<{ x: number, y: number }>({ x: 0, y: 1 });
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [holdValues, setHoldValues] = useState<number[]>([]);
   const [plotType, setPlotType] = useState<'surface' | 'contour'>('surface');
-  const [rotation, setRotation] = useState({ x: Math.PI / 6, y: -Math.PI / 4 });
-  const [isRotating, setIsRotating] = useState(false);
-  const lastMousePos = useRef({ x: 0, y: 0 });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Matrix Math Helpers
-  const multiply = (A: number[][], B: number[][]) => {
-    const m = A.length, n = A[0].length, p = B[0].length;
-    const C = Array(m).fill(0).map(() => Array(p).fill(0));
-    for (let i = 0; i < m; i++)
-      for (let j = 0; j < p; j++)
-        for (let k = 0; k < n; k++) C[i][j] += A[i][k] * B[k][j];
-    return C;
-  };
+  const k = headers.length - 1;
 
-  const transpose = (A: number[][]) => A[0].map((_, c) => A.map(r => r[c]));
-
-  const inverse = (A: number[][]) => {
-    const n = A.length;
-    const M = A.map((row, i) => [...row, ...Array(n).fill(0).map((_, j) => i === j ? 1 : 0)]);
-    for (let i = 0; i < n; i++) {
-      let pivot = M[i][i];
-      if (Math.abs(pivot) < 1e-10) return null; // Singular
-      for (let j = 0; j < 2 * n; j++) M[i][j] /= pivot;
-      for (let k = 0; k < n; k++) {
-        if (k !== i) {
-          const factor = M[k][i];
-          for (let j = 0; j < 2 * n; j++) M[k][j] -= factor * M[i][j];
-        }
+  useEffect(() => {
+    // Initialize hold values to means
+    if (data.length > 0) {
+      const means = new Array(k).fill(0);
+      for (let i = 0; i < k; i++) {
+        const vals = data.map(r => r[i]);
+        means[i] = vals.reduce((a, b) => a + b, 0) / vals.length;
       }
+      setHoldValues(means);
     }
-    return M.map(row => row.slice(n));
-  };
-
-  // T-Distribution PDF approximation for p-value
-  const tDistPValue = (t: number, df: number) => {
-    // Very rough approximation for UI display purposes
-    const x = Math.abs(t);
-    return Math.exp(-0.5 * x * x) / (Math.sqrt(2 * Math.PI)); // Placeholder for full T-dist integration
-  };
+  }, [data.length, k]);
 
   const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2344,15 +2373,12 @@ const DoeWorkspace = ({
 
         if (jsonData.length < 2) throw new Error("Empty or invalid sheet");
 
-        // Assume last column is Y, first k columns are X
         const headerRow = jsonData[0] as string[];
         const dataRows = jsonData.slice(1).filter(r => r.length > 0).map(r => r.map((c: any) => Number(c)));
 
         setHeaders(headerRow);
         setData(dataRows);
-        setN(dataRows.length);
-        setK(dataRows[0].length - 1);
-        addError('info', `Loaded ${dataRows.length} experiments with ${dataRows[0].length - 1} factors.`);
+        addError('info', `Loaded ${dataRows.length} rows from Excel.`);
       } catch (err) {
         addError('error', 'Failed to parse Excel file.');
       }
@@ -2361,883 +2387,243 @@ const DoeWorkspace = ({
   };
 
   const calculateRSM = () => {
-    if (!data || data.length === 0) return;
+    if (!data || data.length < 3) {
+      addError('warning', 'Insufficient data points for RSM.');
+      return;
+    }
 
-    // 1. Construct Design Matrix X for 2nd Order Polynomial
-    // Model: b0 + b1*x1 + ... + b11*x1^2 + ... + b12*x1*x2 + ...
     const X: number[][] = [];
-    const Y: number[][] = [];
+    const Y: number[] = [];
 
     data.forEach(row => {
       const factors = row.slice(0, k);
-      const y = row[k];
-      Y.push([y]);
+      Y.push(row[k]);
 
-      const xRow = [1]; // Intercept
-      // Linear terms
+      const xRow = [1];
       for (let i = 0; i < k; i++) xRow.push(factors[i]);
-      // Quadratic terms
       for (let i = 0; i < k; i++) xRow.push(factors[i] * factors[i]);
-      // Interaction terms
       for (let i = 0; i < k; i++) {
-        for (let j = i + 1; j < k; j++) {
-          xRow.push(factors[i] * factors[j]);
-        }
+        for (let j = i + 1; j < k; j++) xRow.push(factors[i] * factors[j]);
       }
       X.push(xRow);
     });
 
-    // 2. Solve Beta = (X'X)^-1 X'Y
-    const XT = transpose(X);
-    const XTX = multiply(XT, X);
-    const XTX_inv = inverse(XTX);
+    const Beta = solveLeastSquares(X, Y).map(v => [v]); // Format for existing display logic
 
-    if (!XTX_inv) {
-      addError('error', 'Matrix is singular. Check for collinearity or insufficient data points.');
-      return;
-    }
+    // Statistics
+    const n = data.length;
+    const p = Beta.length;
+    let SSE = 0, SST = 0;
+    const meanY = Y.reduce((a, b) => a + b, 0) / n;
 
-    const XTY = multiply(XT, Y);
-    const Beta = multiply(XTX_inv, XTY); // Coefficients
-
-    // 3. Statistics
-    const Y_pred = multiply(X, Beta);
-    let SSE = 0, SST = 0, sumY = 0;
-    Y.forEach(y => sumY += y[0]);
-    const meanY = sumY / n;
+    const Y_pred = X.map(row => row.reduce((sum, val, idx) => sum + val * Beta[idx][0], 0));
 
     for (let i = 0; i < n; i++) {
-      SSE += Math.pow(Y[i][0] - Y_pred[i][0], 2);
-      SST += Math.pow(Y[i][0] - meanY, 2);
+      SSE += Math.pow(Y[i] - Y_pred[i], 2);
+      SST += Math.pow(Y[i] - meanY, 2);
     }
 
-    const SSR = SST - SSE;
-    const p = Beta.length; // Number of parameters
-    const df_reg = p - 1;
-    const df_err = n - p;
-    const MS_reg = SSR / df_reg;
-    const MS_err = SSE / df_err;
-    const F = MS_reg / MS_err;
     const R2 = 1 - (SSE / SST);
+    const MS_err = SSE / (n - p);
+    const MS_reg = (SST - SSE) / (p - 1);
+    const F = MS_reg / MS_err;
 
-    // T-tests for coefficients
-    const coefStats = Beta.map((b, i) => {
-      const se = Math.sqrt(MS_err * XTX_inv[i][i]);
-      const t = b[0] / se;
-      const pVal = tDistPValue(t, df_err); // Approx
-      return { val: b[0], se, t, p: pVal };
-    });
-
-    // Construct Term Labels
+    // Build Equation
     const terms = ['Intercept'];
-    for (let i = 0; i < k; i++) terms.push(`X${i + 1}`);
-    for (let i = 0; i < k; i++) terms.push(`X${i + 1}^2`);
+    for (let i = 0; i < k; i++) terms.push(headers[i]);
+    for (let i = 0; i < k; i++) terms.push(`${headers[i]}²`);
     for (let i = 0; i < k; i++) {
-      for (let j = i + 1; j < k; j++) terms.push(`X${i + 1}*X${j + 1}`);
+      for (let j = i + 1; j < k; j++) terms.push(`${headers[i]}*${headers[j]}`);
     }
 
-    // Format Equation
-    let equation = `Y = ${coefStats[0].val.toFixed(4)}`;
-    for (let i = 1; i < coefStats.length; i++) {
-      const { val } = coefStats[i];
-      if (Math.abs(val) < 1e-6) continue;
-
-      const sign = val >= 0 ? ' + ' : ' - ';
-      const absVal = Math.abs(val).toFixed(4);
-      const term = terms[i].replace('^2', '²').replace('*', '');
-
-      equation += `${sign}${absVal}*${term}`;
+    let equation = `Y = ${Beta[0][0].toFixed(4)}`;
+    for (let i = 1; i < Beta.length; i++) {
+      const b = Beta[i][0];
+      if (Math.abs(b) < 1e-4) continue;
+      equation += ` ${b >= 0 ? '+' : '-'} ${Math.abs(b).toFixed(4)}*${terms[i]}`;
     }
 
-
-    setResults({ Beta, terms, coefStats, R2, F, SSE, SST, SSR, df_reg, df_err, MS_reg, MS_err, equation });
-    addError('info', 'RSM Model Calculated.');
+    setResults({ Beta, R2, F, MS_err, equation, terms, type: 'RSM' });
+    setActiveModel('RSM');
+    addError('info', 'RSM Modeling Complete.');
   };
 
-  // Export DOE Report to PDF with comprehensive analysis including all factor combinations
-  const exportDoeReport = useCallback(async () => {
-    if (!results || !data) {
-      addError('warning', 'No results to export. Please calculate RSM first.');
+  const calculateGMDH = () => {
+    if (!data || data.length < 5) {
+      addError('warning', 'GMDH requires at least 5 data points.');
       return;
     }
 
-    // Calculate factor means for prediction
-    const factorMeans = Array(k).fill(0);
-    for (let f = 0; f < k; f++) {
-      const fVals = data.map(r => r[f]);
-      factorMeans[f] = fVals.reduce((a, b) => a + b, 0) / fVals.length;
-    }
-
-    // Store current state to restore later
-    const originalPlotType = plotType;
-    const originalPlotFactors = { ...plotFactors };
-
-    // Helper to capture canvas with specific settings
-    const capturePlot = (type: 'surface' | 'contour', idxX: number, idxY: number): Promise<string | null> => {
-      return new Promise<string | null>((resolve) => {
-        setPlotType(type);
-        setPlotFactors({ x: idxX, y: idxY });
-
-        // Wait for React state update and canvas render
-        setTimeout(() => {
-          if (canvasRef.current) {
-            resolve(canvasRef.current.toDataURL('image/png'));
-          } else {
-            resolve(null);
-          }
-        }, 150); // Increased timeout for rendering
-      });
-    };
-
-    // Helper to capture 2D plot (factor vs response)
-    const capture2DPlot = (factorIdx: number): Promise<string | null> => {
-      return new Promise<string | null>((resolve) => {
-        // Create a temporary canvas for 2D plot
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = 400;
-        tempCanvas.height = 300;
-        const ctx = tempCanvas.getContext('2d');
-        if (!ctx) {
-          resolve(null);
-          return;
-        }
-
-        // Get factor values and response
-        const xVals = data.map(r => r[factorIdx]);
-        const yVals = data.map(r => r[k]); // response is last column
-
-        const minX = Math.min(...xVals), maxX = Math.max(...xVals);
-        const minY = Math.min(...yVals), maxY = Math.max(...yVals);
-
-        // Draw background
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(0, 0, 400, 300);
-
-        // Draw axes
-        ctx.strokeStyle = '#666';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(50, 20);
-        ctx.lineTo(50, 260); // Y axis
-        ctx.lineTo(380, 260); // X axis
-        ctx.stroke();
-
-        // Draw grid
-        ctx.strokeStyle = '#333';
-        ctx.setLineDash([2, 2]);
-        for (let i = 1; i < 5; i++) {
-          const y = 20 + (i * 60);
-          ctx.beginPath(); ctx.moveTo(50, y); ctx.lineTo(380, y); ctx.stroke();
-        }
-        for (let i = 1; i < 5; i++) {
-          const x = 50 + (i * 82.5);
-          ctx.beginPath(); ctx.moveTo(x, 20); ctx.lineTo(x, 260); ctx.stroke();
-        }
-        ctx.setLineDash([]);
-
-        // Plot actual data points
-        xVals.forEach((x, i) => {
-          const px = 50 + ((x - minX) / (maxX - minX || 1)) * 330;
-          const py = 260 - ((yVals[i] - minY) / (maxY - minY || 1)) * 240;
-
-          ctx.fillStyle = '#c9a86c';
-          ctx.beginPath();
-          ctx.arc(px, py, 4, 0, 2 * Math.PI);
-          ctx.fill();
-        });
-
-        // Draw predicted curve (using model)
-        ctx.strokeStyle = '#4ade80';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-
-        for (let px = 50; px <= 380; px += 2) {
-          const xVal = minX + ((px - 50) / 330) * (maxX - minX);
-
-          // Calculate predicted Y using model
-          const xRow = [1];
-          const factors = [...factorMeans];
-          factors[factorIdx] = xVal;
-
-          for (let f = 0; f < k; f++) xRow.push(factors[f]);
-          for (let f = 0; f < k; f++) xRow.push(factors[f] * factors[f]);
-          for (let f = 0; f < k; f++) {
-            for (let g = f + 1; g < k; g++) {
-              xRow.push(factors[f] * factors[g]);
-            }
-          }
-
-          let predY = 0;
-          for (let b = 0; b < results.Beta.length; b++) {
-            predY += xRow[b] * results.Beta[b][0];
-          }
-
-          const py = 260 - ((predY - minY) / (maxY - minY || 1)) * 240;
-
-          if (px === 50) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-
-        // Labels
-        ctx.fillStyle = '#e0e0e0';
-        ctx.font = '12px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(headers[factorIdx] || `X${factorIdx + 1}`, 215, 285);
-
-        ctx.save();
-        ctx.translate(15, 140);
-        ctx.rotate(-Math.PI / 2);
-        ctx.fillText('Response (Y)', 0, 0);
-        ctx.restore();
-
-        // Axis values
-        ctx.fillStyle = '#888';
-        ctx.font = '9px sans-serif';
-        for (let i = 0; i <= 4; i++) {
-          const val = minX + (i / 4) * (maxX - minX);
-          const x = 50 + i * 82.5;
-          ctx.textAlign = 'center';
-          ctx.fillText(val.toFixed(2), x, 275);
-        }
-        for (let i = 0; i <= 4; i++) {
-          const val = minY + (i / 4) * (maxY - minY);
-          const y = 260 - i * 60;
-          ctx.textAlign = 'right';
-          ctx.fillText(val.toFixed(2), 45, y + 3);
-        }
-
-        resolve(tempCanvas.toDataURL('image/png'));
-      });
-    };
-
-    // Generate all plot images
-    addError('info', 'Generating plots... This may take a moment.');
-
-    const surfaceImages: { idxX: number, idxY: number, img: string }[] = [];
-    const contourImages: { idxX: number, idxY: number, img: string }[] = [];
-    const plot2DImages: { idx: number, img: string }[] = [];
-
-    // Capture all 3D surface and contour plots for each factor pair
-    for (let i = 0; i < k; i++) {
-      for (let j = i + 1; j < k; j++) {
-        // Surface plot
-        const surfImg = await capturePlot('surface', i, j);
-        if (surfImg) surfaceImages.push({ idxX: i, idxY: j, img: surfImg });
-
-        // Contour plot
-        const contImg = await capturePlot('contour', i, j);
-        if (contImg) contourImages.push({ idxX: i, idxY: j, img: contImg });
-      }
-
-      // 2D plot (factor vs response)
-      const img2D = await capture2DPlot(i);
-      if (img2D) plot2DImages.push({ idx: i, img: img2D });
-    }
-
-    // Restore original state
-    setPlotType(originalPlotType);
-    setPlotFactors(originalPlotFactors);
-
-    // Create PDF
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 15;
-    let yPos = margin;
-
-    // Helper functions
-    const addPage = () => {
-      pdf.addPage();
-      yPos = margin;
-    };
-
-    const checkPageBreak = (needed: number) => {
-      if (yPos + needed > pageHeight - margin) {
-        addPage();
-      }
-    };
-
-    // ==================== HEADER ====================
-    pdf.setFontSize(18);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('DOE/RSM Complete Analysis Report', pageWidth / 2, yPos, { align: 'center' });
-    yPos += 10;
-
-    pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, yPos, { align: 'center' });
-    yPos += 8;
-    pdf.text(`Factors: ${k} | Observations: ${n} | Model Terms: ${results.Beta.length}`, pageWidth / 2, yPos, { align: 'center' });
-    yPos += 15;
-
-    // ==================== SECTION 1: MODEL SUMMARY ====================
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('1. Model Summary', margin, yPos);
-    yPos += 8;
-
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
-
-    const adjR2 = results.R2 - (1 - results.R2) * results.df_reg / results.df_err;
-    const rmse = Math.sqrt(results.MS_err);
-    const r2Quality = results.R2 >= 0.9 ? 'Excellent' : results.R2 >= 0.7 ? 'Good' : results.R2 >= 0.5 ? 'Moderate' : 'Poor';
-    const fSignificance = results.F > 4 ? 'Significant' : 'Not Significant';
-
-    const summaryData = [
-      ['R-Squared (R²):', `${(results.R2 * 100).toFixed(2)}%`, 'F-Statistic:', `${results.F.toFixed(2)}`],
-      ['Adjusted R²:', `${(adjR2 * 100).toFixed(2)}%`, 'F-Test:', fSignificance],
-      ['RMSE:', `${rmse.toFixed(4)}`, 'MSE:', `${results.MS_err.toFixed(4)}`],
-      ['SSE:', `${results.SSE.toFixed(4)}`, 'SSR:', `${results.SSR.toFixed(4)}`],
-    ];
-
-    summaryData.forEach(row => {
-      pdf.text(row[0], margin, yPos);
-      pdf.text(row[1], margin + 40, yPos);
-      pdf.text(row[2], margin + 90, yPos);
-      pdf.text(row[3], margin + 130, yPos);
-      yPos += 6;
+    const model = new GMDHEngine({
+      algorithm: 'MIA',
+      polynomialOrder: 2,
+      maxLayers: 8,
+      externalCriterion: 'RMSE',
+      validationSplit: 0.3
     });
-    yPos += 5;
-
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Model Quality:', margin, yPos);
-    yPos += 6;
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(`R² = ${(results.R2 * 100).toFixed(1)}% indicates a ${r2Quality} fit`, margin, yPos);
-    yPos += 10;
-
-    // ==================== SECTION 2: ANOVA ====================
-    checkPageBreak(50);
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('2. Analysis of Variance (ANOVA)', margin, yPos);
-    yPos += 8;
-
-    pdf.setFontSize(9);
-    const anovaHeaders = ['Source', 'DF', 'Sum of Squares', 'Mean Square', 'F-Value'];
-    const anovaRows = [
-      ['Regression', results.df_reg.toString(), results.SSR.toFixed(4), results.MS_reg.toFixed(4), results.F.toFixed(2)],
-      ['Residual', results.df_err.toString(), results.SSE.toFixed(4), results.MS_err.toFixed(4), '-'],
-      ['Total', (results.df_reg + results.df_err).toString(), results.SST.toFixed(4), '-', '-'],
-    ];
-
-    let xPos = margin;
-    anovaHeaders.forEach(h => { pdf.text(h, xPos, yPos); xPos += 35; });
-    yPos += 5;
-    anovaRows.forEach(row => {
-      xPos = margin;
-      row.forEach(cell => { pdf.text(cell, xPos, yPos); xPos += 35; });
-      yPos += 5;
+    model.train(data, headers);
+    
+    const k = headers.length - 1;
+    
+    let R2 = 0;
+    let rmse = 0;
+    if (model.layers.length > 0) {
+      rmse = model.layers[model.layers.length-1][0].rmse;
+      R2 = 1 - Math.pow(rmse / (math.std(data.map(r => r[k])) as unknown as number), 2);
+    }
+    
+    setResults({ 
+      model, 
+      R2,
+      equation: model.getEquation(),
+      type: 'GMDH'
     });
-    yPos += 10;
-
-    // ==================== SECTION 3: EQUATION ====================
-    checkPageBreak(40);
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('3. Regression Equation', margin, yPos);
-    yPos += 8;
-
-    pdf.setFontSize(10);
-    pdf.setFont('courier', 'normal');
-    const eqLines = pdf.splitTextToSize(results.equation, pageWidth - 2 * margin);
-    eqLines.forEach((line: string) => {
-      pdf.text(line, margin, yPos);
-      yPos += 6;
-    });
-    yPos += 10;
-
-    // ==================== SECTION 4: COEFFICIENTS ====================
-    checkPageBreak(60);
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('4. Model Coefficients', margin, yPos);
-    yPos += 8;
-
-    pdf.setFontSize(8);
-    const coefHeaders = ['Term', 'Coef', 'Std Err', 't-Value', 'p-Value', 'Sig'];
-    xPos = margin;
-    const colW = [35, 25, 22, 22, 22, 18];
-    coefHeaders.forEach((h, i) => { pdf.setFont('helvetica', 'bold'); pdf.text(h, xPos, yPos); xPos += colW[i]; });
-    yPos += 5;
-
-    const significantTerms: string[] = [];
-    results.coefStats.forEach((stat: any, i: number) => {
-      const isSig = stat.p < 0.05;
-      if (isSig) significantTerms.push(results.terms[i]);
-
-      xPos = margin;
-      const row = [
-        results.terms[i],
-        stat.val.toFixed(4),
-        stat.se.toFixed(4),
-        stat.t.toFixed(2),
-        stat.p < 0.001 ? '<.001' : stat.p.toFixed(3),
-        isSig ? '***' : ''
-      ];
-
-      row.forEach((cell, j) => {
-        pdf.setFont(isSig ? 'helvetica' : 'helvetica', isSig ? 'bold' : 'normal');
-        if (isSig) pdf.setTextColor(0, 128, 0);
-        else pdf.setTextColor(0, 0, 0);
-        pdf.text(cell, xPos, yPos);
-        pdf.setTextColor(0, 0, 0);
-        xPos += colW[j];
-      });
-      yPos += 5;
-    });
-    yPos += 8;
-
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Significant (p<0.05):', margin, yPos);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(significantTerms.length > 0 ? significantTerms.join(', ') : 'None', margin + 40, yPos);
-    yPos += 15;
-
-    // ==================== SECTION 5: 3D SURFACE PLOTS ====================
-    checkPageBreak(120);
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('5. 3D Response Surface Plots', margin, yPos);
-    yPos += 6;
-
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text('The following plots show the predicted response surface for each pair of factors,', margin, yPos);
-    yPos += 4;
-    pdf.text('with other factors held at their mean values. Peak regions indicate optimal operating conditions.', margin, yPos);
-    yPos += 10;
-
-    const plotW = (pageWidth - 2 * margin - 10) / 2;
-    const plotH = 45;
-
-    for (let p = 0; p < surfaceImages.length; p++) {
-      const { idxX, idxY, img } = surfaceImages[p];
-      const isLeft = p % 2 === 0;
-      const xOffset = isLeft ? margin : margin + 10 + plotW;
-
-      if (p > 0 && p % 2 === 0) {
-        checkPageBreak(plotH + 20);
-        yPos += plotH + 10;
-      }
-
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(`5.${p + 1} ${headers[idxX] || `X${idxX + 1}`} vs ${headers[idxY] || `X${idxY + 1}`}`, xOffset, yPos);
-
-      const imgProps = pdf.getImageProperties(img);
-      const h = (imgProps.height * plotW) / imgProps.width;
-      pdf.addImage(img, 'PNG', xOffset, yPos + 2, plotW, Math.min(h, plotH));
-
-      if (p % 2 === 1) yPos += plotH + 5;
-    }
-    if (surfaceImages.length % 2 === 1) yPos += plotH + 10;
-    else yPos += 10;
-
-    // ==================== SECTION 6: CONTOUR PLOTS ====================
-    checkPageBreak(120);
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('6. Contour Plots (2D View)', margin, yPos);
-    yPos += 6;
-
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text('Contour plots show iso-response lines. Warmer colors (red) indicate higher response,', margin, yPos);
-    yPos += 4;
-    pdf.text('cooler colors (blue) indicate lower response. White dots mark experimental data points.', margin, yPos);
-    yPos += 10;
-
-    for (let p = 0; p < contourImages.length; p++) {
-      const { idxX, idxY, img } = contourImages[p];
-      const isLeft = p % 2 === 0;
-      const xOffset = isLeft ? margin : margin + 10 + plotW;
-
-      if (p > 0 && p % 2 === 0) {
-        checkPageBreak(plotH + 20);
-        yPos += plotH + 10;
-      }
-
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(`6.${p + 1} ${headers[idxX] || `X${idxX + 1}`} vs ${headers[idxY] || `X${idxY + 1}`}`, xOffset, yPos);
-
-      const imgProps = pdf.getImageProperties(img);
-      const h = (imgProps.height * plotW) / imgProps.width;
-      pdf.addImage(img, 'PNG', xOffset, yPos + 2, plotW, Math.min(h, plotH));
-
-      if (p % 2 === 1) yPos += plotH + 5;
-    }
-    if (contourImages.length % 2 === 1) yPos += plotH + 10;
-    else yPos += 10;
-
-    // ==================== SECTION 7: 2D FACTOR VS RESPONSE ====================
-    checkPageBreak(120);
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('7. Individual Factor Effects (2D Plots)', margin, yPos);
-    yPos += 6;
-
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text('These plots show the relationship between each individual factor and the response.', margin, yPos);
-    yPos += 4;
-    pdf.text('Gold dots = actual data, green line = model prediction.', margin, yPos);
-    yPos += 10;
-
-    for (let p = 0; p < plot2DImages.length; p++) {
-      const { idx, img } = plot2DImages[p];
-      checkPageBreak(plotH + 20);
-
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(`7.${p + 1} Response vs ${headers[idx] || `X${idx + 1}`}`, margin, yPos);
-
-      const imgProps = pdf.getImageProperties(img);
-      const h = (imgProps.height * (pageWidth - 2 * margin)) / imgProps.width;
-      pdf.addImage(img, 'PNG', margin, yPos + 2, pageWidth - 2 * margin, Math.min(h, plotH));
-      yPos += plotH + 10;
-    }
-
-    // ==================== SECTION 8: CONCLUSIONS ====================
-    checkPageBreak(40);
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('8. Conclusions & Recommendations', margin, yPos);
-    yPos += 8;
-
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
-
-    const conclusions = [];
-    if (results.R2 >= 0.9) conclusions.push('Excellent model fit (R² > 90%) - suitable for precise predictions');
-    else if (results.R2 >= 0.7) conclusions.push('Good model fit (R² > 70%) - suitable for approximate predictions');
-    else conclusions.push('Moderate fit - consider additional terms or improved data');
-
-    if (significantTerms.length > 0) conclusions.push(`${significantTerms.length} significant parameter(s): ${significantTerms.join(', ')}`);
-    else conclusions.push('No significant parameters detected');
-
-    conclusions.push(`Model: Y = ${results.terms.filter((t: string, i: number) => results.coefStats[i].p < 0.05).length} significant terms + noise`);
-
-    conclusions.forEach((text, idx) => {
-      pdf.text(`${idx + 1}. ${text}`, margin, yPos);
-      yPos += 6;
-    });
-
-    // Footer
-    const totalPages = pdf.getNumberOfPages();
-    for (let i = 1; i <= totalPages; i++) {
-      pdf.setPage(i);
-      pdf.setFontSize(8);
-      pdf.setTextColor(128, 128, 128);
-      pdf.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
-      pdf.text('DOE/RSM Analysis Report - Response Surface Methodology', pageWidth / 2, pageHeight - 5, { align: 'center' });
-      pdf.setTextColor(0, 0, 0);
-    }
-
-    // Save PDF
-    pdf.save('DOE_RSM_Complete_Analysis.pdf');
-
-    // Also export raw data to Excel
-    const wb = XLSX.utils.book_new();
-    const wsRaw = XLSX.utils.json_to_sheet(data.map((row, idx) => {
-      const obj: any = { Obs: idx + 1 };
-      for (let f = 0; f < k; f++) obj[headers[f] || `X${f + 1}`] = row[f];
-      obj.Y = row[k];
-      return obj;
-    }));
-    XLSX.utils.book_append_sheet(wb, wsRaw, 'Raw Data');
-    XLSX.writeFile(wb, 'DOE_RSM_Data.xlsx');
-
-    addError('info', `Complete report exported: ${surfaceImages.length} surface + ${contourImages.length} contour + ${plot2DImages.length} 2D plots.`);
-  }, [results, data, k, n, plotType, plotFactors, headers, addError]);
-
-  // Plotting (Contour/Heatmap)
-  useEffect(() => {
-    if (!results || !data || !canvasRef.current) return;
-    const ctx = canvasRef.current.getContext('2d');
-    if (!ctx) return;
-
-    const width = canvasRef.current.width;
-    const height = canvasRef.current.height;
-    const idxX = plotFactors.x;
-    const idxY = plotFactors.y;
-
-    if (idxX >= k || idxY >= k) return;
-
-    const xVals = data.map(r => r[idxX]);
-    const yVals = data.map(r => r[idxY]);
-    const minX = Math.min(...xVals), maxX = Math.max(...xVals);
-    const minY = Math.min(...yVals), maxY = Math.max(...yVals);
-
-    // Grid for plot
-    const res = 50;
-    const stepX = (maxX - minX) / res;
-    const stepY = (maxY - minY) / res;
-
-    let minZ = Infinity, maxZ = -Infinity;
-    const gridZ: number[][] = [];
-
-    // Pre-calculate Z values
-    for (let i = 0; i < res; i++) {
-      const rowZ = [];
-      for (let j = 0; j < res; j++) {
-        const valX = minX + i * stepX;
-        const valY = minY + j * stepY;
-
-        // Construct prediction vector (holding other factors at mean)
-        const xRow = [1];
-        const factors = Array(k).fill(0);
-        // Fill means
-        for (let f = 0; f < k; f++) {
-          const fVals = data.map(r => r[f]);
-          factors[f] = fVals.reduce((a, b) => a + b, 0) / fVals.length;
-        }
-        factors[idxX] = valX;
-        factors[idxY] = valY;
-
-        // Linear
-        for (let f = 0; f < k; f++) xRow.push(factors[f]);
-        // Quadratic
-        for (let f = 0; f < k; f++) xRow.push(factors[f] * factors[f]);
-        // Interaction
-        for (let f = 0; f < k; f++) {
-          for (let g = f + 1; g < k; g++) {
-            xRow.push(factors[f] * factors[g]);
-          }
-        }
-
-        let z = 0;
-        for (let b = 0; b < results.Beta.length; b++) z += xRow[b] * results.Beta[b][0];
-
-        rowZ.push(z);
-        if (z < minZ) minZ = z;
-        if (z > maxZ) maxZ = z;
-      }
-      gridZ.push(rowZ);
-    }
-
-    // --- 3D Surface Plotting ---
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(0, 0, width, height);
-
-    if (plotType === 'surface') {
-      const zScale = 30;
-      const project = (x: number, y: number, z: number) => {
-        const p = { x, y, z };
-        // Rotate around X axis
-        const y1 = p.y * Math.cos(rotation.x) - p.z * Math.sin(rotation.x);
-        const z1 = p.y * Math.sin(rotation.x) + p.z * Math.cos(rotation.x);
-        // Rotate around Y axis
-        const x2 = p.x * Math.cos(rotation.y) + z1 * Math.sin(rotation.y);
-        const z2 = -p.x * Math.sin(rotation.y) + z1 * Math.cos(rotation.y);
-        return { x: width / 2 + x2 * 5, y: height / 2 + y1 * 2.5, z: z2 };
-      };
-
-      const polygons: any[] = [];
-      for (let i = 0; i < res - 1; i++) {
-        for (let j = 0; j < res - 1; j++) {
-          const x_3d = i - res / 2;
-          const y_3d = j - res / 2;
-
-          const z1_norm = (gridZ[i][j] - minZ) / (maxZ - minZ || 1);
-          const z2_norm = (gridZ[i + 1][j] - minZ) / (maxZ - minZ || 1);
-          const z3_norm = (gridZ[i + 1][j + 1] - minZ) / (maxZ - minZ || 1);
-          const z4_norm = (gridZ[i][j + 1] - minZ) / (maxZ - minZ || 1);
-
-          const p1 = project(x_3d, y_3d, z1_norm * zScale);
-          const p2 = project(x_3d + 1, y_3d, z2_norm * zScale);
-          const p3 = project(x_3d + 1, y_3d + 1, z3_norm * zScale);
-          const p4 = project(x_3d, y_3d + 1, z4_norm * zScale);
-
-          const avgZ = (p1.z + p2.z + p3.z + p4.z) / 4;
-          const normColor = (z1_norm + z2_norm + z3_norm + z4_norm) / 4;
-
-          polygons.push({ p1, p2, p3, p4, z: avgZ, color: normColor });
-        }
-      }
-
-      polygons.sort((a, b) => a.z - b.z);
-
-      polygons.forEach(({ p1, p2, p3, p4, color }) => {
-        const r = Math.floor(255 * color);
-        const b = Math.floor(255 * (1 - color));
-        const g = Math.floor(180 * (1 - Math.abs(color - 0.5) * 2));
-        ctx.fillStyle = `rgb(${r},${g},${b})`;
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 0.3;
-
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.lineTo(p3.x, p3.y);
-        ctx.lineTo(p4.x, p4.y);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-      });
-    } else { // Contour plot
-      const cellW = width / res;
-      const cellH = height / res;
-      for (let i = 0; i < res; i++) {
-        for (let j = 0; j < res; j++) {
-          const norm = (gridZ[i][j] - minZ) / (maxZ - minZ || 1);
-          const r = Math.floor(255 * norm);
-          const b = Math.floor(255 * (1 - norm));
-          const g = Math.floor(180 * (1 - Math.abs(norm - 0.5) * 2));
-          ctx.fillStyle = `rgb(${r},${g},${b})`;
-          ctx.fillRect(i * cellW, (res - 1 - j) * cellH, cellW, cellH);
-        }
-      }
-
-      // Draw axes
-      ctx.strokeStyle = '#aaa';
-      ctx.fillStyle = '#aaa';
-      ctx.font = '10px sans-serif';
-      ctx.lineWidth = 1;
-
-      // X axis
-      ctx.beginPath(); ctx.moveTo(0, height - 20); ctx.lineTo(width, height - 20); ctx.stroke();
-      for (let i = 0; i <= 5; i++) {
-        const x = i / 5 * width;
-        const val = minX + i / 5 * (maxX - minX);
-        ctx.textAlign = 'center';
-        ctx.fillText(val.toFixed(1), x, height - 8);
-      }
-      ctx.fillText(headers[idxX] || `X${idxX + 1}`, width / 2, height);
-
-      // Y axis
-      ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(25, height); ctx.stroke();
-      for (let i = 0; i <= 5; i++) {
-        const y = height - (i / 5 * height);
-        const val = minY + i / 5 * (maxY - minY);
-        ctx.textAlign = 'right';
-        ctx.fillText(val.toFixed(1), 20, y);
-      }
-      ctx.save();
-      ctx.translate(5, height / 2);
-      ctx.rotate(-Math.PI / 2);
-      ctx.textAlign = 'center';
-      ctx.fillText(headers[idxY] || `X${idxY + 1}`, 0, 0);
-      ctx.restore();
-
-      // Data points
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-      ctx.strokeStyle = 'black';
-      ctx.lineWidth = 0.5;
-      data.forEach(row => {
-        const x = row[idxX];
-        const y = row[idxY];
-        const px = (x - minX) / (maxX - minX || 1) * width;
-        const py = height - ((y - minY) / (maxY - minY || 1) * height);
-        ctx.beginPath();
-        ctx.arc(px, py, 2, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.stroke();
-      });
-    }
-  }, [results, plotFactors, data, k, plotType, rotation]);
+    setActiveModel('GMDH');
+    addError('info', 'GMDH Neural Architecture Trained.');
+  };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#141414] text-[#e0e0e0]">
-      <div className="flex border-b border-[#222] p-2 gap-2 bg-[#1a1a1a]">
-        <div className="flex items-center gap-2">
-          <Label>Factors (k):</Label>
-          <Input type="number" value={k} onChange={e => setK(parseInt(e.target.value))} className="w-16 h-7" />
+    <div className="flex flex-col h-full w-full bg-[#050505] text-[#e0e0e0] font-sans">
+      {/* Top Control Bar */}
+      <div className="h-14 border-b border-[#222] bg-[#0a0a0a] flex items-center justify-between px-6">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <Layers size={18} className="text-[#c9a86c]" />
+            <h2 className="text-sm font-black uppercase tracking-tighter text-[#c9a86c]">DOE ANALYZER Pro</h2>
+          </div>
+          <div className="h-4 w-px bg-[#222]" />
+          <div className="flex gap-2">
+            <Button size="sm" variant={activeModel === 'RSM' ? 'default' : 'secondary'} onClick={calculateRSM}>
+              Run RSM
+            </Button>
+            <Button size="sm" variant={activeModel === 'GMDH' ? 'default' : 'secondary'} onClick={calculateGMDH}>
+              Run GMDH
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Label>Trials (N):</Label>
-          <Input type="number" value={n} onChange={e => setN(parseInt(e.target.value))} className="w-16 h-7" />
+        
+        <div className="flex items-center gap-3">
+          <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.csv" onChange={handleFileUpload} />
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+            <Save size={14} className="mr-2" /> Upload Data
+          </Button>
+          <Button variant="outline" size="sm">
+            <Search size={14} className="mr-2" /> Export
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onClose} className="text-red-500">Close</Button>
         </div>
-        <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".xlsx,.csv" />
-        <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>Upload Excel</Button>
-        <Button size="sm" onClick={calculateRSM} disabled={!data}>Calculate RSM</Button>
-        <Button size="sm" variant="outline" onClick={exportDoeReport} disabled={!results}>Export Report</Button>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Results Panel */}
-        <div className="w-1/2 p-4 overflow-y-auto border-r border-[#222]">
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Sidebar: Results & Config */}
+        <div className="w-80 border-r border-[#222] bg-[#0a0a0a] flex flex-col p-4 overflow-y-auto custom-scrollbar">
           {results ? (
-            <div className="space-y-4">
-              <div className="bg-[#1a1a1a] p-3 rounded border border-[#333]">
-                <h3 className="text-[#c9a86c] font-bold mb-2">Model Summary</h3>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>R-Sq: {(results.R2 * 100).toFixed(2)}%</div>
-                  <div>F-Value: {results.F.toFixed(2)}</div>
-                  <div>MSE: {results.MS_err.toFixed(4)}</div>
+            <div className="space-y-6">
+              <section>
+                <h3 className="text-[10px] font-bold text-[#555] uppercase tracking-widest mb-3">Model Metrics</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-[#111] p-3 rounded border border-[#222]">
+                    <div className="text-[10px] text-[#888] mb-1">R-Squared</div>
+                    <div className="text-lg font-black text-[#c9a86c]">{(results.R2 * 100).toFixed(2)}%</div>
+                  </div>
+                  <div className="bg-[#111] p-3 rounded border border-[#222]">
+                    <div className="text-[10px] text-[#888] mb-1">Model Type</div>
+                    <div className="text-xs font-bold text-white uppercase">{results.type}</div>
+                  </div>
                 </div>
-              </div>
-              <div className="bg-[#1a1a1a] p-3 rounded border border-[#333]">
-                <h3 className="text-[#c9a86c] font-bold mb-2">Regression Equation</h3>
-                <p className="text-xs font-mono text-wrap break-words text-green-300">{results.equation}</p>
-              </div>
+              </section>
 
+              <section>
+                <h3 className="text-[10px] font-bold text-[#555] uppercase tracking-widest mb-3">Equation</h3>
+                <div className="bg-[#111] p-3 rounded border border-[#222] font-mono text-[10px] text-emerald-400 break-words leading-relaxed">
+                  {results.equation}
+                </div>
+              </section>
 
-              <table className="w-full text-xs text-left">
-                <thead className="bg-[#222] text-[#888]">
-                  <tr><th className="p-2">Term</th><th className="p-2">Coef</th><th className="p-2">SE</th><th className="p-2">T</th><th className="p-2">Sig</th></tr>
-                </thead>
-                <tbody className="divide-y divide-[#333]">
-                  {results.coefStats.map((stat: any, i: number) => (
-                    <tr key={i} className={stat.p < 0.05 ? "bg-green-800/30" : ""}>
-                      <td className={`p-2 font-mono ${stat.p < 0.05 ? "text-green-300 font-bold" : ""}`}>{results.terms[i]}</td>
-                      <td className="p-2">{stat.val.toFixed(4)}</td>
-                      <td className="p-2 text-[#666]">{stat.se.toFixed(4)}</td>
-                      <td className="p-2">{stat.t.toFixed(2)}</td>
-                      <td className={`p-2 ${stat.p < 0.05 ? "text-green-300 font-bold" : ""}`}>{stat.p < 0.001 ? '<.001' : stat.p.toFixed(3)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <section>
+                <h3 className="text-[10px] font-bold text-[#555] uppercase tracking-widest mb-3">Plot Config</h3>
+                <div className="space-y-4">
+                  <div>
+                    <Label className="mb-2 block">X-Axis Factor</Label>
+                    <select 
+                      className="w-full bg-[#111] border border-[#222] rounded p-2 text-xs text-white"
+                      value={plotFactors.x}
+                      onChange={e => setPlotFactors(p => ({ ...p, x: Number(e.target.value) }))}
+                    >
+                      {headers.slice(0, -1).map((h, i) => <option key={i} value={i}>{h}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="mb-2 block">Y-Axis Factor</Label>
+                    <select 
+                      className="w-full bg-[#111] border border-[#222] rounded p-2 text-xs text-white"
+                      value={plotFactors.y}
+                      onChange={e => setPlotFactors(p => ({ ...p, y: Number(e.target.value) }))}
+                    >
+                      {headers.slice(0, -1).map((h, i) => <option key={i} value={i}>{h}</option>)}
+                    </select>
+                  </div>
+                  
+                  <div className="pt-4 border-t border-[#222]">
+                    <Label className="mb-3 block">Hold Values (Other Factors)</Label>
+                    {headers.slice(0, -1).map((h, i) => {
+                      if (i === plotFactors.x || i === plotFactors.y) return null;
+                      return (
+                        <div key={i} className="mb-4">
+                          <div className="flex justify-between text-[10px] mb-1">
+                            <span>{h}</span>
+                            <span className="text-[#c9a86c]">{holdValues[i]?.toFixed(2)}</span>
+                          </div>
+                          <input 
+                            type="range"
+                            min={Math.min(...data.map(r => r[i]))}
+                            max={Math.max(...data.map(r => r[i]))}
+                            step="0.01"
+                            value={holdValues[i]}
+                            onChange={e => {
+                              const newHolds = [...holdValues];
+                              newHolds[i] = Number(e.target.value);
+                              setHoldValues(newHolds);
+                            }}
+                            className="w-full h-1 bg-[#222] rounded-lg appearance-none cursor-pointer accent-[#c9a86c]"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
             </div>
           ) : (
-            <div className="text-center text-[#666] mt-10">Upload data and calculate to see ANOVA and Coefficients.</div>
+            <div className="flex-1 flex flex-col items-center justify-center text-center opacity-30">
+              <Box size={40} className="mb-4" />
+              <p className="text-xs">Select model type<br/>to begin analysis</p>
+            </div>
           )}
         </div>
 
-        {/* Plot Panel */}
-        <div className="w-1/2 p-4 flex flex-col">
-          <div className="flex justify-between items-center mb-2">
-            <div className="flex gap-2">
+        {/* Center: Visualization & Data */}
+        <div className="flex-1 flex flex-col bg-[#050505]">
+          <div className="flex-1 relative border-b border-[#222]">
+            <div className="absolute top-4 left-4 z-10 flex gap-1">
               <Button size="sm" variant={plotType === 'surface' ? 'default' : 'secondary'} onClick={() => setPlotType('surface')}>3D Surface</Button>
-              <Button size="sm" variant={plotType === 'contour' ? 'default' : 'secondary'} onClick={() => setPlotType('contour')}>Contour Plot</Button>
+              <Button size="sm" variant={plotType === 'contour' ? 'default' : 'secondary'} onClick={() => setPlotType('contour')}>Contour</Button>
             </div>
-            <div className="flex gap-2">
-              <select className="bg-[#0a0a0a] border border-[#333] text-xs rounded" value={plotFactors.x} onChange={e => setPlotFactors(p => ({ ...p, x: parseInt(e.target.value) }))}>
-                {Array.from({ length: k }).map((_, i) => <option key={i} value={i}>X{i + 1}</option>)}
-              </select>
-              <span className="text-xs pt-1">vs</span>
-              <select className="bg-[#0a0a0a] border border-[#333] text-xs rounded" value={plotFactors.y} onChange={e => setPlotFactors(p => ({ ...p, y: parseInt(e.target.value) }))}>
-                {Array.from({ length: k }).map((_, i) => <option key={i} value={i}>X{i + 1}</option>)}
-              </select>
-            </div>
+            <PlotlyPlots 
+              type={plotType}
+              data={data}
+              results={results}
+              factors={plotFactors}
+              headers={headers}
+              holdValues={holdValues}
+              modelType={activeModel}
+            />
           </div>
-          <div className="flex-1 bg-[#000] border border-[#333] relative rounded overflow-hidden">
-            <canvas
-              ref={canvasRef}
-              width={400}
-              height={300}
-              className="w-full h-full cursor-grab active:cursor-grabbing"
-              onMouseDown={(e) => {
-                setIsRotating(true);
-                lastMousePos.current = { x: e.clientX, y: e.clientY };
-              }}
-              onMouseMove={(e) => {
-                if (isRotating) {
-                  const dx = e.clientX - lastMousePos.current.x;
-                  const dy = e.clientY - lastMousePos.current.y;
-                  setRotation(r => ({ x: r.x + dy * 0.01, y: r.y + dx * 0.01 }));
-                  lastMousePos.current = { x: e.clientX, y: e.clientY };
-                }
-              }}
-              onMouseUp={() => setIsRotating(false)}
-              onMouseLeave={() => setIsRotating(false)} />
-            <div className="absolute bottom-2 right-2 text-[10px] text-white bg-black/50 px-1 rounded">Low (Blue) → High (Red)</div>
+          
+          <div className="h-64 flex">
+            <div className="flex-1 p-2">
+              <ManualEntryTable data={data} headers={headers} onChange={(nd, nh) => { setData(nd); setHeaders(nh); }} />
+            </div>
           </div>
         </div>
       </div>
@@ -3808,6 +3194,234 @@ const TickRateInput = ({ value, onChange }: { value: number, onChange: (val: num
 // =============================================================================
 // MAIN COMPONENT (FULLY FUNCTIONAL)
 // =============================================================================
+// =============================================================================
+
+
+// =============================================================================
+// DOE UI COMPONENTS (Manual Table & Plotly Wrappers)
+// =============================================================================
+
+const ManualEntryTable = ({ 
+  data, 
+  headers, 
+  onChange 
+}: { 
+  data: number[][], 
+  headers: string[], 
+  onChange: (newData: number[][], newHeaders: string[]) => void 
+}) => {
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text');
+    const lines = text.split('\n').filter(l => l.trim().length > 0);
+    const grid = lines.map(l => l.split('\t').map(c => Number(c.replace(',', '.'))));
+    
+    if (grid.length > 0) {
+      onChange(grid, headers);
+    }
+  };
+
+  const updateCell = (rIdx: number, cIdx: number, val: string) => {
+    const newData = [...data];
+    newData[rIdx] = [...newData[rIdx]];
+    newData[rIdx][cIdx] = Number(val);
+    onChange(newData, headers);
+  };
+
+  const addRow = () => {
+    const newRow = new Array(headers.length).fill(0);
+    onChange([...data, newRow], headers);
+  };
+
+  const removeRow = (idx: number) => {
+    if (data.length <= 1) return;
+    onChange(data.filter((_, i) => i !== idx), headers);
+  };
+
+  const addFactor = () => {
+    const newHeaders = [...headers.slice(0, -1), `X${headers.length}`, headers[headers.length - 1]];
+    const newData = data.map(r => [...r.slice(0, -1), 0, r[r.length - 1]]);
+    onChange(newData, newHeaders);
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-[#0a0a0a] border border-[#222] rounded overflow-hidden">
+      <div className="flex items-center justify-between p-2 border-b border-[#222] bg-[#141414]">
+        <span className="text-xs font-bold uppercase tracking-wider text-[#888]">Experiment Data</span>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={addFactor}>+ Factor</Button>
+          <Button size="sm" variant="outline" onClick={addRow}>+ Row</Button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-auto custom-scrollbar" onPaste={handlePaste}>
+        <table className="w-full text-xs text-left border-collapse">
+          <thead className="sticky top-0 bg-[#1a1a1a] z-10 shadow-sm">
+            <tr>
+              <th className="p-2 border-b border-[#222] w-8 text-center text-[#444]">#</th>
+              {headers.map((h, i) => (
+                <th key={i} className={`p-2 border-b border-[#222] font-bold ${i === headers.length - 1 ? 'text-emerald-500' : 'text-[#c9a86c]'}`}>
+                  {h}
+                </th>
+              ))}
+              <th className="p-2 border-b border-[#222] w-8"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row, rIdx) => (
+              <tr key={rIdx} className="hover:bg-white/5 border-b border-[#111]">
+                <td className="p-2 text-center text-[#444]">{rIdx + 1}</td>
+                {row.map((cell, cIdx) => (
+                  <td key={cIdx} className="p-0 border-r border-[#111]">
+                    <input 
+                      type="number"
+                      value={cell}
+                      onChange={(e) => updateCell(rIdx, cIdx, e.target.value)}
+                      className="w-full bg-transparent p-2 outline-none focus:bg-emerald-500/10 text-white transition-colors"
+                    />
+                  </td>
+                ))}
+                <td className="p-1">
+                  <button onClick={() => removeRow(rIdx)} className="text-red-500/50 hover:text-red-500 p-1 transition-colors">
+                    <Trash2 size={12} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="p-2 bg-[#141414] border-t border-[#222] text-[10px] text-[#555]">
+        Tip: Paste data directly from Excel (Ctrl+V)
+      </div>
+    </div>
+  );
+};
+
+const PlotlyPlots = ({ 
+  type, 
+  data, 
+  results, 
+  factors, 
+  headers, 
+  holdValues,
+  modelType = 'RSM'
+}: { 
+  type: 'surface' | 'contour', 
+  data: number[][], 
+  results: any, 
+  factors: { x: number, y: number },
+  headers: string[],
+  holdValues: number[],
+  modelType?: 'RSM' | 'GMDH'
+}) => {
+  if (!results || !data) return <div className="flex items-center justify-center h-full text-[#444]">No Model Calculated</div>;
+
+  const idxX = factors.x;
+  const idxY = factors.y;
+  
+  const xVals = data.map(r => r[idxX]);
+  const yVals = data.map(r => r[idxY]);
+  const minX = Math.min(...xVals), maxX = Math.max(...xVals);
+  const minY = Math.min(...yVals), maxY = Math.max(...yVals);
+
+  // Generate Mesh
+  const res = 40;
+  const xRange = math.range(minX, maxX, (maxX - minX) / res).toArray() as number[];
+  const yRange = math.range(minY, maxY, (maxY - minY) / res).toArray() as number[];
+  
+  const zGrid: number[][] = [];
+  
+  for (let j = 0; j < yRange.length; j++) {
+    const rowZ: number[] = [];
+    for (let i = 0; i < xRange.length; i++) {
+      const vX = xRange[i];
+      const vY = yRange[j];
+      
+      const currentFactors = [...holdValues];
+      currentFactors[idxX] = vX;
+      currentFactors[idxY] = vY;
+
+      let z = 0;
+      if (modelType === 'RSM') {
+        const xRow = [1];
+        // Linear
+        for (let f = 0; f < currentFactors.length; f++) xRow.push(currentFactors[f]);
+        // Quadratic
+        for (let f = 0; f < currentFactors.length; f++) xRow.push(currentFactors[f] * currentFactors[f]);
+        // Interaction
+        for (let f = 0; f < currentFactors.length; f++) {
+          for (let g = f + 1; g < currentFactors.length; g++) {
+            xRow.push(currentFactors[f] * currentFactors[g]);
+          }
+        }
+        z = xRow.reduce((sum, val, idx) => sum + val * results.Beta[idx][0], 0);
+      } else {
+        // GMDH Prediction
+        z = results.model.predict(currentFactors);
+      }
+      rowZ.push(z);
+    }
+    zGrid.push(rowZ);
+  }
+
+  const plotData: any[] = [
+    {
+      z: zGrid,
+      x: xRange,
+      y: yRange,
+      type: type === 'surface' ? 'surface' : 'contour',
+      colorscale: 'Viridis',
+      showscale: true,
+      contours: type === 'contour' ? {
+        coloring: 'heatmap',
+        showlabels: true
+      } : undefined
+    }
+  ];
+
+  // Overlay actual points if 3D
+  if (type === 'surface') {
+    plotData.push({
+      x: xVals,
+      y: yVals,
+      z: data.map(r => r[data[0].length - 1]),
+      mode: 'markers',
+      type: 'scatter3d',
+      marker: {
+        size: 4,
+        color: '#c9a86c',
+        opacity: 0.8
+      },
+      name: 'Actual Data'
+    });
+  }
+
+  const layout = {
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#888', family: 'Inter' },
+    margin: { l: 40, r: 40, b: 40, t: 40 },
+    scene: {
+      xaxis: { title: headers[idxX] || `X${idxX+1}`, gridcolor: '#222' },
+      yaxis: { title: headers[idxY] || `X${idxY+1}`, gridcolor: '#222' },
+      zaxis: { title: headers[headers.length-1], gridcolor: '#222' },
+      backgroundColor: '#0a0a0a'
+    },
+    autosize: true
+  };
+
+  return (
+    <div className="w-full h-full">
+      <Plot 
+        data={plotData} 
+        layout={layout} 
+        useResizeHandler={true} 
+        className="w-full h-full"
+        config={{ displayModeBar: true, responsive: true }}
+      />
+    </div>
+  );
+};
 const ADIA = () => {
   const [showWelcome, setShowWelcome] = useState(true);
   // STATE HOOKS
@@ -8663,6 +8277,7 @@ const ADIA = () => {
           initialEdges={xBridgesStateId ? (xState?.xBridgesModel?.edges || []) : globalXBridgesEdges}
           availableVariables={variables}
           tickMs={tickMs}
+          onLaunchDoe={() => toggleWindow('doe')}
           onBack={() => {
             if (xBridgesStateId) setXBridgesStateId(null);
             else setDiagramMode('statemachine');

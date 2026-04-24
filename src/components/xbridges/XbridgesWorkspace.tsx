@@ -39,7 +39,8 @@ export const XbridgesWorkspace: React.FC<{
   tickMs?: number; // Added to sync with State Machine
   onBack?: () => void;
   onSave?: (nodes: any[], edges: any[]) => void;
-}> = ({ initialNodes = [], initialEdges = [], availableVariables = [], tickMs, onBack, onSave }) => {
+  onLaunchDoe?: () => void;
+}> = ({ initialNodes = [], initialEdges = [], availableVariables = [], tickMs, onBack, onSave, onLaunchDoe }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [isSimulating, setIsSimulating] = useState(false);
@@ -736,6 +737,7 @@ export const XbridgesWorkspace: React.FC<{
               block={selectedNode.data as any}
               availableVariables={availableVariables}
               onUpdate={updateBlock}
+              onLaunchDoe={onLaunchDoe}
               onClose={() => setSelectedNodeId(null)}
             />
           )}
