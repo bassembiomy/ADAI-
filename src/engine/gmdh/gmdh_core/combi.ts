@@ -174,8 +174,35 @@ export class GMDHEngine implements PolynomialModel {
   getEquation(): string {
     if (this.layers.length === 0) return "No model trained";
     const bestNeuron = this.layers[this.layers.length - 1][0];
-    return `GMDH Network (${this.layers.length} Layers, ${this.config.externalCriterion}: ${
-      this.config.externalCriterion === 'AIC' ? bestNeuron.aic.toFixed(4) : bestNeuron.rmse.toFixed(4)
-    })`;
+    const c = bestNeuron.coeffs;
+    const [iIdx, jIdx] = bestNeuron.inputs;
+
+    const xi = this.inputNames[iIdx] || `X${iIdx + 1}`;
+    const xj = this.inputNames[jIdx] || `X${jIdx + 1}`;
+
+    let eq = `Y = ${c[0].toFixed(4)}`;
+
+    const terms = this.config.polynomialOrder === 2
+      ? [xi, xj, `${xi}²`, `${xj}²`, `${xi}·${xj}`]
+      : [xi, xj, `${xi}²`, `${xj}²`, `${xi}·${xj}`, `${xi}³`, `${xj}³`, `${xi}²·${xj}`, `${xi}·${xj}²`];
+
+    for (let t = 0; t < terms.length; t++) {
+      const coeff = c[t + 1];
+      if (Math.abs(coeff) < 1e-8) continue;
+      eq += `\n    ${coeff >= 0 ? '+' : '−'} ${Math.abs(coeff).toFixed(4)} · ${terms[t]}`;
+    }
+
+    return eq;
+  }
+
+  getMetricsSummary(): { rmse: number; layers: number; inputs: string[] } {
+    if (this.layers.length === 0) return { rmse: 0, layers: 0, inputs: [] };
+    const bestNeuron = this.layers[this.layers.length - 1][0];
+    const [iIdx, jIdx] = bestNeuron.inputs;
+    return {
+      rmse: bestNeuron.rmse,
+      layers: this.layers.length,
+      inputs: [this.inputNames[iIdx] || `X${iIdx + 1}`, this.inputNames[jIdx] || `X${jIdx + 1}`]
+    };
   }
 }

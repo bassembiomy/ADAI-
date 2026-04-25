@@ -2344,6 +2344,7 @@ const DoeWorkspace = ({
   const [plotFactors, setPlotFactors] = useState<{ x: number, y: number }>({ x: 0, y: 1 });
   const [holdValues, setHoldValues] = useState<number[]>([]);
   const [plotType, setPlotType] = useState<'surface' | 'contour'>('surface');
+  const [eqFontSize, setEqFontSize] = useState(14);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const k = headers.length - 1;
@@ -2482,6 +2483,234 @@ const DoeWorkspace = ({
     addError('info', 'GMDH Neural Architecture Trained.');
   };
 
+  // === Ctrl+S Save DOE Design ===
+  const saveDoeDesign = useCallback(() => {
+    const design = {
+      version: '1.0',
+      timestamp: new Date().toISOString(),
+      headers,
+      data,
+      activeModel,
+      config: activeModel === 'GMDH' ? {
+        algorithm: 'MIA',
+        polynomialOrder: 2,
+        maxLayers: 8,
+        externalCriterion: 'RMSE',
+        validationSplit: 0.3
+      } : { type: 'RSM_Quadratic' },
+      results: results ? {
+        R2: results.R2,
+        equation: results.equation,
+        type: results.type
+      } : null
+    };
+    const blob = new Blob([JSON.stringify(design, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `doe_design_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addError('info', 'DOE design saved successfully.');
+  }, [headers, data, activeModel, results, addError]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveDoeDesign();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [saveDoeDesign]);
+
+  // === Professional Report Generation ===
+  const generateReport = useCallback(() => {
+    if (!results) {
+      addError('warning', 'No model results to export. Run a model first.');
+      return;
+    }
+
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageW = pdf.internal.pageSize.getWidth();
+    const margin = 20;
+    const contentW = pageW - margin * 2;
+    let y = margin;
+
+    const addPage = () => {
+      pdf.addPage();
+      y = margin;
+    };
+
+    const checkSpace = (needed: number) => {
+      if (y + needed > 270) addPage();
+    };
+
+    // --- Header Bar ---
+    pdf.setFillColor(10, 10, 10);
+    pdf.rect(0, 0, pageW, 35, 'F');
+    pdf.setFillColor(201, 168, 108);
+    pdf.rect(0, 35, pageW, 1.5, 'F');
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(18);
+    pdf.setTextColor(201, 168, 108);
+    pdf.text('ADIA', margin, 15);
+    pdf.setFontSize(9);
+    pdf.setTextColor(150, 150, 150);
+    pdf.text('Design of Experiments — Analysis Report', margin, 22);
+    pdf.setFontSize(8);
+    pdf.setTextColor(100, 100, 100);
+    pdf.text(`Generated: ${new Date().toLocaleString()}`, margin, 29);
+    pdf.text(`Model: ${results.type}`, pageW - margin - 30, 29);
+
+    y = 45;
+
+    // --- Model Summary Section ---
+    pdf.setFontSize(13);
+    pdf.setTextColor(201, 168, 108);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('1. Model Summary', margin, y);
+    y += 8;
+
+    pdf.setFillColor(20, 20, 20);
+    pdf.roundedRect(margin, y, contentW, 28, 2, 2, 'F');
+    pdf.setDrawColor(50, 50, 50);
+    pdf.roundedRect(margin, y, contentW, 28, 2, 2, 'S');
+
+    pdf.setFontSize(9);
+    pdf.setTextColor(130, 130, 130);
+    pdf.text('Model Type', margin + 5, y + 7);
+    pdf.text('R-Squared', margin + 50, y + 7);
+    pdf.text('Data Points', margin + 100, y + 7);
+    pdf.text('Factors', margin + 140, y + 7);
+
+    pdf.setFontSize(14);
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(results.type, margin + 5, y + 20);
+    pdf.setTextColor(201, 168, 108);
+    pdf.text(`${(results.R2 * 100).toFixed(2)}%`, margin + 50, y + 20);
+    pdf.setTextColor(255, 255, 255);
+    pdf.text(`${data.length}`, margin + 100, y + 20);
+    pdf.text(`${headers.length - 1}`, margin + 140, y + 20);
+    y += 36;
+
+    // --- Equation Section ---
+    checkSpace(40);
+    pdf.setFontSize(13);
+    pdf.setTextColor(201, 168, 108);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('2. Model Equation', margin, y);
+    y += 8;
+
+    pdf.setFillColor(17, 17, 17);
+    const eqText = results.equation || 'No equation';
+    const eqLines = pdf.setFont('courier', 'normal').setFontSize(10).splitTextToSize(eqText, contentW - 10);
+    const eqH = Math.max(20, eqLines.length * 5 + 10);
+
+    pdf.roundedRect(margin, y, contentW, eqH, 2, 2, 'F');
+    pdf.setDrawColor(50, 50, 50);
+    pdf.roundedRect(margin, y, contentW, eqH, 2, 2, 'S');
+    pdf.setTextColor(52, 211, 153);
+    pdf.text(eqLines, margin + 5, y + 7);
+    y += eqH + 8;
+
+    // --- Factor Summary ---
+    checkSpace(30 + headers.length * 6);
+    pdf.setFontSize(13);
+    pdf.setTextColor(201, 168, 108);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('3. Factor Summary', margin, y);
+    y += 8;
+
+    // Table header
+    pdf.setFillColor(30, 30, 30);
+    pdf.rect(margin, y, contentW, 7, 'F');
+    pdf.setFontSize(8);
+    pdf.setTextColor(150, 150, 150);
+    pdf.setFont('helvetica', 'bold');
+    const colW = contentW / 5;
+    ['Factor', 'Min', 'Max', 'Mean', 'Std Dev'].forEach((h, i) => {
+      pdf.text(h, margin + i * colW + 3, y + 5);
+    });
+    y += 7;
+
+    // Table rows
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(220, 220, 220);
+    headers.slice(0, -1).forEach((h, i) => {
+      const col = data.map(r => r[i]);
+      const min = Math.min(...col);
+      const max = Math.max(...col);
+      const mean = col.reduce((a, b) => a + b, 0) / col.length;
+      const std = Math.sqrt(col.reduce((s, v) => s + (v - mean) ** 2, 0) / col.length);
+
+      if (i % 2 === 0) {
+        pdf.setFillColor(18, 18, 18);
+        pdf.rect(margin, y, contentW, 6, 'F');
+      }
+      [h, min.toFixed(3), max.toFixed(3), mean.toFixed(3), std.toFixed(3)].forEach((val, j) => {
+        pdf.text(val, margin + j * colW + 3, y + 4.5);
+      });
+      y += 6;
+    });
+    y += 8;
+
+    // --- Data Table ---
+    checkSpace(20);
+    pdf.setFontSize(13);
+    pdf.setTextColor(201, 168, 108);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('4. Experiment Data', margin, y);
+    y += 8;
+
+    // Data table header
+    const dColW = contentW / headers.length;
+    pdf.setFillColor(30, 30, 30);
+    pdf.rect(margin, y, contentW, 7, 'F');
+    pdf.setFontSize(7);
+    pdf.setTextColor(150, 150, 150);
+    pdf.setFont('helvetica', 'bold');
+    headers.forEach((h, i) => {
+      pdf.text(h, margin + i * dColW + 2, y + 5);
+    });
+    y += 7;
+
+    // Data rows
+    pdf.setFont('courier', 'normal');
+    pdf.setFontSize(7);
+    pdf.setTextColor(200, 200, 200);
+    data.forEach((row, rIdx) => {
+      checkSpace(6);
+      if (rIdx % 2 === 0) {
+        pdf.setFillColor(15, 15, 15);
+        pdf.rect(margin, y, contentW, 5.5, 'F');
+      }
+      row.forEach((val, cIdx) => {
+        pdf.text(val.toFixed(4), margin + cIdx * dColW + 2, y + 4);
+      });
+      y += 5.5;
+    });
+    y += 8;
+
+    // --- Footer ---
+    const totalPages = pdf.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      pdf.setPage(p);
+      pdf.setFillColor(201, 168, 108);
+      pdf.rect(0, 290, pageW, 0.5, 'F');
+      pdf.setFontSize(7);
+      pdf.setTextColor(100, 100, 100);
+      pdf.text(`ADIA DOE Analyzer Pro — Confidential`, margin, 295);
+      pdf.text(`Page ${p} of ${totalPages}`, pageW - margin - 20, 295);
+    }
+
+    pdf.save(`DOE_Report_${results.type}_${new Date().toISOString().slice(0, 10)}.pdf`);
+    addError('info', 'Professional report generated and downloaded.');
+  }, [results, data, headers, addError]);
+
   return (
     <div className="flex flex-col h-full w-full bg-[#050505] text-[#e0e0e0] font-sans">
       {/* Top Control Bar */}
@@ -2504,11 +2733,14 @@ const DoeWorkspace = ({
         
         <div className="flex items-center gap-3">
           <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.csv" onChange={handleFileUpload} />
-          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-            <Save size={14} className="mr-2" /> Upload Data
+          <Button variant="outline" size="sm" onClick={saveDoeDesign} title="Ctrl+S">
+            <Save size={14} className="mr-2" /> Save
           </Button>
-          <Button variant="outline" size="sm">
-            <Search size={14} className="mr-2" /> Export
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+            <Upload size={14} className="mr-2" /> Upload Data
+          </Button>
+          <Button variant="outline" size="sm" onClick={generateReport}>
+            <FileText size={14} className="mr-2" /> Report
           </Button>
           <Button variant="ghost" size="sm" onClick={onClose} className="text-red-500">Close</Button>
         </div>
@@ -2520,28 +2752,68 @@ const DoeWorkspace = ({
           {results ? (
             <div className="space-y-6">
               <section>
-                <h3 className="text-[10px] font-bold text-[#555] uppercase tracking-widest mb-3">Model Metrics</h3>
+                <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Model Metrics</h3>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-[#111] p-3 rounded border border-[#222]">
-                    <div className="text-[10px] text-[#888] mb-1">R-Squared</div>
-                    <div className="text-lg font-black text-[#c9a86c]">{(results.R2 * 100).toFixed(2)}%</div>
+                  <div className="bg-[#111] p-4 rounded-lg border border-[#222]">
+                    <div className="text-xs text-[#888] mb-1">R-Squared</div>
+                    <div className="text-2xl font-black text-[#c9a86c]">{(results.R2 * 100).toFixed(2)}%</div>
                   </div>
-                  <div className="bg-[#111] p-3 rounded border border-[#222]">
-                    <div className="text-[10px] text-[#888] mb-1">Model Type</div>
-                    <div className="text-xs font-bold text-white uppercase">{results.type}</div>
+                  <div className="bg-[#111] p-4 rounded-lg border border-[#222]">
+                    <div className="text-xs text-[#888] mb-1">Model Type</div>
+                    <div className="text-sm font-bold text-white uppercase">{results.type}</div>
+                    {results.type === 'GMDH' && results.model?.layers && (
+                      <div className="text-[10px] text-[#666] mt-1">{results.model.layers.length} layers</div>
+                    )}
                   </div>
                 </div>
               </section>
 
               <section>
-                <h3 className="text-[10px] font-bold text-[#555] uppercase tracking-widest mb-3">Equation</h3>
-                <div className="bg-[#111] p-3 rounded border border-[#222] font-mono text-[10px] text-emerald-400 break-words leading-relaxed">
-                  {results.equation}
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest">Equation</h3>
+                  <span className="text-[10px] text-[#555]">Scroll to resize</span>
                 </div>
+                <div 
+                  className="bg-[#111] rounded-lg border border-[#222] overflow-auto max-h-64 cursor-ns-resize select-text"
+                  onWheel={(e) => {
+                    e.stopPropagation();
+                    setEqFontSize(prev => Math.max(8, Math.min(32, prev + (e.deltaY < 0 ? 1 : -1))));
+                  }}
+                >
+                  <pre 
+                    className="p-4 font-mono text-emerald-400 whitespace-pre-wrap leading-loose"
+                    style={{ fontSize: `${eqFontSize}px` }}
+                  >
+                    {results.equation || 'No equation generated'}
+                  </pre>
+                </div>
+
+                {/* GMDH Metrics Badges */}
+                {results.type === 'GMDH' && results.model?.layers && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <div className="bg-[#1a1a2e] border border-[#2a2a4e] rounded-full px-3 py-1 text-[11px] font-mono">
+                      <span className="text-[#888]">RMSE </span>
+                      <span className="text-sky-400 font-bold">{results.model.layers[results.model.layers.length - 1][0].rmse.toFixed(4)}</span>
+                    </div>
+                    <div className="bg-[#1a2e1a] border border-[#2a4e2a] rounded-full px-3 py-1 text-[11px] font-mono">
+                      <span className="text-[#888]">Layers </span>
+                      <span className="text-emerald-400 font-bold">{results.model.layers.length}</span>
+                    </div>
+                    {results.model.getMetricsSummary && (() => {
+                      const m = results.model.getMetricsSummary();
+                      return m.inputs.map((inp: string, idx: number) => (
+                        <div key={idx} className="bg-[#2e2a1a] border border-[#4e3a2a] rounded-full px-3 py-1 text-[11px] font-mono">
+                          <span className="text-[#888]">Input </span>
+                          <span className="text-[#c9a86c] font-bold">{inp}</span>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                )}
               </section>
 
               <section>
-                <h3 className="text-[10px] font-bold text-[#555] uppercase tracking-widest mb-3">Plot Config</h3>
+                <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Plot Config</h3>
                 <div className="space-y-4">
                   <div>
                     <Label className="mb-2 block">X-Axis Factor</Label>
