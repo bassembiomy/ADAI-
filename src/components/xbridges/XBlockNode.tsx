@@ -50,7 +50,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
     if (['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR', 'SWITCH', 'IF_ELSE', 'SWITCH_CASE'].includes(type)) return '#6f42c1'; // Logic (Purple)
     if (['BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight'].includes(type)) return '#563d7c'; // Bitwise (Indigo)
     if (['DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Integrator', 'INTEGRATOR_CONTINUOUS', 'INTEGRATOR_DISCRETE', 'PID_CONTROLLER', 'PID_BASIC'].includes(type)) return '#d73a49'; // Sequential/Control (Red)
-    if (type === 'MPC_CONTROLLER') return '#c9a86c'; // MPC (Copper)
+    if (type === 'MPC_CONTROLLER' || type === 'Subsystem') return '#c9a86c'; // MPC/Subsystem (Copper/Gold)
     if (['WHITE_NOISE', 'BAND_LIMITED_NOISE', 'LOW_PASS_FILTER', 'HIGH_PASS_FILTER', 'MOVING_AVERAGE'].includes(type)) return '#17a2b8'; // Signal Processing (Cyan/Teal)
     if (['KALMAN_FILTER', 'EXTENDED_KALMAN_FILTER'].includes(type)) return '#20c997'; // Estimation (Mint)
     if (['THREE_PHASE_INVERTER', 'SINGLE_PHASE_H_BRIDGE'].includes(type)) return '#ef4444'; // Power (Red)
@@ -123,6 +123,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       case 'COT':
       case 'SEC':
       case 'COSEC': return <TrendingUp size={12} />;
+      case 'Subsystem': return <Layers size={12} />;
       default: return null;
     }
   };
@@ -138,6 +139,10 @@ export const XBlockNode = ({ data, id, selected }: any) => {
   };
 
   const renderPort = (port: XPort, index: number) => {
+    // Hide virtual bridging ports in the UI
+    if (data.type === 'Inport' && port.id === 'in') return null;
+    if (data.type === 'Outport' && port.id === 'out') return null;
+
     const isInput = port.direction === 'input';
     const position = 
       port.position === 'left' ? Position.Left :

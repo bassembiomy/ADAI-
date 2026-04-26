@@ -24,6 +24,7 @@ export interface XBlock {
   id: string;
   type: string;
   label?: string; // Optional user-defined name
+  parentId?: string; // NEW: For hierarchical subsystems ('root' or subsystem ID)
   params: Record<string, any>;
   inputs: XPort[];
   outputs: XPort[];

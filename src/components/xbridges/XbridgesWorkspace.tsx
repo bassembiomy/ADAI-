@@ -15,8 +15,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Play, Pause, Square, Save, Trash2, Box, Layers, MousePointer2, Settings2, ChevronDown, ChevronRight, Search, Triangle } from 'lucide-react';
-import { XBRIDGES_CATEGORIES } from '../../utils/xbridges/XbridgesLibrary';
-import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
+import { XBRIDGES_CATEGORIES, BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import { XbridgesEngine } from '../../engine/xbridges/XbridgesEngine';
 import { Solvers } from '../../engine/xbridges/Solvers';
 import { XBlockNode } from './XBlockNode';
@@ -28,8 +27,8 @@ const nodeTypes = { xblock: XBlockNode };
 const normalizeNumerals = (val: string) => {
   if (!val) return "";
   return val.replace(/[٠١٢٣٤٥٦٧٨٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d).toString())
-            .replace(/[۰۱۲۳۴۵۶۷۸۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d).toString())
-            .replace(/[٫،,]/g, '.');
+    .replace(/[۰۱۲۳۴۵۶۷۸۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d).toString())
+    .replace(/[٫،,]/g, '.');
 };
 
 export const XbridgesWorkspace: React.FC<{
@@ -52,7 +51,11 @@ export const XbridgesWorkspace: React.FC<{
   const [searchMenuPos, setSearchMenuPos] = useState<{ x: number, y: number } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedNode, setCopiedNode] = useState<Node | null>(null);
-  const [history, setHistory] = useState<{nodes: Node[], edges: Edge[]}[]>([]);
+  const [history, setHistory] = useState<{ nodes: Node[], edges: Edge[] }[]>([]);
+
+  // Hierarchical Navigation State
+  const [viewPath, setViewPath] = useState<string[]>(['root']);
+  const currentParentId = viewPath[viewPath.length - 1];
 
   const [solverType, setSolverType] = useState<'euler' | 'rk4'>('rk4');
   const initialStep = tickMs ? tickMs / 1000 : 0.02;
@@ -91,7 +94,7 @@ export const XbridgesWorkspace: React.FC<{
   useEffect(() => {
     let animationFrameId: number;
     let updateThrottle = 0;
-    
+
     if (isSimulating) {
       // Rebuild engine model on start
       const model = {
@@ -105,48 +108,48 @@ export const XbridgesWorkspace: React.FC<{
 
       const tick = () => {
         if (engineRef.current && !isPaused) {
-           // Sync SM Variables to Inports (Data Connectivity)
-           nodes.forEach(node => {
-              if (node.data.type === 'Inport' && node.data.params?.smVarId && availableVariables) {
-                 const smVar = availableVariables.find(v => v.id === node.data.params.smVarId);
-                 if (smVar) {
-                    const numericVal = Number(smVar.currentValue);
-                    engineRef.current!.setSignalValue(node.id, 'out', numericVal);
-                    const block = engineRef.current!['blockMap'].get(node.id);
-                    if (block && block.params) block.params.value = numericVal;
-                 }
+          // Sync SM Variables to Inports (Data Connectivity)
+          nodes.forEach(node => {
+            if (node.data.type === 'Inport' && node.data.params?.smVarId && availableVariables) {
+              const smVar = availableVariables.find(v => v.id === node.data.params.smVarId);
+              if (smVar) {
+                const numericVal = Number(smVar.currentValue);
+                engineRef.current!.setSignalValue(node.id, 'out', numericVal);
+                const block = engineRef.current!['blockMap'].get(node.id);
+                if (block && block.params) block.params.value = numericVal;
               }
-           });
+            }
+          });
 
-           if (solverType === 'rk4') Solvers.stepRK4(engineRef.current, timeRef.current, fixedStep);
-           else Solvers.stepEuler(engineRef.current, timeRef.current, fixedStep);
-           
-           timeRef.current += fixedStep;
+          if (solverType === 'rk4') Solvers.stepRK4(engineRef.current, timeRef.current, fixedStep);
+          else Solvers.stepEuler(engineRef.current, timeRef.current, fixedStep);
 
-           // Throttle UI updates to ~15fps (every 4th frame at 60fps) to prevent ReactFlow lag
-           updateThrottle++;
-           if (updateThrottle % 4 === 0) {
-             setNodes(nds => nds.map(n => {
-                const engineBlock = engineRef.current!['blockMap'].get(n.id);
-                if (engineBlock && n.type === 'xblock') {
-                   let dataUpdate: any = { state: engineBlock.state };
-                   
-                   if (engineBlock.type === 'Scope') {
-                       const currentInputs = engineRef.current!.gatherInputs(engineBlock);
-                       const val = currentInputs[0];
-                       const prevHistory = n.data.history || [];
-                       dataUpdate.history = [...prevHistory.slice(-99), typeof val === 'number' ? val : 0];
-                   }
-                   
-                   return { ...n, data: { ...n.data, ...dataUpdate }}; 
+          timeRef.current += fixedStep;
+
+          // Throttle UI updates to ~15fps (every 4th frame at 60fps) to prevent ReactFlow lag
+          updateThrottle++;
+          if (updateThrottle % 4 === 0) {
+            setNodes(nds => nds.map(n => {
+              const engineBlock = engineRef.current!['blockMap'].get(n.id);
+              if (engineBlock && n.type === 'xblock') {
+                let dataUpdate: any = { state: engineBlock.state };
+
+                if (engineBlock.type === 'Scope') {
+                  const currentInputs = engineRef.current!.gatherInputs(engineBlock);
+                  const val = currentInputs[0];
+                  const prevHistory = n.data.history || [];
+                  dataUpdate.history = [...prevHistory.slice(-99), typeof val === 'number' ? val : 0];
                 }
-                return n;
-             }));
-           }
+
+                return { ...n, data: { ...n.data, ...dataUpdate } };
+              }
+              return n;
+            }));
+          }
         }
         animationFrameId = requestAnimationFrame(tick);
       };
-      
+
       animationFrameId = requestAnimationFrame(tick);
     } else {
       timeRef.current = 0; // Reset time when stopped
@@ -164,7 +167,7 @@ export const XbridgesWorkspace: React.FC<{
   const nodesRef = React.useRef(nodes);
   const edgesRef = React.useRef(edges);
   const onSaveRef = React.useRef(onSave);
-  
+
   React.useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   React.useEffect(() => { edgesRef.current = edges; }, [edges]);
   React.useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
@@ -192,14 +195,14 @@ export const XbridgesWorkspace: React.FC<{
       animated: isSimulating,
       style: { stroke: '#4caf50', strokeWidth: 3 } // FR-2.2 Continuous wire
     }, eds));
-    
+
     // If simulating, hot-reload the connection in the engine
     if (isSimulating && engineRef.current) {
-        engineRef.current['model'].connections.push({
-            sourceBlock: params.source!, sourcePort: params.sourceHandle!,
-            targetBlock: params.target!, targetPort: params.targetHandle!
-        });
-        engineRef.current['compiled'] = false; // Force recompile on next step
+      engineRef.current['model'].connections.push({
+        sourceBlock: params.source!, sourcePort: params.sourceHandle!,
+        targetBlock: params.target!, targetPort: params.targetHandle!
+      });
+      engineRef.current['compiled'] = false; // Force recompile on next step
     }
   }, [setEdges, isSimulating, saveHistory]);
 
@@ -218,13 +221,13 @@ export const XbridgesWorkspace: React.FC<{
 
     let position = { x: reactFlowBounds.width / 2 - 70, y: reactFlowBounds.height / 2 - 40 };
     if (reactFlowInstance) {
-       position = reactFlowInstance.screenToFlowPosition({
-          x: reactFlowBounds.left + reactFlowBounds.width / 2,
-          y: reactFlowBounds.top + reactFlowBounds.height / 2
-       });
-       // offset slightly for block dimensions
-       position.x -= 70;
-       position.y -= 40;
+      position = reactFlowInstance.screenToFlowPosition({
+        x: reactFlowBounds.left + reactFlowBounds.width / 2,
+        y: reactFlowBounds.top + reactFlowBounds.height / 2
+      });
+      // offset slightly for block dimensions
+      position.x -= 70;
+      position.y -= 40;
     }
 
     // Instantiate block definition to get inputs/outputs/params
@@ -236,6 +239,7 @@ export const XbridgesWorkspace: React.FC<{
       position,
       data: {
         ...blockDef,
+        parentId: currentParentId, // NEW: Assign to current subsystem
         selected: false
       },
     };
@@ -244,6 +248,13 @@ export const XbridgesWorkspace: React.FC<{
 
   const onNodeClick = (_: React.MouseEvent, node: Node) => {
     setSelectedNodeId(node.id);
+  };
+
+  const onNodeDoubleClick = (_: React.MouseEvent, node: Node) => {
+    if (node.data.type === 'Subsystem') {
+      setViewPath(prev => [...prev, node.id]);
+      setSelectedNodeId(null);
+    }
   };
 
   const onPaneClick = () => {
@@ -280,11 +291,11 @@ export const XbridgesWorkspace: React.FC<{
       if (e.code === 'Delete' || e.code === 'Backspace') {
         const selectedNodes = nodes.filter(n => n.selected || n.id === selectedNodeId);
         const selectedEdges = edges.filter(ed => ed.selected);
-        
+
         if (selectedNodes.length > 0 || selectedEdges.length > 0) {
           e.preventDefault(); // Prevent React Flow from also handling it
           saveHistory();
-          
+
           if (selectedNodes.length > 0) {
             const nodeIds = selectedNodes.map(n => n.id);
             setNodes(nds => nds.filter(n => !nodeIds.includes(n.id)));
@@ -293,7 +304,7 @@ export const XbridgesWorkspace: React.FC<{
               setSelectedNodeId(null);
             }
           }
-          
+
           if (selectedEdges.length > 0) {
             const edgeIds = selectedEdges.map(ed => ed.id);
             // Delete edges, but if we already filtered edges from node deletion, filter those too
@@ -362,26 +373,26 @@ export const XbridgesWorkspace: React.FC<{
     setNodes(nds => nds.map(n => {
       if (n.id === blockId) {
         const updatedData = { ...n.data, ...data };
-        
+
         // Handle parameter-driven port changes (e.g., numInputs, bitWidth, cases)
         if (data.params && BLOCK_LIBRARY[n.data.type]) {
-            // Check if critical params changed
-            const oldParams = n.data.params || {};
-            const newParams = data.params;
-            
-            const hasChanged = 
-              newParams.numInputs !== oldParams.numInputs || 
-              newParams.cases !== oldParams.cases ||
-              newParams.numCases !== oldParams.numCases ||
-              newParams.numSignals !== oldParams.numSignals ||
-              newParams.numOutputs !== oldParams.numOutputs;
+          // Check if critical params changed
+          const oldParams = n.data.params || {};
+          const newParams = data.params;
 
-            if (hasChanged) {
-                // Re-instantiate block definition to get new ports
-                const freshDef = BLOCK_LIBRARY[n.data.type](blockId, newParams);
-                updatedData.inputs = freshDef.inputs;
-                updatedData.outputs = freshDef.outputs;
-            }
+          const hasChanged =
+            newParams.numInputs !== oldParams.numInputs ||
+            newParams.cases !== oldParams.cases ||
+            newParams.numCases !== oldParams.numCases ||
+            newParams.numSignals !== oldParams.numSignals ||
+            newParams.numOutputs !== oldParams.numOutputs;
+
+          if (hasChanged) {
+            // Re-instantiate block definition to get new ports
+            const freshDef = BLOCK_LIBRARY[n.data.type](blockId, newParams);
+            updatedData.inputs = freshDef.inputs;
+            updatedData.outputs = freshDef.outputs;
+          }
         }
 
         return { ...n, data: updatedData };
@@ -392,43 +403,86 @@ export const XbridgesWorkspace: React.FC<{
 
   const stepSimulation = () => {
     if (!engineRef.current) return;
-    
+
     if (solverType === 'rk4') Solvers.stepRK4(engineRef.current, timeRef.current, fixedStep);
     else Solvers.stepEuler(engineRef.current, timeRef.current, fixedStep);
-    
+
     timeRef.current += fixedStep;
 
     setNodes(nds => nds.map(n => {
-        const engineBlock = engineRef.current!['blockMap'].get(n.id);
-        if (engineBlock && n.type === 'xblock') {
-            let dataUpdate: any = { state: engineBlock.state };
-            if (engineBlock.type === 'Scope') {
-                const currentInputs = engineRef.current!.gatherInputs(engineBlock);
-                const val = currentInputs[0];
-                const prevHistory = n.data.history || [];
-                dataUpdate.history = [...prevHistory.slice(-99), typeof val === 'number' ? val : 0];
-            }
-            return { ...n, data: { ...n.data, ...dataUpdate }}; 
+      const engineBlock = engineRef.current!['blockMap'].get(n.id);
+      if (engineBlock && n.type === 'xblock') {
+        let dataUpdate: any = { state: engineBlock.state };
+        if (engineBlock.type === 'Scope') {
+          const currentInputs = engineRef.current!.gatherInputs(engineBlock);
+          const val = currentInputs[0];
+          const prevHistory = n.data.history || [];
+          dataUpdate.history = [...prevHistory.slice(-99), typeof val === 'number' ? val : 0];
         }
-        return n;
+        return { ...n, data: { ...n.data, ...dataUpdate } };
+      }
+      return n;
     }));
   };
+
+  // --- Subsystem Port Synchronization ---
+  useEffect(() => {
+    let hasChanges = false;
+    const nextNodes = nodes.map(node => {
+      if (node.data.type === 'Subsystem') {
+        const internalInports = nodes.filter(n => n.data.parentId === node.id && n.data.type === 'Inport');
+        const internalOutports = nodes.filter(n => n.data.parentId === node.id && n.data.type === 'Outport');
+
+        const newInputs = internalInports
+          .sort((a, b) => (a.data.params.port_index || 0) - (b.data.params.port_index || 0))
+          .map(p => ({
+            id: p.id,
+            name: p.data.params.name || 'In',
+            type: p.data.params.data_type || 'auto',
+            direction: 'input',
+            value: 0,
+            position: 'left'
+          }));
+
+        const newOutputs = internalOutports
+          .sort((a, b) => (a.data.params.port_index || 0) - (b.data.params.port_index || 0))
+          .map(p => ({
+            id: p.id,
+            name: p.data.params.name || 'Out',
+            type: p.data.params.data_type || 'auto',
+            direction: 'output',
+            value: 0,
+            position: 'right'
+          }));
+
+        if (JSON.stringify(newInputs) !== JSON.stringify(node.data.inputs) ||
+          JSON.stringify(newOutputs) !== JSON.stringify(node.data.outputs)) {
+          hasChanges = true;
+          return { ...node, data: { ...node.data, inputs: newInputs, outputs: newOutputs } };
+        }
+      }
+      return node;
+    });
+
+    if (hasChanges) setNodes(nextNodes);
+  }, [nodes, setNodes]);
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
 
   const addBlockAtPos = (type: string, x: number, y: number) => {
     if (!reactFlowInstance || !BLOCK_LIBRARY[type]) return;
     saveHistory();
-    
+
     const position = reactFlowInstance.screenToFlowPosition({ x, y });
     const blockDef = BLOCK_LIBRARY[type](`${type}-${Date.now()}`, {});
-    
+
     const newNode: Node = {
       id: blockDef.id,
       type: 'xblock',
       position,
-      data: { 
+      data: {
         ...blockDef,
+        parentId: currentParentId,
         // Ensure UI callbacks are present
         onUpdate: (newData: any) => updateBlock(blockDef.id, newData),
         onOpenScope: (blockId: string) => setOpenScopes(prev => prev.includes(blockId) ? prev : [...prev, blockId])
@@ -440,7 +494,7 @@ export const XbridgesWorkspace: React.FC<{
     setSearchTerm('');
   };
 
-  const filteredBlocks = XBRIDGES_CATEGORIES.flatMap(cat => 
+  const filteredBlocks = XBRIDGES_CATEGORIES.flatMap(cat =>
     cat.blocks.map(b => ({ ...b, category: cat.name }))
   ).filter(b => b.label.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -448,14 +502,14 @@ export const XbridgesWorkspace: React.FC<{
     <div className="flex h-full w-full bg-[#0a0a0a] text-gray-300 font-sans overflow-hidden select-none relative">
       {/* Quick Search Menu */}
       {searchMenuPos && (
-        <div 
+        <div
           className="fixed z-[9999] w-[260px] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl overflow-hidden"
           style={{ left: searchMenuPos.x, top: searchMenuPos.y }}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="p-3 border-b border-white/5 flex items-center gap-2">
             <Search size={14} className="text-emerald-500" />
-            <input 
+            <input
               autoFocus
               placeholder="Search blocks..."
               className="bg-transparent border-none outline-none text-sm w-full text-white placeholder-white/20 font-bold"
@@ -472,7 +526,7 @@ export const XbridgesWorkspace: React.FC<{
           </div>
           <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-1">
             {filteredBlocks.map((b, i) => (
-              <div 
+              <div
                 key={i}
                 className="flex items-center justify-between p-2 hover:bg-emerald-500/10 rounded cursor-pointer group transition-colors"
                 onClick={() => addBlockAtPos(b.type, searchMenuPos.x, searchMenuPos.y)}
@@ -501,7 +555,7 @@ export const XbridgesWorkspace: React.FC<{
               <span className="text-sm font-black uppercase tracking-wider text-[#c9a86c]">X-Bridges</span>
             </div>
           )}
-          <button 
+          <button
             onClick={() => setIsLibCollapsed(!isLibCollapsed)}
             className={`p-1.5 rounded bg-[#1a1a1a] border border-[#333] text-[#c9a86c] hover:bg-[#c9a86c]/10 transition-all ${isLibCollapsed ? 'w-full' : ''}`}
             title={isLibCollapsed ? "Expand Library" : "Collapse Library"}
@@ -514,14 +568,14 @@ export const XbridgesWorkspace: React.FC<{
             const isExpanded = !!expandedCategories[cat.name];
             return (
               <div key={cat.name} className="flex flex-col">
-                <button 
+                <button
                   onClick={() => toggleCategory(cat.name)}
                   className="flex items-center gap-2 w-full px-3 py-2 text-[10px] font-bold text-emerald-500 uppercase tracking-widest hover:bg-emerald-500/5 transition-colors text-left"
                 >
                   {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                   {cat.name}
                 </button>
-                
+
                 {isExpanded && (
                   <div className="flex flex-col gap-0.5 pl-4 py-1">
                     {cat.blocks.map(b => (
@@ -551,11 +605,10 @@ export const XbridgesWorkspace: React.FC<{
           <div className="flex items-center gap-4">
             <button
               onClick={() => setIsSimulating(!isSimulating)}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded text-sm font-bold shadow-sm transition-colors ${
-                isSimulating 
-                  ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30 border border-red-500/50' 
+              className={`flex items-center gap-2 px-4 py-1.5 rounded text-sm font-bold shadow-sm transition-colors ${isSimulating
+                  ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30 border border-red-500/50'
                   : 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 border border-emerald-500/50'
-              }`}
+                }`}
             >
               {isSimulating ? <Square size={14} className="fill-current" /> : <Play size={14} className="fill-current" />}
               {isSimulating ? 'Stop Simulation' : 'Run Simulation'}
@@ -565,11 +618,10 @@ export const XbridgesWorkspace: React.FC<{
               <div className="flex items-center gap-2 animate-in slide-in-from-left-2 duration-300">
                 <button
                   onClick={() => setIsPaused(!isPaused)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold transition-all ${
-                    isPaused 
-                      ? 'bg-amber-500/20 text-amber-500 border border-amber-500/50' 
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold transition-all ${isPaused
+                      ? 'bg-amber-500/20 text-amber-500 border border-amber-500/50'
                       : 'bg-white/5 text-white/50 hover:bg-white/10 border border-white/10'
-                  }`}
+                    }`}
                   title={isPaused ? "Resume Simulation" : "Pause Simulation"}
                 >
                   {isPaused ? <Play size={12} fill="currentColor" /> : <Pause size={12} fill="currentColor" />}
@@ -579,11 +631,10 @@ export const XbridgesWorkspace: React.FC<{
                 <button
                   onClick={stepSimulation}
                   disabled={!isPaused}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold transition-all ${
-                    isPaused 
-                      ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30' 
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold transition-all ${isPaused
+                      ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30'
                       : 'opacity-30 cursor-not-allowed text-white/30 border border-white/5'
-                  }`}
+                    }`}
                   title="Advance by one time step"
                 >
                   <ChevronRight size={14} />
@@ -596,8 +647,8 @@ export const XbridgesWorkspace: React.FC<{
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <Settings2 size={14} />
               <span>Solver:</span>
-              <select 
-                value={solverType} 
+              <select
+                value={solverType}
                 onChange={e => setSolverType(e.target.value as any)}
                 disabled={isSimulating}
                 className="bg-[#0a0a0a] border border-[#333] rounded px-2 py-1 text-gray-300 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
@@ -608,14 +659,14 @@ export const XbridgesWorkspace: React.FC<{
             </div>
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <span>Step Size (s):</span>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={stepSizeInput}
                 onChange={e => {
                   const raw = e.target.value;
                   const normalized = normalizeNumerals(raw).replace(/[^0-9.]/g, '');
                   setStepSizeInput(normalized);
-                  
+
                   if (!tickMs) {
                     const num = Number(normalized);
                     if (!isNaN(num) && normalized !== '' && normalized !== '.') {
@@ -654,81 +705,103 @@ export const XbridgesWorkspace: React.FC<{
               </button>
             )}
             <div className="text-xs text-emerald-500/80 font-mono flex items-center gap-2">
-               <div className={`w-2 h-2 rounded-full ${isSimulating ? 'bg-emerald-500 animate-pulse' : 'bg-gray-600'}`} />
-               {isSimulating ? `T = ${timeRef.current.toFixed(4)}s` : 'STOPPED'}
+              <div className={`w-2 h-2 rounded-full ${isSimulating ? 'bg-emerald-500 animate-pulse' : 'bg-gray-600'}`} />
+              {isSimulating ? `T = ${timeRef.current.toFixed(4)}s` : 'STOPPED'}
             </div>
           </div>
+        </div>
+
+        {/* Breadcrumb Navigation */}
+        <div className="h-8 bg-[#141414] border-b border-[#222] flex items-center px-4 gap-2 z-20">
+          {viewPath.map((pathId, idx) => {
+            const nodeName = pathId === 'root' ? 'Project' : (nodes.find(n => n.id === pathId)?.data.params.name || pathId);
+            return (
+              <React.Fragment key={pathId}>
+                <button
+                  onClick={() => setViewPath(viewPath.slice(0, idx + 1))}
+                  className={`text-[10px] font-bold tracking-widest uppercase transition-colors hover:text-emerald-400 ${idx === viewPath.length - 1 ? 'text-emerald-500' : 'text-gray-500'}`}
+                >
+                  {nodeName}
+                </button>
+                {idx < viewPath.length - 1 && <ChevronRight size={10} className="text-gray-700" />}
+              </React.Fragment>
+            );
+          })}
         </div>
 
         <div className="flex-1 relative flex">
           <div className="flex-1 relative">
             <ReactFlow
-            // Pass native React Flow selected state alongside custom data and an update callback
-            onInit={setReactFlowInstance}
-            nodes={nodes.map(n => ({ 
-              ...n, 
-              data: { 
-                ...n.data, 
-                onUpdate: (newData: any) => updateBlock(n.id, newData),
-                onOpenScope: (blockId: string) => setOpenScopes(prev => prev.includes(blockId) ? prev : [...prev, blockId])
-              } 
-            }))}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onDrop={onDrop}
-            onDragOver={(e) => e.preventDefault()}
-            onNodeClick={onNodeClick}
-            onPaneClick={(e) => {
-              if (e.detail === 2) {
-                // Double click
-                setSearchMenuPos({ x: e.clientX, y: e.clientY });
-              } else {
-                setSearchMenuPos(null);
-                setSearchTerm('');
-              }
-              setSelectedNodeId(null);
-            }}
-            onSelectionChange={({ nodes: selectedNodes }) => {
-              if (selectedNodes.length === 1) {
-                setSelectedNodeId(selectedNodes[0].id);
-              } else if (selectedNodes.length === 0) {
+              // Pass native React Flow selected state alongside custom data and an update callback
+              onInit={setReactFlowInstance}
+              nodes={nodes.filter(n => (n.data.parentId || 'root') === currentParentId).map(n => ({
+                ...n,
+                data: {
+                  ...n.data,
+                  onUpdate: (newData: any) => updateBlock(n.id, newData),
+                  onOpenScope: (blockId: string) => setOpenScopes(prev => prev.includes(blockId) ? prev : [...prev, blockId])
+                }
+              }))}
+              edges={edges.filter(e => {
+                const sourceNode = nodes.find(n => n.id === e.source);
+                return sourceNode && (sourceNode.data.parentId || 'root') === currentParentId;
+              })}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onDrop={onDrop}
+              onDragOver={(e) => e.preventDefault()}
+              onNodeClick={onNodeClick}
+              onNodeDoubleClick={onNodeDoubleClick}
+              onPaneClick={(e) => {
+                if (e.detail === 2) {
+                  // Double click
+                  setSearchMenuPos({ x: e.clientX, y: e.clientY });
+                } else {
+                  setSearchMenuPos(null);
+                  setSearchTerm('');
+                }
                 setSelectedNodeId(null);
-              }
-            }}
-            onNodesDelete={onNodesDelete}
-            nodeTypes={nodeTypes}
-            snapToGrid
-            snapGrid={[15, 15]}
-            fitView
-            // FR-2.1: Default Bezier routing, FR-2.4: Selection width
-            defaultEdgeOptions={{
-              type: 'default',
-              animated: true,
-              style: { stroke: '#4caf50', strokeWidth: 3 },
-              interactionWidth: 20
-            }}
-            elevateNodesOnSelect
-          >
-            {/* FR-3.4 and FR-3.5: Pan/Zoom controls, Minimap, Grid Background */}
-            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#404040" />
-            <Controls className="bg-[#1e1e1e] border-[#404040] fill-white" />
-            <MiniMap
-              nodeColor={(n) => n.data.selected ? '#4caf50' : '#2d2d2d'}
-              maskColor="rgba(0, 0, 0, 0.6)"
-              className="bg-[#1e1e1e] border border-[#404040]"
-            />
-          </ReactFlow>
+              }}
+              onSelectionChange={({ nodes: selectedNodes }) => {
+                if (selectedNodes.length === 1) {
+                  setSelectedNodeId(selectedNodes[0].id);
+                } else if (selectedNodes.length === 0) {
+                  setSelectedNodeId(null);
+                }
+              }}
+              onNodesDelete={onNodesDelete}
+              nodeTypes={nodeTypes}
+              snapToGrid
+              snapGrid={[15, 15]}
+              fitView
+              // FR-2.1: Default Bezier routing, FR-2.4: Selection width
+              defaultEdgeOptions={{
+                type: 'default',
+                animated: true,
+                style: { stroke: '#4caf50', strokeWidth: 3 },
+                interactionWidth: 20
+              }}
+              elevateNodesOnSelect
+            >
+              {/* FR-3.4 and FR-3.5: Pan/Zoom controls, Minimap, Grid Background */}
+              <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#404040" />
+              <Controls className="bg-[#1e1e1e] border-[#404040] fill-white" />
+              <MiniMap
+                nodeColor={(n) => n.data.selected ? '#4caf50' : '#2d2d2d'}
+                maskColor="rgba(0, 0, 0, 0.6)"
+                className="bg-[#1e1e1e] border border-[#404040]"
+              />
+            </ReactFlow>
 
-          {/* Simple Clear Button to help user reset if old blocks are stuck */}
-          <button
-            onClick={() => { setNodes([]); setEdges([]); setSelectedNodeId(null); }}
-            className="absolute top-4 right-4 z-50 bg-[#1a1a1a] border border-[#333] text-red-500 hover:bg-red-900/20 px-3 py-1.5 rounded text-xs font-bold shadow-lg flex items-center gap-2"
-          >
-            <Trash2 size={12} />
-            Clear Canvas
-          </button>
+            {/* Simple Clear Button to help user reset if old blocks are stuck */}
+            <button
+              onClick={() => { setNodes([]); setEdges([]); setSelectedNodeId(null); }}
+              className="absolute top-4 right-4 z-50 bg-[#1a1a1a] border border-[#333] text-red-500 hover:bg-red-900/20 px-3 py-1.5 rounded text-xs font-bold shadow-lg flex items-center gap-2"
+            >
+              <Trash2 size={12} />
+              Clear Canvas
+            </button>
           </div>
 
           {/* Right-Side Properties Panel */}
@@ -747,7 +820,7 @@ export const XbridgesWorkspace: React.FC<{
             const scopeNode = nodes.find(n => n.id === scopeId);
             if (!scopeNode) return null;
             return (
-              <XbridgesScopeWindow 
+              <XbridgesScopeWindow
                 key={scopeId}
                 block={scopeNode.data}
                 onClose={() => setOpenScopes(prev => prev.filter(id => id !== scopeId))}

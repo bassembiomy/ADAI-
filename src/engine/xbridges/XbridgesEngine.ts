@@ -13,34 +13,61 @@ export class XbridgesEngine {
     this.model.blocks.forEach(b => this.blockMap.set(b.id, b));
   }
 
+  private flatBlocks: XBlock[] = [];
+  private flatConnections: { sourceBlock: string; sourcePort: string; targetBlock: string; targetPort: string }[] = [];
+
+  private flatten() {
+    this.flatBlocks = this.model.blocks.filter(b => b.type !== 'Subsystem');
+    this.flatConnections = [];
+
+    this.model.connections.forEach(conn => {
+      const source = this.blockMap.get(conn.sourceBlock);
+      const target = this.blockMap.get(conn.targetBlock);
+      if (!source || !target) return;
+
+      let sBlock = conn.sourceBlock;
+      let sPort = conn.sourcePort;
+      let tBlock = conn.targetBlock;
+      let tPort = conn.targetPort;
+
+      if (source.type === 'Subsystem') {
+        sBlock = conn.sourcePort; // Subsystem port ID is the internal Outport block ID
+        sPort = 'out';
+      }
+      if (target.type === 'Subsystem') {
+        tBlock = conn.targetPort; // Subsystem port ID is the internal Inport block ID
+        tPort = 'in';
+      }
+
+      this.flatConnections.push({ sourceBlock: sBlock, sourcePort: sPort, targetBlock: tBlock, targetPort: tPort });
+    });
+  }
+
   public compile() {
+    this.flatten();
+    
     // 1. Build adjacency list for Topological Sort
-    // To handle feedback loops, we "break" edges that come from stateful blocks.
     const adjList = new Map<string, string[]>();
     const inDegree = new Map<string, number>();
 
-    this.model.blocks.forEach(b => {
+    this.flatBlocks.forEach(b => {
       adjList.set(b.id, []);
       inDegree.set(b.id, 0);
     });
 
-    this.model.connections.forEach(conn => {
+    this.flatConnections.forEach(conn => {
       const sourceBlock = this.blockMap.get(conn.sourceBlock);
       const targetBlock = this.blockMap.get(conn.targetBlock);
       
-      if (sourceBlock && targetBlock) {
-        // Only count in-degree if the source is NOT stateful OR if we want to allow feedback.
-        // Actually, we ALWAYS build the adjList for execution, but for Kahn's we ignore feedback edges.
+      if (sourceBlock && targetBlock && adjList.has(conn.sourceBlock) && adjList.has(conn.targetBlock)) {
         adjList.get(conn.sourceBlock)!.push(conn.targetBlock);
-        
-        // Break algebraic loop: If source is stateful, it doesn't contribute to in-degree for sorting.
         if (!sourceBlock.isStateful) {
           inDegree.set(conn.targetBlock, inDegree.get(conn.targetBlock)! + 1);
         }
       }
     });
 
-    // 2. Kahn's Algorithm for Topological Sort
+    // 2. Kahn's Algorithm
     const queue: string[] = [];
     inDegree.forEach((degree, blockId) => {
       if (degree === 0) queue.push(blockId);
@@ -53,26 +80,20 @@ export class XbridgesEngine {
       this.executionOrder.push(block);
 
       adjList.get(u)!.forEach(v => {
-        // Only decrement in-degree if it was counted (i.e., source u is NOT stateful)
         if (!block.isStateful) {
           inDegree.set(v, inDegree.get(v)! - 1);
-          if (inDegree.get(v) === 0) {
-            queue.push(v);
-          }
+          if (inDegree.get(v) === 0) queue.push(v);
         }
       });
     }
 
-    // Validation: Check if all blocks are in execution order
-    if (this.executionOrder.length !== this.model.blocks.length) {
-      const missing = this.model.blocks.filter(b => !this.executionOrder.includes(b));
-      console.warn("Algebraic loop detected without stateful components. These blocks might not execute correctly:", missing.map(m => m.type));
-      // Add missing blocks anyway to avoid complete failure, though they might have stale inputs
+    if (this.executionOrder.length !== this.flatBlocks.length) {
+      const missing = this.flatBlocks.filter(b => !this.executionOrder.includes(b));
       missing.forEach(m => this.executionOrder.push(m));
     }
 
     // 3. Initialize signal map
-    this.model.blocks.forEach(b => {
+    this.flatBlocks.forEach(b => {
       b.outputs.forEach(out => {
         this.signalValues.set(`${b.id}.${out.id}`, out.value);
       });
@@ -83,7 +104,7 @@ export class XbridgesEngine {
 
   public gatherInputs(block: XBlock): any[] {
     return block.inputs.map(inPort => {
-      const conn = this.model.connections.find(c => c.targetBlock === block.id && c.targetPort === inPort.id);
+      const conn = this.flatConnections.find(c => c.targetBlock === block.id && c.targetPort === inPort.id);
       if (conn) {
         return this.signalValues.get(`${conn.sourceBlock}.${conn.sourcePort}`);
       }
@@ -162,7 +183,7 @@ export class XbridgesEngine {
       return this.signalValues.get(key);
     }
     // If it's an input port, try to find what's connected to it
-    const conn = this.model.connections.find(c => c.targetBlock === blockId && c.targetPort === portId);
+    const conn = this.flatConnections.find(c => c.targetBlock === blockId && c.targetPort === portId);
     if (conn) {
       return this.signalValues.get(`${conn.sourceBlock}.${conn.sourcePort}`);
     }

@@ -2337,7 +2337,8 @@ const DoeWorkspace = ({
   onClose: () => void;
   addError: (type: 'error' | 'warning' | 'info', message: string) => void;
 }) => {
-  const [activeModel, setActiveModel] = useState<'RSM' | 'GMDH'>('RSM');
+  const [activeModel, setActiveModel] = useState<'RSM' | 'GMDH' | 'Taguchi'>('RSM');
+  const [taguchiConfig, setTaguchiConfig] = useState<{ objective: 'larger' | 'smaller' | 'nominal' }>({ objective: 'larger' });
   const [data, setData] = useState<number[][]>([[0, 0, 0], [1, 0, 1], [0, 1, 1], [1, 1, 4]]);
   const [headers, setHeaders] = useState<string[]>(['X1', 'X2', 'Y']);
   const [results, setResults] = useState<any | null>(null);
@@ -2483,6 +2484,75 @@ const DoeWorkspace = ({
     addError('info', 'GMDH Neural Architecture Trained.');
   };
 
+  const calculateTaguchi = () => {
+    if (!data || data.length < 2) {
+      addError('warning', 'Insufficient data for Taguchi analysis.');
+      return;
+    }
+
+    const factorsCount = headers.length - 1;
+    const factors = headers.slice(0, factorsCount);
+
+    // 1. Calculate S/N Ratios
+    const snRatios = data.map(row => {
+      const y = row[factorsCount];
+      if (taguchiConfig.objective === 'larger') {
+        return -10 * Math.log10(1 / (y * y + 1e-10));
+      } else if (taguchiConfig.objective === 'smaller') {
+        return -10 * Math.log10(y * y + 1e-10);
+      } else {
+        // Nominal is best
+        return -10 * Math.log10(Math.abs(y) + 1e-10); 
+      }
+    });
+
+    // 2. Means Analysis for each factor
+    const factorLevels = factors.map((f, factorIdx) => {
+      const levels = Array.from(new Set(data.map(r => r[factorIdx]))).sort((a, b) => a - b);
+      const means = levels.map(l => {
+        const matchingRowsIndices = data.map((r, i) => r[factorIdx] === l ? i : -1).filter(idx => idx !== -1);
+        const meanY = matchingRowsIndices.reduce((acc, idx) => acc + data[idx][factorsCount], 0) / matchingRowsIndices.length;
+        const meanSN = matchingRowsIndices.reduce((acc, idx) => acc + snRatios[idx], 0) / matchingRowsIndices.length;
+        return { level: l, meanY, meanSN };
+      });
+      const delta = Math.max(...means.map(m => m.meanSN)) - Math.min(...means.map(m => m.meanSN));
+      return { factor: f, means, delta };
+    });
+
+    // 3. Rank factors by Delta
+    const rankedFactors = [...factorLevels].sort((a, b) => b.delta - a.delta).map((f, i) => ({ ...f, rank: i + 1 }));
+
+    // 4. Optimal Combination (Best SN Ratio level for each factor)
+    const optimal = rankedFactors.map(f => {
+      const bestLevel = f.means.reduce((prev, curr) => (curr.meanSN > prev.meanSN ? curr : prev));
+      return { factor: f.factor, level: bestLevel.level, meanSN: bestLevel.meanSN };
+    });
+
+    // 5. ANOVA (Simplified Contribution Analysis)
+    const totalMeanSN = snRatios.reduce((a, b) => a + b, 0) / snRatios.length;
+    const totalSS = snRatios.reduce((acc, sn) => acc + Math.pow(sn - totalMeanSN, 2), 0);
+    const anova = rankedFactors.map(f => {
+      const factorIdx = factors.indexOf(f.factor);
+      const ss = f.means.reduce((acc, m) => {
+        const ni = data.filter(r => r[factorIdx] === m.level).length;
+        return acc + (ni * Math.pow(m.meanSN - totalMeanSN, 2));
+      }, 0);
+      const df = f.means.length - 1;
+      return { factor: f.factor, ss, df, ms: ss / (df || 1), contribution: totalSS > 0 ? (ss / totalSS) * 100 : 0 };
+    });
+
+    setResults({
+      type: 'Taguchi',
+      snRatios,
+      factorLevels: rankedFactors,
+      optimal,
+      anova,
+      objective: taguchiConfig.objective
+    });
+    setActiveModel('Taguchi');
+    addError('info', 'Taguchi Analysis (L/S/N Optimization) Completed.');
+  };
+
   // === Ctrl+S Save DOE Design ===
   const saveDoeDesign = useCallback(() => {
     const design = {
@@ -2591,7 +2661,11 @@ const DoeWorkspace = ({
     pdf.setFont('helvetica', 'bold');
     pdf.text(results.type, margin + 5, y + 20);
     pdf.setTextColor(201, 168, 108);
-    pdf.text(`${(results.R2 * 100).toFixed(2)}%`, margin + 50, y + 20);
+    if (results.type === 'Taguchi') {
+      pdf.text('N/A', margin + 50, y + 20);
+    } else {
+      pdf.text(`${(results.R2 * 100).toFixed(2)}%`, margin + 50, y + 20);
+    }
     pdf.setTextColor(255, 255, 255);
     pdf.text(`${data.length}`, margin + 100, y + 20);
     pdf.text(`${headers.length - 1}`, margin + 140, y + 20);
@@ -2606,7 +2680,9 @@ const DoeWorkspace = ({
     y += 8;
 
     pdf.setFillColor(17, 17, 17);
-    const eqText = results.equation || 'No equation';
+    const eqText = results.type === 'Taguchi' 
+      ? 'Taguchi models optimize S/N ratios for robust design; an explicit polynomial regression equation is not generated.' 
+      : (results.equation || 'No equation');
     const eqLines = pdf.setFont('courier', 'normal').setFontSize(10).splitTextToSize(eqText, contentW - 10);
     const eqH = Math.max(20, eqLines.length * 5 + 10);
 
@@ -2728,6 +2804,9 @@ const DoeWorkspace = ({
             <Button size="sm" variant={activeModel === 'GMDH' ? 'default' : 'secondary'} onClick={calculateGMDH}>
               Run GMDH
             </Button>
+            <Button size="sm" variant={activeModel === 'Taguchi' ? 'default' : 'secondary'} onClick={calculateTaguchi}>
+              Run Taguchi
+            </Button>
           </div>
         </div>
         
@@ -2767,6 +2846,64 @@ const DoeWorkspace = ({
                   </div>
                 </div>
               </section>
+
+              {results.type === 'Taguchi' && (
+                <>
+                  <section>
+                    <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Optimal Combination</h3>
+                    <div className="space-y-2">
+                      {results.optimal?.map((opt: any, idx: number) => (
+                        <div key={idx} className="bg-[#111] p-3 rounded border border-emerald-500/20 flex justify-between items-center">
+                          <span className="text-xs text-gray-400">{opt.factor}</span>
+                          <span className="text-xs font-black text-emerald-400">Level {opt.level}</span>
+                        </div>
+                      ))}
+                      <div className="mt-2 p-2 bg-emerald-500/10 rounded text-center">
+                        <div className="text-[10px] text-emerald-500/70 uppercase font-black">Predicted Average S/N</div>
+                        <div className="text-lg font-mono text-emerald-400">
+                          {results.snRatios ? (results.snRatios.reduce((a: any, b: any) => a + b, 0) / results.snRatios.length).toFixed(2) : '0.00'} dB
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section>
+                    <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">ANOVA (Means)</h3>
+                    <div className="bg-[#111] rounded border border-[#222] overflow-hidden">
+                      <table className="w-full text-[10px] text-left">
+                        <thead className="bg-[#1a1a1a] text-[#666] uppercase">
+                          <tr>
+                            <th className="p-2">Factor</th>
+                            <th className="p-2">Rank</th>
+                            <th className="p-2">Contrib %</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#222]">
+                          {results.factorLevels?.map((f: any, idx: number) => (
+                            <tr key={idx}>
+                              <td className="p-2 text-white">{f.factor}</td>
+                              <td className="p-2 text-[#c9a86c]">#{f.rank}</td>
+                              <td className="p-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 h-1 bg-[#222] rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-[#c9a86c]" 
+                                      style={{ width: `${results.anova?.find((a: any) => a.factor === f.factor)?.contribution || 0}%` }}
+                                    />
+                                  </div>
+                                  <span className="w-8 text-right font-mono">
+                                    {results.anova?.find((a: any) => a.factor === f.factor)?.contribution.toFixed(1)}%
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                </>
+              )}
 
               <section>
                 <div className="flex items-center justify-between mb-3">
@@ -2835,6 +2972,21 @@ const DoeWorkspace = ({
                       {headers.slice(0, -1).map((h, i) => <option key={i} value={i}>{h}</option>)}
                     </select>
                   </div>
+
+                  {activeModel === 'Taguchi' && (
+                    <div>
+                      <Label className="mb-2 block">Objective (S/N)</Label>
+                      <select 
+                        className="w-full bg-[#111] border border-[#222] rounded p-2 text-xs text-white"
+                        value={taguchiConfig.objective}
+                        onChange={e => setTaguchiConfig({ objective: e.target.value as any })}
+                      >
+                        <option value="larger">Larger is Better</option>
+                        <option value="smaller">Smaller is Better</option>
+                        <option value="nominal">Nominal is Best</option>
+                      </select>
+                    </div>
+                  )}
                   
                   <div className="pt-4 border-t border-[#222]">
                     <Label className="mb-3 block">Hold Values (Other Factors)</Label>
@@ -3584,9 +3736,75 @@ const PlotlyPlots = ({
   factors: { x: number, y: number },
   headers: string[],
   holdValues: number[],
-  modelType?: 'RSM' | 'GMDH'
+  modelType?: 'RSM' | 'GMDH' | 'Taguchi'
 }) => {
   if (!results || !data) return <div className="flex items-center justify-center h-full text-[#444]">No Model Calculated</div>;
+
+  if (modelType === 'Taguchi') {
+    // Main Effects Plot for Taguchi
+    const factorIdx = factors.x;
+    const factorData = results.factorLevels?.find((f: any) => headers.indexOf(f.factor) === factorIdx);
+    if (!factorData) return <div className="flex items-center justify-center h-full text-[#444]">Select a factor to plot</div>;
+
+    const levels = factorData.means.map((m: any) => m.level);
+    const meanSN = factorData.means.map((m: any) => m.meanSN);
+    const meanY = factorData.means.map((m: any) => m.meanY);
+
+    const snTrace = {
+      x: levels,
+      y: meanSN,
+      type: 'scatter',
+      mode: 'lines+markers',
+      name: 'Mean S/N Ratio',
+      line: { color: '#c9a86c', width: 3 },
+      marker: { size: 10, color: '#c9a86c' }
+    };
+
+    const meanTrace = {
+      x: levels,
+      y: meanY,
+      type: 'scatter',
+      mode: 'lines+markers',
+      name: 'Mean Response',
+      yaxis: 'y2',
+      line: { color: '#10b981', width: 2, dash: 'dot' },
+      marker: { size: 8, color: '#10b981' }
+    };
+
+    return (
+      <Plot
+        data={[snTrace, meanTrace] as any}
+        layout={{
+          template: { layout: { paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' } },
+          autosize: true,
+          margin: { l: 60, r: 60, t: 60, b: 60 },
+          paper_bgcolor: 'rgba(0,0,0,0)',
+          plot_bgcolor: 'rgba(0,0,0,0)',
+          title: { text: `Main Effects Plot for ${headers[factorIdx]}`, font: { color: '#c9a86c', size: 14, family: 'Inter, sans-serif' } },
+          xaxis: { 
+            title: 'Factor Level', 
+            gridcolor: '#222', 
+            tickfont: { color: '#888' }, 
+            titlefont: { color: '#888' },
+            type: 'category'
+          },
+          yaxis: { title: 'Mean S/N Ratio (dB)', gridcolor: '#222', tickfont: { color: '#c9a86c' }, titlefont: { color: '#c9a86c' } },
+          yaxis2: { 
+            title: 'Mean Response', 
+            overlaying: 'y', 
+            side: 'right', 
+            tickfont: { color: '#10b981' }, 
+            titlefont: { color: '#10b981' },
+            showgrid: false
+          },
+          showlegend: true,
+          legend: { font: { color: '#e0e0e0', size: 10 }, bgcolor: 'rgba(0,0,0,0)', orientation: 'h', y: -0.2 }
+        } as any}
+        useResizeHandler
+        className="w-full h-full"
+      />
+    );
+  }
 
   const idxX = factors.x;
   const idxY = factors.y;

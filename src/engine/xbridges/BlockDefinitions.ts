@@ -437,17 +437,43 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   // --- Ports ---
   'Inport': (id, params) => ({
-    id, type: 'Inport', params: { portNumber: params.portNumber ?? 1, value: params.value ?? 0, smVarId: params.smVarId ?? '' },
-    inputs: [],
+    id, type: 'Inport', params: { 
+      port_index: params.port_index || 1, 
+      name: params.name || `In${params.port_index || 1}`,
+      data_type: params.data_type || 'auto',
+      dimension: params.dimension || 1,
+      value: params.value ?? 0, 
+      smVarId: params.smVarId ?? '' 
+    },
+    inputs: [createPort('in', 'In', 'input')], // Bridge from parent
     outputs: [createPort('out', 'Out', 'output', params.value ?? 0)],
-    execute: (ins, p) => ({ outputs: [Number(p.value || 0)] })
+    state: { value: 0 },
+    execute: (ins, p, state) => ({ outputs: [ins[0] !== undefined ? ins[0] : (state.value || Number(p.value || 0))] })
   }),
 
   'Outport': (id, params) => ({
-    id, type: 'Outport', params: { portNumber: params.portNumber ?? 1, smVarId: params.smVarId ?? '' },
+    id, type: 'Outport', params: { 
+      port_index: params.port_index || 1, 
+      name: params.name || `Out${params.port_index || 1}`,
+      data_type: params.data_type || 'auto',
+      dimension: params.dimension || 1,
+      smVarId: params.smVarId ?? '' 
+    },
     inputs: [createPort('in', 'In', 'input')],
+    outputs: [createPort('out', 'Out', 'output')], // Bridge to parent
+    execute: (ins) => ({ outputs: [ins[0]] })
+  }),
+
+  'Subsystem': (id, params) => ({
+    id, type: 'Subsystem',
+    params: { 
+      name: params.name || 'Subsystem',
+      mask: params.mask || {},
+      atomic_execution: params.atomic_execution || false
+    },
+    inputs: [], 
     outputs: [],
-    execute: () => ({ outputs: [] })
+    execute: () => ({ outputs: [] }) 
   }),
 
   // --- PWM Generators ---
@@ -1916,3 +1942,124 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   })
 };
+
+export const XBRIDGES_CATEGORIES = [
+  {
+    name: 'Sources',
+    blocks: [
+      { type: 'Constant', label: 'Constant', icon: 'square' },
+      { type: 'WaveformGen', label: 'Waveform Gen', icon: 'activity' },
+    ]
+  },
+  {
+    name: 'Element-wise Math',
+    blocks: [
+      { type: 'VectorAdd', label: 'Add', icon: 'plus' },
+      { type: 'VectorSub', label: 'Subtract', icon: 'minus' },
+      { type: 'VectorMul', label: 'Multiply', icon: 'x' },
+      { type: 'VectorDiv', label: 'Divide', icon: 'divide' },
+      { type: 'VectorPow', label: 'Power', icon: 'chevron-up' },
+      { type: 'UnaryNeg', label: 'Unary Minus', icon: 'minus-circle' },
+      { type: 'Abs', label: 'Absolute Value', icon: 'maximize' },
+    ]
+  },
+  {
+    name: 'Reductions',
+    blocks: [
+      { type: 'SumElements', label: 'Sum of Elements', icon: 'sigma' },
+      { type: 'Mean', label: 'Mean', icon: 'bar-chart' },
+      { type: 'Max', label: 'Max', icon: 'arrow-up' },
+    ]
+  },
+  {
+    name: 'Linear Algebra',
+    blocks: [
+      { type: 'MatrixMul', label: 'Matrix Multiply', icon: 'grid' },
+      { type: 'Transpose', label: 'Transpose', icon: 'rotate-cw' },
+      { type: 'Inverse', label: 'Inverse', icon: 'refresh-ccw' },
+      { type: 'Determinant', label: 'Determinant', icon: 'hash' },
+    ]
+  },
+  {
+    name: 'Continuous',
+    blocks: [
+      { type: 'Integrator', label: 'Integrator', icon: 'integral' },
+    ]
+  },
+  {
+    name: 'Logic Gates',
+    blocks: [
+      { type: 'AND', label: 'AND Gate', icon: 'plus' },
+      { type: 'OR', label: 'OR Gate', icon: 'grid' },
+      { type: 'NOT', label: 'NOT Gate', icon: 'minus-circle' },
+      { type: 'NAND', label: 'NAND Gate', icon: 'plus' },
+      { type: 'NOR', label: 'NOR Gate', icon: 'grid' },
+      { type: 'XOR', label: 'XOR Gate', icon: 'plus' },
+    ]
+  },
+  {
+    name: 'Bitwise',
+    blocks: [
+      { type: 'BitwiseAND', label: 'Bitwise AND', icon: 'plus' },
+      { type: 'BitwiseOR', label: 'Bitwise OR', icon: 'grid' },
+      { type: 'BitwiseXOR', label: 'Bitwise XOR', icon: 'plus' },
+      { type: 'BitwiseNOT', label: 'Bitwise NOT', icon: 'minus-circle' },
+      { type: 'ShiftLeft', label: 'Shift Left', icon: 'chevron-left' },
+      { type: 'ShiftRight', label: 'Shift Right', icon: 'chevron-right' },
+    ]
+  },
+  {
+    name: 'Sequential',
+    blocks: [
+      { type: 'DFlipFlop', label: 'D Flip-Flop', icon: 'refresh-ccw' },
+      { type: 'JKFlipFlop', label: 'JK Flip-Flop', icon: 'refresh-ccw' },
+      { type: 'Register', label: 'Register', icon: 'box' },
+      { type: 'Counter', label: 'Counter', icon: 'trending-up' },
+      { type: 'Clock', label: 'Clock', icon: 'rotate-cw' },
+    ]
+  },
+  {
+    name: 'Sinks',
+    blocks: [
+      { type: 'Scope', label: 'Scope', icon: 'monitor' },
+    ]
+  },
+  {
+    name: 'Ports',
+    blocks: [
+      { type: 'Inport', label: 'Inport', icon: 'log-in' },
+      { type: 'Outport', label: 'Outport', icon: 'log-out' },
+    ]
+  },
+  {
+    name: 'Signal Routing',
+    blocks: [
+      { type: 'MUX', label: 'Mux', icon: 'layers' },
+      { type: 'DEMUX', label: 'Demux', icon: 'grid' },
+    ]
+  },
+  {
+    name: 'Motor Control',
+    blocks: [
+      { type: 'VF_SLIP_COMP', label: 'V/f + Slip Comp', icon: 'zap' },
+      { type: 'SIX_STEP_COMMUTATION', label: 'Six-Step BLDC', icon: 'cpu' },
+      { type: 'SENSORLESS_SIX_STEP', label: 'Sensorless BLDC', icon: 'cpu' }
+    ]
+  },
+  {
+    name: 'Torque Optimization',
+    blocks: [
+      { type: 'MTPA_CONTROLLER', label: 'MTPA Controller', icon: 'zap' },
+      { type: 'FIELD_WEAKENING', label: 'Field Weakening', icon: 'activity' },
+      { type: 'MTPA_FW_MANAGER', label: 'MTPA + FW Manager', icon: 'cpu' }
+    ]
+  },
+  {
+    name: 'Subsystem Architecture',
+    blocks: [
+      { type: 'Subsystem', label: 'Subsystem', icon: 'layers' },
+      { type: 'Inport', label: 'Inport', icon: 'arrow-right-circle' },
+      { type: 'Outport', label: 'Outport', icon: 'arrow-left-circle' }
+    ]
+  }
+];
