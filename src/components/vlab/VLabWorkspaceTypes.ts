@@ -7,4 +7,5 @@ export interface VLabWorkspaceProps {
   onEdgesChange: (edges: Edge[]) => void;
   onResult: (result: any, nodes: Node[]) => void;
   onSendToDOE: (data: any) => void;
+  onBack: () => void;
 }

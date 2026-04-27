@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import { XbridgesWorkspace } from './components/xbridges/XbridgesWorkspace';
+import { VLabWorkspace } from './components/vlab/VLabWorkspace';
 import { XbridgesEngine } from './engine/xbridges/XbridgesEngine';
 import { Solvers } from './engine/xbridges/Solvers';
 import { GMDHEngine, solveLeastSquares } from './engine/gmdh/gmdh_core/combi';
@@ -383,7 +384,7 @@ interface StateData {
 }
 
 type ManagedWindowId = 'hmi' | 'pid' | 'rtm' | 'doe';
-type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges';
+type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab';
 
 interface ManagedWindowState {
   id: ManagedWindowId;
@@ -4137,6 +4138,10 @@ const ADIA = () => {
   // Global X-Bridges persistence
   const [globalXBridgesNodes, setGlobalXBridgesNodes] = useState<any[]>([]);
   const [globalXBridgesEdges, setGlobalXBridgesEdges] = useState<any[]>([]);
+
+  // V-Lab STATE
+  const [vlabNodes, setVlabNodes] = useState<any[]>([]);
+  const [vlabEdges, setVlabEdges] = useState<any[]>([]);
 
   const projectImportRef = useRef<HTMLInputElement>(null);
 
@@ -8790,6 +8795,25 @@ const ADIA = () => {
     );
   }
 
+  if (diagramMode === 'vlab') {
+    return (
+      <div className="fixed inset-0 z-50 bg-[#0a0a0a]">
+        <VLabWorkspace
+          nodes={vlabNodes}
+          edges={vlabEdges}
+          onNodesChange={(nodes) => setVlabNodes(nodes)}
+          onEdgesChange={(edges) => setVlabEdges(edges)}
+          onResult={(res) => console.log('V-Lab Result:', res)}
+          onSendToDOE={(data) => {
+            // Logic to send V-Lab results to DOE
+            toggleWindow('doe');
+          }}
+          onBack={() => setDiagramMode('statemachine')}
+        />
+      </div>
+    );
+  }
+
   return (
     <>
       {showWelcome && <WelcomeOverlay onComplete={() => setShowWelcome(false)} />}
@@ -8834,6 +8858,9 @@ const ADIA = () => {
           </button>
           <button onClick={() => setDiagramMode('xbridges')} className={`px-3 py-1 text-xs rounded ${(diagramMode as DiagramMode) === 'xbridges' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
             X-Bridges
+          </button>
+          <button onClick={() => setDiagramMode('vlab')} className={`px-3 py-1 text-xs rounded ${(diagramMode as DiagramMode) === 'vlab' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
+            V-Lab
           </button>
         </div>
 
