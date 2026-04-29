@@ -4,6 +4,7 @@ import Plot from 'react-plotly.js';
 import { v4 as uuidv4 } from 'uuid';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 import { XbridgesWorkspace } from './components/xbridges/XbridgesWorkspace';
 import { VLabWorkspace } from './components/vlab/VLabWorkspace';
 import { XbridgesEngine } from './engine/xbridges/XbridgesEngine';
@@ -13,7 +14,8 @@ import {
   Trash2, Plus, Layers, Settings2, Search, Save, Box,
   ChevronDown, ChevronRight, Play, Pause, Square,
   MousePointer2, Upload, FileText, Download,
-  Activity, Zap, Database, Cpu, Layout, Maximize2, X
+  Activity, Zap, Database, Cpu, Layout, Maximize2, X,
+  LayoutGrid, Rows
 } from 'lucide-react';
 
 // =============================================================================
@@ -469,6 +471,10 @@ interface BlockData {
   risk?: string;
   verificationMethod?: string;
   source?: string;
+  ibdX?: number;
+  ibdY?: number;
+  ibdWidth?: number;
+  ibdHeight?: number;
 }
 
 interface RelationshipData {
@@ -2964,7 +2970,7 @@ const DoeWorkspace = ({
                 </>
               )}
 
-              <section>
+              <div>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest">Equation</h3>
                   <div className="flex gap-1">
@@ -2996,7 +3002,7 @@ const DoeWorkspace = ({
                     </div>
                   </div>
                 )}
-              </section>
+              </div>
 
               <section>
                 <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Plot Config</h3>
@@ -4238,6 +4244,387 @@ const PlotlyPlots = ({
     </div>
   );
 };
+const ReportPreviewModal = ({ 
+  isOpen, 
+  onClose, 
+  results, 
+  data, 
+  headers, 
+  plotFactors, 
+  holdValues 
+}: any) => {
+  const [layout, setLayout] = useState<'1-col' | '2-col'>('1-col');
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  if (!isOpen) return null;
+
+  const exportToWord = async () => {
+    if (!previewRef.current) return;
+    
+    const clone = previewRef.current.cloneNode(true) as HTMLDivElement;
+    const originalPlots = previewRef.current.querySelectorAll('.js-plotly-plot');
+    const clonePlots = clone.querySelectorAll('.js-plotly-plot');
+    
+    // We replace interactive plotly divs with static images for Word
+    for (let i = 0; i < originalPlots.length; i++) {
+      try {
+        const plot = originalPlots[i] as any;
+        if (plot.data && plot.layout) {
+             const canvas = await html2canvas(plot);
+             const imgData = canvas.toDataURL('image/png');
+             const img = document.createElement('img');
+             img.src = imgData;
+             img.style.width = '100%';
+             clonePlots[i].parentNode?.replaceChild(img, clonePlots[i]);
+        }
+      } catch (e) { console.error('Failed to capture plot', e); }
+    }
+
+    const header = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <head><meta charset='utf-8'><title>ADIA DOE Report</title></head><body style="background-color: #1a1a1a; color: #e0e0e0;">`;
+    const footer = "</body></html>";
+    const sourceHTML = header + clone.innerHTML + footer;
+    
+    const blob = new Blob(['\ufeff', sourceHTML], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `ADIA_DOE_Report_${new Date().getTime()}.doc`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportToPDF = async () => {
+    if (!previewRef.current) return;
+    try {
+      const canvas = await html2canvas(previewRef.current, { scale: 2, backgroundColor: '#1a1a1a' });
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`ADIA_DOE_Report_${new Date().getTime()}.pdf`);
+    } catch (e) {
+      console.error('PDF generation failed', e);
+    }
+  };
+
+  const plotsToShow = results?.type === 'RSM' ? ['surface', 'contour', 'pareto', 'residuals'] :
+                      results?.type === 'Taguchi' ? ['taguchi_delta'] :
+                      ['surface', 'contour', 'pred_vs_act'];
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="bg-[#111] border border-[#333] rounded-xl w-full max-w-6xl h-full max-h-[90vh] flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between p-4 border-b border-[#222]">
+          <div className="flex items-center gap-2">
+            <FileText size={20} className="text-[#c9a86c]" />
+            <h2 className="text-lg font-bold text-white">Report Preview</h2>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1 bg-[#1a1a1a] rounded-lg p-1 border border-[#333]">
+              <button 
+                onClick={() => setLayout('1-col')} 
+                className={`p-1.5 rounded transition-colors ${layout === '1-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                title="1 Column Layout"
+              >
+                <Rows size={16} />
+              </button>
+              <button 
+                onClick={() => setLayout('2-col')} 
+                className={`p-1.5 rounded transition-colors ${layout === '2-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                title="2 Columns Grid"
+              >
+                <LayoutGrid size={16} />
+              </button>
+            </div>
+            
+            <Button size="sm" onClick={exportToPDF} className="bg-red-600 hover:bg-red-700 text-white border-0">
+              <Download size={14} className="mr-2" /> PDF
+            </Button>
+            <Button size="sm" onClick={exportToWord} className="bg-blue-600 hover:bg-blue-700 text-white border-0">
+              <Download size={14} className="mr-2" /> Word (.doc)
+            </Button>
+            <button onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors">
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-8 bg-[#0a0a0a] flex justify-center custom-scrollbar">
+          <div 
+            ref={previewRef} 
+            className="bg-[#1a1a1a] w-full max-w-[210mm] min-h-[297mm] shadow-2xl p-10 text-[#e0e0e0] border border-[#333]"
+            style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
+          >
+            <div style={{ borderBottom: '2px solid #c9a86c', paddingBottom: '10px', marginBottom: '20px' }}>
+              <h1 style={{ fontSize: '24px', color: '#c9a86c', margin: 0, fontWeight: 'bold' }}>ADIA DOE Analysis Report</h1>
+              <p style={{ color: '#888', fontSize: '12px', margin: '5px 0 0 0' }}>Generated: {new Date().toLocaleString()}</p>
+              <p style={{ color: '#888', fontSize: '12px', margin: 0 }}>Model Type: {results?.type}</p>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '18px', color: '#c9a86c', borderBottom: '1px solid #333', paddingBottom: '5px', fontWeight: 'bold' }}>1. Model Summary</h2>
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#222' }}>
+                    <th style={{ padding: '8px', border: '1px solid #444', textAlign: 'left', color: '#aaa' }}>Model Type</th>
+                    <th style={{ padding: '8px', border: '1px solid #444', textAlign: 'left', color: '#aaa' }}>R-Squared (Adj)</th>
+                    <th style={{ padding: '8px', border: '1px solid #444', textAlign: 'left', color: '#aaa' }}>Std Error (S)</th>
+                    <th style={{ padding: '8px', border: '1px solid #444', textAlign: 'left', color: '#aaa' }}>F-Statistic</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style={{ padding: '8px', border: '1px solid #444' }}>{results?.type}</td>
+                    <td style={{ padding: '8px', border: '1px solid #444' }}>{results?.type === 'Taguchi' ? 'N/A' : `${(results?.R2Adj ? results.R2Adj * 100 : (results?.R2 || 0) * 100).toFixed(2)}%`}</td>
+                    <td style={{ padding: '8px', border: '1px solid #444' }}>{results?.S ? results.S.toFixed(4) : 'N/A'}</td>
+                    <td style={{ padding: '8px', border: '1px solid #444' }}>{results?.F ? results.F.toFixed(2) : 'N/A'}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '18px', color: '#c9a86c', borderBottom: '1px solid #333', paddingBottom: '5px', fontWeight: 'bold' }}>2. Model Equation</h2>
+              <div style={{ backgroundColor: '#111', padding: '15px', borderRadius: '4px', border: '1px solid #333', fontFamily: 'monospace', fontSize: '12px', color: '#10b981' }}>
+                {results?.type === 'Taguchi' 
+                  ? 'Taguchi models optimize S/N ratios for robust design; an explicit polynomial regression equation is not generated.' 
+                  : (results?.equation || 'No equation available')}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '18px', color: '#c9a86c', borderBottom: '1px solid #333', paddingBottom: '5px', marginBottom: '15px', fontWeight: 'bold' }}>3. Analysis Diagrams</h2>
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: layout === '2-col' ? '1fr 1fr' : '1fr', 
+                gap: '20px' 
+              }}>
+                {plotsToShow.map(pt => (
+                  <div key={pt} style={{ border: '1px solid #333', padding: '10px', borderRadius: '4px', background: '#111' }}>
+                    <div style={{ width: '100%', height: '350px', overflow: 'hidden' }}>
+                      <PlotlyPlots 
+                        type={pt as any} 
+                        results={results} 
+                        data={data} 
+                        headers={headers} 
+                        factors={plotFactors} 
+                        holdValues={holdValues} 
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const GlobalReportPreviewModal = ({ 
+  isOpen, 
+  onClose, 
+  reportData 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  reportData: { html: string, projectName: string } | null 
+}) => {
+  const [layout, setLayout] = useState<'1-col' | '2-col'>('1-col');
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  if (!isOpen || !reportData) return null;
+
+  const exportToWord = async () => {
+    if (!previewRef.current) return;
+    
+    const clone = previewRef.current.cloneNode(true) as HTMLDivElement;
+    const svgs = clone.querySelectorAll('svg');
+    const images: { id: string, data: string }[] = [];
+    
+    // Convert SVGs to images and collect them
+    for (let i = 0; i < svgs.length; i++) {
+      try {
+        const svg = svgs[i];
+        if (!svg.getAttribute('xmlns')) {
+          svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        }
+        
+        const svgData = new XMLSerializer().serializeToString(svg);
+        const canvas = document.createElement("canvas");
+        const scale = 2;
+        const width = parseInt(svg.getAttribute("width") || "800");
+        const height = parseInt(svg.getAttribute("height") || "600");
+        
+        canvas.width = width * scale;
+        canvas.height = height * scale;
+        const ctx = canvas.getContext("2d");
+        
+        const img = document.createElement("img");
+        img.setAttribute("src", "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData))));
+        
+        await new Promise((resolve) => {
+          img.onload = () => {
+            if (ctx) {
+              ctx.fillStyle = "white";
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.scale(scale, scale);
+              ctx.drawImage(img, 0, 0);
+            }
+            resolve(true);
+          };
+          img.onerror = resolve;
+        });
+
+        const imgData = canvas.toDataURL("image/png");
+        const base64Content = imgData.split(',')[1];
+        const imageId = `img_${i}`;
+        images.push({ id: imageId, data: base64Content });
+
+        const newImg = document.createElement('img');
+        newImg.src = `cid:${imageId}`; // Use Content-ID for MHTML
+        
+        // Cap the display width so it doesn't overflow Word's page margins, keeping font scale reasonable
+        const MAX_WORD_WIDTH = 650;
+        const displayWidth = width > MAX_WORD_WIDTH ? MAX_WORD_WIDTH : width;
+        newImg.setAttribute('width', displayWidth.toString());
+        
+        svg.parentNode?.replaceChild(newImg, svg);
+      } catch (e) { console.error('Failed to capture SVG', e); }
+    }
+
+    const htmlContent = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'>
+      <head><meta charset='utf-8'><title>${reportData.projectName} Report</title></head>
+      <body style="font-family: 'Calibri', 'Segoe UI', sans-serif; font-size: 11pt; line-height: 1.5; background-color: #ffffff; color: #333333; margin: 0 auto; max-width: 800px;">
+        ${clone.innerHTML}
+      </body>
+      </html>
+    `;
+
+    // Construct MHTML
+    const boundary = "----=_NextPart_" + Math.random().toString(36).substring(2);
+    let mhtml = `MIME-Version: 1.0\nContent-Type: multipart/related; boundary="${boundary}"\n\n`;
+    
+    // HTML Part
+    mhtml += `--${boundary}\nContent-Type: text/html; charset="utf-8"\nContent-Transfer-Encoding: 8bit\n\n`;
+    mhtml += htmlContent + `\n\n`;
+
+    // Image Parts
+    images.forEach(img => {
+      mhtml += `--${boundary}\nContent-Type: image/png\nContent-Transfer-Encoding: base64\nContent-ID: <${img.id}>\n\n`;
+      mhtml += img.data + `\n\n`;
+    });
+
+    mhtml += `--${boundary}--`;
+
+    const blob = new Blob([mhtml], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${reportData.projectName.replace(/\s+/g, '_')}_Report.doc`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportToHTML = () => {
+    const blob = new Blob([reportData.html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${reportData.projectName.replace(/\s+/g, '_')}_Report.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="bg-[#111] border border-[#333] rounded-xl w-full max-w-6xl h-full max-h-[90vh] flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between p-4 border-b border-[#222]">
+          <div className="flex items-center gap-2">
+            <FileText size={20} className="text-[#c9a86c]" />
+            <h2 className="text-lg font-bold text-white">Global Project Report</h2>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1 bg-[#1a1a1a] rounded-lg p-1 border border-[#333]">
+              <button 
+                onClick={() => setLayout('1-col')} 
+                className={`p-1.5 rounded transition-colors ${layout === '1-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                title="1 Column Layout"
+              >
+                <Rows size={16} />
+              </button>
+              <button 
+                onClick={() => setLayout('2-col')} 
+                className={`p-1.5 rounded transition-colors ${layout === '2-col' ? 'bg-[#333] text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                title="2 Columns Grid"
+              >
+                <LayoutGrid size={16} />
+              </button>
+            </div>
+            
+            <Button size="sm" onClick={exportToHTML} className="bg-emerald-600 hover:bg-emerald-700 text-white border-0">
+              <Download size={14} className="mr-2" /> HTML
+            </Button>
+            <Button size="sm" onClick={exportToWord} className="bg-blue-600 hover:bg-blue-700 text-white border-0">
+              <Download size={14} className="mr-2" /> Word (.doc)
+            </Button>
+            <button onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors">
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-8 bg-[#0a0a0a] flex justify-center custom-scrollbar">
+          <div 
+            ref={previewRef} 
+            className="bg-white w-full max-w-[210mm] min-h-[297mm] shadow-2xl p-10 text-black border border-[#333] global-report-content"
+            style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}
+          >
+            <style>{`
+              .global-report-content h1 { color: #c9a86c; border-bottom: 2px solid #c9a86c; padding-bottom: 10px; margin-bottom: 20px; }
+              .global-report-content h2 { color: #222; border-bottom: 1px solid #eee; margin-top: 40px; padding-bottom: 5px; }
+              .global-report-content h3 { color: #444; margin-top: 25px; font-size: 1.1em; }
+              .global-report-content .meta { color: #666; font-size: 0.9em; margin-bottom: 40px; }
+              .global-report-content .tree { margin-left: 20px; border-left: 1px solid #ddd; padding-left: 15px; }
+              .global-report-content .item { margin-bottom: 15px; }
+              .global-report-content .item-header { font-weight: bold; color: #000; }
+              .global-report-content .props { font-size: 0.9em; color: #555; margin-left: 10px; }
+              .global-report-content .tag { background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }
+              
+              /* Layout styles */
+              .global-report-content .diagram-container {
+                 display: ${layout === '2-col' ? 'grid' : 'block'};
+                 grid-template-columns: ${layout === '2-col' ? '1fr 1fr' : '1fr'};
+                 gap: 20px;
+              }
+              .global-report-content .diagram-cell {
+                 break-inside: avoid;
+              }
+              .global-report-content svg {
+                 max-width: 100%;
+                 height: auto;
+              }
+            `}</style>
+            <div 
+              dangerouslySetInnerHTML={{ 
+                __html: reportData.html.replace(/.*?<body>/s, '').replace(/<\/body>.*?/s, '') 
+              }} 
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ADIA = () => {
   const [showWelcome, setShowWelcome] = useState(true);
   // STATE HOOKS
@@ -4285,6 +4672,8 @@ const ADIA = () => {
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [currentError, setCurrentError] = useState<ErrorItem | null>(null);
   const [showReportDialog, setShowReportDialog] = useState(false);
+  const [showGlobalReportPreview, setShowGlobalReportPreview] = useState(false);
+  const [globalReportData, setGlobalReportData] = useState<{ html: string, projectName: string } | null>(null);
 
   // Window Management State
   const [managedWindows, setManagedWindows] = useState<Record<ManagedWindowId, ManagedWindowState>>({
@@ -4505,7 +4894,7 @@ const ADIA = () => {
   // Resizing state
   const [isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
-  const [resizeStart, setResizeStart] = useState<{ id: string, x: number, y: number, w: number, h: number, mx: number, my: number, type?: 'block' | 'state' } | null>(null);
+  const [resizeStart, setResizeStart] = useState<{ id: string, x: number, y: number, w: number, h: number, mx: number, my: number, type?: 'block' | 'state' | 'ibdContext' } | null>(null);
 
   // Panel resizing state
   const [hierarchyWidth, setHierarchyWidth] = useState(256);
@@ -4533,6 +4922,8 @@ const ADIA = () => {
   }, [setIsRunning, setErrors, setCurrentError, setShowErrorDialog]);
 
   // === Professional Report Generation ===
+  const [showReportPreview, setShowReportPreview] = useState(false);
+
   const generateReport = useCallback(() => {
     if (!results) {
       addError('warning', 'No model results to export. Run a model first.');
@@ -6764,7 +7155,11 @@ const ADIA = () => {
     if (block) {
       setIsResizing(true);
       setResizeHandle(handle);
-      setResizeStart({ id: block.id, x: block.x, y: block.y, w: block.width, h: block.height, mx: worldX, my: worldY, type: 'block' });
+      if (diagramMode === 'ibd' && block.id === currentLayerId) {
+        setResizeStart({ id: block.id, x: block.ibdX ?? 50, y: block.ibdY ?? 50, w: block.ibdWidth ?? 1200, h: block.ibdHeight ?? 800, mx: worldX, my: worldY, type: 'ibdContext' });
+      } else {
+        setResizeStart({ id: block.id, x: block.x, y: block.y, w: block.width, h: block.height, mx: worldX, my: worldY, type: 'block' });
+      }
       addToHistory();
       return;
     }
@@ -6886,6 +7281,8 @@ const ADIA = () => {
 
       if (resizeStart.type === 'state') {
         updateState(resizeStart.id, { x: newX, y: newY, width: newW, height: newH });
+      } else if (resizeStart.type === 'ibdContext') {
+        updateBlock(resizeStart.id, { ibdX: newX, ibdY: newY, ibdWidth: newW, ibdHeight: newH });
       } else {
         updateBlock(resizeStart.id, { x: newX, y: newY, width: newW, height: newH });
       }
@@ -6906,6 +7303,12 @@ const ADIA = () => {
 
       if (element) {
         let elX = element.x, elY = element.y, elW = element.width, elH = element.height;
+        if (isContext && diagramMode === 'ibd') {
+          elX = block!.ibdX ?? 50;
+          elY = block!.ibdY ?? 50;
+          elW = block!.ibdWidth ?? 1200;
+          elH = block!.ibdHeight ?? 800;
+        }
 
         const relX = worldX - elX;
         const relY = worldY - elY;
@@ -7004,12 +7407,21 @@ const ADIA = () => {
         // BDD Blocks
         const block = blocks.find(b => b.id === id);
         if (block) {
-          const newX = block.x + dx;
-          const newY = block.y + dy;
-          updateBlock(id, {
-            x: snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX,
-            y: snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY
-          });
+          if (diagramMode === 'ibd' && block.id === currentLayerId) {
+            const newX = (block.ibdX ?? 50) + dx;
+            const newY = (block.ibdY ?? 50) + dy;
+            updateBlock(id, {
+              ibdX: snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX,
+              ibdY: snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY
+            });
+          } else {
+            const newX = block.x + dx;
+            const newY = block.y + dy;
+            updateBlock(id, {
+              x: snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX,
+              y: snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY
+            });
+          }
         }
 
         // IBD Parts
@@ -7025,8 +7437,12 @@ const ADIA = () => {
           if (diagramMode === 'ibd') {
             const contextBlock = blocks.find(b => b.id === currentLayerId);
             if (contextBlock) {
-              finalX = Math.max(contextBlock.x, Math.min(finalX, contextBlock.x + contextBlock.width - part.width));
-              finalY = Math.max(contextBlock.y, Math.min(finalY, contextBlock.y + contextBlock.height - part.height));
+              const cx = contextBlock.ibdX ?? 50;
+              const cy = contextBlock.ibdY ?? 50;
+              const cw = contextBlock.ibdWidth ?? 1200;
+              const ch = contextBlock.ibdHeight ?? 800;
+              finalX = Math.max(cx, Math.min(finalX, cx + cw - part.width));
+              finalY = Math.max(cy, Math.min(finalY, cy + ch - part.height));
             }
           }
 
@@ -7720,7 +8136,15 @@ const ADIA = () => {
       });
       html += renderDiagramSVG(reqs, reqRels, 'req');
 
-      html += `<h2>1. Requirements</h2><div class="tree">`;
+      html += `<h2>1. Requirements</h2>`;
+      html += `<table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.9em;">`;
+      html += `<tr style="background-color: #f5f5f5; text-align: left; color: #333;">
+                <th style="padding: 10px; border: 1px solid #ddd;">ID</th>
+                <th style="padding: 10px; border: 1px solid #ddd;">Name</th>
+                <th style="padding: 10px; border: 1px solid #ddd;">Status</th>
+                <th style="padding: 10px; border: 1px solid #ddd;">Priority</th>
+                <th style="padding: 10px; border: 1px solid #ddd;">Description</th>
+              </tr>`;
 
       // Build hierarchy map
       const childrenMap = new Map<string, string[]>();
@@ -7730,7 +8154,7 @@ const ADIA = () => {
         const source = blocks.find(b => b.id === rel.sourceId);
         const target = blocks.find(b => b.id === rel.targetId);
         if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
-          // SysML containment: Composition or Derive
+          // Only use specific SysML relationships for parent-child nesting, matching the Traceability Matrix
           if (rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt') {
             if (!childrenMap.has(rel.sourceId)) childrenMap.set(rel.sourceId, []);
             childrenMap.get(rel.sourceId)!.push(rel.targetId);
@@ -7742,40 +8166,39 @@ const ADIA = () => {
       // Roots are requirements that are not children of any other requirement
       const roots = reqs.filter(r => !parentSet.has(r.id));
 
-      // Recursive render function
-      const renderReq = (r: BlockData, number: string) => {
-        let itemHtml = `<div class="item">
-                <div class="item-header">${number} ${r.name} <span class="tag">${r.status || 'Draft'}</span> <span class="tag" style="background:#222;color:#c9a86c;border:1px solid #c9a86c">${r.reqId}</span></div>
-                <div class="props">${r.description || 'No description'}</div>
-                <div class="props">Priority: ${r.priority || 'Medium'}</div>
-            </div>`;
+      // Recursive render function for table rows
+      const renderReqRow = (r: BlockData, level: number) => {
+        const prefix = '&nbsp;&nbsp;&nbsp;&nbsp;'.repeat(level) + (level > 0 ? '└ ' : '');
+        let rowHtml = `<tr>
+          <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; color: #888;">${r.reqId}</td>
+          <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${prefix}${r.name}</td>
+          <td style="padding: 10px; border: 1px solid #ddd;">${r.status || 'Draft'}</td>
+          <td style="padding: 10px; border: 1px solid #ddd;">${r.priority || 'Medium'}</td>
+          <td style="padding: 10px; border: 1px solid #ddd;">${r.description || ''}</td>
+        </tr>`;
 
         const children = childrenMap.get(r.id) || [];
-        if (children.length > 0) {
-          itemHtml += `<div class="tree">`;
-          children.forEach((childId, idx) => {
-            const child = reqs.find(x => x.id === childId);
-            if (child) {
-              itemHtml += renderReq(child, `${number}.${idx + 1}`);
-            }
-          });
-          itemHtml += `</div>`;
-        }
-        return itemHtml;
+        children.forEach(childId => {
+          const child = reqs.find(x => x.id === childId);
+          if (child) {
+            rowHtml += renderReqRow(child, level + 1);
+          }
+        });
+        return rowHtml;
       };
 
       if (roots.length === 0 && reqs.length > 0) {
-        // Fallback if circular or no explicit roots found (e.g. all associations)
-        reqs.forEach((r, i) => {
-          html += renderReq(r, `${i + 1}`);
+        // Fallback if circular or no explicit roots found
+        reqs.forEach((r) => {
+          html += renderReqRow(r, 0);
         });
       } else {
-        roots.forEach((r, i) => {
-          html += renderReq(r, `${i + 1}`);
+        roots.forEach((r) => {
+          html += renderReqRow(r, 0);
         });
       }
 
-      html += `</div>`;
+      html += `</table>`;
     }
 
     // 2. BDD
@@ -7796,7 +8219,7 @@ const ADIA = () => {
         const tHidden = parts.some(p => p.typeId === t.id);
         return s.stereotype !== 'requirement' && t.stereotype !== 'requirement' && !sHidden && !tHidden;
       });
-      html += renderDiagramSVG(bddBlocks, bddRels, 'bdd');
+      html += `<div class="diagram-container"><div class="diagram-cell">` + renderDiagramSVG(bddBlocks, bddRels, 'bdd') + `</div></div>`;
 
       html += `<h2>2. System Architecture (BDD)</h2><div class="tree">`;
       bddBlocks.forEach(b => {
@@ -7823,6 +8246,7 @@ const ADIA = () => {
 
       // Generate diagrams for each context
       const contextIds = Array.from(new Set(parts.map(p => p.blockId).filter(id => id !== null))) as string[];
+      html += `<div class="diagram-container">`;
       contextIds.forEach(ctxId => {
         const ctxBlock = blocks.find(b => b.id === ctxId);
         const ctxName = ctxBlock ? ctxBlock.name : (ctxId === 'root' ? 'Root' : 'Unknown');
@@ -7833,9 +8257,10 @@ const ADIA = () => {
           return (s && s.blockId === ctxId) && (t && t.blockId === ctxId);
         });
         if (ctxParts.length > 0) {
-          html += `<h3>Context: ${ctxName}</h3>` + renderDiagramSVG(ctxParts, ctxConns, 'ibd');
+          html += `<div class="diagram-cell"><h3>Context: ${ctxName}</h3>` + renderDiagramSVG(ctxParts, ctxConns, 'ibd') + `</div>`;
         }
       });
+      html += `</div>`;
 
       parts.forEach(p => {
         const typeName = blocks.find(b => b.id === p.typeId)?.name || 'Unknown';
@@ -7858,6 +8283,7 @@ const ADIA = () => {
       html += `<h2>4. State Machine</h2><div class="tree">`;
 
       // Generate diagrams for all layers
+      html += `<div class="diagram-container">`;
       layers.forEach(layer => {
         const layerStates = states.filter(s => layer.stateIds.includes(s.id));
         const layerJunctions = junctions.filter(j => layer.junctionIds.includes(j.id));
@@ -7879,10 +8305,12 @@ const ADIA = () => {
             ...layerJunctions.map(j => ({ ...j, nodeType: 'junction', width: 20, height: 20, x: j.x - 10, y: j.y - 10 }))
           );
 
-          html += `<h3>Layer: ${layerName}</h3>`;
+          html += `<div class="diagram-cell"><h3>Layer: ${layerName}</h3>`;
           html += renderDiagramSVG(nodes, layerTransitions, 'statemachine');
+          html += `</div>`;
         }
       });
+      html += `</div>`;
 
       states.forEach(s => {
         html += `<div class="item"><div class="item-header">${s.name} <span class="tag">State</span></div>`;
@@ -7918,18 +8346,10 @@ const ADIA = () => {
 
     html += `</body></html>`;
 
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${projectName.replace(/\s+/g, '_')}_Report.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
+    setGlobalReportData({ html, projectName });
+    setShowGlobalReportPreview(true);
     setShowReportDialog(false);
-    addError('info', 'Report generated successfully');
+    addError('info', 'Report preview ready');
   }, [blocks, parts, connectors, states, transitions, junctions, hmiComponents, variables, addError, setShowReportDialog, layers]);
 
   // KEYBOARD SHORTCUTS
@@ -8620,7 +9040,7 @@ const ADIA = () => {
     return blocks.map(block => {
       if (diagramMode === 'ibd') {
         if (block.id === currentLayerId) {
-          const frame = { x: block.x, y: block.y, w: block.width, h: block.height };
+          const frame = { x: block.ibdX ?? 50, y: block.ibdY ?? 50, w: block.ibdWidth ?? 1200, h: block.ibdHeight ?? 800 };
           const isSelected = selectedIds.includes(block.id);
           return (
             <g key={block.id}>
@@ -9406,6 +9826,20 @@ const ADIA = () => {
   return (
     <>
       {showWelcome && <WelcomeOverlay onComplete={() => setShowWelcome(false)} />}
+      <GlobalReportPreviewModal
+        isOpen={showGlobalReportPreview}
+        onClose={() => setShowGlobalReportPreview(false)}
+        reportData={globalReportData}
+      />
+      <ReportPreviewModal 
+        isOpen={showReportPreview} 
+        onClose={() => setShowReportPreview(false)} 
+        results={results} 
+        data={data} 
+        headers={headers} 
+        plotFactors={plotFactors} 
+        holdValues={holdValues} 
+      />
       <div
         className="flex flex-col bg-[#0a0a0a] text-[#e0e0e0] font-sans overflow-hidden"
         style={{
@@ -11676,7 +12110,7 @@ const ADIA = () => {
               plotType={plotType}
               setPlotType={setPlotType}
               handleExportProject={handleExportProject}
-              generateReport={generateReport}
+              generateReport={() => setShowReportPreview(true)}
               onClose={() => toggleWindow('doe')}
               addError={addError}
             />

@@ -14,7 +14,7 @@ import ReactFlow, {
   MiniMap
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Play, Pause, Square, Save, Trash2, Box, Layers, MousePointer2, Settings2, ChevronDown, ChevronRight, Search, Triangle } from 'lucide-react';
+import { Play, Pause, Square, Save, Trash2, Box, Network, MousePointer2, Settings2, ChevronDown, ChevronRight, Search, Triangle } from 'lucide-react';
 import { XBRIDGES_CATEGORIES, BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import { XbridgesEngine } from '../../engine/xbridges/XbridgesEngine';
 import { Solvers } from '../../engine/xbridges/Solvers';
@@ -551,7 +551,7 @@ export const XbridgesWorkspace: React.FC<{
         <div className="p-4 border-b border-[#222] flex items-center justify-between overflow-hidden">
           {!isLibCollapsed && (
             <div className="flex items-center gap-2 animate-in fade-in duration-300">
-              <Layers size={18} className="text-[#c9a86c]" />
+              <Network size={18} className="text-[#c9a86c]" />
               <span className="text-sm font-black uppercase tracking-wider text-[#c9a86c]">X-Bridges</span>
             </div>
           )}

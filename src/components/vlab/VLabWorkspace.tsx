@@ -18,7 +18,7 @@ import 'reactflow/dist/style.css';
 import { VLabWorkspaceProps } from './VLabWorkspaceTypes';
 import { VLAB_LIBRARY, VLabBlock } from '../../utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../engine/vlab/vlabComponentDefinitions';
-import { Settings2, Play, Pause, Square, Send, ChevronLeft, Box, Activity, Cpu, LineChart, X, Maximize2, FileSpreadsheet, Info } from 'lucide-react';
+import { Settings2, Play, Pause, Square, Send, ChevronLeft, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info } from 'lucide-react';
 import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
 
@@ -1114,7 +1114,7 @@ const SymbolRenderer = ({ type, color }: { type: string, color: string }) => {
       );
     default:
       return (
-        <div className="text-xl font-bold" style={{ color }}>{type.substring(0, 3).toUpperCase()}</div>
+        <div className="text-xl font-bold" style={{ color }}>{(type || 'UNK').substring(0, 3).toUpperCase()}</div>
       );
   }
 };
@@ -1426,17 +1426,12 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       type: 'default',
       position: { x: pos.x - 400, y: pos.y - 100 }, // Rough estimate, ideally use project()
       data: { 
-        ...block,
-        onUpdate: (params: any) => {
-          setNodes((nds) =>
-            nds.map((node) => {
-              if (node.id === id) {
-                return { ...node, data: { ...node.data, params } };
-              }
-              return node;
-            })
-          );
-        }
+        label: block.name,
+        type: block.id,
+        icon: block.icon,
+        color: block.color,
+        params: block.params,
+        ports: block.ports
       },
     };
     setNodes((nds) => nds.concat(newNode));
@@ -1562,7 +1557,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             <ChevronLeft size={20} />
           </button>
           <div className="flex items-center gap-2">
-            <Cpu className="text-purple-500" size={18} />
+            <FlaskConical className="text-purple-500" size={18} />
             <h1 className="text-sm font-bold tracking-tight">V-LAB <span className="text-gray-500 font-normal">PHYSICS SIMULATOR</span></h1>
           </div>
         </div>
