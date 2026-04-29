@@ -10,6 +10,7 @@ import { VLabWorkspace } from './components/vlab/VLabWorkspace';
 import { XbridgesEngine } from './engine/xbridges/XbridgesEngine';
 import { Solvers } from './engine/xbridges/Solvers';
 import { GMDHEngine, solveLeastSquares } from './engine/gmdh/gmdh_core/combi';
+import { ChevronLeft } from 'lucide-react';
 import {
   Trash2, Plus, Layers, Settings2, Search, Save, Box,
   ChevronDown, ChevronRight, Play, Pause, Square,
@@ -4244,6 +4245,475 @@ const PlotlyPlots = ({
     </div>
   );
 };
+const HELP_DATA: Record<string, {
+  title: string;
+  description: string;
+  details: string;
+  modules: {
+    id: string;
+    title: string;
+    description: string;
+    icon: string;
+    components: { name: string; usage: string; icon?: string }[];
+  }[];
+}> = {
+  architecture: {
+    title: "Architecture & SysML",
+    description: "Structural design using Block Definition Diagrams (BDD) and Internal Block Diagrams (IBD).",
+    details: "The Architecture module follows SysML standards to define system hierarchy and internal connectivity. Start in the BDD to define 'What' the system is, then use IBD to define 'How' it is connected internally.",
+    modules: [
+      {
+        id: "bdd",
+        title: "Block Definition Diagram (BDD)",
+        description: "Defines system hierarchy and structural relationships.",
+        icon: "Layers",
+        components: [
+          { name: "Block", usage: "The primary structural unit. Represents a system component, sub-system, or external entity. Blocks define types and can have properties (parts, ports, values)." },
+          { name: "Composition", usage: "A strong whole-part relationship. If the parent block is deleted, the part is also deleted. Used for physical containment." },
+          { name: "Aggregation", usage: "A weak whole-part relationship. The part can exist independently of the whole. Used for shared resources." },
+          { name: "Generalization", usage: "An inheritance relationship. A specialized block inherits all properties and behaviors of a general block." },
+          { name: "Association", usage: "A generic connection between two blocks indicating they interact without a specific hierarchy." },
+          { name: "Dependency", usage: "Indicates that one block requires another to function or is defined by it." }
+        ]
+      },
+      {
+        id: "ibd",
+        title: "Internal Block Diagram (IBD)",
+        description: "Defines the internal structure, ports, and connectors of a block.",
+        icon: "Box",
+        components: [
+          { name: "Part", usage: "An instance of a block within another block's internal structure. Represents a specific usage of a type." },
+          { name: "Proxy Port", usage: "A typed interaction point that defines what signals or flows can pass through. Usually typed by an Interface Block." },
+          { name: "Full Port", usage: "A physical interaction point that has its own internal structure and properties." },
+          { name: "Connector", usage: "A physical or logical link between two ports or parts, allowing items to flow between them." },
+          { name: "Flow Property", usage: "Defines the specific item (data, energy, liquid) that flows through a port in a specific direction (In/Out/Inout)." },
+          { name: "Item Flow", usage: "Specifies the actual information or material transferred across a connector." }
+        ]
+      }
+    ]
+  },
+  stateflow: {
+    title: "Stateflow (Behavior)",
+    description: "Reactive logic design using Hierarchical State Machines (HSM).",
+    details: "Stateflow allows you to design complex behavioral logic. It supports hierarchical states (states within states), parallel states (AND logic), and event-driven transitions.",
+    modules: [
+      {
+        id: "logic",
+        title: "Logic & States",
+        description: "Core state machine elements for behavioral logic.",
+        icon: "Activity",
+        components: [
+          { name: "State", usage: "Represents a mode of operation. Supports Entry, During, and Exit actions written in JavaScript-like syntax." },
+          { name: "Hierarchical State", usage: "A state that contains sub-states. Allows for complex logic organization and behavior inheritance." },
+          { name: "Transition", usage: "A link between states triggered by an Event or a Condition [guard]. Transitions can also have Actions." },
+          { name: "Default Transition", usage: "Defines which sub-state is entered first when a hierarchical state becomes active." },
+          { name: "Junction", usage: "Decision point for branching transitions based on multiple conditions (If-Then-Else logic)." },
+          { name: "History Junction", usage: "When a hierarchical state is re-entered, this junction restores the last active sub-state instead of using the default transition." }
+        ]
+      },
+      {
+        id: "behavior_data",
+        title: "Data & Events",
+        description: "Communication and memory within state machines.",
+        icon: "Database",
+        components: [
+          { name: "Local Data", usage: "Variables accessible within the state machine scope. Used to store states or calculations." },
+          { name: "Input/Output Data", usage: "Variables linked to other modules (Architecture or X-Bridges) for system integration." },
+          { name: "Events", usage: "Triggers that cause transitions. Can be broadcast globally or sent to specific states." },
+          { name: "Temporal Logic", usage: "Built-in functions like 'after(n, sec)' to trigger transitions based on elapsed time." }
+        ]
+      }
+    ]
+  },
+  vlab: {
+    title: "V-Lab (Physical Simulation)",
+    description: "Multi-domain plant modeling using an acausal physical network approach.",
+    details: "V-Lab models the 'Plant'. Unlike signal-flow, V-Lab components connect via physical ports (e.g., Electrical Nodes, Mechanical Flanges) where energy is conserved (Kirchhoff's Laws).",
+    modules: [
+      {
+        id: "vlab_elec",
+        title: "Electrical Domain",
+        description: "Modeling of power circuits, machines, and electronics.",
+        icon: "Zap",
+        components: [
+          { name: "Resistor", usage: "V=I*R. Models dissipative energy loss. Parameter: Resistance (Ohms)." },
+          { name: "Capacitor", usage: "I=C*dv/dt. Models energy storage in electric fields. Parameter: Capacitance (Farads)." },
+          { name: "Inductor", usage: "V=L*di/dt. Models energy storage in magnetic fields. Parameter: Inductance (Henries)." },
+          { name: "DC Motor", usage: "Converts electrical power to mechanical torque. Parameters: Ke (Voltage const), Kt (Torque const), J (Inertia)." },
+          { name: "Inverter (3-Phase)", usage: "Converts DC to AC using 6 switches. Driven by PWM signals from Control/Stateflow modules." },
+          { name: "Current/Voltage Sensor", usage: "Measures physical quantities and converts them to PS (Physical Signals) for feedback." }
+        ]
+      },
+      {
+        id: "vlab_mech",
+        title: "Mechanical Domain",
+        description: "Rotational and translational mechanics for motion control.",
+        icon: "Box",
+        components: [
+          { name: "Inertia", usage: "Models rotational mass. Torque = J * alpha. Parameter: Moment of Inertia (kg-m2)." },
+          { name: "Mass", usage: "Models translational mass. Force = m * a. Parameter: Mass (kg)." },
+          { name: "Spring-Damper", usage: "Models restorative and dissipative forces. Parameters: Stiffness (K) and Damping (B)." },
+          { name: "Gear Box", usage: "Transforms speed and torque. Parameter: Gear Ratio (N). Supports efficiency and backlash modeling." },
+          { name: "Ideal Torque Source", usage: "Provides a controlled torque regardless of speed. Driven by a PS input." }
+        ]
+      },
+      {
+        id: "vlab_thermal",
+        title: "Thermal Domain",
+        description: "Heat transfer and thermal management modeling.",
+        icon: "Activity",
+        components: [
+          { name: "Thermal Mass", usage: "Stores thermal energy. Q = C * dT. Parameter: Heat Capacity (J/K)." },
+          { name: "Conduction", usage: "Heat transfer through solid contact. Parameter: Conductance (W/K)." },
+          { name: "Convection", usage: "Heat transfer to a fluid. Parameters: Surface Area and Heat Transfer Coefficient." },
+          { name: "Radiation", usage: "Heat transfer via electromagnetic waves. Parameter: Emissivity and Area." }
+        ]
+      }
+    ]
+  },
+  xbridges: {
+    title: "X-Bridges (Control)",
+    description: "Signal-based modeling for control logic and digital signal processing.",
+    details: "X-Bridges is a block-diagram environment for designing control systems. It processes data flows in a directed graph from sources to sinks.",
+    modules: [
+      {
+        id: "xb_cont",
+        title: "Continuous & Linear",
+        description: "Blocks for frequency-domain and time-domain linear systems.",
+        icon: "Activity",
+        components: [
+          { name: "Integrator", usage: "1/s operator. Calculates the integral of the input. Supports reset and initial condition settings." },
+          { name: "Transfer Function", usage: "Defines linear systems using Laplace coefficients (Numerator/Denominator)." },
+          { name: "State-Space", usage: "Models linear systems in matrix form: dx/dt = Ax + Bu; y = Cx + Du." },
+          { name: "Derivative", usage: "s operator. Calculates the rate of change of the input signal." }
+        ]
+      },
+      {
+        id: "xb_math",
+        title: "Math & Nonlinear",
+        description: "Arithmetic operations and nonlinear mappings.",
+        icon: "Layout",
+        components: [
+          { name: "Sum / Add", usage: "Adds or subtracts multiple signals. Customizable port signs (+/-)." },
+          { name: "Product", usage: "Multiplies or divides input signals." },
+          { name: "Gain", usage: "Multiplies the input by a scalar constant or matrix." },
+          { name: "Saturation", usage: "Clamps the signal between Upper and Lower limits." },
+          { name: "Lookup Table", usage: "Maps an input to an output using a pre-defined 1D or 2D table (Interpolation)." }
+        ]
+      },
+      {
+        id: "xb_logic",
+        title: "Logic & Bitwise",
+        description: "Boolean operations and sequential logic.",
+        icon: "Cpu",
+        components: [
+          { name: "Logical Operator", usage: "AND, OR, NOT, XOR, NAND gates for boolean signal processing." },
+          { name: "Relational Operator", usage: "Compares two signals (>, <, ==, !=, >=, <=) and outputs a boolean." },
+          { name: "Delay", usage: "z^-1 operator. Delays a signal by one sample period. Used in discrete-time systems." }
+        ]
+      }
+    ]
+  },
+  doe: {
+    title: "DOE & Analysis",
+    description: "Design of Experiments and advanced predictive modeling.",
+    details: "The DOE module allows for systematic testing of parameters. It includes GMDH (Group Method of Data Handling) for automatic model discovery from experimental data.",
+    modules: [
+      {
+        id: "doe_methods",
+        title: "Experimental Design",
+        description: "Techniques for sampling the design space.",
+        icon: "LayoutGrid",
+        components: [
+          { name: "Full Factorial", usage: "Tests every possible combination of factors at given levels. Highly thorough but expensive." },
+          { name: "LHS (Latin Hypercube)", usage: "Stochastic sampling method that ensures even coverage of the design space with fewer points." },
+          { name: "RSM (Response Surface)", usage: "Uses quadratic models to find the optimal point within the design space." }
+        ]
+      },
+      {
+        id: "doe_modeling",
+        title: "Predictive Modeling",
+        description: "AI and statistical methods to build models from data.",
+        icon: "Activity",
+        components: [
+          { name: "GMDH Neural Net", usage: "An inductive algorithm that automatically selects the best model structure and features. Used for complex system identification." },
+          { name: "Regression", usage: "Fits a polynomial or linear function to the data using Least Squares optimization." },
+          { name: "Sensitivity Analysis", usage: "Identifies which input parameters have the most significant impact on the outputs (Tornado plots)." }
+        ]
+      }
+    ]
+  },
+  reporting: {
+    title: "Reporting & Traceability",
+    description: "Requirements management and professional document generation.",
+    details: "ADIA automates the production of engineering reports. It ensures that every requirement is traced to a design element and verified by simulation.",
+    modules: [
+      {
+        id: "req_manage",
+        title: "Requirements Engineering",
+        description: "Defining and linking system specifications.",
+        icon: "FileText",
+        components: [
+          { name: "Requirement Block", usage: "Stores text, ID, and status of a specification. Can be linked to any design element." },
+          { name: "Traceability Matrix", usage: "A table showing the relationships between requirements, design blocks, and test cases." },
+          { name: "Coverage Analysis", usage: "Visualizes which percentage of requirements are implemented and verified." }
+        ]
+      },
+      {
+        id: "report_gen",
+        title: "Professional Reporting",
+        description: "Exporting project data to standard formats.",
+        icon: "Upload",
+        components: [
+          { name: "Word Export", usage: "Generates a complete MS Word document with dynamic table of contents, diagrams, and simulation results." },
+          { name: "Diagram Capture", usage: "Exports high-resolution SVG or PNG images of BDD, IBD, and Stateflow diagrams for documentation." },
+          { name: "Global Report", usage: "A unified view that aggregates data from all modules into a professional engineering report structure." }
+        ]
+      }
+    ]
+  }
+};
+
+const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
+  const [selectedMainModule, setSelectedMainModule] = useState<string | null>(null);
+  const [selectedSubModule, setSelectedSubModule] = useState<string | null>(null);
+
+  if (!isOpen) return null;
+
+  const downloadPDF = () => {
+    const doc = new jsPDF();
+    const margin = 20;
+    let y = 20;
+
+    doc.setFontSize(22);
+    doc.setTextColor(201, 168, 108); // #c9a86c
+    doc.text("ADIA User Guide", margin, y);
+    y += 15;
+
+    doc.setFontSize(14);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "bold");
+    doc.text("Professional Engineering Modeling Suite", margin, y);
+    y += 10;
+
+    Object.values(HELP_DATA).forEach(main => {
+        if (y > 250) { doc.addPage(); y = 20; }
+        doc.setFontSize(18);
+        doc.setTextColor(201, 168, 108);
+        doc.text(main.title, margin, y);
+        y += 10;
+        
+        doc.setFontSize(11);
+        doc.setTextColor(50, 50, 50);
+        doc.setFont("helvetica", "normal");
+        const lines = doc.splitTextToSize(main.details, 170);
+        doc.text(lines, margin, y);
+        y += (lines.length * 6) + 5;
+
+        main.modules.forEach(mod => {
+            if (y > 250) { doc.addPage(); y = 20; }
+            doc.setFontSize(14);
+            doc.setTextColor(0, 0, 0);
+            doc.setFont("helvetica", "bold");
+            doc.text(mod.title, margin + 5, y);
+            y += 8;
+
+            mod.components.forEach(comp => {
+                if (y > 270) { doc.addPage(); y = 20; }
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "bold");
+                doc.text("• " + comp.name + ": ", margin + 10, y);
+                const compLines = doc.splitTextToSize(comp.usage, 150);
+                doc.setFont("helvetica", "normal");
+                doc.text(compLines, margin + 40, y);
+                y += (compLines.length * 5) + 2;
+            });
+            y += 5;
+        });
+        y += 10;
+    });
+
+    doc.save("ADIA_Detailed_User_Guide.pdf");
+  };
+
+  const handleBack = () => {
+    if (selectedSubModule) setSelectedSubModule(null);
+    else if (selectedMainModule) setSelectedMainModule(null);
+  };
+
+  const renderBreadcrumbs = () => (
+    <div className="flex items-center gap-2 mb-6 text-xs font-bold uppercase tracking-widest">
+      <button 
+        onClick={() => { setSelectedMainModule(null); setSelectedSubModule(null); }}
+        className={`hover:text-[#c9a86c] transition-colors ${!selectedMainModule ? 'text-[#c9a86c]' : 'text-gray-600'}`}
+      >
+        Overview
+      </button>
+      {selectedMainModule && HELP_DATA[selectedMainModule] && (
+        <>
+          <span className="text-gray-800">/</span>
+          <button 
+            onClick={() => setSelectedSubModule(null)}
+            className={`hover:text-[#c9a86c] transition-colors ${!selectedSubModule ? 'text-[#c9a86c]' : 'text-gray-600'}`}
+          >
+            {HELP_DATA[selectedMainModule].title}
+          </button>
+        </>
+      )}
+      {selectedMainModule && selectedSubModule && (
+        <>
+          <span className="text-gray-800">/</span>
+          <span className="text-[#c9a86c]">
+            {HELP_DATA[selectedMainModule]?.modules?.find(m => m.id === selectedSubModule)?.title || 'Detail'}
+          </span>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-8 animate-in fade-in duration-300 text-[#e0e0e0]">
+      <div className="bg-[#141414] border border-[#333] rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col shadow-2xl relative overflow-hidden">
+        {/* Header */}
+        <div className="px-8 py-6 border-b border-[#222] bg-[#1a1a1a] flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-[#c9a86c]/10 rounded-xl">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white tracking-tight">ADIA Interactive Help</h2>
+              <p className="text-xs text-gray-500 uppercase tracking-widest font-medium mt-0.5">Comprehensive Component Documentation</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button onClick={downloadPDF} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-6 gap-2 border-0">
+              <Download size={16} />
+              Export Full Manual
+            </Button>
+            <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors text-gray-500">
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+
+        {/* Content Body */}
+        <div className="flex-1 overflow-hidden flex flex-col p-12 bg-[#0d0d0d]">
+          {renderBreadcrumbs()}
+
+          <div className="flex-1 overflow-y-auto custom-scrollbar pr-4">
+            {!selectedMainModule ? (
+              /* Main Overview View */
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {Object.entries(HELP_DATA).map(([id, data]) => (
+                  <div 
+                    key={id} 
+                    onClick={(e) => { e.stopPropagation(); setSelectedMainModule(id); }}
+                    className="p-8 bg-[#1a1a1a] border border-[#222] rounded-2xl cursor-pointer group hover:border-[#c9a86c]/50 transition-all hover:bg-[#1a1a1a]/80"
+                  >
+                    <h3 className="text-2xl font-black text-white uppercase tracking-tighter mb-2 group-hover:text-[#c9a86c] transition-colors">{data.title}</h3>
+                    <p className="text-gray-500 text-sm leading-relaxed mb-6">{data.description}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {data.modules.map(m => (
+                        <span key={m.id} className="px-3 py-1 bg-black/40 rounded-full text-[10px] font-bold text-gray-400 border border-[#222] uppercase tracking-wider">
+                          {m.title}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-8 text-[10px] font-black text-[#c9a86c] uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity">
+                      Click to Explore →
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : !selectedSubModule ? (
+              /* Module Details View */
+              <div className="space-y-12">
+                <div className="max-w-2xl">
+                  <h3 className="text-4xl font-black text-white uppercase tracking-tighter mb-4">{HELP_DATA[selectedMainModule]?.title}</h3>
+                  <p className="text-lg text-gray-400 leading-relaxed">{HELP_DATA[selectedMainModule]?.details}</p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {HELP_DATA[selectedMainModule]?.modules?.map(mod => (
+                    <div 
+                      key={mod.id}
+                      onClick={(e) => { e.stopPropagation(); setSelectedSubModule(mod.id); }}
+                      className="p-6 bg-[#1a1a1a] border border-[#222] rounded-xl cursor-pointer hover:border-[#c9a86c]/30 transition-all"
+                    >
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2 bg-[#c9a86c]/10 rounded-lg text-[#c9a86c]">
+                          {mod.icon === 'Zap' && <Zap size={20}/>}
+                          {mod.icon === 'Layers' && <Layers size={20}/>}
+                          {mod.icon === 'Box' && <Box size={20}/>}
+                          {mod.icon === 'Activity' && <Activity size={20}/>}
+                          {mod.icon === 'Layout' && <Layout size={20}/>}
+                          {mod.icon === 'Cpu' && <Cpu size={20}/>}
+                          {mod.icon === 'Database' && <Database size={20}/>}
+                          {mod.icon === 'LayoutGrid' && <LayoutGrid size={20}/>}
+                          {mod.icon === 'FileText' && <FileText size={20}/>}
+                          {mod.icon === 'Upload' && <Upload size={20}/>}
+                        </div>
+                        <h4 className="font-bold text-white uppercase tracking-wider">{mod.title}</h4>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-4">{mod.description}</p>
+                      <div className="text-[10px] font-bold text-[#c9a86c] uppercase tracking-widest">
+                        View {mod.components.length} Components →
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              /* Component Level View */
+              <div className="space-y-8 animate-in slide-in-from-right duration-300">
+                <div className="flex items-center gap-4 mb-8">
+                  <button onClick={() => setSelectedSubModule(null)} className="p-2 hover:bg-white/5 rounded-full text-gray-500 transition-colors">
+                    <ChevronLeft size={24} />
+                  </button>
+                  <h3 className="text-3xl font-black text-white uppercase tracking-tighter">
+                    {HELP_DATA[selectedMainModule]?.modules?.find(m => m.id === selectedSubModule)?.title} Components
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                  {HELP_DATA[selectedMainModule]?.modules?.find(m => m.id === selectedSubModule)?.components.map(comp => (
+                    <div key={comp.name} className="p-6 bg-[#1a1a1a] border border-[#222] rounded-xl flex items-start gap-6 group hover:bg-[#1f1f1f] transition-all">
+                      <div className="w-12 h-12 bg-black rounded-lg flex items-center justify-center border border-white/5 group-hover:border-[#c9a86c]/30 transition-all">
+                        <span className="text-[#c9a86c] font-black text-xl">{comp.name[0]}</span>
+                      </div>
+                      <div className="flex-1">
+                        <h5 className="text-white font-bold mb-2 uppercase tracking-wide flex items-center gap-3">
+                          {comp.name}
+                          <span className="px-2 py-0.5 bg-[#c9a86c]/10 text-[#c9a86c] text-[8px] rounded uppercase font-black tracking-tighter">Verified</span>
+                        </h5>
+                        <p className="text-sm text-gray-500 leading-relaxed">{comp.usage}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-8 py-4 bg-[#1a1a1a] border-t border-[#222] flex items-center justify-between">
+          <p className="text-[10px] text-gray-600 uppercase tracking-[0.3em] font-bold">Advanced Engineering Modeling Suite &copy; 2026 ADIA Team</p>
+          <div className="flex items-center gap-6">
+            <span className="text-[10px] text-gray-500 uppercase font-bold flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+              Documentation Live
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ReportPreviewModal = ({ 
   isOpen, 
   onClose, 
@@ -4844,6 +5314,7 @@ const ADIA = () => {
   // REQ-ENGINE-004: Generation log with checksums
   const [generationLog, setGenerationLog] = useState<string[]>([]);
   const [safetyMode, setSafetyMode] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   // BDD STATE (SysML)
   const [diagramMode, setDiagramMode] = useState<DiagramMode>('statemachine' as DiagramMode);
@@ -9826,6 +10297,7 @@ const ADIA = () => {
   return (
     <>
       {showWelcome && <WelcomeOverlay onComplete={() => setShowWelcome(false)} />}
+      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />
       <GlobalReportPreviewModal
         isOpen={showGlobalReportPreview}
         onClose={() => setShowGlobalReportPreview(false)}
@@ -10069,6 +10541,20 @@ const ADIA = () => {
             className="border-[#c96c8a] text-[#c96c8a] hover:bg-[#c96c8a]/10"
           >
             DOE (RSM)
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowHelpModal(true)}
+            className="border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            Help
           </Button>
 
           <div className="flex-1" />
