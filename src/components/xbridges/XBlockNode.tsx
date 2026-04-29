@@ -199,7 +199,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       >
         <div className="flex items-center gap-2">
           <div style={{ color }}>{getIcon(data.type)}</div>
-          <span className="text-[10px] font-black text-white uppercase tracking-widest truncate max-w-[120px]">
+          <span className="text-[11px] font-black text-white uppercase tracking-widest truncate max-w-[120px]">
             {data.params?.smVarId ? `[${data.label || data.type}]` : (data.label || data.type)}
           </span>
         </div>

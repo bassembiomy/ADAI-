@@ -1194,7 +1194,7 @@ const VLabNode = ({ data, selected }: { data: any, selected: boolean }) => {
       </div>
 
       {/* Block Label */}
-      <div className={`mt-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider transition-all ${selected ? 'text-purple-400 bg-purple-500/10 border border-purple-500/20' : 'text-gray-500'}`}>
+      <div className={`mt-2 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider transition-all ${selected ? 'text-purple-400 bg-purple-500/10 border border-purple-500/20' : 'text-gray-500'}`}>
         {data.label}
       </div>
     </div>
@@ -1302,6 +1302,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const [quickSearchPos, setQuickSearchPos] = useState({ x: 0, y: 0 });
   const [quickSearchQuery, setQuickSearchQuery] = useState('');
   const [lastPaneClick, setLastPaneClick] = useState(0);
+  const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
 
   // Simulation Loop
   useEffect(() => {
@@ -1436,6 +1437,42 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     };
     setNodes((nds) => nds.concat(newNode));
     setIsQuickSearchOpen(false);
+  };
+
+  const addBlockToCenter = (block: VLabBlock) => {
+    setHistory(h => [...h, { nodes, edges }].slice(-20));
+    
+    let position = { x: 500, y: 300 };
+    
+    if (reactFlowInstance) {
+      const container = document.querySelector('.react-flow__renderer');
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        position = reactFlowInstance.screenToFlowPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2
+        });
+        // Center the 80x60 block
+        position.x -= 40;
+        position.y -= 30;
+      }
+    }
+
+    const newNode: Node = {
+      id: `${block.id}_${Date.now()}`,
+      type: 'default',
+      position,
+      data: { 
+        label: block.name,
+        type: block.id,
+        icon: block.icon,
+        color: block.color,
+        params: block.params,
+        ports: block.ports
+      },
+    };
+
+    setNodes((nds) => nds.concat(newNode));
   };
 
   const quickSearchResults = useMemo(() => {
@@ -1638,22 +1675,23 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
               return (
                 <div key={domain.type} className="space-y-4">
-                  <h3 className="text-[10px] font-black text-purple-400 uppercase tracking-[0.2em] mb-1">{domain.type}</h3>
+                  <h3 className="text-[12px] font-black text-purple-400 uppercase tracking-[0.2em] mb-1">{domain.type}</h3>
                   {Object.entries(categories).map(([catName, catBlocks]) => (
                     <div key={catName} className="space-y-2 pl-2 border-l border-[#222]">
-                      <h4 className="text-[9px] font-bold text-gray-600 uppercase tracking-wider">{catName}</h4>
+                      <h4 className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">{catName}</h4>
                       <div className="grid grid-cols-2 gap-2">
                         {catBlocks.map(block => (
                           <div
                             key={block.id}
                             draggable
                             onDragStart={(e) => onDragStart(e, block)}
-                            className="group bg-[#111] border border-white/5 p-3 rounded-xl cursor-grab hover:border-purple-500/50 hover:bg-[#151515] transition-all flex flex-col items-center justify-center gap-2 relative overflow-hidden"
+                            onClick={() => addBlockToCenter(block)}
+                            className="group bg-[#111] border border-white/5 p-3 rounded-xl cursor-grab active:cursor-grabbing hover:border-purple-500/50 hover:bg-[#151515] transition-all flex flex-col items-center justify-center gap-2 relative overflow-hidden"
                           >
                             <div className="w-12 h-12 flex items-center justify-center transform scale-[0.6] group-hover:scale-[0.7] transition-transform origin-center">
                               <SymbolRenderer type={block.icon} color={block.color} />
                             </div>
-                            <span className="text-[8px] text-gray-500 font-bold text-center leading-tight truncate w-full px-1 group-hover:text-gray-200 transition-colors uppercase tracking-tight">
+                            <span className="text-[10px] text-gray-500 font-bold text-center leading-tight truncate w-full px-1 group-hover:text-gray-200 transition-colors uppercase tracking-tight">
                               {block.name}
                             </span>
                           </div>
@@ -1678,6 +1716,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
             onNodeDoubleClick={onNodeDoubleClick}
+            onInit={setReactFlowInstance}
             nodeTypes={nodeTypes}
             fitView
             snapToGrid
