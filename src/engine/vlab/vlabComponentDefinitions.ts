@@ -86,16 +86,16 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Bridges Electrical and Thermal domains by modeling heat generation from power dissipation ($P = I^2 R$).'
   },
   v_sensor: {
-    equations: ['V_out = Vp - Vn'],
-    latex: ['v = v_+ - v_-'],
-    across: 'Voltage (V)', through: 'None',
-    description: 'Measures the potential difference between two nodes. Outputs the result as a physical signal (PS).'
+    equations: ['V_sens = Vp - Vn', 'I = V_sens / R_int'],
+    latex: ['V_{out} = V_p - V_n', 'I_{leak} = \\frac{V_{sens}}{R_{int}}'],
+    across: 'Voltage (V)', through: 'Current (A)',
+    description: 'Measures voltage between two points. Includes a high internal resistance (R_int) to model a non-ideal voltmeter.'
   },
   i_sensor: {
-    equations: ['I_out = I'],
-    latex: ['i = i_{thru}'],
-    across: 'None', through: 'Current (I)',
-    description: 'Measures the current flow through a branch. Outputs the result as a physical signal (PS).'
+    equations: ['I_sens = I_p', 'V_sens = I_sens * R_int'],
+    latex: ['I_{out} = I_p', 'V_{drop} = I \cdot R_{int}'],
+    across: 'Voltage (V)', through: 'Current (A)',
+    description: 'Measures current flowing through the branch. Includes a low internal resistance (R_int) to model voltage drop across a shunt.'
   },
   dc_voltage: {
     equations: ['Vp - Vn = V_const'],
@@ -779,25 +779,25 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     equations: ['alpha = 2/3 * (a - 0.5*b - 0.5*c)', 'beta = 2/3 * (sqrt(3)/2*b - sqrt(3)/2*c)', 'zero = 1/3 * (a + b + c)'],
     latex: ['\mathbf{x}_{\\alpha\\beta0} = \mathbf{T}_{clarke} \mathbf{x}_{abc}'],
     across: 'None', through: 'None',
-    description: 'The Clarke Transform converts three-phase ($abc$) time-domain signals into stationary two-phase ($\alpha\beta0$) orthogonal components.'
+    description: 'Converts 3-phase stationary coordinates (abc) to 2-phase stationary coordinates (alpha-beta-0). Follows the amplitude-invariant convention.'
   },
   inv_clarke_transform: {
     equations: ['a = alpha + zero', 'b = -0.5*alpha + sqrt(3)/2*beta + zero', 'c = -0.5*alpha - sqrt(3)/2*beta + zero'],
     latex: ['\mathbf{x}_{abc} = \mathbf{T}_{clarke}^{-1} \mathbf{x}_{\\alpha\\beta0}'],
     across: 'None', through: 'None',
-    description: 'The Inverse Clarke Transform converts stationary $\alpha\beta0$ components back into the original three-phase $abc$ frame.'
+    description: 'Transforms 2-phase stationary coordinates back to 3-phase stationary coordinates.'
   },
   park_transform: {
     equations: ['d = cos(th)*alpha + sin(th)*beta', 'q = -sin(th)*alpha + cos(th)*beta', '0 = zero'],
     latex: ['\mathbf{x}_{dq0} = \mathbf{T}_{park}(\\theta) \mathbf{x}_{\\alpha\\beta0}'],
     across: 'None', through: 'None',
-    description: 'The Park Transform converts stationary $\alpha\beta0$ components into a rotating $dq0$ reference frame aligned with the rotor flux or voltage vector.'
+    description: 'Converts 2-phase stationary coordinates (alpha-beta) to rotating coordinates (dq) based on the rotor alignment convention.'
   },
   inv_park_transform: {
     equations: ['alpha = cos(th)*d - sin(th)*q', 'beta = sin(th)*d + cos(th)*q', 'zero = 0'],
     latex: ['\mathbf{x}_{\\alpha\\beta0} = \mathbf{T}_{park}^{-1}(\\theta) \mathbf{x}_{dq0}'],
     across: 'None', through: 'None',
-    description: 'The Inverse Park Transform converts rotating $dq0$ components back into the stationary $\alpha\beta0$ frame.'
+    description: 'Transforms rotating dq coordinates back to stationary alpha-beta coordinates.'
   },
   sym_comp_transform: {
     equations: ['pos = 1/3 * (a + a^1*b + a^2*c)', 'neg = 1/3 * (a + a^2*b + a^1*c)', 'zero = 1/3 * (a + b + c)'],

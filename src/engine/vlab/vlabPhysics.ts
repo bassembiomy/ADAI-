@@ -1,12 +1,7 @@
 import { Node, Edge } from 'reactflow';
 import { DAEAssembler } from './DAEAssembler';
 import { ImplicitSolver } from './ImplicitSolver';
-
-export interface EquationContext {
-  dt: number;
-  time: number;
-  parameters: Record<string, any>;
-}
+import { EquationContext } from './types';
 
 export class VLabPhysicsEngine {
   private assembler: DAEAssembler;
@@ -26,12 +21,13 @@ export class VLabPhysicsEngine {
     const ctx: EquationContext = {
       dt,
       time: (prevState?.time || 0) + dt,
-      parameters: {} // Extract parameters from nodes
+      parameters: {}, // Extract parameters from nodes
+      prevStates: initialGuess
     };
 
     // Solve the algebraic/differential system for the next step
     const nextX = this.solver.solve(
-      (x) => system.residuals(x, initialGuess, ctx.parameters),
+      (x, c) => system.residuals(x, c),
       initialGuess,
       ctx
     );

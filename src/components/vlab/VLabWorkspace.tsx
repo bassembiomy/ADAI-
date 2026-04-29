@@ -1298,6 +1298,10 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const [simTime, setSimTime] = useState(0);
   const [scopeData, setScopeData] = useState<any[]>([]);
   const [openScopes, setOpenScopes] = useState<string[]>([]);
+  const [isQuickSearchOpen, setIsQuickSearchOpen] = useState(false);
+  const [quickSearchPos, setQuickSearchPos] = useState({ x: 0, y: 0 });
+  const [quickSearchQuery, setQuickSearchQuery] = useState('');
+  const [lastPaneClick, setLastPaneClick] = useState(0);
 
   // Simulation Loop
   useEffect(() => {
@@ -1400,6 +1404,54 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const onNodeClick = (_: any, node: Node) => {
     setSelectedNodeId(node.id);
   };
+
+  const onPaneClick = (e: React.MouseEvent) => {
+    const now = Date.now();
+    if (now - lastPaneClick < 300) {
+      // Double Click Detected
+      setQuickSearchPos({ x: e.clientX, y: e.clientY });
+      setIsQuickSearchOpen(true);
+      setQuickSearchQuery('');
+    }
+    setLastPaneClick(now);
+    setSelectedNodeId(null);
+  };
+
+  const addBlockAtPos = (block: VLabBlock, pos: { x: number, y: number }) => {
+    const id = `${block.id}_${Date.now()}`;
+    // Convert screen coordinates to flow coordinates
+    // For simplicity, we'll use a relative offset for now if project() isn't easily accessible
+    const newNode: Node = {
+      id,
+      type: 'default',
+      position: { x: pos.x - 400, y: pos.y - 100 }, // Rough estimate, ideally use project()
+      data: { 
+        ...block,
+        onUpdate: (params: any) => {
+          setNodes((nds) =>
+            nds.map((node) => {
+              if (node.id === id) {
+                return { ...node, data: { ...node.data, params } };
+              }
+              return node;
+            })
+          );
+        }
+      },
+    };
+    setNodes((nds) => nds.concat(newNode));
+    setIsQuickSearchOpen(false);
+  };
+
+  const quickSearchResults = useMemo(() => {
+    if (!quickSearchQuery.trim()) return [];
+    const query = quickSearchQuery.toLowerCase();
+    const allBlocks = VLAB_LIBRARY.flatMap(d => d.blocks);
+    return allBlocks.filter(b => 
+      b.name.toLowerCase().includes(query) || 
+      (b.category || '').toLowerCase().includes(query)
+    ).slice(0, 8);
+  }, [quickSearchQuery]);
 
   const onNodeDoubleClick = (_: any, node: Node) => {
     if ((node.data as any).type === 'scope') {
@@ -1601,11 +1653,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                             key={block.id}
                             draggable
                             onDragStart={(e) => onDragStart(e, block)}
-                            className="group bg-[#141414] border border-[#222] p-2 rounded-xl cursor-grab hover:border-purple-500/50 hover:bg-[#1a1a1a] transition-all flex flex-col items-center justify-center gap-1.5 relative overflow-hidden"
+                            className="group bg-[#111] border border-white/5 p-3 rounded-xl cursor-grab hover:border-purple-500/50 hover:bg-[#151515] transition-all flex flex-col items-center justify-center gap-2 relative overflow-hidden"
                           >
-                            <div className="absolute top-0 left-0 w-0.5 h-full" style={{ backgroundColor: block.color }} />
-                            <div className="text-xl" style={{ color: block.color }}>{block.icon}</div>
-                            <span className="text-[9px] text-gray-400 font-medium text-center leading-tight truncate w-full px-1">{block.name}</span>
+                            <div className="w-12 h-12 flex items-center justify-center transform scale-[0.6] group-hover:scale-[0.7] transition-transform origin-center">
+                              <SymbolRenderer type={block.icon} color={block.color} />
+                            </div>
+                            <span className="text-[8px] text-gray-500 font-bold text-center leading-tight truncate w-full px-1 group-hover:text-gray-200 transition-colors uppercase tracking-tight">
+                              {block.name}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -1626,6 +1681,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             onEdgesChange={onLocalEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
+            onPaneClick={onPaneClick}
             onNodeDoubleClick={onNodeDoubleClick}
             nodeTypes={nodeTypes}
             fitView
@@ -1635,6 +1691,55 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             <Background color="#151515" gap={20} variant={BackgroundVariant.Lines} />
             <Controls className="bg-[#1a1a1a] border-[#333] fill-white" />
             
+            {/* Quick Search Overlay */}
+            {isQuickSearchOpen && (
+              <div 
+                className="fixed z-[9999] w-64 bg-[#111] border border-purple-500/30 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl overflow-hidden p-1 flex flex-col"
+                style={{ left: quickSearchPos.x, top: quickSearchPos.y }}
+              >
+                <div className="flex items-center gap-2 p-2 border-b border-[#222]">
+                  <Box size={14} className="text-purple-500" />
+                  <input 
+                    autoFocus
+                    type="text"
+                    placeholder="Quick insert..."
+                    className="bg-transparent text-xs w-full outline-none text-white"
+                    value={quickSearchQuery}
+                    onChange={(e) => setQuickSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') setIsQuickSearchOpen(false);
+                      if (e.key === 'Enter' && quickSearchResults.length > 0) {
+                        addBlockAtPos(quickSearchResults[0], quickSearchPos);
+                      }
+                    }}
+                  />
+                </div>
+                <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                  {quickSearchResults.map(block => (
+                    <button
+                      key={block.id}
+                      onClick={() => addBlockAtPos(block, quickSearchPos)}
+                      className="w-full flex items-center gap-3 p-2 hover:bg-purple-600/10 transition-colors group text-left border-b border-white/5 last:border-0"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-[#1a1a1a] flex items-center justify-center text-lg border border-white/5 group-hover:border-purple-500/30" style={{ color: block.color }}>
+                        {block.icon}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[11px] font-bold text-gray-200">{block.name}</span>
+                        <span className="text-[9px] text-gray-500">{block.category}</span>
+                      </div>
+                    </button>
+                  ))}
+                  {quickSearchQuery && quickSearchResults.length === 0 && (
+                    <div className="p-4 text-center text-[10px] text-gray-500 uppercase tracking-widest">No blocks found</div>
+                  )}
+                  {!quickSearchQuery && (
+                    <div className="p-4 text-center text-[10px] text-gray-500 uppercase tracking-widest">Type to search</div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Real-time Scope Overlay (if a scope is selected) */}
             {selectedNode && (selectedNode.data as any).type === 'scope' && !openScopes.includes(selectedNode.id) && (
               <Panel position="bottom-right" className="w-96 h-64 mb-12 mr-4 shadow-2xl">

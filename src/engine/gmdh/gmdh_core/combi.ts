@@ -52,7 +52,16 @@ export class GMDHEngine implements PolynomialModel {
     const k = data[0].length - 1;
 
     const testSize = Math.floor(n * this.config.validationSplit);
-    const shuffled = [...data].sort(() => Math.random() - 0.5);
+    
+    // Deterministic shuffle to ensure reproducible results
+    const shuffled = [...data];
+    let seed = 42;
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      seed = (seed * 1664525 + 1013904223) % 4294967296;
+      const j = Math.floor((seed / 4294967296) * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
     const validationData = shuffled.slice(0, testSize);
     const trainData = shuffled.slice(testSize);
 
@@ -173,25 +182,28 @@ export class GMDHEngine implements PolynomialModel {
 
   getEquation(): string {
     if (this.layers.length === 0) return "No model trained";
-    const bestNeuron = this.layers[this.layers.length - 1][0];
+    const lastLayer = this.layers[this.layers.length - 1];
+    const bestNeuron = lastLayer[0];
     const c = bestNeuron.coeffs;
     const [iIdx, jIdx] = bestNeuron.inputs;
 
-    const xi = this.inputNames[iIdx] || `X${iIdx + 1}`;
-    const xj = this.inputNames[jIdx] || `X${jIdx + 1}`;
-
-    let eq = `Y = ${c[0].toFixed(4)}`;
+    const layerCount = this.layers.length;
+    let eq = `GMDH Neural Model (${layerCount} Layers)\n`;
+    eq += `------------------------------------\n`;
+    eq += `Final output derived from Z${layerCount-1}_${iIdx} and Z${layerCount-1}_${jIdx}\n\n`;
+    eq += `Y = ${c[0].toFixed(4)}`;
 
     const terms = this.config.polynomialOrder === 2
-      ? [xi, xj, `${xi}²`, `${xj}²`, `${xi}·${xj}`]
-      : [xi, xj, `${xi}²`, `${xj}²`, `${xi}·${xj}`, `${xi}³`, `${xj}³`, `${xi}²·${xj}`, `${xi}·${xj}²`];
+      ? [`z_i`, `z_j`, `z_i²`, `z_j²`, `z_i·z_j`]
+      : [`z_i`, `z_j`, `z_i²`, `z_j²`, `z_i·z_j`, `z_i³`, `z_j³`, `z_i²·z_j`, `z_i·z_j²`];
 
     for (let t = 0; t < terms.length; t++) {
       const coeff = c[t + 1];
-      if (Math.abs(coeff) < 1e-8) continue;
-      eq += `\n    ${coeff >= 0 ? '+' : '−'} ${Math.abs(coeff).toFixed(4)} · ${terms[t]}`;
+      if (Math.abs(coeff) < 1e-6) continue;
+      eq += `\n    ${coeff >= 0 ? '+' : '-'} ${Math.abs(coeff).toFixed(4)} * ${terms[t]}`;
     }
-
+    
+    eq += `\n\nNote: z_i and z_j are recursive outputs from layer ${layerCount-1}.`;
     return eq;
   }
 

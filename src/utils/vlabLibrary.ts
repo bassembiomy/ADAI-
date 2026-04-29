@@ -113,17 +113,17 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       },
       {
         id: 'v_sensor', name: 'Voltage Sensor', color: '#fbbf24', icon: 'v_sensor', category: 'Sensors',
-        params: {},
+        params: { R_int: { value: 1e8, unit: 'Ω', label: 'Internal Res' } },
         ports: [{ id: 'p', pos: 'top', label: '+' }, { id: 'n', pos: 'bottom', label: '-' }, { id: 'v', pos: 'right', label: 'V' }]
       },
       {
         id: 'i_sensor', name: 'Current Sensor', color: '#fbbf24', icon: 'i_sensor', category: 'Sensors',
-        params: {},
+        params: { R_int: { value: 1e-6, unit: 'Ω', label: 'Internal Res' } },
         ports: [{ id: 'p', pos: 'left', label: '+' }, { id: 'n', pos: 'right', label: '-' }, { id: 'i', pos: 'top', label: 'I' }]
       },
       {
         id: 'dc_voltage', name: 'DC Voltage Source', color: '#ef4444', icon: 'dc_voltage', category: 'Sources',
-        params: { V: { value: 12, unit: 'V', label: 'Voltage' } },
+        params: { V: { value: 12, unit: 'V', label: 'Voltage' }, R_int: { value: 1e-3, unit: 'Ω', label: 'Internal Res' } },
         ports: [{ id: 'p', pos: 'top', label: '+' }, { id: 'n', pos: 'bottom', label: '-' }]
       },
       {
@@ -380,22 +380,22 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       // Sensors
       {
         id: 'force_sensor', name: 'Ideal Force Sensor', color: '#10b981', icon: 'force_sensor', category: 'Sensors',
-        params: {},
+        params: { k: { value: 1e8, unit: 'N/m', label: 'Stiffness' } },
         ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 'f', pos: 'top', label: 'F' }]
       },
       {
         id: 'rot_motion_sensor', name: 'Ideal Rotational Motion Sensor', color: '#10b981', icon: 'rot_motion', category: 'Sensors',
-        params: {},
+        params: { b: { value: 0, unit: 'N-m-s/rad', label: 'Damping' } },
         ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }, { id: 'w', pos: 'top', label: 'W' }, { id: 'a', pos: 'top', label: 'A' }]
       },
       {
         id: 'torque_sensor', name: 'Ideal Torque Sensor', color: '#10b981', icon: 'torque_sensor', category: 'Sensors',
-        params: {},
+        params: { k: { value: 1e8, unit: 'N-m/rad', label: 'Stiffness' } },
         ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }, { id: 't', pos: 'top', label: 'T' }]
       },
       {
         id: 'trans_motion_sensor', name: 'Ideal Translational Motion Sensor', color: '#10b981', icon: 'trans_motion', category: 'Sensors',
-        params: {},
+        params: { b: { value: 0, unit: 'N-s/m', label: 'Damping' } },
         ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }, { id: 'v', pos: 'top', label: 'V' }, { id: 'p', pos: 'top', label: 'P' }]
       },
 
@@ -707,12 +707,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       },
       {
         id: 'ps_min', name: 'PS Min', color: '#92400e', icon: 'ps_min', category: 'Nonlinear Operators',
-        params: {},
+        params: { limit: { value: 100, unit: '', label: 'Saturation' } },
         ports: [{ id: 'u1', pos: 'left', label: '1' }, { id: 'u2', pos: 'left', label: '2' }, { id: 'y', pos: 'right', label: 'MIN' }]
       },
       {
         id: 'ps_max', name: 'PS Max', color: '#92400e', icon: 'ps_max', category: 'Nonlinear Operators',
-        params: {},
+        params: { limit: { value: -100, unit: '', label: 'Saturation' } },
         ports: [{ id: 'u1', pos: 'left', label: '1' }, { id: 'u2', pos: 'left', label: '2' }, { id: 'y', pos: 'right', label: 'MAX' }]
       },
 
@@ -772,7 +772,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       },
       {
         id: 'pfc_rectifier_ctrl', name: 'PFC Rectifier Controller', color: '#4b5563', icon: 'pfc_ctrl', category: 'Converter Control',
-        params: {},
+        params: { Kp_v: { value: 0.1, unit: '', label: 'Volt Prop' }, Ki_v: { value: 2, unit: '', label: 'Volt Int' }, Kp_i: { value: 1, unit: '', label: 'Curr Prop' } },
         ports: [
           { id: 'vdc_ref', pos: 'left', label: 'VdcRef (V)' },
           { id: 'q_ref', pos: 'left', label: 'QRef (pu)' },
@@ -785,7 +785,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       },
       {
         id: 'cycloconverter_ctrl', name: 'Cycloconverter Controller', color: '#4b5563', icon: 'cyclo_ctrl', category: 'Converter Control',
-        params: {},
+        params: { m: { value: 0.8, unit: '', label: 'Mod Index' }, bank_limit: { value: 0.1, unit: 's', label: 'Bank Delay' } },
         ports: [
           { id: 'v_ref', pos: 'left', label: 'VRef' },
           { id: 'f_ref', pos: 'left', label: 'fRef' },
@@ -932,32 +932,32 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       // Math Transforms
       {
         id: 'clarke_transform', name: 'Clarke Transform', color: '#4b5563', icon: 'clarke', category: 'Math Transforms',
-        params: {},
+        params: { convention: { value: 'Peak Amp Preserved', unit: '', label: 'Convention' } },
         ports: [{ id: 'abc', pos: 'left', label: 'abc' }, { id: 'ab0', pos: 'right', label: 'ab0' }]
       },
       {
         id: 'inv_clarke_transform', name: 'Inverse Clarke Transform', color: '#4b5563', icon: 'inv_clarke', category: 'Math Transforms',
-        params: {},
+        params: { convention: { value: 'Peak Amp Preserved', unit: '', label: 'Convention' } },
         ports: [{ id: 'ab0', pos: 'left', label: 'ab0' }, { id: 'abc', pos: 'right', label: 'abc' }]
       },
       {
         id: 'park_transform', name: 'Park Transform', color: '#4b5563', icon: 'park', category: 'Math Transforms',
-        params: {},
+        params: { alignment: { value: '90 deg behind A', unit: '', label: 'Alignment' } },
         ports: [{ id: 'abc', pos: 'left', label: 'abc' }, { id: 'theta', pos: 'left', label: 'theta' }, { id: 'dq0', pos: 'right', label: 'dq0' }]
       },
       {
         id: 'inv_park_transform', name: 'Inverse Park Transform', color: '#4b5563', icon: 'inv_park', category: 'Math Transforms',
-        params: {},
+        params: { alignment: { value: '90 deg behind A', unit: '', label: 'Alignment' } },
         ports: [{ id: 'dq0', pos: 'left', label: 'dq0' }, { id: 'theta', pos: 'left', label: 'theta' }, { id: 'abc', pos: 'right', label: 'abc' }]
       },
       {
         id: 'sym_comp_transform', name: 'Symmetrical-Components', color: '#4b5563', icon: 'sym_comp', category: 'Math Transforms',
-        params: {},
+        params: { freq: { value: 50, unit: 'Hz', label: 'Base Freq' } },
         ports: [{ id: 'abc', pos: 'left', label: 'abc' }, { id: 'seq', pos: 'right', label: '+-0' }]
       },
       {
         id: 'inv_sym_comp_transform', name: 'Inverse Symmetrical-Components', color: '#4b5563', icon: 'inv_sym_comp', category: 'Math Transforms',
-        params: {},
+        params: { freq: { value: 50, unit: 'Hz', label: 'Base Freq' } },
         ports: [{ id: 'seq', pos: 'left', label: '+-0' }, { id: 'abc', pos: 'right', label: 'abc' }]
       },
 
@@ -1147,7 +1147,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       },
       {
         id: 'external_force', name: 'External Force and Torque', color: '#4b5563', icon: 'ext_force', category: 'Forces & Torques',
-        params: {},
+        params: { force_scale: { value: 1, unit: '1', label: 'Force Scale' }, torque_scale: { value: 1, unit: '1', label: 'Torque Scale' } },
         ports: [{ id: 'f', pos: 'left', label: 'F' }, { id: 'b', pos: 'right', label: 'B' }]
       },
 
@@ -1164,17 +1164,17 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       },
       {
         id: 'spherical_joint', name: 'Spherical Joint', color: '#4b5563', icon: 'sphere_joint', category: 'Joints',
-        params: {},
+        params: { damping: { value: 0.05, unit: 'N-m-s/rad', label: 'Damping' } },
         ports: [{ id: 'b', pos: 'left', label: 'B' }, { id: 'f', pos: 'right', label: 'F' }]
       },
       {
         id: 'universal_joint', name: 'Universal Joint', color: '#4b5563', icon: 'univ_joint', category: 'Joints',
-        params: {},
+        params: { damping: { value: 0.05, unit: 'N-m-s/rad', label: 'Damping' } },
         ports: [{ id: 'b', pos: 'left', label: 'B' }, { id: 'f', pos: 'right', label: 'F' }]
       },
       {
         id: 'weld_joint', name: 'Weld Joint', color: '#4b5563', icon: 'weld_joint', category: 'Joints',
-        params: {},
+        params: { stiffness: { value: 1e9, unit: 'N/m', label: 'Stiffness' } },
         ports: [{ id: 'b', pos: 'left', label: 'B' }, { id: 'f', pos: 'right', label: 'F' }]
       },
 

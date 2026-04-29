@@ -1,8 +1,9 @@
 import { Node, Edge } from 'reactflow';
 import { VLAB_COMPONENT_DEFINITIONS } from './vlabComponentDefinitions';
+import { EquationContext } from './types';
 
 export interface SystemEquation {
-  residuals: (x: number[], states: number[], params: any) => number[];
+  residuals: (x: number[], ctx: EquationContext) => number[];
   variables: string[];
   systemSize: number;
 }
@@ -51,7 +52,7 @@ export class DAEAssembler {
     });
 
     // 3. Assemble Residuals Function
-    const residuals = (x: number[], states: number[], params: any): number[] => {
+    const residuals = (x: number[], ctx: EquationContext): number[] => {
       const res = new Array(varCount).fill(0);
       
       // Node Map for x-index lookups

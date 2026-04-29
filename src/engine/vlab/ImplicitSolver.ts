@@ -1,4 +1,4 @@
-import { EquationContext } from './vlabPhysics';
+import { EquationContext } from './types';
 
 export class ImplicitSolver {
   private maxIterations = 20;

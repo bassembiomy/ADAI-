@@ -1,4 +1,4 @@
-import { EquationContext } from './vlabPhysics';
+import { EquationContext } from './types';
 
 export const blockEquations: Record<string, (x: number[], ctx: EquationContext, params: any) => number> = {
   Resistor: (x, ctx, params) => {

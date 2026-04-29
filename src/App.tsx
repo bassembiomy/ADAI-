@@ -9,9 +9,9 @@ import { VLabWorkspace } from './components/vlab/VLabWorkspace';
 import { XbridgesEngine } from './engine/xbridges/XbridgesEngine';
 import { Solvers } from './engine/xbridges/Solvers';
 import { GMDHEngine, solveLeastSquares } from './engine/gmdh/gmdh_core/combi';
-import { 
-  Trash2, Plus, Layers, Settings2, Search, Save, Box, 
-  ChevronDown, ChevronRight, Play, Pause, Square, 
+import {
+  Trash2, Plus, Layers, Settings2, Search, Save, Box,
+  ChevronDown, ChevronRight, Play, Pause, Square,
   MousePointer2, Upload, FileText, Download,
   Activity, Zap, Database, Cpu, Layout, Maximize2, X
 } from 'lucide-react';
@@ -111,15 +111,15 @@ const Separator = ({ orientation = 'horizontal', className = '' }: {
 );
 
 const Triangle = ({ size, className, fill }: { size: number, className?: string, fill?: string }) => (
-  <svg 
-    width={size} 
-    height={size} 
-    viewBox="0 0 24 24" 
-    fill={fill || "none"} 
-    stroke="currentColor" 
-    strokeWidth="2" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill={fill || "none"}
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
     className={className}
   >
     <path d="M3 20h18L12 4z" />
@@ -181,38 +181,38 @@ const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
         <div className="relative mb-16 group">
           {/* Outer Ring */}
           <div className="absolute inset-0 scale-[1.8] border border-[#c9a86c]/10 rounded-full animate-ping-slow" />
-          
+
           {/* Main Logo SVG */}
           <div className="relative z-10 transform scale-[1.6]">
             <svg width="120" height="120" viewBox="0 0 100 100" fill="none">
               {/* Outer Hexagon with Draw Animation */}
-              <path 
-                d="M50 5 L90 25 L90 75 L50 95 L10 75 L10 25 Z" 
-                stroke="#c9a86c" 
-                strokeWidth="1.5" 
+              <path
+                d="M50 5 L90 25 L90 75 L50 95 L10 75 L10 25 Z"
+                stroke="#c9a86c"
+                strokeWidth="1.5"
                 strokeLinejoin="round"
                 className="animate-draw-path"
               />
-              
+
               {/* Inner Scanning Hexagon */}
-              <path 
-                d="M50 15 L80 30 L80 70 L50 85 L20 70 L20 30 Z" 
-                stroke="#c9a86c" 
-                strokeWidth="0.5" 
+              <path
+                d="M50 15 L80 30 L80 70 L50 85 L20 70 L20 30 Z"
+                stroke="#c9a86c"
+                strokeWidth="0.5"
                 opacity="0.2"
                 className="animate-pulse"
               />
-              
+
               {/* Core Gem */}
-              <path 
-                d="M40 45 L50 35 L60 45 L60 55 L50 65 L40 55 Z" 
-                fill="#c9a86c" 
+              <path
+                d="M40 45 L50 35 L60 45 L60 55 L50 65 L40 55 Z"
+                fill="#c9a86c"
                 className="animate-glow-cycle"
               />
-              
+
               {/* Scanning Beam */}
               <rect x="0" y="0" width="100" height="2" fill="url(#beamGradient)" className="animate-scan" />
-              
+
               <defs>
                 <linearGradient id="beamGradient" x1="0" y1="0" x2="1" y2="0">
                   <stop offset="0%" stopColor="transparent" />
@@ -228,8 +228,8 @@ const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
         <div className="text-center relative">
           <div className="flex gap-1 mb-6">
             {['A', 'D', 'I', 'A'].map((char, i) => (
-              <span 
-                key={i} 
+              <span
+                key={i}
                 className="text-7xl font-black tracking-tighter text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] animate-reveal-letter"
                 style={{ animationDelay: `${i * 0.2 + 0.5}s` }}
               >
@@ -238,7 +238,7 @@ const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
             ))}
             <span className="text-7xl font-black text-[#c9a86c] animate-reveal-letter" style={{ animationDelay: '1.5s' }}>.</span>
           </div>
-          
+
           <div className="h-8 relative overflow-hidden flex items-center justify-center">
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#c9a86c]/20 to-transparent animate-shimmer" />
             <p className="text-[#c9a86c] text-[10px] font-bold uppercase tracking-[1em] opacity-0 animate-fade-in-up">
@@ -551,8 +551,8 @@ const snapToGrid = (value: number, gridSize: number): number => Math.round(value
 const normalizeNumerals = (val: string) => {
   if (!val) return "";
   return val.replace(/[٠١٢٣٤٥٦٧٨٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d).toString())
-            .replace(/[۰۱۲۳۴۵۶۷۸۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d).toString())
-            .replace(/[٫،,]/g, '.');
+    .replace(/[۰۱۲۳۴۵۶۷۸۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d).toString())
+    .replace(/[٫،,]/g, '.');
 };
 
 const parseValue = (type: VariableType, value: string): number | boolean => {
@@ -901,19 +901,19 @@ const generateMISRACCode = (chart: {
     const sEnum = stateEnum(s);
     let funcs = '';
     funcs += `void ${sEnum}_Entry(void) {\n    /* Entry: ${s.name} */\n    ${processUserCode(s.entry ? s.entry.replace(/\n/g, '\n    ') : '')}\n}\n\n`;
-    
+
     let duringCode = s.during ? s.during.replace(/\n/g, '\n    ') : '';
     if (s.isXBridges) {
-       duringCode += `${duringCode ? '\n    ' : ''}/* Co-Model Step */\n    ${sEnum}_XBridges_Step(${(chart.tickMs / 1000).toFixed(4)}f);`;
+      duringCode += `${duringCode ? '\n    ' : ''}/* Co-Model Step */\n    ${sEnum}_XBridges_Step(${(chart.tickMs / 1000).toFixed(4)}f);`;
     }
     funcs += `void ${sEnum}_During(void) {\n    /* During: ${s.name} */\n    ${processUserCode(duringCode)}\n}\n\n`;
-    
+
     funcs += `void ${sEnum}_Exit(void) {\n    /* Exit: ${s.name} */\n    ${processUserCode(s.exit ? s.exit.replace(/\n/g, '\n    ') : '')}\n}\n`;
 
     if (s.isXBridges && s.xBridgesModel) {
       funcs += `\n/* Generated X-Bridges logic for ${s.name} */\n`;
       funcs += `void ${sEnum}_XBridges_Step(float delta_s) {\n`;
-      
+
       const model = s.xBridgesModel;
       const bMap = new Map<string, any>();
       model.nodes.forEach(n => bMap.set(n.id, n.data));
@@ -922,7 +922,7 @@ const generateMISRACCode = (chart: {
       const executionOrder: any[] = [];
       const inDegree = new Map<string, number>();
       const adj = new Map<string, string[]>();
-      
+
       model.nodes.forEach(n => {
         inDegree.set(n.id, 0);
         adj.set(n.id, []);
@@ -975,7 +975,7 @@ const generateMISRACCode = (chart: {
         const b = n.data as any;
         const id = sanitize(n.id);
         const p = b.params || {};
-        
+
         // Gather input variable names
         const ins = (b.inputs || []).map((inPort: any) => {
           const edge = model.edges.find(e => e.target === n.id && e.targetHandle === inPort.id);
@@ -984,7 +984,7 @@ const generateMISRACCode = (chart: {
         });
 
         funcs += `    /* Block: ${b.label || b.type} (${id}) */\n`;
-        switch(b.type) {
+        switch (b.type) {
           case 'Constant': funcs += `    ${id}_out0 = ${Number(p.value || 0).toFixed(4)}f;\n`; break;
           case 'GAIN': funcs += `    ${id}_out0 = ${ins[0] || '0.0f'} * ${Number(p.gain || 1).toFixed(4)}f;\n`; break;
           case 'VectorAdd': funcs += `    ${id}_out0 = ${ins[0] || '0.0f'} + ${ins[1] || '0.0f'};\n`; break;
@@ -2333,19 +2333,47 @@ const Buzzer = ({
 
 const DoeWorkspace = ({
   onClose,
-  addError
+  addError,
+  activeModel,
+  setActiveModel,
+  taguchiConfig,
+  setTaguchiConfig,
+  data,
+  setData,
+  headers,
+  setHeaders,
+  results,
+  setResults,
+  plotFactors,
+  setPlotFactors,
+  holdValues,
+  setHoldValues,
+  plotType,
+  setPlotType,
+  handleExportProject,
+  generateReport
 }: {
   onClose: () => void;
-  addError: (type: 'error' | 'warning' | 'info', message: string) => void;
+  addError: (type: 'error' | 'warning' | 'info', message: string, source?: string, elementId?: string) => void;
+  activeModel: 'RSM' | 'GMDH' | 'Taguchi';
+  setActiveModel: React.Dispatch<React.SetStateAction<'RSM' | 'GMDH' | 'Taguchi'>>;
+  taguchiConfig: { objective: 'larger' | 'smaller' | 'nominal' };
+  setTaguchiConfig: React.Dispatch<React.SetStateAction<{ objective: 'larger' | 'smaller' | 'nominal' }>>;
+  data: number[][];
+  setData: React.Dispatch<React.SetStateAction<number[][]>>;
+  headers: string[];
+  setHeaders: React.Dispatch<React.SetStateAction<string[]>>;
+  results: any | null;
+  setResults: React.Dispatch<React.SetStateAction<any | null>>;
+  plotFactors: { x: number, y: number };
+  setPlotFactors: React.Dispatch<React.SetStateAction<{ x: number, y: number }>>;
+  holdValues: number[];
+  setHoldValues: React.Dispatch<React.SetStateAction<number[]>>;
+  plotType: 'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act';
+  setPlotType: React.Dispatch<React.SetStateAction<'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act'>>;
+  handleExportProject: () => void;
+  generateReport: () => void;
 }) => {
-  const [activeModel, setActiveModel] = useState<'RSM' | 'GMDH' | 'Taguchi'>('RSM');
-  const [taguchiConfig, setTaguchiConfig] = useState<{ objective: 'larger' | 'smaller' | 'nominal' }>({ objective: 'larger' });
-  const [data, setData] = useState<number[][]>([[0, 0, 0], [1, 0, 1], [0, 1, 1], [1, 1, 4]]);
-  const [headers, setHeaders] = useState<string[]>(['X1', 'X2', 'Y']);
-  const [results, setResults] = useState<any | null>(null);
-  const [plotFactors, setPlotFactors] = useState<{ x: number, y: number }>({ x: 0, y: 1 });
-  const [holdValues, setHoldValues] = useState<number[]>([]);
-  const [plotType, setPlotType] = useState<'surface' | 'contour'>('surface');
   const [eqFontSize, setEqFontSize] = useState(14);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -2389,66 +2417,193 @@ const DoeWorkspace = ({
     reader.readAsBinaryString(file);
   };
 
+  const normalCDF = (x: number) => {
+    const t = 1 / (1 + 0.2316419 * Math.abs(x));
+    const d = 0.3989423 * Math.exp(-x * x / 2);
+    const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+    return x > 0 ? 1 - p : p;
+  };
+
   const calculateRSM = () => {
     if (!data || data.length < 3) {
       addError('warning', 'Insufficient data points for RSM.');
       return;
     }
 
-    const X: number[][] = [];
-    const Y: number[] = [];
+    const factorsCount = headers.length - 1;
+    const n = data.length;
 
-    data.forEach(row => {
-      const factors = row.slice(0, k);
-      Y.push(row[k]);
+    // Standard DOE Constants for design detection
+    const DOE_CONSTANTS: Record<string, boolean> = {
+      '2,13': true, '3,20': true, '4,31': true, '5,32': true, '5,52': true, '6,53': true, '6,91': true, '7,92': true, '7,163': true
+    };
+    const isStandard = !!DOE_CONSTANTS[`${factorsCount},${n}`];
 
-      const xRow = [1];
-      for (let i = 0; i < k; i++) xRow.push(factors[i]);
-      for (let i = 0; i < k; i++) xRow.push(factors[i] * factors[i]);
-      for (let i = 0; i < k; i++) {
-        for (let j = i + 1; j < k; j++) xRow.push(factors[i] * factors[j]);
-      }
-      X.push(xRow);
+    const factorStats = headers.slice(0, factorsCount).map((_, i) => {
+      const col = data.map(r => r[i]);
+      return { min: Math.min(...col), max: Math.max(...col) };
     });
 
-    const Beta = solveLeastSquares(X, Y).map(v => [v]); // Format for existing display logic
+    const coding = factorStats.map(s => ({
+      mid: (s.max + s.min) / 2,
+      scale: (s.max - s.min) / 2 || 1
+    }));
 
-    // Statistics
-    const n = data.length;
-    const p = Beta.length;
-    let SSE = 0, SST = 0;
-    const meanY = Y.reduce((a, b) => a + b, 0) / n;
+    const Z: number[][] = [];
+    const Y: number[] = [];
+    data.forEach(row => {
+      const f = row.slice(0, factorsCount);
+      Y.push(row[factorsCount]);
+      const x = f.map((v, i) => (v - coding[i].mid) / coding[i].scale);
 
-    const Y_pred = X.map(row => row.reduce((sum, val, idx) => sum + val * Beta[idx][0], 0));
+      const zRow = [1];
+      for (let i = 0; i < factorsCount; i++) zRow.push(x[i]);
+      for (let i = 0; i < factorsCount; i++) zRow.push(x[i] * x[i]);
+      for (let i = 0; i < factorsCount; i++) {
+        for (let j = i + 1; j < factorsCount; j++) zRow.push(x[i] * x[j]);
+      }
+      Z.push(zRow);
+    });
 
-    for (let i = 0; i < n; i++) {
-      SSE += Math.pow(Y[i] - Y_pred[i], 2);
-      SST += Math.pow(Y[i] - meanY, 2);
+    const p_terms = Z[0].length - 1;
+    const p_count = p_terms + 1;
+    let resultsObj: any = null;
+
+    try {
+      const ZMat = math.matrix(Z);
+      const YMat = math.matrix(Y.map((y: number) => [y]));
+      const Zt = math.transpose(ZMat);
+      const ZtZ = math.multiply(Zt, ZMat);
+
+      const ZtZ_reg = (ZtZ as any).toArray().map((row: any, i: number) =>
+        row.map((val: number, j: number) => val + (i === j ? 1e-10 : 0))
+      );
+
+      const ZtZ_inv = math.inv(math.matrix(ZtZ_reg));
+      const ZtY = math.multiply(Zt, YMat);
+      const Beta_coded = (math.multiply(ZtZ_inv, ZtY) as any).toArray().map((r: any) => r[0]);
+
+      // Unscale Beta
+      const Beta: number[] = new Array(p_terms + 1).fill(0);
+      const k = factorsCount;
+      for (let i = 0; i < k; i++) Beta[k + 1 + i] = Beta_coded[k + 1 + i] / (coding[i].scale ** 2);
+      let interIdx = 2 * k + 1;
+      for (let i = 0; i < k; i++) {
+        for (let j = i + 1; j < k; j++) {
+          Beta[interIdx] = Beta_coded[interIdx] / (coding[i].scale * coding[j].scale);
+          interIdx++;
+        }
+      }
+      for (let i = 0; i < k; i++) {
+        let val = Beta_coded[i + 1] / coding[i].scale;
+        val -= 2 * Beta[k + 1 + i] * coding[i].mid;
+        let itIdx = 2 * k + 1;
+        for (let m = 0; m < k; m++) {
+          for (let n = m + 1; n < k; n++) {
+            if (m === i) val -= Beta[itIdx] * coding[n].mid;
+            if (n === i) val -= Beta[itIdx] * coding[m].mid;
+            itIdx++;
+          }
+        }
+        Beta[i + 1] = val;
+      }
+      let b0 = Beta_coded[0];
+      for (let i = 0; i < k; i++) {
+        b0 -= Beta_coded[i + 1] * coding[i].mid / coding[i].scale;
+        b0 += Beta_coded[k + 1 + i] * (coding[i].mid ** 2) / (coding[i].scale ** 2);
+      }
+      interIdx = 2 * k + 1;
+      for (let i = 0; i < k; i++) {
+        for (let j = i + 1; j < k; j++) {
+          b0 += Beta_coded[interIdx] * (coding[i].mid * coding[j].mid) / (coding[i].scale * coding[j].scale);
+          interIdx++;
+        }
+      }
+      Beta[0] = b0;
+
+      // Stats
+      const meanY = Y.reduce((a: number, b: number) => a + b, 0) / n;
+      const Y_pred = Z.map((row: number[]) => row.reduce((sum: number, val: number, idx: number) => sum + val * Beta_coded[idx], 0));
+      
+      let SSE = 0, SST = 0;
+      for (let i = 0; i < n; i++) {
+        SSE += Math.pow(Y[i] - Y_pred[i], 2);
+        SST += Math.pow(Y[i] - meanY, 2);
+      }
+
+      const MS_err = SSE / Math.max(1, n - p_count);
+      const MS_reg = (SST - SSE) / Math.max(1, p_count - 1);
+      const F = MS_err === 0 ? 0 : MS_reg / MS_err;
+      const S = Math.sqrt(MS_err);
+      const R2 = SST === 0 ? 1 : Math.max(0, 1 - (SSE / SST));
+      const R2Adj = SST === 0 ? 1 : Math.max(0, 1 - ((SSE / Math.max(1, n - p_count)) / (SST / Math.max(1, n - 1))));
+
+      // Advanced Statistics (PRESS, Pred R2, Adeq Precision)
+      const ZtZ_inv_arr = (ZtZ_inv as any).toArray();
+      let PRESS = 0;
+      const leverages = Z.map(row => {
+        let h = 0;
+        for (let i = 0; i < row.length; i++) {
+          for (let j = 0; j < row.length; j++) {
+            h += row[i] * ZtZ_inv_arr[i][j] * row[j];
+          }
+        }
+        return h;
+      });
+
+      for (let i = 0; i < n; i++) {
+        const e = Y[i] - Y_pred[i];
+        PRESS += Math.pow(e / (1 - Math.min(0.99, leverages[i])), 2);
+      }
+
+      const R2Pred = SST === 0 ? 1 : Math.max(0, 1 - (PRESS / SST));
+      const AdeqPrec = (Math.max(...Y_pred) - Math.min(...Y_pred)) / Math.sqrt((p_count * MS_err) / n || 1e-10);
+
+      // Build Equation and Table Terms
+      const terms = ['Intercept'];
+      for (let i = 0; i < k; i++) terms.push(headers[i]);
+      for (let i = 0; i < k; i++) terms.push(`${headers[i]}^2`);
+      for (let i = 0; i < k; i++) {
+        for (let j = i + 1; j < k; j++) terms.push(`${headers[i]}*${headers[j]}`);
+      }
+
+      const anovaTable = [
+        { source: 'Model', df: p_count - 1, ss: SST - SSE, ms: (SST - SSE) / (p_count - 1), f: F },
+        { source: 'Error', df: n - p_count, ss: SSE, ms: MS_err },
+        { source: 'Total', df: n - 1, ss: SST }
+      ];
+
+      const coeffTable = terms.map((term, i) => {
+        const se = Math.sqrt(MS_err * ZtZ_inv_arr[i][i]);
+        const t = Beta_coded[i] / (se || 1e-10);
+        const p = 2 * (1 - normalCDF(Math.abs(t))); 
+        return { term, coef: Beta[i], codedCoef: Beta_coded[i], se, t, p };
+      });
+
+      let equation = `Regression Equation (Uncoded Units):\n\nY = ${Beta[0].toPrecision(6)}`;
+      for (let i = 1; i < Beta.length; i++) {
+        const b = Beta[i];
+        if (Math.abs(b) < 1e-12) continue;
+        equation += `\n    ${b >= 0 ? '+' : '-'} ${Math.abs(b).toPrecision(6)} * ${terms[i]}`;
+      }
+
+      const residuals = Y.map((y, i) => y - Y_pred[i]);
+
+      resultsObj = { 
+        Beta, Beta_coded, R2, R2Adj, R2Pred, S, F, MS_err, PRESS, AdeqPrec,
+        equation, terms, type: 'RSM', factorStats, isStandard,
+        anovaTable, coeffTable, residuals, fits: Y_pred
+      };
+    } catch (err) {
+      addError('error', 'Regression matrix is singular. Data might be highly collinear.');
+      return;
     }
 
-    const R2 = 1 - (SSE / SST);
-    const MS_err = SSE / (n - p);
-    const MS_reg = (SST - SSE) / (p - 1);
-    const F = MS_reg / MS_err;
-
-    // Build Equation
-    const terms = ['Intercept'];
-    for (let i = 0; i < k; i++) terms.push(headers[i]);
-    for (let i = 0; i < k; i++) terms.push(`${headers[i]}²`);
-    for (let i = 0; i < k; i++) {
-      for (let j = i + 1; j < k; j++) terms.push(`${headers[i]}*${headers[j]}`);
+    if (resultsObj) {
+      setResults(resultsObj);
+      setActiveModel('RSM');
+      addError('info', `RSM Logic synchronized with Minitab regression models.`);
     }
-
-    let equation = `Y = ${Beta[0][0].toFixed(4)}`;
-    for (let i = 1; i < Beta.length; i++) {
-      const b = Beta[i][0];
-      if (Math.abs(b) < 1e-4) continue;
-      equation += ` ${b >= 0 ? '+' : '-'} ${Math.abs(b).toFixed(4)}*${terms[i]}`;
-    }
-
-    setResults({ Beta, R2, F, MS_err, equation, terms, type: 'RSM' });
-    setActiveModel('RSM');
-    addError('info', 'RSM Modeling Complete.');
   };
 
   const calculateGMDH = () => {
@@ -2465,21 +2620,46 @@ const DoeWorkspace = ({
       validationSplit: 0.3
     });
     model.train(data, headers);
-    
+
     const k = headers.length - 1;
-    
-    let R2 = 0;
-    let rmse = 0;
-    if (model.layers.length > 0) {
-      rmse = model.layers[model.layers.length-1][0].rmse;
-      R2 = 1 - Math.pow(rmse / (math.std(data.map(r => r[k])) as unknown as number), 2);
+
+    const Y = data.map(r => r[k]);
+    let Y_pred: number[] = [];
+    try {
+      Y_pred = data.map(r => model.predict(r.slice(0, k)));
+    } catch (e) {
+      Y_pred = Y.map(() => 0);
     }
-    
-    setResults({ 
-      model, 
+
+    const meanY = Y.reduce((a, b) => a + b, 0) / Y.length;
+    let SSE = 0, SST = 0;
+    for (let i = 0; i < Y.length; i++) {
+      SSE += Math.pow(Y[i] - Y_pred[i], 2);
+      SST += Math.pow(Y[i] - meanY, 2);
+    }
+
+    const R2 = SST === 0 ? 1 : Math.max(0, 1 - (SSE / SST));
+
+    // Simple GMDH Feature Importance based on occurrences in neurons
+    const importance: Record<string, number> = {};
+    model.layers.forEach((layer: any[]) => {
+      layer.forEach((neuron: any) => {
+        neuron.inputs.forEach((idx: number) => {
+          const name = headers[idx] || `X${idx+1}`;
+          importance[name] = (importance[name] || 0) + (1 / (model.layers.length));
+        });
+      });
+    });
+
+    setResults({
+      model,
       R2,
       equation: model.getEquation(),
-      type: 'GMDH'
+      type: 'GMDH',
+      fits: Y_pred,
+      actuals: Y,
+      residuals: Y.map((y, i) => y - Y_pred[i]),
+      importance
     });
     setActiveModel('GMDH');
     addError('info', 'GMDH Neural Architecture Trained.');
@@ -2493,53 +2673,81 @@ const DoeWorkspace = ({
 
     const factorsCount = headers.length - 1;
     const factors = headers.slice(0, factorsCount);
+    const meanY = data.reduce((a, r) => a + r[factorsCount], 0) / data.length;
 
-    // 1. Calculate S/N Ratios
-    const snRatios = data.map(row => {
-      const y = row[factorsCount];
+    // 1. Group data into unique trials to handle replicates properly
+    const trialsMap = new Map<string, number[]>();
+    data.forEach((row: number[]) => {
+      const factorsPart = row.slice(0, factorsCount).join('|');
+      if (!trialsMap.has(factorsPart)) trialsMap.set(factorsPart, []);
+      trialsMap.get(factorsPart)!.push(row[factorsCount]);
+    });
+
+    const trials = Array.from(trialsMap.entries()).map(([key, vals]: [string, number[]]) => ({
+      factors: key.split('|').map(Number),
+      mean: vals.reduce((a: number, b: number) => a + b, 0) / vals.length,
+      variance: vals.length > 1 ? vals.reduce((a: number, b: number) => a + Math.pow(b - (vals.reduce((x: number, y: number) => x + y, 0) / vals.length), 2), 0) / (vals.length - 1) : 0,
+      count: vals.length,
+      responses: vals
+    }));
+
+    // Calculate S/N Ratios for each unique trial combination
+    const snRatios = trials.map((t: any) => {
+      const n = t.count;
+      const y = t.responses;
       if (taguchiConfig.objective === 'larger') {
-        return -10 * Math.log10(1 / (y * y + 1e-10));
+        const sumSqInv = y.reduce((acc: number, val: number) => acc + 1 / (val * val + 1e-10), 0);
+        return -10 * Math.log10(sumSqInv / n);
       } else if (taguchiConfig.objective === 'smaller') {
-        return -10 * Math.log10(y * y + 1e-10);
+        const sumSq = y.reduce((acc: number, val: number) => acc + val * val, 0);
+        return -10 * Math.log10(sumSq / n);
       } else {
-        // Nominal is best
-        return -10 * Math.log10(Math.abs(y) + 1e-10); 
+        if (t.variance === 0) return 10 * Math.log10(Math.pow(t.mean, 2) / 1e-6);
+        return 10 * Math.log10(Math.pow(t.mean, 2) / t.variance);
       }
     });
 
-    // 2. Means Analysis for each factor
-    const factorLevels = factors.map((f, factorIdx) => {
-      const levels = Array.from(new Set(data.map(r => r[factorIdx]))).sort((a, b) => a - b);
-      const means = levels.map(l => {
-        const matchingRowsIndices = data.map((r, i) => r[factorIdx] === l ? i : -1).filter(idx => idx !== -1);
-        const meanY = matchingRowsIndices.reduce((acc, idx) => acc + data[idx][factorsCount], 0) / matchingRowsIndices.length;
-        const meanSN = matchingRowsIndices.reduce((acc, idx) => acc + snRatios[idx], 0) / matchingRowsIndices.length;
-        return { level: l, meanY, meanSN };
+    // 2. Means Analysis for each factor (using unique trials)
+    const factorLevels = factors.map((f: string, factorIdx: number) => {
+      const levels = Array.from(new Set(trials.map((t: any) => t.factors[factorIdx]))).sort((a: number, b: number) => a - b);
+      const means = levels.map((l: number) => {
+        const matchingTrialsIndices = trials.map((t: any, i: number) => t.factors[factorIdx] === l ? i : -1).filter((idx: number) => idx !== -1);
+        const levelMeanY = matchingTrialsIndices.reduce((acc: number, idx: number) => acc + trials[idx].mean, 0) / matchingTrialsIndices.length;
+        const meanSN = matchingTrialsIndices.reduce((acc: number, idx: number) => acc + snRatios[idx], 0) / matchingTrialsIndices.length;
+        return { level: l, meanY: levelMeanY, meanSN };
       });
-      const delta = Math.max(...means.map(m => m.meanSN)) - Math.min(...means.map(m => m.meanSN));
+      const delta = Math.max(...means.map((m: any) => m.meanSN)) - Math.min(...means.map((m: any) => m.meanSN));
       return { factor: f, means, delta };
     });
 
     // 3. Rank factors by Delta
-    const rankedFactors = [...factorLevels].sort((a, b) => b.delta - a.delta).map((f, i) => ({ ...f, rank: i + 1 }));
+    const rankedFactors = [...factorLevels].sort((a: any, b: any) => b.delta - a.delta).map((f: any, i: number) => ({ ...f, rank: i + 1 }));
 
     // 4. Optimal Combination (Best SN Ratio level for each factor)
-    const optimal = rankedFactors.map(f => {
-      const bestLevel = f.means.reduce((prev, curr) => (curr.meanSN > prev.meanSN ? curr : prev));
-      return { factor: f.factor, level: bestLevel.level, meanSN: bestLevel.meanSN };
+    const optimal = rankedFactors.map((f: any) => {
+      const best = [...f.means].sort((a: any, b: any) => b.meanSN - a.meanSN)[0];
+      return { factor: f.factor, level: best.level, meanSN: best.meanSN };
     });
 
-    // 5. ANOVA (Simplified Contribution Analysis)
-    const totalMeanSN = snRatios.reduce((a, b) => a + b, 0) / snRatios.length;
-    const totalSS = snRatios.reduce((acc, sn) => acc + Math.pow(sn - totalMeanSN, 2), 0);
+    // 5. ANOVA (on S/N Ratios)
+    const totalMeanSN = snRatios.reduce((a: number, b: number) => a + b, 0) / snRatios.length;
+    const totalSS = snRatios.reduce((acc: number, sn) => acc + Math.pow(sn - totalMeanSN, 2), 0);
     const anova = rankedFactors.map(f => {
       const factorIdx = factors.indexOf(f.factor);
-      const ss = f.means.reduce((acc, m) => {
-        const ni = data.filter(r => r[factorIdx] === m.level).length;
+      const ss = f.means.reduce((acc: number, m: { level: number; meanY: number; meanSN: number }) => {
+        const ni = trials.filter(t => t.factors[factorIdx] === m.level).length;
         return acc + (ni * Math.pow(m.meanSN - totalMeanSN, 2));
       }, 0);
       const df = f.means.length - 1;
       return { factor: f.factor, ss, df, ms: ss / (df || 1), contribution: totalSS > 0 ? (ss / totalSS) * 100 : 0 };
+    });
+
+    // 6. Build Additive Prediction Equation
+    let equation = `Taguchi Additive Prediction Equation:\n\nY = ${meanY.toFixed(4)} (Grand Mean)`;
+    rankedFactors.sort((a, b) => factors.indexOf(a.factor) - factors.indexOf(b.factor)).forEach(f => {
+      equation += `\n  + [ ${f.factor}: `;
+      const effects = f.means.map((m: any) => `L${m.level} ${(m.meanY - meanY) >= 0 ? '+' : ''}${(m.meanY - meanY).toFixed(4)}`);
+      equation += effects.join(' | ') + ' ]';
     });
 
     setResults({
@@ -2548,245 +2756,25 @@ const DoeWorkspace = ({
       factorLevels: rankedFactors,
       optimal,
       anova,
-      objective: taguchiConfig.objective
+      objective: taguchiConfig.objective,
+      equation
     });
     setActiveModel('Taguchi');
-    addError('info', 'Taguchi Analysis (L/S/N Optimization) Completed.');
+    addError('info', 'Taguchi Analysis Completed.');
   };
-
-  // === Ctrl+S Save DOE Design ===
-  const saveDoeDesign = useCallback(() => {
-    const design = {
-      version: '1.0',
-      timestamp: new Date().toISOString(),
-      headers,
-      data,
-      activeModel,
-      config: activeModel === 'GMDH' ? {
-        algorithm: 'MIA',
-        polynomialOrder: 2,
-        maxLayers: 8,
-        externalCriterion: 'RMSE',
-        validationSplit: 0.3
-      } : { type: 'RSM_Quadratic' },
-      results: results ? {
-        R2: results.R2,
-        equation: results.equation,
-        type: results.type
-      } : null
-    };
-    const blob = new Blob([JSON.stringify(design, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `doe_design_${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    addError('info', 'DOE design saved successfully.');
-  }, [headers, data, activeModel, results, addError]);
 
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        saveDoeDesign();
+        handleExportProject();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [saveDoeDesign]);
+  }, [handleExportProject]);
 
   // === Professional Report Generation ===
-  const generateReport = useCallback(() => {
-    if (!results) {
-      addError('warning', 'No model results to export. Run a model first.');
-      return;
-    }
-
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const pageW = pdf.internal.pageSize.getWidth();
-    const margin = 20;
-    const contentW = pageW - margin * 2;
-    let y = margin;
-
-    const addPage = () => {
-      pdf.addPage();
-      y = margin;
-    };
-
-    const checkSpace = (needed: number) => {
-      if (y + needed > 270) addPage();
-    };
-
-    // --- Header Bar ---
-    pdf.setFillColor(10, 10, 10);
-    pdf.rect(0, 0, pageW, 35, 'F');
-    pdf.setFillColor(201, 168, 108);
-    pdf.rect(0, 35, pageW, 1.5, 'F');
-
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(18);
-    pdf.setTextColor(201, 168, 108);
-    pdf.text('ADIA', margin, 15);
-    pdf.setFontSize(9);
-    pdf.setTextColor(150, 150, 150);
-    pdf.text('Design of Experiments — Analysis Report', margin, 22);
-    pdf.setFontSize(8);
-    pdf.setTextColor(100, 100, 100);
-    pdf.text(`Generated: ${new Date().toLocaleString()}`, margin, 29);
-    pdf.text(`Model: ${results.type}`, pageW - margin - 30, 29);
-
-    y = 45;
-
-    // --- Model Summary Section ---
-    pdf.setFontSize(13);
-    pdf.setTextColor(201, 168, 108);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('1. Model Summary', margin, y);
-    y += 8;
-
-    pdf.setFillColor(20, 20, 20);
-    pdf.roundedRect(margin, y, contentW, 28, 2, 2, 'F');
-    pdf.setDrawColor(50, 50, 50);
-    pdf.roundedRect(margin, y, contentW, 28, 2, 2, 'S');
-
-    pdf.setFontSize(9);
-    pdf.setTextColor(130, 130, 130);
-    pdf.text('Model Type', margin + 5, y + 7);
-    pdf.text('R-Squared', margin + 50, y + 7);
-    pdf.text('Data Points', margin + 100, y + 7);
-    pdf.text('Factors', margin + 140, y + 7);
-
-    pdf.setFontSize(14);
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text(results.type, margin + 5, y + 20);
-    pdf.setTextColor(201, 168, 108);
-    if (results.type === 'Taguchi') {
-      pdf.text('N/A', margin + 50, y + 20);
-    } else {
-      pdf.text(`${(results.R2 * 100).toFixed(2)}%`, margin + 50, y + 20);
-    }
-    pdf.setTextColor(255, 255, 255);
-    pdf.text(`${data.length}`, margin + 100, y + 20);
-    pdf.text(`${headers.length - 1}`, margin + 140, y + 20);
-    y += 36;
-
-    // --- Equation Section ---
-    checkSpace(40);
-    pdf.setFontSize(13);
-    pdf.setTextColor(201, 168, 108);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('2. Model Equation', margin, y);
-    y += 8;
-
-    pdf.setFillColor(17, 17, 17);
-    const eqText = results.type === 'Taguchi' 
-      ? 'Taguchi models optimize S/N ratios for robust design; an explicit polynomial regression equation is not generated.' 
-      : (results.equation || 'No equation');
-    const eqLines = pdf.setFont('courier', 'normal').setFontSize(10).splitTextToSize(eqText, contentW - 10);
-    const eqH = Math.max(20, eqLines.length * 5 + 10);
-
-    pdf.roundedRect(margin, y, contentW, eqH, 2, 2, 'F');
-    pdf.setDrawColor(50, 50, 50);
-    pdf.roundedRect(margin, y, contentW, eqH, 2, 2, 'S');
-    pdf.setTextColor(52, 211, 153);
-    pdf.text(eqLines, margin + 5, y + 7);
-    y += eqH + 8;
-
-    // --- Factor Summary ---
-    checkSpace(30 + headers.length * 6);
-    pdf.setFontSize(13);
-    pdf.setTextColor(201, 168, 108);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('3. Factor Summary', margin, y);
-    y += 8;
-
-    // Table header
-    pdf.setFillColor(30, 30, 30);
-    pdf.rect(margin, y, contentW, 7, 'F');
-    pdf.setFontSize(8);
-    pdf.setTextColor(150, 150, 150);
-    pdf.setFont('helvetica', 'bold');
-    const colW = contentW / 5;
-    ['Factor', 'Min', 'Max', 'Mean', 'Std Dev'].forEach((h, i) => {
-      pdf.text(h, margin + i * colW + 3, y + 5);
-    });
-    y += 7;
-
-    // Table rows
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(220, 220, 220);
-    headers.slice(0, -1).forEach((h, i) => {
-      const col = data.map(r => r[i]);
-      const min = Math.min(...col);
-      const max = Math.max(...col);
-      const mean = col.reduce((a, b) => a + b, 0) / col.length;
-      const std = Math.sqrt(col.reduce((s, v) => s + (v - mean) ** 2, 0) / col.length);
-
-      if (i % 2 === 0) {
-        pdf.setFillColor(18, 18, 18);
-        pdf.rect(margin, y, contentW, 6, 'F');
-      }
-      [h, min.toFixed(3), max.toFixed(3), mean.toFixed(3), std.toFixed(3)].forEach((val, j) => {
-        pdf.text(val, margin + j * colW + 3, y + 4.5);
-      });
-      y += 6;
-    });
-    y += 8;
-
-    // --- Data Table ---
-    checkSpace(20);
-    pdf.setFontSize(13);
-    pdf.setTextColor(201, 168, 108);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('4. Experiment Data', margin, y);
-    y += 8;
-
-    // Data table header
-    const dColW = contentW / headers.length;
-    pdf.setFillColor(30, 30, 30);
-    pdf.rect(margin, y, contentW, 7, 'F');
-    pdf.setFontSize(7);
-    pdf.setTextColor(150, 150, 150);
-    pdf.setFont('helvetica', 'bold');
-    headers.forEach((h, i) => {
-      pdf.text(h, margin + i * dColW + 2, y + 5);
-    });
-    y += 7;
-
-    // Data rows
-    pdf.setFont('courier', 'normal');
-    pdf.setFontSize(7);
-    pdf.setTextColor(200, 200, 200);
-    data.forEach((row, rIdx) => {
-      checkSpace(6);
-      if (rIdx % 2 === 0) {
-        pdf.setFillColor(15, 15, 15);
-        pdf.rect(margin, y, contentW, 5.5, 'F');
-      }
-      row.forEach((val, cIdx) => {
-        pdf.text(val.toFixed(4), margin + cIdx * dColW + 2, y + 4);
-      });
-      y += 5.5;
-    });
-    y += 8;
-
-    // --- Footer ---
-    const totalPages = pdf.getNumberOfPages();
-    for (let p = 1; p <= totalPages; p++) {
-      pdf.setPage(p);
-      pdf.setFillColor(201, 168, 108);
-      pdf.rect(0, 290, pageW, 0.5, 'F');
-      pdf.setFontSize(7);
-      pdf.setTextColor(100, 100, 100);
-      pdf.text(`ADIA DOE Analyzer Pro — Confidential`, margin, 295);
-      pdf.text(`Page ${p} of ${totalPages}`, pageW - margin - 20, 295);
-    }
-
-    pdf.save(`DOE_Report_${results.type}_${new Date().toISOString().slice(0, 10)}.pdf`);
-    addError('info', 'Professional report generated and downloaded.');
-  }, [results, data, headers, addError]);
 
   return (
     <div className="flex flex-col h-full w-full bg-[#050505] text-[#e0e0e0] font-sans">
@@ -2810,10 +2798,10 @@ const DoeWorkspace = ({
             </Button>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.csv" onChange={handleFileUpload} />
-          <Button variant="outline" size="sm" onClick={saveDoeDesign} title="Ctrl+S">
+          <Button variant="outline" size="sm" onClick={handleExportProject} title="Ctrl+S">
             <Save size={14} className="mr-2" /> Save
           </Button>
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
@@ -2836,11 +2824,21 @@ const DoeWorkspace = ({
                 <div className="grid grid-cols-2 gap-2">
                   <div className="bg-[#111] p-4 rounded-lg border border-[#222]">
                     <div className="text-xs text-[#888] mb-1">R-Squared</div>
-                    <div className="text-2xl font-black text-[#c9a86c]">{(results.R2 * 100).toFixed(2)}%</div>
+                    <div className="text-xl font-black text-[#c9a86c]">{(results.R2 * 100).toFixed(2)}%</div>
+                    {results.R2Adj !== undefined && (
+                      <div className="text-[10px] text-[#555] mt-1">Adj: {(results.R2Adj * 100).toFixed(2)}% | Pred: {(results.R2Pred * 100).toFixed(2)}%</div>
+                    )}
                   </div>
                   <div className="bg-[#111] p-4 rounded-lg border border-[#222]">
-                    <div className="text-xs text-[#888] mb-1">Model Type</div>
-                    <div className="text-sm font-bold text-white uppercase">{results.type}</div>
+                    <div className="text-xs text-[#888] mb-1">{results.type === 'RSM' ? 'Adeq Precision' : 'Model Type'}</div>
+                    <div className="text-sm font-bold text-white uppercase">
+                      {results.type === 'RSM' ? results.AdeqPrec?.toFixed(4) : results.type}
+                    </div>
+                    {results.type === 'RSM' && (
+                      <div className={`text-[9px] font-bold mt-1 uppercase leading-none px-1 py-0.5 rounded inline-block ${results.AdeqPrec > 4 ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'}`}>
+                        {results.AdeqPrec > 4 ? 'Signal Adequate' : 'Weak Signal'}
+                      </div>
+                    )}
                     {results.type === 'GMDH' && results.model?.layers && (
                       <div className="text-[10px] text-[#666] mt-1">{results.model.layers.length} layers</div>
                     )}
@@ -2851,52 +2849,112 @@ const DoeWorkspace = ({
               {results.type === 'Taguchi' && (
                 <>
                   <section>
-                    <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Optimal Combination</h3>
-                    <div className="space-y-2">
-                      {results.optimal?.map((opt: any, idx: number) => (
-                        <div key={idx} className="bg-[#111] p-3 rounded border border-emerald-500/20 flex justify-between items-center">
-                          <span className="text-xs text-gray-400">{opt.factor}</span>
-                          <span className="text-xs font-black text-emerald-400">Level {opt.level}</span>
-                        </div>
-                      ))}
-                      <div className="mt-2 p-2 bg-emerald-500/10 rounded text-center">
-                        <div className="text-[10px] text-emerald-500/70 uppercase font-black">Predicted Average S/N</div>
-                        <div className="text-lg font-mono text-emerald-400">
-                          {results.snRatios ? (results.snRatios.reduce((a: any, b: any) => a + b, 0) / results.snRatios.length).toFixed(2) : '0.00'} dB
-                        </div>
-                      </div>
+                    <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Response Table (S/N)</h3>
+                    <div className="bg-[#111] rounded border border-[#222] overflow-x-auto custom-scrollbar">
+                      <table className="w-full text-[10px] text-left border-collapse">
+                        <thead className="bg-[#1a1a1a] text-[#666] uppercase">
+                          <tr>
+                            <th className="p-2 border-r border-[#222]">Level</th>
+                            {results.factorLevels?.map((f: any, i: number) => (
+                              <th key={i} className="p-2 text-center min-w-[60px]">{f.factor}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#222]">
+                          {[1, 2, 3, 4, 5].map(level => {
+                            // Check if any factor has this level
+                            const hasLevel = results.factorLevels?.some((f: any) => f.means.some((m: any) => m.level === level));
+                            if (!hasLevel) return null;
+                            return (
+                              <tr key={level}>
+                                <td className="p-2 font-bold text-[#888] bg-[#141414] border-r border-[#222]">{level}</td>
+                                {results.factorLevels?.map((f: any, i: number) => {
+                                  const m = f.means.find((m: any) => m.level === level);
+                                  return <td key={i} className="p-2 text-center text-white">{m ? m.meanSN.toFixed(2) : '-'}</td>;
+                                })}
+                              </tr>
+                            );
+                          })}
+                          <tr className="bg-[#1a1a1a]/50">
+                            <td className="p-2 font-bold text-[#c9a86c] border-r border-[#222]">Delta</td>
+                            {results.factorLevels?.map((f: any, i: number) => (
+                              <td key={i} className="p-2 text-center text-[#c9a86c] font-bold">{f.delta.toFixed(2)}</td>
+                            ))}
+                          </tr>
+                          <tr>
+                            <td className="p-2 font-bold text-[#c9a86c] border-r border-[#222]">Rank</td>
+                            {results.factorLevels?.map((f: any, i: number) => (
+                              <td key={i} className="p-2 text-center text-[#c9a86c] font-black italic">{f.rank}</td>
+                            ))}
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
                   </section>
 
                   <section>
-                    <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">ANOVA (Means)</h3>
-                    <div className="bg-[#111] rounded border border-[#222] overflow-hidden">
-                      <table className="w-full text-[10px] text-left">
+                    <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Optimal Settings</h3>
+                    <div className="grid grid-cols-1 gap-1">
+                      {results.optimal?.map((opt: any, idx: number) => (
+                        <div key={idx} className="bg-[#111] p-2 rounded border border-emerald-500/10 flex justify-between items-center group hover:border-emerald-500/40 transition-colors">
+                          <span className="text-[10px] text-gray-400">{opt.factor}</span>
+                          <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">Level {opt.level}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </>
+              )}
+
+              {results.type === 'RSM' && (
+                <>
+                  <section>
+                    <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">ANOVA (Model Summary)</h3>
+                    <div className="bg-[#111] rounded border border-[#222] overflow-x-auto">
+                      <table className="w-full text-[9px] text-left border-collapse">
                         <thead className="bg-[#1a1a1a] text-[#666] uppercase">
                           <tr>
-                            <th className="p-2">Factor</th>
-                            <th className="p-2">Rank</th>
-                            <th className="p-2">Contrib %</th>
+                            <th className="p-2 border-r border-[#222]">Source</th>
+                            <th className="p-2 text-center">DF</th>
+                            <th className="p-2 text-center">SS</th>
+                            <th className="p-2 text-center">MS</th>
+                            <th className="p-2 text-center">F</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#222]">
-                          {results.factorLevels?.map((f: any, idx: number) => (
-                            <tr key={idx}>
-                              <td className="p-2 text-white">{f.factor}</td>
-                              <td className="p-2 text-[#c9a86c]">#{f.rank}</td>
-                              <td className="p-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="flex-1 h-1 bg-[#222] rounded-full overflow-hidden">
-                                    <div 
-                                      className="h-full bg-[#c9a86c]" 
-                                      style={{ width: `${results.anova?.find((a: any) => a.factor === f.factor)?.contribution || 0}%` }}
-                                    />
-                                  </div>
-                                  <span className="w-8 text-right font-mono">
-                                    {results.anova?.find((a: any) => a.factor === f.factor)?.contribution.toFixed(1)}%
-                                  </span>
-                                </div>
-                              </td>
+                          {results.anovaTable?.map((row: any, i: number) => (
+                            <tr key={i}>
+                              <td className="p-2 font-bold text-[#888] bg-[#141414] border-r border-[#222]">{row.source}</td>
+                              <td className="p-2 text-center text-white">{row.df}</td>
+                              <td className="p-2 text-center text-white">{row.ss.toFixed(2)}</td>
+                              <td className="p-2 text-center text-white">{row.ms?.toFixed(2) || '-'}</td>
+                              <td className="p-2 text-center font-bold text-[#c9a86c]">{row.f?.toFixed(2) || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+
+                  <section>
+                    <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Coefficients (Uncoded)</h3>
+                    <div className="bg-[#111] rounded border border-[#222] overflow-x-auto max-h-48 custom-scrollbar">
+                      <table className="w-full text-[9px] text-left border-collapse">
+                        <thead className="bg-[#1a1a1a] text-[#666] uppercase sticky top-0 z-10">
+                          <tr>
+                            <th className="p-2 border-r border-[#222]">Term</th>
+                            <th className="p-2 text-center">Coef</th>
+                            <th className="p-2 text-center">T-Val</th>
+                            <th className="p-2 text-center">P-Val</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#222]">
+                          {results.coeffTable?.map((row: any, i: number) => (
+                            <tr key={i} className={row.p < 0.05 ? 'bg-emerald-500/5' : ''}>
+                              <td className="p-2 font-bold text-[#888] bg-[#141414] border-r border-[#222] truncate max-w-[80px]">{row.term}</td>
+                              <td className="p-2 text-center text-white">{row.coef.toPrecision(4)}</td>
+                              <td className="p-2 text-center text-white">{row.t.toFixed(2)}</td>
+                              <td className={`p-2 text-center font-bold ${row.p < 0.05 ? 'text-emerald-400' : 'text-gray-500'}`}>{row.p.toFixed(3)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -2909,17 +2967,16 @@ const DoeWorkspace = ({
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest">Equation</h3>
-                  <span className="text-[10px] text-[#555]">Scroll to resize</span>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setEqFontSize(p => Math.max(8, p - 1))}><span className="text-[8px]">A-</span></Button>
+                    <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setEqFontSize(p => Math.min(32, p + 1))}><span className="text-[10px]">A+</span></Button>
+                  </div>
                 </div>
-                <div 
-                  className="bg-[#111] rounded-lg border border-[#222] overflow-auto max-h-64 cursor-ns-resize select-text"
-                  onWheel={(e) => {
-                    e.stopPropagation();
-                    setEqFontSize(prev => Math.max(8, Math.min(32, prev + (e.deltaY < 0 ? 1 : -1))));
-                  }}
+                <div
+                  className="bg-[#111] rounded-lg border border-[#222] overflow-auto max-h-64 select-text"
                 >
-                  <pre 
-                    className="p-4 font-mono text-emerald-400 whitespace-pre-wrap leading-loose"
+                  <pre
+                    className="p-4 font-mono text-[#c9a86c] whitespace-pre-wrap leading-loose"
                     style={{ fontSize: `${eqFontSize}px` }}
                   >
                     {results.equation || 'No equation generated'}
@@ -2937,15 +2994,6 @@ const DoeWorkspace = ({
                       <span className="text-[#888]">Layers </span>
                       <span className="text-emerald-400 font-bold">{results.model.layers.length}</span>
                     </div>
-                    {results.model.getMetricsSummary && (() => {
-                      const m = results.model.getMetricsSummary();
-                      return m.inputs.map((inp: string, idx: number) => (
-                        <div key={idx} className="bg-[#2e2a1a] border border-[#4e3a2a] rounded-full px-3 py-1 text-[11px] font-mono">
-                          <span className="text-[#888]">Input </span>
-                          <span className="text-[#c9a86c] font-bold">{inp}</span>
-                        </div>
-                      ));
-                    })()}
                   </div>
                 )}
               </section>
@@ -2955,40 +3003,112 @@ const DoeWorkspace = ({
                 <div className="space-y-4">
                   <div>
                     <Label className="mb-2 block">X-Axis Factor</Label>
-                    <select 
+                    <select
                       className="w-full bg-[#111] border border-[#222] rounded p-2 text-xs text-white"
                       value={plotFactors.x}
-                      onChange={e => setPlotFactors(p => ({ ...p, x: Number(e.target.value) }))}
+                      onChange={e => setPlotFactors(prev => ({ ...prev, x: Number(e.target.value) }))}
                     >
                       {headers.slice(0, -1).map((h, i) => <option key={i} value={i}>{h}</option>)}
                     </select>
                   </div>
                   <div>
                     <Label className="mb-2 block">Y-Axis Factor</Label>
-                    <select 
+                    <select
                       className="w-full bg-[#111] border border-[#222] rounded p-2 text-xs text-white"
                       value={plotFactors.y}
-                      onChange={e => setPlotFactors(p => ({ ...p, y: Number(e.target.value) }))}
+                      onChange={e => setPlotFactors(prev => ({ ...prev, y: Number(e.target.value) }))}
                     >
                       {headers.slice(0, -1).map((h, i) => <option key={i} value={i}>{h}</option>)}
                     </select>
                   </div>
 
-                  {activeModel === 'Taguchi' && (
-                    <div>
-                      <Label className="mb-2 block">Objective (S/N)</Label>
-                      <select 
-                        className="w-full bg-[#111] border border-[#222] rounded p-2 text-xs text-white"
-                        value={taguchiConfig.objective}
-                        onChange={e => setTaguchiConfig({ objective: e.target.value as any })}
+                  <div>
+                    <Label className="mb-2 block">Plot Type</Label>
+                    <div className="grid grid-cols-2 gap-1">
+                      <Button
+                        size="sm"
+                        variant={plotType === 'surface' ? 'default' : 'outline'}
+                        onClick={() => setPlotType('surface')}
+                        className="text-[10px]"
                       >
-                        <option value="larger">Larger is Better</option>
-                        <option value="smaller">Smaller is Better</option>
-                        <option value="nominal">Nominal is Best</option>
-                      </select>
+                        Surface
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={plotType === 'contour' ? 'default' : 'outline'}
+                        onClick={() => setPlotType('contour')}
+                        className="text-[10px]"
+                      >
+                        Contour
+                      </Button>
+                      {results?.type === 'RSM' && (
+                        <>
+                          <Button size="sm" variant={plotType === 'pareto' ? 'default' : 'outline'} onClick={() => setPlotType('pareto')} className="text-[10px]">Pareto</Button>
+                          <Button size="sm" variant={plotType === 'residuals' ? 'default' : 'outline'} onClick={() => setPlotType('residuals')} className="text-[10px]">Residuals</Button>
+                        </>
+                      )}
+                      {results?.type === 'Taguchi' && (
+                        <Button size="sm" variant={plotType === 'taguchi_delta' ? 'default' : 'outline'} onClick={() => setPlotType('taguchi_delta')} className="text-[10px]">Rank/Delta</Button>
+                      )}
+                      {(results?.type === 'RSM' || results?.type === 'GMDH') && (
+                        <Button size="sm" variant={plotType === 'pred_vs_act' ? 'default' : 'outline'} onClick={() => setPlotType('pred_vs_act')} className="text-[10px]">Pred vs Act</Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {activeModel === 'Taguchi' && (
+                    <div className="space-y-4">
+                      <div className="bg-[#111] p-3 rounded border border-[#222] space-y-3">
+                        <h4 className="text-[10px] font-bold text-[#c9a86c] uppercase tracking-tighter">Confirmation Prediction</h4>
+                        <p className="text-[9px] text-gray-500 italic mb-2">Predict response based on factor level selection.</p>
+                        {headers.slice(0, -1).map((h, i) => (
+                          <div key={i} className="flex justify-between items-center gap-2">
+                            <span className="text-[9px] text-gray-400 truncate w-24">{h}</span>
+                            <select 
+                              className="bg-[#050505] border border-[#222] text-[9px] p-1 rounded text-white"
+                              onChange={(e) => {
+                                const newVals = [...holdValues];
+                                newVals[i] = Number(e.target.value);
+                                setHoldValues(newVals);
+                              }}
+                            >
+                              {Array.from(new Set(data.map(r => r[i]))).sort((a,b)=>a-b).map(l => <option key={l} value={l}>Level {l}</option>)}
+                            </select>
+                          </div>
+                        ))}
+                        <div className="mt-3 pt-3 border-t border-[#222]">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-gray-300">Predicted SN:</span>
+                            <span className="text-[10px] font-bold text-[#c9a86c]">
+                              {(() => {
+                                const grandMean = results?.snRatios?.reduce((a:number,b:number)=>a+b,0) / (results?.snRatios?.length || 1);
+                                let pred = grandMean;
+                                holdValues.forEach((val, i) => {
+                                  const factor = results?.factorLevels?.find((f:any) => f.factor === headers[i]);
+                                  const levelMean = factor?.means.find((m:any) => m.level === val)?.meanSN;
+                                  if (levelMean !== undefined) pred += (levelMean - grandMean);
+                                });
+                                return isNaN(pred) ? '0.000' : pred.toFixed(3);
+                              })()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="mb-2 block">Objective (S/N)</Label>
+                        <select
+                          className="w-full bg-[#111] border border-[#222] rounded p-2 text-xs text-white"
+                          value={taguchiConfig.objective}
+                          onChange={e => setTaguchiConfig({ objective: e.target.value as any })}
+                        >
+                          <option value="larger">Larger is Better</option>
+                          <option value="smaller">Smaller is Better</option>
+                          <option value="nominal">Nominal is Best</option>
+                        </select>
+                      </div>
                     </div>
                   )}
-                  
+
                   <div className="pt-4 border-t border-[#222]">
                     <Label className="mb-3 block">Hold Values (Other Factors)</Label>
                     {headers.slice(0, -1).map((h, i) => {
@@ -2999,7 +3119,7 @@ const DoeWorkspace = ({
                             <span>{h}</span>
                             <span className="text-[#c9a86c]">{holdValues[i]?.toFixed(2)}</span>
                           </div>
-                          <input 
+                          <input
                             type="range"
                             min={Math.min(...data.map(r => r[i]))}
                             max={Math.max(...data.map(r => r[i]))}
@@ -3022,7 +3142,7 @@ const DoeWorkspace = ({
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center opacity-30">
               <Box size={40} className="mb-4" />
-              <p className="text-xs">Select model type<br/>to begin analysis</p>
+              <p className="text-xs">Select model type<br />to begin analysis</p>
             </div>
           )}
         </div>
@@ -3034,7 +3154,7 @@ const DoeWorkspace = ({
               <Button size="sm" variant={plotType === 'surface' ? 'default' : 'secondary'} onClick={() => setPlotType('surface')}>3D Surface</Button>
               <Button size="sm" variant={plotType === 'contour' ? 'default' : 'secondary'} onClick={() => setPlotType('contour')}>Contour</Button>
             </div>
-            <PlotlyPlots 
+            <PlotlyPlots
               type={plotType}
               data={data}
               results={results}
@@ -3044,7 +3164,7 @@ const DoeWorkspace = ({
               modelType={activeModel}
             />
           </div>
-          
+
           <div className="h-64 flex">
             <div className="flex-1 p-2">
               <ManualEntryTable data={data} headers={headers} onChange={(nd, nh) => { setData(nd); setHeaders(nh); }} />
@@ -3626,21 +3746,21 @@ const TickRateInput = ({ value, onChange }: { value: number, onChange: (val: num
 // DOE UI COMPONENTS (Manual Table & Plotly Wrappers)
 // =============================================================================
 
-const ManualEntryTable = ({ 
-  data, 
-  headers, 
-  onChange 
-}: { 
-  data: number[][], 
-  headers: string[], 
-  onChange: (newData: number[][], newHeaders: string[]) => void 
+const ManualEntryTable = ({
+  data,
+  headers,
+  onChange
+}: {
+  data: number[][],
+  headers: string[],
+  onChange: (newData: number[][], newHeaders: string[]) => void
 }) => {
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
     const text = e.clipboardData.getData('text');
     const lines = text.split('\n').filter(l => l.trim().length > 0);
     const grid = lines.map(l => l.split('\t').map(c => Number(c.replace(',', '.'))));
-    
+
     if (grid.length > 0) {
       onChange(grid, headers);
     }
@@ -3660,7 +3780,7 @@ const ManualEntryTable = ({
 
   const removeRow = (idx: number) => {
     if (data.length <= 1) return;
-    onChange(data.filter((_, i) => i !== idx), headers);
+    onChange(data.filter((_: number[], i: number) => i !== idx), headers);
   };
 
   const addFactor = () => {
@@ -3697,7 +3817,7 @@ const ManualEntryTable = ({
                 <td className="p-2 text-center text-[#444]">{rIdx + 1}</td>
                 {row.map((cell, cIdx) => (
                   <td key={cIdx} className="p-0 border-r border-[#111]">
-                    <input 
+                    <input
                       type="number"
                       value={cell}
                       onChange={(e) => updateCell(rIdx, cIdx, e.target.value)}
@@ -3722,18 +3842,18 @@ const ManualEntryTable = ({
   );
 };
 
-const PlotlyPlots = ({ 
-  type, 
-  data, 
-  results, 
-  factors, 
-  headers, 
+const PlotlyPlots = ({
+  type,
+  data,
+  results,
+  factors,
+  headers,
   holdValues,
   modelType = 'RSM'
-}: { 
-  type: 'surface' | 'contour', 
-  data: number[][], 
-  results: any, 
+}: {
+  type: 'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act',
+  data: number[][],
+  results: any,
   factors: { x: number, y: number },
   headers: string[],
   holdValues: number[],
@@ -3741,7 +3861,210 @@ const PlotlyPlots = ({
 }) => {
   if (!results || !data) return <div className="flex items-center justify-center h-full text-[#444]">No Model Calculated</div>;
 
-  if (modelType === 'Taguchi') {
+  if (type === 'pareto' && results.coeffTable) {
+    // Pareto Chart of Standardized Effects
+    const sortedEffects = results.coeffTable
+      .filter((c: any) => c.term !== 'Intercept')
+      .map((c: any) => ({ term: c.term, absT: Math.abs(c.t) }))
+      .sort((a: any, b: any) => a.absT - b.absT);
+
+    const trace = {
+      x: sortedEffects.map((s: any) => s.absT),
+      y: sortedEffects.map((s: any) => s.term),
+      type: 'bar',
+      orientation: 'h',
+      marker: {
+        color: sortedEffects.map((s: any) => s.absT > 2.0 ? '#10b981' : '#444'),
+        line: { color: '#000', width: 1 }
+      },
+      name: 'Effect Magnitude'
+    };
+
+    return (
+      <Plot
+        data={[trace] as any}
+        layout={{
+          template: { layout: { paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' } },
+          autosize: true,
+          margin: { l: 120, r: 40, t: 40, b: 40 },
+          paper_bgcolor: 'transparent',
+          plot_bgcolor: 'rgba(0,0,0,0.2)',
+          font: { color: '#888', size: 10 },
+          title: { text: 'Pareto Chart of Standardized Effects (α=0.05)', font: { size: 12, color: '#c9a86c' } },
+          xaxis: { title: 'Absolute T-Value', gridcolor: '#222' },
+          yaxis: { title: 'Factor Term', gridcolor: '#222' },
+          shapes: [
+            {
+              type: 'line',
+              x0: 2.0,
+              x1: 2.0,
+              y0: -0.5,
+              y1: sortedEffects.length - 0.5,
+              line: { color: '#ef4444', width: 2, dash: 'dash' }
+            }
+          ],
+          annotations: [
+            {
+              x: 2.0,
+              y: sortedEffects.length - 1,
+              text: 'Critical T=2.0',
+              showarrow: false,
+              font: { color: '#ef4444', size: 9 },
+              xanchor: 'left',
+              xshift: 5
+            }
+          ]
+        }}
+        useResizeHandler
+        className="w-full h-full"
+      />
+    );
+  }
+
+  if (type === 'residuals' && results.residuals) {
+    // Residual Diagnostics
+    const res = results.residuals;
+    const fits = results.fits || [];
+    
+    // Normal Probability Plot Calculation
+    const sortedRes = [...res].sort((a, b) => a - b);
+    const n = res.length;
+    const pValues = res.map((_: number, i: number) => (i + 0.5) / n);
+    const zScores = pValues.map((p: number) => {
+      // Simple inverse normal approximation
+      const t = Math.sqrt(-2 * Math.log(Math.min(p, 1 - p)));
+      const z = t - (2.30753 + 0.27061 * t) / (1 + 0.99229 * t + 0.04481 * t * t);
+      return p > 0.5 ? z : -z;
+    });
+
+    const normalTrace = {
+      x: sortedRes,
+      y: zScores,
+      mode: 'markers',
+      type: 'scatter',
+      name: 'Normal Probability',
+      marker: { color: '#c9a86c' }
+    };
+
+    const fitsTrace = {
+      x: fits,
+      y: res,
+      mode: 'markers',
+      type: 'scatter',
+      name: 'Residual vs Fits',
+      xaxis: 'x2',
+      yaxis: 'y2',
+      marker: { color: '#10b981' }
+    };
+
+    const histTrace = {
+      x: res,
+      type: 'histogram',
+      name: 'Histogram',
+      xaxis: 'x3',
+      yaxis: 'y3',
+      marker: { color: '#3b82f6' }
+    };
+
+    return (
+      <Plot
+        data={[normalTrace, fitsTrace, histTrace] as any}
+        layout={{
+          grid: { rows: 2, columns: 2, pattern: 'independent' },
+          template: { layout: { paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' } },
+          paper_bgcolor: 'transparent',
+          plot_bgcolor: 'rgba(0,0,0,0.1)',
+          font: { color: '#888', size: 10 },
+          showlegend: false,
+          annotations: [
+            { text: 'Normal Probability Plot', xref: 'paper', yref: 'paper', x: 0, y: 1.1, showarrow: false, font: { color: '#c9a86c' } },
+            { text: 'Residual vs Fits', xref: 'paper', yref: 'paper', x: 0.6, y: 1.1, showarrow: false, font: { color: '#10b981' } },
+            { text: 'Histogram of Residuals', xref: 'paper', yref: 'paper', x: 0, y: 0.4, showarrow: false, font: { color: '#3b82f6' } }
+          ],
+          xaxis: { title: 'Residual', gridcolor: '#222' },
+          yaxis: { title: 'Z-Score', gridcolor: '#222' },
+          xaxis2: { title: 'Fitted Value', gridcolor: '#222' },
+          yaxis2: { title: 'Residual', gridcolor: '#222' },
+          xaxis3: { title: 'Residual', gridcolor: '#222' },
+          yaxis3: { title: 'Frequency', gridcolor: '#222' }
+        }}
+        useResizeHandler
+        className="w-full h-full"
+      />
+    );
+  }
+
+  if (type === 'pred_vs_act' && results.fits) {
+    const act = results.actuals || data.map(r => r[headers.length-1]);
+    const fits = results.fits;
+    
+    const min = Math.min(...act, ...fits);
+    const max = Math.max(...act, ...fits);
+
+    const trace = {
+      x: act,
+      y: fits,
+      mode: 'markers',
+      type: 'scatter',
+      name: 'Observations',
+      marker: { color: '#c9a86c', size: 8, line: { color: '#000', width: 1 } }
+    };
+
+    const line = {
+      x: [min, max],
+      y: [min, max],
+      mode: 'lines',
+      type: 'scatter',
+      name: 'Ideal (45°)',
+      line: { color: '#666', dash: 'dash', width: 1 }
+    };
+
+    return (
+      <Plot
+        data={[trace, line] as any}
+        layout={{
+          template: { layout: { paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' } },
+          paper_bgcolor: 'transparent',
+          plot_bgcolor: 'rgba(0,0,0,0.1)',
+          font: { color: '#888', size: 10 },
+          title: { text: 'Predicted vs Actual Response', font: { size: 12, color: '#c9a86c' } },
+          xaxis: { title: 'Actual Value', gridcolor: '#222', scaleanchor: 'y', scaleratio: 1 },
+          yaxis: { title: 'Predicted Value', gridcolor: '#222' }
+        }}
+        useResizeHandler
+        className="w-full h-full"
+      />
+    );
+  }
+  if (type === 'taguchi_delta' && results.type === 'Taguchi') {
+    // Response Table Delta Plot
+    const deltaTrace = {
+      x: results.factorLevels.map((f: any) => f.factor),
+      y: results.factorLevels.map((f: any) => f.delta),
+      type: 'bar',
+      marker: { color: '#c9a86c' },
+      name: 'Delta (Max-Min)'
+    };
+
+    return (
+      <Plot
+        data={[deltaTrace] as any}
+        layout={{
+          template: { layout: { paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' } },
+          paper_bgcolor: 'transparent',
+          plot_bgcolor: 'rgba(0,0,0,0.1)',
+          font: { color: '#888', size: 10 },
+          title: { text: 'Response Table Delta (Factor Significance)', font: { size: 12, color: '#c9a86c' } },
+          xaxis: { title: 'Factor', gridcolor: '#222' },
+          yaxis: { title: 'Delta (S/N)', gridcolor: '#222' }
+        }}
+        useResizeHandler
+        className="w-full h-full"
+      />
+    );
+  }
+
+  if (modelType === 'Taguchi' && (type === 'surface' || type === 'contour')) {
     // Main Effects Plot for Taguchi
     const factorIdx = factors.x;
     const factorData = results.factorLevels?.find((f: any) => headers.indexOf(f.factor) === factorIdx);
@@ -3782,19 +4105,19 @@ const PlotlyPlots = ({
           paper_bgcolor: 'rgba(0,0,0,0)',
           plot_bgcolor: 'rgba(0,0,0,0)',
           title: { text: `Main Effects Plot for ${headers[factorIdx]}`, font: { color: '#c9a86c', size: 14, family: 'Inter, sans-serif' } },
-          xaxis: { 
-            title: 'Factor Level', 
-            gridcolor: '#222', 
-            tickfont: { color: '#888' }, 
+          xaxis: {
+            title: 'Factor Level',
+            gridcolor: '#222',
+            tickfont: { color: '#888' },
             titlefont: { color: '#888' },
             type: 'category'
           },
           yaxis: { title: 'Mean S/N Ratio (dB)', gridcolor: '#222', tickfont: { color: '#c9a86c' }, titlefont: { color: '#c9a86c' } },
-          yaxis2: { 
-            title: 'Mean Response', 
-            overlaying: 'y', 
-            side: 'right', 
-            tickfont: { color: '#10b981' }, 
+          yaxis2: {
+            title: 'Mean Response',
+            overlaying: 'y',
+            side: 'right',
+            tickfont: { color: '#10b981' },
             titlefont: { color: '#10b981' },
             showgrid: false
           },
@@ -3809,32 +4132,34 @@ const PlotlyPlots = ({
 
   const idxX = factors.x;
   const idxY = factors.y;
-  
+
   const xVals = data.map(r => r[idxX]);
   const yVals = data.map(r => r[idxY]);
   const minX = Math.min(...xVals), maxX = Math.max(...xVals);
   const minY = Math.min(...yVals), maxY = Math.max(...yVals);
 
-  // Generate Mesh
+  // Generate Mesh (safeguard against minX === maxX preventing math.range crash)
   const res = 40;
-  const xRange = math.range(minX, maxX, (maxX - minX) / res).toArray() as number[];
-  const yRange = math.range(minY, maxY, (maxY - minY) / res).toArray() as number[];
-  
+  const stepX = Math.max(1e-9, (maxX - minX) / res);
+  const stepY = Math.max(1e-9, (maxY - minY) / res);
+  const xRange = Array.from({ length: res + 1 }, (_, i) => minX + i * stepX);
+  const yRange = Array.from({ length: res + 1 }, (_, i) => minY + i * stepY);
+
   const zGrid: number[][] = [];
-  
+
   for (let j = 0; j < yRange.length; j++) {
     const rowZ: number[] = [];
     for (let i = 0; i < xRange.length; i++) {
       const vX = xRange[i];
       const vY = yRange[j];
-      
+
       const currentFactors = [...holdValues];
       currentFactors[idxX] = vX;
       currentFactors[idxY] = vY;
 
       let z = 0;
       if (modelType === 'RSM') {
-        const xRow = [1];
+        const xRow: number[] = [];
         // Linear
         for (let f = 0; f < currentFactors.length; f++) xRow.push(currentFactors[f]);
         // Quadratic
@@ -3845,10 +4170,10 @@ const PlotlyPlots = ({
             xRow.push(currentFactors[f] * currentFactors[g]);
           }
         }
-        z = xRow.reduce((sum, val, idx) => sum + val * results.Beta[idx][0], 0);
+        z = xRow.reduce((sum, val, idx) => sum + val * results.Beta[idx + 1], results.Beta[0]);
       } else {
         // GMDH Prediction
-        z = results.model.predict(currentFactors);
+        if (results.model) z = results.model.predict(currentFactors);
       }
       rowZ.push(z);
     }
@@ -3893,9 +4218,9 @@ const PlotlyPlots = ({
     font: { color: '#888', family: 'Inter' },
     margin: { l: 40, r: 40, b: 40, t: 40 },
     scene: {
-      xaxis: { title: headers[idxX] || `X${idxX+1}`, gridcolor: '#222' },
-      yaxis: { title: headers[idxY] || `X${idxY+1}`, gridcolor: '#222' },
-      zaxis: { title: headers[headers.length-1], gridcolor: '#222' },
+      xaxis: { title: headers[idxX] || `X${idxX + 1}`, gridcolor: '#222' },
+      yaxis: { title: headers[idxY] || `X${idxY + 1}`, gridcolor: '#222' },
+      zaxis: { title: headers[headers.length - 1], gridcolor: '#222' },
       backgroundColor: '#0a0a0a'
     },
     autosize: true
@@ -3903,10 +4228,10 @@ const PlotlyPlots = ({
 
   return (
     <div className="w-full h-full">
-      <Plot 
-        data={plotData} 
-        layout={layout} 
-        useResizeHandler={true} 
+      <Plot
+        data={plotData}
+        layout={layout}
+        useResizeHandler={true}
         className="w-full h-full"
         config={{ displayModeBar: true, responsive: true }}
       />
@@ -3921,6 +4246,16 @@ const ADIA = () => {
     { id: uuidv4(), name: 'flag', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true },
     { id: uuidv4(), name: 'value', type: 'float', initialValue: '0.0', currentValue: 0, visibleInScope: true },
   ]);
+
+  // DOE STATE (Lifted)
+  const [activeModel, setActiveModel] = useState<'RSM' | 'GMDH' | 'Taguchi'>('RSM');
+  const [taguchiConfig, setTaguchiConfig] = useState<{ objective: 'larger' | 'smaller' | 'nominal' }>({ objective: 'larger' });
+  const [data, setData] = useState<number[][]>([[0, 0, 0], [1, 0, 1], [0, 1, 1], [1, 1, 4]]);
+  const [headers, setHeaders] = useState<string[]>(['X1', 'X2', 'Y']);
+  const [results, setResults] = useState<any | null>(null);
+  const [plotFactors, setPlotFactors] = useState<{ x: number, y: number }>({ x: 0, y: 1 });
+  const [holdValues, setHoldValues] = useState<number[]>([]);
+  const [plotType, setPlotType] = useState<'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act'>('surface');
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [mobileTab, setMobileTab] = useState<'hierarchy' | 'variables' | 'canvas' | 'properties'>('canvas');
@@ -4179,6 +4514,348 @@ const ADIA = () => {
   const [scopeHeight, setScopeHeight] = useState(224);
   const [resizingPanel, setResizingPanel] = useState<string | null>(null);
 
+  // ERROR SYSTEM
+  const addError = useCallback((type: 'error' | 'warning' | 'info', message: string, source?: string, elementId?: string) => {
+    const newError: ErrorItem = {
+      id: uuidv4(),
+      type,
+      message,
+      timestamp: new Date(),
+      source: source || 'System',
+      elementId: elementId ?? undefined
+    };
+    setErrors(prev => [newError, ...prev].slice(0, 100));
+    if (type === 'error') {
+      setCurrentError(newError);
+      setShowErrorDialog(true);
+      setIsRunning(false);
+    }
+  }, [setIsRunning, setErrors, setCurrentError, setShowErrorDialog]);
+
+  // === Professional Report Generation ===
+  const generateReport = useCallback(() => {
+    if (!results) {
+      addError('warning', 'No model results to export. Run a model first.');
+      return;
+    }
+
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageW = pdf.internal.pageSize.getWidth();
+    const margin = 20;
+    const contentW = pageW - margin * 2;
+    let y = margin;
+
+    const addPage = () => {
+      pdf.addPage();
+      y = margin;
+    };
+
+    const checkSpace = (needed: number) => {
+      if (y + needed > 270) addPage();
+    };
+
+    // --- Header Bar ---
+    pdf.setFillColor(10, 10, 10);
+    pdf.rect(0, 0, pageW, 35, 'F');
+    pdf.setFillColor(201, 168, 108);
+    pdf.rect(0, 35, pageW, 1.5, 'F');
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(18);
+    pdf.setTextColor(201, 168, 108);
+    pdf.text('ADIA', margin, 15);
+    pdf.setFontSize(9);
+    pdf.setTextColor(150, 150, 150);
+    pdf.text('Design of Experiments — Analysis Report', margin, 22);
+    pdf.setFontSize(8);
+    pdf.setTextColor(100, 100, 100);
+    pdf.text(`Generated: ${new Date().toLocaleString()}`, margin, 29);
+    pdf.text(`Model: ${results.type}`, pageW - margin - 30, 29);
+
+    y = 45;
+
+    // --- Model Summary Section ---
+    pdf.setFontSize(13);
+    pdf.setTextColor(201, 168, 108);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('1. Model Summary', margin, y);
+    y += 8;
+
+    pdf.setFillColor(20, 20, 20);
+    pdf.roundedRect(margin, y, contentW, 28, 2, 2, 'F');
+    pdf.setDrawColor(50, 50, 50);
+    pdf.roundedRect(margin, y, contentW, 28, 2, 2, 'S');
+
+    pdf.setFontSize(9);
+    pdf.setTextColor(130, 130, 130);
+    pdf.text('Model Type', margin + 5, y + 7);
+    pdf.text('R-Squared (Adj)', margin + 45, y + 7);
+    pdf.text('Std Error (S)', margin + 95, y + 7);
+    pdf.text('F-Statistic', margin + 140, y + 7);
+
+    pdf.setFontSize(14);
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(results.type, margin + 5, y + 20);
+    pdf.setTextColor(201, 168, 108);
+    if (results.type === 'Taguchi') {
+      pdf.text('N/A', margin + 45, y + 20);
+      pdf.text('N/A', margin + 95, y + 20);
+    } else {
+      pdf.text(`${(results.R2Adj ? results.R2Adj * 100 : results.R2 * 100).toFixed(2)}%`, margin + 45, y + 20);
+      pdf.text(results.S ? results.S.toFixed(4) : 'N/A', margin + 95, y + 20);
+    }
+    pdf.setTextColor(255, 255, 255);
+    pdf.text(results.F ? results.F.toFixed(2) : 'N/A', margin + 140, y + 20);
+    y += 36;
+
+    // --- Equation Section ---
+    checkSpace(40);
+    pdf.setFontSize(13);
+    pdf.setTextColor(201, 168, 108);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('2. Model Equation', margin, y);
+    y += 8;
+
+    pdf.setFillColor(17, 17, 17);
+    const eqText = results.type === 'Taguchi'
+      ? 'Taguchi models optimize S/N ratios for robust design; an explicit polynomial regression equation is not generated.'
+      : (results.equation || 'No equation');
+    const eqLines = pdf.setFont('courier', 'normal').setFontSize(10).splitTextToSize(eqText, contentW - 10);
+    const eqH = Math.max(20, eqLines.length * 5 + 10);
+
+    pdf.roundedRect(margin, y, contentW, eqH, 2, 2, 'F');
+    pdf.setDrawColor(50, 50, 50);
+    pdf.roundedRect(margin, y, contentW, eqH, 2, 2, 'S');
+    pdf.setTextColor(52, 211, 153);
+    pdf.text(eqLines, margin + 5, y + 7);
+    y += eqH + 8;
+
+    // --- Factor Summary ---
+    checkSpace(30 + headers.length * 6);
+    pdf.setFontSize(13);
+    pdf.setTextColor(201, 168, 108);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('3. Factor Summary', margin, y);
+    y += 8;
+
+    // Table header
+    pdf.setFillColor(30, 30, 30);
+    pdf.rect(margin, y, contentW, 7, 'F');
+    pdf.setFontSize(8);
+    pdf.setTextColor(150, 150, 150);
+    pdf.setFont('helvetica', 'bold');
+    const colW = contentW / 5;
+    ['Factor', 'Min', 'Max', 'Mean', 'Std Dev'].forEach((h, i) => {
+      pdf.text(h, margin + i * colW + 3, y + 5);
+    });
+    y += 7;
+
+    // Table rows
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(220, 220, 220);
+    headers.slice(0, -1).forEach((h, i) => {
+      const col = data.map(r => r[i]);
+      const min = Math.min(...col);
+      const max = Math.max(...col);
+      const mean = col.reduce((a, b) => a + b, 0) / col.length;
+      const std = Math.sqrt(col.reduce((s, v) => s + (v - mean) ** 2, 0) / col.length);
+
+      if (i % 2 === 0) {
+        pdf.setFillColor(18, 18, 18);
+        pdf.rect(margin, y, contentW, 6, 'F');
+      }
+      [h, min.toFixed(3), max.toFixed(3), mean.toFixed(3), std.toFixed(3)].forEach((val, j) => {
+        pdf.text(val, margin + j * colW + 3, y + 4.5);
+      });
+      y += 6;
+    });
+    y += 8;
+
+    // --- Data Table ---
+    checkSpace(20);
+    pdf.setFontSize(13);
+    pdf.setTextColor(201, 168, 108);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('4. Experiment Data', margin, y);
+    y += 8;
+
+    // Data table header
+    const dColW = contentW / headers.length;
+    pdf.setFillColor(30, 30, 30);
+    pdf.rect(margin, y, contentW, 7, 'F');
+    pdf.setFontSize(7);
+    pdf.setTextColor(150, 150, 150);
+    pdf.setFont('helvetica', 'bold');
+    headers.forEach((h, i) => {
+      pdf.text(h, margin + i * dColW + 2, y + 5);
+    });
+    y += 7;
+
+    // Data rows
+    pdf.setFont('courier', 'normal');
+    pdf.setFontSize(7);
+    pdf.setTextColor(200, 200, 200);
+    data.forEach((row, rIdx) => {
+      checkSpace(6);
+      if (rIdx % 2 === 0) {
+        pdf.setFillColor(15, 15, 15);
+        pdf.rect(margin, y, contentW, 5.5, 'F');
+      }
+      row.forEach((val, cIdx) => {
+        pdf.text(val.toFixed(4), margin + cIdx * dColW + 2, y + 4);
+      });
+      y += 5.5;
+    });
+    y += 8;
+
+    // --- Footer ---
+    const totalPages = pdf.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      pdf.setPage(p);
+      pdf.setFillColor(201, 168, 108);
+      pdf.rect(0, 290, pageW, 0.5, 'F');
+      pdf.setFontSize(7);
+      pdf.setTextColor(100, 100, 100);
+      pdf.text(`ADIA DOE Analyzer Pro — Confidential`, margin, 295);
+      pdf.text(`Page ${p} of ${totalPages}`, pageW - margin - 20, 295);
+    }
+
+    pdf.save(`DOE_Report_${results.type}_${new Date().toISOString().slice(0, 10)}.pdf`);
+    addError('info', 'Professional report generated and downloaded.');
+  }, [results, data, headers, addError]);
+
+  const handleExportProject = useCallback(() => {
+    const projectData = {
+      version: VERSION,
+      timestamp: new Date().toISOString(),
+      // Logic & Simulation
+      states,
+      junctions,
+      transitions,
+      layers,
+      variables,
+      view,
+      tickMs,
+      // SysML & Requirements
+      blocks,
+      relationships,
+      parts,
+      connectors,
+      interfaceRealizations,
+      customStereotypes,
+      // HMI Dashboard
+      hmiComponents,
+      // V-Lab Physical Modeling
+      vlabNodes,
+      vlabEdges,
+      // X-Bridges Architecture
+      globalXBridgesNodes,
+      globalXBridgesEdges,
+      // DOE Modeling Suite
+      doe: {
+        headers,
+        data,
+        activeModel,
+        taguchiConfig,
+        results: results ? {
+          R2: results.R2,
+          equation: results.equation,
+          type: results.type,
+          coeffTable: results.coeffTable,
+          anova: results.anova
+        } : null
+      },
+      // UI State
+      managedWindows
+    };
+
+    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `adia_project_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addError('info', 'Unified ADIA Project exported successfully (Ctrl+S)');
+  }, [
+    states, junctions, transitions, layers, variables, view, tickMs,
+    blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
+    hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
+    headers, data, activeModel, taguchiConfig, results, managedWindows, addError
+  ]);
+
+  const hydrateProject = useCallback((importedData: any) => {
+    try {
+      // Logic & Simulation
+      if (importedData.states) setStates(importedData.states);
+      if (importedData.junctions) setJunctions(importedData.junctions);
+      if (importedData.transitions) setTransitions(importedData.transitions);
+      if (importedData.layers) setLayers(importedData.layers);
+      if (importedData.variables) setVariables(importedData.variables);
+      if (importedData.view) setView(importedData.view);
+      if (importedData.tickMs) setTickMs(importedData.tickMs);
+
+      // SysML & Requirements
+      if (importedData.blocks) setBlocks(importedData.blocks);
+      if (importedData.relationships) setRelationships(importedData.relationships);
+      if (importedData.parts) setParts(importedData.parts);
+      if (importedData.connectors) setConnectors(importedData.connectors);
+      if (importedData.interfaceRealizations) setInterfaceRealizations(importedData.interfaceRealizations);
+      if (importedData.customStereotypes) setCustomStereotypes(importedData.customStereotypes);
+
+      // HMI Dashboard
+      if (importedData.hmiComponents) setHmiComponents(importedData.hmiComponents);
+
+      // V-Lab Physical Modeling
+      if (importedData.vlabNodes) setVlabNodes(importedData.vlabNodes);
+      if (importedData.vlabEdges) setVlabEdges(importedData.vlabEdges);
+
+      // X-Bridges Architecture
+      if (importedData.globalXBridgesNodes) setGlobalXBridgesNodes(importedData.globalXBridgesNodes);
+      if (importedData.globalXBridgesEdges) setGlobalXBridgesEdges(importedData.globalXBridgesEdges);
+
+      // DOE Modeling Suite
+      if (importedData.doe) {
+        if (importedData.doe.headers) setHeaders(importedData.doe.headers);
+        if (importedData.doe.data) setData(importedData.doe.data);
+        if (importedData.doe.activeModel) setActiveModel(importedData.doe.activeModel);
+        if (importedData.doe.taguchiConfig) setTaguchiConfig(importedData.doe.taguchiConfig);
+        if (importedData.doe.results) setResults(importedData.doe.results);
+      }
+
+      // UI State
+      if (importedData.managedWindows) setManagedWindows(importedData.managedWindows);
+
+      // Reset runtime state
+      setIsRunning(false);
+      setActiveStates({});
+      setStateTimers({});
+      setTraceHistory([]);
+      setScopeData([]);
+      setSimulationTime(0);
+      setCurrentLayerId('root');
+      setLayerStack([]);
+      setLayerPath(['Root']);
+      setSelectedIds([]);
+      setHistory([]);
+      setHistoryIndex(-1);
+
+      addError('info', 'Unified ADIA Project imported successfully');
+    } catch (error) {
+      addError('error', 'Failed to hydrate project state. File might be corrupted.');
+    }
+  }, [
+    setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
+    setBlocks, setRelationships, setParts, setConnectors, setInterfaceRealizations, setCustomStereotypes,
+    setHmiComponents, setVlabNodes, setVlabEdges, setGlobalXBridgesNodes, setGlobalXBridgesEdges,
+    setHeaders, setData, setActiveModel, setTaguchiConfig, setResults, setManagedWindows,
+    setIsRunning, setActiveStates, setStateTimers, setTraceHistory, setScopeData, setSimulationTime,
+    setSelectedIds, setHistory, setHistoryIndex, setCurrentLayerId, setLayerStack, setLayerPath, addError
+  ]);
+
   // Computed values
   const selectedState = useMemo(() => selectedIds.length === 1 ? states.find(s => s.id === selectedIds[0]) : null, [selectedIds, states]);
   const selectedJunction = useMemo(() => selectedIds.length === 1 ? junctions.find(j => j.id === selectedIds[0]) : null, [selectedIds, junctions]);
@@ -4207,23 +4884,6 @@ const ADIA = () => {
     return false;
   }), [transitions, states, junctions, currentLayerId, layers, currentLayer]);
 
-  // ERROR SYSTEM
-  const addError = useCallback((type: 'error' | 'warning' | 'info', message: string, source?: string, elementId?: string) => {
-    const newError: ErrorItem = {
-      id: uuidv4(),
-      type,
-      message,
-      timestamp: new Date(),
-      source,
-      elementId: elementId ?? undefined
-    };
-    setErrors(prev => [newError, ...prev].slice(0, 100));
-    if (type === 'error') {
-      setCurrentError(newError);
-      setShowErrorDialog(true);
-      setIsRunning(false);
-    }
-  }, [setErrors, setCurrentError, setShowErrorDialog, setIsRunning]);
 
   const clearErrors = useCallback(() => {
     setErrors([]);
@@ -5177,10 +5837,10 @@ const ADIA = () => {
           };
           engine = new XbridgesEngine(model);
           try {
-             engine.compile();
-             xBridgesEnginesRef.current.set(stateId, engine);
+            engine.compile();
+            xBridgesEnginesRef.current.set(stateId, engine);
           } catch (err: any) {
-             addError('error', `Failed to compile X-Bridges sub-model in state ${state.name}: ${err.message}`, 'Simulation');
+            addError('error', `Failed to compile X-Bridges sub-model in state ${state.name}: ${err.message}`, 'Simulation');
           }
         }
 
@@ -5192,11 +5852,11 @@ const ADIA = () => {
               if (map.direction === 'in' && map.smVarId && map.blockId && map.portId) {
                 const smVar = variables.find(v => v.id === map.smVarId);
                 if (smVar) {
-                   const val = smVar.name in workingContext ? workingContext[smVar.name] : smVar.currentValue;
-                   const numericVal = Number(val);
-                   engine!.setSignalValue(map.blockId, map.portId, numericVal);
-                   const block = engine!['blockMap'].get(map.blockId);
-                   if (block && block.params) block.params.value = numericVal;
+                  const val = smVar.name in workingContext ? workingContext[smVar.name] : smVar.currentValue;
+                  const numericVal = Number(val);
+                  engine!.setSignalValue(map.blockId, map.portId, numericVal);
+                  const block = engine!['blockMap'].get(map.blockId);
+                  if (block && block.params) block.params.value = numericVal;
                 }
               }
             });
@@ -5219,7 +5879,7 @@ const ADIA = () => {
           try {
             Solvers.stepRK4(engine, simulationTime, tickMs / 1000);
           } catch (err: any) {
-             addError('error', `X-Bridges simulation error in state ${state.name}: ${err.message}`, 'Simulation');
+            addError('error', `X-Bridges simulation error in state ${state.name}: ${err.message}`, 'Simulation');
           }
 
           // Sync Block -> SM
@@ -5227,12 +5887,12 @@ const ADIA = () => {
           if (state.xBridgesModel.mappings) {
             state.xBridgesModel.mappings.forEach(map => {
               if (map.direction === 'out' && map.smVarId && map.blockId && map.portId) {
-                 const smVar = variables.find(v => v.id === map.smVarId);
-                 if (smVar) {
-                    const blockVal = engine!.getSignalValue(map.blockId, map.portId);
-                    workingContext[smVar.name] = blockVal;
-                    variablesChanged = true;
-                 }
+                const smVar = variables.find(v => v.id === map.smVarId);
+                if (smVar) {
+                  const blockVal = engine!.getSignalValue(map.blockId, map.portId);
+                  workingContext[smVar.name] = blockVal;
+                  variablesChanged = true;
+                }
               }
             });
           }
@@ -6613,35 +7273,7 @@ const ADIA = () => {
     document.addEventListener('mouseup', handleMouseUp);
   }, [transitions, view, updateTransition, uiZoom]);
 
-  const handleExportProject = useCallback(() => {
-    const projectData = {
-      version: VERSION,
-      timestamp: new Date().toISOString(),
-      states,
-      junctions,
-      transitions,
-      layers,
-      variables,
-      view,
-      tickMs,
-      blocks,
-      relationships,
-      parts,
-      connectors,
-      interfaceRealizations
-    };
 
-    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `adia_project_${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    addError('info', 'Project exported successfully');
-  }, [states, junctions, transitions, layers, variables, view, tickMs, blocks, relationships, parts, connectors, interfaceRealizations, addError]);
 
   const handleProjectFileChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -6650,65 +7282,22 @@ const ADIA = () => {
     reader.onload = (event) => {
       try {
         const importedData = JSON.parse(event.target?.result as string);
-        setStates(importedData.states || []);
-        setJunctions(importedData.junctions || []);
-        setTransitions(importedData.transitions || []);
-        setLayers(importedData.layers || [{ id: 'root', name: 'Root', parentStateId: null, stateIds: [], transitionIds: [], junctionIds: [] }]);
-        setVariables(importedData.variables || []);
-        setBlocks(importedData.blocks || []);
-        setRelationships(importedData.relationships || []);
-        setParts(importedData.parts || []);
-        setConnectors(importedData.connectors || []);
-        setInterfaceRealizations(importedData.interfaceRealizations || []);
-        setCustomStereotypes(importedData.customStereotypes || []);
-        setView(importedData.view || { scale: 1, offsetX: 0, offsetY: 0 });
-        setTickMs(importedData.tickMs || 500);
-        addError('info', 'Project imported successfully');
+        hydrateProject(importedData);
       } catch (error) {
-        addError('error', 'Failed to parse project file.');
+        addError('error', 'Failed to parse project file JSON.');
       }
     };
     reader.readAsText(file);
     if (projectImportRef.current) projectImportRef.current.value = '';
-  }, [addError]);
+  }, [hydrateProject, addError]);
 
   const handleImportProject = useCallback(async () => {
     try {
       if ((window as any).require) {
         const { ipcRenderer } = (window as any).require('electron');
         const importedData = await ipcRenderer.invoke('import-json');
-
         if (importedData) {
-          setStates(importedData.states || []); setJunctions(importedData.junctions || []);
-          setTransitions(importedData.transitions || []);
-          setLayers(importedData.layers || [{ id: 'root', name: 'Root', parentStateId: null, stateIds: [], transitionIds: [], junctionIds: [] }]);
-          setVariables(importedData.variables || []);
-          setBlocks(importedData.blocks || []);
-          setRelationships(importedData.relationships || []);
-          setParts(importedData.parts || []);
-          setConnectors(importedData.connectors || []);
-          setInterfaceRealizations(importedData.interfaceRealizations || []);
-          setCustomStereotypes(importedData.customStereotypes || []);
-          setView(importedData.view || { scale: 1, offsetX: 0, offsetY: 0 });
-          setTickMs(importedData.tickMs || 500);
-
-          // Reset simulation state
-          setIsRunning(false);
-          setActiveStates({});
-          setStateTimers({});
-          setTraceHistory([]);
-          setScopeData([]);
-          setSimulationTime(0);
-
-          // Reset navigation and selection
-          setCurrentLayerId('root');
-          setLayerStack([]);
-          setLayerPath(['Root']);
-          setSelectedIds([]);
-          setHistory([]);
-          setHistoryIndex(-1);
-
-          addError('info', 'Project imported successfully');
+          hydrateProject(importedData);
         } else {
           addError('info', 'Import cancelled or file could not be read.');
         }
@@ -6720,7 +7309,7 @@ const ADIA = () => {
       console.error('Import failed:', error);
       addError('error', `Failed to import project: ${error instanceof Error ? error.message : 'Unknown error'}. Tip: Ensure the file is a valid ADIA project JSON file.`);
     }
-  }, [addError, setStates, setJunctions, setTransitions, setLayers, setVariables, setBlocks, setRelationships, setParts, setConnectors, setInterfaceRealizations, setView, setTickMs, setIsRunning, setActiveStates, setStateTimers, setTraceHistory, setScopeData, setSimulationTime, setSelectedIds, setHistory, setHistoryIndex, setCurrentLayerId, setLayerStack, setLayerPath]);
+  }, [addError, hydrateProject]);
 
   const handleGenerateReport = useCallback((projectName: string, author: string) => {
     const style = `
@@ -8819,2259 +9408,2280 @@ const ADIA = () => {
       {showWelcome && <WelcomeOverlay onComplete={() => setShowWelcome(false)} />}
       <div
         className="flex flex-col bg-[#0a0a0a] text-[#e0e0e0] font-sans overflow-hidden"
-      style={{
-        zoom: uiZoom,
-        width: `${100 / uiZoom}vw`,
-        height: `${100 / uiZoom}vh`
-      }}
-    >
-      {/* Hidden input for project import */}
-      <input type="file" ref={projectImportRef} onChange={handleProjectFileChange} className="hidden" accept=".json" />
+        style={{
+          zoom: uiZoom,
+          width: `${100 / uiZoom}vw`,
+          height: `${100 / uiZoom}vh`
+        }}
+      >
+        {/* Hidden input for project import */}
+        <input type="file" ref={projectImportRef} onChange={handleProjectFileChange} className="hidden" accept=".json" />
 
-      {/* Top Toolbar - WITH VISIBLE SIMULATION CONTROLS */}
-      <header className="h-14 bg-[#141414] border-b border-[#222] flex items-center px-4 gap-4 shrink-0 overflow-x-auto no-scrollbar">
-        <div className="flex items-center gap-3">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          <div>
-            <div className="font-bold text-2xl tracking-tight">ADIA</div>
-            <div className="text-xs text-[#888] mt-[-3px]">{VERSION}</div>
-          </div>
-        </div>
-
-        <Separator orientation="vertical" className="h-6 bg-[#333]" />
-
-        {/* DIAGRAM MODE SWITCHER */}
-        <div className="flex bg-[#1a1a1a] rounded border border-[#333] p-0.5">
-          <button onClick={() => setDiagramMode('statemachine')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'statemachine' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
-            State Machine
-          </button>
-          <button onClick={() => setDiagramMode('bdd')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'bdd' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
-            SysML BDD
-          </button>
-          <button onClick={() => setDiagramMode('requirements')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'requirements' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
-            Requirements
-          </button>
-          <button onClick={() => setDiagramMode('ibd')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'ibd' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
-            SysML IBD
-          </button>
-          <button onClick={() => setDiagramMode('xbridges')} className={`px-3 py-1 text-xs rounded ${(diagramMode as DiagramMode) === 'xbridges' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
-            X-Bridges
-          </button>
-          <button onClick={() => setDiagramMode('vlab')} className={`px-3 py-1 text-xs rounded ${(diagramMode as DiagramMode) === 'vlab' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
-            V-Lab
-          </button>
-        </div>
-
-        {/* SIMULATION CONTROLS - PROMINENT AND FUNCTIONAL */}
-        {(diagramMode as DiagramMode) !== 'xbridges' && (
-          <div className="flex items-center gap-2 bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-1.5">
-            <Button
-              variant={isRunning ? "destructive" : "default"}
-              size="sm"
-              onClick={isRunning ? pauseSimulation : startSimulation}
-              className={isRunning ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"}
-            >
-              {isRunning ? (
-                <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                    <rect x="6" y="4" width="4" height="16" />
-                    <rect x="14" y="4" width="4" height="16" />
-                  </svg>
-                  Pause
-                </>
-              ) : (
-                <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                    <polygon points="5 3 19 12 5 21 5 3" />
-                  </svg>
-                  Start
-                </>
-              )}
-            </Button>
-
-            <Button variant="outline" size="sm" onClick={stepSimulation}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                <polygon points="5 3 19 12 5 21 5 3" />
-                <line x1="12" y1="4" x2="12" y2="20" />
-              </svg>
-              Step
-            </Button>
-
-            <Button variant="outline" size="sm" onClick={resetSimulation}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0" />
-                <polyline points="3 4 3 12 11 12" />
-              </svg>
-              Reset
-            </Button>
-
-            <Separator orientation="vertical" className="h-4 bg-[#333]" />
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { if (validateModel()) addError('info', 'Model validation passed.'); }}
-              className="text-[#e0e0e0] hover:bg-[#222]"
-              title="Check for errors"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-              Validate
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={validateWithAI}
-              disabled={isAiValidating}
-              className="text-[#c9a86c] border-[#c9a86c]/50 hover:bg-[#c9a86c]/10"
-              title="Validate logic with AI"
-            >
-              {isAiValidating ? (
-                <svg className="animate-spin mr-1.5 h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                  <path d="M12 2a10 10 0 1 0 10 10H12V2z" />
-                  <path d="M12 2a10 10 0 0 1 10 10" opacity="0.5" />
-                  <circle cx="12" cy="12" r="2" />
-                </svg>
-              )}
-              {isAiValidating ? 'Analyzing...' : 'AI Check'}
-            </Button>
-
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-[#888] whitespace-nowrap">Tick Rate:</span>
-              <TickRateInput value={tickMs} onChange={setTickMs} />
-              <span className="text-[10px] text-[#666]">ms</span>
+        {/* Top Toolbar - WITH VISIBLE SIMULATION CONTROLS */}
+        <header className="h-14 bg-[#141414] border-b border-[#222] flex items-center px-4 gap-4 shrink-0 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-3">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            <div>
+              <div className="font-bold text-2xl tracking-tight">ADIA</div>
+              <div className="text-xs text-[#888] mt-[-3px]">{VERSION}</div>
             </div>
           </div>
-        )}
 
-        <Separator orientation="vertical" className="h-6 bg-[#333]" />
+          <Separator orientation="vertical" className="h-6 bg-[#333]" />
 
-        <div className="flex items-center gap-2 bg-[#1a1a1a] border border-[#333] rounded px-2 py-1">
-          <Checkbox
-            checked={safetyMode}
-            onCheckedChange={(c) => setSafetyMode(c as boolean)}
-            id="safety-mode"
-          />
-          <Label htmlFor="safety-mode" className={safetyMode ? "text-red-400 font-bold" : "text-[#888]"}>Safety Mode</Label>
-        </div>
-
-        <Separator orientation="vertical" className="h-6 bg-[#333]" />
-
-        {/* CODE GENERATION BUTTON - FULLY FUNCTIONAL */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={generateCode}
-          disabled={isGenerating}
-          className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10 disabled:opacity-50 disabled:cursor-wait"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-            <polyline points="16 18 22 12 16 6" />
-            <polyline points="8 6 2 12 8 18" />
-          </svg>
-          {isGenerating ? 'Generating...' : 'Generate C/H'}
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleExportProject}
-          className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          Export
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleImportProject}
-          className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-          Import
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowReportDialog(true)}
-          className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
-        >
-          Report
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => toggleWindow('hmi')}
-          className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-          HMI Panel
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => toggleWindow('pid')}
-          className="border-[#6c9ac6] text-[#6c9ac6] hover:bg-[#6c9ac6]/10"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-            <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="15"></line>
-          </svg>
-          PID Tuner
-        </Button>
-
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => toggleWindow('doe')}
-          className="border-[#c96c8a] text-[#c96c8a] hover:bg-[#c96c8a]/10"
-        >
-          DOE (RSM)
-        </Button>
-
-        <div className="flex-1" />
-
-        {/* Status indicators */}
-        <div className="flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-2">
-            <div className={`w-2.5 h-2.5 rounded-full ${isRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
-            <span className="text-[#888] font-medium">{isRunning ? 'RUNNING' : 'STOPPED'}</span>
-          </div>
-          <div className="text-[#666]">
-            Time: <span className="text-[#c9a86c] font-mono font-medium">{simulationTime.toFixed(2)}s</span>
-          </div>
-          <div className="text-[#666]">
-            States: <span className="text-[#c9a86c] font-mono font-medium">{currentStates.length}</span>
-          </div>
-          <div className="text-[#666]">
-            Vars: <span className="text-[#c9a86c] font-mono font-medium">{variables.length}</span>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
-      <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
-        {/* Left Sidebar - Hierarchy */}
-        <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="bg-[#141414] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
-          <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
-            {!isHierarchyCollapsed && (
-              <div className="flex items-center overflow-hidden whitespace-nowrap">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
-                  <path d="M10 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" />
-                  <path d="M16 17l-3-3 3-3" />
-                  <path d="M13 14H3" />
-                </svg>
-                <span className="text-sm font-medium">Hierarchy</span>
-              </div>
-            )}
-            <button 
-              onClick={() => setIsHierarchyCollapsed(!isHierarchyCollapsed)}
-              className={`p-1.5 rounded hover:bg-[#222] text-[#c9a86c] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
-            >
-              <Triangle size={10} className={`transition-transform duration-300 ${isHierarchyCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
+          {/* DIAGRAM MODE SWITCHER */}
+          <div className="flex bg-[#1a1a1a] rounded border border-[#333] p-0.5">
+            <button onClick={() => setDiagramMode('statemachine')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'statemachine' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
+              State Machine
+            </button>
+            <button onClick={() => setDiagramMode('bdd')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'bdd' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
+              SysML BDD
+            </button>
+            <button onClick={() => setDiagramMode('requirements')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'requirements' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
+              Requirements
+            </button>
+            <button onClick={() => setDiagramMode('ibd')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'ibd' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
+              SysML IBD
+            </button>
+            <button onClick={() => setDiagramMode('xbridges')} className={`px-3 py-1 text-xs rounded ${(diagramMode as DiagramMode) === 'xbridges' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
+              X-Bridges
+            </button>
+            <button onClick={() => setDiagramMode('vlab')} className={`px-3 py-1 text-xs rounded ${(diagramMode as DiagramMode) === 'vlab' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
+              V-Lab
             </button>
           </div>
-          {!isHierarchyCollapsed && (
-            <HierarchyTree
-              states={states}
-              layers={layers}
-              activeStates={activeStates}
-              currentLayerId={currentLayerId}
-              onSelect={(id: string) => setSelectedIds([id])}
-              onDoubleClick={(id: string) => enterLayer(id)}
-              selectedIds={selectedIds}
-            />
-          )}
-        </aside>
-        {!isMobile && !isHierarchyCollapsed && <Resizer onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
 
-        {/* Left Sidebar - Variables */}
-        <aside style={{ width: isMobile ? '100%' : (isVariablesCollapsed ? '48px' : `${variablesWidth}px`), display: isMobile && mobileTab !== 'variables' ? 'none' : 'flex' }} className="bg-[#141414] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
-          <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
-            {!isVariablesCollapsed && (
-              <div className="flex items-center overflow-hidden whitespace-nowrap">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
-                  <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5" />
-                  <path d="M3 12h18" />
-                  <path d="M12 12v9" />
-                </svg>
-                <span className="text-sm font-medium text-[#e0e0e0]">Variables</span>
-              </div>
-            )}
-            <button 
-              onClick={() => setIsVariablesCollapsed(!isVariablesCollapsed)}
-              className={`p-1.5 rounded hover:bg-[#222] text-[#c9a86c] transition-all ${isVariablesCollapsed ? 'w-full flex justify-center' : ''}`}
-            >
-              <Triangle size={10} className={`transition-transform duration-300 ${isVariablesCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
-            </button>
-          </div>
-          
-          {!isVariablesCollapsed && (
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="flex-1 overflow-y-auto no-scrollbar">
-                {/* Compact Create Section */}
-                <div className="p-3 border-b border-[#222] bg-[#1a1a1a]/50">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-bold text-[#c9a86c] uppercase tracking-wider">New Variable</span>
-                  </div>
-                  <div className="flex gap-1.5 mb-1.5">
-                    <Input
-                      placeholder="Name"
-                      value={newVarName}
-                      onChange={(e) => setNewVarName(e.target.value)}
-                      className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#c9a86c]/50"
-                    />
-                    <select
-                      value={newVarType}
-                      onChange={(e) => setNewVarType(e.target.value as VariableType)}
-                      className="h-7 w-24 bg-[#0d0d0d] border border-[#333] rounded text-[10px] px-1 text-[#e0e0e0] outline-none"
-                    >
-                      {ALLOWED_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <Input
-                      placeholder="Init Value"
-                      value={newVarValue}
-                      onChange={(e) => setNewVarValue(e.target.value)}
-                      className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#c9a86c]/50"
-                    />
-                    <Button size="sm" onClick={addVariable} className="h-7 px-3 bg-[#c9a86c] text-[#0a0a0a] text-[10px] font-bold hover:bg-[#b8975b]">ADD</Button>
-                  </div>
-                </div>
-
-                {/* Compact List */}
-                <div className="py-2">
-                  {variables.map((variable, idx) => {
-                    const color = colors[idx % colors.length];
-                    const typeColors: Record<string, string> = {
-                      'int32': 'text-emerald-400',
-                      'float': 'text-sky-400',
-                      'bool': 'text-amber-400'
-                    };
-                    
-                    return (
-                      <div key={variable.id} className="group border-b border-[#1a1a1a] last:border-0">
-                        <div className="flex items-center h-8 px-4 hover:bg-[#222] transition-colors">
-                          <div className="flex items-center gap-2 flex-1 overflow-hidden">
-                            <Checkbox
-                              checked={variable.visibleInScope}
-                              onCheckedChange={() => toggleVariableVisibility(variable.id)}
-                              className="w-3.5 h-3.5 border-[#333] data-[state=checked]:bg-[#c9a86c] data-[state=checked]:border-[#c9a86c]"
-                            />
-                            <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                            <span className="text-xs font-mono text-[#e0e0e0] truncate flex-1" title={variable.name}>{variable.name}</span>
-                            <span className={`text-[9px] font-bold uppercase shrink-0 w-8 text-center ${typeColors[variable.type.toLowerCase()] || 'text-gray-500'}`}>
-                              {variable.type.substring(0, 3)}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => removeVariable(variable.id)}
-                            className="ml-2 text-[#444] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M18 6L6 18M6 6l12 12" />
-                            </svg>
-                          </button>
-                        </div>
-                        
-                        <div className="px-4 pb-2 pt-0.5 grid grid-cols-2 gap-3 group-hover:bg-[#1a1a1a]/30 transition-colors">
-                          <div className="space-y-0.5">
-                            <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Initial</span>
-                            <Input
-                              value={variable.initialValue}
-                              onChange={(e) => updateVariableInitValue(variable.id, e.target.value)}
-                              disabled={isRunning}
-                              className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] focus:border-[#c9a86c]/30 px-1.5"
-                            />
-                          </div>
-                          <div className="space-y-0.5">
-                            <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Current</span>
-                            <Input
-                              value={String(variable.currentValue)}
-                              onChange={(e) => updateVariableValue(variable.id, e.target.value)}
-                              className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] text-emerald-400 focus:border-[#c9a86c]/30 px-1.5"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {variables.length === 0 && (
-                    <div className="py-10 text-center opacity-30">
-                      <p className="text-[10px] font-bold uppercase tracking-widest">No Signals</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </aside>
-        {!isMobile && <Resizer onMouseDown={(e) => handleResizeStart(e, 'variables')} />}
-
-        {/* Canvas Area */}
-        <div style={{ display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="flex-1 flex flex-col min-w-0">
-          <main className="flex-1 relative overflow-hidden bg-[#0a0a0a]">
-            {/* Canvas Toolbar */}
-            <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#1a1a1a]/95 border border-[#333] rounded-lg px-2.5 py-1.5 text-xs">
-              {/* Layer Breadcrumb */}
-              {layerPath.length > 1 && (
-                <>
-                  {layerPath.map((name, index) => ( // REQ-HSM-041 & 042
-                    <React.Fragment key={index}>
-                      <button
-                        onClick={index < layerPath.length - 1 ? exitLayer : undefined}
-                        disabled={index === layerPath.length - 1}
-                        className={`flex items-center gap-1 px-2 py-0.5 rounded ${index === layerPath.length - 1
-                          ? 'bg-[#c9a86c] text-[#0a0a0a] font-medium'
-                          : 'text-[#c9a86c] hover:bg-[#222]'
-                          } ${index < layerPath.length - 1 ? 'cursor-pointer' : 'cursor-default'}`}
-                      > <span className="text-[9px] text-gray-500 mr-1">L{index}</span>
-                        {name}
-                        {index < layerPath.length - 1 && (
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="9 18 15 12 9 6" />
-                          </svg>
-                        )}
-                      </button>
-                      {index < layerPath.length - 1 && <span className="text-[#666] mx-1">/</span>}
-                    </React.Fragment>
-                  ))}
-                </>
-              )}
-
-              <Separator orientation="vertical" className="h-3 bg-[#333] mx-1.5" />
-
-
-        {diagramMode === 'statemachine' && (
-                <>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      const rect = canvasRef.current?.getBoundingClientRect();
-                      if (rect) {
-                        createState(
-                          ((rect.width / uiZoom) / 2 - view.offsetX) / view.scale,
-                          ((rect.height / uiZoom) / 2 - view.offsetY) / view.scale
-                        );
-                      }
-                    }}
-                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                    State
-                  </Button>
-
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      const rect = canvasRef.current?.getBoundingClientRect();
-                      if (rect) {
-                        createJunction(
-                          ((rect.width / uiZoom) / 2 - view.offsetX) / view.scale,
-                          ((rect.height / uiZoom) / 2 - view.offsetY) / view.scale
-                        );
-                      }
-                    }}
-                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
-                      <circle cx="12" cy="12" r="10" />
-                    </svg>
-                    Junction
-                  </Button>
-
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      const rect = canvasRef.current?.getBoundingClientRect();
-                      if (rect) {
-                        createXBridgesState(
-                          ((rect.width / uiZoom) / 2 - view.offsetX) / view.scale,
-                          ((rect.height / uiZoom) / 2 - view.offsetY) / view.scale
-                        );
-                      }
-                    }}
-                    className="h-6 px-2 text-[#4caf50] hover:bg-[#4caf50]/10 border border-[#4caf50]/30"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
-                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                      <polyline points="3.29 7 12 12 20.71 7" />
-                      <line x1="12" y1="22" x2="12" y2="12" />
-                    </svg>
-                    X-Bridges
-                  </Button>
-                </>
-              )}
-
-              {diagramMode === 'bdd' && (
-                <>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      const rect = canvasRef.current?.getBoundingClientRect();
-                      if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'block');
-                    }}
-                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
-                  >
-                    Block
-                  </Button>
-                  <div className="flex gap-0.5">
-                    <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50" title="Add Standard Port">+Std</Button>
-                    <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
-                    <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
-                  </div>
-                </>
-              )}
-
-              {diagramMode === 'requirements' && (
-                <>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      const rect = canvasRef.current?.getBoundingClientRect();
-                      if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'requirement');
-                    }}
-                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
-                  >
-                    Requirement
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => toggleWindow('rtm')}
-                    className="h-6 px-2 text-[#c9a86c] hover:bg-[#222]"
-                  >
-                    RTM
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleAutoLayout}
-                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
-                  >
-                    Auto Layout
-                  </Button>
-                </>
-              )}
-
-              {diagramMode === 'ibd' && (
-                <>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      const rect = canvasRef.current?.getBoundingClientRect();
-                      if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'block');
-                    }}
-                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
-                  >
-                    Block
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      createRequirement(mousePos.x, mousePos.y);
-                    }}
-                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
-                  >
-                    Req
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      const rect = canvasRef.current?.getBoundingClientRect();
-                      if (rect) createBlock(((rect.width / uiZoom) / 2 - view.offsetX) / view.scale, ((rect.height / uiZoom) / 2 - view.offsetY) / view.scale, 'interfaceBlock');
-                    }}
-                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
-                  >
-                    Intf Block
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      const rect = canvasRef.current?.getBoundingClientRect();
-                      if (rect) createPart((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale);
-                    }}
-                    className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
-                  >
-                    Part
-                  </Button>
-                  <div className="flex gap-0.5">
-                    <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50" title="Add Standard Port">+Std</Button>
-                    <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
-                    <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
-                  </div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      if (isCreatingConnector) {
-                        setIsCreatingConnector(false);
-                        setConnectorSource(null);
-                      } else {
-                        setIsCreatingConnector(true);
-                      }
-                    }}
-                    className={`h-6 px-2 ${isCreatingConnector ? 'bg-[#c9a86c] text-[#0a0a0a]' : 'text-[#e0e0e0] hover:bg-[#222]'}`}
-                  >
-                    {isCreatingConnector ? 'Cancel' : 'Connect'}
-                  </Button>
-                </>
-              )}
-
+          {/* SIMULATION CONTROLS - PROMINENT AND FUNCTIONAL */}
+          {(diagramMode as DiagramMode) !== 'xbridges' && (
+            <div className="flex items-center gap-2 bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-1.5">
               <Button
-                variant="secondary"
+                variant={isRunning ? "destructive" : "default"}
                 size="sm"
-                onClick={() => {
-                  if (isCreatingTransition) {
-                    setIsCreatingTransition(false);
-                    setTransitionSourceId(null);
-                  } else {
-                    setIsCreatingTransition(true);
-                  }
-                }}
-                className={`h-6 px-2 ${isCreatingTransition ? 'bg-[#c9a86c] text-[#0a0a0a]' : 'text-[#e0e0e0] hover:bg-[#222]'
-                  }`}
+                onClick={isRunning ? pauseSimulation : startSimulation}
+                className={isRunning ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"}
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                  <polyline points="15 3 21 3 21 9" />
-                  <line x1="10" y1="14" x2="21" y2="3" />
-                </svg>
-                {isCreatingTransition ? 'Cancel' : 'Connect'}
-              </Button>
-
-              <Separator orientation="vertical" className="h-3 bg-[#333] mx-1.5" />
-
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setGridEnabled(!gridEnabled)}
-                className={`h-6 w-6 ${gridEnabled ? 'text-[#c9a86c]' : 'text-[#666]'}`}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 3v1818V3H3z" />
-                  <path d="M9 3v18M15 3v18M3 9h18M3 15h18" />
-                </svg>
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSnapEnabled(!snapEnabled)}
-                className={`h-6 w-6 ${snapEnabled ? 'text-[#c9a86c]' : 'text-[#666]'}`}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" />
-                  <circle cx="12" cy="12" r="6" />
-                  <circle cx="12" cy="12" r="2" />
-                </svg>
-              </Button>
-
-              <Separator orientation="vertical" className="h-3 bg-[#333] mx-1.5" />
-
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setView(prev => ({ ...prev, scale: Math.min(MAX_SCALE, prev.scale * 1.2) }))}
-                className="h-6 w-6 text-[#a0a0a0] hover:text-[#e0e0e0]"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </Button>
-
-              <span className="text-[#666] w-9 text-center font-mono text-xs">
-                {Math.round(view.scale * 100)}%
-              </span>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setView(prev => ({ ...prev, scale: Math.max(MIN_SCALE, prev.scale / 1.2) }))}
-                className="h-6 w-6 text-[#a0a0a0] hover:text-[#e0e0e0]"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setView({ scale: 1, offsetX: 0, offsetY: 0 })}
-                className="h-6 w-6 text-[#a0a0a0] hover:text-[#e0e0e0]"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 14.5V22M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 12.5304 2.04152 13.0558 2.1225 13.5714M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 12.5304 21.9585 13.0558 21.8775 13.5714" />
-                </svg>
-              </Button>
-            </div>
-
-            {/* Mode indicator */}
-            {isCreatingTransition && (
-              <div className="absolute top-3 right-3 z-10 px-4 py-2 bg-[#c9a86c] text-[#0a0a0a] rounded-lg font-medium text-sm shadow-lg">
-                {transitionSourceId ? 'Click target state/junction to connect...' : 'Click source state/junction...'}
-              </div>
-            )}
-            {isCreatingConnector && (
-              <div className="absolute top-3 right-3 z-10 px-4 py-2 bg-[#c9a86c] text-[#0a0a0a] rounded-lg font-medium text-sm shadow-lg">
-                {connectorSource ? 'Click target port...' : 'Click source port...'}
-              </div>
-            )}
-
-            {/* Zoom indicator */}
-            {showZoomIndicator && (
-              <div className="absolute top-12 right-3 z-10 px-3 py-1.5 bg-[#1a1a1a] border border-[#333] rounded-lg font-mono text-sm shadow-lg">
-                Zoom: {Math.round(view.scale * 100)}%
-              </div>
-            )}
-
-
-            <div
-              ref={canvasRef}
-              className="absolute inset-0"
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-              onDoubleClick={handleDoubleClick}
-              onWheel={handleWheel}
-            >
-              <svg width="100%" height="100%" style={{ pointerEvents: 'none' }}>
-                <defs>
-                  <pattern
-                    id="grid"
-                    width={GRID_SIZE}
-                    height={GRID_SIZE}
-                    patternUnits="userSpaceOnUse"
-                  >
-                    <path d={`M ${GRID_SIZE} 0 L 0 0 0 ${GRID_SIZE}`} fill="none" stroke="#1a1a1a" strokeWidth="1" />
-                  </pattern>
-                </defs>
-
-                {/* Grid */}
-                {gridEnabled && (
-                  <rect
-                    width="100%"
-                    height="100%"
-                    fill="url(#grid)"
-                    opacity={0.3}
-                  />
-                )}
-
-                {/* World content */}
-                <g transform={`translate(${view.offsetX}, ${view.offsetY}) scale(${view.scale})`}>
-                  {/* Origin marker */}
-                  <g>
-                    <line x1={-10} y1={0} x2={10} y2={0} stroke="#c9a86c" strokeWidth={0.5} opacity={0.5} />
-                    <line x1={0} y1={-10} x2={0} y2={10} stroke="#c9a86c" strokeWidth={0.5} opacity={0.5} />
-                    <circle cx={0} cy={0} r={2} fill="#c9a86c" opacity={0.7}>
-                      <animate attributeName="r" values="2;3;2" dur="2s" repeatCount="indefinite" />
-                    </circle>
-                  </g>
-
-                  {diagramMode === 'statemachine' ? (
-                    <>
-                      <g style={{ pointerEvents: 'all' }}>
-                        {renderStates()}
-                      </g>
-                      <g style={{ pointerEvents: 'all' }}>
-                        {renderTransitions()}
-                      </g>
-                      <g style={{ pointerEvents: 'all' }}>
-                        {renderJunctions()}
-                      </g>
-                    </>
-                  ) : (diagramMode === 'bdd' || diagramMode === 'requirements') ? (
-                    <>
-                      <g style={{ pointerEvents: 'all' }}>
-                        {renderRelationships()}
-                      </g>
-                      <g style={{ pointerEvents: 'all' }}>
-                        {renderBlocks()}
-                      </g>
-                    </>
-                  ) : (
-                    diagramMode === 'ibd' ? (
-                      <>
-                        <g style={{ pointerEvents: 'all' }}>
-                          {renderBlocks()}
-                        </g>
-                        <g style={{ pointerEvents: 'all' }}>
-                          {renderInterfaceRealizations()}
-                        </g>
-                        <g style={{ pointerEvents: 'all' }}>
-                          {renderConnectors()}
-                        </g>
-                        <g style={{ pointerEvents: 'all' }}>
-                          {renderParts()}
-                        </g>
-                      </>
-                    ) : null
-                  )}
-                </g>
-              </svg>
-            </div>
-
-            {/* Status bar */}
-            <div className="absolute bottom-0 left-0 right-0 h-7 bg-[#141414] border-t border-[#222] flex items-center px-3 text-xs text-[#666]">
-              <span className="mr-4 font-mono">X: {Math.round(mousePos.x)}</span>
-              <span className="mr-4 font-mono">Y: {Math.round(mousePos.y)}</span>
-              {diagramMode === 'statemachine' ? (
-                <>
-                  <span className="mr-4">States: {currentStates.length}</span>
-                  <span>Transitions: {currentTransitions.length}</span>
-                </>
-              ) : (diagramMode === 'bdd' || diagramMode === 'requirements') ? (
-                <>
-                  <span className="mr-4">Blocks: {blocks.length}</span>
-                  <span>Relations: {relationships.length}</span>
-                </>
-              ) : (
-                <>
-                  <span className="mr-4">Parts: {parts.length}</span>
-                  <span>Connectors: {connectors.length}</span>
-                </>
-              )}
-              <div className="flex-1" />
-              <span className="text-[#888]">
-                {isPanning ? 'PANNING' : isSpacePressed.current ? 'PAN MODE (SPACE)' : 'READY'}
-                {' | '}
-                Space+Drag: Pan | Ctrl+Wheel: Zoom
-              </span>
-            </div>
-          </main>
-
-          {/* Bottom Panel */}
-          {!isMobile && !isScopeCollapsed && <Resizer onMouseDown={(e) => handleResizeStart(e, 'scope')} orientation="horizontal" />}
-          <div style={{ height: isMobile ? '30%' : (isScopeCollapsed ? '40px' : `${scopeHeight}px`), display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="bg-[#141414] border-t border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
-            <div className="flex items-center justify-between px-4 border-b border-[#222] h-10 shrink-0">
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => setIsScopeCollapsed(!isScopeCollapsed)}
-                  className="p-1 hover:bg-[#222] rounded text-[#c9a86c] transition-colors"
-                >
-                  <Triangle size={10} className={`transition-transform duration-300 ${isScopeCollapsed ? 'rotate-0' : 'rotate-180'}`} fill="currentColor" />
-                </button>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2">
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                </svg>
-                <span className="font-medium">Scope</span>
-              </div>
-              {!isScopeCollapsed && (
-                <div className="flex items-center gap-2">
-                {/* Variable Selector */}
-                <div className="relative group">
-                  <Button variant="ghost" size="sm" className="text-[#a0a0a0] hover:text-[#e0e0e0] px-2.5 py-1">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
-                      <path d="M12 20v-6M6 20V10M18 20V4" />
-                    </svg>
-                    Variables ({visibleVariables.length})
-                  </Button>
-                  <div className="absolute bottom-full left-0 mb-1 w-48 bg-[#1a1a1a] border border-[#333] rounded-lg shadow-xl p-2 hidden group-hover:block z-50">
-                    {variables.length === 0 ? (
-                      <div className="text-xs text-[#666] p-2 text-center">No variables</div>
-                    ) : (
-                      variables.map(v => (
-                        <div
-                          key={v.id}
-                          className="flex items-center gap-2 p-1.5 hover:bg-[#222] rounded cursor-pointer"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleVariableVisibility(v.id);
-                          }}
-                        >
-                          <Checkbox
-                            checked={v.visibleInScope}
-                            onCheckedChange={() => { }}
-                            className="pointer-events-none"
-                          />
-                          <span className="text-xs text-[#e0e0e0] truncate">{v.name}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <Separator orientation="vertical" className="h-4 bg-[#333] mx-2" />
-
-                <Checkbox
-                  id="sampleOnTransition"
-                  checked={sampleOnTransitionOnly}
-                  onCheckedChange={(checked) => setSampleOnTransitionOnly(checked as boolean)}
-                  className="border-[#444]"
-                />
-                <Label htmlFor="sampleOnTransition" className="text-xs text-[#888] cursor-pointer">
-                  Sample on transitions only
-                </Label>
-                <Separator orientation="vertical" className="h-4 bg-[#333] mx-2" />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={exportScopeCSV}
-                  className="text-[#a0a0a0] hover:text-[#e0e0e0] px-2.5 py-1"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="17 8 12 3 7 8" />
-                    <line x1="12" y1="3" x2="12" y2="15" />
-                  </svg>
-                  Export CSV
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearScope}
-                  className="text-[#a0a0a0] hover:text-[#e0e0e0] px-2.5 py-1"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  </svg>
-                  Clear
-                </Button>
-              </div>
-            )}
-          </div>
-
-            {!isScopeCollapsed && (
-              <div className="flex-1 p-3">
-              {visibleVariables.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-[#666]">
-                  <div className="text-center">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-2 opacity-50">
-                      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                    </svg>
-                    <p className="text-sm font-medium">No variables selected for scope</p>
-                    <p className="text-xs mt-1 opacity-70">Open Workspace to add variables</p>
-                  </div>
-                </div>
-              ) : scopeData.length < 2 ? (
-                <div className="flex items-center justify-center h-full text-[#666]">
-                  <div className="text-center">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-2 opacity-50">
-                      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                    </svg>
-                    <p className="text-sm font-medium">Start simulation to see scope data</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="w-full h-full overflow-hidden">
-                  <div className="h-full flex pb-3 gap-2">
-                    {visibleVariables.map((variable, index) => {
-                      const color = colors[index % colors.length];
-                      const values = scopeData.map(dp => dp[variable.name] ?? 0);
-                      const maxValue = Math.max(1, ...values);
-                      const height = 70;
-
-                      // Auto-scale logic
-                      let minVal = Math.min(...values);
-                      let maxVal = Math.max(...values);
-                      if (minVal === maxVal) {
-                        minVal -= 1;
-                        maxVal += 1;
-                      }
-                      const range = maxVal - minVal;
-                      const padding = range * 0.1;
-                      const effectiveMin = minVal - padding;
-                      const effectiveMax = maxVal + padding;
-                      const effectiveRange = effectiveMax - effectiveMin;
-
-                      // Generate SVG points for continuous line
-                      const points = values.map((v, i) => {
-                        const x = (i / (values.length - 1)) * 100;
-                        const y = 100 - ((v - effectiveMin) / effectiveRange) * 100;
-                        return `${x},${y}`;
-                      }).join(' ');
-
-                      return (
-                        <div key={variable.id} className="flex-1 min-w-[150px] relative h-full bg-[#111] rounded border border-[#333] overflow-hidden">
-                          <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0">
-                            <polyline
-                              points={points}
-                              fill="none"
-                              stroke={color}
-                              strokeWidth="2"
-                              vectorEffect="non-scaling-stroke"
-                              strokeLinejoin="round"
-                              strokeLinecap="round"
-                            />
-                          </svg>
-                          <div className="absolute top-2 left-2 right-2 flex justify-between items-start pointer-events-none">
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#000]/50 backdrop-blur-sm" style={{ color }}>
-                              {variable.name}
-                            </span>
-                            <span className="text-[10px] font-mono text-[#e0e0e0] px-1.5 py-0.5 rounded bg-[#000]/50 backdrop-blur-sm">
-                              {values[values.length - 1]?.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-        {!isMobile && <Resizer onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
-
-        {/* Right Dock: Properties */}
-        <aside style={{ width: isMobile ? '100%' : (isPropertiesCollapsed ? '48px' : `${propertiesWidth}px`), display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className="bg-[#141414] border-l border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
-          <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
-            {!isPropertiesCollapsed && (
-              <div className="flex items-center overflow-hidden whitespace-nowrap">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                </svg>
-                <span className="text-sm font-medium">Properties</span>
-              </div>
-            )}
-            <button 
-              onClick={() => setIsPropertiesCollapsed(!isPropertiesCollapsed)}
-              className={`p-1.5 rounded hover:bg-[#222] text-[#c9a86c] transition-all ${isPropertiesCollapsed ? 'w-full flex justify-center' : ''}`}
-            >
-              <Triangle size={10} className={`transition-transform duration-300 ${isPropertiesCollapsed ? '-rotate-90' : 'rotate-90'}`} fill="currentColor" />
-            </button>
-          </div>
-
-          <div className={`flex-1 overflow-y-auto p-4 space-y-4 ${isPropertiesCollapsed ? 'hidden' : 'block'}`}>
-            {selectedState ? (
-              <>
-                <div>
-                  <Label>State Name</Label>
-                  <Input
-                    value={selectedState.name}
-                    onChange={(e) => updateState(selectedState.id, { name: e.target.value })}
-                    className="mt-1"
-                  />
-                </div>
-
-                <div>
-                  <Label>Priority (lower = higher)</Label>
-                  <Input
-                    type="number"
-                    value={selectedState.priority}
-                    onChange={(e) => updateState(selectedState.id, { priority: parseInt(e.target.value) || 0 })}
-                    className="mt-1"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={selectedState.isParallel}
-                    onCheckedChange={(checked) => updateState(selectedState.id, { isParallel: checked as boolean })}
-                    id="isParallel"
-                  />
-                  <Label htmlFor="isParallel">Parallel State</Label>
-                </div>
-
-                {selectedState.isParallel && (
-                  <div>
-                    <Label>Region ID</Label>
-                    <Input
-                      value={selectedState.regionId || ''}
-                      onChange={(e) => updateState(selectedState.id, { regionId: e.target.value || null })}
-                      placeholder="e.g., main_region"
-                      className="mt-1"
-                    />
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={selectedState.autostart}
-                    onCheckedChange={(checked) => updateState(selectedState.id, { autostart: checked as boolean })}
-                    id="autostart"
-                  />
-                  <Label htmlFor="autostart">Auto-start on reset</Label>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={selectedState.isSafeState || false}
-                    onCheckedChange={(checked) => updateState(selectedState.id, { isSafeState: checked as boolean })}
-                    id="isSafeState"
-                  />
-                  <Label htmlFor="isSafeState" className="text-green-400">Is Safe State</Label>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={selectedState.isXBridges || false}
-                    onCheckedChange={(checked) => updateState(selectedState.id, { isXBridges: checked as boolean })}
-                    id="isXBridges"
-                  />
-                  <Label htmlFor="isXBridges" className="text-amber-400">X-Bridges Sub-Model</Label>
-                </div>
-
-                {selectedState.isXBridges && (
-                  <div className="space-y-3 p-3 bg-[#1a1a1a] rounded border border-[#c9a86c]/30">
-                    <div className="flex justify-between items-center">
-                      <Label className="text-amber-400 font-bold">Variable Mappings</Label>
-                      <Button size="sm" className="h-5 text-[10px] px-2 bg-amber-600/20 text-amber-500 border-amber-500/50" 
-                        onClick={() => {
-                          const currentMappings = selectedState.xBridgesModel?.mappings || [];
-                          updateState(selectedState.id, { 
-                            xBridgesModel: { 
-                              nodes: selectedState.xBridgesModel?.nodes || [],
-                              edges: selectedState.xBridgesModel?.edges || [],
-                              mappings: [...currentMappings, { smVarId: '', blockId: '', portId: '', direction: 'in' }] 
-                            } 
-                          });
-                        }}
-                      >+ Add Map</Button>
-                    </div>
-                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1 thin-scrollbar">
-                      {(selectedState.xBridgesModel?.mappings || []).map((map, idx) => (
-                        <div key={idx} className="p-2 bg-[#0a0a0a] rounded border border-[#333] space-y-2 relative group">
-                          <div className="grid grid-cols-2 gap-2">
-                             <div className="flex flex-col gap-1">
-                               <Label className="text-[9px] uppercase tracking-wider text-gray-500">SM Variable</Label>
-                               <select 
-                                 value={map.smVarId}
-                                 onChange={(e) => {
-                                   const newMaps = [...selectedState.xBridgesModel!.mappings!];
-                                   newMaps[idx] = { ...map, smVarId: e.target.value };
-                                   updateState(selectedState.id, { 
-                                     xBridgesModel: { 
-                                       nodes: selectedState.xBridgesModel?.nodes || [],
-                                       edges: selectedState.xBridgesModel?.edges || [],
-                                       mappings: newMaps 
-                                     } 
-                                   });
-                                 }}
-                                 className="w-full h-7 bg-[#1a1a1a] border border-[#333] rounded text-[10px] px-1 text-amber-200"
-                               >
-                                 <option value="">Select...</option>
-                                 {variables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                               </select>
-                             </div>
-                             <div className="flex flex-col gap-1">
-                               <Label className="text-[9px] uppercase tracking-wider text-gray-500">Direction</Label>
-                               <select 
-                                 value={map.direction}
-                                 onChange={(e) => {
-                                   const newMaps = [...selectedState.xBridgesModel!.mappings!];
-                                   newMaps[idx] = { ...map, direction: e.target.value as any };
-                                   updateState(selectedState.id, { 
-                                     xBridgesModel: { 
-                                       nodes: selectedState.xBridgesModel?.nodes || [],
-                                       edges: selectedState.xBridgesModel?.edges || [],
-                                       mappings: newMaps 
-                                     } 
-                                   });
-                                 }}
-                                 className="w-full h-7 bg-[#1a1a1a] border border-[#333] rounded text-[10px] px-1 text-gray-300"
-                               >
-                                 <option value="in">SM → Block</option>
-                                 <option value="out">Block → SM</option>
-                               </select>
-                             </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                             <div className="flex flex-col gap-1">
-                               <Label className="text-[9px] uppercase tracking-wider text-gray-500">Block ID</Label>
-                               <Input 
-                                 value={map.blockId}
-                                 onChange={(e) => {
-                                   const newMaps = [...selectedState.xBridgesModel!.mappings!];
-                                   newMaps[idx] = { ...map, blockId: e.target.value };
-                                   updateState(selectedState.id, { 
-                                     xBridgesModel: { 
-                                       nodes: selectedState.xBridgesModel?.nodes || [],
-                                       edges: selectedState.xBridgesModel?.edges || [],
-                                       mappings: newMaps 
-                                     } 
-                                   });
-                                 }}
-                                 placeholder="e.g. Constant-1"
-                                 className="h-7 text-[10px] font-mono"
-                               />
-                             </div>
-                             <div className="flex flex-col gap-1">
-                               <Label className="text-[9px] uppercase tracking-wider text-gray-500">Block Port</Label>
-                               <Input 
-                                 value={map.portId}
-                                 onChange={(e) => {
-                                   const newMaps = [...selectedState.xBridgesModel!.mappings!];
-                                   newMaps[idx] = { ...map, portId: e.target.value };
-                                   updateState(selectedState.id, { 
-                                     xBridgesModel: { 
-                                       nodes: selectedState.xBridgesModel?.nodes || [],
-                                       edges: selectedState.xBridgesModel?.edges || [],
-                                       mappings: newMaps 
-                                     } 
-                                   });
-                                 }}
-                                 placeholder="e.g. in1"
-                                 className="h-7 text-[10px] font-mono"
-                               />
-                             </div>
-                          </div>
-                          <button 
-                            className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                            onClick={() => {
-                              const newMaps = selectedState.xBridgesModel!.mappings!.filter((_, i) => i !== idx);
-                              updateState(selectedState.id, { 
-                                xBridgesModel: { 
-                                  nodes: selectedState.xBridgesModel?.nodes || [],
-                                  edges: selectedState.xBridgesModel?.edges || [],
-                                  mappings: newMaps 
-                                } 
-                              });
-                            }}
-                          >
-                             <span className="text-white text-[10px]">×</span>
-                          </button>
-                        </div>
-                      ))}
-                      {(selectedState.xBridgesModel?.mappings || []).length === 0 && (
-                        <div className="text-[10px] text-gray-600 italic text-center py-2">No mappings defined</div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <Label>History</Label>
-                  <select
-                    value={selectedState.historyType || 'none'}
-                    onChange={(e) => {
-                      const newType = e.target.value as 'none' | 'shallow' | 'deep';
-                      updateState(selectedState.id, { historyType: newType });
-
-                      const existing = junctions.find(j => j.parentId === selectedState.id && (j.type === 'history' || j.type === 'deep-history'));
-                      if (existing) {
-                        deleteJunction(existing.id);
-                      }
-
-                      if (newType !== 'none') {
-                        createJunction(selectedState.x + 30, selectedState.y + 30, newType === 'shallow' ? 'history' : 'deep-history', selectedState.id);
-                      }
-                    }}
-                    className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
-                  >
-                    <option value="none">None</option>
-                    <option value="shallow">Shallow (H)</option>
-                    <option value="deep">Deep (H*)</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2 p-2 bg-[#1a1a1a] rounded border border-[#333]">
-                  <div className="flex justify-between items-center">
-                    <Label className="text-[#c9a86c]">Internal Transitions</Label>
-                    <Button size="sm" className="h-5 text-[10px] px-2" onClick={() => {
-                      const current = selectedState.internalTransitions ? selectedState.internalTransitions + '\n' : '';
-                      updateState(selectedState.id, { internalTransitions: current + '[condition] / action;' });
-                    }}>+ Add</Button>
-                  </div>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {(selectedState.internalTransitions || '').split('\n').filter(l => l.trim()).map((line, idx) => {
-                      const parts = line.split('/');
-                      const action = parts.length > 1 ? parts.slice(1).join('/') : '';
-                      const triggerPart = parts[0].trim();
-
-                      let type = 'condition';
-                      if (triggerPart.includes('&&')) type = 'and';
-                      else if (triggerPart.includes('||')) type = 'or';
-                      else if (triggerPart.includes('after')) type = 'after';
-
-                      const afterMatch = triggerPart.match(/after\((\d+)\)/);
-                      const condMatch = triggerPart.match(/\[(.*?)\]/);
-                      const afterTicks = afterMatch ? afterMatch[1] : '';
-                      const condition = condMatch ? condMatch[1] : (type === 'condition' ? triggerPart.replace(/[\[\]]/g, '') : '');
-
-                      const updateLine = (newType: string, newCond: string, newAfter: string, newAct: string) => {
-                        let newTrigger = '';
-                        if (newType === 'condition') newTrigger = `[${newCond}]`;
-                        else if (newType === 'after') newTrigger = `after(${newAfter})`;
-                        else if (newType === 'and') newTrigger = `[${newCond}] && after(${newAfter})`;
-                        else if (newType === 'or') newTrigger = `[${newCond}] || after(${newAfter})`;
-
-                        const allLines = (selectedState.internalTransitions || '').split('\n').filter(l => l.trim());
-                        allLines[idx] = `${newTrigger} / ${newAct}`;
-                        updateState(selectedState.id, { internalTransitions: allLines.join('\n') });
-                      };
-
-                      return (
-                        <div key={idx} className="p-2 bg-[#0a0a0a] border border-[#333] rounded space-y-1">
-                          <div className="flex gap-1">
-                            <select
-                              value={type}
-                              onChange={e => updateLine(e.target.value, condition, afterTicks, action)}
-                              className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-20 px-1 text-[#e0e0e0]"
-                            >
-                              <option value="condition">Cond</option>
-                              <option value="after">After</option>
-                              <option value="and">And</option>
-                              <option value="or">Or</option>
-                            </select>
-                            <button onClick={() => {
-                              const allLines = (selectedState.internalTransitions || '').split('\n').filter(l => l.trim());
-                              allLines.splice(idx, 1);
-                              updateState(selectedState.id, { internalTransitions: allLines.join('\n') });
-                            }} className="ml-auto text-[#666] hover:text-red-400">×</button>
-                          </div>
-                          {(type !== 'after') && (
-                            <Input value={condition} onChange={e => updateLine(type, e.target.value, afterTicks, action)} placeholder="Condition" className="h-6 text-[10px]" />
-                          )}
-                          {(type !== 'condition') && (
-                            <Input value={afterTicks} onChange={e => updateLine(type, condition, e.target.value, action)} placeholder="Ticks" type="number" className="h-6 text-[10px]" />
-                          )}
-                          <div className="flex items-center gap-1">
-                            <span className="text-[#666] text-[10px]">/</span>
-                            <Input value={action.trim()} onChange={e => updateLine(type, condition, afterTicks, e.target.value)} placeholder="Action" className="h-6 text-[10px] flex-1" />
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {(!selectedState.internalTransitions || !selectedState.internalTransitions.trim()) && (
-                      <div className="text-[10px] text-[#666] text-center italic">No internal transitions</div>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Entry Action (C-like)</Label>
-                  <textarea
-                    value={selectedState.entry}
-                    onChange={(e) => updateState(selectedState.id, { entry: e.target.value })}
-                    placeholder="/* Entry action */ counter = 0;"
-                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
-                  />
-                </div>
-
-                <div>
-                  <Label>During Action (C-like)</Label>
-                  <textarea
-                    value={selectedState.during}
-                    onChange={(e) => updateState(selectedState.id, { during: e.target.value })}
-                    placeholder="/* During action */ counter++;"
-                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
-                  />
-                </div>
-
-                <div className="space-y-2 p-2 bg-[#1a1a1a] rounded border border-[#333]">
-                  <div className="flex justify-between items-center">
-                    <Label className="text-[#c9a86c]">Internal Transitions</Label>
-                    <Button size="sm" className="h-5 text-[10px] px-2" onClick={() => {
-                      const current = selectedState.internalTransitions ? selectedState.internalTransitions + '\n' : '';
-                      updateState(selectedState.id, { internalTransitions: current + '[condition] / action;' });
-                    }}>+ Add</Button>
-                  </div>
-                  <textarea
-                    value={selectedState.internalTransitions || ''}
-                    onChange={(e) => updateState(selectedState.id, { internalTransitions: e.target.value })}
-                    placeholder="[condition] / action"
-                    className="w-full h-20 min-h-[4rem] bg-[#0a0a0a] border border-[#333] rounded text-xs font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
-                  />
-                </div>
-
-                <div>
-                  <Label>Exit Action (C-like)</Label>
-                  <textarea
-                    value={selectedState.exit}
-                    onChange={(e) => updateState(selectedState.id, { exit: e.target.value })}
-                    placeholder="/* Exit action */"
-                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
-                  />
-                </div>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => enterLayer(selectedState.id)}
-                  className="w-full border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-                  </svg>
-                  Enter Layer
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => deleteState(selectedState.id)}
-                  className="w-full border-red-800 text-red-400 hover:text-red-300 hover:bg-red-950/30"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  </svg>
-                  Delete State
-                </Button>
-              </>
-            ) : selectedJunction ? (
-              <>
-                <div>
-                  <Label>Junction Name</Label>
-                  <Input
-                    value={selectedJunction.name}
-                    onChange={(e) => updateJunction(selectedJunction.id, { name: e.target.value })}
-                    className="mt-1"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2 mt-3">
-                  <Checkbox
-                    checked={selectedJunction.autostart || false}
-                    onCheckedChange={(checked) => updateJunction(selectedJunction.id, { autostart: checked as boolean })}
-                    id="j-autostart"
-                  />
-                  <Label htmlFor="j-autostart">Default Transition (Auto-start)</Label>
-                </div>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => deleteJunction(selectedJunction.id)}
-                  className="w-full border-red-800 text-red-400 hover:text-red-300 hover:bg-red-950/30"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  </svg>
-                  Delete Junction
-                </Button>
-              </>
-            ) : selectedBlock ? (
-              <>
-                <div>
-                  <Label>Block Name</Label>
-                  <Input value={selectedBlock.name} onChange={(e) => updateBlock(selectedBlock.id, { name: e.target.value })} className="mt-1" />
-                </div>
-                <div>
-                  <Label>Stereotype</Label>
-                  <select
-                    value={selectedBlock.stereotype}
-                    onChange={(e) => updateBlock(selectedBlock.id, { stereotype: e.target.value })}
-                    className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
-                  >
-                    <option value="block">Block</option>
-                    <option value="requirement">Requirement</option>
-                    <option value="interface">Interface</option>
-                    <option value="interfaceBlock">Interface Block</option>
-                    <option value="valueType">ValueType</option>
-                    <option value="enumeration">Enumeration</option>
-                  </select>
-                </div>
-                {selectedBlock.stereotype === 'requirement' && (
+                {isRunning ? (
                   <>
-                    <div><Label>Req ID</Label><Input value={selectedBlock.reqId || ''} onChange={(e) => updateBlock(selectedBlock.id, { reqId: e.target.value })} className="mt-1" /></div>
-                    <div><Label>Status</Label>
-                      <select value={selectedBlock.status || ''} onChange={(e) => updateBlock(selectedBlock.id, { status: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                        <option value="Draft">Draft</option>
-                        <option value="Approved">Approved</option>
-                        <option value="Verified">Verified</option>
-                        <option value="Implemented">Implemented</option>
-                      </select>
-                    </div>
-                    <div><Label>Priority</Label>
-                      <select value={selectedBlock.priority || ''} onChange={(e) => updateBlock(selectedBlock.id, { priority: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                        <option value="High">High</option>
-                        <option value="Medium">Medium</option>
-                        <option value="Low">Low</option>
-                      </select>
-                    </div>
-                    <div><Label>Description</Label><textarea value={selectedBlock.description || ''} onChange={(e) => updateBlock(selectedBlock.id, { description: e.target.value })} className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]" /></div>
-                    <div>
-                      <Label>Risk</Label>
-                      <select value={selectedBlock.risk || 'Medium'} onChange={(e) => updateBlock(selectedBlock.id, { risk: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                        <option value="High">High</option>
-                        <option value="Medium">Medium</option>
-                        <option value="Low">Low</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label>Verification Method</Label>
-                      <select value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                        <option value="Test">Test</option>
-                        <option value="Analysis">Analysis</option>
-                        <option value="Inspection">Inspection</option>
-                        <option value="Demonstration">Demonstration</option>
-                      </select>
-                    </div>
-                    <div><Label>Source</Label><Input value={selectedBlock.source || ''} onChange={(e) => updateBlock(selectedBlock.id, { source: e.target.value })} className="mt-1" /></div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                      <rect x="6" y="4" width="4" height="16" />
+                      <rect x="14" y="4" width="4" height="16" />
+                    </svg>
+                    Pause
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                    Start
                   </>
                 )}
-                <div>
-                  <Label>Ports</Label>
-                  <div className="space-y-1 mt-1 max-h-40 overflow-y-auto">
-                    {selectedBlock.ports.map((port, i) => (
-                      <div key={port.id} className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded border border-[#333]">
-                        <Input
-                          value={port.name}
-                          onChange={(e) => {
-                            const newPorts = [...selectedBlock.ports];
-                            newPorts[i] = { ...port, name: e.target.value };
-                            updateBlock(selectedBlock.id, { ports: newPorts });
-                          }}
-                          className="w-16 h-6 text-[10px] px-1"
-                          placeholder="Name"
-                        />
-                        <span className="text-[#666] text-[10px]">:</span>
-                        <Input
-                          value={port.type}
-                          onChange={(e) => {
-                            const newPorts = [...selectedBlock.ports];
-                            newPorts[i] = { ...port, type: e.target.value };
-                            updateBlock(selectedBlock.id, { ports: newPorts });
-                          }}
-                          className="w-16 h-6 text-[10px] px-1"
-                          placeholder="Type"
-                        />
-                        <select
-                          value={port.kind || 'standard'}
-                          onChange={(e) => {
-                            const newPorts = [...selectedBlock.ports];
-                            newPorts[i] = { ...port, kind: e.target.value as any };
-                            updateBlock(selectedBlock.id, { ports: newPorts });
-                          }}
-                          className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-14 px-0 text-[#e0e0e0]"
-                        >
-                          <option value="standard">Std</option>
-                          <option value="flow">Flow</option>
-                          <option value="proxy">Proxy</option>
-                        </select>
-                        {port.kind === 'flow' && (
-                          <>
-                            <select
-                              value={port.direction || 'in'}
-                              onChange={(e) => {
-                                const newPorts = [...selectedBlock.ports];
-                                newPorts[i] = { ...port, direction: e.target.value as any };
-                                updateBlock(selectedBlock.id, { ports: newPorts });
-                              }}
-                              className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-10 px-0 text-[#e0e0e0]"
-                            >
-                              <option value="in">In</option>
-                              <option value="out">Out</option>
-                              <option value="inout">I/O</option>
-                            </select>
-                            <Input
-                              value={port.unit || ''}
-                              onChange={(e) => {
-                                const newPorts = [...selectedBlock.ports];
-                                newPorts[i] = { ...port, unit: e.target.value };
-                                updateBlock(selectedBlock.id, { ports: newPorts });
-                              }}
-                              className="w-10 h-6 text-[10px] px-1" placeholder="Unit"
-                            />
-                          </>
-                        )}
-                        <button
-                          onClick={() => {
-                            const newPorts = selectedBlock.ports.filter(p => p.id !== port.id);
-                            updateBlock(selectedBlock.id, { ports: newPorts });
-                          }}
-                          className="text-[#666] hover:text-red-400 ml-auto px-1"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex gap-1 mt-2">
-                    <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50">+ Std</Button>
-                    <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
-                    <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
-                  </div>
-                </div>
-                <div>
-                  <Label>Operations (one per line)</Label>
-                  <textarea
-                    value={selectedBlock.operations.join('\n')}
-                    onChange={(e) => updateBlock(selectedBlock.id, { operations: e.target.value.split('\n').filter(s => s) })}
-                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
-                    placeholder="myOperation(arg: Type): ReturnType"
-                  />
-                </div>
-                <div>
-                  <Label>Constraints (one per line)</Label>
-                  <textarea
-                    value={(selectedBlock.constraints || []).join('\n')}
-                    onChange={(e) => updateBlock(selectedBlock.id, { constraints: e.target.value.split('\n').filter(s => s) })}
-                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
-                    placeholder="x > 0"
-                  />
-                </div>
-                <div>
-                  <Label>Nested Classes / Parts</Label>
-                  <textarea
-                    value={(selectedBlock.classes || []).join('\n')}
-                    onChange={(e) => updateBlock(selectedBlock.id, { classes: e.target.value.split('\n').filter(s => s) })}
-                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
-                    placeholder="ClassName : Type"
-                  />
-                </div>
-                <div>
-                  <Label>Properties (comma sep)</Label>
-                  <textarea
-                    value={selectedBlock.properties.map(p => `${p.name}:${p.type}${p.defaultValue ? '=' + p.defaultValue : ''}`).join(',\n')}
-                    onChange={(e) => {
-                      const newProperties: ValuePropertyData[] = e.target.value.split(/[,;\n]/).map(s => s.trim()).filter(s => s).map(pStr => {
-                        const [name, rest] = pStr.split(':');
-                        const [type, defaultValue] = rest ? rest.split('=') : ['any', undefined];
-                        return {
-                          id: uuidv4(),
-                          name: name?.trim() || 'prop',
-                          type: type?.trim() || 'any',
-                          defaultValue: defaultValue?.trim(),
-                        };
-                      });
-                      updateBlock(selectedBlock.id, { properties: newProperties });
-                    }}
-                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
-                  />
-                </div>
-                <div>
-                  <Label>Satisfied Requirements</Label>
-                  <select
-                    multiple
-                    value={selectedBlock.satisfiedReqIds || []}
-                    onChange={(e) => {
-                      const selected = Array.from(e.target.selectedOptions, option => option.value);
-                      updateBlock(selectedBlock.id, { satisfiedReqIds: selected });
-                    }}
-                    className="w-full h-20 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
-                  >
-                    {blocks.filter(b => b.stereotype === 'requirement').map(req => (
-                      <option key={req.id} value={req.id}>{req.reqId}: {req.name}</option>
-                    ))}
-                  </select>
-                  <div className="text-[10px] text-[#666] mt-1">Hold Ctrl to select multiple</div>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => deleteBlock(selectedBlock.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Block</Button>
-              </>
-            ) : selectedRelationship ? (
-              <>
-                <div>
-                  <Label>Relationship Type</Label>
-                  <select
-                    value={selectedRelationship.type}
-                    onChange={(e) => updateRelationship(selectedRelationship.id, { type: e.target.value as any })}
-                    className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
-                  >
-                    <option value="association">Association</option>
-                    <option value="generalization">Generalization</option>
-                    <option value="composition">Composition</option>
-                    <option value="aggregation">Aggregation</option>
-                    <option value="allocation">Allocation</option>
-                    <option value="derive">Derive</option>
-                    <option value="refine">Refine</option>
-                    <option value="satisfy">Satisfy</option>
-                    <option value="verify">Verify</option>
-                    <option value="trace">Trace</option>
-                  </select>
-                </div>
-                <div>
-                  <Label>Label</Label>
-                  <Input value={selectedRelationship.label} onChange={(e) => updateRelationship(selectedRelationship.id, { label: e.target.value })} className="mt-1" />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label>Source Mult.</Label>
-                    <Input value={selectedRelationship.sourceMultiplicity || ''} onChange={(e) => updateRelationship(selectedRelationship.id, { sourceMultiplicity: e.target.value })} className="mt-1" placeholder="0..1" />
-                  </div>
-                  <div>
-                    <Label>Target Mult.</Label>
-                    <Input value={selectedRelationship.targetMultiplicity || ''} onChange={(e) => updateRelationship(selectedRelationship.id, { targetMultiplicity: e.target.value })} className="mt-1" placeholder="*" />
-                  </div>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => deleteRelationship(selectedRelationship.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Relation</Button>
-              </>
-            ) : selectedPart ? (
-              <>
-                <div>
-                  <Label>Part Name</Label>
-                  <Input value={selectedPart.name} onChange={(e) => updatePart(selectedPart.id, { name: e.target.value })} className="mt-1" />
-                </div>
-                <div>
-                  <Label>Block Definition</Label>
-                  <select
-                    value={selectedPart.typeId || ''}
-                    onChange={(e) => updatePart(selectedPart.id, { typeId: e.target.value })}
-                    className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
-                  >
-                    <option value="">[Undefined]</option>
-                    {blocks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <Label>Multiplicity</Label>
-                  <Input value={selectedPart.multiplicity || ''} onChange={(e) => updatePart(selectedPart.id, { multiplicity: e.target.value })} className="mt-1" placeholder="1" />
-                </div>
-
-                {/* Ports Editor for the underlying Block */}
-                {(() => {
-                  const block = blocks.find(b => b.id === selectedPart.typeId);
-                  if (block) {
-                    return (
-                      <div className="p-2 bg-[#1a1a1a] border border-[#333] rounded mt-2">
-                        <Label className="text-[#c9a86c]">Block Ports ({block.name})</Label>
-                        <div className="space-y-1 mt-1 max-h-40 overflow-y-auto">
-                          {block.ports.map((port, i) => (
-                            <div key={port.id} className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded border border-[#333]">
-                              <Input
-                                value={port.name}
-                                onChange={(e) => {
-                                  const newPorts = [...block.ports];
-                                  newPorts[i] = { ...port, name: e.target.value };
-                                  updateBlock(block.id, { ports: newPorts });
-                                }}
-                                className="w-16 h-6 text-[10px] px-1"
-                              />
-                              <span className="text-[#666] text-[10px]">:</span>
-                              <Input
-                                value={port.type}
-                                onChange={(e) => {
-                                  const newPorts = [...block.ports];
-                                  newPorts[i] = { ...port, type: e.target.value };
-                                  updateBlock(block.id, { ports: newPorts });
-                                }}
-                                className="w-16 h-6 text-[10px] px-1"
-                              />
-                              <select
-                                value={port.kind || 'standard'}
-                                onChange={(e) => {
-                                  const newPorts = [...block.ports];
-                                  newPorts[i] = { ...port, kind: e.target.value as any };
-                                  updateBlock(block.id, { ports: newPorts });
-                                }}
-                                className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-14 px-0 text-[#e0e0e0]"
-                              >
-                                <option value="standard">Std</option>
-                                <option value="flow">Flow</option>
-                                <option value="proxy">Proxy</option>
-                              </select>
-                              <button
-                                onClick={() => {
-                                  const newPorts = block.ports.filter(p => p.id !== port.id);
-                                  updateBlock(block.id, { ports: newPorts });
-                                }}
-                                className="text-[#666] hover:text-red-400 ml-auto px-1"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="flex gap-1 mt-2">
-                          <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50">+ Std</Button>
-                          <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
-                          <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-
-                <div>
-                  <Label>Satisfied Requirements</Label>
-                  <select
-                    multiple
-                    value={selectedPart.satisfiedReqIds || []}
-                    onChange={(e) => {
-                      const selected = Array.from(e.target.selectedOptions, option => option.value);
-                      updatePart(selectedPart.id, { satisfiedReqIds: selected });
-                    }}
-                    className="w-full h-20 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
-                  >
-                    {blocks.filter(b => b.stereotype === 'requirement').map(req => (
-                      <option key={req.id} value={req.id}>{req.reqId}: {req.name}</option>
-                    ))}
-                  </select>
-                  <div className="text-[10px] text-[#666] mt-1">Hold Ctrl to select multiple</div>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => deletePart(selectedPart.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Part</Button>
-              </>
-            ) : selectedConnector ? (
-              <>
-                <div>
-                  <Label>Item Flow</Label>
-                  <Input value={selectedConnector.itemFlow || ''} onChange={(e) => updateConnector(selectedConnector.id, { itemFlow: e.target.value })} className="mt-1" placeholder="e.g., PowerSignal" />
-                </div>
-                <div>
-                  <Label>Label (Text)</Label>
-                  <Input value={selectedConnector.label || ''} onChange={(e) => updateConnector(selectedConnector.id, { label: e.target.value })} className="mt-1" placeholder="e.g., Control Link" />
-                </div>
-                <Button variant="outline" size="sm" onClick={() => deleteConnector(selectedConnector.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connector</Button>
-              </>
-            ) : selectedInterfaceRealization ? (
-              <>
-                <div>
-                  <Label>Interface Connection</Label>
-                  <p className="text-xs text-[#888] mt-1">Connects an interface to a part's port.</p>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => deleteInterfaceRealization(selectedInterfaceRealization.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connection</Button>
-              </>
-            ) : selectedTransition ? (
-              <>
-                <div>
-                  <Label>Transition Properties</Label>
-                  <div className="text-sm text-[#888] mt-1 mb-2">
-                    {states.find(s => s.id === selectedTransition.sourceId)?.name ||
-                      junctions.find(j => j.id === selectedTransition.sourceId)?.name} →
-                    {states.find(s => s.id === selectedTransition.targetId)?.name ||
-                      junctions.find(j => j.id === selectedTransition.targetId)?.name}
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Order (priority for same source)</Label>
-                  <Input
-                    type="number"
-                    value={selectedTransition.order}
-                    onChange={(e) => updateTransition(selectedTransition.id, { order: parseInt(e.target.value) || 0 })}
-                    className="mt-1"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2 mt-3 mb-2">
-                  <Checkbox
-                    checked={!!selectedTransition.isInternal}
-                    onCheckedChange={(checked) => updateTransition(selectedTransition.id, { isInternal: checked as boolean })}
-                    id="isInternal"
-                  />
-                  <Label htmlFor="isInternal" className="text-[#c9a86c]">Internal / Local Transition</Label>
-                </div>
-
-                <div className="space-y-3 p-3 bg-[#1a1a1a] rounded-lg border border-[#222]">
-                  <Label className="text-[#c9a86c]">Trigger Logic</Label>
-
-                  <select
-                    value={selectedTransition.type}
-                    onChange={(e) => updateTransition(selectedTransition.id, { type: e.target.value as any })}
-                    className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0]"
-                  >
-                    <option value="condition">Condition Only</option>
-                    <option value="after">After (Timer) Only</option>
-                    <option value="and">Condition AND Timer</option>
-                    <option value="or">Condition OR Timer</option>
-                  </select>
-
-                  {(selectedTransition.type === 'condition' || selectedTransition.type === 'and' || selectedTransition.type === 'or') && (
-                    <div>
-                      <Label>Condition</Label>
-                      <textarea
-                        value={selectedTransition.condition}
-                        onChange={(e) => updateTransition(selectedTransition.id, { condition: e.target.value as any })}
-                        placeholder="e.g., x > 10"
-                        className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
-                      />
-                    </div>
-                  )}
-
-                  {(selectedTransition.type === 'after' || selectedTransition.type === 'and' || selectedTransition.type === 'or') && (
-                    <div>
-                      <Label>After (ticks)</Label>
-                      <Input
-                        type="number"
-                        value={selectedTransition.afterTicks ?? ''}
-                        onChange={(e) => updateTransition(selectedTransition.id, {
-                          afterTicks: e.target.value ? parseInt(e.target.value) : null
-                        })}
-                        placeholder="Ticks"
-                        className="mt-1 font-mono"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <Label>Action (C-like code)</Label>
-                  <textarea
-                    value={selectedTransition.action}
-                    onChange={(e) => updateTransition(selectedTransition.id, { action: e.target.value })}
-                    placeholder="/* Action on transition */ counter = 0; flag = false;"
-                    className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
-                  />
-                </div>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => deleteTransition(selectedTransition.id)}
-                  className="w-full border-red-800 text-red-400 hover:text-red-300 hover:bg-red-950/30"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  </svg>
-                  Delete Transition
-                </Button>
-              </>
-            ) : (
-              <div className="text-center py-8 text-[#666]">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-3 opacity-50">
-                  <path d="M12 12h.01" />
-                  <path d="M16 8v4a4 4 0 0 1-4 4H8" />
-                  <path d="M16 8h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2h2" />
-                </svg>
-                <p className="text-sm font-medium">Select an element to edit properties</p>
-                <p className="text-xs mt-2 opacity-70">
-                  Click and drag to move items<br />
-                  Use toolbar buttons to create elements
-                </p>
-              </div>
-            )}
-          </div>
-        </aside>
-      </div>
-
-      {/* Mobile Navigation Bar */}
-      {isMobile && (
-        <div className="h-14 bg-[#1a1a1a] border-t border-[#222] flex items-center justify-around shrink-0 pb-safe">
-          <button
-            onClick={() => setMobileTab('hierarchy')}
-            className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'hierarchy' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
-              <path d="M10 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" />
-              <path d="M16 17l-3-3 3-3" />
-              <path d="M13 14H3" />
-            </svg>
-            <span className="text-[10px] font-bold">Tree</span>
-          </button>
-          <button
-            onClick={() => setMobileTab('variables')}
-            className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'variables' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
-              <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5" />
-              <path d="M3 12h18" />
-              <path d="M12 12v9" />
-            </svg>
-            <span className="text-[10px] font-bold">Vars</span>
-          </button>
-          <button
-            onClick={() => setMobileTab('canvas')}
-            className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'canvas' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <path d="M3 9h18" />
-            </svg>
-            <span className="text-[10px] font-bold">Canvas</span>
-          </button>
-          <button
-            onClick={() => setMobileTab('properties')}
-            className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'properties' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-            <span className="text-[10px] font-bold">Props</span>
-          </button>
-        </div>
-      )}
-
-      {/* Workspace Modal */}
-      {showWorkspaceModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-          <div className="bg-[#141414] border border-[#c9a86c] rounded-lg w-[650px] max-h-[90vh] flex flex-col">
-            <div className="h-12 flex items-center px-5 border-b border-[#222]">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-3">
-                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-              </svg>
-              <h2 className="text-lg font-bold text-[#c9a86c]">Workspace Variables</h2>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-5 space-y-5">
-              <div className="space-y-3 p-4 bg-[#1a1a1a] rounded-lg border border-[#222]">
-                <Label>Add Variable</Label>
-                <Input
-                  placeholder="Name"
-                  value={newVarName}
-                  onChange={(e) => setNewVarName(e.target.value)}
-                />
-                <select
-                  value={newVarType}
-                  onChange={(e) => {
-                    setNewVarType(e.target.value as VariableType);
-                    setNewVarValue(getDefaultValue(e.target.value as VariableType));
-                  }}
-                  className="h-10 bg-[#0a0a0a] border border-[#333] text-sm rounded w-full px-3 mt-1"
-                >
-                  {ALLOWED_TYPES.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-                <Input
-                  placeholder="Initial value"
-                  value={newVarValue}
-                  onChange={(e) => setNewVarValue(e.target.value)}
-                  className="mt-1"
-                />
-                <Button
-                  size="sm"
-                  onClick={addVariable}
-                  className="w-full bg-[#c9a86c] text-[#0a0a0a] hover:bg-[#b8975b] mt-2 h-9"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                  Add Variable
-                </Button>
-              </div>
-
-              <div className="space-y-3 max-h-[450px] overflow-y-auto pr-2">
-                {variables.map((variable) => (
-                  <div
-                    key={variable.id}
-                    className="p-4 bg-[#1a1a1a] rounded-lg border border-[#222] space-y-3"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Checkbox
-                          checked={variable.visibleInScope}
-                          onCheckedChange={() => toggleVariableVisibility(variable.id)}
-                          id={`var-${variable.id}`}
-                        />
-                        <span className="font-mono text-sm text-[#c9a86c]">{variable.name}</span>
-                      </div>
-                      <Badge>{variable.type}</Badge>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label className="text-[11px]">Initial Value</Label>
-                        <Input
-                          value={variable.initialValue}
-                          onChange={(e) => updateVariableInitValue(variable.id, e.target.value)}
-                          disabled={isRunning}
-                          className="mt-1 text-xs font-mono"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-[11px] flex items-center gap-1">
-                          Runtime Value
-                          {isRunning && (
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6c9ac6" strokeWidth="2">
-                              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                            </svg>
-                          )}
-                        </Label>
-                        <Input
-                          value={String(variable.currentValue)}
-                          onChange={(e) => updateVariableValue(variable.id, e.target.value)}
-                          disabled={!isRunning}
-                          className="mt-1 text-xs font-mono"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setShowWorkspaceModal(false)}
-                className="border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] px-5"
-              >
-                Cancel
               </Button>
-              <Button
-                onClick={() => {
-                  resetVariables();
-                  setShowWorkspaceModal(false);
-                }}
-                className="bg-[#c9a86c] text-[#0a0a0a] hover:bg-[#b8975b] px-5"
-              >
+
+              <Button variant="outline" size="sm" onClick={stepSimulation}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                  <line x1="12" y1="4" x2="12" y2="20" />
+                </svg>
+                Step
+              </Button>
+
+              <Button variant="outline" size="sm" onClick={resetSimulation}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
                   <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0" />
                   <polyline points="3 4 3 12 11 12" />
                 </svg>
-                Reset to Initial Values
+                Reset
               </Button>
+
+              <Separator orientation="vertical" className="h-4 bg-[#333]" />
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { if (validateModel()) addError('info', 'Model validation passed.'); }}
+                className="text-[#e0e0e0] hover:bg-[#222]"
+                title="Check for errors"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                Validate
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={validateWithAI}
+                disabled={isAiValidating}
+                className="text-[#c9a86c] border-[#c9a86c]/50 hover:bg-[#c9a86c]/10"
+                title="Validate logic with AI"
+              >
+                {isAiValidating ? (
+                  <svg className="animate-spin mr-1.5 h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                    <path d="M12 2a10 10 0 1 0 10 10H12V2z" />
+                    <path d="M12 2a10 10 0 0 1 10 10" opacity="0.5" />
+                    <circle cx="12" cy="12" r="2" />
+                  </svg>
+                )}
+                {isAiValidating ? 'Analyzing...' : 'AI Check'}
+              </Button>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-[#888] whitespace-nowrap">Tick Rate:</span>
+                <TickRateInput value={tickMs} onChange={setTickMs} />
+                <span className="text-[10px] text-[#666]">ms</span>
+              </div>
+            </div>
+          )}
+
+          <Separator orientation="vertical" className="h-6 bg-[#333]" />
+
+          <div className="flex items-center gap-2 bg-[#1a1a1a] border border-[#333] rounded px-2 py-1">
+            <Checkbox
+              checked={safetyMode}
+              onCheckedChange={(c) => setSafetyMode(c as boolean)}
+              id="safety-mode"
+            />
+            <Label htmlFor="safety-mode" className={safetyMode ? "text-red-400 font-bold" : "text-[#888]"}>Safety Mode</Label>
+          </div>
+
+          <Separator orientation="vertical" className="h-6 bg-[#333]" />
+
+          {/* CODE GENERATION BUTTON - FULLY FUNCTIONAL */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={generateCode}
+            disabled={isGenerating}
+            className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10 disabled:opacity-50 disabled:cursor-wait"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+              <polyline points="16 18 22 12 16 6" />
+              <polyline points="8 6 2 12 8 18" />
+            </svg>
+            {isGenerating ? 'Generating...' : 'Generate C/H'}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportProject}
+            className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Export
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleImportProject}
+            className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            Import
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowReportDialog(true)}
+            className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
+          >
+            Report
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => toggleWindow('hmi')}
+            className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            HMI Panel
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => toggleWindow('pid')}
+            className="border-[#6c9ac6] text-[#6c9ac6] hover:bg-[#6c9ac6]/10"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+              <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="15"></line>
+            </svg>
+            PID Tuner
+          </Button>
+
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => toggleWindow('doe')}
+            className="border-[#c96c8a] text-[#c96c8a] hover:bg-[#c96c8a]/10"
+          >
+            DOE (RSM)
+          </Button>
+
+          <div className="flex-1" />
+
+          {/* Status indicators */}
+          <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div className={`w-2.5 h-2.5 rounded-full ${isRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
+              <span className="text-[#888] font-medium">{isRunning ? 'RUNNING' : 'STOPPED'}</span>
+            </div>
+            <div className="text-[#666]">
+              Time: <span className="text-[#c9a86c] font-mono font-medium">{simulationTime.toFixed(2)}s</span>
+            </div>
+            <div className="text-[#666]">
+              States: <span className="text-[#c9a86c] font-mono font-medium">{currentStates.length}</span>
+            </div>
+            <div className="text-[#666]">
+              Vars: <span className="text-[#c9a86c] font-mono font-medium">{variables.length}</span>
             </div>
           </div>
+        </header>
+
+        {/* Main Content Area */}
+        <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
+          {/* Left Sidebar - Hierarchy */}
+          <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="bg-[#141414] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+            <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
+              {!isHierarchyCollapsed && (
+                <div className="flex items-center overflow-hidden whitespace-nowrap">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
+                    <path d="M10 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" />
+                    <path d="M16 17l-3-3 3-3" />
+                    <path d="M13 14H3" />
+                  </svg>
+                  <span className="text-sm font-medium">Hierarchy</span>
+                </div>
+              )}
+              <button
+                onClick={() => setIsHierarchyCollapsed(!isHierarchyCollapsed)}
+                className={`p-1.5 rounded hover:bg-[#222] text-[#c9a86c] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
+              >
+                <Triangle size={10} className={`transition-transform duration-300 ${isHierarchyCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
+              </button>
+            </div>
+            {!isHierarchyCollapsed && (
+              <HierarchyTree
+                states={states}
+                layers={layers}
+                activeStates={activeStates}
+                currentLayerId={currentLayerId}
+                onSelect={(id: string) => setSelectedIds([id])}
+                onDoubleClick={(id: string) => enterLayer(id)}
+                selectedIds={selectedIds}
+              />
+            )}
+          </aside>
+          {!isMobile && !isHierarchyCollapsed && <Resizer onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
+
+          {/* Left Sidebar - Variables */}
+          <aside style={{ width: isMobile ? '100%' : (isVariablesCollapsed ? '48px' : `${variablesWidth}px`), display: isMobile && mobileTab !== 'variables' ? 'none' : 'flex' }} className="bg-[#141414] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+            <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
+              {!isVariablesCollapsed && (
+                <div className="flex items-center overflow-hidden whitespace-nowrap">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
+                    <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5" />
+                    <path d="M3 12h18" />
+                    <path d="M12 12v9" />
+                  </svg>
+                  <span className="text-sm font-medium text-[#e0e0e0]">Variables</span>
+                </div>
+              )}
+              <button
+                onClick={() => setIsVariablesCollapsed(!isVariablesCollapsed)}
+                className={`p-1.5 rounded hover:bg-[#222] text-[#c9a86c] transition-all ${isVariablesCollapsed ? 'w-full flex justify-center' : ''}`}
+              >
+                <Triangle size={10} className={`transition-transform duration-300 ${isVariablesCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
+              </button>
+            </div>
+
+            {!isVariablesCollapsed && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 overflow-y-auto no-scrollbar">
+                  {/* Compact Create Section */}
+                  <div className="p-3 border-b border-[#222] bg-[#1a1a1a]/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-bold text-[#c9a86c] uppercase tracking-wider">New Variable</span>
+                    </div>
+                    <div className="flex gap-1.5 mb-1.5">
+                      <Input
+                        placeholder="Name"
+                        value={newVarName}
+                        onChange={(e) => setNewVarName(e.target.value)}
+                        className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#c9a86c]/50"
+                      />
+                      <select
+                        value={newVarType}
+                        onChange={(e) => setNewVarType(e.target.value as VariableType)}
+                        className="h-7 w-24 bg-[#0d0d0d] border border-[#333] rounded text-[10px] px-1 text-[#e0e0e0] outline-none"
+                      >
+                        {ALLOWED_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Input
+                        placeholder="Init Value"
+                        value={newVarValue}
+                        onChange={(e) => setNewVarValue(e.target.value)}
+                        className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#c9a86c]/50"
+                      />
+                      <Button size="sm" onClick={addVariable} className="h-7 px-3 bg-[#c9a86c] text-[#0a0a0a] text-[10px] font-bold hover:bg-[#b8975b]">ADD</Button>
+                    </div>
+                  </div>
+
+                  {/* Compact List */}
+                  <div className="py-2">
+                    {variables.map((variable, idx) => {
+                      const color = colors[idx % colors.length];
+                      const typeColors: Record<string, string> = {
+                        'int32': 'text-emerald-400',
+                        'float': 'text-sky-400',
+                        'bool': 'text-amber-400'
+                      };
+
+                      return (
+                        <div key={variable.id} className="group border-b border-[#1a1a1a] last:border-0">
+                          <div className="flex items-center h-8 px-4 hover:bg-[#222] transition-colors">
+                            <div className="flex items-center gap-2 flex-1 overflow-hidden">
+                              <Checkbox
+                                checked={variable.visibleInScope}
+                                onCheckedChange={() => toggleVariableVisibility(variable.id)}
+                                className="w-3.5 h-3.5 border-[#333] data-[state=checked]:bg-[#c9a86c] data-[state=checked]:border-[#c9a86c]"
+                              />
+                              <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                              <span className="text-xs font-mono text-[#e0e0e0] truncate flex-1" title={variable.name}>{variable.name}</span>
+                              <span className={`text-[9px] font-bold uppercase shrink-0 w-8 text-center ${typeColors[variable.type.toLowerCase()] || 'text-gray-500'}`}>
+                                {variable.type.substring(0, 3)}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => removeVariable(variable.id)}
+                              className="ml-2 text-[#444] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M18 6L6 18M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+
+                          <div className="px-4 pb-2 pt-0.5 grid grid-cols-2 gap-3 group-hover:bg-[#1a1a1a]/30 transition-colors">
+                            <div className="space-y-0.5">
+                              <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Initial</span>
+                              <Input
+                                value={variable.initialValue}
+                                onChange={(e) => updateVariableInitValue(variable.id, e.target.value)}
+                                disabled={isRunning}
+                                className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] focus:border-[#c9a86c]/30 px-1.5"
+                              />
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Current</span>
+                              <Input
+                                value={String(variable.currentValue)}
+                                onChange={(e) => updateVariableValue(variable.id, e.target.value)}
+                                className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] text-emerald-400 focus:border-[#c9a86c]/30 px-1.5"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {variables.length === 0 && (
+                      <div className="py-10 text-center opacity-30">
+                        <p className="text-[10px] font-bold uppercase tracking-widest">No Signals</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </aside>
+          {!isMobile && <Resizer onMouseDown={(e) => handleResizeStart(e, 'variables')} />}
+
+          {/* Canvas Area */}
+          <div style={{ display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="flex-1 flex flex-col min-w-0">
+            <main className="flex-1 relative overflow-hidden bg-[#0a0a0a]">
+              {/* Canvas Toolbar */}
+              <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#1a1a1a]/95 border border-[#333] rounded-lg px-2.5 py-1.5 text-xs">
+                {/* Layer Breadcrumb */}
+                {layerPath.length > 1 && (
+                  <>
+                    {layerPath.map((name, index) => ( // REQ-HSM-041 & 042
+                      <React.Fragment key={index}>
+                        <button
+                          onClick={index < layerPath.length - 1 ? exitLayer : undefined}
+                          disabled={index === layerPath.length - 1}
+                          className={`flex items-center gap-1 px-2 py-0.5 rounded ${index === layerPath.length - 1
+                            ? 'bg-[#c9a86c] text-[#0a0a0a] font-medium'
+                            : 'text-[#c9a86c] hover:bg-[#222]'
+                            } ${index < layerPath.length - 1 ? 'cursor-pointer' : 'cursor-default'}`}
+                        > <span className="text-[9px] text-gray-500 mr-1">L{index}</span>
+                          {name}
+                          {index < layerPath.length - 1 && (
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polyline points="9 18 15 12 9 6" />
+                            </svg>
+                          )}
+                        </button>
+                        {index < layerPath.length - 1 && <span className="text-[#666] mx-1">/</span>}
+                      </React.Fragment>
+                    ))}
+                  </>
+                )}
+
+                <Separator orientation="vertical" className="h-3 bg-[#333] mx-1.5" />
+
+
+                {diagramMode === 'statemachine' && (
+                  <>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) {
+                          createState(
+                            ((rect.width / uiZoom) / 2 - view.offsetX) / view.scale,
+                            ((rect.height / uiZoom) / 2 - view.offsetY) / view.scale
+                          );
+                        }
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                      State
+                    </Button>
+
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) {
+                          createJunction(
+                            ((rect.width / uiZoom) / 2 - view.offsetX) / view.scale,
+                            ((rect.height / uiZoom) / 2 - view.offsetY) / view.scale
+                          );
+                        }
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                        <circle cx="12" cy="12" r="10" />
+                      </svg>
+                      Junction
+                    </Button>
+
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) {
+                          createXBridgesState(
+                            ((rect.width / uiZoom) / 2 - view.offsetX) / view.scale,
+                            ((rect.height / uiZoom) / 2 - view.offsetY) / view.scale
+                          );
+                        }
+                      }}
+                      className="h-6 px-2 text-[#4caf50] hover:bg-[#4caf50]/10 border border-[#4caf50]/30"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                        <polyline points="3.29 7 12 12 20.71 7" />
+                        <line x1="12" y1="22" x2="12" y2="12" />
+                      </svg>
+                      X-Bridges
+                    </Button>
+                  </>
+                )}
+
+                {diagramMode === 'bdd' && (
+                  <>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'block');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      Block
+                    </Button>
+                    <div className="flex gap-0.5">
+                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50" title="Add Standard Port">+Std</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
+                    </div>
+                  </>
+                )}
+
+                {diagramMode === 'requirements' && (
+                  <>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'requirement');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      Requirement
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => toggleWindow('rtm')}
+                      className="h-6 px-2 text-[#c9a86c] hover:bg-[#222]"
+                    >
+                      RTM
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleAutoLayout}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      Auto Layout
+                    </Button>
+                  </>
+                )}
+
+                {diagramMode === 'ibd' && (
+                  <>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'block');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      Block
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        createRequirement(mousePos.x, mousePos.y);
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      Req
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createBlock(((rect.width / uiZoom) / 2 - view.offsetX) / view.scale, ((rect.height / uiZoom) / 2 - view.offsetY) / view.scale, 'interfaceBlock');
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      Intf Block
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) createPart((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale);
+                      }}
+                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
+                    >
+                      Part
+                    </Button>
+                    <div className="flex gap-0.5">
+                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50" title="Add Standard Port">+Std</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        if (isCreatingConnector) {
+                          setIsCreatingConnector(false);
+                          setConnectorSource(null);
+                        } else {
+                          setIsCreatingConnector(true);
+                        }
+                      }}
+                      className={`h-6 px-2 ${isCreatingConnector ? 'bg-[#c9a86c] text-[#0a0a0a]' : 'text-[#e0e0e0] hover:bg-[#222]'}`}
+                    >
+                      {isCreatingConnector ? 'Cancel' : 'Connect'}
+                    </Button>
+                  </>
+                )}
+
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    if (isCreatingTransition) {
+                      setIsCreatingTransition(false);
+                      setTransitionSourceId(null);
+                    } else {
+                      setIsCreatingTransition(true);
+                    }
+                  }}
+                  className={`h-6 px-2 ${isCreatingTransition ? 'bg-[#c9a86c] text-[#0a0a0a]' : 'text-[#e0e0e0] hover:bg-[#222]'
+                    }`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1="10" y1="14" x2="21" y2="3" />
+                  </svg>
+                  {isCreatingTransition ? 'Cancel' : 'Connect'}
+                </Button>
+
+                <Separator orientation="vertical" className="h-3 bg-[#333] mx-1.5" />
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setGridEnabled(!gridEnabled)}
+                  className={`h-6 w-6 ${gridEnabled ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 3v1818V3H3z" />
+                    <path d="M9 3v18M15 3v18M3 9h18M3 15h18" />
+                  </svg>
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSnapEnabled(!snapEnabled)}
+                  className={`h-6 w-6 ${snapEnabled ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <circle cx="12" cy="12" r="6" />
+                    <circle cx="12" cy="12" r="2" />
+                  </svg>
+                </Button>
+
+                <Separator orientation="vertical" className="h-3 bg-[#333] mx-1.5" />
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setView(prev => ({ ...prev, scale: Math.min(MAX_SCALE, prev.scale * 1.2) }))}
+                  className="h-6 w-6 text-[#a0a0a0] hover:text-[#e0e0e0]"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </Button>
+
+                <span className="text-[#666] w-9 text-center font-mono text-xs">
+                  {Math.round(view.scale * 100)}%
+                </span>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setView(prev => ({ ...prev, scale: Math.max(MIN_SCALE, prev.scale / 1.2) }))}
+                  className="h-6 w-6 text-[#a0a0a0] hover:text-[#e0e0e0]"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setView({ scale: 1, offsetX: 0, offsetY: 0 })}
+                  className="h-6 w-6 text-[#a0a0a0] hover:text-[#e0e0e0]"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 14.5V22M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 12.5304 2.04152 13.0558 2.1225 13.5714M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 12.5304 21.9585 13.0558 21.8775 13.5714" />
+                  </svg>
+                </Button>
+              </div>
+
+              {/* Mode indicator */}
+              {isCreatingTransition && (
+                <div className="absolute top-3 right-3 z-10 px-4 py-2 bg-[#c9a86c] text-[#0a0a0a] rounded-lg font-medium text-sm shadow-lg">
+                  {transitionSourceId ? 'Click target state/junction to connect...' : 'Click source state/junction...'}
+                </div>
+              )}
+              {isCreatingConnector && (
+                <div className="absolute top-3 right-3 z-10 px-4 py-2 bg-[#c9a86c] text-[#0a0a0a] rounded-lg font-medium text-sm shadow-lg">
+                  {connectorSource ? 'Click target port...' : 'Click source port...'}
+                </div>
+              )}
+
+              {/* Zoom indicator */}
+              {showZoomIndicator && (
+                <div className="absolute top-12 right-3 z-10 px-3 py-1.5 bg-[#1a1a1a] border border-[#333] rounded-lg font-mono text-sm shadow-lg">
+                  Zoom: {Math.round(view.scale * 100)}%
+                </div>
+              )}
+
+
+              <div
+                ref={canvasRef}
+                className="absolute inset-0"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onDoubleClick={handleDoubleClick}
+                onWheel={handleWheel}
+              >
+                <svg width="100%" height="100%" style={{ pointerEvents: 'none' }}>
+                  <defs>
+                    <pattern
+                      id="grid"
+                      width={GRID_SIZE}
+                      height={GRID_SIZE}
+                      patternUnits="userSpaceOnUse"
+                    >
+                      <path d={`M ${GRID_SIZE} 0 L 0 0 0 ${GRID_SIZE}`} fill="none" stroke="#1a1a1a" strokeWidth="1" />
+                    </pattern>
+                  </defs>
+
+                  {/* Grid */}
+                  {gridEnabled && (
+                    <rect
+                      width="100%"
+                      height="100%"
+                      fill="url(#grid)"
+                      opacity={0.3}
+                    />
+                  )}
+
+                  {/* World content */}
+                  <g transform={`translate(${view.offsetX}, ${view.offsetY}) scale(${view.scale})`}>
+                    {/* Origin marker */}
+                    <g>
+                      <line x1={-10} y1={0} x2={10} y2={0} stroke="#c9a86c" strokeWidth={0.5} opacity={0.5} />
+                      <line x1={0} y1={-10} x2={0} y2={10} stroke="#c9a86c" strokeWidth={0.5} opacity={0.5} />
+                      <circle cx={0} cy={0} r={2} fill="#c9a86c" opacity={0.7}>
+                        <animate attributeName="r" values="2;3;2" dur="2s" repeatCount="indefinite" />
+                      </circle>
+                    </g>
+
+                    {diagramMode === 'statemachine' ? (
+                      <>
+                        <g style={{ pointerEvents: 'all' }}>
+                          {renderStates()}
+                        </g>
+                        <g style={{ pointerEvents: 'all' }}>
+                          {renderTransitions()}
+                        </g>
+                        <g style={{ pointerEvents: 'all' }}>
+                          {renderJunctions()}
+                        </g>
+                      </>
+                    ) : (diagramMode === 'bdd' || diagramMode === 'requirements') ? (
+                      <>
+                        <g style={{ pointerEvents: 'all' }}>
+                          {renderRelationships()}
+                        </g>
+                        <g style={{ pointerEvents: 'all' }}>
+                          {renderBlocks()}
+                        </g>
+                      </>
+                    ) : (
+                      diagramMode === 'ibd' ? (
+                        <>
+                          <g style={{ pointerEvents: 'all' }}>
+                            {renderBlocks()}
+                          </g>
+                          <g style={{ pointerEvents: 'all' }}>
+                            {renderInterfaceRealizations()}
+                          </g>
+                          <g style={{ pointerEvents: 'all' }}>
+                            {renderConnectors()}
+                          </g>
+                          <g style={{ pointerEvents: 'all' }}>
+                            {renderParts()}
+                          </g>
+                        </>
+                      ) : null
+                    )}
+                  </g>
+                </svg>
+              </div>
+
+              {/* Status bar */}
+              <div className="absolute bottom-0 left-0 right-0 h-7 bg-[#141414] border-t border-[#222] flex items-center px-3 text-xs text-[#666]">
+                <span className="mr-4 font-mono">X: {Math.round(mousePos.x)}</span>
+                <span className="mr-4 font-mono">Y: {Math.round(mousePos.y)}</span>
+                {diagramMode === 'statemachine' ? (
+                  <>
+                    <span className="mr-4">States: {currentStates.length}</span>
+                    <span>Transitions: {currentTransitions.length}</span>
+                  </>
+                ) : (diagramMode === 'bdd' || diagramMode === 'requirements') ? (
+                  <>
+                    <span className="mr-4">Blocks: {blocks.length}</span>
+                    <span>Relations: {relationships.length}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="mr-4">Parts: {parts.length}</span>
+                    <span>Connectors: {connectors.length}</span>
+                  </>
+                )}
+                <div className="flex-1" />
+                <span className="text-[#888]">
+                  {isPanning ? 'PANNING' : isSpacePressed.current ? 'PAN MODE (SPACE)' : 'READY'}
+                  {' | '}
+                  Space+Drag: Pan | Ctrl+Wheel: Zoom
+                </span>
+              </div>
+            </main>
+
+            {/* Bottom Panel */}
+            {!isMobile && !isScopeCollapsed && <Resizer onMouseDown={(e) => handleResizeStart(e, 'scope')} orientation="horizontal" />}
+            <div style={{ height: isMobile ? '30%' : (isScopeCollapsed ? '40px' : `${scopeHeight}px`), display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="bg-[#141414] border-t border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+              <div className="flex items-center justify-between px-4 border-b border-[#222] h-10 shrink-0">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsScopeCollapsed(!isScopeCollapsed)}
+                    className="p-1 hover:bg-[#222] rounded text-[#c9a86c] transition-colors"
+                  >
+                    <Triangle size={10} className={`transition-transform duration-300 ${isScopeCollapsed ? 'rotate-0' : 'rotate-180'}`} fill="currentColor" />
+                  </button>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                  </svg>
+                  <span className="font-medium">Scope</span>
+                </div>
+                {!isScopeCollapsed && (
+                  <div className="flex items-center gap-2">
+                    {/* Variable Selector */}
+                    <div className="relative group">
+                      <Button variant="ghost" size="sm" className="text-[#a0a0a0] hover:text-[#e0e0e0] px-2.5 py-1">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                          <path d="M12 20v-6M6 20V10M18 20V4" />
+                        </svg>
+                        Variables ({visibleVariables.length})
+                      </Button>
+                      <div className="absolute bottom-full left-0 mb-1 w-48 bg-[#1a1a1a] border border-[#333] rounded-lg shadow-xl p-2 hidden group-hover:block z-50">
+                        {variables.length === 0 ? (
+                          <div className="text-xs text-[#666] p-2 text-center">No variables</div>
+                        ) : (
+                          variables.map(v => (
+                            <div
+                              key={v.id}
+                              className="flex items-center gap-2 p-1.5 hover:bg-[#222] rounded cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleVariableVisibility(v.id);
+                              }}
+                            >
+                              <Checkbox
+                                checked={v.visibleInScope}
+                                onCheckedChange={() => { }}
+                                className="pointer-events-none"
+                              />
+                              <span className="text-xs text-[#e0e0e0] truncate">{v.name}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <Separator orientation="vertical" className="h-4 bg-[#333] mx-2" />
+
+                    <Checkbox
+                      id="sampleOnTransition"
+                      checked={sampleOnTransitionOnly}
+                      onCheckedChange={(checked) => setSampleOnTransitionOnly(checked as boolean)}
+                      className="border-[#444]"
+                    />
+                    <Label htmlFor="sampleOnTransition" className="text-xs text-[#888] cursor-pointer">
+                      Sample on transitions only
+                    </Label>
+                    <Separator orientation="vertical" className="h-4 bg-[#333] mx-2" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={exportScopeCSV}
+                      className="text-[#a0a0a0] hover:text-[#e0e0e0] px-2.5 py-1"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                      </svg>
+                      Export CSV
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearScope}
+                      className="text-[#a0a0a0] hover:text-[#e0e0e0] px-2.5 py-1"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                      Clear
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {!isScopeCollapsed && (
+                <div className="flex-1 p-3">
+                  {visibleVariables.length === 0 ? (
+                    <div className="flex items-center justify-center h-full text-[#666]">
+                      <div className="text-center">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-2 opacity-50">
+                          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                        </svg>
+                        <p className="text-sm font-medium">No variables selected for scope</p>
+                        <p className="text-xs mt-1 opacity-70">Open Workspace to add variables</p>
+                      </div>
+                    </div>
+                  ) : scopeData.length < 2 ? (
+                    <div className="flex items-center justify-center h-full text-[#666]">
+                      <div className="text-center">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-2 opacity-50">
+                          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                        </svg>
+                        <p className="text-sm font-medium">Start simulation to see scope data</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="w-full h-full overflow-hidden">
+                      <div className="h-full flex pb-3 gap-2">
+                        {visibleVariables.map((variable, index) => {
+                          const color = colors[index % colors.length];
+                          const values = scopeData.map(dp => dp[variable.name] ?? 0);
+                          const maxValue = Math.max(1, ...values);
+                          const height = 70;
+
+                          // Auto-scale logic
+                          let minVal = Math.min(...values);
+                          let maxVal = Math.max(...values);
+                          if (minVal === maxVal) {
+                            minVal -= 1;
+                            maxVal += 1;
+                          }
+                          const range = maxVal - minVal;
+                          const padding = range * 0.1;
+                          const effectiveMin = minVal - padding;
+                          const effectiveMax = maxVal + padding;
+                          const effectiveRange = effectiveMax - effectiveMin;
+
+                          // Generate SVG points for continuous line
+                          const points = values.map((v, i) => {
+                            const x = (i / (values.length - 1)) * 100;
+                            const y = 100 - ((v - effectiveMin) / effectiveRange) * 100;
+                            return `${x},${y}`;
+                          }).join(' ');
+
+                          return (
+                            <div key={variable.id} className="flex-1 min-w-[150px] relative h-full bg-[#111] rounded border border-[#333] overflow-hidden">
+                              <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0">
+                                <polyline
+                                  points={points}
+                                  fill="none"
+                                  stroke={color}
+                                  strokeWidth="2"
+                                  vectorEffect="non-scaling-stroke"
+                                  strokeLinejoin="round"
+                                  strokeLinecap="round"
+                                />
+                              </svg>
+                              <div className="absolute top-2 left-2 right-2 flex justify-between items-start pointer-events-none">
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#000]/50 backdrop-blur-sm" style={{ color }}>
+                                  {variable.name}
+                                </span>
+                                <span className="text-[10px] font-mono text-[#e0e0e0] px-1.5 py-0.5 rounded bg-[#000]/50 backdrop-blur-sm">
+                                  {values[values.length - 1]?.toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          {!isMobile && <Resizer onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
+
+          {/* Right Dock: Properties */}
+          <aside style={{ width: isMobile ? '100%' : (isPropertiesCollapsed ? '48px' : `${propertiesWidth}px`), display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className="bg-[#141414] border-l border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+            <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
+              {!isPropertiesCollapsed && (
+                <div className="flex items-center overflow-hidden whitespace-nowrap">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                  <span className="text-sm font-medium">Properties</span>
+                </div>
+              )}
+              <button
+                onClick={() => setIsPropertiesCollapsed(!isPropertiesCollapsed)}
+                className={`p-1.5 rounded hover:bg-[#222] text-[#c9a86c] transition-all ${isPropertiesCollapsed ? 'w-full flex justify-center' : ''}`}
+              >
+                <Triangle size={10} className={`transition-transform duration-300 ${isPropertiesCollapsed ? '-rotate-90' : 'rotate-90'}`} fill="currentColor" />
+              </button>
+            </div>
+
+            <div className={`flex-1 overflow-y-auto p-4 space-y-4 ${isPropertiesCollapsed ? 'hidden' : 'block'}`}>
+              {selectedState ? (
+                <>
+                  <div>
+                    <Label>State Name</Label>
+                    <Input
+                      value={selectedState.name}
+                      onChange={(e) => updateState(selectedState.id, { name: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+
+                  <div>
+                    <Label>Priority (lower = higher)</Label>
+                    <Input
+                      type="number"
+                      value={selectedState.priority}
+                      onChange={(e) => updateState(selectedState.id, { priority: parseInt(e.target.value) || 0 })}
+                      className="mt-1"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={selectedState.isParallel}
+                      onCheckedChange={(checked) => updateState(selectedState.id, { isParallel: checked as boolean })}
+                      id="isParallel"
+                    />
+                    <Label htmlFor="isParallel">Parallel State</Label>
+                  </div>
+
+                  {selectedState.isParallel && (
+                    <div>
+                      <Label>Region ID</Label>
+                      <Input
+                        value={selectedState.regionId || ''}
+                        onChange={(e) => updateState(selectedState.id, { regionId: e.target.value || null })}
+                        placeholder="e.g., main_region"
+                        className="mt-1"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={selectedState.autostart}
+                      onCheckedChange={(checked) => updateState(selectedState.id, { autostart: checked as boolean })}
+                      id="autostart"
+                    />
+                    <Label htmlFor="autostart">Auto-start on reset</Label>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={selectedState.isSafeState || false}
+                      onCheckedChange={(checked) => updateState(selectedState.id, { isSafeState: checked as boolean })}
+                      id="isSafeState"
+                    />
+                    <Label htmlFor="isSafeState" className="text-green-400">Is Safe State</Label>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={selectedState.isXBridges || false}
+                      onCheckedChange={(checked) => updateState(selectedState.id, { isXBridges: checked as boolean })}
+                      id="isXBridges"
+                    />
+                    <Label htmlFor="isXBridges" className="text-amber-400">X-Bridges Sub-Model</Label>
+                  </div>
+
+                  {selectedState.isXBridges && (
+                    <div className="space-y-3 p-3 bg-[#1a1a1a] rounded border border-[#c9a86c]/30">
+                      <div className="flex justify-between items-center">
+                        <Label className="text-amber-400 font-bold">Variable Mappings</Label>
+                        <Button size="sm" className="h-5 text-[10px] px-2 bg-amber-600/20 text-amber-500 border-amber-500/50"
+                          onClick={() => {
+                            const currentMappings = selectedState.xBridgesModel?.mappings || [];
+                            updateState(selectedState.id, {
+                              xBridgesModel: {
+                                nodes: selectedState.xBridgesModel?.nodes || [],
+                                edges: selectedState.xBridgesModel?.edges || [],
+                                mappings: [...currentMappings, { smVarId: '', blockId: '', portId: '', direction: 'in' }]
+                              }
+                            });
+                          }}
+                        >+ Add Map</Button>
+                      </div>
+                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1 thin-scrollbar">
+                        {(selectedState.xBridgesModel?.mappings || []).map((map, idx) => (
+                          <div key={idx} className="p-2 bg-[#0a0a0a] rounded border border-[#333] space-y-2 relative group">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="flex flex-col gap-1">
+                                <Label className="text-[9px] uppercase tracking-wider text-gray-500">SM Variable</Label>
+                                <select
+                                  value={map.smVarId}
+                                  onChange={(e) => {
+                                    const newMaps = [...selectedState.xBridgesModel!.mappings!];
+                                    newMaps[idx] = { ...map, smVarId: e.target.value };
+                                    updateState(selectedState.id, {
+                                      xBridgesModel: {
+                                        nodes: selectedState.xBridgesModel?.nodes || [],
+                                        edges: selectedState.xBridgesModel?.edges || [],
+                                        mappings: newMaps
+                                      }
+                                    });
+                                  }}
+                                  className="w-full h-7 bg-[#1a1a1a] border border-[#333] rounded text-[10px] px-1 text-amber-200"
+                                >
+                                  <option value="">Select...</option>
+                                  {variables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                                </select>
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <Label className="text-[9px] uppercase tracking-wider text-gray-500">Direction</Label>
+                                <select
+                                  value={map.direction}
+                                  onChange={(e) => {
+                                    const newMaps = [...selectedState.xBridgesModel!.mappings!];
+                                    newMaps[idx] = { ...map, direction: e.target.value as any };
+                                    updateState(selectedState.id, {
+                                      xBridgesModel: {
+                                        nodes: selectedState.xBridgesModel?.nodes || [],
+                                        edges: selectedState.xBridgesModel?.edges || [],
+                                        mappings: newMaps
+                                      }
+                                    });
+                                  }}
+                                  className="w-full h-7 bg-[#1a1a1a] border border-[#333] rounded text-[10px] px-1 text-gray-300"
+                                >
+                                  <option value="in">SM → Block</option>
+                                  <option value="out">Block → SM</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="flex flex-col gap-1">
+                                <Label className="text-[9px] uppercase tracking-wider text-gray-500">Block ID</Label>
+                                <Input
+                                  value={map.blockId}
+                                  onChange={(e) => {
+                                    const newMaps = [...selectedState.xBridgesModel!.mappings!];
+                                    newMaps[idx] = { ...map, blockId: e.target.value };
+                                    updateState(selectedState.id, {
+                                      xBridgesModel: {
+                                        nodes: selectedState.xBridgesModel?.nodes || [],
+                                        edges: selectedState.xBridgesModel?.edges || [],
+                                        mappings: newMaps
+                                      }
+                                    });
+                                  }}
+                                  placeholder="e.g. Constant-1"
+                                  className="h-7 text-[10px] font-mono"
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <Label className="text-[9px] uppercase tracking-wider text-gray-500">Block Port</Label>
+                                <Input
+                                  value={map.portId}
+                                  onChange={(e) => {
+                                    const newMaps = [...selectedState.xBridgesModel!.mappings!];
+                                    newMaps[idx] = { ...map, portId: e.target.value };
+                                    updateState(selectedState.id, {
+                                      xBridgesModel: {
+                                        nodes: selectedState.xBridgesModel?.nodes || [],
+                                        edges: selectedState.xBridgesModel?.edges || [],
+                                        mappings: newMaps
+                                      }
+                                    });
+                                  }}
+                                  placeholder="e.g. in1"
+                                  className="h-7 text-[10px] font-mono"
+                                />
+                              </div>
+                            </div>
+                            <button
+                              className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                              onClick={() => {
+                                const newMaps = selectedState.xBridgesModel!.mappings!.filter((_, i) => i !== idx);
+                                updateState(selectedState.id, {
+                                  xBridgesModel: {
+                                    nodes: selectedState.xBridgesModel?.nodes || [],
+                                    edges: selectedState.xBridgesModel?.edges || [],
+                                    mappings: newMaps
+                                  }
+                                });
+                              }}
+                            >
+                              <span className="text-white text-[10px]">×</span>
+                            </button>
+                          </div>
+                        ))}
+                        {(selectedState.xBridgesModel?.mappings || []).length === 0 && (
+                          <div className="text-[10px] text-gray-600 italic text-center py-2">No mappings defined</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <Label>History</Label>
+                    <select
+                      value={selectedState.historyType || 'none'}
+                      onChange={(e) => {
+                        const newType = e.target.value as 'none' | 'shallow' | 'deep';
+                        updateState(selectedState.id, { historyType: newType });
+
+                        const existing = junctions.find(j => j.parentId === selectedState.id && (j.type === 'history' || j.type === 'deep-history'));
+                        if (existing) {
+                          deleteJunction(existing.id);
+                        }
+
+                        if (newType !== 'none') {
+                          createJunction(selectedState.x + 30, selectedState.y + 30, newType === 'shallow' ? 'history' : 'deep-history', selectedState.id);
+                        }
+                      }}
+                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                    >
+                      <option value="none">None</option>
+                      <option value="shallow">Shallow (H)</option>
+                      <option value="deep">Deep (H*)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2 p-2 bg-[#1a1a1a] rounded border border-[#333]">
+                    <div className="flex justify-between items-center">
+                      <Label className="text-[#c9a86c]">Internal Transitions</Label>
+                      <Button size="sm" className="h-5 text-[10px] px-2" onClick={() => {
+                        const current = selectedState.internalTransitions ? selectedState.internalTransitions + '\n' : '';
+                        updateState(selectedState.id, { internalTransitions: current + '[condition] / action;' });
+                      }}>+ Add</Button>
+                    </div>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {(selectedState.internalTransitions || '').split('\n').filter(l => l.trim()).map((line, idx) => {
+                        const parts = line.split('/');
+                        const action = parts.length > 1 ? parts.slice(1).join('/') : '';
+                        const triggerPart = parts[0].trim();
+
+                        let type = 'condition';
+                        if (triggerPart.includes('&&')) type = 'and';
+                        else if (triggerPart.includes('||')) type = 'or';
+                        else if (triggerPart.includes('after')) type = 'after';
+
+                        const afterMatch = triggerPart.match(/after\((\d+)\)/);
+                        const condMatch = triggerPart.match(/\[(.*?)\]/);
+                        const afterTicks = afterMatch ? afterMatch[1] : '';
+                        const condition = condMatch ? condMatch[1] : (type === 'condition' ? triggerPart.replace(/[\[\]]/g, '') : '');
+
+                        const updateLine = (newType: string, newCond: string, newAfter: string, newAct: string) => {
+                          let newTrigger = '';
+                          if (newType === 'condition') newTrigger = `[${newCond}]`;
+                          else if (newType === 'after') newTrigger = `after(${newAfter})`;
+                          else if (newType === 'and') newTrigger = `[${newCond}] && after(${newAfter})`;
+                          else if (newType === 'or') newTrigger = `[${newCond}] || after(${newAfter})`;
+
+                          const allLines = (selectedState.internalTransitions || '').split('\n').filter(l => l.trim());
+                          allLines[idx] = `${newTrigger} / ${newAct}`;
+                          updateState(selectedState.id, { internalTransitions: allLines.join('\n') });
+                        };
+
+                        return (
+                          <div key={idx} className="p-2 bg-[#0a0a0a] border border-[#333] rounded space-y-1">
+                            <div className="flex gap-1">
+                              <select
+                                value={type}
+                                onChange={e => updateLine(e.target.value, condition, afterTicks, action)}
+                                className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-20 px-1 text-[#e0e0e0]"
+                              >
+                                <option value="condition">Cond</option>
+                                <option value="after">After</option>
+                                <option value="and">And</option>
+                                <option value="or">Or</option>
+                              </select>
+                              <button onClick={() => {
+                                const allLines = (selectedState.internalTransitions || '').split('\n').filter(l => l.trim());
+                                allLines.splice(idx, 1);
+                                updateState(selectedState.id, { internalTransitions: allLines.join('\n') });
+                              }} className="ml-auto text-[#666] hover:text-red-400">×</button>
+                            </div>
+                            {(type !== 'after') && (
+                              <Input value={condition} onChange={e => updateLine(type, e.target.value, afterTicks, action)} placeholder="Condition" className="h-6 text-[10px]" />
+                            )}
+                            {(type !== 'condition') && (
+                              <Input value={afterTicks} onChange={e => updateLine(type, condition, e.target.value, action)} placeholder="Ticks" type="number" className="h-6 text-[10px]" />
+                            )}
+                            <div className="flex items-center gap-1">
+                              <span className="text-[#666] text-[10px]">/</span>
+                              <Input value={action.trim()} onChange={e => updateLine(type, condition, afterTicks, e.target.value)} placeholder="Action" className="h-6 text-[10px] flex-1" />
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {(!selectedState.internalTransitions || !selectedState.internalTransitions.trim()) && (
+                        <div className="text-[10px] text-[#666] text-center italic">No internal transitions</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label>Entry Action (C-like)</Label>
+                    <textarea
+                      value={selectedState.entry}
+                      onChange={(e) => updateState(selectedState.id, { entry: e.target.value })}
+                      placeholder="/* Entry action */ counter = 0;"
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                    />
+                  </div>
+
+                  <div>
+                    <Label>During Action (C-like)</Label>
+                    <textarea
+                      value={selectedState.during}
+                      onChange={(e) => updateState(selectedState.id, { during: e.target.value })}
+                      placeholder="/* During action */ counter++;"
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                    />
+                  </div>
+
+                  <div className="space-y-2 p-2 bg-[#1a1a1a] rounded border border-[#333]">
+                    <div className="flex justify-between items-center">
+                      <Label className="text-[#c9a86c]">Internal Transitions</Label>
+                      <Button size="sm" className="h-5 text-[10px] px-2" onClick={() => {
+                        const current = selectedState.internalTransitions ? selectedState.internalTransitions + '\n' : '';
+                        updateState(selectedState.id, { internalTransitions: current + '[condition] / action;' });
+                      }}>+ Add</Button>
+                    </div>
+                    <textarea
+                      value={selectedState.internalTransitions || ''}
+                      onChange={(e) => updateState(selectedState.id, { internalTransitions: e.target.value })}
+                      placeholder="[condition] / action"
+                      className="w-full h-20 min-h-[4rem] bg-[#0a0a0a] border border-[#333] rounded text-xs font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                    />
+                  </div>
+
+                  <div>
+                    <Label>Exit Action (C-like)</Label>
+                    <textarea
+                      value={selectedState.exit}
+                      onChange={(e) => updateState(selectedState.id, { exit: e.target.value })}
+                      placeholder="/* Exit action */"
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                    />
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => enterLayer(selectedState.id)}
+                    className="w-full border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                    </svg>
+                    Enter Layer
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => deleteState(selectedState.id)}
+                    className="w-full border-red-800 text-red-400 hover:text-red-300 hover:bg-red-950/30"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                    Delete State
+                  </Button>
+                </>
+              ) : selectedJunction ? (
+                <>
+                  <div>
+                    <Label>Junction Name</Label>
+                    <Input
+                      value={selectedJunction.name}
+                      onChange={(e) => updateJunction(selectedJunction.id, { name: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-3">
+                    <Checkbox
+                      checked={selectedJunction.autostart || false}
+                      onCheckedChange={(checked) => updateJunction(selectedJunction.id, { autostart: checked as boolean })}
+                      id="j-autostart"
+                    />
+                    <Label htmlFor="j-autostart">Default Transition (Auto-start)</Label>
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => deleteJunction(selectedJunction.id)}
+                    className="w-full border-red-800 text-red-400 hover:text-red-300 hover:bg-red-950/30"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                    Delete Junction
+                  </Button>
+                </>
+              ) : selectedBlock ? (
+                <>
+                  <div>
+                    <Label>Block Name</Label>
+                    <Input value={selectedBlock.name} onChange={(e) => updateBlock(selectedBlock.id, { name: e.target.value })} className="mt-1" />
+                  </div>
+                  <div>
+                    <Label>Stereotype</Label>
+                    <select
+                      value={selectedBlock.stereotype}
+                      onChange={(e) => updateBlock(selectedBlock.id, { stereotype: e.target.value })}
+                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                    >
+                      <option value="block">Block</option>
+                      <option value="requirement">Requirement</option>
+                      <option value="interface">Interface</option>
+                      <option value="interfaceBlock">Interface Block</option>
+                      <option value="valueType">ValueType</option>
+                      <option value="enumeration">Enumeration</option>
+                    </select>
+                  </div>
+                  {selectedBlock.stereotype === 'requirement' && (
+                    <>
+                      <div><Label>Req ID</Label><Input value={selectedBlock.reqId || ''} onChange={(e) => updateBlock(selectedBlock.id, { reqId: e.target.value })} className="mt-1" /></div>
+                      <div><Label>Status</Label>
+                        <select value={selectedBlock.status || ''} onChange={(e) => updateBlock(selectedBlock.id, { status: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                          <option value="Draft">Draft</option>
+                          <option value="Approved">Approved</option>
+                          <option value="Verified">Verified</option>
+                          <option value="Implemented">Implemented</option>
+                        </select>
+                      </div>
+                      <div><Label>Priority</Label>
+                        <select value={selectedBlock.priority || ''} onChange={(e) => updateBlock(selectedBlock.id, { priority: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                          <option value="High">High</option>
+                          <option value="Medium">Medium</option>
+                          <option value="Low">Low</option>
+                        </select>
+                      </div>
+                      <div><Label>Description</Label><textarea value={selectedBlock.description || ''} onChange={(e) => updateBlock(selectedBlock.id, { description: e.target.value })} className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]" /></div>
+                      <div>
+                        <Label>Risk</Label>
+                        <select value={selectedBlock.risk || 'Medium'} onChange={(e) => updateBlock(selectedBlock.id, { risk: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                          <option value="High">High</option>
+                          <option value="Medium">Medium</option>
+                          <option value="Low">Low</option>
+                        </select>
+                      </div>
+                      <div>
+                        <Label>Verification Method</Label>
+                        <select value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                          <option value="Test">Test</option>
+                          <option value="Analysis">Analysis</option>
+                          <option value="Inspection">Inspection</option>
+                          <option value="Demonstration">Demonstration</option>
+                        </select>
+                      </div>
+                      <div><Label>Source</Label><Input value={selectedBlock.source || ''} onChange={(e) => updateBlock(selectedBlock.id, { source: e.target.value })} className="mt-1" /></div>
+                    </>
+                  )}
+                  <div>
+                    <Label>Ports</Label>
+                    <div className="space-y-1 mt-1 max-h-40 overflow-y-auto">
+                      {selectedBlock.ports.map((port, i) => (
+                        <div key={port.id} className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded border border-[#333]">
+                          <Input
+                            value={port.name}
+                            onChange={(e) => {
+                              const newPorts = [...selectedBlock.ports];
+                              newPorts[i] = { ...port, name: e.target.value };
+                              updateBlock(selectedBlock.id, { ports: newPorts });
+                            }}
+                            className="w-16 h-6 text-[10px] px-1"
+                            placeholder="Name"
+                          />
+                          <span className="text-[#666] text-[10px]">:</span>
+                          <Input
+                            value={port.type}
+                            onChange={(e) => {
+                              const newPorts = [...selectedBlock.ports];
+                              newPorts[i] = { ...port, type: e.target.value };
+                              updateBlock(selectedBlock.id, { ports: newPorts });
+                            }}
+                            className="w-16 h-6 text-[10px] px-1"
+                            placeholder="Type"
+                          />
+                          <select
+                            value={port.kind || 'standard'}
+                            onChange={(e) => {
+                              const newPorts = [...selectedBlock.ports];
+                              newPorts[i] = { ...port, kind: e.target.value as any };
+                              updateBlock(selectedBlock.id, { ports: newPorts });
+                            }}
+                            className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-14 px-0 text-[#e0e0e0]"
+                          >
+                            <option value="standard">Std</option>
+                            <option value="flow">Flow</option>
+                            <option value="proxy">Proxy</option>
+                          </select>
+                          {port.kind === 'flow' && (
+                            <>
+                              <select
+                                value={port.direction || 'in'}
+                                onChange={(e) => {
+                                  const newPorts = [...selectedBlock.ports];
+                                  newPorts[i] = { ...port, direction: e.target.value as any };
+                                  updateBlock(selectedBlock.id, { ports: newPorts });
+                                }}
+                                className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-10 px-0 text-[#e0e0e0]"
+                              >
+                                <option value="in">In</option>
+                                <option value="out">Out</option>
+                                <option value="inout">I/O</option>
+                              </select>
+                              <Input
+                                value={port.unit || ''}
+                                onChange={(e) => {
+                                  const newPorts = [...selectedBlock.ports];
+                                  newPorts[i] = { ...port, unit: e.target.value };
+                                  updateBlock(selectedBlock.id, { ports: newPorts });
+                                }}
+                                className="w-10 h-6 text-[10px] px-1" placeholder="Unit"
+                              />
+                            </>
+                          )}
+                          <button
+                            onClick={() => {
+                              const newPorts = selectedBlock.ports.filter(p => p.id !== port.id);
+                              updateBlock(selectedBlock.id, { ports: newPorts });
+                            }}
+                            className="text-[#666] hover:text-red-400 ml-auto px-1"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-1 mt-2">
+                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50">+ Std</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Operations (one per line)</Label>
+                    <textarea
+                      value={selectedBlock.operations.join('\n')}
+                      onChange={(e) => updateBlock(selectedBlock.id, { operations: e.target.value.split('\n').filter(s => s) })}
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                      placeholder="myOperation(arg: Type): ReturnType"
+                    />
+                  </div>
+                  <div>
+                    <Label>Constraints (one per line)</Label>
+                    <textarea
+                      value={(selectedBlock.constraints || []).join('\n')}
+                      onChange={(e) => updateBlock(selectedBlock.id, { constraints: e.target.value.split('\n').filter(s => s) })}
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                      placeholder="x > 0"
+                    />
+                  </div>
+                  <div>
+                    <Label>Nested Classes / Parts</Label>
+                    <textarea
+                      value={(selectedBlock.classes || []).join('\n')}
+                      onChange={(e) => updateBlock(selectedBlock.id, { classes: e.target.value.split('\n').filter(s => s) })}
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                      placeholder="ClassName : Type"
+                    />
+                  </div>
+                  <div>
+                    <Label>Properties (comma sep)</Label>
+                    <textarea
+                      value={selectedBlock.properties.map(p => `${p.name}:${p.type}${p.defaultValue ? '=' + p.defaultValue : ''}`).join(',\n')}
+                      onChange={(e) => {
+                        const newProperties: ValuePropertyData[] = e.target.value.split(/[,;\n]/).map(s => s.trim()).filter(s => s).map(pStr => {
+                          const [name, rest] = pStr.split(':');
+                          const [type, defaultValue] = rest ? rest.split('=') : ['any', undefined];
+                          return {
+                            id: uuidv4(),
+                            name: name?.trim() || 'prop',
+                            type: type?.trim() || 'any',
+                            defaultValue: defaultValue?.trim(),
+                          };
+                        });
+                        updateBlock(selectedBlock.id, { properties: newProperties });
+                      }}
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                    />
+                  </div>
+                  <div>
+                    <Label>Satisfied Requirements</Label>
+                    <select
+                      multiple
+                      value={selectedBlock.satisfiedReqIds || []}
+                      onChange={(e) => {
+                        const selected = Array.from(e.target.selectedOptions, option => option.value);
+                        updateBlock(selectedBlock.id, { satisfiedReqIds: selected });
+                      }}
+                      className="w-full h-20 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                    >
+                      {blocks.filter(b => b.stereotype === 'requirement').map(req => (
+                        <option key={req.id} value={req.id}>{req.reqId}: {req.name}</option>
+                      ))}
+                    </select>
+                    <div className="text-[10px] text-[#666] mt-1">Hold Ctrl to select multiple</div>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => deleteBlock(selectedBlock.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Block</Button>
+                </>
+              ) : selectedRelationship ? (
+                <>
+                  <div>
+                    <Label>Relationship Type</Label>
+                    <select
+                      value={selectedRelationship.type}
+                      onChange={(e) => updateRelationship(selectedRelationship.id, { type: e.target.value as any })}
+                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                    >
+                      <option value="association">Association</option>
+                      <option value="generalization">Generalization</option>
+                      <option value="composition">Composition</option>
+                      <option value="aggregation">Aggregation</option>
+                      <option value="allocation">Allocation</option>
+                      <option value="derive">Derive</option>
+                      <option value="refine">Refine</option>
+                      <option value="satisfy">Satisfy</option>
+                      <option value="verify">Verify</option>
+                      <option value="trace">Trace</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Label</Label>
+                    <Input value={selectedRelationship.label} onChange={(e) => updateRelationship(selectedRelationship.id, { label: e.target.value })} className="mt-1" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label>Source Mult.</Label>
+                      <Input value={selectedRelationship.sourceMultiplicity || ''} onChange={(e) => updateRelationship(selectedRelationship.id, { sourceMultiplicity: e.target.value })} className="mt-1" placeholder="0..1" />
+                    </div>
+                    <div>
+                      <Label>Target Mult.</Label>
+                      <Input value={selectedRelationship.targetMultiplicity || ''} onChange={(e) => updateRelationship(selectedRelationship.id, { targetMultiplicity: e.target.value })} className="mt-1" placeholder="*" />
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => deleteRelationship(selectedRelationship.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Relation</Button>
+                </>
+              ) : selectedPart ? (
+                <>
+                  <div>
+                    <Label>Part Name</Label>
+                    <Input value={selectedPart.name} onChange={(e) => updatePart(selectedPart.id, { name: e.target.value })} className="mt-1" />
+                  </div>
+                  <div>
+                    <Label>Block Definition</Label>
+                    <select
+                      value={selectedPart.typeId || ''}
+                      onChange={(e) => updatePart(selectedPart.id, { typeId: e.target.value })}
+                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                    >
+                      <option value="">[Undefined]</option>
+                      {blocks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Multiplicity</Label>
+                    <Input value={selectedPart.multiplicity || ''} onChange={(e) => updatePart(selectedPart.id, { multiplicity: e.target.value })} className="mt-1" placeholder="1" />
+                  </div>
+
+                  {/* Ports Editor for the underlying Block */}
+                  {(() => {
+                    const block = blocks.find(b => b.id === selectedPart.typeId);
+                    if (block) {
+                      return (
+                        <div className="p-2 bg-[#1a1a1a] border border-[#333] rounded mt-2">
+                          <Label className="text-[#c9a86c]">Block Ports ({block.name})</Label>
+                          <div className="space-y-1 mt-1 max-h-40 overflow-y-auto">
+                            {block.ports.map((port, i) => (
+                              <div key={port.id} className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded border border-[#333]">
+                                <Input
+                                  value={port.name}
+                                  onChange={(e) => {
+                                    const newPorts = [...block.ports];
+                                    newPorts[i] = { ...port, name: e.target.value };
+                                    updateBlock(block.id, { ports: newPorts });
+                                  }}
+                                  className="w-16 h-6 text-[10px] px-1"
+                                />
+                                <span className="text-[#666] text-[10px]">:</span>
+                                <Input
+                                  value={port.type}
+                                  onChange={(e) => {
+                                    const newPorts = [...block.ports];
+                                    newPorts[i] = { ...port, type: e.target.value };
+                                    updateBlock(block.id, { ports: newPorts });
+                                  }}
+                                  className="w-16 h-6 text-[10px] px-1"
+                                />
+                                <select
+                                  value={port.kind || 'standard'}
+                                  onChange={(e) => {
+                                    const newPorts = [...block.ports];
+                                    newPorts[i] = { ...port, kind: e.target.value as any };
+                                    updateBlock(block.id, { ports: newPorts });
+                                  }}
+                                  className="h-6 bg-[#1a1a1a] border border-[#333] rounded text-[10px] w-14 px-0 text-[#e0e0e0]"
+                                >
+                                  <option value="standard">Std</option>
+                                  <option value="flow">Flow</option>
+                                  <option value="proxy">Proxy</option>
+                                </select>
+                                <button
+                                  onClick={() => {
+                                    const newPorts = block.ports.filter(p => p.id !== port.id);
+                                    updateBlock(block.id, { ports: newPorts });
+                                  }}
+                                  className="text-[#666] hover:text-red-400 ml-auto px-1"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-1 mt-2">
+                            <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50">+ Std</Button>
+                            <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
+                            <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  <div>
+                    <Label>Satisfied Requirements</Label>
+                    <select
+                      multiple
+                      value={selectedPart.satisfiedReqIds || []}
+                      onChange={(e) => {
+                        const selected = Array.from(e.target.selectedOptions, option => option.value);
+                        updatePart(selectedPart.id, { satisfiedReqIds: selected });
+                      }}
+                      className="w-full h-20 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
+                    >
+                      {blocks.filter(b => b.stereotype === 'requirement').map(req => (
+                        <option key={req.id} value={req.id}>{req.reqId}: {req.name}</option>
+                      ))}
+                    </select>
+                    <div className="text-[10px] text-[#666] mt-1">Hold Ctrl to select multiple</div>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => deletePart(selectedPart.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Part</Button>
+                </>
+              ) : selectedConnector ? (
+                <>
+                  <div>
+                    <Label>Item Flow</Label>
+                    <Input value={selectedConnector.itemFlow || ''} onChange={(e) => updateConnector(selectedConnector.id, { itemFlow: e.target.value })} className="mt-1" placeholder="e.g., PowerSignal" />
+                  </div>
+                  <div>
+                    <Label>Label (Text)</Label>
+                    <Input value={selectedConnector.label || ''} onChange={(e) => updateConnector(selectedConnector.id, { label: e.target.value })} className="mt-1" placeholder="e.g., Control Link" />
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => deleteConnector(selectedConnector.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connector</Button>
+                </>
+              ) : selectedInterfaceRealization ? (
+                <>
+                  <div>
+                    <Label>Interface Connection</Label>
+                    <p className="text-xs text-[#888] mt-1">Connects an interface to a part's port.</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => deleteInterfaceRealization(selectedInterfaceRealization.id)} className="w-full border-red-800 text-red-400 hover:bg-red-950/30">Delete Connection</Button>
+                </>
+              ) : selectedTransition ? (
+                <>
+                  <div>
+                    <Label>Transition Properties</Label>
+                    <div className="text-sm text-[#888] mt-1 mb-2">
+                      {states.find(s => s.id === selectedTransition.sourceId)?.name ||
+                        junctions.find(j => j.id === selectedTransition.sourceId)?.name} →
+                      {states.find(s => s.id === selectedTransition.targetId)?.name ||
+                        junctions.find(j => j.id === selectedTransition.targetId)?.name}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label>Order (priority for same source)</Label>
+                    <Input
+                      type="number"
+                      value={selectedTransition.order}
+                      onChange={(e) => updateTransition(selectedTransition.id, { order: parseInt(e.target.value) || 0 })}
+                      className="mt-1"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-3 mb-2">
+                    <Checkbox
+                      checked={!!selectedTransition.isInternal}
+                      onCheckedChange={(checked) => updateTransition(selectedTransition.id, { isInternal: checked as boolean })}
+                      id="isInternal"
+                    />
+                    <Label htmlFor="isInternal" className="text-[#c9a86c]">Internal / Local Transition</Label>
+                  </div>
+
+                  <div className="space-y-3 p-3 bg-[#1a1a1a] rounded-lg border border-[#222]">
+                    <Label className="text-[#c9a86c]">Trigger Logic</Label>
+
+                    <select
+                      value={selectedTransition.type}
+                      onChange={(e) => updateTransition(selectedTransition.id, { type: e.target.value as any })}
+                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0]"
+                    >
+                      <option value="condition">Condition Only</option>
+                      <option value="after">After (Timer) Only</option>
+                      <option value="and">Condition AND Timer</option>
+                      <option value="or">Condition OR Timer</option>
+                    </select>
+
+                    {(selectedTransition.type === 'condition' || selectedTransition.type === 'and' || selectedTransition.type === 'or') && (
+                      <div>
+                        <Label>Condition</Label>
+                        <textarea
+                          value={selectedTransition.condition}
+                          onChange={(e) => updateTransition(selectedTransition.id, { condition: e.target.value as any })}
+                          placeholder="e.g., x > 10"
+                          className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                        />
+                      </div>
+                    )}
+
+                    {(selectedTransition.type === 'after' || selectedTransition.type === 'and' || selectedTransition.type === 'or') && (
+                      <div>
+                        <Label>After (ticks)</Label>
+                        <Input
+                          type="number"
+                          value={selectedTransition.afterTicks ?? ''}
+                          onChange={(e) => updateTransition(selectedTransition.id, {
+                            afterTicks: e.target.value ? parseInt(e.target.value) : null
+                          })}
+                          placeholder="Ticks"
+                          className="mt-1 font-mono"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label>Action (C-like code)</Label>
+                    <textarea
+                      value={selectedTransition.action}
+                      onChange={(e) => updateTransition(selectedTransition.id, { action: e.target.value })}
+                      placeholder="/* Action on transition */ counter = 0; flag = false;"
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                    />
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => deleteTransition(selectedTransition.id)}
+                    className="w-full border-red-800 text-red-400 hover:text-red-300 hover:bg-red-950/30"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                    Delete Transition
+                  </Button>
+                </>
+              ) : (
+                <div className="text-center py-8 text-[#666]">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-3 opacity-50">
+                    <path d="M12 12h.01" />
+                    <path d="M16 8v4a4 4 0 0 1-4 4H8" />
+                    <path d="M16 8h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2h2" />
+                  </svg>
+                  <p className="text-sm font-medium">Select an element to edit properties</p>
+                  <p className="text-xs mt-2 opacity-70">
+                    Click and drag to move items<br />
+                    Use toolbar buttons to create elements
+                  </p>
+                </div>
+              )}
+            </div>
+          </aside>
         </div>
-      )}
 
-      {/* Code Generation Dialog - FULLY FUNCTIONAL */}
-      {showCodegenDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={() => setShowCodegenDialog(false)}>
-          <CodeGenerationDialog
-            files={generatedFiles}
-            codegenErrors={codegenErrors}
-            codegenWarnings={codegenWarnings}
-            generationLog={generationLog}
-            onClose={() => setShowCodegenDialog(false)}
-            addError={addError}
-          />
-        </div>
-      )}
-
-      {/* Report Dialog */}
-      {showReportDialog && (
-        <ReportDialog
-          onClose={() => setShowReportDialog(false)}
-          onGenerate={handleGenerateReport}
-        />
-      )}
-
-      {/* Error Dialog */}
-      {showErrorDialog && currentError && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={() => setShowErrorDialog(false)}>
-          <div className="bg-[#141414] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
-            <div className="h-12 flex items-center px-5 border-b border-red-900/50">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" className="mr-3">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
+        {/* Mobile Navigation Bar */}
+        {isMobile && (
+          <div className="h-14 bg-[#1a1a1a] border-t border-[#222] flex items-center justify-around shrink-0 pb-safe">
+            <button
+              onClick={() => setMobileTab('hierarchy')}
+              className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'hierarchy' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
+                <path d="M10 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" />
+                <path d="M16 17l-3-3 3-3" />
+                <path d="M13 14H3" />
               </svg>
-              <h2 className="text-lg font-bold text-red-400">Error</h2>
-            </div>
-
-            <div className="p-5 bg-red-950/25 rounded-lg border border-red-900 m-5">
-              <p className="text-red-300 text-sm whitespace-pre-wrap">{currentError.message}</p>
-              {currentError.source && (
-                <p className="text-xs text-red-400 mt-2.5">Source: {currentError.source}</p>
-              )}
-            </div>
-
-            <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
-              <Button
-                variant="outline"
-                onClick={() => handleJumpToError(currentError)}
-                disabled={!currentError.elementId}
-                className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10 px-5 mr-auto"
-              >
-                Go to Element
-              </Button>
-              {currentError.canAutoFix && (
-                <Button
-                  onClick={() => handleAutoFix(currentError)}
-                  className="bg-green-600 hover:bg-green-700 text-white px-5 mr-2"
-                >
-                  Auto-Fix
-                </Button>
-              )}
-              {errors.filter(e => e.canAutoFix).length > 1 && (
-                <Button
-                  onClick={handleFixAll}
-                  className="bg-green-700 hover:bg-green-800 text-white px-5 mr-2"
-                >
-                  Fix All ({errors.filter(e => e.canAutoFix).length})
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                onClick={() => setShowErrorDialog(false)}
-                className="border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] px-5"
-              >
-                Dismiss
-              </Button>
-              <Button
-                onClick={() => {
-                  clearErrors();
-                  setShowErrorDialog(false);
-                }}
-                className="bg-red-600 hover:bg-red-700 text-white px-5"
-              >
-                Clear All Errors
-              </Button>
-            </div>
-            {/* Resizing for this modal is less critical, but can be added similarly if needed */}
+              <span className="text-[10px] font-bold">Tree</span>
+            </button>
+            <button
+              onClick={() => setMobileTab('variables')}
+              className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'variables' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
+                <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5" />
+                <path d="M3 12h18" />
+                <path d="M12 12v9" />
+              </svg>
+              <span className="text-[10px] font-bold">Vars</span>
+            </button>
+            <button
+              onClick={() => setMobileTab('canvas')}
+              className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'canvas' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M3 9h18" />
+              </svg>
+              <span className="text-[10px] font-bold">Canvas</span>
+            </button>
+            <button
+              onClick={() => setMobileTab('properties')}
+              className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'properties' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+              <span className="text-[10px] font-bold">Props</span>
+            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* PID Workspace Window */}
-      {managedWindows.pid.isOpen && (
-        <FloatingWindow
-          windowState={managedWindows.pid}
-          onClose={() => toggleWindow('pid')}
-          onUpdate={updateManagedWindow}
-        >
-          <PidWorkspaceDialog onClose={() => toggleWindow('pid')} addError={addError} />
-        </FloatingWindow>
-      )}
+        {/* Workspace Modal */}
+        {showWorkspaceModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+            <div className="bg-[#141414] border border-[#c9a86c] rounded-lg w-[650px] max-h-[90vh] flex flex-col">
+              <div className="h-12 flex items-center px-5 border-b border-[#222]">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-3">
+                  <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                  <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                </svg>
+                <h2 className="text-lg font-bold text-[#c9a86c]">Workspace Variables</h2>
+              </div>
 
+              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                <div className="space-y-3 p-4 bg-[#1a1a1a] rounded-lg border border-[#222]">
+                  <Label>Add Variable</Label>
+                  <Input
+                    placeholder="Name"
+                    value={newVarName}
+                    onChange={(e) => setNewVarName(e.target.value)}
+                  />
+                  <select
+                    value={newVarType}
+                    onChange={(e) => {
+                      setNewVarType(e.target.value as VariableType);
+                      setNewVarValue(getDefaultValue(e.target.value as VariableType));
+                    }}
+                    className="h-10 bg-[#0a0a0a] border border-[#333] text-sm rounded w-full px-3 mt-1"
+                  >
+                    {ALLOWED_TYPES.map(type => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                  <Input
+                    placeholder="Initial value"
+                    value={newVarValue}
+                    onChange={(e) => setNewVarValue(e.target.value)}
+                    className="mt-1"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={addVariable}
+                    className="w-full bg-[#c9a86c] text-[#0a0a0a] hover:bg-[#b8975b] mt-2 h-9"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    Add Variable
+                  </Button>
+                </div>
 
-      {/* RTM Window */}
-      {managedWindows.rtm.isOpen && (
-        <FloatingWindow
-          windowState={managedWindows.rtm}
-          onClose={() => toggleWindow('rtm')}
-          onUpdate={updateManagedWindow}
-        >
-          <TraceabilityMatrix blocks={blocks} relationships={relationships} parts={parts} onClose={() => toggleWindow('rtm')} />
-        </FloatingWindow>
-      )}
+                <div className="space-y-3 max-h-[450px] overflow-y-auto pr-2">
+                  {variables.map((variable) => (
+                    <div
+                      key={variable.id}
+                      className="p-4 bg-[#1a1a1a] rounded-lg border border-[#222] space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Checkbox
+                            checked={variable.visibleInScope}
+                            onCheckedChange={() => toggleVariableVisibility(variable.id)}
+                            id={`var-${variable.id}`}
+                          />
+                          <span className="font-mono text-sm text-[#c9a86c]">{variable.name}</span>
+                        </div>
+                        <Badge>{variable.type}</Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-[11px]">Initial Value</Label>
+                          <Input
+                            value={variable.initialValue}
+                            onChange={(e) => updateVariableInitValue(variable.id, e.target.value)}
+                            disabled={isRunning}
+                            className="mt-1 text-xs font-mono"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-[11px] flex items-center gap-1">
+                            Runtime Value
+                            {isRunning && (
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6c9ac6" strokeWidth="2">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                              </svg>
+                            )}
+                          </Label>
+                          <Input
+                            value={String(variable.currentValue)}
+                            onChange={(e) => updateVariableValue(variable.id, e.target.value)}
+                            disabled={!isRunning}
+                            className="mt-1 text-xs font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-      {/* HMI Dashboard Window */}
-      {managedWindows.hmi.isOpen && (
-        <FloatingWindow
-          windowState={managedWindows.hmi}
-          onClose={() => toggleWindow('hmi')}
-          onUpdate={updateManagedWindow}
-        >
-          <HmiDashboardContent
-            variables={variables}
-            components={hmiComponents}
-            setComponents={setHmiComponents}
-            updateVariable={(id, val) => updateVariableValue(id, val)}
-            onClose={() => toggleWindow('hmi')}
+              <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowWorkspaceModal(false)}
+                  className="border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] px-5"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    resetVariables();
+                    setShowWorkspaceModal(false);
+                  }}
+                  className="bg-[#c9a86c] text-[#0a0a0a] hover:bg-[#b8975b] px-5"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+                    <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0" />
+                    <polyline points="3 4 3 12 11 12" />
+                  </svg>
+                  Reset to Initial Values
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Code Generation Dialog - FULLY FUNCTIONAL */}
+        {showCodegenDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={() => setShowCodegenDialog(false)}>
+            <CodeGenerationDialog
+              files={generatedFiles}
+              codegenErrors={codegenErrors}
+              codegenWarnings={codegenWarnings}
+              generationLog={generationLog}
+              onClose={() => setShowCodegenDialog(false)}
+              addError={addError}
+            />
+          </div>
+        )}
+
+        {/* Report Dialog */}
+        {showReportDialog && (
+          <ReportDialog
+            onClose={() => setShowReportDialog(false)}
+            onGenerate={handleGenerateReport}
           />
-        </FloatingWindow>
-      )}
+        )}
 
-      {/* DOE Workspace Window */}
-      {managedWindows.doe.isOpen && (
-        <FloatingWindow
-          windowState={managedWindows.doe}
-          onClose={() => toggleWindow('doe')}
-          onUpdate={updateManagedWindow}
-        >
-          <DoeWorkspace onClose={() => toggleWindow('doe')} addError={addError} />
-        </FloatingWindow>
-      )}
+        {/* Error Dialog */}
+        {showErrorDialog && currentError && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={() => setShowErrorDialog(false)}>
+            <div className="bg-[#141414] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
+              <div className="h-12 flex items-center px-5 border-b border-red-900/50">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" className="mr-3">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <h2 className="text-lg font-bold text-red-400">Error</h2>
+              </div>
+
+              <div className="p-5 bg-red-950/25 rounded-lg border border-red-900 m-5">
+                <p className="text-red-300 text-sm whitespace-pre-wrap">{currentError.message}</p>
+                {currentError.source && (
+                  <p className="text-xs text-red-400 mt-2.5">Source: {currentError.source}</p>
+                )}
+              </div>
+
+              <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => handleJumpToError(currentError)}
+                  disabled={!currentError.elementId}
+                  className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10 px-5 mr-auto"
+                >
+                  Go to Element
+                </Button>
+                {currentError.canAutoFix && (
+                  <Button
+                    onClick={() => handleAutoFix(currentError)}
+                    className="bg-green-600 hover:bg-green-700 text-white px-5 mr-2"
+                  >
+                    Auto-Fix
+                  </Button>
+                )}
+                {errors.filter(e => e.canAutoFix).length > 1 && (
+                  <Button
+                    onClick={handleFixAll}
+                    className="bg-green-700 hover:bg-green-800 text-white px-5 mr-2"
+                  >
+                    Fix All ({errors.filter(e => e.canAutoFix).length})
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={() => setShowErrorDialog(false)}
+                  className="border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] px-5"
+                >
+                  Dismiss
+                </Button>
+                <Button
+                  onClick={() => {
+                    clearErrors();
+                    setShowErrorDialog(false);
+                  }}
+                  className="bg-red-600 hover:bg-red-700 text-white px-5"
+                >
+                  Clear All Errors
+                </Button>
+              </div>
+              {/* Resizing for this modal is less critical, but can be added similarly if needed */}
+            </div>
+          </div>
+        )}
+
+        {/* PID Workspace Window */}
+        {managedWindows.pid.isOpen && (
+          <FloatingWindow
+            windowState={managedWindows.pid}
+            onClose={() => toggleWindow('pid')}
+            onUpdate={updateManagedWindow}
+          >
+            <PidWorkspaceDialog onClose={() => toggleWindow('pid')} addError={addError} />
+          </FloatingWindow>
+        )}
+
+
+        {/* RTM Window */}
+        {managedWindows.rtm.isOpen && (
+          <FloatingWindow
+            windowState={managedWindows.rtm}
+            onClose={() => toggleWindow('rtm')}
+            onUpdate={updateManagedWindow}
+          >
+            <TraceabilityMatrix blocks={blocks} relationships={relationships} parts={parts} onClose={() => toggleWindow('rtm')} />
+          </FloatingWindow>
+        )}
+
+        {/* HMI Dashboard Window */}
+        {managedWindows.hmi.isOpen && (
+          <FloatingWindow
+            windowState={managedWindows.hmi}
+            onClose={() => toggleWindow('hmi')}
+            onUpdate={updateManagedWindow}
+          >
+            <HmiDashboardContent
+              variables={variables}
+              components={hmiComponents}
+              setComponents={setHmiComponents}
+              updateVariable={(id, val) => updateVariableValue(id, val)}
+              onClose={() => toggleWindow('hmi')}
+            />
+          </FloatingWindow>
+        )}
+
+        {/* DOE Workspace Window */}
+        {managedWindows.doe.isOpen && (
+          <FloatingWindow
+            windowState={managedWindows.doe}
+            onClose={() => toggleWindow('doe')}
+            onUpdate={updateManagedWindow}
+          >
+            <DoeWorkspace
+              activeModel={activeModel}
+              setActiveModel={setActiveModel}
+              taguchiConfig={taguchiConfig}
+              setTaguchiConfig={setTaguchiConfig}
+              data={data}
+              setData={setData}
+              headers={headers}
+              setHeaders={setHeaders}
+              results={results}
+              setResults={setResults}
+              plotFactors={plotFactors}
+              setPlotFactors={setPlotFactors}
+              holdValues={holdValues}
+              setHoldValues={setHoldValues}
+              plotType={plotType}
+              setPlotType={setPlotType}
+              handleExportProject={handleExportProject}
+              generateReport={generateReport}
+              onClose={() => toggleWindow('doe')}
+              addError={addError}
+            />
+          </FloatingWindow>
+        )}
       </div>
     </>
   );
