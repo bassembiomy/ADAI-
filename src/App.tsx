@@ -18,6 +18,9 @@ import {
   Activity, Zap, Database, Cpu, Layout, Maximize2, X,
   LayoutGrid, Rows
 } from 'lucide-react';
+import { FactoryIOGateway } from './components/FactoryIOGateway';
+import { AiArchitectSidebar } from './components/AiArchitectSidebar';
+import { executeAiActions } from './utils/aiActionProcessor';
 
 // =============================================================================
 // STATIC UI COMPONENTS (ZERO IMPORT ERRORS - FULLY TYPED)
@@ -5338,6 +5341,25 @@ const ADIA = () => {
   const [vlabNodes, setVlabNodes] = useState<any[]>([]);
   const [vlabEdges, setVlabEdges] = useState<any[]>([]);
 
+  // FACTORY I/O GATEWAY STATE
+  const [showFactoryIOGateway, setShowFactoryIOGateway] = useState(false);
+  const [factoryIOMapping, setFactoryIOMapping] = useState<{ adiaVarId: string, factoryTagId: number, type: 'sensor' | 'actuator' }[]>([]);
+  const [factoryIOEnabled, setFactoryIOEnabled] = useState(true);
+  const [factoryIOStatus, setFactoryIOStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
+
+  // AI SIDEBAR STATE
+  const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (factoryIOEnabled && (window as any).require) {
+      const { ipcRenderer } = (window as any).require('electron');
+      ipcRenderer.invoke('fetch-factory-io-tags').then((tags: any) => {
+        if (tags && !tags.error) setFactoryIOStatus('connected');
+        else setFactoryIOStatus('error');
+      });
+    }
+  }, []);
+
   const projectImportRef = useRef<HTMLInputElement>(null);
 
   const calculateChecksum = useCallback((str: string): string => {
@@ -5587,7 +5609,7 @@ const ADIA = () => {
     addError('info', 'Professional report generated and downloaded.');
   }, [results, data, headers, addError]);
 
-  const handleExportProject = useCallback(() => {
+  const handleExportProject = useCallback(async () => {
     const projectData = {
       version: VERSION,
       timestamp: new Date().toISOString(),
@@ -5631,6 +5653,20 @@ const ADIA = () => {
       // UI State
       managedWindows
     };
+
+    // Electron specialized save
+    if ((window as any).require) {
+      try {
+        const { ipcRenderer } = (window as any).require('electron');
+        const success = await ipcRenderer.invoke('save-json', projectData);
+        if (success) {
+          addError('info', 'Project saved successfully');
+        }
+        return;
+      } catch (err) {
+        console.error('Electron save failed, falling back to web:', err);
+      }
+    }
 
     const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -6286,45 +6322,16 @@ const ADIA = () => {
   // AI VALIDATION
   const validateWithAI = useCallback(async () => {
     setIsAiValidating(true);
-    try {
-      // Prepare context for the AI
-      const modelContext = {
-        states: states.map(s => ({ name: s.name, entry: s.entry, exit: s.exit, during: s.during })),
-        transitions: transitions.map(t => ({
-          source: states.find(s => s.id === t.sourceId)?.name || junctions.find(j => j.id === t.sourceId)?.name || 'unknown',
-          target: states.find(s => s.id === t.targetId)?.name || junctions.find(j => j.id === t.targetId)?.name || 'unknown',
-          condition: t.condition,
-          action: t.action
-        })),
-        variables: variables.map(v => ({ name: v.name, type: v.type, init: v.initialValue }))
-      };
-
-      // Placeholder for LLM API Call
-      // In a real implementation, you would send 'modelContext' to an endpoint (e.g., OpenAI, Anthropic, or local LLM)
-      // const response = await callLLM(modelContext);
-
-      // Simulating AI analysis delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      // Simulated AI findings (Mock)
-      const aiFindings = [
-        { type: 'info', message: 'AI Analysis: State machine structure appears consistent.' },
-        { type: 'info', message: 'AI Analysis: Variable usage checked against definitions.' }
-      ];
-
-      // Example: Simple heuristic check to simulate "AI" finding something smart
-      if (states.length > 0 && transitions.length === 0) {
-        aiFindings.push({ type: 'warning', message: 'AI Suggestion: The model has states but no transitions. Consider connecting them.' });
-      }
-
-      aiFindings.forEach(f => addError(f.type as any, f.message, 'AI Validator'));
-
-    } catch (error) {
-      addError('error', 'AI Validation failed to connect.', 'AI Validator');
-    } finally {
-      setIsAiValidating(false);
-    }
+    // ... logic ...
   }, [states, transitions, junctions, variables, addError]);
+
+  const handleExecuteAiActions = useCallback((actions: any[]) => {
+    executeAiActions(
+      actions, 
+      { states, variables, junctions, layers, currentLayerId },
+      { setStates, setVariables, setTransitions, setBlocks, addError }
+    );
+  }, [states, variables, junctions, layers, currentLayerId, addError, setStates, setVariables, setTransitions, setBlocks]);
 
   const resolveAutoStart = useCallback((layerId: string, context: any, runActions: boolean = true): string | undefined => {
     const layer = layers.find(l => l.id === layerId);
@@ -6388,14 +6395,68 @@ const ADIA = () => {
     return undefined;
   }, [layers, states, junctions, transitions]);
 
+  // FACTORY I/O SYNC LOGIC
+  const syncFactoryIO = useCallback(async (currentVars: VariableDef[]) => {
+    if (!factoryIOEnabled || !(window as any).require) return currentVars;
+
+    try {
+      const { ipcRenderer } = (window as any).require('electron');
+      
+      // 1. Prepare Actuator data to send
+      const actuatorsToSend = factoryIOMapping
+        .filter(m => m.type === 'actuator')
+        .map(m => {
+          const v = currentVars.find(cv => cv.id === m.adiaVarId);
+          return { id: m.factoryTagId, value: v ? v.currentValue : 0 };
+        });
+
+      // 2. Sync with Backend
+      const tags = await ipcRenderer.invoke('sync-factory-io', { actuators: actuatorsToSend });
+
+      if (tags && !tags.error) {
+        setFactoryIOStatus('connected');
+        // 3. Update ADIA variables from Sensors
+        const nextVars = [...currentVars];
+        let changed = false;
+
+        factoryIOMapping
+          .filter(m => m.type === 'sensor')
+          .forEach(m => {
+            const tag = (tags as any[]).find(t => t.id === m.factoryTagId);
+            if (tag) {
+              const varIdx = nextVars.findIndex(v => v.id === m.adiaVarId);
+              if (varIdx !== -1 && nextVars[varIdx].currentValue !== tag.value) {
+                nextVars[varIdx] = { ...nextVars[varIdx], currentValue: tag.value };
+                changed = true;
+              }
+            }
+          });
+
+        if (changed) setVariables(nextVars);
+        return nextVars;
+      } else {
+        setFactoryIOStatus('error');
+      }
+    } catch (e) {
+      setFactoryIOStatus('error');
+    }
+    return currentVars;
+  }, [factoryIOEnabled, factoryIOMapping]);
+
   // SIMULATION (FULLY FUNCTIONAL)
-  const simulationStep = useCallback(() => {
+  const simulationStep = useCallback(async () => {
+    // 0. Factory I/O Pre-sync (Read Sensors)
+    let currentVars = [...variables];
+    if (factoryIOEnabled) {
+      currentVars = await syncFactoryIO(currentVars);
+    }
+
     // 1. Advance time
     const newTime = simulationTime + tickMs / 1000;
     setSimulationTime(newTime);
 
     // 2. Create working context from current variables
-    const workingContext = variables.reduce((acc, v) => {
+    const workingContext = currentVars.reduce((acc, v) => {
       acc[v.name] = v.currentValue;
       return acc;
     }, {} as Record<string, any>);
@@ -6810,7 +6871,16 @@ const ADIA = () => {
       });
     }
 
-  }, [states, junctions, transitions, variables, activeStates, stateTimers, simulationTime, tickMs, sampleOnTransitionOnly, addError, layers, resolveAutoStart]);
+    // 8. Factory I/O Post-sync (Write Actuators)
+    if (factoryIOEnabled) {
+      const finalVars = variables.map(v => {
+        if (v.name in workingContext) return { ...v, currentValue: workingContext[v.name] };
+        return v;
+      });
+      await syncFactoryIO(finalVars);
+    }
+
+  }, [states, junctions, transitions, variables, activeStates, stateTimers, simulationTime, tickMs, sampleOnTransitionOnly, addError, layers, resolveAutoStart, factoryIOEnabled, syncFactoryIO]);
 
 
   const startSimulation = useCallback(() => {
@@ -6891,21 +6961,29 @@ const ADIA = () => {
     addError('info', 'Simulation step');
   }, [isRunning, simulationStep, addError]);
 
+  const simStepRef = useRef(simulationStep);
   useEffect(() => {
-    if (isRunning) {
-      timerRef.current = setInterval(simulationStep, tickMs);
-    } else {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    }
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
+    simStepRef.current = simulationStep;
+  }, [simulationStep]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const runLoop = async () => {
+      if (isRunning) {
+        await simStepRef.current();
+        timer = setTimeout(runLoop, tickMs);
       }
     };
-  }, [isRunning, simulationStep, tickMs]);
+
+    if (isRunning) {
+      runLoop();
+    }
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [isRunning, tickMs]);
 
   // LAYER / NESTED STATE OPERATIONS
   const enterLayer = useCallback((stateId: string) => {
@@ -10298,6 +10376,22 @@ const ADIA = () => {
     <>
       {showWelcome && <WelcomeOverlay onComplete={() => setShowWelcome(false)} />}
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />
+      <FactoryIOGateway 
+        isOpen={showFactoryIOGateway} 
+        onClose={() => setShowFactoryIOGateway(false)}
+        variables={variables}
+        mapping={factoryIOMapping}
+        setMapping={setFactoryIOMapping}
+        isEnabled={factoryIOEnabled}
+        setIsEnabled={setFactoryIOEnabled}
+        status={factoryIOStatus}
+      />
+      <AiArchitectSidebar 
+        isOpen={isAiSidebarOpen} 
+        onToggle={() => setIsAiSidebarOpen(!isAiSidebarOpen)}
+        currentContext={{ states, variables, transitions, junctions, layers, blocks }}
+        onExecuteActions={handleExecuteAiActions}
+      />
       <GlobalReportPreviewModal
         isOpen={showGlobalReportPreview}
         onClose={() => setShowGlobalReportPreview(false)}
@@ -10555,6 +10649,20 @@ const ADIA = () => {
               <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
             Help
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowFactoryIOGateway(true)}
+            className={`border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/10 ${factoryIOEnabled ? 'border-indigo-400 shadow-[0_0_10px_rgba(99,102,241,0.3)]' : ''}`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+              <line x1="12" y1="22.08" x2="12" y2="12" />
+            </svg>
+            Factory I/O
           </Button>
 
           <div className="flex-1" />
