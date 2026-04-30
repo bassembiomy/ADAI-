@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+// AI Service - Direct REST API (No SDK dependency issues)
 
 const SYSTEM_PROMPT = `
 You are the ADIA AI Architect, an expert engineering assistant specialized in Model-Based Systems Engineering (MBSE), Stateflow, SysML, and Control Systems.
@@ -28,30 +28,104 @@ Contextual Knowledge:
 - Use engineering terminology consistent with MATLAB/Simulink.
 `;
 
-export async function getAiResponse(apiKey: string, history: any[], currentContext: any) {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+// Step 1: Discover which models are actually available for this API key
+async function findWorkingModel(apiKey: string): Promise<string> {
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    if (!res.ok) throw new Error(`ListModels failed: ${res.status}`);
+    const data = await res.json();
+    const models = (data.models || []) as { name: string; supportedGenerationMethods: string[] }[];
+    
+    // Find a model that supports generateContent
+    const preferred = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
+    for (const pref of preferred) {
+      const found = models.find(
+        m => m.name.includes(pref) && m.supportedGenerationMethods?.includes("generateContent")
+      );
+      if (found) {
+        console.log(`AI Architect: Using model ${found.name}`);
+        return found.name; // e.g. "models/gemini-2.0-flash"
+      }
+    }
 
+    // Fallback: use the first model that supports generateContent
+    const fallback = models.find((m: any) => m.supportedGenerationMethods?.includes("generateContent"));
+    if (fallback) {
+      console.log(`AI Architect: Fallback to ${fallback.name}`);
+      return fallback.name;
+    }
+
+    throw new Error("No compatible Gemini model found for this API key. Available models: " + models.map((m: any) => m.name).join(", "));
+  } catch (err: any) {
+    throw new Error(`Failed to list available models: ${err.message}`);
+  }
+}
+
+// Step 2: Call the model using direct REST (no SDK quirks)
+export async function getAiResponse(apiKey: string, history: any[], currentContext: any): Promise<string> {
+  // Discover the correct model name dynamically
+  const modelName = await findWorkingModel(apiKey);
+
+  const userPrompt = history[history.length - 1].content;
   const fullPrompt = `
-Current Project State:
+${SYSTEM_PROMPT}
+
+Current Project Context:
 ${JSON.stringify(currentContext, null, 2)}
 
-User Prompt:
-${history[history.length - 1].content}
+User Request:
+${userPrompt}
 `;
 
-  const chat = model.startChat({
-    history: [
-      { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
-      { role: "model", parts: [{ text: "Understood. I am ready to assist as your AI Architect. Please provide your design requirements." }] },
-      ...history.slice(0, -1).map(h => ({
-        role: h.role === "user" ? "user" : "model",
-        parts: [{ text: h.content }]
-      }))
-    ],
+  // Build the contents array for the API
+  const contents: any[] = [];
+
+  // Add chat history (skip leading 'model' messages)
+  let pastMessages = history.slice(0, -1);
+  while (pastMessages.length > 0 && pastMessages[0].role !== 'user') {
+    pastMessages.shift();
+  }
+  for (const msg of pastMessages) {
+    contents.push({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }]
+    });
+  }
+
+  // Add the current user message with full context
+  contents.push({
+    role: 'user',
+    parts: [{ text: fullPrompt }]
   });
 
-  const result = await chat.sendMessage(fullPrompt);
-  const response = await result.response;
-  return response.text();
+  // Make the direct REST call
+  const url = `https://generativelanguage.googleapis.com/v1beta/${modelName}:generateContent?key=${apiKey}`;
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents,
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 2048
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`Gemini API Error (${response.status}): ${errBody}`);
+  }
+
+  const result = await response.json();
+  
+  if (result.candidates && result.candidates.length > 0) {
+    const parts = result.candidates[0].content?.parts;
+    if (parts && parts.length > 0) {
+      return parts.map((p: any) => p.text).join('');
+    }
+  }
+
+  throw new Error("Empty response from Gemini API.");
 }

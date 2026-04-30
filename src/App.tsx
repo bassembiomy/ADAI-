@@ -6872,14 +6872,7 @@ const ADIA = () => {
     }
 
     // 8. Factory I/O Post-sync (Write Actuators)
-    if (factoryIOEnabled) {
-      const finalVars = variables.map(v => {
-        if (v.name in workingContext) return { ...v, currentValue: workingContext[v.name] };
-        return v;
-      });
-      await syncFactoryIO(finalVars);
-    }
-
+    // REMOVED: Combined into the start of the next tick for efficiency
   }, [states, junctions, transitions, variables, activeStates, stateTimers, simulationTime, tickMs, sampleOnTransitionOnly, addError, layers, resolveAutoStart, factoryIOEnabled, syncFactoryIO]);
 
 

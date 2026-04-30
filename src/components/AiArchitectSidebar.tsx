@@ -25,7 +25,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [showKeyInput, setShowKeyInput] = useState(!apiKey);
-  
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,14 +46,20 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
     try {
       const responseText = await getAiResponse(apiKey, newMessages, currentContext);
       const { message, actions } = processAiResponse(responseText);
-      
+
       setMessages([...newMessages, { role: 'model', content: message }]);
-      
+
       if (actions && actions.length > 0) {
         onExecuteActions(actions);
       }
     } catch (error: any) {
-      setMessages([...newMessages, { role: 'model', content: `Error: ${error.message}. Please check your API key and connection.` }]);
+      let errorMessage = error.message || "Unknown error";
+      if (errorMessage.includes('429') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+        errorMessage = "API Rate Limit Exceeded. You have hit the Gemini API quota limits (or the free tier is not available in your region). Please wait a minute and try again, or check your Google AI Studio billing details.";
+      } else {
+        errorMessage = `Error: ${errorMessage}. Please check your API key and connection.`;
+      }
+      setMessages([...newMessages, { role: 'model', content: errorMessage }]);
     } finally {
       setIsLoading(false);
     }
@@ -67,7 +73,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
   return (
     <>
       {/* Toggle Button (Float) - Always Visible */}
-      <button 
+      <button
         onClick={onToggle}
         className={`fixed right-0 top-1/2 -translate-y-1/2 p-2 bg-[#111] border border-[#333] border-r-0 rounded-l-xl text-indigo-400 hover:text-indigo-300 shadow-2xl z-[60] transition-all duration-300 ${isOpen ? 'mr-[400px]' : 'mr-0'}`}
       >
@@ -77,100 +83,99 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
         </div>
       </button>
 
-      <div 
+      <div
         className={`fixed right-0 top-0 h-screen bg-[#0f0f0f] border-l border-[#222] transition-all duration-300 z-50 flex flex-col shadow-2xl overflow-hidden ${isOpen ? 'w-[400px]' : 'w-0'}`}
       >
 
-      {isOpen && (
-        <>
-          {/* Header */}
-          <div className="h-16 flex items-center justify-between px-6 border-b border-[#222] bg-gradient-to-r from-indigo-950/20 to-transparent">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-500/20 rounded-lg text-indigo-400">
-                <Sparkles size={18} />
+        {isOpen && (
+          <>
+            {/* Header */}
+            <div className="h-16 flex items-center justify-between px-6 border-b border-[#222] bg-gradient-to-r from-indigo-950/20 to-transparent">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-500/20 rounded-lg text-indigo-400">
+                  <Sparkles size={18} />
+                </div>
+                <h2 className="text-sm font-bold text-white tracking-tight">AI Architect Assistant</h2>
               </div>
-              <h2 className="text-sm font-bold text-white tracking-tight">AI Architect Assistant</h2>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setShowKeyInput(!showKeyInput)} className="p-2 hover:bg-[#222] rounded-lg text-gray-400" title="API Settings">
-                <Key size={16} />
-              </button>
-              <button onClick={() => setMessages([{ role: 'model', content: "Chat cleared. How can I help?" }])} className="p-2 hover:bg-[#222] rounded-lg text-gray-400" title="Clear Chat">
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </div>
-
-          {/* API Key Input */}
-          {showKeyInput && (
-            <div className="p-4 bg-amber-500/5 border-b border-amber-500/20">
-              <label className="text-[10px] font-bold text-amber-500/70 uppercase px-1 mb-1 block">Gemini API Key Required</label>
-              <div className="flex gap-2">
-                <input 
-                  type="password" 
-                  value={apiKey} 
-                  onChange={(e) => setApiKey(e.target.value)}
-                  className="flex-1 bg-black border border-[#333] rounded-lg px-3 py-1.5 text-xs text-white focus:border-amber-500/50 outline-none"
-                  placeholder="Paste your API key..."
-                />
-                <button onClick={saveKey} className="bg-amber-600 hover:bg-amber-500 text-white px-3 rounded-lg text-xs font-bold transition-colors">
-                  Save
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowKeyInput(!showKeyInput)} className="p-2 hover:bg-[#222] rounded-lg text-gray-400" title="API Settings">
+                  <Key size={16} />
+                </button>
+                <button onClick={() => setMessages([{ role: 'model', content: "Chat cleared. How can I help?" }])} className="p-2 hover:bg-[#222] rounded-lg text-gray-400" title="Clear Chat">
+                  <Trash2 size={16} />
                 </button>
               </div>
-              <p className="text-[9px] text-gray-500 mt-2 px-1">Keys are stored locally in your browser. Get one at aistudio.google.com</p>
             </div>
-          )}
 
-          {/* Chat Area */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed ${
-                  m.role === 'user' 
-                    ? 'bg-indigo-600 text-white rounded-tr-none' 
-                    : 'bg-[#1a1a1a] border border-[#333] text-gray-200 rounded-tl-none'
-                }`}>
-                  <div className="flex items-center gap-2 mb-1 opacity-50">
-                    {m.role === 'user' ? <User size={10} /> : <Bot size={10} />}
-                    <span className="text-[9px] font-bold uppercase tracking-wider">{m.role === 'user' ? 'You' : 'Architect'}</span>
-                  </div>
-                  {m.content}
+            {/* API Key Input */}
+            {showKeyInput && (
+              <div className="p-4 bg-amber-500/5 border-b border-amber-500/20">
+                <label className="text-[10px] font-bold text-amber-500/70 uppercase px-1 mb-1 block">Gemini API Key Required</label>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    className="flex-1 bg-black border border-[#333] rounded-lg px-3 py-1.5 text-xs text-white focus:border-amber-500/50 outline-none"
+                    placeholder="Paste your API key..."
+                  />
+                  <button onClick={saveKey} className="bg-amber-600 hover:bg-amber-500 text-white px-3 rounded-lg text-xs font-bold transition-colors">
+                    Save
+                  </button>
                 </div>
-              </div>
-            ))}
-            {isLoading && (
-              <div className="flex justify-start animate-pulse">
-                <div className="bg-[#1a1a1a] border border-[#333] rounded-2xl rounded-tl-none p-3 flex gap-2 items-center">
-                  <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" />
-                  <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.2s]" />
-                  <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.4s]" />
-                </div>
+                <p className="text-[9px] text-gray-500 mt-2 px-1">Keys are stored locally in your browser. Get one at aistudio.google.com</p>
               </div>
             )}
-          </div>
 
-          {/* Input Area */}
-          <div className="p-4 bg-[#0a0a0a] border-t border-[#222]">
-            <div className="relative">
-              <textarea 
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                placeholder="Ask me to design something..."
-                className="w-full bg-[#161616] border border-[#333] rounded-xl pl-4 pr-12 py-3 text-xs text-white placeholder:text-gray-600 focus:border-indigo-500/50 outline-none resize-none h-20"
-              />
-              <button 
-                onClick={handleSend}
-                disabled={!input.trim() || isLoading || !apiKey}
-                className="absolute right-2 bottom-2 p-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-lg transition-all"
-              >
-                <Send size={16} />
-              </button>
+            {/* Chat Area */}
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+              {messages.map((m, i) => (
+                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed ${m.role === 'user'
+                      ? 'bg-indigo-600 text-white rounded-tr-none'
+                      : 'bg-[#1a1a1a] border border-[#333] text-gray-200 rounded-tl-none'
+                    }`}>
+                    <div className="flex items-center gap-2 mb-1 opacity-50">
+                      {m.role === 'user' ? <User size={10} /> : <Bot size={10} />}
+                      <span className="text-[9px] font-bold uppercase tracking-wider">{m.role === 'user' ? 'You' : 'Architect'}</span>
+                    </div>
+                    {m.content}
+                  </div>
+                </div>
+              ))}
+              {isLoading && (
+                <div className="flex justify-start animate-pulse">
+                  <div className="bg-[#1a1a1a] border border-[#333] rounded-2xl rounded-tl-none p-3 flex gap-2 items-center">
+                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" />
+                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.2s]" />
+                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.4s]" />
+                  </div>
+                </div>
+              )}
             </div>
-            <p className="text-[9px] text-center text-gray-600 mt-2">The AI Architect can create states, variables, and transitions based on your requirements.</p>
-          </div>
-        </>
-      )}
+
+            {/* Input Area */}
+            <div className="p-4 bg-[#0a0a0a] border-t border-[#222]">
+              <div className="relative">
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                  placeholder="Ask me to design something..."
+                  className="w-full bg-[#161616] border border-[#333] rounded-xl pl-4 pr-12 py-3 text-xs text-white placeholder:text-gray-600 focus:border-indigo-500/50 outline-none resize-none h-20"
+                />
+                <button
+                  onClick={handleSend}
+                  disabled={!input.trim() || isLoading || !apiKey}
+                  className="absolute right-2 bottom-2 p-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-lg transition-all"
+                >
+                  <Send size={16} />
+                </button>
+              </div>
+              <p className="text-[9px] text-center text-gray-600 mt-2">The AI Architect can create states, variables, and transitions based on your requirements.</p>
+            </div>
+          </>
+        )}
       </div>
     </>
   );

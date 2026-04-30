@@ -91,21 +91,28 @@ ipcMain.handle('fetch-factory-io-tags', async () => {
 });
 
 ipcMain.handle('sync-factory-io', async (event, { actuators }) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 1000); // 1s timeout
+
   try {
-    // 1. Write Actuators
+    // 1. Write Actuators (if any)
     if (actuators && actuators.length > 0) {
-      console.log('Sending actuators to Factory I/O:', actuators);
       await fetch('http://127.0.0.1:7410/api/tag/values', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(actuators)
+        body: JSON.stringify(actuators),
+        signal: controller.signal
       });
     }
 
-    // 2. Read all Tags
-    const response = await fetch('http://127.0.0.1:7410/api/tags');
-    return await response.json();
+    // 2. Read all Tags (Sensors)
+    const response = await fetch('http://127.0.0.1:7410/api/tags', { signal: controller.signal });
+    const data = await response.json();
+    
+    clearTimeout(timeoutId);
+    return data;
   } catch (error) {
+    clearTimeout(timeoutId);
     console.error('Factory I/O Sync Error:', error.message);
     return { error: error.message };
   }
