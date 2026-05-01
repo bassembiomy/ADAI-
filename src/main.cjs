@@ -13,6 +13,7 @@ function createWindow() {
     },
     title: "ADIA Engineering Suite",
     backgroundColor: "#0a0a0a",
+    icon: path.join(__dirname, '../icon.png'),
   });
 
   // In production, we load the bundled index.html from the dist folder

@@ -2,15 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { X, RefreshCw, Link2, Unlink, Wifi, WifiOff, Settings } from 'lucide-react';
 
 interface FactoryTag {
-  id: number;
+  id: string;
   name: string;
-  type: number; // 0 for Bool, 1 for Int, 2 for Float
+  type: string;
   value: any;
 }
 
 interface Mapping {
   adiaVarId: string;
-  factoryTagId: number;
+  factoryTagId: string | number;
   type: 'sensor' | 'actuator';
 }
 
@@ -52,7 +52,7 @@ export const FactoryIOGateway: React.FC<FactoryIOGatewayProps> = ({
 
   if (!isOpen) return null;
 
-  const addMapping = (adiaVarId: string, factoryTagId: number, type: 'sensor' | 'actuator') => {
+  const addMapping = (adiaVarId: string, factoryTagId: string | number, type: 'sensor' | 'actuator') => {
     setMapping([...mapping, { adiaVarId, factoryTagId, type }]);
   };
 
@@ -180,7 +180,7 @@ export const FactoryIOGateway: React.FC<FactoryIOGatewayProps> = ({
             <button 
               onClick={() => {
                 const varId = (document.getElementById('adia-var') as HTMLSelectElement).value;
-                const tagId = parseInt((document.getElementById('factory-tag') as HTMLSelectElement).value);
+                const tagId = (document.getElementById('factory-tag') as HTMLSelectElement).value;
                 const type = (document.getElementById('link-type') as HTMLSelectElement).value as 'sensor' | 'actuator';
                 if (varId && tagId) addMapping(varId, tagId, type);
               }}

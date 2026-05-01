@@ -171,6 +171,16 @@ const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
       setTimeout(onComplete, 1200);
     }, 5500);
 
+    try {
+      const synth = window.speechSynthesis;
+      const utterance = new SpeechSynthesisUtterance("ADIA, go beyond.");
+      utterance.pitch = 1;
+      utterance.rate = 0.9;
+      synth.speak(utterance);
+    } catch (e) {
+      console.error("Speech synthesis failed", e);
+    }
+
     return () => clearTimeout(timer);
   }, [onComplete]);
 
@@ -191,30 +201,28 @@ const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
           {/* Main Logo SVG */}
           <div className="relative z-10 transform scale-[1.6]">
             <svg width="120" height="120" viewBox="0 0 100 100" fill="none">
-              {/* Outer Hexagon with Draw Animation */}
-              <path
-                d="M50 5 L90 25 L90 75 L50 95 L10 75 L10 25 Z"
-                stroke="#c9a86c"
-                strokeWidth="1.5"
-                strokeLinejoin="round"
-                className="animate-draw-path"
-              />
+              
+              {/* Outer Rotating Gear/Network Ring (Factory & Control) */}
+              <g className="animate-spin-slow">
+                <circle cx="50" cy="50" r="35" stroke="#c9a86c" strokeWidth="0.5" strokeDasharray="4 4" />
+                <path d="M50 10 L50 15 M90 50 L85 50 M50 90 L50 85 M10 50 L15 50 M22 22 L26 26 M78 22 L74 26 M78 78 L74 74 M22 78 L26 74" stroke="#c9a86c" strokeWidth="2" strokeLinecap="round" />
+              </g>
 
-              {/* Inner Scanning Hexagon */}
-              <path
-                d="M50 15 L80 30 L80 70 L50 85 L20 70 L20 30 Z"
-                stroke="#c9a86c"
-                strokeWidth="0.5"
-                opacity="0.2"
-                className="animate-pulse"
-              />
+              {/* Inner Rotating Ring (Data flow) */}
+              <circle cx="50" cy="50" r="25" stroke="#c9a86c" strokeWidth="1" strokeDasharray="15 10" className="animate-spin-reverse" />
 
-              {/* Core Gem */}
-              <path
-                d="M40 45 L50 35 L60 45 L60 55 L50 65 L40 55 Z"
-                fill="#c9a86c"
-                className="animate-glow-cycle"
-              />
+              {/* AI Core / Microchip */}
+              <rect x="40" y="40" width="20" height="20" rx="3" fill="none" stroke="#c9a86c" strokeWidth="1.5" className="animate-glow-cycle" />
+              
+              {/* Core Processor Lines */}
+              <path d="M44 40 V35 M50 40 V35 M56 40 V35 M44 60 V65 M50 60 V65 M56 60 V65 M40 44 H35 M40 50 H35 M40 56 H35 M60 44 H65 M60 50 H65 M60 56 H65" stroke="#c9a86c" strokeWidth="1" className="animate-pulse" />
+
+              {/* Central Neural Node */}
+              <circle cx="50" cy="50" r="3" fill="#c9a86c" className="animate-ping-slow" />
+              <circle cx="50" cy="50" r="3" fill="#c9a86c" />
+
+              {/* Connecting Traces (State machine & Data) */}
+              <path d="M50 15 L50 35 M85 50 L65 50 M50 85 L50 65 M15 50 L35 50" stroke="#c9a86c" strokeWidth="1" strokeDasharray="5 5" className="animate-data-pulse" />
 
               {/* Scanning Beam */}
               <rect x="0" y="0" width="100" height="2" fill="url(#beamGradient)" className="animate-scan" />
@@ -242,12 +250,11 @@ const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
                 {char}
               </span>
             ))}
-            <span className="text-7xl font-black text-[#c9a86c] animate-reveal-letter" style={{ animationDelay: '1.5s' }}>.</span>
           </div>
 
-          <div className="h-8 relative overflow-hidden flex items-center justify-center">
+          <div className="h-10 relative overflow-hidden flex items-center justify-center mt-2">
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#c9a86c]/20 to-transparent animate-shimmer" />
-            <p className="text-[#c9a86c] text-[10px] font-bold uppercase tracking-[1em] opacity-0 animate-fade-in-up">
+            <p className="text-[#c9a86c] text-xl font-bold uppercase tracking-[0.6em] opacity-0 animate-fade-in-up ml-[0.6em]">
               Go Beyond
             </p>
           </div>
@@ -304,6 +311,17 @@ const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
           0%, 100% { opacity: 0.05; }
           50% { opacity: 0.1; }
         }
+        @keyframes spin-slow {
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes spin-reverse {
+          100% { transform: rotate(-360deg); }
+        }
+        @keyframes data-pulse {
+          0% { stroke-dashoffset: 20; opacity: 0; }
+          50% { opacity: 1; }
+          100% { stroke-dashoffset: 0; opacity: 0; }
+        }
         .animate-draw-path { animation: draw-path 3s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
         .animate-scan { animation: scan 3s linear infinite; }
         .animate-reveal-letter { animation: reveal-letter 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; opacity: 0; }
@@ -313,6 +331,9 @@ const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
         .animate-loading-slide { animation: loading-slide 2.5s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
         .animate-ping-slow { animation: ping-slow 4s cubic-bezier(0, 0, 0.2, 1) infinite; }
         .animate-pulse-slow { animation: pulse-slow 5s ease-in-out infinite; }
+        .animate-spin-slow { animation: spin-slow 12s linear infinite; transform-origin: 50px 50px; }
+        .animate-spin-reverse { animation: spin-reverse 10s linear infinite; transform-origin: 50px 50px; }
+        .animate-data-pulse { animation: data-pulse 2s linear infinite; }
       `}</style>
     </div>
   );
@@ -5343,7 +5364,7 @@ const ADIA = () => {
 
   // FACTORY I/O GATEWAY STATE
   const [showFactoryIOGateway, setShowFactoryIOGateway] = useState(false);
-  const [factoryIOMapping, setFactoryIOMapping] = useState<{ adiaVarId: string, factoryTagId: number, type: 'sensor' | 'actuator' }[]>([]);
+  const [factoryIOMapping, setFactoryIOMapping] = useState<{ adiaVarId: string, factoryTagId: string | number, type: 'sensor' | 'actuator' }[]>([]);
   const [factoryIOEnabled, setFactoryIOEnabled] = useState(true);
   const [factoryIOStatus, setFactoryIOStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
 
@@ -6407,7 +6428,11 @@ const ADIA = () => {
         .filter(m => m.type === 'actuator')
         .map(m => {
           const v = currentVars.find(cv => cv.id === m.adiaVarId);
-          return { id: m.factoryTagId, value: v ? v.currentValue : 0 };
+          let val = v ? v.currentValue : 0;
+          if (v && v.type === 'bool') {
+            val = Boolean(val);
+          }
+          return { id: m.factoryTagId, value: val };
         });
 
       // 2. Sync with Backend
