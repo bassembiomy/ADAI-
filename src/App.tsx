@@ -4453,6 +4453,17 @@ const HELP_DATA: Record<string, {
           { name: "Convection", usage: "Heat transfer to a fluid. Parameters: Surface Area and Heat Transfer Coefficient." },
           { name: "Radiation", usage: "Heat transfer via electromagnetic waves. Parameter: Emissivity and Area." }
         ]
+      },
+      {
+        id: "vlab_labs",
+        title: "Learning Models",
+        description: "Pre-configured physical experiments and industry templates.",
+        icon: "GraduationCap",
+        components: [
+          { name: "Air Fryer Model", usage: "Complete multi-domain simulation of forced convection heating. Demonstrates interaction between AC power, thermal resistance, and fluid dynamics." },
+          { name: "Heat Transfer", usage: "Detailed study of conductive and convective cooling in enclosed volumes." },
+          { name: "Air Circulation", usage: "Models pneumatic pressure sources (fans) and volume chambers to study flow rates and pressure drops." }
+        ]
       }
     ]
   },

@@ -6,7 +6,7 @@ import {
   Sigma, BarChart, ArrowUp, Grid, RotateCw, RefreshCcw, Hash, TrendingUp, Monitor, Box, Download,
   LogIn, LogOut, ChevronLeft, ChevronRight, Zap, Settings, ZapOff, Cpu, Layers, Wind, Filter, Eye
 } from 'lucide-react';
-import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
+import { LineChart, Line, AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import { XPort } from '../../engine/xbridges/types';
 
 export const XBlockNode = ({ data, id, selected }: any) => {
@@ -182,129 +182,144 @@ export const XBlockNode = ({ data, id, selected }: any) => {
 
   return (
     <div 
-      className={`relative rounded-lg shadow-2xl transition-all duration-300 border-2 ${selected ? 'ring-2 ring-white/20' : ''}`}
+      className={`relative rounded-xl overflow-hidden transition-all duration-500 border-2 ${selected ? 'ring-4 ring-white/10 scale-105 z-50' : 'hover:border-white/20'}`}
       style={{ 
-        background: '#1a1a1a',
-        borderColor: color,
-        minWidth: data.type === 'Scope' ? 240 : 120,
-        boxShadow: selected ? `0 0 20px ${color}44` : '0 10px 30px -10px rgba(0,0,0,0.5)'
+        background: 'rgba(20, 20, 20, 0.8)',
+        backdropFilter: 'blur(20px)',
+        borderColor: selected ? color : 'rgba(255,255,255,0.05)',
+        minWidth: data.type === 'Scope' ? 260 : 130,
+        boxShadow: selected 
+          ? `0 20px 50px -10px rgba(0,0,0,0.8), 0 0 30px ${color}33` 
+          : '0 10px 30px -10px rgba(0,0,0,0.5)'
       }}
     >
-      <NodeResizer minWidth={100} minHeight={40} isVisible={selected} lineStyle={{ borderColor: color }} handleStyle={{ background: color, border: 'none' }} />
+      <NodeResizer minWidth={100} minHeight={40} isVisible={selected} lineStyle={{ borderColor: color }} handleStyle={{ background: color, border: 'none', borderRadius: '4px' }} />
       
-      {/* Header */}
+      {/* Header with Glowing Accent */}
       <div 
-        className="px-3 py-2 border-b border-white/5 flex items-center justify-between rounded-t-[6px]"
-        style={{ background: `linear-gradient(to right, ${color}22, transparent)` }}
+        className="px-4 py-2.5 border-b border-white/5 flex items-center justify-between relative overflow-hidden"
+        style={{ background: `linear-gradient(to right, ${color}15, transparent)` }}
       >
-        <div className="flex items-center gap-2">
-          <div style={{ color }}>{getIcon(data.type)}</div>
-          <span className="text-[11px] font-black text-white uppercase tracking-widest truncate max-w-[120px]">
-            {data.params?.smVarId ? `[${data.label || data.type}]` : (data.label || data.type)}
-          </span>
+        <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-right from-white/10 to-transparent" />
+        <div className="flex items-center gap-2.5 z-10">
+          <div className="p-1.5 rounded-lg bg-black/40 shadow-inner" style={{ color }}>
+            {getIcon(data.type)}
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[9px] font-black text-white/90 uppercase tracking-[0.2em] leading-tight">
+              {data.label || data.type}
+            </span>
+            {data.params?.smVarId && (
+              <span className="text-[7px] text-[#c9a86c] font-bold uppercase tracking-widest mt-0.5">
+                Linked: {data.params.smVarId}
+              </span>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        
+        <div className="flex items-center gap-1 z-10">
           {data.type === 'Scope' && (
-            <>
+            <div className="flex bg-black/30 p-0.5 rounded-lg border border-white/5">
               <button 
                 onClick={(e) => { e.stopPropagation(); data.onOpenScope && data.onOpenScope(id); }}
-                className="p-1 hover:bg-white/10 rounded transition-colors text-blue-400"
-                title="Expand Scope"
+                className="p-1.5 hover:bg-white/10 rounded-md transition-all text-blue-400/70 hover:text-blue-400"
+                title="Full Screen Scope"
               >
                 <Maximize2 size={12} />
               </button>
               <button 
                 onClick={(e) => { e.stopPropagation(); downloadCSV(); }}
-                className="p-1 hover:bg-white/10 rounded transition-colors text-emerald-400"
-                title="Download CSV"
+                className="p-1.5 hover:bg-white/10 rounded-md transition-all text-emerald-400/70 hover:text-emerald-400"
+                title="Export Data"
               >
                 <Download size={12} />
               </button>
-            </>
-          )}
-          {(data.type === 'PID_CONTROLLER' || data.type === 'PID_BASIC') && (
-            <div className="px-1.5 py-0.5 rounded-full bg-black/30 border border-white/10 text-[8px] font-black text-[#c9a86c]">
-              {data.params?.mode || 'PID'}
             </div>
           )}
         </div>
       </div>
 
-      <div className="flex p-2 gap-4">
-        {/* Inputs */}
-        <div className="flex flex-col flex-1 justify-center">
+      <div className="flex p-3 gap-5 relative">
+        {/* Decorative Grid Overlay for Node Body */}
+        <div className="absolute inset-0 opacity-[0.02] pointer-events-none" 
+             style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '10px 10px' }} />
+
+        {/* Inputs Column */}
+        <div className="flex flex-col flex-1 justify-center gap-2 z-10">
           {allPorts.filter((p: XPort) => p.position === 'left').map(renderPort)}
         </div>
 
-        {/* Center Content / Parameters Preview */}
-        <div className="flex flex-col items-center justify-center py-2 min-w-[30px] flex-[3]">
+        {/* Dynamic Center Stage */}
+        <div className="flex flex-col items-center justify-center py-1 min-w-[40px] flex-[4] z-10">
           {data.type === 'Scope' ? (
-            <div className="w-full h-[80px] bg-black/40 rounded border border-white/5 p-1">
+            <div className="w-full h-[90px] bg-black/60 rounded-xl border border-white/5 p-2 shadow-inner group/scope overflow-hidden relative">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(16,185,129,0.1),transparent)]" />
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data.state?.history || []}>
+                <AreaChart data={data.state?.history?.slice(-50).map((v: any, i: number) => ({ i, v: typeof v === 'number' ? v : 0 })) || []}>
+                  <defs>
+                    <linearGradient id={`grad-${id}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
                   <YAxis hide domain={['auto', 'auto']} />
-                  {Array.from({ length: data.params?.numSignals || 1 }, (_, i) => (
-                    <Line 
-                      key={i}
-                      type="monotone" 
-                      dataKey={`y${i+1}`} 
-                      stroke={getSignalColor(i)} 
-                      strokeWidth={2} 
-                      dot={false} 
-                      isAnimationActive={false}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          ) : data.type === 'MPC_CONTROLLER' ? (
-            <div className="w-[120px] h-[60px] bg-black/40 rounded border border-white/5 p-1">
-              <div className="text-[7px] text-gray-500 uppercase font-black mb-1">Prediction Horizon</div>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={(data.outputs?.[1]?.value || []).map((v: any, i: number) => ({ i, v }))}>
-                  <YAxis hide domain={['auto', 'auto']} />
-                  <Line 
+                  <Area 
                     type="monotone" 
                     dataKey="v" 
-                    stroke="#c9a86c" 
-                    strokeWidth={1.5} 
-                    dot={false} 
+                    stroke="#10b981" 
+                    strokeWidth={2} 
+                    fillOpacity={1} 
+                    fill={`url(#grad-${id})`}
                     isAnimationActive={false}
+                    className="drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]"
                   />
-                </LineChart>
+                </AreaChart>
               </ResponsiveContainer>
+              <div className="absolute top-1 right-2 text-[6px] font-black text-emerald-500/50 uppercase tracking-widest animate-pulse">Live Trace</div>
+            </div>
+          ) : data.type === 'Subsystem' ? (
+            <div className="flex flex-col items-center group/sub cursor-pointer">
+              <div className="p-3 rounded-2xl bg-white/5 border border-white/10 group-hover/sub:bg-[#c9a86c]/10 group-hover/sub:border-[#c9a86c]/30 transition-all duration-500 shadow-xl">
+                <Layers size={24} className="text-[#c9a86c] drop-shadow-[0_0_10px_rgba(201,168,108,0.3)]" />
+              </div>
+              <span className="text-[7px] font-black text-gray-500 uppercase tracking-widest mt-2 group-hover/sub:text-[#c9a86c]">Double-click to Enter</span>
             </div>
           ) : (
-            <div className="flex flex-col items-center opacity-100 pointer-events-none">
-              <div style={{ color }} className="scale-125 mb-1">{getIcon(data.type)}</div>
-              {data.type === 'Constant' && <span className="text-[10px] font-bold text-white/50">{data.params?.value}</span>}
-              {data.type === 'GAIN' && <span className="text-[10px] font-bold text-white/50">K={data.params?.gain}</span>}
-              {data.type === 'DATA_TYPE_CONVERSION' && <span className="text-[10px] font-bold text-emerald-400/70">{data.params?.output_type}</span>}
-              {data.type === 'NUMERIC_REPRESENTATION' && (
-                <div className="flex flex-col items-center">
-                  <span className="text-[8px] font-black text-white/30 uppercase">Quant Error</span>
-                  <span className="text-[10px] font-mono font-bold text-amber-500">
-                    {(data.outputs?.[1]?.value || 0).toExponential(2)}
-                  </span>
-                </div>
-              )}
+            <div className="flex flex-col items-center">
+               <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 mb-2 shadow-inner">
+                  <div style={{ color }} className="scale-150 drop-shadow-[0_0_8px_currentColor]">{getIcon(data.type)}</div>
+               </div>
+               {data.type === 'Constant' && (
+                 <div className="px-2 py-0.5 rounded-full bg-black/40 border border-white/5 text-[10px] font-mono font-bold text-white/70 tabular-nums">
+                   {data.params?.value}
+                 </div>
+               )}
+               {data.type === 'GAIN' && (
+                 <div className="flex items-center gap-1.5 text-[10px] font-black text-white/40 uppercase tracking-tighter">
+                   <span>GAIN</span>
+                   <span className="text-[#c9a86c] font-mono">{data.params?.gain}</span>
+                 </div>
+               )}
             </div>
           )}
         </div>
 
-        {/* Outputs */}
-        <div className="flex flex-col flex-1 justify-center items-end">
+        {/* Outputs Column */}
+        <div className="flex flex-col flex-1 justify-center items-end gap-2 z-10">
           {allPorts.filter((p: XPort) => p.position === 'right').map(renderPort)}
         </div>
       </div>
 
-      {/* Top/Bottom Ports */}
-      <div className="absolute top-0 left-0 w-full flex justify-center -translate-y-full pb-1">
+      {/* Top/Bottom Port Containers */}
+      <div className="absolute top-0 left-0 w-full flex justify-center -translate-y-1/2 px-10 gap-4">
         {allPorts.filter((p: XPort) => p.position === 'top').map(renderPort)}
       </div>
-      <div className="absolute bottom-0 left-0 w-full flex justify-center translate-y-full pt-1">
+      <div className="absolute bottom-0 left-0 w-full flex justify-center translate-y-1/2 px-10 gap-4">
         {allPorts.filter((p: XPort) => p.position === 'bottom').map(renderPort)}
       </div>
+      
+      {/* Selection Glow Footer */}
+      {selected && <div className="absolute bottom-0 left-0 w-full h-[2px]" style={{ background: `linear-gradient(to right, transparent, ${color}, transparent)` }} />}
     </div>
   );
 };

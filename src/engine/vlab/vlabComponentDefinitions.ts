@@ -655,6 +655,12 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'None', through: 'None',
     description: 'A discrete-time Proportional-Integral controller with anti-windup. Essential for closed-loop regulation of physical systems.'
   },
+  ps_pid_ctrl: {
+    equations: ['u(k) = Kp*e(k) + Ki*sum(e) + Kd*de/dt'],
+    latex: ['U(s) = (K_p + \\frac{K_i}{s} + \\frac{K_d s}{\\frac{K_d}{N}s + 1}) E(s)'],
+    across: 'None', through: 'None',
+    description: 'A discrete-time Proportional-Integral-Derivative controller with filtered derivative and anti-windup. Provides superior dynamic response for complex industrial processes.'
+  },
   ps_lpf: {
     equations: ['y(k) = alpha*u(k) + (1-alpha)*y(k-1)'],
     latex: ['Y(s) = \\frac{1}{Ts+1} U(s)'],

@@ -14,7 +14,7 @@ import ReactFlow, {
   MiniMap
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Play, Pause, Square, Save, Trash2, Box, Network, MousePointer2, Settings2, ChevronDown, ChevronRight, Search, Triangle } from 'lucide-react';
+import { Play, Pause, Square, Save, Trash2, Box, Network, MousePointer2, Settings2, ChevronDown, ChevronRight, Search, Triangle, Layers } from 'lucide-react';
 import { XBRIDGES_CATEGORIES, BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import { XbridgesEngine } from '../../engine/xbridges/XbridgesEngine';
 import { Solvers } from '../../engine/xbridges/Solvers';
@@ -547,45 +547,71 @@ export const XbridgesWorkspace: React.FC<{
         </div>
       )}
       {/* Sidebar Library */}
-      <div className={`${isLibCollapsed ? 'w-12' : 'w-64'} bg-[#141414] border-r border-[#222] flex flex-col shadow-sm z-10 transition-all duration-300 relative`}>
-        <div className="p-4 border-b border-[#222] flex items-center justify-between overflow-hidden">
+      <div className={`${isLibCollapsed ? 'w-12' : 'w-72'} bg-[#0d0d0d] border-r border-white/5 flex flex-col shadow-[10px_0_30px_rgba(0,0,0,0.5)] z-40 transition-all duration-500 ease-in-out relative group`}>
+        {/* Cinematic Header */}
+        <div className="p-5 border-b border-white/5 bg-gradient-to-br from-white/[0.03] to-transparent flex items-center justify-between overflow-hidden">
           {!isLibCollapsed && (
-            <div className="flex items-center gap-2 animate-in fade-in duration-300">
-              <Network size={18} className="text-[#c9a86c]" />
-              <span className="text-sm font-black uppercase tracking-wider text-[#c9a86c]">X-Bridges</span>
+            <div className="flex flex-col animate-in fade-in slide-in-from-left-4 duration-500">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-[#c9a86c]/20 shadow-[0_0_15px_rgba(201,168,108,0.2)]">
+                  <Network size={20} className="text-[#c9a86c]" />
+                </div>
+                <span className="text-sm font-black uppercase tracking-[0.3em] text-white/90 drop-shadow-sm">X-Bridges</span>
+              </div>
+              <span className="text-[8px] text-[#c9a86c]/60 font-black uppercase tracking-widest mt-1 ml-9">Advanced Logic Suite</span>
             </div>
           )}
           <button
             onClick={() => setIsLibCollapsed(!isLibCollapsed)}
-            className={`p-1.5 rounded bg-[#1a1a1a] border border-[#333] text-[#c9a86c] hover:bg-[#c9a86c]/10 transition-all ${isLibCollapsed ? 'w-full' : ''}`}
+            className={`p-2 rounded-xl bg-white/5 border border-white/10 text-[#c9a86c] hover:bg-[#c9a86c]/10 hover:border-[#c9a86c]/30 transition-all ${isLibCollapsed ? 'mx-auto' : ''}`}
             title={isLibCollapsed ? "Expand Library" : "Collapse Library"}
           >
-            <Triangle size={12} className={`transition-transform duration-300 ${isLibCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
+            <Triangle size={12} className={`transition-transform duration-500 ${isLibCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
           </button>
         </div>
-        <div className={`flex-1 overflow-y-auto p-2 space-y-1 ${isLibCollapsed ? 'hidden' : 'block'}`}>
+
+        {/* Search Bar */}
+        {!isLibCollapsed && (
+          <div className="px-4 py-3 border-b border-white/5 bg-white/[0.01]">
+            <div className="relative group">
+              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-[#c9a86c] transition-colors" />
+              <input 
+                placeholder="Search Logic..."
+                className="w-full bg-white/5 border border-white/5 rounded-xl py-2 pl-9 pr-4 text-[10px] font-bold text-white placeholder-gray-700 focus:outline-none focus:border-[#c9a86c]/30 focus:bg-white/[0.08] transition-all"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className={`flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar ${isLibCollapsed ? 'hidden' : 'block'}`}>
           {XBRIDGES_CATEGORIES.map((cat) => {
             const isExpanded = !!expandedCategories[cat.name];
             return (
               <div key={cat.name} className="flex flex-col">
                 <button
                   onClick={() => toggleCategory(cat.name)}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-[10px] font-bold text-emerald-500 uppercase tracking-widest hover:bg-emerald-500/5 transition-colors text-left"
+                  className={`flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isExpanded ? 'bg-white/[0.05] text-[#c9a86c]' : 'text-gray-500 hover:bg-white/[0.03] hover:text-gray-300'}`}
                 >
-                  {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                  {cat.name}
+                  <div className="flex items-center gap-3">
+                    <div className={`w-1 h-1 rounded-full ${isExpanded ? 'bg-[#c9a86c]' : 'bg-gray-700'}`} />
+                    {cat.name}
+                  </div>
+                  {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </button>
 
                 {isExpanded && (
-                  <div className="flex flex-col gap-0.5 pl-4 py-1">
+                  <div className="flex flex-col gap-1 pl-4 pr-1 py-2 animate-in slide-in-from-top-2 duration-300">
                     {cat.blocks.map(b => (
                       <div
                         key={b.type}
                         draggable
                         onDragStart={(e) => onDragStart(e, b.type)}
-                        className="flex items-center gap-3 px-2 py-1.5 rounded hover:bg-[#1a1a1a] cursor-grab active:cursor-grabbing transition-all group"
+                        className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 cursor-grab active:cursor-grabbing transition-all group border border-transparent hover:border-white/5"
                       >
-                        <span className="text-xs font-medium text-gray-400 group-hover:text-emerald-400 transition-colors">
+                        <div className="w-1.5 h-1.5 rounded-full bg-gray-800 group-hover:bg-[#c9a86c]/40 transition-colors" />
+                        <span className="text-xs font-bold text-gray-500 group-hover:text-white/90 transition-colors">
                           {b.label}
                         </span>
                       </div>
@@ -600,130 +626,125 @@ export const XbridgesWorkspace: React.FC<{
 
       {/* Main Canvas Area */}
       <div className="flex-1 relative flex flex-col">
-        {/* Top Toolbar for Solver Configuration */}
-        <div className="h-12 bg-[#1a1a1a] border-b border-[#222] flex items-center justify-between px-4 z-20 shadow-md">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setIsSimulating(!isSimulating)}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded text-sm font-bold shadow-sm transition-colors ${isSimulating
-                  ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30 border border-red-500/50'
-                  : 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 border border-emerald-500/50'
-                }`}
-            >
-              {isSimulating ? <Square size={14} className="fill-current" /> : <Play size={14} className="fill-current" />}
-              {isSimulating ? 'Stop Simulation' : 'Run Simulation'}
-            </button>
-
-            {isSimulating && (
-              <div className="flex items-center gap-2 animate-in slide-in-from-left-2 duration-300">
-                <button
-                  onClick={() => setIsPaused(!isPaused)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold transition-all ${isPaused
-                      ? 'bg-amber-500/20 text-amber-500 border border-amber-500/50'
-                      : 'bg-white/5 text-white/50 hover:bg-white/10 border border-white/10'
-                    }`}
-                  title={isPaused ? "Resume Simulation" : "Pause Simulation"}
-                >
-                  {isPaused ? <Play size={12} fill="currentColor" /> : <Pause size={12} fill="currentColor" />}
-                  {isPaused ? 'Resume' : 'Pause'}
-                </button>
-
-                <button
-                  onClick={stepSimulation}
-                  disabled={!isPaused}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold transition-all ${isPaused
-                      ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30'
-                      : 'opacity-30 cursor-not-allowed text-white/30 border border-white/5'
-                    }`}
-                  title="Advance by one time step"
-                >
-                  <ChevronRight size={14} />
-                  Step
-                </button>
-              </div>
-            )}
-
-            <div className="h-6 w-px bg-[#333] mx-2" />
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              <Settings2 size={14} />
-              <span>Solver:</span>
-              <select
-                value={solverType}
-                onChange={e => setSolverType(e.target.value as any)}
-                disabled={isSimulating}
-                className="bg-[#0a0a0a] border border-[#333] rounded px-2 py-1 text-gray-300 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+        {/* Premium Top Toolbar */}
+        <div className="h-16 bg-[#0a0a0a]/80 backdrop-blur-2xl border-b border-white/5 flex items-center justify-between px-6 z-30 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center bg-white/5 p-1 rounded-2xl border border-white/5 shadow-inner">
+              <button
+                onClick={() => setIsSimulating(!isSimulating)}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition-all duration-300 ${isSimulating
+                    ? 'bg-rose-500 text-white shadow-[0_0_20px_rgba(244,63,94,0.4)] hover:bg-rose-600 scale-95'
+                    : 'bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:bg-emerald-600 hover:scale-105 active:scale-95'
+                  }`}
               >
-                <option value="ode4">ODE4 (Runge-Kutta)</option>
-                <option value="euler">ODE1 (Euler)</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              <span>Step Size (s):</span>
-              <input
-                type="text"
-                value={stepSizeInput}
-                onChange={e => {
-                  const raw = e.target.value;
-                  const normalized = normalizeNumerals(raw).replace(/[^0-9.]/g, '');
-                  setStepSizeInput(normalized);
+                {isSimulating ? <Square size={14} className="fill-current" /> : <Play size={14} className="fill-current" />}
+                {isSimulating ? 'Stop Engine' : 'Run Engine'}
+              </button>
 
-                  if (!tickMs) {
-                    const num = Number(normalized);
-                    if (!isNaN(num) && normalized !== '' && normalized !== '.') {
-                      setFixedStep(num);
-                    }
-                  }
-                }}
-                onBlur={() => {
-                  if (tickMs) {
-                    setStepSizeInput(String(tickMs / 1000));
-                  } else {
-                    const num = Number(stepSizeInput);
-                    if (isNaN(num) || num <= 0) {
-                      setStepSizeInput(String(fixedStep));
-                    }
-                  }
-                }}
-                disabled={!!tickMs}
-                className={`w-16 bg-[#0a0a0a] border border-[#333] rounded px-2 py-1 text-center font-mono focus:outline-none focus:border-emerald-500 ${tickMs ? 'text-amber-500 opacity-80 cursor-not-allowed' : 'text-gray-300'}`}
-                title={tickMs ? "Synced with State Machine Tick Rate" : "Set fixed step size in seconds"}
-              />
-              {tickMs && <span className="text-[10px] text-amber-500/70 ml-1">Synced</span>}
+              {isSimulating && (
+                <div className="flex items-center gap-1 ml-1 animate-in zoom-in duration-500">
+                  <button
+                    onClick={() => setIsPaused(!isPaused)}
+                    className={`p-2.5 rounded-xl transition-all ${isPaused
+                        ? 'bg-amber-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.3)]'
+                        : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                      }`}
+                    title={isPaused ? "Resume" : "Pause"}
+                  >
+                    {isPaused ? <Play size={16} fill="currentColor" /> : <Pause size={16} fill="currentColor" />}
+                  </button>
+
+                  <button
+                    onClick={stepSimulation}
+                    disabled={!isPaused}
+                    className={`p-2.5 rounded-xl transition-all ${isPaused
+                        ? 'text-emerald-500 hover:bg-emerald-500/10'
+                        : 'opacity-20 cursor-not-allowed text-gray-600'
+                      }`}
+                    title="Single Step"
+                  >
+                    <ChevronRight size={18} strokeWidth={3} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="h-8 w-px bg-white/5" />
+            
+            <div className="flex items-center gap-4">
+              <div className="flex flex-col">
+                <span className="text-[8px] text-gray-600 font-black uppercase tracking-widest mb-1">Solver Method</span>
+                <div className="relative group">
+                  <Settings2 size={10} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#c9a86c]" />
+                  <select
+                    value={solverType}
+                    onChange={e => setSolverType(e.target.value as any)}
+                    disabled={isSimulating}
+                    className="bg-white/5 border border-white/5 rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-bold text-gray-300 focus:outline-none focus:border-[#c9a86c]/30 appearance-none cursor-pointer hover:bg-white/[0.08] transition-all disabled:opacity-50"
+                  >
+                    <option value="rk4">Fixed-Step RK4</option>
+                    <option value="euler">Explicit Euler</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-[8px] text-gray-600 font-black uppercase tracking-widest mb-1">Time Step (Δt)</span>
+                <div className="relative group">
+                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-500 text-[8px] font-bold italic">s</div>
+                  <input
+                    type="text"
+                    value={stepSizeInput}
+                    onChange={e => setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}
+                    disabled={!!tickMs}
+                    className={`w-20 bg-white/5 border border-white/5 rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-mono font-bold focus:outline-none focus:border-emerald-500 transition-all ${tickMs ? 'text-amber-500 opacity-80 cursor-not-allowed' : 'text-gray-300 hover:bg-white/[0.08]'}`}
+                  />
+                </div>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            {onBack && (
-              <button
-                onClick={() => {
-                  if (onSave) onSave(nodes, edges);
-                  onBack();
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50 transition-colors mr-2"
-              >
-                <Save size={14} />
-                Save & Close
-              </button>
-            )}
-            <div className="text-xs text-emerald-500/80 font-mono flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${isSimulating ? 'bg-emerald-500 animate-pulse' : 'bg-gray-600'}`} />
-              {isSimulating ? `T = ${timeRef.current.toFixed(4)}s` : 'STOPPED'}
+
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col items-end">
+              <span className="text-[8px] text-gray-600 font-black uppercase tracking-widest mb-1">Engine Status</span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
+                  <div className={`w-2 h-2 rounded-full ${isSimulating ? 'bg-emerald-500 shadow-[0_0_10px_#10b981] animate-pulse' : 'bg-gray-700'}`} />
+                  <span className={`text-[10px] font-mono font-bold tabular-nums ${isSimulating ? 'text-emerald-500' : 'text-gray-500'}`}>
+                    {isSimulating ? `T = ${timeRef.current.toFixed(4)}s` : 'IDLE'}
+                  </span>
+                </div>
+                {onBack && (
+                  <button
+                    onClick={() => { if (onSave) onSave(nodes, edges); onBack(); }}
+                    className="p-2.5 rounded-xl bg-[#c9a86c]/10 text-[#c9a86c] hover:bg-[#c9a86c]/20 border border-[#c9a86c]/20 transition-all"
+                    title="Save & Exit"
+                  >
+                    <Save size={18} />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Breadcrumb Navigation */}
-        <div className="h-8 bg-[#141414] border-b border-[#222] flex items-center px-4 gap-2 z-20">
+        {/* Path Navigation (Breadcrumbs) */}
+        <div className="h-10 bg-[#0d0d0d] border-b border-white/5 flex items-center px-6 gap-3 z-20">
+          <div className="p-1 rounded bg-white/5">
+            <Layers size={12} className="text-gray-600" />
+          </div>
           {viewPath.map((pathId, idx) => {
-            const nodeName = pathId === 'root' ? 'Project' : (nodes.find(n => n.id === pathId)?.data.params.name || pathId);
+            const nodeName = pathId === 'root' ? 'ROOT PROJECT' : (nodes.find(n => n.id === pathId)?.data.params.name || pathId);
+            const isLast = idx === viewPath.length - 1;
             return (
               <React.Fragment key={pathId}>
                 <button
                   onClick={() => setViewPath(viewPath.slice(0, idx + 1))}
-                  className={`text-[10px] font-bold tracking-widest uppercase transition-colors hover:text-emerald-400 ${idx === viewPath.length - 1 ? 'text-emerald-500' : 'text-gray-500'}`}
+                  className={`text-[9px] font-black tracking-[0.2em] uppercase transition-all hover:text-[#c9a86c] ${isLast ? 'text-[#c9a86c]' : 'text-gray-500'}`}
                 >
                   {nodeName}
                 </button>
-                {idx < viewPath.length - 1 && <ChevronRight size={10} className="text-gray-700" />}
+                {!isLast && <ChevronRight size={10} className="text-gray-800" />}
               </React.Fragment>
             );
           })}

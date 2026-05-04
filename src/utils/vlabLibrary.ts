@@ -804,6 +804,17 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         ports: [{ id: 'e', pos: 'left', label: 'e' }, { id: 'reset', pos: 'left', label: 'Reset' }, { id: 'u', pos: 'right', label: 'u' }]
       },
       {
+        id: 'ps_pid_ctrl', name: 'Discrete PID Controller', color: '#4b5563', icon: 'pid_ctrl', category: 'General Control',
+        params: { 
+          Kp: { value: 1, unit: '', label: 'Prop Gain' }, 
+          Ki: { value: 2, unit: '', label: 'Int Gain' }, 
+          Kd: { value: 0.1, unit: '', label: 'Deriv Gain' },
+          N: { value: 100, unit: '', label: 'Filter Coeff' },
+          limit: { value: 240, unit: '', label: 'Saturation' } 
+        },
+        ports: [{ id: 'e', pos: 'left', label: 'e' }, { id: 'reset', pos: 'left', label: 'Reset' }, { id: 'u', pos: 'right', label: 'u' }]
+      },
+      {
         id: 'ps_lpf', name: 'Low-Pass Filter', color: '#4b5563', icon: 'lpf', category: 'General Control',
         params: { f_cut: { value: 100, unit: 'Hz', label: 'Cutoff Freq' } },
         ports: [{ id: 'u', pos: 'left', label: 'u' }, { id: 'y', pos: 'right', label: 'y' }]

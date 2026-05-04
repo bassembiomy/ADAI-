@@ -18,13 +18,365 @@ import 'reactflow/dist/style.css';
 import { VLabWorkspaceProps } from './VLabWorkspaceTypes';
 import { VLAB_LIBRARY, VLabBlock } from '../../utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../engine/vlab/vlabComponentDefinitions';
-import { Settings2, Play, Pause, Square, Send, ChevronLeft, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info } from 'lucide-react';
-import { LineChart as ReLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Settings2, Play, Pause, Square, Send, ChevronLeft, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
+
+const LEARNING_LABS = [
+  {
+    id: 'air_fryer_thermal',
+    name: 'Air Fryer Heat Transfer',
+    category: 'Thermal & Fluid Dynamics',
+    difficulty: 'Advanced',
+    description: 'Study the multi-domain interaction between electrical power, forced convection, and thermal mass accumulation in a standard air fryer basket.',
+    nodes: [
+      {
+        id: 'ac_supply',
+        type: 'default',
+        position: { x: 50, y: 200 },
+        data: { 
+          label: '230V AC Supply', type: 'ac_voltage', color: '#ef4444',
+          params: { Vpk: { value: 325, unit: 'V', label: 'Peak Voltage' }, f: { value: 50, unit: 'Hz', label: 'Frequency' } },
+          ports: [{ id: 'p', pos: 'top', label: '+' }, { id: 'n', pos: 'bottom', label: '-' }]
+        }
+      },
+      {
+        id: 'heating_element',
+        type: 'default',
+        position: { x: 250, y: 200 },
+        data: { 
+          label: 'Heating Element', type: 'thermal_resistor', color: '#ef4444',
+          params: { Rth: { value: 35, unit: 'Ω', label: 'Resistance' } },
+          ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 'h', pos: 'top', label: 'H' }]
+        }
+      },
+      {
+        id: 'convection_link',
+        type: 'default',
+        position: { x: 450, y: 100 },
+        data: { 
+          label: 'Convection Interface', type: 'convective_heat', color: '#f97316',
+          params: { h: { value: 80, unit: 'W/m2K', label: 'Heat Coeff' }, A: { value: 0.15, unit: 'm^2', label: 'Area' } },
+          ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }]
+        }
+      },
+      {
+        id: 'air_chamber',
+        type: 'default',
+        position: { x: 650, y: 200 },
+        data: { 
+          label: 'Cooking Basket (Air)', type: 'ma_chamber', color: '#8b5cf6',
+          params: { V: { value: 0.005, unit: 'm^3', label: 'Volume' } },
+          ports: [{ id: 'a', pos: 'top', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 'h', pos: 'left', label: 'H' }]
+        }
+      },
+      {
+        id: 'circulation_fan',
+        type: 'default',
+        position: { x: 650, y: 400 },
+        data: { 
+          label: 'Air Circulation Fan', type: 'ma_pressure_source', color: '#8b5cf6',
+          params: { P: { value: 150, unit: 'Pa', label: 'Pressure Diff' } },
+          ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 's', pos: 'top', label: 'S' }]
+        }
+      },
+      {
+        id: 'fan_ctrl',
+        type: 'default',
+        position: { x: 650, y: 550 },
+        data: { 
+          label: 'Fan Speed Ctrl', type: 'ps_constant', color: '#92400e',
+          params: { value: { value: 0.8, unit: '1', label: 'Duty Cycle' } },
+          ports: [{ id: 'y', pos: 'right', label: 'C' }]
+        }
+      },
+      {
+        id: 'temp_sensor',
+        type: 'default',
+        position: { x: 850, y: 200 },
+        data: { 
+          label: 'Basket Temp Sensor', type: 'temp_sensor', color: '#f97316',
+          params: {},
+          ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 't', pos: 'top', label: 'T' }]
+        }
+      },
+      {
+        id: 'thermal_scope',
+        type: 'default',
+        position: { x: 1050, y: 150 },
+        data: { 
+          label: 'Temp Monitor', type: 'scope', color: '#fbbf24',
+          params: { time_range: { value: 300, unit: 's', label: 'Time Range' } },
+          ports: [{ id: 'in1', pos: 'left', label: '1' }, { id: 'in2', pos: 'left', label: '2' }]
+        }
+      }
+    ],
+    edges: [
+      { id: 'e1', source: 'ac_supply', target: 'heating_element', sourceHandle: 'p_s', targetHandle: 'a_t', style: { stroke: '#ef4444', strokeWidth: 3 } },
+      { id: 'e2', source: 'heating_element', target: 'convection_link', sourceHandle: 'h_s', targetHandle: 'a_t', style: { stroke: '#f97316', strokeWidth: 2 } },
+      { id: 'e3', source: 'convection_link', target: 'air_chamber', sourceHandle: 'b_s', targetHandle: 'h_t', style: { stroke: '#f97316', strokeWidth: 2 } },
+      { id: 'e4', source: 'fan_ctrl', target: 'circulation_fan', sourceHandle: 'y_s', targetHandle: 's_t', style: { stroke: '#92400e', strokeWidth: 2 } },
+      { id: 'e5', source: 'circulation_fan', target: 'air_chamber', sourceHandle: 'b_s', targetHandle: 'a_t', style: { stroke: '#8b5cf6', strokeWidth: 2 } },
+      { id: 'e6', source: 'air_chamber', target: 'temp_sensor', sourceHandle: 'b_s', targetHandle: 'a_t', style: { stroke: '#8b5cf6', strokeWidth: 2 } },
+      { id: 'e7', source: 'temp_sensor', target: 'thermal_scope', sourceHandle: 't_s', targetHandle: 'in1_t', style: { stroke: '#fbbf24', strokeWidth: 2, animated: true } }
+    ]
+  },
+  {
+    id: 'blender_mixer',
+    name: 'Personal Blender Mixer',
+    category: 'Electromechanical',
+    difficulty: 'Intermediate',
+    description: 'Analyze the start-up torque and steady-state mixing speed of a 24V DC blender motor under variable mixture viscosity.',
+    nodes: [
+      {
+        id: 'dc_source',
+        type: 'default',
+        position: { x: 50, y: 200 },
+        data: { 
+          label: '24V Battery', type: 'dc_voltage', color: '#3b82f6',
+          params: { V_const: { value: 24, unit: 'V', label: 'Voltage' } },
+          ports: [{ id: 'p', pos: 'top', label: '+' }, { id: 'n', pos: 'bottom', label: '-' }]
+        }
+      },
+      {
+        id: 'blender_motor',
+        type: 'default',
+        position: { x: 250, y: 200 },
+        data: { 
+          label: 'DC Motor', type: 'rotational_electromechanical_converter', color: '#10b981',
+          params: { K: { value: 0.05, unit: 'V-s/rad', label: 'Motor Const' }, R: { value: 2, unit: 'Ω', label: 'Resistance' } },
+          ports: [{ id: 'p', pos: 'left', label: '+' }, { id: 'n', pos: 'bottom', label: '-' }, { id: 'r', pos: 'right', label: 'R' }]
+        }
+      },
+      {
+        id: 'mixture_drag',
+        type: 'default',
+        position: { x: 450, y: 200 },
+        data: { 
+          label: 'Mixture Viscosity', type: 'rot_damper', color: '#f59e0b',
+          params: { b: { value: 0.001, unit: 'N-m-s/rad', label: 'Viscosity' } },
+          ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }]
+        }
+      },
+      {
+        id: 'blade_inertia',
+        type: 'default',
+        position: { x: 450, y: 350 },
+        data: { 
+          label: 'Blade Inertia', type: 'inertia', color: '#64748b',
+          params: { J: { value: 0.0002, unit: 'kg-m^2', label: 'Inertia' } },
+          ports: [{ id: 'r', pos: 'top', label: 'R' }]
+        }
+      },
+      {
+        id: 'speed_sensor',
+        type: 'default',
+        position: { x: 650, y: 200 },
+        data: { 
+          label: 'Speed Sensor', type: 'rot_motion_sensor', color: '#06b6d4',
+          params: {},
+          ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'w', pos: 'right', label: 'W' }]
+        }
+      },
+      {
+        id: 'blender_scope',
+        type: 'default',
+        position: { x: 850, y: 150 },
+        data: { 
+          label: 'Performance Monitor', type: 'scope', color: '#fbbf24',
+          params: { time_range: { value: 5, unit: 's', label: 'Time Range' } },
+          ports: [{ id: 'in1', pos: 'left', label: 'Speed' }]
+        }
+      }
+    ],
+    edges: [
+      { id: 'be1', source: 'dc_source', target: 'blender_motor', sourceHandle: 'p_s', targetHandle: 'p_t', style: { stroke: '#3b82f6', strokeWidth: 3 } },
+      { id: 'be2', source: 'blender_motor', target: 'mixture_drag', sourceHandle: 'r_s', targetHandle: 'r_t', style: { stroke: '#10b981', strokeWidth: 2 } },
+      { id: 'be3', source: 'mixture_drag', target: 'blade_inertia', sourceHandle: 'r_s', targetHandle: 'r_t', style: { stroke: '#64748b', strokeWidth: 2 } },
+      { id: 'be4', source: 'mixture_drag', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t', style: { stroke: '#10b981', strokeWidth: 2 } },
+      { id: 'be5', source: 'speed_sensor', target: 'blender_scope', sourceHandle: 'w_s', targetHandle: 'in1_t', style: { stroke: '#fbbf24', strokeWidth: 2, animated: true } }
+    ]
+  },
+  {
+    id: 'pid_ac_motor',
+    name: 'PID Speed Control of AC Motor',
+    category: 'Control Systems',
+    difficulty: 'Expert',
+    description: 'Design and tune a PID controller to regulate the speed of an AC induction motor under varying load conditions. Study step response and overshoot.',
+    nodes: [
+      {
+        id: 'ref_speed',
+        type: 'default',
+        position: { x: 50, y: 200 },
+        data: { 
+          label: 'Ref Speed (RPM)', type: 'ps_constant', color: '#92400e',
+          params: { value: { value: 1200, unit: 'RPM', label: 'Target' } },
+          ports: [{ id: 'y', pos: 'right', label: 'Y' }]
+        }
+      },
+      {
+        id: 'speed_pid',
+        type: 'default',
+        position: { x: 250, y: 200 },
+        data: { 
+          label: 'Speed PID', type: 'ps_pid_ctrl', color: '#4b5563',
+          params: { 
+            Kp: { value: 1.5, unit: '', label: 'Prop' }, 
+            Ki: { value: 0.8, unit: '', label: 'Int' },
+            Kd: { value: 0.1, unit: '', label: 'Deriv' }
+          },
+          ports: [{ id: 'e', pos: 'left', label: 'e' }, { id: 'u', pos: 'right', label: 'u' }]
+        }
+      },
+      {
+        id: 'ac_motor',
+        type: 'default',
+        position: { x: 450, y: 200 },
+        data: { 
+          label: 'AC Motor (IM)', type: 'rotational_electromechanical_converter', color: '#10b981',
+          params: { K: { value: 1.0, unit: 'V-s/rad', label: 'Torque Const' }, R: { value: 0.5, unit: 'Ω', label: 'Resist' } },
+          ports: [{ id: 'p', pos: 'left', label: 'U' }, { id: 'r', pos: 'right', label: 'R' }]
+        }
+      },
+      {
+        id: 'rotor_inertia',
+        type: 'default',
+        position: { x: 450, y: 350 },
+        data: { 
+          label: 'Rotor Inertia', type: 'inertia', color: '#64748b',
+          params: { J: { value: 0.05, unit: 'kg-m^2', label: 'Inertia' } },
+          ports: [{ id: 'r', pos: 'top', label: 'R' }]
+        }
+      },
+      {
+        id: 'speed_sensor',
+        type: 'default',
+        position: { x: 650, y: 200 },
+        data: { 
+          label: 'Speed Sensor', type: 'rot_motion_sensor', color: '#06b6d4',
+          params: {},
+          ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'w', pos: 'right', label: 'W' }]
+        }
+      },
+      {
+        id: 'scope',
+        type: 'default',
+        position: { x: 850, y: 150 },
+        data: { 
+          label: 'Step Response', type: 'scope', color: '#fbbf24',
+          params: { time_range: { value: 10, unit: 's', label: 'Time' } },
+          ports: [{ id: 'in1', pos: 'left', label: '1' }]
+        }
+      }
+    ],
+    edges: [
+      { id: 'pe1', source: 'ref_speed', target: 'speed_pid', sourceHandle: 'y_s', targetHandle: 'e_t', style: { stroke: '#92400e', strokeWidth: 2 } },
+      { id: 'pe2', source: 'speed_pid', target: 'ac_motor', sourceHandle: 'u_s', targetHandle: 'p_t', style: { stroke: '#4b5563', strokeWidth: 2 } },
+      { id: 'pe3', source: 'ac_motor', target: 'rotor_inertia', sourceHandle: 'r_s', targetHandle: 'r_t', style: { stroke: '#64748b', strokeWidth: 2 } },
+      { id: 'pe4', source: 'ac_motor', target: 'speed_sensor', sourceHandle: 'r_s', targetHandle: 'r_t', style: { stroke: '#10b981', strokeWidth: 2 } },
+      { id: 'pe5', source: 'speed_sensor', target: 'scope', sourceHandle: 'w_s', targetHandle: 'in1_t', style: { stroke: '#fbbf24', strokeWidth: 2, animated: true } }
+    ]
+  },
+  {
+    id: 'vfd_inverter_drive',
+    name: 'Variable Frequency Drive (VFD)',
+    category: 'Electromechanical',
+    difficulty: 'Advanced',
+    description: 'Compare Open-Loop V/f Control with High-Performance Sensorless FOC for Induction Motor speed and torque regulation.',
+    nodes: [
+      {
+        id: 'dc_link',
+        type: 'default',
+        position: { x: 50, y: 300 },
+        data: { 
+          label: 'DC Link (600V)', type: 'dc_voltage', color: '#3b82f6',
+          params: { V_const: { value: 600, unit: 'V', label: 'Voltage' } },
+          ports: [{ id: 'p', pos: 'right', label: 'DC+' }, { id: 'n', pos: 'bottom', label: 'DC-' }]
+        }
+      },
+      {
+        id: 'inverter',
+        type: 'default',
+        position: { x: 250, y: 300 },
+        data: { 
+          label: '3-Phase Inverter', type: 'pwm_3ph_2level', color: '#ef4444',
+          params: { f_sw: { value: 5000, unit: 'Hz', label: 'Switch Freq' } },
+          ports: [{ id: 'vdc', pos: 'left', label: 'Vdc' }, { id: 'vabc', pos: 'left', label: 'Vabc' }, { id: 'g', pos: 'right', label: 'g' }]
+        }
+      },
+      {
+        id: 'vfd_controller',
+        type: 'default',
+        position: { x: 250, y: 100 },
+        data: { 
+          label: 'VFD Controller (V/f + FOC)', type: 'im_foc_ctrl', color: '#8b5cf6',
+          params: { 
+            mode: { value: 1, unit: '', label: 'Mode (0:V/f, 1:FOC)' },
+            v_f_ratio: { value: 4.4, unit: '', label: 'V/f Ratio' }
+          },
+          ports: [{ id: 'wr_ref', pos: 'left', label: 'wRef' }, { id: 'g', pos: 'right', label: 'G' }]
+        }
+      },
+      {
+        id: 'im_motor',
+        type: 'default',
+        position: { x: 500, y: 300 },
+        data: { 
+          label: 'Induction Motor', type: 'pmsm', color: '#10b981',
+          params: { pole_pairs: { value: 2, unit: '', label: 'Poles' }, Rs: { value: 0.1, unit: 'Ω', label: 'Stator Res' } },
+          ports: [{ id: 'g', pos: 'left', label: 'G' }, { id: 'r', pos: 'right', label: 'R' }]
+        }
+      },
+      {
+        id: 'ref_speed',
+        type: 'default',
+        position: { x: 50, y: 100 },
+        data: { 
+          label: 'Speed Reference', type: 'ps_step', color: '#92400e',
+          params: { time: { value: 1, unit: 's', label: 'Step Time' }, initial: { value: 500, unit: 'RPM', label: 'Initial' }, final: { value: 1500, unit: 'RPM', label: 'Final' } },
+          ports: [{ id: 'y', pos: 'right', label: 'y' }]
+        }
+      },
+      {
+        id: 'vfd_scope',
+        type: 'default',
+        position: { x: 750, y: 200 },
+        data: { 
+          label: 'VFD Performance', type: 'scope', color: '#fbbf24',
+          params: { time_range: { value: 5, unit: 's', label: 'Time' } },
+          ports: [{ id: 'in1', pos: 'left', label: '1' }, { id: 'in2', pos: 'left', label: '2' }]
+        }
+      }
+    ],
+    edges: [
+      { id: 've1', source: 'ref_speed', target: 'vfd_controller', sourceHandle: 'y_s', targetHandle: 'wr_ref_t' },
+      { id: 've2', source: 'dc_link', target: 'inverter', sourceHandle: 'p_s', targetHandle: 'vdc_t' },
+      { id: 've3', source: 'vfd_controller', target: 'inverter', sourceHandle: 'g_s', targetHandle: 'vabc_t' },
+      { id: 've4', source: 'inverter', target: 'im_motor', sourceHandle: 'g_s', targetHandle: 'g_t' },
+      { id: 've5', source: 'im_motor', target: 'vfd_scope', sourceHandle: 'r_s', targetHandle: 'in1_t' }
+    ]
+  }
+];
 
 
 const SymbolRenderer = ({ type, color }: { type: string, color: string }) => {
   switch (type) {
+    case 'ac_voltage':
+      return (
+        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
+          <circle cx="30" cy="30" r="15" />
+          <path d="M22 30Q26 20 30 30Q34 40 38 30" strokeWidth="2" />
+          <path d="M30 0V15M30 45V60" strokeWidth="1" />
+        </svg>
+      );
+    case 'ma_chamber':
+      return (
+        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
+          <rect x="15" y="15" width="30" height="30" rx="4" />
+          <path d="M15 30H45M30 15V45" strokeOpacity="0.2" />
+          <path d="M22 22Q30 18 38 22M22 38Q30 34 38 38" strokeWidth="1" strokeOpacity="0.3" />
+        </svg>
+      );
     case 'resistor':
       return (
         <svg width="60" height="30" viewBox="0 0 60 30" fill="none" stroke={color} strokeWidth="2">
@@ -173,6 +525,27 @@ const SymbolRenderer = ({ type, color }: { type: string, color: string }) => {
           <text x="30" y="42" fill={color} fontSize="10" textAnchor="middle" stroke="none">-</text>
           {type === 'ac_voltage' && <path d="M22 30Q30 20 38 30Q30 40 22 30" strokeWidth="1" />}
           <path d="M30 0V15M30 45V60" strokeWidth="1" />
+        </svg>
+      );
+    case 'pwm_3ph_2level':
+    case 'pwm_3ph_3level':
+      return (
+        <svg width="80" height="60" viewBox="0 0 80 60" fill="none" stroke={color} strokeWidth="2">
+          <rect x="10" y="10" width="60" height="40" rx="4" />
+          <path d="M20 30L30 20L40 30L50 20L60 30" strokeWidth="1.5" />
+          <text x="40" y="55" textAnchor="middle" fill={color} fontSize="8" stroke="none" fontWeight="bold">INV</text>
+        </svg>
+      );
+    case 'im_foc_ctrl':
+    case 'im_scalar_ctrl':
+      return (
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none" stroke={color} strokeWidth="2">
+          <rect x="5" y="5" width="70" height="70" rx="2" fill={color} fillOpacity="0.05" />
+          <circle cx="40" cy="40" r="20" strokeDasharray="2 2" />
+          <path d="M30 40H50M40 30V50" strokeWidth="1" />
+          <text x="40" y="70" textAnchor="middle" fill={color} fontSize="8" stroke="none" fontWeight="black">
+            {type.includes('foc') ? 'FOC' : 'V/f'}
+          </text>
         </svg>
       );
     case 'dc_current':
@@ -438,6 +811,7 @@ const SymbolRenderer = ({ type, color }: { type: string, color: string }) => {
       );
     case 'ma_flow_src':
     case 'ma_pres_src':
+    case 'ma_pressure_source':
       return (
         <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
           <circle cx="30" cy="30" r="15" />
@@ -1112,6 +1486,16 @@ const SymbolRenderer = ({ type, color }: { type: string, color: string }) => {
           <circle cx="50" cy="10" r="1.5" fill={color} />
         </svg>
       );
+    case 'ps_pi_ctrl':
+    case 'ps_pid_ctrl':
+      return (
+        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
+          <rect x="5" y="5" width="50" height="30" rx="2" />
+          <text x="30" y="24" fill={color} fontSize="10" textAnchor="middle" stroke="none" fontWeight="bold">
+            {type === 'ps_pid_ctrl' ? 'PID' : 'PI'}
+          </text>
+        </svg>
+      );
     default:
       return (
         <div className="text-xl font-bold" style={{ color }}>{(type || 'UNK').substring(0, 3).toUpperCase()}</div>
@@ -1205,40 +1589,208 @@ const nodeTypes = {
   default: VLabNode,
 };
 
-const ScopeView = ({ data, title }: { data: any[], title?: string }) => {
+const getSignalColor = (index: number) => {
+  const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7', '#ec4899', '#06b6d4', '#8b5cf6'];
+  return colors[index % colors.length];
+};
+
+const ScopeView = ({ 
+  data, title, isPaused, onExpand, onAutoScale 
+}: { 
+  data: any[], title?: string, isPaused?: boolean, onExpand?: () => void, onAutoScale?: () => void 
+}) => {
+  const lastPoint = data.length > 0 ? data[data.length - 1] : { value: 0 };
+  const lastVal = lastPoint.value ?? 0;
+  const [scaleKey, setScaleKey] = useState(0);
+  const [zoomLevel, setZoomLevel] = useState(1.0);
+  
+  // Find all keys except 'time'
+  const keys = data.length > 0 ? Object.keys(data[0]).filter(k => k !== 'time') : ['value'];
+
+  const handleAutoScale = () => {
+    setScaleKey(prev => prev + 1);
+    setZoomLevel(1.0);
+    if (onAutoScale) onAutoScale();
+  };
+
   return (
-    <div className="w-full h-full bg-[#0a0a0a] border border-[#222] rounded-xl overflow-hidden flex flex-col shadow-2xl">
-      <div className="p-3 border-b border-[#222] bg-[#111] flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Activity size={14} className="text-yellow-500" />
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{title || 'Scope Signal Monitor'}</span>
+    <div className="w-full h-full bg-[#050505] border border-white/5 rounded-2xl overflow-hidden flex flex-col shadow-2xl relative group">
+      {/* Glossy CRT Overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none z-20" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(16,185,129,0.05),transparent)] pointer-events-none z-10" />
+      
+      {/* Header Info: Industrial Stats Bar */}
+      <div className="p-4 bg-white/[0.02] border-b border-white/5 flex items-center justify-between z-30">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-xl ${isPaused ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.2)] animate-pulse'}`}>
+            <Activity size={18} />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] leading-tight">{title || 'Signal Monitor'}</span>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-sm font-mono font-black text-white/90 tabular-nums">{lastVal.toFixed(4)}</span>
+              <span className="text-[9px] text-gray-600 font-bold uppercase tracking-widest">Units</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-4 pr-2">
+          {keys.map((k, i) => (
+            <div key={k} className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getSignalColor(i) }} />
+              <span className="text-[8px] text-gray-500 font-black uppercase tracking-tighter">{k}</span>
+            </div>
+          ))}
         </div>
       </div>
-      <div className="flex-1 p-6">
+
+      <div className="flex-1 p-5 relative overflow-hidden">
+        {/* Analog Scope Grid */}
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none z-0">
+          <svg width="100%" height="100%">
+            <defs>
+              <pattern id="majorGrid" width="60" height="60" patternUnits="userSpaceOnUse">
+                <path d="M 60 0 L 0 0 0 60" fill="none" stroke="white" strokeWidth="2"/>
+              </pattern>
+              <pattern id="minorGrid" width="12" height="12" patternUnits="userSpaceOnUse">
+                <path d="M 12 0 L 0 0 0 12" fill="none" stroke="white" strokeWidth="0.5"/>
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#minorGrid)" />
+            <rect width="100%" height="100%" fill="url(#majorGrid)" />
+          </svg>
+        </div>
+
         <ResponsiveContainer width="100%" height="100%">
-          <ReLineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#222" />
-            <XAxis dataKey="time" stroke="#444" fontSize={10} tickFormatter={(v) => v.toFixed(2)} />
-            <YAxis stroke="#444" fontSize={10} />
-            <Tooltip 
-              contentStyle={{ background: '#111', border: '1px solid #333', fontSize: '10px' }}
-              itemStyle={{ color: '#fbbf24' }}
+          <AreaChart key={scaleKey} data={data} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+            <defs>
+              {keys.map((k, i) => (
+                <linearGradient key={k} id={`grad-${k}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={getSignalColor(i)} stopOpacity={0.2}/>
+                  <stop offset="95%" stopColor={getSignalColor(i)} stopOpacity={0}/>
+                </linearGradient>
+              ))}
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff03" vertical={false} />
+            <XAxis 
+              dataKey="time" 
+              stroke="#ffffff10" 
+              fontSize={10} 
+              tickFormatter={(v) => v.toFixed(1)} 
+              axisLine={false}
+              tickLine={false}
             />
-            <Line type="monotone" dataKey="value" stroke="#fbbf24" strokeWidth={2} dot={false} isAnimationActive={false} />
-          </ReLineChart>
+            <YAxis 
+              stroke="#ffffff10" 
+              fontSize={10} 
+              tickFormatter={(v) => v.toFixed(1)}
+              axisLine={false}
+              tickLine={false}
+              domain={([min, max]: [number, number]) => {
+                const range = (max - min) || 10;
+                const center = (max + min) / 2;
+                const newRange = range / zoomLevel;
+                return [center - newRange / 2, center + newRange / 2];
+              }}
+            />
+            <Tooltip 
+              contentStyle={{ 
+                background: '#0d0d0d', 
+                border: '1px solid rgba(255,255,255,0.1)', 
+                borderRadius: '12px', 
+                fontSize: '10px',
+                boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+                backdropFilter: 'blur(10px)'
+              }}
+              itemStyle={{ fontWeight: 'bold' }}
+              cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 1 }}
+            />
+            {keys.map((k, i) => (
+              <Area 
+                key={k}
+                type="monotone" 
+                dataKey={k} 
+                stroke={getSignalColor(i)} 
+                strokeWidth={k === 'target' ? 1 : 3} 
+                strokeDasharray={k === 'target' ? '5 5' : '0'}
+                fillOpacity={1} 
+                fill={`url(#grad-${k})`} 
+                isAnimationActive={false}
+                className={k === 'target' ? '' : `drop-shadow-[0_0_10px_${getSignalColor(i)}44]`}
+              />
+            ))}
+          </AreaChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* Footer Interface: Controls & Status */}
+      <div className="h-12 bg-white/[0.03] border-t border-white/5 flex items-center justify-between px-5 z-30">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${isPaused ? 'bg-gray-700' : 'bg-emerald-500 shadow-[0_0_10px_#10b981]'}`} />
+            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+              {isPaused ? 'System Halted' : 'Acquisition Active'}
+            </span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[8px] text-gray-600 font-black uppercase">Timebase</span>
+            <span className="text-[10px] font-mono text-gray-400">50ms/div</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <div className="flex items-center bg-black/40 p-0.5 rounded-xl border border-white/5 mr-2">
+            <button 
+              onClick={() => setZoomLevel(prev => prev / 1.25)}
+              className="p-1.5 hover:bg-white/10 rounded-lg text-gray-500 hover:text-white transition-all active:scale-90"
+              title="Scale Down"
+            >
+              <ZoomOut size={14} />
+            </button>
+            <div className="w-px h-3 bg-white/5 mx-0.5" />
+            <button 
+              onClick={() => setZoomLevel(prev => prev * 1.25)}
+              className="p-1.5 hover:bg-white/10 rounded-lg text-gray-500 hover:text-white transition-all active:scale-90"
+              title="Scale Up"
+            >
+              <ZoomIn size={14} />
+            </button>
+          </div>
+
+          <button 
+            onClick={handleAutoScale}
+            className="p-2 hover:bg-white/10 rounded-xl text-gray-500 hover:text-emerald-400 transition-all group" 
+            title="Reset Scale"
+          >
+            <RefreshCcw size={14} className="group-hover:rotate-180 transition-transform duration-500" />
+          </button>
+          <button className="p-2 hover:bg-white/10 rounded-xl text-gray-500 hover:text-white transition-all" title="Scope Settings">
+            <Settings size={14} />
+          </button>
+          {onExpand && (
+            <button 
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); onExpand(); }}
+              className="p-2 hover:bg-white/10 rounded-xl text-gray-500 hover:text-white transition-all ml-2 active:scale-90 cursor-pointer z-50" 
+              title="Expand View"
+            >
+              <Maximize2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
-const VLabScopeWindow = ({ id, data, onClose, title }: { id: string, data: any[], onClose: () => void, title: string }) => {
+const VLabScopeWindow = ({ id, data, onClose, title, isPaused }: { id: string, data: any[], onClose: () => void, title: string, isPaused: boolean }) => {
   const [pos, setPos] = useState({ x: 100 + Math.random() * 50, y: 100 + Math.random() * 50 });
   const [isDragging, setIsDragging] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
 
   useEffect(() => {
     const handleMove = (e: MouseEvent) => {
-      if (isDragging) {
+      if (isDragging && !isMaximized) {
         setPos({ x: e.clientX - 200, y: e.clientY - 20 });
       }
     };
@@ -1249,31 +1801,52 @@ const VLabScopeWindow = ({ id, data, onClose, title }: { id: string, data: any[]
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
     };
-  }, [isDragging]);
+  }, [isDragging, isMaximized]);
 
   return (
     <div 
-      className="fixed z-[9999] w-[600px] h-[400px] bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col backdrop-blur-xl"
-      style={{ left: pos.x, top: pos.y }}
+      className={`fixed z-[9999] bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col backdrop-blur-xl transition-all duration-300 ${
+        isMaximized ? 'inset-0 !rounded-none' : isMinimized ? 'w-64 h-10' : 'w-[600px] h-[400px]'
+      }`}
+      style={isMaximized ? { left: 0, top: 0, width: '100vw', height: '100vh' } : { left: pos.x, top: pos.y }}
     >
       <div 
-        className="h-10 bg-[#151515] border-b border-white/5 flex items-center justify-between px-4 cursor-move select-none"
-        onMouseDown={() => setIsDragging(true)}
+        className="h-10 bg-[#151515] border-b border-white/5 flex items-center justify-between px-4 cursor-move select-none shrink-0"
+        onMouseDown={() => !isMaximized && setIsDragging(true)}
+        onDoubleClick={() => setIsMaximized(!isMaximized)}
       >
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
-          <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{title}</span>
+          <div className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 shadow-[0_0_8px_#10b981]'} animate-pulse`} />
+          <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] truncate max-w-[120px]">{title}</span>
         </div>
-        <button 
-          onClick={onClose}
-          className="p-1 hover:bg-red-500/20 hover:text-red-500 rounded-md transition-all text-gray-500"
-        >
-          <X size={16} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button 
+            onClick={() => setIsMinimized(!isMinimized)}
+            className="p-1.5 hover:bg-white/5 rounded-md transition-all text-gray-500 hover:text-white"
+            title={isMinimized ? "Restore" : "Minimize"}
+          >
+            <Minus size={14} />
+          </button>
+          <button 
+            onClick={() => { setIsMaximized(!isMaximized); setIsMinimized(false); }}
+            className="p-1.5 hover:bg-white/5 rounded-md transition-all text-gray-500 hover:text-white"
+            title={isMaximized ? "Restore" : "Maximize"}
+          >
+            {isMaximized ? <Layers size={14} /> : <Maximize2 size={14} />}
+          </button>
+          <button 
+            onClick={onClose}
+            className="p-1.5 hover:bg-red-500/20 hover:text-red-500 rounded-md transition-all text-gray-500 ml-1"
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
-      <div className="flex-1">
-        <ScopeView data={data} title={title} />
-      </div>
+      {!isMinimized && (
+        <div className="flex-1 min-h-0">
+          <ScopeView data={data} title={title} isPaused={isPaused} />
+        </div>
+      )}
     </div>
   );
 };
@@ -1298,26 +1871,285 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const [simTime, setSimTime] = useState(0);
   const [scopeData, setScopeData] = useState<any[]>([]);
   const [openScopes, setOpenScopes] = useState<string[]>([]);
+  const [activeSidebarTab, setActiveSidebarTab] = useState<'library' | 'labs'>('library');
+  const [hoveredLabId, setHoveredLabId] = useState<string | null>(null);
   const [isQuickSearchOpen, setIsQuickSearchOpen] = useState(false);
   const [quickSearchPos, setQuickSearchPos] = useState({ x: 0, y: 0 });
   const [quickSearchQuery, setQuickSearchQuery] = useState('');
   const [lastPaneClick, setLastPaneClick] = useState(0);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
 
+  // ── Physics Engine ──────────────────────────────────────────────────────────
+  /**
+   * Builds a domain-aware simulation step function from the current node graph.
+   * Returns a function: (t, dt) => number  (the signal value at the scope)
+   */
+  const buildSimEngine = useCallback(() => {
+    // Helper: get a param value from a node by id
+    const param = (nodeId: string, key: string, fallback: number) => {
+      const n = nodes.find(nd => nd.id === nodeId);
+      if (!n) return fallback;
+      const p = (n.data as any).params?.[key];
+      return typeof p?.value === 'number' ? p.value : fallback;
+    };
+
+    // ── Detect Air Fryer Thermal Model ──────────────────────────────────────
+    const hasAC      = nodes.some(n => (n.data as any).type === 'ac_voltage');
+    const hasThermal = nodes.some(n => ['thermal_resistor','convective_heat','thermal_mass','temp_sensor'].includes((n.data as any).type));
+    const hasScope   = nodes.some(n => (n.data as any).type === 'scope');
+
+    if (hasAC && hasThermal && hasScope) {
+      // ── Air Fryer / Multi-domain Thermal Model ──
+      // Parameters
+      const Vpk  = param('ac_supply',       'Vpk', 325);   // V  peak
+      const R    = param('heating_element', 'Rth',  35);   // Ω  resistance
+      const h    = param('convection_link', 'h',    80);   // W/m²K
+      const A    = param('convection_link', 'A',   0.15);  // m²
+      const V    = param('air_chamber',     'V',  0.005);  // m³ volume
+      // Derive thermal mass: C = rho * Cp * V  (air: ~1.2 kg/m³ × 1005 J/kgK)
+      const rho  = 1.2, Cp = 1005;
+      const C    = rho * Cp * V;           // J/K
+      const hA   = h * A;                  // W/K convection conductance
+      const P_avg = (Vpk * Vpk) / (2 * R); // AC RMS power = Vpk²/(2R)
+      const T_amb = 293;                   // K  ambient ≈ 20°C
+
+      // State: basket temperature  T(t)
+      let T = T_amb;
+      return (t: number, dt: number) => {
+        // Euler step: dT/dt = (P_heat - Q_conv) / C
+        //   Q_conv = hA * (T - T_amb)
+        const dT = (P_avg - hA * (T - T_amb)) / C;
+        T += dT * dt;
+        // Return Celsius offset from ambient so scope starts at ~0
+        return T - T_amb;
+      };
+    }
+
+    // ── Detect Blender Electromechanical Model ──────────────────────────────
+    const hasDC      = nodes.some(n => (n.data as any).type === 'dc_voltage');
+    const hasMotor   = nodes.some(n => (n.data as any).type === 'rotational_electromechanical_converter');
+    const isBlender  = hasDC && hasMotor && nodes.some(n => n.id === 'blender_motor');
+
+    if (isBlender) {
+      // ── Blender / DC Motor Mechanical Model ──
+      const Vsrc = param('dc_source',     'V_const', 24);
+      const K    = param('blender_motor', 'K',     0.05);
+      const Ra   = param('blender_motor', 'R',     2.0);
+      const b    = param('mixture_drag',  'b',     0.001);
+      const J    = param('blade_inertia', 'J',     0.0002);
+      
+      let omega = 0; // rad/s
+      return (t: number, dt: number) => {
+        // Torque_elec = K * (Vsrc - K*omega) / Ra
+        // d_omega/dt = (Torque_elec - b*omega) / J
+        const T_elec = K * (Vsrc - K * omega) / Ra;
+        const dOmega = (T_elec - b * omega) / J;
+        omega += dOmega * dt;
+        
+        // Return speed in RPM for the scope
+        return omega * (60 / (2 * Math.PI));
+      };
+    }
+
+    // ── Detect PID AC Motor Speed Control ───────────────────────────────────
+    const hasPID     = nodes.some(n => (n.data as any).type === 'ps_pid_ctrl');
+    const isPIDMotor = hasPID && nodes.some(n => n.id === 'speed_pid');
+
+    if (isPIDMotor) {
+      // ── PID Speed Control Simulation ──
+      const w_ref = param('ref_speed', 'value', 1200); // RPM
+      const Kp    = param('speed_pid', 'Kp', 2.0);
+      const Ki    = param('speed_pid', 'Ki', 5.0);
+      const Kd    = param('speed_pid', 'Kd', 0.1);
+      const N     = param('speed_pid', 'N', 100);    // Derivative filter coefficient
+      const limit = param('speed_pid', 'limit', 240); // Output saturation
+      
+      const J     = param('rotor_inertia', 'J', 0.05);
+      const b     = 0.1; // damping
+      
+      let omega = 0;   // rad/s
+      let integ = 0;   // integral state
+      let filterState = 0; // for filtered derivative
+      
+      const w_ref_rad = w_ref * (2 * Math.PI / 60);
+
+      return (t: number, dt: number) => {
+        // Apply a step at t=0.5s for better visualization
+        const target_rad = t < 0.5 ? 0 : w_ref_rad;
+        const error = target_rad - omega;
+        
+        // Filtered Derivative: D(s) = Kd * s / (s/N + 1)
+        const dFilter = N * (error - filterState);
+        filterState += dFilter * dt;
+        const deriv = dFilter;
+        
+        // Trial output (P + I + D)
+        const u_unsat = Kp * error + Ki * integ + Kd * deriv;
+        
+        // Output Saturation
+        const u = Math.max(-limit, Math.min(limit, u_unsat));
+        
+        // Anti-windup: Clamping
+        const saturated = u !== u_unsat;
+        const sameSign = Math.sign(error) === Math.sign(u_unsat);
+        if (!(saturated && sameSign)) {
+          integ += error * dt;
+        }
+        
+        // Mechanical dynamics: J*d_omega/dt = T - b*omega
+        const dOmega = (u - b * omega) / J;
+        omega += dOmega * dt;
+        
+        return { 
+          value: omega * (60 / (2 * Math.PI)), 
+          target: target_rad * (60 / (2 * Math.PI)) 
+        }; 
+      };
+    }
+
+    // ── Detect VFD Inverter Drive (V/f + FOC) ────────────────────────────────
+    const isVFD = nodes.some(n => n.id === 'vfd_controller');
+    if (isVFD) {
+      // Machine States
+      let omega = 0;      // rad/s
+      let theta_e = 0;    // electrical angle
+      let id = 0, iq = 0; // dq currents
+      let psi_r = 0;      // rotor flux
+      
+      const mode = param('vfd_controller', 'mode', 1); // 0:V/f, 1:FOC
+      const P    = param('im_motor', 'pole_pairs', 2);
+      const Rs   = param('im_motor', 'Rs', 0.1);
+      const Lm   = 0.05, Ls = 0.06, Lr = 0.06;
+      const sigma = 1 - (Lm*Lm)/(Ls*Lr);
+      const J = 0.05, B = 0.1, Rr = 0.1;
+      
+      return (t: number, dt: number) => {
+        // Reference logic (matches ps_step in lab template)
+        const w_ref_rpm = t < 1.0 ? 500 : 1500;
+        const w_ref_rad = w_ref_rpm * (2 * Math.PI / 60);
+
+        // Sub-stepping for numerical stability
+        const subSteps = 20; // Increased oversampling
+        const sdt = dt / subSteps;
+        const V_MAX = 600; // Physical DC Link limit
+
+        for (let step = 0; step < subSteps; step++) {
+          let vd_ref = 0, vq_ref = 0, we = 0;
+          
+          if (mode === 0) { // V/f Mode
+            we = w_ref_rad * P;
+            const V = Math.max(20, Math.min(V_MAX, we * 0.8)); 
+            vd_ref = V;
+            vq_ref = 0;
+            theta_e += we * sdt;
+          } else { // FOC Mode
+            // Speed loop
+            const iq_ref = Math.max(-100, Math.min(100, (w_ref_rad - omega) * 15.0)); 
+            const id_ref = 12.0; 
+            
+            // Current loop
+            vd_ref = (id_ref - id) * 40 + Rs * id;
+            vq_ref = (iq_ref - iq) * 40 + Rs * iq + omega * P * psi_r * (Lm/Lr);
+            
+            // Saturation
+            vd_ref = Math.max(-V_MAX, Math.min(V_MAX, vd_ref));
+            vq_ref = Math.max(-V_MAX, Math.min(V_MAX, vq_ref));
+            
+            // Slip calc with safety
+            const slip = (Rr * iq) / (Math.max(0.01, psi_r));
+            we = Math.max(-2000, Math.min(2000, omega * P + slip)); 
+            theta_e += we * sdt;
+          }
+          
+          // Machine dynamics
+          const Te = 1.5 * P * (Lm/Lr) * psi_r * iq;
+          const dOmega = (Te - B * omega) / J;
+          omega += dOmega * sdt;
+          
+          const dPsi = (Rr * Lm / Lr) * id - (Rr / Lr) * psi_r;
+          psi_r += dPsi * sdt;
+          
+          // Current derivatives
+          const dId = (vd_ref - Rs * id + we * sigma * Ls * iq - (Lm/Lr) * dPsi) / (sigma * Ls);
+          const dIq = (vq_ref - Rs * iq - we * sigma * Ls * id - we * (Lm/Lr) * psi_r) / (sigma * Ls);
+          
+          id += dId * sdt;
+          iq += dIq * sdt;
+
+          // Robust safety check (Reset on any non-finite value)
+          if (!Number.isFinite(omega) || !Number.isFinite(id) || !Number.isFinite(iq) || !Number.isFinite(psi_r)) {
+            omega = 0; id = 0; iq = 0; psi_r = 0; theta_e = 0;
+            break; 
+          }
+        }
+
+        return {
+          value: omega * (60 / (2 * Math.PI)),
+          target: w_ref_rpm
+        };
+      };
+    }
+
+    // ── Generic Electrical Model (RC/RL-like response) ──────────────────────
+    const hasElec = nodes.some(n => ['ac_voltage','dc_voltage','dc_current'].includes((n.data as any).type));
+    if (hasElec) {
+      const Vpk = param(nodes.find(n => (n.data as any).type === 'ac_voltage')?.id ?? '', 'Vpk', 10);
+      const f   = param(nodes.find(n => (n.data as any).type === 'ac_voltage')?.id ?? '', 'f', 50);
+      const hasCapacitor = nodes.some(n => (n.data as any).type === 'capacitor');
+      let Vc = 0;
+      return (t: number, dt: number) => {
+        const Vsrc = Vpk * Math.sin(2 * Math.PI * f * t);
+        if (hasCapacitor) {
+          // Simple RC: dVc/dt = (Vsrc - Vc) / RC
+          const RC = 0.02;
+          Vc += ((Vsrc - Vc) / RC) * dt;
+          return Vc;
+        }
+        return Vsrc;
+      };
+    }
+
+    // ── Mechanical Model ────────────────────────────────────────────────────
+    const hasMech = nodes.some(n => ['mass','inertia','trans_spring','rot_spring'].includes((n.data as any).type));
+    if (hasMech) {
+      let v = 0, x = 0;
+      const m = 1.0, k = 10.0, b = 0.5;
+      return (_t: number, dt: number) => {
+        const F = -k * x - b * v;
+        v += (F / m) * dt;
+        x += v * dt;
+        return x;
+      };
+    }
+
+    // ── Fallback: constant zero ──────────────────────────────────────────────
+    return (_t: number, _dt: number) => 0;
+  }, [nodes]);
+
   // Simulation Loop
   useEffect(() => {
-    let interval: any;
-    if (isSimulating && !isPaused) {
-      interval = setInterval(() => {
-        setSimTime(t => t + 0.05);
+    if (!isSimulating || isPaused) return;
+
+    // Build the physics engine once per simulation run
+    const step = buildSimEngine();
+    const DT = 0.05;   // seconds per tick (wall-clock 50 ms)
+
+    const interval = setInterval(() => {
+      setSimTime(prevT => {
+        const t   = prevT;
+        const val = step(t, DT);
         setScopeData(prev => {
-          const newData = [...prev, { time: simTime, value: Math.sin(simTime * 2) + Math.random() * 0.1 }];
-          return newData.slice(-50); // Keep last 50 points
+          const newPoint = typeof val === 'number' 
+            ? { time: parseFloat(t.toFixed(3)), value: parseFloat(val.toFixed(6)) }
+            : { time: parseFloat(t.toFixed(3)), ...Object.fromEntries(Object.entries(val).map(([k, v]) => [k, parseFloat((v as number).toFixed(6))])) };
+          return [...prev, newPoint].slice(-200); 
         });
-      }, 50);
-    }
+        return t + DT;
+      });
+    }, 50);
+
     return () => clearInterval(interval);
-  }, [isSimulating, isPaused, simTime]);
+  }, [isSimulating, isPaused, buildSimEngine]);
 
   // Keyboard Shortcuts
   useEffect(() => {
@@ -1475,6 +2307,22 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     setNodes((nds) => nds.concat(newNode));
   };
 
+  const loadLabTemplate = (labId: string) => {
+    const lab = LEARNING_LABS.find(l => l.id === labId);
+    if (!lab) return;
+
+    if (nodes.length > 0 && !window.confirm('Loading a template will clear your current workspace. Continue?')) {
+      return;
+    }
+
+    setNodes(lab.nodes as any);
+    setEdges(lab.edges as any);
+    
+    if (reactFlowInstance) {
+      setTimeout(() => reactFlowInstance.fitView(), 100);
+    }
+  };
+
   const quickSearchResults = useMemo(() => {
     if (!quickSearchQuery.trim()) return [];
     const query = quickSearchQuery.toLowerCase();
@@ -1522,14 +2370,30 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   };
 
   const runSimulation = () => {
-    const mockResult = {
-      time: Array.from({ length: 100 }, (_, i) => i * 0.01),
+    // Run a batch 300-step physics simulation for the DOE export
+    const step = buildSimEngine();
+    const DT   = 0.1;   // s
+    const N    = 300;
+
+    const timeArr: number[] = [];
+    const valArr: number[]  = [];
+    for (let i = 0; i < N; i++) {
+      const t   = i * DT;
+      const val = step(t, DT);
+      const scalarVal = typeof val === 'number' ? val : (val.value ?? 0);
+      timeArr.push(parseFloat(t.toFixed(3)));
+      valArr.push(parseFloat(scalarVal.toFixed(6)));
+    }
+
+    const result = {
+      time: timeArr,
       data: nodes.map(n => ({
         id: n.id,
-        values: Array.from({ length: 100 }, () => Math.random() * 10)
+        label: (n.data as any).label,
+        values: valArr          // share the primary trace; extend per-node if needed
       }))
     };
-    onResult(mockResult, nodes);
+    onResult(result, nodes);
   };
 
   const exportToExcel = () => {
@@ -1647,62 +2511,147 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* Main Workspace Layout */}
       <div className="flex flex-1 mt-12 overflow-hidden">
-        {/* Left Sidebar: Block Library */}
+        {/* Left Sidebar: Block Library / Learning Labs */}
         <div className="w-72 bg-[#0d0d0d] border-r border-[#222] flex flex-col">
-          <div className="p-4 border-b border-[#222]">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search blocks..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none transition-all"
-              />
-            </div>
+          {/* Sidebar Tab Switcher */}
+          <div className="p-3 border-b border-[#222] flex gap-1">
+            <button
+              onClick={() => setActiveSidebarTab('library')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                activeSidebarTab === 'library' 
+                ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.1)]' 
+                : 'text-gray-500 hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              <Layers size={14} />
+              Library
+            </button>
+            <button
+              onClick={() => setActiveSidebarTab('labs')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                activeSidebarTab === 'labs' 
+                ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20 shadow-[0_0_15px_rgba(249,115,22,0.1)]' 
+                : 'text-gray-500 hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              <GraduationCap size={14} />
+              Labs
+            </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
-            {filteredLibrary.map(domain => {
-              // Group blocks by category if they have one
-              const categories = domain.blocks.reduce((acc, block) => {
-                const cat = block.category || 'Standard';
-                if (!acc[cat]) acc[cat] = [];
-                acc[cat].push(block);
-                return acc;
-              }, {} as Record<string, VLabBlock[]>);
+          {activeSidebarTab === 'library' ? (
+            <>
+              <div className="p-4 border-b border-[#222]">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search blocks..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none transition-all"
+                  />
+                </div>
+              </div>
 
-              return (
-                <div key={domain.type} className="space-y-4">
-                  <h3 className="text-[12px] font-black text-purple-400 uppercase tracking-[0.2em] mb-1">{domain.type}</h3>
-                  {Object.entries(categories).map(([catName, catBlocks]) => (
-                    <div key={catName} className="space-y-2 pl-2 border-l border-[#222]">
-                      <h4 className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">{catName}</h4>
-                      <div className="grid grid-cols-2 gap-2">
-                        {catBlocks.map(block => (
-                          <div
-                            key={block.id}
-                            draggable
-                            onDragStart={(e) => onDragStart(e, block)}
-                            onClick={() => addBlockToCenter(block)}
-                            className="group bg-[#111] border border-white/5 p-3 rounded-xl cursor-grab active:cursor-grabbing hover:border-purple-500/50 hover:bg-[#151515] transition-all flex flex-col items-center justify-center gap-2 relative overflow-hidden"
-                          >
-                            <div className="w-12 h-12 flex items-center justify-center transform scale-[0.6] group-hover:scale-[0.7] transition-transform origin-center">
-                              <SymbolRenderer type={block.icon} color={block.color} />
-                            </div>
-                            <span className="text-[10px] text-gray-500 font-bold text-center leading-tight truncate w-full px-1 group-hover:text-gray-200 transition-colors uppercase tracking-tight">
-                              {block.name}
-                            </span>
+              <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+                {filteredLibrary.map(domain => {
+                  const categories = domain.blocks.reduce((acc, block) => {
+                    const cat = block.category || 'Standard';
+                    if (!acc[cat]) acc[cat] = [];
+                    acc[cat].push(block);
+                    return acc;
+                  }, {} as Record<string, VLabBlock[]>);
+
+                  return (
+                    <div key={domain.type} className="space-y-4">
+                      <h3 className="text-[12px] font-black text-purple-400 uppercase tracking-[0.2em] mb-1">{domain.type}</h3>
+                      {Object.entries(categories).map(([catName, catBlocks]) => (
+                        <div key={catName} className="space-y-2 pl-2 border-l border-[#222]">
+                          <h4 className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">{catName}</h4>
+                          <div className="grid grid-cols-2 gap-2">
+                            {catBlocks.map(block => (
+                              <div
+                                key={block.id}
+                                draggable
+                                onDragStart={(e) => onDragStart(e, block)}
+                                onClick={() => addBlockToCenter(block)}
+                                className="group bg-[#111] border border-white/5 p-3 rounded-xl cursor-grab active:cursor-grabbing hover:border-purple-500/50 hover:bg-[#151515] transition-all flex flex-col items-center justify-center gap-2 relative overflow-hidden"
+                              >
+                                <div className="w-12 h-12 flex items-center justify-center transform scale-[0.6] group-hover:scale-[0.7] transition-transform origin-center">
+                                  <SymbolRenderer type={block.icon} color={block.color} />
+                                </div>
+                                <span className="text-[10px] text-gray-500 font-bold text-center leading-tight truncate w-full px-1 group-hover:text-gray-200 transition-colors uppercase tracking-tight">
+                                  {block.name}
+                                </span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+              <div className="mb-6 p-4 bg-orange-500/5 border border-orange-500/10 rounded-2xl">
+                <h3 className="text-[10px] font-black text-orange-400 uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
+                  <BookOpen size={14} />
+                  Physical Modeling Labs
+                </h3>
+                <p className="text-[10px] text-gray-500 leading-relaxed italic">
+                  Select a pre-configured learning model to explore real-world physical phenomena and multi-domain interactions.
+                </p>
+              </div>
+
+              {LEARNING_LABS.map(lab => (
+                <div 
+                  key={lab.id}
+                  onClick={() => loadLabTemplate(lab.id)}
+                  onMouseEnter={() => setHoveredLabId(lab.id)}
+                  onMouseLeave={() => setHoveredLabId(null)}
+                  className="group relative bg-[#111] border border-white/5 rounded-2xl overflow-hidden cursor-pointer hover:border-orange-500/30 transition-all active:scale-95 shadow-xl"
+                >
+                  {/* Decorative Background Glow */}
+                  <div className={`absolute inset-0 bg-gradient-to-br from-orange-500/10 to-transparent transition-opacity duration-500 ${hoveredLabId === lab.id ? 'opacity-100' : 'opacity-0'}`} />
+                  
+                  <div className="relative p-5">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="p-2 bg-orange-500/20 rounded-xl border border-orange-500/20">
+                        <FlaskConical size={20} className="text-orange-400" />
+                      </div>
+                      <span className="text-[8px] font-black px-2 py-1 bg-white/5 rounded-full text-gray-400 uppercase tracking-widest border border-white/5">
+                        {lab.difficulty}
+                      </span>
+                    </div>
+
+                    <h4 className="text-xs font-black text-gray-200 uppercase tracking-wider mb-2 group-hover:text-orange-400 transition-colors">
+                      {lab.name}
+                    </h4>
+                    <p className="text-[10px] text-gray-500 leading-relaxed mb-4 line-clamp-2">
+                      {lab.description}
+                    </p>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-bold text-gray-600 uppercase tracking-tighter">
+                        {lab.category}
+                      </span>
+                      <div className="flex items-center gap-1 text-[10px] font-black text-orange-400 group-hover:translate-x-1 transition-transform">
+                        LOAD LAB <ChevronLeft size={14} className="rotate-180" />
                       </div>
                     </div>
-                  ))}
+                  </div>
+                  
+                  {/* Bottom Progress/Status Bar */}
+                  <div className="h-1 w-full bg-white/5 overflow-hidden">
+                    <div className={`h-full bg-orange-500 transition-all duration-700 ${hoveredLabId === lab.id ? 'w-full' : 'w-0'}`} />
+                  </div>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Center: Flow Canvas */}
@@ -1776,8 +2725,13 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
             {/* Real-time Scope Overlay (if a scope is selected) */}
             {selectedNode && (selectedNode.data as any).type === 'scope' && !openScopes.includes(selectedNode.id) && (
-              <Panel position="bottom-right" className="w-96 h-64 mb-12 mr-4 shadow-2xl">
-                <ScopeView data={scopeData} />
+              <Panel position="bottom-right" className="w-96 h-64 mb-12 mr-4 shadow-2xl z-50">
+                <ScopeView 
+                  data={scopeData} 
+                  title={selectedNode.data.label}
+                  isPaused={isPaused} 
+                  onExpand={() => setOpenScopes(prev => prev.includes(selectedNode.id) ? prev : [...prev, selectedNode.id])}
+                />
               </Panel>
             )}
 
@@ -1903,6 +2857,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             id={scopeId}
             title={scopeNode.data.label}
             data={scopeData}
+            isPaused={isPaused}
             onClose={() => setOpenScopes(prev => prev.filter(id => id !== scopeId))}
           />
         );
