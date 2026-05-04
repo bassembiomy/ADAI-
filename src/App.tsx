@@ -44,7 +44,7 @@ const Button = ({
 }) => {
   const base = 'px-3 py-1.5 rounded font-medium transition-colors flex items-center justify-center';
   const variants = {
-    default: 'bg-[#c9a86c] text-[#0a0a0a] hover:bg-[#b8975b]',
+    default: 'bg-[#f97316] text-white hover:bg-[#ea580c]',
     outline: 'border border-[#333] text-[#e0e0e0] hover:bg-[#1a1a1a]',
     destructive: 'bg-red-600 hover:bg-red-700 text-white',
     ghost: 'text-[#a0a0a0] hover:text-[#e0e0e0] hover:bg-[#1a1a1a]',
@@ -103,7 +103,7 @@ const Badge = ({ children, variant = 'secondary', className = '' }: {
   variant?: 'default' | 'secondary' | 'outline';
   className?: string;
 }) => (
-  <span className={`px-2 py-0.5 rounded text-xs ${variant === 'secondary' ? 'bg-[#222] text-[#888]' : 'bg-[#c9a86c] text-[#0a0a0a]'
+  <span className={`px-2 py-0.5 rounded text-xs ${variant === 'secondary' ? 'bg-[#222] text-[#888]' : 'bg-[#f97316] text-[#0a0a0a]'
     } ${className}`}>
     {children}
   </span>
@@ -148,7 +148,7 @@ const Checkbox = ({
     type="checkbox"
     checked={checked}
     onChange={(e) => onCheckedChange(e.target.checked)}
-    className={`w-4 h-4 rounded border-[#444] bg-[#1a1a1a] text-[#c9a86c] focus:ring-[#c9a86c] ${className}`}
+    className={`w-4 h-4 rounded border-[#444] bg-[#1a1a1a] text-[#f97316] focus:ring-[#f97316] ${className}`}
   />
 );
 
@@ -158,115 +158,168 @@ const Resizer = ({ onMouseDown, orientation = 'vertical' }: { onMouseDown: (e: R
     className={`shrink-0 bg-transparent group transition-colors duration-200 ${orientation === 'vertical' ? 'w-1.5 cursor-col-resize' : 'h-1.5 cursor-row-resize'
       }`}
   >
-    <div className={`bg-[#333] group-hover:bg-[#c9a86c] transition-colors ${orientation === 'vertical' ? 'w-px h-full mx-auto' : 'h-px w-full my-auto'}`} />
+    <div className={`bg-[#333] group-hover:bg-[#f97316] transition-colors ${orientation === 'vertical' ? 'w-px h-full mx-auto' : 'h-px w-full my-auto'}`} />
   </div>
 );
 
 const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
   const [isVisible, setIsVisible] = useState(true);
+  const hasPlayedVoice = useRef(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsVisible(false);
       setTimeout(onComplete, 1200);
-    }, 5500);
+    }, 6500);
 
-    try {
-      const synth = window.speechSynthesis;
-      const utterance = new SpeechSynthesisUtterance("ADIA, go beyond.");
-      utterance.pitch = 1;
-      utterance.rate = 0.9;
-      synth.speak(utterance);
-    } catch (e) {
-      console.error("Speech synthesis failed", e);
+    if (!hasPlayedVoice.current) {
+      try {
+        const synth = window.speechSynthesis;
+        const utterance = new SpeechSynthesisUtterance("ADIA, go beyond.");
+        utterance.pitch = 0.9;
+        utterance.rate = 0.85;
+        synth.speak(utterance);
+        hasPlayedVoice.current = true;
+      } catch (e) {
+        console.error("Speech synthesis failed", e);
+      }
     }
 
     return () => clearTimeout(timer);
   }, [onComplete]);
 
   return (
-    <div className={`fixed inset-0 z-[9999] bg-[#050505] flex flex-col items-center justify-center transition-opacity duration-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
-      {/* Background Mist/Particles */}
+    <div className={`fixed inset-0 z-[9999] bg-[#0a0a0a] flex flex-col items-center justify-center transition-opacity duration-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+      {/* Dynamic Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-[#c9a86c]/5 rounded-full blur-[120px] animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#c9a86c]/5 rounded-full blur-[120px] animate-pulse-slow" />
+        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(249,115,22,0.05),transparent_70%)]" />
+        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-orange-600/5 rounded-full blur-[120px] animate-pulse-slow" />
+        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-amber-600/5 rounded-full blur-[120px] animate-pulse-slow [animation-delay:2s]" />
+        
+        {/* Data Stream Particles */}
+        <div className="absolute inset-0 opacity-20">
+          {[...Array(20)].map((_, i) => (
+            <div 
+              key={i}
+              className="absolute bg-orange-400/30 rounded-full animate-float-particle"
+              style={{
+                width: Math.random() * 3 + 1 + 'px',
+                height: Math.random() * 3 + 1 + 'px',
+                left: Math.random() * 100 + '%',
+                top: Math.random() * 100 + '%',
+                animationDuration: Math.random() * 10 + 10 + 's',
+                animationDelay: Math.random() * 5 + 's'
+              }}
+            />
+          ))}
+        </div>
       </div>
 
       <div className="relative flex flex-col items-center">
-        {/* Cinematic Logo Container */}
-        <div className="relative mb-16 group">
-          {/* Outer Ring */}
-          <div className="absolute inset-0 scale-[1.8] border border-[#c9a86c]/10 rounded-full animate-ping-slow" />
+        {/* Creative Neural Nexus Logo */}
+        <div className="relative mb-20 group">
+          {/* Outer Energy Rings */}
+          <div className="absolute inset-0 scale-[2.2] border border-orange-500/10 rounded-full animate-ping-slow" />
+          <div className="absolute inset-0 scale-[1.8] border border-amber-500/10 rounded-full animate-ping-slow [animation-delay:1s]" />
+          
+          {/* Lens Flare Effect */}
+          <div className="absolute -inset-20 bg-gradient-to-tr from-transparent via-orange-400/10 to-transparent rotate-45 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000 pointer-events-none" />
 
           {/* Main Logo SVG */}
-          <div className="relative z-10 transform scale-[1.6]">
-            <svg width="120" height="120" viewBox="0 0 100 100" fill="none">
-              
-              {/* Outer Rotating Gear/Network Ring (Factory & Control) */}
+          <div className="relative z-10 transform scale-[1.8] drop-shadow-[0_0_30px_rgba(249,115,22,0.4)]">
+            <svg width="140" height="140" viewBox="0 0 100 100" fill="none">
+              <defs>
+                <linearGradient id="nexusGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f59e0b" />
+                  <stop offset="100%" stopColor="#ea580c" />
+                </linearGradient>
+                <filter id="glow">
+                  <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+                  <feMerge>
+                    <feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+              </defs>
+
+              {/* Hexagonal Shield */}
+              <path 
+                d="M50 5 L89 27.5 V72.5 L50 95 L11 72.5 V27.5 Z" 
+                stroke="url(#nexusGradient)" 
+                strokeWidth="0.5" 
+                fill="rgba(37,99,235,0.03)"
+                className="animate-draw-path"
+              />
+
+              {/* Orbital Nodes */}
               <g className="animate-spin-slow">
-                <circle cx="50" cy="50" r="35" stroke="#c9a86c" strokeWidth="0.5" strokeDasharray="4 4" />
-                <path d="M50 10 L50 15 M90 50 L85 50 M50 90 L50 85 M10 50 L15 50 M22 22 L26 26 M78 22 L74 26 M78 78 L74 74 M22 78 L26 74" stroke="#c9a86c" strokeWidth="2" strokeLinecap="round" />
+                {[0, 60, 120, 180, 240, 300].map((angle, i) => (
+                  <circle 
+                    key={i}
+                    cx={50 + 38 * Math.cos(angle * Math.PI / 180)} 
+                    cy={50 + 38 * Math.sin(angle * Math.PI / 180)} 
+                    r="1.5" 
+                    fill="#f59e0b" 
+                    className="animate-pulse"
+                    style={{ animationDelay: `${i * 0.5}s` }}
+                  />
+                ))}
               </g>
 
-              {/* Inner Rotating Ring (Data flow) */}
-              <circle cx="50" cy="50" r="25" stroke="#c9a86c" strokeWidth="1" strokeDasharray="15 10" className="animate-spin-reverse" />
-
-              {/* AI Core / Microchip */}
-              <rect x="40" y="40" width="20" height="20" rx="3" fill="none" stroke="#c9a86c" strokeWidth="1.5" className="animate-glow-cycle" />
+              {/* Inner Logic Core */}
+              <rect 
+                x="35" y="35" width="30" height="30" rx="4" 
+                stroke="url(#nexusGradient)" 
+                strokeWidth="1.5" 
+                className="animate-glow-cycle"
+                filter="url(#glow)"
+              />
               
-              {/* Core Processor Lines */}
-              <path d="M44 40 V35 M50 40 V35 M56 40 V35 M44 60 V65 M50 60 V65 M56 60 V65 M40 44 H35 M40 50 H35 M40 56 H35 M60 44 H65 M60 50 H65 M60 56 H65" stroke="#c9a86c" strokeWidth="1" className="animate-pulse" />
+              {/* Neural Connections */}
+              <g className="opacity-60">
+                <path d="M50 35 V15 M50 65 V85 M35 50 H15 M65 50 H85" stroke="#f97316" strokeWidth="1" strokeDasharray="2 2" />
+                <path d="M40 40 L25 25 M60 40 L75 25 M40 60 L25 75 M60 60 L75 75" stroke="#f97316" strokeWidth="1" strokeDasharray="2 2" />
+              </g>
 
-              {/* Central Neural Node */}
-              <circle cx="50" cy="50" r="3" fill="#c9a86c" className="animate-ping-slow" />
-              <circle cx="50" cy="50" r="3" fill="#c9a86c" />
-
-              {/* Connecting Traces (State machine & Data) */}
-              <path d="M50 15 L50 35 M85 50 L65 50 M50 85 L50 65 M15 50 L35 50" stroke="#c9a86c" strokeWidth="1" strokeDasharray="5 5" className="animate-data-pulse" />
-
-              {/* Scanning Beam */}
-              <rect x="0" y="0" width="100" height="2" fill="url(#beamGradient)" className="animate-scan" />
-
-              <defs>
-                <linearGradient id="beamGradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="transparent" />
-                  <stop offset="50%" stopColor="#c9a86c" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="transparent" />
-                </linearGradient>
-              </defs>
+              {/* Central Core Signal */}
+              <circle cx="50" cy="50" r="5" fill="#f97316" className="animate-ping-slow" />
+              <circle cx="50" cy="50" r="4" fill="url(#nexusGradient)" />
             </svg>
           </div>
         </div>
 
-        {/* Text Reveal Section */}
+        {/* Professional Text Reveal */}
         <div className="text-center relative">
-          <div className="flex gap-1 mb-6">
+          <div className="flex gap-2 mb-8">
             {['A', 'D', 'I', 'A'].map((char, i) => (
               <span
                 key={i}
-                className="text-7xl font-black tracking-tighter text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] animate-reveal-letter"
-                style={{ animationDelay: `${i * 0.2 + 0.5}s` }}
+                className="text-8xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-orange-200 drop-shadow-[0_0_20px_rgba(249,115,22,0.5)] animate-reveal-letter"
+                style={{ 
+                  animationDelay: `${i * 0.2 + 0.5}s`,
+                  opacity: 0 
+                }}
               >
                 {char}
               </span>
             ))}
+            <span className="text-8xl font-black text-orange-500 animate-cursor-fade ml-1">|</span>
           </div>
 
-          <div className="h-10 relative overflow-hidden flex items-center justify-center mt-2">
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#c9a86c]/20 to-transparent animate-shimmer" />
-            <p className="text-[#c9a86c] text-xl font-bold uppercase tracking-[0.6em] opacity-0 animate-fade-in-up ml-[0.6em]">
-              Go Beyond
+          <div className="h-12 relative overflow-hidden flex items-center justify-center mt-2 group">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-orange-500/20 to-transparent animate-shimmer" />
+            <p className="text-orange-400 text-2xl font-light lowercase tracking-[0.6em] opacity-0 animate-technical-reveal ml-[0.6em] drop-shadow-[0_0_10px_rgba(249,115,22,0.3)]">
+              go beyond
             </p>
           </div>
         </div>
 
-        {/* Futuristic Status Bar */}
-        <div className="mt-20 w-64 h-[1px] bg-[#222] relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#c9a86c] to-transparent animate-loading-slide" />
-          <div className="absolute top-2 left-0 right-0 flex justify-between text-[8px] font-mono text-[#444] tracking-widest uppercase">
-            <span>System</span>
-            <span className="animate-pulse">Active</span>
-            <span>2024</span>
+        {/* Loading Progress Bar */}
+        <div className="mt-24 w-80 h-[2px] bg-orange-900/30 relative rounded-full overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-orange-600 via-amber-400 to-orange-600 animate-loading-slide shadow-[0_0_10px_#f97316]" />
+          <div className="absolute top-4 left-0 right-0 flex justify-between text-[10px] font-mono text-orange-500/60 tracking-[0.2em] uppercase">
+            <span className="animate-pulse">Core Initialized</span>
+            <span className="font-bold">v2.5</span>
+            <span className="animate-pulse">Encrypted</span>
           </div>
         </div>
       </div>
@@ -274,26 +327,41 @@ const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
       <style>{`
         @keyframes draw-path {
           0% { stroke-dasharray: 0 400; stroke-dashoffset: 0; opacity: 0; }
-          50% { opacity: 1; }
-          100% { stroke-dasharray: 400 0; stroke-dashoffset: 0; }
-        }
-        @keyframes scan {
-          0% { transform: translateY(0); opacity: 0; }
-          20% { opacity: 1; }
-          80% { opacity: 1; }
-          100% { transform: translateY(100px); opacity: 0; }
+          100% { stroke-dasharray: 400 0; stroke-dashoffset: 0; opacity: 1; }
         }
         @keyframes reveal-letter {
-          0% { transform: translateY(20px) scale(0.8); opacity: 0; filter: blur(10px); }
-          100% { transform: translateY(0) scale(1); opacity: 1; filter: blur(0); }
+          0% { transform: scale(0.8); opacity: 0; filter: brightness(0); }
+          50% { opacity: 0.5; filter: brightness(2); }
+          100% { transform: scale(1); opacity: 1; filter: brightness(1); }
         }
-        @keyframes fade-in-up {
-          0% { transform: translateY(20px); opacity: 0; }
-          100% { transform: translateY(0); opacity: 1; }
+        .animate-reveal-letter {
+          animation: reveal-letter 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+          display: inline-block;
+        }
+        @keyframes technical-reveal {
+          0% { transform: translateY(10px); opacity: 0; letter-spacing: -0.5em; clip-path: inset(0 100% 0 0); }
+          50% { opacity: 0.5; }
+          100% { transform: translateY(0); opacity: 1; letter-spacing: 0.6em; clip-path: inset(0 0 0 0); }
+        }
+        .animate-technical-reveal {
+          animation: technical-reveal 1.5s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+          animation-delay: 1.8s;
+        }
+        @keyframes cursor-fade {
+          0%, 80% { opacity: 1; }
+          100% { opacity: 0; }
+        }
+        .animate-cursor-fade {
+          animation: blink 0.8s infinite, cursor-fade 0.5s forwards;
+          animation-delay: 0s, 1.8s;
+        }
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
         }
         @keyframes glow-cycle {
-          0%, 100% { filter: drop-shadow(0 0 5px #c9a86c); }
-          50% { filter: drop-shadow(0 0 20px #c9a86c); }
+          0%, 100% { filter: drop-shadow(0 0 5px #f97316); stroke-opacity: 0.8; }
+          50% { filter: drop-shadow(0 0 25px #f59e0b); stroke-opacity: 1; }
         }
         @keyframes shimmer {
           0% { transform: translateX(-100%); }
@@ -304,36 +372,29 @@ const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
           100% { transform: translateX(100%); }
         }
         @keyframes ping-slow {
-          0% { transform: scale(1.4); opacity: 0.3; }
-          100% { transform: scale(2.2); opacity: 0; }
+          0% { transform: scale(1); opacity: 0.5; }
+          100% { transform: scale(2.5); opacity: 0; }
         }
         @keyframes pulse-slow {
-          0%, 100% { opacity: 0.05; }
-          50% { opacity: 0.1; }
+          0%, 100% { opacity: 0.05; transform: scale(1); }
+          50% { opacity: 0.15; transform: scale(1.1); }
         }
         @keyframes spin-slow {
           100% { transform: rotate(360deg); }
         }
-        @keyframes spin-reverse {
-          100% { transform: rotate(-360deg); }
+        @keyframes float-particle {
+          0%, 100% { transform: translateY(0) translateX(0); }
+          50% { transform: translateY(-100px) translateX(20px); }
         }
-        @keyframes data-pulse {
-          0% { stroke-dashoffset: 20; opacity: 0; }
-          50% { opacity: 1; }
-          100% { stroke-dashoffset: 0; opacity: 0; }
-        }
-        .animate-draw-path { animation: draw-path 3s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
-        .animate-scan { animation: scan 3s linear infinite; }
-        .animate-reveal-letter { animation: reveal-letter 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; opacity: 0; }
-        .animate-fade-in-up { animation: fade-in-up 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; animation-delay: 2s; }
+        .animate-draw-path { animation: draw-path 4s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        .animate-reveal-letter { animation: reveal-letter 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; opacity: 0; perspective: 1000px; }
+        .animate-fade-in-up { animation: fade-in-up 2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; animation-delay: 2.2s; }
         .animate-glow-cycle { animation: glow-cycle 3s ease-in-out infinite; }
-        .animate-shimmer { animation: shimmer 2s linear infinite; }
-        .animate-loading-slide { animation: loading-slide 2.5s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+        .animate-shimmer { animation: shimmer 3s linear infinite; }
+        .animate-loading-slide { animation: loading-slide 3s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
         .animate-ping-slow { animation: ping-slow 4s cubic-bezier(0, 0, 0.2, 1) infinite; }
-        .animate-pulse-slow { animation: pulse-slow 5s ease-in-out infinite; }
-        .animate-spin-slow { animation: spin-slow 12s linear infinite; transform-origin: 50px 50px; }
-        .animate-spin-reverse { animation: spin-reverse 10s linear infinite; transform-origin: 50px 50px; }
-        .animate-data-pulse { animation: data-pulse 2s linear infinite; }
+        .animate-pulse-slow { animation: pulse-slow 6s ease-in-out infinite; }
+        .animate-spin-slow { animation: spin-slow 20s linear infinite; transform-origin: 50px 50px; }
       `}</style>
     </div>
   );
@@ -571,7 +632,7 @@ const MIN_SCALE = 0.1;
 const MAX_SCALE = 5;
 const GRID_SIZE = 20;
 const SCOPE_MAX_POINTS = 500;
-const STATE_COLORS = ['#c9a86c', '#6c9ac6', '#6cc9a8', '#c96c8a', '#9a6cc9', '#c9c46c'];
+const STATE_COLORS = ['#f97316', '#6c9ac6', '#6cc9a8', '#c96c8a', '#9a6cc9', '#c9c46c'];
 const JUNCTION_COLOR = '#ff9900';
 const VERSION = 'v2.4 ENGINE';
 
@@ -1356,7 +1417,7 @@ const HierarchyTree = ({
         <div
           onClick={(e) => { e.stopPropagation(); onSelect(state.id); }}
           onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(state.id); }}
-          className={`flex items-center p-1 rounded cursor-pointer hover:bg-[#2a2a2a] ${isSelected ? 'bg-[#c9a86c]/30' : ''
+          className={`flex items-center p-1 rounded cursor-pointer hover:bg-[#2a2a2a] ${isSelected ? 'bg-[#f97316]/30' : ''
             } ${isActive ? 'font-bold' : ''}`}
           style={{ paddingLeft: `${level * 16 + 8}px` }}
         >
@@ -1513,7 +1574,7 @@ const FloatingWindow = ({
         height: windowState.size.height,
         zIndex: windowState.zIndex,
       }}
-      className="bg-[#141414] border border-[#c9a86c] rounded-lg flex flex-col shadow-2xl overflow-hidden"
+      className="bg-[#1a1a1a] border border-[#f97316] rounded-lg flex flex-col shadow-2xl overflow-hidden"
       onMouseDown={() => !isMobile && onUpdate(windowState.id, { zIndex: Date.now() })}
     >
       <div
@@ -1525,7 +1586,7 @@ const FloatingWindow = ({
           setDragOffset({ x: e.clientX - windowState.pos.x, y: e.clientY - windowState.pos.y });
         }}
       >
-        <span className="text-xs font-bold text-[#c9a86c]">{windowState.title}</span>
+        <span className="text-xs font-bold text-[#f97316]">{windowState.title}</span>
         <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="text-[#666] hover:text-[#e0e0e0]">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
@@ -1542,7 +1603,7 @@ const FloatingWindow = ({
           setResizeStart({ w: windowState.size.width, h: windowState.size.height, x: e.clientX, y: e.clientY });
         }}
       >
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="#c9a86c" className="absolute bottom-1 right-1 opacity-50"><path d="M 10 0 L 10 10 L 0 10 Z" /></svg>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="#f97316" className="absolute bottom-1 right-1 opacity-50"><path d="M 10 0 L 10 10 L 0 10 Z" /></svg>
       </div>}
     </div>
   );
@@ -1637,7 +1698,7 @@ const TraceabilityMatrix = ({
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#141414]">
+    <div className="flex flex-col h-full w-full bg-[#1a1a1a]">
       <div className="h-10 flex items-center px-4 border-b border-[#222] justify-between shrink-0">
         <div className="flex gap-2 items-center">
           <span className="text-xs text-[#888]">Filter:</span>
@@ -1675,14 +1736,14 @@ const TraceabilityMatrix = ({
               const satisfiedBy = [...satisfiedByBlocks, ...satisfiedByParts];
               return (
                 <tr key={r.id} className="hover:bg-[#1a1a1a] transition-colors group">
-                  <td className="py-3 pr-3 font-mono text-[#c9a86c]" style={{ paddingLeft: `${12 + level * 20}px` }}>
+                  <td className="py-3 pr-3 font-mono text-[#f97316]" style={{ paddingLeft: `${12 + level * 20}px` }}>
                     {level > 0 && <span className="text-[#555] mr-2">└</span>}
                     {r.reqId}
                   </td>
                   <td className="p-3 font-bold text-[#e0e0e0] group-hover:text-[#fff]">{r.name}</td>
                   <td className="p-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${r.status === 'Verified' ? 'bg-green-900/20 text-green-400 border-green-800/30' :
-                      r.status === 'Approved' ? 'bg-blue-900/20 text-blue-400 border-blue-800/30' :
+                      r.status === 'Approved' ? 'bg-orange-900/20 text-orange-400 border-orange-800/30' :
                         r.status === 'Implemented' ? 'bg-purple-900/20 text-purple-400 border-purple-800/30' :
                           'bg-[#222] text-[#aaa] border-[#333]'
                       }`}>
@@ -1702,7 +1763,7 @@ const TraceabilityMatrix = ({
                       {relationships.filter(rel => rel.sourceId === r.id).map(rel => {
                         const t = blocks.find(b => b.id === rel.targetId);
                         return (
-                          <div key={rel.id} className="flex items-center gap-1.5 bg-[#111] px-2 py-1 rounded border border-[#222] w-max">
+                          <div key={rel.id} className="flex items-center gap-1.5 bg-[#1a1a1a] px-2 py-1 rounded border border-[#222] w-max">
                             <span className="text-[#6c9ac6] text-[10px] font-mono">«{rel.type}»</span>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-50"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                             <span className="text-[#ccc]">{t?.name}</span>
@@ -1780,13 +1841,13 @@ const CodeGenerationDialog = ({
   }, [isResizingModal]);
 
   return (
-    <div style={{ width: `${size.width}px`, height: `${size.height}px` }} className="bg-[#141414] border border-[#c9a86c] rounded-lg flex flex-col relative overflow-hidden" onMouseDown={e => e.stopPropagation()}>
+    <div style={{ width: `${size.width}px`, height: `${size.height}px` }} className="bg-[#1a1a1a] border border-[#f97316] rounded-lg flex flex-col relative overflow-hidden" onMouseDown={e => e.stopPropagation()}>
       <div className="h-12 flex items-center px-5 border-b border-[#222]">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-3">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="mr-3">
           <polyline points="16 18 22 12 16 6" />
           <polyline points="8 6 2 12 8 18" />
         </svg>
-        <h2 className="text-lg font-bold text-[#c9a86c]">MISRA-C Code Generation</h2>
+        <h2 className="text-lg font-bold text-[#f97316]">MISRA-C Code Generation</h2>
       </div>
 
       <div className="flex-1 overflow-y-auto p-5">
@@ -1803,7 +1864,7 @@ const CodeGenerationDialog = ({
             <ul className="text-xs text-red-300 space-y-1.5 max-h-64 overflow-y-auto">
               {codegenErrors.map((err, i) => (
                 <li key={i} className="pl-4 border-l-2 border-red-900/70 py-0.5">
-                  <span className="font-mono text-[#c9a86c]">[{err.source}]</span> {err.message}
+                  <span className="font-mono text-[#f97316]">[{err.source}]</span> {err.message}
                 </li>
               ))}
             </ul>
@@ -1813,12 +1874,12 @@ const CodeGenerationDialog = ({
             <div>
               <div className="flex gap-2 mb-2 overflow-x-auto pb-2">
                 {files.map(f => (
-                  <button key={f.name} onClick={() => setActiveFile(f.name)} className={`px-3 py-1 text-xs rounded border ${activeFile === f.name ? 'bg-[#c9a86c] text-black border-[#c9a86c]' : 'bg-[#1a1a1a] text-[#888] border-[#333]'}`}>
+                  <button key={f.name} onClick={() => setActiveFile(f.name)} className={`px-3 py-1 text-xs rounded border ${activeFile === f.name ? 'bg-[#f97316] text-black border-[#f97316]' : 'bg-[#1a1a1a] text-[#888] border-[#333]'}`}>
                     {f.name}
                   </button>
                 ))}
               </div>
-              <h3 className="text-sm font-medium text-[#c9a86c] mb-2.5">{activeFile}</h3>
+              <h3 className="text-sm font-medium text-[#f97316] mb-2.5">{activeFile}</h3>
               <pre className="bg-[#0a0a0a] p-4 rounded text-xs font-mono text-[#e0e0e0] max-h-64 overflow-auto border border-[#333]">
                 {files.find(f => f.name === activeFile)?.content || '// Select a file'}
               </pre>
@@ -1841,7 +1902,7 @@ const CodeGenerationDialog = ({
               </div>
             )}
             {generationLog.length > 0 && (
-              <div className="bg-[#111] border border-[#333] rounded-lg p-4">
+              <div className="bg-[#1a1a1a] border border-[#333] rounded-lg p-4">
                 <h3 className="text-xs font-medium text-[#888] mb-2">Generation Log (REQ-ENGINE-004)</h3>
                 <ul className="text-[10px] font-mono text-[#666] space-y-1 max-h-24 overflow-y-auto">
                   {generationLog.map((log, i) => (
@@ -1877,7 +1938,7 @@ const CodeGenerationDialog = ({
               addError('info', 'Files downloaded successfully');
               onClose();
             }}
-            className="bg-[#c9a86c] text-[#0a0a0a] hover:bg-[#b8975b] px-5"
+            className="bg-[#f97316] text-[#0a0a0a] hover:bg-[#ea580c] px-5"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -1890,7 +1951,7 @@ const CodeGenerationDialog = ({
       </div>
       <div
         onMouseDown={handleModalResizeStart}
-        className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10 text-[#c9a86c] opacity-50 hover:opacity-100 flex items-end justify-end"
+        className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10 text-[#f97316] opacity-50 hover:opacity-100 flex items-end justify-end"
         title="Resize Window"
       ><svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M 10 0 L 10 10 L 0 10 Z" /></svg></div>
     </div>
@@ -2038,7 +2099,7 @@ const PidWorkspaceDialog = ({
   }, [pidKp, pidKi, pidKd, pidData, addError]);
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#141414]">
+    <div className="flex flex-col h-full w-full bg-[#1a1a1a]">
       <div className="p-5 text-center text-[#e0e0e0]">
         PID Workspace (Please refactor state to pass as props to fully enable)
       </div>
@@ -2204,18 +2265,18 @@ const HybridRotary = ({
         <defs>
           <radialGradient id="grad-hybrid">
             <stop offset="0%" stopColor="#444" />
-            <stop offset="90%" stopColor="#111" />
+            <stop offset="90%" stopColor="#1a1a1a" />
             <stop offset="100%" stopColor="#000" />
           </radialGradient>
         </defs>
-        <circle cx="50" cy="50" r="40" fill="url(#grad-hybrid)" stroke="#c9a86c" strokeWidth="1" />
+        <circle cx="50" cy="50" r="40" fill="url(#grad-hybrid)" stroke="#f97316" strokeWidth="1" />
         {Array.from({ length: positions }).map((_, i) => {
           const tickRot = 225 + i * stepAngle;
           return (
             <line
               key={i}
               x1="50" y1="10" x2="50" y2="15"
-              stroke={i === currentIndex ? '#c9a86c' : '#666'}
+              stroke={i === currentIndex ? '#f97316' : '#666'}
               strokeWidth={i === currentIndex ? 3 : 1}
               transform={`rotate(${tickRot} 50 50)`}
             />
@@ -2233,7 +2294,7 @@ const HybridRotary = ({
                 y={ty}
                 textAnchor="middle"
                 dominantBaseline="middle"
-                fill={i === currentIndex ? '#c9a86c' : '#888'}
+                fill={i === currentIndex ? '#f97316' : '#888'}
                 fontSize="6"
                 fontFamily="monospace"
                 style={{ pointerEvents: 'none' }}
@@ -2244,11 +2305,11 @@ const HybridRotary = ({
           );
         })}
         <g transform={`rotate(${angle} 50 50)`}>
-          <circle cx="50" cy="20" r="4" fill="#c9a86c" />
-          <line x1="50" y1="20" x2="50" y2="50" stroke="#c9a86c" strokeWidth="2" />
+          <circle cx="50" cy="20" r="4" fill="#f97316" />
+          <line x1="50" y1="20" x2="50" y2="50" stroke="#f97316" strokeWidth="2" />
         </g>
       </svg>
-      <div className="absolute bottom-1 text-[9px] text-[#c9a86c] font-mono select-none">
+      <div className="absolute bottom-1 text-[9px] text-[#f97316] font-mono select-none">
         {values[currentIndex]}
       </div>
     </div>
@@ -2813,8 +2874,8 @@ const DoeWorkspace = ({
       <div className="h-14 border-b border-[#222] bg-[#0a0a0a] flex items-center justify-between px-6">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
-            <Layers size={18} className="text-[#c9a86c]" />
-            <h2 className="text-sm font-black uppercase tracking-tighter text-[#c9a86c]">DOE ANALYZER Pro</h2>
+            <Layers size={18} className="text-[#f97316]" />
+            <h2 className="text-sm font-black uppercase tracking-tighter text-[#f97316]">DOE ANALYZER Pro</h2>
           </div>
           <div className="h-4 w-px bg-[#222]" />
           <div className="flex gap-2">
@@ -2853,14 +2914,14 @@ const DoeWorkspace = ({
               <section>
                 <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Model Metrics</h3>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-[#111] p-4 rounded-lg border border-[#222]">
+                  <div className="bg-[#1a1a1a] p-4 rounded-lg border border-[#222]">
                     <div className="text-xs text-[#888] mb-1">R-Squared</div>
-                    <div className="text-xl font-black text-[#c9a86c]">{(results.R2 * 100).toFixed(2)}%</div>
+                    <div className="text-xl font-black text-[#f97316]">{(results.R2 * 100).toFixed(2)}%</div>
                     {results.R2Adj !== undefined && (
                       <div className="text-[10px] text-[#555] mt-1">Adj: {(results.R2Adj * 100).toFixed(2)}% | Pred: {(results.R2Pred * 100).toFixed(2)}%</div>
                     )}
                   </div>
-                  <div className="bg-[#111] p-4 rounded-lg border border-[#222]">
+                  <div className="bg-[#1a1a1a] p-4 rounded-lg border border-[#222]">
                     <div className="text-xs text-[#888] mb-1">{results.type === 'RSM' ? 'Adeq Precision' : 'Model Type'}</div>
                     <div className="text-sm font-bold text-white uppercase">
                       {results.type === 'RSM' ? results.AdeqPrec?.toFixed(4) : results.type}
@@ -2881,7 +2942,7 @@ const DoeWorkspace = ({
                 <>
                   <section>
                     <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Response Table (S/N)</h3>
-                    <div className="bg-[#111] rounded border border-[#222] overflow-x-auto custom-scrollbar">
+                    <div className="bg-[#1a1a1a] rounded border border-[#222] overflow-x-auto custom-scrollbar">
                       <table className="w-full text-[10px] text-left border-collapse">
                         <thead className="bg-[#1a1a1a] text-[#666] uppercase">
                           <tr>
@@ -2898,7 +2959,7 @@ const DoeWorkspace = ({
                             if (!hasLevel) return null;
                             return (
                               <tr key={level}>
-                                <td className="p-2 font-bold text-[#888] bg-[#141414] border-r border-[#222]">{level}</td>
+                                <td className="p-2 font-bold text-[#888] bg-[#1a1a1a] border-r border-[#222]">{level}</td>
                                 {results.factorLevels?.map((f: any, i: number) => {
                                   const m = f.means.find((m: any) => m.level === level);
                                   return <td key={i} className="p-2 text-center text-white">{m ? m.meanSN.toFixed(2) : '-'}</td>;
@@ -2907,15 +2968,15 @@ const DoeWorkspace = ({
                             );
                           })}
                           <tr className="bg-[#1a1a1a]/50">
-                            <td className="p-2 font-bold text-[#c9a86c] border-r border-[#222]">Delta</td>
+                            <td className="p-2 font-bold text-[#f97316] border-r border-[#222]">Delta</td>
                             {results.factorLevels?.map((f: any, i: number) => (
-                              <td key={i} className="p-2 text-center text-[#c9a86c] font-bold">{f.delta.toFixed(2)}</td>
+                              <td key={i} className="p-2 text-center text-[#f97316] font-bold">{f.delta.toFixed(2)}</td>
                             ))}
                           </tr>
                           <tr>
-                            <td className="p-2 font-bold text-[#c9a86c] border-r border-[#222]">Rank</td>
+                            <td className="p-2 font-bold text-[#f97316] border-r border-[#222]">Rank</td>
                             {results.factorLevels?.map((f: any, i: number) => (
-                              <td key={i} className="p-2 text-center text-[#c9a86c] font-black italic">{f.rank}</td>
+                              <td key={i} className="p-2 text-center text-[#f97316] font-black italic">{f.rank}</td>
                             ))}
                           </tr>
                         </tbody>
@@ -2927,7 +2988,7 @@ const DoeWorkspace = ({
                     <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Optimal Settings</h3>
                     <div className="grid grid-cols-1 gap-1">
                       {results.optimal?.map((opt: any, idx: number) => (
-                        <div key={idx} className="bg-[#111] p-2 rounded border border-emerald-500/10 flex justify-between items-center group hover:border-emerald-500/40 transition-colors">
+                        <div key={idx} className="bg-[#1a1a1a] p-2 rounded border border-emerald-500/10 flex justify-between items-center group hover:border-emerald-500/40 transition-colors">
                           <span className="text-[10px] text-gray-400">{opt.factor}</span>
                           <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">Level {opt.level}</span>
                         </div>
@@ -2941,7 +3002,7 @@ const DoeWorkspace = ({
                 <>
                   <section>
                     <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">ANOVA (Model Summary)</h3>
-                    <div className="bg-[#111] rounded border border-[#222] overflow-x-auto">
+                    <div className="bg-[#1a1a1a] rounded border border-[#222] overflow-x-auto">
                       <table className="w-full text-[9px] text-left border-collapse">
                         <thead className="bg-[#1a1a1a] text-[#666] uppercase">
                           <tr>
@@ -2955,11 +3016,11 @@ const DoeWorkspace = ({
                         <tbody className="divide-y divide-[#222]">
                           {results.anovaTable?.map((row: any, i: number) => (
                             <tr key={i}>
-                              <td className="p-2 font-bold text-[#888] bg-[#141414] border-r border-[#222]">{row.source}</td>
+                              <td className="p-2 font-bold text-[#888] bg-[#1a1a1a] border-r border-[#222]">{row.source}</td>
                               <td className="p-2 text-center text-white">{row.df}</td>
                               <td className="p-2 text-center text-white">{row.ss.toFixed(2)}</td>
                               <td className="p-2 text-center text-white">{row.ms?.toFixed(2) || '-'}</td>
-                              <td className="p-2 text-center font-bold text-[#c9a86c]">{row.f?.toFixed(2) || '-'}</td>
+                              <td className="p-2 text-center font-bold text-[#f97316]">{row.f?.toFixed(2) || '-'}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -2969,7 +3030,7 @@ const DoeWorkspace = ({
 
                   <section>
                     <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Coefficients (Uncoded)</h3>
-                    <div className="bg-[#111] rounded border border-[#222] overflow-x-auto max-h-48 custom-scrollbar">
+                    <div className="bg-[#1a1a1a] rounded border border-[#222] overflow-x-auto max-h-48 custom-scrollbar">
                       <table className="w-full text-[9px] text-left border-collapse">
                         <thead className="bg-[#1a1a1a] text-[#666] uppercase sticky top-0 z-10">
                           <tr>
@@ -2982,7 +3043,7 @@ const DoeWorkspace = ({
                         <tbody className="divide-y divide-[#222]">
                           {results.coeffTable?.map((row: any, i: number) => (
                             <tr key={i} className={row.p < 0.05 ? 'bg-emerald-500/5' : ''}>
-                              <td className="p-2 font-bold text-[#888] bg-[#141414] border-r border-[#222] truncate max-w-[80px]">{row.term}</td>
+                              <td className="p-2 font-bold text-[#888] bg-[#1a1a1a] border-r border-[#222] truncate max-w-[80px]">{row.term}</td>
                               <td className="p-2 text-center text-white">{row.coef.toPrecision(4)}</td>
                               <td className="p-2 text-center text-white">{row.t.toFixed(2)}</td>
                               <td className={`p-2 text-center font-bold ${row.p < 0.05 ? 'text-emerald-400' : 'text-gray-500'}`}>{row.p.toFixed(3)}</td>
@@ -3004,10 +3065,10 @@ const DoeWorkspace = ({
                   </div>
                 </div>
                 <div
-                  className="bg-[#111] rounded-lg border border-[#222] overflow-auto max-h-64 select-text"
+                  className="bg-[#1a1a1a] rounded-lg border border-[#222] overflow-auto max-h-64 select-text"
                 >
                   <pre
-                    className="p-4 font-mono text-[#c9a86c] whitespace-pre-wrap leading-loose"
+                    className="p-4 font-mono text-[#f97316] whitespace-pre-wrap leading-loose"
                     style={{ fontSize: `${eqFontSize}px` }}
                   >
                     {results.equation || 'No equation generated'}
@@ -3035,7 +3096,7 @@ const DoeWorkspace = ({
                   <div>
                     <Label className="mb-2 block">X-Axis Factor</Label>
                     <select
-                      className="w-full bg-[#111] border border-[#222] rounded p-2 text-xs text-white"
+                      className="w-full bg-[#1a1a1a] border border-[#222] rounded p-2 text-xs text-white"
                       value={plotFactors.x}
                       onChange={e => setPlotFactors(prev => ({ ...prev, x: Number(e.target.value) }))}
                     >
@@ -3045,7 +3106,7 @@ const DoeWorkspace = ({
                   <div>
                     <Label className="mb-2 block">Y-Axis Factor</Label>
                     <select
-                      className="w-full bg-[#111] border border-[#222] rounded p-2 text-xs text-white"
+                      className="w-full bg-[#1a1a1a] border border-[#222] rounded p-2 text-xs text-white"
                       value={plotFactors.y}
                       onChange={e => setPlotFactors(prev => ({ ...prev, y: Number(e.target.value) }))}
                     >
@@ -3089,8 +3150,8 @@ const DoeWorkspace = ({
 
                   {activeModel === 'Taguchi' && (
                     <div className="space-y-4">
-                      <div className="bg-[#111] p-3 rounded border border-[#222] space-y-3">
-                        <h4 className="text-[10px] font-bold text-[#c9a86c] uppercase tracking-tighter">Confirmation Prediction</h4>
+                      <div className="bg-[#1a1a1a] p-3 rounded border border-[#222] space-y-3">
+                        <h4 className="text-[10px] font-bold text-[#f97316] uppercase tracking-tighter">Confirmation Prediction</h4>
                         <p className="text-[9px] text-gray-500 italic mb-2">Predict response based on factor level selection.</p>
                         {headers.slice(0, -1).map((h, i) => (
                           <div key={i} className="flex justify-between items-center gap-2">
@@ -3110,7 +3171,7 @@ const DoeWorkspace = ({
                         <div className="mt-3 pt-3 border-t border-[#222]">
                           <div className="flex justify-between items-center">
                             <span className="text-[10px] text-gray-300">Predicted SN:</span>
-                            <span className="text-[10px] font-bold text-[#c9a86c]">
+                            <span className="text-[10px] font-bold text-[#f97316]">
                               {(() => {
                                 const grandMean = results?.snRatios?.reduce((a:number,b:number)=>a+b,0) / (results?.snRatios?.length || 1);
                                 let pred = grandMean;
@@ -3128,7 +3189,7 @@ const DoeWorkspace = ({
                       <div>
                         <Label className="mb-2 block">Objective (S/N)</Label>
                         <select
-                          className="w-full bg-[#111] border border-[#222] rounded p-2 text-xs text-white"
+                          className="w-full bg-[#1a1a1a] border border-[#222] rounded p-2 text-xs text-white"
                           value={taguchiConfig.objective}
                           onChange={e => setTaguchiConfig({ objective: e.target.value as any })}
                         >
@@ -3148,7 +3209,7 @@ const DoeWorkspace = ({
                         <div key={i} className="mb-4">
                           <div className="flex justify-between text-[10px] mb-1">
                             <span>{h}</span>
-                            <span className="text-[#c9a86c]">{holdValues[i]?.toFixed(2)}</span>
+                            <span className="text-[#f97316]">{holdValues[i]?.toFixed(2)}</span>
                           </div>
                           <input
                             type="range"
@@ -3161,7 +3222,7 @@ const DoeWorkspace = ({
                               newHolds[i] = Number(e.target.value);
                               setHoldValues(newHolds);
                             }}
-                            className="w-full h-1 bg-[#222] rounded-lg appearance-none cursor-pointer accent-[#c9a86c]"
+                            className="w-full h-1 bg-[#222] rounded-lg appearance-none cursor-pointer accent-[#f97316]"
                           />
                         </div>
                       );
@@ -3315,7 +3376,7 @@ const HmiDashboardContent = ({
     const numValue = typeof value === 'number' ? value : (value ? 1 : 0);
     const boolValue = !!value;
 
-    const commonStyle = `absolute border ${selectedId === comp.id && editMode ? 'border-[#c9a86c] z-10' : 'border-[#333]'} bg-[#111] rounded flex flex-col items-center justify-center overflow-hidden select-none`;
+    const commonStyle = `absolute border ${selectedId === comp.id && editMode ? 'border-[#f97316] z-10' : 'border-[#333]'} bg-[#1a1a1a] rounded flex flex-col items-center justify-center overflow-hidden select-none`;
 
     return (
       <div
@@ -3330,7 +3391,7 @@ const HmiDashboardContent = ({
             {['nw', 'ne', 'sw', 'se'].map(h => (
               <div
                 key={h}
-                className={`absolute w-2 h-2 bg-[#c9a86c] border border-black z-20 ${h === 'nw' ? 'top-0 left-0 cursor-nw-resize' : h === 'ne' ? 'top-0 right-0 cursor-ne-resize' : h === 'sw' ? 'bottom-0 left-0 cursor-sw-resize' : 'bottom-0 right-0 cursor-se-resize'}`}
+                className={`absolute w-2 h-2 bg-[#f97316] border border-black z-20 ${h === 'nw' ? 'top-0 left-0 cursor-nw-resize' : h === 'ne' ? 'top-0 right-0 cursor-ne-resize' : h === 'sw' ? 'bottom-0 left-0 cursor-sw-resize' : 'bottom-0 right-0 cursor-se-resize'}`}
                 onMouseDown={(e) => handleResizeMouseDown(e, h, comp.id)}
               />
             ))}
@@ -3340,7 +3401,7 @@ const HmiDashboardContent = ({
         <div className="flex-1 flex items-center justify-center w-full p-2">
           {comp.type === 'toggle' && (
             <div
-              className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${boolValue ? 'bg-[#c9a86c]' : 'bg-[#333]'}`}
+              className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${boolValue ? 'bg-[#f97316]' : 'bg-[#333]'}`}
               onClick={() => !editMode && variable && updateVariable(variable.id, (!boolValue).toString())}
             >
               <div className={`w-4 h-4 rounded-full bg-white shadow-md transform transition-transform ${boolValue ? 'translate-x-6' : 'translate-x-0'}`} />
@@ -3348,7 +3409,7 @@ const HmiDashboardContent = ({
           )}
           {comp.type === 'button' && (
             <button
-              className={`w-full h-full rounded font-bold transition-all active:scale-95 ${boolValue ? 'bg-[#c9a86c] text-black' : 'bg-[#333] text-[#ccc]'}`}
+              className={`w-full h-full rounded font-bold transition-all active:scale-95 ${boolValue ? 'bg-[#f97316] text-black' : 'bg-[#333] text-[#ccc]'}`}
               onMouseDown={() => !editMode && variable && updateVariable(variable.id, 'true')}
               onMouseUp={() => !editMode && variable && updateVariable(variable.id, 'false')}
               onMouseLeave={() => !editMode && variable && updateVariable(variable.id, 'false')}
@@ -3369,7 +3430,7 @@ const HmiDashboardContent = ({
               max={comp.max ?? 100}
               value={numValue}
               onChange={(e) => !editMode && variable && updateVariable(variable.id, e.target.value)}
-              className="w-full accent-[#c9a86c]"
+              className="w-full accent-[#f97316]"
               disabled={editMode}
             />
           )}
@@ -3378,7 +3439,7 @@ const HmiDashboardContent = ({
               type="number"
               value={numValue}
               onChange={(e) => !editMode && variable && updateVariable(variable.id, e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-[#333] rounded px-2 py-1 text-right text-[#c9a86c] font-mono"
+              className="w-full bg-[#0a0a0a] border border-[#333] rounded px-2 py-1 text-right text-[#f97316] font-mono"
               disabled={editMode}
             />
           )}
@@ -3394,7 +3455,7 @@ const HmiDashboardContent = ({
                 <path
                   d="M 10 50 A 40 40 0 0 1 90 50"
                   fill="none"
-                  stroke="#c9a86c"
+                  stroke="#f97316"
                   strokeWidth="10"
                   strokeDasharray={`${((numValue - (comp.min || 0)) / ((comp.max || 100) - (comp.min || 0))) * 126} 126`}
                 />
@@ -3476,15 +3537,15 @@ const HmiDashboardContent = ({
               return (
                 <div className="relative w-full h-full flex items-center justify-center" onMouseDown={handleRotaryMouseDown} style={{ cursor: editMode ? 'default' : 'pointer' }}>
                   <svg viewBox="0 0 100 100" className="w-full h-full">
-                    <defs><radialGradient id="grad-rotary"><stop offset="0%" stopColor="#555" /><stop offset="90%" stopColor="#222" /><stop offset="100%" stopColor="#111" /></radialGradient></defs>
-                    <circle cx="50" cy="50" r="40" fill="url(#grad-rotary)" stroke="#111" strokeWidth="2" />
+                    <defs><radialGradient id="grad-rotary"><stop offset="0%" stopColor="#555" /><stop offset="90%" stopColor="#222" /><stop offset="100%" stopColor="#1a1a1a" /></radialGradient></defs>
+                    <circle cx="50" cy="50" r="40" fill="url(#grad-rotary)" stroke="#1a1a1a" strokeWidth="2" />
                     {/* Ticks */}
                     {Array.from({ length: positions }).map((_, i) => (
-                      <line key={i} x1="50" y1="10" x2="50" y2="15" stroke={i === currentIndex ? "#c9a86c" : "#888"} strokeWidth={i === currentIndex ? 3 : 2} transform={`rotate(${-135 + i * stepAngle} 50 50)`} />
+                      <line key={i} x1="50" y1="10" x2="50" y2="15" stroke={i === currentIndex ? "#f97316" : "#888"} strokeWidth={i === currentIndex ? 3 : 2} transform={`rotate(${-135 + i * stepAngle} 50 50)`} />
                     ))}
                     <g transform={`rotate(${angle} 50 50)`}>
-                      <circle cx="50" cy="20" r="4" fill="#c9a86c" />
-                      <line x1="50" y1="20" x2="50" y2="50" stroke="#c9a86c" strokeWidth="2" />
+                      <circle cx="50" cy="20" r="4" fill="#f97316" />
+                      <line x1="50" y1="20" x2="50" y2="50" stroke="#f97316" strokeWidth="2" />
                     </g>
                   </svg>
                   <div className="absolute bottom-1 text-[9px] text-white font-mono select-none">Pos {currentIndex + 1}</div>
@@ -3538,10 +3599,10 @@ const HmiDashboardContent = ({
             return (
               <div className="relative w-full h-full flex items-center justify-center" onMouseDown={handleRotaryMouseDown} style={{ cursor: editMode ? 'default' : 'grab' }}>
                 <svg viewBox="0 0 100 100" className="w-full h-full">
-                  <defs><radialGradient id="grad-rotary"><stop offset="0%" stopColor="#555" /><stop offset="90%" stopColor="#222" /><stop offset="100%" stopColor="#111" /></radialGradient></defs>
-                  <circle cx="50" cy="50" r="40" fill="url(#grad-rotary)" stroke="#111" strokeWidth="2" />
+                  <defs><radialGradient id="grad-rotary"><stop offset="0%" stopColor="#555" /><stop offset="90%" stopColor="#222" /><stop offset="100%" stopColor="#1a1a1a" /></radialGradient></defs>
+                  <circle cx="50" cy="50" r="40" fill="url(#grad-rotary)" stroke="#1a1a1a" strokeWidth="2" />
                   {Array.from({ length: 11 }).map((_, i) => <line key={i} x1="50" y1="10" x2="50" y2="15" stroke="#888" strokeWidth="2" transform={`rotate(${-135 + i * 27} 50 50)`} />)}
-                  <g transform={`rotate(${angle} 50 50)`}><circle cx="50" cy="20" r="4" fill="#c9a86c" /></g>
+                  <g transform={`rotate(${angle} 50 50)`}><circle cx="50" cy="20" r="4" fill="#f97316" /></g>
                 </svg>
                 <div className="absolute text-xs text-white font-mono select-none">{value.toFixed(1)}</div>
               </div>
@@ -3568,12 +3629,12 @@ const HmiDashboardContent = ({
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#141414]" onMouseUp={handleMouseUp} onMouseMove={handleMouseMove}>
+    <div className="flex flex-col h-full w-full bg-[#1a1a1a]" onMouseUp={handleMouseUp} onMouseMove={handleMouseMove}>
       <div className="h-10 flex items-center px-4 border-b border-[#222] justify-between bg-[#1a1a1a] shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex bg-[#0a0a0a] rounded p-0.5 border border-[#333]">
             <button onClick={() => setEditMode(true)} className={`px-3 py-1 text-xs rounded ${editMode ? 'bg-[#333] text-white' : 'text-[#888]'}`}>Edit</button>
-            <button onClick={() => { setEditMode(false); setSelectedId(null); }} className={`px-3 py-1 text-xs rounded ${!editMode ? 'bg-[#c9a86c] text-black font-bold' : 'text-[#888]'}`}>Run</button>
+            <button onClick={() => { setEditMode(false); setSelectedId(null); }} className={`px-3 py-1 text-xs rounded ${!editMode ? 'bg-[#f97316] text-black font-bold' : 'text-[#888]'}`}>Run</button>
           </div>
         </div>
       </div>
@@ -3582,14 +3643,14 @@ const HmiDashboardContent = ({
         {/* Sidebar (Edit Mode Only) */}
         {editMode && (
           <div
-            className="w-48 bg-[#111] border-r border-[#222] p-3 flex flex-col gap-3 overflow-y-auto"
+            className="w-48 bg-[#1a1a1a] border-r border-[#222] p-3 flex flex-col gap-3 overflow-y-auto"
             onMouseDown={e => e.stopPropagation()}
             onClick={e => e.stopPropagation()}
           >
             <Label>Components</Label>
             <div className="grid grid-cols-2 gap-2">
               {['toggle', 'button', 'slider', 'input', 'lamp', 'led', 'lcd', 'gauge', 'rotary', 'hybrid-rotary', 'buzzer'].map(t => (
-                <button key={t} onClick={() => addComponent(t as HmiComponentType)} className="flex flex-col items-center justify-center p-2 bg-[#1a1a1a] border border-[#333] rounded hover:bg-[#222] hover:border-[#c9a86c]">
+                <button key={t} onClick={() => addComponent(t as HmiComponentType)} className="flex flex-col items-center justify-center p-2 bg-[#1a1a1a] border border-[#333] rounded hover:bg-[#222] hover:border-[#f97316]">
                   <span className="text-[10px] capitalize text-[#ccc]">{t}</span>
                 </button>
               ))}
@@ -3716,9 +3777,9 @@ const ReportDialog = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={onClose}>
-      <div className="bg-[#141414] border border-[#c9a86c] rounded-lg w-[400px] flex flex-col" onMouseDown={e => e.stopPropagation()}>
+      <div className="bg-[#1a1a1a] border border-[#f97316] rounded-lg w-[400px] flex flex-col" onMouseDown={e => e.stopPropagation()}>
         <div className="h-12 flex items-center px-5 border-b border-[#222]">
-          <h2 className="text-lg font-bold text-[#c9a86c]">Generate Report</h2>
+          <h2 className="text-lg font-bold text-[#f97316]">Generate Report</h2>
         </div>
         <div className="p-5 space-y-4">
           <div>
@@ -3729,7 +3790,7 @@ const ReportDialog = ({
             <Label>Author</Label>
             <Input value={author} onChange={e => setAuthor(e.target.value)} className="w-full mt-1" />
           </div>
-          <Button onClick={() => onGenerate(projectName, author)} className="w-full bg-[#c9a86c] text-[#0a0a0a] font-bold">Generate Report</Button>
+          <Button onClick={() => onGenerate(projectName, author)} className="w-full bg-[#f97316] text-[#0a0a0a] font-bold">Generate Report</Button>
         </div>
       </div>
     </div>
@@ -3822,7 +3883,7 @@ const ManualEntryTable = ({
 
   return (
     <div className="flex flex-col h-full bg-[#0a0a0a] border border-[#222] rounded overflow-hidden">
-      <div className="flex items-center justify-between p-2 border-b border-[#222] bg-[#141414]">
+      <div className="flex items-center justify-between p-2 border-b border-[#222] bg-[#1a1a1a]">
         <span className="text-xs font-bold uppercase tracking-wider text-[#888]">Experiment Data</span>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={addFactor}>+ Factor</Button>
@@ -3835,7 +3896,7 @@ const ManualEntryTable = ({
             <tr>
               <th className="p-2 border-b border-[#222] w-8 text-center text-[#444]">#</th>
               {headers.map((h, i) => (
-                <th key={i} className={`p-2 border-b border-[#222] font-bold ${i === headers.length - 1 ? 'text-emerald-500' : 'text-[#c9a86c]'}`}>
+                <th key={i} className={`p-2 border-b border-[#222] font-bold ${i === headers.length - 1 ? 'text-emerald-500' : 'text-[#f97316]'}`}>
                   {h}
                 </th>
               ))}
@@ -3844,10 +3905,10 @@ const ManualEntryTable = ({
           </thead>
           <tbody>
             {data.map((row, rIdx) => (
-              <tr key={rIdx} className="hover:bg-white/5 border-b border-[#111]">
+              <tr key={rIdx} className="hover:bg-white/5 border-b border-[#1a1a1a]">
                 <td className="p-2 text-center text-[#444]">{rIdx + 1}</td>
                 {row.map((cell, cIdx) => (
-                  <td key={cIdx} className="p-0 border-r border-[#111]">
+                  <td key={cIdx} className="p-0 border-r border-[#1a1a1a]">
                     <input
                       type="number"
                       value={cell}
@@ -3866,7 +3927,7 @@ const ManualEntryTable = ({
           </tbody>
         </table>
       </div>
-      <div className="p-2 bg-[#141414] border-t border-[#222] text-[10px] text-[#555]">
+      <div className="p-2 bg-[#1a1a1a] border-t border-[#222] text-[10px] text-[#555]">
         Tip: Paste data directly from Excel (Ctrl+V)
       </div>
     </div>
@@ -3921,7 +3982,7 @@ const PlotlyPlots = ({
           paper_bgcolor: 'transparent',
           plot_bgcolor: 'rgba(0,0,0,0.2)',
           font: { color: '#888', size: 10 },
-          title: { text: 'Pareto Chart of Standardized Effects (α=0.05)', font: { size: 12, color: '#c9a86c' } },
+          title: { text: 'Pareto Chart of Standardized Effects (α=0.05)', font: { size: 12, color: '#f97316' } },
           xaxis: { title: 'Absolute T-Value', gridcolor: '#222' },
           yaxis: { title: 'Factor Term', gridcolor: '#222' },
           shapes: [
@@ -3974,7 +4035,7 @@ const PlotlyPlots = ({
       mode: 'markers',
       type: 'scatter',
       name: 'Normal Probability',
-      marker: { color: '#c9a86c' }
+      marker: { color: '#f97316' }
     };
 
     const fitsTrace = {
@@ -3994,7 +4055,7 @@ const PlotlyPlots = ({
       name: 'Histogram',
       xaxis: 'x3',
       yaxis: 'y3',
-      marker: { color: '#3b82f6' }
+      marker: { color: '#f97316' }
     };
 
     return (
@@ -4008,9 +4069,9 @@ const PlotlyPlots = ({
           font: { color: '#888', size: 10 },
           showlegend: false,
           annotations: [
-            { text: 'Normal Probability Plot', xref: 'paper', yref: 'paper', x: 0, y: 1.1, showarrow: false, font: { color: '#c9a86c' } },
+            { text: 'Normal Probability Plot', xref: 'paper', yref: 'paper', x: 0, y: 1.1, showarrow: false, font: { color: '#f97316' } },
             { text: 'Residual vs Fits', xref: 'paper', yref: 'paper', x: 0.6, y: 1.1, showarrow: false, font: { color: '#10b981' } },
-            { text: 'Histogram of Residuals', xref: 'paper', yref: 'paper', x: 0, y: 0.4, showarrow: false, font: { color: '#3b82f6' } }
+            { text: 'Histogram of Residuals', xref: 'paper', yref: 'paper', x: 0, y: 0.4, showarrow: false, font: { color: '#f97316' } }
           ],
           xaxis: { title: 'Residual', gridcolor: '#222' },
           yaxis: { title: 'Z-Score', gridcolor: '#222' },
@@ -4038,7 +4099,7 @@ const PlotlyPlots = ({
       mode: 'markers',
       type: 'scatter',
       name: 'Observations',
-      marker: { color: '#c9a86c', size: 8, line: { color: '#000', width: 1 } }
+      marker: { color: '#f97316', size: 8, line: { color: '#000', width: 1 } }
     };
 
     const line = {
@@ -4058,7 +4119,7 @@ const PlotlyPlots = ({
           paper_bgcolor: 'transparent',
           plot_bgcolor: 'rgba(0,0,0,0.1)',
           font: { color: '#888', size: 10 },
-          title: { text: 'Predicted vs Actual Response', font: { size: 12, color: '#c9a86c' } },
+          title: { text: 'Predicted vs Actual Response', font: { size: 12, color: '#f97316' } },
           xaxis: { title: 'Actual Value', gridcolor: '#222', scaleanchor: 'y', scaleratio: 1 },
           yaxis: { title: 'Predicted Value', gridcolor: '#222' }
         }}
@@ -4073,7 +4134,7 @@ const PlotlyPlots = ({
       x: results.factorLevels.map((f: any) => f.factor),
       y: results.factorLevels.map((f: any) => f.delta),
       type: 'bar',
-      marker: { color: '#c9a86c' },
+      marker: { color: '#f97316' },
       name: 'Delta (Max-Min)'
     };
 
@@ -4085,7 +4146,7 @@ const PlotlyPlots = ({
           paper_bgcolor: 'transparent',
           plot_bgcolor: 'rgba(0,0,0,0.1)',
           font: { color: '#888', size: 10 },
-          title: { text: 'Response Table Delta (Factor Significance)', font: { size: 12, color: '#c9a86c' } },
+          title: { text: 'Response Table Delta (Factor Significance)', font: { size: 12, color: '#f97316' } },
           xaxis: { title: 'Factor', gridcolor: '#222' },
           yaxis: { title: 'Delta (S/N)', gridcolor: '#222' }
         }}
@@ -4111,8 +4172,8 @@ const PlotlyPlots = ({
       type: 'scatter',
       mode: 'lines+markers',
       name: 'Mean S/N Ratio',
-      line: { color: '#c9a86c', width: 3 },
-      marker: { size: 10, color: '#c9a86c' }
+      line: { color: '#f97316', width: 3 },
+      marker: { size: 10, color: '#f97316' }
     };
 
     const meanTrace = {
@@ -4135,7 +4196,7 @@ const PlotlyPlots = ({
           margin: { l: 60, r: 60, t: 60, b: 60 },
           paper_bgcolor: 'rgba(0,0,0,0)',
           plot_bgcolor: 'rgba(0,0,0,0)',
-          title: { text: `Main Effects Plot for ${headers[factorIdx]}`, font: { color: '#c9a86c', size: 14, family: 'Inter, sans-serif' } },
+          title: { text: `Main Effects Plot for ${headers[factorIdx]}`, font: { color: '#f97316', size: 14, family: 'Inter, sans-serif' } },
           xaxis: {
             title: 'Factor Level',
             gridcolor: '#222',
@@ -4143,7 +4204,7 @@ const PlotlyPlots = ({
             titlefont: { color: '#888' },
             type: 'category'
           },
-          yaxis: { title: 'Mean S/N Ratio (dB)', gridcolor: '#222', tickfont: { color: '#c9a86c' }, titlefont: { color: '#c9a86c' } },
+          yaxis: { title: 'Mean S/N Ratio (dB)', gridcolor: '#222', tickfont: { color: '#f97316' }, titlefont: { color: '#f97316' } },
           yaxis2: {
             title: 'Mean Response',
             overlaying: 'y',
@@ -4236,7 +4297,7 @@ const PlotlyPlots = ({
       type: 'scatter3d',
       marker: {
         size: 4,
-        color: '#c9a86c',
+        color: '#f97316',
         opacity: 0.8
       },
       name: 'Actual Data'
@@ -4277,7 +4338,7 @@ const HELP_DATA: Record<string, {
     id: string;
     title: string;
     description: string;
-    icon: string;
+    icon?: string;
     components: { name: string; usage: string; icon?: string }[];
   }[];
 }> = {
@@ -4478,9 +4539,9 @@ const HELP_DATA: Record<string, {
         description: "Defining and linking system specifications.",
         icon: "FileText",
         components: [
-          { name: "Requirement Block", usage: "Stores text, ID, and status of a specification. Can be linked to any design element." },
-          { name: "Traceability Matrix", usage: "A table showing the relationships between requirements, design blocks, and test cases." },
-          { name: "Coverage Analysis", usage: "Visualizes which percentage of requirements are implemented and verified." }
+          { name: "Requirement Block", usage: "Stores text, ID, and status of a specification. Can be linked to any design element using 'Satisfy' or 'Verify' relationships." },
+          { name: "Traceability Matrix", usage: "A dynamic table showing the relationships between requirements, design blocks, and test cases. Essential for safety-critical audits." },
+          { name: "Coverage Analysis", usage: "Visualizes which percentage of requirements are implemented and verified. Highlights gaps in the system design." }
         ]
       },
       {
@@ -4489,9 +4550,82 @@ const HELP_DATA: Record<string, {
         description: "Exporting project data to standard formats.",
         icon: "Upload",
         components: [
-          { name: "Word Export", usage: "Generates a complete MS Word document with dynamic table of contents, diagrams, and simulation results." },
-          { name: "Diagram Capture", usage: "Exports high-resolution SVG or PNG images of BDD, IBD, and Stateflow diagrams for documentation." },
-          { name: "Global Report", usage: "A unified view that aggregates data from all modules into a professional engineering report structure." }
+          { name: "Word Export", usage: "Generates a complete MS Word document with dynamic table of contents, diagrams, and simulation results. Uses professional engineering templates." },
+          { name: "Diagram Capture", usage: "Exports high-resolution SVG or PNG images of BDD, IBD, and Stateflow diagrams for documentation and stakeholder reviews." },
+          { name: "Global Project Report", usage: "A comprehensive document that aggregates data from all modules (Architecture, Control, Plant) into a unified engineering record." }
+        ]
+      }
+    ]
+  },
+  hmi: {
+    title: "HMI & Dashboards",
+    description: "Designing interactive Human-Machine Interfaces for real-time monitoring.",
+    details: "The HMI Panel allows users to build drag-and-drop dashboards. Components are linked to system variables for bi-directional communication.",
+    modules: [
+      {
+        id: "hmi_controls",
+        title: "Interactive Controls",
+        description: "Input elements for user interaction.",
+        icon: "Settings2",
+        components: [
+          { name: "Toggle Switch", usage: "Boolean input to turn system features ON/OFF. Directly writes 'true/false' to linked boolean variables." },
+          { name: "Rotary Knob", usage: "Provides a realistic industrial interface for setting setpoints or gain values. Supports snapping to discrete levels." },
+          { name: "Slider", usage: "Linear input for continuous variable adjustment (e.g., speed, temperature target)." },
+          { name: "Action Button", usage: "Momentary trigger for events. Can be used for 'Emergency Stop' or 'Reset' functions." }
+        ]
+      },
+      {
+        id: "hmi_controls",
+        title: "Control Widgets",
+        description: "Input devices for real-time interaction.",
+        components: [
+          { name: "Control Knobs", usage: "Rotary inputs for adjusting gains or setpoints (PID tuning)." },
+          { name: "Precision Sliders", usage: "Linear inputs with fine-grained decimal control." },
+          { name: "Toggle Switches", usage: "Binary controls for system start/stop or mode switching." }
+        ]
+      },
+      {
+        id: "hmi_indicators",
+        title: "Visual Indicators",
+        description: "Real-time data visualization.",
+        components: [
+          { name: "Analog Gauges", usage: "Round gauges for pressure, speed, and temperature monitoring." },
+          { name: "Strip Charts", usage: "Scrolling time-series plots for tracking signal stability." },
+          { name: "LED Matrices", usage: "Status indicators with custom color-coded logic (Alarm/Warning/Normal)." }
+        ]
+      }
+    ]
+  },
+  automation: {
+    title: "Industrial Automation",
+    description: "External hardware sync and Factory I/O gateway.",
+    details: "Connect ADIA to the real world using the Automation Gateway for HIL and SIL testing.",
+    modules: [
+      {
+        id: "auto_gateway",
+        title: "Automation Gateway",
+        description: "Bi-directional communication hub.",
+        components: [
+          { name: "Factory I/O Sync", usage: "Real-time TCP/UDP bridge to 3D industrial simulators." },
+          { name: "Variable Mapping", usage: "Links ADIA Stateflow variables to external PLCs or Actuators." },
+          { name: "Time-Base Lock", usage: "Synchronizes the ADIA solver step with the external simulation clock." }
+        ]
+      }
+    ]
+  },
+  ai: {
+    title: "AI Architect Assistant",
+    description: "Gemini-powered engineering intelligence.",
+    details: "The AI assistant provides generative design, architectural analysis, and automated optimization.",
+    modules: [
+      {
+        id: "ai_generative",
+        title: "Generative Design",
+        description: "Automated creation of engineering artifacts.",
+        components: [
+          { name: "Logic Generator", usage: "Generates complete Stateflow charts from natural language descriptions." },
+          { name: "Report Drafter", usage: "Automatically summarizes simulation results into professional engineering reports." },
+          { name: "Code Reviewer", usage: "Analyzes control logic for safety hazards and MISRA compliance." }
         ]
       }
     ]
@@ -4499,239 +4633,74 @@ const HELP_DATA: Record<string, {
 };
 
 const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
-  const [selectedMainModule, setSelectedMainModule] = useState<string | null>(null);
-  const [selectedSubModule, setSelectedSubModule] = useState<string | null>(null);
-
+  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
+  
   if (!isOpen) return null;
 
-  const downloadPDF = () => {
-    const doc = new jsPDF();
-    const margin = 20;
-    let y = 20;
-
-    doc.setFontSize(22);
-    doc.setTextColor(201, 168, 108); // #c9a86c
-    doc.text("ADIA User Guide", margin, y);
-    y += 15;
-
-    doc.setFontSize(14);
-    doc.setTextColor(0, 0, 0);
-    doc.setFont("helvetica", "bold");
-    doc.text("Professional Engineering Modeling Suite", margin, y);
-    y += 10;
-
-    Object.values(HELP_DATA).forEach(main => {
-        if (y > 250) { doc.addPage(); y = 20; }
-        doc.setFontSize(18);
-        doc.setTextColor(201, 168, 108);
-        doc.text(main.title, margin, y);
-        y += 10;
-        
-        doc.setFontSize(11);
-        doc.setTextColor(50, 50, 50);
-        doc.setFont("helvetica", "normal");
-        const lines = doc.splitTextToSize(main.details, 170);
-        doc.text(lines, margin, y);
-        y += (lines.length * 6) + 5;
-
-        main.modules.forEach(mod => {
-            if (y > 250) { doc.addPage(); y = 20; }
-            doc.setFontSize(14);
-            doc.setTextColor(0, 0, 0);
-            doc.setFont("helvetica", "bold");
-            doc.text(mod.title, margin + 5, y);
-            y += 8;
-
-            mod.components.forEach(comp => {
-                if (y > 270) { doc.addPage(); y = 20; }
-                doc.setFontSize(10);
-                doc.setFont("helvetica", "bold");
-                doc.text("• " + comp.name + ": ", margin + 10, y);
-                const compLines = doc.splitTextToSize(comp.usage, 150);
-                doc.setFont("helvetica", "normal");
-                doc.text(compLines, margin + 40, y);
-                y += (compLines.length * 5) + 2;
-            });
-            y += 5;
-        });
-        y += 10;
-    });
-
-    doc.save("ADIA_Detailed_User_Guide.pdf");
+  const toggleModule = (id: string) => {
+    setExpandedModules(prev => ({ ...prev, [id]: !prev[id] }));
   };
-
-  const handleBack = () => {
-    if (selectedSubModule) setSelectedSubModule(null);
-    else if (selectedMainModule) setSelectedMainModule(null);
-  };
-
-  const renderBreadcrumbs = () => (
-    <div className="flex items-center gap-2 mb-6 text-xs font-bold uppercase tracking-widest">
-      <button 
-        onClick={() => { setSelectedMainModule(null); setSelectedSubModule(null); }}
-        className={`hover:text-[#c9a86c] transition-colors ${!selectedMainModule ? 'text-[#c9a86c]' : 'text-gray-600'}`}
-      >
-        Overview
-      </button>
-      {selectedMainModule && HELP_DATA[selectedMainModule] && (
-        <>
-          <span className="text-gray-800">/</span>
-          <button 
-            onClick={() => setSelectedSubModule(null)}
-            className={`hover:text-[#c9a86c] transition-colors ${!selectedSubModule ? 'text-[#c9a86c]' : 'text-gray-600'}`}
-          >
-            {HELP_DATA[selectedMainModule].title}
-          </button>
-        </>
-      )}
-      {selectedMainModule && selectedSubModule && (
-        <>
-          <span className="text-gray-800">/</span>
-          <span className="text-[#c9a86c]">
-            {HELP_DATA[selectedMainModule]?.modules?.find(m => m.id === selectedSubModule)?.title || 'Detail'}
-          </span>
-        </>
-      )}
-    </div>
-  );
-
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-8 animate-in fade-in duration-300 text-[#e0e0e0]">
-      <div className="bg-[#141414] border border-[#333] rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col shadow-2xl relative overflow-hidden">
-        {/* Header */}
-        <div className="px-8 py-6 border-b border-[#222] bg-[#1a1a1a] flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-[#c9a86c]/10 rounded-xl">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-white tracking-tight">ADIA Interactive Help</h2>
-              <p className="text-xs text-gray-500 uppercase tracking-widest font-medium mt-0.5">Comprehensive Component Documentation</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Button onClick={downloadPDF} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-6 gap-2 border-0">
-              <Download size={16} />
-              Export Full Manual
-            </Button>
-            <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors text-gray-500">
-              <X size={20} />
-            </button>
-          </div>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 p-20 text-white">
+      <div className="bg-[#1a1a1a] p-10 rounded-xl border border-white/10 w-full max-w-4xl shadow-2xl">
+        <div className="flex justify-between items-center mb-10">
+          <h2 className="text-3xl font-bold text-[#f97316]">ADIA Help Center</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-white font-bold">CLOSE [X]</button>
         </div>
-
-        {/* Content Body */}
-        <div className="flex-1 overflow-hidden flex flex-col p-12 bg-[#0d0d0d]">
-          {renderBreadcrumbs()}
-
-          <div className="flex-1 overflow-y-auto custom-scrollbar pr-4">
-            {!selectedMainModule ? (
-              /* Main Overview View */
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {Object.entries(HELP_DATA).map(([id, data]) => (
-                  <div 
-                    key={id} 
-                    onClick={(e) => { e.stopPropagation(); setSelectedMainModule(id); }}
-                    className="p-8 bg-[#1a1a1a] border border-[#222] rounded-2xl cursor-pointer group hover:border-[#c9a86c]/50 transition-all hover:bg-[#1a1a1a]/80"
-                  >
-                    <h3 className="text-2xl font-black text-white uppercase tracking-tighter mb-2 group-hover:text-[#c9a86c] transition-colors">{data.title}</h3>
-                    <p className="text-gray-500 text-sm leading-relaxed mb-6">{data.description}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {data.modules.map(m => (
-                        <span key={m.id} className="px-3 py-1 bg-black/40 rounded-full text-[10px] font-bold text-gray-400 border border-[#222] uppercase tracking-wider">
-                          {m.title}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="mt-8 text-[10px] font-black text-[#c9a86c] uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity">
-                      Click to Explore →
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : !selectedSubModule ? (
-              /* Module Details View */
-              <div className="space-y-12">
-                <div className="max-w-2xl">
-                  <h3 className="text-4xl font-black text-white uppercase tracking-tighter mb-4">{HELP_DATA[selectedMainModule]?.title}</h3>
-                  <p className="text-lg text-gray-400 leading-relaxed">{HELP_DATA[selectedMainModule]?.details}</p>
+        <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-4 custom-scrollbar">
+          <p className="text-gray-400 text-sm italic">The help system is currently in stable reference mode.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Object.keys(HELP_DATA || {}).map(key => (
+              <div key={key} className="p-8 bg-black/40 border border-white/5 rounded-2xl hover:border-[#f97316]/50 transition-all group">
+                <div className="mb-6">
+                  <h3 className="font-black text-white uppercase tracking-tighter text-2xl group-hover:text-[#f97316] transition-colors">{HELP_DATA[key]?.title || "Untitled"}</h3>
+                  <p className="text-sm text-gray-400 mt-2 font-light leading-relaxed">{HELP_DATA[key]?.description || "No description available."}</p>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {HELP_DATA[selectedMainModule]?.modules?.map(mod => (
-                    <div 
-                      key={mod.id}
-                      onClick={(e) => { e.stopPropagation(); setSelectedSubModule(mod.id); }}
-                      className="p-6 bg-[#1a1a1a] border border-[#222] rounded-xl cursor-pointer hover:border-[#c9a86c]/30 transition-all"
-                    >
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2 bg-[#c9a86c]/10 rounded-lg text-[#c9a86c]">
-                          {mod.icon === 'Zap' && <Zap size={20}/>}
-                          {mod.icon === 'Layers' && <Layers size={20}/>}
-                          {mod.icon === 'Box' && <Box size={20}/>}
-                          {mod.icon === 'Activity' && <Activity size={20}/>}
-                          {mod.icon === 'Layout' && <Layout size={20}/>}
-                          {mod.icon === 'Cpu' && <Cpu size={20}/>}
-                          {mod.icon === 'Database' && <Database size={20}/>}
-                          {mod.icon === 'LayoutGrid' && <LayoutGrid size={20}/>}
-                          {mod.icon === 'FileText' && <FileText size={20}/>}
-                          {mod.icon === 'Upload' && <Upload size={20}/>}
+                <div className="space-y-4">
+                  {HELP_DATA[key]?.modules?.map((mod: any) => (
+                    <div key={mod.id} className="bg-white/[0.02] border border-white/5 rounded-xl overflow-hidden">
+                      <button 
+                        onClick={() => toggleModule(mod.id)}
+                        className="w-full p-4 flex items-center justify-between hover:bg-white/[0.04] transition-all"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-1 h-4 rounded-full transition-all ${expandedModules[mod.id] ? 'bg-[#f97316]' : 'bg-gray-700'}`}></div>
+                          <h4 className={`text-[10px] font-black uppercase tracking-[0.2em] transition-colors ${expandedModules[mod.id] ? 'text-[#f97316]' : 'text-gray-500'}`}>
+                            {mod.title}
+                          </h4>
                         </div>
-                        <h4 className="font-bold text-white uppercase tracking-wider">{mod.title}</h4>
-                      </div>
-                      <p className="text-xs text-gray-500 mb-4">{mod.description}</p>
-                      <div className="text-[10px] font-bold text-[#c9a86c] uppercase tracking-widest">
-                        View {mod.components.length} Components →
-                      </div>
+                        <div className={`transition-transform duration-300 ${expandedModules[mod.id] ? 'rotate-180' : ''}`}>
+                          <ChevronDown size={14} className="text-gray-600" />
+                        </div>
+                      </button>
+                      
+                      {expandedModules[mod.id] && (
+                        <div className="px-6 pb-6 pt-2 animate-in slide-in-from-top-2 duration-300">
+                          <div className="grid grid-cols-1 gap-5">
+                            {mod.components?.map((comp: any) => (
+                              <div key={comp.name} className="group/item">
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-[#f97316]/30 group-hover/item:bg-[#f97316] transition-all"></div>
+                                  <span className="text-white text-[11px] font-bold uppercase tracking-wider">{comp.name}</span>
+                                </div>
+                                <p className="text-gray-500 text-[10px] leading-relaxed font-medium pl-3.5 border-l border-white/10 group-hover/item:border-[#f97316]/40 transition-all">
+                                  {comp.usage}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
-            ) : (
-              /* Component Level View */
-              <div className="space-y-8 animate-in slide-in-from-right duration-300">
-                <div className="flex items-center gap-4 mb-8">
-                  <button onClick={() => setSelectedSubModule(null)} className="p-2 hover:bg-white/5 rounded-full text-gray-500 transition-colors">
-                    <ChevronLeft size={24} />
-                  </button>
-                  <h3 className="text-3xl font-black text-white uppercase tracking-tighter">
-                    {HELP_DATA[selectedMainModule]?.modules?.find(m => m.id === selectedSubModule)?.title} Components
-                  </h3>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4">
-                  {HELP_DATA[selectedMainModule]?.modules?.find(m => m.id === selectedSubModule)?.components.map(comp => (
-                    <div key={comp.name} className="p-6 bg-[#1a1a1a] border border-[#222] rounded-xl flex items-start gap-6 group hover:bg-[#1f1f1f] transition-all">
-                      <div className="w-12 h-12 bg-black rounded-lg flex items-center justify-center border border-white/5 group-hover:border-[#c9a86c]/30 transition-all">
-                        <span className="text-[#c9a86c] font-black text-xl">{comp.name[0]}</span>
-                      </div>
-                      <div className="flex-1">
-                        <h5 className="text-white font-bold mb-2 uppercase tracking-wide flex items-center gap-3">
-                          {comp.name}
-                          <span className="px-2 py-0.5 bg-[#c9a86c]/10 text-[#c9a86c] text-[8px] rounded uppercase font-black tracking-tighter">Verified</span>
-                        </h5>
-                        <p className="text-sm text-gray-500 leading-relaxed">{comp.usage}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            ))}
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="px-8 py-4 bg-[#1a1a1a] border-t border-[#222] flex items-center justify-between">
-          <p className="text-[10px] text-gray-600 uppercase tracking-[0.3em] font-bold">Advanced Engineering Modeling Suite &copy; 2026 ADIA Team</p>
-          <div className="flex items-center gap-6">
-            <span className="text-[10px] text-gray-500 uppercase font-bold flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-              Documentation Live
-            </span>
-          </div>
+        <div className="mt-10 pt-6 border-t border-white/5 text-[10px] text-gray-600 uppercase tracking-widest font-bold">
+          Advanced Engineering Modeling Suite &copy; 2026
         </div>
       </div>
     </div>
@@ -4810,10 +4779,10 @@ const ReportPreviewModal = ({
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-[#111] border border-[#333] rounded-xl w-full max-w-6xl h-full max-h-[90vh] flex flex-col shadow-2xl">
+      <div className="bg-[#1a1a1a] border border-[#333] rounded-xl w-full max-w-6xl h-full max-h-[90vh] flex flex-col shadow-2xl">
         <div className="flex items-center justify-between p-4 border-b border-[#222]">
           <div className="flex items-center gap-2">
-            <FileText size={20} className="text-[#c9a86c]" />
+            <FileText size={20} className="text-[#f97316]" />
             <h2 className="text-lg font-bold text-white">Report Preview</h2>
           </div>
           <div className="flex items-center gap-4">
@@ -4837,7 +4806,7 @@ const ReportPreviewModal = ({
             <Button size="sm" onClick={exportToPDF} className="bg-red-600 hover:bg-red-700 text-white border-0">
               <Download size={14} className="mr-2" /> PDF
             </Button>
-            <Button size="sm" onClick={exportToWord} className="bg-blue-600 hover:bg-blue-700 text-white border-0">
+            <Button size="sm" onClick={exportToWord} className="bg-orange-600 hover:bg-orange-700 text-white border-0">
               <Download size={14} className="mr-2" /> Word (.doc)
             </Button>
             <button onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors">
@@ -4852,14 +4821,14 @@ const ReportPreviewModal = ({
             className="bg-[#1a1a1a] w-full max-w-[210mm] min-h-[297mm] shadow-2xl p-10 text-[#e0e0e0] border border-[#333]"
             style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
           >
-            <div style={{ borderBottom: '2px solid #c9a86c', paddingBottom: '10px', marginBottom: '20px' }}>
-              <h1 style={{ fontSize: '24px', color: '#c9a86c', margin: 0, fontWeight: 'bold' }}>ADIA DOE Analysis Report</h1>
+            <div style={{ borderBottom: '2px solid #f97316', paddingBottom: '10px', marginBottom: '20px' }}>
+              <h1 style={{ fontSize: '24px', color: '#f97316', margin: 0, fontWeight: 'bold' }}>ADIA DOE Analysis Report</h1>
               <p style={{ color: '#888', fontSize: '12px', margin: '5px 0 0 0' }}>Generated: {new Date().toLocaleString()}</p>
               <p style={{ color: '#888', fontSize: '12px', margin: 0 }}>Model Type: {results?.type}</p>
             </div>
 
             <div style={{ marginBottom: '20px' }}>
-              <h2 style={{ fontSize: '18px', color: '#c9a86c', borderBottom: '1px solid #333', paddingBottom: '5px', fontWeight: 'bold' }}>1. Model Summary</h2>
+              <h2 style={{ fontSize: '18px', color: '#f97316', borderBottom: '1px solid #333', paddingBottom: '5px', fontWeight: 'bold' }}>1. Model Summary</h2>
               <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#222' }}>
@@ -4881,8 +4850,8 @@ const ReportPreviewModal = ({
             </div>
 
             <div style={{ marginBottom: '20px' }}>
-              <h2 style={{ fontSize: '18px', color: '#c9a86c', borderBottom: '1px solid #333', paddingBottom: '5px', fontWeight: 'bold' }}>2. Model Equation</h2>
-              <div style={{ backgroundColor: '#111', padding: '15px', borderRadius: '4px', border: '1px solid #333', fontFamily: 'monospace', fontSize: '12px', color: '#10b981' }}>
+              <h2 style={{ fontSize: '18px', color: '#f97316', borderBottom: '1px solid #333', paddingBottom: '5px', fontWeight: 'bold' }}>2. Model Equation</h2>
+              <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '4px', border: '1px solid #333', fontFamily: 'monospace', fontSize: '12px', color: '#10b981' }}>
                 {results?.type === 'Taguchi' 
                   ? 'Taguchi models optimize S/N ratios for robust design; an explicit polynomial regression equation is not generated.' 
                   : (results?.equation || 'No equation available')}
@@ -4890,14 +4859,14 @@ const ReportPreviewModal = ({
             </div>
 
             <div style={{ marginBottom: '20px' }}>
-              <h2 style={{ fontSize: '18px', color: '#c9a86c', borderBottom: '1px solid #333', paddingBottom: '5px', marginBottom: '15px', fontWeight: 'bold' }}>3. Analysis Diagrams</h2>
+              <h2 style={{ fontSize: '18px', color: '#f97316', borderBottom: '1px solid #333', paddingBottom: '5px', marginBottom: '15px', fontWeight: 'bold' }}>3. Analysis Diagrams</h2>
               <div style={{ 
                 display: 'grid', 
                 gridTemplateColumns: layout === '2-col' ? '1fr 1fr' : '1fr', 
                 gap: '20px' 
               }}>
                 {plotsToShow.map(pt => (
-                  <div key={pt} style={{ border: '1px solid #333', padding: '10px', borderRadius: '4px', background: '#111' }}>
+                  <div key={pt} style={{ border: '1px solid #333', padding: '10px', borderRadius: '4px', background: '#1a1a1a' }}>
                     <div style={{ width: '100%', height: '350px', overflow: 'hidden' }}>
                       <PlotlyPlots 
                         type={pt as any} 
@@ -5040,10 +5009,10 @@ const GlobalReportPreviewModal = ({
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-[#111] border border-[#333] rounded-xl w-full max-w-6xl h-full max-h-[90vh] flex flex-col shadow-2xl">
+      <div className="bg-[#1a1a1a] border border-[#333] rounded-xl w-full max-w-6xl h-full max-h-[90vh] flex flex-col shadow-2xl">
         <div className="flex items-center justify-between p-4 border-b border-[#222]">
           <div className="flex items-center gap-2">
-            <FileText size={20} className="text-[#c9a86c]" />
+            <FileText size={20} className="text-[#f97316]" />
             <h2 className="text-lg font-bold text-white">Global Project Report</h2>
           </div>
           <div className="flex items-center gap-4">
@@ -5067,7 +5036,7 @@ const GlobalReportPreviewModal = ({
             <Button size="sm" onClick={exportToHTML} className="bg-emerald-600 hover:bg-emerald-700 text-white border-0">
               <Download size={14} className="mr-2" /> HTML
             </Button>
-            <Button size="sm" onClick={exportToWord} className="bg-blue-600 hover:bg-blue-700 text-white border-0">
+            <Button size="sm" onClick={exportToWord} className="bg-orange-600 hover:bg-orange-700 text-white border-0">
               <Download size={14} className="mr-2" /> Word (.doc)
             </Button>
             <button onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors">
@@ -5083,7 +5052,7 @@ const GlobalReportPreviewModal = ({
             style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}
           >
             <style>{`
-              .global-report-content h1 { color: #c9a86c; border-bottom: 2px solid #c9a86c; padding-bottom: 10px; margin-bottom: 20px; }
+              .global-report-content h1 { color: #f97316; border-bottom: 2px solid #f97316; padding-bottom: 10px; margin-bottom: 20px; }
               .global-report-content h2 { color: #222; border-bottom: 1px solid #eee; margin-top: 40px; padding-bottom: 5px; }
               .global-report-content h3 { color: #444; margin-top: 25px; font-size: 1.1em; }
               .global-report-content .meta { color: #666; font-size: 0.9em; margin-bottom: 40px; }
@@ -8297,7 +8266,7 @@ const ADIA = () => {
   const handleGenerateReport = useCallback((projectName: string, author: string) => {
     const style = `
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fff; color: #333; padding: 40px; line-height: 1.6; }
-        h1 { color: #c9a86c; border-bottom: 2px solid #c9a86c; padding-bottom: 10px; margin-bottom: 20px; }
+        h1 { color: #f97316; border-bottom: 2px solid #f97316; padding-bottom: 10px; margin-bottom: 20px; }
         h2 { color: #222; border-bottom: 1px solid #eee; margin-top: 40px; padding-bottom: 5px; }
         h3 { color: #444; margin-top: 25px; font-size: 1.1em; }
         .meta { color: #666; font-size: 0.9em; margin-bottom: 40px; }
@@ -8423,7 +8392,7 @@ const ADIA = () => {
       // Render Nodes
       displayNodes.forEach(n => {
         const fill = type === 'req' ? '#fff' : '#f0f0f0';
-        const stroke = type === 'req' ? '#c9a86c' : '#333';
+        const stroke = type === 'req' ? '#f97316' : '#333';
 
         if (type === 'statemachine') {
           if (n.nodeType === 'junction') {
@@ -8497,7 +8466,7 @@ const ADIA = () => {
             const portPos = getPortPos(n, p.id);
             const px = portPos.x - n.displayX;
             const py = portPos.y - n.displayY;
-            svg += `<rect x="${px - 4}" y="${py - 4}" width="8" height="8" fill="#333" stroke="#c9a86c" stroke-width="1" />`;
+            svg += `<rect x="${px - 4}" y="${py - 4}" width="8" height="8" fill="#333" stroke="#f97316" stroke-width="1" />`;
 
             const isLeft = px <= 0;
             const isRight = px >= n.width;
@@ -8645,17 +8614,17 @@ const ADIA = () => {
       const height = Math.max(100, maxY - minY + padding * 2);
       const viewBox = `${minX - padding} ${minY - padding} ${width} ${height}`;
 
-      let svg = `<div style="margin: 20px 0; border: 1px solid #333; padding: 10px; overflow: auto; background: #111;">`;
-      svg += `<h3 style="margin-top:0; color:#c9a86c; font-size:14px;">HMI Visual Design</h3>`;
+      let svg = `<div style="margin: 20px 0; border: 1px solid #333; padding: 10px; overflow: auto; background: #1a1a1a;">`;
+      svg += `<h3 style="margin-top:0; color:#f97316; font-size:14px;">HMI Visual Design</h3>`;
       svg += `<svg width="${width}" height="${height}" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg" style="font-family: sans-serif; background: #0a0a0a;">`;
 
       components.forEach(c => {
         const cx = c.width / 2;
         const cy = c.height / 2;
-        const highlight = '#c9a86c';
+        const highlight = '#f97316';
 
         svg += `<g transform="translate(${c.x}, ${c.y})">`;
-        svg += `<rect width="${c.width}" height="${c.height}" fill="#111" stroke="#333" stroke-width="1" rx="4" />`;
+        svg += `<rect width="${c.width}" height="${c.height}" fill="#1a1a1a" stroke="#333" stroke-width="1" rx="4" />`;
 
         if (c.type === 'toggle') {
           svg += `<rect x="${cx - 20}" y="${cy - 10}" width="40" height="20" rx="10" fill="#333" />`;
@@ -8679,7 +8648,7 @@ const ADIA = () => {
         } else if (c.type === 'gauge') {
           svg += `<path d="M 10 ${c.height - 10} A ${c.width / 2 - 10} ${c.width / 2 - 10} 0 0 1 ${c.width - 10} ${c.height - 10}" fill="none" stroke="#333" stroke-width="6" />`;
         } else if (c.type === 'rotary' || c.type === 'hybrid-rotary') {
-          svg += `<circle cx="${cx}" cy="${cy}" r="${Math.min(c.width, c.height) / 2 - 10}" fill="#222" stroke="#111" stroke-width="2" />`;
+          svg += `<circle cx="${cx}" cy="${cy}" r="${Math.min(c.width, c.height) / 2 - 10}" fill="#222" stroke="#1a1a1a" stroke-width="2" />`;
           svg += `<line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy - (Math.min(c.width, c.height) / 2 - 15)}" stroke="${highlight}" stroke-width="2" transform="rotate(-135, ${cx}, ${cy})" />`;
         } else if (c.type === 'buzzer') {
           svg += `<path d="M${cx - 8} ${cy - 8} h4 l4 -4 v24 l-4 -4 h-4 z" fill="#444" />`;
@@ -9264,7 +9233,7 @@ const ADIA = () => {
               <rect
                 key={h}
                 x={hx - 4} y={hy - 4} width={8} height={8}
-                fill="#c9a86c" stroke="#0a0a0a" strokeWidth={1}
+                fill="#f97316" stroke="#0a0a0a" strokeWidth={1}
                 style={{ cursor: `${h}-resize` }}
                 onMouseDown={(e) => handleResizeMouseDown(e, h, state.id)}
               />
@@ -9279,7 +9248,7 @@ const ADIA = () => {
               height={state.height + 8}
               rx={8}
               fill="none"
-              stroke="#c9a86c"
+              stroke="#f97316"
               strokeWidth={2}
               strokeDasharray="5,5"
             />
@@ -9445,7 +9414,7 @@ const ADIA = () => {
               cy={0}
               r={12}
               fill="none"
-              stroke="#c9a86c"
+              stroke="#f97316"
               strokeWidth={2}
               strokeDasharray="5,5"
             />
@@ -9557,7 +9526,7 @@ const ADIA = () => {
           <path
             d={path}
             fill="none"
-            stroke={isFired ? '#ffffff' : (isSelected ? '#c9a86c' : '#666')}
+            stroke={isFired ? '#ffffff' : (isSelected ? '#f97316' : '#666')}
             strokeWidth={isFired ? strokeWidth * 2 : strokeWidth}
             strokeDasharray={transition.condition === 'true' && !transition.afterTicks ? '5,3' : undefined}
             style={{ transition: 'stroke 0.1s, stroke-width 0.1s' }}
@@ -9566,7 +9535,7 @@ const ADIA = () => {
           {/* Arrowhead - scaled with transform */}
           <path
             d={`M ${tp.x} ${tp.y} L ${tp.x - 10} ${tp.y - 4} L ${tp.x - 10} ${tp.y + 4} Z`}
-            fill={isSelected ? '#c9a86c' : '#666'}
+            fill={isSelected ? '#f97316' : '#666'}
             transform={`rotate(${Math.atan2(tp.y - sp.y, tp.x - sp.x) * 180 / Math.PI}, ${tp.x}, ${tp.y})`}
             style={{ transition: 'fill 0.1s' }}
           />
@@ -9577,7 +9546,7 @@ const ADIA = () => {
               cx={cp.x}
               cy={cp.y}
               r={handleRadius}
-              fill="#c9a86c"
+              fill="#f97316"
               stroke="#0a0a0a"
               strokeWidth={handleStrokeWidth}
               cursor="move"
@@ -9591,7 +9560,7 @@ const ADIA = () => {
           {/* Transition label - not scaled (remains readable) */}
           <foreignObject x={cp.x - 75} y={cp.y - 15} width="150" height="30">
             <div className="px-2 py-1 bg-[#0a0a0a] border border-[#333] rounded text-[10px] font-mono text-center"
-              style={{ color: isSelected ? '#c9a86c' : '#a0a0a0', pointerEvents: 'none' }}>
+              style={{ color: isSelected ? '#f97316' : '#a0a0a0', pointerEvents: 'none' }}>
               <span className="text-amber-400">{priorityText}</span> {labelText}
             </div>
           </foreignObject>
@@ -9625,7 +9594,7 @@ const ADIA = () => {
                   <rect
                     key={h}
                     x={hx - 4} y={hy - 4} width={8} height={8}
-                    fill="#c9a86c" stroke="#0a0a0a" strokeWidth={1}
+                    fill="#f97316" stroke="#0a0a0a" strokeWidth={1}
                     style={{ cursor: `${h}-resize` }}
                     onMouseDown={(e) => handleResizeMouseDown(e, h, block.id)}
                   />
@@ -9650,8 +9619,8 @@ const ADIA = () => {
                   <g key={port.id} transform={`translate(${x}, ${y})`}>
                     <rect
                       x={-6} y={-6} width={12} height={12}
-                      fill={connectorSource?.portId === port.id && connectorSource?.partId === block.id ? '#c9a86c' : '#222'}
-                      stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#c9a86c'}
+                      fill={connectorSource?.portId === port.id && connectorSource?.partId === block.id ? '#f97316' : '#222'}
+                      stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
                       strokeWidth={1}
                       onMouseDown={(e) => handlePortMouseDown(e, block.id, port.id)}
                       onClick={(e) => handlePortClick(e, block.id, port.id)}
@@ -9711,7 +9680,7 @@ const ADIA = () => {
           style={{ cursor: isCreatingTransition ? 'crosshair' : 'move' }}
         >
           {isSelected && (
-            <rect x={-4} y={-4} width={displayWidth + 8} height={displayHeight + 8} fill="none" stroke="#c9a86c" strokeWidth={2} strokeDasharray="5,5" rx={4} />
+            <rect x={-4} y={-4} width={displayWidth + 8} height={displayHeight + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={4} />
           )}
 
           {isSelected && diagramMode === 'requirements' && ['nw', 'ne', 'sw', 'se'].map(h => {
@@ -9721,24 +9690,24 @@ const ADIA = () => {
               <rect
                 key={h}
                 x={hx - 4} y={hy - 4} width={8} height={8}
-                fill="#c9a86c" stroke="#0a0a0a" strokeWidth={1}
+                fill="#f97316" stroke="#0a0a0a" strokeWidth={1}
                 style={{ cursor: `${h}-resize` }}
                 onMouseDown={(e) => handleResizeMouseDown(e, h, block.id)}
               />
             );
           })}
 
-          <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? '#1e1e1e' : '#1a1a1a'} stroke={isSelected ? '#c9a86c' : '#e0e0e0'} strokeWidth={1} />
+          <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? '#1e1e1e' : '#1a1a1a'} stroke={isSelected ? '#f97316' : '#e0e0e0'} strokeWidth={1} />
 
           {/* Header */}
-          <text x={displayWidth / 2} y={15} textAnchor="middle" fill="#c9a86c" fontSize={10} fontFamily="monospace">«{block.stereotype}»</text>
+          <text x={displayWidth / 2} y={15} textAnchor="middle" fill="#f97316" fontSize={10} fontFamily="monospace">«{block.stereotype}»</text>
           <text x={displayWidth / 2} y={30} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold">{block.name}</text>
           <line x1={0} y1={35} x2={displayWidth} y2={35} stroke="#444" strokeWidth={1} />
 
           {/* Requirement Specifics */}
           {block.stereotype === 'requirement' ? (
             <g transform="translate(5, 45)">
-              <text y={0} fill="#c9a86c" fontSize={10} fontWeight="bold">Id: {block.reqId}</text>
+              <text y={0} fill="#f97316" fontSize={10} fontWeight="bold">Id: {block.reqId}</text>
               <foreignObject x={0} y={5} width={Math.max(10, displayWidth - 10)} height={Math.max(10, displayHeight - 55)}>
                 <div className="text-[9px] text-[#aaa] overflow-hidden h-full">
                   {block.description}
@@ -9802,7 +9771,7 @@ const ADIA = () => {
                 width={10}
                 height={10}
                 fill="#333"
-                stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#c9a86c'}
+                stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
                 strokeWidth={1}
               />
               {port.kind === 'flow' && (
@@ -9858,7 +9827,7 @@ const ADIA = () => {
       const sp = getEdgePoint({ x: source.x, y: source.y, width: srcW, height: srcH }, { x: target.x, y: target.y, width: tgtW, height: tgtH });
       const tp = getEdgePoint({ x: target.x, y: target.y, width: tgtW, height: tgtH }, { x: source.x, y: source.y, width: srcW, height: srcH });
       const isSelected = selectedIds.includes(rel.id);
-      const strokeColor = isSelected ? '#c9a86c' : '#888';
+      const strokeColor = isSelected ? '#f97316' : '#888';
       const strokeDash = rel.type === 'allocation' ? '5,5' : undefined;
       const isTrace = ['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace'].includes(rel.type);
 
@@ -9918,9 +9887,9 @@ const ADIA = () => {
           style={{ cursor: isCreatingConnector ? 'default' : 'move' }}
         >
           {isSelected && (
-            <rect x={-4} y={-4} width={part.width + 8} height={part.height + 8} fill="none" stroke="#c9a86c" strokeWidth={2} strokeDasharray="5,5" rx={4} />
+            <rect x={-4} y={-4} width={part.width + 8} height={part.height + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={4} />
           )}
-          <rect width={part.width} height={part.height} fill="#1a1a1a" stroke={isSelected ? '#c9a86c' : '#666'} strokeWidth={1} />
+          <rect width={part.width} height={part.height} fill="#1a1a1a" stroke={isSelected ? '#f97316' : '#666'} strokeWidth={1} />
           <text x={part.width / 2} y={20} textAnchor="middle" fill="#e0e0e0" fontSize={12} fontWeight="bold">{part.name} {part.multiplicity ? `[${part.multiplicity}]` : ''}</text>
           <text x={part.width / 2} y={35} textAnchor="middle" fill="#888" fontSize={10}>: {block?.name || 'Unknown'}</text>
 
@@ -9948,8 +9917,8 @@ const ADIA = () => {
                 <rect
                   x={-5} y={-5}
                   width={10} height={10}
-                  fill={connectorSource?.portId === port.id && connectorSource?.partId === part.id ? '#c9a86c' : '#333'}
-                  stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#c9a86c'}
+                  fill={connectorSource?.portId === port.id && connectorSource?.partId === part.id ? '#f97316' : '#333'}
+                  stroke={port.kind === 'flow' ? '#6c9ac6' : port.kind === 'proxy' ? '#c96c8a' : '#f97316'}
                   strokeWidth={1}
                   onMouseDown={(e) => handlePortMouseDown(e, part.id, port.id)}
                   onClick={(e) => handlePortClick(e, part.id, port.id)}
@@ -10043,15 +10012,15 @@ const ADIA = () => {
       return (
         <g key={conn.id} onClick={(e) => { e.stopPropagation(); setSelectedIds([conn.id]); }}>
           <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="transparent" strokeWidth={10} style={{ cursor: 'pointer' }} />
-          <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={isSelected ? '#c9a86c' : '#888'} strokeWidth={2} pointerEvents="none" />
+          <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={isSelected ? '#f97316' : '#888'} strokeWidth={2} pointerEvents="none" />
           {(conn.itemFlow || conn.label) && (
             <g>
               <polygon
                 points="0,0 -6,-3 -6,3"
-                fill="#c9a86c"
+                fill="#f97316"
                 transform={`translate(${midX}, ${midY}) rotate(${angle})`}
               />
-              {conn.itemFlow && <text x={midX} y={midY - 15} textAnchor="middle" fill="#c9a86c" fontSize={8}>«itemFlow»</text>}
+              {conn.itemFlow && <text x={midX} y={midY - 15} textAnchor="middle" fill="#f97316" fontSize={8}>«itemFlow»</text>}
               <text x={midX} y={midY - 5} textAnchor="middle" fill="#e0e0e0" fontSize={10}>
                 {conn.itemFlow || ''}
                 {conn.label ? (conn.itemFlow ? ` : ${conn.label}` : conn.label) : ''}
@@ -10099,7 +10068,7 @@ const ADIA = () => {
       }
 
       const isSelected = selectedIds.includes(id);
-      const strokeColor = isSelected ? '#c9a86c' : '#6c9ac6';
+      const strokeColor = isSelected ? '#f97316' : '#6c9ac6';
 
       return (
         <g key={id} onClick={(e) => { e.stopPropagation(); setSelectedIds([id]); }}>
@@ -10337,7 +10306,7 @@ const ADIA = () => {
   }, [errors, states, layers, updateState, addError]);
 
   const visibleVariables = useMemo(() => variables.filter(v => v.visibleInScope), [variables]);
-  const colors = ['#c9a86c', '#6c9ac6', '#6cc9a8', '#c96c8a', '#9a6cc9', '#c9c46c'];
+  const colors = ['#f97316', '#6c9ac6', '#6cc9a8', '#c96c8a', '#9a6cc9', '#c9c46c'];
 
   if (xBridgesStateId || diagramMode === 'xbridges') {
     const xState = xBridgesStateId ? states.find(s => s.id === xBridgesStateId) : null;
@@ -10436,9 +10405,9 @@ const ADIA = () => {
         <input type="file" ref={projectImportRef} onChange={handleProjectFileChange} className="hidden" accept=".json" />
 
         {/* Top Toolbar - WITH VISIBLE SIMULATION CONTROLS */}
-        <header className="h-14 bg-[#141414] border-b border-[#222] flex items-center px-4 gap-4 shrink-0 overflow-x-auto no-scrollbar">
+        <header className="h-14 bg-[#1a1a1a] border-b border-[#222] flex items-center px-4 gap-4 shrink-0 overflow-x-auto no-scrollbar">
           <div className="flex items-center gap-3">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
             <div>
@@ -10532,7 +10501,7 @@ const ADIA = () => {
                 size="sm"
                 onClick={validateWithAI}
                 disabled={isAiValidating}
-                className="text-[#c9a86c] border-[#c9a86c]/50 hover:bg-[#c9a86c]/10"
+                className="text-[#f97316] border-[#f97316]/50 hover:bg-[#f97316]/10"
                 title="Validate logic with AI"
               >
                 {isAiValidating ? (
@@ -10577,7 +10546,7 @@ const ADIA = () => {
             size="sm"
             onClick={generateCode}
             disabled={isGenerating}
-            className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10 disabled:opacity-50 disabled:cursor-wait"
+            className="border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10 disabled:opacity-50 disabled:cursor-wait"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
               <polyline points="16 18 22 12 16 6" />
@@ -10590,7 +10559,7 @@ const ADIA = () => {
             variant="outline"
             size="sm"
             onClick={handleExportProject}
-            className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
+            className="border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -10604,7 +10573,7 @@ const ADIA = () => {
             variant="outline"
             size="sm"
             onClick={handleImportProject}
-            className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
+            className="border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -10618,7 +10587,7 @@ const ADIA = () => {
             variant="outline"
             size="sm"
             onClick={() => setShowReportDialog(true)}
-            className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
+            className="border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10"
           >
             Report
           </Button>
@@ -10627,7 +10596,7 @@ const ADIA = () => {
             variant="outline"
             size="sm"
             onClick={() => toggleWindow('hmi')}
-            className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
+            className="border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
             HMI Panel
@@ -10692,13 +10661,13 @@ const ADIA = () => {
               <span className="text-[#888] font-medium">{isRunning ? 'RUNNING' : 'STOPPED'}</span>
             </div>
             <div className="text-[#666]">
-              Time: <span className="text-[#c9a86c] font-mono font-medium">{simulationTime.toFixed(2)}s</span>
+              Time: <span className="text-[#f97316] font-mono font-medium">{simulationTime.toFixed(2)}s</span>
             </div>
             <div className="text-[#666]">
-              States: <span className="text-[#c9a86c] font-mono font-medium">{currentStates.length}</span>
+              States: <span className="text-[#f97316] font-mono font-medium">{currentStates.length}</span>
             </div>
             <div className="text-[#666]">
-              Vars: <span className="text-[#c9a86c] font-mono font-medium">{variables.length}</span>
+              Vars: <span className="text-[#f97316] font-mono font-medium">{variables.length}</span>
             </div>
           </div>
         </header>
@@ -10706,11 +10675,11 @@ const ADIA = () => {
         {/* Main Content Area */}
         <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
           {/* Left Sidebar - Hierarchy */}
-          <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="bg-[#141414] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+          <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="bg-[#1a1a1a] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
             <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
               {!isHierarchyCollapsed && (
                 <div className="flex items-center overflow-hidden whitespace-nowrap">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="mr-2.5">
                     <path d="M10 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" />
                     <path d="M16 17l-3-3 3-3" />
                     <path d="M13 14H3" />
@@ -10720,7 +10689,7 @@ const ADIA = () => {
               )}
               <button
                 onClick={() => setIsHierarchyCollapsed(!isHierarchyCollapsed)}
-                className={`p-1.5 rounded hover:bg-[#222] text-[#c9a86c] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
+                className={`p-1.5 rounded hover:bg-[#222] text-[#f97316] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
               >
                 <Triangle size={10} className={`transition-transform duration-300 ${isHierarchyCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
               </button>
@@ -10740,11 +10709,11 @@ const ADIA = () => {
           {!isMobile && !isHierarchyCollapsed && <Resizer onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
 
           {/* Left Sidebar - Variables */}
-          <aside style={{ width: isMobile ? '100%' : (isVariablesCollapsed ? '48px' : `${variablesWidth}px`), display: isMobile && mobileTab !== 'variables' ? 'none' : 'flex' }} className="bg-[#141414] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+          <aside style={{ width: isMobile ? '100%' : (isVariablesCollapsed ? '48px' : `${variablesWidth}px`), display: isMobile && mobileTab !== 'variables' ? 'none' : 'flex' }} className="bg-[#1a1a1a] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
             <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
               {!isVariablesCollapsed && (
                 <div className="flex items-center overflow-hidden whitespace-nowrap">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="mr-2.5">
                     <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5" />
                     <path d="M3 12h18" />
                     <path d="M12 12v9" />
@@ -10754,7 +10723,7 @@ const ADIA = () => {
               )}
               <button
                 onClick={() => setIsVariablesCollapsed(!isVariablesCollapsed)}
-                className={`p-1.5 rounded hover:bg-[#222] text-[#c9a86c] transition-all ${isVariablesCollapsed ? 'w-full flex justify-center' : ''}`}
+                className={`p-1.5 rounded hover:bg-[#222] text-[#f97316] transition-all ${isVariablesCollapsed ? 'w-full flex justify-center' : ''}`}
               >
                 <Triangle size={10} className={`transition-transform duration-300 ${isVariablesCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
               </button>
@@ -10766,14 +10735,14 @@ const ADIA = () => {
                   {/* Compact Create Section */}
                   <div className="p-3 border-b border-[#222] bg-[#1a1a1a]/50">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-bold text-[#c9a86c] uppercase tracking-wider">New Variable</span>
+                      <span className="text-[10px] font-bold text-[#f97316] uppercase tracking-wider">New Variable</span>
                     </div>
                     <div className="flex gap-1.5 mb-1.5">
                       <Input
                         placeholder="Name"
                         value={newVarName}
                         onChange={(e) => setNewVarName(e.target.value)}
-                        className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#c9a86c]/50"
+                        className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#f97316]/50"
                       />
                       <select
                         value={newVarType}
@@ -10788,9 +10757,9 @@ const ADIA = () => {
                         placeholder="Init Value"
                         value={newVarValue}
                         onChange={(e) => setNewVarValue(e.target.value)}
-                        className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#c9a86c]/50"
+                        className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#f97316]/50"
                       />
-                      <Button size="sm" onClick={addVariable} className="h-7 px-3 bg-[#c9a86c] text-[#0a0a0a] text-[10px] font-bold hover:bg-[#b8975b]">ADD</Button>
+                      <Button size="sm" onClick={addVariable} className="h-7 px-3 bg-[#f97316] text-[#0a0a0a] text-[10px] font-bold hover:bg-[#ea580c]">ADD</Button>
                     </div>
                   </div>
 
@@ -10811,7 +10780,7 @@ const ADIA = () => {
                               <Checkbox
                                 checked={variable.visibleInScope}
                                 onCheckedChange={() => toggleVariableVisibility(variable.id)}
-                                className="w-3.5 h-3.5 border-[#333] data-[state=checked]:bg-[#c9a86c] data-[state=checked]:border-[#c9a86c]"
+                                className="w-3.5 h-3.5 border-[#333] data-[state=checked]:bg-[#f97316] data-[state=checked]:border-[#f97316]"
                               />
                               <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
                               <span className="text-xs font-mono text-[#e0e0e0] truncate flex-1" title={variable.name}>{variable.name}</span>
@@ -10836,7 +10805,7 @@ const ADIA = () => {
                                 value={variable.initialValue}
                                 onChange={(e) => updateVariableInitValue(variable.id, e.target.value)}
                                 disabled={isRunning}
-                                className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] focus:border-[#c9a86c]/30 px-1.5"
+                                className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] focus:border-[#f97316]/30 px-1.5"
                               />
                             </div>
                             <div className="space-y-0.5">
@@ -10844,7 +10813,7 @@ const ADIA = () => {
                               <Input
                                 value={String(variable.currentValue)}
                                 onChange={(e) => updateVariableValue(variable.id, e.target.value)}
-                                className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] text-emerald-400 focus:border-[#c9a86c]/30 px-1.5"
+                                className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] text-emerald-400 focus:border-[#f97316]/30 px-1.5"
                               />
                             </div>
                           </div>
@@ -10878,8 +10847,8 @@ const ADIA = () => {
                           onClick={index < layerPath.length - 1 ? exitLayer : undefined}
                           disabled={index === layerPath.length - 1}
                           className={`flex items-center gap-1 px-2 py-0.5 rounded ${index === layerPath.length - 1
-                            ? 'bg-[#c9a86c] text-[#0a0a0a] font-medium'
-                            : 'text-[#c9a86c] hover:bg-[#222]'
+                            ? 'bg-[#f97316] text-[#0a0a0a] font-medium'
+                            : 'text-[#f97316] hover:bg-[#222]'
                             } ${index < layerPath.length - 1 ? 'cursor-pointer' : 'cursor-default'}`}
                         > <span className="text-[9px] text-gray-500 mr-1">L{index}</span>
                           {name}
@@ -10979,7 +10948,7 @@ const ADIA = () => {
                       Block
                     </Button>
                     <div className="flex gap-0.5">
-                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50" title="Add Standard Port">+Std</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50" title="Add Standard Port">+Std</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
                     </div>
@@ -11003,7 +10972,7 @@ const ADIA = () => {
                       variant="secondary"
                       size="sm"
                       onClick={() => toggleWindow('rtm')}
-                      className="h-6 px-2 text-[#c9a86c] hover:bg-[#222]"
+                      className="h-6 px-2 text-[#f97316] hover:bg-[#222]"
                     >
                       RTM
                     </Button>
@@ -11064,7 +11033,7 @@ const ADIA = () => {
                       Part
                     </Button>
                     <div className="flex gap-0.5">
-                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50" title="Add Standard Port">+Std</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 px-1 text-[10px] bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50" title="Add Standard Port">+Std</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 px-1 text-[10px] bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50" title="Add Flow Port">+Flow</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 px-1 text-[10px] bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50" title="Add Proxy Port">+Prx</Button>
                     </div>
@@ -11079,7 +11048,7 @@ const ADIA = () => {
                           setIsCreatingConnector(true);
                         }
                       }}
-                      className={`h-6 px-2 ${isCreatingConnector ? 'bg-[#c9a86c] text-[#0a0a0a]' : 'text-[#e0e0e0] hover:bg-[#222]'}`}
+                      className={`h-6 px-2 ${isCreatingConnector ? 'bg-[#f97316] text-[#0a0a0a]' : 'text-[#e0e0e0] hover:bg-[#222]'}`}
                     >
                       {isCreatingConnector ? 'Cancel' : 'Connect'}
                     </Button>
@@ -11097,7 +11066,7 @@ const ADIA = () => {
                       setIsCreatingTransition(true);
                     }
                   }}
-                  className={`h-6 px-2 ${isCreatingTransition ? 'bg-[#c9a86c] text-[#0a0a0a]' : 'text-[#e0e0e0] hover:bg-[#222]'
+                  className={`h-6 px-2 ${isCreatingTransition ? 'bg-[#f97316] text-[#0a0a0a]' : 'text-[#e0e0e0] hover:bg-[#222]'
                     }`}
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
@@ -11114,7 +11083,7 @@ const ADIA = () => {
                   variant="ghost"
                   size="icon"
                   onClick={() => setGridEnabled(!gridEnabled)}
-                  className={`h-6 w-6 ${gridEnabled ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+                  className={`h-6 w-6 ${gridEnabled ? 'text-[#f97316]' : 'text-[#666]'}`}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M3 3v1818V3H3z" />
@@ -11126,7 +11095,7 @@ const ADIA = () => {
                   variant="ghost"
                   size="icon"
                   onClick={() => setSnapEnabled(!snapEnabled)}
-                  className={`h-6 w-6 ${snapEnabled ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+                  className={`h-6 w-6 ${snapEnabled ? 'text-[#f97316]' : 'text-[#666]'}`}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="10" />
@@ -11178,12 +11147,12 @@ const ADIA = () => {
 
               {/* Mode indicator */}
               {isCreatingTransition && (
-                <div className="absolute top-3 right-3 z-10 px-4 py-2 bg-[#c9a86c] text-[#0a0a0a] rounded-lg font-medium text-sm shadow-lg">
+                <div className="absolute top-3 right-3 z-10 px-4 py-2 bg-[#f97316] text-[#0a0a0a] rounded-lg font-medium text-sm shadow-lg">
                   {transitionSourceId ? 'Click target state/junction to connect...' : 'Click source state/junction...'}
                 </div>
               )}
               {isCreatingConnector && (
-                <div className="absolute top-3 right-3 z-10 px-4 py-2 bg-[#c9a86c] text-[#0a0a0a] rounded-lg font-medium text-sm shadow-lg">
+                <div className="absolute top-3 right-3 z-10 px-4 py-2 bg-[#f97316] text-[#0a0a0a] rounded-lg font-medium text-sm shadow-lg">
                   {connectorSource ? 'Click target port...' : 'Click source port...'}
                 </div>
               )}
@@ -11232,9 +11201,9 @@ const ADIA = () => {
                   <g transform={`translate(${view.offsetX}, ${view.offsetY}) scale(${view.scale})`}>
                     {/* Origin marker */}
                     <g>
-                      <line x1={-10} y1={0} x2={10} y2={0} stroke="#c9a86c" strokeWidth={0.5} opacity={0.5} />
-                      <line x1={0} y1={-10} x2={0} y2={10} stroke="#c9a86c" strokeWidth={0.5} opacity={0.5} />
-                      <circle cx={0} cy={0} r={2} fill="#c9a86c" opacity={0.7}>
+                      <line x1={-10} y1={0} x2={10} y2={0} stroke="#f97316" strokeWidth={0.5} opacity={0.5} />
+                      <line x1={0} y1={-10} x2={0} y2={10} stroke="#f97316" strokeWidth={0.5} opacity={0.5} />
+                      <circle cx={0} cy={0} r={2} fill="#f97316" opacity={0.7}>
                         <animate attributeName="r" values="2;3;2" dur="2s" repeatCount="indefinite" />
                       </circle>
                     </g>
@@ -11283,7 +11252,7 @@ const ADIA = () => {
               </div>
 
               {/* Status bar */}
-              <div className="absolute bottom-0 left-0 right-0 h-7 bg-[#141414] border-t border-[#222] flex items-center px-3 text-xs text-[#666]">
+              <div className="absolute bottom-0 left-0 right-0 h-7 bg-[#1a1a1a] border-t border-[#222] flex items-center px-3 text-xs text-[#666]">
                 <span className="mr-4 font-mono">X: {Math.round(mousePos.x)}</span>
                 <span className="mr-4 font-mono">Y: {Math.round(mousePos.y)}</span>
                 {diagramMode === 'statemachine' ? (
@@ -11313,16 +11282,16 @@ const ADIA = () => {
 
             {/* Bottom Panel */}
             {!isMobile && !isScopeCollapsed && <Resizer onMouseDown={(e) => handleResizeStart(e, 'scope')} orientation="horizontal" />}
-            <div style={{ height: isMobile ? '30%' : (isScopeCollapsed ? '40px' : `${scopeHeight}px`), display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="bg-[#141414] border-t border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+            <div style={{ height: isMobile ? '30%' : (isScopeCollapsed ? '40px' : `${scopeHeight}px`), display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="bg-[#1a1a1a] border-t border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
               <div className="flex items-center justify-between px-4 border-b border-[#222] h-10 shrink-0">
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setIsScopeCollapsed(!isScopeCollapsed)}
-                    className="p-1 hover:bg-[#222] rounded text-[#c9a86c] transition-colors"
+                    className="p-1 hover:bg-[#222] rounded text-[#f97316] transition-colors"
                   >
                     <Triangle size={10} className={`transition-transform duration-300 ${isScopeCollapsed ? 'rotate-0' : 'rotate-180'}`} fill="currentColor" />
                   </button>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2">
                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                   </svg>
                   <span className="font-medium">Scope</span>
@@ -11454,7 +11423,7 @@ const ADIA = () => {
                           }).join(' ');
 
                           return (
-                            <div key={variable.id} className="flex-1 min-w-[150px] relative h-full bg-[#111] rounded border border-[#333] overflow-hidden">
+                            <div key={variable.id} className="flex-1 min-w-[150px] relative h-full bg-[#1a1a1a] rounded border border-[#333] overflow-hidden">
                               <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0">
                                 <polyline
                                   points={points}
@@ -11487,11 +11456,11 @@ const ADIA = () => {
           {!isMobile && <Resizer onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
 
           {/* Right Dock: Properties */}
-          <aside style={{ width: isMobile ? '100%' : (isPropertiesCollapsed ? '48px' : `${propertiesWidth}px`), display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className="bg-[#141414] border-l border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+          <aside style={{ width: isMobile ? '100%' : (isPropertiesCollapsed ? '48px' : `${propertiesWidth}px`), display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className="bg-[#1a1a1a] border-l border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
             <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
               {!isPropertiesCollapsed && (
                 <div className="flex items-center overflow-hidden whitespace-nowrap">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-2.5">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="mr-2.5">
                     <circle cx="12" cy="12" r="3" />
                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
                   </svg>
@@ -11500,7 +11469,7 @@ const ADIA = () => {
               )}
               <button
                 onClick={() => setIsPropertiesCollapsed(!isPropertiesCollapsed)}
-                className={`p-1.5 rounded hover:bg-[#222] text-[#c9a86c] transition-all ${isPropertiesCollapsed ? 'w-full flex justify-center' : ''}`}
+                className={`p-1.5 rounded hover:bg-[#222] text-[#f97316] transition-all ${isPropertiesCollapsed ? 'w-full flex justify-center' : ''}`}
               >
                 <Triangle size={10} className={`transition-transform duration-300 ${isPropertiesCollapsed ? '-rotate-90' : 'rotate-90'}`} fill="currentColor" />
               </button>
@@ -11577,7 +11546,7 @@ const ADIA = () => {
                   </div>
 
                   {selectedState.isXBridges && (
-                    <div className="space-y-3 p-3 bg-[#1a1a1a] rounded border border-[#c9a86c]/30">
+                    <div className="space-y-3 p-3 bg-[#1a1a1a] rounded border border-[#f97316]/30">
                       <div className="flex justify-between items-center">
                         <Label className="text-amber-400 font-bold">Variable Mappings</Label>
                         <Button size="sm" className="h-5 text-[10px] px-2 bg-amber-600/20 text-amber-500 border-amber-500/50"
@@ -11731,7 +11700,7 @@ const ADIA = () => {
 
                   <div className="space-y-2 p-2 bg-[#1a1a1a] rounded border border-[#333]">
                     <div className="flex justify-between items-center">
-                      <Label className="text-[#c9a86c]">Internal Transitions</Label>
+                      <Label className="text-[#f97316]">Internal Transitions</Label>
                       <Button size="sm" className="h-5 text-[10px] px-2" onClick={() => {
                         const current = selectedState.internalTransitions ? selectedState.internalTransitions + '\n' : '';
                         updateState(selectedState.id, { internalTransitions: current + '[condition] / action;' });
@@ -11809,7 +11778,7 @@ const ADIA = () => {
                       value={selectedState.entry}
                       onChange={(e) => updateState(selectedState.id, { entry: e.target.value })}
                       placeholder="/* Entry action */ counter = 0;"
-                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
                     />
                   </div>
 
@@ -11819,13 +11788,13 @@ const ADIA = () => {
                       value={selectedState.during}
                       onChange={(e) => updateState(selectedState.id, { during: e.target.value })}
                       placeholder="/* During action */ counter++;"
-                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
                     />
                   </div>
 
                   <div className="space-y-2 p-2 bg-[#1a1a1a] rounded border border-[#333]">
                     <div className="flex justify-between items-center">
-                      <Label className="text-[#c9a86c]">Internal Transitions</Label>
+                      <Label className="text-[#f97316]">Internal Transitions</Label>
                       <Button size="sm" className="h-5 text-[10px] px-2" onClick={() => {
                         const current = selectedState.internalTransitions ? selectedState.internalTransitions + '\n' : '';
                         updateState(selectedState.id, { internalTransitions: current + '[condition] / action;' });
@@ -11835,7 +11804,7 @@ const ADIA = () => {
                       value={selectedState.internalTransitions || ''}
                       onChange={(e) => updateState(selectedState.id, { internalTransitions: e.target.value })}
                       placeholder="[condition] / action"
-                      className="w-full h-20 min-h-[4rem] bg-[#0a0a0a] border border-[#333] rounded text-xs font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                      className="w-full h-20 min-h-[4rem] bg-[#0a0a0a] border border-[#333] rounded text-xs font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
                     />
                   </div>
 
@@ -11845,7 +11814,7 @@ const ADIA = () => {
                       value={selectedState.exit}
                       onChange={(e) => updateState(selectedState.id, { exit: e.target.value })}
                       placeholder="/* Exit action */"
-                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
                     />
                   </div>
 
@@ -11853,7 +11822,7 @@ const ADIA = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => enterLayer(selectedState.id)}
-                    className="w-full border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10"
+                    className="w-full border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
                       <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
@@ -11947,7 +11916,7 @@ const ADIA = () => {
                           <option value="Low">Low</option>
                         </select>
                       </div>
-                      <div><Label>Description</Label><textarea value={selectedBlock.description || ''} onChange={(e) => updateBlock(selectedBlock.id, { description: e.target.value })} className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]" /></div>
+                      <div><Label>Description</Label><textarea value={selectedBlock.description || ''} onChange={(e) => updateBlock(selectedBlock.id, { description: e.target.value })} className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]" /></div>
                       <div>
                         <Label>Risk</Label>
                         <select value={selectedBlock.risk || 'Medium'} onChange={(e) => updateBlock(selectedBlock.id, { risk: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
@@ -12046,7 +12015,7 @@ const ADIA = () => {
                       ))}
                     </div>
                     <div className="flex gap-1 mt-2">
-                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50">+ Std</Button>
+                      <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50">+ Std</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
                       <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
                     </div>
@@ -12056,7 +12025,7 @@ const ADIA = () => {
                     <textarea
                       value={selectedBlock.operations.join('\n')}
                       onChange={(e) => updateBlock(selectedBlock.id, { operations: e.target.value.split('\n').filter(s => s) })}
-                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
                       placeholder="myOperation(arg: Type): ReturnType"
                     />
                   </div>
@@ -12065,7 +12034,7 @@ const ADIA = () => {
                     <textarea
                       value={(selectedBlock.constraints || []).join('\n')}
                       onChange={(e) => updateBlock(selectedBlock.id, { constraints: e.target.value.split('\n').filter(s => s) })}
-                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
                       placeholder="x > 0"
                     />
                   </div>
@@ -12074,7 +12043,7 @@ const ADIA = () => {
                     <textarea
                       value={(selectedBlock.classes || []).join('\n')}
                       onChange={(e) => updateBlock(selectedBlock.id, { classes: e.target.value.split('\n').filter(s => s) })}
-                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
                       placeholder="ClassName : Type"
                     />
                   </div>
@@ -12095,7 +12064,7 @@ const ADIA = () => {
                         });
                         updateBlock(selectedBlock.id, { properties: newProperties });
                       }}
-                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
                     />
                   </div>
                   <div>
@@ -12182,7 +12151,7 @@ const ADIA = () => {
                     if (block) {
                       return (
                         <div className="p-2 bg-[#1a1a1a] border border-[#333] rounded mt-2">
-                          <Label className="text-[#c9a86c]">Block Ports ({block.name})</Label>
+                          <Label className="text-[#f97316]">Block Ports ({block.name})</Label>
                           <div className="space-y-1 mt-1 max-h-40 overflow-y-auto">
                             {block.ports.map((port, i) => (
                               <div key={port.id} className="flex items-center gap-1 bg-[#0a0a0a] p-1 rounded border border-[#333]">
@@ -12231,7 +12200,7 @@ const ADIA = () => {
                             ))}
                           </div>
                           <div className="flex gap-1 mt-2">
-                            <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#c9a86c]/20 text-[#c9a86c] hover:bg-[#c9a86c]/30 border border-[#c9a86c]/50">+ Std</Button>
+                            <Button size="sm" onClick={() => handleAddPortToSelected('standard')} className="h-6 text-[10px] px-2 bg-[#f97316]/20 text-[#f97316] hover:bg-[#f97316]/30 border border-[#f97316]/50">+ Std</Button>
                             <Button size="sm" onClick={() => handleAddPortToSelected('flow')} className="h-6 text-[10px] px-2 bg-[#6c9ac6]/20 text-[#6c9ac6] hover:bg-[#6c9ac6]/30 border border-[#6c9ac6]/50">+ Flow</Button>
                             <Button size="sm" onClick={() => handleAddPortToSelected('proxy')} className="h-6 text-[10px] px-2 bg-[#c96c8a]/20 text-[#c96c8a] hover:bg-[#c96c8a]/30 border border-[#c96c8a]/50">+ Proxy</Button>
                           </div>
@@ -12308,11 +12277,11 @@ const ADIA = () => {
                       onCheckedChange={(checked) => updateTransition(selectedTransition.id, { isInternal: checked as boolean })}
                       id="isInternal"
                     />
-                    <Label htmlFor="isInternal" className="text-[#c9a86c]">Internal / Local Transition</Label>
+                    <Label htmlFor="isInternal" className="text-[#f97316]">Internal / Local Transition</Label>
                   </div>
 
                   <div className="space-y-3 p-3 bg-[#1a1a1a] rounded-lg border border-[#222]">
-                    <Label className="text-[#c9a86c]">Trigger Logic</Label>
+                    <Label className="text-[#f97316]">Trigger Logic</Label>
 
                     <select
                       value={selectedTransition.type}
@@ -12332,7 +12301,7 @@ const ADIA = () => {
                           value={selectedTransition.condition}
                           onChange={(e) => updateTransition(selectedTransition.id, { condition: e.target.value as any })}
                           placeholder="e.g., x > 10"
-                          className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                          className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
                         />
                       </div>
                     )}
@@ -12359,7 +12328,7 @@ const ADIA = () => {
                       value={selectedTransition.action}
                       onChange={(e) => updateTransition(selectedTransition.id, { action: e.target.value })}
                       placeholder="/* Action on transition */ counter = 0; flag = false;"
-                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#c9a86c]"
+                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
                     />
                   </div>
 
@@ -12399,7 +12368,7 @@ const ADIA = () => {
           <div className="h-14 bg-[#1a1a1a] border-t border-[#222] flex items-center justify-around shrink-0 pb-safe">
             <button
               onClick={() => setMobileTab('hierarchy')}
-              className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'hierarchy' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+              className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'hierarchy' ? 'text-[#f97316]' : 'text-[#666]'}`}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
                 <path d="M10 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" />
@@ -12410,7 +12379,7 @@ const ADIA = () => {
             </button>
             <button
               onClick={() => setMobileTab('variables')}
-              className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'variables' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+              className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'variables' ? 'text-[#f97316]' : 'text-[#666]'}`}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
                 <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5" />
@@ -12421,7 +12390,7 @@ const ADIA = () => {
             </button>
             <button
               onClick={() => setMobileTab('canvas')}
-              className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'canvas' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+              className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'canvas' ? 'text-[#f97316]' : 'text-[#666]'}`}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
                 <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -12431,7 +12400,7 @@ const ADIA = () => {
             </button>
             <button
               onClick={() => setMobileTab('properties')}
-              className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'properties' ? 'text-[#c9a86c]' : 'text-[#666]'}`}
+              className={`flex flex-col items-center justify-center w-full h-full ${mobileTab === 'properties' ? 'text-[#f97316]' : 'text-[#666]'}`}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-1">
                 <circle cx="12" cy="12" r="3" />
@@ -12445,13 +12414,13 @@ const ADIA = () => {
         {/* Workspace Modal */}
         {showWorkspaceModal && (
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-            <div className="bg-[#141414] border border-[#c9a86c] rounded-lg w-[650px] max-h-[90vh] flex flex-col">
+            <div className="bg-[#1a1a1a] border border-[#f97316] rounded-lg w-[650px] max-h-[90vh] flex flex-col">
               <div className="h-12 flex items-center px-5 border-b border-[#222]">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c9a86c" strokeWidth="2" className="mr-3">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="mr-3">
                   <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
                   <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
                 </svg>
-                <h2 className="text-lg font-bold text-[#c9a86c]">Workspace Variables</h2>
+                <h2 className="text-lg font-bold text-[#f97316]">Workspace Variables</h2>
               </div>
 
               <div className="flex-1 overflow-y-auto p-5 space-y-5">
@@ -12483,7 +12452,7 @@ const ADIA = () => {
                   <Button
                     size="sm"
                     onClick={addVariable}
-                    className="w-full bg-[#c9a86c] text-[#0a0a0a] hover:bg-[#b8975b] mt-2 h-9"
+                    className="w-full bg-[#f97316] text-[#0a0a0a] hover:bg-[#ea580c] mt-2 h-9"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
                       <line x1="12" y1="5" x2="12" y2="19" />
@@ -12506,7 +12475,7 @@ const ADIA = () => {
                             onCheckedChange={() => toggleVariableVisibility(variable.id)}
                             id={`var-${variable.id}`}
                           />
-                          <span className="font-mono text-sm text-[#c9a86c]">{variable.name}</span>
+                          <span className="font-mono text-sm text-[#f97316]">{variable.name}</span>
                         </div>
                         <Badge>{variable.type}</Badge>
                       </div>
@@ -12555,7 +12524,7 @@ const ADIA = () => {
                     resetVariables();
                     setShowWorkspaceModal(false);
                   }}
-                  className="bg-[#c9a86c] text-[#0a0a0a] hover:bg-[#b8975b] px-5"
+                  className="bg-[#f97316] text-[#0a0a0a] hover:bg-[#ea580c] px-5"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
                     <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0" />
@@ -12593,7 +12562,7 @@ const ADIA = () => {
         {/* Error Dialog */}
         {showErrorDialog && currentError && (
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={() => setShowErrorDialog(false)}>
-            <div className="bg-[#141414] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
+            <div className="bg-[#1a1a1a] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
               <div className="h-12 flex items-center px-5 border-b border-red-900/50">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" className="mr-3">
                   <circle cx="12" cy="12" r="10" />
@@ -12615,7 +12584,7 @@ const ADIA = () => {
                   variant="outline"
                   onClick={() => handleJumpToError(currentError)}
                   disabled={!currentError.elementId}
-                  className="border-[#c9a86c] text-[#c9a86c] hover:bg-[#c9a86c]/10 px-5 mr-auto"
+                  className="border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10 px-5 mr-auto"
                 >
                   Go to Element
                 </Button>

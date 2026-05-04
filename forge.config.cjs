@@ -9,6 +9,7 @@ module.exports = {
       name: '@electron-forge/maker-squirrel',
       config: {
         name: 'adia',
+        setupIcon: './icon.png'
       },
     },
     {

@@ -96,7 +96,7 @@ input[type=range]::-webkit-slider-thumb {
   height: 14px;
   width: 14px;
   border-radius: 50%;
-  background: #c9a86c;
+  background: #f97316;
   margin-top: -5px; /* Centers thumb on track */
   box-shadow: 0 0 5px rgba(0,0,0,0.5);
 }
@@ -111,6 +111,6 @@ input[type=range]::-moz-range-thumb {
   height: 14px;
   width: 14px;
   border-radius: 50%;
-  background: #c9a86c;
+  background: #f97316;
   border: none;
 }
