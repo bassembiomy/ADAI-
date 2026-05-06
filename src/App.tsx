@@ -5725,9 +5725,9 @@ const ADIA = () => {
   const handleExportProject = useCallback(async () => {
     const projectFiles = {
       'statemachine.json': { states, junctions, transitions, layers, variables, view, tickMs },
-      'bdd.json': { blocks: blocks.filter(b => (b.data as any)?.stereotype !== 'Requirement'), relationships, customStereotypes },
+      'bdd.json': { blocks: blocks.filter(b => b.stereotype !== 'Requirement'), relationships, customStereotypes },
       'ibd.json': { parts, connectors, interfaceRealizations },
-      'requirements.json': { blocks: blocks.filter(b => (b.data as any)?.stereotype === 'Requirement'), relationships },
+      'requirements.json': { blocks: blocks.filter(b => b.stereotype === 'Requirement'), relationships },
       'xbridges.json': { globalXBridgesNodes, globalXBridgesEdges },
       'vlab.json': { vlabNodes, vlabEdges },
       'hmi.json': { hmiComponents },
