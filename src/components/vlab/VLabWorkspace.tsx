@@ -15,8 +15,9 @@ import ReactFlow, {
   Position
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import * as math from 'mathjs';
 import { VLabWorkspaceProps } from './VLabWorkspaceTypes';
-import { VLAB_LIBRARY, VLabBlock } from '../../utils/vlabLibrary';
+import { VLAB_LIBRARY, VLabBlock, VLabPort } from '../../utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../engine/vlab/vlabComponentDefinitions';
 import { Settings2, Play, Pause, Square, Send, ChevronLeft, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -1454,6 +1455,14 @@ const SymbolRenderer = ({ type, color }: { type: string, color: string }) => {
           </text>
         </svg>
       );
+    case 'doe_custom':
+      return (
+        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
+          <rect x="10" y="10" width="40" height="40" rx="4" />
+          <path d="M20 20L40 40M20 40L40 20" strokeWidth="1" opacity="0.3" />
+          <text x="30" y="35" textAnchor="middle" fill={color} fontSize="10" fontWeight="bold">DOE</text>
+        </svg>
+      );
     default:
       return (
         <div className="text-xl font-bold" style={{ color }}>{(type || 'UNK').substring(0, 3).toUpperCase()}</div>
@@ -1919,7 +1928,6 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     const isPIDMotor = hasPID && nodes.some(n => n.id === 'speed_pid');
 
     if (isPIDMotor) {
-      // ── PID Speed Control Simulation ──
       const w_ref = param('ref_speed', 'value', 1200); // RPM
       const Kp = param('speed_pid', 'Kp', 2.0);
       const Ki = param('speed_pid', 'Ki', 5.0);
@@ -1967,6 +1975,58 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           value: omega * (60 / (2 * Math.PI)),
           target: target_rad * (60 / (2 * Math.PI))
         };
+      };
+    }
+
+    // ── Detect Custom DOE Model Block ───────────────────────────────────────
+    const customDoeNode = nodes.find(n => (n.data as any).type === 'doe_custom');
+    if (customDoeNode) {
+      const data = customDoeNode.data as any;
+      const modelType = data.params?.modelType?.value || 'RSM';
+      const eq = data.params?.equation?.value || '0';
+      const inputNames = data.params?.inputNames || [];
+      const layers = data.params?.layers || [];
+      const polyOrder = data.params?.polyOrder || 2;
+
+      return (t: number, dt: number) => {
+        // Collect inputs from connected nodes
+        const inputs = inputNames.map((name: string, i: number) => {
+          const edge = edges.find(e => e.target === customDoeNode.id && e.targetHandle === `in${i + 1}_t`);
+          if (edge) {
+            const sourceNode = nodes.find(n => n.id === edge.source);
+            if (sourceNode) return param(sourceNode.id, 'value', 0);
+          }
+          return param(customDoeNode.id, name, 0);
+        });
+
+        if (modelType === 'RSM') {
+          try {
+            let equation = eq;
+            if (equation.includes('=')) equation = equation.split('=')[1].trim();
+            const scope: any = {};
+            inputNames.forEach((name: string, i: number) => {
+              scope[name] = inputs[i];
+              scope[`X${i + 1}`] = inputs[i];
+            });
+            return math.evaluate!(equation, scope);
+          } catch (e) { return 0; }
+        } else if (modelType === 'GMDH') {
+          try {
+            let currentVals = [...inputs];
+            for (const layer of layers) {
+              currentVals = layer.map((neuron: any) => {
+                const xi = currentVals[neuron.inputs[0]];
+                const xj = currentVals[neuron.inputs[1]];
+                let vals: number[];
+                if (polyOrder === 2) vals = [1, xi, xj, xi * xi, xj * xj, xi * xj];
+                else vals = [1, xi, xj, xi * xi, xj * xj, xi * xj, xi * xi * xi, xj * xj * xj, xi * xi * xj, xi * xj * xj];
+                return vals.reduce((sum, v, cIdx) => sum + v * (neuron.coeffs[cIdx] || 0), 0);
+              });
+            }
+            return currentVals[0] || 0;
+          } catch (e) { return 0; }
+        }
+        return 0;
       };
     }
 

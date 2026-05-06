@@ -1,7 +1,7 @@
 // src/components/xbridges/XbridgesPropertiesPanel.tsx
 import React, { useState, useEffect } from 'react';
 import { XBlock, XPort } from '../../engine/xbridges/types';
-import { X, Plus, Trash2, Settings2, Hash, Layers } from 'lucide-react';
+import { X, Plus, Trash2, Settings2, Hash, Layers, Activity } from 'lucide-react';
 
 interface Props {
   block: XBlock | null;
@@ -329,7 +329,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
             )}
           </div>
           <div className="space-y-2">
-            {block.inputs.map(port => (
+            {(block.inputs || []).map(port => (
               <div key={port.id} className="bg-[#0a0a0a] border border-[#222] p-2 rounded-lg space-y-1">
                 <div className="flex items-center justify-between">
                    <div className="flex items-center gap-2">
@@ -363,7 +363,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
 
           <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-4">Output Ports</h3>
           <div className="space-y-2">
-            {block.outputs.map(port => (
+            {(block.outputs || []).map(port => (
               <div key={port.id} className="bg-[#0a0a0a] border border-[#222] p-2 rounded-lg space-y-1">
                 <div className="flex items-center justify-between">
                    <div className="flex items-center gap-2">
@@ -390,6 +390,39 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
             {block.outputs.length === 0 && <p className="text-xs text-gray-600 italic px-2">No outputs</p>}
           </div>
         </section>
+
+        {/* Model Analysis Report (For DOE Models) */}
+        {block.type === 'DOE_MODEL' && (block as any).metrics && (
+           <section className="mt-8 border-t border-white/5 pt-6 space-y-4">
+              <h3 className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest flex items-center gap-2">
+                 <Activity size={12} /> Model Analysis Report
+              </h3>
+              
+              <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-4 space-y-3">
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-0.5">
+                       <span className="text-[8px] text-emerald-500/60 uppercase font-black">R-Squared</span>
+                       <div className="text-xl font-black text-white leading-none">{(block as any).metrics.R2 ? ((block as any).metrics.R2 * 100).toFixed(2) : '0.00'}%</div>
+                    </div>
+                    {(block as any).metrics.R2Adj !== undefined && (
+                       <div className="space-y-0.5">
+                          <span className="text-[8px] text-emerald-500/60 uppercase font-black">Adj. R-Squared</span>
+                          <div className="text-xl font-black text-white/70 leading-none">{((block as any).metrics.R2Adj * 100).toFixed(2)}%</div>
+                       </div>
+                    )}
+                 </div>
+
+                 <div className="h-px bg-emerald-500/10" />
+
+                 <div className="space-y-1.5">
+                    <span className="text-[8px] text-emerald-500/60 uppercase font-black">Regression Equation</span>
+                    <div className="bg-black/40 p-2 rounded-lg border border-white/5 font-mono text-[9px] text-emerald-400 whitespace-pre-wrap break-all leading-relaxed">
+                       {(block as any).metrics.equation}
+                    </div>
+                 </div>
+              </div>
+           </section>
+        )}
       </div>
     </div>
   );

@@ -2555,7 +2555,9 @@ const DoeWorkspace = ({
   plotType,
   setPlotType,
   handleExportProject,
-  generateReport
+  generateReport,
+  onExportToVLab,
+  onExportToXBridges
 }: {
   onClose: () => void;
   addError: (type: 'error' | 'warning' | 'info', message: string, source?: string, elementId?: string) => void;
@@ -2577,6 +2579,8 @@ const DoeWorkspace = ({
   setPlotType: React.Dispatch<React.SetStateAction<'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act'>>;
   handleExportProject: () => void;
   generateReport: () => void;
+  onExportToVLab: (block: any) => void;
+  onExportToXBridges: (block: any) => void;
 }) => {
   const [eqFontSize, setEqFontSize] = useState(14);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2967,6 +2971,93 @@ const DoeWorkspace = ({
     addError('info', 'Taguchi Analysis Completed.');
   };
 
+  const handleExportToVLab = () => {
+    if (!results || !results.equation) {
+      addError('warning', 'Please calculate a model first.');
+      return;
+    }
+
+    const block = {
+      name: `${activeModel} Model`,
+      type: 'doe_custom',
+      color: '#f97316',
+      icon: 'Σ',
+      params: {
+        modelType: { value: activeModel, label: 'Model Type' },
+        equation: { value: results.equation, label: 'Equation' },
+        inputNames: [...headers.slice(0, -1)],
+        outputName: headers[headers.length - 1],
+        layers: results.model?.layers ? JSON.parse(JSON.stringify(results.model.layers)) : [],
+        polyOrder: results.polyOrder || 2
+      },
+      ports: [
+        ...headers.slice(0, -1).map((h, i) => ({
+          id: `in${i + 1}`,
+          label: h,
+          type: 'input',
+          pos: 'left'
+        })),
+        {
+          id: 'out1',
+          label: headers[headers.length - 1],
+          type: 'output',
+          pos: 'right'
+        }
+      ]
+    };
+
+    onExportToVLab(block);
+  };
+
+  const handleExportToXBridges = () => {
+    if (!results || !results.equation) {
+      addError('warning', 'Please calculate a model first.');
+      return;
+    }
+
+    const blockData = {
+      name: `${activeModel} Model`,
+      type: 'DOE_MODEL',
+      equation: results.equation,
+      modelType: activeModel,
+      inputNames: [...headers.slice(0, -1)],
+      outputName: headers[headers.length - 1],
+      layers: results.model?.layers ? JSON.parse(JSON.stringify(results.model.layers)) : [],
+      polyOrder: results.polyOrder || 2,
+      metrics: {
+        R2: results.R2,
+        R2Adj: results.R2Adj,
+        R2Pred: results.R2Pred,
+        AdeqPrec: results.AdeqPrec,
+        equation: results.equation,
+        importance: results.importance || []
+      },
+      params: {
+        equation: { value: results.equation, label: 'Equation' },
+        modelType: { value: activeModel, label: 'Model Type' },
+        rSquared: { value: `${(results.R2 * 100).toFixed(2)}%`, label: 'R-Squared' }
+      },
+      inputs: headers.slice(0, -1).map((h, i) => ({
+        id: `in${i + 1}`,
+        name: h,
+        type: 'auto',
+        direction: 'input',
+        value: 0,
+        position: 'left'
+      })),
+      outputs: [{
+        id: 'out1',
+        name: headers[headers.length - 1],
+        type: 'auto',
+        direction: 'output',
+        value: 0,
+        position: 'right'
+      }]
+    };
+
+    onExportToXBridges(blockData);
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -3171,7 +3262,24 @@ const DoeWorkspace = ({
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest">Equation</h3>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 items-center">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-6 text-[9px] border-[#f97316] text-[#f97316] hover:bg-[#f97316] hover:text-white"
+                      onClick={handleExportToVLab}
+                    >
+                      Export to V-Lab
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-6 text-[9px] border-sky-500 text-sky-500 hover:bg-sky-500 hover:text-white"
+                      onClick={handleExportToXBridges}
+                    >
+                      Export to X-Bridges
+                    </Button>
+                    <div className="w-2" />
                     <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setEqFontSize(p => Math.max(8, p - 1))}><span className="text-[8px]">A-</span></Button>
                     <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setEqFontSize(p => Math.min(32, p + 1))}><span className="text-[10px]">A+</span></Button>
                   </div>
@@ -12819,6 +12927,33 @@ const ADIA = () => {
               generateReport={() => setShowReportPreview(true)}
               onClose={() => toggleWindow('doe')}
               addError={addError}
+              onExportToVLab={(block) => {
+                const newNodeId = `doe_vlab_${Date.now()}`;
+                const newNode = {
+                  id: newNodeId,
+                  type: 'default',
+                  position: { x: 400, y: 300 },
+                  data: { ...block, id: newNodeId }
+                };
+                setVlabNodes(prev => [...prev, newNode]);
+                setDiagramMode('vlab');
+                addError('info', `Exported ${block.name} to V-Lab workspace.`);
+              }}
+              onExportToXBridges={(blockData) => {
+                const newNodeId = `doe_xb_${Date.now()}`;
+                const newNode = {
+                  id: newNodeId,
+                  type: 'xblock',
+                  position: { x: 400, y: 300 },
+                  data: {
+                    ...blockData,
+                    id: newNodeId
+                  }
+                };
+                setGlobalXBridgesNodes(prev => [...prev, newNode]);
+                setDiagramMode('xbridges');
+                addError('info', `Exported ${blockData.name} to X-Bridges workspace.`);
+              }}
             />
           </FloatingWindow>
         )}

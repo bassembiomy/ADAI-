@@ -193,6 +193,12 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'Voltage (V)', through: 'Current (I)',
     description: 'The zero-potential reference point for the electrical network. Every circuit must have at least one ground.'
   },
+  doe_custom: {
+    equations: ['y = evaluate_doe(u1, u2, ..., un)'],
+    latex: ['y = f_{DOE}(\\mathbf{u})'],
+    across: 'None', through: 'None',
+    description: 'A custom block generated from the DOE module. Implements a trained regression or neural model.'
+  },
   busbar: {
     equations: ['V1 = V2 = ... = Vn', 'Sum(I) = 0'],
     latex: ['V_i = V_j', '\sum I_k = 0'],

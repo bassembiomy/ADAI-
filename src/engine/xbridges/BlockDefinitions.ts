@@ -793,12 +793,12 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   }),
 
-  // --- FOC Control Blocks ---
   'CURRENT_CONTROLLER_DQ': (id, params) => ({
     id, type: 'CURRENT_CONTROLLER_DQ',
     params: { 
       Kp_d: params.Kp_d || 1, Ki_d: params.Ki_d || 10,
-      Kp_q: params.Kp_q || 1, Ki_q: params.Ki_q || 10 
+      Kp_q: params.Kp_q || 1, Ki_q: params.Ki_q || 10,
+      iMax: params.iMax || 100
     },
     isStateful: true,
     inputs: [
@@ -811,24 +811,91 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       createPort('vd', 'Vd*', 'output', 0, 'right', 'control'),
       createPort('vq', 'Vq*', 'output', 0, 'right', 'control')
     ],
-    state: { intD: 0, intQ: 0, lastTime: 0 },
-    execute: (ins, p, state, time) => {
-      const dt = Math.max(1e-6, time - (state.lastTime || 0));
-      const errD = Number(ins[0]) - Number(ins[2]);
-      const errQ = Number(ins[1]) - Number(ins[3]);
-      
-      const nextIntD = state.intD + errD * dt;
-      const nextIntQ = state.intQ + errQ * dt;
-      
-      const vd = p.Kp_d * errD + p.Ki_d * nextIntD;
-      const vq = p.Kp_q * errQ + p.Ki_q * nextIntQ;
-      
+    state: { intD: 0, intQ: 0, lastT: 0 },
+    execute: (ins, p, state, t) => {
+      const dt = Math.max(1e-6, t - (state.lastT || 0));
+      const eD = Number(ins[0]) - Number(ins[2]);
+      const eQ = Number(ins[1]) - Number(ins[3]);
+      const nextIntD = state.intD + eD * dt;
+      const nextIntQ = state.intQ + eQ * dt;
+      const vd = p.Kp_d * eD + p.Ki_d * nextIntD;
+      const vq = p.Kp_q * eQ + p.Ki_q * nextIntQ;
       return { 
         outputs: [vd, vq],
-        nextState: { intD: nextIntD, intQ: nextIntQ, lastTime: time }
+        nextState: { intD: nextIntD, intQ: nextIntQ, lastT: t }
       };
     }
   }),
+
+  'DOE_MODEL': (id, params) => {
+    const inputNames = params.inputNames || ['X1'];
+    const outputName = params.outputName || 'Y';
+    const modelType = params.modelType || 'RSM'; // 'RSM' or 'GMDH'
+    
+    return {
+      id, type: 'DOE_MODEL',
+      params: { ...params, inputNames, outputName, modelType },
+      inputs: inputNames.map((name: string, i: number) => createPort(`in${i+1}`, name, 'input')),
+      outputs: [createPort('out', outputName, 'output')],
+      execute: (ins, p) => {
+        if (p.modelType === 'RSM') {
+          try {
+            // RSM typically provides a string equation like "Y = 10 + 2*X1 + 3*X2"
+            // We need to strip "Y =" and replace factor names with input values
+            const scope: any = {};
+            inputNames.forEach((name: string, i: number) => {
+              scope[name] = Number(ins[i] || 0);
+              // Support X1, X2 format too if name is different
+              scope[`X${i+1}`] = Number(ins[i] || 0);
+            });
+
+            const lines = (p.equation || '0').split('\n');
+            const eqLine = lines.find((l: string) => l.includes('Y ='));
+            let eqStr = '0';
+            if (eqLine) {
+              eqStr = eqLine.split('Y =')[1].trim();
+              lines.slice(lines.indexOf(eqLine) + 1).forEach((line: string) => {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('+') || trimmed.startsWith('-')) {
+                  eqStr += ' ' + trimmed;
+                }
+              });
+            }
+            
+            const result = math.evaluate(eqStr, scope);
+            return { outputs: [result] };
+          } catch (e) {
+            return { outputs: [0] };
+          }
+        } else if (p.modelType === 'GMDH') {
+          // GMDH Layer-by-layer prediction
+          try {
+            const layers = p.layers || [];
+            const polyOrder = p.polyOrder || 2;
+            let currentVals = ins.map(v => Number(v || 0));
+            
+            for (const layer of layers) {
+              currentVals = layer.map((neuron: any) => {
+                const xi = currentVals[neuron.inputs[0]];
+                const xj = currentVals[neuron.inputs[1]];
+                let vals: number[];
+                if (polyOrder === 2) {
+                  vals = [1, xi, xj, xi * xi, xj * xj, xi * xj];
+                } else {
+                  vals = [1, xi, xj, xi * xi, xj * xj, xi * xj, xi * xi * xi, xj * xj * xj, xi * xi * xj, xi * xj * xj];
+                }
+                return vals.reduce((sum, v, cIdx) => sum + v * (neuron.coeffs[cIdx] || 0), 0);
+              });
+            }
+            return { outputs: [currentVals[0] || 0] };
+          } catch (e) {
+            return { outputs: [0] };
+          }
+        }
+        return { outputs: [0] };
+      }
+    };
+  },
 
   'SPEED_CONTROLLER': (id, params) => ({
     id, type: 'SPEED_CONTROLLER',

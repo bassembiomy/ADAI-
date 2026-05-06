@@ -1508,5 +1508,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         ports: [{ id: 'a', pos: 'left', label: '' }]
       }
     ]
+  },
+  {
+    type: 'DOE Models',
+    blocks: [
+      {
+        id: 'doe_custom', name: 'DOE Model Block', color: '#f97316', icon: 'doe_model', category: 'Statistical',
+        params: { 
+          modelType: { value: 'RSM', unit: '', label: 'Model Type' },
+          equation: { value: '', unit: '', label: 'Equation' }
+        },
+        ports: [] // Ports are dynamically assigned on export
+      }
+    ]
   }
 ];

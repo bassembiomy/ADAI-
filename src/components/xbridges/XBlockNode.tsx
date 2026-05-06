@@ -50,7 +50,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
     if (['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR', 'SWITCH', 'IF_ELSE', 'SWITCH_CASE'].includes(type)) return '#6f42c1'; // Logic (Purple)
     if (['BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight'].includes(type)) return '#563d7c'; // Bitwise (Indigo)
     if (['DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Integrator', 'INTEGRATOR_CONTINUOUS', 'INTEGRATOR_DISCRETE', 'PID_CONTROLLER', 'PID_BASIC'].includes(type)) return '#d73a49'; // Sequential/Control (Red)
-    if (type === 'MPC_CONTROLLER' || type === 'Subsystem') return '#c9a86c'; // MPC/Subsystem (Copper/Gold)
+    if (type === 'MPC_CONTROLLER' || type === 'Subsystem' || type === 'DOE_MODEL') return '#c9a86c'; // MPC/Subsystem/DOE (Copper/Gold)
     if (['WHITE_NOISE', 'BAND_LIMITED_NOISE', 'LOW_PASS_FILTER', 'HIGH_PASS_FILTER', 'MOVING_AVERAGE'].includes(type)) return '#17a2b8'; // Signal Processing (Cyan/Teal)
     if (['KALMAN_FILTER', 'EXTENDED_KALMAN_FILTER'].includes(type)) return '#20c997'; // Estimation (Mint)
     if (['THREE_PHASE_INVERTER', 'SINGLE_PHASE_H_BRIDGE'].includes(type)) return '#ef4444'; // Power (Red)
@@ -123,7 +123,8 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       case 'COT':
       case 'SEC':
       case 'COSEC': return <TrendingUp size={12} />;
-      case 'Subsystem': return <Layers size={12} />;
+      case 'Subsystem':
+      case 'DOE_MODEL': return <Layers size={12} />;
       default: return null;
     }
   };
@@ -283,6 +284,22 @@ export const XBlockNode = ({ data, id, selected }: any) => {
                 <Layers size={24} className="text-[#c9a86c] drop-shadow-[0_0_10px_rgba(201,168,108,0.3)]" />
               </div>
               <span className="text-[7px] font-black text-gray-500 uppercase tracking-widest mt-2 group-hover/sub:text-[#c9a86c]">Double-click to Enter</span>
+            </div>
+          ) : data.type === 'DOE_MODEL' ? (
+            <div className="flex flex-col items-center text-center">
+               <div className="p-3 rounded-2xl bg-[#c9a86c]/10 border border-[#c9a86c]/20 mb-3 shadow-[0_0_15px_rgba(201,168,108,0.1)]">
+                  <Layers size={28} className="text-[#c9a86c] drop-shadow-[0_0_8px_rgba(201,168,108,0.4)]" />
+               </div>
+               <span className="text-[8px] font-black text-[#c9a86c] uppercase tracking-[0.2em] mb-1">
+                 {data.modelType || 'RSM'} MODEL
+               </span>
+               {data.metrics?.R2 !== undefined && (
+                 <div className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                   <span className="text-[9px] font-mono font-bold text-emerald-400">
+                     R²: {(data.metrics.R2 * 100).toFixed(1)}%
+                   </span>
+                 </div>
+               )}
             </div>
           ) : (
             <div className="flex flex-col items-center">
