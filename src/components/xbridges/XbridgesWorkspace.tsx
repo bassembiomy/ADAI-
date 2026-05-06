@@ -97,9 +97,22 @@ export const XbridgesWorkspace: React.FC<{
     let updateThrottle = 0;
 
     if (isSimulating) {
-      // Rebuild engine model on start
+      // Rebuild engine model on start - use BLOCK_LIBRARY to get live execute() functions
       const model = {
-        blocks: nodes.map(n => n.data as any),
+        blocks: nodes.map(n => {
+          const d = n.data as any;
+          // Try to rebuild via BLOCK_LIBRARY to get live execute() function
+          if (BLOCK_LIBRARY[d.type]) {
+            try {
+              const freshBlock = BLOCK_LIBRARY[d.type](d.id, d.params || {});
+              // Merge saved state and extra data into the fresh block
+              return { ...freshBlock, id: d.id, state: d.state || freshBlock.state, params: { ...freshBlock.params, ...d.params } };
+            } catch (e) {
+              return d; // fallback to raw data if rebuild fails
+            }
+          }
+          return d;
+        }),
         connections: edges.map(e => ({
           sourceBlock: e.source, sourcePort: e.sourceHandle!, targetBlock: e.target, targetPort: e.targetHandle!
         }))
@@ -133,16 +146,8 @@ export const XbridgesWorkspace: React.FC<{
             setNodes(nds => nds.map(n => {
               const engineBlock = engineRef.current!['blockMap'].get(n.id);
               if (engineBlock && n.type === 'xblock') {
-                let dataUpdate: any = { state: engineBlock.state };
-
-                if (engineBlock.type === 'Scope') {
-                  const currentInputs = engineRef.current!.gatherInputs(engineBlock);
-                  const val = currentInputs[0];
-                  const prevHistory = n.data.history || [];
-                  dataUpdate.history = [...prevHistory.slice(-99), typeof val === 'number' ? val : 0];
-                }
-
-                return { ...n, data: { ...n.data, ...dataUpdate } };
+                // Sync the engine's block state (which includes Scope history) to React node data
+                return { ...n, data: { ...n.data, state: engineBlock.state } };
               }
               return n;
             }));

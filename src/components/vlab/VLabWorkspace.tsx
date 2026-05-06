@@ -1862,7 +1862,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       const n = nodes.find(nd => nd.id === nodeId);
       if (!n) return fallback;
       const p = (n.data as any).params?.[key];
-      return typeof p?.value === 'number' ? p.value : fallback;
+      if (p === undefined || p === null) return fallback;
+      const val = p.value;
+      if (typeof val === 'number') return val;
+      if (typeof val === 'string') {
+        const parsed = parseFloat(val);
+        return isNaN(parsed) ? fallback : parsed;
+      }
+      return fallback;
     };
 
     // ── Detect Air Fryer Thermal Model ──────────────────────────────────────
@@ -2001,14 +2008,25 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
         if (modelType === 'RSM') {
           try {
-            let equation = eq;
-            if (equation.includes('=')) equation = equation.split('=')[1].trim();
+            const lines = (eq || '0').split('\n');
+            const eqLine = lines.find((l: string) => l.includes('Y ='));
+            let eqStr = '0';
+            if (eqLine) {
+              eqStr = eqLine.split('Y =')[1].trim();
+              lines.slice(lines.indexOf(eqLine) + 1).forEach((line: string) => {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('+') || trimmed.startsWith('-')) {
+                  eqStr += ' ' + trimmed;
+                }
+              });
+            }
+
             const scope: any = {};
             inputNames.forEach((name: string, i: number) => {
               scope[name] = inputs[i];
               scope[`X${i + 1}`] = inputs[i];
             });
-            return math.evaluate!(equation, scope);
+            return math.evaluate!(eqStr, scope);
           } catch (e) { return 0; }
         } else if (modelType === 'GMDH') {
           try {
@@ -2024,6 +2042,25 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               });
             }
             return currentVals[0] || 0;
+          } catch (e) { return 0; }
+        } else if (modelType === 'Taguchi') {
+          try {
+            const grandMean = data.params?.grandMean?.value || 0;
+            const factorLevels = data.params?.factorLevels?.value || [];
+            let prediction = Number(grandMean);
+            
+            inputNames.forEach((name: string, i: number) => {
+              const val = inputs[i] || 0;
+              const f = factorLevels[i];
+              if (f && f.means) {
+                const sortedMeans = [...f.means].sort((a: any, b: any) => Math.abs(a.level - val) - Math.abs(b.level - val));
+                const nearest = sortedMeans[0];
+                if (nearest) {
+                  prediction += (nearest.meanY - grandMean);
+                }
+              }
+            });
+            return prediction;
           } catch (e) { return 0; }
         }
         return 0;

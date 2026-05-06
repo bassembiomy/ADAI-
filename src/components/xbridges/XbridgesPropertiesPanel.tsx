@@ -138,8 +138,11 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
         <section className="space-y-3">
           <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Parameters</h3>
           {Object.entries(block.params).map(([key, value]) => {
-            let displayValue = value;
-            if (typeof value === 'object') displayValue = JSON.stringify(value);
+            const isObjectParam = typeof value === 'object' && value !== null && 'value' in value;
+            let displayValue = isObjectParam ? value.value : value;
+            if (typeof displayValue === 'object' && displayValue !== null) {
+              displayValue = JSON.stringify(displayValue);
+            }
 
             if (key === 'smVarId' && (block.type === 'Inport' || block.type === 'Outport')) {
                return (
@@ -301,7 +304,11 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                           try { val = JSON.parse(val); } catch(err) {}
                         }
                       }
-                      onUpdate(block.id, { params: { ...block.params, [key]: val } });
+                      let finalVal = val;
+                      if (isObjectParam) {
+                        finalVal = { ...block.params[key], value: val };
+                      }
+                      onUpdate(block.id, { params: { ...block.params, [key]: finalVal } });
                     }}
                     className="w-full text-sm font-mono px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-white rounded focus:border-[#emerald-500] outline-none transition-all"
                   />

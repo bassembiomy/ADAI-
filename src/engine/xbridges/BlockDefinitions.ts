@@ -828,9 +828,12 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'DOE_MODEL': (id, params) => {
-    const inputNames = params.inputNames || ['X1'];
-    const outputName = params.outputName || 'Y';
-    const modelType = params.modelType || 'RSM'; // 'RSM' or 'GMDH'
+    const inputNames = (typeof params.inputNames === 'object' && params.inputNames !== null && 'value' in params.inputNames) 
+      ? params.inputNames.value : (params.inputNames || ['X1']);
+    const outputName = (typeof params.outputName === 'object' && params.outputName !== null && 'value' in params.outputName) 
+      ? params.outputName.value : (params.outputName || 'Y');
+    const modelType = (typeof params.modelType === 'object' && params.modelType !== null && 'value' in params.modelType) 
+      ? params.modelType.value : (params.modelType || 'RSM');
     
     return {
       id, type: 'DOE_MODEL',
@@ -838,61 +841,92 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       inputs: inputNames.map((name: string, i: number) => createPort(`in${i+1}`, name, 'input')),
       outputs: [createPort('out', outputName, 'output')],
       execute: (ins, p) => {
-        if (p.modelType === 'RSM') {
-          try {
-            // RSM typically provides a string equation like "Y = 10 + 2*X1 + 3*X2"
-            // We need to strip "Y =" and replace factor names with input values
-            const scope: any = {};
-            inputNames.forEach((name: string, i: number) => {
-              scope[name] = Number(ins[i] || 0);
-              // Support X1, X2 format too if name is different
-              scope[`X${i+1}`] = Number(ins[i] || 0);
+        try {
+            const mType = (typeof p.modelType === 'object' && p.modelType !== null) ? p.modelType.value : (p.modelType || 'RSM');
+            const equationStr = (typeof p.equation === 'object' && p.equation !== null) ? p.equation.value : (p.equation || '');
+            
+            const cleanIns = ins.map(v => {
+                const n = Number(v);
+                return isNaN(n) ? 0 : n;
             });
 
-            const lines = (p.equation || '0').split('\n');
-            const eqLine = lines.find((l: string) => l.includes('Y ='));
-            let eqStr = '0';
-            if (eqLine) {
-              eqStr = eqLine.split('Y =')[1].trim();
-              lines.slice(lines.indexOf(eqLine) + 1).forEach((line: string) => {
-                const trimmed = line.trim();
-                if (trimmed.startsWith('+') || trimmed.startsWith('-')) {
-                  eqStr += ' ' + trimmed;
+            if (mType === 'RSM') {
+                const scope: any = {};
+                const inputNamesArr = (typeof p.inputNames === 'object' && p.inputNames !== null && 'value' in p.inputNames) 
+                  ? p.inputNames.value : (p.inputNames || inputNames);
+                
+                inputNamesArr.forEach((name: string, i: number) => {
+                    const val = cleanIns[i] || 0;
+                    scope[name] = val;
+                    scope[`X${i+1}`] = val;
+                });
+
+                const lines = (equationStr || '').split('\n').filter((l: string) => l.trim() !== '');
+                const eqLine = lines.find((l: string) => l.includes('Y ='));
+                let eqStr = eqLine ? eqLine.split('Y =')[1].trim() : (lines[0] || '0');
+                
+                if (eqLine) {
+                  lines.slice(lines.indexOf(eqLine) + 1).forEach((line: string) => {
+                    const trimmed = line.trim();
+                    if (trimmed.startsWith('+') || trimmed.startsWith('-')) {
+                      eqStr += ' ' + trimmed;
+                    }
+                  });
                 }
-              });
+
+                try {
+                    const result = math.evaluate(eqStr, scope);
+                    return { outputs: [Number(result) || 0] };
+                } catch (e) {
+                    return { outputs: [cleanIns.reduce((a, b) => a + b, 0)] };
+                }
+            } else if (mType === 'GMDH') {
+                const layers = (typeof p.layers === 'object' && p.layers !== null && !Array.isArray(p.layers)) ? p.layers.value : p.layers;
+                const polyOrder = (typeof p.polyOrder === 'object' && p.polyOrder !== null) ? p.polyOrder.value : (p.polyOrder || 2);
+                
+                if (!layers || !Array.isArray(layers) || layers.length === 0) {
+                    return { outputs: [cleanIns[0] || 0] };
+                }
+
+                let currentVals = [...cleanIns];
+                for (const layer of (layers as any[])) {
+                    currentVals = layer.map((neuron: any) => {
+                        const xi = currentVals[neuron.inputs[0]] || 0;
+                        const xj = currentVals[neuron.inputs[1]] || 0;
+                        let vals: number[];
+                        if (polyOrder === 3) {
+                            vals = [1, xi, xj, xi * xi, xj * xj, xi * xj, xi * xi * xi, xj * xj * xj, xi * xi * xj, xi * xj * xj];
+                        } else {
+                            vals = [1, xi, xj, xi * xi, xj * xj, xi * xj];
+                        }
+                        const coeffs = neuron.coeffs || neuron.weights || [];
+                        return vals.reduce((sum, v, cIdx) => sum + v * (coeffs[cIdx] || 0), 0);
+                    });
+                }
+                return { outputs: [Number(currentVals[0]) || 0] };
+            } else if (mType === 'Taguchi') {
+                const grandMean = (typeof p.grandMean === 'object') ? p.grandMean.value : (p.grandMean || 0);
+                const factorLevels = (typeof p.factorLevels === 'object' && !Array.isArray(p.factorLevels)) ? p.factorLevels.value : (p.factorLevels || []);
+                
+                let prediction = Number(grandMean);
+                factorLevels.forEach((f: any, i: number) => {
+                    const val = cleanIns[i] || 0;
+                    // Find nearest level
+                    if (f.means && Array.isArray(f.means)) {
+                        const sortedMeans = [...f.means].sort((a, b) => Math.abs(a.level - val) - Math.abs(b.level - val));
+                        const nearest = sortedMeans[0];
+                        if (nearest) {
+                            prediction += (nearest.meanY - grandMean);
+                        }
+                    }
+                });
+                return { outputs: [prediction] };
             }
             
-            const result = math.evaluate(eqStr, scope);
-            return { outputs: [result] };
-          } catch (e) {
+            return { outputs: [cleanIns.reduce((a, b) => a + b, 0)] };
+        } catch (err) {
             return { outputs: [0] };
-          }
-        } else if (p.modelType === 'GMDH') {
-          // GMDH Layer-by-layer prediction
-          try {
-            const layers = p.layers || [];
-            const polyOrder = p.polyOrder || 2;
-            let currentVals = ins.map(v => Number(v || 0));
-            
-            for (const layer of layers) {
-              currentVals = layer.map((neuron: any) => {
-                const xi = currentVals[neuron.inputs[0]];
-                const xj = currentVals[neuron.inputs[1]];
-                let vals: number[];
-                if (polyOrder === 2) {
-                  vals = [1, xi, xj, xi * xi, xj * xj, xi * xj];
-                } else {
-                  vals = [1, xi, xj, xi * xi, xj * xj, xi * xj, xi * xi * xi, xj * xj * xj, xi * xi * xj, xi * xj * xj];
-                }
-                return vals.reduce((sum, v, cIdx) => sum + v * (neuron.coeffs[cIdx] || 0), 0);
-              });
-            }
-            return { outputs: [currentVals[0] || 0] };
-          } catch (e) {
-            return { outputs: [0] };
-          }
         }
-        return { outputs: [0] };
       }
     };
   },

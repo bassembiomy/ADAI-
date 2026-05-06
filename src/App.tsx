@@ -16,7 +16,7 @@ import {
   ChevronDown, ChevronRight, Play, Pause, Square,
   MousePointer2, Upload, FileText, Download,
   Activity, Zap, Database, Cpu, Layout, Maximize2, X,
-  LayoutGrid, Rows
+  LayoutGrid, Rows, Network
 } from 'lucide-react';
 import { FactoryIOGateway } from './components/FactoryIOGateway';
 import { AiArchitectSidebar } from './components/AiArchitectSidebar';
@@ -2625,11 +2625,96 @@ const DoeWorkspace = ({
     reader.readAsBinaryString(file);
   };
 
+  // ── Statistical Functions (Minitab-grade) ──────────────────────────────────
   const normalCDF = (x: number) => {
     const t = 1 / (1 + 0.2316419 * Math.abs(x));
     const d = 0.3989423 * Math.exp(-x * x / 2);
     const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
     return x > 0 ? 1 - p : p;
+  };
+
+  // Regularized incomplete beta function via continued fraction (Lentz)
+  const betaIncomplete = (a: number, b: number, x: number): number => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    const lnBeta = lgamma(a) + lgamma(b) - lgamma(a + b);
+    const front = Math.exp(Math.log(x) * a + Math.log(1 - x) * b - lnBeta) / a;
+    let f = 1, c = 1, d = 1 - (a + b) * x / (a + 1);
+    if (Math.abs(d) < 1e-30) d = 1e-30;
+    d = 1 / d; f = d;
+    for (let m = 1; m <= 200; m++) {
+      let num = m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m));
+      d = 1 + num * d; if (Math.abs(d) < 1e-30) d = 1e-30; d = 1 / d;
+      c = 1 + num / c; if (Math.abs(c) < 1e-30) c = 1e-30;
+      f *= d * c;
+      num = -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1));
+      d = 1 + num * d; if (Math.abs(d) < 1e-30) d = 1e-30; d = 1 / d;
+      c = 1 + num / c; if (Math.abs(c) < 1e-30) c = 1e-30;
+      const delta = d * c; f *= delta;
+      if (Math.abs(delta - 1) < 1e-10) break;
+    }
+    return front * f;
+  };
+
+  const lgamma = (x: number): number => {
+    const c = [76.18009172947146, -86.50532032941677, 24.01409824083091,
+      -1.231739572450155, 0.001208650973866179, -0.000005395239384953];
+    let y = x, tmp = x + 5.5;
+    tmp -= (x + 0.5) * Math.log(tmp);
+    let ser = 1.000000000190015;
+    for (let j = 0; j < 6; j++) ser += c[j] / ++y;
+    return -tmp + Math.log(2.5066282746310005 * ser / x);
+  };
+
+  // Student's t-distribution CDF — matches Minitab's coefficient p-values
+  const tDistCDF = (t: number, df: number): number => {
+    const x = df / (df + t * t);
+    const ib = betaIncomplete(df / 2, 0.5, x);
+    return t >= 0 ? 1 - 0.5 * ib : 0.5 * ib;
+  };
+
+  // Two-tailed p-value from t-statistic with df degrees of freedom
+  const tDistPValue = (t: number, df: number): number => {
+    return 2 * (1 - tDistCDF(Math.abs(t), df));
+  };
+
+  // Critical t-value (approximate inverse via Newton-Raphson on the CDF)
+  const tCritical = (alpha: number, df: number): number => {
+    // Start with normal approximation
+    const a = 0.5 * alpha;
+    let t0 = Math.sqrt(-2 * Math.log(a));
+    t0 = t0 - (2.30753 + 0.27061 * t0) / (1 + 0.99229 * t0 + 0.04481 * t0 * t0);
+    // Refine with Newton's method
+    for (let i = 0; i < 10; i++) {
+      const p = 1 - tDistCDF(t0, df);
+      const err = p - a;
+      if (Math.abs(err) < 1e-10) break;
+      const pdf = Math.exp(lgamma((df + 1) / 2) - lgamma(df / 2) - 0.5 * Math.log(df * Math.PI) - ((df + 1) / 2) * Math.log(1 + t0 * t0 / df));
+      t0 += err / pdf;
+    }
+    return t0;
+  };
+
+  // F-distribution p-value
+  const fDistPValue = (fVal: number, df1: number, df2: number): number => {
+    if (fVal <= 0 || df1 <= 0 || df2 <= 0) return 1;
+    const x = df2 / (df2 + df1 * fVal);
+    return betaIncomplete(df2 / 2, df1 / 2, x);
+  };
+
+  // ── Unified RSM Prediction (shared by engine + 3D plotter) ─────────────────
+  const predictRSM = (Beta: number[], factorValues: number[], k: number): number => {
+    let y = Beta[0]; // intercept
+    for (let i = 0; i < k; i++) y += Beta[i + 1] * factorValues[i]; // linear
+    for (let i = 0; i < k; i++) y += Beta[k + 1 + i] * factorValues[i] * factorValues[i]; // quadratic
+    let idx = 2 * k + 1;
+    for (let i = 0; i < k; i++) {
+      for (let j = i + 1; j < k; j++) {
+        y += Beta[idx] * factorValues[i] * factorValues[j]; // interaction
+        idx++;
+      }
+    }
+    return y;
   };
 
   const calculateRSM = () => {
@@ -2761,11 +2846,12 @@ const DoeWorkspace = ({
 
       for (let i = 0; i < n; i++) {
         const e = Y[i] - Y_pred[i];
-        PRESS += Math.pow(e / (1 - Math.min(0.99, leverages[i])), 2);
+        PRESS += Math.pow(e / (1 - Math.min(1 - 1e-10, leverages[i])), 2);
       }
 
       const R2Pred = SST === 0 ? 1 : Math.max(0, 1 - (PRESS / SST));
       const AdeqPrec = (Math.max(...Y_pred) - Math.min(...Y_pred)) / Math.sqrt((p_count * MS_err) / n || 1e-10);
+      const df_err = Math.max(1, n - p_count);
 
       // Build Equation and Table Terms
       const terms = ['Intercept'];
@@ -2775,17 +2861,51 @@ const DoeWorkspace = ({
         for (let j = i + 1; j < k; j++) terms.push(`${headers[i]}*${headers[j]}`);
       }
 
+      // Lack-of-Fit Test (when replicates exist)
+      const groupMap = new Map<string, number[]>();
+      data.forEach((row, idx) => {
+        const key = row.slice(0, k).map(v => v.toFixed(8)).join('|');
+        if (!groupMap.has(key)) groupMap.set(key, []);
+        groupMap.get(key)!.push(idx);
+      });
+      const replicateGroups = Array.from(groupMap.values()).filter(g => g.length > 1);
+      let lofTest: any = null;
+      if (replicateGroups.length > 0) {
+        let SS_PE = 0; let df_PE = 0;
+        replicateGroups.forEach(group => {
+          const groupMean = group.reduce((s, i) => s + Y[i], 0) / group.length;
+          group.forEach(i => { SS_PE += Math.pow(Y[i] - groupMean, 2); });
+          df_PE += group.length - 1;
+        });
+        const SS_LOF = SSE - SS_PE;
+        const df_LOF = df_err - df_PE;
+        if (df_LOF > 0 && df_PE > 0) {
+          const MS_LOF = SS_LOF / df_LOF;
+          const MS_PE = SS_PE / df_PE;
+          const F_LOF = MS_PE > 0 ? MS_LOF / MS_PE : 0;
+          const p_LOF = fDistPValue(F_LOF, df_LOF, df_PE);
+          lofTest = { SS_LOF, SS_PE, df_LOF, df_PE, MS_LOF, MS_PE, F_LOF, p_LOF };
+        }
+      }
+
+      // ANOVA with p-values
+      const modelPValue = fDistPValue(F, p_count - 1, df_err);
       const anovaTable = [
-        { source: 'Model', df: p_count - 1, ss: SST - SSE, ms: (SST - SSE) / (p_count - 1), f: F },
-        { source: 'Error', df: n - p_count, ss: SSE, ms: MS_err },
+        { source: 'Model', df: p_count - 1, ss: SST - SSE, ms: (SST - SSE) / (p_count - 1), f: F, p: modelPValue },
+        ...(lofTest ? [
+          { source: 'Lack of Fit', df: lofTest.df_LOF, ss: lofTest.SS_LOF, ms: lofTest.MS_LOF, f: lofTest.F_LOF, p: lofTest.p_LOF },
+          { source: 'Pure Error', df: lofTest.df_PE, ss: lofTest.SS_PE, ms: lofTest.MS_PE }
+        ] : []),
+        { source: 'Error', df: df_err, ss: SSE, ms: MS_err },
         { source: 'Total', df: n - 1, ss: SST }
       ];
 
+      // Coefficient table with proper t-distribution p-values
       const coeffTable = terms.map((term, i) => {
-        const se = Math.sqrt(MS_err * ZtZ_inv_arr[i][i]);
-        const t = Beta_coded[i] / (se || 1e-10);
-        const p = 2 * (1 - normalCDF(Math.abs(t))); 
-        return { term, coef: Beta[i], codedCoef: Beta_coded[i], se, t, p };
+        const se = Math.sqrt(Math.max(0, MS_err * ZtZ_inv_arr[i][i]));
+        const tVal = Beta_coded[i] / (se || 1e-10);
+        const p = tDistPValue(tVal, df_err);
+        return { term, coef: Beta[i], codedCoef: Beta_coded[i], se, t: tVal, p };
       });
 
       let equation = `Regression Equation (Uncoded Units):\n\nY = ${Beta[0].toPrecision(6)}`;
@@ -2795,12 +2915,14 @@ const DoeWorkspace = ({
         equation += `\n    ${b >= 0 ? '+' : '-'} ${Math.abs(b).toPrecision(6)} * ${terms[i]}`;
       }
 
-      const residuals = Y.map((y, i) => y - Y_pred[i]);
+      // Generate fits using unified prediction function
+      const fitsFromBeta = data.map(row => predictRSM(Beta, row.slice(0, k), k));
+      const residuals = Y.map((y, i) => y - fitsFromBeta[i]);
 
       resultsObj = { 
         Beta, Beta_coded, R2, R2Adj, R2Pred, S, F, MS_err, PRESS, AdeqPrec,
-        equation, terms, type: 'RSM', factorStats, isStandard,
-        anovaTable, coeffTable, residuals, fits: Y_pred
+        equation, terms, type: 'RSM', factorStats, isStandard, lofTest,
+        anovaTable, coeffTable, residuals, fits: fitsFromBeta, k: factorsCount
       };
     } catch (err) {
       addError('error', 'Regression matrix is singular. Data might be highly collinear.');
@@ -2830,6 +2952,7 @@ const DoeWorkspace = ({
     model.train(data, headers);
 
     const k = headers.length - 1;
+    const n = data.length;
 
     const Y = data.map(r => r[k]);
     let Y_pred: number[] = [];
@@ -2847,8 +2970,13 @@ const DoeWorkspace = ({
     }
 
     const R2 = SST === 0 ? 1 : Math.max(0, 1 - (SSE / SST));
+    // Effective parameter count: sum of coefficients across all layers
+    const pEff = model.layers.reduce((s, layer) => s + layer.reduce((s2, neuron) => s2 + neuron.coeffs.length, 0), 0);
+    const R2Adj = SST === 0 ? 1 : Math.max(0, 1 - ((SSE / Math.max(1, n - pEff)) / (SST / Math.max(1, n - 1))));
+    const RMSE = Math.sqrt(SSE / n);
+    const S = Math.sqrt(SSE / Math.max(1, n - pEff));
 
-    // Simple GMDH Feature Importance based on occurrences in neurons
+    // Feature Importance based on occurrences in neurons
     const importance: Record<string, number> = {};
     model.layers.forEach((layer: any[]) => {
       layer.forEach((neuron: any) => {
@@ -2862,15 +2990,19 @@ const DoeWorkspace = ({
     setResults({
       model,
       R2,
+      R2Adj,
+      RMSE,
+      S,
       equation: model.getEquation(),
       type: 'GMDH',
       fits: Y_pred,
       actuals: Y,
       residuals: Y.map((y, i) => y - Y_pred[i]),
-      importance
+      importance,
+      k: k
     });
     setActiveModel('GMDH');
-    addError('info', 'GMDH Neural Architecture Trained.');
+    addError('info', `GMDH Trained: R² = ${(R2 * 100).toFixed(2)}%, R²_adj = ${(R2Adj * 100).toFixed(2)}%`);
   };
 
   const calculateTaguchi = () => {
@@ -2950,29 +3082,81 @@ const DoeWorkspace = ({
       return { factor: f.factor, ss, df, ms: ss / (df || 1), contribution: totalSS > 0 ? (ss / totalSS) * 100 : 0 };
     });
 
-    // 6. Build Additive Prediction Equation
+    // Pooled ANOVA: auto-pool factors with <5% contribution into error
+    const significantAnova = anova.filter(a => a.contribution >= 5);
+    const pooledAnova = anova.filter(a => a.contribution < 5);
+    const pooledSS = pooledAnova.reduce((s, a) => s + a.ss, 0);
+    const pooledDF = pooledAnova.reduce((s, a) => s + a.df, 0);
+    const totalDF_anova = snRatios.length - 1;
+    const errorSS = totalSS - significantAnova.reduce((s, a) => s + a.ss, 0);
+    const errorDF = totalDF_anova - significantAnova.reduce((s, a) => s + a.df, 0);
+    const MS_error = errorDF > 0 ? errorSS / errorDF : 0;
+
+    const anovaWithF = significantAnova.map(a => ({
+      ...a,
+      f: MS_error > 0 ? a.ms / MS_error : 0,
+      p: MS_error > 0 && errorDF > 0 ? fDistPValue(a.ms / MS_error, a.df, errorDF) : 1
+    }));
+
+    // 6. Compute R² from additive model predictions
+    const Y_all = data.map(r => r[factorsCount]);
+    const fits = data.map(row => {
+      let pred = meanY;
+      factorLevels.forEach((f, fIdx) => {
+        const val = row[fIdx];
+        const nearest = [...f.means].sort((a: any, b: any) => Math.abs(a.level - val) - Math.abs(b.level - val))[0];
+        if (nearest) pred += (nearest.meanY - meanY);
+      });
+      return pred;
+    });
+    const residuals = Y_all.map((y, i) => y - fits[i]);
+    let SSE_tag = 0, SST_tag = 0;
+    for (let i = 0; i < Y_all.length; i++) {
+      SSE_tag += Math.pow(Y_all[i] - fits[i], 2);
+      SST_tag += Math.pow(Y_all[i] - meanY, 2);
+    }
+    const R2 = SST_tag === 0 ? 1 : Math.max(0, 1 - SSE_tag / SST_tag);
+
+    // 7. Confirmation Prediction CI
+    const dfSig = significantAnova.reduce((s, a) => s + a.df, 0);
+    const nEff = trials.length / (1 + dfSig);
+    const tCrit = errorDF > 0 ? tCritical(0.05, errorDF) : 2;
+    const ciHalf = tCrit * Math.sqrt(Math.abs(MS_error) * (1 / Math.max(0.01, nEff)));
+
+    // 8. Build Additive Prediction Equation
     let equation = `Taguchi Additive Prediction Equation:\n\nY = ${meanY.toFixed(4)} (Grand Mean)`;
     rankedFactors.sort((a, b) => factors.indexOf(a.factor) - factors.indexOf(b.factor)).forEach(f => {
       equation += `\n  + [ ${f.factor}: `;
       const effects = f.means.map((m: any) => `L${m.level} ${(m.meanY - meanY) >= 0 ? '+' : ''}${(m.meanY - meanY).toFixed(4)}`);
       equation += effects.join(' | ') + ' ]';
     });
+    equation += `\n\nR² = ${(R2 * 100).toFixed(2)}%`;
+    equation += `\nConfirmation CI (95%): ±${ciHalf.toFixed(4)}`;
 
     setResults({
       type: 'Taguchi',
       snRatios,
       factorLevels: rankedFactors,
       optimal,
-      anova,
+      anova: anovaWithF,
+      pooledFactors: pooledAnova.map(a => a.factor),
       objective: taguchiConfig.objective,
-      equation
+      equation,
+      grandMean: meanY,
+      R2,
+      fits,
+      residuals,
+      actuals: Y_all,
+      confirmationCI: ciHalf,
+      MS_error,
+      errorDF
     });
     setActiveModel('Taguchi');
-    addError('info', 'Taguchi Analysis Completed.');
+    addError('info', `Taguchi Analysis Completed. R² = ${(R2 * 100).toFixed(2)}%`);
   };
 
   const handleExportToVLab = () => {
-    if (!results || !results.equation) {
+    if (!results) {
       addError('warning', 'Please calculate a model first.');
       return;
     }
@@ -2980,15 +3164,17 @@ const DoeWorkspace = ({
     const block = {
       name: `${activeModel} Model`,
       type: 'doe_custom',
-      color: '#f97316',
+      color: activeModel === 'GMDH' ? '#3b82f6' : activeModel === 'RSM' ? '#f97316' : '#10b981',
       icon: 'Σ',
       params: {
         modelType: { value: activeModel, label: 'Model Type' },
-        equation: { value: results.equation, label: 'Equation' },
+        equation: { value: results.equation || '', label: 'Equation' },
         inputNames: [...headers.slice(0, -1)],
         outputName: headers[headers.length - 1],
         layers: results.model?.layers ? JSON.parse(JSON.stringify(results.model.layers)) : [],
-        polyOrder: results.polyOrder || 2
+        polyOrder: results.model?.config?.polynomialOrder || 2,
+        grandMean: { value: results.grandMean || 0, label: 'Grand Mean' },
+        factorLevels: { value: results.factorLevels || [], label: 'Factor Levels' }
       },
       ports: [
         ...headers.slice(0, -1).map((h, i) => ({
@@ -3010,7 +3196,7 @@ const DoeWorkspace = ({
   };
 
   const handleExportToXBridges = () => {
-    if (!results || !results.equation) {
+    if (!results) {
       addError('warning', 'Please calculate a model first.');
       return;
     }
@@ -3018,24 +3204,30 @@ const DoeWorkspace = ({
     const blockData = {
       name: `${activeModel} Model`,
       type: 'DOE_MODEL',
-      equation: results.equation,
+      equation: results.equation || '',
       modelType: activeModel,
       inputNames: [...headers.slice(0, -1)],
       outputName: headers[headers.length - 1],
       layers: results.model?.layers ? JSON.parse(JSON.stringify(results.model.layers)) : [],
-      polyOrder: results.polyOrder || 2,
+      polyOrder: results.model?.config?.polynomialOrder || 2,
       metrics: {
         R2: results.R2,
         R2Adj: results.R2Adj,
         R2Pred: results.R2Pred,
         AdeqPrec: results.AdeqPrec,
-        equation: results.equation,
+        equation: results.equation || '',
         importance: results.importance || []
       },
       params: {
-        equation: { value: results.equation, label: 'Equation' },
+        equation: { value: results.equation || '', label: 'Equation' },
         modelType: { value: activeModel, label: 'Model Type' },
-        rSquared: { value: `${(results.R2 * 100).toFixed(2)}%`, label: 'R-Squared' }
+        rSquared: { value: results.R2 !== undefined ? `${(results.R2 * 100).toFixed(2)}%` : 'N/A', label: 'R-Squared' },
+        layers: { value: results.model?.layers || [], label: 'Model Layers' },
+        polyOrder: { value: results.model?.config?.polynomialOrder || 2, label: 'Poly Order' },
+        inputNames: { value: [...headers.slice(0, -1)], label: 'Input Factors' },
+        outputName: { value: headers[headers.length - 1], label: 'Output Name' },
+        grandMean: { value: results.grandMean || 0, label: 'Grand Mean' },
+        factorLevels: { value: results.factorLevels || [], label: 'Factor Levels' }
       },
       inputs: headers.slice(0, -1).map((h, i) => ({
         id: `in${i + 1}`,
@@ -3046,7 +3238,7 @@ const DoeWorkspace = ({
         position: 'left'
       })),
       outputs: [{
-        id: 'out1',
+        id: 'out',
         name: headers[headers.length - 1],
         type: 'auto',
         direction: 'output',
@@ -3114,6 +3306,28 @@ const DoeWorkspace = ({
         <div className="w-80 border-r border-[#222] bg-[#0a0a0a] flex flex-col p-4 overflow-y-auto custom-scrollbar">
           {results ? (
             <div className="space-y-6">
+              <section className="bg-white/5 p-3 rounded-xl border border-white/10 shadow-2xl">
+                <h3 className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em] mb-3">Model Deployment</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-8 text-[10px] font-black border-sky-500/30 text-sky-400 hover:bg-sky-500 hover:text-white transition-all duration-300"
+                    onClick={handleExportToXBridges}
+                  >
+                    <Network size={12} className="mr-2" /> X-Bridges
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-8 text-[10px] font-black border-purple-500/30 text-purple-400 hover:bg-purple-500 hover:text-white transition-all duration-300"
+                    onClick={handleExportToVLab}
+                  >
+                    <Box size={12} className="mr-2" /> V-Lab
+                  </Button>
+                </div>
+              </section>
+
               <section>
                 <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Model Metrics</h3>
                 <div className="grid grid-cols-2 gap-2">
@@ -3214,21 +3428,30 @@ const DoeWorkspace = ({
                             <th className="p-2 text-center">SS</th>
                             <th className="p-2 text-center">MS</th>
                             <th className="p-2 text-center">F</th>
+                            <th className="p-2 text-center">P-Value</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#222]">
                           {results.anovaTable?.map((row: any, i: number) => (
-                            <tr key={i}>
-                              <td className="p-2 font-bold text-[#888] bg-[#1a1a1a] border-r border-[#222]">{row.source}</td>
+                            <tr key={i} className={row.source === 'Lack of Fit' && row.p > 0.05 ? 'bg-emerald-500/5' : row.source === 'Lack of Fit' && row.p <= 0.05 ? 'bg-red-500/5' : ''}>
+                              <td className={`p-2 font-bold bg-[#1a1a1a] border-r border-[#222] ${row.source === 'Lack of Fit' || row.source === 'Pure Error' ? 'text-[#666] pl-4' : 'text-[#888]'}`}>{row.source}</td>
                               <td className="p-2 text-center text-white">{row.df}</td>
-                              <td className="p-2 text-center text-white">{row.ss.toFixed(2)}</td>
-                              <td className="p-2 text-center text-white">{row.ms?.toFixed(2) || '-'}</td>
+                              <td className="p-2 text-center text-white">{row.ss?.toFixed(4) || '-'}</td>
+                              <td className="p-2 text-center text-white">{row.ms?.toFixed(4) || '-'}</td>
                               <td className="p-2 text-center font-bold text-[#f97316]">{row.f?.toFixed(2) || '-'}</td>
+                              <td className={`p-2 text-center font-bold ${row.p !== undefined ? (row.p < 0.05 ? 'text-emerald-400' : 'text-gray-500') : 'text-gray-600'}`}>
+                                {row.p !== undefined ? row.p.toFixed(4) : '-'}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
+                    {results.lofTest && (
+                      <div className={`text-[9px] mt-1 px-2 py-1 rounded ${results.lofTest.p_LOF > 0.05 ? 'text-emerald-400 bg-emerald-500/5' : 'text-amber-400 bg-amber-500/5'}`}>
+                        {results.lofTest.p_LOF > 0.05 ? '✓ Lack of Fit is not significant — model fits well' : '⚠ Lack of Fit is significant — consider higher-order terms'}
+                      </div>
+                    )}
                   </section>
 
                   <section>
@@ -3353,16 +3576,16 @@ const DoeWorkspace = ({
                       >
                         Contour
                       </Button>
-                      {results?.type === 'RSM' && (
+                      {(results?.type === 'RSM' || results?.type === 'Taguchi') && (
                         <>
-                          <Button size="sm" variant={plotType === 'pareto' ? 'default' : 'outline'} onClick={() => setPlotType('pareto')} className="text-[10px]">Pareto</Button>
+                          {results?.type === 'RSM' && <Button size="sm" variant={plotType === 'pareto' ? 'default' : 'outline'} onClick={() => setPlotType('pareto')} className="text-[10px]">Pareto</Button>}
                           <Button size="sm" variant={plotType === 'residuals' ? 'default' : 'outline'} onClick={() => setPlotType('residuals')} className="text-[10px]">Residuals</Button>
                         </>
                       )}
                       {results?.type === 'Taguchi' && (
                         <Button size="sm" variant={plotType === 'taguchi_delta' ? 'default' : 'outline'} onClick={() => setPlotType('taguchi_delta')} className="text-[10px]">Rank/Delta</Button>
                       )}
-                      {(results?.type === 'RSM' || results?.type === 'GMDH') && (
+                      {(results?.type === 'RSM' || results?.type === 'GMDH' || results?.type === 'Taguchi') && (
                         <Button size="sm" variant={plotType === 'pred_vs_act' ? 'default' : 'outline'} onClick={() => setPlotType('pred_vs_act')} className="text-[10px]">Pred vs Act</Button>
                       )}
                     </div>
@@ -4174,7 +4397,30 @@ const PlotlyPlots = ({
   if (!results || !data) return <div className="flex items-center justify-center h-full text-[#444]">No Model Calculated</div>;
 
   if (type === 'pareto' && results.coeffTable) {
-    // Pareto Chart of Standardized Effects
+    // Pareto Chart of Standardized Effects with dynamic critical t-value
+    const n = data.length;
+    const p = results.coeffTable?.length || 1;
+    const dfErr = Math.max(1, n - p);
+    // Compute critical t from degrees of freedom (approximate)
+    const lgamma = (x: number): number => {
+      const c = [76.18009172947146, -86.50532032941677, 24.01409824083091,
+        -1.231739572450155, 0.001208650973866179, -0.000005395239384953];
+      let y = x, tmp = x + 5.5;
+      tmp -= (x + 0.5) * Math.log(tmp);
+      let ser = 1.000000000190015;
+      for (let j = 0; j < 6; j++) ser += c[j] / ++y;
+      return -tmp + Math.log(2.5066282746310005 * ser / x);
+    };
+    // Approximate critical t via Wilson-Hilferty
+    let critT = 2.0; // fallback
+    if (dfErr > 2) {
+      const a = 0.025; // two-tailed alpha/2
+      let z = Math.sqrt(-2 * Math.log(a));
+      z = z - (2.30753 + 0.27061 * z) / (1 + 0.99229 * z + 0.04481 * z * z);
+      critT = Math.abs(z * Math.sqrt(dfErr / (dfErr - 2 + z * z / (3 * dfErr))));
+      critT = Math.min(critT, z * (1 + 1 / (4 * dfErr))); // bounded correction
+    }
+
     const sortedEffects = results.coeffTable
       .filter((c: any) => c.term !== 'Intercept')
       .map((c: any) => ({ term: c.term, absT: Math.abs(c.t) }))
@@ -4186,7 +4432,7 @@ const PlotlyPlots = ({
       type: 'bar',
       orientation: 'h',
       marker: {
-        color: sortedEffects.map((s: any) => s.absT > 2.0 ? '#10b981' : '#444'),
+        color: sortedEffects.map((s: any) => s.absT > critT ? '#10b981' : '#444'),
         line: { color: '#000', width: 1 }
       },
       name: 'Effect Magnitude'
@@ -4202,14 +4448,14 @@ const PlotlyPlots = ({
           paper_bgcolor: 'transparent',
           plot_bgcolor: 'rgba(0,0,0,0.2)',
           font: { color: '#888', size: 10 },
-          title: { text: 'Pareto Chart of Standardized Effects (α=0.05)', font: { size: 12, color: '#f97316' } },
+          title: { text: `Pareto Chart of Standardized Effects (α=0.05, df=${dfErr})`, font: { size: 12, color: '#f97316' } },
           xaxis: { title: 'Absolute T-Value', gridcolor: '#222' },
           yaxis: { title: 'Factor Term', gridcolor: '#222' },
           shapes: [
             {
               type: 'line',
-              x0: 2.0,
-              x1: 2.0,
+              x0: critT,
+              x1: critT,
               y0: -0.5,
               y1: sortedEffects.length - 0.5,
               line: { color: '#ef4444', width: 2, dash: 'dash' }
@@ -4217,9 +4463,9 @@ const PlotlyPlots = ({
           ],
           annotations: [
             {
-              x: 2.0,
+              x: critT,
               y: sortedEffects.length - 1,
-              text: 'Critical T=2.0',
+              text: `t_crit = ${critT.toFixed(3)}`,
               showarrow: false,
               font: { color: '#ef4444', size: 9 },
               xanchor: 'left',
@@ -4450,42 +4696,48 @@ const PlotlyPlots = ({
   const minX = Math.min(...xVals), maxX = Math.max(...xVals);
   const minY = Math.min(...yVals), maxY = Math.max(...yVals);
 
-  // Generate Mesh (safeguard against minX === maxX preventing math.range crash)
-  const res = 40;
-  const stepX = Math.max(1e-9, (maxX - minX) / res);
-  const stepY = Math.max(1e-9, (maxY - minY) / res);
-  const xRange = Array.from({ length: res + 1 }, (_, i) => minX + i * stepX);
-  const yRange = Array.from({ length: res + 1 }, (_, i) => minY + i * stepY);
+  // Higher resolution mesh for smoother surfaces
+  const gridRes = 60;
+  const stepX = Math.max(1e-9, (maxX - minX) / gridRes);
+  const stepY = Math.max(1e-9, (maxY - minY) / gridRes);
+  const xRange = Array.from({ length: gridRes + 1 }, (_, i) => minX + i * stepX);
+  const yRange = Array.from({ length: gridRes + 1 }, (_, i) => minY + i * stepY);
 
+  const k = headers.length - 1;
   const zGrid: number[][] = [];
 
   for (let j = 0; j < yRange.length; j++) {
     const rowZ: number[] = [];
     for (let i = 0; i < xRange.length; i++) {
-      const vX = xRange[i];
-      const vY = yRange[j];
-
       const currentFactors = [...holdValues];
-      currentFactors[idxX] = vX;
-      currentFactors[idxY] = vY;
+      currentFactors[idxX] = xRange[i];
+      currentFactors[idxY] = yRange[j];
 
       let z = 0;
-      if (modelType === 'RSM') {
-        const xRow: number[] = [];
-        // Linear
-        for (let f = 0; f < currentFactors.length; f++) xRow.push(currentFactors[f]);
-        // Quadratic
-        for (let f = 0; f < currentFactors.length; f++) xRow.push(currentFactors[f] * currentFactors[f]);
-        // Interaction
-        for (let f = 0; f < currentFactors.length; f++) {
-          for (let g = f + 1; g < currentFactors.length; g++) {
-            xRow.push(currentFactors[f] * currentFactors[g]);
+      if (modelType === 'RSM' && results.Beta) {
+        // Use unified prediction function — matches engine exactly
+        z = results.Beta[0];
+        for (let f = 0; f < k; f++) z += results.Beta[f + 1] * currentFactors[f];
+        for (let f = 0; f < k; f++) z += results.Beta[k + 1 + f] * currentFactors[f] * currentFactors[f];
+        let idx = 2 * k + 1;
+        for (let f = 0; f < k; f++) {
+          for (let g = f + 1; g < k; g++) {
+            z += results.Beta[idx] * currentFactors[f] * currentFactors[g];
+            idx++;
           }
         }
-        z = xRow.reduce((sum, val, idx) => sum + val * results.Beta[idx + 1], results.Beta[0]);
-      } else {
-        // GMDH Prediction
-        if (results.model) z = results.model.predict(currentFactors);
+      } else if (modelType === 'GMDH' && results.model) {
+        z = results.model.predict(currentFactors.slice(0, k));
+      } else if (modelType === 'Taguchi' && results.factorLevels && results.grandMean !== undefined) {
+        // Taguchi additive model surface
+        z = results.grandMean;
+        results.factorLevels.forEach((f: any, fIdx: number) => {
+          const val = currentFactors[fIdx];
+          if (f.means && f.means.length > 0) {
+            const sorted = [...f.means].sort((a: any, b: any) => Math.abs(a.level - val) - Math.abs(b.level - val));
+            if (sorted[0]) z += (sorted[0].meanY - results.grandMean);
+          }
+        });
       }
       rowZ.push(z);
     }
@@ -4500,14 +4752,18 @@ const PlotlyPlots = ({
       type: type === 'surface' ? 'surface' : 'contour',
       colorscale: 'Viridis',
       showscale: true,
+      opacity: type === 'surface' ? 0.95 : 1,
       contours: type === 'contour' ? {
         coloring: 'heatmap',
-        showlabels: true
+        showlabels: true,
+        labelfont: { size: 10, color: '#fff' }
+      } : type === 'surface' ? {
+        z: { show: true, usecolormap: true, highlightcolor: '#fff', project: { z: false } }
       } : undefined
     }
   ];
 
-  // Overlay actual points if 3D
+  // Overlay actual data points on 3D surface
   if (type === 'surface') {
     plotData.push({
       x: xVals,
@@ -4516,9 +4772,10 @@ const PlotlyPlots = ({
       mode: 'markers',
       type: 'scatter3d',
       marker: {
-        size: 4,
+        size: 5,
         color: '#f97316',
-        opacity: 0.8
+        opacity: 1,
+        line: { width: 1, color: '#fff' }
       },
       name: 'Actual Data'
     });
@@ -4527,13 +4784,17 @@ const PlotlyPlots = ({
   const layout = {
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor: 'rgba(0,0,0,0)',
-    font: { color: '#888', family: 'Inter' },
-    margin: { l: 40, r: 40, b: 40, t: 40 },
+    font: { color: '#888', family: 'Inter, sans-serif' },
+    margin: { l: 20, r: 20, b: 20, t: 40 },
+    title: { 
+      text: type === 'surface' ? '3D Response Surface' : 'Contour Plot',
+      font: { size: 14, color: '#f97316' }
+    },
     scene: {
-      xaxis: { title: headers[idxX] || `X${idxX + 1}`, gridcolor: '#222' },
-      yaxis: { title: headers[idxY] || `X${idxY + 1}`, gridcolor: '#222' },
-      zaxis: { title: headers[headers.length - 1], gridcolor: '#222' },
-      backgroundColor: '#0a0a0a'
+      xaxis: { title: { text: headers[idxX], font: { color: '#f97316' } }, gridcolor: '#222' },
+      yaxis: { title: { text: headers[idxY], font: { color: '#10b981' } }, gridcolor: '#222' },
+      zaxis: { title: { text: headers[headers.length - 1], font: { color: '#3b82f6' } }, gridcolor: '#222' },
+      camera: { eye: { x: 1.6, y: 1.6, z: 1.4 } }
     },
     autosize: true
   };
