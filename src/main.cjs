@@ -76,6 +76,26 @@ ipcMain.handle('save-json', async (event, data) => {
   }
 });
 
+ipcMain.handle('save-project-folder', async (event, files) => {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Select Export Directory'
+  });
+
+  if (canceled) return false;
+
+  const dir = filePaths[0];
+  try {
+    for (const [filename, data] of Object.entries(files)) {
+      fs.writeFileSync(path.join(dir, filename), JSON.stringify(data, null, 2));
+    }
+    return true;
+  } catch (error) {
+    console.error('Failed to save project folder:', error);
+    return false;
+  }
+});
+
 // FACTORY I/O GATEWAY HANDLERS
 ipcMain.handle('fetch-factory-io-tags', async () => {
   try {

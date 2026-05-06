@@ -330,38 +330,64 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
           </div>
           <div className="space-y-2">
             {block.inputs.map(port => (
-              <div key={port.id} className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-gray-500" />
-                <input 
-                  type="text" 
-                  value={port.name}
-                  onChange={(e) => updatePortName(port.id, e.target.value, true)}
-                  className="flex-1 text-xs px-2 py-1 border border-[#333] bg-[#0a0a0a] text-white rounded focus:border-[#c9a86c] outline-none"
-                />
-                {block.allowDynamicInputs && block.inputs.length > 2 && (
-                  <button onClick={() => handleRemoveInput(port.id)} className="text-gray-500 hover:text-red-500 p-1 transition-colors">
-                    <Trash2 size={12} />
-                  </button>
-                )}
+              <div key={port.id} className="bg-[#0a0a0a] border border-[#222] p-2 rounded-lg space-y-1">
+                <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.4)]" />
+                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">
+                         {port.id} <span className="text-gray-600 lowercase ml-1">({port.name})</span>
+                      </span>
+                   </div>
+                   <span className="text-[8px] text-blue-400 font-mono bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/10 uppercase tracking-tighter">
+                     {port.type}
+                   </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="text" 
+                    value={port.name}
+                    onChange={(e) => updatePortName(port.id, e.target.value, true)}
+                    className="flex-1 text-xs px-2 py-1 border border-[#333] bg-[#141414] text-white rounded focus:border-[#c9a86c] outline-none"
+                    placeholder="Port Label"
+                  />
+                  {block.allowDynamicInputs && block.inputs.length > 2 && (
+                    <button onClick={() => handleRemoveInput(port.id)} className="text-gray-500 hover:text-red-500 p-1 transition-colors">
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
-            {block.inputs.length === 0 && <p className="text-xs text-gray-600 italic">No inputs</p>}
+            {block.inputs.length === 0 && <p className="text-xs text-gray-600 italic px-2">No inputs</p>}
           </div>
 
           <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-4">Output Ports</h3>
           <div className="space-y-2">
             {block.outputs.map(port => (
-              <div key={port.id} className="flex items-center gap-2">
-                <input 
-                  type="text" 
-                  value={port.name}
-                  onChange={(e) => updatePortName(port.id, e.target.value, false)}
-                  className="flex-1 text-xs px-2 py-1 border border-[#333] bg-[#0a0a0a] text-white rounded focus:border-[#c9a86c] outline-none"
-                />
-                <div className="w-1.5 h-1.5 rounded-full bg-gray-500" />
+              <div key={port.id} className="bg-[#0a0a0a] border border-[#222] p-2 rounded-lg space-y-1">
+                <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">
+                         {port.id} <span className="text-gray-600 lowercase ml-1">({port.name})</span>
+                      </span>
+                   </div>
+                   <span className="text-[8px] text-emerald-400 font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/10 uppercase tracking-tighter">
+                     {port.type}
+                   </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="text" 
+                    value={port.name}
+                    onChange={(e) => updatePortName(port.id, e.target.value, false)}
+                    className="flex-1 text-xs px-2 py-1 border border-[#333] bg-[#141414] text-white rounded focus:border-[#c9a86c] outline-none"
+                    placeholder="Port Label"
+                  />
+                </div>
               </div>
             ))}
-            {block.outputs.length === 0 && <p className="text-xs text-gray-600 italic">No outputs</p>}
+            {block.outputs.length === 0 && <p className="text-xs text-gray-600 italic px-2">No outputs</p>}
           </div>
         </section>
       </div>

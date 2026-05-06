@@ -5611,74 +5611,53 @@ const ADIA = () => {
   }, [results, data, headers, addError]);
 
   const handleExportProject = useCallback(async () => {
-    const projectData = {
-      version: VERSION,
-      timestamp: new Date().toISOString(),
-      // Logic & Simulation
-      states,
-      junctions,
-      transitions,
-      layers,
-      variables,
-      view,
-      tickMs,
-      // SysML & Requirements
-      blocks,
-      relationships,
-      parts,
-      connectors,
-      interfaceRealizations,
-      customStereotypes,
-      // HMI Dashboard
-      hmiComponents,
-      // V-Lab Physical Modeling
-      vlabNodes,
-      vlabEdges,
-      // X-Bridges Architecture
-      globalXBridgesNodes,
-      globalXBridgesEdges,
-      // DOE Modeling Suite
-      doe: {
-        headers,
-        data,
-        activeModel,
-        taguchiConfig,
-        results: results ? {
-          R2: results.R2,
-          equation: results.equation,
-          type: results.type,
-          coeffTable: results.coeffTable,
-          anova: results.anova
-        } : null
-      },
-      // UI State
-      managedWindows
+    const projectFiles = {
+      'statemachine.json': { states, junctions, transitions, layers, variables, view, tickMs },
+      'bdd.json': { blocks: blocks.filter(b => (b.data as any)?.stereotype !== 'Requirement'), relationships, customStereotypes },
+      'ibd.json': { parts, connectors, interfaceRealizations },
+      'requirements.json': { blocks: blocks.filter(b => (b.data as any)?.stereotype === 'Requirement'), relationships },
+      'xbridges.json': { globalXBridgesNodes, globalXBridgesEdges },
+      'vlab.json': { vlabNodes, vlabEdges },
+      'hmi.json': { hmiComponents },
+      'doe.json': { headers, data, activeModel, taguchiConfig, results: results ? { R2: results.R2, equation: results.equation, type: results.type } : null },
+      'adia_project_unified.json': {
+        version: VERSION,
+        timestamp: new Date().toISOString(),
+        states, junctions, transitions, layers, variables, view, tickMs,
+        blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
+        hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
+        doe: { headers, data, activeModel, taguchiConfig, results },
+        managedWindows
+      }
     };
 
-    // Electron specialized save
+    // Electron specialized multi-file save
     if ((window as any).require) {
       try {
         const { ipcRenderer } = (window as any).require('electron');
-        const success = await ipcRenderer.invoke('save-json', projectData);
+        const success = await ipcRenderer.invoke('save-project-folder', projectFiles);
         if (success) {
-          addError('info', 'Project saved successfully');
+          addError('info', 'Project exported as individual module files in selected directory');
         }
         return;
       } catch (err) {
-        console.error('Electron save failed, falling back to web:', err);
+        console.error('Electron folder save failed, falling back to web downloads:', err);
       }
     }
 
-    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `adia_project_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    addError('info', 'Unified ADIA Project exported successfully (Ctrl+S)');
+    // Web Fallback: Trigger multiple downloads
+    for (const [filename, data] of Object.entries(projectFiles)) {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+    addError('info', 'All project modules exported as individual files (Ctrl+S)');
   }, [
     states, junctions, transitions, layers, variables, view, tickMs,
     blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,

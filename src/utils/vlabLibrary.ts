@@ -2,6 +2,7 @@ export interface VLabPort {
   id: string;
   pos: 'left' | 'right' | 'top' | 'bottom';
   label?: string;
+  domain?: string;
 }
 
 export interface VLabBlock {
@@ -82,13 +83,13 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         params: { Ron: { value: 0.01, unit: 'Ω', label: 'On Resistance' } },
         ports: [{ id: 'p', pos: 'left', label: '+' }, { id: 'n', pos: 'right', label: '-' }, { id: 'v', pos: 'top', label: 'v' }]
       },
-      { 
+      {
         id: 'rotational_electromechanical_converter', name: 'Rotational EM Converter', color: '#f59e0b', icon: 'rotational_em', category: 'Couplings',
-        params: { K: { value: 0.1, unit: 'V-s/rad', label: 'Constant' } },
-        ports: [
-          { id: 'p', pos: 'left', label: '+' }, { id: 'n', pos: 'left', label: '-' },
-          { id: 'r', pos: 'right', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }
-        ]
+        params: { 
+          K: { value: 1, unit: 'V-s/rad', label: 'Motor Constant' },
+          R: { value: 1, unit: 'Ω', label: 'Armature Res' }
+        },
+        ports: [{ id: 'p', pos: 'left', label: '+', domain: 'Electrical' }, { id: 'n', pos: 'left', label: '-', domain: 'Electrical' }, { id: 'r', pos: 'right', label: 'R', domain: 'Rotational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Rotational' }]
       },
       { 
         id: 'translational_electromechanical_converter', name: 'Translational EM Converter', color: '#f59e0b', icon: 'translational_em', category: 'Couplings',
@@ -98,43 +99,106 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           { id: 'r', pos: 'right', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }
         ]
       },
+      {
+        id: 'pmsm', name: 'Permanent Magnet Synchronous Motor', color: '#10b981', icon: 'pmsm', category: 'Couplings',
+        params: { 
+          pole_pairs: { value: 4, unit: '', label: 'Pole Pairs' }, 
+          Rs: { value: 0.1, unit: 'Ω', label: 'Stator Res' },
+          Kt: { value: 0.2, unit: 'N-m/A', label: 'Torque Const' }
+        },
+        ports: [
+          { id: 'g', pos: 'left', label: 'G', domain: 'Electrical' }, 
+          { id: 'r', pos: 'right', label: 'R', domain: 'Rotational' }
+        ]
+      },
+      {
+        id: 'dc_motor', name: 'DC Motor', color: '#10b981', icon: 'dc_motor', category: 'Machines',
+        params: { 
+          Ra: { value: 2, unit: 'Ω', label: 'Armature Res' },
+          La: { value: 0.01, unit: 'H', label: 'Armature Ind' },
+          Ke: { value: 0.05, unit: 'V/rad/s', label: 'Back EMF Const' },
+          J: { value: 0.001, unit: 'kg-m^2', label: 'Inertia' }
+        },
+        ports: [
+          { id: 'p', pos: 'left', label: '+', domain: 'Electrical' }, 
+          { id: 'n', pos: 'left', label: '-', domain: 'Electrical' }, 
+          { id: 'r', pos: 'right', label: 'R', domain: 'Rotational' }
+        ]
+      },
+      {
+        id: 'ac_motor', name: 'AC Motor', color: '#10b981', icon: 'ac_motor', category: 'Machines',
+        params: { 
+          Rs: { value: 0.1, unit: 'Ω', label: 'Stator Res' },
+          Rr: { value: 0.08, unit: 'Ω', label: 'Rotor Res' },
+          Lm: { value: 0.05, unit: 'H', label: 'Mutual Ind' },
+          P: { value: 2, unit: '', label: 'Pole Pairs' }
+        },
+        ports: [
+          { id: 'a', pos: 'left', label: 'A', domain: 'Electrical' }, 
+          { id: 'b', pos: 'left', label: 'B', domain: 'Electrical' }, 
+          { id: 'c', pos: 'left', label: 'C', domain: 'Electrical' }, 
+          { id: 'n', pos: 'bottom', label: 'N', domain: 'Electrical' },
+          { id: 'r', pos: 'right', label: 'R', domain: 'Rotational' }
+        ]
+      },
+      {
+        id: 'bldc_motor', name: 'BLDC Motor', color: '#10b981', icon: 'bldc_motor', category: 'Machines',
+        params: { 
+          Rs: { value: 0.2, unit: 'Ω', label: 'Phase Res' },
+          Ls: { value: 0.002, unit: 'H', label: 'Phase Ind' },
+          Ke: { value: 0.1, unit: 'V/rad/s', label: 'Back EMF Const' },
+          P: { value: 4, unit: '', label: 'Pole Pairs' }
+        },
+        ports: [
+          { id: 'a', pos: 'left', label: 'A', domain: 'Electrical' }, 
+          { id: 'b', pos: 'left', label: 'B', domain: 'Electrical' }, 
+          { id: 'c', pos: 'left', label: 'C', domain: 'Electrical' }, 
+          { id: 'g', pos: 'left', label: 'G', domain: 'Electrical' },
+          { id: 'r', pos: 'right', label: 'R', domain: 'Rotational' }
+        ]
+      },
       { 
         id: 'thermal_resistor', name: 'Thermal Resistor', color: '#ef4444', icon: 'thermal_resistor', category: 'Thermal',
         params: { Rth: { value: 10, unit: 'K/W', label: 'Thermal Resistance' } },
         ports: [
-          { id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' },
-          { id: 'h', pos: 'top', label: 'H' }
+          { id: 'a', pos: 'left', label: 'A', domain: 'Electrical' }, { id: 'b', pos: 'right', label: 'B', domain: 'Electrical' },
+          { id: 'h', pos: 'top', label: 'H', domain: 'Thermal' }
         ]
       },
       { 
         id: 'scope', name: 'Scope', color: '#fbbf24', icon: 'scope', category: 'Sinks',
         params: { time_range: { value: 10, unit: 's', label: 'Time Range' } },
-        ports: [{ id: 'in1', pos: 'left', label: '1' }, { id: 'in2', pos: 'left', label: '2' }]
+        ports: [{ id: 'in1', pos: 'left', label: '1', domain: 'Physical' }, { id: 'in2', pos: 'left', label: '2', domain: 'Physical' }]
       },
       {
         id: 'v_sensor', name: 'Voltage Sensor', color: '#fbbf24', icon: 'v_sensor', category: 'Sensors',
         params: { R_int: { value: 1e8, unit: 'Ω', label: 'Internal Res' } },
-        ports: [{ id: 'p', pos: 'top', label: '+' }, { id: 'n', pos: 'bottom', label: '-' }, { id: 'v', pos: 'right', label: 'V' }]
+        ports: [{ id: 'p', pos: 'top', label: '+', domain: 'Electrical' }, { id: 'n', pos: 'bottom', label: '-', domain: 'Electrical' }, { id: 'v', pos: 'right', label: 'V', domain: 'Physical' }]
       },
       {
         id: 'i_sensor', name: 'Current Sensor', color: '#fbbf24', icon: 'i_sensor', category: 'Sensors',
         params: { R_int: { value: 1e-6, unit: 'Ω', label: 'Internal Res' } },
-        ports: [{ id: 'p', pos: 'left', label: '+' }, { id: 'n', pos: 'right', label: '-' }, { id: 'i', pos: 'top', label: 'I' }]
+        ports: [{ id: 'p', pos: 'left', label: '+', domain: 'Electrical' }, { id: 'n', pos: 'right', label: '-', domain: 'Electrical' }, { id: 'i', pos: 'top', label: 'I', domain: 'Physical' }]
       },
       {
         id: 'dc_voltage', name: 'DC Voltage Source', color: '#ef4444', icon: 'dc_voltage', category: 'Sources',
         params: { V: { value: 12, unit: 'V', label: 'Voltage' }, R_int: { value: 1e-3, unit: 'Ω', label: 'Internal Res' } },
-        ports: [{ id: 'p', pos: 'top', label: '+' }, { id: 'n', pos: 'bottom', label: '-' }]
+        ports: [{ id: 'p', pos: 'top', label: '+', domain: 'Electrical' }, { id: 'n', pos: 'bottom', label: '-', domain: 'Electrical' }]
       },
       {
         id: 'ac_voltage', name: 'AC Voltage Source', color: '#ef4444', icon: 'ac_voltage', category: 'Sources',
         params: { Vpk: { value: 230, unit: 'V', label: 'Peak Voltage' }, f: { value: 50, unit: 'Hz', label: 'Frequency' } },
-        ports: [{ id: 'p', pos: 'top', label: '+' }, { id: 'n', pos: 'bottom', label: '-' }]
+        ports: [{ id: 'p', pos: 'top', label: '+', domain: 'Electrical' }, { id: 'n', pos: 'bottom', label: '-', domain: 'Electrical' }]
+      },
+      {
+        id: 'three_phase_source', name: '3-Phase Source', color: '#ef4444', icon: 'three_phase_source', category: 'Sources',
+        params: { Vrms: { value: 400, unit: 'V', label: 'Line Voltage' }, f: { value: 50, unit: 'Hz', label: 'Frequency' } },
+        ports: [{ id: 'a', pos: 'right', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 'c', pos: 'right', label: 'C' }]
       },
       {
         id: 'controlled_voltage', name: 'Controlled Voltage Source', color: '#ef4444', icon: 'controlled_voltage', category: 'Sources',
         params: {},
-        ports: [{ id: 'p', pos: 'top', label: '+' }, { id: 'n', pos: 'bottom', label: '-' }, { id: 's', pos: 'left', label: 'S' }]
+        ports: [{ id: 'p', pos: 'top', label: '+', domain: 'Electrical' }, { id: 'n', pos: 'bottom', label: '-', domain: 'Electrical' }, { id: 's', pos: 'left', label: 'S', domain: 'Physical' }]
       },
       {
         id: 'dc_current', name: 'DC Current Source', color: '#ef4444', icon: 'dc_current', category: 'Sources',
@@ -381,56 +445,56 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'force_sensor', name: 'Ideal Force Sensor', color: '#10b981', icon: 'force_sensor', category: 'Sensors',
         params: { k: { value: 1e8, unit: 'N/m', label: 'Stiffness' } },
-        ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 'f', pos: 'top', label: 'F' }]
+        ports: [{ id: 'a', pos: 'left', label: 'A', domain: 'Translational' }, { id: 'b', pos: 'right', label: 'B', domain: 'Translational' }, { id: 'f', pos: 'top', label: 'F', domain: 'Physical' }]
       },
       {
         id: 'rot_motion_sensor', name: 'Ideal Rotational Motion Sensor', color: '#10b981', icon: 'rot_motion', category: 'Sensors',
         params: { b: { value: 0, unit: 'N-m-s/rad', label: 'Damping' } },
-        ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }, { id: 'w', pos: 'top', label: 'W' }, { id: 'a', pos: 'top', label: 'A' }]
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Rotational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Rotational' }, { id: 'w', pos: 'top', label: 'W', domain: 'Physical' }, { id: 'a', pos: 'top', label: 'A', domain: 'Physical' }]
       },
       {
         id: 'torque_sensor', name: 'Ideal Torque Sensor', color: '#10b981', icon: 'torque_sensor', category: 'Sensors',
         params: { k: { value: 1e8, unit: 'N-m/rad', label: 'Stiffness' } },
-        ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }, { id: 't', pos: 'top', label: 'T' }]
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Rotational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Rotational' }, { id: 't', pos: 'top', label: 'T', domain: 'Physical' }]
       },
       {
         id: 'trans_motion_sensor', name: 'Ideal Translational Motion Sensor', color: '#10b981', icon: 'trans_motion', category: 'Sensors',
         params: { b: { value: 0, unit: 'N-s/m', label: 'Damping' } },
-        ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }, { id: 'v', pos: 'top', label: 'V' }, { id: 'p', pos: 'top', label: 'P' }]
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Translational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Translational' }, { id: 'v', pos: 'top', label: 'V', domain: 'Physical' }, { id: 'p', pos: 'top', label: 'P', domain: 'Physical' }]
       },
 
       // Sources
       {
         id: 'force_source', name: 'Ideal Force Source', color: '#10b981', icon: 'force_source', category: 'Sources',
         params: { F: { value: 10, unit: 'N', label: 'Force' } },
-        ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 's', pos: 'top', label: 'S' }]
+        ports: [{ id: 'a', pos: 'left', label: 'A', domain: 'Translational' }, { id: 'b', pos: 'right', label: 'B', domain: 'Translational' }, { id: 's', pos: 'top', label: 'S', domain: 'Physical' }]
       },
       {
         id: 'torque_source', name: 'Ideal Torque Source', color: '#10b981', icon: 'torque_source', category: 'Sources',
         params: { T: { value: 5, unit: 'N-m', label: 'Torque' } },
-        ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }, { id: 's', pos: 'top', label: 'S' }]
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Rotational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Rotational' }, { id: 's', pos: 'top', label: 'S', domain: 'Physical' }]
       },
       {
         id: 'ang_vel_source', name: 'Ideal Angular Velocity Source', color: '#10b981', icon: 'vel_source', category: 'Sources',
         params: { omega: { value: 10, unit: 'rad/s', label: 'Angular Velocity' } },
-        ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }, { id: 's', pos: 'top', label: 'S' }]
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Rotational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Rotational' }, { id: 's', pos: 'top', label: 'S', domain: 'Physical' }]
       },
 
       // Mechanisms
       {
         id: 'gear_box', name: 'Gear Box', color: '#10b981', icon: 'gear_box', category: 'Mechanisms',
         params: { ratio: { value: 2, unit: '1', label: 'Gear Ratio' } },
-        ports: [{ id: 's1', pos: 'left', label: 'S1' }, { id: 's2', pos: 'right', label: 'S2' }]
+        ports: [{ id: 's1', pos: 'left', label: 'S1', domain: 'Rotational' }, { id: 's2', pos: 'right', label: 'S2', domain: 'Rotational' }]
       },
       {
         id: 'lever', name: 'Lever', color: '#10b981', icon: 'lever', category: 'Mechanisms',
         params: { L1: { value: 0.5, unit: 'm', label: 'Length 1' }, L2: { value: 0.5, unit: 'm', label: 'Length 2' } },
-        ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 'c', pos: 'bottom', label: 'C' }]
+        ports: [{ id: 'a', pos: 'left', label: 'A', domain: 'Translational' }, { id: 'b', pos: 'right', label: 'B', domain: 'Translational' }, { id: 'c', pos: 'bottom', label: 'C', domain: 'Translational' }]
       },
       {
         id: 'wheel_axle', name: 'Wheel and Axle', color: '#10b981', icon: 'wheel_axle', category: 'Mechanisms',
         params: { Rw: { value: 0.3, unit: 'm', label: 'Wheel Radius' }, Ra: { value: 0.05, unit: 'm', label: 'Axle Radius' } },
-        ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'p', pos: 'right', label: 'P' }]
+        ports: [{ id: 'a', pos: 'left', label: 'A', domain: 'Rotational' }, { id: 'p', pos: 'right', label: 'P', domain: 'Translational' }]
       },
       {
         id: 'rot_multibody_interface', name: 'Rotational Multibody Interface', color: '#10b981', icon: 'rot_multibody', category: 'Multibody Interfaces',
@@ -447,12 +511,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'inertia', name: 'Inertia', color: '#10b981', icon: 'inertia', category: 'Rotational Elements',
         params: { J: { value: 0.01, unit: 'kg-m^2', label: 'Inertia' } },
-        ports: [{ id: 'r', pos: 'top', label: 'R' }]
+        ports: [{ id: 'r', pos: 'top', label: 'R', domain: 'Rotational' }]
       },
       {
         id: 'rot_ref', name: 'Mechanical Rotational Reference', color: '#10b981', icon: 'rot_ref', category: 'Rotational Elements',
         params: {},
-        ports: [{ id: 'r', pos: 'top', label: 'R' }]
+        ports: [{ id: 'r', pos: 'top', label: 'R', domain: 'Rotational' }]
       },
       {
         id: 'rot_spring', name: 'Rotational Spring', color: '#10b981', icon: 'rot_spring', category: 'Rotational Elements',
@@ -462,54 +526,54 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'rot_damper', name: 'Rotational Damper', color: '#10b981', icon: 'rot_damper', category: 'Rotational Elements',
         params: { b: { value: 0.1, unit: 'N-m/rad/s', label: 'Damping Coefficient' } },
-        ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }]
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Rotational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Rotational' }]
       },
       {
         id: 'rot_friction', name: 'Rotational Friction', color: '#10b981', icon: 'rot_friction', category: 'Rotational Elements',
         params: { Ts: { value: 0.5, unit: 'N-m', label: 'Static Friction' } },
-        ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }]
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Rotational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Rotational' }]
       },
       {
         id: 'rot_hard_stop', name: 'Rotational Hard Stop', color: '#10b981', icon: 'rot_hard_stop', category: 'Rotational Elements',
         params: { upper: { value: 1, unit: 'rad', label: 'Upper Limit' }, lower: { value: -1, unit: 'rad', label: 'Lower Limit' } },
-        ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }]
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Rotational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Rotational' }]
       },
 
       // Translational Elements
       {
         id: 'mass', name: 'Mass', color: '#10b981', icon: 'mass', category: 'Translational Elements',
         params: { m: { value: 1, unit: 'kg', label: 'Mass' } },
-        ports: [{ id: 'p', pos: 'top', label: 'P' }]
+        ports: [{ id: 'p', pos: 'top', label: 'P', domain: 'Translational' }]
       },
       {
         id: 'trans_ref', name: 'Mechanical Translational Reference', color: '#10b981', icon: 'trans_ref', category: 'Translational Elements',
         params: {},
-        ports: [{ id: 'p', pos: 'top', label: 'P' }]
+        ports: [{ id: 'p', pos: 'top', label: 'P', domain: 'Translational' }]
       },
       {
         id: 'trans_spring', name: 'Translational Spring', color: '#10b981', icon: 'trans_spring', category: 'Translational Elements',
         params: { k: { value: 1000, unit: 'N/m', label: 'Spring Rate' } },
-        ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }]
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Translational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Translational' }]
       },
       {
         id: 'trans_damper', name: 'Translational Damper', color: '#10b981', icon: 'trans_damper', category: 'Translational Elements',
         params: { b: { value: 10, unit: 'N/m/s', label: 'Damping Coefficient' } },
-        ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }]
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Translational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Translational' }]
       },
       {
         id: 'trans_friction', name: 'Translational Friction', color: '#10b981', icon: 'trans_friction', category: 'Translational Elements',
         params: { Fs: { value: 5, unit: 'N', label: 'Static Friction' } },
-        ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }]
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Translational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Translational' }]
       },
       {
         id: 'trans_hard_stop', name: 'Translational Hard Stop', color: '#10b981', icon: 'trans_hard_stop', category: 'Translational Elements',
         params: { upper: { value: 0.1, unit: 'm', label: 'Upper Limit' }, lower: { value: -0.1, unit: 'm', label: 'Lower Limit' } },
-        ports: [{ id: 'r', pos: 'left', label: 'R' }, { id: 'c', pos: 'right', label: 'C' }]
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Translational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Translational' }]
       }
     ]
   },
   {
-    type: 'Moist Air',
+    type: 'Fluid',
     blocks: [
       {
         id: 'ma_ref', name: 'Absolute Reference (MA)', color: '#8b5cf6', icon: 'ma_ref', category: 'Elements',
@@ -519,14 +583,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'ma_chamber', name: 'Constant Volume Chamber (MA)', color: '#8b5cf6', icon: 'ma_chamber', category: 'Elements',
         params: { V: { value: 0.1, unit: 'm^3', label: 'Volume' } },
-        ports: [{ id: 'a', pos: 'top', label: 'A' }, { id: 'b', pos: 'top', label: 'B' }, { id: 'h', pos: 'left', label: 'H' }]
+        ports: [{ id: 'a', pos: 'top', label: 'A', domain: 'Fluid' }, { id: 'b', pos: 'top', label: 'B', domain: 'Fluid' }, { id: 'h', pos: 'left', label: 'H', domain: 'Thermal' }]
       },
       {
         id: 'ma_pipe', name: 'Pipe (MA)', color: '#8b5cf6', icon: 'ma_pipe', category: 'Elements',
         params: { L: { value: 2, unit: 'm', label: 'Length' } },
         ports: [
           { id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' },
-          { id: 'h', pos: 'top', label: 'H' }, { id: 'wd', pos: 'bottom', label: 'WD' }
+          { id: 'h', pos: 'top', label: 'H', domain: 'Thermal' }, { id: 'wd', pos: 'bottom', label: 'WD' }
         ]
       },
       {
@@ -550,8 +614,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         id: 'ma_trans_conv', name: 'Translational Mechanical Converter (MA)', color: '#10b981', icon: 'ma_trans_conv', category: 'Couplings',
         params: { A: { value: 0.01, unit: 'm^2', label: 'Area' } },
         ports: [
-          { id: 'a', pos: 'left', label: 'A' }, { id: 'h', pos: 'left', label: 'H' },
-          { id: 'r', pos: 'right', label: 'R' }, { id: 'c', pos: 'right', label: 'C' },
+          { id: 'a', pos: 'left', label: 'A' }, { id: 'h', pos: 'left', label: 'H', domain: 'Thermal' },
+          { id: 'r', pos: 'right', label: 'R', domain: 'Translational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Translational' },
           { id: 'wd', pos: 'bottom', label: 'WD' }
         ]
       },
@@ -586,17 +650,17 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'ma_moisture_source', name: 'Moisture Source (MA)', color: '#8b5cf6', icon: 'ma_moisture_src', category: 'Sources',
         params: { rate: { value: 0.01, unit: 'kg/s', label: 'Moisture Rate' } },
-        ports: [{ id: 'a', pos: 'bottom', label: 'A' }, { id: 's', pos: 'top', label: 'S' }]
+        ports: [{ id: 'a', pos: 'bottom', label: 'A' }, { id: 's', pos: 'top', label: 'S', domain: 'Physical' }]
       },
       {
         id: 'ma_flow_source', name: 'Flow Rate Source (MA)', color: '#8b5cf6', icon: 'ma_flow_src', category: 'Sources',
         params: { rate: { value: 0.1, unit: 'kg/s', label: 'Mass Flow Rate' } },
-        ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 's', pos: 'top', label: 'S' }]
+        ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 's', pos: 'top', label: 'S', domain: 'Physical' }]
       },
       {
         id: 'ma_pressure_source', name: 'Pressure Source (MA)', color: '#8b5cf6', icon: 'ma_pres_src', category: 'Sources',
         params: { P: { value: 100000, unit: 'Pa', label: 'Pressure Difference' } },
-        ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 's', pos: 'top', label: 'S' }]
+        ports: [{ id: 'a', pos: 'left', label: 'A', domain: 'Fluid' }, { id: 'b', pos: 'right', label: 'B', domain: 'Fluid' }, { id: 's', pos: 'top', label: 'S', domain: 'Physical' }]
       },
       // Moist Air Utilities
       {
@@ -610,7 +674,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
     ]
   },
   {
-    type: 'Physical Signals',
+    type: 'Physical',
     blocks: [
       // Delays
       {
@@ -905,15 +969,22 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       },
       {
         id: 'im_foc_ctrl', name: 'Induction Machine FOC', color: '#4b5563', icon: 'im_foc', category: 'Induction Machine Control',
-        params: { Lm: { value: 0.05, unit: 'H', label: 'Mutual Ind' }, Rr: { value: 0.1, unit: 'Ohm', label: 'Rotor Res' } },
+        params: { 
+          Lm: { value: 0.05, unit: 'H', label: 'Mutual Ind' }, 
+          Rr: { value: 0.1, unit: 'Ohm', label: 'Rotor Res' },
+          mode: { value: 1, unit: '', label: 'Mode (0:V/f, 1:FOC)' },
+          v_f_ratio: { value: 4.4, unit: '', label: 'V/f Ratio' },
+          target_rpm: { value: 1500, unit: 'RPM', label: 'Target Speed' }
+        },
         ports: [
-          { id: 'imr_ref', pos: 'left', label: 'imrRef' },
-          { id: 'wr_ref', pos: 'left', label: 'wrRef' },
-          { id: 'iabc', pos: 'left', label: 'iabc' },
-          { id: 'wr', pos: 'left', label: 'wr' },
-          { id: 'vdc', pos: 'left', label: 'Vdc' },
-          { id: 'g', pos: 'right', label: 'G' },
-          { id: 'vis', pos: 'right', label: 'Visualization' }
+          { id: 'imr_ref', pos: 'left', label: 'imrRef', domain: 'Physical' },
+          { id: 'wr_ref', pos: 'left', label: 'wrRef', domain: 'Physical' },
+          { id: 'iabc', pos: 'left', label: 'iabc', domain: 'Physical' },
+          { id: 'wr', pos: 'left', label: 'wr', domain: 'Physical' },
+          { id: 'vdc', pos: 'left', label: 'Vdc', domain: 'Physical' },
+          { id: 'g', pos: 'right', label: 'G', domain: 'Physical' },
+          { id: 'vabc', pos: 'right', label: 'Vabc', domain: 'Physical' },
+          { id: 'vis', pos: 'right', label: 'Visualization', domain: 'Physical' }
         ]
       },
       {
@@ -1069,9 +1140,16 @@ export const VLAB_LIBRARY: VLabDomain[] = [
 
       // PWM & Gate Generation
       {
-        id: 'pwm_3ph_2level', name: 'PWM Generator (3-Phase, 2-Level)', color: '#4b5563', icon: 'pwm_3ph', category: 'PWM & Gate Generation',
+        id: 'pwm_3ph_2level', name: '3-Phase Inverter Bridge', color: '#4b5563', icon: 'pwm_3ph', category: 'Power Electronics',
         params: { f_sw: { value: 5000, unit: 'Hz', label: 'Switch Freq' } },
-        ports: [{ id: 'vabc', pos: 'left', label: 'Vabc' }, { id: 'vdc', pos: 'left', label: 'Vdc' }, { id: 'g', pos: 'right', label: 'g' }, { id: 'mod', pos: 'right', label: 'ModWave' }]
+        ports: [
+          { id: 'vabc', pos: 'left', label: 'Vabc', domain: 'Physical' }, 
+          { id: 'p', pos: 'top', label: 'DC+', domain: 'Electrical' },
+          { id: 'n', pos: 'bottom', label: 'DC-', domain: 'Electrical' },
+          { id: 'a', pos: 'right', label: 'A', domain: 'Electrical' },
+          { id: 'b', pos: 'right', label: 'B', domain: 'Electrical' },
+          { id: 'c', pos: 'right', label: 'C', domain: 'Electrical' }
+        ]
       },
       {
         id: 'pwm_3ph_3level', name: 'PWM Generator (3-Phase, 3-Level)', color: '#4b5563', icon: 'pwm_npc', category: 'PWM & Gate Generation',
@@ -1219,7 +1297,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'ps_constant', name: 'PS Constant', color: '#92400e', icon: 'ps_const', category: 'Sources',
         params: { value: { value: 1, unit: '1', label: 'Constant' } },
-        ports: [{ id: 'y', pos: 'right', label: 'C' }]
+        ports: [{ id: 'y', pos: 'right', label: 'C', domain: 'Physical' }]
       },
       {
         id: 'ps_sine', name: 'PS Sine Wave', color: '#92400e', icon: 'ps_sine', category: 'Sources',
@@ -1294,12 +1372,110 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'ctrl_heat_src', name: 'Controlled Heat Flow Rate Source', color: '#f97316', icon: 'ctrl_heat_src', category: 'Sources',
         params: {},
-        ports: [{ id: 'a', pos: 'bottom', label: 'A' }, { id: 'b', pos: 'top', label: 'B' }, { id: 's', pos: 'left', label: 'S' }]
+        ports: [
+          { id: 'a', pos: 'bottom', label: 'A', domain: 'Thermal' }, 
+          { id: 'b', pos: 'top', label: 'B', domain: 'Thermal' }, 
+          { id: 's', pos: 'left', label: 'S', domain: 'Physical' }
+        ]
       },
       {
         id: 'ctrl_temp_src', name: 'Controlled Temperature Source', color: '#f97316', icon: 'ctrl_temp_src', category: 'Sources',
         params: {},
         ports: [{ id: 'a', pos: 'bottom', label: 'A' }, { id: 'b', pos: 'top', label: 'B' }, { id: 's', pos: 'left', label: 'S' }]
+      }
+    ]
+  },
+  {
+    type: 'Consumer Appliances',
+    blocks: [
+      {
+        id: 'washing_basket', name: 'Washing Basket', color: '#06b6d4', icon: 'washing_basket', category: 'Elements',
+        params: { 
+          J_basket: { value: 0.1, unit: 'kg-m^2', label: 'Basket Inertia' },
+          load_mass: { value: 5, unit: 'kg', label: 'Clothes Mass' },
+          unbalance: { value: 0.5, unit: 'kg', label: 'Unbalance Mass' },
+          radius: { value: 0.25, unit: 'm', label: 'Radius' }
+        },
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Rotational' }, { id: 'vis', pos: 'right', label: 'Vis', domain: 'Physical' }]
+      },
+      {
+        id: 'washing_fluid', name: 'Fluid & Detergent Load', color: '#06b6d4', icon: 'washing_fluid', category: 'Elements',
+        params: {
+          water_level: { value: 10, unit: 'L', label: 'Water Level' },
+          detergent: { value: 1, unit: '%', label: 'Detergent Conc' },
+          drag_coeff: { value: 0.05, unit: 'N-m-s/rad', label: 'Slosh Drag' }
+        },
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Rotational' }]
+      }
+    ]
+  },
+  {
+    type: 'Microwave & Cooking',
+    blocks: [
+      {
+        id: 'magnetron', name: 'Magnetron Unit', color: '#ef4444', icon: 'magnetron', category: 'Elements',
+        params: {
+          power_rating: { value: 900, unit: 'W', label: 'Nominal Power' },
+          efficiency: { value: 65, unit: '%', label: 'Efficiency' },
+          freq: { value: 2.45, unit: 'GHz', label: 'Frequency' }
+        },
+        ports: [
+          { id: 'p', pos: 'left', label: '+', domain: 'Electrical' },
+          { id: 'n', pos: 'bottom', label: '-', domain: 'Electrical' },
+          { id: 'h', pos: 'right', label: 'H', domain: 'Thermal' }
+        ]
+      },
+      {
+        id: 'upper_heater', name: 'Upper Radiant Heater', color: '#f97316', icon: 'heater', category: 'Elements',
+        params: {
+          resistance: { value: 40, unit: 'Ohm', label: 'Resistance' },
+          surface_area: { value: 0.05, unit: 'm^2', label: 'Surface Area' }
+        },
+        ports: [
+          { id: 'p', pos: 'left', label: '+', domain: 'Electrical' },
+          { id: 'n', pos: 'right', label: '-', domain: 'Electrical' },
+          { id: 'h', pos: 'top', label: 'H', domain: 'Thermal' }
+        ]
+      },
+      {
+        id: 'steam_generator', name: 'Steam Generator (800W)', color: '#0ea5e9', icon: 'steam_gen', category: 'Elements',
+        params: {
+          power: { value: 800, unit: 'W', label: 'Heating Power' },
+          tank_vol: { value: 0.5, unit: 'L', label: 'Tank Volume' },
+          boil_temp: { value: 100, unit: 'C', label: 'Boiling Temp' }
+        },
+        ports: [
+          { id: 'p', pos: 'left', label: '+', domain: 'Electrical' },
+          { id: 'n', pos: 'bottom', label: '-', domain: 'Electrical' },
+          { id: 's', pos: 'right', label: 'S', domain: 'Thermal' }
+        ]
+      },
+      {
+        id: 'microwave_inverter', name: 'HV Inverter PSU', color: '#8b5cf6', icon: 'inverter', category: 'Power',
+        params: {
+          v_in: { value: 230, unit: 'V', label: 'Input Voltage' },
+          v_out: { value: 4000, unit: 'V', label: 'Output HV' },
+          switching_freq: { value: 30, unit: 'kHz', label: 'Switching Freq' }
+        },
+        ports: [
+          { id: 'ac_in', pos: 'left', label: 'AC', domain: 'Electrical' },
+          { id: 'hv_out', pos: 'right', label: 'HV', domain: 'Electrical' },
+          { id: 'ctrl', pos: 'top', label: 'C', domain: 'Physical' }
+        ]
+      },
+      {
+        id: 'microwave_cavity', name: '25L Microwave Cavity', color: '#64748b', icon: 'cavity', category: 'Thermal',
+        params: {
+          volume: { value: 25, unit: 'L', label: 'Volume' },
+          insulation: { value: 0.02, unit: 'W/mK', label: 'Insulation' },
+          ambient_temp: { value: 25, unit: 'C', label: 'Ambient' }
+        },
+        ports: [
+          { id: 'h1', pos: 'left', label: 'M', domain: 'Thermal' },
+          { id: 'h2', pos: 'top', label: 'U', domain: 'Thermal' },
+          { id: 'h3', pos: 'right', label: 'S', domain: 'Thermal' },
+          { id: 't', pos: 'bottom', label: 'T', domain: 'Physical' }
+        ]
       }
     ]
   },

@@ -109,6 +109,48 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'Voltage (V)', through: 'Current (I)',
     description: 'An ideal sinusoidal voltage source. Used for modeling mains power or signal generators.'
   },
+  three_phase_source: {
+    equations: [
+      'Va = Vpk * sin(w*t)',
+      'Vb = Vpk * sin(w*t - 2*pi/3)',
+      'Vc = Vpk * sin(w*t + 2*pi/3)'
+    ],
+    latex: ['V_{abc} = V_{pk} \\sin(\\omega t - \\phi_{abc})'],
+    across: 'Voltage (V)', through: 'Current (I)',
+    description: 'A balanced 3-phase AC voltage source. Essential for modeling industrial power systems and multi-phase machines.'
+  },
+  dc_motor: {
+    equations: [
+      'Va = Ra*Ia + La*d(Ia)/dt + Ke*omega',
+      'Te = Kt*Ia',
+      'd(omega)/dt = (Te - T_load - B*omega) / J'
+    ],
+    latex: ['V_a = R_a i_a + L_a \\frac{di_a}{dt} + K_e \\omega', 'T_e = K_t i_a'],
+    across: 'Voltage, Ang. Vel', through: 'Current, Torque',
+    description: 'Models a standard Permanent Magnet DC Motor. Couples electrical power to mechanical rotation via Lorentz force.'
+  },
+  ac_motor: {
+    equations: [
+      'Valpha = (2*(Va-Vn) - (Vb-Vn) - (Vc-Vn)) / 3',
+      'Vbeta = ((Vb-Vn) - (Vc-Vn)) / 1.732',
+      'Vs = Valpha + j * Vbeta',
+      'Vs = Rs*Is + d(Psi_s)/dt',
+      '0 = Rr*Ir + d(Psi_r)/dt - j*w_slip*Psi_r',
+      'Te = 1.5 * P * Im(Psi_s * conj(Is))'
+    ],
+    latex: ['\\vec{v}_s = R_s \\vec{i}_s + \\frac{d\\vec{\\psi}_s}{dt}', '0 = R_r \\vec{i}_r + \\frac{d\\vec{\\psi}_r}{dt} - j \\omega_{slip} \\vec{\\psi}_r'],
+    across: 'Voltage, Ang. Vel', through: 'Current, Torque',
+    description: 'Models a 3-phase Squirrel Cage Induction Motor in the stationary reference frame using complex space vectors. Internally performs Clarke transformation from A-B-C inputs.'
+  },
+  bldc_motor: {
+    equations: [
+      'V_abc = R*I_abc + L*d(I_abc)/dt + E_abc(theta)',
+      'Te = sum(E_i * I_i) / omega'
+    ],
+    latex: ['v_{ph} = R i_{ph} + L \\frac{di_{ph}}{dt} + e_{ph}(\\theta)'],
+    across: 'Voltage, Ang. Vel', through: 'Current, Torque',
+    description: 'Models a Brushless DC Motor with trapezoidal back-EMF. Requires a 6-step commutation inverter for operation.'
+  },
   controlled_voltage: {
     equations: ['Vp - Vn = S'],
     latex: ['v = S(t)'],
@@ -589,23 +631,17 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'None', through: 'None',
     description: 'Selects between two signals based on a threshold-controlled port.'
   },
-  ps_constant: {
-    equations: ['y = C'],
-    latex: ['y = C'],
-    across: 'None', through: 'None',
-    description: 'Generates a constant physical signal value.'
+  ps_ramp: {
+    equations: ['y = slope * (t - start)'],
+    latex: ['y(t) = m \\cdot (t - t_0)'],
+    across: 'Time (s)', through: 'Signal (1)',
+    description: 'Generates a linearly increasing or decreasing signal starting at a specified time.'
   },
   ps_sine: {
     equations: ['y = A * sin(2*pi*f*t)'],
     latex: ['y = A \\sin(2\\pi f t)'],
     across: 'None', through: 'None',
     description: 'Generates a sinusoidal physical signal.'
-  },
-  ps_step: {
-    equations: ['y = val_init if t < t_step else val_final'],
-    latex: ['y = \\text{step}(t)'],
-    across: 'None', through: 'None',
-    description: 'Implements a step transition in a signal at a specific time.'
   },
   ps_rms: {
     equations: ['y = sqrt(avg(u^2))'],
@@ -654,12 +690,6 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     latex: ['U(z) = (K_p + K_i \\frac{T_s}{z-1}) E(z)'],
     across: 'None', through: 'None',
     description: 'A discrete-time Proportional-Integral controller with anti-windup. Essential for closed-loop regulation of physical systems.'
-  },
-  ps_pid_ctrl: {
-    equations: ['u(k) = Kp*e(k) + Ki*sum(e) + Kd*de/dt'],
-    latex: ['U(s) = (K_p + \\frac{K_i}{s} + \\frac{K_d s}{\\frac{K_d}{N}s + 1}) E(s)'],
-    across: 'None', through: 'None',
-    description: 'A discrete-time Proportional-Integral-Derivative controller with filtered derivative and anti-windup. Provides superior dynamic response for complex industrial processes.'
   },
   ps_lpf: {
     equations: ['y(k) = alpha*u(k) + (1-alpha)*y(k-1)'],
@@ -763,12 +793,6 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'None', through: 'None',
     description: 'Implements Scalar Control (V/f) for induction motors. Maintains constant air-gap flux by keeping the voltage-to-frequency ratio constant.'
   },
-  im_foc_ctrl: {
-    equations: ['id_ref = FluxRef / Lm', 'iq_ref = TqRef / (k * Flux)', 'Vdq = PI(idq_err) + FeedForward'],
-    latex: ['\mathbf{V}_{dq} = \mathbf{C}_{abc \\to dq} \mathbf{V}_{abc}'],
-    across: 'None', through: 'None',
-    description: 'Field-Oriented Control (FOC) for induction machines. Decouples torque and flux control into separate d-axis and q-axis current loops, allowing DC-motor-like performance.'
-  },
   im_dtc_ctrl: {
     equations: ['Flux_err = Flux_ref - Flux_est', 'Tq_err = Tq_ref - Tq_est', 'Vector = Lookup(Flux_err, Tq_err, Sector)'],
     latex: ['S = f_{DTC}(\Delta \Psi, \Delta T, \theta)'],
@@ -867,15 +891,72 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
   },
   pmsm_tq_est: {
     equations: ['Tq = 1.5 * P * (Flux*iq + (Ld - Lq)*id*iq)'],
-    latex: ['T_e = \\frac{3}{2} p [\Psi_m i_q + (L_d - L_q) i_d i_q]'],
+    latex: ['T_e = \\frac{3}{2} p [\\Psi_m i_q + (L_d - L_q) i_d i_q]'],
     across: 'None', through: 'None',
     description: 'Estimates the electromagnetic torque produced by a PMSM based on measured currents and known machine parameters (flux, inductances).'
   },
+  pmsm: {
+    equations: [
+      'Vd = Rs*id + Ld*d(id)/dt - w_elec*Lq*iq',
+      'Vq = Rs*iq + Lq*d(iq)/dt + w_elec*(Ld*id + Flux)',
+      'Te = 1.5 * P * (Flux*iq + (Ld-Lq)*id*iq)',
+      'd(w_mech)/dt = (Te - T_load) / J'
+    ],
+    latex: [
+      '\\mathbf{V}_{dq} = R_s \\mathbf{i}_{dq} + \\mathbf{L}_{dq} \\frac{d\\mathbf{i}_{dq}}{dt} + \\omega_e \\mathbf{\\Psi}_{dq}',
+      'T_e = \\frac{3}{2} p [\\Psi_m i_q + (L_d - L_q) i_d i_q]'
+    ],
+    across: 'Voltage, Ang. Vel', through: 'Current, Torque',
+    description: 'Models a Permanent Magnet Synchronous Motor (PMSM) in the rotor-fixed dq-reference frame. Connect to an inverter for high-performance motion control.'
+  },
+  ps_pid_ctrl: {
+    equations: ['u = Kp*e + Ki*integral(e) + Kd*de/dt'],
+    latex: ['U(s) = (K_p + \\frac{K_i}{s} + \\frac{K_d s}{1 + Ns}) E(s)'],
+    across: 'Input Error', through: 'Control Output',
+    description: 'Implements a standard Proportional-Integral-Derivative controller with anti-windup and derivative filtering.'
+  },
+  im_foc_ctrl: {
+    equations: ['iq_ref = PI(w_ref - w)', 'id_ref = Constant', 'Vdq = CurrentCtrl(idq_ref, idq)'],
+    latex: ['i_q^* = k_p (\\omega^* - \\omega) + k_i \\int (\\omega^* - \\omega) dt'],
+    across: 'Reference Speed, Feedback', through: 'Gate Signals',
+    description: 'High-performance Field-Oriented Controller for Induction Machines. Decouples torque and flux control for precise speed regulation.'
+  },
+  washing_basket: {
+    equations: [
+      'J_total = J_basket + (load_mass + unbalance) * radius^2',
+      'T_load = J_total * d(omega)/dt + 0.02 * omega'
+    ],
+    latex: ['J_{total} \\ddot{\\theta} + B \\dot{\\theta} = T_e'],
+    across: 'Angular Velocity', through: 'Load Torque',
+    description: 'Models the mechanical dynamics of a washing machine drum, including load inertia and dynamic unbalance forces.'
+  },
+  washing_fluid: {
+    equations: ['T_slosh = drag_coeff * (water_level/10) * omega^2'],
+    latex: ['T_{slosh} = C_d \\cdot V_{water} \\cdot \\omega^2'],
+    across: 'Angular Velocity', through: 'Slosh Torque',
+    description: 'Simulates the non-linear fluid drag and sloshing effects of water and detergent during the wash cycle.'
+  },
+  ps_constant: {
+    equations: ['y = value'],
+    latex: ['y(t) = C'],
+    across: 'None', through: 'Signal',
+    description: 'Generates a constant physical signal. Use to set fixed setpoints or parameters in control loops.'
+  },
+  ps_step: {
+    equations: ['y = t > step_time ? final : initial'],
+    latex: ['y(t) = y_0 + (y_f - y_0) u(t - t_s)'],
+    across: 'None', through: 'Signal',
+    description: 'Generates a step change in a physical signal at a specified time. Useful for analyzing system step response.'
+  },
   pwm_3ph_2level: {
-    equations: ['g = 1 if Vabc > Carrier else 0'],
-    latex: ['g = \\text{sgn}(V_{abc} - V_{tri})'],
-    across: 'None', through: 'None',
-    description: 'Generates gate signals for a standard two-level three-phase inverter. Uses carrier-based comparison to modulate the duty cycle.'
+    equations: [
+      'Va = Vn + (Vp - Vn) * Vabc[0]',
+      'Vb = Vn + (Vp - Vn) * Vabc[1]',
+      'Vc = Vn + (Vp - Vn) * Vabc[2]'
+    ],
+    latex: ['V_a = V_n + (V_p - V_n) \\cdot m_a'],
+    across: 'Voltage (V)', through: 'Duty Cycle',
+    description: '3-Phase Inverter Bridge using Averaged Model. Converts DC input power to AC potentials based on modulation indices (Vabc).'
   },
   pwm_3ph_3level: {
     equations: ['g = 1 if Vabc > C1 else 0 if Vabc < C2 else 0.5'],
@@ -1104,5 +1185,40 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     latex: ['Y(t) = X(t)'],
     across: 'Any', through: 'None',
     description: 'Visualizes signal time-histories in a dedicated window.'
+  },
+  magnetron: {
+    equations: ['Qh = -power_rating * (efficiency/100) * ((Vp - Vn)/4000)^2'],
+    latex: ['Q = -P \eta (\frac{V}{4000})^2'],
+    across: 'Voltage (V)', through: 'Heat Flow (W)',
+    description: 'Converts high-voltage electrical energy into microwave thermal power.'
+  },
+  upper_heater: {
+    equations: ['Qh = -((Vp - Vn)^2) / resistance'],
+    latex: ['Q = -\frac{(V_p-V_n)^2}{R}'],
+    across: 'Voltage (V)', through: 'Heat Flow (W)',
+    description: 'Model for a radiant/resistive heating element.'
+  },
+  steam_generator: {
+    equations: ['Qs = -power'],
+    latex: ['Q = -P'],
+    across: 'Voltage (V)', through: 'Heat Flow (W)',
+    description: 'Models electrical heating of water and subsequent phase change to steam.'
+  },
+  microwave_inverter: {
+    equations: ['Vhv_out = Vac_in * (v_out / v_in)'],
+    latex: ['V_{hv} = V_{ac} \cdot \frac{V_{out}}{V_{in}}'],
+    across: 'Voltage (V)', through: 'Current (A)',
+    description: 'High-frequency switching power supply for generating magnetron drive voltage.'
+  },
+  microwave_cavity: {
+    equations: [
+      'Th1 = Th2',
+      'Th1 = Th3',
+      't = Th1',
+      'dTh1/dt = (Qh1 + Qh2 + Qh3 - 0.05 * (Th1 - ambient_temp)) / (volume * 1.2)'
+    ],
+    latex: ['T = T_{ambient} + \int \frac{\Sigma Q}{C} dt'],
+    across: 'Temperature (K)', through: 'Heat Flow (W)',
+    description: 'Thermal mass model for the microwave cooking volume (25L).'
   }
 };
