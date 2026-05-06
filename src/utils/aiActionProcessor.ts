@@ -1,7 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
-
 export interface AiAction {
-  type: 'CREATE_VARIABLE' | 'CREATE_STATE' | 'CREATE_TRANSITION' | 'CREATE_BLOCK';
+  type: 'CREATE_VARIABLE' | 'CREATE_STATE' | 'CREATE_TRANSITION' | 'CREATE_BLOCK' | 'CONFIGURE_DOE' | 'RUN_MODEL' | 'EXPORT_MODEL';
   name?: string;
   varType?: string;
   value?: string;
@@ -15,17 +14,21 @@ export interface AiAction {
   condition?: string;
   action?: string;
   stereotype?: string;
+  // DOE fields
+  modelType?: 'RSM' | 'GMDH' | 'Taguchi';
+  factors?: Array<{ name: string; min: number; max: number; levels?: number[] }>;
+  response?: string;
+  target?: 'X-Bridges' | 'V-Lab';
 }
 
 export function processAiResponse(responseText: string) {
   try {
-    // Attempt to extract JSON from the response (in case AI adds conversational text)
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return { message: responseText, actions: [] };
 
     const parsed = JSON.parse(jsonMatch[0]);
     return {
-      message: parsed.message || "Actions suggested.",
+      message: parsed.message || parsed.chatResponse || "Actions suggested.",
       actions: (parsed.actions || []) as AiAction[]
     };
   } catch (e) {
@@ -40,10 +43,36 @@ export function executeAiActions(
   setters: any
 ) {
   const { states, variables, junctions, currentLayerId } = appState;
-  const { setStates, setVariables, setTransitions, setBlocks, addError } = setters;
+  const { 
+    setStates, setVariables, setTransitions, setBlocks, addError,
+    setFactors, setHeaders, setModelType, calculateRSM, calculateGMDH, calculateTaguchi,
+    handleExportToXbridges, handleExportToVLab
+  } = setters;
 
   actions.forEach(action => {
     switch (action.type) {
+      case 'CONFIGURE_DOE':
+        if (action.factors && action.modelType) {
+          setFactors(action.factors.map(f => ({ name: f.name, min: f.min, max: f.max, levels: f.levels || [f.min, f.max] })));
+          setHeaders([...action.factors.map(f => f.name), action.response || 'Yield']);
+          setModelType(action.modelType);
+          addError('info', `AI Configured ${action.modelType} model.`);
+        }
+        break;
+
+      case 'RUN_MODEL':
+        if (action.modelType === 'RSM') calculateRSM();
+        else if (action.modelType === 'GMDH') calculateGMDH();
+        else if (action.modelType === 'Taguchi') calculateTaguchi();
+        addError('info', `AI executing ${action.modelType} analysis...`);
+        break;
+
+      case 'EXPORT_MODEL':
+        if (action.target === 'X-Bridges') handleExportToXbridges();
+        else if (action.target === 'V-Lab') handleExportToVLab();
+        addError('info', `AI exporting model to ${action.target}.`);
+        break;
+
       case 'CREATE_VARIABLE':
         if (action.name && action.varType) {
           const newVar = {
@@ -99,8 +128,6 @@ export function executeAiActions(
           }
         }
         break;
-      
-      // Additional actions can be added here
     }
   });
 }

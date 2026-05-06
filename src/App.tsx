@@ -2535,6 +2535,94 @@ const Buzzer = ({
   );
 };
 
+// ── Statistical Helper Functions (Global Scope) ──────────────────────────────
+const normalCDF = (x: number) => {
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989423 * Math.exp(-x * x / 2);
+  const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  return x > 0 ? 1 - p : p;
+};
+
+const lgamma = (x: number): number => {
+  const c = [76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5];
+  let tmp = x + 5.5;
+  tmp -= (x + 0.5) * Math.log(tmp);
+  let ser = 1.000000000190015;
+  for (let i = 0; i < 6; i++) ser += c[i] / (x + i + 1);
+  return -tmp + Math.log(2.5066282746310005 * ser / x);
+};
+
+const betaIncomplete = (a: number, b: number, x: number): number => {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const lnBeta = lgamma(a) + lgamma(b) - lgamma(a + b);
+  const front = Math.exp(Math.log(x) * a + Math.log(1 - x) * b - lnBeta) / a;
+  let f = 1, c = 1, d = 1 - (a + b) * x / (a + 1);
+  if (Math.abs(d) < 1e-30) d = 1e-30;
+  d = 1 / d; f = d;
+  for (let m = 1; m <= 200; m++) {
+    let num = m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m));
+    d = 1 + num * d; if (Math.abs(d) < 1e-30) d = 1e-30; d = 1 / d;
+    c = 1 + num / c; if (Math.abs(c) < 1e-30) c = 1e-30;
+    f *= d * c;
+    num = -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1));
+    d = 1 + num * d; if (Math.abs(d) < 1e-30) d = 1e-30; d = 1 / d;
+    c = 1 + num / c; if (Math.abs(c) < 1e-30) c = 1e-30;
+    f *= d * c;
+  }
+  return front * f;
+};
+
+const fDistPValue = (fVal: number, df1: number, df2: number): number => {
+  if (fVal <= 0 || df1 <= 0 || df2 <= 0) return 1;
+  const x = df2 / (df2 + df1 * fVal);
+  return betaIncomplete(df2 / 2, df1 / 2, x);
+};
+
+const tCritical = (alpha: number, df: number): number => {
+  if (df <= 0) return 0;
+  const target = 1 - alpha / 2;
+  let t = 2, step = 1;
+  for (let i = 0; i < 20; i++) {
+    const p = 1 - 0.5 * betaIncomplete(df / 2, 0.5, df / (df + t * t));
+    if (p < target) t += step; else t -= step;
+    step /= 2;
+  }
+  return t;
+};
+
+const solveLeastSquares = (X: number[][], Y: number[]): number[] => {
+  try {
+    const XMat = math.matrix(X);
+    const YMat = math.matrix(Y.map(y => [y]));
+    const Xt = math.transpose(XMat);
+    const XtX = math.multiply(Xt, XMat);
+    const XtX_reg = (XtX as any).toArray().map((row: any, i: number) =>
+      row.map((val: number, j: number) => val + (i === j ? 1e-10 : 0))
+    );
+    const XtX_inv = math.inv(math.matrix(XtX_reg));
+    const XtY = math.multiply(Xt, YMat);
+    return (math.multiply(XtX_inv, XtY) as any).toArray().map((r: any) => r[0]);
+  } catch (err) {
+    console.error("Least Squares Error:", err);
+    return new Array(X[0].length).fill(0);
+  }
+};
+
+const predictRSM = (Beta: number[], factorValues: number[], k: number): number => {
+  let y = Beta[0];
+  for (let i = 0; i < k; i++) y += Beta[i + 1] * factorValues[i];
+  for (let i = 0; i < k; i++) y += Beta[k + 1 + i] * factorValues[i] * factorValues[i];
+  let idx = 2 * k + 1;
+  for (let i = 0; i < k; i++) {
+    for (let j = i + 1; j < k; j++) {
+      y += Beta[idx] * factorValues[i] * factorValues[j];
+      idx++;
+    }
+  }
+  return y;
+};
+
 const DoeWorkspace = ({
   onClose,
   addError,
@@ -2557,7 +2645,14 @@ const DoeWorkspace = ({
   handleExportProject,
   generateReport,
   onExportToVLab,
-  onExportToXBridges
+  onExportToXBridges,
+  factors,
+  setFactors,
+  calculateRSM,
+  calculateGMDH,
+  calculateTaguchi,
+  handleExportToVLab,
+  handleExportToXBridges
 }: {
   onClose: () => void;
   addError: (type: 'error' | 'warning' | 'info', message: string, source?: string, elementId?: string) => void;
@@ -2581,6 +2676,13 @@ const DoeWorkspace = ({
   generateReport: () => void;
   onExportToVLab: (block: any) => void;
   onExportToXBridges: (block: any) => void;
+  factors: any[];
+  setFactors: React.Dispatch<React.SetStateAction<any[]>>;
+  calculateRSM: () => void;
+  calculateGMDH: () => void;
+  calculateTaguchi: () => void;
+  handleExportToVLab: () => void;
+  handleExportToXBridges: () => void;
 }) => {
   const [eqFontSize, setEqFontSize] = useState(14);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2625,630 +2727,18 @@ const DoeWorkspace = ({
     reader.readAsBinaryString(file);
   };
 
-  // ── Statistical Functions (Minitab-grade) ──────────────────────────────────
-  const normalCDF = (x: number) => {
-    const t = 1 / (1 + 0.2316419 * Math.abs(x));
-    const d = 0.3989423 * Math.exp(-x * x / 2);
-    const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-    return x > 0 ? 1 - p : p;
-  };
-
-  // Regularized incomplete beta function via continued fraction (Lentz)
-  const betaIncomplete = (a: number, b: number, x: number): number => {
-    if (x <= 0) return 0;
-    if (x >= 1) return 1;
-    const lnBeta = lgamma(a) + lgamma(b) - lgamma(a + b);
-    const front = Math.exp(Math.log(x) * a + Math.log(1 - x) * b - lnBeta) / a;
-    let f = 1, c = 1, d = 1 - (a + b) * x / (a + 1);
-    if (Math.abs(d) < 1e-30) d = 1e-30;
-    d = 1 / d; f = d;
-    for (let m = 1; m <= 200; m++) {
-      let num = m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m));
-      d = 1 + num * d; if (Math.abs(d) < 1e-30) d = 1e-30; d = 1 / d;
-      c = 1 + num / c; if (Math.abs(c) < 1e-30) c = 1e-30;
-      f *= d * c;
-      num = -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1));
-      d = 1 + num * d; if (Math.abs(d) < 1e-30) d = 1e-30; d = 1 / d;
-      c = 1 + num / c; if (Math.abs(c) < 1e-30) c = 1e-30;
-      const delta = d * c; f *= delta;
-      if (Math.abs(delta - 1) < 1e-10) break;
-    }
-    return front * f;
-  };
-
-  const lgamma = (x: number): number => {
-    const c = [76.18009172947146, -86.50532032941677, 24.01409824083091,
-      -1.231739572450155, 0.001208650973866179, -0.000005395239384953];
-    let y = x, tmp = x + 5.5;
-    tmp -= (x + 0.5) * Math.log(tmp);
-    let ser = 1.000000000190015;
-    for (let j = 0; j < 6; j++) ser += c[j] / ++y;
-    return -tmp + Math.log(2.5066282746310005 * ser / x);
-  };
-
-  // Student's t-distribution CDF — matches Minitab's coefficient p-values
-  const tDistCDF = (t: number, df: number): number => {
-    const x = df / (df + t * t);
-    const ib = betaIncomplete(df / 2, 0.5, x);
-    return t >= 0 ? 1 - 0.5 * ib : 0.5 * ib;
-  };
-
-  // Two-tailed p-value from t-statistic with df degrees of freedom
-  const tDistPValue = (t: number, df: number): number => {
-    return 2 * (1 - tDistCDF(Math.abs(t), df));
-  };
-
-  // Critical t-value (approximate inverse via Newton-Raphson on the CDF)
-  const tCritical = (alpha: number, df: number): number => {
-    // Start with normal approximation
-    const a = 0.5 * alpha;
-    let t0 = Math.sqrt(-2 * Math.log(a));
-    t0 = t0 - (2.30753 + 0.27061 * t0) / (1 + 0.99229 * t0 + 0.04481 * t0 * t0);
-    // Refine with Newton's method
-    for (let i = 0; i < 10; i++) {
-      const p = 1 - tDistCDF(t0, df);
-      const err = p - a;
-      if (Math.abs(err) < 1e-10) break;
-      const pdf = Math.exp(lgamma((df + 1) / 2) - lgamma(df / 2) - 0.5 * Math.log(df * Math.PI) - ((df + 1) / 2) * Math.log(1 + t0 * t0 / df));
-      t0 += err / pdf;
-    }
-    return t0;
-  };
-
-  // F-distribution p-value
-  const fDistPValue = (fVal: number, df1: number, df2: number): number => {
-    if (fVal <= 0 || df1 <= 0 || df2 <= 0) return 1;
-    const x = df2 / (df2 + df1 * fVal);
-    return betaIncomplete(df2 / 2, df1 / 2, x);
-  };
-
-  // ── Unified RSM Prediction (shared by engine + 3D plotter) ─────────────────
-  const predictRSM = (Beta: number[], factorValues: number[], k: number): number => {
-    let y = Beta[0]; // intercept
-    for (let i = 0; i < k; i++) y += Beta[i + 1] * factorValues[i]; // linear
-    for (let i = 0; i < k; i++) y += Beta[k + 1 + i] * factorValues[i] * factorValues[i]; // quadratic
-    let idx = 2 * k + 1;
-    for (let i = 0; i < k; i++) {
-      for (let j = i + 1; j < k; j++) {
-        y += Beta[idx] * factorValues[i] * factorValues[j]; // interaction
-        idx++;
+  useEffect(() => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleExportProject();
       }
-    }
-    return y;
-  };
-
-  const calculateRSM = () => {
-    if (!data || data.length < 3) {
-      addError('warning', 'Insufficient data points for RSM.');
-      return;
-    }
-
-    const factorsCount = headers.length - 1;
-    const n = data.length;
-
-    // Standard DOE Constants for design detection
-    const DOE_CONSTANTS: Record<string, boolean> = {
-      '2,13': true, '3,20': true, '4,31': true, '5,32': true, '5,52': true, '6,53': true, '6,91': true, '7,92': true, '7,163': true
     };
-    const isStandard = !!DOE_CONSTANTS[`${factorsCount},${n}`];
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleExportProject]);
 
-    const factorStats = headers.slice(0, factorsCount).map((_, i) => {
-      const col = data.map(r => r[i]);
-      return { min: Math.min(...col), max: Math.max(...col) };
-    });
-
-    const coding = factorStats.map(s => ({
-      mid: (s.max + s.min) / 2,
-      scale: (s.max - s.min) / 2 || 1
-    }));
-
-    const Z: number[][] = [];
-    const Y: number[] = [];
-    data.forEach(row => {
-      const f = row.slice(0, factorsCount);
-      Y.push(row[factorsCount]);
-      const x = f.map((v, i) => (v - coding[i].mid) / coding[i].scale);
-
-      const zRow = [1];
-      for (let i = 0; i < factorsCount; i++) zRow.push(x[i]);
-      for (let i = 0; i < factorsCount; i++) zRow.push(x[i] * x[i]);
-      for (let i = 0; i < factorsCount; i++) {
-        for (let j = i + 1; j < factorsCount; j++) zRow.push(x[i] * x[j]);
-      }
-      Z.push(zRow);
-    });
-
-    const p_terms = Z[0].length - 1;
-    const p_count = p_terms + 1;
-    let resultsObj: any = null;
-
-    try {
-      const ZMat = math.matrix(Z);
-      const YMat = math.matrix(Y.map((y: number) => [y]));
-      const Zt = math.transpose(ZMat);
-      const ZtZ = math.multiply(Zt, ZMat);
-
-      const ZtZ_reg = (ZtZ as any).toArray().map((row: any, i: number) =>
-        row.map((val: number, j: number) => val + (i === j ? 1e-10 : 0))
-      );
-
-      const ZtZ_inv = math.inv(math.matrix(ZtZ_reg));
-      const ZtY = math.multiply(Zt, YMat);
-      const Beta_coded = (math.multiply(ZtZ_inv, ZtY) as any).toArray().map((r: any) => r[0]);
-
-      // Unscale Beta
-      const Beta: number[] = new Array(p_terms + 1).fill(0);
-      const k = factorsCount;
-      for (let i = 0; i < k; i++) Beta[k + 1 + i] = Beta_coded[k + 1 + i] / (coding[i].scale ** 2);
-      let interIdx = 2 * k + 1;
-      for (let i = 0; i < k; i++) {
-        for (let j = i + 1; j < k; j++) {
-          Beta[interIdx] = Beta_coded[interIdx] / (coding[i].scale * coding[j].scale);
-          interIdx++;
-        }
-      }
-      for (let i = 0; i < k; i++) {
-        let val = Beta_coded[i + 1] / coding[i].scale;
-        val -= 2 * Beta[k + 1 + i] * coding[i].mid;
-        let itIdx = 2 * k + 1;
-        for (let m = 0; m < k; m++) {
-          for (let n = m + 1; n < k; n++) {
-            if (m === i) val -= Beta[itIdx] * coding[n].mid;
-            if (n === i) val -= Beta[itIdx] * coding[m].mid;
-            itIdx++;
-          }
-        }
-        Beta[i + 1] = val;
-      }
-      let b0 = Beta_coded[0];
-      for (let i = 0; i < k; i++) {
-        b0 -= Beta_coded[i + 1] * coding[i].mid / coding[i].scale;
-        b0 += Beta_coded[k + 1 + i] * (coding[i].mid ** 2) / (coding[i].scale ** 2);
-      }
-      interIdx = 2 * k + 1;
-      for (let i = 0; i < k; i++) {
-        for (let j = i + 1; j < k; j++) {
-          b0 += Beta_coded[interIdx] * (coding[i].mid * coding[j].mid) / (coding[i].scale * coding[j].scale);
-          interIdx++;
-        }
-      }
-      Beta[0] = b0;
-
-      // Stats
-      const meanY = Y.reduce((a: number, b: number) => a + b, 0) / n;
-      const Y_pred = Z.map((row: number[]) => row.reduce((sum: number, val: number, idx: number) => sum + val * Beta_coded[idx], 0));
-      
-      let SSE = 0, SST = 0;
-      for (let i = 0; i < n; i++) {
-        SSE += Math.pow(Y[i] - Y_pred[i], 2);
-        SST += Math.pow(Y[i] - meanY, 2);
-      }
-
-      const MS_err = SSE / Math.max(1, n - p_count);
-      const MS_reg = (SST - SSE) / Math.max(1, p_count - 1);
-      const F = MS_err === 0 ? 0 : MS_reg / MS_err;
-      const S = Math.sqrt(MS_err);
-      const R2 = SST === 0 ? 1 : Math.max(0, 1 - (SSE / SST));
-      const R2Adj = SST === 0 ? 1 : Math.max(0, 1 - ((SSE / Math.max(1, n - p_count)) / (SST / Math.max(1, n - 1))));
-
-      // Advanced Statistics (PRESS, Pred R2, Adeq Precision)
-      const ZtZ_inv_arr = (ZtZ_inv as any).toArray();
-      let PRESS = 0;
-      const leverages = Z.map(row => {
-        let h = 0;
-        for (let i = 0; i < row.length; i++) {
-          for (let j = 0; j < row.length; j++) {
-            h += row[i] * ZtZ_inv_arr[i][j] * row[j];
-          }
-        }
-        return h;
-      });
-
-      for (let i = 0; i < n; i++) {
-        const e = Y[i] - Y_pred[i];
-        PRESS += Math.pow(e / (1 - Math.min(1 - 1e-10, leverages[i])), 2);
-      }
-
-      const R2Pred = SST === 0 ? 1 : Math.max(0, 1 - (PRESS / SST));
-      const AdeqPrec = (Math.max(...Y_pred) - Math.min(...Y_pred)) / Math.sqrt((p_count * MS_err) / n || 1e-10);
-      const df_err = Math.max(1, n - p_count);
-
-      // Build Equation and Table Terms
-      const terms = ['Intercept'];
-      for (let i = 0; i < k; i++) terms.push(headers[i]);
-      for (let i = 0; i < k; i++) terms.push(`${headers[i]}^2`);
-      for (let i = 0; i < k; i++) {
-        for (let j = i + 1; j < k; j++) terms.push(`${headers[i]}*${headers[j]}`);
-      }
-
-      // Lack-of-Fit Test (when replicates exist)
-      const groupMap = new Map<string, number[]>();
-      data.forEach((row, idx) => {
-        const key = row.slice(0, k).map(v => v.toFixed(8)).join('|');
-        if (!groupMap.has(key)) groupMap.set(key, []);
-        groupMap.get(key)!.push(idx);
-      });
-      const replicateGroups = Array.from(groupMap.values()).filter(g => g.length > 1);
-      let lofTest: any = null;
-      if (replicateGroups.length > 0) {
-        let SS_PE = 0; let df_PE = 0;
-        replicateGroups.forEach(group => {
-          const groupMean = group.reduce((s, i) => s + Y[i], 0) / group.length;
-          group.forEach(i => { SS_PE += Math.pow(Y[i] - groupMean, 2); });
-          df_PE += group.length - 1;
-        });
-        const SS_LOF = SSE - SS_PE;
-        const df_LOF = df_err - df_PE;
-        if (df_LOF > 0 && df_PE > 0) {
-          const MS_LOF = SS_LOF / df_LOF;
-          const MS_PE = SS_PE / df_PE;
-          const F_LOF = MS_PE > 0 ? MS_LOF / MS_PE : 0;
-          const p_LOF = fDistPValue(F_LOF, df_LOF, df_PE);
-          lofTest = { SS_LOF, SS_PE, df_LOF, df_PE, MS_LOF, MS_PE, F_LOF, p_LOF };
-        }
-      }
-
-      // ANOVA with p-values
-      const modelPValue = fDistPValue(F, p_count - 1, df_err);
-      const anovaTable = [
-        { source: 'Model', df: p_count - 1, ss: SST - SSE, ms: (SST - SSE) / (p_count - 1), f: F, p: modelPValue },
-        ...(lofTest ? [
-          { source: 'Lack of Fit', df: lofTest.df_LOF, ss: lofTest.SS_LOF, ms: lofTest.MS_LOF, f: lofTest.F_LOF, p: lofTest.p_LOF },
-          { source: 'Pure Error', df: lofTest.df_PE, ss: lofTest.SS_PE, ms: lofTest.MS_PE }
-        ] : []),
-        { source: 'Error', df: df_err, ss: SSE, ms: MS_err },
-        { source: 'Total', df: n - 1, ss: SST }
-      ];
-
-      // Coefficient table with proper t-distribution p-values
-      const coeffTable = terms.map((term, i) => {
-        const se = Math.sqrt(Math.max(0, MS_err * ZtZ_inv_arr[i][i]));
-        const tVal = Beta_coded[i] / (se || 1e-10);
-        const p = tDistPValue(tVal, df_err);
-        return { term, coef: Beta[i], codedCoef: Beta_coded[i], se, t: tVal, p };
-      });
-
-      let equation = `Regression Equation (Uncoded Units):\n\nY = ${Beta[0].toPrecision(6)}`;
-      for (let i = 1; i < Beta.length; i++) {
-        const b = Beta[i];
-        if (Math.abs(b) < 1e-12) continue;
-        equation += `\n    ${b >= 0 ? '+' : '-'} ${Math.abs(b).toPrecision(6)} * ${terms[i]}`;
-      }
-
-      // Generate fits using unified prediction function
-      const fitsFromBeta = data.map(row => predictRSM(Beta, row.slice(0, k), k));
-      const residuals = Y.map((y, i) => y - fitsFromBeta[i]);
-
-      resultsObj = { 
-        Beta, Beta_coded, R2, R2Adj, R2Pred, S, F, MS_err, PRESS, AdeqPrec,
-        equation, terms, type: 'RSM', factorStats, isStandard, lofTest,
-        anovaTable, coeffTable, residuals, fits: fitsFromBeta, k: factorsCount
-      };
-    } catch (err) {
-      addError('error', 'Regression matrix is singular. Data might be highly collinear.');
-      return;
-    }
-
-    if (resultsObj) {
-      setResults(resultsObj);
-      setActiveModel('RSM');
-      addError('info', `RSM Logic synchronized with Minitab regression models.`);
-    }
-  };
-
-  const calculateGMDH = () => {
-    if (!data || data.length < 5) {
-      addError('warning', 'GMDH requires at least 5 data points.');
-      return;
-    }
-
-    const model = new GMDHEngine({
-      algorithm: 'MIA',
-      polynomialOrder: 2,
-      maxLayers: 8,
-      externalCriterion: 'RMSE',
-      validationSplit: 0.3
-    });
-    model.train(data, headers);
-
-    const k = headers.length - 1;
-    const n = data.length;
-
-    const Y = data.map(r => r[k]);
-    let Y_pred: number[] = [];
-    try {
-      Y_pred = data.map(r => model.predict(r.slice(0, k)));
-    } catch (e) {
-      Y_pred = Y.map(() => 0);
-    }
-
-    const meanY = Y.reduce((a, b) => a + b, 0) / Y.length;
-    let SSE = 0, SST = 0;
-    for (let i = 0; i < Y.length; i++) {
-      SSE += Math.pow(Y[i] - Y_pred[i], 2);
-      SST += Math.pow(Y[i] - meanY, 2);
-    }
-
-    const R2 = SST === 0 ? 1 : Math.max(0, 1 - (SSE / SST));
-    // Effective parameter count: sum of coefficients across all layers
-    const pEff = model.layers.reduce((s, layer) => s + layer.reduce((s2, neuron) => s2 + neuron.coeffs.length, 0), 0);
-    const R2Adj = SST === 0 ? 1 : Math.max(0, 1 - ((SSE / Math.max(1, n - pEff)) / (SST / Math.max(1, n - 1))));
-    const RMSE = Math.sqrt(SSE / n);
-    const S = Math.sqrt(SSE / Math.max(1, n - pEff));
-
-    // Feature Importance based on occurrences in neurons
-    const importance: Record<string, number> = {};
-    model.layers.forEach((layer: any[]) => {
-      layer.forEach((neuron: any) => {
-        neuron.inputs.forEach((idx: number) => {
-          const name = headers[idx] || `X${idx+1}`;
-          importance[name] = (importance[name] || 0) + (1 / (model.layers.length));
-        });
-      });
-    });
-
-    setResults({
-      model,
-      R2,
-      R2Adj,
-      RMSE,
-      S,
-      equation: model.getEquation(),
-      type: 'GMDH',
-      fits: Y_pred,
-      actuals: Y,
-      residuals: Y.map((y, i) => y - Y_pred[i]),
-      importance,
-      k: k
-    });
-    setActiveModel('GMDH');
-    addError('info', `GMDH Trained: R² = ${(R2 * 100).toFixed(2)}%, R²_adj = ${(R2Adj * 100).toFixed(2)}%`);
-  };
-
-  const calculateTaguchi = () => {
-    if (!data || data.length < 2) {
-      addError('warning', 'Insufficient data for Taguchi analysis.');
-      return;
-    }
-
-    const factorsCount = headers.length - 1;
-    const factors = headers.slice(0, factorsCount);
-    const meanY = data.reduce((a, r) => a + r[factorsCount], 0) / data.length;
-
-    // 1. Group data into unique trials to handle replicates properly
-    const trialsMap = new Map<string, number[]>();
-    data.forEach((row: number[]) => {
-      const factorsPart = row.slice(0, factorsCount).join('|');
-      if (!trialsMap.has(factorsPart)) trialsMap.set(factorsPart, []);
-      trialsMap.get(factorsPart)!.push(row[factorsCount]);
-    });
-
-    const trials = Array.from(trialsMap.entries()).map(([key, vals]: [string, number[]]) => ({
-      factors: key.split('|').map(Number),
-      mean: vals.reduce((a: number, b: number) => a + b, 0) / vals.length,
-      variance: vals.length > 1 ? vals.reduce((a: number, b: number) => a + Math.pow(b - (vals.reduce((x: number, y: number) => x + y, 0) / vals.length), 2), 0) / (vals.length - 1) : 0,
-      count: vals.length,
-      responses: vals
-    }));
-
-    // Calculate S/N Ratios for each unique trial combination
-    const snRatios = trials.map((t: any) => {
-      const n = t.count;
-      const y = t.responses;
-      if (taguchiConfig.objective === 'larger') {
-        const sumSqInv = y.reduce((acc: number, val: number) => acc + 1 / (val * val + 1e-10), 0);
-        return -10 * Math.log10(sumSqInv / n);
-      } else if (taguchiConfig.objective === 'smaller') {
-        const sumSq = y.reduce((acc: number, val: number) => acc + val * val, 0);
-        return -10 * Math.log10(sumSq / n);
-      } else {
-        if (t.variance === 0) return 10 * Math.log10(Math.pow(t.mean, 2) / 1e-6);
-        return 10 * Math.log10(Math.pow(t.mean, 2) / t.variance);
-      }
-    });
-
-    // 2. Means Analysis for each factor (using unique trials)
-    const factorLevels = factors.map((f: string, factorIdx: number) => {
-      const levels = Array.from(new Set(trials.map((t: any) => t.factors[factorIdx]))).sort((a: number, b: number) => a - b);
-      const means = levels.map((l: number) => {
-        const matchingTrialsIndices = trials.map((t: any, i: number) => t.factors[factorIdx] === l ? i : -1).filter((idx: number) => idx !== -1);
-        const levelMeanY = matchingTrialsIndices.reduce((acc: number, idx: number) => acc + trials[idx].mean, 0) / matchingTrialsIndices.length;
-        const meanSN = matchingTrialsIndices.reduce((acc: number, idx: number) => acc + snRatios[idx], 0) / matchingTrialsIndices.length;
-        return { level: l, meanY: levelMeanY, meanSN };
-      });
-      const delta = Math.max(...means.map((m: any) => m.meanSN)) - Math.min(...means.map((m: any) => m.meanSN));
-      return { factor: f, means, delta };
-    });
-
-    // 3. Rank factors by Delta
-    const rankedFactors = [...factorLevels].sort((a: any, b: any) => b.delta - a.delta).map((f: any, i: number) => ({ ...f, rank: i + 1 }));
-
-    // 4. Optimal Combination (Best SN Ratio level for each factor)
-    const optimal = rankedFactors.map((f: any) => {
-      const best = [...f.means].sort((a: any, b: any) => b.meanSN - a.meanSN)[0];
-      return { factor: f.factor, level: best.level, meanSN: best.meanSN };
-    });
-
-    // 5. ANOVA (on S/N Ratios)
-    const totalMeanSN = snRatios.reduce((a: number, b: number) => a + b, 0) / snRatios.length;
-    const totalSS = snRatios.reduce((acc: number, sn) => acc + Math.pow(sn - totalMeanSN, 2), 0);
-    const anova = rankedFactors.map(f => {
-      const factorIdx = factors.indexOf(f.factor);
-      const ss = f.means.reduce((acc: number, m: { level: number; meanY: number; meanSN: number }) => {
-        const ni = trials.filter(t => t.factors[factorIdx] === m.level).length;
-        return acc + (ni * Math.pow(m.meanSN - totalMeanSN, 2));
-      }, 0);
-      const df = f.means.length - 1;
-      return { factor: f.factor, ss, df, ms: ss / (df || 1), contribution: totalSS > 0 ? (ss / totalSS) * 100 : 0 };
-    });
-
-    // Pooled ANOVA: auto-pool factors with <5% contribution into error
-    const significantAnova = anova.filter(a => a.contribution >= 5);
-    const pooledAnova = anova.filter(a => a.contribution < 5);
-    const pooledSS = pooledAnova.reduce((s, a) => s + a.ss, 0);
-    const pooledDF = pooledAnova.reduce((s, a) => s + a.df, 0);
-    const totalDF_anova = snRatios.length - 1;
-    const errorSS = totalSS - significantAnova.reduce((s, a) => s + a.ss, 0);
-    const errorDF = totalDF_anova - significantAnova.reduce((s, a) => s + a.df, 0);
-    const MS_error = errorDF > 0 ? errorSS / errorDF : 0;
-
-    const anovaWithF = significantAnova.map(a => ({
-      ...a,
-      f: MS_error > 0 ? a.ms / MS_error : 0,
-      p: MS_error > 0 && errorDF > 0 ? fDistPValue(a.ms / MS_error, a.df, errorDF) : 1
-    }));
-
-    // 6. Compute R² from additive model predictions
-    const Y_all = data.map(r => r[factorsCount]);
-    const fits = data.map(row => {
-      let pred = meanY;
-      factorLevels.forEach((f, fIdx) => {
-        const val = row[fIdx];
-        const nearest = [...f.means].sort((a: any, b: any) => Math.abs(a.level - val) - Math.abs(b.level - val))[0];
-        if (nearest) pred += (nearest.meanY - meanY);
-      });
-      return pred;
-    });
-    const residuals = Y_all.map((y, i) => y - fits[i]);
-    let SSE_tag = 0, SST_tag = 0;
-    for (let i = 0; i < Y_all.length; i++) {
-      SSE_tag += Math.pow(Y_all[i] - fits[i], 2);
-      SST_tag += Math.pow(Y_all[i] - meanY, 2);
-    }
-    const R2 = SST_tag === 0 ? 1 : Math.max(0, 1 - SSE_tag / SST_tag);
-
-    // 7. Confirmation Prediction CI
-    const dfSig = significantAnova.reduce((s, a) => s + a.df, 0);
-    const nEff = trials.length / (1 + dfSig);
-    const tCrit = errorDF > 0 ? tCritical(0.05, errorDF) : 2;
-    const ciHalf = tCrit * Math.sqrt(Math.abs(MS_error) * (1 / Math.max(0.01, nEff)));
-
-    // 8. Build Additive Prediction Equation
-    let equation = `Taguchi Additive Prediction Equation:\n\nY = ${meanY.toFixed(4)} (Grand Mean)`;
-    rankedFactors.sort((a, b) => factors.indexOf(a.factor) - factors.indexOf(b.factor)).forEach(f => {
-      equation += `\n  + [ ${f.factor}: `;
-      const effects = f.means.map((m: any) => `L${m.level} ${(m.meanY - meanY) >= 0 ? '+' : ''}${(m.meanY - meanY).toFixed(4)}`);
-      equation += effects.join(' | ') + ' ]';
-    });
-    equation += `\n\nR² = ${(R2 * 100).toFixed(2)}%`;
-    equation += `\nConfirmation CI (95%): ±${ciHalf.toFixed(4)}`;
-
-    setResults({
-      type: 'Taguchi',
-      snRatios,
-      factorLevels: rankedFactors,
-      optimal,
-      anova: anovaWithF,
-      pooledFactors: pooledAnova.map(a => a.factor),
-      objective: taguchiConfig.objective,
-      equation,
-      grandMean: meanY,
-      R2,
-      fits,
-      residuals,
-      actuals: Y_all,
-      confirmationCI: ciHalf,
-      MS_error,
-      errorDF
-    });
-    setActiveModel('Taguchi');
-    addError('info', `Taguchi Analysis Completed. R² = ${(R2 * 100).toFixed(2)}%`);
-  };
-
-  const handleExportToVLab = () => {
-    if (!results) {
-      addError('warning', 'Please calculate a model first.');
-      return;
-    }
-
-    const block = {
-      name: `${activeModel} Model`,
-      type: 'doe_custom',
-      color: activeModel === 'GMDH' ? '#3b82f6' : activeModel === 'RSM' ? '#f97316' : '#10b981',
-      icon: 'Σ',
-      params: {
-        modelType: { value: activeModel, label: 'Model Type' },
-        equation: { value: results.equation || '', label: 'Equation' },
-        inputNames: [...headers.slice(0, -1)],
-        outputName: headers[headers.length - 1],
-        layers: results.model?.layers ? JSON.parse(JSON.stringify(results.model.layers)) : [],
-        polyOrder: results.model?.config?.polynomialOrder || 2,
-        grandMean: { value: results.grandMean || 0, label: 'Grand Mean' },
-        factorLevels: { value: results.factorLevels || [], label: 'Factor Levels' }
-      },
-      ports: [
-        ...headers.slice(0, -1).map((h, i) => ({
-          id: `in${i + 1}`,
-          label: h,
-          type: 'input',
-          pos: 'left'
-        })),
-        {
-          id: 'out1',
-          label: headers[headers.length - 1],
-          type: 'output',
-          pos: 'right'
-        }
-      ]
-    };
-
-    onExportToVLab(block);
-  };
-
-  const handleExportToXBridges = () => {
-    if (!results) {
-      addError('warning', 'Please calculate a model first.');
-      return;
-    }
-
-    const blockData = {
-      name: `${activeModel} Model`,
-      type: 'DOE_MODEL',
-      equation: results.equation || '',
-      modelType: activeModel,
-      inputNames: [...headers.slice(0, -1)],
-      outputName: headers[headers.length - 1],
-      layers: results.model?.layers ? JSON.parse(JSON.stringify(results.model.layers)) : [],
-      polyOrder: results.model?.config?.polynomialOrder || 2,
-      metrics: {
-        R2: results.R2,
-        R2Adj: results.R2Adj,
-        R2Pred: results.R2Pred,
-        AdeqPrec: results.AdeqPrec,
-        equation: results.equation || '',
-        importance: results.importance || []
-      },
-      params: {
-        equation: { value: results.equation || '', label: 'Equation' },
-        modelType: { value: activeModel, label: 'Model Type' },
-        rSquared: { value: results.R2 !== undefined ? `${(results.R2 * 100).toFixed(2)}%` : 'N/A', label: 'R-Squared' },
-        layers: { value: results.model?.layers || [], label: 'Model Layers' },
-        polyOrder: { value: results.model?.config?.polynomialOrder || 2, label: 'Poly Order' },
-        inputNames: { value: [...headers.slice(0, -1)], label: 'Input Factors' },
-        outputName: { value: headers[headers.length - 1], label: 'Output Name' },
-        grandMean: { value: results.grandMean || 0, label: 'Grand Mean' },
-        factorLevels: { value: results.factorLevels || [], label: 'Factor Levels' }
-      },
-      inputs: headers.slice(0, -1).map((h, i) => ({
-        id: `in${i + 1}`,
-        name: h,
-        type: 'auto',
-        direction: 'input',
-        value: 0,
-        position: 'left'
-      })),
-      outputs: [{
-        id: 'out',
-        name: headers[headers.length - 1],
-        type: 'auto',
-        direction: 'output',
-        value: 0,
-        position: 'right'
-      }]
-    };
-
-    onExportToXBridges(blockData);
-  };
+  // ── Statistical Functions & Analysis (Moved to ADIA) ───────────────────────
 
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
@@ -5598,6 +5088,306 @@ const ADIA = () => {
   const [plotFactors, setPlotFactors] = useState<{ x: number, y: number }>({ x: 0, y: 1 });
   const [holdValues, setHoldValues] = useState<number[]>([]);
   const [plotType, setPlotType] = useState<'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act'>('surface');
+  const [factors, setFactors] = useState<any[]>([]);
+
+  // ── Statistical Functions (Lifted from DoeWorkspace) ───────────────────────
+  const calculateRSM = () => {
+    if (!data || data.length < 3) {
+      addError('warning', 'Insufficient data points for RSM.');
+      return;
+    }
+    const factorsCount = headers.length - 1;
+    const n = data.length;
+    const factorStats = headers.slice(0, factorsCount).map((_, i) => {
+      const col = data.map(r => r[i]);
+      return { min: Math.min(...col), max: Math.max(...col) };
+    });
+    const coding = factorStats.map(s => ({ mid: (s.max + s.min) / 2, scale: (s.max - s.min) / 2 || 1 }));
+    const Z: number[][] = [];
+    const Y: number[] = [];
+    data.forEach(row => {
+      const f = row.slice(0, factorsCount);
+      Y.push(row[factorsCount]);
+      const x = f.map((v, i) => (v - coding[i].mid) / coding[i].scale);
+      const zRow = [1];
+      for (let i = 0; i < factorsCount; i++) zRow.push(x[i]);
+      for (let i = 0; i < factorsCount; i++) zRow.push(x[i] * x[i]);
+      for (let i = 0; i < factorsCount; i++) {
+        for (let j = i + 1; j < factorsCount; j++) zRow.push(x[i] * x[j]);
+      }
+      Z.push(zRow);
+    });
+
+    try {
+      const Beta_coded = solveLeastSquares(Z, Y);
+      const p_terms = Z[0].length - 1;
+      const Beta: number[] = new Array(p_terms + 1).fill(0);
+      const k = factorsCount;
+      for (let i = 0; i < k; i++) Beta[k + 1 + i] = Beta_coded[k + 1 + i] / (coding[i].scale ** 2);
+      let interIdx = 2 * k + 1;
+      for (let i = 0; i < k; i++) {
+        for (let j = i + 1; j < k; j++) {
+          Beta[interIdx] = Beta_coded[interIdx] / (coding[i].scale * coding[j].scale);
+          interIdx++;
+        }
+      }
+      for (let i = 0; i < k; i++) {
+        let val = Beta_coded[i + 1] / coding[i].scale;
+        val -= 2 * Beta[k + 1 + i] * coding[i].mid;
+        let itIdx = 2 * k + 1;
+        for (let m = 0; m < k; m++) {
+          for (let n = m + 1; n < k; n++) {
+            if (m === i) val -= Beta[itIdx] * coding[n].mid;
+            if (n === i) val -= Beta[itIdx] * coding[m].mid;
+            itIdx++;
+          }
+        }
+        Beta[i + 1] = val;
+      }
+      let intercept = Beta_coded[0];
+      for (let i = 0; i < k; i++) intercept -= (Beta_coded[i + 1] / coding[i].scale) * coding[i].mid;
+      for (let i = 0; i < k; i++) intercept += Beta[k + 1 + i] * (coding[i].mid ** 2);
+      let iIdx = 2 * k + 1;
+      for (let i = 0; i < k; i++) {
+        for (let j = i + 1; j < k; j++) {
+          intercept += Beta[iIdx] * coding[i].mid * coding[j].mid;
+          iIdx++;
+        }
+      }
+      Beta[0] = intercept;
+
+      const Y_pred = Z.map(row => {
+        let sum = 0;
+        for (let i = 0; i < Beta_coded.length; i++) sum += Beta_coded[i] * row[i];
+        return sum;
+      });
+
+      const SSE = Y.reduce((acc, y, i) => acc + Math.pow(y - Y_pred[i], 2), 0);
+      const SST = Y.reduce((acc, y) => acc + Math.pow(y - (Y.reduce((a, b) => a + b, 0) / Y.length), 2), 0);
+      const df_total = n - 1;
+      const df_model = p_terms;
+      const df_error = n - p_terms - 1;
+      const R2 = 1 - SSE / SST;
+      const R2Adj = 1 - (SSE / df_error) / (SST / df_total);
+      const MS_model = (SST - SSE) / df_model;
+      const MS_error = SSE / df_error;
+      const F = MS_model / MS_error;
+      const P = fDistPValue(F, df_model, df_error);
+
+      let eq = `Y = ${Beta[0].toFixed(4)}`;
+      for (let i = 0; i < k; i++) eq += ` ${Beta[i + 1] >= 0 ? '+' : ''} ${Beta[i + 1].toFixed(4)}·${headers[i]}`;
+      for (let i = 0; i < k; i++) eq += ` ${Beta[k + 1 + i] >= 0 ? '+' : ''} ${Beta[k + 1 + i].toFixed(4)}·${headers[i]}²`;
+      let aIdx = 2 * k + 1;
+      for (let i = 0; i < k; i++) {
+        for (let j = i + 1; j < k; j++) {
+          eq += ` ${Beta[aIdx] >= 0 ? '+' : ''} ${Beta[aIdx].toFixed(4)}·${headers[i]}·${headers[j]}`;
+          aIdx++;
+        }
+      }
+
+      setResults({
+        type: 'RSM',
+        Beta,
+        Beta_coded,
+        R2,
+        R2Adj,
+        F,
+        P,
+        equation: eq,
+        fits: Y_pred,
+        residuals: Y.map((y, i) => y - Y_pred[i]),
+        actuals: Y
+      });
+      setActiveModel('RSM');
+      addError('info', `RSM Calculated: R² = ${(R2 * 100).toFixed(2)}%`);
+    } catch (err) {
+      addError('error', 'Statistical solver failed.');
+    }
+  };
+
+  const calculateGMDH = () => {
+    if (!data || data.length < 5) {
+      addError('warning', 'Insufficient data for GMDH.');
+      return;
+    }
+    const factorsCount = headers.length - 1;
+    const X = data.map(r => r.slice(0, factorsCount));
+    const Y = data.map(r => r[factorsCount]);
+
+    const k_folds = 5;
+    const model = new GMDHEngine({
+      algorithm: 'MIA',
+      polynomialOrder: 2,
+      maxLayers: 8,
+      externalCriterion: 'RMSE',
+      validationSplit: 0.3
+    });
+    model.train(data, headers);
+
+    const Y_pred = data.map(r => {
+      try { return model.predict(r.slice(0, factorsCount)); } catch(e) { return 0; }
+    });
+    const meanY = Y.reduce((a, b) => a + b, 0) / Y.length;
+    let SSE = 0, SST = 0;
+    for (let i = 0; i < Y.length; i++) {
+      SSE += Math.pow(Y[i] - Y_pred[i], 2);
+      SST += Math.pow(Y[i] - meanY, 2);
+    }
+    const R2 = SST === 0 ? 1 : Math.max(0, 1 - (SSE / SST));
+
+    setResults({
+      type: 'GMDH',
+      model,
+      R2,
+      equation: model.getEquation ? model.getEquation() : 'GMDH Neural Model',
+      fits: Y_pred,
+      residuals: Y.map((y, i) => y - Y_pred[i]),
+      actuals: Y
+    });
+    setActiveModel('GMDH');
+    addError('info', `GMDH Trained: R² = ${(R2 * 100).toFixed(2)}%`);
+  };
+
+  const calculateTaguchi = () => {
+    if (!data || data.length < 2) {
+      addError('warning', 'Insufficient data for Taguchi analysis.');
+      return;
+    }
+
+    const factorsCount = headers.length - 1;
+    const factors = headers.slice(0, factorsCount);
+    const meanY = data.reduce((a, r) => a + r[factorsCount], 0) / data.length;
+
+    // Group data into unique trials to handle replicates properly
+    const trialsMap = new Map<string, number[]>();
+    data.forEach((row: number[]) => {
+      const factorsPart = row.slice(0, factorsCount).join('|');
+      if (!trialsMap.has(factorsPart)) trialsMap.set(factorsPart, []);
+      trialsMap.get(factorsPart)!.push(row[factorsCount]);
+    });
+
+    const trials = Array.from(trialsMap.entries()).map(([key, vals]: [string, number[]]) => ({
+      factors: key.split('|').map(Number),
+      mean: vals.reduce((a: number, b: number) => a + b, 0) / vals.length,
+      variance: vals.length > 1 ? vals.reduce((a: number, b: number) => a + Math.pow(b - (vals.reduce((x: number, y: number) => x + y, 0) / vals.length), 2), 0) / (vals.length - 1) : 0,
+      count: vals.length,
+      responses: vals
+    }));
+
+    const snRatios = trials.map((t: any) => {
+      const n = t.count;
+      const y = t.responses;
+      if (taguchiConfig.objective === 'larger') {
+        const sumSqInv = y.reduce((acc: number, val: number) => acc + 1 / (val * val + 1e-10), 0);
+        return -10 * Math.log10(sumSqInv / n);
+      } else if (taguchiConfig.objective === 'smaller') {
+        const sumSq = y.reduce((acc: number, val: number) => acc + val * val, 0);
+        return -10 * Math.log10(sumSq / n);
+      } else {
+        if (t.variance === 0) return 10 * Math.log10(Math.pow(t.mean, 2) / 1e-6);
+        return 10 * Math.log10(Math.pow(t.mean, 2) / t.variance);
+      }
+    });
+
+    const factorLevels = factors.map((f: string, factorIdx: number) => {
+      const levels = Array.from(new Set(trials.map((t: any) => t.factors[factorIdx]))).sort((a: number, b: number) => a - b);
+      const means = levels.map((l: number) => {
+        const matchingTrialsIndices = trials.map((t: any, i: number) => t.factors[factorIdx] === l ? i : -1).filter((idx: number) => idx !== -1);
+        const levelMeanY = matchingTrialsIndices.reduce((acc: number, idx: number) => acc + trials[idx].mean, 0) / matchingTrialsIndices.length;
+        const meanSN = matchingTrialsIndices.reduce((acc: number, idx: number) => acc + snRatios[idx], 0) / matchingTrialsIndices.length;
+        return { level: l, meanY: levelMeanY, meanSN };
+      });
+      const delta = Math.max(...means.map((m: any) => m.meanSN)) - Math.min(...means.map((m: any) => m.meanSN));
+      return { factor: f, means, delta };
+    });
+
+    const rankedFactors = [...factorLevels].sort((a: any, b: any) => b.delta - a.delta).map((f: any, i: number) => ({ ...f, rank: i + 1 }));
+    const Y_all = data.map(r => r[factorsCount]);
+    const fits = data.map(row => {
+      let pred = meanY;
+      factorLevels.forEach((f, fIdx) => {
+        const val = row[fIdx];
+        const nearest = [...f.means].sort((a: any, b: any) => Math.abs(a.level - val) - Math.abs(b.level - val))[0];
+        if (nearest) pred += (nearest.meanY - meanY);
+      });
+      return pred;
+    });
+
+    const SSE = Y_all.reduce((acc, y, i) => acc + Math.pow(y - fits[i], 2), 0);
+    const SST = Y_all.reduce((acc, y) => acc + Math.pow(y - meanY, 2), 0);
+    const R2 = SST === 0 ? 1 : Math.max(0, 1 - SSE / SST);
+
+    setResults({
+      type: 'Taguchi',
+      snRatios,
+      factorLevels: rankedFactors,
+      objective: taguchiConfig.objective,
+      equation: `Taguchi Model (R² = ${(R2*100).toFixed(2)}%)`,
+      grandMean: meanY,
+      R2,
+      fits,
+      actuals: Y_all,
+      residuals: Y_all.map((y, i) => y - fits[i])
+    });
+    setActiveModel('Taguchi');
+    addError('info', `Taguchi Analysis Completed. R² = ${(R2 * 100).toFixed(2)}%`);
+  };
+
+  const handleExportToVLab = (block?: any) => {
+    if (!results) {
+      addError('warning', 'Please calculate a model first.');
+      return;
+    }
+    const exportBlock = block || {
+      name: `${activeModel} Model`,
+      type: 'doe_custom',
+      params: { equation: { value: results.equation || '' } },
+      ports: headers.slice(0, -1).map((h, i) => ({ id: `in${i + 1}`, label: h, type: 'input' }))
+    };
+    
+    const newNodeId = `doe_vlab_${Date.now()}`;
+    const newNode = {
+      id: newNodeId,
+      type: 'default',
+      position: { x: 400, y: 300 },
+      data: { ...exportBlock, id: newNodeId }
+    };
+    setVlabNodes(prev => [...prev, newNode]);
+    setDiagramMode('vlab');
+    toggleWindow('doe');
+    addError('info', `Exported ${activeModel} model to V-Lab workspace.`);
+  };
+
+  const handleExportToXBridges = () => {
+    if (!results) {
+      addError('warning', 'Please calculate a model first.');
+      return;
+    }
+    const blockData = {
+      name: `${activeModel} Model`,
+      type: 'DOE_MODEL',
+      equation: results.equation || '',
+      modelType: activeModel,
+      inputNames: headers.slice(0, -1),
+      outputName: headers[headers.length - 1],
+      params: { equation: { value: results.equation || '' } }
+    };
+    
+    const newNodeId = `doe_xb_${Date.now()}`;
+    const newNode = {
+      id: newNodeId,
+      type: 'xblock',
+      position: { x: 400, y: 300 },
+      data: { ...blockData, id: newNodeId }
+    };
+    setGlobalXBridgesNodes(prev => [...prev, newNode]);
+    setDiagramMode('xbridges');
+    toggleWindow('doe');
+    addError('info', `Exported ${activeModel} model to X-Bridges workspace.`);
+  };
+
+  const onExportToVLab = handleExportToVLab;
+  const onExportToXBridges = handleExportToXBridges;
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [mobileTab, setMobileTab] = useState<'hierarchy' | 'variables' | 'canvas' | 'properties'>('canvas');
@@ -6807,9 +6597,15 @@ const ADIA = () => {
     executeAiActions(
       actions, 
       { states, variables, junctions, layers, currentLayerId },
-      { setStates, setVariables, setTransitions, setBlocks, addError }
+      { 
+        setStates, setVariables, setTransitions, setBlocks, addError,
+        setFactors, setHeaders, setModelType: setActiveModel,
+        calculateRSM, calculateGMDH, calculateTaguchi,
+        handleExportToXbridges: handleExportToXBridges,
+        handleExportToVLab
+      }
     );
-  }, [states, variables, junctions, layers, currentLayerId, addError, setStates, setVariables, setTransitions, setBlocks]);
+  }, [states, variables, junctions, layers, currentLayerId, addError, setStates, setVariables, setTransitions, setBlocks, setFactors, setHeaders, setActiveModel, calculateRSM, calculateGMDH, calculateTaguchi, handleExportToXBridges, handleExportToVLab]);
 
   const resolveAutoStart = useCallback((layerId: string, context: any, runActions: boolean = true): string | undefined => {
     const layer = layers.find(l => l.id === layerId);
@@ -13188,33 +12984,15 @@ const ADIA = () => {
               generateReport={() => setShowReportPreview(true)}
               onClose={() => toggleWindow('doe')}
               addError={addError}
-              onExportToVLab={(block) => {
-                const newNodeId = `doe_vlab_${Date.now()}`;
-                const newNode = {
-                  id: newNodeId,
-                  type: 'default',
-                  position: { x: 400, y: 300 },
-                  data: { ...block, id: newNodeId }
-                };
-                setVlabNodes(prev => [...prev, newNode]);
-                setDiagramMode('vlab');
-                addError('info', `Exported ${block.name} to V-Lab workspace.`);
-              }}
-              onExportToXBridges={(blockData) => {
-                const newNodeId = `doe_xb_${Date.now()}`;
-                const newNode = {
-                  id: newNodeId,
-                  type: 'xblock',
-                  position: { x: 400, y: 300 },
-                  data: {
-                    ...blockData,
-                    id: newNodeId
-                  }
-                };
-                setGlobalXBridgesNodes(prev => [...prev, newNode]);
-                setDiagramMode('xbridges');
-                addError('info', `Exported ${blockData.name} to X-Bridges workspace.`);
-              }}
+              onExportToVLab={onExportToVLab}
+              onExportToXBridges={onExportToXBridges}
+              factors={factors}
+              setFactors={setFactors}
+              calculateRSM={calculateRSM}
+              calculateGMDH={calculateGMDH}
+              calculateTaguchi={calculateTaguchi}
+              handleExportToVLab={handleExportToVLab}
+              handleExportToXBridges={handleExportToXBridges}
             />
           </FloatingWindow>
         )}

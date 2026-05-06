@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, X, ChevronRight, ChevronLeft, Bot, User, Trash2, Key } from 'lucide-react';
-import { getAiResponse } from '../services/aiService';
+import { Send, Sparkles, X, ChevronRight, ChevronLeft, Bot, User, Trash2, Key, Globe, Zap } from 'lucide-react';
+import { getAiResponse, getN8nAiResponse } from '../services/aiService';
 import { processAiResponse } from '../utils/aiActionProcessor';
 
 interface Message {
@@ -19,12 +19,13 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
   isOpen, onToggle, currentContext, onExecuteActions
 }) => {
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'model', content: "Hello! I am your AI Architect. How can I help you design your system today?" }
+    { role: 'model', content: "Hello! I am your AI Architect. I am now connected to the n8n Orchestrator. How can I help you design your system or perform statistical analysis today?" }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [useOrchestrator, setUseOrchestrator] = useState(true);
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
-  const [showKeyInput, setShowKeyInput] = useState(!apiKey);
+  const [showKeyInput, setShowKeyInput] = useState(!apiKey && !useOrchestrator);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -35,7 +36,11 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
   }, [messages]);
 
   const handleSend = async () => {
-    if (!input.trim() || !apiKey) return;
+    if (!input.trim()) return;
+    if (!useOrchestrator && !apiKey) {
+      setShowKeyInput(true);
+      return;
+    }
 
     const userMessage: Message = { role: 'user', content: input };
     const newMessages = [...messages, userMessage];
@@ -44,7 +49,13 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
     setIsLoading(true);
 
     try {
-      const responseText = await getAiResponse(apiKey, newMessages, currentContext);
+      let responseText: string;
+      if (useOrchestrator) {
+        responseText = await getN8nAiResponse(input, currentContext);
+      } else {
+        responseText = await getAiResponse(apiKey, newMessages, currentContext);
+      }
+
       const { message, actions } = processAiResponse(responseText);
 
       setMessages([...newMessages, { role: 'model', content: message }]);
@@ -54,10 +65,8 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
       }
     } catch (error: any) {
       let errorMessage = error.message || "Unknown error";
-      if (errorMessage.includes('429') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
-        errorMessage = "API Rate Limit Exceeded. You have hit the Gemini API quota limits (or the free tier is not available in your region). Please wait a minute and try again, or check your Google AI Studio billing details.";
-      } else {
-        errorMessage = `Error: ${errorMessage}. Please check your API key and connection.`;
+      if (errorMessage.includes('429')) {
+        errorMessage = "API Rate Limit Exceeded. Please wait a minute.";
       }
       setMessages([...newMessages, { role: 'model', content: errorMessage }]);
     } finally {
@@ -72,7 +81,6 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
 
   return (
     <>
-      {/* Toggle Button (Float) - Always Visible */}
       <button
         onClick={onToggle}
         className={`fixed right-0 top-1/2 -translate-y-1/2 p-2 bg-[#111] border border-[#333] border-r-0 rounded-l-xl text-indigo-400 hover:text-indigo-300 shadow-2xl z-[60] transition-all duration-300 ${isOpen ? 'mr-[400px]' : 'mr-0'}`}
@@ -86,22 +94,36 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
       <div
         className={`fixed right-0 top-0 h-screen bg-[#0f0f0f] border-l border-[#222] transition-all duration-300 z-50 flex flex-col shadow-2xl overflow-hidden ${isOpen ? 'w-[400px]' : 'w-0'}`}
       >
-
         {isOpen && (
           <>
             {/* Header */}
             <div className="h-16 flex items-center justify-between px-6 border-b border-[#222] bg-gradient-to-r from-indigo-950/20 to-transparent">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-indigo-500/20 rounded-lg text-indigo-400">
-                  <Sparkles size={18} />
+                <div className={`p-2 rounded-lg ${useOrchestrator ? 'bg-emerald-500/20 text-emerald-400' : 'bg-indigo-500/20 text-indigo-400'}`}>
+                  {useOrchestrator ? <Zap size={18} /> : <Sparkles size={18} />}
                 </div>
-                <h2 className="text-sm font-bold text-white tracking-tight">AI Architect Assistant</h2>
+                <div>
+                  <h2 className="text-sm font-bold text-white tracking-tight">AI Architect Assistant</h2>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${useOrchestrator ? 'bg-emerald-500' : 'bg-indigo-500'}`} />
+                    <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">
+                      {useOrchestrator ? 'n8n Orchestrator Active' : 'Gemini Engine Active'}
+                    </span>
+                  </div>
+                </div>
               </div>
               <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setUseOrchestrator(!useOrchestrator)} 
+                  className={`p-2 rounded-lg transition-colors ${useOrchestrator ? 'text-emerald-400 bg-emerald-500/10' : 'text-gray-400 hover:bg-[#222]'}`}
+                  title={useOrchestrator ? "Switch to Gemini" : "Switch to n8n Orchestrator"}
+                >
+                  <Globe size={16} />
+                </button>
                 <button onClick={() => setShowKeyInput(!showKeyInput)} className="p-2 hover:bg-[#222] rounded-lg text-gray-400" title="API Settings">
                   <Key size={16} />
                 </button>
-                <button onClick={() => setMessages([{ role: 'model', content: "Chat cleared. How can I help?" }])} className="p-2 hover:bg-[#222] rounded-lg text-gray-400" title="Clear Chat">
+                <button onClick={() => setMessages([{ role: 'model', content: "Chat cleared." }])} className="p-2 hover:bg-[#222] rounded-lg text-gray-400" title="Clear Chat">
                   <Trash2 size={16} />
                 </button>
               </div>
@@ -110,7 +132,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
             {/* API Key Input */}
             {showKeyInput && (
               <div className="p-4 bg-amber-500/5 border-b border-amber-500/20">
-                <label className="text-[10px] font-bold text-amber-500/70 uppercase px-1 mb-1 block">Gemini API Key Required</label>
+                <label className="text-[10px] font-bold text-amber-500/70 uppercase px-1 mb-1 block">Gemini API Key</label>
                 <div className="flex gap-2">
                   <input
                     type="password"
@@ -123,16 +145,15 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                     Save
                   </button>
                 </div>
-                <p className="text-[9px] text-gray-500 mt-2 px-1">Keys are stored locally in your browser. Get one at aistudio.google.com</p>
               </div>
             )}
 
             {/* Chat Area */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
               {messages.map((m, i) => (
                 <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed ${m.role === 'user'
-                      ? 'bg-indigo-600 text-white rounded-tr-none'
+                      ? 'bg-indigo-600 text-white rounded-tr-none shadow-lg'
                       : 'bg-[#1a1a1a] border border-[#333] text-gray-200 rounded-tl-none'
                     }`}>
                     <div className="flex items-center gap-2 mb-1 opacity-50">
@@ -161,18 +182,20 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                  placeholder="Ask me to design something..."
-                  className="w-full bg-[#161616] border border-[#333] rounded-xl pl-4 pr-12 py-3 text-xs text-white placeholder:text-gray-600 focus:border-indigo-500/50 outline-none resize-none h-20"
+                  placeholder={useOrchestrator ? "Tell the Orchestrator what to model..." : "Ask me to design something..."}
+                  className={`w-full bg-[#161616] border border-[#333] rounded-xl pl-4 pr-12 py-3 text-xs text-white placeholder:text-gray-600 outline-none resize-none h-20 transition-all ${useOrchestrator ? 'focus:border-emerald-500/50' : 'focus:border-indigo-500/50'}`}
                 />
                 <button
                   onClick={handleSend}
-                  disabled={!input.trim() || isLoading || !apiKey}
-                  className="absolute right-2 bottom-2 p-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-lg transition-all"
+                  disabled={!input.trim() || isLoading}
+                  className={`absolute right-2 bottom-2 p-2 rounded-lg transition-all ${useOrchestrator ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-indigo-600 hover:bg-indigo-500'} disabled:bg-gray-800 disabled:text-gray-600 text-white shadow-lg`}
                 >
                   <Send size={16} />
                 </button>
               </div>
-              <p className="text-[9px] text-center text-gray-600 mt-2">The AI Architect can create states, variables, and transitions based on your requirements.</p>
+              <p className="text-[9px] text-center text-gray-600 mt-2">
+                {useOrchestrator ? 'Connected to n8n Orchestrator for automated modeling.' : 'Using Gemini for architectural guidance.'}
+              </p>
             </div>
           </>
         )}
