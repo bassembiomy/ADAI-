@@ -5757,7 +5757,24 @@ const ADIA = () => {
       }
     }
 
-    // Web Fallback: Trigger multiple downloads
+    // Web Fallback: Try File System Access API for one-window directory save
+    if (!((window as any).require) && 'showDirectoryPicker' in window) {
+      try {
+        const dirHandle = await (window as any).showDirectoryPicker();
+        for (const [filename, data] of Object.entries(projectFiles)) {
+          const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+          const writable = await fileHandle.createWritable();
+          await writable.write(JSON.stringify(data, null, 2));
+          await writable.close();
+        }
+        addError('info', 'Unified Project saved successfully to selected directory');
+        return;
+      } catch (err) {
+        console.warn('Directory picker failed or canceled, falling back to multiple downloads:', err);
+      }
+    }
+
+    // Traditional Web Fallback: Trigger multiple downloads
     for (const [filename, data] of Object.entries(projectFiles)) {
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -8993,8 +9010,7 @@ const ADIA = () => {
   // KEYBOARD SHORTCUTS
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      // Prevent shortcuts when in sub-model workspace or global playground
-      if (xBridgesStateId || diagramMode === 'xbridges') return;
+      // Prevent shortcuts when typing in inputs
 
       const target = e.target as HTMLElement;
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
@@ -10443,6 +10459,7 @@ const ADIA = () => {
               setGlobalXBridgesEdges(edges);
             }
           }}
+          onSaveAll={handleExportProject}
         />
       </div>
     );

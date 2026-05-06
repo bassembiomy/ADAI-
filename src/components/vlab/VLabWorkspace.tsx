@@ -1816,7 +1816,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   onEdgesChange,
   onResult,
   onSendToDOE,
-  onBack
+  onBack,
+  onSaveAll
 }) => {
   const [nodes, setNodes, onLocalNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onLocalEdgesChange] = useEdgesState(initialEdges);
@@ -2233,8 +2234,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       // Save (Ctrl + S)
       if (e.ctrlKey && e.key === 's') {
         e.preventDefault();
-        console.log('V-Lab State Saved Locally');
-        // Trigger parent save if available
+        if (onSaveAll) onSaveAll();
+        else console.log('V-Lab State Saved Locally');
       }
 
       // Delete

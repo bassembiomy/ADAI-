@@ -8,4 +8,5 @@ export interface VLabWorkspaceProps {
   onResult: (result: any, nodes: Node[]) => void;
   onSendToDOE: (data: any) => void;
   onBack: () => void;
+  onSaveAll?: () => void;
 }
