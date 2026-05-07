@@ -164,26 +164,12 @@ const Resizer = ({ onMouseDown, orientation = 'vertical' }: { onMouseDown: (e: R
 
 const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
   const [isVisible, setIsVisible] = useState(true);
-  const hasPlayedVoice = useRef(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsVisible(false);
-      setTimeout(onComplete, 1200);
-    }, 6500);
-
-    if (!hasPlayedVoice.current) {
-      try {
-        const synth = window.speechSynthesis;
-        const utterance = new SpeechSynthesisUtterance("ADIA, go beyond.");
-        utterance.pitch = 0.9;
-        utterance.rate = 0.85;
-        synth.speak(utterance);
-        hasPlayedVoice.current = true;
-      } catch (e) {
-        console.error("Speech synthesis failed", e);
-      }
-    }
+      setTimeout(onComplete, 1500); // Slightly longer exit for cinematic feel
+    }, 7000); // 7 seconds total
 
     return () => clearTimeout(timer);
   }, [onComplete]);
@@ -192,23 +178,23 @@ const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
     <div className={`fixed inset-0 z-[9999] bg-[#0a0a0a] flex flex-col items-center justify-center transition-opacity duration-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
       {/* Dynamic Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(249,115,22,0.05),transparent_70%)]" />
-        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-orange-600/5 rounded-full blur-[120px] animate-pulse-slow" />
-        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-amber-600/5 rounded-full blur-[120px] animate-pulse-slow [animation-delay:2s]" />
+        {/* Pulsing Core Light */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-orange-600/10 rounded-full blur-[150px] animate-pulse-intense" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(249,115,22,0.1),transparent_70%)] animate-ambient-glow" />
         
-        {/* Data Stream Particles */}
-        <div className="absolute inset-0 opacity-20">
-          {[...Array(20)].map((_, i) => (
+        {/* Floating Atmospheric Particles */}
+        <div className="absolute inset-0 opacity-30">
+          {[...Array(30)].map((_, i) => (
             <div 
               key={i}
-              className="absolute bg-orange-400/30 rounded-full animate-float-particle"
+              className="absolute bg-orange-300/40 rounded-full animate-float-atmospheric"
               style={{
-                width: Math.random() * 3 + 1 + 'px',
-                height: Math.random() * 3 + 1 + 'px',
+                width: Math.random() * 2 + 1 + 'px',
+                height: Math.random() * 2 + 1 + 'px',
                 left: Math.random() * 100 + '%',
                 top: Math.random() * 100 + '%',
-                animationDuration: Math.random() * 10 + 10 + 's',
-                animationDelay: Math.random() * 5 + 's'
+                animationDuration: Math.random() * 15 + 15 + 's',
+                animationDelay: Math.random() * 10 + 's'
               }}
             />
           ))}
@@ -216,93 +202,23 @@ const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
       </div>
 
       <div className="relative flex flex-col items-center">
-        {/* Creative Neural Nexus Logo */}
-        <div className="relative mb-20 group">
-          {/* Outer Energy Rings */}
-          <div className="absolute inset-0 scale-[2.2] border border-orange-500/10 rounded-full animate-ping-slow" />
-          <div className="absolute inset-0 scale-[1.8] border border-amber-500/10 rounded-full animate-ping-slow [animation-delay:1s]" />
-          
-          {/* Lens Flare Effect */}
-          <div className="absolute -inset-20 bg-gradient-to-tr from-transparent via-orange-400/10 to-transparent rotate-45 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000 pointer-events-none" />
-
-          {/* Main Logo SVG */}
-          <div className="relative z-10 transform scale-[1.8] drop-shadow-[0_0_30px_rgba(249,115,22,0.4)]">
-            <svg width="140" height="140" viewBox="0 0 100 100" fill="none">
-              <defs>
-                <linearGradient id="nexusGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#f59e0b" />
-                  <stop offset="100%" stopColor="#ea580c" />
-                </linearGradient>
-                <filter id="glow">
-                  <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
-                  <feMerge>
-                    <feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/>
-                  </feMerge>
-                </filter>
-              </defs>
-
-              {/* Hexagonal Shield */}
-              <path 
-                d="M50 5 L89 27.5 V72.5 L50 95 L11 72.5 V27.5 Z" 
-                stroke="url(#nexusGradient)" 
-                strokeWidth="0.5" 
-                fill="rgba(37,99,235,0.03)"
-                className="animate-draw-path"
-              />
-
-              {/* Orbital Nodes */}
-              <g className="animate-spin-slow">
-                {[0, 60, 120, 180, 240, 300].map((angle, i) => (
-                  <circle 
-                    key={i}
-                    cx={50 + 38 * Math.cos(angle * Math.PI / 180)} 
-                    cy={50 + 38 * Math.sin(angle * Math.PI / 180)} 
-                    r="1.5" 
-                    fill="#f59e0b" 
-                    className="animate-pulse"
-                    style={{ animationDelay: `${i * 0.5}s` }}
-                  />
-                ))}
-              </g>
-
-              {/* Inner Logic Core */}
-              <rect 
-                x="35" y="35" width="30" height="30" rx="4" 
-                stroke="url(#nexusGradient)" 
-                strokeWidth="1.5" 
-                className="animate-glow-cycle"
-                filter="url(#glow)"
-              />
-              
-              {/* Neural Connections */}
-              <g className="opacity-60">
-                <path d="M50 35 V15 M50 65 V85 M35 50 H15 M65 50 H85" stroke="#f97316" strokeWidth="1" strokeDasharray="2 2" />
-                <path d="M40 40 L25 25 M60 40 L75 25 M40 60 L25 75 M60 60 L75 75" stroke="#f97316" strokeWidth="1" strokeDasharray="2 2" />
-              </g>
-
-              {/* Central Core Signal */}
-              <circle cx="50" cy="50" r="5" fill="#f97316" className="animate-ping-slow" />
-              <circle cx="50" cy="50" r="4" fill="url(#nexusGradient)" />
-            </svg>
-          </div>
-        </div>
 
         {/* Professional Text Reveal */}
         <div className="text-center relative">
-          <div className="flex gap-2 mb-8">
+          <div className="flex gap-4 mb-8">
             {['A', 'D', 'I', 'A'].map((char, i) => (
               <span
                 key={i}
-                className="text-8xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-orange-200 drop-shadow-[0_0_20px_rgba(249,115,22,0.5)] animate-reveal-letter"
+                className="text-9xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-orange-200 drop-shadow-[0_10px_30px_rgba(249,115,22,0.3)] animate-typewriter"
                 style={{ 
-                  animationDelay: `${i * 0.2 + 0.5}s`,
+                  animationDelay: `${i * 0.3 + 1}s`,
                   opacity: 0 
                 }}
               >
                 {char}
               </span>
             ))}
-            <span className="text-8xl font-black text-orange-500 animate-cursor-fade ml-1">|</span>
+            <span className="text-9xl font-black text-orange-500 animate-blink ml-2">_</span>
           </div>
 
           <div className="h-12 relative overflow-hidden flex items-center justify-center mt-2 group">
@@ -323,78 +239,71 @@ const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
           </div>
         </div>
       </div>
-
       <style>{`
-        @keyframes draw-path {
-          0% { stroke-dasharray: 0 400; stroke-dashoffset: 0; opacity: 0; }
-          100% { stroke-dasharray: 400 0; stroke-dashoffset: 0; opacity: 1; }
+        @keyframes typewriter {
+          0% { transform: translateY(10px) scale(0.9); opacity: 0; filter: blur(10px); }
+          100% { transform: translateY(0) scale(1); opacity: 1; filter: blur(0); }
         }
-        @keyframes reveal-letter {
-          0% { transform: scale(0.8); opacity: 0; filter: brightness(0); }
-          50% { opacity: 0.5; filter: brightness(2); }
-          100% { transform: scale(1); opacity: 1; filter: brightness(1); }
+        .animate-typewriter {
+          animation: typewriter 0.8s cubic-bezier(0.19, 1, 0.22, 1) forwards;
         }
-        .animate-reveal-letter {
-          animation: reveal-letter 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-          display: inline-block;
+        @keyframes pulse-intense {
+          0%, 100% { opacity: 0.05; transform: translate(-50%, -50%) scale(1); }
+          50% { opacity: 0.2; transform: translate(-50%, -50%) scale(1.2); }
+        }
+        .animate-pulse-intense {
+          animation: pulse-intense 4s ease-in-out infinite;
+        }
+        @keyframes ambient-glow {
+          0%, 100% { opacity: 0.4; }
+          50% { opacity: 0.8; }
+        }
+        .animate-ambient-glow {
+          animation: ambient-glow 6s ease-in-out infinite;
+        }
+        @keyframes float-atmospheric {
+          0%, 100% { transform: translateY(0) translateX(0); opacity: 0.2; }
+          50% { transform: translateY(-100px) translateX(20px); opacity: 0.5; }
+        }
+        .animate-float-atmospheric {
+          animation: float-atmospheric linear infinite;
         }
         @keyframes technical-reveal {
-          0% { transform: translateY(10px); opacity: 0; letter-spacing: -0.5em; clip-path: inset(0 100% 0 0); }
-          50% { opacity: 0.5; }
-          100% { transform: translateY(0); opacity: 1; letter-spacing: 0.6em; clip-path: inset(0 0 0 0); }
+          0% { transform: translateY(20px); opacity: 0; letter-spacing: -0.2em; filter: blur(5px); }
+          100% { transform: translateY(0); opacity: 1; letter-spacing: 1.2em; filter: blur(0); }
         }
         .animate-technical-reveal {
-          animation: technical-reveal 1.5s cubic-bezier(0.19, 1, 0.22, 1) forwards;
-          animation-delay: 1.8s;
-        }
-        @keyframes cursor-fade {
-          0%, 80% { opacity: 1; }
-          100% { opacity: 0; }
-        }
-        .animate-cursor-fade {
-          animation: blink 0.8s infinite, cursor-fade 0.5s forwards;
-          animation-delay: 0s, 1.8s;
+          animation: technical-reveal 3s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+          animation-delay: 2.5s;
         }
         @keyframes blink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
         }
-        @keyframes glow-cycle {
-          0%, 100% { filter: drop-shadow(0 0 5px #f97316); stroke-opacity: 0.8; }
-          50% { filter: drop-shadow(0 0 25px #f59e0b); stroke-opacity: 1; }
+        .animate-blink {
+          animation: blink 0.8s infinite;
         }
         @keyframes shimmer {
           0% { transform: translateX(-100%); }
           100% { transform: translateX(100%); }
         }
         @keyframes loading-slide {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
+          0% { transform: translateX(-100%); opacity: 0; }
+          20% { opacity: 1; }
+          80% { opacity: 1; }
+          100% { transform: translateX(100%); opacity: 0; }
         }
         @keyframes ping-slow {
           0% { transform: scale(1); opacity: 0.5; }
           100% { transform: scale(2.5); opacity: 0; }
         }
-        @keyframes pulse-slow {
-          0%, 100% { opacity: 0.05; transform: scale(1); }
-          50% { opacity: 0.15; transform: scale(1.1); }
-        }
         @keyframes spin-slow {
           100% { transform: rotate(360deg); }
         }
-        @keyframes float-particle {
-          0%, 100% { transform: translateY(0) translateX(0); }
-          50% { transform: translateY(-100px) translateX(20px); }
-        }
-        .animate-draw-path { animation: draw-path 4s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
-        .animate-reveal-letter { animation: reveal-letter 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; opacity: 0; perspective: 1000px; }
-        .animate-fade-in-up { animation: fade-in-up 2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; animation-delay: 2.2s; }
-        .animate-glow-cycle { animation: glow-cycle 3s ease-in-out infinite; }
         .animate-shimmer { animation: shimmer 3s linear infinite; }
-        .animate-loading-slide { animation: loading-slide 3s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
-        .animate-ping-slow { animation: ping-slow 4s cubic-bezier(0, 0, 0.2, 1) infinite; }
-        .animate-pulse-slow { animation: pulse-slow 6s ease-in-out infinite; }
-        .animate-spin-slow { animation: spin-slow 20s linear infinite; transform-origin: 50px 50px; }
+        .animate-loading-slide { animation: loading-slide 4s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+        .animate-ping-slow { animation: ping-slow 5s cubic-bezier(0, 0, 0.2, 1) infinite; }
+        .animate-spin-slow { animation: spin-slow 25s linear infinite; transform-origin: center; }
       `}</style>
     </div>
   );
