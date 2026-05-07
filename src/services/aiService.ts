@@ -24,10 +24,12 @@ You can return structured commands in your response to modify the project. Use t
 }
 `;
 
-const N8N_WEBHOOK_URL = "https://bebo007.app.n8n.cloud/webhook-test/adia-ai-orchestrator";
+const N8N_WEBHOOK_URL = "https://bebo007.app.n8n.cloud/webhook/adia-ai-orchestrator";
 
-// New n8n Orchestrator function
-export async function getN8nAiResponse(prompt: string, context: any): Promise<string> {
+// New n8n Orchestrator function with automatic fallback and debugging
+export async function getN8nAiResponse(prompt: string, context: any, apiKey?: string, history?: any[]): Promise<string> {
+  console.log("AI Architect: Calling Orchestrator at", N8N_WEBHOOK_URL);
+  
   try {
     const response = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
@@ -43,7 +45,9 @@ export async function getN8nAiResponse(prompt: string, context: any): Promise<st
     });
 
     if (!response.ok) {
-      throw new Error(`n8n Webhook Error: ${response.status}`);
+      const errorText = await response.text();
+      console.error(`n8n Server Error (${response.status}):`, errorText);
+      throw new Error(`Orchestrator returned error ${response.status}`);
     }
 
     const data = await response.json();
@@ -53,8 +57,14 @@ export async function getN8nAiResponse(prompt: string, context: any): Promise<st
     if (data.response) return data.response;
     return JSON.stringify(data);
   } catch (err: any) {
-    console.error("n8n Workflow Error:", err);
-    throw new Error(`Failed to reach AI Orchestrator: ${err.message}`);
+    console.warn("n8n Orchestrator unreachable, falling back to local Gemini:", err.message);
+    
+    // If we have an API key and history, try the local Gemini fallback
+    if (apiKey && history) {
+      return getAiResponse(apiKey, history, context);
+    }
+    
+    throw new Error(`AI Orchestrator Error: ${err.message}. (Check if your n8n workflow is Active and 'Allowed Origins' is set to *)`);
   }
 }
 

@@ -768,6 +768,15 @@ const SymbolRenderer = ({ type, color }: { type: string, color: string }) => {
           <path d="M30 15V45" strokeWidth="1" strokeDasharray="2 2" />
         </svg>
       );
+    case 'doe_custom':
+      return (
+        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color || '#c9a86c'} strokeWidth="2">
+          <rect x="10" y="10" width="40" height="40" rx="8" fill={color || '#c9a86c'} fillOpacity="0.1" />
+          <path d="M20 20L40 40M40 20L20 40" strokeOpacity="0.2" />
+          <circle cx="30" cy="30" r="12" strokeDasharray="4 2" />
+          <text x="30" y="34" textAnchor="middle" fill={color || '#c9a86c'} fontSize="8" fontWeight="black" stroke="none">DOE</text>
+        </svg>
+      );
     case 'ma_flow_src':
     case 'ma_pres_src':
     case 'ma_pressure_source':
@@ -1456,30 +1465,80 @@ const SymbolRenderer = ({ type, color }: { type: string, color: string }) => {
         </svg>
       );
     case 'doe_custom':
+    case 'DOE_MODEL':
+    case 'Statistical':
       return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="10" y="10" width="40" height="40" rx="4" />
-          <path d="M20 20L40 40M20 40L40 20" strokeWidth="1" opacity="0.3" />
-          <text x="30" y="35" textAnchor="middle" fill={color} fontSize="10" fontWeight="bold">DOE</text>
+        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color || '#c9a86c'} strokeWidth="2">
+          <rect x="10" y="10" width="40" height="40" rx="8" fill={color || '#c9a86c'} fillOpacity="0.1" />
+          <path d="M20 20L40 40M40 20L20 40" strokeOpacity="0.2" />
+          <circle cx="30" cy="30" r="12" strokeDasharray="4 2" />
+          <text x="30" y="34" textAnchor="middle" fill={color || '#c9a86c'} fontSize="10" fontWeight="black" stroke="none">DOE</text>
         </svg>
       );
     default:
+      if (type && type.toLowerCase().includes('doe')) {
+        return (
+          <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color || '#c9a86c'} strokeWidth="2">
+            <rect x="10" y="10" width="40" height="40" rx="8" fill={color || '#c9a86c'} fillOpacity="0.1" />
+            <text x="30" y="34" textAnchor="middle" fill={color || '#c9a86c'} fontSize="10" fontWeight="black" stroke="none">DOE</text>
+          </svg>
+        );
+      }
       return (
-        <div className="text-xl font-bold" style={{ color }}>{(type || 'UNK').substring(0, 3).toUpperCase()}</div>
+        <div className="text-xl font-bold p-4 rounded bg-white/5 border border-white/10" style={{ color: color || '#888' }}>
+          {(type || 'UNK').substring(0, 3).toUpperCase()}
+        </div>
       );
   }
 };
 
-const VLabNode = ({ data, selected }: { data: any, selected: boolean }) => {
+class NodeErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("VLab Node Error:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-4 border-2 border-red-500 bg-red-900/20 text-red-400 rounded-xl flex flex-col items-center justify-center text-center">
+          <Activity size={24} className="mb-2 opacity-50" />
+          <span className="text-[10px] font-black uppercase tracking-tighter">Rendering Failure</span>
+          <span className="text-[8px] opacity-70">Check console for details</span>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boolean }) => {
+  console.log(`VLab Node [${id}]:`, data);
+  
+  // Robust port gathering (supports ports array or separate inputs/outputs)
+  const rawPorts = data.ports || [
+    ...(data.inputs || []).map((p: any) => ({ ...p, pos: p.pos || p.position || 'left' })),
+    ...(data.outputs || []).map((p: any) => ({ ...p, pos: p.pos || p.position || 'right' }))
+  ];
+
   // Group ports by side to calculate offsets
-  const portsBySide = (data.ports || []).reduce((acc: any, port: any) => {
-    if (!acc[port.pos]) acc[port.pos] = [];
-    acc[port.pos].push(port);
+  const portsBySide = rawPorts.reduce((acc: any, port: any) => {
+    if (!port) return acc;
+    const side = port.pos || port.position || 'left';
+    if (!acc[side]) acc[side] = [];
+    acc[side].push(port);
     return acc;
   }, {});
 
   return (
     <div className={`relative group flex flex-col items-center transition-all ${selected ? 'z-50' : 'z-10'}`}>
+      {/* Component Name */}
+      <span className="text-[9px] font-black text-white/40 mb-1 pointer-events-none uppercase tracking-widest text-center max-w-[100px] truncate">
+        {data.label}
+      </span>
       {/* Component Symbol Container */}
       <div
         className={`relative flex items-center justify-center transition-all duration-300 ${selected
@@ -1507,26 +1566,26 @@ const VLabNode = ({ data, selected }: { data: any, selected: boolean }) => {
                   transform: 'translate(-50%, -50%)'
                 }}
               >
-                {/* Acausal "Trick": Overlay Source and Target for any-to-any connection */}
+                {/* Unique Handle IDs to prevent connection ambiguity */}
                 <Handle
                   type="target"
                   position={position}
-                  id={`${port.id}_t`}
-                  className="!w-2 !h-2 !bg-blue-400/80 !border !border-white/20 hover:!bg-blue-300 hover:!scale-125 transition-all"
+                  id={`${id}-${port.id}_t`}
+                  className="!w-3 !h-3 !bg-blue-400 !border-2 !border-white/40 hover:!bg-blue-300 hover:!scale-125 transition-all shadow-lg"
                 />
                 <Handle
                   type="source"
                   position={position}
-                  id={`${port.id}_s`}
-                  className="!w-2 !h-2 !bg-transparent !border-none" // Invisible source handle
+                  id={`${id}-${port.id}_s`}
+                  className="!w-3 !h-3 !bg-transparent !border-none" // Invisible source handle
                 />
 
                 {/* Port Label */}
                 <div
-                  className="absolute text-[8px] font-black text-blue-500/50 select-none pointer-events-none uppercase"
+                  className="absolute text-[8px] font-black text-blue-400/80 select-none pointer-events-none uppercase whitespace-nowrap"
                   style={{
-                    top: side === 'top' ? -15 : side === 'bottom' ? 15 : 0,
-                    left: side === 'left' ? -15 : side === 'right' ? 15 : 0,
+                    top: side === 'top' ? -18 : side === 'bottom' ? 18 : 0,
+                    left: side === 'left' ? -20 : side === 'right' ? 20 : 0,
                     transform: (side === 'left' || side === 'right') ? 'translateY(-50%)' : 'translateX(-50%)'
                   }}
                 >
@@ -1552,7 +1611,8 @@ const VLabNode = ({ data, selected }: { data: any, selected: boolean }) => {
 };
 
 const nodeTypes = {
-  default: VLabNode,
+  default: (props: any) => <NodeErrorBoundary><VLabNode {...props} /></NodeErrorBoundary>,
+  doe_custom: (props: any) => <NodeErrorBoundary><VLabNode {...props} /></NodeErrorBoundary>,
 };
 
 const getSignalColor = (index: number) => {
@@ -1830,6 +1890,15 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 }) => {
   const [nodes, setNodes, onLocalNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onLocalEdgesChange] = useEdgesState(initialEdges);
+
+  // Sync with props
+  useEffect(() => {
+    setNodes(initialNodes);
+  }, [initialNodes, setNodes]);
+
+  useEffect(() => {
+    setEdges(initialEdges);
+  }, [initialEdges, setEdges]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [clipboard, setClipboard] = useState<any[]>([]);
@@ -2262,6 +2331,32 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         v += (F / m) * dt;
         x += v * dt;
         return x;
+      };
+    }
+
+    // ── Detect DOE Custom Block (Regression/Neural) ────────────────────────
+    const doeNode = nodes.find(n => (n.data as any).type === 'doe_custom');
+    if (doeNode) {
+      const equation = (doeNode.data as any).params?.equation?.value;
+      const inputs = (doeNode.data as any).ports?.filter((p: any) => p.type === 'input') || [];
+      
+      return (t: number, _dt: number) => {
+        try {
+          const scope: any = {};
+          // For V-Lab simplified simulation, we assume input signals are constant or sine
+          inputs.forEach((p: any, i: number) => {
+             // In a real V-Lab simulation, we would trace the connections to get values.
+             // Here we simulate a dynamic input for visualization.
+             scope[p.label] = 10 * Math.sin(t + i); 
+          });
+          
+          if (equation) {
+            return math.evaluate(equation, scope);
+          }
+        } catch (e) {
+          return 0;
+        }
+        return 0;
       };
     }
 
@@ -3028,14 +3123,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                     {Object.entries((selectedNode.data as any).params || {}).map(([key, param]: [string, any]) => (
                       <div key={key}>
                         <div className="flex justify-between items-center mb-1">
-                          <label className="text-[10px] text-gray-400 font-bold uppercase">{param.label}</label>
-                          <span className="text-[10px] text-gray-600">{param.unit}</span>
+                          <label className="text-[10px] text-gray-400 font-bold uppercase">{param.label || key}</label>
+                          <span className="text-[10px] text-gray-600">{param.unit || ''}</span>
                         </div>
                         <input
-                          type={typeof param.value === 'number' ? "number" : "text"}
-                          value={param.value}
+                          type={typeof (param.value ?? 0) === 'number' ? "number" : "text"}
+                          value={param.value ?? ''}
                           onChange={(e) => {
-                            const val = typeof param.value === 'number' ? parseFloat(e.target.value) : e.target.value;
+                            const val = typeof (param.value ?? 0) === 'number' ? parseFloat(e.target.value) : e.target.value;
                             updateParameter(key, val);
                           }}
                           className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none"
@@ -3102,11 +3197,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   {selectedBlockDef ? (
                     <div className="space-y-4">
                       <div className="bg-[#141414] p-4 rounded-xl border border-[#222] flex flex-col items-center justify-center min-h-[100px] text-center">
-                        {selectedBlockDef.latex.map((eq, i) => (
+                        {(selectedBlockDef.latex || []).map((eq, i) => (
                           <div key={i} className="text-sm font-serif italic text-purple-300 mb-2 last:mb-0">
                             {eq}
                           </div>
                         ))}
+                        {(!selectedBlockDef.latex || selectedBlockDef.latex.length === 0) && (
+                          <span className="text-[10px] text-gray-600 italic">No latex available</span>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">

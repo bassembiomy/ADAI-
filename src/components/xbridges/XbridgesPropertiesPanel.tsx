@@ -60,7 +60,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
   };
 
   const updatePortName = (portId: string, newName: string, isInput: boolean) => {
-    const list = isInput ? block.inputs : block.outputs;
+    const list = (isInput ? block.inputs : block.outputs) || [];
     const updated = list.map(p => p.id === portId ? { ...p, name: newName } : p);
     onUpdate(block.id, isInput ? { inputs: updated } : { outputs: updated });
   };
@@ -357,7 +357,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                     className="flex-1 text-xs px-2 py-1 border border-[#333] bg-[#141414] text-white rounded focus:border-[#c9a86c] outline-none"
                     placeholder="Port Label"
                   />
-                  {block.allowDynamicInputs && block.inputs.length > 2 && (
+                  {block.allowDynamicInputs && (block.inputs || []).length > 2 && (
                     <button onClick={() => handleRemoveInput(port.id)} className="text-gray-500 hover:text-red-500 p-1 transition-colors">
                       <Trash2 size={12} />
                     </button>
@@ -365,7 +365,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                 </div>
               </div>
             ))}
-            {block.inputs.length === 0 && <p className="text-xs text-gray-600 italic px-2">No inputs</p>}
+            {(block.inputs || []).length === 0 && <p className="text-xs text-gray-600 italic px-2">No inputs</p>}
           </div>
 
           <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-4">Output Ports</h3>
@@ -394,7 +394,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                 </div>
               </div>
             ))}
-            {block.outputs.length === 0 && <p className="text-xs text-gray-600 italic px-2">No outputs</p>}
+            {(block.outputs || []).length === 0 && <p className="text-xs text-gray-600 italic px-2">No outputs</p>}
           </div>
         </section>
 

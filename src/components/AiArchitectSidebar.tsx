@@ -51,7 +51,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
     try {
       let responseText: string;
       if (useOrchestrator) {
-        responseText = await getN8nAiResponse(input, currentContext);
+        responseText = await getN8nAiResponse(input, currentContext, apiKey, newMessages);
       } else {
         responseText = await getAiResponse(apiKey, newMessages, currentContext);
       }

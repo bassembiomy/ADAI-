@@ -2591,23 +2591,7 @@ const tCritical = (alpha: number, df: number): number => {
   return t;
 };
 
-const solveLeastSquares = (X: number[][], Y: number[]): number[] => {
-  try {
-    const XMat = math.matrix(X);
-    const YMat = math.matrix(Y.map(y => [y]));
-    const Xt = math.transpose(XMat);
-    const XtX = math.multiply(Xt, XMat);
-    const XtX_reg = (XtX as any).toArray().map((row: any, i: number) =>
-      row.map((val: number, j: number) => val + (i === j ? 1e-10 : 0))
-    );
-    const XtX_inv = math.inv(math.matrix(XtX_reg));
-    const XtY = math.multiply(Xt, YMat);
-    return (math.multiply(XtX_inv, XtY) as any).toArray().map((r: any) => r[0]);
-  } catch (err) {
-    console.error("Least Squares Error:", err);
-    return new Array(X[0].length).fill(0);
-  }
-};
+
 
 const predictRSM = (Beta: number[], factorValues: number[], k: number): number => {
   let y = Beta[0];
@@ -5338,20 +5322,39 @@ const ADIA = () => {
       addError('warning', 'Please calculate a model first.');
       return;
     }
-    const exportBlock = block || {
+    // Prevent React events from being treated as block data
+    const actualBlock = (block && block.nativeEvent) ? null : block;
+    
+    const exportBlock = actualBlock || {
       name: `${activeModel} Model`,
       type: 'doe_custom',
-      params: { equation: { value: results.equation || '' } },
-      ports: headers.slice(0, -1).map((h, i) => ({ id: `in${i + 1}`, label: h, type: 'input' }))
+      color: '#c9a86c', // Explicit gold color for DOE
+      params: { 
+        equation: { label: 'Model Equation', value: results.equation || '', unit: '' },
+        modelType: { label: 'Algorithm', value: activeModel, unit: '' }
+      },
+      ports: [
+        ...headers.slice(0, -1).map((h, i) => ({ 
+          id: `in${i + 1}`, label: h, type: 'input', pos: 'left', position: 'left', domain: 'General' 
+        })),
+        { id: 'out', label: headers[headers.length - 1], type: 'output', pos: 'right', position: 'right', domain: 'General' }
+      ]
     };
     
     const newNodeId = `doe_vlab_${Date.now()}`;
     const newNode = {
       id: newNodeId,
-      type: 'default',
+      type: 'doe_custom', 
       position: { x: 400, y: 300 },
-      data: { ...exportBlock, id: newNodeId }
+      data: { 
+        ...exportBlock, 
+        id: newNodeId, 
+        label: exportBlock.name,
+        type: 'doe_custom', 
+        ports: exportBlock.ports 
+      }
     };
+    console.log('[DOE EXPORT DEBUG] Exporting to VLab:', newNode); // Log object directly, no stringify
     setVlabNodes(prev => [...prev, newNode]);
     setDiagramMode('vlab');
     toggleWindow('doe');
@@ -5363,22 +5366,50 @@ const ADIA = () => {
       addError('warning', 'Please calculate a model first.');
       return;
     }
+    const newNodeId = `doe_xb_${Date.now()}`;
     const blockData = {
       name: `${activeModel} Model`,
+      label: `${activeModel} Model`,
       type: 'DOE_MODEL',
       equation: results.equation || '',
       modelType: activeModel,
       inputNames: headers.slice(0, -1),
       outputName: headers[headers.length - 1],
-      params: { equation: { value: results.equation || '' } }
+      params: { 
+        equation: { label: 'Equation', value: results.equation || '' },
+        inputNames: { label: 'Inputs', value: headers.slice(0, -1) },
+        outputName: { label: 'Output', value: headers[headers.length - 1] },
+        modelType: { label: 'Model', value: activeModel }
+      },
+      inputs: headers.slice(0, -1).map((h, i) => ({ 
+        id: `in${i + 1}`, name: h, type: 'auto', direction: 'input', position: 'left', value: 0 
+      })),
+      outputs: [{ 
+        id: 'out', name: headers[headers.length - 1], type: 'auto', direction: 'output', position: 'right', value: 0 
+      }],
+      // Inject execution logic for simulation
+      execute: (inputs: any[], params: any) => {
+        try {
+          const scope: any = {};
+          const inputNames = params.inputNames.value;
+          inputNames.forEach((name: string, i: number) => {
+            scope[name] = inputs[i] || 0;
+          });
+          // Evaluate using mathjs (available globally as math)
+          const result = math.evaluate(params.equation.value, scope);
+          return { outputs: [result] };
+        } catch (e) {
+          console.error('DOE Model execution error:', e);
+          return { outputs: [0] };
+        }
+      }
     };
     
-    const newNodeId = `doe_xb_${Date.now()}`;
     const newNode = {
       id: newNodeId,
       type: 'xblock',
       position: { x: 400, y: 300 },
-      data: { ...blockData, id: newNodeId }
+      data: { ...blockData, id: newNodeId, selected: false }
     };
     setGlobalXBridgesNodes(prev => [...prev, newNode]);
     setDiagramMode('xbridges');
