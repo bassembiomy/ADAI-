@@ -2501,8 +2501,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       const sourceData = sourceNode.data as any;
       const targetData = targetNode.data as any;
 
-      const sPortId = edge.sourceHandle?.replace(/_[st]$/, '');
-      const tPortId = edge.targetHandle?.replace(/_[st]$/, '');
+      const sPortId = edge.sourceHandle?.split('-').pop()?.replace(/_[st]$/, '');
+      const tPortId = edge.targetHandle?.split('-').pop()?.replace(/_[st]$/, '');
       
       const sourcePort = sourceData.ports?.find((p: any) => p.id === sPortId);
       const targetPort = targetData.ports?.find((p: any) => p.id === tPortId);
@@ -2615,8 +2615,17 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       return;
     }
 
-    setNodes(reconstructLabNodes(lab.nodes as any));
-    setEdges(lab.edges as any);
+    const reconstructedNodes = reconstructLabNodes(lab.nodes as any);
+    const reconstructedEdges = lab.edges.map(edge => ({
+      ...edge,
+      sourceHandle: `${edge.source}-${edge.sourceHandle}`,
+      targetHandle: `${edge.target}-${edge.targetHandle}`,
+      animated: true,
+      style: { stroke: '#6c9ac6', strokeWidth: 2 }
+    }));
+
+    setNodes(reconstructedNodes);
+    setEdges(reconstructedEdges as any);
 
     if (reactFlowInstance) {
       setTimeout(() => reactFlowInstance.fitView(), 100);
