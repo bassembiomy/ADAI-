@@ -2,6 +2,15 @@
 
 export const XBRIDGES_CATEGORIES = [
   {
+    name: 'Learning Models',
+    blocks: [
+      { type: 'AC_MOTOR_PID_CONTROL', label: 'AC Motor PID Control', icon: 'graduation-cap' },
+      { type: 'LMS_ADAPTIVE_FILTER', label: 'LMS Adaptive Filter', icon: 'graduation-cap' },
+      { type: 'NEURAL_NEURON_LEARNING', label: 'Neural Neuron Learner', icon: 'graduation-cap' },
+      { type: 'RL_Q_LEARNING_CONTROLLER', label: 'RL Q-Learning Agent', icon: 'graduation-cap' }
+    ]
+  },
+  {
     name: 'Sources',
     blocks: [
       { type: 'Constant', label: 'Constant', icon: 'square' },

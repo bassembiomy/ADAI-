@@ -136,9 +136,9 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
       'Vs = Valpha + j * Vbeta',
       'Vs = Rs*Is + d(Psi_s)/dt',
       '0 = Rr*Ir + d(Psi_r)/dt - j*w_slip*Psi_r',
-      'Te = 1.5 * P * Im(Psi_s * conj(Is))'
+      'Te = 1.5 * P * Im(conj(Psi_s) * Is)'
     ],
-    latex: ['\\vec{v}_s = R_s \\vec{i}_s + \\frac{d\\vec{\\psi}_s}{dt}', '0 = R_r \\vec{i}_r + \\frac{d\\vec{\\psi}_r}{dt} - j \\omega_{slip} \\vec{\\psi}_r'],
+    latex: ['\\vec{v}_s = R_s \\vec{i}_s + \\frac{d\\vec{\\psi}_s}{dt}', 'T_e = \\frac{3}{2} p \\, \\text{Im}(\\psi_s^* \\vec{i}_s)'],
     across: 'Voltage, Ang. Vel', through: 'Current, Torque',
     description: 'Models a 3-phase Squirrel Cage Induction Motor in the stationary reference frame using complex space vectors. Internally performs Clarke transformation from A-B-C inputs.'
   },
@@ -242,10 +242,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Models a gas-tight seal or cap. Prevents mass flow through the terminal.'
   },
   gas_chamber: {
-    equations: ['dm/dt = (V/R*T) * dP/dt'],
+    equations: ['dm/dt = (V / (R*T)) * dP/dt'],
     latex: ['\dot{m} = \frac{V}{RT} \frac{dP}{dt}'],
     across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
-    description: 'Models a fixed-volume gas container. It accumulates mass based on pressure and temperature changes.'
+    description: 'Models a fixed-volume gas container. It accumulates mass based on pressure changes under isothermal conditions.'
   },
   gas_reservoir: {
     equations: ['P = S'],
@@ -278,16 +278,16 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A constant pressure source representing a large tank or regulated gas supply.'
   },
   gas_rotational_conv: {
-    equations: ['mdot = (D/R*T) * omega', 'T_torque = D * (Pa - Ph)'],
-    latex: ['\dot{m} = \frac{D}{RT} \omega', '\tau = D \Delta P'],
+    equations: ['mdot = (Pa * D / (R * T)) * omega', 'T_torque = D * (Pa - Ph)'],
+    latex: ['\dot{m} = \frac{P D}{RT} \omega', '\tau = D \Delta P'],
     across: 'P, rad/s', through: 'mdot, N-m',
-    description: 'Bridges Gas and Rotational domains. Models pneumatic motors or compressors.'
+    description: 'Bridges Gas and Rotational domains. Models pneumatic motors or compressors where mass flow is proportional to pressure and angular velocity.'
   },
   gas_translational_conv: {
-    equations: ['mdot = (A/R*T) * v', 'F_force = A * (Pa - Ph)'],
-    latex: ['\dot{m} = \frac{A}{RT} v', 'f = A \Delta P'],
+    equations: ['mdot = (Pa * A / (R * T)) * v', 'F_force = A * (Pa - Ph)'],
+    latex: ['\dot{m} = \frac{P A}{RT} v', 'f = A \Delta P'],
     across: 'P, m/s', through: 'mdot, N',
-    description: 'Bridges Gas and Translational domains. Models pneumatic cylinders and actuators.'
+    description: 'Bridges Gas and Translational domains. Models pneumatic cylinders where mass flow is proportional to pressure and linear velocity.'
   },
   gas_flow_source: {
     equations: ['mdot = S_m'],
@@ -338,10 +338,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Bridges Electrical and Magnetic domains. Models a coil with N turns.'
   },
   reluctance_force: {
-    equations: ['F = 0.5 * phi^2 * dR/dx'],
-    latex: ['f = \\frac{1}{2} \\phi^2 \\frac{d\\mathcal{R}}{dx}'],
+    equations: ['F = -0.5 * phi^2 * dR/dx'],
+    latex: ['f = -\\frac{1}{2} \\phi^2 \\frac{d\\mathcal{R}}{dx}'],
     across: 'A-t, m/s', through: 'Wb, N',
-    description: 'Bridges Magnetic and Translational domains. Models the attraction force in solenoids or relays.'
+    description: 'Bridges Magnetic and Translational domains. Models the attraction force in solenoids or relays. Force is directed to minimize reluctance.'
   },
   mag_flux_sensor: {
     equations: ['phi_out = phi'],
@@ -710,7 +710,7 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'A generalized integrator with reset capability. Computes the accumulation of a signal over time.'
   },
   ps_moving_avg: {
-    equations: ['y(k) = sum(u(k-N:k)) / N'],
+    equations: ['y(k) = sum(u(k-N+1:k)) / N'],
     latex: ['y = \\frac{1}{N} \\sum_{i=0}^{N-1} u_{k-i}'],
     across: 'None', through: 'None',
     description: 'Computes the arithmetic mean of the input signal over a sliding window of N samples.'
@@ -764,10 +764,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Generates a periodic stair-step signal defined by a vector of values.'
   },
   ps_washout: {
-    equations: ['Y(s) = (Ts / (Ts + 1)) * U(s)'],
-    latex: ['G(s) = \\frac{Ts}{Ts + 1}'],
+    equations: ['Y(s) = (T*s / (T*s + 1)) * U(s)'],
+    latex: ['G(s) = \\frac{T s}{T s + 1}'],
     across: 'None', through: 'None',
-    description: 'A washout filter (high-pass) that removes the steady-state component of a signal, allowing only transients to pass.'
+    description: 'A washout filter (high-pass) that removes the steady-state component of a signal, allowing only transients to pass. T is the time constant.'
   },
   dc_current_ctrl: {
     equations: ['V_err = I_ref - I', 'vRef = PI(V_err)', 'vRef = clip(vRef, -vMax, vMax)'],
@@ -848,10 +848,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Synthesizes three-phase $abc$ signals from their positive, negative, and zero sequence components.'
   },
   im_flux_observer: {
-    equations: ['d(phi_r)/dt = -(1/Tr)*phi_r + (Lm/Tr)*is', 'theta = atan2(phi_beta, phi_alpha)'],
-    latex: ['\dot{\hat{\Psi}}_r = -\frac{1}{T_r} \hat{\Psi}_r + \frac{L_m}{T_r} \mathbf{i}_s'],
+    equations: ['d(phi_r)/dt = -(1/Tr - j*w_r)*phi_r + (Lm/Tr)*is', 'theta = atan2(phi_beta, phi_alpha)'],
+    latex: ['\dot{\hat{\Psi}}_r = -(\frac{1}{T_r} - j\omega_r) \hat{\Psi}_r + \frac{L_m}{T_r} \mathbf{i}_s'],
     across: 'None', through: 'None',
-    description: 'Estimates the rotor flux magnitude and angle for an induction machine. Essential for sensorless FOC or flux-oriented regulation.'
+    description: 'Estimates the rotor flux magnitude and angle for an induction machine in the stationary frame. Essential for sensorless FOC or flux-oriented regulation.'
   },
   luenberger_observer: {
     equations: ['dx_hat/dt = A*x_hat + B*u + L*(y - C*x_hat)'],
@@ -1196,13 +1196,13 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     equations: ['Qh = -power_rating * (efficiency/100) * ((Vp - Vn)/4000)^2'],
     latex: ['Q = -P \eta (\frac{V}{4000})^2'],
     across: 'Voltage (V)', through: 'Heat Flow (W)',
-    description: 'Converts high-voltage electrical energy into microwave thermal power.'
+    description: 'Converts high-voltage electrical energy into microwave thermal power. Negative through-value at port indicates heat injection into the connected node.'
   },
   upper_heater: {
     equations: ['Qh = -((Vp - Vn)^2) / resistance'],
     latex: ['Q = -\frac{(V_p-V_n)^2}{R}'],
     across: 'Voltage (V)', through: 'Heat Flow (W)',
-    description: 'Model for a radiant/resistive heating element.'
+    description: 'Model for a radiant/resistive heating element. Injects thermal energy (negative through-flow) based on dissipated electrical power.'
   },
   steam_generator: {
     equations: ['Qs = -power'],
@@ -1223,8 +1223,8 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
       't = Th1',
       'dTh1/dt = (Qh1 + Qh2 + Qh3 - 0.05 * (Th1 - ambient_temp)) / (volume * 1.2)'
     ],
-    latex: ['T = T_{ambient} + \int \frac{\Sigma Q}{C} dt'],
+    latex: ['T = T_0 + \int \frac{\Sigma Q - Q_{loss}}{C} dt'],
     across: 'Temperature (K)', through: 'Heat Flow (W)',
-    description: 'Thermal mass model for the microwave cooking volume (25L).'
+    description: 'Thermal mass model for the microwave cooking volume (25L). Accounts for heat addition from multiple sources and convection losses to ambient.'
   }
 };

@@ -102,4 +102,40 @@ export class VectorUtils {
   static flatten(arr: XValue): number[] {
     return math.flatten(arr as any) as number[];
   }
+
+  static integrateState(state: any, deriv: any, factor: number): any {
+    if (typeof state === 'number') {
+      return state + (Number(deriv) || 0) * factor;
+    }
+    if (Array.isArray(state)) {
+      return state.map((val, idx) => {
+        const d = Array.isArray(deriv) ? deriv[idx] : deriv;
+        return val + (Number(d) || 0) * factor;
+      });
+    }
+    if (typeof state === 'object' && state !== null) {
+      const nextState = { ...state };
+      const keys = Object.keys(state);
+      if (Array.isArray(deriv)) {
+        deriv.forEach((d, idx) => {
+          const key = keys[idx];
+          if (key !== undefined) {
+            nextState[key] = (Number(state[key]) || 0) + (Number(d) || 0) * factor;
+          }
+        });
+      } else if (typeof deriv === 'object' && deriv !== null) {
+        for (const key in deriv) {
+          if (key in nextState) {
+            nextState[key] = (Number(state[key]) || 0) + (Number(deriv[key]) || 0) * factor;
+          }
+        }
+      } else {
+        keys.forEach(key => {
+          nextState[key] = (Number(state[key]) || 0) + (Number(deriv) || 0) * factor;
+        });
+      }
+      return nextState;
+    }
+    return state;
+  }
 }

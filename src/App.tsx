@@ -13,18 +13,23 @@ import { GMDHEngine, solveLeastSquares } from './engine/gmdh/gmdh_core/combi';
 import { ChevronLeft } from 'lucide-react';
 import {
   Trash2, Plus, Layers, Settings2, Search, Save, Box,
-  ChevronDown, ChevronRight, Play, Pause, Square,
+  ChevronDown, ChevronRight, Play, Pause, Square, BookOpen,
   MousePointer2, Upload, FileText, Download,
   Activity, Zap, Database, Cpu, Layout, Maximize2, X,
-  LayoutGrid, Rows, Network
+  LayoutGrid, Rows, Network, Flame, RefreshCcw, Wind, Cloud
 } from 'lucide-react';
 import { FactoryIOGateway } from './components/FactoryIOGateway';
 import { AiArchitectSidebar } from './components/AiArchitectSidebar';
 import { executeAiActions } from './utils/aiActionProcessor';
+import { IntroStandbyOverlay } from './components/IntroStandbyOverlay';
 import { 
   VariableType, VariableDef, StateData, JunctionData, TransitionData, Layer, ErrorItem 
 } from './types/sm_types';
 import { generateMISRACCode, getCTimeType } from './utils/stateMachineCodeGenerator';
+import { analyzeStateMachine } from './utils/smAnalysisEngine';
+import { HELP_DATA } from './HelpData';
+import { VLAB_LIBRARY } from './utils/vlabLibrary';
+import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
 
 // =============================================================================
 // STATIC UI COMPONENTS (ZERO IMPORT ERRORS - FULLY TYPED)
@@ -166,152 +171,7 @@ const Resizer = ({ onMouseDown, orientation = 'vertical' }: { onMouseDown: (e: R
   </div>
 );
 
-const WelcomeOverlay = ({ onComplete }: { onComplete: () => void }) => {
-  const [isVisible, setIsVisible] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsVisible(false);
-      setTimeout(onComplete, 1500); // Slightly longer exit for cinematic feel
-    }, 7000); // 7 seconds total
-
-    return () => clearTimeout(timer);
-  }, [onComplete]);
-
-  return (
-    <div className={`fixed inset-0 z-[9999] bg-[#0a0a0a] flex flex-col items-center justify-center transition-opacity duration-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
-      {/* Dynamic Background */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {/* Pulsing Core Light */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-orange-600/10 rounded-full blur-[150px] animate-pulse-intense" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(249,115,22,0.1),transparent_70%)] animate-ambient-glow" />
-        
-        {/* Floating Atmospheric Particles */}
-        <div className="absolute inset-0 opacity-30">
-          {[...Array(30)].map((_, i) => (
-            <div 
-              key={i}
-              className="absolute bg-orange-300/40 rounded-full animate-float-atmospheric"
-              style={{
-                width: Math.random() * 2 + 1 + 'px',
-                height: Math.random() * 2 + 1 + 'px',
-                left: Math.random() * 100 + '%',
-                top: Math.random() * 100 + '%',
-                animationDuration: Math.random() * 15 + 15 + 's',
-                animationDelay: Math.random() * 10 + 's'
-              }}
-            />
-          ))}
-        </div>
-      </div>
-
-      <div className="relative flex flex-col items-center">
-
-        {/* Professional Text Reveal */}
-        <div className="text-center relative">
-          <div className="flex gap-4 mb-8">
-            {['A', 'D', 'I', 'A'].map((char, i) => (
-              <span
-                key={i}
-                className="text-9xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-orange-200 drop-shadow-[0_10px_30px_rgba(249,115,22,0.3)] animate-typewriter"
-                style={{ 
-                  animationDelay: `${i * 0.3 + 1}s`,
-                  opacity: 0 
-                }}
-              >
-                {char}
-              </span>
-            ))}
-            <span className="text-9xl font-black text-orange-500 animate-blink ml-2">_</span>
-          </div>
-
-          <div className="h-12 relative overflow-hidden flex items-center justify-center mt-2 group">
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-orange-500/20 to-transparent animate-shimmer" />
-            <p className="text-orange-400 text-2xl font-light lowercase tracking-[0.6em] opacity-0 animate-technical-reveal ml-[0.6em] drop-shadow-[0_0_10px_rgba(249,115,22,0.3)]">
-              go beyond
-            </p>
-          </div>
-        </div>
-
-        {/* Loading Progress Bar */}
-        <div className="mt-24 w-80 h-[2px] bg-orange-900/30 relative rounded-full overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-orange-600 via-amber-400 to-orange-600 animate-loading-slide shadow-[0_0_10px_#f97316]" />
-          <div className="absolute top-4 left-0 right-0 flex justify-between text-[10px] font-mono text-orange-500/60 tracking-[0.2em] uppercase">
-            <span className="animate-pulse">Core Initialized</span>
-            <span className="font-bold">v2.5</span>
-            <span className="animate-pulse">Encrypted</span>
-          </div>
-        </div>
-      </div>
-      <style>{`
-        @keyframes typewriter {
-          0% { transform: translateY(10px) scale(0.9); opacity: 0; filter: blur(10px); }
-          100% { transform: translateY(0) scale(1); opacity: 1; filter: blur(0); }
-        }
-        .animate-typewriter {
-          animation: typewriter 0.8s cubic-bezier(0.19, 1, 0.22, 1) forwards;
-        }
-        @keyframes pulse-intense {
-          0%, 100% { opacity: 0.05; transform: translate(-50%, -50%) scale(1); }
-          50% { opacity: 0.2; transform: translate(-50%, -50%) scale(1.2); }
-        }
-        .animate-pulse-intense {
-          animation: pulse-intense 4s ease-in-out infinite;
-        }
-        @keyframes ambient-glow {
-          0%, 100% { opacity: 0.4; }
-          50% { opacity: 0.8; }
-        }
-        .animate-ambient-glow {
-          animation: ambient-glow 6s ease-in-out infinite;
-        }
-        @keyframes float-atmospheric {
-          0%, 100% { transform: translateY(0) translateX(0); opacity: 0.2; }
-          50% { transform: translateY(-100px) translateX(20px); opacity: 0.5; }
-        }
-        .animate-float-atmospheric {
-          animation: float-atmospheric linear infinite;
-        }
-        @keyframes technical-reveal {
-          0% { transform: translateY(20px); opacity: 0; letter-spacing: -0.2em; filter: blur(5px); }
-          100% { transform: translateY(0); opacity: 1; letter-spacing: 1.2em; filter: blur(0); }
-        }
-        .animate-technical-reveal {
-          animation: technical-reveal 3s cubic-bezier(0.19, 1, 0.22, 1) forwards;
-          animation-delay: 2.5s;
-        }
-        @keyframes blink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0; }
-        }
-        .animate-blink {
-          animation: blink 0.8s infinite;
-        }
-        @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-        @keyframes loading-slide {
-          0% { transform: translateX(-100%); opacity: 0; }
-          20% { opacity: 1; }
-          80% { opacity: 1; }
-          100% { transform: translateX(100%); opacity: 0; }
-        }
-        @keyframes ping-slow {
-          0% { transform: scale(1); opacity: 0.5; }
-          100% { transform: scale(2.5); opacity: 0; }
-        }
-        @keyframes spin-slow {
-          100% { transform: rotate(360deg); }
-        }
-        .animate-shimmer { animation: shimmer 3s linear infinite; }
-        .animate-loading-slide { animation: loading-slide 4s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
-        .animate-ping-slow { animation: ping-slow 5s cubic-bezier(0, 0, 0.2, 1) infinite; }
-        .animate-spin-slow { animation: spin-slow 25s linear infinite; transform-origin: center; }
-      `}</style>
-    </div>
-  );
-};
+// WelcomeOverlay has been moved and refactored as a standalone component IntroStandbyOverlay
 
 
 
@@ -3550,389 +3410,430 @@ const PlotlyPlots = ({
     </div>
   );
 };
-const HELP_DATA: Record<string, {
-  title: string;
-  description: string;
-  details: string;
-  modules: {
-    id: string;
-    title: string;
-    description: string;
-    icon?: string;
-    components: { name: string; usage: string; icon?: string }[];
-  }[];
-}> = {
-  architecture: {
-    title: "Architecture & SysML",
-    description: "Structural design using Block Definition Diagrams (BDD) and Internal Block Diagrams (IBD).",
-    details: "The Architecture module follows SysML standards to define system hierarchy and internal connectivity. Start in the BDD to define 'What' the system is, then use IBD to define 'How' it is connected internally.",
-    modules: [
-      {
-        id: "bdd",
-        title: "Block Definition Diagram (BDD)",
-        description: "Defines system hierarchy and structural relationships.",
-        icon: "Layers",
-        components: [
-          { name: "Block", usage: "The primary structural unit. Represents a system component, sub-system, or external entity. Blocks define types and can have properties (parts, ports, values)." },
-          { name: "Composition", usage: "A strong whole-part relationship. If the parent block is deleted, the part is also deleted. Used for physical containment." },
-          { name: "Aggregation", usage: "A weak whole-part relationship. The part can exist independently of the whole. Used for shared resources." },
-          { name: "Generalization", usage: "An inheritance relationship. A specialized block inherits all properties and behaviors of a general block." },
-          { name: "Association", usage: "A generic connection between two blocks indicating they interact without a specific hierarchy." },
-          { name: "Dependency", usage: "Indicates that one block requires another to function or is defined by it." }
-        ]
-      },
-      {
-        id: "ibd",
-        title: "Internal Block Diagram (IBD)",
-        description: "Defines the internal structure, ports, and connectors of a block.",
-        icon: "Box",
-        components: [
-          { name: "Part", usage: "An instance of a block within another block's internal structure. Represents a specific usage of a type." },
-          { name: "Proxy Port", usage: "A typed interaction point that defines what signals or flows can pass through. Usually typed by an Interface Block." },
-          { name: "Full Port", usage: "A physical interaction point that has its own internal structure and properties." },
-          { name: "Connector", usage: "A physical or logical link between two ports or parts, allowing items to flow between them." },
-          { name: "Flow Property", usage: "Defines the specific item (data, energy, liquid) that flows through a port in a specific direction (In/Out/Inout)." },
-          { name: "Item Flow", usage: "Specifies the actual information or material transferred across a connector." }
-        ]
-      }
-    ]
-  },
-  stateflow: {
-    title: "Stateflow (Behavior)",
-    description: "Reactive logic design using Hierarchical State Machines (HSM).",
-    details: "Stateflow allows you to design complex behavioral logic. It supports hierarchical states (states within states), parallel states (AND logic), and event-driven transitions.",
-    modules: [
-      {
-        id: "logic",
-        title: "Logic & States",
-        description: "Core state machine elements for behavioral logic.",
-        icon: "Activity",
-        components: [
-          { name: "State", usage: "Represents a mode of operation. Supports Entry, During, and Exit actions written in JavaScript-like syntax." },
-          { name: "Hierarchical State", usage: "A state that contains sub-states. Allows for complex logic organization and behavior inheritance." },
-          { name: "Transition", usage: "A link between states triggered by an Event or a Condition [guard]. Transitions can also have Actions." },
-          { name: "Default Transition", usage: "Defines which sub-state is entered first when a hierarchical state becomes active." },
-          { name: "Junction", usage: "Decision point for branching transitions based on multiple conditions (If-Then-Else logic)." },
-          { name: "History Junction", usage: "When a hierarchical state is re-entered, this junction restores the last active sub-state instead of using the default transition." }
-        ]
-      },
-      {
-        id: "behavior_data",
-        title: "Data & Events",
-        description: "Communication and memory within state machines.",
-        icon: "Database",
-        components: [
-          { name: "Local Data", usage: "Variables accessible within the state machine scope. Used to store states or calculations." },
-          { name: "Input/Output Data", usage: "Variables linked to other modules (Architecture or X-Bridges) for system integration." },
-          { name: "Events", usage: "Triggers that cause transitions. Can be broadcast globally or sent to specific states." },
-          { name: "Temporal Logic", usage: "Built-in functions like 'after(n, sec)' to trigger transitions based on elapsed time." }
-        ]
-      }
-    ]
-  },
-  vlab: {
-    title: "V-Lab (Physical Simulation)",
-    description: "Multi-domain plant modeling using an acausal physical network approach.",
-    details: "V-Lab models the 'Plant'. Unlike signal-flow, V-Lab components connect via physical ports (e.g., Electrical Nodes, Mechanical Flanges) where energy is conserved (Kirchhoff's Laws).",
-    modules: [
-      {
-        id: "vlab_elec",
-        title: "Electrical Domain",
-        description: "Modeling of power circuits, machines, and electronics.",
-        icon: "Zap",
-        components: [
-          { name: "Resistor", usage: "V=I*R. Models dissipative energy loss. Parameter: Resistance (Ohms)." },
-          { name: "Capacitor", usage: "I=C*dv/dt. Models energy storage in electric fields. Parameter: Capacitance (Farads)." },
-          { name: "Inductor", usage: "V=L*di/dt. Models energy storage in magnetic fields. Parameter: Inductance (Henries)." },
-          { name: "DC Motor", usage: "Converts electrical power to mechanical torque. Parameters: Ke (Voltage const), Kt (Torque const), J (Inertia)." },
-          { name: "Inverter (3-Phase)", usage: "Converts DC to AC using 6 switches. Driven by PWM signals from Control/Stateflow modules." },
-          { name: "Current/Voltage Sensor", usage: "Measures physical quantities and converts them to PS (Physical Signals) for feedback." }
-        ]
-      },
-      {
-        id: "vlab_mech",
-        title: "Mechanical Domain",
-        description: "Rotational and translational mechanics for motion control.",
-        icon: "Box",
-        components: [
-          { name: "Inertia", usage: "Models rotational mass. Torque = J * alpha. Parameter: Moment of Inertia (kg-m2)." },
-          { name: "Mass", usage: "Models translational mass. Force = m * a. Parameter: Mass (kg)." },
-          { name: "Spring-Damper", usage: "Models restorative and dissipative forces. Parameters: Stiffness (K) and Damping (B)." },
-          { name: "Gear Box", usage: "Transforms speed and torque. Parameter: Gear Ratio (N). Supports efficiency and backlash modeling." },
-          { name: "Ideal Torque Source", usage: "Provides a controlled torque regardless of speed. Driven by a PS input." }
-        ]
-      },
-      {
-        id: "vlab_thermal",
-        title: "Thermal Domain",
-        description: "Heat transfer and thermal management modeling.",
-        icon: "Activity",
-        components: [
-          { name: "Thermal Mass", usage: "Stores thermal energy. Q = C * dT. Parameter: Heat Capacity (J/K)." },
-          { name: "Conduction", usage: "Heat transfer through solid contact. Parameter: Conductance (W/K)." },
-          { name: "Convection", usage: "Heat transfer to a fluid. Parameters: Surface Area and Heat Transfer Coefficient." },
-          { name: "Radiation", usage: "Heat transfer via electromagnetic waves. Parameter: Emissivity and Area." }
-        ]
-      },
-      {
-        id: "vlab_labs",
-        title: "Learning Models",
-        description: "Pre-configured physical experiments and industry templates.",
-        icon: "GraduationCap",
-        components: [
-          { name: "Air Fryer Model", usage: "Complete multi-domain simulation of forced convection heating. Demonstrates interaction between AC power, thermal resistance, and fluid dynamics." },
-          { name: "Heat Transfer", usage: "Detailed study of conductive and convective cooling in enclosed volumes." },
-          { name: "Air Circulation", usage: "Models pneumatic pressure sources (fans) and volume chambers to study flow rates and pressure drops." }
-        ]
-      }
-    ]
-  },
-  xbridges: {
-    title: "X-Bridges (Control)",
-    description: "Signal-based modeling for control logic and digital signal processing.",
-    details: "X-Bridges is a block-diagram environment for designing control systems. It processes data flows in a directed graph from sources to sinks.",
-    modules: [
-      {
-        id: "xb_cont",
-        title: "Continuous & Linear",
-        description: "Blocks for frequency-domain and time-domain linear systems.",
-        icon: "Activity",
-        components: [
-          { name: "Integrator", usage: "1/s operator. Calculates the integral of the input. Supports reset and initial condition settings." },
-          { name: "Transfer Function", usage: "Defines linear systems using Laplace coefficients (Numerator/Denominator)." },
-          { name: "State-Space", usage: "Models linear systems in matrix form: dx/dt = Ax + Bu; y = Cx + Du." },
-          { name: "Derivative", usage: "s operator. Calculates the rate of change of the input signal." }
-        ]
-      },
-      {
-        id: "xb_math",
-        title: "Math & Nonlinear",
-        description: "Arithmetic operations and nonlinear mappings.",
-        icon: "Layout",
-        components: [
-          { name: "Sum / Add", usage: "Adds or subtracts multiple signals. Customizable port signs (+/-)." },
-          { name: "Product", usage: "Multiplies or divides input signals." },
-          { name: "Gain", usage: "Multiplies the input by a scalar constant or matrix." },
-          { name: "Saturation", usage: "Clamps the signal between Upper and Lower limits." },
-          { name: "Lookup Table", usage: "Maps an input to an output using a pre-defined 1D or 2D table (Interpolation)." }
-        ]
-      },
-      {
-        id: "xb_logic",
-        title: "Logic & Bitwise",
-        description: "Boolean operations and sequential logic.",
-        icon: "Cpu",
-        components: [
-          { name: "Logical Operator", usage: "AND, OR, NOT, XOR, NAND gates for boolean signal processing." },
-          { name: "Relational Operator", usage: "Compares two signals (>, <, ==, !=, >=, <=) and outputs a boolean." },
-          { name: "Delay", usage: "z^-1 operator. Delays a signal by one sample period. Used in discrete-time systems." }
-        ]
-      }
-    ]
-  },
-  doe: {
-    title: "DOE & Analysis",
-    description: "Design of Experiments and advanced predictive modeling.",
-    details: "The DOE module allows for systematic testing of parameters. It includes GMDH (Group Method of Data Handling) for automatic model discovery from experimental data.",
-    modules: [
-      {
-        id: "doe_methods",
-        title: "Experimental Design",
-        description: "Techniques for sampling the design space.",
-        icon: "LayoutGrid",
-        components: [
-          { name: "Full Factorial", usage: "Tests every possible combination of factors at given levels. Highly thorough but expensive." },
-          { name: "LHS (Latin Hypercube)", usage: "Stochastic sampling method that ensures even coverage of the design space with fewer points." },
-          { name: "RSM (Response Surface)", usage: "Uses quadratic models to find the optimal point within the design space." }
-        ]
-      },
-      {
-        id: "doe_modeling",
-        title: "Predictive Modeling",
-        description: "AI and statistical methods to build models from data.",
-        icon: "Activity",
-        components: [
-          { name: "GMDH Neural Net", usage: "An inductive algorithm that automatically selects the best model structure and features. Used for complex system identification." },
-          { name: "Regression", usage: "Fits a polynomial or linear function to the data using Least Squares optimization." },
-          { name: "Sensitivity Analysis", usage: "Identifies which input parameters have the most significant impact on the outputs (Tornado plots)." }
-        ]
-      }
-    ]
-  },
-  reporting: {
-    title: "Reporting & Traceability",
-    description: "Requirements management and professional document generation.",
-    details: "ADIA automates the production of engineering reports. It ensures that every requirement is traced to a design element and verified by simulation.",
-    modules: [
-      {
-        id: "req_manage",
-        title: "Requirements Engineering",
-        description: "Defining and linking system specifications.",
-        icon: "FileText",
-        components: [
-          { name: "Requirement Block", usage: "Stores text, ID, and status of a specification. Can be linked to any design element using 'Satisfy' or 'Verify' relationships." },
-          { name: "Traceability Matrix", usage: "A dynamic table showing the relationships between requirements, design blocks, and test cases. Essential for safety-critical audits." },
-          { name: "Coverage Analysis", usage: "Visualizes which percentage of requirements are implemented and verified. Highlights gaps in the system design." }
-        ]
-      },
-      {
-        id: "report_gen",
-        title: "Professional Reporting",
-        description: "Exporting project data to standard formats.",
-        icon: "Upload",
-        components: [
-          { name: "Word Export", usage: "Generates a complete MS Word document with dynamic table of contents, diagrams, and simulation results. Uses professional engineering templates." },
-          { name: "Diagram Capture", usage: "Exports high-resolution SVG or PNG images of BDD, IBD, and Stateflow diagrams for documentation and stakeholder reviews." },
-          { name: "Global Project Report", usage: "A comprehensive document that aggregates data from all modules (Architecture, Control, Plant) into a unified engineering record." }
-        ]
-      }
-    ]
-  },
-  hmi: {
-    title: "HMI & Dashboards",
-    description: "Designing interactive Human-Machine Interfaces for real-time monitoring.",
-    details: "The HMI Panel allows users to build drag-and-drop dashboards. Components are linked to system variables for bi-directional communication.",
-    modules: [
-      {
-        id: "hmi_controls",
-        title: "Interactive Controls",
-        description: "Input elements for user interaction.",
-        icon: "Settings2",
-        components: [
-          { name: "Toggle Switch", usage: "Boolean input to turn system features ON/OFF. Directly writes 'true/false' to linked boolean variables." },
-          { name: "Rotary Knob", usage: "Provides a realistic industrial interface for setting setpoints or gain values. Supports snapping to discrete levels." },
-          { name: "Slider", usage: "Linear input for continuous variable adjustment (e.g., speed, temperature target)." },
-          { name: "Action Button", usage: "Momentary trigger for events. Can be used for 'Emergency Stop' or 'Reset' functions." }
-        ]
-      },
-      {
-        id: "hmi_controls",
-        title: "Control Widgets",
-        description: "Input devices for real-time interaction.",
-        components: [
-          { name: "Control Knobs", usage: "Rotary inputs for adjusting gains or setpoints (PID tuning)." },
-          { name: "Precision Sliders", usage: "Linear inputs with fine-grained decimal control." },
-          { name: "Toggle Switches", usage: "Binary controls for system start/stop or mode switching." }
-        ]
-      },
-      {
-        id: "hmi_indicators",
-        title: "Visual Indicators",
-        description: "Real-time data visualization.",
-        components: [
-          { name: "Analog Gauges", usage: "Round gauges for pressure, speed, and temperature monitoring." },
-          { name: "Strip Charts", usage: "Scrolling time-series plots for tracking signal stability." },
-          { name: "LED Matrices", usage: "Status indicators with custom color-coded logic (Alarm/Warning/Normal)." }
-        ]
-      }
-    ]
-  },
-  automation: {
-    title: "Industrial Automation",
-    description: "External hardware sync and Factory I/O gateway.",
-    details: "Connect ADIA to the real world using the Automation Gateway for HIL and SIL testing.",
-    modules: [
-      {
-        id: "auto_gateway",
-        title: "Automation Gateway",
-        description: "Bi-directional communication hub.",
-        components: [
-          { name: "Factory I/O Sync", usage: "Real-time TCP/UDP bridge to 3D industrial simulators." },
-          { name: "Variable Mapping", usage: "Links ADIA Stateflow variables to external PLCs or Actuators." },
-          { name: "Time-Base Lock", usage: "Synchronizes the ADIA solver step with the external simulation clock." }
-        ]
-      }
-    ]
-  },
-  ai: {
-    title: "AI Architect Assistant",
-    description: "Gemini-powered engineering intelligence.",
-    details: "The AI assistant provides generative design, architectural analysis, and automated optimization.",
-    modules: [
-      {
-        id: "ai_generative",
-        title: "Generative Design",
-        description: "Automated creation of engineering artifacts.",
-        components: [
-          { name: "Logic Generator", usage: "Generates complete Stateflow charts from natural language descriptions." },
-          { name: "Report Drafter", usage: "Automatically summarizes simulation results into professional engineering reports." },
-          { name: "Code Reviewer", usage: "Analyzes control logic for safety hazards and MISRA compliance." }
-        ]
-      }
-    ]
+// Help Data moved to HelpData.ts
+
+const DynamicIcon = ({ name, size, className }: { name?: string; size: number; className?: string }) => {
+  switch (name) {
+    case 'activity': return <Activity size={size} className={className} />;
+    case 'zap': return <Zap size={size} className={className} />;
+    case 'cpu': return <Cpu size={size} className={className} />;
+    case 'layers': return <Layers size={size} className={className} />;
+    case 'database': return <Database size={size} className={className} />;
+    case 'network': return <Network size={size} className={className} />;
+    case 'plus': return <Plus size={size} className={className} />;
+    case 'resistor': return <Zap size={size} className={className} />;
+    case 'capacitor': return <Layers size={size} className={className} />;
+    case 'inductor': return <Activity size={size} className={className} />;
+    case 'dc_motor': return <Cpu size={size} className={className} />;
+    case 'inertia': return <Database size={size} className={className} />;
+    case 'mass': return <Box size={size} className={className} />;
+    case 'trans_spring': return <Rows size={size} className={className} />;
+    case 'scope': return <Activity size={size} className={className} />;
+    case 'settings-2': return <Settings2 size={size} className={className} />;
+    case 'magnetron': return <Zap size={size} className={className} />;
+    case 'heater': return <Flame size={size} className={className} />;
+    case 'cavity': return <Box size={size} className={className} />;
+    case 'inverter': return <RefreshCcw size={size} className={className} />;
+    case 'gas_chamber': return <Wind size={size} className={className} />;
+    case 'ma_chamber': return <Cloud size={size} className={className} />;
+    case 'reluctance': return <Activity size={size} className={className} />;
+    case 'doe_model': return <Database size={size} className={className} />;
+    default: return <Box size={size} className={className} />;
   }
 };
 
 const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
-  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
+  const [activeTopic, setActiveTopic] = useState<string>("getting-started");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showBlockRef, setShowBlockRef] = useState(false);
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   
   if (!isOpen) return null;
 
-  const toggleModule = (id: string) => {
-    setExpandedModules(prev => ({ ...prev, [id]: !prev[id] }));
-  };
+  const topic = HELP_DATA[activeTopic] || HELP_DATA["getting-started"];
+
+  // Categories for Help Topics
+  const topicCategories: Record<string, string[]> = {};
+  Object.keys(HELP_DATA).forEach(key => {
+    const cat = HELP_DATA[key].category;
+    if (!topicCategories[cat]) topicCategories[cat] = [];
+    topicCategories[cat].push(key);
+  });
+
+  // Flattened library for search
+  const vlabBlocks = VLAB_LIBRARY.flatMap(domain => 
+    domain.blocks.map(b => ({ ...b, domain: domain.type, source: 'V-Lab' }))
+  );
+  
+  const xbridgesBlocks = Object.keys(XBRIDGES_LIBRARY).map(key => {
+    try {
+      const b = XBRIDGES_LIBRARY[key]('tmp', {});
+      return { 
+        id: key, 
+        name: key, 
+        domain: 'Control', 
+        source: 'X-Bridges', 
+        params: b.params, 
+        ports: [...(b.inputs || []), ...(b.outputs || [])],
+        icon: b.icon,
+        equation: b.equation,
+        description: b.description
+      };
+    } catch(e) {
+      return { id: key, name: key, domain: 'Control', source: 'X-Bridges', params: {}, ports: [], icon: undefined, equation: undefined, description: undefined };
+    }
+  });
+
+  const allBlocks = [...vlabBlocks, ...xbridgesBlocks];
+  const filteredBlocks = allBlocks.filter(b => 
+    b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    b.domain.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const selectedBlock = allBlocks.find(b => b.id === selectedBlockId);
+
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 p-20 text-white">
-      <div className="bg-[#1a1a1a] p-10 rounded-xl border border-white/10 w-full max-w-4xl shadow-2xl">
-        <div className="flex justify-between items-center mb-10">
-          <h2 className="text-3xl font-bold text-[#f97316]">ADIA Help Center</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-white font-bold">CLOSE [X]</button>
-        </div>
-        <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-4 custom-scrollbar">
-          <p className="text-gray-400 text-sm italic">The help system is currently in stable reference mode.</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {Object.keys(HELP_DATA || {}).map(key => (
-              <div key={key} className="p-8 bg-black/40 border border-white/5 rounded-2xl hover:border-[#f97316]/50 transition-all group">
-                <div className="mb-6">
-                  <h3 className="font-black text-white uppercase tracking-tighter text-2xl group-hover:text-[#f97316] transition-colors">{HELP_DATA[key]?.title || "Untitled"}</h3>
-                  <p className="text-sm text-gray-400 mt-2 font-light leading-relaxed">{HELP_DATA[key]?.description || "No description available."}</p>
-                </div>
-                
-                <div className="space-y-4">
-                  {HELP_DATA[key]?.modules?.map((mod: any) => (
-                    <div key={mod.id} className="bg-white/[0.02] border border-white/5 rounded-xl overflow-hidden">
-                      <button 
-                        onClick={() => toggleModule(mod.id)}
-                        className="w-full p-4 flex items-center justify-between hover:bg-white/[0.04] transition-all"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-1 h-4 rounded-full transition-all ${expandedModules[mod.id] ? 'bg-[#f97316]' : 'bg-gray-700'}`}></div>
-                          <h4 className={`text-[10px] font-black uppercase tracking-[0.2em] transition-colors ${expandedModules[mod.id] ? 'text-[#f97316]' : 'text-gray-500'}`}>
-                            {mod.title}
-                          </h4>
-                        </div>
-                        <div className={`transition-transform duration-300 ${expandedModules[mod.id] ? 'rotate-180' : ''}`}>
-                          <ChevronDown size={14} className="text-gray-600" />
-                        </div>
-                      </button>
-                      
-                      {expandedModules[mod.id] && (
-                        <div className="px-6 pb-6 pt-2 animate-in slide-in-from-top-2 duration-300">
-                          <div className="grid grid-cols-1 gap-5">
-                            {mod.components?.map((comp: any) => (
-                              <div key={comp.name} className="group/item">
-                                <div className="flex items-center gap-2 mb-1.5">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-[#f97316]/30 group-hover/item:bg-[#f97316] transition-all"></div>
-                                  <span className="text-white text-[11px] font-bold uppercase tracking-wider">{comp.name}</span>
-                                </div>
-                                <p className="text-gray-500 text-[10px] leading-relaxed font-medium pl-3.5 border-l border-white/10 group-hover/item:border-[#f97316]/40 transition-all">
-                                  {comp.usage}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 backdrop-blur-3xl p-10 text-white font-sans">
+      <div className="bg-[#0f0f0f] rounded-3xl border border-white/10 w-full h-full max-w-7xl flex flex-col shadow-[0_0_150px_rgba(0,0,0,0.8)] overflow-hidden">
+        
+        {/* TOP HEADER */}
+        <header className="h-20 border-b border-white/5 flex items-center justify-between px-10 bg-[#151515]/50 backdrop-blur-xl">
+          <div className="flex items-center gap-8">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center font-black text-xl shadow-[0_0_20px_rgba(249,115,22,0.3)]">A</div>
+              <div className="flex flex-col">
+                <span className="font-black tracking-tight text-xl leading-none">ADIA <span className="text-orange-500">DOCS</span></span>
+                <span className="text-[9px] text-gray-500 font-bold uppercase tracking-[0.2em] mt-1">Advanced Engineering Reference</span>
+              </div>
+            </div>
+            
+            <div className="h-10 w-[1px] bg-white/10"></div>
+            
+            <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
+              <button 
+                onClick={() => setShowBlockRef(false)}
+                className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!showBlockRef ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:text-white'}`}
+              >
+                User Guide
+              </button>
+              <button 
+                onClick={() => setShowBlockRef(true)}
+                className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${showBlockRef ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:text-white'}`}
+              >
+                Block Reference
+              </button>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-6">
+            <div className="relative group">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-orange-500 transition-colors">
+                <Search size={16} />
+              </div>
+              <input 
+                type="text" 
+                placeholder={showBlockRef ? "Search components..." : "Search documentation..."}
+                className="bg-black/60 border border-white/10 rounded-full py-3 pl-12 pr-6 text-xs w-80 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-all font-medium"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <button 
+              onClick={onClose}
+              className="w-12 h-12 rounded-full bg-white/5 hover:bg-red-500/20 hover:text-red-500 flex items-center justify-center transition-all group"
+            >
+              <X size={24} className="group-hover:rotate-90 transition-transform" />
+            </button>
+          </div>
+        </header>
+
+        <div className="flex flex-1 overflow-hidden">
+          
+          {/* SIDEBAR */}
+          <aside className="w-80 border-r border-white/5 bg-[#0a0a0a] flex flex-col">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+              {!showBlockRef ? (
+                /* DOCUMENTATION TREE */
+                <div className="space-y-8">
+                  {Object.keys(topicCategories).map(cat => (
+                    <div key={cat}>
+                      <h4 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                        <div className="w-1 h-1 rounded-full bg-orange-500"></div>
+                        {cat}
+                      </h4>
+                      <ul className="space-y-1">
+                        {topicCategories[cat].map(key => (
+                          <li key={key}>
+                            <button 
+                              onClick={() => setActiveTopic(key)}
+                              className={`w-full text-left px-4 py-2.5 rounded-xl text-xs transition-all flex items-center gap-3 ${activeTopic === key ? 'bg-orange-500/10 text-orange-500 font-bold border border-orange-500/20' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}
+                            >
+                              <BookOpen size={14} className={activeTopic === key ? 'text-orange-500' : 'text-gray-700'} />
+                              {HELP_DATA[key].title}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   ))}
                 </div>
+              ) : (
+                /* BLOCK LIBRARY TREE */
+                <div className="space-y-2">
+                  <h4 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.2em] mb-4">Available Components</h4>
+                  {filteredBlocks.map(block => (
+                    <button 
+                      key={block.id}
+                      onClick={() => setSelectedBlockId(block.id)}
+                      className={`w-full text-left px-4 py-2 rounded-xl text-[11px] transition-all flex items-center justify-between group ${selectedBlockId === block.id ? 'bg-orange-500 text-black font-black' : 'text-gray-500 hover:bg-white/5'}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Box size={14} className={selectedBlockId === block.id ? 'text-black' : 'text-gray-700'} />
+                        {block.name}
+                      </div>
+                      <span className={`text-[8px] uppercase font-bold px-1.5 py-0.5 rounded ${selectedBlockId === block.id ? 'bg-black/20 text-black' : 'bg-white/5 text-gray-600'}`}>
+                        {block.source}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </aside>
+
+          {/* MAIN CONTENT AREA */}
+          <main className="flex-1 overflow-y-auto bg-[#0a0a0a] p-16 custom-scrollbar relative">
+            {!showBlockRef ? (
+              /* TOPIC VIEW */
+              <div className="max-w-4xl mx-auto">
+                <div className="mb-16">
+                  <nav className="flex items-center gap-3 text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-6">
+                    <span className="hover:text-orange-500 cursor-pointer">ADIA Docs</span>
+                    <ChevronRight size={10} />
+                    <span className="text-gray-400">{topic.category}</span>
+                    <ChevronRight size={10} />
+                    <span className="text-white">{topic.title}</span>
+                  </nav>
+                  
+                  <h1 className="text-6xl font-black text-white tracking-tighter mb-6 leading-none">
+                    {topic.title}
+                  </h1>
+                  <p className="text-xl text-gray-400 leading-relaxed font-light max-w-2xl">
+                    {topic.description}
+                  </p>
+                </div>
+
+                {topic.image && (
+                  <div className="mb-16 rounded-3xl overflow-hidden border border-white/10 shadow-2xl group relative">
+                    <img src={topic.image} alt={topic.title} className="w-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                    <div className="absolute bottom-8 left-8 flex items-center gap-3">
+                      <div className="p-2 bg-orange-500 rounded-lg text-black"><Activity size={16} /></div>
+                      <span className="text-xs font-black uppercase tracking-widest text-white shadow-sm">Module Overview Diagram</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="prose prose-invert max-w-none">
+                  <div className="text-gray-300 leading-relaxed text-lg mb-16 font-light">
+                    {topic.content}
+                  </div>
+
+                  <div className="space-y-20">
+                    {topic.sections?.map((section, idx) => (
+                      <section key={idx} className="relative pl-12 border-l border-white/10 group">
+                        <div className="absolute left-[-6px] top-0 w-3 h-3 rounded-full bg-white/10 group-hover:bg-orange-500 transition-colors shadow-[0_0_15px_rgba(255,255,255,0.1)] group-hover:shadow-orange-500/50"></div>
+                        <h2 className="text-2xl font-black text-white mb-6 tracking-tight flex items-center gap-4">
+                          {section.title}
+                        </h2>
+                        <div className="text-gray-400 leading-relaxed mb-8 whitespace-pre-wrap font-light">
+                          {section.body}
+                        </div>
+                        
+                        {section.list && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                            {section.list.map((item, i) => (
+                              <div key={i} className="flex items-start gap-3 p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
+                                <div className="w-1.5 h-1.5 rounded-full bg-orange-500 mt-1.5 shrink-0"></div>
+                                <span className="text-sm text-gray-300 font-light" dangerouslySetInnerHTML={{ __html: item.replace(/\*\*(.*?)\*\*/g, '<b class="text-white">$1</b>') }}></span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {section.code && (
+                          <div className="relative group/code mt-8">
+                            <div className="absolute right-4 top-4 text-[10px] font-black text-white/20 uppercase tracking-widest">Mathematical Model</div>
+                            <div className="bg-black/80 rounded-2xl border border-white/10 p-8 font-mono text-sm text-orange-400 overflow-x-auto shadow-inner">
+                              <pre className="m-0">{section.code}</pre>
+                            </div>
+                          </div>
+                        )}
+                      </section>
+                    ))}
+                  </div>
+
+                  {topic.related && (
+                    <div className="mt-32 pt-16 border-t border-white/5">
+                      <h3 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] mb-10">Expand Your Learning</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {topic.related.map(key => (
+                          <button 
+                            key={key}
+                            onClick={() => setActiveTopic(key)}
+                            className="p-8 bg-[#151515] border border-white/5 rounded-3xl hover:border-orange-500/40 transition-all text-left group hover:-translate-y-1"
+                          >
+                            <span className="text-[9px] text-orange-500 uppercase font-black block mb-2 tracking-widest">{HELP_DATA[key]?.category}</span>
+                            <span className="text-lg font-bold text-white group-hover:text-orange-500 transition-colors block leading-tight">{HELP_DATA[key]?.title}</span>
+                            <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-gray-500 group-hover:text-gray-300 transition-colors">
+                              View Tutorial <ChevronRight size={10} />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            ))}
+            ) : (
+              /* BLOCK REFERENCE VIEW */
+              <div className="max-w-4xl mx-auto">
+                {selectedBlock ? (
+                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="flex items-start justify-between mb-16">
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-4 mb-4">
+                          <div className="p-4 bg-orange-500 rounded-2xl text-black shadow-2xl shadow-orange-500/20">
+                            <DynamicIcon name={selectedBlock.icon} size={32} />
+                          </div>
+                          <div>
+                            <h1 className="text-5xl font-black text-white tracking-tighter">{selectedBlock.name}</h1>
+                            <div className="flex items-center gap-3 mt-2">
+                              <span className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-[10px] font-black text-gray-400 uppercase tracking-widest">{selectedBlock.source} Component</span>
+                              <span className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-[10px] font-black text-orange-500 uppercase tracking-widest">{selectedBlock.domain} Domain</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10px] font-black text-gray-600 uppercase tracking-widest mb-1">Status</div>
+                        <div className="text-emerald-500 font-bold text-xs flex items-center gap-2 justify-end">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                          Fully Documented
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                      <div className="space-y-10">
+                        <section>
+                          <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.2em] mb-6">Component Interface</h3>
+                          <div className="bg-black/40 rounded-3xl border border-white/5 p-8 relative flex items-center justify-center min-h-[300px]">
+                            {/* Block Visualization */}
+                            <div className="w-40 h-40 bg-orange-500/5 border-2 border-orange-500/30 rounded-3xl flex items-center justify-center relative shadow-[0_0_50px_rgba(249,115,22,0.1)]">
+                              <DynamicIcon name={selectedBlock.icon} size={48} className="text-orange-500" />
+                              
+                              {/* Port Labels */}
+                              {selectedBlock.ports?.map((p: any, i: number) => (
+                                <div key={i} className={`absolute text-[8px] font-black uppercase text-gray-400 p-2 ${p.position === 'left' ? '-left-12' : p.position === 'right' ? '-right-12' : p.position === 'top' ? '-top-10' : '-bottom-10'}`}>
+                                  {p.label || p.name}
+                                  <div className={`absolute w-2 h-2 rounded-full border-2 border-orange-500 bg-black ${p.position === 'left' ? 'right-[-4px] top-1/2 -translate-y-1/2' : p.position === 'right' ? 'left-[-4px] top-1/2 -translate-y-1/2' : p.position === 'top' ? 'bottom-[-4px] left-1/2 -translate-x-1/2' : 'top-[-4px] left-1/2 -translate-x-1/2'}`}></div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </section>
+
+                        <section>
+                          <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.2em] mb-6">Configurable Parameters</h3>
+                          <div className="space-y-3">
+                            {Object.entries(selectedBlock.params || {}).map(([key, p]: [string, any]) => (
+                              <div key={key} className="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl group hover:bg-white/[0.04] transition-colors">
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-black text-white uppercase">{p.label || key}</span>
+                                  <span className="text-[9px] text-gray-600 font-mono">{key}</span>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-xs font-bold text-orange-500">{p.value}</span>
+                                  <span className="text-[9px] text-gray-500 ml-1 uppercase">{p.unit}</span>
+                                </div>
+                              </div>
+                            ))}
+                            {Object.keys(selectedBlock.params || {}).length === 0 && (
+                              <div className="p-8 text-center text-xs text-gray-600 italic bg-white/[0.01] border border-dashed border-white/10 rounded-2xl">
+                                No configurable parameters for this component.
+                              </div>
+                            )}
+                          </div>
+                        </section>
+                      </div>
+
+                      <div className="space-y-10">
+                        <section>
+                          <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.2em] mb-6">Execution Logic</h3>
+                          <div className="bg-black/60 rounded-3xl border border-white/5 p-8">
+                            <p className="text-sm text-gray-400 leading-relaxed font-light mb-6">
+                              {selectedBlock.description || "This block performs real-time computation of its internal transfer function during each simulation step (fixed-step solver)."}
+                            </p>
+                            <div className="bg-orange-500/5 p-6 rounded-2xl border border-orange-500/20">
+                              <h4 className="text-[9px] font-black text-orange-500 uppercase tracking-widest mb-4">Physics Equation</h4>
+                              <div className="font-mono text-sm text-white/90 italic whitespace-pre-wrap">
+                                {selectedBlock.equation || (selectedBlock.domain === 'Electrical' ? 'V = I * Z(s)' : selectedBlock.domain === 'Mechanical' ? 'F = m * dv/dt' : 'Y = f(U)')}
+                              </div>
+                            </div>
+                          </div>
+                        </section>
+
+                        <section>
+                          <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.2em] mb-6">Usage Example</h3>
+                          <div className="p-8 bg-gradient-to-br from-orange-500/10 to-transparent border border-orange-500/10 rounded-3xl">
+                            <p className="text-xs text-gray-400 leading-relaxed mb-6 font-light italic">
+                              "Connect the {selectedBlock.name} to a <b>Scope</b> to visualize its dynamics in real-time. Ensure the input signal type matches the expected physical domain."
+                            </p>
+                            <button className="flex items-center gap-2 text-[10px] font-black text-orange-500 uppercase tracking-widest hover:text-orange-400 transition-colors">
+                              Open Learning Lab <ChevronRight size={12} />
+                            </button>
+                          </div>
+                        </section>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-[60vh] flex flex-col items-center justify-center text-center">
+                    <div className="w-24 h-24 bg-white/[0.03] rounded-full flex items-center justify-center mb-8 border border-white/5">
+                      <Search size={40} className="text-gray-700" />
+                    </div>
+                    <h2 className="text-3xl font-black text-white tracking-tighter mb-4">Explore the Block Library</h2>
+                    <p className="text-gray-500 max-w-sm leading-relaxed text-sm font-light">
+                      Select a component from the sidebar to view its mathematical model, electrical ports, and configuration parameters.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </main>
+        </div>
+
+        {/* FOOTER */}
+        <footer className="h-14 border-t border-white/5 bg-[#111] flex items-center justify-between px-10">
+          <div className="flex items-center gap-6">
+            <span className="text-[9px] text-gray-600 font-black uppercase tracking-widest">ADIA Engineering Suite v2.4</span>
+            <div className="h-4 w-[1px] bg-white/5"></div>
+            <div className="flex gap-4">
+              <button className="text-[9px] text-gray-500 font-bold uppercase hover:text-white transition-colors">Safety Standard</button>
+              <button className="text-[9px] text-gray-500 font-bold uppercase hover:text-white transition-colors">Compliance Record</button>
+            </div>
           </div>
-        </div>
-        <div className="mt-10 pt-6 border-t border-white/5 text-[10px] text-gray-600 uppercase tracking-widest font-bold">
-          Advanced Engineering Modeling Suite &copy; 2026
-        </div>
+          <div className="flex items-center gap-4">
+            <div className="flex -space-x-2">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="w-6 h-6 rounded-full border-2 border-[#111] bg-gray-800 flex items-center justify-center text-[8px] font-bold text-gray-500">U{i}</div>
+              ))}
+            </div>
+            <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Join the Community</span>
+          </div>
+        </footer>
+
       </div>
     </div>
   );
@@ -4298,13 +4199,35 @@ const GlobalReportPreviewModal = ({
                  display: ${layout === '2-col' ? 'grid' : 'block'};
                  grid-template-columns: ${layout === '2-col' ? '1fr 1fr' : '1fr'};
                  gap: 20px;
+                 margin: 16px 0;
               }
               .global-report-content .diagram-cell {
                  break-inside: avoid;
+                 page-break-inside: avoid;
+                 margin-bottom: 16px;
               }
               .global-report-content svg {
                  max-width: 100%;
                  height: auto;
+                 display: block;
+              }
+              
+              /* Print styles for clean PDF output */
+              @media print {
+                .global-report-content .diagram-container {
+                   display: block;
+                }
+                .global-report-content .diagram-cell {
+                   page-break-inside: avoid;
+                   margin-bottom: 20px;
+                }
+                .global-report-content svg {
+                   max-width: 100% !important;
+                   height: auto !important;
+                }
+                .global-report-content h2 {
+                   page-break-after: avoid;
+                }
               }
             `}</style>
             <div 
@@ -4321,6 +4244,45 @@ const GlobalReportPreviewModal = ({
 
 const ADIA = () => {
   const [showWelcome, setShowWelcome] = useState(true);
+  const [showStandby, setShowStandby] = useState(false);
+
+  // Standby Timeout Listener (30 seconds of inactivity)
+  useEffect(() => {
+    if (showWelcome) return; // Don't trigger standby if the initial welcome/intro screen is visible
+
+    let timeoutId: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        setShowStandby(true);
+      }, 30000); // 30 seconds
+    };
+
+    const handleActivity = () => {
+      if (showStandby) {
+        setShowStandby(false);
+      }
+      resetTimer();
+    };
+
+    // Activity triggers
+    window.addEventListener('mousemove', handleActivity);
+    window.addEventListener('mousedown', handleActivity);
+    window.addEventListener('keydown', handleActivity);
+    window.addEventListener('touchstart', handleActivity);
+
+    // Initial trigger
+    resetTimer();
+
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('mousemove', handleActivity);
+      window.removeEventListener('mousedown', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+      window.removeEventListener('touchstart', handleActivity);
+    };
+  }, [showWelcome, showStandby]);
   // STATE HOOKS
   const [variables, setVariables] = useState<VariableDef[]>([
     { id: uuidv4(), name: 'counter', type: 'int32', initialValue: '0', currentValue: 0, visibleInScope: true },
@@ -4902,8 +4864,134 @@ const ADIA = () => {
   const [draggedPort, setDraggedPort] = useState<{ elementId: string, portId: string } | null>(null);
 
   // Global X-Bridges persistence
-  const [globalXBridgesNodes, setGlobalXBridgesNodes] = useState<any[]>([]);
-  const [globalXBridgesEdges, setGlobalXBridgesEdges] = useState<any[]>([]);
+  const defaultXBridgesNodes = [
+    {
+      id: 'w_ref_const',
+      type: 'xblock',
+      position: { x: 80, y: 120 },
+      data: {
+        id: 'w_ref_const',
+        type: 'Constant',
+        label: 'Speed Ref (rad/s)',
+        params: { value: 157 },
+        inputs: [],
+        outputs: [
+          { id: 'out', name: 'Out', type: 'auto', direction: 'output', value: 157, position: 'right' }
+        ],
+        parentId: 'root',
+        selected: false
+      }
+    },
+    {
+      id: 'tl_const',
+      type: 'xblock',
+      position: { x: 80, y: 280 },
+      data: {
+        id: 'tl_const',
+        type: 'Constant',
+        label: 'Load Torque (N-m)',
+        params: { value: 2 },
+        inputs: [],
+        outputs: [
+          { id: 'out', name: 'Out', type: 'auto', direction: 'output', value: 2, position: 'right' }
+        ],
+        parentId: 'root',
+        selected: false
+      }
+    },
+    {
+      id: 'ac_motor_controller',
+      type: 'xblock',
+      position: { x: 350, y: 160 },
+      data: {
+        id: 'ac_motor_controller',
+        type: 'AC_MOTOR_PID_CONTROL',
+        label: 'AC Motor PID Control',
+        params: { Kp: 2.5, Ki: 1.2, Kd: 0.1, w_ref: 157, tl: 2 },
+        inputs: [
+          { id: 'w_ref', name: 'ω*', type: 'control', direction: 'input', value: 157, position: 'left' },
+          { id: 'tl', name: 'Tl', type: 'load', direction: 'input', value: 2, position: 'bottom' }
+        ],
+        outputs: [
+          { id: 'omega', name: 'ω', type: 'measurement', direction: 'output', value: 0, position: 'right' },
+          { id: 'error', name: 'Error', type: 'measurement', direction: 'output', value: 0, position: 'top' },
+          { id: 'te', name: 'Torque', type: 'measurement', direction: 'output', value: 0, position: 'top' }
+        ],
+        parentId: 'root',
+        selected: false
+      }
+    },
+    {
+      id: 'motor_scope',
+      type: 'xblock',
+      position: { x: 680, y: 160 },
+      data: {
+        id: 'motor_scope',
+        type: 'Scope',
+        label: 'Motor Scope',
+        params: { numSignals: 3, bufferSize: 1000 },
+        inputs: [
+          { id: 'in1', name: 'In 1', type: 'auto', direction: 'input', value: 0, position: 'left' },
+          { id: 'in2', name: 'In 2', type: 'auto', direction: 'input', value: 0, position: 'left' },
+          { id: 'in3', name: 'In 3', type: 'auto', direction: 'input', value: 0, position: 'left' }
+        ],
+        outputs: [],
+        parentId: 'root',
+        selected: false
+      }
+    }
+  ];
+
+  const defaultXBridgesEdges = [
+    {
+      id: 'e_w_ref',
+      source: 'w_ref_const',
+      sourceHandle: 'out',
+      target: 'ac_motor_controller',
+      targetHandle: 'w_ref',
+      style: { stroke: '#4caf50', strokeWidth: 3 },
+      animated: false
+    },
+    {
+      id: 'e_tl',
+      source: 'tl_const',
+      sourceHandle: 'out',
+      target: 'ac_motor_controller',
+      targetHandle: 'tl',
+      style: { stroke: '#4caf50', strokeWidth: 3 },
+      animated: false
+    },
+    {
+      id: 'e_omega',
+      source: 'ac_motor_controller',
+      sourceHandle: 'omega',
+      target: 'motor_scope',
+      targetHandle: 'in1',
+      style: { stroke: '#4caf50', strokeWidth: 3 },
+      animated: false
+    },
+    {
+      id: 'e_error',
+      source: 'ac_motor_controller',
+      sourceHandle: 'error',
+      target: 'motor_scope',
+      targetHandle: 'in2',
+      style: { stroke: '#4caf50', strokeWidth: 3 },
+      animated: false
+    },
+    {
+      id: 'e_te',
+      source: 'ac_motor_controller',
+      sourceHandle: 'te',
+      target: 'motor_scope',
+      targetHandle: 'in3',
+      style: { stroke: '#4caf50', strokeWidth: 3 },
+      animated: false
+    }
+  ];
+
+  const [globalXBridgesNodes, setGlobalXBridgesNodes] = useState<any[]>(defaultXBridgesNodes);
+  const [globalXBridgesEdges, setGlobalXBridgesEdges] = useState<any[]>(defaultXBridgesEdges);
 
   // V-Lab STATE
   const [vlabNodes, setVlabNodes] = useState<any[]>([]);
@@ -6327,7 +6415,23 @@ const ADIA = () => {
         let engine = xBridgesEnginesRef.current.get(stateId);
         if (!engine) {
           const model = {
-            blocks: state.xBridgesModel.nodes.map(n => n.data as any),
+            blocks: state.xBridgesModel.nodes.map(n => {
+              const d = n.data as any;
+              if (XBRIDGES_LIBRARY[d.type]) {
+                try {
+                  const freshBlock = XBRIDGES_LIBRARY[d.type](d.id, d.params || {});
+                  return { 
+                    ...freshBlock, 
+                    id: d.id, 
+                    state: d.state || freshBlock.state, 
+                    params: { ...freshBlock.params, ...d.params } 
+                  };
+                } catch (e) {
+                  return d;
+                }
+              }
+              return d;
+            }),
             connections: state.xBridgesModel.edges.map(e => ({
               sourceBlock: e.source, sourcePort: e.sourceHandle!, targetBlock: e.target, targetPort: e.targetHandle!
             }))
@@ -7845,31 +7949,239 @@ const ADIA = () => {
 
   const handleGenerateReport = useCallback((projectName: string, author: string) => {
     const style = `
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fff; color: #333; padding: 40px; line-height: 1.6; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fff; color: #333; padding: 40px; line-height: 1.6; max-width: 900px; margin: 0 auto; }
         h1 { color: #f97316; border-bottom: 2px solid #f97316; padding-bottom: 10px; margin-bottom: 20px; }
-        h2 { color: #222; border-bottom: 1px solid #eee; margin-top: 40px; padding-bottom: 5px; }
-        h3 { color: #444; margin-top: 25px; font-size: 1.1em; }
+        h2 { color: #222; border-bottom: 1px solid #eee; margin-top: 40px; padding-bottom: 5px; page-break-after: avoid; }
+        h3 { color: #444; margin-top: 25px; font-size: 1.1em; page-break-after: avoid; }
         .meta { color: #666; font-size: 0.9em; margin-bottom: 40px; }
         .tree { margin-left: 20px; border-left: 1px solid #ddd; padding-left: 15px; }
         .item { margin-bottom: 15px; }
         .item-header { font-weight: bold; color: #000; }
         .props { font-size: 0.9em; color: #555; margin-left: 10px; }
         .tag { background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }
+        .diagram-container { margin: 16px 0; }
+        .diagram-cell { break-inside: avoid; page-break-inside: avoid; margin-bottom: 16px; }
+        svg { max-width: 100%; height: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 15px; font-size: 0.9em; }
+        th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+        th { background-color: #f5f5f5; color: #333; }
+        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
+        .badge-critical { background-color: #fee2e2; color: #991b1b; }
+        .badge-warning { background-color: #fef3c7; color: #92400e; }
+        .badge-info { background-color: #e0f2fe; color: #075985; }
+        @media print {
+          .diagram-cell { page-break-inside: avoid; }
+          svg { max-width: 100% !important; height: auto !important; }
+        }
     `;
 
     let html = `<html><head><title>${projectName} Report</title><style>${style}</style></head><body>`;
     html += `<h1>${projectName}</h1>`;
     html += `<div class="meta"><strong>Author:</strong> ${author} &bull; <strong>Date:</strong> ${new Date().toLocaleString()} &bull; <strong>Engine:</strong> ${VERSION}</div>`;
 
+    // ═══════════════════════════════════════════════════════════════════
+    // AUTO-LAYOUT ENGINE FOR REPORT DIAGRAMS
+    // Repositions nodes into readable arrangements for report output
+    // without modifying the user's actual canvas positions.
+    // ═══════════════════════════════════════════════════════════════════
+    const autoLayoutForReport = (
+      nodes: any[],
+      edges: any[],
+      type: 'req' | 'bdd' | 'ibd' | 'statemachine' | 'xbridges'
+    ): any[] => {
+      if (nodes.length <= 1) return nodes;
+
+      const NODE_GAP_X = 60;
+      const NODE_GAP_Y = 80;
+      const MAX_ROW_WIDTH = 780; // A4 target width
+
+      // Build adjacency for hierarchical layout
+      const buildAdjacency = () => {
+        const children = new Map<string, string[]>();
+        const parents = new Set<string>();
+        const nodeIds = new Set(nodes.map(n => n.id));
+
+        edges.forEach((e: any) => {
+          const srcId = e.sourceId || e.sourcePartId;
+          const tgtId = e.targetId || e.targetPartId;
+          if (!nodeIds.has(srcId) || !nodeIds.has(tgtId)) return;
+          if (srcId === tgtId) return;
+
+          if (!children.has(srcId)) children.set(srcId, []);
+          children.get(srcId)!.push(tgtId);
+          parents.add(tgtId);
+        });
+
+        // Find root nodes (nodes with no incoming edges)
+        const roots = nodes.filter(n => !parents.has(n.id));
+        if (roots.length === 0) return { children, roots: [nodes[0]] }; // fallback
+        return { children, roots };
+      };
+
+      if (type === 'statemachine') {
+        // ── Hierarchical / layered layout (top-to-bottom) ──
+        // BFS from start states to assign layers
+        const { children, roots } = buildAdjacency();
+
+        // Prioritize autostart states as roots
+        const autostartRoots = roots.filter(n => n.autostart || n.nodeType === 'parentState');
+        const effectiveRoots = autostartRoots.length > 0 ? autostartRoots : roots;
+
+        const layerMap = new Map<string, number>();
+        const queue: { id: string, layer: number }[] = effectiveRoots.map(r => ({ id: r.id, layer: 0 }));
+        const visited = new Set<string>();
+
+        while (queue.length > 0) {
+          const { id, layer } = queue.shift()!;
+          if (visited.has(id)) continue;
+          visited.add(id);
+          layerMap.set(id, Math.max(layerMap.get(id) || 0, layer));
+
+          const kids = children.get(id) || [];
+          kids.forEach(kid => {
+            if (!visited.has(kid)) {
+              queue.push({ id: kid, layer: layer + 1 });
+            }
+          });
+        }
+
+        // Place unvisited nodes into next layer
+        nodes.forEach(n => {
+          if (!layerMap.has(n.id)) {
+            layerMap.set(n.id, (Math.max(...Array.from(layerMap.values()), 0)) + 1);
+          }
+        });
+
+        // Group nodes by layer
+        const layerGroups = new Map<number, any[]>();
+        nodes.forEach(n => {
+          const layer = layerMap.get(n.id) || 0;
+          if (!layerGroups.has(layer)) layerGroups.set(layer, []);
+          layerGroups.get(layer)!.push(n);
+        });
+
+        const sortedLayers = Array.from(layerGroups.keys()).sort((a, b) => a - b);
+        let currentY = 0;
+
+        sortedLayers.forEach(layerIdx => {
+          const layerNodes = layerGroups.get(layerIdx)!;
+          let currentX = 0;
+          const maxH = Math.max(...layerNodes.map(n => n.height || 80));
+
+          // Center the row
+          const totalWidth = layerNodes.reduce((sum, n) => sum + (n.width || 160) + NODE_GAP_X, -NODE_GAP_X);
+          const startX = Math.max(0, (MAX_ROW_WIDTH - totalWidth) / 2);
+          currentX = startX;
+
+          layerNodes.forEach(n => {
+            const w = n.width || 160;
+            n.displayX = currentX;
+            n.displayY = currentY;
+            currentX += w + NODE_GAP_X;
+          });
+
+          currentY += maxH + NODE_GAP_Y;
+        });
+
+      } else if (type === 'bdd' || type === 'req') {
+        // ── Tree layout for BDD / Requirements ──
+        const { children, roots } = buildAdjacency();
+
+        // Assign levels via BFS
+        const levelMap = new Map<string, number>();
+        const bfsQueue: { id: string, level: number }[] = roots.map(r => ({ id: r.id, level: 0 }));
+        const bfsVisited = new Set<string>();
+
+        while (bfsQueue.length > 0) {
+          const { id, level } = bfsQueue.shift()!;
+          if (bfsVisited.has(id)) continue;
+          bfsVisited.add(id);
+          levelMap.set(id, level);
+
+          const kids = children.get(id) || [];
+          kids.forEach(kid => {
+            if (!bfsVisited.has(kid)) {
+              bfsQueue.push({ id: kid, level: level + 1 });
+            }
+          });
+        }
+
+        // Place unvisited
+        nodes.forEach(n => {
+          if (!levelMap.has(n.id)) {
+            levelMap.set(n.id, (Math.max(...Array.from(levelMap.values()), 0)) + 1);
+          }
+        });
+
+        // Group by level
+        const levelGroups = new Map<number, any[]>();
+        nodes.forEach(n => {
+          const level = levelMap.get(n.id) || 0;
+          if (!levelGroups.has(level)) levelGroups.set(level, []);
+          levelGroups.get(level)!.push(n);
+        });
+
+        const sortedLevels = Array.from(levelGroups.keys()).sort((a, b) => a - b);
+        let curY = 0;
+
+        sortedLevels.forEach(level => {
+          const levelNodes = levelGroups.get(level)!;
+          const totalWidth = levelNodes.reduce((sum, n) => sum + (n.width || 140) + NODE_GAP_X, -NODE_GAP_X);
+          const startX = Math.max(0, (MAX_ROW_WIDTH - totalWidth) / 2);
+          let curX = startX;
+          const maxH = Math.max(...levelNodes.map(n => n.height || 80));
+
+          levelNodes.forEach(n => {
+            n.displayX = curX;
+            n.displayY = curY;
+            curX += (n.width || 140) + NODE_GAP_X;
+          });
+
+          curY += maxH + NODE_GAP_Y;
+        });
+
+      } else if (type === 'ibd') {
+        // ── Grid layout for IBD parts ──
+        const nodeW = 180;
+        const nodeH = 100;
+        const cols = Math.max(2, Math.floor(MAX_ROW_WIDTH / (nodeW + NODE_GAP_X)));
+
+        nodes.forEach((n, i) => {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          n.displayX = col * (nodeW + NODE_GAP_X);
+          n.displayY = row * (nodeH + NODE_GAP_Y);
+          if (!n.width || n.width < 100) n.width = nodeW;
+          if (!n.height || n.height < 60) n.height = nodeH;
+        });
+
+      } else {
+        // ── Fallback: grid layout ──
+        const cols = Math.max(2, Math.floor(MAX_ROW_WIDTH / 200));
+        nodes.forEach((n, i) => {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          n.displayX = col * 200;
+          n.displayY = row * 150;
+        });
+      }
+
+      return nodes;
+    };
+
     // Helper to generate SVG for report
     const renderDiagramSVG = (nodes: any[], edges: any[], type: 'req' | 'bdd' | 'ibd' | 'statemachine' | 'xbridges', contextId?: string) => {
       if (nodes.length === 0) return '';
 
+      // Deep-copy edges to avoid mutating actual state data
+      const edgesCopy = edges.map((e: any) => ({ ...e }));
+
       // Prepare Nodes: Use fixed size for BDD blocks to match App, use instance size for IBD/Req
       const displayNodes = nodes.map(n => {
         const isBdd = type === 'bdd';
-        const width = isBdd ? 120 : n.width;
-        const height = isBdd ? 60 : n.height;
+        const isReq = type === 'req';
+        const width = isBdd ? 140 : isReq ? (n.width || 160) : n.width;
+        const height = isBdd ? 70 : isReq ? (n.height || 80) : n.height;
         return { ...n, width, height, displayX: n.x || 0, displayY: n.y || 0 };
       });
 
@@ -7878,7 +8190,7 @@ const ADIA = () => {
 
       // Ensure all edge sources and targets are in displayNodes for statemachine
       if (type === 'statemachine') {
-        edges.forEach((e: any) => {
+        edgesCopy.forEach((e: any) => {
           [e.sourceId, e.targetId].forEach(id => {
             if (!displayNodesMap.has(id)) {
               const globalState = states.find(s => s.id === id);
@@ -7897,7 +8209,21 @@ const ADIA = () => {
         });
       }
 
-      // Calculate bounds
+      // ── AUTO-LAYOUT: reposition nodes for report readability ──
+      autoLayoutForReport(displayNodes, edgesCopy, type);
+
+      // Rebuild the map after layout (positions changed)
+      displayNodes.forEach(n => displayNodesMap.set(n.id, n));
+
+      // Clear any user-defined control points (they won't match new positions)
+      if (type === 'statemachine') {
+        edgesCopy.forEach((e: any) => {
+          e.controlPoint = undefined;
+          e.hasControlPoint = false;
+        });
+      }
+
+      // Calculate bounds from new layout
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       displayNodes.forEach(n => {
         minX = Math.min(minX, n.displayX);
@@ -7906,25 +8232,72 @@ const ADIA = () => {
         maxY = Math.max(maxY, n.displayY + n.height);
       });
 
-      // Also expand bounds based on control points so curves aren't clipped
-      if (type === 'statemachine') {
-        edges.forEach((e: any) => {
-          if (e.controlPoint) {
-            minX = Math.min(minX, e.controlPoint.x);
-            minY = Math.min(minY, e.controlPoint.y);
-            maxX = Math.max(maxX, e.controlPoint.x);
-            maxY = Math.max(maxY, e.controlPoint.y);
-          }
+      const padding = 60;
+      const rawWidth = Math.max(200, maxX - minX + padding * 2);
+      const rawHeight = Math.max(150, maxY - minY + padding * 2);
+
+      // Cap SVG display width for A4 readability
+      const MAX_SVG_WIDTH = 780;
+      const scaleFactor = rawWidth > MAX_SVG_WIDTH ? MAX_SVG_WIDTH / rawWidth : 1;
+      const displayWidth = Math.min(rawWidth, MAX_SVG_WIDTH);
+      const displayHeight = rawHeight * scaleFactor;
+
+      const viewBox = `${minX - padding} ${minY - padding} ${rawWidth} ${rawHeight}`;
+
+      // ── PAGINATION: split large diagrams into pages ──
+      const MAX_NODES_PER_PAGE = 20;
+      if (displayNodes.length > MAX_NODES_PER_PAGE) {
+        // Sort nodes by Y then X for logical page grouping
+        const sortedNodes = [...displayNodes].sort((a, b) => a.displayY - b.displayY || a.displayX - b.displayX);
+        const pages: any[][] = [];
+        for (let i = 0; i < sortedNodes.length; i += MAX_NODES_PER_PAGE) {
+          pages.push(sortedNodes.slice(i, i + MAX_NODES_PER_PAGE));
+        }
+
+        let allSvg = '';
+        pages.forEach((pageNodes, pageIdx) => {
+          const pageNodeIds = new Set(pageNodes.map(n => n.id));
+          const pageEdges = edgesCopy.filter((e: any) => {
+            const srcId = e.sourceId || e.sourcePartId;
+            const tgtId = e.targetId || e.targetPartId;
+            return pageNodeIds.has(srcId) || pageNodeIds.has(tgtId);
+          });
+
+          // Calculate page bounds
+          let pMinX = Infinity, pMinY = Infinity, pMaxX = -Infinity, pMaxY = -Infinity;
+          pageNodes.forEach(n => {
+            pMinX = Math.min(pMinX, n.displayX);
+            pMinY = Math.min(pMinY, n.displayY);
+            pMaxX = Math.max(pMaxX, n.displayX + n.width);
+            pMaxY = Math.max(pMaxY, n.displayY + n.height);
+          });
+
+          const pPad = 50;
+          const pW = Math.max(200, pMaxX - pMinX + pPad * 2);
+          const pH = Math.max(150, pMaxY - pMinY + pPad * 2);
+          const pDispW = Math.min(pW, MAX_SVG_WIDTH);
+          const pScale = pW > MAX_SVG_WIDTH ? MAX_SVG_WIDTH / pW : 1;
+          const pDispH = pH * pScale;
+          const pVB = `${pMinX - pPad} ${pMinY - pPad} ${pW} ${pH}`;
+
+          allSvg += `<div style="margin: 12px 0; border: 1px solid #ddd; padding: 12px; background: #fcfcfc; page-break-inside: avoid;">`;
+          allSvg += `<div style="font-size: 10px; color: #999; margin-bottom: 6px; text-align: right;">Page ${pageIdx + 1} of ${pages.length} (${displayNodes.length} elements)</div>`;
+          allSvg += renderSingleSVG(pageNodes, pageEdges, type, pVB, pDispW, pDispH, displayNodesMap);
+          allSvg += `</div>`;
         });
+        return allSvg;
       }
 
-      const padding = 60;
-      const width = Math.max(100, maxX - minX + padding * 2);
-      const height = Math.max(100, maxY - minY + padding * 2);
-      const viewBox = `${minX - padding} ${minY - padding} ${width} ${height}`;
+      let svgResult = `<div style="margin: 16px 0; border: 1px solid #ddd; padding: 12px; background: #fcfcfc; page-break-inside: avoid;">`;
+      svgResult += renderSingleSVG(displayNodes, edgesCopy, type, viewBox, displayWidth, displayHeight, displayNodesMap);
+      svgResult += `</div>`;
+      return svgResult;
+    };
 
-      let svg = `<div style="margin: 20px 0; border: 1px solid #eee; padding: 10px; overflow: auto; background: #fcfcfc;">`;
-      svg += `<svg width="${width}" height="${height}" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg" style="font-family: sans-serif;">`;
+    // Single SVG rendering helper (used by renderDiagramSVG and pagination)
+    const renderSingleSVG = (displayNodes: any[], edges: any[], type: string, viewBox: string, svgWidth: number, svgHeight: number, displayNodesMap: Map<string, any>) => {
+
+      let svg = `<svg width="${svgWidth}" height="${svgHeight}" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Segoe UI', Tahoma, sans-serif; max-width: 100%; height: auto;">`;
 
       // Defs for markers
       svg += `<defs>
@@ -7977,23 +8350,23 @@ const ADIA = () => {
         if (type === 'statemachine') {
           if (n.nodeType === 'junction') {
             svg += `<g transform="translate(${n.displayX + n.width / 2}, ${n.displayY + n.height / 2})">`;
-            svg += `<circle r="6" fill="#333" stroke="#ff9900" stroke-width="1.5" />`;
-            if (n.type === 'history') svg += `<text x="0" y="4" text-anchor="middle" fill="#fff" font-size="10" font-weight="bold">H</text>`;
-            if (n.type === 'deep-history') svg += `<text x="0" y="4" text-anchor="middle" fill="#fff" font-size="10" font-weight="bold">H*</text>`;
-            svg += `<text x="0" y="-15" text-anchor="middle" fill="#ff9900" font-size="10" font-weight="bold">${n.name}</text>`;
+            svg += `<circle r="8" fill="#333" stroke="#ff9900" stroke-width="2" />`;
+            if (n.type === 'history') svg += `<text x="0" y="4" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">H</text>`;
+            if (n.type === 'deep-history') svg += `<text x="0" y="4" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">H*</text>`;
+            svg += `<text x="0" y="-18" text-anchor="middle" fill="#ff9900" font-size="12" font-weight="bold">${n.name}</text>`;
             svg += `</g>`;
           } else {
             // State
             svg += `<g transform="translate(${n.displayX}, ${n.displayY})">`;
-            svg += `<rect width="${n.width}" height="${n.height}" rx="8" fill="#fcfcfc" stroke="#333" stroke-width="1.5" />`;
-            svg += `<path d="M0 24 h${n.width}" stroke="#eee" stroke-width="1" />`;
-            svg += `<text x="${n.width / 2}" y="16" text-anchor="middle" font-size="11" font-weight="bold" fill="#000" font-family="sans-serif">${n.name}</text>`;
+            svg += `<rect width="${n.width}" height="${n.height}" rx="8" fill="#fcfcfc" stroke="#333" stroke-width="2" />`;
+            svg += `<path d="M0 26 h${n.width}" stroke="#ddd" stroke-width="1" />`;
+            svg += `<text x="${n.width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${n.name}</text>`;
 
             if (n.entry || n.during || n.exit) {
               let yTxt = 36;
-              if (n.entry) { svg += `<text x="6" y="${yTxt}" font-size="9" fill="#555" font-family="monospace">entry/</text>`; yTxt += 10; }
-              if (n.during) { svg += `<text x="6" y="${yTxt}" font-size="9" fill="#555" font-family="monospace">during/</text>`; yTxt += 10; }
-              if (n.exit) { svg += `<text x="6" y="${yTxt}" font-size="9" fill="#555" font-family="monospace">exit/</text>`; }
+              if (n.entry) { svg += `<text x="6" y="${yTxt}" font-size="10" fill="#555" font-family="monospace">entry/</text>`; yTxt += 12; }
+              if (n.during) { svg += `<text x="6" y="${yTxt}" font-size="10" fill="#555" font-family="monospace">during/</text>`; yTxt += 12; }
+              if (n.exit) { svg += `<text x="6" y="${yTxt}" font-size="10" fill="#555" font-family="monospace">exit/</text>`; }
             }
             if (n.internalTransitions) {
               const lines = n.internalTransitions.split('\n').filter((l: string) => l.trim());
@@ -8021,16 +8394,16 @@ const ADIA = () => {
         svg += `<rect width="${n.width}" height="${n.height}" fill="${fill}" stroke="${stroke}" stroke-width="1" rx="4" />`;
 
         if (type === 'req') {
-          svg += `<text x="${n.width / 2}" y="20" text-anchor="middle" font-size="12" font-weight="bold" fill="#000" font-family="sans-serif">${n.reqId}</text>`;
-          svg += `<text x="${n.width / 2}" y="35" text-anchor="middle" font-size="10" fill="#333" font-family="sans-serif">${n.name.length > 20 ? n.name.substring(0, 18) + '...' : n.name}</text>`;
+          svg += `<text x="${n.width / 2}" y="22" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${n.reqId}</text>`;
+          svg += `<text x="${n.width / 2}" y="40" text-anchor="middle" font-size="11" fill="#333" font-family="sans-serif">${n.name.length > 22 ? n.name.substring(0, 20) + '...' : n.name}</text>`;
           if (n.description) {
-            const desc = n.description.length > 25 ? n.description.substring(0, 22) + '...' : n.description;
-            svg += `<text x="5" y="55" font-size="9" fill="#555" font-family="sans-serif">${desc}</text>`;
+            const desc = n.description.length > 30 ? n.description.substring(0, 28) + '...' : n.description;
+            svg += `<text x="6" y="58" font-size="10" fill="#555" font-family="sans-serif">${desc}</text>`;
           }
         } else {
-          svg += `<text x="${n.width / 2}" y="15" text-anchor="middle" font-size="9" fill="#666" font-family="monospace">«${n.stereotype || (type === 'ibd' ? 'part' : 'block')}»</text>`;
-          svg += `<text x="${n.width / 2}" y="30" text-anchor="middle" font-size="12" font-weight="bold" fill="#000" font-family="sans-serif">${n.name}</text>`;
-          svg += `<line x1="0" y1="35" x2="${n.width}" y2="35" stroke="#888" stroke-width="0.5" />`;
+          svg += `<text x="${n.width / 2}" y="17" text-anchor="middle" font-size="10" fill="#666" font-family="monospace">«${n.stereotype || (type === 'ibd' ? 'part' : 'block')}»</text>`;
+          svg += `<text x="${n.width / 2}" y="34" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${n.name}</text>`;
+          svg += `<line x1="0" y1="38" x2="${n.width}" y2="38" stroke="#888" stroke-width="0.5" />`;
         }
 
         if (type === 'bdd' && n.properties?.length > 0) {
@@ -8161,9 +8534,9 @@ const ADIA = () => {
             }
 
             const txt = (middleLabel ? middleLabel + ' ' : '') + (e.label || '');
-            const txtW = txt.length * 6 + 10;
-            svg += `<rect x="${midX - txtW / 2}" y="${midY - 8}" width="${txtW}" height="14" fill="#fcfcfc" opacity="0.9" />`;
-            svg += `<text x="${midX}" y="${midY + 3}" text-anchor="middle" font-size="10" fill="#000">${txt}</text>`;
+            const txtW = txt.length * 6.5 + 12;
+            svg += `<rect x="${midX - txtW / 2}" y="${midY - 9}" width="${txtW}" height="16" fill="#fcfcfc" opacity="0.92" rx="2" />`;
+            svg += `<text x="${midX}" y="${midY + 3}" text-anchor="middle" font-size="11" fill="#000">${txt}</text>`;
           }
 
           if (type === 'bdd' && (e.sourceMultiplicity || e.targetMultiplicity)) {
@@ -8173,7 +8546,7 @@ const ADIA = () => {
         }
       });
 
-      svg += `</svg></div>`;
+      svg += `</svg>`;
       return svg;
     };
 
@@ -8447,6 +8820,105 @@ const ADIA = () => {
         html += `</div>`;
       });
       html += `</div>`;
+
+      // 4.1 Critical Path Analysis (Critical Batches)
+      const analysis = analyzeStateMachine({ tickMs, states, junctions, transitions, variables, layers, safetyMode });
+
+      html += `<h2>4.1 Critical Path Analysis</h2><div class="tree">`;
+      html += `<p>The execution path analysis evaluates the longest and most complex functional routes (critical batches) through the state machine.</p>`;
+      if (analysis.criticalPaths.length > 0) {
+        html += `<table>
+                  <tr style="background-color: #f5f5f5; text-align: left; color: #333;">
+                    <th style="padding: 10px; border: 1px solid #ddd;">ID</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">Name</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">Execution Sequence</th>
+                    <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Complexity</th>
+                  </tr>`;
+        analysis.criticalPaths.forEach(cp => {
+          html += `<tr>
+                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-weight: bold; color: #f97316;">${cp.id}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>${cp.name}</strong><br/><small style="color: #666;">${cp.description}</small></td>
+                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-size: 0.95em;">${cp.states.map(s => `<span class="tag">${s}</span>`).join(' &rarr; ')}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; text-align: center;">${cp.complexity}</td>
+                  </tr>`;
+        });
+        html += `</table>`;
+      } else {
+        html += `<p><em>No critical paths identified. Check if an autostart state is configured.</em></p>`;
+      }
+      html += `</div>`;
+
+      // 4.2 Corner Case & Behavior Analysis
+      html += `<h2>4.2 Corner Case & Behavior Analysis</h2><div class="tree">`;
+      html += `<p>Systematic audit of risk-prone states, deadlock conditions, race risks, and boundaries in the designed logic.</p>`;
+      if (analysis.cornerCases.length > 0) {
+        html += `<table>
+                  <tr style="background-color: #f5f5f5; text-align: left; color: #333;">
+                    <th style="padding: 10px; border: 1px solid #ddd;">ID</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">Category</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">Severity</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">Element</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">Description</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">Recommendation</th>
+                  </tr>`;
+        analysis.cornerCases.forEach(cc => {
+          const badgeClass = cc.severity === 'critical' ? 'badge-critical' : cc.severity === 'warning' ? 'badge-warning' : 'badge-info';
+          html += `<tr>
+                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-weight: bold;">${cc.id}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-weight: bold;">${cc.category}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><span class="badge ${badgeClass}">${cc.severity.toUpperCase()}</span></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>${cc.elementName}</strong></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">${cc.description}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><span style="color: #3b82f6; font-weight: 500;">${cc.recommendation}</span></td>
+                  </tr>`;
+        });
+        html += `</table>`;
+      } else {
+        html += `<p style="color: #15803d; font-weight: bold;">&check; All behavioral audits passed! No deadlocks, unreachable states, or unconditional loops detected.</p>`;
+      }
+      html += `</div>`;
+
+      // 4.3 Test Scenario Matrix
+      html += `<h2>4.3 Test Scenario Matrix</h2><div class="tree">`;
+      html += `<p>Comprehensive set of test scenarios derived to achieve full branch/junction coverage, exercise all corner cases, and verify robust runtime execution with zero crashes.</p>`;
+      
+      analysis.testScenarios.forEach(ts => {
+        html += `<div class="item" style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; margin-bottom: 20px; background-color: #fafafa;">
+                  <div class="item-header" style="font-size: 1.1em; color: #1e293b; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 10px;">
+                    <span class="tag" style="background-color: #f97316; color: #fff;">${ts.category.toUpperCase()}</span> ${ts.name} <span style="font-family: monospace; font-size: 0.9em; color: #64748b; float: right;">${ts.id}</span>
+                  </div>`;
+        
+        if (ts.preconditions.length > 0) {
+          html += `<div class="props" style="margin-bottom: 10px;">
+                    <strong>Preconditions:</strong>
+                    <ul style="margin: 4px 0; padding-left: 20px; font-size: 0.95em;">
+                      ${ts.preconditions.map(p => `<li>${p}</li>`).join('')}
+                    </ul>
+                  </div>`;
+        }
+
+        html += `<strong>Steps:</strong>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 10px; font-size: 0.85em; background-color: #fff;">
+                  <tr style="background-color: #f1f5f9; text-align: left;">
+                    <th style="width: 8%; padding: 6px; border: 1px solid #cbd5e1; text-align: center;">Step</th>
+                    <th style="width: 52%; padding: 6px; border: 1px solid #cbd5e1;">Action / Input Stimulus</th>
+                    <th style="width: 40%; padding: 6px; border: 1px solid #cbd5e1;">Expected Transition / Output State</th>
+                  </tr>`;
+        ts.steps.forEach((step, index) => {
+          html += `<tr>
+                    <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold;">${index + 1}</td>
+                    <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${step.action}</td>
+                    <td style="padding: 6px; border: 1px solid #cbd5e1;">${step.expected}</td>
+                  </tr>`;
+        });
+        html += `</table>`;
+
+        html += `<div class="props" style="background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 8px; border-radius: 4px; font-size: 0.9em;">
+                  <strong>Expected Outcome:</strong> ${ts.expectedResult}
+                </div>`;
+        html += `</div>`;
+      });
+      html += `</div>`;
     }
 
     // 5. HMI
@@ -8466,7 +8938,7 @@ const ADIA = () => {
     setShowGlobalReportPreview(true);
     setShowReportDialog(false);
     addError('info', 'Report preview ready');
-  }, [blocks, parts, connectors, states, transitions, junctions, hmiComponents, variables, addError, setShowReportDialog, layers]);
+  }, [blocks, parts, connectors, states, transitions, junctions, hmiComponents, variables, addError, setShowReportDialog, layers, tickMs, safetyMode]);
 
   // KEYBOARD SHORTCUTS
   useEffect(() => {
@@ -9896,7 +10368,14 @@ const ADIA = () => {
   if (xBridgesStateId || diagramMode === 'xbridges') {
     const xState = xBridgesStateId ? states.find(s => s.id === xBridgesStateId) : null;
     return (
-      <div className="fixed inset-0 z-50 bg-[#0a0a0a]">
+      <div 
+        className="fixed inset-0 z-50 bg-[#0a0a0a]"
+        style={{
+          zoom: uiZoom,
+          width: `${100 / uiZoom}vw`,
+          height: `${100 / uiZoom}vh`
+        }}
+      >
         <XbridgesWorkspace
           initialNodes={xBridgesStateId ? (xState?.xBridgesModel?.nodes || []) : globalXBridgesNodes}
           initialEdges={xBridgesStateId ? (xState?.xBridgesModel?.edges || []) : globalXBridgesEdges}
@@ -9928,7 +10407,14 @@ const ADIA = () => {
 
   if (diagramMode === 'vlab') {
     return (
-      <div className="fixed inset-0 z-50 bg-[#0a0a0a]">
+      <div 
+        className="fixed inset-0 z-50 bg-[#0a0a0a]"
+        style={{
+          zoom: uiZoom,
+          width: `${100 / uiZoom}vw`,
+          height: `${100 / uiZoom}vh`
+        }}
+      >
         <VLabWorkspace
           nodes={vlabNodes}
           edges={vlabEdges}
@@ -9947,7 +10433,12 @@ const ADIA = () => {
 
   return (
     <>
-      {showWelcome && <WelcomeOverlay onComplete={() => setShowWelcome(false)} />}
+      {showWelcome && (
+        <IntroStandbyOverlay mode="intro" onClose={() => setShowWelcome(false)} />
+      )}
+      {showStandby && (
+        <IntroStandbyOverlay mode="standby" onClose={() => setShowStandby(false)} />
+      )}
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />
       <FactoryIOGateway 
         isOpen={showFactoryIOGateway} 

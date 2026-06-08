@@ -80,8 +80,8 @@ describe('StateMachineCodeGenerator', () => {
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
     
     // counter is uint16, so assignments and comparisons involving literals should have 'U'
-    expect(userLogicC).toContain('g_data.counter = 0U;'); // From Idle state entry
-    expect(coreC).toContain('g_data.counter = 5U;');      // From transition action
+    expect(userLogicC).toContain('instance->data.counter = 0U;'); // From Idle state entry
+    expect(coreC).toContain('instance->data.counter = 5U;');      // From transition action
   });
 
   it('should correctly generate state transition logic in sm_core.c', () => {
@@ -89,13 +89,13 @@ describe('StateMachineCodeGenerator', () => {
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
     
     // Check transition from Idle to Active
-    expect(coreC).toContain('if (g_data.sensor_val > 10.0)');
-    expect(coreC).toContain('g_active_state = SM_ST_ACTIVE;');
+    expect(coreC).toContain('if (instance->data.sensor_val > 10.0)');
+    expect(coreC).toContain('instance->active_state = SM_ST_ACTIVE;');
     
     // Check transition from Active to Idle
     // Note: counter is uint16, so 100 should become 100U
-    expect(coreC).toContain('if (g_data.counter >= 100U)');
-    expect(coreC).toContain('g_active_state = SM_ST_IDLE;');
+    expect(coreC).toContain('if (instance->data.counter >= 100U)');
+    expect(coreC).toContain('instance->active_state = SM_ST_IDLE;');
   });
 
   it('should generate X-Bridges step logic when a state has an X-Bridges model', () => {
@@ -126,14 +126,14 @@ describe('StateMachineCodeGenerator', () => {
     const userLogicH = result.files.find(f => f.name === 'sm_user_logic.h')?.content || '';
 
     // Check prototype in .h
-    expect(userLogicH).toContain('void SM_ST_IDLE_XBridges_Step(float delta_s);');
+    expect(userLogicH).toContain('void SM_ST_IDLE_XBridges_Step(ADIA_Instance_t* instance, float delta_s);');
 
     // Check implementation in .c
-    expect(userLogicC).toContain('void SM_ST_IDLE_XBridges_Step(float delta_s)');
+    expect(userLogicC).toContain('void SM_ST_IDLE_XBridges_Step(ADIA_Instance_t* instance, float delta_s)');
     expect(userLogicC).toContain('float block1_out0 = 0.0f;');
     expect(userLogicC).toContain('block1_out0 = 5.0000f;');
-    expect(userLogicC).toContain('g_data.block2_state += block1_out0 * delta_s;');
-    expect(userLogicC).toContain('g_data.sensor_val = block2_out0;');
+    expect(userLogicC).toContain('instance->data.block2_state += block1_out0 * delta_s;');
+    expect(userLogicC).toContain('instance->data.sensor_val = block2_out0;');
   });
 
   it('should report error if safety mode is enabled but no safe state is defined', () => {
@@ -143,5 +143,16 @@ describe('StateMachineCodeGenerator', () => {
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0].message).toContain('No Safe State defined');
     expect(result.files).toHaveLength(0);
+  });
+
+  it('should include enhanced state machine analysis sections in the testing report', () => {
+    const result = generateMISRACCode(chart);
+    const report = result.files.find(f => f.name === 'sm_testing_report.md')?.content || '';
+
+    expect(report).toContain('## 5. Critical Path Analysis (Critical Batches)');
+    expect(report).toContain('## 6. Corner Case & Behavior Analysis');
+    expect(report).toContain('## 7. Automatically Generated Test Scenario Matrix');
+    expect(report).toContain('Total Unique Paths Enumerated:');
+    expect(report).toContain('State Reachability:');
   });
 });

@@ -13,6 +13,8 @@ export interface VLabBlock {
   params: Record<string, { value: number | string; unit: string; label: string }>;
   category?: string;
   ports: VLabPort[];
+  equation?: string;
+  description?: string;
 }
 
 export interface VLabDomain {
@@ -27,12 +29,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       { 
         id: 'resistor', name: 'Resistor', color: '#3b82f6', icon: 'resistor', category: 'Passive',
         params: { R: { value: 100, unit: 'Ω', label: 'Resistance' } },
-        ports: [{ id: 'p', pos: 'left', label: '+' }, { id: 'n', pos: 'right', label: '-' }]
+        ports: [{ id: 'p', pos: 'left', label: '+' }, { id: 'n', pos: 'right', label: '-' }],
+        equation: 'V = I * R'
       },
       { 
         id: 'variable_resistor', name: 'Variable Resistor', color: '#3b82f6', icon: 'variable_resistor', category: 'Passive',
         params: { R_min: { value: 0, unit: 'Ω', label: 'Min Resistance' } },
-        ports: [{ id: 'p', pos: 'left', label: '+' }, { id: 'n', pos: 'right', label: '-' }, { id: 'r', pos: 'top', label: 'R' }]
+        ports: [{ id: 'p', pos: 'left', label: '+' }, { id: 'n', pos: 'right', label: '-' }, { id: 'r', pos: 'top', label: 'R' }],
+        equation: 'V = I * R(t)',
+        description: 'A resistor whose value is controlled by an external physical signal. Useful for modeling sensors or variable loads.'
       },
       { 
         id: 'infinite_resistance', name: 'Infinite Resistance', color: '#60a5fa', icon: 'infinite_resistance', category: 'Passive',
@@ -42,12 +47,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       { 
         id: 'capacitor', name: 'Capacitor', color: '#3b82f6', icon: 'capacitor', category: 'Passive',
         params: { C: { value: 1e-6, unit: 'F', label: 'Capacitance' } },
-        ports: [{ id: 'p', pos: 'left', label: '+' }, { id: 'n', pos: 'right', label: '-' }]
+        ports: [{ id: 'p', pos: 'left', label: '+' }, { id: 'n', pos: 'right', label: '-' }],
+        equation: 'I = C * dV/dt'
       },
       { 
         id: 'inductor', name: 'Inductor', color: '#3b82f6', icon: 'inductor', category: 'Passive',
         params: { L: { value: 1e-3, unit: 'H', label: 'Inductance' } },
-        ports: [{ id: 'p', pos: 'left', label: '+' }, { id: 'n', pos: 'right', label: '-' }]
+        ports: [{ id: 'p', pos: 'left', label: '+' }, { id: 'n', pos: 'right', label: '-' }],
+        equation: 'V = L * dI/dt'
       },
       { 
         id: 'memristor', name: 'Memristor', color: '#3b82f6', icon: 'memristor', category: 'Passive',
@@ -68,7 +75,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         ports: [
           { id: 'p1', pos: 'left', label: '1+' }, { id: 'n1', pos: 'left', label: '1-' },
           { id: 'p2', pos: 'right', label: '2+' }, { id: 'n2', pos: 'right', label: '2-' }
-        ]
+        ],
+        equation: 'V2 = N * V1\\nI1 = N * I2',
+        description: 'An ideal transformer that scales voltage and current according to the turns ratio N. It preserves power (V1*I1 = V2*I2).'
       },
       { 
         id: 'opamp', name: 'Op-Amp', color: '#60a5fa', icon: 'opamp', category: 'Active',
@@ -76,12 +85,15 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         ports: [
           { id: 'in_p', pos: 'left', label: '+' }, { id: 'in_n', pos: 'left', label: '-' },
           { id: 'out', pos: 'right', label: 'Out' }
-        ]
+        ],
+        equation: 'Vout = A * (V+ - V-)\\n(Ideal: V+ = V-)'
       },
       { 
         id: 'switch', name: 'Switch', color: '#60a5fa', icon: 'switch', category: 'Active',
         params: { Ron: { value: 0.01, unit: 'Ω', label: 'On Resistance' } },
-        ports: [{ id: 'p', pos: 'left', label: '+' }, { id: 'n', pos: 'right', label: '-' }, { id: 'v', pos: 'top', label: 'v' }]
+        ports: [{ id: 'p', pos: 'left', label: '+' }, { id: 'n', pos: 'right', label: '-' }, { id: 'v', pos: 'top', label: 'v' }],
+        equation: 'V = I * R_sw\\nR_sw = (v > 0) ? Ron : Roff',
+        description: 'An ideal switch controlled by a physical signal. When the control signal is positive, the switch is closed with a low resistance Ron.'
       },
       {
         id: 'rotational_electromechanical_converter', name: 'Rotational EM Converter', color: '#f59e0b', icon: 'rotational_em', category: 'Couplings',
@@ -123,7 +135,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           { id: 'p', pos: 'left', label: '+', domain: 'Electrical' }, 
           { id: 'n', pos: 'left', label: '-', domain: 'Electrical' }, 
           { id: 'r', pos: 'right', label: 'R', domain: 'Rotational' }
-        ]
+        ],
+        equation: 'V = Ra*I + La*dI/dt + Ke*ω\\nT = Ke*I = J*dω/dt + B*ω'
       },
       {
         id: 'ac_motor', name: 'AC Motor', color: '#10b981', icon: 'ac_motor', category: 'Machines',
@@ -173,7 +186,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'v_sensor', name: 'Voltage Sensor', color: '#fbbf24', icon: 'v_sensor', category: 'Sensors',
         params: { R_int: { value: 1e8, unit: 'Ω', label: 'Internal Res' } },
-        ports: [{ id: 'p', pos: 'top', label: '+', domain: 'Electrical' }, { id: 'n', pos: 'bottom', label: '-', domain: 'Electrical' }, { id: 'v', pos: 'right', label: 'V', domain: 'Physical' }]
+        ports: [{ id: 'p', pos: 'top', label: '+', domain: 'Electrical' }, { id: 'n', pos: 'bottom', label: '-', domain: 'Electrical' }, { id: 'v', pos: 'right', label: 'V', domain: 'Physical' }],
+        equation: 'V_out = V_p - V_n',
+        description: 'Measures the potential difference between two electrical nodes and outputs it as a physical signal.'
       },
       {
         id: 'i_sensor', name: 'Current Sensor', color: '#fbbf24', icon: 'i_sensor', category: 'Sensors',
@@ -183,7 +198,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'dc_voltage', name: 'DC Voltage Source', color: '#ef4444', icon: 'dc_voltage', category: 'Sources',
         params: { V: { value: 12, unit: 'V', label: 'Voltage' }, R_int: { value: 1e-3, unit: 'Ω', label: 'Internal Res' } },
-        ports: [{ id: 'p', pos: 'top', label: '+', domain: 'Electrical' }, { id: 'n', pos: 'bottom', label: '-', domain: 'Electrical' }]
+        ports: [{ id: 'p', pos: 'top', label: '+', domain: 'Electrical' }, { id: 'n', pos: 'bottom', label: '-', domain: 'Electrical' }],
+        equation: 'V = V_source - I * R_int'
       },
       {
         id: 'ac_voltage', name: 'AC Voltage Source', color: '#ef4444', icon: 'ac_voltage', category: 'Sources',
@@ -240,7 +256,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'ground', name: 'Electrical Reference', color: '#3b82f6', icon: 'ground', category: 'Connections',
         params: {},
-        ports: [{ id: 'a', pos: 'top', label: '' }]
+        ports: [{ id: 'a', pos: 'top', label: '' }],
+        equation: 'V = 0',
+        description: 'The zero-potential reference for the electrical circuit. All voltage measurements are relative to this node.'
       },
       {
         id: 'busbar', name: 'Busbar', color: '#3b82f6', icon: 'busbar', category: 'Connections',
@@ -285,7 +303,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'gas_chamber', name: 'Constant Volume Chamber (G)', color: '#d946ef', icon: 'gas_chamber', category: 'Elements',
         params: { V: { value: 0.01, unit: 'm^3', label: 'Volume' } },
-        ports: [{ id: 'a', pos: 'top', label: 'A' }, { id: 'b', pos: 'top', label: 'B' }]
+        ports: [{ id: 'a', pos: 'top', label: 'A' }, { id: 'b', pos: 'top', label: 'B' }],
+        equation: 'dP/dt = (R*T/V) * Σ(mdot_in)',
+        description: 'A rigid container that stores gas. The pressure changes according to the net mass flow rate into the chamber.'
       },
       {
         id: 'gas_reservoir', name: 'Controlled Reservoir (G)', color: '#d946ef', icon: 'gas_res', category: 'Elements',
@@ -295,7 +315,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'gas_resistance', name: 'Flow Resistance (G)', color: '#d946ef', icon: 'gas_resistance', category: 'Elements',
         params: { k: { value: 1, unit: 'kg/s/Pa', label: 'Conductance' } },
-        ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }]
+        ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }],
+        equation: 'mdot = k * (Pa - Pb)',
+        description: 'Models a pressure drop across a component. The mass flow rate is proportional to the pressure difference.'
       },
       {
         id: 'gas_inf_resistance', name: 'Infinite Flow Resistance (G)', color: '#d946ef', icon: 'gas_inf_res', category: 'Elements',
@@ -316,7 +338,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         ports: [
           { id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' },
           { id: 'h', pos: 'top', label: 'H' }
-        ]
+        ],
+        equation: 'ΔP = f * (L/D) * (ρv²/2)',
+        description: 'Models gas flow through a cylindrical conduit, accounting for friction-induced pressure drop and heat transfer.'
       },
       {
         id: 'gas_fixed_res', name: 'Reservoir (G)', color: '#d946ef', icon: 'gas_fixed_res', category: 'Elements',
@@ -374,7 +398,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'reluctance', name: 'Reluctance', color: '#ec4899', icon: 'reluctance', category: 'Elements',
         params: { R: { value: 1e6, unit: 'A-t/Wb', label: 'Reluctance' } },
-        ports: [{ id: 'n', pos: 'left', label: 'N' }, { id: 's', pos: 'right', label: 'S' }]
+        ports: [{ id: 'n', pos: 'left', label: 'N' }, { id: 's', pos: 'right', label: 'S' }],
+        equation: 'MMF = Φ * R'
       },
       {
         id: 'fundamental_reluctance', name: 'Fundamental Reluctance', color: '#ec4899', icon: 'reluctance_f', category: 'Elements',
@@ -424,7 +449,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'mag_mmf_source', name: 'MMF Source', color: '#ec4899', icon: 'mmf_source', category: 'Sources',
         params: { MMF: { value: 10, unit: 'A-t', label: 'Magnetomotive Force' } },
-        ports: [{ id: 'n', pos: 'top', label: 'N' }, { id: 's', pos: 'bottom', label: 'S' }]
+        ports: [{ id: 'n', pos: 'top', label: 'N' }, { id: 's', pos: 'bottom', label: 'S' }],
+        equation: 'MMF = N * I',
+        description: 'An ideal source of magnetomotive force. Drives magnetic flux through a reluctant circuit.'
       },
       {
         id: 'mag_flux_source', name: 'Flux Source', color: '#ec4899', icon: 'flux_source', category: 'Sources',
@@ -460,7 +487,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'trans_motion_sensor', name: 'Ideal Translational Motion Sensor', color: '#10b981', icon: 'trans_motion', category: 'Sensors',
         params: { b: { value: 0, unit: 'N-s/m', label: 'Damping' } },
-        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Translational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Translational' }, { id: 'v', pos: 'top', label: 'V', domain: 'Physical' }, { id: 'p', pos: 'top', label: 'P', domain: 'Physical' }]
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Translational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Translational' }, { id: 'v', pos: 'top', label: 'V', domain: 'Physical' }, { id: 'p', pos: 'top', label: 'P', domain: 'Physical' }],
+        equation: 'v = dx/dt',
+        description: 'Measures position and velocity of a mechanical translational node relative to a reference.'
       },
 
       // Sources
@@ -477,14 +506,18 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'ang_vel_source', name: 'Ideal Angular Velocity Source', color: '#10b981', icon: 'vel_source', category: 'Sources',
         params: { omega: { value: 10, unit: 'rad/s', label: 'Angular Velocity' } },
-        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Rotational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Rotational' }, { id: 's', pos: 'top', label: 'S', domain: 'Physical' }]
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Rotational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Rotational' }, { id: 's', pos: 'top', label: 'S', domain: 'Physical' }],
+        equation: 'ω = ω_input',
+        description: 'Drives a rotational node at a specified angular velocity, regardless of the load torque.'
       },
 
       // Mechanisms
       {
         id: 'gear_box', name: 'Gear Box', color: '#10b981', icon: 'gear_box', category: 'Mechanisms',
         params: { ratio: { value: 2, unit: '1', label: 'Gear Ratio' } },
-        ports: [{ id: 's1', pos: 'left', label: 'S1', domain: 'Rotational' }, { id: 's2', pos: 'right', label: 'S2', domain: 'Rotational' }]
+        ports: [{ id: 's1', pos: 'left', label: 'S1', domain: 'Rotational' }, { id: 's2', pos: 'right', label: 'S2', domain: 'Rotational' }],
+        equation: 'ω1 = ratio * ω2\\nτ2 = ratio * τ1',
+        description: 'An ideal mechanical gear transmission that scales angular velocity and torque.'
       },
       {
         id: 'lever', name: 'Lever', color: '#10b981', icon: 'lever', category: 'Mechanisms',
@@ -511,7 +544,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'inertia', name: 'Inertia', color: '#10b981', icon: 'inertia', category: 'Rotational Elements',
         params: { J: { value: 0.01, unit: 'kg-m^2', label: 'Inertia' } },
-        ports: [{ id: 'r', pos: 'top', label: 'R', domain: 'Rotational' }]
+        ports: [{ id: 'r', pos: 'top', label: 'R', domain: 'Rotational' }],
+        equation: 'τ = J * dω/dt'
       },
       {
         id: 'rot_ref', name: 'Mechanical Rotational Reference', color: '#10b981', icon: 'rot_ref', category: 'Rotational Elements',
@@ -543,7 +577,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'mass', name: 'Mass', color: '#10b981', icon: 'mass', category: 'Translational Elements',
         params: { m: { value: 1, unit: 'kg', label: 'Mass' } },
-        ports: [{ id: 'p', pos: 'top', label: 'P', domain: 'Translational' }]
+        ports: [{ id: 'p', pos: 'top', label: 'P', domain: 'Translational' }],
+        equation: 'F = m * dv/dt'
       },
       {
         id: 'trans_ref', name: 'Mechanical Translational Reference', color: '#10b981', icon: 'trans_ref', category: 'Translational Elements',
@@ -553,7 +588,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'trans_spring', name: 'Translational Spring', color: '#10b981', icon: 'trans_spring', category: 'Translational Elements',
         params: { k: { value: 1000, unit: 'N/m', label: 'Spring Rate' } },
-        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Translational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Translational' }]
+        ports: [{ id: 'r', pos: 'left', label: 'R', domain: 'Translational' }, { id: 'c', pos: 'right', label: 'C', domain: 'Translational' }],
+        equation: 'F = k * (x_r - x_c)'
       },
       {
         id: 'trans_damper', name: 'Translational Damper', color: '#10b981', icon: 'trans_damper', category: 'Translational Elements',
@@ -583,7 +619,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'ma_chamber', name: 'Constant Volume Chamber (MA)', color: '#8b5cf6', icon: 'ma_chamber', category: 'Elements',
         params: { V: { value: 0.1, unit: 'm^3', label: 'Volume' } },
-        ports: [{ id: 'a', pos: 'top', label: 'A', domain: 'Fluid' }, { id: 'b', pos: 'top', label: 'B', domain: 'Fluid' }, { id: 'h', pos: 'left', label: 'H', domain: 'Thermal' }]
+        ports: [{ id: 'a', pos: 'top', label: 'A', domain: 'Fluid' }, { id: 'b', pos: 'top', label: 'B', domain: 'Fluid' }, { id: 'h', pos: 'left', label: 'H', domain: 'Thermal' }],
+        equation: 'dP/dt = (R*T/V) * (mdot_in - mdot_out)',
+        description: 'Represents a constant volume of moist air. Calculates pressure and temperature based on mass and energy balance.'
       },
       {
         id: 'ma_pipe', name: 'Pipe (MA)', color: '#8b5cf6', icon: 'ma_pipe', category: 'Elements',
@@ -591,7 +629,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         ports: [
           { id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' },
           { id: 'h', pos: 'top', label: 'H', domain: 'Thermal' }, { id: 'wd', pos: 'bottom', label: 'WD' }
-        ]
+        ],
+        equation: 'ΔP = f(L, D, Re) * (ρv²/2)',
+        description: 'Models the pressure drop and heat transfer of moist air flowing through a pipe.'
       },
       {
         id: 'ma_separator', name: 'Moisture Separator (MA)', color: '#8b5cf6', icon: 'ma_separator', category: 'Elements',
@@ -696,7 +736,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'ps_gain', name: 'PS Gain', color: '#92400e', icon: 'ps_gain', category: 'Functions',
         params: { gain: { value: 1, unit: '1', label: 'Gain' } },
-        ports: [{ id: 'u', pos: 'left', label: 'U' }, { id: 'y', pos: 'right', label: 'Y' }]
+        ports: [{ id: 'u', pos: 'left', label: 'U' }, { id: 'y', pos: 'right', label: 'Y' }],
+        equation: 'Y = Gain * U',
+        description: 'Multiplies the input physical signal by a constant gain factor.'
       },
       {
         id: 'ps_product', name: 'PS Product', color: '#92400e', icon: 'ps_product', category: 'Functions',
@@ -723,7 +765,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'ps_integrator', name: 'PS Integrator', color: '#92400e', icon: 'ps_integrator', category: 'Linear Operators',
         params: { initial: { value: 0, unit: '', label: 'Initial State' } },
-        ports: [{ id: 'u', pos: 'left', label: 'U' }, { id: 'y', pos: 'right', label: 'Y' }]
+        ports: [{ id: 'u', pos: 'left', label: 'U' }, { id: 'y', pos: 'right', label: 'Y' }],
+        equation: 'y(t) = ∫u(τ)dτ + y(0)',
+        description: 'Integrates the input physical signal over time.'
       },
       {
         id: 'ps_transfer_fcn', name: 'PS Transfer Function', color: '#92400e', icon: 'ps_tf', category: 'Linear Operators',
@@ -876,7 +920,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           N: { value: 100, unit: '', label: 'Filter Coeff' },
           limit: { value: 240, unit: '', label: 'Saturation' } 
         },
-        ports: [{ id: 'e', pos: 'left', label: 'e' }, { id: 'reset', pos: 'left', label: 'Reset' }, { id: 'u', pos: 'right', label: 'u' }]
+        ports: [{ id: 'e', pos: 'left', label: 'e' }, { id: 'reset', pos: 'left', label: 'Reset' }, { id: 'u', pos: 'right', label: 'u' }],
+        equation: 'u = PI + D',
+        description: 'Standard discrete-time PID controller with derivative filtering and saturation limits.'
       },
       {
         id: 'ps_lpf', name: 'Low-Pass Filter', color: '#4b5563', icon: 'lpf', category: 'General Control',
@@ -1423,7 +1469,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           { id: 'p', pos: 'left', label: '+', domain: 'Electrical' },
           { id: 'n', pos: 'bottom', label: '-', domain: 'Electrical' },
           { id: 'h', pos: 'right', label: 'H', domain: 'Thermal' }
-        ]
+        ],
+        equation: 'P_out = P_elec * η\\nλ = c / f',
+        description: 'Converts high-voltage electrical energy into microwave radiation (thermal energy). Typical efficiency is around 65%.'
       },
       {
         id: 'upper_heater', name: 'Upper Radiant Heater', color: '#f97316', icon: 'heater', category: 'Elements',
@@ -1435,7 +1483,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           { id: 'p', pos: 'left', label: '+', domain: 'Electrical' },
           { id: 'n', pos: 'right', label: '-', domain: 'Electrical' },
           { id: 'h', pos: 'top', label: 'H', domain: 'Thermal' }
-        ]
+        ],
+        equation: 'Q = V²/R\\nQ_rad = ε*σ*A*(T⁴ - T_amb⁴)',
+        description: 'A resistive heating element that provides radiant heat to the cavity. It models both Joule heating and Stefan-Boltzmann radiation.'
       },
       {
         id: 'steam_generator', name: 'Steam Generator (800W)', color: '#0ea5e9', icon: 'steam_gen', category: 'Elements',
@@ -1475,7 +1525,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           { id: 'h2', pos: 'top', label: 'U', domain: 'Thermal' },
           { id: 'h3', pos: 'right', label: 'S', domain: 'Thermal' },
           { id: 't', pos: 'bottom', label: 'T', domain: 'Physical' }
-        ]
+        ],
+        equation: 'dQ/dt = P_in - Q_loss\\nm*Cp*dT/dt = Σ(dQ/dt)',
+        description: 'A thermal model of a microwave oven cavity. It tracks temperature based on microwave energy input and heat losses to the environment.'
       }
     ]
   },
@@ -1485,7 +1537,8 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'solver_config', name: 'Solver Configuration', color: '#4b5563', icon: 'solver_config', category: 'General',
         params: { dt: { value: 0.001, unit: 's', label: 'Step Size' } },
-        ports: [{ id: 'a', pos: 'right', label: '' }]
+        ports: [{ id: 'a', pos: 'right', label: '' }],
+        description: 'Mandatory block for physical networks. It defines the global simulation parameters like the fixed-step solver sample time.'
       },
       {
         id: 'ps_simulink_conv', name: 'PS-Simulink Converter', color: '#4b5563', icon: 'ps_to_sim', category: 'Converters',
@@ -1518,7 +1571,9 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           modelType: { value: 'RSM', unit: '', label: 'Model Type' },
           equation: { value: '', unit: '', label: 'Equation' }
         },
-        ports: [] // Ports are dynamically assigned on export
+        ports: [], // Ports are dynamically assigned on export
+        equation: 'Y = f(X1, X2, ...)',
+        description: 'A data-driven model generated from experimental results (Design of Experiments). It allows high-fidelity behavioral simulation without complex physical equations.'
       }
     ]
   }

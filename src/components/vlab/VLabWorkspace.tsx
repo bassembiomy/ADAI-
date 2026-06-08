@@ -256,22 +256,6 @@ const reconstructLabNodes = (labNodes: LabNode[]): Node[] => {
 
 const SymbolRenderer = ({ type, color }: { type: string, color: string }) => {
   switch (type) {
-    case 'ac_voltage':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="30" cy="30" r="15" />
-          <path d="M22 30Q26 20 30 30Q34 40 38 30" strokeWidth="2" />
-          <path d="M30 0V15M30 45V60" strokeWidth="1" />
-        </svg>
-      );
-    case 'ma_chamber':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="15" width="30" height="30" rx="4" />
-          <path d="M15 30H45M30 15V45" strokeOpacity="0.2" />
-          <path d="M22 22Q30 18 38 22M22 38Q30 34 38 38" strokeWidth="1" strokeOpacity="0.3" />
-        </svg>
-      );
     case 'resistor':
       return (
         <svg width="60" height="30" viewBox="0 0 60 30" fill="none" stroke={color} strokeWidth="2">
@@ -305,7 +289,6 @@ const SymbolRenderer = ({ type, color }: { type: string, color: string }) => {
     case 'dc_motor':
     case 'pmsm':
     case 'ac_motor':
-    case 'dc_motor':
     case 'bldc_motor':
       return (
         <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
@@ -766,15 +749,6 @@ const SymbolRenderer = ({ type, color }: { type: string, color: string }) => {
           <circle cx="30" cy="30" r="15" />
           <path d="M28 25Q30 20 32 25Q30 30 28 25" fill={color} stroke="none" />
           <path d="M30 15V45" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
-      );
-    case 'doe_custom':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color || '#c9a86c'} strokeWidth="2">
-          <rect x="10" y="10" width="40" height="40" rx="8" fill={color || '#c9a86c'} fillOpacity="0.1" />
-          <path d="M20 20L40 40M40 20L20 40" strokeOpacity="0.2" />
-          <circle cx="30" cy="30" r="12" strokeDasharray="4 2" />
-          <text x="30" y="34" textAnchor="middle" fill={color || '#c9a86c'} fontSize="8" fontWeight="black" stroke="none">DOE</text>
         </svg>
       );
     case 'ma_flow_src':

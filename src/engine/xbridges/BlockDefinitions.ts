@@ -15,6 +15,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     allowDynamicInputs: true,
     inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, String.fromCharCode(65 + i), 'input')),
     outputs: [createPort('out', 'Out', 'output')],
+    icon: 'activity',
+    equation: 'Out = A & B & ...',
     execute: (ins) => ({ outputs: [ins.every(val => !!val)] })
   }),
 
@@ -23,6 +25,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     allowDynamicInputs: true,
     inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, String.fromCharCode(65 + i), 'input')),
     outputs: [createPort('out', 'Out', 'output')],
+    icon: 'activity',
+    equation: 'Out = A | B | ...',
     execute: (ins) => ({ outputs: [ins.some(val => !!val)] })
   }),
 
@@ -30,6 +34,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'NOT', params: {},
     inputs: [createPort('in', 'In', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
+    icon: 'zap',
+    equation: 'Out = !In',
     execute: (ins) => ({ outputs: [!ins[0]] })
   }),
 
@@ -38,6 +44,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     allowDynamicInputs: true,
     inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, String.fromCharCode(65 + i), 'input')),
     outputs: [createPort('out', 'Out', 'output')],
+    icon: 'activity',
+    equation: 'Out = !(A & B & ...)',
+    description: 'A Not-AND gate. The output is LOW (0) only if all inputs are HIGH (1).',
     execute: (ins) => ({ outputs: [!ins.every(val => !!val)] })
   }),
 
@@ -46,6 +55,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     allowDynamicInputs: true,
     inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, String.fromCharCode(65 + i), 'input')),
     outputs: [createPort('out', 'Out', 'output')],
+    icon: 'activity',
+    equation: 'Out = !(A | B | ...)',
+    description: 'A Not-OR gate. The output is HIGH (1) only if all inputs are LOW (0).',
     execute: (ins) => ({ outputs: [!ins.some(val => !!val)] })
   }),
 
@@ -54,6 +66,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     allowDynamicInputs: true,
     inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, String.fromCharCode(65 + i), 'input')),
     outputs: [createPort('out', 'Out', 'output')],
+    icon: 'activity',
+    equation: 'Out = Σ(Inputs) % 2',
     execute: (ins) => ({ outputs: [ins.filter(val => !!val).length % 2 !== 0] })
   }),
 
@@ -62,6 +76,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'BitwiseAND', params: {},
     inputs: [createPort('in1', 'A', 'input'), createPort('in2', 'B', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
+    icon: 'cpu',
+    equation: 'Out = A & B (Bitwise)',
+    description: 'Performs a bitwise AND operation on two integer inputs.',
     execute: (ins) => ({ outputs: [Number(ins[0]) & Number(ins[1])] })
   }),
 
@@ -110,6 +127,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     ],
     outputs: [createPort('q', 'Q', 'output'), createPort('qbar', 'Q!', 'output', 1)],
     state: { q: 0, lastClk: 0 },
+    icon: 'layers',
+    equation: 'Q(next) = D (on Clock Edge)',
+    description: 'A standard D-type flip-flop that samples the input D on the rising edge of the clock.',
     execute: (ins, p, state) => {
       const d = !!ins[0];
       const clk = !!ins[1];
@@ -140,6 +160,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     ],
     outputs: [createPort('q', 'Q', 'output'), createPort('qbar', 'Q!', 'output', 1)],
     state: { q: 0, lastClk: 0 },
+    icon: 'layers',
+    equation: 'Q(next) = J!Q + !KQ (on Clock Edge)',
+    description: 'A JK flip-flop that can set, reset, or toggle its state based on J and K inputs.',
     execute: (ins, p, state) => {
       const j = !!ins[0];
       const k = !!ins[1];
@@ -173,6 +196,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     ],
     outputs: [createPort('out', 'Out', 'output')],
     state: { value: 0, lastClk: 0 },
+    icon: 'database',
+    equation: 'Val(next) = Data (if EN & CLK)',
+    description: 'A multi-bit register that stores an integer value. Sampling occurs on the rising edge of the clock when EN is high.',
     execute: (ins, p, state) => {
       const data = Number(ins[0]);
       const clk = !!ins[1];
@@ -200,6 +226,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     ],
     outputs: [createPort('out', 'Count', 'output')],
     state: { count: 0, lastClk: 0 },
+    icon: 'activity',
+    equation: 'Count = (Count + 1) % (Max + 1)',
+    description: 'A discrete-time counter that increments its internal value on each clock pulse.',
     execute: (ins, p, state) => {
       const clk = !!ins[0];
       const en = !!ins[1];
@@ -220,6 +249,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'Clock', params: { freq: params.freq || 1 },
     inputs: [],
     outputs: [createPort('clk', 'CLK', 'output')],
+    icon: 'zap',
+    equation: 'Clock = (t % T < T/2) ? 1 : 0',
+    description: 'Generates a periodic square wave signal (1/0) at a specified frequency.',
     execute: (ins, p, state, time) => {
       const period = 1 / p.freq;
       const clk = (time % period) < (period / 2) ? 1 : 0;
@@ -269,6 +301,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     allowDynamicInputs: true,
     inputs: [createPort('in1', 'A', 'input'), createPort('in2', 'B', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
+    icon: 'plus',
+    equation: 'Y = Σ(Ui)',
     execute: (ins) => {
       let result = ins[0];
       for (let i = 1; i < ins.length; i++) {
@@ -290,6 +324,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     allowDynamicInputs: true,
     inputs: [createPort('in1', 'A', 'input'), createPort('in2', 'B', 'input')],
     outputs: [createPort('out', 'Out', 'output')],
+    icon: 'activity',
+    equation: 'Y = Π(Ui)',
     execute: (ins) => {
       let result = ins[0];
       for (let i = 1; i < ins.length; i++) {
@@ -395,6 +431,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('in', 'In', 'input')],
     outputs: [createPort('out', 'Out', 'output', params.initialCondition ?? 0)],
     state: params.initialCondition ?? 0,
+    icon: 'layers',
+    equation: 'y(t) = ∫ u(τ) dτ + y(0)',
     execute: (ins, p, state, time) => {
         // Output is simply the current state
         return { outputs: [state] }; 
@@ -498,7 +536,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       
       const duty = Math.max(0, Math.min(1, Number(ins[0])));
       return { outputs: [duty > carrier ? 1 : 0] };
-    }
+    },
+    icon: 'zap',
+    equation: 'PWM = Duty > Carrier(t)'
   }),
 
   'THREE_PHASE_PWM': (id, params) => ({
@@ -645,6 +685,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       createPort('vc_ref', 'Vc*', 'output', 0, 'right', 'control')
     ],
     state: { integralD: 0, integralQ: 0, lastTime: 0 },
+    icon: 'cpu',
+    equation: 'Vdq = PI(I_ref - I_meas)\\nVabc = T_inv(Vdq, θ)',
     execute: (ins, p, state, time) => {
       const id_ref = Number(ins[0]);
       const iq_ref = Number(ins[1]);
@@ -723,7 +765,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       }
       
       return { outputs: [iAlpha, iBeta] };
-    }
+    },
+    icon: 'network',
+    equation: 'α = Ia\\nβ = (Ia + 2*Ib)/√3'
   }),
 
   'PARK_TRANSFORM': (id) => ({
@@ -1003,6 +1047,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       createPort('t2', 'T2', 'output', 0, 'top', 'measurement'),
       createPort('t0', 'T0', 'output', 0, 'top', 'measurement')
     ],
+    icon: 'network',
+    equation: 'T1 = Ts * (√3*Vref/Vdc) * sin(π/3 - θs)\\nT2 = Ts * (√3*Vref/Vdc) * sin(θs)',
+    description: 'Calculates the space vector modulation timing intervals T1, T2, and T0 for a given voltage vector in the alpha-beta plane.',
     execute: (ins, p) => {
       const vAlpha = Number(ins[0]);
       const vBeta = Number(ins[1]);
@@ -1157,6 +1204,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       createPort('gc', 'Gc', 'output', 0, 'right', 'logical')
     ],
     state: { lastTime: 0 },
+    icon: 'network',
+    equation: 'Gate = f(Vα, Vβ, Vdc)',
+    description: 'A complete Space Vector Pulse Width Modulation (SVPWM) modulator. It converts voltage references into 6-step switching signals for a 3-phase inverter.',
     execute: (ins, p, state, time) => {
       // Internal pipeline: CORE -> GATE_GEN
       const core = BLOCK_LIBRARY['SVPWM_CORE'](id, p);
@@ -1177,6 +1227,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
     state: { buffer: [], index: 0 },
+    icon: 'database',
+    equation: 'y(k) = u(k - N)',
+    description: 'Delays the input signal by a specified number of simulation steps. Useful for modeling transport delays or discrete-time pipelines.',
     execute: (ins, p, state) => {
       const N = Number(p.delay_length);
       const u = ins[0];
@@ -1211,6 +1264,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
     state: { y: params.initial_condition || 0, u_prev: 0, lastTime: 0 },
+    icon: 'layers',
+    equation: 'y(k) = y(k-1) + Δt * u(k-1) (Forward Euler)',
+    description: 'Performs numerical integration of a discrete-time signal using Euler or Tustin methods.',
     execute: (ins, p, state, time) => {
       const dt = Math.max(1e-6, time - (state.lastTime || 0));
       const u = Number(ins[0]);
@@ -1235,6 +1291,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     allowDynamicInputs: true,
     inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, `u${i+1}`, 'input')),
     outputs: [createPort('y', 'y', 'output', 0, 'right', 'vector')],
+    icon: 'rows',
+    description: 'Bundles multiple scalar signals into a single vector signal for cleaner routing.',
     execute: (ins) => ({ outputs: [ins as any] })
   }),
 
@@ -1252,6 +1310,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     params: { gain: params.gain || 1 },
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
+    icon: 'activity',
+    equation: 'y = u * K',
+    description: 'Multiplies the input signal by a constant gain factor K.',
     execute: (ins, p) => ({ outputs: [Number(ins[0]) * Number(p.gain)] })
   }),
 
@@ -1279,6 +1340,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       createPort('ctrl', 'ctrl', 'input', 0, 'bottom', 'control')
     ],
     outputs: [createPort('y', 'y', 'output')],
+    icon: 'activity',
+    equation: 'y = (ctrl > th) ? u1 : u2',
+    description: 'Passes either the first or second input based on whether a control signal meets a threshold criteria.',
     execute: (ins, p) => {
       const u1 = ins[0];
       const u2 = ins[1];
@@ -1405,6 +1469,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     id, type: 'SIN', params: { angle_unit: params.angle_unit || 'radians' },
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
+    icon: 'activity',
+    equation: 'y = sin(u)',
+    description: 'Calculates the sine of the input signal (in radians or degrees).',
     execute: (ins, p) => {
       const u = p.angle_unit === 'degrees' ? (Number(ins[0]) * Math.PI) / 180 : Number(ins[0]);
       return { outputs: [Math.sin(u)] };
@@ -1571,6 +1638,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       x0: params.x0 || [0],
       representation: params.representation || 'continuous'
     },
+    icon: 'settings-2',
+    equation: 'dx/dt = Ax + Bu\\ny = Cx + Du',
+    description: 'Models a linear time-invariant (LTI) system in state-space representation. Supports both continuous and discrete-time domains.',
     isStateful: true,
     inputs: [createPort('u', 'u', 'input', 0, 'left', 'vector')],
     outputs: [
@@ -1639,7 +1709,13 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     const C = [Array.from({ length: n }, (_, i) => b[n - i] - d[n - i] * b0)];
     const D = [[b0]];
 
-    return BLOCK_LIBRARY['STATE_SPACE'](id, { ...params, A, B, C, D });
+    const ss = BLOCK_LIBRARY['STATE_SPACE'](id, { ...params, A, B, C, D });
+    return {
+      ...ss,
+      icon: 'settings-2',
+      equation: 'G(s) = (b0*sⁿ + ... + bn) / (a0*sⁿ + ... + an)',
+      description: 'Models a linear system using its Laplace-domain transfer function coefficients. Automatically converts to state-space for simulation.'
+    };
   },
 
   'ZERO_POLE_GAIN': (id, params) => {
@@ -1683,6 +1759,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       max: params.max !== undefined ? params.max : 100,
       method: params.method || 'forward_euler'
     },
+    icon: 'settings-2',
+    equation: 'u = PI + D',
+    description: 'A basic PID controller implementation with saturation and anti-windup. Ideal for simple control loops.',
     isStateful: true,
     inputs: [
       createPort('e', 'Error', 'input'),
@@ -1779,10 +1858,12 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   }),
 
-  // --- Basic Filters ---
   'LOW_PASS_FILTER': (id, params) => ({
     id, type: 'LOW_PASS_FILTER',
     params: { fc: params.fc || 10, method: params.method || 'discrete' },
+    icon: 'activity',
+    equation: 'τ*dy/dt + y = u',
+    description: 'A first-order low-pass filter that attenuates high-frequency noise above the cutoff frequency fc.',
     isStateful: true,
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
@@ -1822,6 +1903,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   'MOVING_AVERAGE': (id, params) => ({
     id, type: 'MOVING_AVERAGE',
     params: { window_size: params.window_size || 10 },
+    icon: 'database',
+    equation: 'y(k) = (1/N) * Σ u(k-i)',
+    description: 'Calculates the average of the last N input samples. Smooths out high-frequency fluctuations.',
     isStateful: true,
     inputs: [createPort('u', 'u', 'input')],
     outputs: [createPort('y', 'y', 'output')],
@@ -1847,6 +1931,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       R: params.R || [[0.1]],
       P0: params.P0 || [[1, 0], [0, 1]]
     },
+    icon: 'cpu',
+    equation: 'x̂(k+1) = Ax̂(k) + Bu(k) + K(y - Cx̂)',
+    description: 'An optimal estimator for linear systems with Gaussian noise. It provides the best possible estimate of the internal state.',
     isStateful: true,
     inputs: [
       createPort('u', 'u', 'input', 0, 'left', 'vector'),
@@ -1860,39 +1947,26 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     ],
     state: { x: null, P: null },
     execute: (ins, p, state) => {
-      // Ensure inputs are matrices
       const uArr = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
       const yArr = Array.isArray(ins[1]) ? ins[1] : [Number(ins[1])];
-      
-      const u = math.matrix(uArr.map(v => [Number(v)])); // Column vector
-      const y = math.matrix(yArr.map(v => [Number(v)])); // Column vector
-      
+      const u = math.matrix(uArr.map(v => [Number(v)]));
+      const y = math.matrix(yArr.map(v => [Number(v)]));
       const A = math.matrix(p.A as number[][]);
       const B = math.matrix(p.B as number[][]);
       const C = math.matrix(p.C as number[][]);
       const Q = math.matrix(p.Q as number[][]);
       const R = math.matrix(p.R as number[][]);
-
       let x = state.x ? math.matrix(state.x as number[][]) : math.zeros(A.size()[0], 1);
       let P = state.P ? math.matrix(state.P as number[][]) : math.matrix(p.P0 as number[][]);
-
-      // 1. Predict
       const x_minus = math.add(math.multiply(A, x), math.multiply(B, u)) as math.Matrix;
       const P_minus = math.add(math.multiply(math.multiply(A, P), math.transpose(A)), Q) as math.Matrix;
-
-      // 2. Kalman Gain
-      // S = C*P_minus*C' + R
       const S = math.add(math.multiply(math.multiply(C, P_minus), math.transpose(C)), R) as math.Matrix;
       const K = math.multiply(math.multiply(P_minus, math.transpose(C)), math.inv(S)) as math.Matrix;
-
-      // 3. Update
       const innovation = math.subtract(y, math.multiply(C, x_minus)) as math.Matrix;
       const x_new = math.add(x_minus, math.multiply(K, innovation)) as math.Matrix;
       const I = math.identity(A.size()[0]) as math.Matrix;
       const P_new = math.multiply(math.subtract(I, math.multiply(K, C)), P_minus) as math.Matrix;
-
       const y_hat = math.multiply(C, x_new) as math.Matrix;
-
       return {
         outputs: [
           x_new.toArray().map((v: any) => v[0]), 
@@ -1931,6 +2005,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     return {
       id, type: 'MPC_CONTROLLER',
       params: { Np, Nc, A, B, C, D, Q, R, u_min, u_max },
+      icon: 'cpu',
+      equation: 'min J = Σ(x\'Qx + u\'Ru)',
+      description: 'Advanced predictive controller that solves a constrained optimization problem at each step to determine the optimal control input.',
       isStateful: true,
       inputs: [
         createPort('x', 'x(k)', 'input', [0, 0], 'left', 'vector'),
@@ -1944,14 +2021,11 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       execute: (ins, p, state) => {
         const x = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
         const r_val = Array.isArray(ins[1]) ? ins[1] : [Number(ins[1])];
-        
         if (!state.solver) {
           state.solver = new MpcSolver({ A: p.A, B: p.B, C: p.C, D: p.D }, p as any);
         }
-
         const ref_seq = Array(p.Np).fill(r_val).flat();
         const result = state.solver.solve(x, ref_seq, state.u_seq);
-
         return { 
           outputs: [result.u[0], result.pred_y],
           nextState: { solver: state.solver, u_seq: result.u }
@@ -1980,15 +2054,12 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       execute: (ins: any[], p: any) => {
         let u = Number(ins[0]);
         let y = u;
-
-
         if (p.mode === 'floating_point') {
             if (p.output_type === 'float32') y = Math.fround(u);
             else if (p.output_type === 'float16') y = Number(u.toPrecision(4));
         } else {
             const scale = Math.pow(2, p.fractionLength);
             let raw = u * scale;
-            
             if (p.rounding === 'floor') raw = Math.floor(raw);
             else if (p.rounding === 'ceil') raw = Math.ceil(raw);
             else if (p.rounding === 'round') raw = Math.round(raw);
@@ -1999,12 +2070,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
                 else if (f > 0.5) raw = d + 1;
                 else raw = (d % 2 === 0) ? d : d + 1;
             }
-
             const maxRaw = Math.pow(2, p.wordLength - 1) - 1;
             const minRaw = -Math.pow(2, p.wordLength - 1);
-            
-
-
             if (p.overflow === 'saturate') raw = Math.max(minRaw, Math.min(maxRaw, raw));
             else if (p.overflow === 'wrap') {
                 const range = maxRaw - minRaw + 1;
@@ -2012,7 +2079,6 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
             }
             y = raw / scale;
         }
-
         const error = Math.abs(u - y);
         return { outputs: [y, error] };
       }
@@ -2041,10 +2107,559 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     execute: (ins: any[], p: any, state: any) => {
       return { outputs: [state.model || null, 0] };
     }
+  }),
+  'AC_INDUCTION_MOTOR': (id: string, params: any) => ({
+    id, type: 'AC_INDUCTION_MOTOR',
+    params: {
+      Rs: params.Rs || 0.5, Ls: params.Ls || 0.1,
+      Rr: params.Rr || 0.4, Lr: params.Lr || 0.1,
+      Lm: params.Lm || 0.09, P: params.P || 2,
+      J: params.J || 0.01, B: params.B || 0.001
+    },
+    isStateful: true,
+    inputs: [
+      createPort('va', 'Va', 'input', 0, 'left', 'power'),
+      createPort('vb', 'Vb', 'input', 0, 'left', 'power'),
+      createPort('vc', 'Vc', 'input', 0, 'left', 'power'),
+      createPort('tl', 'Tl', 'input', 0, 'bottom', 'load')
+    ],
+    outputs: [
+      createPort('ia', 'Ia', 'output', 0, 'right', 'measurement'),
+      createPort('ib', 'Ib', 'output', 0, 'right', 'measurement'),
+      createPort('ic', 'Ic', 'output', 0, 'right', 'measurement'),
+      createPort('omega', 'ω', 'output', 0, 'right', 'measurement'),
+      createPort('theta', 'θ', 'output', 0, 'right', 'measurement'),
+      createPort('te', 'Te', 'output', 0, 'top', 'measurement')
+    ],
+    state: { ias: 0, ibs: 0, psiar: 0, psibr: 0, omega: 0, theta: 0, lastTime: 0 },
+    icon: 'zap',
+    equation: 'dPsi/dt = V - Rs*Is\\nd(omega)/dt = (Te - Tl)/J',
+    description: 'Dynamic model of a 3-phase Induction Motor in the stationary alpha-beta frame. Outputs mechanical speed, torque, and phase currents.',
+    execute: (ins: any[], p: any, state: any) => ({
+      outputs: [
+        state.ias,
+        state.ibs,
+        -state.ias - state.ibs,
+        state.omega,
+        state.theta,
+        1.5 * p.P * (p.Lm / p.Lr) * (state.psiar * state.ibs - state.psibr * state.ias)
+      ]
+    }),
+    evaluateDerivatives: (ins, p, state) => {
+      const va = Number(ins[0]);
+      const vb = Number(ins[1]);
+      const vc = Number(ins[2]);
+      const tl = Number(ins[3]);
+      
+      const vAlpha = (2 * va - vb - vc) / 3;
+      const vBeta = (vb - vc) / Math.sqrt(3);
+      
+      const sigma = 1 - (p.Lm * p.Lm) / (p.Ls * p.Lr);
+      const kr = p.Lm / p.Lr;
+      const tr = p.Lr / p.Rr;
+      
+      const dias = (vAlpha - (p.Rs + kr * kr * p.Rr) / sigma * state.ias + (kr / (sigma * tr)) * state.psiar + (kr * p.P * state.omega / sigma) * state.psibr) / (sigma * p.Ls);
+      const dibs = (vBeta - (p.Rs + kr * kr * p.Rr) / sigma * state.ibs + (kr / (sigma * tr)) * state.psibr - (kr * p.P * state.omega / sigma) * state.psiar) / (sigma * p.Ls);
+      const dpsiar = (p.Lm / tr) * state.ias - (1 / tr) * state.psiar - p.P * state.omega * state.psibr;
+      const dpsibr = (p.Lm / tr) * state.ibs - (1 / tr) * state.psibr + p.P * state.omega * state.psiar;
+      
+      const Te = 1.5 * p.P * kr * (state.psiar * state.ibs - state.psibr * state.ias);
+      const domega = (Te - tl - p.B * state.omega) / p.J;
+      const dtheta = state.omega;
+      
+      return [dias, dibs, dpsiar, dpsibr, domega, dtheta];
+    }
+  }),
+
+  'IM_SCALAR_CONTROL': (id: string, params: any) => ({
+    id, type: 'IM_SCALAR_CONTROL',
+    params: {
+      v_f_ratio: params.v_f_ratio || 4,
+      boost: params.boost || 10,
+      rated_f: params.rated_f || 50
+    },
+    inputs: [createPort('w_ref', 'ω*', 'input', 0, 'left', 'control')],
+    outputs: [
+      createPort('va', 'Va*', 'output', 0, 'right', 'control'),
+      createPort('vb', 'Vb*', 'output', 0, 'right', 'control'),
+      createPort('vc', 'Vc*', 'output', 0, 'right', 'control')
+    ],
+    icon: 'activity',
+    equation: 'V = Vf * f + Vboost',
+    description: 'Open-loop Volts-per-Hertz (Scalar) control for Induction Motors. Maintains constant flux-to-frequency ratio.',
+    execute: (ins, p, state, time) => {
+      const wRef = Math.abs(Number(ins[0]));
+      const f = wRef / (2 * Math.PI);
+      const vMag = p.v_f_ratio * f + p.boost;
+      
+      const va = vMag * Math.sin(wRef * time);
+      const vb = vMag * Math.sin(wRef * time - 2 * Math.PI / 3);
+      const vc = vMag * Math.sin(wRef * time + 2 * Math.PI / 3);
+      
+      return { outputs: [va, vb, vc] };
+    }
+  }),
+
+  'IM_FOC_CONTROL': (id: string, params: any) => ({
+    id, type: 'IM_FOC_CONTROL',
+    params: {
+      Kp_speed: params.Kp_speed || 2, Ki_speed: params.Ki_speed || 20,
+      Kp_curr: params.Kp_curr || 10, Ki_curr: params.Ki_curr || 100,
+      psi_ref: params.psi_ref || 0.9,
+      Lm: params.Lm || 0.09, Lr: params.Lr || 0.1, Rr: params.Rr || 0.4, P: params.P || 2
+    },
+    isStateful: true,
+    inputs: [
+      createPort('w_ref', 'ω*', 'input', 0, 'left', 'control'),
+      createPort('w_meas', 'ω', 'input', 0, 'top', 'measurement'),
+      createPort('ia', 'Ia', 'input', 0, 'top', 'measurement'),
+      createPort('ib', 'Ib', 'input', 0, 'top', 'measurement'),
+      createPort('theta', 'θ_flux', 'input', 0, 'bottom', 'measurement')
+    ],
+    outputs: [
+      createPort('va', 'Va*', 'output', 0, 'right', 'control'),
+      createPort('vb', 'Vb*', 'output', 0, 'right', 'control'),
+      createPort('vc', 'Vc*', 'output', 0, 'right', 'control'),
+      createPort('id_ref', 'Id*', 'output', 0, 'top', 'measurement'),
+      createPort('iq_ref', 'Iq*', 'output', 0, 'top', 'measurement')
+    ],
+    state: { intW: 0, intD: 0, intQ: 0, lastT: 0 },
+    icon: 'cpu',
+    description: 'High-performance Field-Oriented Control for Induction Motors. Includes speed and current PI loops.',
+    execute: (ins, p, state, time) => {
+      const dt = Math.max(1e-6, time - (state.lastT || 0));
+      const wErr = Number(ins[0]) - Number(ins[1]);
+      const nextIntW = state.intW + wErr * dt;
+      const iqRef = p.Kp_speed * wErr + p.Ki_speed * nextIntW;
+      const idRef = p.psi_ref / p.Lm;
+      
+      // Clarke/Park
+      const ia = Number(ins[2]), ib = Number(ins[3]), theta = Number(ins[4]);
+      const iAlpha = ia, iBeta = (ia + 2 * ib) / Math.sqrt(3);
+      const cosT = Math.cos(theta), sinT = Math.sin(theta);
+      const id = iAlpha * cosT + iBeta * sinT, iq = -iAlpha * sinT + iBeta * cosT;
+      
+      const eD = idRef - id, eQ = iqRef - iq;
+      const nextIntD = state.intD + eD * dt, nextIntQ = state.intQ + eQ * dt;
+      const vd = p.Kp_curr * eD + p.Ki_curr * nextIntD;
+      const vq = p.Kp_curr * eQ + p.Ki_curr * nextIntQ;
+      
+      const vAlpha = vd * cosT - vq * sinT, vBeta = vd * sinT + vq * cosT;
+      const va = vAlpha, vb = -0.5 * vAlpha + Math.sqrt(3) / 2 * vBeta, vc = -0.5 * vAlpha - Math.sqrt(3) / 2 * vBeta;
+      
+      return { 
+        outputs: [va, vb, vc, idRef, iqRef],
+        nextState: { intW: nextIntW, intD: nextIntD, intQ: nextIntQ, lastT: time }
+      };
+    }
+  }),
+
+  'IM_FLUX_OBSERVER': (id: string, params: any) => ({
+    id, type: 'IM_FLUX_OBSERVER',
+    params: { Lm: params.Lm || 0.09, Lr: params.Lr || 0.1, Rr: params.Rr || 0.4, P: params.P || 2 },
+    isStateful: true,
+    inputs: [
+      createPort('ia', 'Ia', 'input', 0, 'left', 'measurement'),
+      createPort('ib', 'Ib', 'input', 0, 'left', 'measurement'),
+      createPort('omega', 'ω', 'input', 0, 'bottom', 'measurement')
+    ],
+    outputs: [
+      createPort('theta', 'θ_flux', 'output', 0, 'right', 'measurement'),
+      createPort('psi_r', 'Ψr', 'output', 0, 'right', 'measurement')
+    ],
+    state: { psiar: 0.001, psibr: 0, lastTime: 0 },
+    icon: 'eye',
+    description: 'Current-model Rotor Flux Observer. Estimates the rotor flux angle and magnitude from stator currents and rotor speed.',
+    execute: (ins, p, state) => {
+      const theta = Math.atan2(state.psibr, state.psiar);
+      const mag = Math.sqrt(state.psibr * state.psibr + state.psiar * state.psiar);
+      return { outputs: [theta, mag] };
+    },
+    evaluateDerivatives: (ins, p, state) => {
+      const ia = Number(ins[0]), ib = Number(ins[1]), omega = Number(ins[2]);
+      const iAlpha = ia, iBeta = (ia + 2 * ib) / Math.sqrt(3);
+      const tr = p.Lr / p.Rr;
+      const dpsiar = (p.Lm / tr) * iAlpha - (1 / tr) * state.psiar - p.P * omega * state.psibr;
+      const dpsibr = (p.Lm / tr) * iBeta - (1 / tr) * state.psibr + p.P * omega * state.psiar;
+      return [dpsiar, dpsibr];
+    }
+  }),
+
+  'VF_SLIP_COMP': (id: string, params: any) => ({
+    id, type: 'VF_SLIP_COMP',
+    params: {
+      v_f_ratio: params.v_f_ratio || 4,
+      rated_slip: params.rated_slip || 0.05,
+      rated_iq: params.rated_iq || 10
+    },
+    inputs: [
+      createPort('w_ref', 'ω*', 'input', 0, 'left', 'control'),
+      createPort('iq_actual', 'Iq', 'input', 0, 'top', 'measurement')
+    ],
+    outputs: [
+      createPort('va', 'Va*', 'output', 0, 'right', 'control'),
+      createPort('vb', 'Vb*', 'output', 0, 'right', 'control'),
+      createPort('vc', 'Vc*', 'output', 0, 'right', 'control'),
+      createPort('w_sync', 'ω_sync', 'output', 0, 'top', 'measurement')
+    ],
+    icon: 'zap',
+    description: 'V/f control with slip compensation. Adjusts the output frequency based on measured q-axis current to maintain constant speed under load.',
+    execute: (ins, p, state, time) => {
+      const wRef = Number(ins[0]);
+      const iq = Number(ins[1]);
+      const wSlip = (iq / p.rated_iq) * p.rated_slip * (2 * Math.PI * 50); // Rough estimate
+      const wSync = wRef + wSlip;
+      const f = Math.abs(wSync) / (2 * Math.PI);
+      const vMag = p.v_f_ratio * f + 10;
+      
+      const va = vMag * Math.sin(wSync * time);
+      const vb = vMag * Math.sin(wSync * time - 2 * Math.PI / 3);
+      const vc = vMag * Math.sin(wSync * time + 2 * Math.PI / 3);
+      
+      return { outputs: [va, vb, vc, wSync] };
+    }
+  }),
+
+  'FIELD_WEAKENING': (id: string, params: any) => ({
+    id, type: 'FIELD_WEAKENING',
+    params: { v_max: params.v_max || 300, Kp: params.Kp || 0.1, Ki: params.Ki || 1 },
+    isStateful: true,
+    inputs: [
+      createPort('v_mag', '|V|', 'input', 0, 'left', 'measurement'),
+      createPort('id_base', 'Id_base', 'input', 10, 'left', 'control')
+    ],
+    outputs: [createPort('id_ref', 'Id*', 'output', 0, 'right', 'control')],
+    state: { integral: 0, lastTime: 0 },
+    icon: 'activity',
+    description: 'Field weakening controller. Reduces the d-axis current (flux reference) when the terminal voltage exceeds the maximum limit.',
+    execute: (ins, p, state, time) => {
+      const dt = Math.max(1e-6, time - (state.lastTime || 0));
+      const vMag = Number(ins[0]);
+      const idBase = Number(ins[1]);
+      const vErr = p.v_max - vMag;
+      
+      let nextInt = state.integral;
+      if (vErr < 0) nextInt += vErr * dt;
+      else nextInt = Math.min(0, nextInt + vErr * dt);
+      
+      const deltaId = p.Kp * (vErr < 0 ? vErr : 0) + p.Ki * nextInt;
+      const idRef = idBase + deltaId;
+      
+      return { outputs: [idRef], nextState: { integral: nextInt, lastTime: time } };
+    }
+  }),
+
+  'MTPA_CONTROLLER': (id: string, params: any) => ({
+    id, type: 'MTPA_CONTROLLER',
+    params: { Ld: params.Ld || 0.01, Lq: params.Lq || 0.02, psi_m: params.psi_m || 0.1 },
+    inputs: [createPort('te_ref', 'Te*', 'input', 0, 'left', 'control')],
+    outputs: [
+      createPort('id_ref', 'Id*', 'output', 0, 'right', 'control'),
+      createPort('iq_ref', 'Iq*', 'output', 0, 'right', 'control')
+    ],
+    icon: 'zap',
+    description: 'Maximum Torque Per Ampere (MTPA) trajectory generator for salient-pole motors (IPMSM).',
+    execute: (ins, p) => {
+      const Te = Number(ins[0]);
+      // Simplified MTPA for learning
+      const iq = Te / (1.5 * 2 * (p.psi_m)); // Assuming 2 pole pairs
+      const id = -Math.abs(iq * 0.2); // Rough salient effect
+      return { outputs: [id, iq] };
+    }
+  }),
+
+  'AC_MOTOR_PID_CONTROL': (id: string, params: any) => {
+    // This block is a composite learning module
+    // It internally uses the AC_INDUCTION_MOTOR logic and a PID controller
+    const motor = BLOCK_LIBRARY['AC_INDUCTION_MOTOR'](id + '_m', params);
+    const pid = BLOCK_LIBRARY['PID_CONTROLLER'](id + '_p', params);
+    
+    return {
+      id, type: 'AC_MOTOR_PID_CONTROL',
+      params: { 
+        Kp: params.Kp || 2.5, Ki: params.Ki || 1.2, Kd: params.Kd || 0.1,
+        w_ref: params.w_ref || 157,
+        tl: params.tl || 0
+      },
+      isStateful: true,
+      icon: 'graduation-cap',
+      description: 'A complete pedagogical model for PID Speed Control of an Induction Motor. It integrates the motor dynamics and the speed regulator into one block for easy analysis of tuning effects.',
+      inputs: [
+        createPort('w_ref', 'ω*', 'input', params.w_ref || 157, 'left', 'control'),
+        createPort('tl', 'Tl', 'input', params.tl || 0, 'bottom', 'load')
+      ],
+      outputs: [
+        createPort('omega', 'ω', 'output', 0, 'right', 'measurement'),
+        createPort('error', 'Error', 'output', 0, 'top', 'measurement'),
+        createPort('te', 'Torque', 'output', 0, 'top', 'measurement')
+      ],
+      state: { 
+        ias: 0, ibs: 0, psiar: 0.001, psibr: 0, omega: 0, theta: 0, // Motor states
+        i_state: 0, d_state: 0, last_e: 0, lastTime: 0 // PID states
+      },
+      execute: (ins: any[], p: any, state: any) => {
+        const Te = 1.5 * p.P * (p.Lm / p.Lr) * (state.psiar * state.ibs - state.psibr * state.ias);
+        const error = Number(ins[0]) - state.omega;
+        return {
+          outputs: [state.omega, error, Te]
+        };
+      },
+      evaluateDerivatives: (ins: any[], p: any, state: any, time: number) => {
+        const w_ref = Number(ins[0]);
+        const tl = Number(ins[1]);
+        const w_meas = state.omega;
+        const error = w_ref - w_meas;
+
+        // 1. PID Logic (Stationary Frame Approximation for Learning)
+        const P = p.Kp * error;
+        const I = state.i_state;
+        const D = state.d_state;
+        const v_mag = Math.max(0, P + I + D); // Voltage magnitude
+        
+        // 2. Stator Voltage Generation (V/f synchronous)
+        const theta_v = w_ref * time; 
+        const va = v_mag * Math.sin(theta_v);
+        const vb = v_mag * Math.sin(theta_v - 2 * Math.PI / 3);
+        const vc = v_mag * Math.sin(theta_v + 2 * Math.PI / 3);
+        
+        const vAlpha = (2 * va - vb - vc) / 3;
+        const vBeta = (vb - vc) / Math.sqrt(3);
+
+        // 3. Induction Motor Derivatives
+        const sigma = 1 - (p.Lm * p.Lm) / (p.Ls * p.Lr);
+        const kr = p.Lm / p.Lr;
+        const tr = p.Lr / p.Rr;
+        
+        const dias = (vAlpha - (p.Rs + kr * kr * p.Rr) / sigma * state.ias + (kr / (sigma * tr)) * state.psiar + (kr * p.P * state.omega / sigma) * state.psibr) / (sigma * p.Ls);
+        const dibs = (vBeta - (p.Rs + kr * kr * p.Rr) / sigma * state.ibs + (kr / (sigma * tr)) * state.psibr - (kr * p.P * state.omega / sigma) * state.psiar) / (sigma * p.Ls);
+        const dpsiar = (p.Lm / tr) * state.ias - (1 / tr) * state.psiar - p.P * state.omega * state.psibr;
+        const dpsibr = (p.Lm / tr) * state.ibs - (1 / tr) * state.psibr + p.P * state.omega * state.psiar;
+        
+        const Te = 1.5 * p.P * kr * (state.psiar * state.ibs - state.psibr * state.ias);
+        const domega = (Te - tl - (p.B || 0.001) * state.omega) / (p.J || 0.01);
+        const dtheta = state.omega;
+
+        // 4. PID Derivatives
+        const di = p.Ki * error;
+        const N = p.N || 100;
+        const dd = N * (p.Kd * N * (error - (state.last_e || 0)) - state.d_state);
+
+        return [dias, dibs, dpsiar, dpsibr, domega, dtheta, di, dd];
+      }
+    };
+  },
+
+  'LMS_ADAPTIVE_FILTER': (id: string, params: any) => ({
+    id, type: 'LMS_ADAPTIVE_FILTER',
+    params: { lr: params.lr || 0.05 },
+    isStateful: true,
+    inputs: [
+      createPort('x', 'x', 'input', 0, 'left', 'control'),
+      createPort('d', 'd', 'input', 0, 'left', 'control'),
+      createPort('lr', 'Learning Rate', 'input', params.lr || 0.05, 'bottom', 'control')
+    ],
+    outputs: [
+      createPort('y', 'y', 'output', 0, 'right', 'control'),
+      createPort('err', 'err', 'output', 0, 'right', 'control'),
+      createPort('w1', 'w1', 'output', 0, 'right', 'control'),
+      createPort('w2', 'w2', 'output', 0, 'right', 'control')
+    ],
+    state: { w1: 0, w2: 0, x_prev: 0 },
+    icon: 'graduation-cap',
+    equation: 'y = w1*x + w2*x_prev\\nerr = d - y\\nw = w + lr*err*x_vec',
+    description: 'A 2-tap Least Mean Squares (LMS) Adaptive Filter. Automatically learns to predict a target signal d from an input x by updating filter weights w1 and w2.\n\nSampling Time Note: For stable learning, the sampling time (dt) must satisfy dt < 2 / (R * lr) where R is the input signal power. In practice, a sampling rate of 100 Hz to 1 kHz (dt = 1ms to 10ms) is recommended to ensure smooth gradients and prevent divergence.',
+    execute: (ins, p, state) => {
+      const x = Number(ins[0] ?? 0);
+      const d = Number(ins[1] ?? 0);
+      const lr = Number(ins[2] ?? p.lr ?? 0.05);
+      
+      const w1 = state.w1 ?? 0;
+      const w2 = state.w2 ?? 0;
+      const x_prev = state.x_prev ?? 0;
+      
+      const y = w1 * x + w2 * x_prev;
+      const err = d - y;
+      
+      const nextW1 = w1 + lr * err * x;
+      const nextW2 = w2 + lr * err * x_prev;
+      
+      return {
+        outputs: [y, err, w1, w2],
+        nextState: { w1: nextW1, w2: nextW2, x_prev: x }
+      };
+    }
+  }),
+
+  'NEURAL_NEURON_LEARNING': (id: string, params: any) => ({
+    id, type: 'NEURAL_NEURON_LEARNING',
+    params: { lr: params.lr || 0.1, initW1: params.initW1 || 0.5, initW2: params.initW2 || -0.5, initBias: params.initBias || 0.0 },
+    isStateful: true,
+    inputs: [
+      createPort('x1', 'x1', 'input', 0, 'left', 'control'),
+      createPort('x2', 'x2', 'input', 0, 'left', 'control'),
+      createPort('target', 'target', 'input', 0, 'left', 'control'),
+      createPort('lr', 'Learning Rate', 'input', params.lr || 0.1, 'bottom', 'control')
+    ],
+    outputs: [
+      createPort('y', 'y', 'output', 0, 'right', 'control'),
+      createPort('err', 'err', 'output', 0, 'right', 'control'),
+      createPort('w1', 'w1', 'output', params.initW1 || 0.5, 'right', 'control'),
+      createPort('w2', 'w2', 'output', params.initW2 || -0.5, 'right', 'control'),
+      createPort('bias', 'bias', 'output', params.initBias || 0.0, 'right', 'control')
+    ],
+    state: { 
+      w1: params.initW1 || 0.5, 
+      w2: params.initW2 || -0.5, 
+      bias: params.initBias || 0.0 
+    },
+    icon: 'graduation-cap',
+    equation: 'y = tanh(w1*x1 + w2*x2 + bias)\\nerr = target - y\\ndw = lr*err*(1-y^2)*x',
+    description: 'A Single-Neuron Online Gradient Descent Learner using a tanh activation function. Trains weights and bias via online backpropagation.\n\nSampling Time Note: A sampling time of 2ms to 20ms is recommended. Smaller dt values provide smoother optimization trajectories, whereas larger dt values might cause weight divergence or numerical overflow in discrete gradient steps unless the learning rate is scaled down.',
+    execute: (ins, p, state) => {
+      const x1 = Number(ins[0] ?? 0);
+      const x2 = Number(ins[1] ?? 0);
+      const target = Number(ins[2] ?? 0);
+      const lr = Number(ins[3] ?? p.lr ?? 0.1);
+      
+      const w1 = state.w1 !== undefined ? state.w1 : (p.initW1 || 0.5);
+      const w2 = state.w2 !== undefined ? state.w2 : (p.initW2 || -0.5);
+      const bias = state.bias !== undefined ? state.bias : (p.initBias || 0.0);
+      
+      const net = w1 * x1 + w2 * x2 + bias;
+      const y = Math.tanh(net);
+      const err = target - y;
+      
+      const f_prime = 1 - y * y;
+      
+      const nextW1 = w1 + lr * err * f_prime * x1;
+      const nextW2 = w2 + lr * err * f_prime * x2;
+      const nextBias = bias + lr * err * f_prime;
+      
+      return {
+        outputs: [y, err, w1, w2, bias],
+        nextState: { w1: nextW1, w2: nextW2, bias: nextBias }
+      };
+    }
+  }),
+
+  'RL_Q_LEARNING_CONTROLLER': (id: string, params: any) => ({
+    id, type: 'RL_Q_LEARNING_CONTROLLER',
+    params: { alpha: params.alpha || 0.1, gamma: params.gamma || 0.9, epsilon: params.epsilon || 0.1 },
+    isStateful: true,
+    inputs: [
+      createPort('error', 'error', 'input', 0, 'left', 'control'),
+      createPort('reward', 'reward', 'input', 0, 'left', 'control'),
+      createPort('reset', 'reset', 'input', 0, 'bottom', 'logical')
+    ],
+    outputs: [
+      createPort('action', 'action', 'output', 0, 'right', 'control'),
+      createPort('max_q', 'max_q', 'output', 0, 'right', 'control')
+    ],
+    state: {
+      qTable: [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+      ],
+      lastStateIdx: 0,
+      lastActionIdx: 1,
+      hasPrev: 0
+    },
+    icon: 'graduation-cap',
+    equation: 'Q(s,a) += α*(R + γ*max_q(s\') - Q(s,a))',
+    description: 'Discrete Q-learning control agent. Maps continuous system error into 5 state bins, selects control actions [-1, 0, 1] using epsilon-greedy exploration, and updates Q-values online.\n\nSampling Time Note: Reinforcement learning control loops require a slower sampling time, typically 20ms to 100ms. If dt is too small, state changes are negligible, causing poor credit assignment. If dt is too large, the delayed control inputs lead to poor regulation stability.',
+    execute: (ins, p, state) => {
+      const error = Number(ins[0] ?? 0);
+      const reward = Number(ins[1] ?? 0);
+      const reset = !!ins[2];
+      
+      const alpha = p.alpha ?? 0.1;
+      const gamma = p.gamma ?? 0.9;
+      const epsilon = p.epsilon ?? 0.1;
+      
+      const actions = [-1.0, 0.0, 1.0];
+      
+      let s = 2;
+      if (error < -1.0) s = 0;
+      else if (error < -0.1) s = 1;
+      else if (error > 1.0) s = 4;
+      else if (error > 0.1) s = 3;
+      
+      let qTable = state.qTable ? state.qTable.map((row: number[]) => [...row]) : [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+      ];
+      
+      let lastStateIdx = state.lastStateIdx ?? 0;
+      let lastActionIdx = state.lastActionIdx ?? 1;
+      let hasPrev = state.hasPrev ?? 0;
+      
+      if (reset) {
+        qTable = [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0]
+        ];
+        lastStateIdx = 2;
+        lastActionIdx = 1;
+        hasPrev = 0;
+      }
+      
+      if (hasPrev === 1 && !reset) {
+        const maxQNext = Math.max(...qTable[s]);
+        const targetQ = reward + gamma * maxQNext;
+        const currentQ = qTable[lastStateIdx][lastActionIdx];
+        qTable[lastStateIdx][lastActionIdx] = currentQ + alpha * (targetQ - currentQ);
+      }
+      
+      let aIdx = 1;
+      if (Math.random() < epsilon) {
+        aIdx = Math.floor(Math.random() * 3);
+      } else {
+        let maxVal = qTable[s][0];
+        aIdx = 0;
+        for (let i = 1; i < 3; i++) {
+          if (qTable[s][i] > maxVal) {
+            maxVal = qTable[s][i];
+            aIdx = i;
+          }
+        }
+      }
+      
+      const action = actions[aIdx];
+      const maxQ = Math.max(...qTable[s]);
+      
+      return {
+        outputs: [action, maxQ],
+        nextState: {
+          qTable,
+          lastStateIdx: s,
+          lastActionIdx: aIdx,
+          hasPrev: 1
+        }
+      };
+    }
   })
 };
 
+
 export const XBRIDGES_CATEGORIES = [
+  {
+    name: 'Learning Models',
+    blocks: [
+      { type: 'AC_MOTOR_PID_CONTROL', label: 'AC Motor PID Control', icon: 'graduation-cap' },
+      { type: 'LMS_ADAPTIVE_FILTER', label: 'LMS Adaptive Filter', icon: 'graduation-cap' },
+      { type: 'NEURAL_NEURON_LEARNING', label: 'Neural Neuron Learner', icon: 'graduation-cap' },
+      { type: 'RL_Q_LEARNING_CONTROLLER', label: 'RL Q-Learning Agent', icon: 'graduation-cap' }
+    ]
+  },
   {
     name: 'Sources',
     blocks: [
@@ -2143,8 +2758,12 @@ export const XBRIDGES_CATEGORIES = [
     name: 'Motor Control',
     blocks: [
       { type: 'VF_SLIP_COMP', label: 'V/f + Slip Comp', icon: 'zap' },
+      { type: 'IM_SCALAR_CONTROL', label: 'Induction Motor Scalar', icon: 'activity' },
+      { type: 'IM_FOC_CONTROL', label: 'Induction Motor FOC', icon: 'cpu' },
+      { type: 'IM_FLUX_OBSERVER', label: 'Flux Observer', icon: 'eye' },
       { type: 'SIX_STEP_COMMUTATION', label: 'Six-Step BLDC', icon: 'cpu' },
-      { type: 'SENSORLESS_SIX_STEP', label: 'Sensorless BLDC', icon: 'cpu' }
+      { type: 'SENSORLESS_SIX_STEP', label: 'Sensorless BLDC', icon: 'cpu' },
+      { type: 'AC_INDUCTION_MOTOR', label: 'Induction Motor Model', icon: 'zap' }
     ]
   },
   {

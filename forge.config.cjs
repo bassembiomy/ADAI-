@@ -1,7 +1,7 @@
 module.exports = {
   packagerConfig: {
     asar: true,
-    icon: './icon.png'
+    // icon: './icon.png'
   },
   rebuildConfig: {},
   makers: [
@@ -9,7 +9,7 @@ module.exports = {
       name: '@electron-forge/maker-squirrel',
       config: {
         name: 'adia',
-        setupIcon: './icon.png'
+        // setupIcon: './icon.png'
       },
     },
     {

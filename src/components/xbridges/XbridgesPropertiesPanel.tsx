@@ -32,6 +32,46 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
     setIsCollapsed(false); // Auto-expand when a new block is selected
   }, [block.id]);
 
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [isMouseDown, setIsMouseDown] = useState(false);
+  const [startY, setStartY] = useState(0);
+  const [scrollTop, setScrollTop] = useState(0);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'SELECT' ||
+      target.tagName === 'BUTTON' ||
+      target.closest('button') ||
+      target.closest('input') ||
+      target.closest('select') ||
+      target.closest('textarea')
+    ) {
+      return;
+    }
+    setIsMouseDown(true);
+    setStartY(e.pageY - (containerRef.current?.offsetTop || 0));
+    setScrollTop(containerRef.current?.scrollTop || 0);
+  };
+
+  const handleMouseLeave = () => {
+    setIsMouseDown(false);
+  };
+
+  const handleMouseUp = () => {
+    setIsMouseDown(false);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isMouseDown || !containerRef.current) return;
+    e.preventDefault();
+    const y = e.pageY - containerRef.current.offsetTop;
+    const walk = (y - startY) * 1.5;
+    containerRef.current.scrollTop = scrollTop - walk;
+  };
+
   const handleLabelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLocalLabel(e.target.value);
     onUpdate(block.id, { label: e.target.value });
@@ -82,7 +122,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
   );
 
   return (
-    <div className={`${isCollapsed ? 'w-12' : 'w-80'} bg-[#141414] border-l border-[#222] flex flex-col h-full shadow-2xl z-50 text-gray-300 transition-all duration-300 overflow-hidden`}>
+    <div className={`${isCollapsed ? 'w-12' : 'w-80'} bg-[#141414] border-l border-[#222] flex flex-col h-full shadow-2xl z-50 text-gray-300 transition-all duration-300 overflow-hidden select-text`}>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-[#222] bg-[#1a1a1a]">
         {!isCollapsed && (
@@ -107,7 +147,15 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
         </div>
       </div>
 
-      <div className={`flex-1 overflow-y-auto p-4 space-y-6 ${isCollapsed ? 'hidden' : 'block'}`}>
+      <div 
+        ref={containerRef}
+        onMouseDown={handleMouseDown}
+        onMouseLeave={handleMouseLeave}
+        onMouseUp={handleMouseUp}
+        onMouseMove={handleMouseMove}
+        className={`flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 space-y-6 cursor-grab active:cursor-grabbing ${isCollapsed ? 'hidden' : 'block'}`}
+        style={{ maxHeight: 'calc(100% - 60px)' }}
+      >
         {/* General */}
         <section className="space-y-3">
           <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">General</h3>
@@ -124,6 +172,12 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
             <span className="text-xs text-gray-500">Block Type</span>
             <span className="text-xs font-mono font-medium text-[#c9a86c]">{block.type}</span>
           </div>
+          {block.description && (
+            <div className="bg-[#0a0a0a] p-3 rounded border border-[#333] text-xs text-gray-400 space-y-1.5 shadow-inner">
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Description & Notes</span>
+              <p className="leading-relaxed whitespace-pre-wrap font-sans text-gray-400">{block.description}</p>
+            </div>
+          )}
           {block.type === 'DOE_MODULE' && onLaunchDoe && (
             <button 
               onClick={onLaunchDoe}

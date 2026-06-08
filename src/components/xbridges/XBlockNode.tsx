@@ -4,10 +4,62 @@ import { Handle, Position, useUpdateNodeInternals, NodeResizer } from 'reactflow
 import { 
   Square, Activity, Plus, Minus, X, Divide, ChevronUp, MinusCircle, Maximize, Maximize2,
   Sigma, BarChart, ArrowUp, Grid, RotateCw, RefreshCcw, Hash, TrendingUp, Monitor, Box, Download,
-  LogIn, LogOut, ChevronLeft, ChevronRight, Zap, Settings, ZapOff, Cpu, Layers, Wind, Filter, Eye
+  LogIn, LogOut, ChevronLeft, ChevronRight, Zap, Settings, ZapOff, Cpu, Layers, Wind, Filter, Eye,
+  GraduationCap, ArrowRightCircle, ArrowLeftCircle, Network
 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import { XPort } from '../../engine/xbridges/types';
+import { XBRIDGES_CATEGORIES } from '../../engine/xbridges/BlockDefinitions';
+
+// Map icon string names to Lucide icon components
+const LucideIconMap: Record<string, React.ComponentType<any>> = {
+  'square': Square,
+  'activity': Activity,
+  'plus': Plus,
+  'minus': Minus,
+  'x': X,
+  'divide': Divide,
+  'chevron-up': ChevronUp,
+  'minus-circle': MinusCircle,
+  'maximize': Maximize,
+  'maximize2': Maximize2,
+  'sigma': Sigma,
+  'bar-chart': BarChart,
+  'arrow-up': ArrowUp,
+  'grid': Grid,
+  'rotate-cw': RotateCw,
+  'refresh-ccw': RefreshCcw,
+  'hash': Hash,
+  'trending-up': TrendingUp,
+  'monitor': Monitor,
+  'box': Box,
+  'download': Download,
+  'log-in': LogIn,
+  'log-out': LogOut,
+  'chevron-left': ChevronLeft,
+  'chevron-right': ChevronRight,
+  'zap': Zap,
+  'settings': Settings,
+  'zap-off': ZapOff,
+  'cpu': Cpu,
+  'layers': Layers,
+  'wind': Wind,
+  'filter': Filter,
+  'eye': Eye,
+  'graduation-cap': GraduationCap,
+  'arrow-right-circle': ArrowRightCircle,
+  'arrow-left-circle': ArrowLeftCircle,
+  'network': Network,
+  'integral': TrendingUp,
+};
+
+// Build mapping of block type to icon name from categories
+const blockTypeToIconName: Record<string, string> = {};
+XBRIDGES_CATEGORIES.forEach(cat => {
+  cat.blocks.forEach(b => {
+    blockTypeToIconName[b.type] = b.icon;
+  });
+});
 
 export const XBlockNode = ({ data, id, selected }: any) => {
   const updateNodeInternals = useUpdateNodeInternals();
@@ -50,7 +102,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
     if (['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR', 'SWITCH', 'IF_ELSE', 'SWITCH_CASE'].includes(type)) return '#6f42c1'; // Logic (Purple)
     if (['BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight'].includes(type)) return '#563d7c'; // Bitwise (Indigo)
     if (['DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Integrator', 'INTEGRATOR_CONTINUOUS', 'INTEGRATOR_DISCRETE', 'PID_CONTROLLER', 'PID_BASIC'].includes(type)) return '#d73a49'; // Sequential/Control (Red)
-    if (type === 'MPC_CONTROLLER' || type === 'Subsystem' || type === 'DOE_MODEL') return '#c9a86c'; // MPC/Subsystem/DOE (Copper/Gold)
+    if (['MPC_CONTROLLER', 'Subsystem', 'DOE_MODEL', 'AC_MOTOR_PID_CONTROL', 'LMS_ADAPTIVE_FILTER', 'NEURAL_NEURON_LEARNING', 'RL_Q_LEARNING_CONTROLLER'].includes(type)) return '#c9a86c'; // MPC/Subsystem/DOE/Learning (Copper/Gold)
     if (['WHITE_NOISE', 'BAND_LIMITED_NOISE', 'LOW_PASS_FILTER', 'HIGH_PASS_FILTER', 'MOVING_AVERAGE'].includes(type)) return '#17a2b8'; // Signal Processing (Cyan/Teal)
     if (['KALMAN_FILTER', 'EXTENDED_KALMAN_FILTER'].includes(type)) return '#20c997'; // Estimation (Mint)
     if (['THREE_PHASE_INVERTER', 'SINGLE_PHASE_H_BRIDGE'].includes(type)) return '#ef4444'; // Power (Red)
@@ -60,6 +112,12 @@ export const XBlockNode = ({ data, id, selected }: any) => {
   };
 
   const getIcon = (type: string) => {
+    const iconName = blockTypeToIconName[type] || data?.icon;
+    if (iconName && LucideIconMap[iconName]) {
+      const IconComponent = LucideIconMap[iconName];
+      return <IconComponent size={12} />;
+    }
+
     switch (type) {
       case 'Constant': return <Square size={12} />;
       case 'WaveformGen': return <Activity size={12} />;
@@ -125,7 +183,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       case 'COSEC': return <TrendingUp size={12} />;
       case 'Subsystem':
       case 'DOE_MODEL': return <Layers size={12} />;
-      default: return null;
+      default: return <Box size={12} />;
     }
   };
 
@@ -181,9 +239,11 @@ export const XBlockNode = ({ data, id, selected }: any) => {
   const color = getColor(data.type);
   const allPorts = [...(data.inputs || []), ...(data.outputs || [])];
 
+  const isPulsing = !!data.pulse;
+
   return (
     <div 
-      className={`relative rounded-xl overflow-hidden transition-all duration-500 border-2 ${selected ? 'ring-4 ring-white/10 scale-105 z-50' : 'hover:border-white/20'}`}
+      className={`relative rounded-xl overflow-hidden transition-all duration-500 border-2 ${selected ? 'ring-4 ring-white/10 scale-105 z-50' : 'hover:border-white/20'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
       style={{ 
         background: 'rgba(20, 20, 20, 0.8)',
         backdropFilter: 'blur(20px)',
@@ -256,7 +316,15 @@ export const XBlockNode = ({ data, id, selected }: any) => {
             <div className="w-full h-[90px] bg-black/60 rounded-xl border border-white/5 p-2 shadow-inner group/scope overflow-hidden relative">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(16,185,129,0.1),transparent)]" />
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data.state?.history?.slice(-50).map((v: any, i: number) => ({ i, v: typeof v === 'number' ? v : 0 })) || []}>
+                <AreaChart data={data.state?.history?.slice(-50).map((sample: any, i: number) => {
+                  let val = 0;
+                  if (typeof sample === 'number') {
+                    val = sample;
+                  } else if (sample && typeof sample === 'object') {
+                    val = sample.y1 !== undefined ? sample.y1 : (sample.y !== undefined ? sample.y : 0);
+                  }
+                  return { i, v: Number(val) || 0 };
+                }) || []}>
                   <defs>
                     <linearGradient id={`grad-${id}`} x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>

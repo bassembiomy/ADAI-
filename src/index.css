@@ -114,3 +114,47 @@ input[type=range]::-moz-range-thumb {
   background: #f97316;
   border: none;
 }
+
+/* Custom Scrollbar Utility */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(201, 168, 108, 0.5); /* Premium gold-copper thumb */
+  border-radius: 5px;
+  border: 2px solid #141414; /* Inset padding effect */
+  transition: background 0.3s;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 168, 108, 0.9);
+}
+
+/* Custom Pulse Highlight for Tutorial Target Blocks */
+@keyframes block-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(201, 168, 108, 0.7);
+    border-color: rgba(201, 168, 108, 0.8);
+  }
+  70% {
+    box-shadow: 0 0 0 15px rgba(201, 168, 108, 0);
+    border-color: rgba(201, 168, 108, 1);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(201, 168, 108, 0);
+    border-color: rgba(201, 168, 108, 0.8);
+  }
+}
+.block-pulse-highlight {
+  animation: block-pulse 2s infinite ease-in-out !important;
+  border-color: #c9a86c !important;
+}
+
+

@@ -13,21 +13,29 @@ function createWindow() {
     },
     title: "ADIA Engineering Suite",
     backgroundColor: "#0a0a0a",
-    icon: path.join(__dirname, '../icon.png'),
+    // icon: path.join(__dirname, '../icon.png'),
   });
 
   // In production, we load the bundled index.html from the dist folder
   // In development, we could load from localhost:3000 if vite is running
   if (app.isPackaged) {
-    win.loadFile(path.join(__dirname, '../dist/index.html'));
+    win.loadFile(path.join(__dirname, '../dist/index.html')).catch(err => {
+      console.error('Failed to load file:', err);
+    });
   } else {
-    win.loadURL('http://localhost:3000');
+    win.loadURL('http://localhost:3000').catch(err => {
+      console.error('Failed to load URL:', err);
+    });
   }
+
+  win.webContents.openDevTools();
 
   // win.webContents.openDevTools();
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(createWindow).catch(err => {
+  console.error('App failed to start:', err);
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

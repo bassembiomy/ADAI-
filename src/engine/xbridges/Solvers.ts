@@ -12,7 +12,7 @@ export class Solvers {
       dx.forEach((deriv, blockId) => {
         const block = engine['executionOrder'].find(b => b.id === blockId);
         if (block) {
-           const nextState = VectorUtils.applyElementWise(block.state, VectorUtils.applyElementWise(deriv, dt, 'multiply'), 'add');
+           const nextState = VectorUtils.integrateState(block.state, deriv, dt);
            nextStates.set(blockId, nextState);
         }
       });
@@ -43,7 +43,7 @@ export class Solvers {
       k1.forEach((deriv, blockId) => {
         const block = engine['executionOrder'].find(b => b.id === blockId);
         if (block) {
-          state_k2.set(blockId, VectorUtils.applyElementWise(block.state, VectorUtils.applyElementWise(deriv, dt2, 'multiply'), 'add'));
+          state_k2.set(blockId, VectorUtils.integrateState(block.state, deriv, dt2));
         }
       });
       engine.computeOutputs(t + dt2, state_k2);
@@ -54,7 +54,7 @@ export class Solvers {
       k2.forEach((deriv, blockId) => {
         const block = engine['executionOrder'].find(b => b.id === blockId);
         if (block) {
-          state_k3.set(blockId, VectorUtils.applyElementWise(block.state, VectorUtils.applyElementWise(deriv, dt2, 'multiply'), 'add'));
+          state_k3.set(blockId, VectorUtils.integrateState(block.state, deriv, dt2));
         }
       });
       engine.computeOutputs(t + dt2, state_k3);
@@ -65,7 +65,7 @@ export class Solvers {
       k3.forEach((deriv, blockId) => {
         const block = engine['executionOrder'].find(b => b.id === blockId);
         if (block) {
-          state_k4.set(blockId, VectorUtils.applyElementWise(block.state, VectorUtils.applyElementWise(deriv, dt, 'multiply'), 'add'));
+          state_k4.set(blockId, VectorUtils.integrateState(block.state, deriv, dt));
         }
       });
       engine.computeOutputs(t + dt, state_k4);
@@ -85,7 +85,7 @@ export class Solvers {
           sum = VectorUtils.applyElementWise(sum, deriv4, 'add');
           
           const delta = VectorUtils.applyElementWise(sum, dt / 6, 'multiply');
-          nextStates.set(blockId, VectorUtils.applyElementWise(block.state, delta, 'add'));
+          nextStates.set(blockId, VectorUtils.integrateState(block.state, delta, 1));
         }
       });
 
