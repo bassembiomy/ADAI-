@@ -7,6 +7,8 @@ import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { XbridgesWorkspace } from './components/xbridges/XbridgesWorkspace';
 import { VLabWorkspace } from './components/vlab/VLabWorkspace';
+import { HILWorkspace } from './components/hil/HILWorkspace';
+import { HILConfig, HILSessionState } from './engine/hil/hilTypes';
 import { XbridgesEngine } from './engine/xbridges/XbridgesEngine';
 import { Solvers } from './engine/xbridges/Solvers';
 import { GMDHEngine, solveLeastSquares } from './engine/gmdh/gmdh_core/combi';
@@ -191,7 +193,7 @@ interface Point {
 }
 
 type ManagedWindowId = 'hmi' | 'pid' | 'rtm' | 'doe';
-type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab';
+type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil';
 
 interface ManagedWindowState {
   id: ManagedWindowId;
@@ -289,7 +291,7 @@ interface InterfaceRealizationData {
   interfaceId: string;
 }
 
-type HmiComponentType = 'toggle' | 'button' | 'slider' | 'input' | 'lamp' | 'led' | 'lcd' | 'gauge' | 'rotary' | 'hybrid-rotary' | 'buzzer';
+type HmiComponentType = 'toggle' | 'button' | 'slider' | 'input' | 'lamp' | 'led' | 'lcd' | 'gauge' | 'rotary' | 'hybrid-rotary' | 'buzzer' | 'oled' | 'encoder' | 'mode-selector' | 'mode-icon';
 
 interface HmiComponent {
   id: string;
@@ -305,6 +307,26 @@ interface HmiComponent {
   variableIds?: string[];
   hybridValues?: string[];
   soundType?: 'sine' | 'square' | 'sawtooth' | 'triangle';
+  icon?: 'none' | 'power' | 'play' | 'light';
+  color?: 'orange' | 'green' | 'red' | 'blue' | 'yellow' | 'grey';
+  cursorVariableId?: string | null;
+  pressVariableId?: string | null;
+  oledModeVarId?: string | null;
+  oledTempVarId?: string | null;
+  oledTimeVarId?: string | null;
+  oledStateVarId?: string | null;
+  oledSteamVarId?: string | null;
+  oledHeatVarId?: string | null;
+  oledFanVarId?: string | null;
+  oledLightVarId?: string | null;
+  oledDuoVarId?: string | null;
+  oledProgressVarId?: string | null;
+  iconEmoji?: string;
+  targetValue?: string;
+  oledModeNames?: string;
+  oledIndicatorEmojis?: string[];
+  oledIndicatorVarIds?: (string | null)[];
+  oledIndicatorLabels?: string[];
 }
 
 // =============================================================================
@@ -1403,6 +1425,329 @@ const PidWorkspaceDialog = ({
   );
 };
 
+const OledDisplay = ({
+  comp,
+  variables,
+  editMode
+}: {
+  comp: HmiComponent;
+  variables: VariableDef[];
+  editMode: boolean;
+}) => {
+  const getVarVal = (varId: string | null | undefined, fallback: any = 0) => {
+    if (!varId) return fallback;
+    const v = variables.find(x => x.id === varId);
+    return v ? v.currentValue : fallback;
+  };
+
+  const modeVal = getVarVal(comp.oledModeVarId, 0);
+  const tempVal = getVarVal(comp.oledTempVarId, 200);
+  const timeVal = getVarVal(comp.oledTimeVarId, 20);
+  const stateVal = getVarVal(comp.oledStateVarId, 'HOME');
+  const steamVal = !!getVarVal(comp.oledSteamVarId, false);
+  const heatVal = !!getVarVal(comp.oledHeatVarId, false);
+  const fanVal = !!getVarVal(comp.oledFanVarId, false);
+  const lightVal = !!getVarVal(comp.oledLightVarId, false);
+  const duoVal = !!getVarVal(comp.oledDuoVarId, false);
+  const progressVal = Number(getVarVal(comp.oledProgressVarId, 0));
+
+  const customModeList = comp.oledModeNames
+    ? comp.oledModeNames.split(',').map(s => s.trim())
+    : [
+        'AIR FRYER', 'STEAMER', 'OVEN', 'RAPID STEAM', 'BROIL', 'REHEAT',
+        'KEEP WARM', 'FERMENT', 'DEFROST', 'SLOW COOK', 'DEHYDRATE', 'DUO COOK'
+      ];
+
+  let modeText = customModeList[0] || 'READY';
+  if (typeof modeVal === 'number') {
+    modeText = customModeList[Math.floor(modeVal) % customModeList.length] || customModeList[0] || 'READY';
+  } else if (typeof modeVal === 'string') {
+    modeText = modeVal.toUpperCase();
+  }
+
+  let tempText = typeof tempVal === 'number' ? `${tempVal}°C` : String(tempVal);
+  let timeText = '';
+  if (typeof timeVal === 'number') {
+    if (timeVal >= 60 || (String(stateVal).toUpperCase() === 'COOKING' && timeVal > 0)) {
+      const m = Math.floor(timeVal / 60);
+      const s = Math.floor(timeVal % 60);
+      if (timeVal < 60 && String(stateVal).toUpperCase() !== 'COOKING') {
+        timeText = `${timeVal} min`;
+      } else {
+        timeText = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      }
+    } else {
+      timeText = `${timeVal} min`;
+    }
+  } else {
+    timeText = String(timeVal);
+  }
+
+  const stateStr = String(stateVal).toUpperCase();
+  let ctxText = 'Rotate to select mode';
+  if (stateStr === 'READY') ctxText = 'Press START to cook';
+  else if (stateStr === 'COOKING') ctxText = 'Cooking... Press START to pause';
+  else if (stateStr === 'PAUSED') ctxText = 'Paused. Press START to resume';
+  else if (stateStr === 'COMPLETE') ctxText = 'Cooking complete! Press encoder';
+  else if (stateStr === 'SETTINGS') ctxText = 'Settings menu';
+
+  const hasCustomIndicators = Array.isArray(comp.oledIndicatorEmojis) && comp.oledIndicatorEmojis.length > 0;
+
+  const renderIndicators = () => {
+    if (hasCustomIndicators) {
+      return (comp.oledIndicatorEmojis || []).map((emoji, idx) => {
+        const varId = comp.oledIndicatorVarIds?.[idx];
+        const val = varId ? !!getVarVal(varId, false) : false;
+        const label = comp.oledIndicatorLabels?.[idx] || `Indicator ${idx + 1}`;
+        const isSpin = emoji === '🌀' || emoji === '⚙️' || emoji === '🎡' || label.toLowerCase().includes('fan') || label.toLowerCase().includes('spin');
+
+        return (
+          <span
+            key={idx}
+            className={`transition-opacity duration-200 ${val ? 'opacity-100' : 'opacity-20'} ${val && isSpin ? 'animate-spin' : ''}`}
+            style={val && isSpin ? { animationDuration: '2s', display: 'inline-block' } : { display: 'inline-block' }}
+            title={label}
+          >
+            {emoji}
+          </span>
+        );
+      });
+    }
+
+    // Default legacy fallback
+    return (
+      <>
+        <span className={`transition-opacity duration-200 ${steamVal ? 'opacity-100' : 'opacity-20'}`} title="Steam">💧</span>
+        <span className={`transition-opacity duration-200 ${heatVal ? 'opacity-100' : 'opacity-20'}`} title="Heat">🔥</span>
+        <span className={`transition-opacity duration-200 ${fanVal ? 'opacity-100 animate-spin' : 'opacity-20'}`} style={{ animationDuration: '2s' }} title="Fan">🌀</span>
+        <span className={`transition-opacity duration-200 ${lightVal ? 'opacity-100' : 'opacity-20'}`} title="Light">💡</span>
+        <span className={`transition-opacity duration-200 ${duoVal ? 'opacity-100' : 'opacity-20'}`} title="Duo">⚡</span>
+      </>
+    );
+  };
+
+  return (
+    <div className="w-full h-full bg-black border border-[#1a1a22] rounded-lg p-3 flex flex-col justify-between font-mono shadow-[inset_0_0_15px_rgba(0,0,0,0.9)] text-[#4db8ff]">
+      <div className="text-[10px] text-[#4d7aaa] uppercase tracking-wider truncate h-4">
+        {modeText}
+      </div>
+      <div className="text-2xl font-bold tracking-widest text-[#4db8ff] text-shadow-[0_0_8px_rgba(77,184,255,0.5)] my-0.5 truncate">
+        {tempText}
+      </div>
+      <div className="w-full h-1 bg-[#111] border border-[#222] rounded overflow-hidden">
+        <div 
+          className="h-full bg-gradient-to-r from-[#e8a020] to-[#3de88a] transition-all duration-300"
+          style={{ width: `${Math.max(0, Math.min(100, progressVal))}%` }}
+        />
+      </div>
+      <div className="flex justify-between items-center text-xs my-0.5 font-semibold">
+        <span className="text-[#4db8ff]">{timeText}</span>
+        <span className="text-[#3de88a] bg-[#3de88a]/10 px-1.5 py-0.2 rounded text-[9px] border border-[#3de88a]/20">
+          {stateStr}
+        </span>
+      </div>
+      <div className="flex gap-2 text-sm justify-start border-t border-[#111] pt-1 mt-0.5 h-7 items-center overflow-x-auto">
+        {renderIndicators()}
+      </div>
+      <div className="text-[8px] text-[#335577] truncate border-t border-[#111] pt-1 mt-0.5 h-3.5">
+        {ctxText}
+      </div>
+    </div>
+  );
+};
+
+const Encoder = ({
+  comp,
+  variables,
+  updateVariable,
+  editMode
+}: {
+  comp: HmiComponent;
+  variables: VariableDef[];
+  updateVariable: (id: string, value: string) => void;
+  editMode: boolean;
+}) => {
+  const [rotationAngle, setRotationAngle] = useState(0);
+  const [isLpActive, setIsLpActive] = useState(false);
+  const lpTimerRef = useRef<any>(null);
+
+  const rotVar = variables.find(x => x.id === comp.variableId);
+  const rotVal = rotVar ? Number(rotVar.currentValue) || 0 : 0;
+  const angle = rotVal * 18 + rotationAngle;
+
+  const rotate = (dir: number) => {
+    if (editMode || !comp.variableId) return;
+    const v = variables.find(x => x.id === comp.variableId);
+    if (!v) return;
+    const curVal = Number(v.currentValue) || 0;
+    const step = v.name.toLowerCase().includes('temp') ? 5 : 1;
+    const newVal = curVal + dir * step;
+    const clampedVal = Math.max(comp.min ?? 0, Math.min(comp.max ?? 100, newVal));
+    updateVariable(comp.variableId, clampedVal.toString());
+    setRotationAngle(prev => prev + dir * 18);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (editMode || !comp.pressVariableId) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    setIsLpActive(false);
+    updateVariable(comp.pressVariableId, 'true');
+
+    lpTimerRef.current = setTimeout(() => {
+      setIsLpActive(true);
+    }, 1500);
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (editMode || !comp.pressVariableId) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (lpTimerRef.current) {
+      clearTimeout(lpTimerRef.current);
+      lpTimerRef.current = null;
+    }
+    setIsLpActive(false);
+    updateVariable(comp.pressVariableId, 'false');
+  };
+
+  const handleMouseLeave = () => {
+    if (editMode || !comp.pressVariableId) return;
+    if (lpTimerRef.current) {
+      clearTimeout(lpTimerRef.current);
+      lpTimerRef.current = null;
+    }
+    setIsLpActive(false);
+    updateVariable(comp.pressVariableId, 'false');
+  };
+
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-between p-2 select-none">
+      <div className="flex gap-2 w-full justify-center shrink-0">
+        <button 
+          onClick={() => rotate(-1)} 
+          className="w-10 h-6 bg-[#222] border border-[#333] hover:border-[#f97316] rounded text-[#888] hover:text-[#fff] text-xs flex items-center justify-center active:scale-95 transition-all"
+          disabled={editMode}
+        >
+          ↺
+        </button>
+        <button 
+          onClick={() => rotate(1)} 
+          className="w-10 h-6 bg-[#222] border border-[#333] hover:border-[#f97316] rounded text-[#888] hover:text-[#fff] text-xs flex items-center justify-center active:scale-95 transition-all"
+          disabled={editMode}
+        >
+          ↻
+        </button>
+      </div>
+
+      <div className="relative flex-1 flex items-center justify-center my-1">
+        <div 
+          onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
+          className="relative w-20 h-20 rounded-full cursor-pointer flex items-center justify-center transition-transform active:scale-95"
+          style={{
+            background: 'conic-gradient(from 0deg, #2a2a36, #1a1a24, #2a2a36, #1a1a24, #2a2a36)',
+            border: '3px solid #333340',
+            boxShadow: '0 4px 10px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)',
+            transform: `rotate(${angle}deg)`
+          }}
+        >
+          <div className="absolute w-2.5 h-2.5 bg-[#f97316] rounded-full shadow-[0_0_6px_rgba(249,115,22,0.8)]" style={{ top: '6px' }} />
+          <div className="w-10 h-10 rounded-full bg-[#0d0d10] border border-[#222230] shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] flex items-center justify-center">
+            <span className="text-[10px] text-[#444] font-bold">✦</span>
+          </div>
+        </div>
+        <div 
+          className={`absolute w-24 h-24 rounded-full border-2 border-[#f97316] pointer-events-none transition-all duration-300 ${isLpActive ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}
+        />
+      </div>
+
+      <div className="text-[9px] text-[#555] font-mono text-center shrink-0">
+        Value: {rotVal}
+      </div>
+    </div>
+  );
+};
+
+const ModeSelector = ({
+  comp,
+  variables,
+  updateVariable,
+  editMode
+}: {
+  comp: HmiComponent;
+  variables: VariableDef[];
+  updateVariable: (id: string, value: string) => void;
+  editMode: boolean;
+}) => {
+  const oledModes = [
+    { name: 'Air Fry', emoji: '🍟' },
+    { name: 'Steam', emoji: '💧' },
+    { name: 'Oven', emoji: '🍞' },
+    { name: 'Rapid Stm', emoji: '♨️' },
+    { name: 'Broil', emoji: '🔥' },
+    { name: 'Reheat', emoji: '🍲' },
+    { name: 'Warm', emoji: '☕' },
+    { name: 'Ferment', emoji: '🧫' },
+    { name: 'Defrost', emoji: '❄️' },
+    { name: 'Slow Cook', emoji: '🥘' },
+    { name: 'Dehydrate', emoji: '🌿' },
+    { name: 'Duo Cook', emoji: '⚡' }
+  ];
+
+  const selVar = variables.find(x => x.id === comp.variableId);
+  const selIndex = selVar ? Number(selVar.currentValue) || 0 : 0;
+
+  const curVar = variables.find(x => x.id === comp.cursorVariableId);
+  const curIndex = curVar ? Number(curVar.currentValue) || 0 : 0;
+
+  const handleSelect = (idx: number) => {
+    if (editMode || !comp.variableId) return;
+    updateVariable(comp.variableId, idx.toString());
+  };
+
+  return (
+    <div className="w-full h-full bg-[#111] p-1 flex flex-col justify-between select-none">
+      <div className="text-[9px] text-[#555] uppercase font-bold tracking-wider px-1">Cooking Modes</div>
+      <div className="grid grid-cols-6 gap-1 flex-1 mt-0.5">
+        {oledModes.map((m, idx) => {
+          const isSelected = idx === selIndex;
+          const isCursor = idx === curIndex;
+
+          let borderClass = 'border-[#222]';
+          let bgClass = 'bg-[#1a1a20]';
+          let glowStyle = {};
+
+          if (isSelected) {
+            borderClass = 'border-[#f97316]';
+            bgClass = 'bg-[#f97316]/10';
+            glowStyle = { boxShadow: '0 0 6px rgba(249,115,22,0.3)' };
+          } else if (isCursor) {
+            borderClass = 'border-[#4db8ff]';
+            bgClass = 'bg-[#4db8ff]/10';
+            glowStyle = { boxShadow: '0 0 6px rgba(77,184,255,0.3)' };
+          }
+
+          return (
+            <div
+              key={idx}
+              onClick={() => handleSelect(idx)}
+              style={glowStyle}
+              className={`border rounded flex flex-col items-center justify-center cursor-pointer p-0.5 transition-all active:scale-95 ${borderClass} ${bgClass}`}
+            >
+              <span className="text-xs">{m.emoji}</span>
+              <span className="text-[7px] text-[#888] truncate w-full text-center mt-0.5">{m.name}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const HybridRotary = ({
   comp,
   variable,
@@ -1732,6 +2077,279 @@ const predictRSM = (Beta: number[], factorValues: number[], k: number): number =
   return y;
 };
 
+// =============================================================================
+// TAGUCHI ORTHOGONAL ARRAYS & HELPERS (MINITAB COMPLIANT)
+// =============================================================================
+const gf4_add = (x: number, y: number) => x ^ y;
+const gf4_mul = (x: number, y: number) => {
+  if (x === 0 || y === 0) return 0;
+  if (x === 1) return y;
+  if (y === 1) return x;
+  if (x === 2 && y === 2) return 3;
+  if (x === 3 && y === 3) return 2;
+  return 1;
+};
+
+const generateL4 = () => [
+  [1, 1, 1],
+  [1, 2, 2],
+  [2, 1, 2],
+  [2, 2, 1]
+];
+
+const generateL8 = () => [
+  [1, 1, 1, 1, 1, 1, 1],
+  [1, 1, 1, 2, 2, 2, 2],
+  [1, 2, 2, 1, 1, 2, 2],
+  [1, 2, 2, 2, 2, 1, 1],
+  [2, 1, 2, 1, 2, 1, 2],
+  [2, 1, 2, 2, 1, 2, 1],
+  [2, 2, 1, 1, 2, 2, 1],
+  [2, 2, 1, 2, 1, 1, 2]
+];
+
+const generateL9 = () => [
+  [1, 1, 1, 1],
+  [1, 2, 2, 2],
+  [1, 3, 3, 3],
+  [2, 1, 2, 3],
+  [2, 2, 3, 1],
+  [2, 3, 1, 2],
+  [3, 1, 3, 2],
+  [3, 2, 1, 3],
+  [3, 3, 2, 1]
+];
+
+const generateL12 = () => [
+  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+  [1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2],
+  [1, 1, 2, 2, 2, 1, 1, 1, 2, 2, 2],
+  [1, 2, 1, 2, 2, 1, 2, 2, 1, 1, 2],
+  [1, 2, 2, 1, 2, 2, 1, 2, 1, 2, 1],
+  [1, 2, 2, 2, 1, 2, 2, 1, 2, 1, 1],
+  [2, 1, 2, 2, 1, 1, 2, 2, 1, 2, 1],
+  [2, 1, 2, 1, 2, 2, 2, 1, 1, 1, 2],
+  [2, 1, 1, 2, 2, 2, 1, 2, 2, 1, 1],
+  [2, 2, 2, 1, 1, 1, 1, 2, 2, 1, 2],
+  [2, 2, 1, 2, 1, 2, 1, 1, 1, 2, 2],
+  [2, 2, 1, 1, 2, 1, 2, 2, 2, 2, 1]
+];
+
+const generateL16_2 = () => {
+  const matrix = [];
+  for (let r = 0; r < 16; r++) {
+    const row = [];
+    for (let c = 1; c <= 15; c++) {
+      let popcount = 0;
+      let andVal = r & c;
+      while (andVal > 0) {
+        if (andVal & 1) popcount++;
+        andVal >>= 1;
+      }
+      row.push((popcount % 2 === 0) ? 1 : 2);
+    }
+    matrix.push(row);
+  }
+  return matrix;
+};
+
+const generateL16_4 = () => {
+  const matrix = [];
+  for (let r = 0; r < 16; r++) {
+    const a = Math.floor(r / 4);
+    const b = r % 4;
+    const row = [
+      a + 1,
+      b + 1,
+      gf4_add(a, b) + 1,
+      gf4_add(a, gf4_mul(2, b)) + 1,
+      gf4_add(a, gf4_mul(3, b)) + 1
+    ];
+    matrix.push(row);
+  }
+  return matrix;
+};
+
+const generateL18 = () => [
+  [1, 1, 1, 1, 1, 1, 1, 1],
+  [1, 1, 2, 2, 2, 2, 2, 2],
+  [1, 1, 3, 3, 3, 3, 3, 3],
+  [1, 2, 1, 1, 2, 2, 3, 3],
+  [1, 2, 2, 2, 3, 3, 1, 1],
+  [1, 2, 3, 3, 1, 1, 2, 2],
+  [1, 3, 1, 2, 1, 3, 2, 3],
+  [1, 3, 2, 3, 2, 1, 3, 1],
+  [1, 3, 3, 1, 3, 2, 1, 2],
+  [2, 1, 1, 3, 3, 2, 2, 1],
+  [2, 1, 2, 1, 1, 3, 3, 2],
+  [2, 1, 3, 2, 2, 1, 1, 3],
+  [2, 2, 1, 2, 3, 1, 3, 2],
+  [2, 2, 2, 3, 1, 2, 1, 3],
+  [2, 2, 3, 1, 2, 3, 2, 1],
+  [2, 3, 1, 3, 2, 3, 1, 2],
+  [2, 3, 2, 1, 3, 1, 2, 3],
+  [2, 3, 3, 2, 1, 2, 3, 1]
+];
+
+const generateL25 = () => {
+  const matrix = [];
+  for (let r = 0; r < 25; r++) {
+    const a = Math.floor(r / 5);
+    const b = r % 5;
+    const row = [
+      a + 1,
+      b + 1,
+      ((a + b) % 5) + 1,
+      ((a + 2 * b) % 5) + 1,
+      ((a + 3 * b) % 5) + 1,
+      ((a + 4 * b) % 5) + 1
+    ];
+    matrix.push(row);
+  }
+  return matrix;
+};
+
+const generateL27 = () => {
+  const matrix = [];
+  for (let r = 0; r < 27; r++) {
+    const a = Math.floor(r / 9) % 3;
+    const b = Math.floor(r / 3) % 3;
+    const c = r % 3;
+    const row = [
+      a + 1, // 1
+      b + 1, // 2
+      ((a + b) % 3) + 1, // 3
+      ((a + 2 * b) % 3) + 1, // 4
+      c + 1, // 5
+      ((a + c) % 3) + 1, // 6
+      ((a + 2 * c) % 3) + 1, // 7
+      ((b + c) % 3) + 1, // 8
+      ((b + 2 * c) % 3) + 1, // 9
+      ((a + b + c) % 3) + 1, // 10
+      ((a + b + 2 * c) % 3) + 1, // 11
+      ((a + 2 * b + c) % 3) + 1, // 12
+      ((a + 2 * b + 2 * c) % 3) + 1 // 13
+    ];
+    matrix.push(row);
+  }
+  return matrix;
+};
+
+const generateL32 = () => {
+  const matrix = [];
+  for (let r = 0; r < 32; r++) {
+    const row = [];
+    for (let c = 1; c <= 31; c++) {
+      let popcount = 0;
+      let andVal = r & c;
+      while (andVal > 0) {
+        if (andVal & 1) popcount++;
+        andVal >>= 1;
+      }
+      row.push((popcount % 2 === 0) ? 1 : 2);
+    }
+    matrix.push(row);
+  }
+  return matrix;
+};
+
+interface TaguchiOADef {
+  name: string;
+  runs: number;
+  colLevels: number[];
+  matrix: number[][];
+}
+
+const getTaguchiOAs = (): TaguchiOADef[] => [
+  { name: 'L4 (2^3)', runs: 4, colLevels: Array(3).fill(2), matrix: generateL4() },
+  { name: 'L8 (2^7)', runs: 8, colLevels: Array(7).fill(2), matrix: generateL8() },
+  { name: 'L9 (3^4)', runs: 9, colLevels: Array(4).fill(3), matrix: generateL9() },
+  { name: 'L12 (2^11)', runs: 12, colLevels: Array(11).fill(2), matrix: generateL12() },
+  { name: 'L16 (2^15)', runs: 16, colLevels: Array(15).fill(2), matrix: generateL16_2() },
+  { name: 'L16 (4^5)', runs: 16, colLevels: Array(5).fill(4), matrix: generateL16_4() },
+  { name: 'L18 (2^1 x 3^7)', runs: 18, colLevels: [2, 3, 3, 3, 3, 3, 3, 3], matrix: generateL18() },
+  { name: 'L25 (5^6)', runs: 25, colLevels: Array(6).fill(5), matrix: generateL25() },
+  { name: 'L27 (3^13)', runs: 27, colLevels: Array(13).fill(3), matrix: generateL27() },
+  { name: 'L32 (2^31)', runs: 32, colLevels: Array(31).fill(2), matrix: generateL32() }
+];
+
+const findBestOA = (userLevels: number[]): TaguchiOADef | null => {
+  const sortedUser = [...userLevels].sort((a, b) => b - a);
+  const OAs = getTaguchiOAs();
+  let bestOA: TaguchiOADef | null = null;
+  for (const oa of OAs) {
+    const sortedOA = [...oa.colLevels].sort((a, b) => b - a);
+    if (sortedUser.length > sortedOA.length) continue;
+    
+    let compatible = true;
+    for (let i = 0; i < sortedUser.length; i++) {
+      if (sortedUser[i] > sortedOA[i]) {
+        compatible = false;
+        break;
+      }
+    }
+    if (compatible) {
+      if (!bestOA || oa.runs < bestOA.runs) {
+        bestOA = oa;
+      }
+    }
+  }
+  return bestOA;
+};
+
+const generateDesignMatrix = (factors: { name: string, levels: number }[], oa: TaguchiOADef): number[][] => {
+  const mappedCols: number[] = [];
+  const usedCols = new Set<number>();
+  
+  factors.forEach((f, fIdx) => {
+    let matchedCol = -1;
+    for (let c = 0; c < oa.colLevels.length; c++) {
+      if (!usedCols.has(c) && oa.colLevels[c] === f.levels) {
+        matchedCol = c;
+        break;
+      }
+    }
+    if (matchedCol !== -1) {
+      mappedCols[fIdx] = matchedCol;
+      usedCols.add(matchedCol);
+    }
+  });
+  
+  factors.forEach((f, fIdx) => {
+    if (mappedCols[fIdx] !== undefined) return;
+    let matchedCol = -1;
+    for (let c = 0; c < oa.colLevels.length; c++) {
+      if (!usedCols.has(c) && oa.colLevels[c] >= f.levels) {
+        matchedCol = c;
+        break;
+      }
+    }
+    if (matchedCol !== -1) {
+      mappedCols[fIdx] = matchedCol;
+      usedCols.add(matchedCol);
+    }
+  });
+
+  const dataRows: number[][] = [];
+  for (let r = 0; r < oa.runs; r++) {
+    const row: number[] = [];
+    factors.forEach((f, fIdx) => {
+      const colIdx = mappedCols[fIdx];
+      let val = 1;
+      if (colIdx !== undefined) {
+        val = oa.matrix[r][colIdx];
+        if (val > f.levels) {
+          val = 1;
+        }
+      }
+      row.push(val);
+    });
+    row.push(0);
+    dataRows.push(row);
+  }
+  return dataRows;
+};
+
 const DoeWorkspace = ({
   onClose,
   addError,
@@ -1767,8 +2385,8 @@ const DoeWorkspace = ({
   addError: (type: 'error' | 'warning' | 'info', message: string, source?: string, elementId?: string) => void;
   activeModel: 'RSM' | 'GMDH' | 'Taguchi';
   setActiveModel: React.Dispatch<React.SetStateAction<'RSM' | 'GMDH' | 'Taguchi'>>;
-  taguchiConfig: { objective: 'larger' | 'smaller' | 'nominal' };
-  setTaguchiConfig: React.Dispatch<React.SetStateAction<{ objective: 'larger' | 'smaller' | 'nominal' }>>;
+  taguchiConfig: { objective: 'larger' | 'smaller' | 'nominal' | 'target', targetValue?: number };
+  setTaguchiConfig: React.Dispatch<React.SetStateAction<{ objective: 'larger' | 'smaller' | 'nominal' | 'target', targetValue?: number }>>;
   data: number[][];
   setData: React.Dispatch<React.SetStateAction<number[][]>>;
   headers: string[];
@@ -1779,8 +2397,8 @@ const DoeWorkspace = ({
   setPlotFactors: React.Dispatch<React.SetStateAction<{ x: number, y: number }>>;
   holdValues: number[];
   setHoldValues: React.Dispatch<React.SetStateAction<number[]>>;
-  plotType: 'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act';
-  setPlotType: React.Dispatch<React.SetStateAction<'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act'>>;
+  plotType: 'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act' | 'taguchi_main_sn' | 'taguchi_main_mean';
+  setPlotType: React.Dispatch<React.SetStateAction<'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act' | 'taguchi_main_sn' | 'taguchi_main_mean'>>;
   handleExportProject: () => void;
   generateReport: () => void;
   onExportToVLab: (block: any) => void;
@@ -1795,6 +2413,16 @@ const DoeWorkspace = ({
 }) => {
   const [eqFontSize, setEqFontSize] = useState(14);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Taguchi design builder state
+  const [showDesignBuilder, setShowDesignBuilder] = useState(false);
+  const [builderNumFactors, setBuilderNumFactors] = useState(3);
+  const [builderFactors, setBuilderFactors] = useState<{ name: string, levels: number }[]>([
+    { name: 'A', levels: 3 },
+    { name: 'B', levels: 3 },
+    { name: 'C', levels: 3 }
+  ]);
+  const [responseTableTab, setResponseTableTab] = useState<'sn' | 'mean'>('sn');
 
   const k = headers.length - 1;
 
@@ -1847,20 +2475,47 @@ const DoeWorkspace = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleExportProject]);
 
-  // ── Statistical Functions & Analysis (Moved to ADIA) ───────────────────────
-
-  useEffect(() => {
-    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        handleExportProject();
+  const handleBuilderNumFactorsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseInt(e.target.value);
+    if (isNaN(val) || val < 1 || val > 15) return;
+    setBuilderNumFactors(val);
+    setBuilderFactors(prev => {
+      const newList = [...prev];
+      if (val > prev.length) {
+        for (let i = prev.length; i < val; i++) {
+          const charCode = 65 + i;
+          const name = charCode <= 90 ? String.fromCharCode(charCode) : `X${i + 1}`;
+          newList.push({ name, levels: 3 });
+        }
+      } else if (val < prev.length) {
+        return newList.slice(0, val);
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleExportProject]);
+      return newList;
+    });
+  };
 
-  // === Professional Report Generation ===
+  const handleBuilderFactorNameChange = (idx: number, name: string) => {
+    setBuilderFactors(prev => prev.map((f, i) => i === idx ? { ...f, name } : f));
+  };
+
+  const handleBuilderFactorLevelsChange = (idx: number, levels: number) => {
+    setBuilderFactors(prev => prev.map((f, i) => i === idx ? { ...f, levels } : f));
+  };
+
+  const handleGenerateDesign = () => {
+    const bestOA = findBestOA(builderFactors.map(f => f.levels));
+    if (!bestOA) {
+      addError('error', 'No standard Taguchi Orthogonal Array supports this levels configuration.');
+      return;
+    }
+    const designMatrix = generateDesignMatrix(builderFactors, bestOA);
+    const newHeaders = [...builderFactors.map(f => f.name), 'Response'];
+    setData(designMatrix);
+    setHeaders(newHeaders);
+    setResults(null);
+    setShowDesignBuilder(false);
+    addError('info', `Generated Taguchi Coded worksheet using ${bestOA.name} array.`);
+  };
 
   return (
     <div className="flex flex-col h-full w-full bg-[#050505] text-[#e0e0e0] font-sans">
@@ -1882,6 +2537,11 @@ const DoeWorkspace = ({
             <Button size="sm" variant={activeModel === 'Taguchi' ? 'default' : 'secondary'} onClick={calculateTaguchi}>
               Run Taguchi
             </Button>
+            {activeModel === 'Taguchi' && (
+              <Button size="sm" variant="outline" onClick={() => setShowDesignBuilder(true)}>
+                Create Taguchi Design
+              </Button>
+            )}
           </div>
         </div>
 
@@ -1957,7 +2617,23 @@ const DoeWorkspace = ({
               {results.type === 'Taguchi' && (
                 <>
                   <section>
-                    <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Response Table (S/N)</h3>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest">Response Table</h3>
+                      <div className="flex bg-[#1a1a1a] p-0.5 rounded border border-[#222]">
+                        <button 
+                          className={`px-2 py-1 text-[9px] rounded font-bold transition-all ${responseTableTab === 'sn' ? 'bg-[#f97316] text-black' : 'text-[#888] hover:text-[#fff]'}`}
+                          onClick={() => setResponseTableTab('sn')}
+                        >
+                          S/N
+                        </button>
+                        <button 
+                          className={`px-2 py-1 text-[9px] rounded font-bold transition-all ${responseTableTab === 'mean' ? 'bg-[#f97316] text-black' : 'text-[#888] hover:text-[#fff]'}`}
+                          onClick={() => setResponseTableTab('mean')}
+                        >
+                          Means
+                        </button>
+                      </div>
+                    </div>
                     <div className="bg-[#1a1a1a] rounded border border-[#222] overflow-x-auto custom-scrollbar">
                       <table className="w-full text-[10px] text-left border-collapse">
                         <thead className="bg-[#1a1a1a] text-[#666] uppercase">
@@ -1970,7 +2646,6 @@ const DoeWorkspace = ({
                         </thead>
                         <tbody className="divide-y divide-[#222]">
                           {[1, 2, 3, 4, 5].map(level => {
-                            // Check if any factor has this level
                             const hasLevel = results.factorLevels?.some((f: any) => f.means.some((m: any) => m.level === level));
                             if (!hasLevel) return null;
                             return (
@@ -1978,37 +2653,53 @@ const DoeWorkspace = ({
                                 <td className="p-2 font-bold text-[#888] bg-[#1a1a1a] border-r border-[#222]">{level}</td>
                                 {results.factorLevels?.map((f: any, i: number) => {
                                   const m = f.means.find((m: any) => m.level === level);
-                                  return <td key={i} className="p-2 text-center text-white">{m ? m.meanSN.toFixed(2) : '-'}</td>;
+                                  return (
+                                    <td key={i} className="p-2 text-center text-white">
+                                      {m ? (responseTableTab === 'sn' ? m.meanSN.toFixed(2) : m.meanY.toFixed(4)) : '-'}
+                                    </td>
+                                  );
                                 })}
                               </tr>
                             );
                           })}
                           <tr className="bg-[#1a1a1a]/50">
                             <td className="p-2 font-bold text-[#f97316] border-r border-[#222]">Delta</td>
-                            {results.factorLevels?.map((f: any, i: number) => (
-                              <td key={i} className="p-2 text-center text-[#f97316] font-bold">{f.delta.toFixed(2)}</td>
-                            ))}
+                            {results.factorLevels?.map((f: any, i: number) => {
+                              const deltaVal = responseTableTab === 'sn' ? f.delta : f.deltaY;
+                              return <td key={i} className="p-2 text-center text-[#f97316] font-bold">{deltaVal !== undefined ? deltaVal.toFixed(2) : '-'}</td>;
+                            })}
                           </tr>
                           <tr>
                             <td className="p-2 font-bold text-[#f97316] border-r border-[#222]">Rank</td>
-                            {results.factorLevels?.map((f: any, i: number) => (
-                              <td key={i} className="p-2 text-center text-[#f97316] font-black italic">{f.rank}</td>
-                            ))}
+                            {results.factorLevels?.map((f: any, i: number) => {
+                              const val = responseTableTab === 'sn' ? f.rank : f.rankY;
+                              return <td key={i} className="p-2 text-center text-[#f97316] font-black italic">{val}</td>;
+                            })}
                           </tr>
                         </tbody>
                       </table>
                     </div>
                   </section>
 
-                  <section>
+                  <section className="bg-[#1a1a1a] p-3 rounded-xl border border-emerald-500/10">
                     <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Optimal Settings</h3>
-                    <div className="grid grid-cols-1 gap-1">
+                    <div className="grid grid-cols-1 gap-1 mb-3">
                       {results.optimal?.map((opt: any, idx: number) => (
-                        <div key={idx} className="bg-[#1a1a1a] p-2 rounded border border-emerald-500/10 flex justify-between items-center group hover:border-emerald-500/40 transition-colors">
+                        <div key={idx} className="bg-[#0f0f0f] p-2 rounded border border-emerald-500/10 flex justify-between items-center group hover:border-emerald-500/40 transition-colors">
                           <span className="text-[10px] text-gray-400">{opt.factor}</span>
                           <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">Level {opt.level}</span>
                         </div>
                       ))}
+                    </div>
+                    <div className="space-y-1 pt-2 border-t border-[#222] font-mono text-[10px]">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Predicted SN:</span>
+                        <span className="text-emerald-400 font-bold">{results.predOptSN?.toFixed(3)} dB</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Predicted Mean Y:</span>
+                        <span className="text-emerald-400 font-bold">{results.predOptY?.toFixed(4)}</span>
+                      </div>
                     </div>
                   </section>
                 </>
@@ -2135,26 +2826,30 @@ const DoeWorkspace = ({
               <section>
                 <h3 className="text-xs font-bold text-[#888] uppercase tracking-widest mb-3">Plot Config</h3>
                 <div className="space-y-4">
-                  <div>
-                    <Label className="mb-2 block">X-Axis Factor</Label>
-                    <select
-                      className="w-full bg-[#1a1a1a] border border-[#222] rounded p-2 text-xs text-white"
-                      value={plotFactors.x}
-                      onChange={e => setPlotFactors(prev => ({ ...prev, x: Number(e.target.value) }))}
-                    >
-                      {headers.slice(0, -1).map((h, i) => <option key={i} value={i}>{h}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <Label className="mb-2 block">Y-Axis Factor</Label>
-                    <select
-                      className="w-full bg-[#1a1a1a] border border-[#222] rounded p-2 text-xs text-white"
-                      value={plotFactors.y}
-                      onChange={e => setPlotFactors(prev => ({ ...prev, y: Number(e.target.value) }))}
-                    >
-                      {headers.slice(0, -1).map((h, i) => <option key={i} value={i}>{h}</option>)}
-                    </select>
-                  </div>
+                  {plotType !== 'taguchi_main_sn' && plotType !== 'taguchi_main_mean' && (
+                    <>
+                      <div>
+                        <Label className="mb-2 block">X-Axis Factor</Label>
+                        <select
+                          className="w-full bg-[#1a1a1a] border border-[#222] rounded p-2 text-xs text-white"
+                          value={plotFactors.x}
+                          onChange={e => setPlotFactors(prev => ({ ...prev, x: Number(e.target.value) }))}
+                        >
+                          {headers.slice(0, -1).map((h, i) => <option key={i} value={i}>{h}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <Label className="mb-2 block">Y-Axis Factor</Label>
+                        <select
+                          className="w-full bg-[#1a1a1a] border border-[#222] rounded p-2 text-xs text-white"
+                          value={plotFactors.y}
+                          onChange={e => setPlotFactors(prev => ({ ...prev, y: Number(e.target.value) }))}
+                        >
+                          {headers.slice(0, -1).map((h, i) => <option key={i} value={i}>{h}</option>)}
+                        </select>
+                      </div>
+                    </>
+                  )}
 
                   <div>
                     <Label className="mb-2 block">Plot Type</Label>
@@ -2175,6 +2870,26 @@ const DoeWorkspace = ({
                       >
                         Contour
                       </Button>
+                      {results?.type === 'Taguchi' && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant={plotType === 'taguchi_main_sn' ? 'default' : 'outline'}
+                            onClick={() => setPlotType('taguchi_main_sn')}
+                            className="text-[10px]"
+                          >
+                            Main Effects (S/N)
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={plotType === 'taguchi_main_mean' ? 'default' : 'outline'}
+                            onClick={() => setPlotType('taguchi_main_mean')}
+                            className="text-[10px]"
+                          >
+                            Main Effects (Means)
+                          </Button>
+                        </>
+                      )}
                       {(results?.type === 'RSM' || results?.type === 'Taguchi') && (
                         <>
                           {results?.type === 'RSM' && <Button size="sm" variant={plotType === 'pareto' ? 'default' : 'outline'} onClick={() => setPlotType('pareto')} className="text-[10px]">Pareto</Button>}
@@ -2200,6 +2915,7 @@ const DoeWorkspace = ({
                             <span className="text-[9px] text-gray-400 truncate w-24">{h}</span>
                             <select 
                               className="bg-[#050505] border border-[#222] text-[9px] p-1 rounded text-white"
+                              value={holdValues[i]}
                               onChange={(e) => {
                                 const newVals = [...holdValues];
                                 newVals[i] = Number(e.target.value);
@@ -2211,11 +2927,11 @@ const DoeWorkspace = ({
                           </div>
                         ))}
                         <div className="mt-3 pt-3 border-t border-[#222]">
-                          <div className="flex justify-between items-center">
+                          <div className="flex justify-between items-center mb-1">
                             <span className="text-[10px] text-gray-300">Predicted SN:</span>
                             <span className="text-[10px] font-bold text-[#f97316]">
                               {(() => {
-                                const grandMean = results?.snRatios?.reduce((a:number,b:number)=>a+b,0) / (results?.snRatios?.length || 1);
+                                const grandMean = results?.grandMeanSN || 0;
                                 let pred = grandMean;
                                 holdValues.forEach((val, i) => {
                                   const factor = results?.factorLevels?.find((f:any) => f.factor === headers[i]);
@@ -2226,6 +2942,21 @@ const DoeWorkspace = ({
                               })()}
                             </span>
                           </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-gray-300">Predicted Mean Y:</span>
+                            <span className="text-[10px] font-bold text-emerald-400">
+                              {(() => {
+                                const grandMeanY = results?.grandMeanY || 0;
+                                let pred = grandMeanY;
+                                holdValues.forEach((val, i) => {
+                                  const factor = results?.factorLevels?.find((f:any) => f.factor === headers[i]);
+                                  const levelMean = factor?.means.find((m:any) => m.level === val)?.meanY;
+                                  if (levelMean !== undefined) pred += (levelMean - grandMeanY);
+                                });
+                                return isNaN(pred) ? '0.000' : pred.toFixed(4);
+                              })()}
+                            </span>
+                          </div>
                         </div>
                       </div>
                       <div>
@@ -2233,43 +2964,58 @@ const DoeWorkspace = ({
                         <select
                           className="w-full bg-[#1a1a1a] border border-[#222] rounded p-2 text-xs text-white"
                           value={taguchiConfig.objective}
-                          onChange={e => setTaguchiConfig({ objective: e.target.value as any })}
+                          onChange={e => setTaguchiConfig(prev => ({ ...prev, objective: e.target.value as any }))}
                         >
                           <option value="larger">Larger is Better</option>
                           <option value="smaller">Smaller is Better</option>
-                          <option value="nominal">Nominal is Best</option>
+                          <option value="nominal">Nominal is Best (Standard)</option>
+                          <option value="target">Nominal is Best (Target Value)</option>
                         </select>
                       </div>
+
+                      {taguchiConfig.objective === 'target' && (
+                        <div>
+                          <Label className="mb-2 block">Target Value</Label>
+                          <input
+                            type="number"
+                            value={taguchiConfig.targetValue !== undefined ? taguchiConfig.targetValue : 0}
+                            onChange={e => setTaguchiConfig(prev => ({ ...prev, targetValue: Number(e.target.value) }))}
+                            className="w-full bg-[#1a1a1a] border border-[#222] rounded p-2 text-xs text-white"
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  <div className="pt-4 border-t border-[#222]">
-                    <Label className="mb-3 block">Hold Values (Other Factors)</Label>
-                    {headers.slice(0, -1).map((h, i) => {
-                      if (i === plotFactors.x || i === plotFactors.y) return null;
-                      return (
-                        <div key={i} className="mb-4">
-                          <div className="flex justify-between text-[10px] mb-1">
-                            <span>{h}</span>
-                            <span className="text-[#f97316]">{holdValues[i]?.toFixed(2)}</span>
+                  {plotType !== 'taguchi_main_sn' && plotType !== 'taguchi_main_mean' && (
+                    <div className="pt-4 border-t border-[#222]">
+                      <Label className="mb-3 block">Hold Values (Other Factors)</Label>
+                      {headers.slice(0, -1).map((h, i) => {
+                        if (i === plotFactors.x || i === plotFactors.y) return null;
+                        return (
+                          <div key={i} className="mb-4">
+                            <div className="flex justify-between text-[10px] mb-1">
+                              <span>{h}</span>
+                              <span className="text-[#f97316]">{holdValues[i]?.toFixed(2)}</span>
+                            </div>
+                            <input
+                              type="range"
+                              min={Math.min(...data.map(r => r[i]))}
+                              max={Math.max(...data.map(r => r[i]))}
+                              step="0.01"
+                              value={holdValues[i]}
+                              onChange={e => {
+                                const newHolds = [...holdValues];
+                                newHolds[i] = Number(e.target.value);
+                                setHoldValues(newHolds);
+                              }}
+                              className="w-full h-1 bg-[#222] rounded-lg appearance-none cursor-pointer accent-[#f97316]"
+                            />
                           </div>
-                          <input
-                            type="range"
-                            min={Math.min(...data.map(r => r[i]))}
-                            max={Math.max(...data.map(r => r[i]))}
-                            step="0.01"
-                            value={holdValues[i]}
-                            onChange={e => {
-                              const newHolds = [...holdValues];
-                              newHolds[i] = Number(e.target.value);
-                              setHoldValues(newHolds);
-                            }}
-                            className="w-full h-1 bg-[#222] rounded-lg appearance-none cursor-pointer accent-[#f97316]"
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </section>
             </div>
@@ -2282,22 +3028,136 @@ const DoeWorkspace = ({
         </div>
 
         {/* Center: Visualization & Data */}
-        <div className="flex-1 flex flex-col bg-[#050505]">
-          <div className="flex-1 relative border-b border-[#222]">
-            <div className="absolute top-4 left-4 z-10 flex gap-1">
-              <Button size="sm" variant={plotType === 'surface' ? 'default' : 'secondary'} onClick={() => setPlotType('surface')}>3D Surface</Button>
-              <Button size="sm" variant={plotType === 'contour' ? 'default' : 'secondary'} onClick={() => setPlotType('contour')}>Contour</Button>
+        <div className="flex-1 flex flex-col bg-[#050505] overflow-y-auto">
+          {showDesignBuilder ? (
+            <div className="flex-1 p-8 flex flex-col items-center justify-center">
+              <div className="w-full max-w-2xl bg-[#0f0f0f] border border-[#222] rounded-2xl p-6 shadow-2xl space-y-6">
+                <div>
+                  <h3 className="text-lg font-black text-white uppercase tracking-tight">Create Taguchi Design</h3>
+                  <p className="text-xs text-gray-500">Configure factors and levels to generate a coded Orthogonal Array worksheet.</p>
+                </div>
+                
+                <div className="flex items-center gap-4 bg-[#141414] p-4 rounded-xl border border-[#222]">
+                  <Label className="uppercase text-xs font-black tracking-widest text-[#f97316]">Number of Factors</Label>
+                  <input 
+                    type="number" 
+                    min={2} 
+                    max={15} 
+                    value={builderNumFactors} 
+                    onChange={handleBuilderNumFactorsChange}
+                    className="w-20 bg-[#050505] border border-[#333] p-1.5 text-center rounded text-sm text-white"
+                  />
+                </div>
+
+                <div className="max-h-60 overflow-y-auto border border-[#222] rounded-xl bg-[#0a0a0a] p-2 custom-scrollbar">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-[#222] text-[#666] uppercase">
+                        <th className="p-2">Factor</th>
+                        <th className="p-2">Name</th>
+                        <th className="p-2">Levels</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#151515]">
+                      {builderFactors.map((f, idx) => (
+                        <tr key={idx}>
+                          <td className="p-2 font-bold text-gray-400">Factor {idx + 1}</td>
+                          <td className="p-1">
+                            <input 
+                              type="text" 
+                              value={f.name} 
+                              onChange={(e) => handleBuilderFactorNameChange(idx, e.target.value)}
+                              className="bg-[#050505] border border-[#222] p-1.5 rounded text-white text-xs w-full focus:border-[#f97316] outline-none"
+                            />
+                          </td>
+                          <td className="p-1">
+                            <select 
+                              value={f.levels} 
+                              onChange={(e) => handleBuilderFactorLevelsChange(idx, Number(e.target.value))}
+                              className="bg-[#050505] border border-[#222] p-1.5 rounded text-white text-xs w-full focus:border-[#f97316] outline-none"
+                            >
+                              <option value={2}>2 Levels</option>
+                              <option value={3}>3 Levels</option>
+                              <option value={4}>4 Levels</option>
+                              <option value={5}>5 Levels</option>
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {(() => {
+                  const bestOA = findBestOA(builderFactors.map(f => f.levels));
+                  return (
+                    <div className="bg-[#1a1a1a] p-4 rounded-xl border border-[#222] flex justify-between items-center">
+                      <div>
+                        <div className="text-[10px] font-bold text-[#888] uppercase tracking-widest">Recommended Orthogonal Array</div>
+                        <div className="text-sm font-black text-[#f97316] uppercase mt-1">
+                          {bestOA ? bestOA.name : 'No compatible array found'}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10px] font-bold text-[#888] uppercase tracking-widest">Worksheet Size</div>
+                        <div className="text-sm font-black text-white mt-1">
+                          {bestOA ? `${bestOA.runs} Runs` : '-'}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setShowDesignBuilder(false)}>Cancel</Button>
+                  <Button 
+                    variant="default"
+                    disabled={!findBestOA(builderFactors.map(f => f.levels))}
+                    onClick={handleGenerateDesign}
+                  >
+                    Generate Coded Worksheet
+                  </Button>
+                </div>
+              </div>
             </div>
-            <PlotlyPlots
-              type={plotType}
-              data={data}
-              results={results}
-              factors={plotFactors}
-              headers={headers}
-              holdValues={holdValues}
-              modelType={activeModel}
-            />
-          </div>
+          ) : (
+            <>
+              {!results && activeModel === 'Taguchi' ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-gray-400 space-y-4 min-h-[300px]">
+                  <Database size={48} className="text-[#f97316] opacity-60" />
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Taguchi Design of Experiments</h3>
+                    <p className="text-xs max-w-sm mx-auto mt-1">Configure your factors and levels to generate a coded orthogonal design matrix, or paste your experimental data below.</p>
+                  </div>
+                  <Button onClick={() => setShowDesignBuilder(true)}>
+                    Create Taguchi Design Wizard
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex-1 relative border-b border-[#222] min-h-[300px]">
+                  <div className="absolute top-4 left-4 z-10 flex gap-1">
+                    <Button size="sm" variant={plotType === 'surface' ? 'default' : 'secondary'} onClick={() => setPlotType('surface')}>3D Surface</Button>
+                    <Button size="sm" variant={plotType === 'contour' ? 'default' : 'secondary'} onClick={() => setPlotType('contour')}>Contour</Button>
+                    {results?.type === 'Taguchi' && (
+                      <>
+                        <Button size="sm" variant={plotType === 'taguchi_main_sn' ? 'default' : 'secondary'} onClick={() => setPlotType('taguchi_main_sn')}>Main Effects (SN)</Button>
+                        <Button size="sm" variant={plotType === 'taguchi_main_mean' ? 'default' : 'secondary'} onClick={() => setPlotType('taguchi_main_mean')}>Main Effects (Means)</Button>
+                      </>
+                    )}
+                  </div>
+                  <PlotlyPlots
+                    type={plotType}
+                    data={data}
+                    results={results}
+                    factors={plotFactors}
+                    headers={headers}
+                    holdValues={holdValues}
+                    modelType={activeModel}
+                  />
+                </div>
+              )}
+            </>
+          )}
 
           <div className="h-64 flex">
             <div className="flex-1 p-2">
@@ -2338,13 +3198,17 @@ const HmiDashboardContent = ({
       name: `${type}_${components.length + 1}`,
       x: 50 + (components.length * 20) % 300,
       y: 50 + (components.length * 20) % 300,
-      width: type === 'slider' ? 150 : type === 'lcd' ? 120 : (type === 'rotary' || type === 'gauge' || type === 'hybrid-rotary' || type === 'buzzer') ? 80 : 80,
-      height: type === 'slider' ? 40 : (type === 'rotary' || type === 'gauge' || type === 'hybrid-rotary' || type === 'buzzer') ? 80 : 60,
+      width: type === 'slider' ? 150 : type === 'lcd' ? 120 : (type === 'rotary' || type === 'gauge' || type === 'hybrid-rotary' || type === 'buzzer') ? 80 : type === 'oled' ? 240 : type === 'encoder' ? 120 : type === 'mode-selector' ? 320 : type === 'mode-icon' ? 55 : 80,
+      height: type === 'slider' ? 40 : (type === 'rotary' || type === 'gauge' || type === 'hybrid-rotary' || type === 'buzzer') ? 80 : type === 'oled' ? 180 : type === 'encoder' ? 150 : type === 'mode-selector' ? 90 : type === 'mode-icon' ? 55 : 60,
       variableId: null,
       min: 0,
       max: 100,
       variableIds: type === 'rotary' ? [] : undefined,
-      hybridValues: type === 'hybrid-rotary' ? ['0', '1', '2'] : undefined
+      hybridValues: type === 'hybrid-rotary' ? ['0', '1', '2'] : undefined,
+      icon: type === 'button' ? 'none' : undefined,
+      color: (type === 'button' || type === 'led' || type === 'lamp') ? 'orange' : undefined,
+      iconEmoji: type === 'mode-icon' ? '🍟' : undefined,
+      targetValue: type === 'mode-icon' ? '0' : undefined
     };
     setComponents(prev => [...prev, newComp]);
     setSelectedId(newComp.id);
@@ -2449,22 +3313,63 @@ const HmiDashboardContent = ({
               <div className={`w-4 h-4 rounded-full bg-white shadow-md transform transition-transform ${boolValue ? 'translate-x-6' : 'translate-x-0'}`} />
             </div>
           )}
-          {comp.type === 'button' && (
-            <button
-              className={`w-full h-full rounded font-bold transition-all active:scale-95 ${boolValue ? 'bg-[#f97316] text-black' : 'bg-[#333] text-[#ccc]'}`}
-              onMouseDown={() => !editMode && variable && updateVariable(variable.id, 'true')}
-              onMouseUp={() => !editMode && variable && updateVariable(variable.id, 'false')}
-              onMouseLeave={() => !editMode && variable && updateVariable(variable.id, 'false')}
-            >
-              {comp.name}
-            </button>
-          )}
-          {comp.type === 'lamp' && (
-            <div className={`w-10 h-10 rounded-full border-2 border-[#555] ${boolValue ? 'bg-green-500 shadow-[0_0_15px_rgba(34,197,94,0.8)]' : 'bg-[#222]'}`} />
-          )}
-          {comp.type === 'led' && (
-            <div className={`w-4 h-4 rounded-full ${boolValue ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 'bg-[#333]'}`} />
-          )}
+          {comp.type === 'button' && (() => {
+            const btnTheme = comp.color || 'orange';
+            const colorMap = {
+              orange: { bg: 'bg-[#ea580c]/20 hover:bg-[#ea580c]/30 text-[#f97316] border-[#ea580c]/50 active:bg-[#ea580c]/40', activeBg: 'bg-[#ea580c] text-white border-[#f97316] shadow-[0_0_12px_rgba(249,115,22,0.4)]' },
+              green: { bg: 'bg-[#166534]/20 hover:bg-[#166534]/30 text-[#22c55e] border-[#166534]/50 active:bg-[#166534]/40', activeBg: 'bg-[#22c55e] text-black border-[#4ade80] shadow-[0_0_12px_rgba(34,197,94,0.4)]' },
+              red: { bg: 'bg-[#991b1b]/20 hover:bg-[#991b1b]/30 text-[#ef4444] border-[#991b1b]/50 active:bg-[#991b1b]/40', activeBg: 'bg-[#ef4444] text-white border-[#f87171] shadow-[0_0_12px_rgba(239,68,68,0.4)]' },
+              blue: { bg: 'bg-[#075985]/20 hover:bg-[#075985]/30 text-[#38bdf8] border-[#075985]/50 active:bg-[#075985]/40', activeBg: 'bg-[#0284c7] text-white border-[#38bdf8] shadow-[0_0_12px_rgba(56,189,248,0.4)]' },
+              yellow: { bg: 'bg-[#854d0e]/20 hover:bg-[#854d0e]/30 text-[#eab308] border-[#854d0e]/50 active:bg-[#854d0e]/40', activeBg: 'bg-[#eab308] text-black border-[#facc15] shadow-[0_0_12px_rgba(234,179,8,0.4)]' },
+              grey: { bg: 'bg-[#333]/40 hover:bg-[#444]/40 text-[#ccc] border-[#444] active:bg-[#555]/40', activeBg: 'bg-[#555] text-white border-[#666] shadow-[0_0_12px_rgba(255,255,255,0.1)]' }
+            };
+            const currentTheme = colorMap[btnTheme] || colorMap.orange;
+
+            const renderButtonIcon = () => {
+              if (comp.icon === 'power') return <span className="mr-1">⏻</span>;
+              if (comp.icon === 'play') return <span className="mr-1">▶</span>;
+              if (comp.icon === 'light') return <span className="mr-1">💡</span>;
+              return null;
+            };
+
+            return (
+              <button
+                className={`w-full h-full rounded border font-bold text-[10px] tracking-wider uppercase transition-all duration-150 flex items-center justify-center ${
+                  boolValue ? currentTheme.activeBg : currentTheme.bg
+                }`}
+                onMouseDown={() => !editMode && variable && updateVariable(variable.id, 'true')}
+                onMouseUp={() => !editMode && variable && updateVariable(variable.id, 'false')}
+                onMouseLeave={() => !editMode && variable && updateVariable(variable.id, 'false')}
+              >
+                {renderButtonIcon()}
+                {comp.name}
+              </button>
+            );
+          })()}
+          {comp.type === 'lamp' && (() => {
+            const lampColor = comp.color || 'green';
+            const colorClasses = {
+              red: boolValue ? 'bg-red-500/20 border-red-500 shadow-[inset_0_0_10px_rgba(239,68,68,0.5),0_0_15px_rgba(239,68,68,0.6)]' : 'bg-[#222] border-[#444]',
+              green: boolValue ? 'bg-green-500/20 border-green-500 shadow-[inset_0_0_10px_rgba(34,197,94,0.5),0_0_15px_rgba(34,197,94,0.6)]' : 'bg-[#222] border-[#444]',
+              blue: boolValue ? 'bg-[#4db8ff]/20 border-[#4db8ff] shadow-[inset_0_0_10px_rgba(77,184,255,0.5),0_0_15px_rgba(77,184,255,0.6)]' : 'bg-[#222] border-[#444]',
+              yellow: boolValue ? 'bg-[#e8a020]/20 border-[#e8a020] shadow-[inset_0_0_10px_rgba(232,160,32,0.5),0_0_15px_rgba(232,160,32,0.6)]' : 'bg-[#222] border-[#444]',
+              orange: boolValue ? 'bg-[#f97316]/20 border-[#f97316] shadow-[inset_0_0_10px_rgba(249,115,22,0.5),0_0_15px_rgba(249,115,22,0.6)]' : 'bg-[#222] border-[#444]',
+              grey: boolValue ? 'bg-white/20 border-white shadow-[inset_0_0_10px_rgba(255,255,255,0.5),0_0_15px_rgba(255,255,255,0.6)]' : 'bg-[#222] border-[#444]'
+            };
+            return <div className={`w-10 h-10 rounded-full border-2 transition-all duration-200 ${colorClasses[lampColor] || colorClasses.green}`} />;
+          })()}
+          {comp.type === 'led' && (() => {
+            const ledColor = comp.color || 'red';
+            const colorClasses = {
+              red: boolValue ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 'bg-[#333]',
+              green: boolValue ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.8)]' : 'bg-[#333]',
+              blue: boolValue ? 'bg-[#4db8ff] shadow-[0_0_10px_rgba(77,184,255,0.8)]' : 'bg-[#333]',
+              yellow: boolValue ? 'bg-[#e8a020] shadow-[0_0_10px_rgba(232,160,32,0.8)]' : 'bg-[#333]',
+              orange: boolValue ? 'bg-[#f97316] shadow-[0_0_10px_rgba(249,115,22,0.8)]' : 'bg-[#333]',
+              grey: boolValue ? 'bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'bg-[#333]'
+            };
+            return <div className={`w-4 h-4 rounded-full transition-all duration-200 ${colorClasses[ledColor] || colorClasses.red}`} />;
+          })()}
           {comp.type === 'slider' && (
             <input
               type="range"
@@ -2661,6 +3566,57 @@ const HmiDashboardContent = ({
           {comp.type === 'buzzer' && (
             <Buzzer comp={comp} variable={variable} editMode={editMode} />
           )}
+          {comp.type === 'oled' && (
+            <OledDisplay
+              comp={comp}
+              variables={variables}
+              editMode={editMode}
+            />
+          )}
+          {comp.type === 'encoder' && (
+            <Encoder
+              comp={comp}
+              variables={variables}
+              updateVariable={updateVariable}
+              editMode={editMode}
+            />
+          )}
+          {comp.type === 'mode-selector' && (
+            <ModeSelector
+              comp={comp}
+              variables={variables}
+              updateVariable={updateVariable}
+              editMode={editMode}
+            />
+          )}
+          {comp.type === 'mode-icon' && (() => {
+            const isSelected = variable && String(variable.currentValue) === String(comp.targetValue);
+            let borderClass = 'border-[#222]';
+            let bgClass = 'bg-[#1a1a20]';
+            let glowStyle = {};
+
+            if (isSelected) {
+              borderClass = 'border-[#f97316]';
+              bgClass = 'bg-[#f97316]/10';
+              glowStyle = { boxShadow: '0 0 8px rgba(249,115,22,0.4)' };
+            }
+
+            const handleClick = () => {
+              if (editMode || !variable) return;
+              updateVariable(variable.id, (comp.targetValue ?? '0').toString());
+            };
+
+            return (
+              <div
+                onClick={handleClick}
+                style={glowStyle}
+                className={`w-full h-full border rounded flex flex-col items-center justify-center cursor-pointer p-1 transition-all active:scale-95 ${borderClass} ${bgClass}`}
+              >
+                <span className="text-xl leading-none">{comp.iconEmoji || '✨'}</span>
+                <span className="text-[8px] text-[#ccc] font-medium truncate w-full text-center mt-1">{comp.name}</span>
+              </div>
+            );
+          })()}
         </div>
         {/* Label */}
         <div className="w-full bg-[#1a1a1a] text-[9px] text-center text-[#888] py-0.5 truncate px-1">
@@ -2691,7 +3647,7 @@ const HmiDashboardContent = ({
           >
             <Label>Components</Label>
             <div className="grid grid-cols-2 gap-2">
-              {['toggle', 'button', 'slider', 'input', 'lamp', 'led', 'lcd', 'gauge', 'rotary', 'hybrid-rotary', 'buzzer'].map(t => (
+              {['toggle', 'button', 'slider', 'input', 'lamp', 'led', 'lcd', 'gauge', 'rotary', 'hybrid-rotary', 'buzzer', 'oled', 'encoder', 'mode-selector', 'mode-icon'].map(t => (
                 <button key={t} onClick={() => addComponent(t as HmiComponentType)} className="flex flex-col items-center justify-center p-2 bg-[#1a1a1a] border border-[#333] rounded hover:bg-[#222] hover:border-[#f97316]">
                   <span className="text-[10px] capitalize text-[#ccc]">{t}</span>
                 </button>
@@ -2721,13 +3677,213 @@ const HmiDashboardContent = ({
                         </select>
                       </div>
 
+                      {(comp.type === 'button' || comp.type === 'led' || comp.type === 'lamp') && (
+                        <div className="space-y-2 mt-2">
+                          <div>
+                            <Label>Color / Theme</Label>
+                            <select
+                              value={comp.color || 'orange'}
+                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, color: e.target.value as any } : c))}
+                              className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
+                            >
+                              <option value="orange">Orange</option>
+                              <option value="green">Green</option>
+                              <option value="red">Red</option>
+                              <option value="blue">Blue</option>
+                              <option value="yellow">Yellow</option>
+                              <option value="grey">Grey</option>
+                            </select>
+                          </div>
+                          {comp.type === 'button' && (
+                            <div>
+                              <Label>Button Icon</Label>
+                              <select
+                                value={comp.icon || 'none'}
+                                onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, icon: e.target.value as any } : c))}
+                                className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
+                              >
+                                <option value="none">None</option>
+                                <option value="power">Power (⏻)</option>
+                                <option value="play">Play/Pause (▶)</option>
+                                <option value="light">Light (💡)</option>
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {comp.type === 'encoder' && (
+                        <div className="space-y-2 mt-2">
+                          <Label>Button Press Bind (GPIO)</Label>
+                          <select
+                            value={comp.pressVariableId || ''}
+                            onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, pressVariableId: e.target.value || null } : c))}
+                            className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
+                          >
+                            <option value="">-- Unbound --</option>
+                            {variables.map(v => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
+                          </select>
+                        </div>
+                      )}
+
+                      {comp.type === 'mode-selector' && (
+                        <div className="space-y-2 mt-2">
+                          <Label>Cursor Variable (Index)</Label>
+                          <select
+                            value={comp.cursorVariableId || ''}
+                            onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, cursorVariableId: e.target.value || null } : c))}
+                            className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
+                          >
+                            <option value="">-- Unbound --</option>
+                            {variables.map(v => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
+                          </select>
+                        </div>
+                      )}
+
+                      {comp.type === 'mode-icon' && (
+                        <div className="space-y-2 mt-2">
+                          <div>
+                            <Label>Icon (Emoji)</Label>
+                            <Input
+                              value={comp.iconEmoji || ''}
+                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, iconEmoji: e.target.value } : c))}
+                              placeholder="e.g. 🍟"
+                              className="mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label>Target Value</Label>
+                            <Input
+                              value={comp.targetValue || ''}
+                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, targetValue: e.target.value } : c))}
+                              placeholder="e.g. 0, 1, or Air Fry"
+                              className="mt-1"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {comp.type === 'oled' && (
+                        <div className="space-y-2 mt-2 border-t border-[#333] pt-2 max-h-60 overflow-y-auto pr-1">
+                          <Label>Display Variable Mapping</Label>
+                          {[
+                            { label: 'Mode Index/Text', key: 'oledModeVarId' },
+                            { label: 'Temp', key: 'oledTempVarId' },
+                            { label: 'Time', key: 'oledTimeVarId' },
+                            { label: 'State (e.g. HOME)', key: 'oledStateVarId' },
+                            { label: 'Steam Active (Bool)', key: 'oledSteamVarId' },
+                            { label: 'Heat Active (Bool)', key: 'oledHeatVarId' },
+                            { label: 'Fan Active (Bool)', key: 'oledFanVarId' },
+                            { label: 'Light Active (Bool)', key: 'oledLightVarId' },
+                            { label: 'Duo Active (Bool)', key: 'oledDuoVarId' },
+                            { label: 'Progress (0-100)', key: 'oledProgressVarId' }
+                          ].map(mapping => (
+                            <div key={mapping.key} className="mt-1">
+                              <span className="text-[10px] text-gray-400">{mapping.label}</span>
+                              <select
+                                value={(comp as any)[mapping.key] || ''}
+                                onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, [mapping.key]: e.target.value || null } : c))}
+                                className="w-full h-7 bg-[#0a0a0a] border border-[#333] rounded px-1.5 text-[10px] text-[#e0e0e0] mt-0.5"
+                              >
+                                <option value="">-- Unbound --</option>
+                                {variables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                              </select>
+                            </div>
+                          ))}
+                          <div className="mt-2 border-t border-[#222] pt-2">
+                            <Label>Mode Names (comma-separated)</Label>
+                            <textarea
+                              value={comp.oledModeNames || ''}
+                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, oledModeNames: e.target.value } : c))}
+                              placeholder="AIR FRYER, STEAMER, OVEN, ..."
+                              className="w-full min-h-[50px] bg-[#0a0a0a] border border-[#333] rounded p-1.5 text-xs text-[#e0e0e0] font-mono mt-1"
+                            />
+                          </div>
+                          <div className="space-y-2 mt-2 pt-2 border-t border-[#222]">
+                            <Label>Custom Status Indicators (Max 8)</Label>
+                            {(comp.oledIndicatorEmojis || []).map((emoji, idx) => (
+                              <div key={idx} className="flex flex-col gap-1 p-1.5 bg-[#111] border border-[#222] rounded mt-1">
+                                <div className="flex gap-1 items-center justify-between">
+                                  <span className="text-[10px] text-gray-400 font-bold">Indicator #{idx + 1}</span>
+                                  <button
+                                    onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? {
+                                      ...c,
+                                      oledIndicatorEmojis: (c.oledIndicatorEmojis || []).filter((_, i) => i !== idx),
+                                      oledIndicatorVarIds: (c.oledIndicatorVarIds || []).filter((_, i) => i !== idx),
+                                      oledIndicatorLabels: (c.oledIndicatorLabels || []).filter((_, i) => i !== idx)
+                                    } : c))}
+                                    className="text-[#888] hover:text-red-400 text-xs px-1"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-1 mt-1">
+                                  <div>
+                                    <span className="text-[8px] text-gray-500">Emoji/Icon</span>
+                                    <Input
+                                      value={emoji}
+                                      onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? {
+                                        ...c,
+                                        oledIndicatorEmojis: (c.oledIndicatorEmojis || []).map((v, i) => i === idx ? e.target.value : v)
+                                      } : c))}
+                                      className="h-6 text-[10px] px-1"
+                                    />
+                                  </div>
+                                  <div>
+                                    <span className="text-[8px] text-gray-500">Label</span>
+                                    <Input
+                                      value={comp.oledIndicatorLabels?.[idx] || ''}
+                                      onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? {
+                                        ...c,
+                                        oledIndicatorLabels: Array.from({ length: Math.max(c.oledIndicatorLabels?.length || 0, idx + 1) }, (_, i) => i === idx ? e.target.value : (c.oledIndicatorLabels?.[i] || ''))
+                                      } : c))}
+                                      className="h-6 text-[10px] px-1"
+                                      placeholder="e.g. Steam"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="mt-1">
+                                  <span className="text-[8px] text-gray-500">Bind Variable</span>
+                                  <select
+                                    value={comp.oledIndicatorVarIds?.[idx] || ''}
+                                    onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? {
+                                      ...c,
+                                      oledIndicatorVarIds: Array.from({ length: Math.max(c.oledIndicatorVarIds?.length || 0, idx + 1) }, (_, i) => i === idx ? (e.target.value || null) : (c.oledIndicatorVarIds?.[i] || null))
+                                    } : c))}
+                                    className="w-full h-6 bg-[#0a0a0a] border border-[#333] rounded px-1 text-[10px] text-[#e0e0e0]"
+                                  >
+                                    <option value="">-- Unbound --</option>
+                                    {variables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                                  </select>
+                                </div>
+                              </div>
+                            ))}
+                            {((comp.oledIndicatorEmojis || []).length < 8) && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className="w-full h-6 text-[10px] mt-1"
+                                onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? {
+                                  ...c,
+                                  oledIndicatorEmojis: [...(c.oledIndicatorEmojis || []), '💡'],
+                                  oledIndicatorVarIds: [...(c.oledIndicatorVarIds || []), null],
+                                  oledIndicatorLabels: [...(c.oledIndicatorLabels || []), 'Status']
+                                } : c))}
+                              >
+                                + Add Custom Indicator
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       {comp.type === 'rotary' && (
                         <div className="space-y-2 border-t border-[#333] pt-2 mt-2">
                           <Label>Multi-Variable Mode (Max 5)</Label>
                           {(comp.variableIds || []).map((vid, idx) => (
                             <div key={idx} className="flex gap-1">
                               <select
-                                value={vid}
+                                value={vid || ''}
                                 onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, variableIds: (c.variableIds || []).map((v, i) => i === idx ? e.target.value : v) } : c))}
                                 className="flex-1 h-6 bg-[#0a0a0a] border border-[#333] rounded px-1 text-[10px] text-[#e0e0e0]"
                               >
@@ -2985,7 +4141,7 @@ const PlotlyPlots = ({
   holdValues,
   modelType = 'RSM'
 }: {
-  type: 'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act',
+  type: 'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act' | 'taguchi_main_sn' | 'taguchi_main_mean',
   data: number[][],
   results: any,
   factors: { x: number, y: number },
@@ -3221,69 +4377,105 @@ const PlotlyPlots = ({
     );
   }
 
-  if (modelType === 'Taguchi' && (type === 'surface' || type === 'contour')) {
-    // Main Effects Plot for Taguchi
-    const factorIdx = factors.x;
-    const factorData = results.factorLevels?.find((f: any) => headers.indexOf(f.factor) === factorIdx);
-    if (!factorData) return <div className="flex items-center justify-center h-full text-[#444]">Select a factor to plot</div>;
+  if (modelType === 'Taguchi' && (type === 'taguchi_main_sn' || type === 'taguchi_main_mean')) {
+    const isSN = type === 'taguchi_main_sn';
+    const K = results.factorLevels?.length || 0;
+    if (K === 0) return <div className="flex items-center justify-center h-full text-[#444]">No Factor Levels Found</div>;
 
-    const levels = factorData.means.map((m: any) => m.level);
-    const meanSN = factorData.means.map((m: any) => m.meanSN);
-    const meanY = factorData.means.map((m: any) => m.meanY);
+    const traces: any[] = [];
+    const layoutAxes: any = {};
+    const grandMean = isSN ? results.grandMeanSN : results.grandMeanY;
 
-    const snTrace = {
-      x: levels,
-      y: meanSN,
-      type: 'scatter',
-      mode: 'lines+markers',
-      name: 'Mean S/N Ratio',
-      line: { color: '#f97316', width: 3 },
-      marker: { size: 10, color: '#f97316' }
-    };
+    results.factorLevels.forEach((fl: any, idx: number) => {
+      const factorName = fl.factor;
+      const sortedMeans = [...fl.means].sort((a: any, b: any) => a.level - b.level);
+      const x = sortedMeans.map((m: any) => `L${m.level}`);
+      const y = sortedMeans.map((m: any) => isSN ? m.meanSN : m.meanY);
+      
+      traces.push({
+        x,
+        y,
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: factorName,
+        xaxis: 'x' + (idx + 1),
+        yaxis: 'y',
+        line: { 
+          color: isSN ? '#f97316' : '#10b981', 
+          width: 3 
+        },
+        marker: { 
+          color: isSN ? '#f97316' : '#10b981', 
+          size: 10,
+          line: { color: '#000', width: 1 } 
+        },
+        showlegend: false
+      });
 
-    const meanTrace = {
-      x: levels,
-      y: meanY,
-      type: 'scatter',
-      mode: 'lines+markers',
-      name: 'Mean Response',
-      yaxis: 'y2',
-      line: { color: '#10b981', width: 2, dash: 'dot' },
-      marker: { size: 8, color: '#10b981' }
+      layoutAxes[`xaxis${idx + 1}`] = {
+        title: factorName,
+        titlefont: { size: 10, color: '#aaa', family: 'Inter, sans-serif' },
+        tickfont: { size: 9, color: '#888' },
+        gridcolor: '#222',
+        zeroline: false,
+        domain: [idx / K + 0.02, (idx + 1) / K - 0.02]
+      };
+    });
+
+    const layout = {
+      paper_bgcolor: 'transparent',
+      plot_bgcolor: 'rgba(0,0,0,0.1)',
+      font: { color: '#888', family: 'Inter, sans-serif' },
+      margin: { l: 60, r: 20, b: 50, t: 50 },
+      title: { 
+        text: isSN ? 'Main Effects Plot for SN Ratios' : 'Main Effects Plot for Means',
+        font: { size: 13, color: '#f97316' }
+      },
+      yaxis: {
+        title: isSN ? 'Mean S/N Ratio (dB)' : 'Mean Response',
+        gridcolor: '#222',
+        tickfont: { size: 9, color: '#aaa' },
+        zeroline: false
+      },
+      ...layoutAxes,
+      shapes: [
+        {
+          type: 'line',
+          x0: 0,
+          x1: 1,
+          xref: 'paper',
+          y0: grandMean || 0,
+          y1: grandMean || 0,
+          yref: 'y',
+          line: { color: '#666', width: 1.5, dash: 'dash' }
+        }
+      ],
+      annotations: [
+        {
+          xref: 'paper',
+          yref: 'y',
+          x: 0.98,
+          y: grandMean || 0,
+          text: `Grand Mean: ${(grandMean || 0).toFixed(3)}`,
+          showarrow: false,
+          font: { color: '#888', size: 9 },
+          yanchor: 'bottom',
+          xanchor: 'right'
+        }
+      ],
+      autosize: true
     };
 
     return (
-      <Plot
-        data={[snTrace, meanTrace] as any}
-        layout={{
-          template: { layout: { paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' } },
-          autosize: true,
-          margin: { l: 60, r: 60, t: 60, b: 60 },
-          paper_bgcolor: 'rgba(0,0,0,0)',
-          plot_bgcolor: 'rgba(0,0,0,0)',
-          title: { text: `Main Effects Plot for ${headers[factorIdx]}`, font: { color: '#f97316', size: 14, family: 'Inter, sans-serif' } },
-          xaxis: {
-            title: 'Factor Level',
-            gridcolor: '#222',
-            tickfont: { color: '#888' },
-            titlefont: { color: '#888' },
-            type: 'category'
-          },
-          yaxis: { title: 'Mean S/N Ratio (dB)', gridcolor: '#222', tickfont: { color: '#f97316' }, titlefont: { color: '#f97316' } },
-          yaxis2: {
-            title: 'Mean Response',
-            overlaying: 'y',
-            side: 'right',
-            tickfont: { color: '#10b981' },
-            titlefont: { color: '#10b981' },
-            showgrid: false
-          },
-          showlegend: true,
-          legend: { font: { color: '#e0e0e0', size: 10 }, bgcolor: 'rgba(0,0,0,0)', orientation: 'h', y: -0.2 }
-        } as any}
-        useResizeHandler
-        className="w-full h-full"
-      />
+      <div className="w-full h-full">
+        <Plot
+          data={traces as any}
+          layout={layout as any}
+          useResizeHandler={true}
+          className="w-full h-full"
+          config={{ displayModeBar: false }}
+        />
+      </div>
     );
   }
 
@@ -4292,13 +5484,13 @@ const ADIA = () => {
 
   // DOE STATE (Lifted)
   const [activeModel, setActiveModel] = useState<'RSM' | 'GMDH' | 'Taguchi'>('RSM');
-  const [taguchiConfig, setTaguchiConfig] = useState<{ objective: 'larger' | 'smaller' | 'nominal' }>({ objective: 'larger' });
+  const [taguchiConfig, setTaguchiConfig] = useState<{ objective: 'larger' | 'smaller' | 'nominal' | 'target', targetValue?: number }>({ objective: 'larger', targetValue: 10 });
   const [data, setData] = useState<number[][]>([[0, 0, 0], [1, 0, 1], [0, 1, 1], [1, 1, 4]]);
   const [headers, setHeaders] = useState<string[]>(['X1', 'X2', 'Y']);
   const [results, setResults] = useState<any | null>(null);
   const [plotFactors, setPlotFactors] = useState<{ x: number, y: number }>({ x: 0, y: 1 });
   const [holdValues, setHoldValues] = useState<number[]>([]);
-  const [plotType, setPlotType] = useState<'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act'>('surface');
+  const [plotType, setPlotType] = useState<'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act' | 'taguchi_main_sn' | 'taguchi_main_mean'>('surface');
   const [factors, setFactors] = useState<any[]>([]);
 
   // ── Statistical Functions (Lifted from DoeWorkspace) ───────────────────────
@@ -4489,12 +5681,16 @@ const ADIA = () => {
       const n = t.count;
       const y = t.responses;
       if (taguchiConfig.objective === 'larger') {
-        const sumSqInv = y.reduce((acc: number, val: number) => acc + 1 / (val * val + 1e-10), 0);
+        const sumSqInv = y.reduce((acc: number, val: number) => acc + 1 / (val * val + 1e-12), 0);
         return -10 * Math.log10(sumSqInv / n);
       } else if (taguchiConfig.objective === 'smaller') {
         const sumSq = y.reduce((acc: number, val: number) => acc + val * val, 0);
         return -10 * Math.log10(sumSq / n);
-      } else {
+      } else if (taguchiConfig.objective === 'target') {
+        const target = taguchiConfig.targetValue !== undefined ? taguchiConfig.targetValue : 0;
+        const sumSqDev = y.reduce((acc: number, val: number) => acc + Math.pow(val - target, 2), 0);
+        return -10 * Math.log10((sumSqDev / n) + 1e-12);
+      } else { // 'nominal'
         if (t.variance === 0) return 10 * Math.log10(Math.pow(t.mean, 2) / 1e-6);
         return 10 * Math.log10(Math.pow(t.mean, 2) / t.variance);
       }
@@ -4509,10 +5705,40 @@ const ADIA = () => {
         return { level: l, meanY: levelMeanY, meanSN };
       });
       const delta = Math.max(...means.map((m: any) => m.meanSN)) - Math.min(...means.map((m: any) => m.meanSN));
-      return { factor: f, means, delta };
+      const deltaY = Math.max(...means.map((m: any) => m.meanY)) - Math.min(...means.map((m: any) => m.meanY));
+      return { factor: f, means, delta, deltaY };
     });
 
-    const rankedFactors = [...factorLevels].sort((a: any, b: any) => b.delta - a.delta).map((f: any, i: number) => ({ ...f, rank: i + 1 }));
+    const rankedFactors = factorLevels.map((f: any) => {
+      const snSorted = [...factorLevels].sort((a: any, b: any) => b.delta - a.delta);
+      const rank = snSorted.findIndex((x: any) => x.factor === f.factor) + 1;
+      
+      const ySorted = [...factorLevels].sort((a: any, b: any) => b.deltaY - a.deltaY);
+      const rankY = ySorted.findIndex((x: any) => x.factor === f.factor) + 1;
+      
+      return { ...f, rank, rankY };
+    });
+
+    const grandMeanSN = snRatios.reduce((a: number, b: number) => a + b, 0) / snRatios.length;
+    const grandMeanY = trials.reduce((a: number, t: any) => a + t.mean, 0) / trials.length;
+
+    const optimal = factorLevels.map((fl: any) => {
+      const bestMean = [...fl.means].sort((a: any, b: any) => b.meanSN - a.meanSN)[0];
+      return {
+        factor: fl.factor,
+        level: bestMean ? bestMean.level : 1,
+        meanSN: bestMean ? bestMean.meanSN : 0,
+        meanY: bestMean ? bestMean.meanY : 0
+      };
+    });
+
+    let predOptSN = grandMeanSN;
+    let predOptY = grandMeanY;
+    optimal.forEach((opt: any) => {
+      predOptSN += (opt.meanSN - grandMeanSN);
+      predOptY += (opt.meanY - grandMeanY);
+    });
+
     const Y_all = data.map(r => r[factorsCount]);
     const fits = data.map(row => {
       let pred = meanY;
@@ -4533,12 +5759,18 @@ const ADIA = () => {
       snRatios,
       factorLevels: rankedFactors,
       objective: taguchiConfig.objective,
+      targetValue: taguchiConfig.targetValue,
       equation: `Taguchi Model (R² = ${(R2*100).toFixed(2)}%)`,
       grandMean: meanY,
+      grandMeanSN,
+      grandMeanY,
       R2,
       fits,
       actuals: Y_all,
-      residuals: Y_all.map((y, i) => y - fits[i])
+      residuals: Y_all.map((y, i) => y - fits[i]),
+      optimal,
+      predOptSN,
+      predOptY
     });
     setActiveModel('Taguchi');
     addError('info', `Taguchi Analysis Completed. R² = ${(R2 * 100).toFixed(2)}%`);
@@ -4851,6 +6083,24 @@ const ADIA = () => {
 
   // BDD STATE (SysML)
   const [diagramMode, setDiagramMode] = useState<DiagramMode>('statemachine' as DiagramMode);
+
+  // HIL (Hardware-in-the-Loop) state
+  const [hilConfig, setHilConfig] = useState<HILConfig>({
+    enabled: false,
+    target: 'Generic',
+    clockSpeed: 16,
+    channels: [],
+    mappings: [],
+    commPort: '',
+    baudRate: 115200
+  });
+
+  const [hilSessionState, setHilSessionState] = useState<HILSessionState>({
+    status: 'disconnected',
+    channelValues: {},
+    faultInjections: {},
+    log: []
+  });
   const [blocks, setBlocks] = useState<BlockData[]>([]);
   const [relationships, setRelationships] = useState<RelationshipData[]>([]);
   const [parts, setParts] = useState<PartData[]>([]);
@@ -4996,6 +6246,8 @@ const ADIA = () => {
   // V-Lab STATE
   const [vlabNodes, setVlabNodes] = useState<any[]>([]);
   const [vlabEdges, setVlabEdges] = useState<any[]>([]);
+  const [vlabSelectedNodeId, setVlabSelectedNodeId] = useState<string | null>(null);
+  const [xBridgesSelectedNodeId, setXBridgesSelectedNodeId] = useState<string | null>(null);
 
   // FACTORY I/O GATEWAY STATE
   const [showFactoryIOGateway, setShowFactoryIOGateway] = useState(false);
@@ -5274,6 +6526,7 @@ const ADIA = () => {
       'xbridges.json': { globalXBridgesNodes, globalXBridgesEdges },
       'vlab.json': { vlabNodes, vlabEdges },
       'hmi.json': { hmiComponents },
+      'hil.json': hilConfig,
       'doe.json': { headers, data, activeModel, taguchiConfig, results: results ? { R2: results.R2, equation: results.equation, type: results.type } : null },
       'adia_project_unified.json': {
         version: VERSION,
@@ -5281,6 +6534,7 @@ const ADIA = () => {
         states, junctions, transitions, layers, variables, view, tickMs,
         blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
         hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
+        hilConfig,
         doe: { headers, data, activeModel, taguchiConfig, results },
         managedWindows
       }
@@ -5334,6 +6588,7 @@ const ADIA = () => {
     states, junctions, transitions, layers, variables, view, tickMs,
     blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
     hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
+    hilConfig,
     headers, data, activeModel, taguchiConfig, results, managedWindows, addError
   ]);
 
@@ -5366,6 +6621,9 @@ const ADIA = () => {
       // X-Bridges Architecture
       if (importedData.globalXBridgesNodes) setGlobalXBridgesNodes(importedData.globalXBridgesNodes);
       if (importedData.globalXBridgesEdges) setGlobalXBridgesEdges(importedData.globalXBridgesEdges);
+
+      // HIL Configuration
+      if (importedData.hilConfig) setHilConfig(importedData.hilConfig);
 
       // DOE Modeling Suite
       if (importedData.doe) {
@@ -5401,6 +6659,7 @@ const ADIA = () => {
     setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
     setBlocks, setRelationships, setParts, setConnectors, setInterfaceRealizations, setCustomStereotypes,
     setHmiComponents, setVlabNodes, setVlabEdges, setGlobalXBridgesNodes, setGlobalXBridgesEdges,
+    setHilConfig,
     setHeaders, setData, setActiveModel, setTaguchiConfig, setResults, setManagedWindows,
     setIsRunning, setActiveStates, setStateTimers, setTraceHistory, setScopeData, setSimulationTime,
     setSelectedIds, setHistory, setHistoryIndex, setCurrentLayerId, setLayerStack, setLayerPath, addError
@@ -8579,16 +9838,29 @@ const ADIA = () => {
         svg += `<g transform="translate(${c.x}, ${c.y})">`;
         svg += `<rect width="${c.width}" height="${c.height}" fill="#1a1a1a" stroke="#333" stroke-width="1" rx="4" />`;
 
+        const themeColors = {
+          orange: '#f97316',
+          green: '#22c55e',
+          red: '#ef4444',
+          blue: '#0284c7',
+          yellow: '#eab308',
+          grey: '#555'
+        };
+
         if (c.type === 'toggle') {
           svg += `<rect x="${cx - 20}" y="${cy - 10}" width="40" height="20" rx="10" fill="#333" />`;
           svg += `<circle cx="${cx - 10}" cy="${cy}" r="8" fill="#fff" />`;
         } else if (c.type === 'button') {
-          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" rx="4" fill="#222" />`;
-          svg += `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="#ccc" font-size="10">${c.name}</text>`;
+          const btnColor = themeColors[c.color || 'orange'] || themeColors.orange;
+          const iconSym = c.icon === 'power' ? '⏻ ' : c.icon === 'play' ? '▶ ' : c.icon === 'light' ? '💡 ' : '';
+          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" rx="4" fill="#222" stroke="${btnColor}" stroke-width="1" />`;
+          svg += `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="${btnColor}" font-size="10">${iconSym}${c.name}</text>`;
         } else if (c.type === 'lamp') {
-          svg += `<circle cx="${cx}" cy="${cy}" r="15" fill="#222" stroke="#555" stroke-width="2" />`;
+          const lampColor = themeColors[c.color || 'green'] || themeColors.green;
+          svg += `<circle cx="${cx}" cy="${cy}" r="15" fill="#222" stroke="${lampColor}" stroke-width="2" />`;
         } else if (c.type === 'led') {
-          svg += `<circle cx="${cx}" cy="${cy}" r="6" fill="#333" />`;
+          const ledColor = themeColors[c.color || 'red'] || themeColors.red;
+          svg += `<circle cx="${cx}" cy="${cy}" r="6" fill="${ledColor}" />`;
         } else if (c.type === 'slider') {
           svg += `<line x1="10" y1="${cy}" x2="${c.width - 10}" y2="${cy}" stroke="#555" stroke-width="4" stroke-linecap="round" />`;
           svg += `<circle cx="${cx}" cy="${cy}" r="8" fill="${highlight}" />`;
@@ -8605,6 +9877,51 @@ const ADIA = () => {
           svg += `<line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy - (Math.min(c.width, c.height) / 2 - 15)}" stroke="${highlight}" stroke-width="2" transform="rotate(-135, ${cx}, ${cy})" />`;
         } else if (c.type === 'buzzer') {
           svg += `<path d="M${cx - 8} ${cy - 8} h4 l4 -4 v24 l-4 -4 h-4 z" fill="#444" />`;
+        } else if (c.type === 'oled') {
+          const customModeList = c.oledModeNames
+            ? c.oledModeNames.split(',').map(s => s.trim())
+            : [
+                'AIR FRYER', 'STEAMER', 'OVEN', 'RAPID STEAM', 'BROIL', 'REHEAT',
+                'KEEP WARM', 'FERMENT', 'DEFROST', 'SLOW COOK', 'DEHYDRATE', 'DUO COOK'
+              ];
+          const modeText = customModeList[0] || 'READY';
+          let indicatorsStr = '💧 🔥 🌀 💡 ⚡';
+          if (Array.isArray(c.oledIndicatorEmojis) && c.oledIndicatorEmojis.length > 0) {
+            indicatorsStr = c.oledIndicatorEmojis.join(' ');
+          }
+
+          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#000" stroke="#222" stroke-width="2" rx="6" />`;
+          svg += `<text x="12" y="20" fill="#4d7aaa" font-size="8" font-family="monospace">${modeText}</text>`;
+          svg += `<text x="12" y="45" fill="#4db8ff" font-size="18" font-family="monospace" font-weight="bold">200°C</text>`;
+          svg += `<rect x="12" y="55" width="${c.width - 24}" height="3" fill="#111" rx="1" />`;
+          svg += `<rect x="12" y="55" width="${(c.width - 24) * 0.4}" height="3" fill="#3de88a" rx="1" />`;
+          svg += `<text x="12" y="75" fill="#4db8ff" font-size="10" font-family="monospace">30:00</text>`;
+          svg += `<text x="${c.width - 12}" y="75" text-anchor="end" fill="#3de88a" font-size="8" font-family="monospace">HOME</text>`;
+          svg += `<text x="12" y="95" fill="#335577" font-size="7" font-family="monospace">${indicatorsStr}</text>`;
+        } else if (c.type === 'mode-icon') {
+          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#1a1a20" stroke="#333" rx="4" />`;
+          svg += `<text x="${cx}" y="${cy - 4}" text-anchor="middle" font-size="14">${c.iconEmoji || '✨'}</text>`;
+          svg += `<text x="${cx}" y="${cy + 12}" text-anchor="middle" font-size="7" fill="#ccc">${c.name}</text>`;
+        } else if (c.type === 'encoder') {
+          svg += `<circle cx="${cx}" cy="${cy - 15}" r="30" fill="#2a2a36" stroke="#333340" stroke-width="2" />`;
+          svg += `<circle cx="${cx}" cy="${cy - 35}" r="3.5" fill="#f97316" />`;
+          svg += `<circle cx="${cx}" cy="${cy - 15}" r="15" fill="#0d0d10" stroke="#222230" />`;
+          svg += `<rect x="${cx - 25}" y="${c.height - 25}" width="20" height="12" rx="2" fill="#222" stroke="#333" />`;
+          svg += `<text x="${cx - 15}" y="${c.height - 17}" text-anchor="middle" fill="#888" font-size="8">↺</text>`;
+          svg += `<rect x="${cx + 5}" y="${c.height - 25}" width="20" height="12" rx="2" fill="#222" stroke="#333" />`;
+          svg += `<text x="${cx + 15}" y="${c.height - 17}" text-anchor="middle" fill="#888" font-size="8">↻</text>`;
+        } else if (c.type === 'mode-selector') {
+          svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#111" stroke="#222" rx="4" />`;
+          svg += `<text x="10" y="16" fill="#555" font-size="7" font-family="sans-serif" font-weight="bold">COOKING MODES</text>`;
+          svg += `<rect x="10" y="24" width="24" height="24" rx="2" fill="#f97316" fill-opacity="0.1" stroke="#f97316" stroke-width="1" />`;
+          svg += `<text x="22" y="40" text-anchor="middle" font-size="12">🍟</text>`;
+          svg += `<rect x="40" y="24" width="24" height="24" rx="2" fill="#1a1a20" stroke="#222" stroke-width="1" />`;
+          svg += `<text x="52" y="40" text-anchor="middle" font-size="12">💧</text>`;
+          svg += `<rect x="70" y="24" width="24" height="24" rx="2" fill="#1a1a20" stroke="#222" stroke-width="1" />`;
+          svg += `<text x="82" y="40" text-anchor="middle" font-size="12">🍞</text>`;
+          svg += `<rect x="100" y="24" width="24" height="24" rx="2" fill="#4db8ff" fill-opacity="0.1" stroke="#4db8ff" stroke-width="1" />`;
+          svg += `<text x="112" y="40" text-anchor="middle" font-size="12">♨️</text>`;
+          svg += `<text x="135" y="40" fill="#444" font-size="10">...</text>`;
         }
 
         svg += `<text x="${cx}" y="${c.height - 4}" text-anchor="middle" font-size="8" fill="#888">${c.name}</text>`;
@@ -9208,7 +10525,7 @@ const ADIA = () => {
     await validateWithAI();
 
     try {
-      const chart = { tickMs, states, junctions, transitions, variables, layers, safetyMode };
+      const chart = { tickMs, states, junctions, transitions, variables, layers, safetyMode, hilConfig };
       // REQ-ENGINE-003: TS template literals ensure safe string concatenation
       let { files, errors: validationErrors, warnings } = generateMISRACCode(chart);
 
@@ -9269,7 +10586,7 @@ const ADIA = () => {
     } finally {
       setIsGenerating(false);
     }
-  }, [tickMs, states, junctions, transitions, variables, layers, addError, validateModel, calculateChecksum, validateWithAI]);
+  }, [tickMs, states, junctions, transitions, variables, layers, safetyMode, hilConfig, addError, validateModel, calculateChecksum, validateWithAI]);
 
   const renderStates = useCallback((): React.ReactNode => {
     return currentStates.map(state => {
@@ -10388,18 +11705,60 @@ const ADIA = () => {
           }}
           onSave={(nodes, edges) => {
             if (xBridgesStateId) {
-              xBridgesEnginesRef.current.delete(xBridgesStateId);
-              setStates(prev => prev.map(s =>
-                s.id === xBridgesStateId
-                  ? { ...s, xBridgesModel: { ...s.xBridgesModel, nodes, edges } }
-                  : s
-              ));
+               xBridgesEnginesRef.current.delete(xBridgesStateId);
+               setStates(prev => prev.map(s =>
+                 s.id === xBridgesStateId
+                   ? { ...s, xBridgesModel: { ...s.xBridgesModel, nodes, edges } }
+                   : s
+               ));
             } else {
-              setGlobalXBridgesNodes(nodes);
-              setGlobalXBridgesEdges(edges);
+               setGlobalXBridgesNodes(nodes);
+               setGlobalXBridgesEdges(edges);
             }
           }}
           onSaveAll={handleExportProject}
+          initialSelectedNodeId={xBridgesSelectedNodeId}
+          onNavigateToVlab={(nodeId) => {
+            const findMatchingNode = (targetNodes: any[], sourceNodeId?: string) => {
+              if (!sourceNodeId) return null;
+              const srcLower = sourceNodeId.toLowerCase();
+              const groups = [
+                ['pid', 'controller', 'ctrl', 'ps_pid_ctrl', 'pid_basic', 'pid_controller'],
+                ['motor', 'plant', 'ac_motor', 'ac_induction_motor', 'induction', 'engine'],
+                ['inverter', 'pwm', 'gate', 'pwm_3ph_2level', 'three_phase_inverter', 'commutation'],
+                ['error', 'subtract', 'sub', 'error_calc', 'error_sub', 'ps_subtract', 'vectorsub'],
+                ['ref', 'constant', 'gen', 'signal', 'ref_speed', 'ref_signal', 'ps_constant', 'waveformgen']
+              ];
+              let match = targetNodes.find(n => n.id === sourceNodeId);
+              if (match) return match;
+              for (const group of groups) {
+                const isSourceInGroup = group.some(keyword => srcLower.includes(keyword));
+                if (isSourceInGroup) {
+                  match = targetNodes.find(n => {
+                    const id = n.id.toLowerCase();
+                    const type = (n.data?.type || n.type || '').toLowerCase();
+                    return group.some(keyword => id.includes(keyword) || type.includes(keyword));
+                  });
+                  if (match) return match;
+                }
+              }
+              const cleanId = srcLower.replace(/_[0-9]+$/, '');
+              return targetNodes.find(n => {
+                const id = n.id.toLowerCase();
+                const type = (n.data?.type || n.type || '').toLowerCase();
+                return id.includes(cleanId) || type.includes(cleanId) || cleanId.includes(id) || cleanId.includes(type);
+              });
+            };
+
+            const targetNode = findMatchingNode(vlabNodes, nodeId);
+            if (targetNode) {
+              setVlabSelectedNodeId(targetNode.id);
+            } else {
+              setVlabSelectedNodeId(null);
+            }
+            setDiagramMode('vlab');
+            setTimeout(() => setVlabSelectedNodeId(null), 1000);
+          }}
         />
       </div>
     );
@@ -10425,6 +11784,71 @@ const ADIA = () => {
             // Logic to send V-Lab results to DOE
             toggleWindow('doe');
           }}
+          onBack={() => setDiagramMode('statemachine')}
+          initialSelectedNodeId={vlabSelectedNodeId}
+          onNavigateToXbridges={(nodeId) => {
+            const findMatchingNode = (targetNodes: any[], sourceNodeId?: string) => {
+              if (!sourceNodeId) return null;
+              const srcLower = sourceNodeId.toLowerCase();
+              const groups = [
+                ['pid', 'controller', 'ctrl', 'ps_pid_ctrl', 'pid_basic', 'pid_controller'],
+                ['motor', 'plant', 'ac_motor', 'ac_induction_motor', 'induction', 'engine'],
+                ['inverter', 'pwm', 'gate', 'pwm_3ph_2level', 'three_phase_inverter', 'commutation'],
+                ['error', 'subtract', 'sub', 'error_calc', 'error_sub', 'ps_subtract', 'vectorsub'],
+                ['ref', 'constant', 'gen', 'signal', 'ref_speed', 'ref_signal', 'ps_constant', 'waveformgen']
+              ];
+              let match = targetNodes.find(n => n.id === sourceNodeId);
+              if (match) return match;
+              for (const group of groups) {
+                const isSourceInGroup = group.some(keyword => srcLower.includes(keyword));
+                if (isSourceInGroup) {
+                  match = targetNodes.find(n => {
+                    const id = n.id.toLowerCase();
+                    const type = (n.data?.type || n.type || '').toLowerCase();
+                    return group.some(keyword => id.includes(keyword) || type.includes(keyword));
+                  });
+                  if (match) return match;
+                }
+              }
+              const cleanId = srcLower.replace(/_[0-9]+$/, '');
+              return targetNodes.find(n => {
+                const id = n.id.toLowerCase();
+                const type = (n.data?.type || n.type || '').toLowerCase();
+                return id.includes(cleanId) || type.includes(cleanId) || cleanId.includes(id) || cleanId.includes(type);
+              });
+            };
+
+            const targetNodes = xBridgesStateId ? (states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.nodes || []) : globalXBridgesNodes;
+            const targetNode = findMatchingNode(targetNodes, nodeId);
+            if (targetNode) {
+              setXBridgesSelectedNodeId(targetNode.id);
+            } else {
+              setXBridgesSelectedNodeId(null);
+            }
+            setDiagramMode('xbridges');
+            setTimeout(() => setXBridgesSelectedNodeId(null), 1000);
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (diagramMode === 'hil') {
+    return (
+      <div 
+        className="fixed inset-0 z-50 bg-[#0a0a0a]"
+        style={{
+          zoom: uiZoom,
+          width: `${100 / uiZoom}vw`,
+          height: `${100 / uiZoom}vh`
+        }}
+      >
+        <HILWorkspace
+          config={hilConfig}
+          onChangeConfig={setHilConfig}
+          sessionState={hilSessionState}
+          onChangeSessionState={setHilSessionState}
+          variables={variables}
           onBack={() => setDiagramMode('statemachine')}
         />
       </div>
@@ -10515,10 +11939,13 @@ const ADIA = () => {
             <button onClick={() => setDiagramMode('vlab')} className={`px-3 py-1 text-xs rounded ${(diagramMode as DiagramMode) === 'vlab' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
               V-Lab
             </button>
+            <button onClick={() => setDiagramMode('hil')} className={`px-3 py-1 text-xs rounded ${(diagramMode as DiagramMode) === 'hil' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
+              HIL
+            </button>
           </div>
 
           {/* SIMULATION CONTROLS - PROMINENT AND FUNCTIONAL */}
-          {(diagramMode as DiagramMode) !== 'xbridges' && (
+          {(diagramMode as DiagramMode) !== 'xbridges' && (diagramMode as DiagramMode) !== 'hil' && (
             <div className="flex items-center gap-2 bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-1.5">
               <Button
                 variant={isRunning ? "destructive" : "default"}

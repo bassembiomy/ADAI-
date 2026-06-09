@@ -5,7 +5,7 @@ import {
   Square, Activity, Plus, Minus, X, Divide, ChevronUp, MinusCircle, Maximize, Maximize2,
   Sigma, BarChart, ArrowUp, Grid, RotateCw, RefreshCcw, Hash, TrendingUp, Monitor, Box, Download,
   LogIn, LogOut, ChevronLeft, ChevronRight, Zap, Settings, ZapOff, Cpu, Layers, Wind, Filter, Eye,
-  GraduationCap, ArrowRightCircle, ArrowLeftCircle, Network
+  GraduationCap, ArrowRightCircle, ArrowLeftCircle, Network, FlaskConical
 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import { XPort } from '../../engine/xbridges/types';
@@ -208,13 +208,19 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       port.position === 'right' ? Position.Right :
       port.position === 'top' ? Position.Top : Position.Bottom;
 
+    const isVertical = port.position === 'top' || port.position === 'bottom';
+
     return (
       <div 
         key={port.id} 
-        className="relative group flex items-center"
+        className="relative group flex"
         style={{
-          flexDirection: port.position === 'right' ? 'row-reverse' : 'row',
-          margin: port.position === 'top' || port.position === 'bottom' ? '0 10px' : '5px 0'
+          flexDirection: isVertical
+            ? (port.position === 'bottom' ? 'column-reverse' : 'column')
+            : (port.position === 'right' ? 'row-reverse' : 'row'),
+          alignItems: 'center',
+          justifyContent: 'center',
+          margin: isVertical ? '0 10px' : '5px 0'
         }}
       >
         <Handle
@@ -226,10 +232,20 @@ export const XBlockNode = ({ data, id, selected }: any) => {
             width: 8,
             height: 8,
             border: '2px solid #1a1a1a',
-            zIndex: 10
+            zIndex: 10,
+            ...(port.position === 'left' ? { left: -14 } : {}),
+            ...(port.position === 'right' ? { right: -14 } : {}),
+            ...(port.position === 'top' ? { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' } : {}),
+            ...(port.position === 'bottom' ? { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' } : {}),
           }}
         />
-        <span className={`text-[8px] font-mono text-gray-500 uppercase tracking-tighter mx-1.5 transition-opacity duration-200 group-hover:text-white`}>
+        <span 
+          className={`text-[8px] font-mono text-gray-500 uppercase tracking-tighter mx-1.5 transition-opacity duration-200 group-hover:text-white`}
+          style={{
+            marginTop: port.position === 'top' ? 12 : 0,
+            marginBottom: port.position === 'bottom' ? 12 : 0,
+          }}
+        >
           {port.name}
         </span>
       </div>
@@ -243,7 +259,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
 
   return (
     <div 
-      className={`relative rounded-xl overflow-hidden transition-all duration-500 border-2 ${selected ? 'ring-4 ring-white/10 scale-105 z-50' : 'hover:border-white/20'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
+      className={`relative rounded-xl transition-all duration-500 border-2 ${selected ? 'ring-4 ring-white/10 scale-105 z-50' : 'hover:border-white/20'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
       style={{ 
         background: 'rgba(20, 20, 20, 0.8)',
         backdropFilter: 'blur(20px)',
@@ -258,7 +274,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       
       {/* Header with Glowing Accent */}
       <div 
-        className="px-4 py-2.5 border-b border-white/5 flex items-center justify-between relative overflow-hidden"
+        className="px-4 py-2.5 border-b border-white/5 flex items-center justify-between relative overflow-hidden rounded-t-[10px]"
         style={{ background: `linear-gradient(to right, ${color}15, transparent)` }}
       >
         <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-right from-white/10 to-transparent" />
@@ -279,6 +295,19 @@ export const XBlockNode = ({ data, id, selected }: any) => {
         </div>
         
         <div className="flex items-center gap-1 z-10">
+          {(() => {
+            const isVLabLink = ['AC_INDUCTION_MOTOR', 'AC_MOTOR_PID_CONTROL', 'THREE_PHASE_INVERTER', 'SINGLE_PHASE_H_BRIDGE', 'PWM_GENERATOR', 'THREE_PHASE_PWM', 'SIX_STEP_COMMUTATION'].includes(data.type) ||
+              ['motor', 'plant', 'inverter', 'pwm', 'commutation'].some(k => id.toLowerCase().includes(k) || data.type?.toLowerCase().includes(k));
+            if (!isVLabLink) return null;
+            return (
+              <span 
+                className="text-[7px] font-black px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 uppercase tracking-widest cursor-pointer flex items-center gap-0.5 mr-1"
+                title="Double-click to navigate to V-Lab physical plant"
+              >
+                <FlaskConical size={8} /> V-Lab
+              </span>
+            );
+          })()}
           {data.type === 'Scope' && (
             <div className="flex bg-black/30 p-0.5 rounded-lg border border-white/5">
               <button 

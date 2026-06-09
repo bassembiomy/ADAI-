@@ -63,3 +63,11 @@ export interface SolverOptions {
   minStep?: number;
   tolerance?: number;
 }
+
+export interface ModelDiagnostic {
+  severity: 'error' | 'warning' | 'info';
+  code: string;
+  message: string;
+  blockIds?: string[];
+}
+

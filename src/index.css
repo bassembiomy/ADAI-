@@ -157,4 +157,24 @@ input[type=range]::-moz-range-thumb {
   border-color: #c9a86c !important;
 }
 
+/* Enlarged hover targets for handles (makes aiming and clicking easier) */
+.react-flow__handle {
+  position: relative;
+}
+.react-flow__handle::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  right: -8px;
+  bottom: -8px;
+  background: transparent;
+  cursor: crosshair;
+}
+
+/* Prevent overlapping source handles from blocking target handles during connection dragging in V-Lab */
+.react-flow--connection-active .react-flow__handle-source {
+  pointer-events: none !important;
+}
+
 

@@ -9,4 +9,6 @@ export interface VLabWorkspaceProps {
   onSendToDOE: (data: any) => void;
   onBack: () => void;
   onSaveAll?: () => void;
+  onNavigateToXbridges?: (targetBlockId?: string) => void;
+  initialSelectedNodeId?: string | null;
 }

@@ -1,0 +1,482 @@
+import React, { useEffect, useState, useRef } from 'react';
+import { Play, Square, Settings, RefreshCcw, Wifi, WifiOff, FileDown, ShieldAlert } from 'lucide-react';
+import Plot from 'react-plotly.js';
+import { DriverChannel, HILSessionState, FaultInjectionConfig, HILMapping } from '../../engine/hil/hilTypes';
+import { decodeTextFrame, encodeTextFrame } from '../../engine/hil/hilProtocol';
+
+interface HILDashboardProps {
+  channels: DriverChannel[];
+  mappings: HILMapping[];
+  sessionState: HILSessionState;
+  onChangeSessionState: React.Dispatch<React.SetStateAction<HILSessionState>>;
+  commPort: string;
+  onChangeCommPort: (port: string) => void;
+  baudRate: number;
+  onChangeBaudRate: (rate: number) => void;
+}
+
+export const HILDashboard: React.FC<HILDashboardProps> = ({
+  channels,
+  mappings,
+  sessionState,
+  onChangeSessionState,
+  commPort,
+  onChangeCommPort,
+  baudRate,
+  onChangeBaudRate
+}) => {
+  const [ports, setPorts] = useState<string[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedData, setRecordedData] = useState<Array<{ timestamp: number; values: Record<string, number> }>>([]);
+  const [historyLength, setHistoryLength] = useState(50); // limit graph points
+  const [plotData, setPlotData] = useState<Record<string, number[]>>({});
+  const [timestamps, setTimestamps] = useState<number[]>([]);
+  
+  const simTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // List available ports
+  useEffect(() => {
+    const fetchPorts = async () => {
+      if ((window as any).require) {
+        try {
+          const { ipcRenderer } = (window as any).require('electron');
+          const listedPorts = await ipcRenderer.invoke('hil-list-ports');
+          setPorts(listedPorts || []);
+          if (listedPorts && listedPorts.length > 0 && !commPort) {
+            onChangeCommPort(listedPorts[0]);
+          }
+        } catch (e) {
+          console.error('Failed to list serial ports', e);
+        }
+      } else {
+        // Mock ports for Web/Browser Demo
+        setPorts(['COM1 (Virtual)', 'COM3 (Virtual)', '/dev/ttyUSB0 (Virtual)']);
+        if (!commPort) onChangeCommPort('COM1 (Virtual)');
+      }
+    };
+    fetchPorts();
+  }, [commPort, onChangeCommPort]);
+
+  // Handle serial data from Electron IPC
+  useEffect(() => {
+    if (!(window as any).require) return;
+    const { ipcRenderer } = (window as any).require('electron');
+
+    const handleData = (_event: any, rawData: string) => {
+      // Decode incoming telemetry
+      const values = decodeTextFrame(rawData);
+      handleIncomingValues(values);
+    };
+
+    ipcRenderer.on('hil-on-data', handleData);
+    return () => {
+      ipcRenderer.removeListener('hil-on-data', handleData);
+    };
+  }, [sessionState.status, channels]);
+
+  const handleIncomingValues = (values: Record<string, number>) => {
+    const time = Date.now();
+    setTimestamps(prev => [...prev.slice(-historyLength), time]);
+    
+    // Update Plotly chart buffers
+    setPlotData(prev => {
+      const updated = { ...prev };
+      channels.forEach(ch => {
+        const val = values[ch.name] !== undefined ? values[ch.name] : 0;
+        updated[ch.name] = [...(updated[ch.name] || []).slice(-historyLength), val];
+      });
+      return updated;
+    });
+
+    // Save state
+    onChangeSessionState(prev => ({
+      ...prev,
+      lastSyncMs: time,
+      channelValues: { ...prev.channelValues, ...values }
+    }));
+
+    // Save record trace if recording
+    if (isRecording) {
+      setRecordedData(prev => [...prev, { timestamp: time, values }]);
+    }
+  };
+
+  // Simulated Web loop for demo/browser testing
+  const startMockSimulation = () => {
+    let t = 0;
+    simTimerRef.current = setInterval(() => {
+      t += 0.1;
+      const mockValues: Record<string, number> = {};
+      
+      channels.forEach(ch => {
+        // Check if override is active
+        const fault = sessionState.faultInjections[ch.id];
+        if (fault && fault.active) {
+          if (fault.type === 'override') {
+            mockValues[ch.name] = fault.value;
+          } else if (fault.type === 'noise') {
+            mockValues[ch.name] = (ch.peripheral === 'GPIO' ? 0 : 5) + Math.sin(t) * 2 + (Math.random() - 0.5) * fault.value;
+          } else { // clamp
+            mockValues[ch.name] = Math.max(ch.rangeMin, Math.min(fault.value, (Math.sin(t) + 1) * 5));
+          }
+        } else {
+          // Standard mock signal waveforms
+          if (ch.peripheral === 'GPIO') {
+            mockValues[ch.name] = Math.sin(t) > 0 ? 1 : 0;
+          } else if (ch.peripheral === 'ADC') {
+            mockValues[ch.name] = Math.round((Math.sin(t) + 1) * 2047); // 12-bit ADC mock
+          } else if (ch.peripheral === 'DAC') {
+            mockValues[ch.name] = Math.round((Math.cos(t) + 1) * 127);
+          } else {
+            mockValues[ch.name] = 10 + Math.sin(t * 1.5) * 5;
+          }
+        }
+      });
+      
+      handleIncomingValues(mockValues);
+    }, 200);
+  };
+
+  const addLog = (type: 'info' | 'warn' | 'error' | 'success', message: string) => {
+    onChangeSessionState(prev => ({
+      ...prev,
+      log: [{ timestamp: Date.now(), type, message }, ...prev.log.slice(0, 49)]
+    }));
+  };
+
+  const handleConnect = async () => {
+    if (sessionState.status === 'connected') return;
+
+    onChangeSessionState(prev => ({ ...prev, status: 'connecting' }));
+    addLog('info', `Connecting to HIL hardware on ${commPort} at ${baudRate} baud...`);
+
+    if ((window as any).require) {
+      try {
+        const { ipcRenderer } = (window as any).require('electron');
+        const success = await ipcRenderer.invoke('hil-connect', { port: commPort, baudRate });
+        if (success) {
+          onChangeSessionState(prev => ({ ...prev, status: 'connected', connectedAt: Date.now() }));
+          addLog('success', `HIL session established on ${commPort}`);
+        } else {
+          onChangeSessionState(prev => ({ ...prev, status: 'error' }));
+          addLog('error', `Could not open serial port ${commPort}`);
+        }
+      } catch (err) {
+        onChangeSessionState(prev => ({ ...prev, status: 'error' }));
+        addLog('error', `Connection failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else {
+      // Mock Browser Timeout Connection
+      setTimeout(() => {
+        onChangeSessionState(prev => ({ ...prev, status: 'connected', connectedAt: Date.now() }));
+        addLog('success', `HIL Session established on ${commPort} (Simulated Web Connection)`);
+        startMockSimulation();
+      }, 500);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (simTimerRef.current) {
+      clearInterval(simTimerRef.current);
+      simTimerRef.current = null;
+    }
+
+    if ((window as any).require) {
+      try {
+        const { ipcRenderer } = (window as any).require('electron');
+        await ipcRenderer.invoke('hil-disconnect');
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    onChangeSessionState(prev => ({ ...prev, status: 'disconnected' }));
+    addLog('warn', 'HIL session terminated.');
+  };
+
+  const toggleFault = (channelId: string, type: 'override' | 'noise' | 'clamp', value: number) => {
+    onChangeSessionState(prev => {
+      const active = !prev.faultInjections[channelId]?.active;
+      const updatedFaults = {
+        ...prev.faultInjections,
+        [channelId]: { type, value, active }
+      };
+
+      // If connected in Electron, notify target
+      if (prev.status === 'connected' && (window as any).require) {
+        const { ipcRenderer } = (window as any).require('electron');
+        const ch = channels.find(c => c.id === channelId);
+        if (ch) {
+          const payload = active 
+            ? `${ch.name}=${value}\n` 
+            : `${ch.name}_release=1\n`;
+          ipcRenderer.invoke('hil-send', payload);
+        }
+      }
+
+      return { ...prev, faultInjections: updatedFaults };
+    });
+
+    const ch = channels.find(c => c.id === channelId);
+    if (ch) {
+      const active = !sessionState.faultInjections[channelId]?.active;
+      addLog(active ? 'warn' : 'info', 
+        active ? `Injected ${type} fault into ${ch.name}` : `Released fault on ${ch.name}`
+      );
+    }
+  };
+
+  const handleExportTrace = () => {
+    if (recordedData.length === 0) return;
+    
+    // Convert trace to CSV
+    let csv = 'Timestamp,Elapsed (ms),' + channels.map(c => c.name).join(',') + '\n';
+    const start = recordedData[0].timestamp;
+    
+    recordedData.forEach(row => {
+      const elapsed = row.timestamp - start;
+      const lineVals = channels.map(c => row.values[c.name] ?? 0).join(',');
+      csv += `${row.timestamp},${elapsed},${lineVals}\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `HIL_Trace_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addLog('success', 'HIL data trace exported successfully.');
+  };
+
+  // Prepare chart lines
+  const traceData = channels.map(ch => ({
+    x: timestamps.map(t => new Date(t).toLocaleTimeString()),
+    y: plotData[ch.name] || [],
+    name: ch.name,
+    type: 'scatter' as const,
+    mode: 'lines+markers' as const,
+    line: { shape: 'spline' as const, width: 2 },
+    marker: { size: 4 }
+  }));
+
+  return (
+    <div className="bg-[#0e0e0e] border border-[#222] rounded-xl p-4 flex flex-col h-full overflow-hidden">
+      
+      {/* Session toolbar controls */}
+      <div className="grid grid-cols-4 gap-4 mb-4 shrink-0 bg-[#161616] p-3 border border-[#222] rounded-lg items-center">
+        {/* Connection status */}
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-lg ${sessionState.status === 'connected' ? 'bg-green-950/30 text-green-400' : 'bg-red-950/30 text-red-500'}`}>
+            {sessionState.status === 'connected' ? <Wifi size={20} /> : <WifiOff size={20} />}
+          </div>
+          <div>
+            <div className="text-[10px] text-[#888] uppercase tracking-wider font-bold">HIL Status</div>
+            <div className="text-xs font-semibold capitalize text-[#e0e0e0]">{sessionState.status}</div>
+          </div>
+        </div>
+
+        {/* COM port selector */}
+        <div>
+          <label className="block text-[9px] text-[#888] uppercase font-bold mb-1">COM Port</label>
+          <select
+            value={commPort}
+            disabled={sessionState.status === 'connected' || sessionState.status === 'connecting'}
+            onChange={(e) => onChangeCommPort(e.target.value)}
+            className="w-full bg-[#0a0a0a] border border-[#252525] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
+          >
+            {ports.map(p => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Baud rate selector */}
+        <div>
+          <label className="block text-[9px] text-[#888] uppercase font-bold mb-1">Baud Rate</label>
+          <select
+            value={baudRate}
+            disabled={sessionState.status === 'connected' || sessionState.status === 'connecting'}
+            onChange={(e) => onChangeBaudRate(parseInt(e.target.value))}
+            className="w-full bg-[#0a0a0a] border border-[#252525] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
+          >
+            {[9600, 19200, 38400, 57600, 115200, 230400, 921600].map(rate => (
+              <option key={rate} value={rate}>{rate} bps</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Start/Stop Session Buttons */}
+        <div className="flex gap-2">
+          {sessionState.status !== 'connected' ? (
+            <button
+              onClick={handleConnect}
+              disabled={!commPort || sessionState.status === 'connecting'}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-black font-semibold text-xs rounded transition-colors disabled:opacity-50"
+            >
+              <Play size={14} /> Connect
+            </button>
+          ) : (
+            <button
+              onClick={handleDisconnect}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded transition-colors"
+            >
+              <Square size={14} /> Disconnect
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-12 gap-4 flex-1 overflow-hidden">
+        {/* Left Side: Plotly real-time signals */}
+        <div className="col-span-8 bg-[#121212] border border-[#222] rounded-lg p-3 flex flex-col h-full overflow-hidden">
+          <div className="flex justify-between items-center mb-2 shrink-0">
+            <div>
+              <h3 className="text-xs font-bold text-[#e0e0e0]">Real-Time Signal Scope</h3>
+              <p className="text-[10px] text-[#666]">Live telemetry feed from MCU</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setIsRecording(!isRecording);
+                  if (!isRecording) {
+                    setRecordedData([]);
+                    addLog('info', 'Started recording trace data...');
+                  } else {
+                    addLog('success', `Trace complete. Recorded ${recordedData.length} samples.`);
+                  }
+                }}
+                className={`px-2 py-1 text-[10px] font-semibold rounded transition-colors ${
+                  isRecording 
+                    ? 'bg-red-950/30 text-red-500 border border-red-900/40' 
+                    : 'bg-[#222] hover:bg-[#333] text-gray-400 border border-[#333]'
+                }`}
+              >
+                {isRecording ? 'Stop Rec' : 'Start Rec'}
+              </button>
+              <button
+                disabled={recordedData.length === 0}
+                onClick={handleExportTrace}
+                className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold bg-[#222] hover:bg-[#333] border border-[#333] text-gray-300 rounded transition-colors disabled:opacity-40"
+              >
+                <FileDown size={12} /> Export CSV
+              </button>
+            </div>
+          </div>
+          
+          <div className="flex-1 bg-[#0a0a0a] rounded border border-[#222]/60 overflow-hidden flex items-center justify-center">
+            {sessionState.status !== 'connected' ? (
+              <div className="text-center p-6 text-[#444]">
+                <p className="text-sm">Signal scope offline</p>
+                <p className="text-xs mt-1">Connect serial port to initiate live data graphing</p>
+              </div>
+            ) : (
+              <Plot
+                data={traceData}
+                layout={{
+                  autosize: true,
+                  margin: { l: 40, r: 15, t: 15, b: 35 },
+                  paper_bgcolor: 'rgba(0,0,0,0)',
+                  plot_bgcolor: 'rgba(0,0,0,0)',
+                  font: { color: '#888', size: 10 },
+                  xaxis: { gridcolor: '#1a1a1a', zeroline: false },
+                  yaxis: { gridcolor: '#1a1a1a', zeroline: false },
+                  showlegend: true,
+                  legend: { orientation: 'h', x: 0, y: 1.15 }
+                }}
+                config={{ responsive: true, displayModeBar: false }}
+                style={{ width: '100%', height: '100%' }}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Right Side: Fault injection & Override console */}
+        <div className="col-span-4 flex flex-col gap-4 h-full overflow-hidden">
+          
+          {/* Fault injection */}
+          <div className="flex-1 bg-[#121212] border border-[#222] rounded-lg p-3 flex flex-col overflow-hidden">
+            <h3 className="text-xs font-bold text-[#e0e0e0] flex items-center gap-1.5 mb-2 shrink-0">
+              <ShieldAlert size={14} className="text-yellow-600" />
+              Fault Injection / Overrides
+            </h3>
+            
+            <div className="flex-1 overflow-y-auto pr-1 no-scrollbar space-y-2">
+              {channels.filter(c => c.direction === 'In').map(ch => {
+                const fault = sessionState.faultInjections[ch.id] || { active: false, value: 0, type: 'override' };
+                return (
+                  <div key={ch.id} className="bg-[#181818] p-2 rounded border border-[#222] text-xs">
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="font-semibold text-white">{ch.name} <span className="text-[10px] text-[#666]">({ch.pin})</span></span>
+                      <button
+                        onClick={() => toggleFault(ch.id, 'override', fault.value)}
+                        className={`px-2 py-0.5 text-[9px] rounded font-bold transition-all ${
+                          fault.active 
+                            ? 'bg-yellow-600 text-black' 
+                            : 'bg-[#222] hover:bg-[#333] text-gray-500'
+                        }`}
+                      >
+                        {fault.active ? 'ACTIVE' : 'INJECT'}
+                      </button>
+                    </div>
+                    
+                    {fault.active && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] text-[#888]">Ovr Val:</span>
+                        <input
+                          type="number"
+                          value={fault.value}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            onChangeSessionState(prev => ({
+                              ...prev,
+                              faultInjections: {
+                                ...prev.faultInjections,
+                                [ch.id]: { ...prev.faultInjections[ch.id], value: val }
+                              }
+                            }));
+                          }}
+                          className="bg-[#0a0a0a] border border-[#333] rounded px-1.5 py-0.5 text-[11px] text-white w-20 focus:outline-none"
+                        />
+                        <span className="text-[10px] text-[#666] font-mono">{ch.unit || 'n/a'}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {channels.filter(c => c.direction === 'In').length === 0 && (
+                <div className="text-[#444] text-center py-6 text-[11px]">
+                  No input channels found for overrides.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Session Logs */}
+          <div className="h-44 bg-[#121212] border border-[#222] rounded-lg p-3 flex flex-col overflow-hidden">
+            <h3 className="text-xs font-bold text-[#e0e0e0] mb-2 shrink-0">Session Logs</h3>
+            <div className="flex-1 overflow-y-auto no-scrollbar font-mono text-[9px] text-[#888] space-y-1">
+              {sessionState.log.map((lg, i) => {
+                let color = 'text-[#aaa]';
+                if (lg.type === 'success') color = 'text-green-400';
+                if (lg.type === 'warn') color = 'text-yellow-600';
+                if (lg.type === 'error') color = 'text-red-500';
+                return (
+                  <div key={i} className="flex gap-1.5">
+                    <span className="text-[#555]">{new Date(lg.timestamp).toLocaleTimeString()}</span>
+                    <span className={color}>{lg.message}</span>
+                  </div>
+                );
+              })}
+              {sessionState.log.length === 0 && (
+                <div className="text-[#444] text-center py-4">No events logged yet.</div>
+              )}
+            </div>
+          </div>
+
+        </div>
+      </div>
+      
+    </div>
+  );
+};

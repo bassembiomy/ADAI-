@@ -146,3 +146,82 @@ ipcMain.handle('sync-factory-io', async (event, { actuators }) => {
     return { error: error.message };
   }
 });
+
+// =============================================================================
+// HIL HARDWARE-IN-THE-LOOP IPC HANDLERS
+// =============================================================================
+let serialPort = null;
+let virtualInterval = null;
+
+ipcMain.handle('hil-list-ports', async () => {
+  try {
+    const { SerialPort } = require('serialport');
+    const ports = await SerialPort.list();
+    return ports.map(p => p.path);
+  } catch (e) {
+    return ['COM1 (Virtual)', 'COM3 (Virtual)', '/dev/ttyUSB0 (Virtual)'];
+  }
+});
+
+ipcMain.handle('hil-connect', async (event, { port, baudRate }) => {
+  if (port.includes('(Virtual)')) {
+    if (virtualInterval) clearInterval(virtualInterval);
+    let t = 0;
+    virtualInterval = setInterval(() => {
+      t += 0.1;
+      // Simulate multiple channels telemetry output
+      const values = `ch_1=${(Math.sin(t) > 0 ? 1 : 0).toFixed(4)};ch_2=${Math.round((Math.sin(t)+1)*2047)};ch_3=${Math.round((Math.cos(t)+1)*127)}\n`;
+      event.sender.send('hil-on-data', values);
+    }, 200);
+    return true;
+  }
+
+  try {
+    const { SerialPort } = require('serialport');
+    serialPort = new SerialPort({ path: port, baudRate: baudRate });
+    
+    let buffer = '';
+    serialPort.on('data', (data) => {
+      buffer += data.toString();
+      let parts = buffer.split('\n');
+      buffer = parts.pop();
+      parts.forEach(line => {
+        if (line.trim()) {
+          event.sender.send('hil-on-data', line + '\n');
+        }
+      });
+    });
+
+    return true;
+  } catch (e) {
+    console.error('Serial port connect failed:', e);
+    return false;
+  }
+});
+
+ipcMain.handle('hil-disconnect', async () => {
+  if (virtualInterval) {
+    clearInterval(virtualInterval);
+    virtualInterval = null;
+  }
+  if (serialPort && serialPort.isOpen) {
+    return new Promise((resolve) => {
+      serialPort.close((err) => {
+        serialPort = null;
+        resolve(!err);
+      });
+    });
+  }
+  return true;
+});
+
+ipcMain.handle('hil-send', async (event, payload) => {
+  if (serialPort && serialPort.isOpen) {
+    return new Promise((resolve) => {
+      serialPort.write(payload, (err) => {
+        resolve(!err);
+      });
+    });
+  }
+  return true;
+});

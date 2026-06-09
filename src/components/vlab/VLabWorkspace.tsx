@@ -12,14 +12,15 @@ import ReactFlow, {
   Panel,
   BackgroundVariant,
   Handle,
-  Position
+  Position,
+  ConnectionLineType
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import * as math from 'mathjs';
 import { VLabWorkspaceProps } from './VLabWorkspaceTypes';
 import { VLAB_LIBRARY, VLabBlock, VLabPort } from '../../utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../engine/vlab/vlabComponentDefinitions';
-import { Settings2, Play, Pause, Square, Send, ChevronLeft, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus } from 'lucide-react';
+import { Settings2, Play, Pause, Square, Send, ChevronLeft, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus, Network } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
 
@@ -1521,6 +1522,23 @@ const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boo
           }`}
         style={{ minWidth: 80, minHeight: 60 }}
       >
+        {/* X-Bridges Link Badge */}
+        {(() => {
+          const isXbridgesLink = (data.type?.startsWith('ps_') || 
+            (data.type || '').includes('pid') || 
+            ['speed_pid', 'pid_controller', 'controller', 'error_calc', 'ref_speed'].some(k => id.includes(k) || (data.type || '').includes(k)));
+          
+          if (!isXbridgesLink) return null;
+          
+          return (
+            <span 
+              className="absolute top-1 right-1 text-[7px] font-black px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase tracking-widest cursor-pointer flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity z-20"
+              title="Double-click to navigate to X-Bridges control loop"
+            >
+              <Network size={8} /> Logic
+            </span>
+          );
+        })()}
         {/* Bidirectional Ports with Offsets */}
         {Object.entries(portsBySide).map(([side, sidePorts]: [any, any]) => (
           sidePorts.map((port: any, index: number) => {
@@ -1860,7 +1878,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   onResult,
   onSendToDOE,
   onBack,
-  onSaveAll
+  onSaveAll,
+  onNavigateToXbridges,
+  initialSelectedNodeId
 }) => {
   const [nodes, setNodes, onLocalNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onLocalEdgesChange] = useEdgesState(initialEdges);
@@ -1873,7 +1893,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   useEffect(() => {
     setEdges(initialEdges);
   }, [initialEdges, setEdges]);
+
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [clipboard, setClipboard] = useState<any[]>([]);
   const [history, setHistory] = useState<{ nodes: any[], edges: any[] }[]>([]);
@@ -1888,6 +1910,20 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const [quickSearchPos, setQuickSearchPos] = useState({ x: 0, y: 0 });
   const [quickSearchQuery, setQuickSearchQuery] = useState('');
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+
+  // Select and focus programmatic node
+  useEffect(() => {
+    if (initialSelectedNodeId && reactFlowInstance) {
+      setSelectedNodeId(initialSelectedNodeId);
+      setNodes(nds => nds.map(n => ({ ...n, selected: n.id === initialSelectedNodeId })));
+      const node = nodes.find(n => n.id === initialSelectedNodeId);
+      if (node) {
+        setTimeout(() => {
+          reactFlowInstance.setCenter(node.position.x + 40, node.position.y + 30, { zoom: 1.2, duration: 800 });
+        }, 150);
+      }
+    }
+  }, [initialSelectedNodeId, reactFlowInstance, nodes]);
   const [invalidEdges, setInvalidEdges] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState<{ message: string; type: 'idle' | 'info' | 'success' | 'warning' | 'error' }>({
     message: 'System Ready',
@@ -2619,6 +2655,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const onNodeDoubleClick = (_: any, node: Node) => {
     if ((node.data as any).type === 'scope') {
       setOpenScopes(prev => prev.includes(node.id) ? prev : [...prev, node.id]);
+    } else if (
+      (node.data as any).type?.startsWith('ps_') || 
+      (node.data as any).type?.includes('pid') || 
+      ['speed_pid', 'pid_controller', 'controller', 'error_calc', 'ref_speed'].some(k => node.id.includes(k) || (node.data as any).type?.includes(k))
+    ) {
+      if (onNavigateToXbridges) {
+        onNavigateToXbridges(node.id);
+      }
     }
   };
 
@@ -2731,7 +2775,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   };
 
   return (
-    <div className="flex h-screen w-full bg-[#050505] text-[#e0e0e0] overflow-hidden">
+    <div className="flex h-full w-full bg-[#050505] text-[#e0e0e0] overflow-hidden">
       {/* Top Bar */}
       <div className="absolute top-0 left-0 right-0 h-12 bg-[#0d0d0d] border-b border-[#222] flex items-center justify-between px-4 z-10">
         <div className="flex items-center gap-4">
@@ -2963,6 +3007,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             onNodeDoubleClick={onNodeDoubleClick}
             onInit={setReactFlowInstance}
             nodeTypes={nodeTypes}
+            connectionLineStyle={{ stroke: '#6c9ac6', strokeWidth: 2 }}
+            connectionLineType={ConnectionLineType.Bezier}
             fitView
             snapToGrid
             snapGrid={[10, 10]}

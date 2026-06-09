@@ -2379,7 +2379,12 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       params: { 
         Kp: params.Kp || 2.5, Ki: params.Ki || 1.2, Kd: params.Kd || 0.1,
         w_ref: params.w_ref || 157,
-        tl: params.tl || 0
+        tl: params.tl || 0,
+        Rs: params.Rs || 0.5, Ls: params.Ls || 0.1,
+        Rr: params.Rr || 0.4, Lr: params.Lr || 0.1,
+        Lm: params.Lm || 0.09, P: params.P || 2,
+        J: params.J || 0.01, B: params.B || 0.001,
+        N: params.N || 100
       },
       isStateful: true,
       icon: 'graduation-cap',
@@ -2542,111 +2547,128 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   }),
 
-  'RL_Q_LEARNING_CONTROLLER': (id: string, params: any) => ({
-    id, type: 'RL_Q_LEARNING_CONTROLLER',
-    params: { alpha: params.alpha || 0.1, gamma: params.gamma || 0.9, epsilon: params.epsilon || 0.1 },
-    isStateful: true,
-    inputs: [
-      createPort('error', 'error', 'input', 0, 'left', 'control'),
-      createPort('reward', 'reward', 'input', 0, 'left', 'control'),
-      createPort('reset', 'reset', 'input', 0, 'bottom', 'logical')
-    ],
-    outputs: [
-      createPort('action', 'action', 'output', 0, 'right', 'control'),
-      createPort('max_q', 'max_q', 'output', 0, 'right', 'control')
-    ],
-    state: {
-      qTable: [
-        [0, 0, 0],
-        [0, 0, 0],
-        [0, 0, 0],
-        [0, 0, 0],
-        [0, 0, 0]
+  'RL_Q_LEARNING_CONTROLLER': (id: string, params: any) => {
+    const numStates = params.numStates || 5;
+    const numActions = params.numActions || 3;
+    return {
+      id, type: 'RL_Q_LEARNING_CONTROLLER',
+      params: { 
+        alpha: params.alpha || 0.1, 
+        gamma: params.gamma || 0.9, 
+        epsilon: params.epsilon || 0.1,
+        numStates,
+        numActions
+      },
+      isStateful: true,
+      inputs: [
+        createPort('error', 'error', 'input', 0, 'left', 'control'),
+        createPort('reward', 'reward', 'input', 0, 'left', 'control'),
+        createPort('reset', 'reset', 'input', 0, 'bottom', 'logical')
       ],
-      lastStateIdx: 0,
-      lastActionIdx: 1,
-      hasPrev: 0
-    },
-    icon: 'graduation-cap',
-    equation: 'Q(s,a) += α*(R + γ*max_q(s\') - Q(s,a))',
-    description: 'Discrete Q-learning control agent. Maps continuous system error into 5 state bins, selects control actions [-1, 0, 1] using epsilon-greedy exploration, and updates Q-values online.\n\nSampling Time Note: Reinforcement learning control loops require a slower sampling time, typically 20ms to 100ms. If dt is too small, state changes are negligible, causing poor credit assignment. If dt is too large, the delayed control inputs lead to poor regulation stability.',
-    execute: (ins, p, state) => {
-      const error = Number(ins[0] ?? 0);
-      const reward = Number(ins[1] ?? 0);
-      const reset = !!ins[2];
-      
-      const alpha = p.alpha ?? 0.1;
-      const gamma = p.gamma ?? 0.9;
-      const epsilon = p.epsilon ?? 0.1;
-      
-      const actions = [-1.0, 0.0, 1.0];
-      
-      let s = 2;
-      if (error < -1.0) s = 0;
-      else if (error < -0.1) s = 1;
-      else if (error > 1.0) s = 4;
-      else if (error > 0.1) s = 3;
-      
-      let qTable = state.qTable ? state.qTable.map((row: number[]) => [...row]) : [
-        [0, 0, 0],
-        [0, 0, 0],
-        [0, 0, 0],
-        [0, 0, 0],
-        [0, 0, 0]
-      ];
-      
-      let lastStateIdx = state.lastStateIdx ?? 0;
-      let lastActionIdx = state.lastActionIdx ?? 1;
-      let hasPrev = state.hasPrev ?? 0;
-      
-      if (reset) {
-        qTable = [
-          [0, 0, 0],
-          [0, 0, 0],
-          [0, 0, 0],
-          [0, 0, 0],
-          [0, 0, 0]
-        ];
-        lastStateIdx = 2;
-        lastActionIdx = 1;
-        hasPrev = 0;
-      }
-      
-      if (hasPrev === 1 && !reset) {
-        const maxQNext = Math.max(...qTable[s]);
-        const targetQ = reward + gamma * maxQNext;
-        const currentQ = qTable[lastStateIdx][lastActionIdx];
-        qTable[lastStateIdx][lastActionIdx] = currentQ + alpha * (targetQ - currentQ);
-      }
-      
-      let aIdx = 1;
-      if (Math.random() < epsilon) {
-        aIdx = Math.floor(Math.random() * 3);
-      } else {
-        let maxVal = qTable[s][0];
-        aIdx = 0;
-        for (let i = 1; i < 3; i++) {
-          if (qTable[s][i] > maxVal) {
-            maxVal = qTable[s][i];
-            aIdx = i;
+      outputs: [
+        createPort('action', 'action', 'output', 0, 'right', 'control'),
+        createPort('max_q', 'max_q', 'output', 0, 'right', 'control')
+      ],
+      state: {
+        qTable: Array.from({ length: numStates }, () => Array(numActions).fill(0)),
+        lastStateIdx: Math.floor(numStates / 2),
+        lastActionIdx: Math.floor(numActions / 2),
+        hasPrev: 0
+      },
+      icon: 'graduation-cap',
+      equation: 'Q(s,a) += α*(R + γ*max_q(s\') - Q(s,a))',
+      description: 'Discrete Q-learning control agent. Maps continuous system error into a configurable number of state bins, selects control actions spaced between [-1, 1] using epsilon-greedy exploration, and updates Q-values online.\n\nSampling Time Note: Reinforcement learning control loops require a slower sampling time, typically 20ms to 100ms. If dt is too small, state changes are negligible, causing poor credit assignment. If dt is too large, the delayed control inputs lead to poor regulation stability.',
+      execute: (ins, p, state) => {
+        const error = Number(ins[0] ?? 0);
+        const reward = Number(ins[1] ?? 0);
+        const reset = !!ins[2];
+        
+        const alpha = p.alpha ?? 0.1;
+        const gamma = p.gamma ?? 0.9;
+        const epsilon = p.epsilon ?? 0.1;
+        const nS = p.numStates ?? 5;
+        const nA = p.numActions ?? 3;
+        
+        const actions: number[] = [];
+        if (nA === 1) {
+          actions.push(0.0);
+        } else {
+          for (let i = 0; i < nA; i++) {
+            actions.push(-1.0 + (2.0 * i) / (nA - 1));
           }
         }
-      }
-      
-      const action = actions[aIdx];
-      const maxQ = Math.max(...qTable[s]);
-      
-      return {
-        outputs: [action, maxQ],
-        nextState: {
-          qTable,
-          lastStateIdx: s,
-          lastActionIdx: aIdx,
-          hasPrev: 1
+        
+        let s = Math.floor(nS / 2);
+        if (nS === 5) {
+          if (error < -1.0) s = 0;
+          else if (error < -0.1) s = 1;
+          else if (error > 1.0) s = 4;
+          else if (error > 0.1) s = 3;
+          else s = 2;
+        } else {
+          // Linear mapping from error [-1.5, 1.5] to [0, nS - 1]
+          const range = 3.0;
+          const normalized = (error + 1.5) / range;
+          s = Math.max(0, Math.min(nS - 1, Math.floor(normalized * nS)));
         }
-      };
-    }
-  })
+        
+        let qTable = state && state.qTable && state.qTable.length === nS && state.qTable[0].length === nA
+          ? state.qTable.map((row: number[]) => [...row])
+          : Array.from({ length: nS }, () => Array(nA).fill(0));
+        
+        let lastStateIdx = state && state.qTable && state.qTable.length === nS && state.qTable[0].length === nA
+          ? (state.lastStateIdx ?? Math.floor(nS / 2))
+          : Math.floor(nS / 2);
+        let lastActionIdx = state && state.qTable && state.qTable.length === nS && state.qTable[0].length === nA
+          ? (state.lastActionIdx ?? Math.floor(nA / 2))
+          : Math.floor(nA / 2);
+        let hasPrev = state && state.qTable && state.qTable.length === nS && state.qTable[0].length === nA
+          ? (state.hasPrev ?? 0)
+          : 0;
+        
+        if (reset) {
+          qTable = Array.from({ length: nS }, () => Array(nA).fill(0));
+          lastStateIdx = Math.floor(nS / 2);
+          lastActionIdx = Math.floor(nA / 2);
+          hasPrev = 0;
+        }
+        
+        if (hasPrev === 1 && !reset) {
+          const maxQNext = Math.max(...qTable[s]);
+          const targetQ = reward + gamma * maxQNext;
+          const currentQ = qTable[lastStateIdx][lastActionIdx];
+          qTable[lastStateIdx][lastActionIdx] = currentQ + alpha * (targetQ - currentQ);
+        }
+        
+        let aIdx = Math.floor(nA / 2);
+        if (Math.random() < epsilon) {
+          aIdx = Math.floor(Math.random() * nA);
+        } else {
+          let maxVal = qTable[s][0];
+          aIdx = 0;
+          for (let i = 1; i < nA; i++) {
+            if (qTable[s][i] > maxVal) {
+              maxVal = qTable[s][i];
+              aIdx = i;
+            }
+          }
+        }
+        
+        const action = actions[aIdx];
+        const maxQ = Math.max(...qTable[s]);
+        
+        return {
+          outputs: [action, maxQ],
+          nextState: {
+            qTable,
+            lastStateIdx: s,
+            lastActionIdx: aIdx,
+            hasPrev: 1
+          }
+        };
+      }
+    };
+  }
 };
 
 

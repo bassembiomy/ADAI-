@@ -3,6 +3,7 @@ import {
   VariableType, VariableDef, StateData, JunctionData, TransitionData, Layer, ErrorItem 
 } from '../types/sm_types';
 import { analyzeStateMachine } from './smAnalysisEngine';
+import { generateHALCode } from '../engine/hil/hilCodeGenerator';
 
 const VERSION = 'v2.4 ENGINE';
 
@@ -34,6 +35,7 @@ export const generateMISRACCode = (chart: {
   variables: VariableDef[];
   layers: Layer[];
   safetyMode: boolean;
+  hilConfig?: any;
 }): { files: { name: string; content: string }[]; errors: ErrorItem[]; warnings: string[] } => {
   const errors: ErrorItem[] = [];
   const warnings: string[] = [];
@@ -554,17 +556,24 @@ export const generateMISRACCode = (chart: {
 
   const testingReport = generateTestingReport(chart, errors, warnings);
 
+  const baseFiles = [
+    { name: 'sm_config.h', content: smConfigH },
+    { name: 'sm_core.h', content: smCoreH },
+    { name: 'sm_core.c', content: smCoreC },
+    { name: 'sm_safety.h', content: smSafetyH },
+    { name: 'sm_safety.c', content: smSafetyC },
+    { name: 'sm_user_logic.h', content: smUserLogicH },
+    { name: 'sm_user_logic.c', content: smUserLogicC },
+    { name: 'sm_testing_report.md', content: testingReport }
+  ];
+
+  if (chart.hilConfig && chart.hilConfig.enabled) {
+    const hilFiles = generateHALCode(chart.hilConfig, chart.variables);
+    baseFiles.push(...hilFiles);
+  }
+
   return {
-    files: [
-      { name: 'sm_config.h', content: smConfigH },
-      { name: 'sm_core.h', content: smCoreH },
-      { name: 'sm_core.c', content: smCoreC },
-      { name: 'sm_safety.h', content: smSafetyH },
-      { name: 'sm_safety.c', content: smSafetyC },
-      { name: 'sm_user_logic.h', content: smUserLogicH },
-      { name: 'sm_user_logic.c', content: smUserLogicC },
-      { name: 'sm_testing_report.md', content: testingReport }
-    ],
+    files: baseFiles,
     errors,
     warnings
   };
@@ -590,6 +599,25 @@ const generateTestingReport = (chart: any, errors: ErrorItem[], warnings: string
   });
 
   const analysis = analyzeStateMachine(chart);
+
+  let hilReport = '';
+  if (chart.hilConfig && chart.hilConfig.enabled) {
+    const hc = chart.hilConfig;
+    hilReport = `
+## 8. HIL Driver Mapping Report
+- **Target Microcontroller:** ${hc.target}
+- **Baud Rate:** ${hc.baudRate} bps
+- **System Clock:** ${hc.clockSpeed} MHz
+- **Connection Port:** ${hc.commPort || 'Auto-Detect'}
+
+| Channel Name | Pin | Peripheral | Direction | Mapped ADIA Variable | Scaling |
+|--------------|-----|------------|-----------|----------------------|---------|
+${hc.channels.map((ch: any) => {
+  const m = hc.mappings.find((mp: any) => mp.channelId === ch.id);
+  return `| \`${ch.name}\` | \`${ch.pin}\` | \`${ch.peripheral}\` | \`${ch.direction}\` | \`${m ? m.adiaVarId : 'Unmapped'}\` | \`${ch.scalingFactor}\` |`;
+}).join('\n')}
+`;
+  }
 
   return `# ADIA Code Generation: Testing & Validation Report
 **Timestamp:** ${now}
@@ -668,6 +696,8 @@ ${ts.steps.map((step, idx) => `| ${idx + 1} | ${step.action} | ${step.expected} 
 **Expected Result:**
 ${ts.expectedResult}
 `).join('\n')}
+
+${hilReport}
 
 ---
 **Summary:** The generated code is **Verified** for deployment on target hardware with SIL-2 requirements.

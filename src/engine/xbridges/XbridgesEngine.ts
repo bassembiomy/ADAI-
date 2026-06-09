@@ -1,5 +1,6 @@
 // src/engine/xbridges/XbridgesEngine.ts
-import { XModel, XBlock } from './types';
+import { XModel, XBlock, ModelDiagnostic } from './types';
+import { BLOCK_LIBRARY } from './BlockDefinitions';
 
 export class XbridgesEngine {
   private model: XModel;
@@ -7,6 +8,7 @@ export class XbridgesEngine {
   private compiled = false;
   private blockMap = new Map<string, XBlock>();
   private signalValues = new Map<string, any>(); // key: "blockId.portId"
+  public diagnostics: ModelDiagnostic[] = [];
 
   constructor(model: XModel) {
     this.model = model;
@@ -43,8 +45,42 @@ export class XbridgesEngine {
     });
   }
 
-  public compile() {
+  private validateConnections() {
+    this.flatConnections.forEach(conn => {
+      const sourceBlock = this.blockMap.get(conn.sourceBlock);
+      const targetBlock = this.blockMap.get(conn.targetBlock);
+      if (!sourceBlock || !targetBlock) return;
+
+      const outPort = sourceBlock.outputs.find(o => o.id === conn.sourcePort);
+      const inPort = targetBlock.inputs.find(i => i.id === conn.targetPort);
+      if (!outPort || !inPort) return;
+
+      const t1 = outPort.type;
+      const t2 = inPort.type;
+
+      if (t1 === 'auto' || t2 === 'auto') return;
+
+      if (t1 !== t2) {
+        const isPowerLogical = (t1 === 'power' && t2 === 'logical') || (t1 === 'logical' && t2 === 'power');
+        const isLogicalContinuous = (t1 === 'logical' && t2 === 'continuous') || (t1 === 'continuous' && t2 === 'logical');
+        const isMatrixContinuous = (t1 === 'matrix' && t2 === 'continuous') || (t1 === 'continuous' && t2 === 'matrix');
+
+        if (isPowerLogical || isLogicalContinuous || isMatrixContinuous) {
+          this.diagnostics.push({
+            severity: 'warning',
+            code: 'SIGNAL_TYPE_MISMATCH',
+            message: `Signal type mismatch: Port '${outPort.name}' on block '${sourceBlock.label || sourceBlock.type}' of type '${t1}' connected to port '${inPort.name}' on block '${targetBlock.label || targetBlock.type}' of type '${t2}'.`,
+            blockIds: [sourceBlock.id, targetBlock.id]
+          });
+        }
+      }
+    });
+  }
+
+  public compile(): ModelDiagnostic[] {
+    this.diagnostics = [];
     this.flatten();
+    this.validateConnections();
     
     // 1. Build adjacency list for Topological Sort
     const adjList = new Map<string, string[]>();
@@ -89,6 +125,14 @@ export class XbridgesEngine {
 
     if (this.executionOrder.length !== this.flatBlocks.length) {
       const missing = this.flatBlocks.filter(b => !this.executionOrder.includes(b));
+      const missingIds = missing.map(b => b.id);
+      const missingLabels = missing.map(b => b.label || b.type).join(', ');
+      this.diagnostics.push({
+        severity: 'error',
+        code: 'ALGEBRAIC_LOOP',
+        message: `Algebraic loop detected involving blocks: ${missingLabels}. Try introducing a Unit Delay or Integrator to break the loop.`,
+        blockIds: missingIds
+      });
       missing.forEach(m => this.executionOrder.push(m));
     }
 
@@ -100,6 +144,7 @@ export class XbridgesEngine {
     });
 
     this.compiled = true;
+    return this.diagnostics;
   }
 
   public gatherInputs(block: XBlock): any[] {
@@ -196,4 +241,39 @@ export class XbridgesEngine {
   public setSignalValue(blockId: string, portId: string, value: any) {
     this.signalValues.set(`${blockId}.${portId}`, value);
   }
+
+  public getBlock(blockId: string): XBlock | undefined {
+    return this.blockMap.get(blockId);
+  }
+
+  public patchBlockParams(blockId: string, newParams: Record<string, any>) {
+    const block = this.blockMap.get(blockId);
+    if (!block) return;
+
+    // Detect if we need to re-seed state.
+    // The keys are: initialCondition, initW1, initW2, initBias, alpha, gamma, epsilon, numStates, numActions, etc.
+    const reseedKeys = ['initialCondition', 'initW1', 'initW2', 'initBias', 'alpha', 'gamma', 'epsilon', 'numStates', 'numActions'];
+    let needsReseed = false;
+    for (const key of reseedKeys) {
+      if (newParams[key] !== undefined && newParams[key] !== block.params[key]) {
+        needsReseed = true;
+      }
+    }
+
+    // Merge parameters
+    block.params = { ...block.params, ...newParams };
+
+    if (needsReseed) {
+      // Re-seed state from BLOCK_LIBRARY
+      try {
+        if (BLOCK_LIBRARY[block.type]) {
+          const freshBlock = BLOCK_LIBRARY[block.type](block.id, block.params);
+          block.state = freshBlock.state;
+        }
+      } catch (e) {
+        console.error(`Failed to re-seed state for block ${blockId}:`, e);
+      }
+    }
+  }
 }
+

@@ -11,7 +11,8 @@ import ReactFlow, {
   useEdgesState,
   Panel,
   BackgroundVariant,
-  MiniMap
+  MiniMap,
+  ConnectionLineType
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { 
@@ -71,6 +72,7 @@ const renderLibraryIcon = (iconName: string, size = 14, className?: string) => {
 
 import { XbridgesEngine } from '../../engine/xbridges/XbridgesEngine';
 import { Solvers } from '../../engine/xbridges/Solvers';
+import { ModelDiagnostic } from '../../engine/xbridges/types';
 import { XBlockNode } from './XBlockNode';
 import { XbridgesPropertiesPanel } from './XbridgesPropertiesPanel';
 import { XbridgesScopeWindow } from './XbridgesScopeWindow';
@@ -447,7 +449,9 @@ export const XbridgesWorkspace: React.FC<{
   onSave?: (nodes: any[], edges: any[]) => void;
   onSaveAll?: () => void;
   onLaunchDoe?: () => void;
-}> = ({ initialNodes = [], initialEdges = [], availableVariables = [], tickMs, onBack, onSave, onSaveAll, onLaunchDoe }) => {
+  onNavigateToVlab?: (targetBlockId?: string) => void;
+  initialSelectedNodeId?: string | null;
+}> = ({ initialNodes = [], initialEdges = [], availableVariables = [], tickMs, onBack, onSave, onSaveAll, onLaunchDoe, onNavigateToVlab, initialSelectedNodeId }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [isSimulating, setIsSimulating] = useState(false);
@@ -456,11 +460,13 @@ export const XbridgesWorkspace: React.FC<{
   const [isPropsCollapsed, setIsPropsCollapsed] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [openScopes, setOpenScopes] = useState<string[]>([]);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [searchMenuPos, setSearchMenuPos] = useState<{ x: number, y: number } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedNode, setCopiedNode] = useState<Node | null>(null);
   const [history, setHistory] = useState<{ nodes: Node[], edges: Edge[] }[]>([]);
   const [activeSidebarTab, setActiveSidebarTab] = useState<'library' | 'labs'>('library');
+  const [diagnostics, setDiagnostics] = useState<ModelDiagnostic[]>([]);
 
   // Tutorial / Learning Lab State
   const [activeLabId, setActiveLabId] = useState<string | null>(null);
@@ -473,6 +479,7 @@ export const XbridgesWorkspace: React.FC<{
   const currentParentId = viewPath[viewPath.length - 1];
 
   const [solverType, setSolverType] = useState<'euler' | 'rk4'>('rk4');
+  const [edgeType, setEdgeType] = useState<'default' | 'straight' | 'smoothstep'>('smoothstep');
   const initialStep = tickMs ? tickMs / 1000 : 0.02;
   const [fixedStep, setFixedStep] = useState(initialStep);
   const [stepSizeInput, setStepSizeInput] = useState(String(initialStep));
@@ -488,6 +495,20 @@ export const XbridgesWorkspace: React.FC<{
   const engineRef = React.useRef<XbridgesEngine | null>(null);
   const timeRef = React.useRef(0);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+
+  // Select and focus programmatic node from V-Lab
+  useEffect(() => {
+    if (initialSelectedNodeId && reactFlowInstance) {
+      setSelectedNodeId(initialSelectedNodeId);
+      setNodes(nds => nds.map(n => ({ ...n, selected: n.id === initialSelectedNodeId })));
+      const node = nodes.find(n => n.id === initialSelectedNodeId);
+      if (node) {
+        setTimeout(() => {
+          reactFlowInstance.setCenter(node.position.x + 70, node.position.y + 40, { zoom: 1.2, duration: 800 });
+        }, 150);
+      }
+    }
+  }, [initialSelectedNodeId, reactFlowInstance, nodes]);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
     'Sources': true,
     'Continuous': true,
@@ -519,8 +540,8 @@ export const XbridgesWorkspace: React.FC<{
           if (BLOCK_LIBRARY[d.type]) {
             try {
               const freshBlock = BLOCK_LIBRARY[d.type](d.id, d.params || {});
-              // Merge saved state and extra data into the fresh block
-              return { ...freshBlock, id: d.id, state: d.state || freshBlock.state, params: { ...freshBlock.params, ...d.params } };
+              // Always start with fresh state on Play - never resume trained/stale state
+              return { ...freshBlock, id: d.id, state: freshBlock.state, params: { ...freshBlock.params, ...d.params } };
             } catch (e) {
               return d; // fallback to raw data if rebuild fails
             }
@@ -532,7 +553,8 @@ export const XbridgesWorkspace: React.FC<{
         }))
       };
       engineRef.current = new XbridgesEngine(model);
-      engineRef.current.compile();
+      const compileDiagnostics = engineRef.current.compile();
+      setDiagnostics(compileDiagnostics);
 
       const tick = () => {
         if (engineRef.current && !isPaused) {
@@ -574,6 +596,8 @@ export const XbridgesWorkspace: React.FC<{
     } else {
       timeRef.current = 0; // Reset time when stopped
       setIsPaused(false);
+      setDiagnostics([]);
+      setShowDiagnostics(false);
     }
 
     return () => cancelAnimationFrame(animationFrameId);
@@ -612,6 +636,7 @@ export const XbridgesWorkspace: React.FC<{
     saveHistory();
     setEdges((eds) => addEdge({
       ...params,
+      type: edgeType,
       animated: isSimulating,
       style: { stroke: '#4caf50', strokeWidth: 3 } // FR-2.2 Continuous wire
     }, eds));
@@ -624,7 +649,7 @@ export const XbridgesWorkspace: React.FC<{
       });
       engineRef.current['compiled'] = false; // Force recompile on next step
     }
-  }, [setEdges, isSimulating, saveHistory]);
+  }, [setEdges, isSimulating, saveHistory, edgeType]);
 
   const onDragStart = (event: React.DragEvent, nodeType: string) => {
     event.dataTransfer.setData('application/reactflow', nodeType);
@@ -674,6 +699,13 @@ export const XbridgesWorkspace: React.FC<{
     if (node.data.type === 'Subsystem') {
       setViewPath(prev => [...prev, node.id]);
       setSelectedNodeId(null);
+    } else if (
+      ['AC_INDUCTION_MOTOR', 'AC_MOTOR_PID_CONTROL', 'THREE_PHASE_INVERTER', 'SINGLE_PHASE_H_BRIDGE', 'PWM_GENERATOR', 'THREE_PHASE_PWM', 'SIX_STEP_COMMUTATION', 'PID_BASIC', 'PID_CONTROLLER'].includes(node.data.type) ||
+      ['motor', 'plant', 'inverter', 'pwm', 'commutation', 'pid', 'controller'].some(k => node.id.toLowerCase().includes(k) || node.data.type?.toLowerCase().includes(k))
+    ) {
+      if (onNavigateToVlab) {
+        onNavigateToVlab(node.id);
+      }
     }
   };
 
@@ -819,6 +851,13 @@ export const XbridgesWorkspace: React.FC<{
       }
       return n;
     }));
+
+    // --- LIVE HOT-PATCH: sync param changes to running engine immediately ---
+    // This is the core Simulink-like behavior: no stop/restart needed.
+    // patchBlockParams will also re-seed state if learning hyperparams changed.
+    if (data.params && isSimulating && engineRef.current) {
+      engineRef.current.patchBlockParams(blockId, data.params);
+    }
   };
 
   const stepSimulation = () => {
@@ -1278,6 +1317,26 @@ export const XbridgesWorkspace: React.FC<{
               </div>
 
               <div className="flex flex-col">
+                <span className="text-[8px] text-gray-600 font-black uppercase tracking-widest mb-1">Routing Style</span>
+                <div className="relative group">
+                  <Network size={10} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#c9a86c]" />
+                  <select
+                    value={edgeType}
+                    onChange={e => {
+                      const newType = e.target.value as any;
+                      setEdgeType(newType);
+                      setEdges(eds => eds.map(edge => ({ ...edge, type: newType })));
+                    }}
+                    className="bg-white/5 border border-white/5 rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-bold text-gray-300 focus:outline-none focus:border-[#c9a86c]/30 appearance-none cursor-pointer hover:bg-white/[0.08] transition-all"
+                  >
+                    <option value="smoothstep">Orthogonal</option>
+                    <option value="default">Bezier Curve</option>
+                    <option value="straight">Straight Line</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col">
                 <span className="text-[8px] text-gray-600 font-black uppercase tracking-widest mb-1">Time Step (Δt)</span>
                 <div className="relative group">
                   <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-500 text-[8px] font-bold italic">s</div>
@@ -1303,6 +1362,71 @@ export const XbridgesWorkspace: React.FC<{
                     {isSimulating ? `T = ${timeRef.current.toFixed(4)}s` : 'IDLE'}
                   </span>
                 </div>
+
+                {/* Diagnostics Badge */}
+                {diagnostics.length > 0 && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowDiagnostics(v => !v)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-bold transition-all ${
+                        diagnostics.some(d => d.severity === 'error')
+                          ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20'
+                          : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
+                      }`}
+                      title="Model Diagnostics"
+                    >
+                      <span className="font-mono">
+                        {diagnostics.filter(d => d.severity === 'error').length > 0 && (
+                          <span className="text-red-400">{diagnostics.filter(d => d.severity === 'error').length}E</span>
+                        )}
+                        {diagnostics.filter(d => d.severity === 'error').length > 0 && diagnostics.filter(d => d.severity === 'warning').length > 0 && ' '}
+                        {diagnostics.filter(d => d.severity === 'warning').length > 0 && (
+                          <span className="text-amber-400">{diagnostics.filter(d => d.severity === 'warning').length}W</span>
+                        )}
+                      </span>
+                      <span>DIAG</span>
+                    </button>
+
+                    {/* Floating Diagnostics Panel */}
+                    {showDiagnostics && (
+                      <div className="absolute top-full right-0 mt-2 w-[400px] bg-[#0f0f0f]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl z-[9999] overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-white/[0.02]">
+                          <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/70">Model Diagnostics</span>
+                          <button onClick={() => setShowDiagnostics(false)} className="text-gray-600 hover:text-white transition-colors">
+                            <X size={14} />
+                          </button>
+                        </div>
+                        <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-2 space-y-1">
+                          {diagnostics.map((d, i) => (
+                            <div
+                              key={i}
+                              className={`flex gap-3 p-2.5 rounded-lg text-[11px] ${
+                                d.severity === 'error'
+                                  ? 'bg-red-500/10 border border-red-500/20'
+                                  : d.severity === 'warning'
+                                  ? 'bg-amber-500/10 border border-amber-500/20'
+                                  : 'bg-blue-500/10 border border-blue-500/20'
+                              }`}
+                            >
+                              <span className={`font-black text-[9px] uppercase mt-0.5 shrink-0 ${
+                                d.severity === 'error' ? 'text-red-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-blue-400'
+                              }`}>
+                                {d.severity === 'error' ? '✖' : d.severity === 'warning' ? '⚠' : 'ℹ'}
+                              </span>
+                              <div className="flex flex-col gap-0.5 min-w-0">
+                                <span className={`font-black text-[9px] tracking-wider uppercase ${
+                                  d.severity === 'error' ? 'text-red-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-blue-400'
+                                }`}>[{d.code}]</span>
+                                <span className="text-white/60 leading-relaxed break-words">{d.message}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {onBack && (
                   <button
                     onClick={() => { if (onSave) onSave(nodes, edges); onBack(); }}
@@ -1392,9 +1516,15 @@ export const XbridgesWorkspace: React.FC<{
               snapToGrid
               snapGrid={[15, 15]}
               fitView
-              // FR-2.1: Default Bezier routing, FR-2.4: Selection width
+              connectionLineStyle={{ stroke: '#4caf50', strokeWidth: 3 }}
+              connectionLineType={
+                edgeType === 'straight' ? ConnectionLineType.Straight :
+                edgeType === 'smoothstep' ? ConnectionLineType.SmoothStep :
+                ConnectionLineType.Bezier
+              }
+              // FR-2.1: Dynamic edge routing, FR-2.4: Selection width
               defaultEdgeOptions={{
-                type: 'default',
+                type: edgeType,
                 animated: true,
                 style: { stroke: '#4caf50', strokeWidth: 3 },
                 interactionWidth: 20
