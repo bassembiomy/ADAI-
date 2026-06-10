@@ -49,9 +49,20 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
           console.error('Failed to list serial ports', e);
         }
       } else {
-        // Mock ports for Web/Browser Demo
-        setPorts(['COM1 (Virtual)', 'COM3 (Virtual)', '/dev/ttyUSB0 (Virtual)']);
-        if (!commPort) onChangeCommPort('COM1 (Virtual)');
+        let availablePorts = ['COM1 (Virtual)', 'COM3 (Virtual)', '/dev/ttyUSB0 (Virtual)'];
+        if ((navigator as any).serial) {
+          try {
+            const paired = await (navigator as any).serial.getPorts();
+            const pairedPaths = paired.map((p: any, idx: number) => `Web Serial Port ${idx + 1}`);
+            availablePorts = [...pairedPaths, ...availablePorts];
+          } catch (e) {
+            console.error('Failed to fetch Web Serial ports:', e);
+          }
+        }
+        setPorts(availablePorts);
+        if (availablePorts.length > 0 && !commPort) {
+          onChangeCommPort(availablePorts[0]);
+        }
       }
     };
     fetchPorts();
@@ -166,12 +177,59 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
         addLog('error', `Connection failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     } else {
-      // Mock Browser Timeout Connection
-      setTimeout(() => {
-        onChangeSessionState(prev => ({ ...prev, status: 'connected', connectedAt: Date.now() }));
-        addLog('success', `HIL Session established on ${commPort} (Simulated Web Connection)`);
-        startMockSimulation();
-      }, 500);
+      if (commPort.startsWith('Web Serial Port') && (navigator as any).serial) {
+        try {
+          const paired = await (navigator as any).serial.getPorts();
+          const portIndex = parseInt(commPort.replace('Web Serial Port', '').trim()) - 1;
+          const port = paired[portIndex];
+          if (!port) throw new Error('Selected port not found. Pair it first.');
+
+          await port.open({ baudRate });
+          (window as any).activeWebSerialPort = port;
+          
+          onChangeSessionState(prev => ({ ...prev, status: 'connected', connectedAt: Date.now() }));
+          addLog('success', `HIL session established via Web Serial`);
+
+          const decoder = new TextDecoder();
+          const reader = port.readable.getReader();
+          (window as any).activeWebSerialReader = reader;
+
+          (async () => {
+            let buffer = '';
+            try {
+              while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value);
+                const parts = buffer.split('\n');
+                buffer = parts.pop() || '';
+                parts.forEach(line => {
+                  if (line.trim()) {
+                    handleIncomingValues(decodeTextFrame(line + '\n'));
+                  }
+                });
+              }
+            } catch (err) {
+              console.error('Web Serial read error:', err);
+              addLog('error', `Serial port read disconnected: ${err instanceof Error ? err.message : String(err)}`);
+              onChangeSessionState(prev => ({ ...prev, status: 'disconnected' }));
+            } finally {
+              reader.releaseLock();
+            }
+          })();
+
+        } catch (err) {
+          onChangeSessionState(prev => ({ ...prev, status: 'error' }));
+          addLog('error', `Web Serial connection failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      } else {
+        // Mock Browser Timeout Connection
+        setTimeout(() => {
+          onChangeSessionState(prev => ({ ...prev, status: 'connected', connectedAt: Date.now() }));
+          addLog('success', `HIL Session established on ${commPort} (Simulated Web Connection)`);
+          startMockSimulation();
+        }, 500);
+      }
     }
   };
 
@@ -188,6 +246,17 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
       } catch (e) {
         console.error(e);
       }
+    } else if ((window as any).activeWebSerialPort) {
+      try {
+        if ((window as any).activeWebSerialReader) {
+          await (window as any).activeWebSerialReader.cancel();
+          (window as any).activeWebSerialReader = null;
+        }
+        await (window as any).activeWebSerialPort.close();
+        (window as any).activeWebSerialPort = null;
+      } catch (e) {
+        console.error('Failed to close Web Serial port:', e);
+      }
     }
 
     onChangeSessionState(prev => ({ ...prev, status: 'disconnected' }));
@@ -202,15 +271,29 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
         [channelId]: { type, value, active }
       };
 
-      // If connected in Electron, notify target
-      if (prev.status === 'connected' && (window as any).require) {
-        const { ipcRenderer } = (window as any).require('electron');
+      // If connected, notify target
+      if (prev.status === 'connected') {
         const ch = channels.find(c => c.id === channelId);
         if (ch) {
           const payload = active 
             ? `${ch.name}=${value}\n` 
             : `${ch.name}_release=1\n`;
-          ipcRenderer.invoke('hil-send', payload);
+          if ((window as any).require) {
+            const { ipcRenderer } = (window as any).require('electron');
+            ipcRenderer.invoke('hil-send', payload);
+          } else if ((window as any).activeWebSerialPort) {
+            const port = (window as any).activeWebSerialPort;
+            if (port.writable) {
+              const writer = port.writable.getWriter();
+              const encoder = new TextEncoder();
+              writer.write(encoder.encode(payload)).then(() => {
+                writer.releaseLock();
+              }).catch((e: any) => {
+                console.error('Web Serial write error:', e);
+                writer.releaseLock();
+              });
+            }
+          }
         }
       }
 
@@ -282,12 +365,38 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
           <select
             value={commPort}
             disabled={sessionState.status === 'connected' || sessionState.status === 'connecting'}
-            onChange={(e) => onChangeCommPort(e.target.value)}
+            onChange={async (e) => {
+              const val = e.target.value;
+              if (val === 'ADD_NEW_PORT') {
+                if ((navigator as any).serial) {
+                  try {
+                    const port = await (navigator as any).serial.requestPort();
+                    const paired = await (navigator as any).serial.getPorts();
+                    const pairedPaths = paired.map((p: any, idx: number) => `Web Serial Port ${idx + 1}`);
+                    const allPorts = [...pairedPaths, 'COM1 (Virtual)', 'COM3 (Virtual)', '/dev/ttyUSB0 (Virtual)'];
+                    setPorts(allPorts);
+                    const newPortIndex = paired.indexOf(port);
+                    if (newPortIndex !== -1) {
+                      onChangeCommPort(`Web Serial Port ${newPortIndex + 1}`);
+                    }
+                  } catch (err) {
+                    console.error('Failed to pair Web Serial port:', err);
+                  }
+                } else {
+                  alert('Web Serial API is not supported in this browser. Please use Chrome, Edge or run inside Electron.');
+                }
+              } else {
+                onChangeCommPort(val);
+              }
+            }}
             className="w-full bg-[#0a0a0a] border border-[#252525] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
           >
             {ports.map(p => (
               <option key={p} value={p}>{p}</option>
             ))}
+            {!((window as any).require) && (navigator as any).serial && (
+              <option value="ADD_NEW_PORT">+ Pair Real COM Port...</option>
+            )}
           </select>
         </div>
 

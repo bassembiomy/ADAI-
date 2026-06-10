@@ -150,14 +150,41 @@ ipcMain.handle('sync-factory-io', async (event, { actuators }) => {
 // =============================================================================
 // HIL HARDWARE-IN-THE-LOOP IPC HANDLERS
 // =============================================================================
+const { execSync, spawn } = require('child_process');
 let serialPort = null;
 let virtualInterval = null;
+let activePsProcess = null;
+
+async function getRealPorts() {
+  if (process.platform === 'win32') {
+    try {
+      const stdout = execSync('[System.IO.Ports.SerialPort]::GetPortNames()', { shell: 'powershell.exe' }).toString();
+      const ports = stdout.split(/[\r\n]+/).map(p => p.trim()).filter(Boolean);
+      return Array.from(new Set(ports));
+    } catch (e) {
+      console.error('Failed to list ports via PowerShell:', e);
+      return [];
+    }
+  } else if (process.platform === 'darwin' || process.platform === 'linux') {
+    try {
+      const fs = require('fs');
+      const files = fs.readdirSync('/dev');
+      return files
+        .filter(f => f.startsWith('tty.usb') || f.startsWith('ttyUSB') || f.startsWith('ttyACM') || f.startsWith('cu.usb'))
+        .map(f => '/dev/' + f);
+    } catch (e) {
+      console.error('Failed to list /dev ports:', e);
+      return [];
+    }
+  }
+  return [];
+}
 
 ipcMain.handle('hil-list-ports', async () => {
   try {
-    const { SerialPort } = require('serialport');
-    const ports = await SerialPort.list();
-    return ports.map(p => p.path);
+    const realPorts = await getRealPorts();
+    const virtualPorts = ['COM1 (Virtual)', 'COM3 (Virtual)', '/dev/ttyUSB0 (Virtual)'];
+    return [...realPorts, ...virtualPorts];
   } catch (e) {
     return ['COM1 (Virtual)', 'COM3 (Virtual)', '/dev/ttyUSB0 (Virtual)'];
   }
@@ -176,6 +203,7 @@ ipcMain.handle('hil-connect', async (event, { port, baudRate }) => {
     return true;
   }
 
+  // 1. Try native serialport package first
   try {
     const { SerialPort } = require('serialport');
     serialPort = new SerialPort({ path: port, baudRate: baudRate });
@@ -194,7 +222,115 @@ ipcMain.handle('hil-connect', async (event, { port, baudRate }) => {
 
     return true;
   } catch (e) {
-    console.error('Serial port connect failed:', e);
+    console.warn('Native serialport connection failed, attempting PowerShell bridge fallback...', e);
+
+    // 2. Fall back to PowerShell serial bridge (Windows only)
+    if (process.platform === 'win32') {
+      return new Promise((resolve) => {
+        try {
+          const psScript = `
+$portName = "${port}"
+$baud = ${baudRate}
+$p = New-Object System.IO.Ports.SerialPort $portName, $baud, None, 8, one
+$p.ReadTimeout = 500
+$p.WriteTimeout = 500
+try {
+  $p.Open()
+  Write-Output "[OPEN_SUCCESS]"
+  
+  $tokenSource = New-Object System.Threading.CancellationTokenSource
+  $task = [System.Threading.Tasks.Task]::Run({
+    while (!$tokenSource.IsCancellationRequested -and $p.IsOpen) {
+      try {
+        if ($p.BytesToRead -gt 0) {
+          $line = $p.ReadLine()
+          Write-Output $line
+        } else {
+          [System.Threading.Thread]::Sleep(10)
+        }
+      } catch {
+        # Timeout or read exception
+      }
+    }
+  }, $tokenSource.Token)
+
+  while ($p.IsOpen) {
+    $line = [System.Console]::ReadLine()
+    if ($null -eq $line -or $line -eq "[CLOSE]") {
+      break
+    }
+    $p.WriteLine($line)
+  }
+} catch {
+  Write-Output "[OPEN_FAILED]: $_"
+} finally {
+  if ($tokenSource) { $tokenSource.Cancel() }
+  if ($p) {
+    if ($p.IsOpen) { $p.Close() }
+    $p.Dispose()
+  }
+  Write-Output "[CLOSED]"
+}
+`;
+          activePsProcess = spawn('powershell.exe', ['-NoProfile', '-Command', '-'], {
+            stdio: ['pipe', 'pipe', 'ignore']
+          });
+
+          let resolved = false;
+          let buffer = '';
+
+          activePsProcess.stdout.on('data', (data) => {
+            buffer += data.toString();
+            const parts = buffer.split('\n');
+            buffer = parts.pop() || '';
+
+            for (const part of parts) {
+              const cleaned = part.trim();
+              if (!cleaned) continue;
+
+              if (cleaned === '[OPEN_SUCCESS]') {
+                if (!resolved) {
+                  resolved = true;
+                  resolve(true);
+                }
+              } else if (cleaned.startsWith('[OPEN_FAILED]')) {
+                if (!resolved) {
+                  resolved = true;
+                  resolve(false);
+                }
+              } else if (cleaned === '[CLOSED]') {
+                // Bridge closed
+              } else {
+                event.sender.send('hil-on-data', cleaned + '\n');
+              }
+            }
+          });
+
+          activePsProcess.on('error', (err) => {
+            console.error('PowerShell bridge process error:', err);
+            if (!resolved) {
+              resolved = true;
+              resolve(false);
+            }
+          });
+
+          activePsProcess.on('exit', () => {
+            activePsProcess = null;
+          });
+
+          // Write script to stdin
+          activePsProcess.stdin.write(psScript + '\n');
+
+        } catch (err) {
+          console.error('PowerShell bridge spawn failed:', err);
+          if (!resolved) {
+            resolved = true;
+            resolve(false);
+          }
+        }
+      });
+    }
+
     return false;
   }
 });
@@ -204,6 +340,15 @@ ipcMain.handle('hil-disconnect', async () => {
     clearInterval(virtualInterval);
     virtualInterval = null;
   }
+
+  if (activePsProcess) {
+    try {
+      activePsProcess.stdin.write("[CLOSE]\n");
+      activePsProcess.kill();
+    } catch (e) {}
+    activePsProcess = null;
+  }
+
   if (serialPort && serialPort.isOpen) {
     return new Promise((resolve) => {
       serialPort.close((err) => {
@@ -216,6 +361,15 @@ ipcMain.handle('hil-disconnect', async () => {
 });
 
 ipcMain.handle('hil-send', async (event, payload) => {
+  if (activePsProcess) {
+    try {
+      activePsProcess.stdin.write(payload.trim() + '\n');
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   if (serialPort && serialPort.isOpen) {
     return new Promise((resolve) => {
       serialPort.write(payload, (err) => {

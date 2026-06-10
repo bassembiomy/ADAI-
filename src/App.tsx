@@ -327,6 +327,8 @@ interface HmiComponent {
   oledIndicatorEmojis?: string[];
   oledIndicatorVarIds?: (string | null)[];
   oledIndicatorLabels?: string[];
+  oledTitle?: string;
+  encoderValues?: string[];
 }
 
 // =============================================================================
@@ -1528,8 +1530,9 @@ const OledDisplay = ({
 
   return (
     <div className="w-full h-full bg-black border border-[#1a1a22] rounded-lg p-3 flex flex-col justify-between font-mono shadow-[inset_0_0_15px_rgba(0,0,0,0.9)] text-[#4db8ff]">
-      <div className="text-[10px] text-[#4d7aaa] uppercase tracking-wider truncate h-4">
-        {modeText}
+      <div className="text-[10px] text-[#4d7aaa] uppercase tracking-wider truncate h-4 flex justify-between">
+        <span>{comp.oledTitle || comp.name}</span>
+        <span className="text-[#3de88a]/70 font-semibold">{modeText}</span>
       </div>
       <div className="text-2xl font-bold tracking-widest text-[#4db8ff] text-shadow-[0_0_8px_rgba(77,184,255,0.5)] my-0.5 truncate">
         {tempText}
@@ -1573,18 +1576,37 @@ const Encoder = ({
 
   const rotVar = variables.find(x => x.id === comp.variableId);
   const rotVal = rotVar ? Number(rotVar.currentValue) || 0 : 0;
-  const angle = rotVal * 18 + rotationAngle;
+
+  const isHybrid = Array.isArray(comp.encoderValues) && comp.encoderValues.length > 0;
+  const encoderValues = comp.encoderValues || [];
+
+  let currentIndex = 0;
+  if (isHybrid && rotVar) {
+    const idx = encoderValues.findIndex(x => String(x) === String(rotVar.currentValue));
+    if (idx !== -1) currentIndex = idx;
+  }
+
+  const stepAngle = isHybrid ? 360 / Math.max(1, encoderValues.length) : 18;
+  const rotIndexVal = isHybrid ? currentIndex : rotVal;
+  const angle = rotIndexVal * stepAngle + rotationAngle;
 
   const rotate = (dir: number) => {
     if (editMode || !comp.variableId) return;
     const v = variables.find(x => x.id === comp.variableId);
     if (!v) return;
-    const curVal = Number(v.currentValue) || 0;
-    const step = v.name.toLowerCase().includes('temp') ? 5 : 1;
-    const newVal = curVal + dir * step;
-    const clampedVal = Math.max(comp.min ?? 0, Math.min(comp.max ?? 100, newVal));
-    updateVariable(comp.variableId, clampedVal.toString());
-    setRotationAngle(prev => prev + dir * 18);
+
+    if (isHybrid) {
+      const nextIndex = (currentIndex + dir + encoderValues.length) % encoderValues.length;
+      updateVariable(comp.variableId, encoderValues[nextIndex]);
+      setRotationAngle(prev => prev + dir * stepAngle);
+    } else {
+      const curVal = Number(v.currentValue) || 0;
+      const step = v.name.toLowerCase().includes('temp') ? 5 : 1;
+      const newVal = curVal + dir * step;
+      const clampedVal = Math.max(comp.min ?? 0, Math.min(comp.max ?? 100, newVal));
+      updateVariable(comp.variableId, clampedVal.toString());
+      setRotationAngle(prev => prev + dir * 18);
+    }
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -1666,7 +1688,7 @@ const Encoder = ({
       </div>
 
       <div className="text-[9px] text-[#555] font-mono text-center shrink-0">
-        Value: {rotVal}
+        Value: {isHybrid ? String(encoderValues[currentIndex] || '') : String(rotVal)}
       </div>
     </div>
   );
@@ -3170,6 +3192,89 @@ const DoeWorkspace = ({
   );
 };
 
+const ICON_LIBRARY = [
+  {
+    category: 'Cooking & Kitchen',
+    icons: ['🍟', '💧', '🍞', '♨️', '🔥', '🍲', '☕', '🧫', '❄️', '🥘', '🌿', '⚡', '🍳', '🍕', '🍰', '🍖', '🍗', '🐟', '🍤', '🍿', '🥩', '🥦', '🍎', '🍚', '🥣', '🥫', '🧊', '🌡️']
+  },
+  {
+    category: 'Controls & Power',
+    icons: ['⏻', '▶', '⏸', '⏹', '🔁', '🔃', '⚙️', '🌀', '🎡', '💡', '🔌', '🔋', '🔔', '🔕', '🔊', '🚨', '🛑', '🔒', '🔓', '🛡️', '🔑', '⏱️', '⏰', '📅']
+  },
+  {
+    category: 'Status & Indicators',
+    icons: ['✅', '❌', '⚠️', 'ℹ️', '❓', '📶', '📡', '☁️', '🌐', '📈', '📉', '📊', '💬', '📣', '💎', '🚥', '🚦', '🚧']
+  },
+  {
+    category: 'Miscellaneous',
+    icons: ['✨', '🌟', '🍀', '🚀', '🔧', '🛢️', '🧪', '🔩', '🖥️', '📟']
+  }
+];
+
+const EmojiPicker = ({
+  onSelect,
+  currentValue
+}: {
+  onSelect: (emoji: string) => void;
+  currentValue: string;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="relative mt-1">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full h-8 px-2 bg-[#0a0a0a] border border-[#333] hover:border-[#f97316] rounded text-xs text-[#e0e0e0] flex items-center justify-between transition-colors"
+      >
+        <span className="truncate">Selected: {currentValue || 'None'}</span>
+        <span className="text-[10px] text-gray-500 shrink-0">▼ Library</span>
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto bg-[#141414] border border-[#2d2d2d] rounded shadow-2xl p-2 font-sans text-xs">
+          <div className="flex justify-between items-center mb-1.5 border-b border-[#2d2d2d] pb-1">
+            <span className="text-gray-400 font-bold">Pick an Icon</span>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="text-gray-500 hover:text-white"
+            >
+              Close
+            </button>
+          </div>
+          <div className="space-y-3">
+            {ICON_LIBRARY.map((cat, catIdx) => (
+              <div key={catIdx}>
+                <div className="text-[9px] text-[#f97316] uppercase font-bold tracking-wider mb-1">
+                  {cat.category}
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {cat.icons.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => {
+                        onSelect(emoji);
+                        setIsOpen(false);
+                      }}
+                      className={`h-7 flex items-center justify-center rounded text-base hover:bg-[#333] transition-colors ${
+                        currentValue === emoji ? 'bg-[#f97316]/20 border border-[#f97316]/50' : 'bg-[#0a0a0a] border border-[#222]'
+                      }`}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const HmiDashboardContent = ({
   variables,
   components,
@@ -3714,15 +3819,35 @@ const HmiDashboardContent = ({
 
                       {comp.type === 'encoder' && (
                         <div className="space-y-2 mt-2">
-                          <Label>Button Press Bind (GPIO)</Label>
-                          <select
-                            value={comp.pressVariableId || ''}
-                            onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, pressVariableId: e.target.value || null } : c))}
-                            className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
-                          >
-                            <option value="">-- Unbound --</option>
-                            {variables.map(v => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
-                          </select>
+                          <div>
+                            <Label>Button Press Bind (GPIO)</Label>
+                            <select
+                              value={comp.pressVariableId || ''}
+                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, pressVariableId: e.target.value || null } : c))}
+                              className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-xs text-[#e0e0e0] mt-1"
+                            >
+                              <option value="">-- Unbound --</option>
+                              {variables.map(v => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
+                            </select>
+                          </div>
+                          <div className="space-y-2 border-t border-[#333] pt-2 mt-2">
+                            <Label>Encoder Values (Discrete Mode)</Label>
+                            {(comp.encoderValues || []).map((val, idx) => (
+                              <div key={idx} className="flex gap-1">
+                                <Input
+                                  value={val}
+                                  onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, encoderValues: (c.encoderValues || []).map((v, i) => i === idx ? e.target.value : v) } : c))}
+                                  className="flex-1 h-6 text-[10px]"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, encoderValues: (c.encoderValues || []).filter((_, i) => i !== idx) } : c))}
+                                  className="text-[#666] hover:text-red-400 px-1"
+                                >×</button>
+                              </div>
+                            ))}
+                            <Button size="sm" variant="secondary" className="w-full h-6 text-[10px]" onClick={() => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, encoderValues: [...(c.encoderValues || []), '0'] } : c))}>+ Add Value</Button>
+                          </div>
                         </div>
                       )}
 
@@ -3749,6 +3874,10 @@ const HmiDashboardContent = ({
                               onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, iconEmoji: e.target.value } : c))}
                               placeholder="e.g. 🍟"
                               className="mt-1"
+                            />
+                            <EmojiPicker
+                              currentValue={comp.iconEmoji || ''}
+                              onSelect={emoji => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, iconEmoji: emoji } : c))}
                             />
                           </div>
                           <div>
@@ -3791,6 +3920,15 @@ const HmiDashboardContent = ({
                             </div>
                           ))}
                           <div className="mt-2 border-t border-[#222] pt-2">
+                            <Label>Screen Title</Label>
+                            <Input
+                              value={comp.oledTitle || ''}
+                              onChange={e => setComponents(prev => prev.map(c => c.id === comp.id ? { ...c, oledTitle: e.target.value } : c))}
+                              placeholder="e.g. MAIN PANEL"
+                              className="mt-1"
+                            />
+                          </div>
+                          <div className="mt-2 border-t border-[#222] pt-2">
                             <Label>Mode Names (comma-separated)</Label>
                             <textarea
                               value={comp.oledModeNames || ''}
@@ -3827,6 +3965,13 @@ const HmiDashboardContent = ({
                                         oledIndicatorEmojis: (c.oledIndicatorEmojis || []).map((v, i) => i === idx ? e.target.value : v)
                                       } : c))}
                                       className="h-6 text-[10px] px-1"
+                                    />
+                                    <EmojiPicker
+                                      currentValue={emoji}
+                                      onSelect={emojiVal => setComponents(prev => prev.map(c => c.id === comp.id ? {
+                                        ...c,
+                                        oledIndicatorEmojis: (c.oledIndicatorEmojis || []).map((v, i) => i === idx ? emojiVal : v)
+                                      } : c))}
                                     />
                                   </div>
                                   <div>
@@ -5223,6 +5368,26 @@ const GlobalReportPreviewModal = ({
 }) => {
   const [layout, setLayout] = useState<'1-col' | '2-col'>('1-col');
   const previewRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen && reportData && previewRef.current) {
+      const scripts = previewRef.current.querySelectorAll('script');
+      scripts.forEach(script => {
+        try {
+          const newScript = document.createElement('script');
+          if (script.src) {
+            newScript.src = script.src;
+          } else {
+            newScript.textContent = script.textContent;
+          }
+          document.body.appendChild(newScript);
+          document.body.removeChild(newScript);
+        } catch (e) {
+          console.error("Failed to run preview script:", e);
+        }
+      });
+    }
+  }, [isOpen, reportData, layout]);
 
   if (!isOpen || !reportData) return null;
 
@@ -9889,9 +10054,11 @@ const ADIA = () => {
           if (Array.isArray(c.oledIndicatorEmojis) && c.oledIndicatorEmojis.length > 0) {
             indicatorsStr = c.oledIndicatorEmojis.join(' ');
           }
+          const titleText = (c.oledTitle || c.name).toUpperCase();
 
           svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#000" stroke="#222" stroke-width="2" rx="6" />`;
-          svg += `<text x="12" y="20" fill="#4d7aaa" font-size="8" font-family="monospace">${modeText}</text>`;
+          svg += `<text x="12" y="20" fill="#4d7aaa" font-size="8" font-family="monospace">${titleText}</text>`;
+          svg += `<text x="${c.width - 12}" y="20" text-anchor="end" fill="#3de88a" font-size="8" font-family="monospace" font-weight="bold">${modeText}</text>`;
           svg += `<text x="12" y="45" fill="#4db8ff" font-size="18" font-family="monospace" font-weight="bold">200°C</text>`;
           svg += `<rect x="12" y="55" width="${c.width - 24}" height="3" fill="#111" rx="1" />`;
           svg += `<rect x="12" y="55" width="${(c.width - 24) * 0.4}" height="3" fill="#3de88a" rx="1" />`;
@@ -9903,6 +10070,9 @@ const ADIA = () => {
           svg += `<text x="${cx}" y="${cy - 4}" text-anchor="middle" font-size="14">${c.iconEmoji || '✨'}</text>`;
           svg += `<text x="${cx}" y="${cy + 12}" text-anchor="middle" font-size="7" fill="#ccc">${c.name}</text>`;
         } else if (c.type === 'encoder') {
+          const isHybrid = Array.isArray(c.encoderValues) && c.encoderValues.length > 0;
+          const displayVal = isHybrid ? (c.encoderValues?.[0] || '0') : '0';
+
           svg += `<circle cx="${cx}" cy="${cy - 15}" r="30" fill="#2a2a36" stroke="#333340" stroke-width="2" />`;
           svg += `<circle cx="${cx}" cy="${cy - 35}" r="3.5" fill="#f97316" />`;
           svg += `<circle cx="${cx}" cy="${cy - 15}" r="15" fill="#0d0d10" stroke="#222230" />`;
@@ -9910,6 +10080,7 @@ const ADIA = () => {
           svg += `<text x="${cx - 15}" y="${c.height - 17}" text-anchor="middle" fill="#888" font-size="8">↺</text>`;
           svg += `<rect x="${cx + 5}" y="${c.height - 25}" width="20" height="12" rx="2" fill="#222" stroke="#333" />`;
           svg += `<text x="${cx + 15}" y="${c.height - 17}" text-anchor="middle" fill="#888" font-size="8">↻</text>`;
+          svg += `<text x="${cx}" y="${cy + 25}" text-anchor="middle" fill="#555" font-family="monospace" font-size="7">${displayVal}</text>`;
         } else if (c.type === 'mode-selector') {
           svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#111" stroke="#222" rx="4" />`;
           svg += `<text x="10" y="16" fill="#555" font-size="7" font-family="sans-serif" font-weight="bold">COOKING MODES</text>`;
@@ -10247,6 +10418,1245 @@ const ADIA = () => {
         html += `<div class="item"><div class="item-header">${c.name} <span class="tag">${c.type}</span></div><div class="props">Bound to: <strong>${boundVariableName}</strong></div></div>`;
       });
       html += `</div>`;
+    }
+
+    // 6. Interactive System Prototype
+    if (hmiComponents.length > 0) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      hmiComponents.forEach(c => {
+        minX = Math.min(minX, c.x);
+        minY = Math.min(minY, c.y);
+        maxX = Math.max(maxX, c.x + c.width);
+        maxY = Math.max(maxY, c.y + c.height);
+      });
+
+      const padding = 20;
+      const width = Math.max(100, maxX - minX + padding * 2);
+      const height = Math.max(100, maxY - minY + padding * 2);
+
+      // Serialize data for JS engine
+      const serializedVariables = variables.map(v => ({
+        id: v.id,
+        name: v.name,
+        type: v.type,
+        defaultValue: v.initialValue,
+        currentValue: v.currentValue
+      }));
+
+      const serializedStates = states.map(s => ({
+        id: s.id,
+        name: s.name,
+        parentId: s.parentId,
+        entry: s.entry || '',
+        during: s.during || '',
+        exit: s.exit || '',
+        autostart: !!s.autostart,
+        internalTransitions: s.internalTransitions || '',
+        isXBridges: !!s.isXBridges
+      }));
+
+      const serializedTransitions = transitions.map(t => ({
+        id: t.id,
+        sourceId: t.sourceId,
+        targetId: t.targetId,
+        condition: t.condition || '',
+        action: t.action || '',
+        afterTicks: t.afterTicks,
+        type: t.type || 'condition',
+        order: t.order || 1
+      }));
+
+      const serializedJunctions = junctions.map(j => ({
+        id: j.id,
+        name: j.name,
+        parentId: j.parentId
+      }));
+
+      const serializedLayers = layers.map(l => ({
+        id: l.id,
+        name: l.name || '',
+        parentStateId: l.parentStateId,
+        stateIds: l.stateIds || [],
+        junctionIds: l.junctionIds || [],
+        transitionIds: l.transitionIds || []
+      }));
+
+      const serializedHmiComponents = hmiComponents.map(c => ({
+        id: c.id,
+        name: c.name,
+        type: c.type,
+        variableId: c.variableId,
+        pressVariableId: c.pressVariableId,
+        color: c.color,
+        icon: c.icon,
+        encoderValues: c.encoderValues,
+        cursorVariableId: c.cursorVariableId,
+        iconEmoji: c.iconEmoji,
+        targetValue: c.targetValue,
+        oledTitle: c.oledTitle,
+        oledModeNames: c.oledModeNames,
+        oledModeVarId: c.oledModeVarId,
+        oledTempVarId: c.oledTempVarId,
+        oledTimeVarId: c.oledTimeVarId,
+        oledStateVarId: c.oledStateVarId,
+        oledProgressVarId: c.oledProgressVarId,
+        oledIndicatorEmojis: c.oledIndicatorEmojis,
+        oledIndicatorVarIds: c.oledIndicatorVarIds,
+        oledIndicatorLabels: c.oledIndicatorLabels,
+        min: c.min,
+        max: c.max,
+        x: c.x,
+        y: c.y,
+        width: c.width,
+        height: c.height
+      }));
+
+      let componentsHtml = '';
+      hmiComponents.forEach(c => {
+        const cx = c.x - (minX - padding);
+        const cy = c.y - (minY - padding);
+        const cw = c.width;
+        const ch = c.height;
+
+        componentsHtml += `<div class="hmi-comp-container" style="left: ${cx}px; top: ${cy}px; width: ${cw}px; height: ${ch}px;" data-id="${c.id}" data-type="${c.type}">`;
+
+        if (c.type === 'toggle') {
+          componentsHtml += `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+              <div class="hmi-toggle-track" id="track-${c.id}" onclick="window.ADIA_SIM.toggleClick('${c.id}')">
+                <div class="hmi-toggle-thumb"></div>
+              </div>
+              <span style="font-size: 8px; color: #888; margin-top: 4px; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
+            </div>`;
+        } else if (c.type === 'button') {
+          const btnColor = c.color === 'green' ? '#22c55e' : c.color === 'red' ? '#ef4444' : c.color === 'blue' ? '#0284c7' : c.color === 'yellow' ? '#eab308' : c.color === 'grey' ? '#555' : '#f97316';
+          const iconSym = c.icon === 'power' ? '⏻ ' : c.icon === 'play' ? '▶ ' : c.icon === 'light' ? '💡 ' : '';
+          componentsHtml += `
+            <button class="hmi-btn" id="btn-${c.id}" onmousedown="window.ADIA_SIM.buttonPress('${c.id}', true)" onmouseup="window.ADIA_SIM.buttonPress('${c.id}', false)" onmouseleave="window.ADIA_SIM.buttonPress('${c.id}', false)" style="--btn-color: ${btnColor}">
+              ${iconSym}${c.name}
+            </button>`;
+        } else if (c.type === 'lamp') {
+          const lampColor = c.color === 'green' ? '#22c55e' : c.color === 'red' ? '#ef4444' : c.color === 'blue' ? '#0284c7' : c.color === 'yellow' ? '#eab308' : c.color === 'grey' ? '#555' : '#22c55e';
+          componentsHtml += `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+              <div class="hmi-lamp-circle" id="lamp-${c.id}" style="--glow-color: ${lampColor}; border-color: ${lampColor}"></div>
+              <span style="font-size: 8px; color: #888; margin-top: 4px; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
+            </div>`;
+        } else if (c.type === 'led') {
+          const ledColor = c.color === 'green' ? '#22c55e' : c.color === 'red' ? '#ef4444' : c.color === 'blue' ? '#0284c7' : c.color === 'yellow' ? '#eab308' : c.color === 'grey' ? '#555' : '#ef4444';
+          componentsHtml += `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+              <div class="hmi-led-circle" id="led-${c.id}" style="--led-color: ${ledColor}"></div>
+              <span style="font-size: 8px; color: #888; margin-top: 4px; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
+            </div>`;
+        } else if (c.type === 'slider') {
+          componentsHtml += `
+            <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; padding: 0 4px;">
+              <input type="range" id="slider-${c.id}" min="${c.min ?? 0}" max="${c.max ?? 100}" oninput="window.ADIA_SIM.sliderChange('${c.id}', this.value)" style="width: 100%; accent-color: #f97316;" />
+              <span style="font-size: 8px; color: #888; text-align: center; margin-top: 2px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
+            </div>`;
+        } else if (c.type === 'input') {
+          componentsHtml += `
+            <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; padding: 2px;">
+              <input type="number" id="input-${c.id}" min="${c.min ?? 0}" max="${c.max ?? 100}" onchange="window.ADIA_SIM.inputChange('${c.id}', this.value)" style="width: 100%; background: #0a0a0a; border: 1px solid #333; color: #f97316; font-family: monospace; font-size: 10px; text-align: center; border-radius: 4px; padding: 2px;" />
+              <span style="font-size: 8px; color: #888; text-align: center; margin-top: 2px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
+            </div>`;
+        } else if (c.type === 'lcd') {
+          componentsHtml += `
+            <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; background: #0a0a0a; border: 1px solid #333; border-radius: 6px; padding: 4px; box-sizing: border-box;">
+              <div id="lcd-${c.id}" style="font-family: monospace; font-size: 14px; color: #4ade80; text-align: right; text-shadow: 0 0 6px rgba(74,222,128,0.4); overflow: hidden; white-space: nowrap;">0.00</div>
+              <span style="font-size: 7px; color: #555; text-align: left; margin-top: 1px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
+            </div>`;
+        } else if (c.type === 'gauge') {
+          componentsHtml += `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+              <svg viewBox="0 0 100 50" style="width: 80%; height: auto;">
+                <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#333" stroke-width="8" />
+                <path id="gauge-path-${c.id}" d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#f97316" stroke-width="8" stroke-dasharray="0 126" />
+                <text id="gauge-text-${c.id}" x="50" y="45" text-anchor="middle" fill="#fff" font-size="11" font-family="monospace">0</text>
+              </svg>
+              <span style="font-size: 7px; color: #888; margin-top: 2px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
+            </div>`;
+        } else if (c.type === 'rotary' || c.type === 'hybrid-rotary' || c.type === 'encoder') {
+          const isEncoder = c.type === 'encoder';
+          const innerIcon = isEncoder ? '✦' : '⚙️';
+          componentsHtml += `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100%; padding: 2px 0;">
+              <div style="display: flex; gap: 4px; margin-bottom: 2px;">
+                <button onclick="window.ADIA_SIM.rotateKnob('${c.id}', -1)" style="width: 20px; height: 14px; background: #222; border: 1px solid #333; border-radius: 4px; color: #888; font-size: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none;">↺</button>
+                <button onclick="window.ADIA_SIM.rotateKnob('${c.id}', 1)" style="width: 20px; height: 14px; background: #222; border: 1px solid #333; border-radius: 4px; color: #888; font-size: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none;">↻</button>
+              </div>
+              <div style="position: relative; width: ${ch - 24}px; height: ${ch - 24}px; cursor: pointer;" 
+                   onmousedown="window.ADIA_SIM.knobPress('${c.id}', true)" 
+                   onmouseup="window.ADIA_SIM.knobPress('${c.id}', false)"
+                   onmouseleave="window.ADIA_SIM.knobPress('${c.id}', false)">
+                <div class="hmi-knob-circle" id="knob-${c.id}">
+                  <div class="hmi-knob-dot"></div>
+                  <div class="hmi-knob-inner">${innerIcon}</div>
+                </div>
+                <div class="knob-lp-ring" id="knob-lp-${c.id}"></div>
+              </div>
+              <div id="knob-val-${c.id}" style="font-family: monospace; font-size: 8px; color: #ccc; margin-top: 1px; width: 100%; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">0</div>
+            </div>`;
+        } else if (c.type === 'oled') {
+          componentsHtml += `
+            <div class="hmi-comp oled" id="oled-${c.id}" style="width: 100%; height: 100%; background: black; border: 1px solid #1a1a22; border-radius: 8px; padding: 6px; flex-direction: column; justify-content: space-between; font-family: monospace; color: #4db8ff; box-shadow: inset 0 0 10px rgba(0,0,0,0.9); display: flex; box-sizing: border-box;">
+              <div style="font-size: 7px; color: #4d7aaa; display: flex; justify-content: space-between; border-bottom: 1px solid #111; padding-bottom: 2px;">
+                <span class="oled-title" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%;">${c.oledTitle || c.name}</span>
+                <span class="oled-mode" style="color: #3de88a; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%;">READY</span>
+              </div>
+              <div class="oled-temp" style="font-size: 16px; font-weight: bold; color: #4db8ff; margin: 1px 0;">200°C</div>
+              <div style="width: 100%; height: 3px; background: #111; border: 1px solid #222; border-radius: 2px; overflow: hidden; margin: 1px 0;">
+                <div class="oled-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #e8a020, #3de88a); transition: width 0.3s;"></div>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 9px; margin: 1px 0;">
+                <span class="oled-time">30:00</span>
+                <span class="oled-state" style="color: #3de88a; border: 1px solid rgba(61,232,138,0.2); border-radius: 2px; padding: 0 3px; font-size: 7px;">HOME</span>
+              </div>
+              <div class="oled-indicators" style="display: flex; gap: 3px; font-size: 10px; border-top: 1px solid #111; padding-top: 2px; height: 14px; overflow: hidden;"></div>
+              <div class="oled-context" style="font-size: 6px; color: #335577; border-top: 1px solid #111; padding-top: 2px; text-align: left; height: 9px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">Ready to cook</div>
+            </div>`;
+        } else if (c.type === 'mode-icon') {
+          componentsHtml += `
+            <div class="hmi-mode-card" id="modeicon-${c.id}" onclick="window.ADIA_SIM.modeIconClick('${c.id}')" style="width: 100%; height: 100%;">
+              <span style="font-size: 14px;">${c.iconEmoji || '✨'}</span>
+              <span style="font-size: 7px; color: #ccc; margin-top: 2px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${c.name}</span>
+            </div>`;
+        } else if (c.type === 'mode-selector') {
+          componentsHtml += `
+            <div class="hmi-comp mode-selector" style="width: 100%; height: 100%; background: #111; border: 1px solid #222; border-radius: 6px; padding: 4px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box;">
+              <div style="font-size: 7px; color: #555; font-weight: bold; text-transform: uppercase;">Cooking Modes</div>
+              <div class="modes-grid" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; margin-top: 1px;">
+                ${[
+                  { name: 'Air Fry', emoji: '🍟' },
+                  { name: 'Steam', emoji: '💧' },
+                  { name: 'Oven', emoji: '🍞' },
+                  { name: 'Rapid Stm', emoji: '♨️' },
+                  { name: 'Broil', emoji: '🔥' },
+                  { name: 'Reheat', emoji: '🍲' },
+                  { name: 'Warm', emoji: '☕' },
+                  { name: 'Ferment', emoji: '🧫' },
+                  { name: 'Defrost', emoji: '❄️' },
+                  { name: 'Slow Cook', emoji: '🥘' },
+                  { name: 'Dehydrate', emoji: '🌿' },
+                  { name: 'Duo Cook', emoji: '⚡' }
+                ].map((m, idx) => `
+                  <div class="selector-mode-card" id="modeselect-${c.id}-${idx}" onclick="window.ADIA_SIM.modeSelectorClick('${c.id}', ${idx})" style="border: 1px solid #222; background: #1a1a20; border-radius: 3px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; padding: 1px; transition: all 0.1s;">
+                    <span style="font-size: 8px;">${m.emoji}</span>
+                    <span style="font-size: 5px; color: #888; text-align: center; margin-top: 0.5px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${m.name.split(' ')[0]}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>`;
+        } else if (c.type === 'buzzer') {
+          componentsHtml += `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+              <div id="buzzer-${c.id}" style="font-size: 18px; color: #444; transition: all 0.1s;">🔊</div>
+              <span style="font-size: 8px; color: #888; margin-top: 2px; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
+            </div>`;
+        }
+
+        componentsHtml += `</div>`;
+      });
+
+      html += `
+        <h2>6. Interactive System Prototype</h2>
+        <div class="hmi-sim-container">
+          <style>
+            .hmi-sim-container {
+              background: #0a0a0c;
+              color: #e8e8ec;
+              border: 1px solid #2a2a36;
+              border-radius: 12px;
+              padding: 24px;
+              font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+              margin-top: 30px;
+              box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+              box-sizing: border-box;
+            }
+            .hmi-sim-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 1px solid #2a2a36;
+              padding-bottom: 12px;
+              margin-bottom: 20px;
+            }
+            .hmi-sim-title {
+              color: #f97316;
+              font-size: 16px;
+              font-weight: 700;
+              margin: 0;
+              text-transform: uppercase;
+              letter-spacing: 1px;
+            }
+            .hmi-sim-subtitle {
+              color: #8888a0;
+              font-size: 11px;
+              margin: 4px 0 0;
+            }
+            .sim-toolbar {
+              display: flex;
+              gap: 8px;
+            }
+            .sim-btn {
+              background: #1a1a20;
+              border: 1px solid #2a2a36;
+              color: #e8e8ec;
+              border-radius: 6px;
+              padding: 6px 12px;
+              cursor: pointer;
+              font-size: 12px;
+              font-weight: 600;
+              transition: all 0.15s;
+              outline: none;
+            }
+            .sim-btn:hover {
+              background: #22222a;
+              border-color: #f97316;
+            }
+            .sim-btn.active {
+              background: rgba(249, 115, 22, 0.15);
+              border-color: #f97316;
+              color: #f97316;
+            }
+            .hmi-canvas-wrapper {
+              position: relative;
+              border: 1px solid #2a2a36;
+              border-radius: 8px;
+              background: #111115;
+              margin: 0 auto 20px;
+              box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            }
+            .hmi-comp-container {
+              position: absolute;
+              box-sizing: border-box;
+            }
+            .hmi-btn {
+              width: 100%;
+              height: 100%;
+              border-radius: 6px;
+              border: 1px solid #333;
+              background: linear-gradient(180deg, #222230, #18181e);
+              color: #e0e0e0;
+              font-size: 10px;
+              font-weight: 600;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              transition: all 0.12s;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+              outline: none;
+              user-select: none;
+            }
+            .hmi-btn:hover {
+              background: linear-gradient(180deg, #2a2a3a, #1e1e26);
+              border-color: #f97316;
+            }
+            .hmi-btn:active {
+              transform: translateY(1px);
+              box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+            }
+            .hmi-btn.active {
+              background: rgba(249, 115, 22, 0.1);
+              border-color: #f97316;
+              color: #f97316;
+              box-shadow: 0 0 8px rgba(249, 115, 22, 0.3);
+            }
+            .hmi-toggle-track {
+              width: 40px;
+              height: 20px;
+              border-radius: 10px;
+              background: #333;
+              position: relative;
+              cursor: pointer;
+              transition: background 0.2s;
+            }
+            .hmi-toggle-track.active {
+              background: #22c55e;
+            }
+            .hmi-toggle-thumb {
+              width: 16px;
+              height: 16px;
+              border-radius: 50%;
+              background: white;
+              position: absolute;
+              top: 2px;
+              left: 2px;
+              transition: transform 0.2s;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+            }
+            .hmi-toggle-track.active .hmi-toggle-thumb {
+              transform: translateX(20px);
+            }
+            .hmi-lamp-circle {
+              width: 24px;
+              height: 24px;
+              border-radius: 50%;
+              background: #111;
+              border: 2px solid #555;
+              transition: all 0.2s;
+            }
+            .hmi-lamp-circle.active {
+              box-shadow: 0 0 12px var(--glow-color, #22c55e);
+              background: var(--glow-color, #22c55e);
+            }
+            .hmi-led-circle {
+              width: 10px;
+              height: 10px;
+              border-radius: 50%;
+              background: #222;
+              border: 1px solid #111;
+              transition: all 0.2s;
+            }
+            .hmi-led-circle.active {
+              background: var(--led-color, #ef4444);
+              box-shadow: 0 0 8px var(--led-color, #ef4444);
+              border-color: var(--led-color, #ef4444);
+            }
+            .hmi-knob-circle {
+              width: 100%;
+              height: 100%;
+              border-radius: 50%;
+              background: conic-gradient(from 0deg, #2a2a36, #1a1a24, #2a2a36, #1a1a24, #2a2a36);
+              border: 2px solid #333340;
+              box-shadow: 0 3px 8px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
+              position: relative;
+              transition: transform 0.1s;
+            }
+            .hmi-knob-dot {
+              width: 4px;
+              height: 4px;
+              background: #f97316;
+              border-radius: 50%;
+              position: absolute;
+              top: 4px;
+              left: 50%;
+              transform: translateX(-50%);
+              box-shadow: 0 0 4px rgba(249,115,22,0.8);
+            }
+            .hmi-knob-inner {
+              width: 45%;
+              height: 45%;
+              border-radius: 50%;
+              background: #0d0d10;
+              border: 1px solid #222230;
+              position: absolute;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: #444;
+              font-size: 8px;
+            }
+            .knob-lp-ring {
+              position: absolute;
+              inset: -3px;
+              border-radius: 50%;
+              border: 1.5px solid #f97316;
+              opacity: 0;
+              pointer-events: none;
+              transition: opacity 0.2s, transform 0.2s;
+              transform: scale(0.9);
+            }
+            .hmi-mode-card {
+              border: 1px solid #222;
+              background: #1a1a20;
+              border-radius: 6px;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              cursor: pointer;
+              transition: all 0.15s;
+              padding: 4px;
+              box-sizing: border-box;
+            }
+            .hmi-mode-card.active {
+              border-color: #f97316;
+              background: rgba(249, 115, 22, 0.1);
+              box-shadow: 0 0 6px rgba(249, 115, 22, 0.3);
+            }
+            .selector-mode-card.active {
+              border-color: #f97316 !important;
+              background: rgba(249, 115, 22, 0.15) !important;
+              box-shadow: 0 0 5px rgba(249, 115, 22, 0.3);
+            }
+            .selector-mode-card.cursor {
+              border-color: #4db8ff !important;
+              background: rgba(77, 184, 255, 0.15) !important;
+              box-shadow: 0 0 5px rgba(77, 184, 255, 0.3);
+            }
+            @keyframes sim-spin {
+              from { transform: rotate(0deg); }
+              to { transform: rotate(360deg); }
+            }
+          </style>
+
+          <div class="hmi-sim-header">
+            <div>
+              <div class="hmi-sim-title">HMI INTERACTIVE SIMULATOR</div>
+              <div class="hmi-sim-subtitle">Interact with components to step through the system logic in real-time.</div>
+            </div>
+            <div class="sim-toolbar">
+              <button id="sim-btn-power" onclick="window.ADIA_SIM.toggleSimRunning()" class="sim-btn">PAUSE</button>
+              <button id="sim-btn-step" onclick="window.ADIA_SIM.step()" class="sim-btn">STEP TICK</button>
+              <button id="sim-btn-reset" onclick="window.ADIA_SIM.reset()" class="sim-btn">RESET</button>
+            </div>
+          </div>
+
+          <div class="hmi-canvas-wrapper" style="width: ${width}px; height: ${height}px;">
+            ${componentsHtml}
+          </div>
+
+          <div style="background: #111115; border: 1px solid #2a2a36; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+            <div style="font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #555568; margin-bottom: 12px; border-bottom: 1px solid #2a2a36; padding-bottom: 6px;">Live Engineering Dashboard</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 10px;" id="sim-dashboard"></div>
+          </div>
+
+          <div style="background: #111115; border: 1px solid #2a2a36; border-radius: 8px; padding: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <div style="font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #555568;">Event Log</div>
+              <button onclick="window.ADIA_SIM.clearLog()" style="font-size: 10px; color: #555568; cursor: pointer; border: 1px solid #2a2a36; background: none; border-radius: 4px; padding: 2px 6px;">Clear</button>
+            </div>
+            <div id="sim-event-log" style="max-height: 120px; overflow-y: auto; font-family: monospace; font-size: 11px; display: flex; flex-direction: column; gap: 4px;"></div>
+          </div>
+        </div>
+
+        <script>
+          (function() {
+            const PROJECT_DATA = {
+              variables: ${JSON.stringify(serializedVariables)},
+              states: ${JSON.stringify(serializedStates)},
+              transitions: ${JSON.stringify(serializedTransitions)},
+              junctions: ${JSON.stringify(serializedJunctions)},
+              layers: ${JSON.stringify(serializedLayers)},
+              hmiComponents: ${JSON.stringify(serializedHmiComponents)},
+              tickMs: ${tickMs}
+            };
+
+            let varValues = {};
+            let varTypes = {};
+            let activeStates = {};
+            let stateTimers = {};
+            let lastActiveStates = {};
+            let simRunning = true;
+            let simInterval = null;
+            let stepCount = 0;
+            let simTime = 0;
+            let lpTimers = {};
+            let audioCtx = null;
+
+            function logEvent(event, detail = "") {
+              const el = document.getElementById("sim-event-log");
+              if (!el) return;
+              const now = new Date();
+              const ts = String(now.getMinutes()).padStart(2, "0") + ":" + String(now.getSeconds()).padStart(2, "0") + "." + String(Math.floor(now.getMilliseconds() / 100));
+              const entry = document.createElement("div");
+              entry.style.display = "flex";
+              entry.style.gap = "8px";
+              entry.style.borderBottom = "1px solid #1a1a20";
+              entry.style.padding = "3px 0";
+              entry.innerHTML = "<span style='color: #555568; min-width: 50px;'>" + ts + "</span><span style='color: #4db8ff; min-width: 100px; font-weight: bold;'>" + event + "</span><span style='color: #8888a0;'>" + detail + "</span>";
+              el.prepend(entry);
+              while (el.children.length > 40) el.removeChild(el.lastChild);
+            }
+
+            function getVarValById(id) {
+              const v = PROJECT_DATA.variables.find(x => x.id === id);
+              return v ? varValues[v.name] : null;
+            }
+
+            function updateVariableById(id, value) {
+              const v = PROJECT_DATA.variables.find(x => x.id === id);
+              if (!v) return;
+              let val = value;
+              if (varTypes[v.name] === "bool") {
+                val = value === "true" || value === true || value === "1" || value === 1;
+              } else if (varTypes[v.name] === "int" || varTypes[v.name] === "float") {
+                val = Number(value) || 0;
+              }
+              const oldVal = varValues[v.name];
+              if (oldVal !== val) {
+                varValues[v.name] = val;
+                logEvent("Variable Change", v.name + ": " + oldVal + " → " + val);
+                updateUi();
+              }
+            }
+
+            function executeAction(code, location) {
+              if (!code || !code.trim()) return;
+              try {
+                const varKeys = Object.keys(varValues);
+                const varVals = varKeys.map(k => varValues[k]);
+                const runner = new Function(...varKeys, code + "; return {" + varKeys.map(k => k + ":" + k).join(",") + "};");
+                const result = runner(...varVals);
+                if (result) {
+                  varKeys.forEach(k => {
+                    if (result[k] !== undefined) {
+                      if (varTypes[k] === "bool") {
+                        varValues[k] = !!result[k];
+                      } else if (varTypes[k] === "int" || varTypes[k] === "float") {
+                        varValues[k] = Number(result[k]) || 0;
+                      } else {
+                        varValues[k] = result[k];
+                      }
+                    }
+                  });
+                }
+              } catch (e) {
+                console.error("Action error in " + location + ":", e);
+                logEvent("Action Error", location + ": " + e.message);
+              }
+            }
+
+            function evaluateCondition(condition, location) {
+              if (condition === "true" || condition === "") return true;
+              try {
+                let jsCondition = condition
+                  .replace(/&&/g, "&&")
+                  .replace(/\\|\\|/g, "||")
+                  .replace(/!/g, "!")
+                  .replace(/==/g, "===")
+                  .replace(/!=/g, "!==");
+                const varKeys = Object.keys(varValues);
+                const varVals = varKeys.map(k => varValues[k]);
+                const evaluator = new Function(...varKeys, "return !!(" + jsCondition + ");");
+                return evaluator(...varVals);
+              } catch (e) {
+                console.error("Condition error in " + location + ":", e);
+                return false;
+              }
+            }
+
+            function enterState(stateId, activeMap, fromHistory = false) {
+              const s = PROJECT_DATA.states.find(st => st.id === stateId);
+              if (!s) return;
+              const layerId = s.parentId || "root";
+              activeMap[layerId] = s.id;
+              stateTimers[s.id] = 0;
+              executeAction(s.entry, "Entry " + s.name);
+              
+              const childLayer = PROJECT_DATA.layers.find(l => l.parentStateId === s.id);
+              if (childLayer) {
+                let childToEnterId;
+                if (fromHistory === "deep") {
+                  childToEnterId = lastActiveStates[childLayer.id];
+                }
+                if (childToEnterId) {
+                  enterState(childToEnterId, activeMap, "deep");
+                } else {
+                  const targetId = resolveAutoStart(childLayer.id);
+                  if (targetId) enterState(targetId, activeMap, false);
+                }
+              }
+            }
+
+            function resolveAutoStart(layerId) {
+              const layerStates = PROJECT_DATA.states.filter(s => s.parentId === layerId);
+              const autostarts = layerStates.filter(s => s.autostart);
+              return autostarts.length > 0 ? autostarts[0].id : (layerStates.length > 0 ? layerStates[0].id : null);
+            }
+
+            function exitState(stateId, activeMap) {
+              const s = PROJECT_DATA.states.find(st => st.id === stateId);
+              if (!s) return;
+              const layerId = s.parentId || "root";
+              lastActiveStates[layerId] = s.id;
+              
+              const childLayer = PROJECT_DATA.layers.find(l => l.parentStateId === s.id);
+              if (childLayer) {
+                const activeChildId = activeMap[childLayer.id];
+                if (activeChildId) exitState(activeChildId, activeMap);
+                delete activeMap[childLayer.id];
+              }
+              executeAction(s.exit, "Exit " + s.name);
+            }
+
+            function getNode(id) {
+              return PROJECT_DATA.states.find(s => s.id === id) || PROJECT_DATA.junctions.find(j => j.id === id);
+            }
+
+            function beepBuzzer() {
+              try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === "suspended") audioCtx.resume();
+                if (window.lastBeepTime && Date.now() - window.lastBeepTime < 300) return;
+                window.lastBeepTime = Date.now();
+                const osc = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                osc.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                osc.type = "sine";
+                osc.frequency.value = 1000;
+                gainNode.gain.setValueAtTime(0.04, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.08);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.08);
+              } catch (e) {}
+            }
+
+            function stepSimulation() {
+              simTime += (PROJECT_DATA.tickMs || 100) / 1000;
+              stepCount++;
+              
+              Object.values(activeStates).forEach(stateId => {
+                if (stateId) {
+                  stateTimers[stateId] = (stateTimers[stateId] || 0) + 1;
+                }
+              });
+
+              const nextActiveStates = { ...activeStates };
+              let transitionFired = false;
+              const regions = Object.keys(activeStates);
+
+              for (const region of regions) {
+                const currentStateId = activeStates[region];
+                if (!nextActiveStates[region]) continue;
+                const currentState = PROJECT_DATA.states.find(s => s.id === currentStateId);
+                if (!currentState) continue;
+
+                const potentialTransitions = PROJECT_DATA.transitions
+                  .filter(t => t.sourceId === currentStateId)
+                  .sort((a, b) => a.order - b.order);
+
+                if (currentState.internalTransitions) {
+                  const internalLines = currentState.internalTransitions.split("\\n").filter(l => l.trim());
+                  internalLines.forEach((line, idx) => {
+                    let type = "condition";
+                    let condition = "true";
+                    let afterTicks = null;
+                    let action = "";
+                    const parts = line.split("/");
+                    if (parts.length > 1) action = parts.slice(1).join("/").trim();
+                    const triggerPart = parts[0].trim();
+                    const afterMatch = triggerPart.match(/after\\((\\d+)\\)/);
+                    const condMatch = triggerPart.match(/\\[(.*?)\\]/);
+                    if (afterMatch) {
+                      type = "after";
+                      afterTicks = parseInt(afterMatch[1]);
+                    }
+                    if (condMatch) condition = condMatch[1];
+
+                    potentialTransitions.push({
+                      id: "INT_" + currentState.id + "_" + idx,
+                      sourceId: currentState.id,
+                      targetId: currentState.id,
+                      condition,
+                      action,
+                      type,
+                      afterTicks,
+                      order: 1000 + idx,
+                      isInternal: true
+                    });
+                  });
+                }
+
+                for (const transition of potentialTransitions) {
+                  const currentTicks = stateTimers[currentStateId] || 0;
+                  const conditionMet = evaluateCondition(transition.condition, "Transition from " + currentState.name);
+                  const timerMet = transition.afterTicks !== null && currentTicks >= transition.afterTicks;
+
+                  let shouldFire = false;
+                  if (transition.type === "condition") shouldFire = conditionMet;
+                  else if (transition.type === "after") shouldFire = timerMet;
+                  else if (transition.type === "and") shouldFire = conditionMet && timerMet;
+                  else if (transition.type === "or") shouldFire = conditionMet || timerMet;
+
+                  if (shouldFire) {
+                    let currentTr = transition;
+                    let targetNode = getNode(currentTr.targetId);
+                    let pathActions = [currentTr.action];
+                    let isLocalPath = !!transition.isInternal;
+                    const visited = new Set();
+                    let pathTerminatedAtJunction = false;
+
+                    while (targetNode && !PROJECT_DATA.states.find(s => s.id === targetNode.id)) {
+                      if (visited.has(targetNode.id)) {
+                        pathActions.forEach(act => executeAction(act, "Action Path"));
+                        transitionFired = true;
+                        logEvent("Action Path", "Cycle ended at " + targetNode.name);
+                        break;
+                      }
+                      visited.add(targetNode.id);
+                      const currentNode = targetNode;
+                      const junctionTransitions = PROJECT_DATA.transitions
+                        .filter(t => t.sourceId === currentNode.id)
+                        .sort((a, b) => a.order - b.order);
+
+                      let foundNext = false;
+                      for (const jTr of junctionTransitions) {
+                        if (evaluateCondition(jTr.condition, "Junction " + currentNode.name)) {
+                          currentTr = jTr;
+                          targetNode = getNode(jTr.targetId);
+                          pathActions.push(jTr.action);
+                          foundNext = true;
+                          break;
+                        }
+                      }
+                      if (!foundNext) {
+                        pathActions.forEach(act => executeAction(act, "Action Path"));
+                        transitionFired = true;
+                        logEvent("Action Path", "Ended at junction " + currentNode.name);
+                        targetNode = null;
+                        pathTerminatedAtJunction = true;
+                        break;
+                      }
+                    }
+
+                    if (pathTerminatedAtJunction || transitionFired) {
+                      break;
+                    }
+
+                    if (targetNode) {
+                      const targetState = targetNode;
+                      if (isLocalPath) {
+                        pathActions.forEach(act => executeAction(act, "Local Action"));
+                        if (targetState.id !== currentState.id) {
+                          nextActiveStates[region] = targetState.id;
+                          stateTimers[targetState.id] = 0;
+                        }
+                      } else {
+                        exitState(currentState.id, nextActiveStates);
+                        pathActions.forEach(act => executeAction(act, "Transition Action"));
+                        enterState(targetState.id, nextActiveStates);
+                      }
+                      transitionFired = true;
+                      logEvent("Transition", currentState.name + " → " + targetState.name);
+                      break;
+                    }
+                  }
+                }
+              }
+
+              Object.values(nextActiveStates).forEach(stateId => {
+                const state = PROJECT_DATA.states.find(s => s.id === stateId);
+                if (state && state.during) {
+                  executeAction(state.during, "During " + state.name);
+                }
+              });
+
+              activeStates = nextActiveStates;
+              updateUi();
+            }
+
+            function updateDashboard() {
+              const db = document.getElementById("sim-dashboard");
+              if (!db) return;
+              db.innerHTML = "";
+
+              PROJECT_DATA.layers.forEach(layer => {
+                const layerName = layer.name || (layer.id === "root" ? "Root Region" : "Region");
+                const activeStateId = activeStates[layer.id];
+                const activeState = PROJECT_DATA.states.find(s => s.id === activeStateId);
+                const stateName = activeState ? activeState.name : "—";
+                const cell = document.createElement("div");
+                cell.style.background = "#1a1a20";
+                cell.style.border = "1px solid #2a2a36";
+                cell.style.borderRadius = "6px";
+                cell.style.padding = "6px 8px";
+                cell.innerHTML = "<div style='font-size: 8px; color: #555568; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + layerName + "</div><div style='font-size: 11px; font-weight: bold; color: #f97316; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + stateName + "</div>";
+                db.appendChild(cell);
+              });
+
+              PROJECT_DATA.variables.forEach(v => {
+                const val = varValues[v.name];
+                let displayVal = String(val !== undefined && val !== null ? val : "");
+                if (v.type === "bool") displayVal = val ? "TRUE" : "FALSE";
+                const cell = document.createElement("div");
+                cell.style.background = "#1a1a20";
+                cell.style.border = "1px solid #2a2a36";
+                cell.style.borderRadius = "6px";
+                cell.style.padding = "6px 8px";
+                cell.innerHTML = "<div style='font-size: 8px; color: #555568; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + v.name + "</div><div style='font-size: 11px; font-weight: bold; color: " + (v.type === "bool" && val ? "#22c55e" : "#e8e8ec") + "; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + displayVal + "</div>";
+                db.appendChild(cell);
+              });
+            }
+
+            function updateUi() {
+              PROJECT_DATA.hmiComponents.forEach(c => {
+                const val = c.variableId ? getVarValById(c.variableId) : null;
+                if (c.type === "toggle") {
+                  const track = document.getElementById("track-" + c.id);
+                  if (track) {
+                    if (val === true || val === "true" || val === 1) track.classList.add("active");
+                    else track.classList.remove("active");
+                  }
+                } else if (c.type === "button") {
+                  const btn = document.getElementById("btn-" + c.id);
+                  if (btn) {
+                    const isPress = c.pressVariableId ? getVarValById(c.pressVariableId) : null;
+                    const active = (val === true || val === "true" || val === 1 || isPress === true || isPress === "true" || isPress === 1);
+                    if (active) btn.classList.add("active");
+                    else btn.classList.remove("active");
+                  }
+                } else if (c.type === "lamp") {
+                  const lamp = document.getElementById("lamp-" + c.id);
+                  if (lamp) {
+                    if (val === true || val === "true" || val === 1) lamp.classList.add("active");
+                    else lamp.classList.remove("active");
+                  }
+                } else if (c.type === "led") {
+                  const led = document.getElementById("led-" + c.id);
+                  if (led) {
+                    if (val === true || val === "true" || val === 1) led.classList.add("active");
+                    else led.classList.remove("active");
+                  }
+                } else if (c.type === "slider") {
+                  const slider = document.getElementById("slider-" + c.id);
+                  if (slider) slider.value = Number(val) || 0;
+                } else if (c.type === "input") {
+                  const input = document.getElementById("input-" + c.id);
+                  if (input) input.value = val !== null ? val : "";
+                } else if (c.type === "lcd") {
+                  const lcd = document.getElementById("lcd-" + c.id);
+                  if (lcd) {
+                    const num = Number(val);
+                    lcd.textContent = isNaN(num) ? String(val ?? "") : num.toFixed(2);
+                  }
+                } else if (c.type === "gauge") {
+                  const path = document.getElementById("gauge-path-" + c.id);
+                  const text = document.getElementById("gauge-text-" + c.id);
+                  if (path && text) {
+                    const minVal = c.min ?? 0;
+                    const maxVal = c.max ?? 100;
+                    const range = maxVal - minVal;
+                    const currentVal = Number(val) || 0;
+                    const percent = range === 0 ? 0 : Math.max(0, Math.min(1, (currentVal - minVal) / range));
+                    path.setAttribute("stroke-dasharray", (percent * 126) + " 126");
+                    text.textContent = Math.round(currentVal);
+                  }
+                } else if (c.type === "rotary" || c.type === "hybrid-rotary" || c.type === "encoder") {
+                  const knob = document.getElementById("knob-" + c.id);
+                  const valText = document.getElementById("knob-val-" + c.id);
+                  if (knob) {
+                    let angle = 0;
+                    let displayVal = "0";
+                    if (c.type === "encoder") {
+                      const isHybrid = Array.isArray(c.encoderValues) && c.encoderValues.length > 0;
+                      const encoderValues = c.encoderValues || [];
+                      if (isHybrid) {
+                        const idx = encoderValues.findIndex(x => String(x) === String(val));
+                        const currentIndex = idx !== -1 ? idx : 0;
+                        angle = currentIndex * (360 / Math.max(1, encoderValues.length));
+                        displayVal = String(encoderValues[currentIndex] || "");
+                      } else {
+                        const rotVal = Number(val) || 0;
+                        angle = rotVal * 18;
+                        displayVal = String(rotVal);
+                      }
+                    } else if (c.type === "hybrid-rotary") {
+                      const values = c.hybridValues || [];
+                      const idx = values.findIndex(v => String(v) === String(val));
+                      const currentIndex = idx !== -1 ? idx : 0;
+                      angle = -135 + currentIndex * (270 / Math.max(1, values.length - 1));
+                      displayVal = String(values[currentIndex] || "");
+                    } else {
+                      const minVal = c.min ?? 0;
+                      const maxVal = c.max ?? 100;
+                      const range = maxVal - minVal;
+                      const currentVal = Number(val) || 0;
+                      angle = -135 + (range === 0 ? 0 : (currentVal - minVal) / range) * 270;
+                      displayVal = currentVal.toFixed(1);
+                    }
+                    knob.style.transform = "rotate(" + angle + "deg)";
+                    if (valText) valText.textContent = displayVal;
+                  }
+                } else if (c.type === "oled") {
+                  const oled = document.getElementById("oled-" + c.id);
+                  if (oled) {
+                    const modeTextEl = oled.querySelector(".oled-mode");
+                    const tempEl = oled.querySelector(".oled-temp");
+                    const progressEl = oled.querySelector(".oled-progress-bar");
+                    const timeEl = oled.querySelector(".oled-time");
+                    const stateEl = oled.querySelector(".oled-state");
+                    const indicatorsEl = oled.querySelector(".oled-indicators");
+                    const contextEl = oled.querySelector(".oled-context");
+                    
+                    if (modeTextEl) {
+                      const modeIdx = c.oledModeVarId ? Number(getVarValById(c.oledModeVarId)) || 0 : 0;
+                      const modeNames = c.oledModeNames ? c.oledModeNames.split(",").map(s => s.trim()) : [
+                        "AIR FRYER", "STEAMER", "OVEN", "RAPID STEAM", "BROIL", "REHEAT",
+                        "KEEP WARM", "FERMENT", "DEFROST", "SLOW COOK", "DEHYDRATE", "DUO COOK"
+                      ];
+                      modeTextEl.textContent = modeNames[modeIdx] || "READY";
+                    }
+                    if (tempEl) {
+                      const tempVal = c.oledTempVarId ? getVarValById(c.oledTempVarId) : "";
+                      tempEl.textContent = tempVal !== undefined && tempVal !== null && tempVal !== "" ? tempVal + "°C" : "";
+                    }
+                    if (progressEl) {
+                      const progressVal = c.oledProgressVarId ? Number(getVarValById(c.oledProgressVarId)) || 0 : 0;
+                      progressEl.style.width = Math.max(0, Math.min(100, progressVal)) + "%";
+                    }
+                    if (timeEl) {
+                      const timeVal = c.oledTimeVarId ? getVarValById(c.oledTimeVarId) : "";
+                      const timeNum = Number(timeVal);
+                      if (!isNaN(timeNum) && timeVal !== "" && timeVal !== null) {
+                        const m = Math.floor(timeNum / 60);
+                        const s = Math.round(timeNum % 60);
+                        if (timeNum < 180 && String(c.oledTitle).toLowerCase().includes("fryer")) {
+                          timeEl.textContent = String(Math.floor(timeNum)).padStart(2, "0") + ":00";
+                        } else {
+                          timeEl.textContent = String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+                        }
+                      } else {
+                        timeEl.textContent = String(timeVal ?? "");
+                      }
+                    }
+                    if (stateEl) {
+                      const stateVal = c.oledStateVarId ? String(getVarValById(c.oledStateVarId)) : "";
+                      if (stateVal) stateEl.textContent = stateVal;
+                      else {
+                        const rootActiveStateId = activeStates["root"];
+                        const rootActiveState = PROJECT_DATA.states.find(s => s.id === rootActiveStateId);
+                        stateEl.textContent = rootActiveState ? rootActiveState.name : "HOME";
+                      }
+                    }
+                    if (indicatorsEl && Array.isArray(c.oledIndicatorEmojis)) {
+                      indicatorsEl.innerHTML = "";
+                      c.oledIndicatorEmojis.forEach((emoji, idx) => {
+                        const varId = c.oledIndicatorVarIds?.[idx];
+                        const iVal = varId ? !!getVarValById(varId) : false;
+                        const label = c.oledIndicatorLabels?.[idx] || "";
+                        const isSpin = emoji === "🌀" || emoji === "⚙️" || emoji === "🎡" || label.toLowerCase().includes("fan") || label.toLowerCase().includes("spin");
+                        const span = document.createElement("span");
+                        span.title = label;
+                        span.textContent = emoji;
+                        span.style.transition = "opacity 0.2s";
+                        span.style.opacity = iVal ? "1" : "0.2";
+                        span.style.display = "inline-block";
+                        if (iVal && isSpin) {
+                          span.style.animation = "sim-spin 2s linear infinite";
+                        }
+                        indicatorsEl.appendChild(span);
+                      });
+                    }
+                    if (contextEl) {
+                      contextEl.textContent = "System OK";
+                    }
+                  }
+                } else if (c.type === "mode-icon") {
+                  const card = document.getElementById("modeicon-" + c.id);
+                  if (card) {
+                    if (String(val) === String(c.targetValue)) card.classList.add("active");
+                    else card.classList.remove("active");
+                  }
+                } else if (c.type === "mode-selector") {
+                  const selVarVal = val;
+                  const curVarVal = c.cursorVariableId ? getVarValById(c.cursorVariableId) : null;
+                  for (let idx = 0; idx < 12; idx++) {
+                    const item = document.getElementById("modeselect-" + c.id + "-" + idx);
+                    if (item) {
+                      item.className = "selector-mode-card";
+                      if (Number(selVarVal) === idx) item.classList.add("active");
+                      else if (Number(curVarVal) === idx) item.classList.add("cursor");
+                    }
+                  }
+                } else if (c.type === "buzzer") {
+                  const buzzer = document.getElementById("buzzer-" + c.id);
+                  if (buzzer) {
+                    if (val === true || val === "true" || val === 1) {
+                      buzzer.style.color = "#ef4444";
+                      buzzer.style.transform = stepCount % 2 === 0 ? "scale(1.2)" : "scale(1.0)";
+                      beepBuzzer();
+                    } else {
+                      buzzer.style.color = "#444";
+                      buzzer.style.transform = "scale(1.0)";
+                    }
+                  }
+                }
+              });
+              updateDashboard();
+            }
+
+            function initializeSimulation() {
+              PROJECT_DATA.variables.forEach(v => {
+                let val = v.defaultValue;
+                if (v.type === "bool") {
+                  val = val === "true" || val === true || val === "1";
+                } else if (v.type === "int" || v.type === "float") {
+                  val = Number(val) || 0;
+                }
+                varValues[v.name] = val;
+                varTypes[v.name] = v.type;
+              });
+
+              const rootStates = PROJECT_DATA.states.filter(s => s.parentId === "root" || !s.parentId);
+              const autostarts = rootStates.filter(s => s.autostart);
+              if (autostarts.length > 0) {
+                autostarts.forEach(s => enterState(s.id, activeStates));
+              } else if (rootStates.length > 0) {
+                enterState(rootStates[0].id, activeStates);
+              }
+
+              const intervalTime = Math.max(100, PROJECT_DATA.tickMs || 100);
+              simInterval = setInterval(() => {
+                const container = document.getElementById("sim-event-log");
+                if (!container) {
+                  clearInterval(simInterval);
+                  simInterval = null;
+                  if (window.ADIA_SIM) delete window.ADIA_SIM;
+                  return;
+                }
+                if (simRunning) {
+                  stepSimulation();
+                }
+              }, intervalTime);
+
+              updateUi();
+              logEvent("System Init", "State machine initialized");
+            }
+
+            window.ADIA_SIM = {
+              toggleSimRunning() {
+                simRunning = !simRunning;
+                const btn = document.getElementById("sim-btn-power");
+                if (btn) {
+                  btn.textContent = simRunning ? "PAUSE" : "RUN";
+                  if (simRunning) btn.classList.remove("active");
+                  else btn.classList.add("active");
+                }
+                logEvent(simRunning ? "Sim Resumed" : "Sim Paused");
+              },
+              step() {
+                stepSimulation();
+                logEvent("Sim Step", "Manual tick step executed");
+              },
+              reset() {
+                PROJECT_DATA.variables.forEach(v => {
+                  let val = v.defaultValue;
+                  if (v.type === "bool") {
+                    val = val === "true" || val === true || val === "1";
+                  } else if (v.type === "int" || v.type === "float") {
+                    val = Number(val) || 0;
+                  }
+                  varValues[v.name] = val;
+                });
+                activeStates = {};
+                stateTimers = {};
+                lastActiveStates = {};
+                simTime = 0;
+                stepCount = 0;
+                
+                const rootStates = PROJECT_DATA.states.filter(s => s.parentId === "root" || !s.parentId);
+                const autostarts = rootStates.filter(s => s.autostart);
+                if (autostarts.length > 0) {
+                  autostarts.forEach(s => enterState(s.id, activeStates));
+                } else if (rootStates.length > 0) {
+                  enterState(rootStates[0].id, activeStates);
+                }
+                updateUi();
+                logEvent("Sim Reset", "All states and variables reset to default");
+              },
+              clearLog() {
+                const el = document.getElementById("sim-event-log");
+                if (el) el.innerHTML = "";
+              },
+              toggleClick(id) {
+                const c = PROJECT_DATA.hmiComponents.find(x => x.id === id);
+                if (!c || !c.variableId) return;
+                const currentVal = !!getVarValById(c.variableId);
+                updateVariableById(c.variableId, !currentVal);
+              },
+              buttonPress(id, isDown) {
+                const c = PROJECT_DATA.hmiComponents.find(x => x.id === id);
+                if (!c) return;
+                if (c.pressVariableId) {
+                  updateVariableById(c.pressVariableId, isDown);
+                } else if (c.variableId && isDown) {
+                  const currentVal = getVarValById(c.variableId);
+                  if (varTypes[c.name] === "bool") {
+                    updateVariableById(c.variableId, !currentVal);
+                  } else {
+                    updateVariableById(c.variableId, 1);
+                  }
+                }
+              },
+              sliderChange(id, val) {
+                const c = PROJECT_DATA.hmiComponents.find(x => x.id === id);
+                if (!c || !c.variableId) return;
+                updateVariableById(c.variableId, val);
+              },
+              inputChange(id, val) {
+                const c = PROJECT_DATA.hmiComponents.find(x => x.id === id);
+                if (!c || !c.variableId) return;
+                updateVariableById(c.variableId, val);
+              },
+              rotateKnob(id, dir) {
+                const c = PROJECT_DATA.hmiComponents.find(x => x.id === id);
+                if (!c || !c.variableId) return;
+                const v = PROJECT_DATA.variables.find(x => x.id === c.variableId);
+                if (!v) return;
+                const isHybrid = Array.isArray(c.encoderValues) && c.encoderValues.length > 0;
+                const encoderValues = c.encoderValues || [];
+
+                if (c.type === "encoder" && isHybrid) {
+                  const idx = encoderValues.findIndex(x => String(x) === String(varValues[v.name]));
+                  const currentIndex = idx !== -1 ? idx : 0;
+                  const nextIndex = (currentIndex + dir + encoderValues.length) % encoderValues.length;
+                  updateVariableById(c.variableId, encoderValues[nextIndex]);
+                } else if (c.type === "hybrid-rotary") {
+                  const values = c.hybridValues || [];
+                  const idx = values.findIndex(x => String(x) === String(varValues[v.name]));
+                  const currentIndex = idx !== -1 ? idx : 0;
+                  const nextIndex = (currentIndex + dir + values.length) % values.length;
+                  updateVariableById(c.variableId, values[nextIndex]);
+                } else {
+                  const curVal = Number(varValues[v.name]) || 0;
+                  const step = v.name.toLowerCase().includes("temp") ? 5 : 1;
+                  const newVal = curVal + dir * step;
+                  const clampedVal = Math.max(c.min ?? 0, Math.min(c.max ?? 100, newVal));
+                  updateVariableById(c.variableId, clampedVal);
+                }
+              },
+              knobPress(id, isDown) {
+                const c = PROJECT_DATA.hmiComponents.find(x => x.id === id);
+                if (!c || !c.pressVariableId) return;
+                const pressVarId = c.pressVariableId;
+                const lpRing = document.getElementById("knob-lp-" + c.id);
+                if (isDown) {
+                  updateVariableById(pressVarId, true);
+                  if (lpRing) {
+                    lpRing.style.opacity = "1";
+                    lpRing.style.transform = "scale(1.1)";
+                  }
+                  lpTimers[id] = setTimeout(() => {
+                    logEvent("Long Press", c.name + " held for 1.5s");
+                    if (lpRing) lpRing.style.borderColor = "#22c55e";
+                  }, 1500);
+                } else {
+                  updateVariableById(pressVarId, false);
+                  if (lpRing) {
+                    lpRing.style.opacity = "0";
+                    lpRing.style.transform = "scale(0.9)";
+                    lpRing.style.borderColor = "#f97316";
+                  }
+                  if (lpTimers[id]) {
+                    clearTimeout(lpTimers[id]);
+                    delete lpTimers[id];
+                  }
+                }
+              },
+              modeIconClick(id) {
+                const c = PROJECT_DATA.hmiComponents.find(x => x.id === id);
+                if (!c || !c.variableId) return;
+                updateVariableById(c.variableId, c.targetValue);
+              },
+              modeSelectorClick(id, idx) {
+                const c = PROJECT_DATA.hmiComponents.find(x => x.id === id);
+                if (!c || !c.variableId) return;
+                updateVariableById(c.variableId, idx);
+              }
+            };
+
+            initializeSimulation();
+          })();
+        </script>
+      `;
     }
 
     html += `</body></html>`;
