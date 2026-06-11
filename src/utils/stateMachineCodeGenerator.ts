@@ -43,6 +43,65 @@ export const generateMISRACCode = (chart: {
   // REQ-DET-101: Stable Enumeration Order & REQ-DET-102: Stable Code Layout
   const sortedStates = [...chart.states].sort((a, b) => a.name.localeCompare(b.name));
   const sortedVariables = [...chart.variables].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedLayers = [...chart.layers].sort((a, b) => a.id.localeCompare(b.id));
+
+  const stateIndexMap = new Map<string, number>();
+  sortedStates.forEach((s, idx) => stateIndexMap.set(s.id, idx));
+
+  const layerIndexMap = new Map<string, number>();
+  sortedLayers.forEach((l, idx) => layerIndexMap.set(l.id, idx));
+
+  const getAncestors = (stateId: string): string[] => {
+    const ancestors: string[] = [];
+    let currentId = stateId;
+    while (currentId) {
+      const s = sortedStates.find(st => st.id === currentId);
+      if (!s) break;
+      if (s.parentId && s.parentId !== 'root') {
+        ancestors.push(s.parentId);
+        currentId = s.parentId;
+      } else {
+        break;
+      }
+    }
+    return ancestors;
+  };
+
+  const findLCA = (stateId1: string | null, stateId2: string | null): string | null => {
+    if (!stateId1 || !stateId2) return null;
+    const anc1 = [stateId1, ...getAncestors(stateId1)];
+    const anc2 = [stateId2, ...getAncestors(stateId2)];
+    for (const a1 of anc1) {
+      if (anc2.includes(a1)) {
+        return a1;
+      }
+    }
+    return null;
+  };
+
+  const getExitSequence = (srcId: string, dstId: string): string[] => {
+    const exitSeq: string[] = [];
+    const lca = findLCA(srcId, dstId);
+    let curr: string | null = srcId;
+    while (curr && curr !== lca) {
+      exitSeq.push(curr);
+      const s = sortedStates.find(st => st.id === curr);
+      curr = s?.parentId && s.parentId !== 'root' ? s.parentId : null;
+    }
+    return exitSeq;
+  };
+
+  const getEntrySequence = (srcId: string | null, dstId: string): string[] => {
+    const entrySeq: string[] = [];
+    const lca = findLCA(srcId, dstId);
+    let curr: string | null = dstId;
+    while (curr && curr !== lca) {
+      entrySeq.unshift(curr);
+      const s = sortedStates.find(st => st.id === curr);
+      curr = s?.parentId && s.parentId !== 'root' ? s.parentId : null;
+    }
+    return entrySeq;
+  };
 
   const indent = (lvl: number) => '    '.repeat(lvl);
 
@@ -118,54 +177,141 @@ export const generateMISRACCode = (chart: {
     });
   };
 
-  // Helper to process user code (conditions/actions) for MISRA compliance
-  const processUserCode = (code: string): string => {
-    if (!code) return '';
-    let processed = code;
+  const processLiteralSuffixes = (expr: string, targetType?: string): string => {
+    let type = targetType;
+    if (!type) {
+      const foundVar = sortedVariables.find(v => expr.includes(`instance->data.${v.name}`));
+      if (foundVar) {
+        type = foundVar.type;
+      }
+    }
 
-    // Replace variable names with instance->data.name
+    let result = expr;
+    if (type) {
+      if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(type)) {
+        result = result.replace(/(?<!\.)\b\d+\b(?![.fFuU_xX])/g, '$&U');
+      } else if (['float', 'single'].includes(type)) {
+        result = result.replace(/(?<!\.)\b\d+\.\d+\b(?![fF])/g, '$&f');
+        result = result.replace(/(?<!\.)\b\d+\b(?![.fFuU_xX])/g, '$&.0f');
+      } else if (type === 'double') {
+        result = result.replace(/(?<!\.)\b\d+\b(?![.fFuU_xX])/g, '$&.0');
+      }
+    }
+    return result;
+  };
+
+  const processConditionString = (cond: string): string => {
+    if (!cond || cond.trim() === 'true') return 'true';
+
+    let processed = cond;
     sortedVariables.forEach(v => {
       const regex = new RegExp(`(?<!instance->data\\.)\\b${v.name}\\b`, 'g');
       processed = processed.replace(regex, `instance->data.${v.name}`);
     });
 
-    // Auto-append 'U' suffix for unsigned literals (MISRA 10.x)
-    sortedVariables.forEach(v => {
-      if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type)) {
-        const varName = `instance->data.${v.name}`;
-        const safeVarName = varName.replace('.', '\\.');
+    const parts = processed.split(/(&&|\|\|)/);
+    const processedParts = parts.map(part => {
+      const trimmed = part.trim();
+      if (trimmed === '&&' || trimmed === '||') return ` ${trimmed} `;
 
-        const assignmentRegex = new RegExp(`\\b(${safeVarName})\\s*([+\\-*\\/%&|\\^]?=)\\s*(\\d+)\\b(?![.Uu])`, 'g');
-        processed = processed.replace(assignmentRegex, '$1 $2 $3U');
+      let subExpr = processLiteralSuffixes(trimmed);
 
-        const comparisonRegex = new RegExp(`\\b(${safeVarName})\\s*(==|!=|<|>|<=|>=)\\s*(\\d+)\\b(?![.Uu])`, 'g');
-        processed = processed.replace(comparisonRegex, '$1 $2 $3U');
-
-        const comparisonRegex2 = new RegExp(`\\b(\\d+)\\b(?![.Uu])\\s*(==|!=|<|>|<=|>=)\\s*(${safeVarName})\\b`, 'g');
-        processed = processed.replace(comparisonRegex2, '$1U $2 $3');
-      }
-    });
-
-    // Separate multiple statements on a single line
-    processed = processed.split('\n').map(line => {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('/*') || trimmed.startsWith('//') || trimmed.startsWith('*')) {
-        return line;
-      }
-      if (line.includes(';') && (line.match(/;/g) || []).length > 1) {
-        const match = line.match(/^(\s*)/);
-        const indentation = match ? match[1] : '    ';
-        const parts = line.split(';')
-          .map(part => part.trim())
-          .filter(part => part.length > 0);
-        if (parts.length > 0) {
-          return parts.map(part => indentation + part).join(';\n') + ';';
+      if (/(==|!=|<|>|<=|>=)/.test(subExpr)) {
+        if (subExpr.startsWith('(') && subExpr.endsWith(')')) {
+          const inner = subExpr.slice(1, -1).trim();
+          return `(${inner})`;
+        } else {
+          return `(${subExpr})`;
         }
       }
-      return line;
-    }).join('\n');
+      if (subExpr.startsWith('(') && subExpr.endsWith(')')) {
+        return subExpr;
+      }
+      if (/^[a-zA-Z0-9_\-\>\.]+$/.test(subExpr)) {
+        return `(${subExpr})`;
+      }
+      return subExpr;
+    });
 
-    return processed;
+    let joined = processedParts.join('').trim();
+    if (parts.length > 1) {
+      joined = `(${joined})`;
+    }
+    return joined;
+  };
+
+  const processActionLine = (line: string): string => {
+    const trimmed = line.trim();
+    if (!trimmed) return line;
+
+    if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
+      return line;
+    }
+
+    const indentMatch = line.match(/^(\s*)/);
+    const indentStr = indentMatch ? indentMatch[1] : '';
+
+    let processedLine = trimmed;
+    sortedVariables.forEach(v => {
+      const regex = new RegExp(`(?<!instance->data\\.)\\b${v.name}\\b`, 'g');
+      processedLine = processedLine.replace(regex, `instance->data.${v.name}`);
+    });
+
+    const singleLineElseIfRegex = /^else\s+if\s*\((.*?)\)\s*([^{]+;)$/;
+    const elseIfMatch = processedLine.match(singleLineElseIfRegex);
+    if (elseIfMatch) {
+      const cond = elseIfMatch[1];
+      const stmt = elseIfMatch[2];
+      const processedCond = processConditionString(cond);
+      const processedStmt = processActionLine(stmt).trim();
+      return `${indentStr}else if (${processedCond}) {\n${indentStr}    ${processedStmt}\n${indentStr}}`;
+    }
+
+    const singleLineIfRegex = /^if\s*\((.*?)\)\s*([^{]+;)$/;
+    const ifMatch = processedLine.match(singleLineIfRegex);
+    if (ifMatch) {
+      const cond = ifMatch[1];
+      const stmt = ifMatch[2];
+      const processedCond = processConditionString(cond);
+      const processedStmt = processActionLine(stmt).trim();
+      return `${indentStr}if (${processedCond}) {\n${indentStr}    ${processedStmt}\n${indentStr}}`;
+    }
+
+    const singleLineElseRegex = /^else\s+([^{]+;)$/;
+    const elseMatch = processedLine.match(singleLineElseRegex);
+    if (elseMatch) {
+      const stmt = elseMatch[1];
+      const processedStmt = processActionLine(stmt).trim();
+      return `${indentStr}else {\n${indentStr}    ${processedStmt}\n${indentStr}}`;
+    }
+
+    const assignmentRegex = /^instance->data\.([a-zA-Z0-9_]+)\s*([+\-*\/]?=)\s*([^;]+);$/;
+    const assignMatch = processedLine.match(assignmentRegex);
+    if (assignMatch) {
+      const varName = assignMatch[1];
+      const op = assignMatch[2];
+      const expr = assignMatch[3].trim();
+      const v = sortedVariables.find(vr => vr.name === varName);
+      if (v) {
+        const type = getCTimeType(v.type);
+        const processedExpr = processLiteralSuffixes(expr, v.type);
+        if (op === '=') {
+          return `${indentStr}instance->data.${varName} = (${type})(${processedExpr});`;
+        } else {
+          const baseOp = op.charAt(0);
+          return `${indentStr}instance->data.${varName} = (${type})(instance->data.${varName} ${baseOp} (${processedExpr}));`;
+        }
+      }
+    }
+
+    return indentStr + processLiteralSuffixes(processedLine);
+  };
+
+  const processUserCode = (code: string): string => {
+    if (!code) return '';
+    const lines = code.split('\n');
+    const processedLines = lines.map(line => processActionLine(line));
+    return processedLines.join('\n');
   };
 
   // Validate states
@@ -252,7 +398,10 @@ export const generateMISRACCode = (chart: {
     }
   });
 
-  const smConfigH = `${disclaimer}#ifndef SM_CONFIG_H\n#define SM_CONFIG_H\n\n#include <stdint.h>\n#include <stdbool.h>\n\n/* Regions */\ntypedef enum {\n    SM_GRP_MAIN,\n    SM_GRP_COUNT\n} SM_Group_t;\n\n/* States */\ntypedef enum {\n    SM_NODE_INVALID = 0U,\n${sortedStates.map(s => `    ${stateEnum(s)},`).join('\n')}\n    SM_NODE_ERROR,\n    SM_NODE_SAFE\n} SM_Node_t;\n\n/* Error Codes */\ntypedef enum {\n    SM_ERR_NONE = 0U,\n    SM_ERR_WATCHDOG,\n    SM_ERR_SAFETY_VIOLATION,\n    SM_ERR_INVALID_STATE,\n    SM_ERR_ROM_INTEGRITY,\n    SM_ERR_RAM_INTEGRITY\n} SM_Error_t;\n\n/* Data Structure */\ntypedef struct {\n${sortedVariables.length > 0 ? sortedVariables.map(v => `    ${getCTimeType(v.type)} ${v.name};`).join('\n') : ''}\n${blockStates.length > 0 ? blockStates.join('\n') + '\n' : ''}    uint32_t state_timer;\n} SM_Data_t;\n\n/* Instance Context Structure */\ntypedef struct {\n    SM_Node_t active_state;\n    SM_Data_t data;\n    SM_Error_t error_status;\n} ADIA_Instance_t;\n\n/* Legacy Compatibility Constants instead of macros */\nstatic const uint32_t SM_TICK_MS = ${chart.tickMs}U;\n\n#endif /* SM_CONFIG_H */`;
+  const rootLayer = sortedLayers.find(l => l.id === 'root' || !l.parentStateId || l.parentStateId === 'root');
+  const rootLayerIdx = rootLayer ? layerIndexMap.get(rootLayer.id) : 0;
+
+  const smConfigH = `${disclaimer}#ifndef SM_CONFIG_H\n#define SM_CONFIG_H\n\n#include <stdint.h>\n#include <stdbool.h>\n\n/* Constant Limits */\n#define SM_NUM_LAYERS ${sortedLayers.length}U\n#define SM_NUM_STATES ${sortedStates.length}U\n\n/* Regions */\ntypedef enum {\n    SM_GRP_MAIN,\n    SM_GRP_COUNT\n} SM_Group_t;\n\n/* States */\ntypedef enum {\n    SM_NODE_INVALID = 0U,\n${sortedStates.map(s => `    ${stateEnum(s)},`).join('\n')}\n    SM_NODE_ERROR,\n    SM_NODE_SAFE\n} SM_Node_t;\n\n/* Error Codes */\ntypedef enum {\n    SM_ERR_NONE = 0U,\n    SM_ERR_WATCHDOG,\n    SM_ERR_SAFETY_VIOLATION,\n    SM_ERR_INVALID_STATE,\n    SM_ERR_ROM_INTEGRITY,\n    SM_ERR_RAM_INTEGRITY\n} SM_Error_t;\n\n/* State Indices */\n${sortedStates.map((s, idx) => `#define SM_ST_${sanitize(s.name).toUpperCase()}_IDX ${idx}U`).join('\n')}\n\n/* Layer Indices */\n${sortedLayers.map((l, idx) => `#define SM_LYR_${sanitize(l.id).toUpperCase()}_IDX ${idx}U`).join('\n')}\n\n/* Data Structure */\ntypedef struct {\n${sortedVariables.length > 0 ? sortedVariables.map(v => `    ${getCTimeType(v.type)} ${v.name};`).join('\n') : ''}\n${blockStates.length > 0 ? blockStates.join('\n') + '\n' : ''}    uint32_t state_timer;\n} SM_Data_t;\n\n/* Instance Context Structure */\ntypedef struct {\n    SM_Node_t active_states[SM_NUM_LAYERS];\n    SM_Node_t history_states[SM_NUM_LAYERS];\n    uint32_t state_timers[SM_NUM_STATES];\n    SM_Data_t data;\n    SM_Error_t error_status;\n} ADIA_Instance_t;\n\n/* Legacy Compatibility Constants instead of macros */\nstatic const uint32_t SM_TICK_MS = ${chart.tickMs}U;\n\n#endif /* SM_CONFIG_H */`;
 
   const smCoreH = `${disclaimer}#ifndef SM_CORE_H\n#define SM_CORE_H\n\n#include "sm_config.h"\n\nvoid SM_Init(ADIA_Instance_t* instance);\nvoid SM_Reset(ADIA_Instance_t* instance);\nvoid SM_Step(ADIA_Instance_t* instance, uint32_t delta_ms);\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g);\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance);\n\n/* Deprecated API for direct access */\nstatic inline SM_Data_t* SM_Data_Legacy(ADIA_Instance_t* instance) {\n    return &instance->data;\n}\n\n#endif /* SM_CORE_H */`;
 
@@ -391,140 +540,206 @@ export const generateMISRACCode = (chart: {
     return funcs;
   }).join('\n')}`;
 
-  let smCoreC = `${disclaimer}#include "sm_core.h"\n#include "sm_safety.h"\n#include "sm_user_logic.h"\n\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g) {\n    (void)g;\n    return instance->active_state;\n}\n\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance) {\n    return instance->error_status;\n}\n\nvoid SM_Init(ADIA_Instance_t* instance) {\n${sortedVariables.map(v => {
-    let initVal = v.initialValue;
-    if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type) && /^\d+$/.test(initVal)) initVal += 'U';
-    return `    instance->data.${v.name} = ${initVal};`;
-  }).join('\n')}\n${blockStates.length > 0 ? blockStates.map(bs => bs.replace('float ', 'instance->data.').replace(';', ' = 0.0f;')).join('\n') + '\n' : ''}    instance->data.state_timer = 0U;\n    instance->error_status = SM_ERR_NONE;\n    SM_Reset(instance);\n}\n\nvoid SM_Reset(ADIA_Instance_t* instance) {\n    instance->active_state = SM_NODE_INVALID;\n    instance->error_status = SM_ERR_NONE;\n${(() => {
-    const rootAutoState = sortedStates.find(s => s.autostart && (s.parentId === 'root' || !s.parentId));
-    const rootAutoJunc = chart.junctions.find(j => j.autostart && (!j.parentId || j.parentId === 'root'));
+  let timerIncrementCode = '';
+  sortedStates.forEach(s => {
+    const sEnum = stateEnum(s);
+    const stateIdx = stateIndexMap.get(s.id);
+    const parentLayer = chart.layers.find(l => l.stateIds.includes(s.id));
+    const parentLayerIdx = parentLayer ? layerIndexMap.get(parentLayer.id) : 0;
 
-    const generateInitLogic = (transitions: TransitionData[], depth: number, accumulatedCode: string, visitedJunctions: Set<string>): string => {
-      let code = '';
-      let hasConditions = false;
-      for (let i = 0; i < transitions.length; i++) {
-        const tr = transitions[i];
-        const targetState = sortedStates.find(s => s.id === tr.targetId);
-        const targetJunction = chart.junctions.find(j => j.id === tr.targetId);
-        const rawCond = tr.condition || 'true';
-        const condition = rawCond.includes('//') ? `${rawCond}\n` : rawCond;
-        let conditionCheck = `(${condition})`;
+    timerIncrementCode += `    if (instance->active_states[${parentLayerIdx}U] == ${sEnum}) {\n`;
+    timerIncrementCode += `        if (instance->state_timers[${stateIdx}U] + delta_ms < instance->state_timers[${stateIdx}U]) {\n`;
+    timerIncrementCode += `            instance->state_timers[${stateIdx}U] = 4294967295U;\n`;
+    timerIncrementCode += `        } else {\n`;
+    timerIncrementCode += `            instance->state_timers[${stateIdx}U] += delta_ms;\n`;
+    timerIncrementCode += `        }\n`;
+    timerIncrementCode += `    }\n`;
+  });
 
-        sortedVariables.forEach(v => {
-          const regex = new RegExp(`(?<!instance->data\\.)\\b${v.name}\\b`, 'g');
-          conditionCheck = conditionCheck.replace(regex, `instance->data.${v.name}`);
-        });
+  let smExitStateFunc = `static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {\n    switch (state) {\n`;
+  sortedStates.forEach(s => {
+    const sEnum = stateEnum(s);
+    const stateIdx = stateIndexMap.get(s.id);
+    const parentLayer = chart.layers.find(l => l.stateIds.includes(s.id));
+    const parentLayerIdx = parentLayer ? layerIndexMap.get(parentLayer.id) : 0;
 
-        const currentAction = tr.action ? `        /* Action */\n        ${tr.action.replace(/\n/g, '\n        ')}\n` : '';
-        const nextAccumulatedCode = accumulatedCode + currentAction;
+    smExitStateFunc += `        case ${sEnum}:\n`;
+    
+    const childLayers = chart.layers.filter(l => l.parentStateId === s.id);
+    childLayers.forEach(l => {
+      const lIdx = layerIndexMap.get(l.id);
+      smExitStateFunc += `            if (instance->active_states[${lIdx}U] != SM_NODE_INVALID) {\n`;
+      smExitStateFunc += `                SM_Exit_State(instance, instance->active_states[${lIdx}U]);\n`;
+      smExitStateFunc += `            }\n`;
+    });
 
-        code += `    ${i > 0 ? 'else ' : ''}if ${conditionCheck} {\n`;
-        hasConditions = true;
-        if (targetState) {
-          const targetEnum = stateEnum(targetState);
-          code += `${nextAccumulatedCode}`;
-          code += `        instance->active_state = ${targetEnum};\n        instance->data.state_timer = 0U;\n        ${targetEnum}_Entry(instance);\n    }\n`;
-        } else if (targetJunction) {
-          if (visitedJunctions.has(targetJunction.id)) {
-            code += `        /* Loop detected */\n    }\n`;
-            continue;
-          }
-          const junctionOutgoing = chart.transitions.filter(t => t.sourceId === targetJunction.id).sort((a, b) => a.order - b.order);
-          if (junctionOutgoing.length > 0) {
-            const newVisited = new Set(visitedJunctions);
-            newVisited.add(targetJunction.id);
-            code += generateInitLogic(junctionOutgoing, depth + 1, nextAccumulatedCode, newVisited);
-            code += `    }\n`;
-          } else {
-            code += `${nextAccumulatedCode}        /* End of init path */\n    }\n`;
-          }
-        } else {
-          code += `        /* Error */\n    }\n`;
-        }
-      }
-      if (hasConditions) code += `    else { /* MISRA 15.7 */ }\n`;
-      return code;
-    };
+    smExitStateFunc += `            ${sEnum}_Exit(instance);\n`;
+    smExitStateFunc += `            instance->state_timers[${stateIdx}U] = 0U;\n`;
 
-    if (rootAutoState) {
-      const sEnum = stateEnum(rootAutoState);
-      return `    instance->active_state = ${sEnum};\n    ${sEnum}_Entry(instance);`;
-    } else if (rootAutoJunc) {
-      const outgoing = chart.transitions.filter(t => t.sourceId === rootAutoJunc.id).sort((a, b) => a.order - b.order);
-      if (outgoing.length > 0) {
-        return generateInitLogic(outgoing, 0, '', new Set([rootAutoJunc.id]));
-      } else {
-        return `    /* AutoStart Junction has no paths */`;
-      }
+    const hasHistoryJunction = parentLayer && chart.junctions.some(j => parentLayer.junctionIds.includes(j.id) && (j.type === 'history' || j.type === 'deep-history'));
+    if (hasHistoryJunction) {
+      smExitStateFunc += `            instance->history_states[${parentLayerIdx}U] = state;\n`;
     }
-    return `    /* No Root AutoStart */`;
-  })()}\n}\n\nvoid SM_Step(ADIA_Instance_t* instance, uint32_t delta_ms) {\n    SM_Watchdog_Kick(instance);\n    SM_Safety_Check(instance);\n    if (instance->error_status != SM_ERR_NONE) {\n        if (instance->error_status == SM_ERR_SAFETY_VIOLATION ||\n            instance->error_status == SM_ERR_RAM_INTEGRITY ||\n            instance->error_status == SM_ERR_ROM_INTEGRITY) {\n            if (instance->active_state != SM_NODE_SAFE) {\n                instance->active_state = SM_NODE_SAFE;\n            }\n            return;\n        }\n        if (instance->active_state != SM_NODE_ERROR) {\n            instance->active_state = SM_NODE_ERROR;\n        }\n        return;\n    }\n    if (instance->data.state_timer + delta_ms < instance->data.state_timer) instance->data.state_timer = UINT32_MAX;\n    else instance->data.state_timer += delta_ms;\n\n    switch (instance->active_state) {\n`;
 
-  smCoreC += sortedStates.map(state => {
-    const sEnum = stateEnum(state);
-    let stateCode = `        case ${sEnum}:\n            ${sEnum}_During(instance, delta_ms);\n`;
+    if (parentLayer) {
+      smExitStateFunc += `            instance->active_states[${parentLayerIdx}U] = SM_NODE_INVALID;\n`;
+    }
+    smExitStateFunc += `            break;\n`;
+  });
+  smExitStateFunc += `        default:\n            break;\n    }\n}\n\n`;
 
-    const external = chart.transitions.filter(t => t.sourceId === state.id).sort((a, b) => a.order - b.order);
-    const internal = parseInternalTransitions(state);
-    const outgoingTransitions = [...external, ...internal];
+  let layerEntryFuncs = '';
+  let smEnterStateFunc = `static void SM_Enter_State(ADIA_Instance_t* instance, SM_Node_t state, bool use_history) {\n    switch (state) {\n`;
+  
+  sortedStates.forEach(s => {
+    const sEnum = stateEnum(s);
+    const stateIdx = stateIndexMap.get(s.id);
+    const parentLayer = chart.layers.find(l => l.stateIds.includes(s.id));
+    const parentLayerIdx = parentLayer ? layerIndexMap.get(parentLayer.id) : 0;
 
-    if (outgoingTransitions.length > 0) {
-      stateCode += `            /* Transitions */\n`;
-      const generateTransitionLogic = (transitions: TransitionData[], depth: number, accumulatedCode: string, visitedJunctions: Set<string>): string => {
+    smEnterStateFunc += `        case ${sEnum}:\n`;
+    if (parentLayer) {
+      smEnterStateFunc += `            instance->active_states[${parentLayerIdx}U] = state;\n`;
+    }
+    smEnterStateFunc += `            instance->state_timers[${stateIdx}U] = 0U;\n`;
+    smEnterStateFunc += `            ${sEnum}_Entry(instance);\n`;
+
+    const childLayers = chart.layers.filter(l => l.parentStateId === s.id);
+    childLayers.forEach(l => {
+      const lIdx = layerIndexMap.get(l.id);
+      smEnterStateFunc += `            SM_Enter_Layer_${lIdx}(instance, use_history);\n`;
+    });
+
+    smEnterStateFunc += `            break;\n`;
+  });
+  smEnterStateFunc += `        default:\n            break;\n    }\n}\n\n`;
+
+  sortedLayers.forEach((l) => {
+    const lIdx = layerIndexMap.get(l.id);
+    const defaultState = sortedStates.find(s => l.stateIds.includes(s.id) && s.autostart);
+    const defaultJunc = chart.junctions.find(j => l.junctionIds.includes(j.id) && j.autostart);
+
+    layerEntryFuncs += `static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) {\n`;
+    layerEntryFuncs += `    if (use_history && (instance->history_states[${lIdx}U] != SM_NODE_INVALID)) {\n`;
+    layerEntryFuncs += `        SM_Enter_State(instance, instance->history_states[${lIdx}U], true);\n`;
+    layerEntryFuncs += `    } else {\n`;
+
+    if (defaultState) {
+      layerEntryFuncs += `        SM_Enter_State(instance, ${stateEnum(defaultState)}, false);\n`;
+    } else if (defaultJunc) {
+      const outgoing = chart.transitions.filter(t => t.sourceId === defaultJunc.id).sort((a, b) => a.order - b.order);
+      const visited = new Set<string>([defaultJunc.id]);
+      
+      const generateJunctionInit = (transitions: TransitionData[]): string => {
         let code = '';
         let hasConditions = false;
         for (let i = 0; i < transitions.length; i++) {
           const tr = transitions[i];
           const targetState = sortedStates.find(s => s.id === tr.targetId);
           const targetJunction = chart.junctions.find(j => j.id === tr.targetId);
-          const afterTicks = tr.afterTicks ?? 0;
-          const afterTimeMs = afterTicks * chart.tickMs;
           const rawCond = tr.condition || 'true';
-          const condition = rawCond.includes('//') ? `${rawCond}\n` : rawCond;
-          let conditionCheck = '';
-          if (tr.type === 'condition') conditionCheck = `(${condition})`;
-          else if (tr.type === 'after') conditionCheck = `(instance->data.state_timer >= ${afterTimeMs}U)`;
-          else if (tr.type === 'and') conditionCheck = `((${condition}) && (instance->data.state_timer >= ${afterTimeMs}U))`;
-          else if (tr.type === 'or') conditionCheck = `((${condition}) || (instance->data.state_timer >= ${afterTimeMs}U))`;
+          const conditionCheck = processConditionString(rawCond);
+          const actionStr = tr.action ? `            /* Action */\n            ${processUserCode(tr.action).replace(/\n/g, '\n            ')}\n` : '';
 
-          sortedVariables.forEach(v => {
-            const regex = new RegExp(`(?<!instance->data\\.)\\b${v.name}\\b`, 'g');
-            conditionCheck = conditionCheck.replace(regex, `instance->data.${v.name}`);
-          });
+          code += `        ${i > 0 ? 'else ' : ''}if ${conditionCheck} {\n`;
+          hasConditions = true;
+          if (targetState) {
+            code += `${actionStr}`;
+            const entrySeq = getEntrySequence(null, targetState.id);
+            entrySeq.forEach(stId => {
+              const st = sortedStates.find(s => s.id === stId);
+              if (st) {
+                code += `            SM_Enter_State(instance, ${stateEnum(st)}, false);\n`;
+              }
+            });
+            code += `        }\n`;
+          } else if (targetJunction) {
+            if (visited.has(targetJunction.id)) {
+              code += `            /* Loop detected */\n        }\n`;
+              continue;
+            }
+            visited.add(targetJunction.id);
+            const outgoingJunc = chart.transitions.filter(t => t.sourceId === targetJunction.id).sort((a, b) => a.order - b.order);
+            code += generateJunctionInit(outgoingJunc);
+            code += `        }\n`;
+          } else {
+            code += `            /* Error */\n        }\n`;
+          }
+        }
+        if (hasConditions) code += `        else { /* MISRA 15.7 */ }\n`;
+        return code;
+      };
 
-          const currentAction = tr.action ? `/* Action */\n                ${tr.action.replace(/\n/g, '\n                ')}\n` : '';
-          const nextAccumulatedCode = accumulatedCode + currentAction;
-          const isInternal = !!tr.isInternal;
+      layerEntryFuncs += generateJunctionInit(outgoing);
+    } else {
+      layerEntryFuncs += `        /* No autostart defined for this layer */\n`;
+    }
+    
+    layerEntryFuncs += `    }\n}\n\n`;
+  });
+
+  let layerStepFuncs = '';
+  sortedLayers.forEach(l => {
+    const lIdx = layerIndexMap.get(l.id);
+    layerStepFuncs += `static void SM_Step_Layer_${lIdx}(ADIA_Instance_t* instance, uint32_t delta_ms) {\n`;
+    layerStepFuncs += `    switch (instance->active_states[${lIdx}U]) {\n`;
+
+    l.stateIds.forEach(stateId => {
+      const state = sortedStates.find(s => s.id === stateId);
+      if (!state) return;
+      const sEnum = stateEnum(state);
+
+      layerStepFuncs += `        case ${sEnum}:\n`;
+      layerStepFuncs += `            /* Evaluate Outgoing Transitions */\n`;
+
+      const outgoing = chart.transitions.filter(t => t.sourceId === stateId).sort((a, b) => a.order - b.order);
+      
+      const generateTransitions = (transitions: TransitionData[], depth: number, accumulatedAction: string, visited: Set<string>): string => {
+        let code = '';
+        let hasConditions = false;
+        for (let i = 0; i < transitions.length; i++) {
+          const tr = transitions[i];
+          const targetState = sortedStates.find(s => s.id === tr.targetId);
+          const targetJunction = chart.junctions.find(j => j.id === tr.targetId);
+          
+          const rawCond = tr.condition || 'true';
+          const conditionCheck = processConditionString(rawCond);
+          const actionStr = tr.action ? `                /* Action */\n                ${processUserCode(tr.action).replace(/\n/g, '\n                ')}\n` : '';
+          const nextAccumulatedAction = accumulatedAction + actionStr;
 
           code += `            ${i > 0 ? 'else ' : ''}if ${conditionCheck} {\n`;
           hasConditions = true;
-          if (isInternal && !targetJunction) {
-            code += `                ${nextAccumulatedCode}\n`;
-            code += `            }\n`;
 
-          } else if (targetState) {
-            const targetEnum = stateEnum(targetState);
-            const isSelfTransition = targetState.id === state.id;
-            code += `                ${sEnum}_Exit(instance);\n                ${nextAccumulatedCode}\n`;
-            if (isSelfTransition) {
-              code += `                instance->data.state_timer = 0U;\n                ${targetEnum}_Entry(instance);\n            }\n`;
-            } else {
-              code += `                instance->active_state = ${targetEnum};\n                instance->data.state_timer = 0U;\n                ${targetEnum}_Entry(instance);\n            }\n`;
+          if (targetState) {
+            const exitSeq = getExitSequence(stateId, targetState.id);
+            const entrySeq = getEntrySequence(stateId, targetState.id);
+
+            exitSeq.forEach(stId => {
+              const st = sortedStates.find(s => s.id === stId);
+              if (st) code += `                SM_Exit_State(instance, ${stateEnum(st)});\n`;
+            });
+
+            if (nextAccumulatedAction) {
+              code += `${nextAccumulatedAction}`;
             }
+
+            entrySeq.forEach(stId => {
+              const st = sortedStates.find(s => s.id === stId);
+              if (st) code += `                SM_Enter_State(instance, ${stateEnum(st)}, false);\n`;
+            });
+
+            code += `                return;\n`;
+            code += `            }\n`;
           } else if (targetJunction) {
-            if (visitedJunctions.has(targetJunction.id)) {
+            if (visited.has(targetJunction.id)) {
               code += `                /* Loop detected */\n            }\n`;
               continue;
             }
-            const junctionOutgoing = chart.transitions.filter(t => t.sourceId === targetJunction.id).sort((a, b) => a.order - b.order);
-            if (junctionOutgoing.length > 0) {
-              const newVisited = new Set(visitedJunctions);
-              newVisited.add(targetJunction.id);
-              code += generateTransitionLogic(junctionOutgoing, depth + 1, nextAccumulatedCode, newVisited);
-              code += `            }\n`;
-            } else {
-              code += `                ${nextAccumulatedCode}\n                /* End of action path */\n            }\n`;
-            }
+            const nextVisited = new Set(visited);
+            nextVisited.add(targetJunction.id);
+            const outgoingJunc = chart.transitions.filter(t => t.sourceId === targetJunction.id).sort((a, b) => a.order - b.order);
+            code += generateTransitions(outgoingJunc, depth + 1, nextAccumulatedAction, nextVisited);
+            code += `            }\n`;
           } else {
             code += `                /* Error */\n            }\n`;
           }
@@ -532,13 +747,42 @@ export const generateMISRACCode = (chart: {
         if (hasConditions) code += `            else { /* MISRA 15.7 */ }\n`;
         return code;
       };
-      stateCode += generateTransitionLogic(outgoingTransitions, 0, '', new Set<string>());
-    }
-    stateCode += `            break;`;
-    return stateCode;
-  }).join('\n');
 
-  smCoreC += `\n        default:\n            instance->error_status = SM_ERR_INVALID_STATE;\n            instance->active_state = SM_NODE_ERROR;\n            break;\n    }\n}`;
+      if (outgoing.length > 0) {
+        layerStepFuncs += generateTransitions(outgoing, 0, '', new Set<string>());
+      }
+
+      layerStepFuncs += `            /* Run During Actions */\n`;
+      layerStepFuncs += `            ${sEnum}_During(instance, delta_ms);\n`;
+
+      const childLayers = chart.layers.filter(cl => cl.parentStateId === stateId);
+      if (childLayers.length > 0) {
+        layerStepFuncs += `            /* Step Child Layers */\n`;
+        childLayers.forEach(cl => {
+          const clIdx = layerIndexMap.get(cl.id);
+          layerStepFuncs += `            SM_Step_Layer_${clIdx}(instance, delta_ms);\n`;
+        });
+      }
+
+      layerStepFuncs += `            break;\n`;
+    });
+
+    layerStepFuncs += `        default:\n            break;\n    }\n}\n\n`;
+  });
+
+  let smCoreC = `${disclaimer}#include "sm_core.h"\n#include "sm_safety.h"\n#include "sm_user_logic.h"\n\n/* Forward declarations of internal static helpers */\nstatic void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State(ADIA_Instance_t* instance, SM_Node_t state, bool use_history);\n`;
+  
+  sortedLayers.forEach((l) => {
+    const lIdx = layerIndexMap.get(l.id);
+    smCoreC += `static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history);\n`;
+    smCoreC += `static void SM_Step_Layer_${lIdx}(ADIA_Instance_t* instance, uint32_t delta_ms);\n`;
+  });
+
+  smCoreC += `\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g) {\n    SM_Node_t active = SM_NODE_INVALID;\n    if ((uint32_t)g < SM_NUM_LAYERS) {\n        active = instance->active_states[(uint32_t)g];\n    }\n    return active;\n}\n\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance) {\n    return instance->error_status;\n}\n\nvoid SM_Init(ADIA_Instance_t* instance) {\n    uint32_t i;\n    for (i = 0U; i < SM_NUM_LAYERS; i++) {\n        instance->active_states[i] = SM_NODE_INVALID;\n        instance->history_states[i] = SM_NODE_INVALID;\n    }\n    for (i = 0U; i < SM_NUM_STATES; i++) {\n        instance->state_timers[i] = 0U;\n    }\n${sortedVariables.map(v => {
+    let initVal = v.initialValue;
+    if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type) && /^\d+$/.test(initVal)) initVal += 'U';
+    return `    instance->data.${v.name} = ${initVal};`;
+  }).join('\n')}\n${blockStates.length > 0 ? blockStates.map(bs => bs.replace('float ', 'instance->data.').replace(';', ' = 0.0f;')).join('\n') + '\n' : ''}    instance->data.state_timer = 0U;\n    instance->error_status = SM_ERR_NONE;\n    SM_Reset(instance);\n}\n\nvoid SM_Reset(ADIA_Instance_t* instance) {\n    uint32_t i;\n    for (i = 0U; i < SM_NUM_LAYERS; i++) {\n        instance->active_states[i] = SM_NODE_INVALID;\n    }\n    instance->error_status = SM_ERR_NONE;\n    SM_Enter_Layer_${rootLayerIdx}(instance, false);\n}\n\nvoid SM_Step(ADIA_Instance_t* instance, uint32_t delta_ms) {\n    SM_Watchdog_Kick(instance);\n    SM_Safety_Check(instance);\n    if (instance->error_status != SM_ERR_NONE) {\n        if (instance->error_status == SM_ERR_SAFETY_VIOLATION ||\n            instance->error_status == SM_ERR_RAM_INTEGRITY ||\n            instance->error_status == SM_ERR_ROM_INTEGRITY) {\n            uint32_t i;\n            for (i = 0U; i < SM_NUM_LAYERS; i++) {\n                instance->active_states[i] = SM_NODE_SAFE;\n            }\n            return;\n        }\n        uint32_t i;\n        for (i = 0U; i < SM_NUM_LAYERS; i++) {\n            instance->active_states[i] = SM_NODE_ERROR;\n        }\n        return;\n    }\n    if (instance->data.state_timer + delta_ms < instance->data.state_timer) instance->data.state_timer = UINT32_MAX;\n    else instance->data.state_timer += delta_ms;\n\n    /* Increment state timers */\n${timerIncrementCode}\n    /* Step root layer */\n    SM_Step_Layer_${rootLayerIdx}(instance, delta_ms);\n}\n\n/* Helper Functions Implementation */\n${smExitStateFunc}\n${smEnterStateFunc}\n${layerEntryFuncs}\n${layerStepFuncs}`;
 
   // Replace division-based time scaling with fixed-point math in smCoreC
   smCoreC = smCoreC.replace(/(?:(?:\(float\)\s*)?delta_ms|\bdelta_ms\b)\s*\/\s*1000(?:\.0f?)?/g, '((delta_ms * 65536U) / 1000U)');

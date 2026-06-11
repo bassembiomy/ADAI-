@@ -13259,6 +13259,12 @@ const ADIA = () => {
           sessionState={hilSessionState}
           onChangeSessionState={setHilSessionState}
           variables={variables}
+          states={states}
+          transitions={transitions}
+          junctions={junctions}
+          layers={layers}
+          safetyMode={safetyMode}
+          tickMs={tickMs}
           onBack={() => setDiagramMode('statemachine')}
         />
       </div>

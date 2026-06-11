@@ -1359,6 +1359,90 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         id: 'ps_ramp', name: 'PS Ramp', color: '#92400e', icon: 'ps_ramp', category: 'Sources',
         params: { slope: { value: 1, unit: '1/s', label: 'Slope' }, start: { value: 0, unit: 's', label: 'Start Time' } },
         ports: [{ id: 'y', pos: 'right', label: 'y' }]
+      },
+      {
+        id: 'lms_adaptive_filter', name: 'LMS Adaptive Filter', color: '#c9a86c', icon: 'graduation-cap', category: 'Learning Models',
+        params: { lr: { value: 0.05, unit: '1', label: 'Learning Rate' } },
+        ports: [
+          { id: 'x', pos: 'left', label: 'x', domain: 'Physical' },
+          { id: 'd', pos: 'left', label: 'd', domain: 'Physical' },
+          { id: 'lr', pos: 'bottom', label: 'lr', domain: 'Physical' },
+          { id: 'y', pos: 'right', label: 'y', domain: 'Physical' },
+          { id: 'err', pos: 'right', label: 'err', domain: 'Physical' },
+          { id: 'w1', pos: 'right', label: 'w1', domain: 'Physical' },
+          { id: 'w2', pos: 'right', label: 'w2', domain: 'Physical' }
+        ],
+        equation: 'y = w1*x + w2*x_prev\\nerr = d - y\\nw = w + lr*err*x_vec',
+        description: 'A 2-tap Least Mean Squares (LMS) Adaptive Filter. Automatically learns to predict a target signal d from an input x by updating filter weights w1 and w2.'
+      },
+      {
+        id: 'neural_neuron_learning', name: 'Neural Neuron Learner', color: '#c9a86c', icon: 'graduation-cap', category: 'Learning Models',
+        params: {
+          lr: { value: 0.1, unit: '1', label: 'Learning Rate' },
+          initW1: { value: 0.5, unit: '1', label: 'Init Weight 1' },
+          initW2: { value: -0.5, unit: '1', label: 'Init Weight 2' },
+          initBias: { value: 0.0, unit: '1', label: 'Init Bias' }
+        },
+        ports: [
+          { id: 'x1', pos: 'left', label: 'x1', domain: 'Physical' },
+          { id: 'x2', pos: 'left', label: 'x2', domain: 'Physical' },
+          { id: 'target', pos: 'left', label: 'target', domain: 'Physical' },
+          { id: 'lr', pos: 'bottom', label: 'lr', domain: 'Physical' },
+          { id: 'y', pos: 'right', label: 'y', domain: 'Physical' },
+          { id: 'err', pos: 'right', label: 'err', domain: 'Physical' },
+          { id: 'w1', pos: 'right', label: 'w1', domain: 'Physical' },
+          { id: 'w2', pos: 'right', label: 'w2', domain: 'Physical' },
+          { id: 'bias', pos: 'right', label: 'bias', domain: 'Physical' }
+        ],
+        equation: 'y = tanh(w1*x1 + w2*x2 + bias)\\nerr = target - y\\ndw = lr*err*(1-y^2)*x',
+        description: 'A Single-Neuron Online Gradient Descent Learner using a tanh activation function. Trains weights and bias via online backpropagation.'
+      },
+      {
+        id: 'rl_q_learning_controller', name: 'RL Q-Learning Agent', color: '#c9a86c', icon: 'graduation-cap', category: 'Learning Models',
+        params: {
+          alpha: { value: 0.1, unit: '1', label: 'Alpha (Learning Rate)' },
+          gamma: { value: 0.9, unit: '1', label: 'Gamma (Discount Factor)' },
+          epsilon: { value: 0.1, unit: '1', label: 'Epsilon (Exploration Rate)' },
+          numStates: { value: 5, unit: '1', label: 'Number of States' },
+          numActions: { value: 3, unit: '1', label: 'Number of Actions' }
+        },
+        ports: [
+          { id: 'error', pos: 'left', label: 'error', domain: 'Physical' },
+          { id: 'reward', pos: 'left', label: 'reward', domain: 'Physical' },
+          { id: 'reset', pos: 'bottom', label: 'reset', domain: 'Physical' },
+          { id: 'action', pos: 'right', label: 'action', domain: 'Physical' },
+          { id: 'max_q', pos: 'right', label: 'max_q', domain: 'Physical' }
+        ],
+        equation: 'Q(s,a) += α*(R + γ*max_q(s\') - Q(s,a))',
+        description: 'Discrete Q-learning control agent. Maps continuous system error into a configurable number of state bins, selects control actions spaced between [-1, 1], and updates Q-values online.'
+      },
+      {
+        id: 'ac_motor_pid_control', name: 'AC Motor PID Control', color: '#c9a86c', icon: 'graduation-cap', category: 'Learning Models',
+        params: {
+          Kp: { value: 2.5, unit: '1', label: 'Prop Gain' },
+          Ki: { value: 1.2, unit: '1', label: 'Int Gain' },
+          Kd: { value: 0.1, unit: '1', label: 'Deriv Gain' },
+          w_ref: { value: 157, unit: 'rad/s', label: 'Ref Speed' },
+          tl: { value: 0, unit: 'N-m', label: 'Load Torque' },
+          Rs: { value: 0.5, unit: 'Ω', label: 'Stator Res' },
+          Ls: { value: 0.1, unit: 'H', label: 'Stator Ind' },
+          Rr: { value: 0.4, unit: 'Ω', label: 'Rotor Res' },
+          Lr: { value: 0.1, unit: 'H', label: 'Rotor Ind' },
+          Lm: { value: 0.09, unit: 'H', label: 'Mutual Ind' },
+          P: { value: 2, unit: '1', label: 'Pole Pairs' },
+          J: { value: 0.01, unit: 'kg-m^2', label: 'Inertia' },
+          B: { value: 0.001, unit: 'N-m-s/rad', label: 'Damping' },
+          N: { value: 100, unit: '1', label: 'Filter Coeff' }
+        },
+        ports: [
+          { id: 'w_ref', pos: 'left', label: 'w_ref', domain: 'Physical' },
+          { id: 'tl', pos: 'bottom', label: 'tl', domain: 'Physical' },
+          { id: 'omega', pos: 'right', label: 'omega', domain: 'Physical' },
+          { id: 'error', pos: 'right', label: 'error', domain: 'Physical' },
+          { id: 'te', pos: 'right', label: 'te', domain: 'Physical' }
+        ],
+        equation: 'Pedagogical model for PID Speed Control of an Induction Motor.',
+        description: 'A complete pedagogical model for PID Speed Control of an Induction Motor. It integrates the motor dynamics and the speed regulator into one block for easy analysis of tuning effects.'
       }
     ]
   },

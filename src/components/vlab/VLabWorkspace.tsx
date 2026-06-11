@@ -20,6 +20,7 @@ import * as math from 'mathjs';
 import { VLabWorkspaceProps } from './VLabWorkspaceTypes';
 import { VLAB_LIBRARY, VLabBlock, VLabPort } from '../../utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../engine/vlab/vlabComponentDefinitions';
+import { VLabPhysicsEngine } from '../../engine/vlab/vlabPhysics';
 import { Settings2, Play, Pause, Square, Send, ChevronLeft, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus, Network } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
@@ -206,6 +207,28 @@ const LEARNING_LABS = [
       { id: 'mg2', source: 'mw_magnetron', target: 'mw_ground', sourceHandle: 'n_s', targetHandle: 'a_t' },
       { id: 'mg3', source: 'mw_heater', target: 'mw_ground', sourceHandle: 'n_s', targetHandle: 'a_t' },
       { id: 'mg4', source: 'mw_steam', target: 'mw_ground', sourceHandle: 'n_s', targetHandle: 'a_t' }
+    ]
+  },
+  {
+    id: 'voltage_sensing_circuit',
+    name: '220V Power Supply & Voltage Sensing',
+    category: 'Electrical Networks',
+    difficulty: 'Beginner',
+    description: 'Learn to measure voltage across a 100Ω resistor connected to a 220V AC power supply (220V RMS / 311V Peak) using a voltage sensor and an oscilloscope.',
+    nodes: [
+      { id: 'ac_source', blockId: 'ac_voltage', position: { x: 50, y: 200 }, label: '220V AC Supply', params: { Vpk: 311.13, f: 50 } },
+      { id: 'resistor_load', blockId: 'resistor', position: { x: 300, y: 200 }, label: '100Ω Load Resistor', params: { R: 100 } },
+      { id: 'v_sensor', blockId: 'v_sensor', position: { x: 550, y: 200 }, label: 'Voltage Sensor', params: { R_int: 1e8 } },
+      { id: 'scope', blockId: 'scope', position: { x: 800, y: 150 }, label: 'Oscilloscope', params: { time_range: 0.1 } },
+      { id: 'ground', blockId: 'ground', position: { x: 200, y: 400 }, label: 'Ground Reference' }
+    ],
+    edges: [
+      { id: 'e1', source: 'ac_source', target: 'resistor_load', sourceHandle: 'p_s', targetHandle: 'p_t' },
+      { id: 'e2', source: 'resistor_load', target: 'ground', sourceHandle: 'n_s', targetHandle: 'a_t' },
+      { id: 'e3', source: 'ac_source', target: 'ground', sourceHandle: 'n_s', targetHandle: 'a_t' },
+      { id: 'e4', source: 'resistor_load', target: 'v_sensor', sourceHandle: 'p_s', targetHandle: 'p_t' },
+      { id: 'e5', source: 'v_sensor', target: 'ground', sourceHandle: 'n_s', targetHandle: 'a_t' },
+      { id: 'e6', source: 'v_sensor', target: 'scope', sourceHandle: 'v_s', targetHandle: 'in1_t' }
     ]
   }
 ];
@@ -1450,6 +1473,47 @@ const SymbolRenderer = ({ type, color }: { type: string, color: string }) => {
           <text x="30" y="34" textAnchor="middle" fill={color || '#c9a86c'} fontSize="10" fontWeight="black" stroke="none">DOE</text>
         </svg>
       );
+    case 'lms_adaptive_filter':
+      return (
+        <svg width="80" height="60" viewBox="0 0 80 60" fill="none" stroke={color} strokeWidth="2">
+          <rect x="10" y="10" width="60" height="40" rx="4" fill={color} fillOpacity="0.05" />
+          <path d="M15 30H30L35 20L45 40L50 30H65" strokeWidth="1.5" />
+          <text x="40" y="52" textAnchor="middle" fill={color} fontSize="8" stroke="none" fontWeight="bold">LMS FILTER</text>
+        </svg>
+      );
+    case 'neural_neuron_learning':
+      return (
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none" stroke={color} strokeWidth="2">
+          <rect x="5" y="5" width="70" height="70" rx="4" fill={color} fillOpacity="0.05" />
+          <circle cx="25" cy="25" r="6" />
+          <circle cx="25" cy="55" r="6" />
+          <circle cx="55" cy="40" r="10" fill={color} fillOpacity="0.2" />
+          <line x1="31" y1="27" x2="46" y2="36" strokeWidth="1.5" />
+          <line x1="31" y1="53" x2="46" y2="44" strokeWidth="1.5" />
+          <text x="40" y="72" textAnchor="middle" fill={color} fontSize="8" stroke="none" fontWeight="bold">NEURON</text>
+        </svg>
+      );
+    case 'rl_q_learning_controller':
+      return (
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none" stroke={color} strokeWidth="2">
+          <rect x="5" y="5" width="70" height="70" rx="4" fill={color} fillOpacity="0.05" />
+          <path d="M25 40 A15 15 0 1 1 55 40 A15 15 0 0 1 25 40" strokeDasharray="3 3" />
+          <path d="M55 40 L53 35 M55 40 L50 42" strokeWidth="2" />
+          <text x="40" y="44" textAnchor="middle" fill={color} fontSize="14" stroke="none" fontWeight="bold">Q</text>
+          <text x="40" y="72" textAnchor="middle" fill={color} fontSize="8" stroke="none" fontWeight="bold">RL AGENT</text>
+        </svg>
+      );
+    case 'ac_motor_pid_control':
+      return (
+        <svg width="100" height="100" viewBox="0 0 100 100" fill="none" stroke={color} strokeWidth="2">
+          <rect x="10" y="10" width="80" height="80" rx="6" fill={color} fillOpacity="0.05" />
+          <circle cx="65" cy="50" r="20" />
+          <text x="65" y="56" textAnchor="middle" fill={color} fontSize="16" stroke="none" fontWeight="bold">M</text>
+          <rect x="20" y="35" width="25" height="30" rx="2" strokeWidth="1.5" />
+          <text x="32" y="53" textAnchor="middle" fill={color} fontSize="8" stroke="none" fontWeight="bold">PID</text>
+          <path d="M45 50 H50" strokeWidth="1.5" />
+        </svg>
+      );
     default:
       if (type && type.toLowerCase().includes('doe')) {
         return (
@@ -1524,9 +1588,12 @@ const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boo
       >
         {/* X-Bridges Link Badge */}
         {(() => {
-          const isXbridgesLink = (data.type?.startsWith('ps_') || 
+          const isXbridgesLink = (
+            data.type?.startsWith('ps_') || 
             (data.type || '').includes('pid') || 
-            ['speed_pid', 'pid_controller', 'controller', 'error_calc', 'ref_speed'].some(k => id.includes(k) || (data.type || '').includes(k)));
+            ['lms_adaptive_filter', 'neural_neuron_learning', 'rl_q_learning_controller', 'ac_motor_pid_control'].includes(data.type || '') ||
+            ['speed_pid', 'pid_controller', 'controller', 'error_calc', 'ref_speed'].some(k => id.includes(k) || (data.type || '').includes(k))
+          );
           
           if (!isXbridgesLink) return null;
           
@@ -1936,7 +2003,11 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
    * Returns a function: (t, dt) => number  (the signal value at the scope)
    */
   const buildSimEngine = useCallback(() => {
-    // Helper: get a param value from a node by id
+    const engine = new VLabPhysicsEngine();
+    let state: any = null;
+    let useFallback = false;
+
+    // Helper: get a param value from a node by id for the fallback
     const param = (nodeId: string, key: string, fallback: number) => {
       const n = nodes.find(nd => nd.id === nodeId);
       if (!n) return fallback;
@@ -1951,428 +2022,277 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       return fallback;
     };
 
-    // ── Detect Air Fryer Thermal Model ──────────────────────────────────────
-    const hasAC = nodes.some(n => (n.data as any).type === 'ac_voltage');
-    const hasThermal = nodes.some(n => ['thermal_resistor', 'convective_heat', 'thermal_mass', 'temp_sensor'].includes((n.data as any).type));
-    const hasScope = nodes.some(n => (n.data as any).type === 'scope');
+    // Keep the old hardcoded solver as a safe runtime fallback
+    const runFallbackSolver = () => {
+      const hasAC = nodes.some(n => (n.data as any).type === 'ac_voltage');
+      const hasThermal = nodes.some(n => ['thermal_resistor', 'convective_heat', 'thermal_mass', 'temp_sensor'].includes((n.data as any).type));
+      const hasScope = nodes.some(n => (n.data as any).type === 'scope');
 
-    if (hasAC && hasThermal && hasScope) {
-      // ── Air Fryer / Multi-domain Thermal Model ──
-      // Parameters
-      const Vpk = param('ac_supply', 'Vpk', 325);   // V  peak
-      const R = param('heating_element', 'Rth', 35);   // Ω  resistance
-      const h = param('convection_link', 'h', 80);   // W/m²K
-      const A = param('convection_link', 'A', 0.15);  // m²
-      const V = param('air_chamber', 'V', 0.005);  // m³ volume
-      // Derive thermal mass: C = rho * Cp * V  (air: ~1.2 kg/m³ × 1005 J/kgK)
-      const rho = 1.2, Cp = 1005;
-      const C = rho * Cp * V;           // J/K
-      const hA = h * A;                  // W/K convection conductance
-      const P_avg = (Vpk * Vpk) / (2 * R); // AC RMS power = Vpk²/(2R)
-      const T_amb = 293;                   // K  ambient ≈ 20°C
+      if (hasAC && hasThermal && hasScope) {
+        const Vpk = param('ac_supply', 'Vpk', 325);
+        const R = param('heating_element', 'Rth', 35);
+        const h = param('convection_link', 'h', 80);
+        const A = param('convection_link', 'A', 0.15);
+        const V = param('air_chamber', 'V', 0.005);
+        const rho = 1.2, Cp = 1005;
+        const C = rho * Cp * V;
+        const hA = h * A;
+        const P_avg = (Vpk * Vpk) / (2 * R);
+        const T_amb = 293;
 
-      // State: basket temperature  T(t)
-      let T = T_amb;
-      return (t: number, dt: number) => {
-        // Euler step: dT/dt = (P_heat - Q_conv) / C
-        //   Q_conv = hA * (T - T_amb)
-        const dT = (P_avg - hA * (T - T_amb)) / C;
-        T += dT * dt;
-        // Return Celsius offset from ambient so scope starts at ~0
-        return T - T_amb;
-      };
-    }
-
-    // ── Detect Blender Electromechanical Model ──────────────────────────────
-    const hasDC = nodes.some(n => (n.data as any).type === 'dc_voltage');
-    const hasMotor = nodes.some(n => (n.data as any).type === 'rotational_electromechanical_converter');
-    const isBlender = hasDC && hasMotor && nodes.some(n => n.id === 'blender_motor');
-
-    if (isBlender) {
-      // ── Blender / DC Motor Mechanical Model ──
-      const Vsrc = param('dc_source', 'V_const', 24);
-      const K = param('blender_motor', 'K', 0.05);
-      const Ra = param('blender_motor', 'R', 2.0);
-      const b = param('mixture_drag', 'b', 0.001);
-      const J = param('blade_inertia', 'J', 0.0002);
-
-      let omega = 0; // rad/s
-      return (t: number, dt: number) => {
-        // Torque_elec = K * (Vsrc - K*omega) / Ra
-        // d_omega/dt = (Torque_elec - b*omega) / J
-        const T_elec = K * (Vsrc - K * omega) / Ra;
-        const dOmega = (T_elec - b * omega) / J;
-        omega += dOmega * dt;
-
-        // Return speed in RPM for the scope
-        return omega * (60 / (2 * Math.PI));
-      };
-    }
-
-    // ── Detect PID AC Motor Speed Control ───────────────────────────────────
-    const hasPID = nodes.some(n => (n.data as any).type === 'ps_pid_ctrl');
-    const isPIDMotor = hasPID && nodes.some(n => n.id === 'speed_pid');
-
-    if (isPIDMotor) {
-      const w_ref = param('ref_speed', 'value', 1200); // RPM
-      const Kp = param('speed_pid', 'Kp', 2.0);
-      const Ki = param('speed_pid', 'Ki', 5.0);
-      const Kd = param('speed_pid', 'Kd', 0.1);
-      const N = param('speed_pid', 'N', 100);    // Derivative filter coefficient
-      const limit = param('speed_pid', 'limit', 240); // Output saturation
-
-      const J = param('rotor_inertia', 'J', 0.05);
-      const b = 0.1; // damping
-
-      let omega = 0;   // rad/s
-      let integ = 0;   // integral state
-      let filterState = 0; // for filtered derivative
-
-      const w_ref_rad = w_ref * (2 * Math.PI / 60);
-
-      return (t: number, dt: number) => {
-        // Apply a step at t=0.5s for better visualization
-        const target_rad = t < 0.5 ? 0 : w_ref_rad;
-        const error = target_rad - omega;
-
-        // Filtered Derivative: D(s) = Kd * s / (s/N + 1)
-        const dFilter = N * (error - filterState);
-        filterState += dFilter * dt;
-        const deriv = dFilter;
-
-        // Trial output (P + I + D)
-        const u_unsat = Kp * error + Ki * integ + Kd * deriv;
-
-        // Output Saturation
-        const u = Math.max(-limit, Math.min(limit, u_unsat));
-
-        // Anti-windup: Clamping
-        const saturated = u !== u_unsat;
-        const sameSign = Math.sign(error) === Math.sign(u_unsat);
-        if (!(saturated && sameSign)) {
-          integ += error * dt;
-        }
-
-        // Mechanical dynamics: J*d_omega/dt = T - b*omega
-        const dOmega = (u - b * omega) / J;
-        omega += dOmega * dt;
-
-        return {
-          value: omega * (60 / (2 * Math.PI)),
-          target: target_rad * (60 / (2 * Math.PI))
+        let T = T_amb;
+        return (t: number, dt: number) => {
+          const dT = (P_avg - hA * (T - T_amb)) / C;
+          T += dT * dt;
+          return T - T_amb;
         };
-      };
-    }
+      }
 
-    // ── Detect Custom DOE Model Block ───────────────────────────────────────
-    const customDoeNode = nodes.find(n => (n.data as any).type === 'doe_custom');
-    if (customDoeNode) {
-      const data = customDoeNode.data as any;
-      const modelType = data.params?.modelType?.value || 'RSM';
-      const eq = data.params?.equation?.value || '0';
-      const inputNames = data.params?.inputNames || [];
-      const layers = data.params?.layers || [];
-      const polyOrder = data.params?.polyOrder || 2;
+      const hasDC = nodes.some(n => (n.data as any).type === 'dc_voltage');
+      const hasMotor = nodes.some(n => (n.data as any).type === 'rotational_electromechanical_converter');
+      const isBlender = hasDC && hasMotor && nodes.some(n => n.id === 'blender_motor');
 
-      return (t: number, dt: number) => {
-        // Collect inputs from connected nodes
-        const inputs = inputNames.map((name: string, i: number) => {
-          const edge = edges.find(e => e.target === customDoeNode.id && e.targetHandle === `in${i + 1}_t`);
-          if (edge) {
-            const sourceNode = nodes.find(n => n.id === edge.source);
-            if (sourceNode) return param(sourceNode.id, 'value', 0);
+      if (isBlender) {
+        const Vsrc = param('dc_source', 'V_const', 24);
+        const K = param('blender_motor', 'K', 0.05);
+        const Ra = param('blender_motor', 'R', 2.0);
+        const b = param('mixture_drag', 'b', 0.001);
+        const J = param('blade_inertia', 'J', 0.0002);
+
+        let omega = 0;
+        return (t: number, dt: number) => {
+          const T_elec = K * (Vsrc - K * omega) / Ra;
+          const dOmega = (T_elec - b * omega) / J;
+          omega += dOmega * dt;
+          return omega * (60 / (2 * Math.PI));
+        };
+      }
+
+      const hasPID = nodes.some(n => (n.data as any).type === 'ps_pid_ctrl');
+      const isPIDMotor = hasPID && nodes.some(n => n.id === 'speed_pid');
+
+      if (isPIDMotor) {
+        const w_ref = param('ref_speed', 'value', 1200);
+        const Kp = param('speed_pid', 'Kp', 2.0);
+        const Ki = param('speed_pid', 'Ki', 5.0);
+        const Kd = param('speed_pid', 'Kd', 0.1);
+        const N = param('speed_pid', 'N', 100);
+        const limit = param('speed_pid', 'limit', 240);
+        const J = param('rotor_inertia', 'J', 0.05);
+        const b = 0.1;
+
+        let omega = 0;
+        let integ = 0;
+        let filterState = 0;
+        const w_ref_rad = w_ref * (2 * Math.PI / 60);
+
+        return (t: number, dt: number) => {
+          const target_rad = t < 0.5 ? 0 : w_ref_rad;
+          const error = target_rad - omega;
+          const dFilter = N * (error - filterState);
+          filterState += dFilter * dt;
+          const deriv = dFilter;
+          const u_unsat = Kp * error + Ki * integ + Kd * deriv;
+          const u = Math.max(-limit, Math.min(limit, u_unsat));
+          const saturated = u !== u_unsat;
+          const sameSign = Math.sign(error) === Math.sign(u_unsat);
+          if (!(saturated && sameSign)) {
+            integ += error * dt;
           }
-          return param(customDoeNode.id, name, 0);
-        });
+          const dOmega = (u - b * omega) / J;
+          omega += dOmega * dt;
+          return {
+            value: omega * (60 / (2 * Math.PI)),
+            target: target_rad * (60 / (2 * Math.PI))
+          };
+        };
+      }
 
-        if (modelType === 'RSM') {
-          try {
-            const lines = (eq || '0').split('\n');
-            const eqLine = lines.find((l: string) => l.includes('Y ='));
-            let eqStr = '0';
-            if (eqLine) {
-              eqStr = eqLine.split('Y =')[1].trim();
-              lines.slice(lines.indexOf(eqLine) + 1).forEach((line: string) => {
-                const trimmed = line.trim();
-                if (trimmed.startsWith('+') || trimmed.startsWith('-')) {
-                  eqStr += ' ' + trimmed;
-                }
-              });
+      const customDoeNode = nodes.find(n => (n.data as any).type === 'doe_custom');
+      if (customDoeNode) {
+        const data = customDoeNode.data as any;
+        const modelType = data.params?.modelType?.value || 'RSM';
+        const eq = data.params?.equation?.value || '0';
+        const inputNames = data.params?.inputNames || [];
+        const layers = data.params?.layers || [];
+        const polyOrder = data.params?.polyOrder || 2;
+
+        return (t: number, dt: number) => {
+          const inputs = inputNames.map((name: string, i: number) => {
+            const edge = edges.find(e => e.target === customDoeNode.id && e.targetHandle === `in${i + 1}_t`);
+            if (edge) {
+              const sourceNode = nodes.find(n => n.id === edge.source);
+              if (sourceNode) return param(sourceNode.id, 'value', 0);
             }
-
-            const scope: any = {};
-            inputNames.forEach((name: string, i: number) => {
-              scope[name] = inputs[i];
-              scope[`X${i + 1}`] = inputs[i];
-            });
-            return math.evaluate!(eqStr, scope);
-          } catch (e) { return 0; }
-        } else if (modelType === 'GMDH') {
-          try {
-            let currentVals = [...inputs];
-            for (const layer of layers) {
-              currentVals = layer.map((neuron: any) => {
-                const xi = currentVals[neuron.inputs[0]];
-                const xj = currentVals[neuron.inputs[1]];
-                let vals: number[];
-                if (polyOrder === 2) vals = [1, xi, xj, xi * xi, xj * xj, xi * xj];
-                else vals = [1, xi, xj, xi * xi, xj * xj, xi * xj, xi * xi * xi, xj * xj * xj, xi * xi * xj, xi * xj * xj];
-                return vals.reduce((sum, v, cIdx) => sum + v * (neuron.coeffs[cIdx] || 0), 0);
-              });
-            }
-            return currentVals[0] || 0;
-          } catch (e) { return 0; }
-        } else if (modelType === 'Taguchi') {
-          try {
-            const grandMean = data.params?.grandMean?.value || 0;
-            const factorLevels = data.params?.factorLevels?.value || [];
-            let prediction = Number(grandMean);
-            
-            inputNames.forEach((name: string, i: number) => {
-              const val = inputs[i] || 0;
-              const f = factorLevels[i];
-              if (f && f.means) {
-                const sortedMeans = [...f.means].sort((a: any, b: any) => Math.abs(a.level - val) - Math.abs(b.level - val));
-                const nearest = sortedMeans[0];
-                if (nearest) {
-                  prediction += (nearest.meanY - grandMean);
-                }
-              }
-            });
-            return prediction;
-          } catch (e) { return 0; }
-        }
-        return 0;
-      };
-    }
-
-    // ── Detect Washing Machine Dynamics ─────────────────────────────────────
-    const isWash = nodes.some(n => n.id === 'basket_load');
-    if (isWash) {
-      let omega = 0, theta = 0;
-      let id = 0, iq = 0, psi_r = 0;
-
-      const P = 4; // Pole pairs
-      const R = param('basket_load', 'radius', 0.25);
-      const M_clothes = param('basket_load', 'load_mass', 5);
-      const M_unbal = param('basket_load', 'unbalance', 0.5);
-      const J_basket = param('basket_load', 'J_basket', 0.1);
-
-      const Water = param('fluid_load', 'water_level', 10); // Liters
-      const Det = param('fluid_load', 'detergent', 1);      // %
-
-      // Effective inertia
-      const J_total = J_basket + (M_clothes + Water) * R * R;
-
-      return (t: number, dt: number) => {
-        const subSteps = 20;
-        const sdt = dt / subSteps;
-        const w_ref_rad = 600 * (2 * Math.PI / 60); // 600 RPM
-
-        for (let i = 0; i < subSteps; i++) {
-          // Unbalance torque (oscillates with rotation)
-          const T_unbal = M_unbal * 9.81 * R * Math.sin(theta);
-
-          // Fluid & Detergent drag (non-linear viscosity)
-          const viscosity = 0.05 + (Det * 0.02) + (Water * 0.005);
-          const T_drag = viscosity * omega + 0.01 * Math.sign(omega) * (omega * omega);
-
-          // Controller (FOC-like current ref)
-          const iq_ref = Math.max(-50, Math.min(50, (w_ref_rad - omega) * 20.0));
-          const Te = 1.5 * P * 0.1 * iq; // Kt = 0.1 simplified
-
-          // Mechanical integration
-          const dOmega = (Te - T_drag - T_unbal) / J_total;
-          omega += dOmega * sdt;
-          theta += omega * sdt;
-
-          // Current loop (fast)
-          const dIq = (iq_ref - iq) * 100;
-          iq += dIq * sdt;
-
-          if (!Number.isFinite(omega)) { omega = 0; iq = 0; theta = 0; break; }
-        }
-
-        return {
-          value: omega * (60 / (2 * Math.PI)),
-          amps: iq
-        };
-      };
-    }
-
-    // ── Detect VFD Inverter Drive (V/f + FOC) ────────────────────────────────
-    const isVFD = nodes.some(n => n.id === 'vfd_controller');
-    if (isVFD) {
-      // Machine States
-      let omega = 0;      // rad/s
-      let theta_e = 0;    // electrical angle
-      let id = 0, iq = 0; // dq currents
-      let psi_r = 0;      // rotor flux
-
-      const mode = param('vfd_controller', 'mode', 1); // 0:V/f, 1:FOC
-      const P = param('im_motor', 'pole_pairs', 2);
-      const Rs = param('im_motor', 'Rs', 0.1);
-      const Lm = 0.05, Ls = 0.06, Lr = 0.06;
-      const sigma = 1 - (Lm * Lm) / (Ls * Lr);
-      const J = 0.05, B = 0.1, Rr = 0.1;
-
-      return (t: number, dt: number) => {
-        // Reference logic (matches ps_step in lab template)
-        const w_ref_rpm = t < 1.0 ? 500 : 1500;
-        const w_ref_rad = w_ref_rpm * (2 * Math.PI / 60);
-
-        // Sub-stepping for numerical stability
-        const subSteps = 20; // Increased oversampling
-        const sdt = dt / subSteps;
-        const V_MAX = 600; // Physical DC Link limit
-
-        for (let step = 0; step < subSteps; step++) {
-          let vd_ref = 0, vq_ref = 0, we = 0;
-
-          if (mode === 0) { // V/f Mode
-            we = w_ref_rad * P;
-            const V = Math.max(20, Math.min(V_MAX, we * 0.8));
-            vd_ref = V;
-            vq_ref = 0;
-            theta_e += we * sdt;
-          } else { // FOC Mode
-            // Speed loop
-            const iq_ref = Math.max(-100, Math.min(100, (w_ref_rad - omega) * 15.0));
-            const id_ref = 12.0;
-
-            // Current loop
-            vd_ref = (id_ref - id) * 40 + Rs * id;
-            vq_ref = (iq_ref - iq) * 40 + Rs * iq + omega * P * psi_r * (Lm / Lr);
-
-            // Saturation
-            vd_ref = Math.max(-V_MAX, Math.min(V_MAX, vd_ref));
-            vq_ref = Math.max(-V_MAX, Math.min(V_MAX, vq_ref));
-
-            // Slip calc with safety
-            const slip = (Rr * iq) / (Math.max(0.01, psi_r));
-            we = Math.max(-2000, Math.min(2000, omega * P + slip));
-            theta_e += we * sdt;
-          }
-
-          // Machine dynamics
-          const Te = 1.5 * P * (Lm / Lr) * psi_r * iq;
-          const dOmega = (Te - B * omega) / J;
-          omega += dOmega * sdt;
-
-          const dPsi = (Rr * Lm / Lr) * id - (Rr / Lr) * psi_r;
-          psi_r += dPsi * sdt;
-
-          // Current derivatives
-          const dId = (vd_ref - Rs * id + we * sigma * Ls * iq - (Lm / Lr) * dPsi) / (sigma * Ls);
-          const dIq = (vq_ref - Rs * iq - we * sigma * Ls * id - we * (Lm / Lr) * psi_r) / (sigma * Ls);
-
-          id += dId * sdt;
-          iq += dIq * sdt;
-
-          // Robust safety check (Reset on any non-finite value)
-          if (!Number.isFinite(omega) || !Number.isFinite(id) || !Number.isFinite(iq) || !Number.isFinite(psi_r)) {
-            omega = 0; id = 0; iq = 0; psi_r = 0; theta_e = 0;
-            break;
-          }
-        }
-
-        return {
-          value: omega * (60 / (2 * Math.PI)),
-          target: w_ref_rpm
-        };
-      };
-    }
-
-    // ── Detect Advanced Microwave Design ───────────────────────────────────
-    const isMicrowave = nodes.some(n => n.id === 'mw_cavity');
-    if (isMicrowave) {
-      const P_mag = param('mw_magnetron', 'power_rating', 900);
-      const eff = param('mw_magnetron', 'efficiency', 65) / 100;
-      const R_heat = param('mw_heater', 'resistance', 35);
-      const P_steam = param('mw_steam', 'power', 800);
-      const vol = param('mw_cavity', 'volume', 25);
-      const T_amb = 25; // Celsius
-
-      // Derived
-      const Q_mw = P_mag * eff;
-      const Q_h = (230 * 230) / R_heat; // Assume 230V RMS
-      const Q_s = P_steam;
-      const Q_total = Q_mw + Q_h + Q_s;
-
-      // Thermal Mass (Air + effective load)
-      const C = (vol * 0.0012 * 1005) + 500; // Air mass + 0.5kg water equivalent heat capacity
-
-      let temp = T_amb;
-      return (t: number, dt: number) => {
-        // Simple thermal integration
-        const Q_loss = 0.8 * (temp - T_amb); // Loss coefficient
-        const dTemp = (Q_total - Q_loss) / C;
-        temp += dTemp * dt;
-        return temp;
-      };
-    }
-
-    // ── Generic Electrical Model (RC/RL-like response) ──────────────────────
-    const hasElec = nodes.some(n => ['ac_voltage', 'dc_voltage', 'dc_current'].includes((n.data as any).type));
-    if (hasElec) {
-      const Vpk = param(nodes.find(n => (n.data as any).type === 'ac_voltage')?.id ?? '', 'Vpk', 10);
-      const f = param(nodes.find(n => (n.data as any).type === 'ac_voltage')?.id ?? '', 'f', 50);
-      const hasCapacitor = nodes.some(n => (n.data as any).type === 'capacitor');
-      let Vc = 0;
-      return (t: number, dt: number) => {
-        const Vsrc = Vpk * Math.sin(2 * Math.PI * f * t);
-        if (hasCapacitor) {
-          // Simple RC: dVc/dt = (Vsrc - Vc) / RC
-          const RC = 0.02;
-          Vc += ((Vsrc - Vc) / RC) * dt;
-          return Vc;
-        }
-        return Vsrc;
-      };
-    }
-
-    // ── Mechanical Model ────────────────────────────────────────────────────
-    const hasMech = nodes.some(n => ['mass', 'inertia', 'trans_spring', 'rot_spring'].includes((n.data as any).type));
-    if (hasMech) {
-      let v = 0, x = 0;
-      const m = 1.0, k = 10.0, b = 0.5;
-      return (_t: number, dt: number) => {
-        const F = -k * x - b * v;
-        v += (F / m) * dt;
-        x += v * dt;
-        return x;
-      };
-    }
-
-    // ── Detect DOE Custom Block (Regression/Neural) ────────────────────────
-    const doeNode = nodes.find(n => (n.data as any).type === 'doe_custom');
-    if (doeNode) {
-      const equation = (doeNode.data as any).params?.equation?.value;
-      const inputs = (doeNode.data as any).ports?.filter((p: any) => p.type === 'input') || [];
-      
-      return (t: number, _dt: number) => {
-        try {
-          const scope: any = {};
-          // For V-Lab simplified simulation, we assume input signals are constant or sine
-          inputs.forEach((p: any, i: number) => {
-             // In a real V-Lab simulation, we would trace the connections to get values.
-             // Here we simulate a dynamic input for visualization.
-             scope[p.label] = 10 * Math.sin(t + i); 
+            return param(customDoeNode.id, name, 0);
           });
-          
-          if (equation) {
-            return math.evaluate(equation, scope);
+
+          if (modelType === 'RSM') {
+            try {
+              const lines = (eq || '0').split('\n');
+              const eqLine = lines.find((l: string) => l.includes('Y ='));
+              let eqStr = '0';
+              if (eqLine) {
+                eqStr = eqLine.split('Y =')[1].trim();
+                lines.slice(lines.indexOf(eqLine) + 1).forEach((line: string) => {
+                  const trimmed = line.trim();
+                  if (trimmed.startsWith('+') || trimmed.startsWith('-')) {
+                    eqStr += ' ' + trimmed;
+                  }
+                });
+              }
+              const scope: any = {};
+              inputNames.forEach((name: string, i: number) => {
+                scope[name] = inputs[i];
+                scope[`X${i + 1}`] = inputs[i];
+              });
+              return math.evaluate!(eqStr, scope);
+            } catch (e) { return 0; }
+          } else if (modelType === 'GMDH') {
+            try {
+              let currentVals = [...inputs];
+              for (const layer of layers) {
+                currentVals = layer.map((neuron: any) => {
+                  const xi = currentVals[neuron.inputs[0]];
+                  const xj = currentVals[neuron.inputs[1]];
+                  let vals: number[];
+                  if (polyOrder === 2) vals = [1, xi, xj, xi * xi, xj * xj, xi * xj];
+                  else vals = [1, xi, xj, xi * xi, xj * xj, xi * xj, xi * xi * xi, xj * xj * xj, xi * xi * xj, xi * xj * xj];
+                  return vals.reduce((sum, v, cIdx) => sum + v * (neuron.coeffs[cIdx] || 0), 0);
+                });
+              }
+              return currentVals[0] || 0;
+            } catch (e) { return 0; }
+          }
+          return 0;
+        };
+      }
+
+      const isWash = nodes.some(n => n.id === 'basket_load');
+      if (isWash) {
+        let omega = 0, theta = 0;
+        let iq = 0;
+        const P = 4;
+        const R = param('basket_load', 'radius', 0.25);
+        const M_clothes = param('basket_load', 'load_mass', 5);
+        const M_unbal = param('basket_load', 'unbalance', 0.5);
+        const J_basket = param('basket_load', 'J_basket', 0.1);
+        const Water = param('fluid_load', 'water_level', 10);
+        const Det = param('fluid_load', 'detergent', 1);
+        const J_total = J_basket + (M_clothes + Water) * R * R;
+
+        return (t: number, dt: number) => {
+          const subSteps = 20;
+          const sdt = dt / subSteps;
+          const w_ref_rad = 600 * (2 * Math.PI / 60);
+
+          for (let i = 0; i < subSteps; i++) {
+            const T_unbal = M_unbal * 9.81 * R * Math.sin(theta);
+            const viscosity = 0.05 + (Det * 0.02) + (Water * 0.005);
+            const T_drag = viscosity * omega + 0.01 * Math.sign(omega) * (omega * omega);
+            const iq_ref = Math.max(-50, Math.min(50, (w_ref_rad - omega) * 20.0));
+            const Te = 1.5 * P * 0.1 * iq;
+            const dOmega = (Te - T_drag - T_unbal) / J_total;
+            omega += dOmega * sdt;
+            theta += omega * sdt;
+            const dIq = (iq_ref - iq) * 100;
+            iq += dIq * sdt;
+          }
+          return { value: omega * (60 / (2 * Math.PI)), amps: iq };
+        };
+      }
+
+      const isVFD = nodes.some(n => n.id === 'vfd_controller');
+      if (isVFD) {
+        let omega = 0, theta_e = 0, id = 0, iq = 0, psi_r = 0;
+        const mode = param('vfd_controller', 'mode', 1);
+        const P = param('im_motor', 'pole_pairs', 2);
+        const Rs = param('im_motor', 'Rs', 0.1);
+        const Lm = 0.05, Ls = 0.06, Lr = 0.06;
+        const sigma = 1 - (Lm * Lm) / (Ls * Lr);
+        const J = 0.05, B = 0.1, Rr = 0.1;
+
+        return (t: number, dt: number) => {
+          const w_ref_rpm = t < 1.0 ? 500 : 1500;
+          const w_ref_rad = w_ref_rpm * (2 * Math.PI / 60);
+          const subSteps = 20;
+          const sdt = dt / subSteps;
+          const V_MAX = 600;
+
+          for (let step = 0; step < subSteps; step++) {
+            let vd_ref = 0, vq_ref = 0, we = 0;
+            if (mode === 0) {
+              we = w_ref_rad * P;
+              const V = Math.max(20, Math.min(V_MAX, we * 0.8));
+              vd_ref = V;
+              vq_ref = 0;
+              theta_e += we * sdt;
+            } else {
+              const iq_ref = Math.max(-100, Math.min(100, (w_ref_rad - omega) * 15.0));
+              const id_ref = 12.0;
+              vd_ref = (id_ref - id) * 40 + Rs * id;
+              vq_ref = (iq_ref - iq) * 40 + Rs * iq + omega * P * psi_r * (Lm / Lr);
+              vd_ref = Math.max(-V_MAX, Math.min(V_MAX, vd_ref));
+              vq_ref = Math.max(-V_MAX, Math.min(V_MAX, vq_ref));
+              const slip = (Rr * iq) / (Math.max(0.01, psi_r));
+              we = Math.max(-2000, Math.min(2000, omega * P + slip));
+              theta_e += we * sdt;
+            }
+            const Te = 1.5 * P * (Lm / Lr) * psi_r * iq;
+            const dOmega = (Te - B * omega) / J;
+            omega += dOmega * sdt;
+            const dPsi = (Rr * Lm / Lr) * id - (Rr / Lr) * psi_r;
+            psi_r += dPsi * sdt;
+            const dId = (vd_ref - Rs * id + we * sigma * Ls * iq - (Lm / Lr) * dPsi) / (sigma * Ls);
+            const dIq = (vq_ref - Rs * iq - we * sigma * Ls * id - we * (Lm / Lr) * psi_r) / (sigma * Ls);
+            id += dId * sdt;
+            iq += dIq * sdt;
+          }
+          return { value: omega * (60 / (2 * Math.PI)), target: w_ref_rpm };
+        };
+      }
+
+      const isMicrowave = nodes.some(n => n.id === 'mw_cavity');
+      if (isMicrowave) {
+        const P_mag = param('mw_magnetron', 'power_rating', 900);
+        const eff = param('mw_magnetron', 'efficiency', 65) / 100;
+        const R_heat = param('mw_heater', 'resistance', 35);
+        const P_steam = param('mw_steam', 'power', 800);
+        const vol = param('mw_cavity', 'volume', 25);
+        const T_amb = 25;
+        const Q_total = (P_mag * eff) + ((230 * 230) / R_heat) + P_steam;
+        const C = (vol * 0.0012 * 1005) + 500;
+        let temp = T_amb;
+
+        return (t: number, dt: number) => {
+          const Q_loss = 0.8 * (temp - T_amb);
+          const dTemp = (Q_total - Q_loss) / C;
+          temp += dTemp * dt;
+          return temp;
+        };
+      }
+
+      return (_t: number, _dt: number) => 0;
+    };
+
+    const fallbackStep = runFallbackSolver();
+
+    return (t: number, dt: number) => {
+      if (!useFallback) {
+        try {
+          const result = engine.simulateStep(nodes, edges, state, dt);
+          state = result;
+          if (result && result.scopeValues !== undefined && result.scopeValues !== null) {
+            return result.scopeValues;
           }
         } catch (e) {
-          return 0;
+          console.warn("DAE Physics Engine failed, falling back to Euler model:", e);
+          useFallback = true;
         }
-        return 0;
-      };
-    }
-
-    // ── Fallback: constant zero ──────────────────────────────────────────────
-    return (_t: number, _dt: number) => 0;
-  }, [nodes]);
+      }
+      return fallbackStep(t, dt);
+    };
+  }, [nodes, edges]);
 
   // Simulation Loop
   useEffect(() => {
@@ -2485,12 +2405,43 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       ...domain,
       blocks: domain.blocks.filter(block =>
         block.name.toLowerCase().includes(query) ||
-        (block.category || '').toLowerCase().includes(query)
+        block.id.toLowerCase().includes(query) ||
+        (block.category || '').toLowerCase().includes(query) ||
+        (block.description || '').toLowerCase().includes(query)
       )
     })).filter(domain => domain.blocks.length > 0);
   }, [searchQuery]);
 
   const onConnect = useCallback((params: Connection) => {
+    // 1. Domain connection validation (Simscape connection safety parity)
+    const sourceNode = nodes.find(n => n.id === params.source);
+    const targetNode = nodes.find(n => n.id === params.target);
+    if (sourceNode && targetNode) {
+      const sourceData = sourceNode.data as any;
+      const targetData = targetNode.data as any;
+
+      const sPortId = params.sourceHandle?.split('-').pop()?.replace(/_[st]$/, '');
+      const tPortId = params.targetHandle?.split('-').pop()?.replace(/_[st]$/, '');
+      
+      const sourcePort = sourceData.ports?.find((p: any) => p.id === sPortId);
+      const targetPort = targetData.ports?.find((p: any) => p.id === tPortId);
+
+      const sDomain = sourcePort?.domain || sourceData.domain;
+      const tDomain = targetPort?.domain || targetData.domain;
+
+      const isUniversalBlock = (id: string) => id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator';
+      const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type);
+
+      if (sDomain && tDomain && sDomain.toLowerCase() !== tDomain.toLowerCase() && !isRelaxed) {
+        setStatus({
+          message: `Cannot connect ${sDomain} port to ${tDomain} port. Use a converter block.`,
+          type: 'error'
+        });
+        setTimeout(() => setStatus(s => s.type === 'error' ? { message: 'System Ready', type: 'idle' } : s), 5000);
+        return; // Block the connection
+      }
+    }
+
     setHistory(h => [...h, { nodes, edges }].slice(-20)); // Keep last 20 steps
     const edge = {
       ...params,
@@ -2648,7 +2599,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     const allBlocks = VLAB_LIBRARY.flatMap(d => d.blocks);
     return allBlocks.filter(b =>
       b.name.toLowerCase().includes(query) ||
-      (b.category || '').toLowerCase().includes(query)
+      b.id.toLowerCase().includes(query) ||
+      (b.category || '').toLowerCase().includes(query) ||
+      (b.description || '').toLowerCase().includes(query)
     ).slice(0, 8);
   }, [quickSearchQuery]);
 
@@ -2658,6 +2611,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     } else if (
       (node.data as any).type?.startsWith('ps_') || 
       (node.data as any).type?.includes('pid') || 
+      ['lms_adaptive_filter', 'neural_neuron_learning', 'rl_q_learning_controller', 'ac_motor_pid_control'].includes((node.data as any).type || '') ||
       ['speed_pid', 'pid_controller', 'controller', 'error_calc', 'ref_speed'].some(k => node.id.includes(k) || (node.data as any).type?.includes(k))
     ) {
       if (onNavigateToXbridges) {

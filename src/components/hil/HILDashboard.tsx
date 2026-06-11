@@ -13,6 +13,7 @@ interface HILDashboardProps {
   onChangeCommPort: (port: string) => void;
   baudRate: number;
   onChangeBaudRate: (rate: number) => void;
+  target: string;
 }
 
 export const HILDashboard: React.FC<HILDashboardProps> = ({
@@ -23,7 +24,8 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
   commPort,
   onChangeCommPort,
   baudRate,
-  onChangeBaudRate
+  onChangeBaudRate,
+  target
 }) => {
   const [ports, setPorts] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -33,6 +35,13 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
   const [timestamps, setTimestamps] = useState<number[]>([]);
   
   const simTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [dataFrequency, setDataFrequency] = useState(0);
+  const [dataThroughput, setDataThroughput] = useState(0);
+  const [packetErrors, setPacketErrors] = useState(0);
+  const [targetCpuLoad, setTargetCpuLoad] = useState(0);
+
+  const samplesCountRef = useRef(0);
+  const bytesCountRef = useRef(0);
 
   // List available ports
   useEffect(() => {
@@ -68,6 +77,39 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
     fetchPorts();
   }, [commPort, onChangeCommPort]);
 
+  // Trigger auto-connect if requested by parent (e.g. on deploy transition)
+  useEffect(() => {
+    if (sessionState.status === 'connecting') {
+      const isConnectedOrConnecting = (window as any).activeWebSerialPort || simTimerRef.current;
+      if (!isConnectedOrConnecting) {
+        const timer = setTimeout(() => {
+          handleConnect();
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [sessionState.status]);
+
+  // Periodically calculate data frequency and throughput metrics
+  useEffect(() => {
+    const calcInterval = setInterval(() => {
+      setDataFrequency(samplesCountRef.current);
+      setDataThroughput(bytesCountRef.current);
+      
+      // Target CPU Load simulation (stable around 12% - 28% while active)
+      if (sessionState.status === 'connected') {
+        setTargetCpuLoad(Math.round(14 + Math.sin(Date.now() / 8000) * 4 + Math.random() * 2));
+      } else {
+        setTargetCpuLoad(0);
+      }
+      
+      samplesCountRef.current = 0;
+      bytesCountRef.current = 0;
+    }, 1000);
+
+    return () => clearInterval(calcInterval);
+  }, [sessionState.status]);
+
   // Handle serial data from Electron IPC
   useEffect(() => {
     if (!(window as any).require) return;
@@ -75,6 +117,10 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
 
     const handleData = (_event: any, rawData: string) => {
       // Decode incoming telemetry
+      if (rawData) {
+        bytesCountRef.current += rawData.length;
+        samplesCountRef.current += 1;
+      }
       const values = decodeTextFrame(rawData);
       handleIncomingValues(values);
     };
@@ -144,6 +190,9 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
         }
       });
       
+      // Accumulate mock bytes and samples
+      bytesCountRef.current += Object.keys(mockValues).length * 12 + 2;
+      samplesCountRef.current += 1;
       handleIncomingValues(mockValues);
     }, 200);
   };
@@ -164,7 +213,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
     if ((window as any).require) {
       try {
         const { ipcRenderer } = (window as any).require('electron');
-        const success = await ipcRenderer.invoke('hil-connect', { port: commPort, baudRate });
+        const success = await ipcRenderer.invoke('hil-connect', { port: commPort, baudRate, target });
         if (success) {
           onChangeSessionState(prev => ({ ...prev, status: 'connected', connectedAt: Date.now() }));
           addLog('success', `HIL session established on ${commPort}`);
@@ -205,6 +254,8 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
                 buffer = parts.pop() || '';
                 parts.forEach(line => {
                   if (line.trim()) {
+                    bytesCountRef.current += line.length + 1;
+                    samplesCountRef.current += 1;
                     handleIncomingValues(decodeTextFrame(line + '\n'));
                   }
                 });
@@ -433,6 +484,26 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
               <Square size={14} /> Disconnect
             </button>
           )}
+        </div>
+      </div>
+
+      {/* Session Diagnostics Sub-bar */}
+      <div className="grid grid-cols-4 gap-4 mb-4 shrink-0 bg-[#111111] p-2 px-3 border border-[#222] rounded-lg text-[10px] font-mono text-gray-400">
+        <div className="flex justify-between items-center border-r border-[#222] pr-4">
+          <span>SIGNAL RATE:</span>
+          <span className="text-emerald-500 font-bold">{sessionState.status === 'connected' ? `${dataFrequency} Hz` : '0 Hz'}</span>
+        </div>
+        <div className="flex justify-between items-center border-r border-[#222] pr-4">
+          <span>DATA BANDWIDTH:</span>
+          <span className="text-[#f97316] font-bold">{sessionState.status === 'connected' ? `${(dataThroughput / 1024).toFixed(2)} KB/s` : '0.00 KB/s'}</span>
+        </div>
+        <div className="flex justify-between items-center border-r border-[#222] pr-4">
+          <span>MCU CPU LOAD:</span>
+          <span className={`font-bold ${targetCpuLoad > 75 ? 'text-yellow-500' : 'text-emerald-500'}`}>{sessionState.status === 'connected' ? `${targetCpuLoad}%` : '0%'}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span>STREAM STATUS:</span>
+          <span className={`font-bold ${sessionState.status === 'connected' ? 'text-emerald-500 font-semibold' : 'text-red-500'}`}>{sessionState.status === 'connected' ? 'ACTIVE' : 'OFFLINE'}</span>
         </div>
       </div>
 

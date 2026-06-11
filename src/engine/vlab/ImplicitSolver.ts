@@ -1,8 +1,9 @@
 import { EquationContext } from './types';
+import { SparseLinearSolver } from './SparseLinearSolver';
 
 export class ImplicitSolver {
-  private maxIterations = 20;
-  private tolerance = 1e-6;
+  private maxIterations = 50;
+  private tolerance = 1e-8;
 
   solve(
     equations: (x: number[], ctx: EquationContext) => number[],
@@ -10,62 +11,88 @@ export class ImplicitSolver {
     ctx: EquationContext
   ): number[] {
     let x = [...initialX];
+    let bestX = [...x];
+    let minError = Infinity;
     
     for (let iter = 0; iter < this.maxIterations; iter++) {
       const fx = equations(x, ctx);
       const error = Math.sqrt(fx.reduce((sum, val) => sum + val * val, 0));
       
-      if (error < this.tolerance) return x;
+      if (error < minError) {
+        minError = error;
+        bestX = [...x];
+      }
       
-      // Simplified Newton Step (Numerical Jacobian approximation)
-      const J = this.computeJacobian(equations, x, ctx);
-      const deltaX = this.solveLinear(J, fx.map(v => -v));
+      if (error < this.tolerance) {
+        return x;
+      }
       
-      x = x.map((v, i) => v + deltaX[i]);
+      // Compute Numerical Jacobian J[row][col]
+      const J = this.computeJacobian(equations, x, fx, ctx);
+      
+      // Newton step: J * deltaX = -fx
+      const negFx = fx.map(v => -v);
+      let deltaX: number[];
+      try {
+        deltaX = SparseLinearSolver.solve(J, negFx);
+      } catch (e) {
+        // Fallback if solver fails (e.g. singular matrix)
+        console.warn('Linear solver failed, aborting Newton step', e);
+        break;
+      }
+      
+      // Backtracking line search / damping to improve convergence on sharp non-linearities
+      let damping = 1.0;
+      let stepAccepted = false;
+      
+      while (damping > 0.05) {
+        const xTrial = x.map((v, i) => v + damping * deltaX[i]);
+        const fxTrial = equations(xTrial, ctx);
+        const trialError = Math.sqrt(fxTrial.reduce((sum, val) => sum + val * val, 0));
+        
+        if (trialError < error || trialError < this.tolerance) {
+          x = xTrial;
+          stepAccepted = true;
+          break;
+        }
+        damping *= 0.5;
+      }
+      
+      if (!stepAccepted) {
+        // If no damping factor improves the residual, take a small step anyway to escape local minima
+        x = x.map((v, i) => v + 0.1 * deltaX[i]);
+      }
     }
     
-    return x;
+    // If we finished all iterations and didn't converge below tolerance,
+    // throw an error so the physics engine can retry with a smaller step size
+    if (minError > 1e-3) {
+      throw new Error(`ImplicitSolver did not converge. Final residual error: ${minError}`);
+    }
+    return bestX;
   }
 
   private computeJacobian(
     equations: (x: number[], ctx: EquationContext) => number[],
     x: number[],
+    fx: number[],
     ctx: EquationContext
   ): number[][] {
+    const n = x.length;
     const eps = 1e-8;
-    const fx = equations(x, ctx);
-    const J: number[][] = [];
+    const J: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
     
-    for (let j = 0; j < x.length; j++) {
+    for (let j = 0; j < n; j++) {
       const xPlus = [...x];
-      xPlus[j] += eps;
+      // Adapt perturbation to scale of x[j]
+      const h = eps * Math.max(1.0, Math.abs(x[j]));
+      xPlus[j] += h;
       const fxPlus = equations(xPlus, ctx);
-      const col = fxPlus.map((v, i) => (v - fx[i]) / eps);
-      J.push(col);
-    }
-    
-    // Transpose back to standard J[row][col]
-    return x[0].hasOwnProperty('length') ? J : J[0].map((_, i) => J.map(row => row[i]));
-  }
-
-  private solveLinear(A: number[][], b: number[]): number[] {
-    // Basic Gaussian elimination for small matrices
-    const n = b.length;
-    for (let i = 0; i < n; i++) {
-      let pivot = A[i][i];
-      for (let j = i + 1; j < n; j++) {
-        const factor = A[j][i] / pivot;
-        for (let k = i; k < n; k++) A[j][k] -= factor * A[i][k];
-        b[j] -= factor * b[i];
+      for (let i = 0; i < n; i++) {
+        J[i][j] = (fxPlus[i] - fx[i]) / h;
       }
     }
     
-    const x = new Array(n).fill(0);
-    for (let i = n - 1; i >= 0; i--) {
-      let sum = 0;
-      for (let j = i + 1; j < n; j++) sum += A[i][j] * x[j];
-      x[i] = (b[i] - sum) / A[i][i];
-    }
-    return x;
+    return J;
   }
 }

@@ -1226,5 +1226,68 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     latex: ['T = T_0 + \int \frac{\Sigma Q - Q_{loss}}{C} dt'],
     across: 'Temperature (K)', through: 'Heat Flow (W)',
     description: 'Thermal mass model for the microwave cooking volume (25L). Accounts for heat addition from multiple sources and convection losses to ambient.'
+  },
+  lms_adaptive_filter: {
+    equations: [
+      'y = w1 * x + w2 * x_prev',
+      'err = d - y',
+      'dw1/dt = lr * err * x',
+      'dw2/dt = lr * err * x_prev'
+    ],
+    latex: [
+      'y = w_1 x + w_2 x_{prev}',
+      'e = d - y',
+      '\\frac{dw_1}{dt} = \\eta \\cdot e \\cdot x',
+      '\\frac{dw_2}{dt} = \\eta \\cdot e \\cdot x_{prev}'
+    ],
+    across: 'None', through: 'None',
+    description: 'A 2-tap Least Mean Squares (LMS) Adaptive Filter. Automatically learns to predict a target signal d from an input x by updating filter weights w1 and w2.'
+  },
+  neural_neuron_learning: {
+    equations: [
+      'net = w1 * x1 + w2 * x2 + bias',
+      'y = tanh(net)',
+      'err = target - y',
+      'dw1/dt = lr * err * (1 - y^2) * x1',
+      'dw2/dt = lr * err * (1 - y^2) * x2',
+      'dbias/dt = lr * err * (1 - y^2)'
+    ],
+    latex: [
+      'y = \\tanh(w_1 x_1 + w_2 x_2 + b)',
+      'e = r - y',
+      '\\frac{dw_i}{dt} = \\eta \\cdot e \\cdot (1 - y^2) \\cdot x_i',
+      '\\frac{db}{dt} = \\eta \\cdot e \\cdot (1 - y^2)'
+    ],
+    across: 'None', through: 'None',
+    description: 'A Single-Neuron Online Gradient Descent Learner using a tanh activation function. Trains weights and bias via online backpropagation.'
+  },
+  rl_q_learning_controller: {
+    equations: [
+      'Q(s, a) = Q(s, a) + alpha * (reward + gamma * max_q(s\') - Q(s, a))'
+    ],
+    latex: [
+      'Q(s,a) \\leftarrow Q(s,a) + \\alpha [ R + \\gamma \\max_{a\'} Q(s\', a\') - Q(s,a) ]'
+    ],
+    across: 'None', through: 'None',
+    description: 'Discrete Q-learning control agent. Maps continuous system error into a configurable number of state bins, selects control actions spaced between [-1, 1], and updates Q-values online.'
+  },
+  ac_motor_pid_control: {
+    equations: [
+      'domega/dt = (Te - tl - B * omega) / J',
+      'dtheta/dt = omega',
+      'dias/dt = (vAlpha - (Rs + kr * kr * Rr) / sigma * ias + (kr / (sigma * tr)) * psiar + (kr * P * omega / sigma) * psibr) / (sigma * Ls)',
+      'dibs/dt = (vBeta - (Rs + kr * kr * Rr) / sigma * ibs + (kr / (sigma * tr)) * psibr - (kr * P * omega / sigma) * psiar) / (sigma * Ls)',
+      'dpsiar/dt = (Lm / tr) * ias - (1 / tr) * psiar - P * omega * psibr',
+      'dpsibr/dt = (Lm / tr) * ibs - (1 / tr) * psibr + P * omega * psiar',
+      'di_state/dt = Ki * error',
+      'dd_state/dt = N * (Kd * N * (error - last_e) - d_state)'
+    ],
+    latex: [
+      'J \\frac{d\\omega}{dt} = T_e - T_L - B \\omega',
+      'T_e = 1.5 P \\frac{L_m}{L_r} (\\psi_{ar} i_{bs} - \\psi_{br} i_{as})',
+      'u_{PID} = K_p e + K_i \\int e dt + K_d \\frac{de}{dt}'
+    ],
+    across: 'None', through: 'None',
+    description: 'A complete pedagogical model for PID Speed Control of an Induction Motor. It integrates the motor dynamics and the speed regulator into one block for easy analysis of tuning effects.'
   }
 };

@@ -79,9 +79,9 @@ describe('StateMachineCodeGenerator', () => {
     const userLogicC = result.files.find(f => f.name === 'sm_user_logic.c')?.content || '';
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
     
-    // counter is uint16, so assignments and comparisons involving literals should have 'U'
-    expect(userLogicC).toContain('instance->data.counter = 0U;'); // From Idle state entry
-    expect(coreC).toContain('instance->data.counter = 5U;');      // From transition action
+    // counter is uint16, so assignments and comparisons involving literals should have 'U' and cast
+    expect(userLogicC).toContain('instance->data.counter = (uint16_t)(0U);'); // From Idle state entry
+    expect(coreC).toContain('instance->data.counter = (uint16_t)(5U);');      // From transition action
   });
 
   it('should correctly generate state transition logic in sm_core.c', () => {
@@ -89,13 +89,13 @@ describe('StateMachineCodeGenerator', () => {
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
     
     // Check transition from Idle to Active
-    expect(coreC).toContain('if (instance->data.sensor_val > 10.0)');
-    expect(coreC).toContain('instance->active_state = SM_ST_ACTIVE;');
+    expect(coreC).toContain('if (instance->data.sensor_val > 10.0f)');
+    expect(coreC).toContain('SM_Enter_State(instance, SM_ST_ACTIVE, false);');
     
     // Check transition from Active to Idle
     // Note: counter is uint16, so 100 should become 100U
     expect(coreC).toContain('if (instance->data.counter >= 100U)');
-    expect(coreC).toContain('instance->active_state = SM_ST_IDLE;');
+    expect(coreC).toContain('SM_Enter_State(instance, SM_ST_IDLE, false);');
   });
 
   it('should generate X-Bridges step logic when a state has an X-Bridges model', () => {
@@ -154,5 +154,42 @@ describe('StateMachineCodeGenerator', () => {
     expect(report).toContain('## 7. Automatically Generated Test Scenario Matrix');
     expect(report).toContain('Total Unique Paths Enumerated:');
     expect(report).toContain('State Reachability:');
+  });
+
+  it('should enforce parenthesization and wrap single statement conditional bodies in braces', () => {
+    const customChart = {
+      ...chart,
+      states: [
+        {
+          ...mockStates[0],
+          entry: 'if (sensor_val > 10.0) counter = 1;\nelse counter = 2;'
+        },
+        mockStates[1]
+      ],
+      transitions: [
+        {
+          id: 't1', sourceId: 's1', targetId: 's2',
+          condition: 'sensor_val > 5.0 && counter < 10', action: 'if (is_active) counter = 3;',
+          afterTicks: null, type: 'condition', hasControlPoint: false, order: 1
+        }
+      ]
+    };
+
+    const result = generateMISRACCode(customChart as any);
+    const userLogicC = result.files.find(f => f.name === 'sm_user_logic.c')?.content || '';
+    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
+
+    // Verify bracket wrapping in user entry code
+    expect(userLogicC).toContain('if ((instance->data.sensor_val > 10.0f)) {');
+    expect(userLogicC).toContain('instance->data.counter = (uint16_t)(1U);');
+    expect(userLogicC).toContain('else {');
+    expect(userLogicC).toContain('instance->data.counter = (uint16_t)(2U);');
+
+    // Verify parenthesization in transition condition
+    expect(coreC).toContain('if ((instance->data.sensor_val > 5.0f) && (instance->data.counter < 10U))');
+
+    // Verify bracket wrapping in transition action
+    expect(coreC).toContain('if ((instance->data.is_active)) {');
+    expect(coreC).toContain('instance->data.counter = (uint16_t)(3U);');
   });
 });

@@ -386,12 +386,23 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     execute: (ins) => {
         // If single input array, return max of array. If multiple inputs, return element-wise max.
         if (ins.length === 1) return { outputs: [VectorUtils.max(ins[0])] };
+        
+        const elementWiseMax = (a: any, b: any): any => {
+          if (Array.isArray(a) && Array.isArray(b)) {
+            return a.map((val, i) => elementWiseMax(val, b[i]));
+          } else if (Array.isArray(a)) {
+            return a.map(val => elementWiseMax(val, b));
+          } else if (Array.isArray(b)) {
+            return b.map(val => elementWiseMax(a, val));
+          }
+          return Math.max(Number(a) || 0, Number(b) || 0);
+        };
+        
         let result = ins[0];
         for (let i = 1; i < ins.length; i++) {
-           result = math.dot(result as any, ins[i] as any) as any; // Hack for elementwise max if needed, but math.max handles arrays differently.
-           // Actually, for multiple inputs we just want math.max(a, b). math.js handles broadcasting.
+           result = elementWiseMax(result, ins[i]);
         }
-        return { outputs: [result] }; // Placeholder for actual implementation if needed. Let's stick to single input reduction.
+        return { outputs: [result] };
     }
   }),
 
@@ -559,9 +570,14 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       const period = 1 / freq;
       const tRel = (time % period) / period; // Sawtooth carrier 0-1
       
-      const refs = ins.map(v => Math.max(0, Math.min(1, (Number(v) + 1) / 2))); // Map -1..1 to 0..1
+      let refs = ins.map(Number);
+      if (p.method === 'Saddle' || p.method === 'SVPWM') {
+        const vOffset = (Math.max(...refs) + Math.min(...refs)) / 2;
+        refs = refs.map(v => v - vOffset);
+      }
       
-      return { outputs: refs.map(ref => (ref > tRel ? 1 : 0)) };
+      const normalizedRefs = refs.map(v => Math.max(0, Math.min(1, (v + 1) / 2))); // Map -1..1 to 0..1
+      return { outputs: normalizedRefs.map(ref => (ref > tRel ? 1 : 0)) };
     }
   }),
 
@@ -589,6 +605,96 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         case 4: gates = [0, -1, 1]; break; // Step 6
       }
       return { outputs: gates };
+    }
+  }),
+
+  'SENSORLESS_SIX_STEP': (id, params) => ({
+    id, type: 'SENSORLESS_SIX_STEP',
+    params: { threshold: params.threshold || 0.1 },
+    isStateful: true,
+    inputs: [
+      createPort('va', 'Va', 'input', 0, 'left', 'measurement'),
+      createPort('vb', 'Vb', 'input', 0, 'left', 'measurement'),
+      createPort('vc', 'Vc', 'input', 0, 'left', 'measurement'),
+      createPort('vdc', 'Vdc', 'input', 24, 'bottom', 'measurement')
+    ],
+    outputs: [
+      createPort('ga', 'Ga', 'output', 0, 'right', 'logical'),
+      createPort('gb', 'Gb', 'output', 0, 'right', 'logical'),
+      createPort('gc', 'Gc', 'output', 0, 'right', 'logical'),
+      createPort('theta', 'θ_est', 'output', 0, 'right', 'measurement'),
+      createPort('speed', 'ω_est', 'output', 0, 'right', 'measurement')
+    ],
+    state: {
+      commutationStep: 1,
+      lastZcTime: 0,
+      prevZcSign: 0,
+      estimatedSpeed: 0,
+      theta: 0,
+      lastTime: 0
+    },
+    execute: (ins, p, state, time) => {
+      const va = Number(ins[0] ?? 0);
+      const vb = Number(ins[1] ?? 0);
+      const vc = Number(ins[2] ?? 0);
+      const vdc = Number(ins[3] ?? 24);
+      
+      const vNeut = (va + vb + vc) / 3;
+      
+      const step = state.commutationStep || 1;
+      let floatVolt = 0;
+      
+      if (step === 1) { floatVolt = vc - vNeut; }
+      else if (step === 2) { floatVolt = vb - vNeut; }
+      else if (step === 3) { floatVolt = va - vNeut; }
+      else if (step === 4) { floatVolt = vc - vNeut; }
+      else if (step === 5) { floatVolt = vb - vNeut; }
+      else if (step === 6) { floatVolt = va - vNeut; }
+      
+      let zcDetected = false;
+      const currentSign = floatVolt >= 0 ? 1 : -1;
+      if (state.prevZcSign !== 0 && currentSign !== state.prevZcSign) {
+        zcDetected = true;
+      }
+      
+      const dt = time - state.lastTime;
+      let lastZcTime = state.lastZcTime;
+      let nextStep = step;
+      let estimatedSpeed = state.estimatedSpeed || 0;
+      let theta = state.theta || 0;
+      
+      if (zcDetected) {
+        const period = (time - lastZcTime) * 2;
+        lastZcTime = time;
+        if (period > 0) {
+          estimatedSpeed = (2 * Math.PI) / period;
+        }
+        nextStep = (step % 6) + 1;
+      }
+      
+      theta = (theta + estimatedSpeed * dt) % (2 * Math.PI);
+      
+      let gates = [0, 0, 0];
+      switch(nextStep) {
+        case 1: gates = [1, -1, 0]; break;
+        case 2: gates = [1, 0, -1]; break;
+        case 3: gates = [0, 1, -1]; break;
+        case 4: gates = [-1, 1, 0]; break;
+        case 5: gates = [-1, 0, 1]; break;
+        case 6: gates = [0, -1, 1]; break;
+      }
+      
+      return {
+        outputs: [...gates, theta, estimatedSpeed],
+        nextState: {
+          commutationStep: nextStep,
+          lastZcTime,
+          prevZcSign: currentSign,
+          estimatedSpeed,
+          theta,
+          lastTime: time
+        }
+      };
     }
   }),
 
@@ -1014,7 +1120,14 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'ROTOR_POSITION_ESTIMATOR': (id, params) => ({
     id, type: 'ROTOR_POSITION_ESTIMATOR',
-    params: { method: params.method || 'Hall_sensor' },
+    params: {
+      method: params.method || 'Sensorless_SMO',
+      Rs: params.Rs || 0.5,
+      Ls: params.Ls || 0.01,
+      psi_m: params.psi_m || 0.12,
+      P: params.P || 2
+    },
+    isStateful: true,
     inputs: [
       createPort('ia', 'Ia', 'input', 0, 'left', 'measurement'),
       createPort('ib', 'Ib', 'input', 0, 'left', 'measurement'),
@@ -1024,12 +1137,86 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       createPort('vc', 'Vc', 'input', 0, 'top', 'measurement')
     ],
     outputs: [
-      createPort('theta', 'θ', 'output', 0, 'right', 'measurement'),
-      createPort('speed', 'ω', 'output', 0, 'right', 'measurement')
+      createPort('theta', 'θ_est', 'output', 0, 'right', 'measurement'),
+      createPort('speed', 'ω_est', 'output', 0, 'right', 'measurement')
     ],
-    execute: () => {
-      // Placeholder for actual estimator logic
-      return { outputs: [0, 0] };
+    state: {
+      theta: 0,
+      speed: 0,
+      ia_prev: 0,
+      ib_prev: 0,
+      lastTime: 0
+    },
+    execute: (ins, p, state, time) => {
+      const ia = Number(ins[0] ?? 0);
+      const ib = Number(ins[1] ?? 0);
+      const ic = Number(ins[2] ?? 0);
+      const va = Number(ins[3] ?? 0);
+      const vb = Number(ins[4] ?? 0);
+      const vc = Number(ins[5] ?? 0);
+      
+      const Rs = Number(p.Rs);
+      const Ls = Number(p.Ls);
+      const P = Number(p.P);
+      
+      const dt = Math.max(1e-6, time - state.lastTime);
+      const vNeut = (va + vb + vc) / 3;
+      
+      // Clarke Transform
+      const iAlpha = ia;
+      const iBeta = (ia + 2 * ib) / Math.sqrt(3);
+      
+      const vAlpha = (2 * va - vb - vc) / 3;
+      const vBeta = (vb - vc) / Math.sqrt(3);
+      
+      let theta = state.theta;
+      let speed = state.speed;
+      
+      if (p.method === 'Hall_sensor') {
+        const sector = (va > vNeut ? 1 : 0) << 2 | (vb > vNeut ? 1 : 0) << 1 | (vc > vNeut ? 1 : 0);
+        const angles = [0, 0, 240, 300, 120, 60, 180, 0];
+        const angleRad = (angles[sector] || 0) * Math.PI / 180;
+        theta = angleRad;
+        
+        let dTheta = theta - state.theta;
+        if (dTheta > Math.PI) dTheta -= 2 * Math.PI;
+        if (dTheta < -Math.PI) dTheta += 2 * Math.PI;
+        speed = dTheta / dt;
+      } else {
+        const iAlpha_prev = state.ia_prev;
+        const iBeta_prev = (state.ia_prev + 2 * state.ib_prev) / Math.sqrt(3);
+        
+        const diAlpha = (iAlpha - iAlpha_prev) / dt;
+        const diBeta = (iBeta - iBeta_prev) / dt;
+        
+        const eAlpha = vAlpha - Rs * iAlpha - Ls * diAlpha;
+        const eBeta = vBeta - Rs * iBeta - Ls * diBeta;
+        
+        if (Math.abs(eAlpha) > 0.01 || Math.abs(eBeta) > 0.01) {
+          theta = Math.atan2(-eAlpha, eBeta);
+          if (theta < 0) theta += 2 * Math.PI;
+          
+          let dTheta = theta - state.theta;
+          if (dTheta > Math.PI) dTheta -= 2 * Math.PI;
+          if (dTheta < -Math.PI) dTheta += 2 * Math.PI;
+          
+          const rawSpeed = (dTheta / dt) / P;
+          speed = 0.9 * state.speed + 0.1 * rawSpeed;
+        }
+      }
+      
+      speed = Math.max(-500, Math.min(500, speed));
+      
+      return {
+        outputs: [theta, speed],
+        nextState: {
+          theta,
+          speed,
+          ia_prev: ia,
+          ib_prev: ib,
+          lastTime: time
+        }
+      };
     }
   }),
 
@@ -2368,6 +2555,87 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   }),
 
+  'MTPA_FW_MANAGER': (id, params) => ({
+    id, type: 'MTPA_FW_MANAGER',
+    params: {
+      Ld: params.Ld || 0.005,
+      Lq: params.Lq || 0.012,
+      psi_m: params.psi_m || 0.12,
+      P: params.P || 2,
+      i_max: params.i_max || 20,
+      v_max: params.v_max || 300
+    },
+    inputs: [
+      createPort('te_ref', 'Te*', 'input', 0, 'left', 'control'),
+      createPort('speed', 'ω', 'input', 0, 'left', 'measurement'),
+      createPort('vdc', 'Vdc', 'input', 400, 'bottom', 'measurement')
+    ],
+    outputs: [
+      createPort('id_ref', 'Id*', 'output', 0, 'right', 'control'),
+      createPort('iq_ref', 'Iq*', 'output', 0, 'right', 'control'),
+      createPort('fw_active', 'FW_Active', 'output', 0, 'top', 'logical')
+    ],
+    execute: (ins, p) => {
+      const Te = Number(ins[0] ?? 0);
+      const omega = Math.abs(Number(ins[1] ?? 0));
+      const vdc = Number(ins[2] || 400);
+      
+      const Ld = Number(p.Ld);
+      const Lq = Number(p.Lq);
+      const psi_m = Number(p.psi_m);
+      const P = Number(p.P);
+      const iMax = Number(p.i_max);
+      const vMax = (vdc / Math.sqrt(3)) * 0.95;
+      
+      let iq = Te / (1.5 * P * psi_m);
+      let id = 0;
+      
+      if (Math.abs(Ld - Lq) > 1e-6) {
+        const is_approx = Math.min(iMax, Math.abs(Te) / (1.5 * P * psi_m));
+        id = -Math.abs((psi_m - Math.sqrt(psi_m * psi_m + 8 * Math.pow(Ld - Lq, 2) * is_approx * is_approx)) / (4 * (Ld - Lq)));
+        const denom = 1.5 * P * (psi_m + (Ld - Lq) * id);
+        iq = denom !== 0 ? Te / denom : 0;
+      }
+      
+      let is_mag = Math.sqrt(id * id + iq * iq);
+      if (is_mag > iMax) {
+        const ratio = iMax / is_mag;
+        id *= ratio;
+        iq *= ratio;
+      }
+      
+      const w_e = omega * P;
+      const vd_est = -w_e * Lq * iq;
+      const vq_est = w_e * (psi_m + Ld * id);
+      const v_mag = Math.sqrt(vd_est * vd_est + vq_est * vq_est);
+      
+      let fwActive = 0;
+      if (v_mag > vMax && w_e > 0) {
+        fwActive = 1;
+        const v_limit_sq = Math.pow(vMax / w_e, 2);
+        const term_q = Math.pow(Lq * iq, 2);
+        if (v_limit_sq > term_q) {
+          const id_fw = (-psi_m - Math.sqrt(v_limit_sq - term_q)) / Ld;
+          if (id_fw < id) {
+            id = Math.max(-iMax, id_fw);
+            const remaining_iq_sq = iMax * iMax - id * id;
+            if (remaining_iq_sq > 0) {
+              const max_iq_avail = Math.sqrt(remaining_iq_sq);
+              iq = Math.min(max_iq_avail, Math.max(-max_iq_avail, iq));
+            } else {
+              iq = 0;
+            }
+          }
+        } else {
+          id = -iMax;
+          iq = 0;
+        }
+      }
+      
+      return { outputs: [id, iq, fwActive] };
+    }
+  }),
+
   'AC_MOTOR_PID_CONTROL': (id: string, params: any) => {
     // This block is a composite learning module
     // It internally uses the AC_INDUCTION_MOTOR logic and a PID controller
@@ -2687,6 +2955,7 @@ export const XBRIDGES_CATEGORIES = [
     blocks: [
       { type: 'Constant', label: 'Constant', icon: 'square' },
       { type: 'WaveformGen', label: 'Waveform Gen', icon: 'activity' },
+      { type: 'Clock', label: 'Clock', icon: 'rotate-cw' }
     ]
   },
   {
@@ -2699,6 +2968,8 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'VectorPow', label: 'Power', icon: 'chevron-up' },
       { type: 'UnaryNeg', label: 'Unary Minus', icon: 'minus-circle' },
       { type: 'Abs', label: 'Absolute Value', icon: 'maximize' },
+      { type: 'GAIN', label: 'Gain', icon: 'activity' },
+      { type: 'PRODUCT', label: 'Product', icon: 'activity' }
     ]
   },
   {
@@ -2706,7 +2977,7 @@ export const XBRIDGES_CATEGORIES = [
     blocks: [
       { type: 'SumElements', label: 'Sum of Elements', icon: 'sigma' },
       { type: 'Mean', label: 'Mean', icon: 'bar-chart' },
-      { type: 'Max', label: 'Max', icon: 'arrow-up' },
+      { type: 'Max', label: 'Max', icon: 'arrow-up' }
     ]
   },
   {
@@ -2715,13 +2986,93 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'MatrixMul', label: 'Matrix Multiply', icon: 'grid' },
       { type: 'Transpose', label: 'Transpose', icon: 'rotate-cw' },
       { type: 'Inverse', label: 'Inverse', icon: 'refresh-ccw' },
-      { type: 'Determinant', label: 'Determinant', icon: 'hash' },
+      { type: 'Determinant', label: 'Determinant', icon: 'hash' }
     ]
   },
   {
-    name: 'Continuous',
+    name: 'Continuous Systems',
     blocks: [
       { type: 'Integrator', label: 'Integrator', icon: 'integral' },
+      { type: 'INTEGRATOR_CONTINUOUS', label: 'Continuous Integrator', icon: 'integral' },
+      { type: 'STATE_SPACE', label: 'State-Space Model', icon: 'settings-2' },
+      { type: 'TRANSFER_FUNCTION', label: 'Transfer Function', icon: 'settings-2' },
+      { type: 'ZERO_POLE_GAIN', label: 'Zero-Pole-Gain', icon: 'settings-2' }
+    ]
+  },
+  {
+    name: 'Discrete & Delay',
+    blocks: [
+      { type: 'DELAY', label: 'Unit Delay', icon: 'database' },
+      { type: 'INTEGRATOR_DISCRETE', label: 'Discrete Integrator', icon: 'layers' },
+      { type: 'DISCRETE_TRANSFER_FUNCTION', label: 'Discrete TF', icon: 'settings-2' },
+      { type: 'Counter', label: 'Counter', icon: 'trending-up' }
+    ]
+  },
+  {
+    name: 'Trigonometric',
+    blocks: [
+      { type: 'SIN', label: 'Sine', icon: 'activity' },
+      { type: 'COS', label: 'Cosine', icon: 'activity' },
+      { type: 'TAN', label: 'Tangent', icon: 'activity' },
+      { type: 'COT', label: 'Cotangent', icon: 'activity' },
+      { type: 'SEC', label: 'Secant', icon: 'activity' },
+      { type: 'COSEC', label: 'Cosecant', icon: 'activity' }
+    ]
+  },
+  {
+    name: 'Control & Feedback',
+    blocks: [
+      { type: 'PID_BASIC', label: 'Basic PID Controller', icon: 'settings-2' },
+      { type: 'PID_CONTROLLER', label: 'Advanced PID Controller', icon: 'settings-2' },
+      { type: 'SPEED_CONTROLLER', label: 'PI Speed Controller', icon: 'cpu' },
+      { type: 'CURRENT_CONTROLLER_DQ', label: 'dq Current Controller', icon: 'cpu' },
+      { type: 'VOLTAGE_REFERENCE_GENERATOR', label: 'Voltage Reference Gen', icon: 'activity' },
+      { type: 'FLUX_REFERENCE', label: 'Flux Reference Gen', icon: 'activity' },
+      { type: 'FIELD_ORIENTED_CONTROL', label: 'Field-Oriented Control', icon: 'cpu' }
+    ]
+  },
+  {
+    name: 'Power Electronics & Bridges',
+    blocks: [
+      { type: 'SINGLE_PHASE_H_BRIDGE', label: 'H-Bridge Inverter', icon: 'zap' },
+      { type: 'THREE_PHASE_INVERTER', label: 'Three-Phase Inverter', icon: 'zap' }
+    ]
+  },
+  {
+    name: 'PWM & Modulation',
+    blocks: [
+      { type: 'PWM_GENERATOR', label: 'PWM Generator', icon: 'zap' },
+      { type: 'THREE_PHASE_PWM', label: 'Three-Phase PWM', icon: 'zap' },
+      { type: 'SVPWM_MODULATOR', label: 'SVPWM Modulator', icon: 'network' },
+      { type: 'SVPWM_CORE', label: 'SVPWM Core Timing', icon: 'network' },
+      { type: 'SVPWM_GATE_GENERATOR', label: 'SVPWM Gate Generator', icon: 'network' },
+      { type: 'ZERO_SEQUENCE_INJECTION', label: 'Zero Sequence Injection', icon: 'network' }
+    ]
+  },
+  {
+    name: 'Signal Processing & Observers',
+    blocks: [
+      { type: 'LOW_PASS_FILTER', label: 'Low-Pass Filter', icon: 'filter' },
+      { type: 'HIGH_PASS_FILTER', label: 'High-Pass Filter', icon: 'filter' },
+      { type: 'MOVING_AVERAGE', label: 'Moving Average Filter', icon: 'database' },
+      { type: 'WHITE_NOISE', label: 'White Noise Source', icon: 'wind' },
+      { type: 'BAND_LIMITED_NOISE', label: 'Band-Limited Noise', icon: 'wind' },
+      { type: 'KALMAN_FILTER', label: 'Kalman Filter', icon: 'eye' },
+      { type: 'EXTENDED_KALMAN_FILTER', label: 'Extended Kalman Filter', icon: 'eye' },
+      { type: 'ROTOR_POSITION_ESTIMATOR', label: 'Rotor Position/Speed Estimator', icon: 'eye' }
+    ]
+  },
+  {
+    name: 'Routing & Control Flow',
+    blocks: [
+      { type: 'SWITCH', label: 'Switch', icon: 'settings' },
+      { type: 'IF_ELSE', label: 'If-Else Selector', icon: 'settings' },
+      { type: 'SWITCH_CASE', label: 'Switch-Case Selector', icon: 'settings' },
+      { type: 'MUX', label: 'Mux', icon: 'layers' },
+      { type: 'DEMUX', label: 'Demux', icon: 'grid' },
+      { type: 'TERMINATOR', label: 'Terminator', icon: 'zap-off' },
+      { type: 'DATA_TYPE_CONVERSION', label: 'Data Type Conversion', icon: 'hash' },
+      { type: 'NUMERIC_REPRESENTATION', label: 'Numeric Representation', icon: 'activity' }
     ]
   },
   {
@@ -2732,7 +3083,7 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'NOT', label: 'NOT Gate', icon: 'minus-circle' },
       { type: 'NAND', label: 'NAND Gate', icon: 'plus' },
       { type: 'NOR', label: 'NOR Gate', icon: 'grid' },
-      { type: 'XOR', label: 'XOR Gate', icon: 'plus' },
+      { type: 'XOR', label: 'XOR Gate', icon: 'plus' }
     ]
   },
   {
@@ -2743,7 +3094,7 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'BitwiseXOR', label: 'Bitwise XOR', icon: 'plus' },
       { type: 'BitwiseNOT', label: 'Bitwise NOT', icon: 'minus-circle' },
       { type: 'ShiftLeft', label: 'Shift Left', icon: 'chevron-left' },
-      { type: 'ShiftRight', label: 'Shift Right', icon: 'chevron-right' },
+      { type: 'ShiftRight', label: 'Shift Right', icon: 'chevron-right' }
     ]
   },
   {
@@ -2751,29 +3102,20 @@ export const XBRIDGES_CATEGORIES = [
     blocks: [
       { type: 'DFlipFlop', label: 'D Flip-Flop', icon: 'refresh-ccw' },
       { type: 'JKFlipFlop', label: 'JK Flip-Flop', icon: 'refresh-ccw' },
-      { type: 'Register', label: 'Register', icon: 'box' },
-      { type: 'Counter', label: 'Counter', icon: 'trending-up' },
-      { type: 'Clock', label: 'Clock', icon: 'rotate-cw' },
+      { type: 'Register', label: 'Register', icon: 'box' }
     ]
   },
   {
     name: 'Sinks',
     blocks: [
-      { type: 'Scope', label: 'Scope', icon: 'monitor' },
+      { type: 'Scope', label: 'Scope', icon: 'monitor' }
     ]
   },
   {
     name: 'Ports',
     blocks: [
       { type: 'Inport', label: 'Inport', icon: 'log-in' },
-      { type: 'Outport', label: 'Outport', icon: 'log-out' },
-    ]
-  },
-  {
-    name: 'Signal Routing',
-    blocks: [
-      { type: 'MUX', label: 'Mux', icon: 'layers' },
-      { type: 'DEMUX', label: 'Demux', icon: 'grid' },
+      { type: 'Outport', label: 'Outport', icon: 'log-out' }
     ]
   },
   {
@@ -2797,11 +3139,17 @@ export const XBRIDGES_CATEGORIES = [
     ]
   },
   {
+    name: 'Optimization & Modeling',
+    blocks: [
+      { type: 'MPC_CONTROLLER', label: 'MPC Controller', icon: 'cpu' },
+      { type: 'DOE_MODEL', label: 'DoE Model', icon: 'layers' },
+      { type: 'DOE_MODULE', label: 'DoE Module', icon: 'layers' }
+    ]
+  },
+  {
     name: 'Subsystem Architecture',
     blocks: [
-      { type: 'Subsystem', label: 'Subsystem', icon: 'layers' },
-      { type: 'Inport', label: 'Inport', icon: 'arrow-right-circle' },
-      { type: 'Outport', label: 'Outport', icon: 'arrow-left-circle' }
+      { type: 'Subsystem', label: 'Subsystem', icon: 'layers' }
     ]
   }
 ];

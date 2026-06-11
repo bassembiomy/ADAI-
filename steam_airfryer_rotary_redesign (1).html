@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Steam Air Fryer — Rotary Encoder Redesign</title>
+<style>
+  :root {
+    --bg: #0a0a0c;
+    --surface: #111115;
+    --surface2: #1a1a20;
+    --surface3: #22222a;
+    --accent: #e8a020;
+    --accent2: #4db8ff;
+    --accent3: #3de88a;
+    --red: #ff4a4a;
+    --text: #e8e8ec;
+    --text2: #8888a0;
+    --text3: #555568;
+    --border: #2a2a36;
+    --glow: rgba(232,160,32,0.3);
+    --glow2: rgba(77,184,255,0.3);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  /* ---- REPORT SECTIONS ---- */
+  .report { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+  h1 { font-size: 28px; font-weight: 700; color: var(--text); letter-spacing: -0.5px; }
+  h2 { font-size: 18px; font-weight: 600; color: var(--accent); margin: 40px 0 16px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  h3 { font-size: 14px; font-weight: 600; color: var(--accent2); margin: 20px 0 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  p { color: var(--text2); margin-bottom: 12px; line-height: 1.7; }
+  .subtitle { color: var(--text2); font-size: 15px; margin-top: 6px; }
+  .tag { display: inline-block; background: var(--surface3); border: 1px solid var(--border); color: var(--text2); font-size: 11px; padding: 2px 8px; border-radius: 4px; margin: 2px; }
+  .tag.accent { border-color: var(--accent); color: var(--accent); }
+  .tag.blue { border-color: var(--accent2); color: var(--accent2); }
+  .tag.green { border-color: var(--accent3); color: var(--accent3); }
+  .tag.red { border-color: var(--red); color: var(--red); }
+
+  /* ---- TABLES ---- */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+  th { background: var(--surface3); color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; font-size: 11px; padding: 10px 12px; text-align: left; border-bottom: 2px solid var(--border); }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+  tr:hover td { background: var(--surface2); }
+  .old { color: var(--red); }
+  .new { color: var(--accent3); }
+
+  /* ---- METRICS ---- */
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin: 20px 0; }
+  .metric { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+  .metric .val { font-size: 32px; font-weight: 700; color: var(--accent); }
+  .metric .val.blue { color: var(--accent2); }
+  .metric .val.green { color: var(--accent3); }
+  .metric .lbl { color: var(--text2); font-size: 12px; margin-top: 4px; }
+
+  /* ---- STATE MACHINE ---- */
+  .states { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+  .state-node { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 12px; }
+  .state-node.active { border-color: var(--accent); color: var(--accent); }
+  .state-node.special { border-color: var(--accent2); color: var(--accent2); }
+
+  /* ---- FLOW ---- */
+  .flow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+  .flow-step { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 12px; color: var(--text2); }
+  .flow-arrow { color: var(--text3); font-size: 16px; }
+  .flow-step.action { border-color: var(--accent); color: var(--accent); }
+  .flow-step.confirm { border-color: var(--accent3); color: var(--accent3); }
+
+  /* ===== APPLIANCE PROTOTYPE ===== */
+  #prototype { max-width: 1100px; margin: 0 auto 0; padding: 0 24px 60px; }
+  .proto-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  .proto-sub { color: var(--text2); font-size: 13px; margin-bottom: 28px; }
+
+  /* Appliance body */
+  .appliance {
+    background: linear-gradient(160deg, #1e1e26 0%, #141418 60%, #101014 100%);
+    border: 1px solid #2e2e3a;
+    border-radius: 16px;
+    padding: 24px 28px 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
+    position: relative;
+  }
+  .appliance-brand { font-size: 11px; font-weight: 700; letter-spacing: 3px; color: var(--text3); text-transform: uppercase; margin-bottom: 16px; }
+  .appliance-name { font-size: 13px; color: var(--text3); margin-bottom: 24px; letter-spacing: 1px; }
+
+  /* Control panel row */
+  .control-row { display: flex; align-items: center; gap: 20px; }
+
+  /* OLED Display */
+  .display-wrap { background: #000; border: 1px solid #1a1a22; border-radius: 10px; padding: 14px 16px; min-width: 220px; box-shadow: inset 0 0 20px rgba(0,0,0,0.8); flex-shrink: 0; }
+  .display-mode { font-size: 11px; color: #4d7aaa; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; min-height: 14px; }
+  .display-main { font-size: 36px; font-weight: 700; color: #4db8ff; letter-spacing: 2px; font-variant-numeric: tabular-nums; line-height: 1; text-shadow: 0 0 12px rgba(77,184,255,0.5); }
+  .display-main.hot { color: #e8a020; text-shadow: 0 0 12px rgba(232,160,32,0.5); }
+  .display-row2 { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+  .display-sub { font-size: 12px; color: #4d7aaa; }
+  .display-icon-row { display: flex; gap: 8px; margin-top: 6px; }
+  .display-icon { font-size: 14px; opacity: 0.4; }
+  .display-icon.on { opacity: 1; }
+  .display-context { font-size: 10px; color: #335577; margin-top: 4px; min-height: 12px; }
+
+  /* Mode strip */
+  .mode-strip { flex: 1; display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
+  .mode-label { font-size: 10px; color: var(--text3); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px; }
+  .mode-icons { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mode-icon { width: 36px; height: 36px; border-radius: 6px; background: var(--surface3); border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.15s; position: relative; }
+  .mode-icon span.emoji { font-size: 16px; }
+  .mode-icon span.lbl { font-size: 7px; color: var(--text3); margin-top: 1px; letter-spacing: 0; text-align: center; line-height: 1; }
+  .mode-icon.selected { background: var(--surface2); border-color: var(--accent); box-shadow: 0 0 10px var(--glow); }
+  .mode-icon.selected span.lbl { color: var(--accent); }
+  .mode-icon.active-cursor { border-color: var(--accent2); box-shadow: 0 0 8px var(--glow2); }
+
+  /* Rotary section */
+  .rotary-section { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; }
+  .rotary-label { font-size: 10px; color: var(--text3); letter-spacing: 0.5px; text-transform: uppercase; }
+  .rotary-wrap { position: relative; }
+  .rotary {
+    width: 72px; height: 72px; border-radius: 50%;
+    background: conic-gradient(from 0deg, #2a2a36, #1a1a24, #2a2a36, #1a1a24, #2a2a36);
+    border: 3px solid #333340;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px #111;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.1s;
+    position: relative;
+    user-select: none;
+  }
+  .rotary:hover { border-color: #444455; }
+  .rotary.pressing { transform: scale(0.95); }
+  .rotary-dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; position: absolute; top: 8px; left: 50%; transform: translateX(-50%); box-shadow: 0 0 6px var(--glow); }
+  .rotary-inner { width: 34px; height: 34px; border-radius: 50%; background: #0d0d10; border: 1px solid #222230; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; }
+  .rotary-inner-icon { font-size: 14px; opacity: 0.5; }
+  .rotary-hint { font-size: 9px; color: var(--text3); text-align: center; max-width: 80px; line-height: 1.4; }
+
+  /* Button strip */
+  .btn-strip { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+  .hw-btn {
+    width: 48px; height: 34px; border-radius: 7px;
+    border: 1px solid var(--border);
+    background: linear-gradient(180deg, #222230, #18181e);
+    color: var(--text2); font-size: 10px; font-weight: 600;
+    letter-spacing: 0.5px; text-transform: uppercase;
+    cursor: pointer; transition: all 0.12s;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    position: relative;
+  }
+  .hw-btn:hover { background: linear-gradient(180deg, #2a2a3a, #1e1e26); border-color: #444; }
+  .hw-btn:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+  .hw-btn.power { border-color: var(--red); color: var(--red); }
+  .hw-btn.power.on { background: linear-gradient(180deg, #3a1818, #2a1010); box-shadow: 0 0 10px rgba(255,74,74,0.2); }
+  .hw-btn.start { border-color: var(--accent3); color: var(--accent3); height: 40px; }
+  .hw-btn.start.cooking { background: linear-gradient(180deg, #143a28, #0e2a1e); box-shadow: 0 0 10px rgba(61,232,138,0.2); }
+  .hw-btn.light { border-color: var(--accent); color: var(--accent); }
+  .hw-btn.light.on { background: linear-gradient(180deg, #2a1f08, #1e1508); box-shadow: 0 0 10px rgba(232,160,32,0.2); }
+
+  /* Status LEDs */
+  .led-row { display: flex; gap: 6px; align-items: center; justify-content: center; }
+  .led { width: 6px; height: 6px; border-radius: 50%; background: var(--surface3); border: 1px solid var(--border); }
+  .led.on { background: var(--accent3); border-color: var(--accent3); box-shadow: 0 0 6px rgba(61,232,138,0.6); }
+  .led.steam { }
+  .led.steam.on { background: var(--accent2); border-color: var(--accent2); box-shadow: 0 0 6px rgba(77,184,255,0.6); }
+  .led.warn.on { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 6px var(--glow); }
+
+  /* ===== DASHBOARD ===== */
+  .dashboard { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-top: 20px; }
+  .dash-title { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text3); margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .dash-cell { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .dash-cell .k { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+  .dash-cell .v { font-size: 14px; font-weight: 600; color: var(--text); margin-top: 3px; }
+  .dash-cell .v.accent { color: var(--accent); }
+  .dash-cell .v.blue { color: var(--accent2); }
+  .dash-cell .v.green { color: var(--accent3); }
+  .dash-cell .v.red { color: var(--red); }
+
+  /* ===== EVENT LOG ===== */
+  .log-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-top: 16px; }
+  .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .log-title { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text3); }
+  .log-clear { font-size: 10px; color: var(--text3); cursor: pointer; padding: 3px 8px; border: 1px solid var(--border); border-radius: 4px; background: none; }
+  .log-clear:hover { color: var(--text); border-color: var(--text3); }
+  #event-log { max-height: 180px; overflow-y: auto; }
+  .log-entry { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-time { color: var(--text3); font-variant-numeric: tabular-nums; min-width: 55px; font-size: 11px; }
+  .log-action { color: var(--accent2); min-width: 120px; }
+  .log-detail { color: var(--text2); }
+
+  /* ===== ROTARY CW/CCW BUTTONS ===== */
+  .rotary-btns { display: flex; gap: 6px; }
+  .rot-btn { width: 32px; height: 22px; background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; color: var(--text3); font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .rot-btn:hover { color: var(--text); border-color: #444; }
+  .rot-btn:active { background: var(--surface3); }
+
+  /* ===== INTERACTION HINTS ===== */
+  .hints { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-top: 16px; }
+  .hints-title { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--text3); margin-bottom: 10px; }
+  .hint-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .hint { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); }
+  .hint-key { background: var(--surface3); border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; font-size: 10px; color: var(--text); }
+
+  /* ===== LONG PRESS INDICATOR ===== */
+  .longpress-ring {
+    position: absolute; top: -4px; left: -4px; right: -4px; bottom: -4px;
+    border-radius: 50%; border: 2px solid var(--accent);
+    opacity: 0; transform: scale(0.8);
+    transition: opacity 0.1s, transform 0.1s;
+    pointer-events: none;
+  }
+  .longpress-ring.active { opacity: 1; transform: scale(1); }
+
+  /* ===== COUNTDOWN PROGRESS ===== */
+  .cook-progress { width: 100%; height: 3px; background: var(--surface3); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+  .cook-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent3)); border-radius: 2px; transition: width 1s linear; }
+
+  /* Scroll to prototype */
+  .scroll-cta { display: inline-block; margin-top: 12px; padding: 8px 18px; background: var(--surface2); border: 1px solid var(--accent); border-radius: 8px; color: var(--accent); font-size: 12px; cursor: pointer; text-decoration: none; }
+  .scroll-cta:hover { background: var(--surface3); }
+
+  .divider { height: 1px; background: var(--border); margin: 32px 0; }
+  .note { background: var(--surface2); border-left: 3px solid var(--accent2); border-radius: 0 6px 6px 0; padding: 10px 14px; font-size: 12px; color: var(--text2); margin: 12px 0; }
+
+  /* scrollbar */
+  #event-log::-webkit-scrollbar { width: 4px; }
+  #event-log::-webkit-scrollbar-track { background: var(--surface); }
+  #event-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  @media (max-width: 700px) {
+    .control-row { flex-wrap: wrap; }
+    .mode-strip { min-width: 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ==================== ANALYSIS REPORT ==================== -->
+<div class="report">
+  <h1>Steam Air Fryer — Rotary Encoder Redesign</h1>
+  <p class="subtitle">TORNADO Steam Air Fryer · Control Panel Architecture Review · Ref: 260519</p>
+  <a class="scroll-cta" onclick="document.getElementById('prototype').scrollIntoView({behavior:'smooth'})">↓ Jump to Interactive Prototype</a>
+
+  <!-- CURRENT DESIGN ANALYSIS -->
+  <h2>1. Current Design Analysis</h2>
+  <p>The existing panel spans <strong>285 mm × 35 mm</strong> — a wide membrane keyboard housing 20 dedicated switches arranged in three rows, each switch backed by an individual LED. The 7-segment display shows time (H:MM) in the centre-left. The panel lists all modes visually at once, relying on the user's ability to scan and memorise 13 cooking modes plus 7 utility controls.</p>
+
+  <h3>Current switch inventory</h3>
+  <table>
+    <tr><th>#</th><th>Control</th><th>Type</th><th>Notes</th></tr>
+    <tr><td>1</td><td>Power</td><td>Switch</td><td>On/Off</td></tr>
+    <tr><td>2</td><td>Start/Pause ▶⏸</td><td>Switch</td><td>Dual function</td></tr>
+    <tr><td>3</td><td>Menu</td><td>Switch</td><td>Opens settings menu</td></tr>
+    <tr><td>4</td><td>Select</td><td>Switch</td><td>Confirm selection</td></tr>
+    <tr><td>5</td><td>Light</td><td>Switch</td><td>Interior light toggle</td></tr>
+    <tr><td>6</td><td>Up ▲ (Temp/Time)</td><td>Switch</td><td>Increment</td></tr>
+    <tr><td>7</td><td>Down ▼ (Temp/Time)</td><td>Switch</td><td>Decrement</td></tr>
+    <tr><td>8</td><td>Temp/Time toggle</td><td>Switch</td><td>Switch active parameter</td></tr>
+    <tr><td>9</td><td>Zone 1/2 selector</td><td>Switch</td><td>Duo Cook zone</td></tr>
+    <tr><td>10</td><td>Air Fryer</td><td>Switch + LED</td><td>Mode direct-select</td></tr>
+    <tr><td>11</td><td>Steamer</td><td>Switch + LED</td><td>Mode direct-select</td></tr>
+    <tr><td>12</td><td>Oven</td><td>Switch + LED</td><td>Mode direct-select</td></tr>
+    <tr><td>13</td><td>Rapid Steam</td><td>Switch + LED</td><td>Mode direct-select</td></tr>
+    <tr><td>14</td><td>Broil</td><td>Switch + LED</td><td>Mode direct-select</td></tr>
+    <tr><td>15</td><td>Reheat</td><td>Switch + LED</td><td>Mode direct-select</td></tr>
+    <tr><td>16</td><td>Keep Warm</td><td>Switch + LED</td><td>Mode direct-select</td></tr>
+    <tr><td>17</td><td>Ferment</td><td>Switch + LED</td><td>Mode direct-select</td></tr>
+    <tr><td>18</td><td>Defrost</td><td>Switch + LED</td><td>Mode direct-select</td></tr>
+    <tr><td>19</td><td>Slow Cook</td><td>Switch + LED</td><td>Mode direct-select</td></tr>
+    <tr><td>20</td><td>Dehydrate</td><td>Switch + LED</td><td>Mode direct-select</td></tr>
+    <tr><td>21</td><td>Duo Cook</td><td>Switch + LED</td><td>Mode direct-select</td></tr>
+    <tr><td>22</td><td>Duo Ready</td><td>Switch + LED</td><td>Status indicator</td></tr>
+  </table>
+
+  <div class="metrics">
+    <div class="metric"><div class="val">22</div><div class="lbl">Current Switches</div></div>
+    <div class="metric"><div class="val">16</div><div class="lbl">Current LEDs</div></div>
+    <div class="metric"><div class="val">13</div><div class="lbl">Mode Buttons</div></div>
+    <div class="metric"><div class="val">285mm</div><div class="lbl">PCB Width</div></div>
+  </div>
+
+  <h3>Design Problems Identified</h3>
+  <p>The current architecture has several structural weaknesses that a premium redesign must solve:</p>
+  <p><strong>Cognitive overload:</strong> 13 mode labels are visible simultaneously. A new user faces a wall of text before they can begin cooking. Premium appliances (Breville Joule, Wolf steam oven) hide complexity behind progressive disclosure.</p>
+  <p><strong>Redundant controls:</strong> A dedicated Temp/Time toggle button exists solely to switch which parameter Up/Down adjusts. This is a pure UX debt — a rotary encoder eliminates it entirely.</p>
+  <p><strong>Dedicated Select button:</strong> Unnecessary when a push-button encoder press can serve as confirm. This is the exact UX model used by BMW iDrive, Sonos, and Nest thermostats.</p>
+  <p><strong>Dedicated Menu button:</strong> Menu navigation can be accessed via a long press or secondary encoder context — no discrete switch required.</p>
+  <p><strong>PCB cost:</strong> 22 switches + 16 LEDs = 38 discrete components requiring individual PCB footprints, soldering, and trace routing. Each tactile switch adds ~$0.04–0.08 BOM cost; the matrix decode logic requires an MCU with sufficient GPIO pins or a dedicated keyboard controller IC.</p>
+
+  <!-- FUNCTION MAPPING -->
+  <h2>2. Function Mapping: Current → Proposed</h2>
+  <table>
+    <tr><th>Function</th><th>Current Control</th><th>Proposed Control</th><th>Method</th></tr>
+    <tr><td>Power On/Off</td><td class="old">Dedicated switch</td><td class="new">Power button (kept)</td><td>1 physical button — safety/clarity</td></tr>
+    <tr><td>Mode Selection</td><td class="old">13 dedicated mode buttons</td><td class="new">Rotary CW/CCW</td><td>Encoder rotation browses modes on display</td></tr>
+    <tr><td>Mode Confirm</td><td class="old">Select button</td><td class="new">Encoder short press</td><td>Press to confirm highlighted mode</td></tr>
+    <tr><td>Temperature Adjust</td><td class="old">Up/Down + Temp button</td><td class="new">Rotary CW/CCW</td><td>After mode selected, first context = temp</td></tr>
+    <tr><td>Time Adjust</td><td class="old">Up/Down + Time button</td><td class="new">Rotary CW/CCW</td><td>Short press encoder to switch to time context</td></tr>
+    <tr><td>Temp/Time Toggle</td><td class="old">Dedicated button</td><td class="new">Encoder short press</td><td>Toggles active parameter</td></tr>
+    <tr><td>Start / Pause</td><td class="old">Dedicated Start/Pause button</td><td class="new">Start/Pause button (kept)</td><td>1 physical button — safety/muscle memory</td></tr>
+    <tr><td>Cancel / Back</td><td class="old">Implicit (power off)</td><td class="new">Encoder long press</td><td>Hold 2s → cancel/return to HOME</td></tr>
+    <tr><td>Menu/Settings</td><td class="old">Dedicated Menu button</td><td class="new">Encoder long press from HOME</td><td>Long press opens SETTINGS</td></tr>
+    <tr><td>Duo Cook Zone</td><td class="old">1/2 Zone selector button</td><td class="new">Encoder short press in Duo mode</td><td>Toggles zone focus on display</td></tr>
+    <tr><td>Duo Ready indicator</td><td class="old">LED indicator</td><td class="new">Display icon + status LED</td><td>Display shows DUO READY state</td></tr>
+    <tr><td>Light</td><td class="old">Dedicated Light button</td><td class="new">Light button (kept)</td><td>1 physical button — convenience</td></tr>
+    <tr><td>Steam indicators</td><td class="old">LEDs on steam modes</td><td class="new">Display icon + steam LED</td><td>OLED shows steam status icon</td></tr>
+    <tr><td>Mode LEDs (13×)</td><td class="old">Individual LED per mode</td><td class="new">Display highlight</td><td>Display shows selected mode prominently</td></tr>
+  </table>
+
+  <div class="note">ℹ️ <strong>Key insight:</strong> The Temp/Time toggle, Select, and Menu buttons are pure "interface overhead" — they exist to compensate for not having a rotary encoder. All three disappear in the new architecture.</div>
+
+  <!-- SWITCH REDUCTION -->
+  <h2>3. Switch Reduction Analysis</h2>
+  <div class="metrics">
+    <div class="metric"><div class="val">22</div><div class="lbl">Current Switches</div></div>
+    <div class="metric"><div class="val blue">4</div><div class="lbl">Proposed Switches</div></div>
+    <div class="metric"><div class="val green">82%</div><div class="lbl">Switch Reduction</div></div>
+    <div class="metric"><div class="val">16</div><div class="lbl">Current LEDs</div></div>
+    <div class="metric"><div class="val blue">3</div><div class="lbl">Proposed Status LEDs</div></div>
+    <div class="metric"><div class="val green">81%</div><div class="lbl">LED Reduction</div></div>
+  </div>
+
+  <h3>Proposed Physical Controls (4 total)</h3>
+  <table>
+    <tr><th>#</th><th>Control</th><th>Justification</th></tr>
+    <tr><td>1</td><td>Rotary Encoder (with push)</td><td>Replaces 18 switches. The core interaction device.</td></tr>
+    <tr><td>2</td><td>Power button</td><td>Safety-critical. Users expect a discrete power control. Regulatory compliance (CE, UL).</td></tr>
+    <tr><td>3</td><td>Start / Pause button</td><td>Safety-critical. Must be operable without looking at display. Common muscle memory expectation.</td></tr>
+    <tr><td>4</td><td>Light button</td><td>Frequently used while hands are busy. Convenience argument justifies discrete placement.</td></tr>
+  </table>
+
+  <h3>Hardware Benefits</h3>
+  <table>
+    <tr><th>Aspect</th><th>Current</th><th>Proposed</th><th>Benefit</th></tr>
+    <tr><td>PCB traces</td><td>~38 component footprints</td><td>~8 component footprints</td><td>Simpler routing, smaller board</td></tr>
+    <tr><td>GPIO requirements</td><td>22+ GPIO or matrix decoder IC</td><td>5 GPIO (encoder A, B, push + 3 buttons)</td><td>Simpler MCU, no keyboard controller IC</td></tr>
+    <tr><td>Membrane layer</td><td>Complex 285mm × 35mm overlay</td><td>Compact 120mm × 35mm overlay</td><td>~58% smaller panel overlay</td></tr>
+    <tr><td>BOM cost (switches)</td><td>~$1.50–2.00 for 22 tactile switches</td><td>~$0.40 for 3 tactile + ~$1.20 encoder</td><td>Comparable BOM, better UX ROI</td></tr>
+    <tr><td>Reliability</td><td>22× switch MTBF exposure</td><td>4× switch MTBF exposure</td><td>80%+ fewer failure points</td></tr>
+    <tr><td>Manufacturing</td><td>22 pick-and-place placements</td><td>4 placements</td><td>Faster assembly, lower labour cost</td></tr>
+    <tr><td>Waterproofing</td><td>22 membrane penetration points</td><td>4 penetration points + sealed encoder</td><td>Better IP rating achievable</td></tr>
+  </table>
+
+  <!-- USER FLOWS -->
+  <h2>4. User Flow Design</h2>
+
+  <h3>Power ON</h3>
+  <div class="flow">
+    <div class="flow-step">Press Power</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Boot animation (0.8s)</div><div class="flow-arrow">→</div>
+    <div class="flow-step">HOME: last used mode shown</div><div class="flow-arrow">→</div>
+    <div class="flow-step confirm">Ready to cook</div>
+  </div>
+
+  <h3>Select Cooking Mode</h3>
+  <div class="flow">
+    <div class="flow-step">HOME state</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Rotate CW/CCW</div><div class="flow-arrow">→</div>
+    <div class="flow-step">Mode scrolls on display</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Short Press</div><div class="flow-arrow">→</div>
+    <div class="flow-step confirm">MODE_SELECTED</div>
+  </div>
+
+  <h3>Adjust Temperature</h3>
+  <div class="flow">
+    <div class="flow-step">MODE_SELECTED (temp context)</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Rotate CW</div><div class="flow-arrow">→</div>
+    <div class="flow-step">Temp +5°C per click</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Rotate CCW</div><div class="flow-arrow">→</div>
+    <div class="flow-step">Temp -5°C per click</div>
+  </div>
+
+  <h3>Switch to Time / Adjust Time</h3>
+  <div class="flow">
+    <div class="flow-step">TEMP_SETTING active</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Short Press encoder</div><div class="flow-arrow">→</div>
+    <div class="flow-step">TIME_SETTING active</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Rotate CW/CCW</div><div class="flow-arrow">→</div>
+    <div class="flow-step confirm">Time adjusted</div>
+  </div>
+
+  <h3>Start Cooking</h3>
+  <div class="flow">
+    <div class="flow-step">READY state</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Press Start/Pause</div><div class="flow-arrow">→</div>
+    <div class="flow-step confirm">COOKING — countdown begins</div>
+  </div>
+
+  <h3>Pause / Resume</h3>
+  <div class="flow">
+    <div class="flow-step">COOKING</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Press Start/Pause</div><div class="flow-arrow">→</div>
+    <div class="flow-step">PAUSED (timer frozen)</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Press Start/Pause again</div><div class="flow-arrow">→</div>
+    <div class="flow-step confirm">COOKING resumed</div>
+  </div>
+
+  <h3>Cancel Cooking</h3>
+  <div class="flow">
+    <div class="flow-step">COOKING or PAUSED</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Long Press encoder (2s)</div><div class="flow-arrow">→</div>
+    <div class="flow-step">Confirmation flash on display</div><div class="flow-arrow">→</div>
+    <div class="flow-step confirm">Return to HOME</div>
+  </div>
+
+  <h3>Steam Operation</h3>
+  <div class="flow">
+    <div class="flow-step">Rotate to Steamer / Rapid Steam</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Short Press</div><div class="flow-arrow">→</div>
+    <div class="flow-step">Steam temp locked (100°C) or adjustable</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Short Press → set time</div><div class="flow-arrow">→</div>
+    <div class="flow-step">Start/Pause</div><div class="flow-arrow">→</div>
+    <div class="flow-step confirm">Steam LED on</div>
+  </div>
+
+  <h3>Duo Cook Operation</h3>
+  <div class="flow">
+    <div class="flow-step">Select DUO COOK</div><div class="flow-arrow">→</div>
+    <div class="flow-step">Zone 1 temp/time shown</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Short Press → set Zone 1</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Short Press → switch Zone 2</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Set Zone 2</div><div class="flow-arrow">→</div>
+    <div class="flow-step confirm">Start → both zones run</div>
+  </div>
+
+  <h3>Settings Navigation</h3>
+  <div class="flow">
+    <div class="flow-step">HOME</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Long Press encoder</div><div class="flow-arrow">→</div>
+    <div class="flow-step">SETTINGS menu</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Rotate to browse</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Short Press to enter</div><div class="flow-arrow">→</div>
+    <div class="flow-step action">Long Press to back</div>
+  </div>
+
+  <!-- STATE MACHINE -->
+  <h2>5. State Machine</h2>
+  <table>
+    <tr><th>State</th><th>Entry Condition</th><th>Encoder CW/CCW</th><th>Short Press</th><th>Long Press</th><th>Start/Pause</th></tr>
+    <tr><td><span class="tag">OFF</span></td><td>Power unplugged or turned off</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td><span class="tag blue">BOOT</span></td><td>Power button pressed</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td><span class="tag accent">HOME</span></td><td>Boot complete / cook done / cancel</td><td>→ MODE_SELECTION</td><td>Confirm last mode</td><td>→ SETTINGS</td><td>Start last mode</td></tr>
+    <tr><td><span class="tag">MODE_SELECTION</span></td><td>Rotate from HOME</td><td>Scroll modes</td><td>→ TEMP_SETTING</td><td>→ HOME</td><td>Start with defaults</td></tr>
+    <tr><td><span class="tag">TEMP_SETTING</span></td><td>Mode confirmed</td><td>Adjust temp ±5°C</td><td>→ TIME_SETTING</td><td>→ HOME</td><td>→ COOKING</td></tr>
+    <tr><td><span class="tag">TIME_SETTING</span></td><td>Short press from TEMP</td><td>Adjust time ±1min</td><td>→ READY</td><td>→ HOME</td><td>→ COOKING</td></tr>
+    <tr><td><span class="tag green">READY</span></td><td>Time confirmed</td><td>Re-adjust time</td><td>Re-enter TEMP</td><td>→ HOME</td><td>→ COOKING</td></tr>
+    <tr><td><span class="tag green">COOKING</span></td><td>Start pressed</td><td>Adjust remaining time</td><td>Toggle temp/time view</td><td>→ HOME (cancel)</td><td>→ PAUSED</td></tr>
+    <tr><td><span class="tag">PAUSED</span></td><td>Start/Pause during COOKING</td><td>Adjust time</td><td>Adjust temp</td><td>→ HOME (cancel)</td><td>→ COOKING</td></tr>
+    <tr><td><span class="tag accent">COMPLETE</span></td><td>Timer reaches zero</td><td>—</td><td>→ HOME</td><td>→ HOME</td><td>→ HOME</td></tr>
+    <tr><td><span class="tag blue">SETTINGS</span></td><td>Long press from HOME</td><td>Browse settings</td><td>Select setting</td><td>→ HOME</td><td>—</td></tr>
+  </table>
+
+  <!-- FINAL RECOMMENDATION -->
+  <h2>6. Final Recommendation</h2>
+  <p><strong>Verdict: Migrate to the rotary encoder architecture.</strong></p>
+  <p>The current 22-switch membrane panel is a functional product that works — but it is not a premium product. It reads as budget engineering dressed up with food photography icons. Every high-end appliance in the comparison set (Breville Smart Oven Air Fryer Pro, Ninja Foodi, Instant Pot Pro) has progressively moved toward encoders, OLED displays, and reduced physical switch counts.</p>
+  <table>
+    <tr><th>Dimension</th><th>Current</th><th>Proposed</th><th>Winner</th></tr>
+    <tr><td>UX learnability</td><td>Steep — 13 modes visible at once</td><td>Progressive — one thing at a time</td><td class="new">Rotary ✓</td></tr>
+    <tr><td>UX fluency (expert)</td><td>Fast single-press mode select</td><td>1–3 rotary clicks</td><td>Draw</td></tr>
+    <tr><td>Hardware cost</td><td>~$2.20 in switches + LEDs</td><td>~$1.60 encoder + 3 switches</td><td class="new">Rotary ✓</td></tr>
+    <tr><td>PCB complexity</td><td>High — 38 components, matrix logic</td><td>Low — 4 components + OLED</td><td class="new">Rotary ✓</td></tr>
+    <tr><td>Reliability</td><td>22 failure points</td><td>4 failure points</td><td class="new">Rotary ✓</td></tr>
+    <tr><td>Manufacturing</td><td>Complex membrane, many placements</td><td>Simple overlay, minimal placements</td><td class="new">Rotary ✓</td></tr>
+    <tr><td>Brand perception</td><td>Budget/appliance feel</td><td>Premium/intentional feel</td><td class="new">Rotary ✓</td></tr>
+    <tr><td>Localisation</td><td>13 physical text labels (Arabic + EN)</td><td>All labels on OLED — software only</td><td class="new">Rotary ✓</td></tr>
+    <tr><td>Accessibility</td><td>Small icons, no tactile differentiation</td><td>Tactile encoder, large display text</td><td class="new">Rotary ✓</td></tr>
+  </table>
+  <p>The only genuine risk is discoverability of the 13 cooking modes — users must understand that rotating the encoder scrolls through them. This is mitigated by a clear OLED mode name display, a mode icon strip, and the now-standard consumer expectation of "turn to select" interaction. A simple onboarding animation at first power-on resolves any remaining ambiguity.</p>
+  <p>The localisation benefit alone justifies the migration: all mode names, unit labels, and menu strings live in firmware. Changing from Arabic to English, or adding new markets, requires zero PCB respins.</p>
+
+  <div class="divider"></div>
+</div>
+
+<!-- ==================== PROTOTYPE ==================== -->
+<div id="prototype">
+  <div class="report">
+    <div class="proto-title">Interactive Control Panel Prototype</div>
+    <div class="proto-sub">Simulate the rotary encoder interaction — rotate, press, and cook.</div>
+  </div>
+
+  <div style="max-width:1100px;margin:0 auto;padding:0 24px;">
+
+    <!-- APPLIANCE -->
+    <div class="appliance">
+      <div class="appliance-brand">TORNADO</div>
+      <div class="appliance-name">STEAM AIR FRYER · PRO SERIES</div>
+
+      <div class="control-row">
+
+        <!-- DISPLAY -->
+        <div class="display-wrap">
+          <div class="display-mode" id="disp-mode">AIR FRYER</div>
+          <div class="display-main" id="disp-main">200°C</div>
+          <div class="cook-progress"><div class="cook-bar" id="cook-bar" style="width:0%"></div></div>
+          <div class="display-row2">
+            <div class="display-sub" id="disp-sub">30:00</div>
+            <div class="display-sub" id="disp-state">HOME</div>
+          </div>
+          <div class="display-icon-row">
+            <span class="display-icon" id="icon-steam" title="Steam">💧</span>
+            <span class="display-icon" id="icon-heat" title="Heating">🔥</span>
+            <span class="display-icon" id="icon-fan" title="Fan">🌀</span>
+            <span class="display-icon" id="icon-light" title="Light">💡</span>
+            <span class="display-icon" id="icon-duo" title="Duo">⚡</span>
+          </div>
+          <div class="display-context" id="disp-ctx">Rotate to select mode · Press to confirm</div>
+        </div>
+
+        <!-- MODE STRIP -->
+        <div class="mode-strip">
+          <div class="mode-label">Cooking Modes</div>
+          <div class="mode-icons" id="mode-icons"></div>
+          <div style="margin-top:8px;">
+            <div class="led-row">
+              <div class="led on" id="led-ready" title="Ready"></div>
+              <div style="font-size:10px;color:var(--text3);margin:0 4px;">RDY</div>
+              <div class="led steam" id="led-steam" title="Steam"></div>
+              <div style="font-size:10px;color:var(--text3);margin:0 4px;">STM</div>
+              <div class="led warn" id="led-cook" title="Cooking"></div>
+              <div style="font-size:10px;color:var(--text3);">COOK</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROTARY -->
+        <div class="rotary-section">
+          <div class="rotary-label">Encoder</div>
+          <div class="rotary-btns">
+            <button class="rot-btn" onclick="rotateEncoder(-1)" title="Counter-Clockwise">↺</button>
+            <button class="rot-btn" onclick="rotateEncoder(1)" title="Clockwise">↻</button>
+          </div>
+          <div class="rotary-wrap" id="rotary-wrap">
+            <div class="rotary" id="rotary" onmousedown="startPress()" onmouseup="endPress()" onmouseleave="cancelPress()" ontouchstart="startPress(event)" ontouchend="endPress()">
+              <div class="rotary-dot"></div>
+              <div class="rotary-inner"><div class="rotary-inner-icon">✦</div></div>
+            </div>
+            <div class="longpress-ring" id="lp-ring"></div>
+          </div>
+          <div class="rotary-hint" id="rotary-hint">Short press to confirm · Hold 2s for menu</div>
+        </div>
+
+        <!-- BUTTON STRIP -->
+        <div class="btn-strip">
+          <button class="hw-btn power" id="btn-power" onclick="pressPower()">⏻ PWR</button>
+          <button class="hw-btn start" id="btn-start" onclick="handleStart()" disabled>▶ START</button>
+          <button class="hw-btn light" id="btn-light" onclick="pressLight()">💡 LIGHT</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- HINTS -->
+    <div class="hints">
+      <div class="hints-title">Interaction Guide</div>
+      <div class="hint-row">
+        <div class="hint"><span class="hint-key">↺ ↻</span> Rotate encoder</div>
+        <div class="hint"><span class="hint-key">Click encoder</span> Short press (confirm / toggle param)</div>
+        <div class="hint"><span class="hint-key">Hold encoder 2s</span> Long press (cancel / settings)</div>
+        <div class="hint"><span class="hint-key">▶ START</span> Start / Pause cooking</div>
+        <div class="hint"><span class="hint-key">⏻ PWR</span> Power on/off</div>
+        <div class="hint"><span class="hint-key">💡 LIGHT</span> Interior light</div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="dashboard">
+      <div class="dash-title">Live Engineering Dashboard</div>
+      <div class="dash-grid">
+        <div class="dash-cell"><div class="k">State</div><div class="v accent" id="db-state">OFF</div></div>
+        <div class="dash-cell"><div class="k">Mode</div><div class="v blue" id="db-mode">—</div></div>
+        <div class="dash-cell"><div class="k">Active Param</div><div class="v" id="db-param">—</div></div>
+        <div class="dash-cell"><div class="k">Temperature</div><div class="v accent" id="db-temp">—</div></div>
+        <div class="dash-cell"><div class="k">Time</div><div class="v" id="db-time">—</div></div>
+        <div class="dash-cell"><div class="k">Power</div><div class="v red" id="db-power">OFF</div></div>
+        <div class="dash-cell"><div class="k">Steam</div><div class="v blue" id="db-steam">OFF</div></div>
+        <div class="dash-cell"><div class="k">Light</div><div class="v" id="db-light">OFF</div></div>
+        <div class="dash-cell"><div class="k">Cooking</div><div class="v green" id="db-cooking">IDLE</div></div>
+        <div class="dash-cell"><div class="k">Encoder Pos</div><div class="v" id="db-enc">0</div></div>
+        <div class="dash-cell"><div class="k">Last Action</div><div class="v blue" id="db-action">—</div></div>
+        <div class="dash-cell"><div class="k">Zone (Duo)</div><div class="v" id="db-zone">—</div></div>
+      </div>
+    </div>
+
+    <!-- EVENT LOG -->
+    <div class="log-wrap">
+      <div class="log-header">
+        <div class="log-title">Event Log</div>
+        <button class="log-clear" onclick="clearLog()">Clear</button>
+      </div>
+      <div id="event-log"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ===== STATE =====
+const MODES = [
+  { id:'airfryer',   name:'Air Fryer',   emoji:'🍟', defaultTemp:200, defaultTime:20, steam:false, fan:true  },
+  { id:'steamer',    name:'Steamer',     emoji:'💧', defaultTemp:100, defaultTime:30, steam:true,  fan:false },
+  { id:'oven',       name:'Oven',        emoji:'🍞', defaultTemp:180, defaultTime:25, steam:false, fan:false },
+  { id:'rapidsteam', name:'Rapid Steam', emoji:'♨️', defaultTemp:100, defaultTime:15, steam:true,  fan:false },
+  { id:'broil',      name:'Broil',       emoji:'🔥', defaultTemp:220, defaultTime:12, steam:false, fan:false },
+  { id:'reheat',     name:'Reheat',      emoji:'🍲', defaultTemp:160, defaultTime:10, steam:false, fan:true  },
+  { id:'keepwarm',   name:'Keep Warm',   emoji:'☕', defaultTemp:60,  defaultTime:60, steam:false, fan:false },
+  { id:'ferment',    name:'Ferment',     emoji:'🧫', defaultTemp:40,  defaultTime:480,steam:false, fan:false },
+  { id:'defrost',    name:'Defrost',     emoji:'❄️', defaultTemp:50,  defaultTime:20, steam:false, fan:true  },
+  { id:'slowcook',   name:'Slow Cook',   emoji:'🥘', defaultTemp:90,  defaultTime:240,steam:false, fan:false },
+  { id:'dehydrate',  name:'Dehydrate',   emoji:'🌿', defaultTemp:70,  defaultTime:360,steam:false, fan:true  },
+  { id:'duocook',    name:'Duo Cook',    emoji:'⚡', defaultTemp:180, defaultTime:25, steam:false, fan:true  },
+];
+
+let S = {
+  power: false,
+  state: 'OFF', // OFF BOOT HOME MODE_SELECTION TEMP_SETTING TIME_SETTING READY COOKING PAUSED COMPLETE SETTINGS
+  modeIdx: 0,
+  cursorIdx: 0,
+  temp: 200,
+  time: 20,
+  activeParam: 'temp', // 'temp' | 'time'
+  light: false,
+  cookTimer: null,
+  cookRemaining: 0,
+  cookTotal: 0,
+  encoderPos: 0,
+  lpTimer: null,
+  duoZone: 1,
+};
+
+// ===== DOM =====
+const $ = id => document.getElementById(id);
+function buildModeIcons(){
+  const wrap = $('mode-icons');
+  wrap.innerHTML = '';
+  MODES.forEach((m, i) => {
+    const d = document.createElement('div');
+    d.className = 'mode-icon';
+    d.id = 'mi-'+i;
+    d.innerHTML = `<span class="emoji">${m.emoji}</span><span class="lbl">${m.name.split(' ')[0]}</span>`;
+    d.onclick = () => { if(!S.power) return; selectModeByIndex(i); };
+    wrap.appendChild(d);
+  });
+}
+buildModeIcons();
+
+// ===== LOG =====
+function log(action, detail=''){
+  const el = $('event-log');
+  const now = new Date();
+  const ts = `${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}.${String(Math.floor(now.getMilliseconds()/100))}`;
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">${ts}</span><span class="log-action">${action}</span><span class="log-detail">${detail}</span>`;
+  el.prepend(entry);
+  while(el.children.length > 50) el.removeChild(el.lastChild);
+  $('db-action').textContent = action;
+}
+function clearLog(){ $('event-log').innerHTML = ''; }
+
+// ===== UPDATE DISPLAY =====
+function fmt(min){ return `${String(Math.floor(min)).padStart(2,'0')}:${String((min%1)*60).padStart(2,'0')}`; }
+function fmtTime(s){ const m=Math.floor(s/60), sec=s%60; return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`; }
+
+function updateDisplay(){
+  const M = MODES[S.modeIdx];
+  const dispMain = $('disp-main');
+  const dispMode = $('disp-mode');
+  const dispSub = $('disp-sub');
+  const dispState = $('disp-state');
+  const dispCtx = $('disp-ctx');
+
+  if(!S.power){ dispMode.textContent=''; dispMain.textContent=''; dispMain.className='display-main'; dispSub.textContent=''; dispState.textContent=''; dispCtx.textContent=''; return; }
+
+  dispState.textContent = S.state;
+
+  if(S.state==='BOOT'){ dispMode.textContent=''; dispMain.textContent='...'; dispMain.className='display-main'; dispCtx.textContent='Starting up'; }
+  else if(S.state==='HOME'||S.state==='MODE_SELECTION'){
+    const cur = MODES[S.cursorIdx];
+    dispMode.textContent = cur.name.toUpperCase();
+    dispMain.textContent = cur.defaultTemp+'°C';
+    dispMain.className = 'display-main hot';
+    dispSub.textContent = cur.defaultTime+'min';
+    dispCtx.textContent = S.state==='HOME' ? 'Rotate to select mode · Press to confirm' : 'Browsing modes · Press to select';
+  }
+  else if(S.state==='TEMP_SETTING'){
+    dispMode.textContent = M.name.toUpperCase()+' · SET TEMP';
+    dispMain.textContent = S.temp+'°C';
+    dispMain.className = 'display-main hot';
+    dispSub.textContent = S.time+'min';
+    dispCtx.textContent = 'Rotate to adjust temp · Press to set time';
+  }
+  else if(S.state==='TIME_SETTING'){
+    dispMode.textContent = M.name.toUpperCase()+' · SET TIME';
+    dispMain.textContent = S.temp+'°C';
+    dispMain.className = 'display-main hot';
+    dispSub.textContent = S.time+'min  ◀';
+    dispCtx.textContent = 'Rotate to adjust time · Press to confirm';
+  }
+  else if(S.state==='READY'){
+    dispMode.textContent = M.name.toUpperCase()+' · READY';
+    dispMain.textContent = S.temp+'°C';
+    dispMain.className = 'display-main hot';
+    dispSub.textContent = S.time+'min';
+    dispCtx.textContent = 'Press START to cook';
+  }
+  else if(S.state==='COOKING'){
+    dispMode.textContent = M.name.toUpperCase()+' · COOKING';
+    const activeShow = S.activeParam==='temp' ? S.temp+'°C' : fmtTime(S.cookRemaining);
+    dispMain.textContent = activeShow;
+    dispMain.className = 'display-main hot';
+    const other = S.activeParam==='temp' ? fmtTime(S.cookRemaining) : S.temp+'°C';
+    dispSub.textContent = other;
+    dispCtx.textContent = 'Press encoder to toggle view · START to pause';
+    const pct = S.cookTotal>0 ? ((S.cookTotal-S.cookRemaining)/S.cookTotal)*100 : 0;
+    $('cook-bar').style.width = pct+'%';
+  }
+  else if(S.state==='PAUSED'){
+    dispMode.textContent = M.name.toUpperCase()+' · PAUSED';
+    dispMain.textContent = fmtTime(S.cookRemaining);
+    dispMain.className = 'display-main';
+    dispSub.textContent = S.temp+'°C';
+    dispCtx.textContent = 'Press START to resume · Hold encoder to cancel';
+  }
+  else if(S.state==='COMPLETE'){
+    dispMode.textContent = '✓ DONE';
+    dispMain.textContent = M.name.toUpperCase();
+    dispMain.className = 'display-main green';
+    dispSub.textContent = '';
+    dispCtx.textContent = 'Press encoder or any button to dismiss';
+    $('cook-bar').style.width = '100%';
+  }
+  else if(S.state==='SETTINGS'){
+    dispMode.textContent = 'SETTINGS';
+    dispMain.textContent = 'MENU';
+    dispMain.className = 'display-main';
+    dispCtx.textContent = 'Rotate to browse · Press to select · Hold to back';
+  }
+
+  // icons
+  const steamModes = ['steamer','rapidsteam'];
+  $('icon-steam').classList.toggle('on', steamModes.includes(M.id) && S.state==='COOKING');
+  $('icon-heat').classList.toggle('on', ['COOKING','PAUSED'].includes(S.state));
+  $('icon-fan').classList.toggle('on', M.fan && S.state==='COOKING');
+  $('icon-light').classList.toggle('on', S.light);
+  $('icon-duo').classList.toggle('on', M.id==='duocook');
+
+  // mode icons highlight
+  MODES.forEach((_,i)=>{
+    const el = $('mi-'+i);
+    el.classList.toggle('selected', i===S.modeIdx && ['TEMP_SETTING','TIME_SETTING','READY','COOKING','PAUSED'].includes(S.state));
+    el.classList.toggle('active-cursor', i===S.cursorIdx && ['HOME','MODE_SELECTION'].includes(S.state));
+  });
+
+  // LEDs
+  $('led-ready').classList.toggle('on', S.power && ['HOME','MODE_SELECTION','TEMP_SETTING','TIME_SETTING','READY'].includes(S.state));
+  $('led-steam').classList.toggle('on', steamModes.includes(M.id) && S.state==='COOKING');
+  $('led-cook').classList.toggle('on', S.state==='COOKING');
+
+  // start button
+  const startBtn = $('btn-start');
+  startBtn.disabled = !S.power || ['OFF','BOOT'].includes(S.state);
+  startBtn.className = 'hw-btn start' + (S.state==='COOKING' ? ' cooking' : '');
+  startBtn.textContent = S.state==='COOKING' ? '⏸ PAUSE' : S.state==='PAUSED' ? '▶ RESUME' : '▶ START';
+
+  // power btn
+  $('btn-power').className = 'hw-btn power' + (S.power ? ' on' : '');
+  $('btn-light').className = 'hw-btn light' + (S.light ? ' on' : '');
+
+  // dashboard
+  $('db-state').textContent = S.state;
+  $('db-mode').textContent = S.power ? M.name : '—';
+  $('db-param').textContent = S.power ? S.activeParam.toUpperCase() : '—';
+  $('db-temp').textContent = S.power ? S.temp+'°C' : '—';
+  $('db-time').textContent = S.power ? (S.state==='COOKING'||S.state==='PAUSED' ? fmtTime(S.cookRemaining) : S.time+'min') : '—';
+  $('db-power').textContent = S.power ? 'ON' : 'OFF';
+  $('db-power').className = 'v '+(S.power?'green':'red');
+  $('db-steam').textContent = steamModes.includes(M.id) && S.state==='COOKING' ? 'ACTIVE' : 'OFF';
+  $('db-light').textContent = S.light ? 'ON' : 'OFF';
+  $('db-cooking').textContent = S.state==='COOKING' ? 'COOKING' : S.state==='PAUSED' ? 'PAUSED' : S.state==='COMPLETE' ? 'DONE' : 'IDLE';
+  $('db-enc').textContent = S.encoderPos;
+  $('db-zone').textContent = M.id==='duocook' ? 'Zone '+S.duoZone : '—';
+}
+
+// ===== ACTIONS =====
+function pressPower(){
+  if(!S.power){
+    S.power = true;
+    S.state = 'BOOT';
+    updateDisplay();
+    log('Power ON','Booting...');
+    setTimeout(()=>{ S.state='HOME'; S.cursorIdx=0; updateDisplay(); log('Boot Complete','HOME state'); }, 800);
+  } else {
+    stopCook();
+    S.power = false; S.state = 'OFF'; S.light = false;
+    updateDisplay();
+    log('Power OFF','');
+  }
+}
+
+function rotateEncoder(dir){
+  if(!S.power) return;
+  S.encoderPos += dir;
+  const rotary = $('rotary');
+  rotary.style.transform = `rotate(${S.encoderPos*18}deg)`;
+
+  if(S.state==='HOME'||S.state==='MODE_SELECTION'){
+    S.state = 'MODE_SELECTION';
+    S.cursorIdx = (S.cursorIdx + dir + MODES.length) % MODES.length;
+    log(dir>0?'Rotate CW':'Rotate CCW', 'Mode: '+MODES[S.cursorIdx].name);
+  }
+  else if(S.state==='TEMP_SETTING'){
+    S.temp = Math.max(30, Math.min(260, S.temp + dir*5));
+    log(dir>0?'Rotate CW':'Rotate CCW', 'Temp: '+S.temp+'°C');
+  }
+  else if(S.state==='TIME_SETTING'||S.state==='READY'){
+    S.time = Math.max(1, Math.min(720, S.time + dir));
+    log(dir>0?'Rotate CW':'Rotate CCW', 'Time: '+S.time+'min');
+  }
+  else if(S.state==='COOKING'){
+    S.cookRemaining = Math.max(10, Math.min(S.cookTotal, S.cookRemaining + dir*60));
+    log(dir>0?'Rotate CW':'Rotate CCW', 'Time adj: '+fmtTime(S.cookRemaining));
+  }
+  else if(S.state==='SETTINGS'){
+    log(dir>0?'Rotate CW':'Rotate CCW', 'Browse settings');
+  }
+  updateDisplay();
+}
+
+function shortPress(){
+  if(!S.power) return;
+  if(S.state==='HOME'||S.state==='MODE_SELECTION'){
+    S.modeIdx = S.cursorIdx;
+    const M = MODES[S.modeIdx];
+    S.temp = M.defaultTemp;
+    S.time = M.defaultTime;
+    S.state = 'TEMP_SETTING';
+    S.activeParam = 'temp';
+    log('Short Press', 'Mode selected: '+M.name);
+  }
+  else if(S.state==='TEMP_SETTING'){
+    S.state = 'TIME_SETTING';
+    S.activeParam = 'time';
+    log('Short Press', 'Switched to TIME setting');
+  }
+  else if(S.state==='TIME_SETTING'){
+    S.state = 'READY';
+    log('Short Press', 'Settings confirmed — READY');
+  }
+  else if(S.state==='READY'){
+    S.state = 'TEMP_SETTING';
+    S.activeParam = 'temp';
+    log('Short Press', 'Back to TEMP_SETTING');
+  }
+  else if(S.state==='COOKING'){
+    S.activeParam = S.activeParam==='temp' ? 'time' : 'temp';
+    log('Short Press', 'Toggle view: '+S.activeParam);
+  }
+  else if(S.state==='PAUSED'){
+    log('Short Press', 'Encoder press while paused');
+  }
+  else if(S.state==='COMPLETE'){
+    S.state = 'HOME'; S.cursorIdx = S.modeIdx;
+    $('cook-bar').style.width = '0%';
+    log('Short Press', 'Dismissed — HOME');
+  }
+  else if(S.state==='SETTINGS'){
+    log('Short Press', 'Setting selected');
+    S.state = 'HOME';
+  }
+  updateDisplay();
+}
+
+function longPress(){
+  if(!S.power) return;
+  if(S.state==='HOME'||S.state==='MODE_SELECTION'){
+    S.state = 'SETTINGS';
+    log('Long Press', 'Entered SETTINGS');
+  }
+  else if(['TEMP_SETTING','TIME_SETTING','READY','COOKING','PAUSED'].includes(S.state)){
+    stopCook();
+    S.state = 'HOME';
+    $('cook-bar').style.width = '0%';
+    log('Long Press', 'Cancelled — returned HOME');
+  }
+  else if(S.state==='SETTINGS'){
+    S.state = 'HOME';
+    log('Long Press', 'Exited SETTINGS');
+  }
+  updateDisplay();
+}
+
+function handleStart(){
+  if(!S.power) return;
+  if(S.state==='HOME'||S.state==='MODE_SELECTION'){
+    S.modeIdx = S.cursorIdx;
+    const M = MODES[S.modeIdx];
+    S.temp = M.defaultTemp; S.time = M.defaultTime;
+    startCook();
+    return;
+  }
+  if(['TEMP_SETTING','TIME_SETTING','READY'].includes(S.state)){
+    startCook(); return;
+  }
+  if(S.state==='COOKING'){
+    clearInterval(S.cookTimer); S.cookTimer=null;
+    S.state = 'PAUSED';
+    log('Cooking Paused', fmtTime(S.cookRemaining)+' remaining');
+    updateDisplay(); return;
+  }
+  if(S.state==='PAUSED'){
+    startCookTimer();
+    S.state = 'COOKING';
+    log('Cooking Resumed', '');
+    updateDisplay(); return;
+  }
+  if(S.state==='COMPLETE'){
+    S.state='HOME'; $('cook-bar').style.width='0%'; updateDisplay(); return;
+  }
+}
+
+function startCook(){
+  S.state = 'COOKING';
+  S.cookTotal = S.time * 60;
+  S.cookRemaining = S.cookTotal;
+  S.activeParam = 'time';
+  log('Cooking Started', MODES[S.modeIdx].name+' · '+S.temp+'°C · '+S.time+'min');
+  startCookTimer();
+  updateDisplay();
+}
+function startCookTimer(){
+  S.cookTimer = setInterval(()=>{
+    S.cookRemaining--;
+    if(S.cookRemaining<=0){
+      clearInterval(S.cookTimer); S.cookTimer=null;
+      S.state='COMPLETE';
+      log('Cooking Complete', MODES[S.modeIdx].name+' finished');
+    }
+    updateDisplay();
+  },1000);
+}
+function stopCook(){
+  if(S.cookTimer){ clearInterval(S.cookTimer); S.cookTimer=null; }
+}
+
+function pressLight(){
+  if(!S.power) return;
+  S.light = !S.light;
+  log('Light '+(S.light?'ON':'OFF'),'');
+  updateDisplay();
+}
+
+function selectModeByIndex(i){
+  S.cursorIdx = i; S.state='MODE_SELECTION';
+  updateDisplay();
+}
+
+// ===== LONG PRESS MECHANISM =====
+let btnPressedAt = 0;
+function startPress(e){ if(e) e.preventDefault(); if(!S.power) return; btnPressedAt = Date.now(); $('lp-ring').classList.add('active'); S.lpTimer = setTimeout(()=>{ cancelPress(); longPress(); }, 2000); }
+function endPress(e){ if(e) e.preventDefault(); $('lp-ring').classList.remove('active'); if(S.lpTimer){ clearTimeout(S.lpTimer); S.lpTimer=null; } if(!S.power) return; const dur = Date.now()-btnPressedAt; if(dur<1500){ shortPress(); log('Short Press','encoder'); } }
+function cancelPress(){ if(S.lpTimer){ clearTimeout(S.lpTimer); S.lpTimer=null; } $('lp-ring').classList.remove('active'); }
+
+// keyboard support
+document.addEventListener('keydown', e=>{
+  if(e.repeat) return;
+  if(e.key==='ArrowRight'||e.key==='ArrowUp') rotateEncoder(1);
+  else if(e.key==='ArrowLeft'||e.key==='ArrowDown') rotateEncoder(-1);
+  else if(e.key===' '||e.key==='Enter'){ e.preventDefault(); shortPress(); log('Short Press','keyboard'); }
+  else if(e.key==='l'||e.key==='L') pressLight();
+  else if(e.key==='p'||e.key==='P') pressPower();
+  else if(e.key==='s'||e.key==='S') handleStart();
+});
+
+// expose to inline HTML handlers
+window.pressPower = pressPower;
+window.handleStart = handleStart;
+window.pressLight = pressLight;
+window.rotateEncoder = rotateEncoder;
+window.startPress = startPress;
+window.endPress = endPress;
+window.cancelPress = cancelPress;
+window.selectModeByIndex = selectModeByIndex;
+window.clearLog = clearLog;
+
+// init
+updateDisplay();
+</script>
+</body>
+</html>
