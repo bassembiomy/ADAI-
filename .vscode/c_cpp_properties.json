@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "name": "ADIA AVR",
+      "includePath": [
+        "${workspaceFolder}/hil_build",
+        "${workspaceFolder}/avr-gcc/avr-gcc-15.2.0-x64-windows/avr/include",
+        "${workspaceFolder}/avr-gcc/avr-gcc-15.2.0-x64-windows/lib/gcc/avr/15.2.0/include",
+        "${workspaceFolder}/avr-gcc/avr-gcc-15.2.0-x64-windows/lib/gcc/avr/15.2.0/include-fixed",
+        "${workspaceFolder}/**"
+      ],
+      "defines": [
+        "__AVR_ATmega2560__",
+        "F_CPU=16000000UL",
+        "__AVR__"
+      ],
+      "compilerPath": "${workspaceFolder}/avr-gcc/avr-gcc-15.2.0-x64-windows/bin/avr-g++.exe",
+      "cStandard": "c17",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "windows-gcc-x64"
+    }
+  ],
+  "version": 4
+}

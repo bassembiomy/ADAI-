@@ -238,7 +238,7 @@ ${outputSyncs || '    (void)instance;'}
 void HIL_ProcessMessage(const char* msg) {
     char temp[256];
     strncpy(temp, msg, sizeof(temp));
-    temp[sizeof(temp)-1] = '\0';
+    temp[sizeof(temp)-1] = '\\0';
     char* token = strtok(temp, ";");
     while (token != NULL) {
         char name[64];
@@ -268,6 +268,7 @@ ${telemetryCompositions || '    len += sprintf(buf + len, "info=no_channels");'}
   const mainHilC = `${disclaimer}#include "sm_core.h"
 #include "hal_drivers.h"
 #include "hil_interface.h"
+${target.startsWith('Arduino') || target === 'ESP32' ? '#include "Arduino.h"\n' : ''}
 
 ADIA_Instance_t sm_instance;
 

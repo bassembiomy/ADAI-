@@ -178,95 +178,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
     };
   }, [config.target, config.channels, config.mappings, variables, memoryLimits]);
 
-  // Signature IDs for device flashing simulator
-  const getDeviceSignature = (target: string) => {
-    if (target === 'STM32F4') return '0x411 (STM32F4xx high-density)';
-    if (target === 'STM32F1') return '0x410 (STM32F1xx medium-density)';
-    if (target === 'Arduino_Uno') return '0x1E950F (ATmega328P)';
-    if (target === 'Arduino_Mega') return '0x1E9801 (ATmega2560)';
-    if (target === 'ESP32') return '0x00F3AF (ESP32-D0WDQ6)';
-    return '0x000000 (Virtual Host)';
-  };
 
-  const runSimulatedBuild = () => {
-    setTimeout(() => {
-      setConsoleLogs(prev => [
-        ...prev,
-        `[1/4] Compiling hal_config.h (Virtual Simulator) ... OK`,
-        `[2/4] Compiling hal_drivers.c (Virtual Simulator) ... OK`
-      ]);
-    }, 600);
-
-    setTimeout(() => {
-      setConsoleLogs(prev => [
-        ...prev,
-        `[3/4] Compiling hil_interface.c (Virtual Simulator) ... OK`,
-        `[4/4] Compiling main_hil.c (Virtual Simulator) ... OK`,
-        `[LINKER] ld -T STM32F407_flash.ld hal_drivers.o hil_interface.o main_hil.o -o adia_hil.elf`
-      ]);
-    }, 1200);
-
-    setTimeout(() => {
-      const flashPctStr = memoryUsage.flashPct.toFixed(1);
-      const ramPctStr = memoryUsage.ramPct.toFixed(1);
-
-      setConsoleLogs(prev => [
-        ...prev,
-        `[LINKER] Generating binary images adia_hil.bin and adia_hil.hex...`,
-        `[SIZE] Output size report:`,
-        `======================================================================`,
-        `Memory Section       Used Bytes    Total Available    Percent Used`,
-        `----------------------------------------------------------------------`,
-        `  FLASH (text+data):  ${memoryUsage.flashUsed} B          ${memoryLimits.flash} B           ${flashPctStr}%`,
-        `  SRAM (static+data): ${memoryUsage.ramUsed} B          ${memoryLimits.ram} B           ${ramPctStr}%`,
-        `======================================================================`,
-        `[SYSTEM] VIRTUAL BUILD COMPLETED SUCCESSFULLY (Virtual executable buffered).`
-      ]);
-      setBuildStatus('success');
-    }, 2000);
-  };
-
-  const runSimulatedFlash = () => {
-    const target = config.target || 'Generic';
-    const address = flashAddress;
-
-    setTimeout(() => {
-      setConsoleLogs(prev => [
-        ...prev,
-        `[FLASHER] Debugger link active. MCU signature read: ${getDeviceSignature(target)}`,
-        `[FLASHER] Erasing target sector pages...`,
-        `[FLASHER] Sector Erase completed.`
-      ]);
-    }, 600);
-
-    setTimeout(() => {
-      setConsoleLogs(prev => [
-        ...prev,
-        `[FLASHER] Flashing page blocks (offset ${address}):`,
-        `Writing: [██████████░░░░░░░░░░] 50% (${(memoryUsage.flashUsed / 2048).toFixed(1)} KB)`
-      ]);
-    }, 1200);
-
-    setTimeout(() => {
-      setConsoleLogs(prev => [
-        ...prev,
-        `Writing: [████████████████████] 100% (${(memoryUsage.flashUsed / 1024).toFixed(1)} KB) - Block complete`
-      ]);
-    }, 1800);
-
-    setTimeout(() => {
-      setConsoleLogs(prev => [
-        ...prev,
-        `[FLASHER] Verifying checksum on target memory...`,
-        `[FLASHER] Checksum match OK (SHA256 validated).`,
-        `[FLASHER] Issuing hardware system reset line...`,
-        `[FLASHER] MCU running firmware. Telemetry port COM initialized.`,
-        `[SYSTEM] TARGET CHIP SUCCESSFULLY FLASHED AND DEPLOYED (Virtual Flash complete).`
-      ]);
-      setBurnStatus('success');
-      onChangeConfig({ ...config, enabled: true });
-    }, 2400);
-  };
 
   // Compile / Build Action
   const handleBuild = async () => {
@@ -335,14 +247,13 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
             ]);
             setBuildStatus('success');
           } else {
-            // Real compilation failed (e.g. GCC missing) - present simulated fallback option
+            // Real compilation failed (e.g. GCC missing)
             setConsoleLogs(prev => [
               ...prev,
-              `[WARNING] Native compilation failed: ${compileRes.error || 'Compiler not found or build script error.'}`,
-              `[FALLBACK] Lacking local embedded toolchain. Launching virtual synthesis compiler fallback...`
+              `[ERROR] Native compilation failed: ${compileRes.error || 'Compiler not found or build script error.'}`,
+              `[ERROR] Make sure that the required compiler toolchain for '${target}' is installed and configured in your system's PATH environmental variable.`
             ]);
-            
-            runSimulatedBuild();
+            setBuildStatus('error');
           }
         } else {
           throw new Error(res?.error || 'Unknown error');
@@ -350,19 +261,16 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
       } catch (err) {
         setConsoleLogs(prev => [
           ...prev,
-          `[ERROR] Saving files failed: ${err instanceof Error ? err.message : String(err)}`,
-          `[SYSTEM] Falling back to virtual compiler simulation...`
+          `[ERROR] Saving files failed: ${err instanceof Error ? err.message : String(err)}`
         ]);
-        runSimulatedBuild();
+        setBuildStatus('error');
       }
     } else {
-      // In web browser, run simulated build directly
       setConsoleLogs(prev => [
         ...prev,
-        `[INFO] Web browser context detected. Saving files to physical storage is bypassed.`,
-        `[SYSTEM] Initiating virtual synthesis compiler...`
+        `[ERROR] Web browser context detected. Physical compilation requires the Electron desktop application.`
       ]);
-      runSimulatedBuild();
+      setBuildStatus('error');
     }
   };
 
@@ -409,25 +317,27 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
           setBurnStatus('success');
           onChangeConfig({ ...config, enabled: true });
         } else {
-          // Real flashing failed (e.g. programmer tool not installed) - run simulated fallback
+          // Real flashing failed (e.g. programmer tool not installed)
           setConsoleLogs(prev => [
             ...prev,
-            `[WARNING] Real programmer tool execution failed: ${flashRes.error || 'Utility exit code mismatch'}`,
-            `[FALLBACK] Lacking local flash utility setup. Launching virtual flasher emulator...`
+            `[ERROR] Real programmer tool execution failed: ${flashRes.error || 'Utility exit code mismatch'}`,
+            `[ERROR] Make sure that your target programmer [${tool}] is connected to the PCB, the COM port is correct, and the programmer command line tool is in the system PATH.`
           ]);
-          
-          runSimulatedFlash();
+          setBurnStatus('error');
         }
       } catch (err) {
         setConsoleLogs(prev => [
           ...prev,
-          `[ERROR] Flasher execution error: ${err instanceof Error ? err.message : String(err)}`,
-          `[SYSTEM] Falling back to programmer simulator...`
+          `[ERROR] Flasher execution error: ${err instanceof Error ? err.message : String(err)}`
         ]);
-        runSimulatedFlash();
+        setBurnStatus('error');
       }
     } else {
-      runSimulatedFlash();
+      setConsoleLogs(prev => [
+        ...prev,
+        `[ERROR] Web browser context detected. Physical flashing requires the Electron desktop application.`
+      ]);
+      setBurnStatus('error');
     }
   };
 

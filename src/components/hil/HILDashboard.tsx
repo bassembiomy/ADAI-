@@ -58,12 +58,12 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
           console.error('Failed to list serial ports', e);
         }
       } else {
-        let availablePorts = ['COM1 (Virtual)', 'COM3 (Virtual)', '/dev/ttyUSB0 (Virtual)'];
+        let availablePorts: string[] = [];
         if ((navigator as any).serial) {
           try {
             const paired = await (navigator as any).serial.getPorts();
             const pairedPaths = paired.map((p: any, idx: number) => `Web Serial Port ${idx + 1}`);
-            availablePorts = [...pairedPaths, ...availablePorts];
+            availablePorts = [...pairedPaths];
           } catch (e) {
             console.error('Failed to fetch Web Serial ports:', e);
           }
@@ -274,12 +274,8 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
           addLog('error', `Web Serial connection failed: ${err instanceof Error ? err.message : String(err)}`);
         }
       } else {
-        // Mock Browser Timeout Connection
-        setTimeout(() => {
-          onChangeSessionState(prev => ({ ...prev, status: 'connected', connectedAt: Date.now() }));
-          addLog('success', `HIL Session established on ${commPort} (Simulated Web Connection)`);
-          startMockSimulation();
-        }, 500);
+        onChangeSessionState(prev => ({ ...prev, status: 'error' }));
+        addLog('error', `Connection failed: Real physical COM port is required for HIL connection.`);
       }
     }
   };
@@ -424,7 +420,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
                     const port = await (navigator as any).serial.requestPort();
                     const paired = await (navigator as any).serial.getPorts();
                     const pairedPaths = paired.map((p: any, idx: number) => `Web Serial Port ${idx + 1}`);
-                    const allPorts = [...pairedPaths, 'COM1 (Virtual)', 'COM3 (Virtual)', '/dev/ttyUSB0 (Virtual)'];
+                    const allPorts = [...pairedPaths];
                     setPorts(allPorts);
                     const newPortIndex = paired.indexOf(port);
                     if (newPortIndex !== -1) {

@@ -333,7 +333,7 @@ void HIL_SendString(const char* str) {
   },
   Arduino_Uno: {
     name: 'Arduino Uno',
-    systemIncludes: `#include <Arduino.h>`,
+    systemIncludes: `#include "Arduino.h"`,
     globals: `
 /* HIL Buffer */
 String rx_buffer = "";
@@ -395,7 +395,7 @@ void HIL_SendString(const char* str) {
   },
   Arduino_Mega: {
     name: 'Arduino Mega',
-    systemIncludes: `#include <Arduino.h>`,
+    systemIncludes: `#include "Arduino.h"`,
     globals: `
 String rx_buffer = "";
 `,
@@ -456,7 +456,7 @@ void HIL_SendString(const char* str) {
   },
   ESP32: {
     name: 'ESP32 NodeMCU',
-    systemIncludes: `#include <Arduino.h>`,
+    systemIncludes: `#include "Arduino.h"`,
     globals: `
 String rx_buffer = "";
 `,

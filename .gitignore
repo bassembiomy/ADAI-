@@ -4,3 +4,9 @@ dist/
 *.tsbuildinfo
 .gemini/
 out/
+avr-gcc/
+hil_build/*.elf
+hil_build/*.exe
+hil_build/*.bin
+hil_build/*.hex
+hil_build/*.o

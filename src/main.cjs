@@ -2,6 +2,12 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+// Prepend local AVR toolchain to PATH if it exists in the workspace
+const localAvrBin = path.join(__dirname, '../avr-gcc/avr-gcc-15.2.0-x64-windows/bin');
+if (fs.existsSync(localAvrBin)) {
+  process.env.PATH = localAvrBin + path.delimiter + process.env.PATH;
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1400,
@@ -225,13 +231,15 @@ ipcMain.handle('hil-run-compile', async (event, { target, optimization, warningL
         'adia_hil.exe'
       ];
     } else if (target === 'Arduino_Uno') {
-      cmd = 'avr-gcc';
+      cmd = 'avr-g++';
       args = [
         '-mmcu=atmega328p',
         '-DF_CPU=16000000UL',
+        '-I.',
         optimization || '-Os',
         warningLevel || '-Wall',
         ...dbg,
+        'Arduino.cpp',
         'hal_drivers.c',
         'hil_interface.c',
         'main_hil.c',
@@ -242,13 +250,15 @@ ipcMain.handle('hil-run-compile', async (event, { target, optimization, warningL
         'adia_hil.elf'
       ];
     } else if (target === 'Arduino_Mega') {
-      cmd = 'avr-gcc';
+      cmd = 'avr-g++';
       args = [
         '-mmcu=atmega2560',
         '-DF_CPU=16000000UL',
+        '-I.',
         optimization || '-Os',
         warningLevel || '-Wall',
         ...dbg,
+        'Arduino.cpp',
         'hal_drivers.c',
         'hil_interface.c',
         'main_hil.c',
@@ -391,31 +401,26 @@ ipcMain.handle('hil-run-flash', async (event, { target, programmer, flashAddress
 ipcMain.handle('hil-list-ports', async () => {
   try {
     const realPorts = await getRealPorts();
-    const virtualPorts = ['COM1 (Virtual)', 'COM3 (Virtual)', '/dev/ttyUSB0 (Virtual)'];
-    return [...realPorts, ...virtualPorts];
+    return realPorts;
   } catch (e) {
-    return ['COM1 (Virtual)', 'COM3 (Virtual)', '/dev/ttyUSB0 (Virtual)'];
+    console.error('Failed to list real ports:', e);
+    return [];
   }
 });
 
 ipcMain.handle('hil-connect', async (event, { port, baudRate, target }) => {
-  if (port.includes('(Virtual)') || target === 'Generic') {
-    if (virtualInterval) clearInterval(virtualInterval);
-    
-    // Try launching the real compiled executable!
-    const exePath = path.join(process.cwd(), 'hil_build', 'adia_hil.exe');
-    if (fs.existsSync(exePath)) {
-      if (activeHilProcess) {
-        try { activeHilProcess.kill(); } catch (e) {}
-      }
-      
-      activeHilProcess = spawn(exePath, [], { cwd: path.dirname(exePath) });
+  // If a physical port is provided, always do a real serial connection
+  if (port && !port.includes('(Virtual)')) {
+    // 1. Try native serialport package first
+    try {
+      const { SerialPort } = require('serialport');
+      serialPort = new SerialPort({ path: port, baudRate: baudRate });
       
       let buffer = '';
-      activeHilProcess.stdout.on('data', (data) => {
+      serialPort.on('data', (data) => {
         buffer += data.toString();
         let parts = buffer.split('\n');
-        buffer = parts.pop() || '';
+        buffer = parts.pop();
         parts.forEach(line => {
           if (line.trim()) {
             event.sender.send('hil-on-data', line + '\n');
@@ -423,53 +428,15 @@ ipcMain.handle('hil-connect', async (event, { port, baudRate, target }) => {
         });
       });
 
-      activeHilProcess.stderr.on('data', (data) => {
-        console.warn('HIL Executable Stderr:', data.toString());
-      });
-
-      activeHilProcess.on('close', (code) => {
-        activeHilProcess = null;
-      });
-
       return true;
-    }
+    } catch (e) {
+      console.warn('Native serialport connection failed, attempting PowerShell bridge fallback...', e);
 
-    // Fall back to virtual mock timer loop if not compiled
-    let t = 0;
-    virtualInterval = setInterval(() => {
-      t += 0.1;
-      const values = `ch_1=${(Math.sin(t) > 0 ? 1 : 0).toFixed(4)};ch_2=${Math.round((Math.sin(t)+1)*2047)};ch_3=${Math.round((Math.cos(t)+1)*127)}\n`;
-      event.sender.send('hil-on-data', values);
-    }, 200);
-    return true;
-  }
-
-  // 1. Try native serialport package first
-  try {
-    const { SerialPort } = require('serialport');
-    serialPort = new SerialPort({ path: port, baudRate: baudRate });
-    
-    let buffer = '';
-    serialPort.on('data', (data) => {
-      buffer += data.toString();
-      let parts = buffer.split('\n');
-      buffer = parts.pop();
-      parts.forEach(line => {
-        if (line.trim()) {
-          event.sender.send('hil-on-data', line + '\n');
-        }
-      });
-    });
-
-    return true;
-  } catch (e) {
-    console.warn('Native serialport connection failed, attempting PowerShell bridge fallback...', e);
-
-    // 2. Fall back to PowerShell serial bridge (Windows only)
-    if (process.platform === 'win32') {
-      return new Promise((resolve) => {
-        try {
-          const psScript = `
+      // 2. Fall back to PowerShell serial bridge (Windows only)
+      if (process.platform === 'win32') {
+        return new Promise((resolve) => {
+          try {
+            const psScript = `
 $portName = "${port}"
 $baud = ${baudRate}
 $p = New-Object System.IO.Ports.SerialPort $portName, $baud, None, 8, one
@@ -513,67 +480,104 @@ try {
   Write-Output "[CLOSED]"
 }
 `;
-          activePsProcess = spawn('powershell.exe', ['-NoProfile', '-Command', '-'], {
-            stdio: ['pipe', 'pipe', 'ignore']
-          });
+            activePsProcess = spawn('powershell.exe', ['-NoProfile', '-Command', '-'], {
+              stdio: ['pipe', 'pipe', 'ignore']
+            });
 
-          let resolved = false;
-          let buffer = '';
+            let resolved = false;
+            let buffer = '';
 
-          activePsProcess.stdout.on('data', (data) => {
-            buffer += data.toString();
-            const parts = buffer.split('\n');
-            buffer = parts.pop() || '';
+            activePsProcess.stdout.on('data', (data) => {
+              buffer += data.toString();
+              const parts = buffer.split('\n');
+              buffer = parts.pop() || '';
 
-            for (const part of parts) {
-              const cleaned = part.trim();
-              if (!cleaned) continue;
+              for (const part of parts) {
+                const cleaned = part.trim();
+                if (!cleaned) continue;
 
-              if (cleaned === '[OPEN_SUCCESS]') {
-                if (!resolved) {
-                  resolved = true;
-                  resolve(true);
+                if (cleaned === '[OPEN_SUCCESS]') {
+                  if (!resolved) {
+                    resolved = true;
+                    resolve(true);
+                  }
+                } else if (cleaned.startsWith('[OPEN_FAILED]')) {
+                  if (!resolved) {
+                    resolved = true;
+                    resolve(false);
+                  }
+                } else if (cleaned === '[CLOSED]') {
+                  // Bridge closed
+                } else {
+                  event.sender.send('hil-on-data', cleaned + '\n');
                 }
-              } else if (cleaned.startsWith('[OPEN_FAILED]')) {
-                if (!resolved) {
-                  resolved = true;
-                  resolve(false);
-                }
-              } else if (cleaned === '[CLOSED]') {
-                // Bridge closed
-              } else {
-                event.sender.send('hil-on-data', cleaned + '\n');
               }
-            }
-          });
+            });
 
-          activePsProcess.on('error', (err) => {
-            console.error('PowerShell bridge process error:', err);
+            activePsProcess.on('error', (err) => {
+              console.error('PowerShell bridge process error:', err);
+              if (!resolved) {
+                resolved = true;
+                resolve(false);
+              }
+            });
+
+            activePsProcess.on('exit', () => {
+              activePsProcess = null;
+            });
+
+            // Write script to stdin
+            activePsProcess.stdin.write(psScript + '\n');
+
+          } catch (err) {
+            console.error('PowerShell bridge spawn failed:', err);
             if (!resolved) {
               resolved = true;
               resolve(false);
             }
-          });
-
-          activePsProcess.on('exit', () => {
-            activePsProcess = null;
-          });
-
-          // Write script to stdin
-          activePsProcess.stdin.write(psScript + '\n');
-
-        } catch (err) {
-          console.error('PowerShell bridge spawn failed:', err);
-          if (!resolved) {
-            resolved = true;
-            resolve(false);
           }
-        }
-      });
-    }
+        });
+      }
 
-    return false;
+      return false;
+    }
   }
+
+  // If target is Generic and no port is provided, fall back to running the compiled local executable
+  if (target === 'Generic') {
+    const exePath = path.join(process.cwd(), 'hil_build', 'adia_hil.exe');
+    if (fs.existsSync(exePath)) {
+      if (activeHilProcess) {
+        try { activeHilProcess.kill(); } catch (e) {}
+      }
+      
+      activeHilProcess = spawn(exePath, [], { cwd: path.dirname(exePath) });
+      
+      let buffer = '';
+      activeHilProcess.stdout.on('data', (data) => {
+        buffer += data.toString();
+        let parts = buffer.split('\n');
+        buffer = parts.pop() || '';
+        parts.forEach(line => {
+          if (line.trim()) {
+            event.sender.send('hil-on-data', line + '\n');
+          }
+        });
+      });
+
+      activeHilProcess.stderr.on('data', (data) => {
+        console.warn('HIL Executable Stderr:', data.toString());
+      });
+
+      activeHilProcess.on('close', (code) => {
+        activeHilProcess = null;
+      });
+
+      return true;
+    }
+  }
+
+  return false;
 });
 
 ipcMain.handle('hil-disconnect', async () => {
