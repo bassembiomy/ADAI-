@@ -128,12 +128,12 @@ inline void init() {
     sei();
 }
 
-struct PinInfo {
+typedef struct PinInfo {
     volatile uint8_t* ddr;
     volatile uint8_t* port;
     volatile uint8_t* pinReg;
     uint8_t mask;
-};
+} PinInfo;
 
 inline PinInfo getPinInfo(int pin) {
     PinInfo info = { 0, 0, 0, 0 };
@@ -232,6 +232,7 @@ inline void analogWrite(int pin, int val) {
     (void)val;
 }
 
+#ifdef __cplusplus
 class String {
 private:
     char* data;
@@ -298,5 +299,6 @@ public:
 };
 
 extern SerialImpl Serial;
+#endif
 
 #endif

@@ -16,14 +16,14 @@ static bool override_active_ch_1 = false;
 
 void HIL_Sync_Inputs(ADIA_Instance_t* instance) {
     if (override_active_ch_1) {
-        instance->data.counter = override_val_ch_1;
-    } else {
-        instance->data.counter = HAL_GPIO_Read(PIN_CH_1, "ch_1");
-    }
-    if (override_active_ch_1) {
         instance->data.value = override_val_ch_1;
     } else {
         instance->data.value = HAL_GPIO_Read(PIN_CH_1, "ch_1");
+    }
+    if (override_active_ch_1) {
+        instance->data.flag = override_val_ch_1;
+    } else {
+        instance->data.flag = HAL_GPIO_Read(PIN_CH_1, "ch_1");
     }
 }
 
@@ -55,7 +55,7 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance) {
     char buf[512];
     int len = 0;
     (void)instance;
-    len += sprintf(buf + len, "ch_1=%.4f", (double)(instance->data.counter));
+    len += sprintf(buf + len, "ch_1=%.4f", (double)(instance->data.value));
     sprintf(buf + len, "\n");
     HIL_SendString(buf);
 }

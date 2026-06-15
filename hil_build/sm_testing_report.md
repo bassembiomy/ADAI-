@@ -1,5 +1,5 @@
 # ADIA Code Generation: Testing & Validation Report
-**Timestamp:** 2026-06-14T13:22:47.257Z
+**Timestamp:** 2026-06-15T10:02:34.158Z
 **Compliance Level:** MISRA-C:2012 / IEC 61508 SIL-2
 
 ## 1. Syntax & Compliance Check
@@ -151,7 +151,7 @@ System handles the missing action gracefully with no crash, hang, or undefined b
 
 | Channel Name | Pin | Peripheral | Direction | Mapped ADIA Variable | Scaling |
 |--------------|-----|------------|-----------|----------------------|---------|
-| `ch_1` | `PA0` | `GPIO` | `In` | `counter` | `1` |
+| `ch_1` | `PA0` | `GPIO` | `In` | `value` | `1` |
 
 
 ---

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Play, Sparkles, Activity } from 'lucide-react';
+import { Sparkles, Activity } from 'lucide-react';
 
 interface IntroStandbyOverlayProps {
   mode: 'intro' | 'standby';
@@ -171,8 +171,25 @@ class GoldenParticle {
 export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, onClose }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isExiting, setIsExiting] = useState(false);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [currentLine, setCurrentLine] = useState('');
+  const [logIndex, setLogIndex] = useState(0);
+  const [charIndex, setCharIndex] = useState(0);
+
+  const bootLogs = [
+    "Initializing ADIA Core Engine...",
+    "Loading local AVR GCC compiler toolchain...",
+    "Linking HIL hardware model interfaces...",
+    "Compiling Arduino.h and workspace libraries...",
+    "Resolving system identification parameters...",
+    "Workspace ready. Booting interface..."
+  ];
+
+  const exitTriggeredRef = useRef(false);
 
   const handleExit = () => {
+    if (exitTriggeredRef.current) return;
+    exitTriggeredRef.current = true;
     setIsExiting(true);
     setTimeout(() => {
       onClose();
@@ -180,12 +197,45 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
   };
 
   useEffect(() => {
-    if (mode === 'intro') {
-      const timer = setTimeout(() => {
+    if (mode !== 'intro') return;
+
+    let timer: any;
+    const currentFullText = bootLogs[logIndex];
+
+    if (logIndex < bootLogs.length) {
+      if (charIndex < currentFullText.length) {
+        timer = setTimeout(() => {
+          setCurrentLine((prev) => prev + currentFullText[charIndex]);
+          setCharIndex((prev) => prev + 1);
+        }, 25);
+      } else {
+        timer = setTimeout(() => {
+          setLogs((prev) => [...prev, currentFullText]);
+          setCurrentLine('');
+          setCharIndex(0);
+          setLogIndex((prev) => prev + 1);
+        }, 400);
+      }
+    } else {
+      timer = setTimeout(() => {
         handleExit();
-      }, 8500);
-      return () => clearTimeout(timer);
+      }, 800);
     }
+
+    return () => clearTimeout(timer);
+  }, [mode, logIndex, charIndex]);
+
+  useEffect(() => {
+    if (mode !== 'intro') return;
+    
+    const handleKeyDown = () => {
+      handleExit();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [mode]);
 
   useEffect(() => {
@@ -277,7 +327,10 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
 
   return (
     <div
+      onClick={mode === 'intro' ? handleExit : undefined}
       className={`fixed inset-0 z-[9999] bg-[#030305] flex items-center justify-center overflow-hidden transition-all duration-700 ease-in-out ${
+        mode === 'intro' ? 'cursor-pointer' : ''
+      } ${
         isExiting ? 'opacity-0 scale-105 pointer-events-none' : 'opacity-100 scale-100'
       }`}
     >
@@ -300,22 +353,45 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
         </div>
 
         {mode === 'intro' ? (
-          <div className="flex flex-col items-center gap-6 w-full animate-fade-in-delayed-more">
-            <button
-              onClick={handleExit}
-              className="group relative flex items-center justify-center gap-3 bg-gradient-to-r from-orange-600 to-amber-500 text-white font-bold text-sm tracking-widest px-10 py-4 rounded-xl shadow-[0_5px_30px_rgba(249,115,22,0.4)] hover:shadow-[0_5px_40px_rgba(249,115,22,0.65)] hover:scale-[1.04] active:scale-[0.98] transition-all duration-300 border border-orange-400/30 overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full group-hover:animate-shimmer" />
-              <Play className="w-4 h-4 fill-white" />
-              ENTER WORKSPACE
-            </button>
-
-            <div className="w-64 h-[2px] bg-white/5 relative rounded-full overflow-hidden mt-4">
-              <div className="absolute inset-0 bg-gradient-to-r from-orange-600 via-amber-400 to-orange-600 animate-loading-slide shadow-[0_0_8px_#f97316]" />
+          <div className="flex flex-col items-center gap-4 w-full animate-fade-in-delayed-more" onClick={(e) => e.stopPropagation()}>
+            {/* Terminal Log Container */}
+            <div className="w-80 h-32 bg-black/40 border border-orange-500/10 rounded-lg p-3.5 font-mono text-[10px] text-left text-orange-500/80 overflow-y-auto flex flex-col justify-end gap-1 shadow-inner backdrop-blur-sm">
+              {logs.map((log, idx) => (
+                <div key={idx} className="flex items-center gap-1.5 opacity-60">
+                  <span className="text-amber-500/50">&gt;</span>
+                  <span>{log}</span>
+                </div>
+              ))}
+              {logIndex < bootLogs.length && (
+                <div className="flex items-center gap-1.5 text-orange-400">
+                  <span className="text-amber-400 font-bold animate-pulse">&gt;</span>
+                  <span>
+                    {currentLine}
+                    <span className="inline-block w-1.5 h-3.5 bg-orange-400 animate-pulse ml-0.5" />
+                  </span>
+                </div>
+              )}
             </div>
-            
-            <span className="text-[10px] font-mono text-white/30 uppercase tracking-[0.2em] animate-pulse">
-              System boot sequence active
+
+            {/* Progress Bar Container */}
+            <div className="w-80 flex flex-col gap-2 mt-2">
+              <div className="w-full h-[3px] bg-white/5 relative rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-orange-600 via-amber-400 to-orange-600 shadow-[0_0_8px_#f97316] transition-all duration-100 ease-out" 
+                  style={{ width: `${Math.min(100, Math.round(((logIndex + (bootLogs[logIndex] ? charIndex / bootLogs[logIndex].length : 0)) / bootLogs.length) * 100))}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[9px] font-mono text-white/30 uppercase tracking-[0.2em]">
+                <span>System Booting</span>
+                <span className="text-orange-500 font-bold">
+                  {Math.min(100, Math.round(((logIndex + (bootLogs[logIndex] ? charIndex / bootLogs[logIndex].length : 0)) / bootLogs.length) * 100))}%
+                </span>
+              </div>
+            </div>
+
+            {/* Click to skip indicator */}
+            <span className="text-[8px] font-mono text-white/20 uppercase tracking-[0.1em] mt-1 animate-pulse">
+              Click anywhere or press any key to skip
             </span>
           </div>
         ) : (
