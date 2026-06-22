@@ -222,8 +222,8 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                   {key.replace(/([A-Z])/g, ' $1').trim()}
                 </label>
                 
-                {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'numCases', 'numSignals', 'bufferSize'].includes(key) && 
-                 (key !== 'type' || block.type === 'WaveformGen') ? (
+                {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'numCases', 'numSignals', 'bufferSize', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication'].includes(key) && 
+                 (key !== 'type' || block.type === 'WaveformGen' || block.type === 'FUZZY_INFERENCE_SYSTEM') ? (
                   <select
                     value={displayValue as string}
                     onChange={(e) => onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } })}
@@ -342,6 +342,60 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                       <>
                         <option value="Sine">Sine Wave</option>
                         <option value="Square">Square Wave</option>
+                      </>
+                    )}
+                    {key === 'type' && block.type === 'FUZZY_INFERENCE_SYSTEM' && (
+                      <>
+                        <option value="Mamdani">Mamdani</option>
+                        <option value="Sugeno">Sugeno (Takagi-Sugeno)</option>
+                      </>
+                    )}
+                    {key === 'andMethod' && (
+                      <>
+                        <option value="min">Minimum (T-Norm)</option>
+                        <option value="product">Algebraic Product</option>
+                      </>
+                    )}
+                    {key === 'orMethod' && (
+                      <>
+                        <option value="max">Maximum (S-Norm)</option>
+                        <option value="probor">Probabilistic Sum</option>
+                      </>
+                    )}
+                    {key === 'defuzzMethod' && (
+                      <>
+                        <option value="centroid">Centroid (COA)</option>
+                        <option value="bisector">Bisector (BOA)</option>
+                        <option value="mom">Mean of Maximum (MOM)</option>
+                        <option value="som">Smallest of Maximum (SOM)</option>
+                        <option value="lom">Largest of Maximum (LOM)</option>
+                      </>
+                    )}
+                    {key === 'operator' && (
+                      <>
+                        <option value="AND">AND (Min)</option>
+                        <option value="OR">OR (Max)</option>
+                      </>
+                    )}
+                    {key === 'implication' && (
+                      <>
+                        <option value="min">Minimum (Mamdani)</option>
+                        <option value="prod">Product (Larsen)</option>
+                      </>
+                    )}
+                    {key === 'method' && (block.type === 'FUZZY_AND' || block.type === 'FUZZY_OR') && (
+                      <>
+                        {block.type === 'FUZZY_AND' ? (
+                          <>
+                            <option value="min">Minimum</option>
+                            <option value="product">Algebraic Product</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="max">Maximum</option>
+                            <option value="probor">Probabilistic Sum</option>
+                          </>
+                        )}
                       </>
                     )}
                   </select>

@@ -157,24 +157,72 @@ input[type=range]::-moz-range-thumb {
   border-color: #c9a86c !important;
 }
 
-/* Enlarged hover targets for handles (makes aiming and clicking easier) */
+/* Styling for ReactFlow Handles in X-Bridges */
 .react-flow__handle {
   position: relative;
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 50% !important;
+  border: 2px solid #0a0a0a !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+  cursor: crosshair !important;
 }
+
+/* Hover target enlarger */
 .react-flow__handle::after {
   content: '';
   position: absolute;
-  top: -8px;
-  left: -8px;
-  right: -8px;
-  bottom: -8px;
+  top: -10px;
+  left: -10px;
+  right: -10px;
+  bottom: -10px;
   background: transparent;
   cursor: crosshair;
 }
 
-/* Prevent overlapping source handles from blocking target handles during connection dragging in V-Lab */
+.react-flow__handle:hover {
+  transform: scale(1.4) !important;
+  box-shadow: 0 0 10px currentColor, 0 0 20px currentColor;
+  border-color: #ffffff !important;
+}
+
+/* Handle Connecting / Active Pulse State */
+.react-flow__handle-connecting {
+  animation: handle-pulse 0.8s infinite alternate ease-in-out !important;
+}
+
+@keyframes handle-pulse {
+  0% {
+    transform: scale(1.1);
+    box-shadow: 0 0 4px currentColor;
+  }
+  100% {
+    transform: scale(1.4);
+    box-shadow: 0 0 16px currentColor;
+  }
+}
+
+/* Prevent overlapping source handles from blocking target handles during connection dragging */
 .react-flow--connection-active .react-flow__handle-source {
   pointer-events: none !important;
 }
+
+/* Custom premium path and dot animations */
+.edge-pulse-dot {
+  animation: pulse-dot-glow 1.5s infinite alternate ease-in-out;
+}
+
+@keyframes pulse-dot-glow {
+  0% {
+    r: 3.5px;
+    opacity: 0.8;
+  }
+  100% {
+    r: 5px;
+    opacity: 1;
+  }
+}
+
 
 

@@ -58,9 +58,7 @@ export class XbridgesEngine {
       const t1 = outPort.type;
       const t2 = inPort.type;
 
-      if (t1 === 'auto' || t2 === 'auto') return;
-
-      if (t1 !== t2) {
+      if (t1 !== 'auto' && t2 !== 'auto' && t1 !== t2) {
         const isPowerLogical = (t1 === 'power' && t2 === 'logical') || (t1 === 'logical' && t2 === 'power');
         const isLogicalContinuous = (t1 === 'logical' && t2 === 'continuous') || (t1 === 'continuous' && t2 === 'logical');
         const isMatrixContinuous = (t1 === 'matrix' && t2 === 'continuous') || (t1 === 'continuous' && t2 === 'matrix');
@@ -70,6 +68,60 @@ export class XbridgesEngine {
             severity: 'warning',
             code: 'SIGNAL_TYPE_MISMATCH',
             message: `Signal type mismatch: Port '${outPort.name}' on block '${sourceBlock.label || sourceBlock.type}' of type '${t1}' connected to port '${inPort.name}' on block '${targetBlock.label || targetBlock.type}' of type '${t2}'.`,
+            blockIds: [sourceBlock.id, targetBlock.id]
+          });
+        }
+      }
+
+      // Unit consistency validation
+      if (outPort.unit && inPort.unit && outPort.unit !== inPort.unit) {
+        this.diagnostics.push({
+          severity: 'warning',
+          code: 'UNIT_INCONSISTENCY',
+          message: `Unit inconsistency: Port '${outPort.name}' on block '${sourceBlock.label || sourceBlock.type}' has unit '${outPort.unit}' but is connected to port '${inPort.name}' on block '${targetBlock.label || targetBlock.type}' with unit '${inPort.unit}'.`,
+          blockIds: [sourceBlock.id, targetBlock.id]
+        });
+      }
+
+      // Frame consistency validation
+      if (outPort.frame && inPort.frame && outPort.frame !== inPort.frame && outPort.frame !== 'none' && inPort.frame !== 'none') {
+        this.diagnostics.push({
+          severity: 'warning',
+          code: 'FRAME_INCONSISTENCY',
+          message: `Frame inconsistency: Port '${outPort.name}' on block '${sourceBlock.label || sourceBlock.type}' is in '${outPort.frame}' coordinate frame but is connected to port '${inPort.name}' on block '${targetBlock.label || targetBlock.type}' which expects '${inPort.frame}' frame.`,
+          blockIds: [sourceBlock.id, targetBlock.id]
+        });
+      }
+
+      // Data type consistency validation
+      if (outPort.dataType && inPort.dataType && outPort.dataType !== inPort.dataType) {
+        this.diagnostics.push({
+          severity: 'warning',
+          code: 'DATA_TYPE_MISMATCH',
+          message: `Data type mismatch: Port '${outPort.name}' on block '${sourceBlock.label || sourceBlock.type}' of data type '${outPort.dataType}' connected to port '${inPort.name}' on block '${targetBlock.label || targetBlock.type}' of data type '${inPort.dataType}'.`,
+          blockIds: [sourceBlock.id, targetBlock.id]
+        });
+      }
+
+      // Sample rate consistency validation
+      if (outPort.sampleRate !== undefined && inPort.sampleRate !== undefined && outPort.sampleRate !== inPort.sampleRate) {
+        this.diagnostics.push({
+          severity: 'warning',
+          code: 'SAMPLE_RATE_MISMATCH',
+          message: `Sample rate mismatch: Port '${outPort.name}' on block '${sourceBlock.label || sourceBlock.type}' has sample rate ${outPort.sampleRate} Hz but is connected to port '${inPort.name}' on block '${targetBlock.label || targetBlock.type}' expecting ${inPort.sampleRate} Hz.`,
+          blockIds: [sourceBlock.id, targetBlock.id]
+        });
+      }
+
+      // Signal dimensions validation
+      if (outPort.dimensions && inPort.dimensions) {
+        const dim1 = outPort.dimensions.join('x');
+        const dim2 = inPort.dimensions.join('x');
+        if (dim1 !== dim2) {
+          this.diagnostics.push({
+            severity: 'warning',
+            code: 'DIMENSION_MISMATCH',
+            message: `Dimension mismatch: Port '${outPort.name}' on block '${sourceBlock.label || sourceBlock.type}' with dimensions [${dim1}] connected to port '${inPort.name}' on block '${targetBlock.label || targetBlock.type}' expecting [${dim2}].`,
             blockIds: [sourceBlock.id, targetBlock.id]
           });
         }

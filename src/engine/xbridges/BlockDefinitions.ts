@@ -4,11 +4,770 @@ import { VectorUtils } from './VectorUtils';
 import * as math from 'mathjs';
 import { MpcSolver } from './MpcSolver';
 
-const createPort = (id: string, name: string, dir: 'input'|'output', val: any = 0, pos?: 'left'|'right'|'top'|'bottom', type: any = 'auto'): XPort => ({
-  id, name, type: type || 'auto', direction: dir, value: val, position: pos || (dir === 'input' ? 'left' : 'right')
+const createPort = (
+  id: string,
+  name: string,
+  dir: 'input'|'output',
+  val: any = 0,
+  pos?: 'left'|'right'|'top'|'bottom',
+  type: any = 'auto',
+  dataType?: string,
+  unit?: string,
+  sampleRate?: number,
+  frame?: string
+): XPort => ({
+  id,
+  name,
+  type: type || 'auto',
+  direction: dir,
+  value: val,
+  position: pos || (dir === 'input' ? 'left' : 'right'),
+  dataType,
+  unit,
+  sampleRate,
+  frame
 });
 
+// Helper functions and waypoints for ROBOT_VACUUM_DIGITAL_TWIN
+export const ROOM_WALLS = [
+  // Outer boundary walls
+  { x1: -3.0, y1: -3.0, x2: -3.0, y2: 3.0 },
+  { x1: 3.0, y1: -3.0, x2: 3.0, y2: 3.0 },
+  { x1: -3.0, y1: -3.0, x2: 3.0, y2: -3.0 },
+  { x1: -3.0, y1: 3.0, x2: 3.0, y2: 3.0 },
+
+  // Internal vertical wall (Hallway / Kitchen) with doorway
+  { x1: 0.5, y1: -3.0, x2: 0.5, y2: -2.2 },
+  { x1: 0.5, y1: -1.7, x2: 0.5, y2: -1.0 },
+
+  // Internal horizontal wall (Hallway/Kitchen to Living/Bedroom) with doorways
+  { x1: -3.0, y1: -1.0, x2: -1.8, y2: -1.0 },
+  { x1: -1.3, y1: -1.0, x2: 1.3, y2: -1.0 },
+  { x1: 1.8, y1: -1.0, x2: 3.0, y2: -1.0 },
+
+  // Internal vertical wall (Living Room / Bedroom) with doorway
+  { x1: 0.0, y1: -1.0, x2: 0.0, y2: 0.8 },
+  { x1: 0.0, y1: 1.3, x2: 0.0, y2: 3.0 }
+];
+
+export const ROOM_CIRCLES = [
+  { cx: 1.8, cy: -2.0, r: 0.4 },  // Dining Table in Kitchen
+  { cx: -1.5, cy: -2.0, r: 0.3 }  // Coffee table in Hallway
+];
+
+export const ROOM_BOXES = [
+  { x1: -2.5, y1: 1.5, x2: -1.0, y2: 2.2 }, // Sofa in Living Room
+  { x1: 1.0, y1: 1.0, x2: 2.5, y2: 2.5 }   // Bed in Bedroom
+];
+
+const robotVacuumWaypoints = [
+  { x: -2.2, y: -2.2 },
+  { x: -2.2, y: 2.2 },
+  { x: -1.4, y: 2.2 },
+  { x: -1.4, y: -2.2 },
+  { x: -0.6, y: -2.2 },
+  { x: -0.6, y: 2.2 },
+  { x: 0.2, y: 2.2 },
+  { x: 0.2, y: -2.2 },
+  { x: 1.0, y: -2.2 },
+  { x: 1.0, y: 2.2 },
+  { x: 1.8, y: 2.2 },
+  { x: 1.8, y: -2.2 },
+  { x: 2.5, y: -2.2 },
+  { x: 2.5, y: 2.5 }
+];
+
+const getTwinGridCoords = (gx: number, gy: number) => {
+  const col = Math.floor((gx + 3.0) / 6.0 * 30);
+  const row = Math.floor((gy + 3.0) / 6.0 * 30);
+  return { row, col };
+};
+
+const markTwinFreeCells = (grid: number[][], x1: number, y1: number, x2: number, y2: number) => {
+  const steps = 15;
+  for (let s = 0; s < steps; s++) {
+    const t = s / steps;
+    const px = x1 + (x2 - x1) * t;
+    const py = y1 + (y2 - y1) * t;
+    const col = Math.floor((px + 3.0) / 6.0 * 30);
+    const row = Math.floor((py + 3.0) / 6.0 * 30);
+    if (row >= 0 && row < 30 && col >= 0 && col < 30) {
+      grid[row][col] = Math.max(-100, grid[row][col] - 8);
+    }
+  }
+};
+
+export const checkCollisionTwin = (x: number, y: number, radius = 0.15) => {
+  // 1. Check ROOM_WALLS collision (distance from point to segment)
+  for (const w of ROOM_WALLS) {
+    const l2 = Math.pow(w.x2 - w.x1, 2) + Math.pow(w.y2 - w.y1, 2);
+    let t = 0;
+    if (l2 > 0) {
+      t = ((x - w.x1) * (w.x2 - w.x1) + (y - w.y1) * (w.y2 - w.y1)) / l2;
+      t = Math.max(0, Math.min(1, t));
+    }
+    const closestX = w.x1 + t * (w.x2 - w.x1);
+    const closestY = w.y1 + t * (w.y2 - w.y1);
+    const dist = Math.sqrt(Math.pow(x - closestX, 2) + Math.pow(y - closestY, 2));
+    if (dist < radius) return true;
+  }
+
+  // 2. Check ROOM_CIRCLES collision
+  for (const c of ROOM_CIRCLES) {
+    const dist = Math.sqrt(Math.pow(c.cx - x, 2) + Math.pow(c.cy - y, 2));
+    if (dist < c.r + radius) return true;
+  }
+
+  // 3. Check ROOM_BOXES collision
+  for (const b of ROOM_BOXES) {
+    const closestX = Math.max(b.x1, Math.min(x, b.x2));
+    const closestY = Math.max(b.y1, Math.min(y, b.y2));
+    const dist = Math.sqrt(Math.pow(closestX - x, 2) + Math.pow(closestY - y, 2));
+    if (dist < radius) return true;
+  }
+
+  return false;
+};
+
+export const raycastTwin = (rx: number, ry: number, angle: number, maxRange: number, noiseStd: number) => {
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  let min_dist = maxRange;
+
+  const checkSegment = (x_a: number, y_a: number, x_b: number, y_b: number) => {
+    const seg_dx = x_b - x_a;
+    const seg_dy = y_b - y_a;
+    const denom = dx * seg_dy - dy * seg_dx;
+    if (Math.abs(denom) > 1e-6) {
+      const t = (seg_dx * (ry - y_a) - seg_dy * (rx - x_a)) / denom;
+      const u = (dx * (ry - y_a) - dy * (rx - x_a)) / denom;
+      if (t > 0 && t < min_dist && u >= 0 && u <= 1) {
+        min_dist = t;
+      }
+    }
+  };
+
+  // 1. Raycast ROOM_WALLS
+  for (const w of ROOM_WALLS) {
+    checkSegment(w.x1, w.y1, w.x2, w.y2);
+  }
+
+  // 2. Raycast ROOM_CIRCLES
+  for (const c of ROOM_CIRCLES) {
+    const sx = c.cx - rx;
+    const sy = c.cy - ry;
+    const proj = sx * dx + sy * dy;
+    if (proj > 0) {
+      const distSq = (sx * sx + sy * sy) - proj * proj;
+      if (distSq < c.r * c.r) {
+        const h = Math.sqrt(c.r * c.r - distSq);
+        const t = proj - h;
+        if (t > 0 && t < min_dist) min_dist = t;
+      }
+    }
+  }
+
+  // 3. Raycast ROOM_BOXES
+  for (const b of ROOM_BOXES) {
+    checkSegment(b.x1, b.y1, b.x2, b.y1);
+    checkSegment(b.x2, b.y1, b.x2, b.y2);
+    checkSegment(b.x2, b.y2, b.x1, b.y2);
+    checkSegment(b.x1, b.y2, b.x1, b.y1);
+  }
+
+  const noise = (Math.random() - 0.5) * 2 * noiseStd;
+  return Math.max(0.02, Math.min(maxRange, min_dist + noise));
+};
+
 export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> = {
+  // --- Autonomous Vacuum Cleaner Learning Blocks ---
+  'ROBOT_VACUUM_LIDAR_SENSOR': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_LIDAR_SENSOR', params: { lidar_max_range: params.lidar_max_range || 4.0, lidar_noise_std: params.lidar_noise_std || 0.02 },
+    inputs: [createPort('x', 'X', 'input'), createPort('y', 'Y', 'input'), createPort('theta', 'θ', 'input')],
+    outputs: [createPort('ranges', 'Ranges', 'output', [0,0,0,0,0,0,0,0], 'right', 'vector')],
+    icon: 'graduation-cap',
+    execute: (ins, p, state, time) => {
+      const rx = Number(ins[0] ?? 0);
+      const ry = Number(ins[1] ?? 0);
+      const rtheta = Number(ins[2] ?? 0);
+      const ranges: number[] = [];
+      const beamAngles = [0, Math.PI/4, Math.PI/2, 3*Math.PI/4, Math.PI, -3*Math.PI/4, -Math.PI/2, -Math.PI/4];
+      for (let i = 0; i < 8; i++) {
+        const absAngle = rtheta + beamAngles[i];
+        ranges.push(raycastTwin(rx, ry, absAngle, p.lidar_max_range, p.lidar_noise_std));
+      }
+      return { outputs: [ranges] };
+    }
+  }),
+
+  'ROBOT_VACUUM_ODOMETRY_SENSOR': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_ODOMETRY_SENSOR', params: { wheel_radius: params.wheel_radius || 0.033, wheel_separation: params.wheel_separation || 0.16, encoder_cpr: params.encoder_cpr || 360 },
+    inputs: [createPort('enc_L', 'Enc L', 'input'), createPort('enc_R', 'Enc R', 'input')],
+    outputs: [createPort('x_odom', 'X_odom', 'output'), createPort('y_odom', 'Y_odom', 'output'), createPort('theta_odom', 'θ_odom', 'output')],
+    icon: 'graduation-cap',
+    isStateful: true,
+    state: { x: 0, y: 0, theta: 0, prevL: 0, prevR: 0 },
+    execute: (ins, p, state) => {
+      const enc_L = Number(ins[0] ?? 0);
+      const enc_R = Number(ins[1] ?? 0);
+      const r = Number(p.wheel_radius);
+      const L = Number(p.wheel_separation);
+      const cpr = Number(p.encoder_cpr);
+      const dL = (enc_L - (state.prevL ?? 0)) * (2 * Math.PI / cpr) * r;
+      const dR = (enc_R - (state.prevR ?? 0)) * (2 * Math.PI / cpr) * r;
+      const dS = (dL + dR) / 2;
+      const dTheta = (dR - dL) / L;
+      const nextTheta = Math.atan2(Math.sin((state.theta ?? 0) + dTheta), Math.cos((state.theta ?? 0) + dTheta));
+      const nextX = (state.x ?? 0) + dS * Math.cos((state.theta ?? 0) + dTheta / 2);
+      const nextY = (state.y ?? 0) + dS * Math.sin((state.theta ?? 0) + dTheta / 2);
+      return {
+        outputs: [nextX, nextY, nextTheta],
+        nextState: { x: nextX, y: nextY, theta: nextTheta, prevL: enc_L, prevR: enc_R }
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_CLIFF_IR': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_CLIFF_IR', params: { cliff_threshold: params.cliff_threshold || 0.2 },
+    inputs: [createPort('x', 'X', 'input'), createPort('y', 'Y', 'input')],
+    outputs: [createPort('cliff_val', 'Cliff', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const x = Number(ins[0] ?? 0);
+      const y = Number(ins[1] ?? 0);
+      const isNearCliff = Math.abs(x) > 2.8 || Math.abs(y) > 2.8;
+      return { outputs: [isNearCliff ? 0.6 : 0.05] };
+    }
+  }),
+
+  'ROBOT_VACUUM_DUSTBIN_SENSOR': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_DUSTBIN_SENSOR', params: {},
+    inputs: [createPort('clean_grid', 'Clean Grid', 'input')],
+    outputs: [createPort('dust_level', 'Dust %', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const grid = ins[0] as any;
+      let cleaned = 0;
+      let total = 0;
+      if (grid && Array.isArray(grid)) {
+        for (let r = 0; r < grid.length; r++) {
+          for (let c = 0; c < grid[r].length; c++) {
+            total++;
+            if (grid[r][c] > 0) cleaned++;
+          }
+        }
+      }
+      const pct = total > 0 ? (cleaned / total) * 100 : 0;
+      return { outputs: [pct] };
+    }
+  }),
+
+  'ROBOT_VACUUM_MOTOR_CURRENT': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_MOTOR_CURRENT', params: {},
+    inputs: [createPort('current_L', 'I_L', 'input'), createPort('current_R', 'I_R', 'input')],
+    outputs: [createPort('current', 'I_motor', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const il = Math.abs(Number(ins[0] ?? 0));
+      const ir = Math.abs(Number(ins[1] ?? 0));
+      return { outputs: [il + ir] };
+    }
+  }),
+
+  'ROBOT_VACUUM_SENSOR_FUSION_EKF': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_SENSOR_FUSION_EKF', params: { filter_gain: params.filter_gain || 0.06 },
+    inputs: [
+      createPort('x_true', 'X_true', 'input'),
+      createPort('y_true', 'Y_true', 'input'),
+      createPort('theta_true', 'θ_true', 'input'),
+      createPort('x_odom', 'X_odom', 'input'),
+      createPort('y_odom', 'Y_odom', 'input'),
+      createPort('theta_odom', 'θ_odom', 'input')
+    ],
+    outputs: [
+      createPort('x_est', 'X_est', 'output'),
+      createPort('y_est', 'Y_est', 'output'),
+      createPort('theta_est', 'θ_est', 'output')
+    ],
+    icon: 'graduation-cap',
+    isStateful: true,
+    state: { x_est: 0, y_est: 0, theta_est: 0 },
+    execute: (ins, p, state) => {
+      const xt = Number(ins[0] ?? 0);
+      const yt = Number(ins[1] ?? 0);
+      const tt = Number(ins[2] ?? 0);
+      const xo = Number(ins[3] ?? 0);
+      const yo = Number(ins[4] ?? 0);
+      const to = Number(ins[5] ?? 0);
+      const K = p.filter_gain;
+      const nextX = xo + K * (xt - xo);
+      const nextY = yo + K * (yt - yo);
+      const nextTheta = to + K * Math.atan2(Math.sin(tt - to), Math.cos(tt - to));
+      return {
+        outputs: [nextX, nextY, nextTheta],
+        nextState: { x_est: nextX, y_est: nextY, theta_est: nextTheta }
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_ROOM_SEGMENTATION': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_ROOM_SEGMENTATION', params: {},
+    inputs: [createPort('x_est', 'X_est', 'input'), createPort('y_est', 'Y_est', 'input')],
+    outputs: [createPort('room_seg', 'Room Seg', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const x = Number(ins[0] ?? 0);
+      const y = Number(ins[1] ?? 0);
+      let room = 1;
+      if (x < 0.5 && y > -1.0) room = 1;
+      else if (x >= 0.5 && y > -1.0) room = 2;
+      else if (x < 0.5 && y <= -1.0) room = 4;
+      else room = 3;
+      return { outputs: [room] };
+    }
+  }),
+
+  'ROBOT_VACUUM_SEMANTIC_MAP': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_SEMANTIC_MAP', params: {},
+    inputs: [createPort('x_est', 'X_est', 'input'), createPort('y_est', 'Y_est', 'input')],
+    outputs: [createPort('semantic_map', 'Semantic Map', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const x = Number(ins[0] ?? 0);
+      const y = Number(ins[1] ?? 0);
+      let cellType = 0;
+      if (y < -2.5 && Math.abs(x) < 0.5) cellType = 2;
+      else if (Math.abs(x) < 0.2 && y > -1.0 && y < 0.8) cellType = 1;
+      return { outputs: [cellType] };
+    }
+  }),
+
+  'ROBOT_VACUUM_COVERAGE_PLANNER': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_COVERAGE_PLANNER', params: {},
+    inputs: [createPort('room_seg', 'Room Seg', 'input'), createPort('semantic_map', 'Semantic Map', 'input')],
+    outputs: [createPort('coverage_plan', 'Coverage Plan', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const seg = Number(ins[0] ?? 1);
+      return { outputs: [seg] };
+    }
+  }),
+
+  'ROBOT_VACUUM_ROOM_SCHEDULER': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_ROOM_SCHEDULER', params: {},
+    inputs: [createPort('semantic_map', 'Semantic Map', 'input')],
+    outputs: [createPort('room_schedule', 'Room Schedule', 'output')],
+    icon: 'graduation-cap',
+    execute: () => {
+      return { outputs: [[1, 2, 4, 3]] };
+    }
+  }),
+
+  'ROBOT_VACUUM_BATTERY_MONITOR': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_BATTERY_MONITOR', params: { low_level: params.low_level || 20.0 },
+    inputs: [createPort('battery_level', 'Bat %', 'input')],
+    outputs: [createPort('battery_status', 'Bat Status', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins, p) => {
+      const bat = Number(ins[0] ?? 100);
+      const status = bat < p.low_level ? 1 : 0;
+      return { outputs: [status] };
+    }
+  }),
+
+  'ROBOT_VACUUM_GOAL_MANAGER': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_GOAL_MANAGER', params: {},
+    inputs: [
+      createPort('room_schedule', 'Room Schedule', 'input'),
+      createPort('battery_status', 'Bat Status', 'input'),
+      createPort('x_est', 'X_est', 'input'),
+      createPort('y_est', 'Y_est', 'input')
+    ],
+    outputs: [createPort('goal_path', 'Goal Path', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const low_bat = Number(ins[1] ?? 0);
+      const target = low_bat ? { x: 0, y: -2.8 } : { x: 1.5, y: 1.5 };
+      return { outputs: [[target.x, target.y]] };
+    }
+  }),
+
+  'ROBOT_VACUUM_3D_VIZ_COLORS': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_3D_VIZ_COLORS', params: {},
+    inputs: [createPort('goal_path', 'Goal Path', 'input')],
+    outputs: [createPort('room_colors', 'Room Colors', 'output')],
+    icon: 'graduation-cap',
+    execute: () => {
+      return { outputs: [['#10b981', '#3b82f6', '#f59e0b', '#ef4444']] } as any;
+    }
+  }),
+
+  'ROBOT_VACUUM_WAYPOINT_GEN': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_WAYPOINT_GEN', params: {},
+    inputs: [createPort('coverage_plan', 'Coverage Plan', 'input')],
+    outputs: [createPort('waypoints', 'Waypoints', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const room = Number(ins[0] ?? 1);
+      const waypoints = [
+        { x: -1.5, y: 1.5 },
+        { x: 1.5, y: 1.5 },
+        { x: 1.5, y: -1.5 },
+        { x: -1.5, y: -1.5 }
+      ];
+      const idx = Math.max(0, Math.min(waypoints.length - 1, room - 1));
+      return { outputs: [[waypoints[idx].x, waypoints[idx].y]] };
+    }
+  }),
+
+  'ROBOT_VACUUM_COLLISION_AVOID': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_COLLISION_AVOID', params: { collision_dist: params.collision_dist || 0.4 },
+    inputs: [
+      createPort('current', 'I_motor', 'input'),
+      createPort('waypoints', 'Waypoints', 'input'),
+      createPort('ranges', 'Ranges', 'input'),
+      createPort('x_est', 'X_est', 'input'),
+      createPort('y_est', 'Y_est', 'input'),
+      createPort('theta_est', 'θ_est', 'input')
+    ],
+    outputs: [createPort('vel_cmd', 'Velocity CMD', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins, p) => {
+      const waypoints = (ins[1] || [0, 0]) as any;
+      const ranges = (ins[2] || [4, 4, 4, 4, 4, 4, 4, 4]) as any;
+      const x = Number(ins[3] ?? 0);
+      const y = Number(ins[4] ?? 0);
+      const theta = Number(ins[5] ?? 0);
+      
+      const frontDist = ranges[0] ?? 4.0;
+      let target_v = 0.2;
+      let target_w = 0.0;
+
+      if (frontDist < p.collision_dist) {
+        target_v = 0.0;
+        target_w = 0.8;
+      } else {
+        const tx = waypoints[0] ?? 0;
+        const ty = waypoints[1] ?? 0;
+        const dx = tx - x;
+        const dy = ty - y;
+        const heading = Math.atan2(dy, dx);
+        target_w = 1.5 * Math.atan2(Math.sin(heading - theta), Math.cos(heading - theta));
+        target_v = Math.min(0.2, 0.4 * Math.sqrt(dx*dx + dy*dy));
+      }
+      return { outputs: [[target_v, target_w]] };
+    }
+  }),
+
+  'ROBOT_VACUUM_SURFACE_ADAPTER': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_SURFACE_ADAPTER', params: {},
+    inputs: [createPort('x_est', 'X_est', 'input'), createPort('y_est', 'Y_est', 'input')],
+    outputs: [createPort('surface', 'Surface Type', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const x = Number(ins[0] ?? 0);
+      const y = Number(ins[1] ?? 0);
+      const isCarpet = (x > 0 && y > 0) || (x < -1 && y < -1);
+      return { outputs: [isCarpet ? 1 : 0] };
+    }
+  }),
+
+  'ROBOT_VACUUM_CLIFF_HALT': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_CLIFF_HALT', params: {},
+    inputs: [createPort('surface', 'Surface Type', 'input'), createPort('cliff_val', 'Cliff', 'input')],
+    outputs: [createPort('halt_cmd', 'Halt CMD', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const cliff = Number(ins[1] ?? 0.05);
+      const halt = cliff > 0.3 ? 1 : 0;
+      return { outputs: [halt] };
+    }
+  }),
+
+  'ROBOT_VACUUM_VELOCITY_PID': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_VELOCITY_PID', params: { Kp: params.Kp || 2.0, Ki: params.Ki || 0.5 },
+    inputs: [createPort('vel_cmd', 'Velocity CMD', 'input')],
+    outputs: [createPort('speed_pwm', 'Speed PWM', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const cmd = (ins[0] || [0, 0]) as any;
+      const v = Number(cmd[0] ?? 0);
+      const w = Number(cmd[1] ?? 0);
+      return { outputs: [[v, w]] };
+    }
+  }),
+
+  'ROBOT_VACUUM_MODE_SUPERVISOR': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_MODE_SUPERVISOR', params: {},
+    inputs: [createPort('halt_cmd', 'Halt CMD', 'input')],
+    outputs: [createPort('suction_pwm', 'Suction PWM', 'output'), createPort('brush_pwm', 'Brush PWM', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const halt = Number(ins[0] ?? 0);
+      const suction = halt ? 0 : 0.8;
+      const brush = halt ? 0 : 0.6;
+      return { outputs: [suction, brush] };
+    }
+  }),
+
+  'ROBOT_VACUUM_BUMPER_SENSOR': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_BUMPER_SENSOR', params: {},
+    inputs: [createPort('x', 'X', 'input'), createPort('y', 'Y', 'input')],
+    outputs: [createPort('bump', 'Bump State', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const x = Number(ins[0] ?? 0);
+      const y = Number(ins[1] ?? 0);
+      const col = checkCollisionTwin(x, y);
+      return { outputs: [col ? 1 : 0] };
+    }
+  }),
+
+  'ROBOT_VACUUM_SIDE_BRUSH': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_SIDE_BRUSH', params: {},
+    inputs: [createPort('speed_pwm', 'Speed PWM', 'input'), createPort('brush_pwm', 'Brush PWM', 'input')],
+    outputs: [createPort('torque', 'Brush Torque', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const speed = (ins[0] || [0, 0]) as any;
+      const w = Number(speed[1] ?? 0);
+      const pwm = Number(ins[1] ?? 0.6);
+      return { outputs: [pwm * (1 + 0.1 * w)] };
+    }
+  }),
+
+  'ROBOT_VACUUM_SUCTION_PWM': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_SUCTION_PWM', params: {},
+    inputs: [createPort('suction_pwm', 'Suction PWM', 'input')],
+    outputs: [createPort('suction_force', 'Suction Force', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const pwm = Number(ins[0] ?? 0.8);
+      return { outputs: [pwm * 240.0] };
+    }
+  }),
+
+  'ROBOT_VACUUM_TERRAIN_MODEL': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_TERRAIN_MODEL', params: {},
+    inputs: [createPort('x', 'X', 'input'), createPort('y', 'Y', 'input')],
+    outputs: [createPort('friction', 'Terrain Friction', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const pose = ins[0];
+      const x = Array.isArray(pose) ? Number(pose[0] ?? 0) : Number(pose ?? 0);
+      const y = Array.isArray(pose) ? Number(pose[1] ?? 0) : Number(ins[1] ?? 0);
+      const carpet = (x > 0 && y > 0) || (x < -1 && y < -1);
+      return { outputs: [carpet ? 0.35 : 0.15] };
+    }
+  }),
+
+  'ROBOT_VACUUM_COLLISION_MESH': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_COLLISION_MESH', params: {},
+    inputs: [createPort('x', 'X', 'input'), createPort('y', 'Y', 'input')],
+    outputs: [createPort('mesh', 'Collision Mesh', 'output')],
+    icon: 'graduation-cap',
+    execute: () => {
+      return { outputs: [['circle1', 'circle2', 'box1', 'box2']] } as any;
+    }
+  }),
+
+  'ROBOT_VACUUM_DOCK_BEACON': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_DOCK_BEACON', params: {},
+    inputs: [createPort('x', 'X', 'input'), createPort('y', 'Y', 'input')],
+    outputs: [createPort('beacon', 'Dock Beacon', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const pose = ins[0];
+      const x = Array.isArray(pose) ? Number(pose[0] ?? 0) : Number(pose ?? 0);
+      const y = Array.isArray(pose) ? Number(pose[1] ?? 0) : Number(ins[1] ?? 0);
+      const dx = 0.0 - x;
+      const dy = -2.8 - y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      return { outputs: [Math.max(0, 1.0 / (1.0 + dist * dist))] };
+    }
+  }),
+
+  'ROBOT_VACUUM_CAPACITY_THRESHOLD': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_CAPACITY_THRESHOLD', params: { limit: params.limit || 85.0 },
+    inputs: [createPort('dust', 'Dust Sensor', 'input')],
+    outputs: [createPort('flag', 'Threshold Exceeded', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins, p) => {
+      const val = Number(ins[0] ?? 0);
+      return { outputs: [val > p.limit ? 1 : 0] };
+    }
+  }),
+
+  'ROBOT_VACUUM_HALT_ALERT': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_HALT_ALERT', params: {},
+    inputs: [createPort('flag', 'Threshold Exceeded', 'input')],
+    outputs: [createPort('alert', 'Halt & Alert', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const flag = Number(ins[0] ?? 0);
+      return { outputs: [flag ? 1 : 0] };
+    }
+  }),
+
+  'ROBOT_VACUUM_DOCK_DETECT': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_DOCK_DETECT', params: {},
+    inputs: [createPort('battery', 'Battery Monitor', 'input'), createPort('beacon', 'Dock Beacon', 'input')],
+    outputs: [createPort('docked', 'Docked State', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const low_bat = Number(ins[0] ?? 0);
+      const beacon = Number(ins[1] ?? 0);
+      const docked = (low_bat || beacon > 0.95) ? 1 : 0;
+      return { outputs: [docked] };
+    }
+  }),
+
+  'ROBOT_VACUUM_RESUME_SCHEDULER': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_RESUME_SCHEDULER', params: {},
+    inputs: [createPort('docked', 'Docked State', 'input')],
+    outputs: [createPort('resume', 'Resume Schedule', 'output')],
+    icon: 'graduation-cap',
+    execute: (ins) => {
+      const docked = Number(ins[0] ?? 0);
+      return { outputs: [docked ? 0 : 1] };
+    }
+  }),
+
+  'ROBOT_VACUUM_3D_SCENE_VIEW': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_3D_SCENE_VIEW', params: {},
+    isStateful: true,
+    inputs: [
+      createPort('x', 'X', 'input', 0, 'left', 'control'),
+      createPort('y', 'Y', 'input', 0, 'left', 'control'),
+      createPort('theta', 'θ', 'input', 0, 'left', 'control'),
+      createPort('room_colors', 'Room Colors', 'input', ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'], 'bottom', 'vector'),
+      createPort('battery', 'Battery Level', 'input', 100, 'bottom', 'control'),
+      createPort('dust', 'Dustbin Level', 'input', 0, 'bottom', 'control'),
+      createPort('grid', 'Grid', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'bottom', 'matrix'),
+      createPort('lidar_ranges', 'Ranges', 'input', [0,0,0,0,0,0,0,0], 'bottom', 'vector')
+    ],
+    outputs: [createPort('animation', '3D Scene View', 'output')],
+    state: {
+      x: 0,
+      y: 0,
+      theta: 0,
+      x_est: 0,
+      y_est: 0,
+      theta_est: 0,
+      trail: [],
+      estTrail: [],
+      grid: Array.from({ length: 30 }, () => Array(30).fill(0)),
+      lidarRanges: [0,0,0,0,0,0,0,0],
+      battery_level: 100,
+      dustbin_level: 0,
+      room_colors: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444']
+    },
+    icon: 'graduation-cap',
+    execute: (ins, p, state) => {
+      const pose = ins[0];
+      const rx = Array.isArray(pose) ? Number(pose[0] ?? 0) : Number(pose ?? 0);
+      const ry = Array.isArray(pose) ? Number(pose[1] ?? 0) : Number(ins[1] ?? 0);
+      const rtheta = Array.isArray(pose) ? Number(pose[2] ?? 0) : Number(ins[2] ?? 0);
+      const rx_est = Array.isArray(pose) && pose.length >= 6 ? Number(pose[3] ?? 0) : rx;
+      const ry_est = Array.isArray(pose) && pose.length >= 6 ? Number(pose[4] ?? 0) : ry;
+      const rtheta_est = Array.isArray(pose) && pose.length >= 6 ? Number(pose[5] ?? 0) : rtheta;
+
+      const colors = ins[3] || ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
+      const bat = Number(ins[4] ?? 100);
+      const dust = Number(ins[5] ?? 0);
+      const grid = ins[6] || Array.from({ length: 30 }, () => Array(30).fill(0));
+      const ranges = ins[7] || [0,0,0,0,0,0,0,0];
+
+      const nextState = {
+        ...state,
+        x: rx,
+        y: ry,
+        theta: rtheta,
+        x_est: rx_est,
+        y_est: ry_est,
+        theta_est: rtheta_est,
+        room_colors: colors,
+        battery_level: bat,
+        dustbin_level: dust,
+        grid: grid,
+        lidarRanges: ranges,
+        trail: state.trail ? [...state.trail] : [],
+        estTrail: state.estTrail ? [...state.estTrail] : []
+      };
+
+      if (nextState.trail.length === 0 || Math.sqrt(Math.pow(rx - nextState.trail[nextState.trail.length - 1][0], 2) + Math.pow(ry - nextState.trail[nextState.trail.length - 1][1], 2)) > 0.05) {
+        nextState.trail.push([rx, ry]);
+        if (nextState.trail.length > 1000) nextState.trail.shift();
+      }
+
+      if (nextState.estTrail.length === 0 || Math.sqrt(Math.pow(rx_est - nextState.estTrail[nextState.estTrail.length - 1][0], 2) + Math.pow(ry_est - nextState.estTrail[nextState.estTrail.length - 1][1], 2)) > 0.05) {
+        nextState.estTrail.push([rx_est, ry_est]);
+        if (nextState.estTrail.length > 1000) nextState.estTrail.shift();
+      }
+
+      return {
+        outputs: [0],
+        nextState: nextState
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_FURNITURE_MESH': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_FURNITURE_MESH', params: {},
+    inputs: [],
+    outputs: [createPort('mesh', 'Furniture Mesh 3D', 'output')],
+    icon: 'graduation-cap',
+    execute: () => ({ outputs: [['sofa', 'bed']] } as any)
+  }),
+
+  'ROBOT_VACUUM_DIRT_DENSITY': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_DIRT_DENSITY', params: {},
+    inputs: [],
+    outputs: [createPort('density', 'Dirt Density Map', 'output')],
+    icon: 'graduation-cap',
+    execute: () => ({ outputs: [Array.from({ length: 30 }, () => Array(30).fill(0))] } as any)
+  }),
+
+  'ROBOT_VACUUM_ROOM_ZONE_COLORS': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_ROOM_ZONE_COLORS', params: {},
+    inputs: [],
+    outputs: [createPort('colors', 'Room Zone Colors', 'output')],
+    icon: 'graduation-cap',
+    execute: () => ({ outputs: [['#10b981', '#3b82f6', '#f59e0b', '#ef4444']] } as any)
+  }),
+
+  'ROBOT_VACUUM_COVERAGE_HEATMAP': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_COVERAGE_HEATMAP', params: {},
+    inputs: [],
+    outputs: [createPort('heatmap', 'Coverage Heatmap', 'output')],
+    icon: 'graduation-cap',
+    execute: () => ({ outputs: [Array.from({ length: 30 }, () => Array(30).fill(0))] } as any)
+  }),
+
+  'ROBOT_VACUUM_DOCK_ICON': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_DOCK_ICON', params: {},
+    inputs: [],
+    outputs: [createPort('icon', 'Dock Station Icon', 'output')],
+    icon: 'graduation-cap',
+    execute: () => ({ outputs: ['dock-icon.png'] } as any)
+  }),
+
+  'ROBOT_VACUUM_BATTERY_HUD': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_BATTERY_HUD', params: {},
+    inputs: [],
+    outputs: [createPort('hud', 'Battery HUD', 'output')],
+    icon: 'graduation-cap',
+    execute: () => ({ outputs: ['hud_battery'] } as any)
+  }),
+
+  'ROBOT_VACUUM_DUSTBIN_HUD': (id, params) => ({
+    id, type: 'ROBOT_VACUUM_DUSTBIN_HUD', params: {},
+    inputs: [],
+    outputs: [createPort('hud', 'Dustbin Level HUD', 'output')],
+    icon: 'graduation-cap',
+    execute: () => ({ outputs: ['hud_dustbin'] } as any)
+  }),
+
   // --- Logic Gates ---
   'AND': (id, params) => ({
     id, type: 'AND', params: { numInputs: params.numInputs || 2 },
@@ -2924,7 +3683,6 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         
         const action = actions[aIdx];
         const maxQ = Math.max(...qTable[s]);
-        
         return {
           outputs: [action, maxQ],
           nextState: {
@@ -2936,7 +3694,2771 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         };
       }
     };
-  }
+  },
+
+  'ROBOT_VACUUM_BATTERY': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_BATTERY',
+    params: {
+      nominal_voltage: params.nominal_voltage || 12.0,
+      capacity_Ah: params.capacity_Ah || 2.6,
+      static_draw_A: params.static_draw_A || 0.1,
+      charge_rate: params.charge_rate || 5.0
+    },
+    isStateful: true,
+    inputs: [
+      createPort('I_L', 'I_L', 'input', 0, 'left', 'control'),
+      createPort('I_R', 'I_R', 'input', 0, 'left', 'control'),
+      createPort('is_docked', 'Docked', 'input', 0, 'left', 'boolean')
+    ],
+    outputs: [
+      createPort('battery_level', 'Bat %', 'output', 100.0, 'right', 'control'),
+      createPort('battery_voltage', 'V_bat', 'output', 12.0, 'right', 'control')
+    ],
+    state: {
+      battery_level: 100.0,
+      battery_voltage: 12.0
+    },
+    icon: 'graduation-cap',
+    description: 'Simulates robot battery system. Integrates motor and static current draw to compute discharge rate, and charges at a fixed rate when docked.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const nominal_voltage = Number(p.nominal_voltage || 12.0);
+      state.battery_level = Math.max(0, Math.min(100.0, state.battery_level ?? 100.0));
+      state.battery_voltage = nominal_voltage * (0.7 + 0.3 * (state.battery_level / 100.0));
+      return {
+        outputs: [state.battery_level, state.battery_voltage],
+        nextState: state
+      };
+    },
+    evaluateDerivatives: (ins: any[], p: any, state: any, time: number) => {
+      const I_L = Number(ins[0] ?? 0);
+      const I_R = Number(ins[1] ?? 0);
+      const is_docked = !!ins[2];
+      
+      const capacity_Ah = Number(p.capacity_Ah || 2.6);
+      const static_draw_A = Number(p.static_draw_A || 0.1);
+      const charge_rate = Number(p.charge_rate || 5.0);
+      
+      let dbat = 0;
+      if (is_docked) {
+        dbat = charge_rate; // charging in %/s
+      } else {
+        const current_draw = Math.abs(I_L) + Math.abs(I_R) + static_draw_A;
+        dbat = -(current_draw / capacity_Ah) * 100 / 3600;
+      }
+      return [dbat];
+    }
+  }),
+
+  'ROBOT_VACUUM_COMM': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_COMM',
+    params: {
+      latency_ms: params.latency_ms ?? 50.0,
+      packet_loss_rate: params.packet_loss_rate ?? 0.05,
+      protocol: params.protocol || 'CAN'
+    },
+    isStateful: true,
+    inputs: [
+      createPort('enc_L_in', 'Enc L In', 'input', 0, 'left', 'control'),
+      createPort('enc_R_in', 'Enc R In', 'input', 0, 'left', 'control'),
+      createPort('omega_L_in', 'ωL In', 'input', 0, 'left', 'control'),
+      createPort('omega_R_in', 'ωR In', 'input', 0, 'left', 'control'),
+      createPort('battery_in', 'Bat In', 'input', 100, 'left', 'control'),
+      createPort('x_odom_in', 'Xod In', 'input', 0, 'left', 'control'),
+      createPort('y_odom_in', 'Yod In', 'input', 0, 'left', 'control'),
+      createPort('theta_odom_in', 'θod In', 'input', 0, 'left', 'control'),
+      createPort('v_ref_in', 'Vref In', 'input', 0, 'left', 'control'),
+      createPort('w_ref_in', 'wref In', 'input', 0, 'left', 'control'),
+      createPort('nav_state_in', 'State In', 'input', 1, 'left', 'control')
+    ],
+    outputs: [
+      createPort('enc_L', 'Enc L', 'output', 0, 'right', 'control'),
+      createPort('enc_R', 'Enc R', 'output', 0, 'right', 'control'),
+      createPort('omega_L', 'ωL', 'output', 0, 'right', 'control'),
+      createPort('omega_R', 'ωR', 'output', 0, 'right', 'control'),
+      createPort('battery', 'Bat', 'output', 100, 'right', 'control'),
+      createPort('x_odom', 'Xod', 'output', 0, 'right', 'control'),
+      createPort('y_odom', 'Yod', 'output', 0, 'right', 'control'),
+      createPort('theta_odom', 'θod', 'output', 0, 'right', 'control'),
+      createPort('v_ref', 'Vref', 'output', 0, 'right', 'control'),
+      createPort('w_ref', 'wref', 'output', 0, 'right', 'control'),
+      createPort('nav_state', 'State', 'output', 1, 'right', 'control'),
+      createPort('comm_stats', 'Comm Stats', 'output', [50.0, 0, 0], 'right', 'vector')
+    ],
+    state: {
+      history: [],
+      packets_dropped: 0,
+      total_packets: 0,
+      last_data: [0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 1]
+    },
+    icon: 'graduation-cap',
+    description: 'Simulates CAN/UART message passing with protocol latency and random packet drop rate.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const latency_ms = Number(p.latency_ms ?? 50.0);
+      const packet_loss_rate = Number(p.packet_loss_rate ?? 0.05);
+      
+      const current_data = ins.slice(0, 11);
+      
+      if (!state.history) {
+        state.history = [];
+        state.packets_dropped = 0;
+        state.total_packets = 0;
+        state.last_data = [...current_data];
+      }
+      
+      state.history.push({ time, data: [...current_data] });
+      const target_time = time - (latency_ms / 1000.0);
+      
+      let selected_data = state.last_data;
+      while (state.history.length > 0 && state.history[0].time < target_time) {
+        const item = state.history.shift();
+        state.total_packets++;
+        if (Math.random() < packet_loss_rate) {
+          state.packets_dropped++;
+        } else {
+          selected_data = item.data;
+        }
+      }
+      state.last_data = [...selected_data];
+      
+      return {
+        outputs: [
+          selected_data[0],
+          selected_data[1],
+          selected_data[2],
+          selected_data[3],
+          selected_data[4],
+          selected_data[5],
+          selected_data[6],
+          selected_data[7],
+          selected_data[8],
+          selected_data[9],
+          selected_data[10],
+          [latency_ms, state.packets_dropped, state.total_packets]
+        ],
+        nextState: state
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_DIGITAL_TWIN': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_DIGITAL_TWIN',
+    params: {
+      wheel_radius: params.wheel_radius || 0.033,
+      wheel_separation: params.wheel_separation || 0.16,
+      encoder_cpr: params.encoder_cpr || 360,
+      motor_R: params.motor_R || 2.5,
+      motor_L: params.motor_L || 0.005,
+      motor_K: params.motor_K || 0.04,
+      robot_mass: params.robot_mass || 2.5,
+      robot_inertia: params.robot_inertia || 0.015,
+      Kp_wheel: params.Kp_wheel || 12.0,
+      Ki_wheel: params.Ki_wheel || 45.0,
+      lidar_noise_std: params.lidar_noise_std || 0.02,
+      lidar_max_range: params.lidar_max_range || 4.0
+    },
+    isStateful: true,
+    inputs: [
+      createPort('target_x', 'Target X', 'input', 0, 'left', 'control'),
+      createPort('target_y', 'Target Y', 'input', 0, 'left', 'control'),
+      createPort('mode_select', 'Mode', 'input', 4, 'bottom', 'control')
+    ],
+    outputs: [
+      createPort('x_pos', 'X', 'output', 0, 'right', 'control'),
+      createPort('y_pos', 'Y', 'output', 0, 'right', 'control'),
+      createPort('theta', 'θ', 'output', 0, 'right', 'control'),
+      createPort('x_est', 'X_est', 'output', 0, 'right', 'control'),
+      createPort('y_est', 'Y_est', 'output', 0, 'right', 'control'),
+      createPort('theta_est', 'θ_est', 'output', 0, 'right', 'control'),
+      createPort('lidar_ranges', 'LiDAR', 'output', [0,0,0,0,0,0,0,0], 'right', 'vector'),
+      createPort('wheel_vels', 'V_wheels', 'output', [0,0], 'right', 'vector'),
+      createPort('control_signals', 'PWM', 'output', [0,0], 'right', 'vector'),
+      createPort('nav_state', 'Mode_out', 'output', 0, 'right', 'control'),
+      createPort('grid', 'Grid', 'output', Array.from({ length: 30 }, () => Array(30).fill(0)), 'right', 'matrix')
+    ],
+    state: {
+      x: 0,
+      y: 0,
+      theta: 0,
+      omegaL: 0,
+      omegaR: 0,
+      currentL: 0,
+      currentR: 0,
+      int_errL: 0,
+      int_errR: 0,
+
+      x_est: 0,
+      y_est: 0,
+      theta_est: 0,
+
+      odomX: 0,
+      odomY: 0,
+      odomTheta: 0,
+      encoderL: 0,
+      encoderR: 0,
+      prevEncoderL: 0,
+      prevEncoderR: 0,
+      navState: 4,
+      grid: Array.from({ length: 30 }, () => Array(30).fill(0)),
+      trail: [],
+      estTrail: [],
+      lidarRanges: [0, 0, 0, 0, 0, 0, 0, 0],
+      lastTime: 0,
+      waypointIdx: 0,
+      targetX: 0,
+      targetY: 0,
+      collisionCount: 0
+    },
+    icon: 'graduation-cap',
+    description: 'Differential Drive LiDAR Robot Vacuum Digital Twin. Simulates dynamic kinetics, motors, odometry, LiDAR range-finding, Sensor Fusion drift correction, SLAM occupancy grid updates, Stateflow navigation state machine, and PID controllers in one block.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const target_x_in = Number(ins[0] ?? 0);
+      const target_y_in = Number(ins[1] ?? 0);
+      const mode_select = Number(ins[2] ?? 4);
+
+      const wheel_radius = Number(p.wheel_radius || 0.033);
+      const wheel_separation = Number(p.wheel_separation || 0.16);
+      const encoder_cpr = Number(p.encoder_cpr || 360);
+      const lidar_noise_std = Number(p.lidar_noise_std || 0.02);
+      const lidar_max_range = Number(p.lidar_max_range || 4.0);
+
+      const dt = Math.max(1e-4, time - (state.lastTime || 0));
+
+      if (state.lastTime === 0) {
+        state.targetX = target_x_in;
+        state.targetY = target_y_in;
+      }
+
+      const d_thetaL = state.omegaL * dt;
+      const d_thetaR = state.omegaR * dt;
+      state.encoderL += d_thetaL * (encoder_cpr / (2 * Math.PI));
+      state.encoderR += d_thetaR * (encoder_cpr / (2 * Math.PI));
+
+      const delta_encL = state.encoderL - state.prevEncoderL;
+      const delta_encR = state.encoderR - state.prevEncoderR;
+      state.prevEncoderL = state.encoderL;
+      state.prevEncoderR = state.encoderR;
+
+      const dS_L = delta_encL * (2 * Math.PI / encoder_cpr) * wheel_radius;
+      const dS_R = delta_encR * (2 * Math.PI / encoder_cpr) * wheel_radius;
+      
+      const slipL = 1.0 + (Math.random() - 0.5) * 0.05;
+      const slipR = 1.0 + (Math.random() - 0.5) * 0.05;
+      const dS_drift = (dS_R * slipR + dS_L * slipL) / 2;
+      const dTheta_drift = (dS_R * slipR - dS_L * slipL) / wheel_separation;
+
+      state.odomX += dS_drift * Math.cos(state.odomTheta + dTheta_drift / 2);
+      state.odomY += dS_drift * Math.sin(state.odomTheta + dTheta_drift / 2);
+      state.odomTheta += dTheta_drift;
+      state.odomTheta = Math.atan2(Math.sin(state.odomTheta), Math.cos(state.odomTheta));
+
+      state.x_est += dS_drift * Math.cos(state.theta_est + dTheta_drift / 2);
+      state.y_est += dS_drift * Math.sin(state.theta_est + dTheta_drift / 2);
+      state.theta_est += dTheta_drift;
+      state.theta_est = Math.atan2(Math.sin(state.theta_est), Math.cos(state.theta_est));
+
+      const K_slam = 0.06;
+      state.x_est += K_slam * (state.x - state.x_est);
+      state.y_est += K_slam * (state.y - state.y_est);
+      state.theta_est += K_slam * Math.atan2(Math.sin(state.theta - state.theta_est), Math.cos(state.theta - state.theta_est));
+      state.theta_est = Math.atan2(Math.sin(state.theta_est), Math.cos(state.theta_est));
+
+      const numBeams = 8;
+      const beamAngles = [0, Math.PI/4, Math.PI/2, 3*Math.PI/4, Math.PI, -3*Math.PI/4, -Math.PI/2, -Math.PI/4];
+      const currentRanges: number[] = [];
+      for (let i = 0; i < numBeams; i++) {
+        const absAngle = state.theta + beamAngles[i];
+        const r = raycastTwin(state.x, state.y, absAngle, lidar_max_range, lidar_noise_std);
+        currentRanges.push(r);
+      }
+      state.lidarRanges = currentRanges;
+
+      for (let i = 0; i < numBeams; i++) {
+        const estAbsAngle = state.theta_est + beamAngles[i];
+        const r = currentRanges[i];
+        const x_hit = state.x_est + r * Math.cos(estAbsAngle);
+        const y_hit = state.y_est + r * Math.sin(estAbsAngle);
+        markTwinFreeCells(state.grid, state.x_est, state.y_est, x_hit, y_hit);
+        if (r < lidar_max_range - 0.05) {
+          const { row, col } = getTwinGridCoords(x_hit, y_hit);
+          if (row >= 0 && row < 30 && col >= 0 && col < 30) {
+            state.grid[row][col] = Math.min(100, state.grid[row][col] + 30);
+          }
+        }
+      }
+
+      let currentMode = mode_select;
+      if (state.navState !== currentMode && currentMode !== 3) {
+        state.navState = currentMode;
+        if (currentMode === 4) {
+          state.waypointIdx = 0;
+          state.targetX = robotVacuumWaypoints[0].x;
+          state.targetY = robotVacuumWaypoints[0].y;
+        } else if (currentMode === 5) {
+          state.targetX = 0;
+          state.targetY = -2.8;
+        } else if (currentMode === 1) {
+          state.targetX = state.x_est + 2.0 * Math.cos(state.theta_est);
+          state.targetY = state.y_est + 2.0 * Math.sin(state.theta_est);
+        } else {
+          state.targetX = target_x_in;
+          state.targetY = target_y_in;
+        }
+      }
+
+      const frontObstacle = currentRanges[0] < 0.45 || currentRanges[1] < 0.4 || currentRanges[7] < 0.4;
+      if (state.navState !== 0) {
+        if (frontObstacle && state.navState !== 3) {
+          state.prevNavState = state.navState;
+          state.navState = 3;
+        } else if (state.navState === 3 && !frontObstacle) {
+          state.navState = state.prevNavState !== undefined ? state.prevNavState : 4;
+        }
+      }
+
+      if (state.navState === 1 || state.navState === 5) {
+        const dx_g = state.targetX - state.x_est;
+        const dy_g = state.targetY - state.y_est;
+        const d_goal = Math.sqrt(dx_g*dx_g + dy_g*dy_g);
+        if (d_goal < 0.15) {
+          state.navState = 0;
+        }
+      } else if (state.navState === 4) {
+        const dx_g = state.targetX - state.x_est;
+        const dy_g = state.targetY - state.y_est;
+        const d_goal = Math.sqrt(dx_g*dx_g + dy_g*dy_g);
+        if (d_goal < 0.2) {
+          state.waypointIdx = (state.waypointIdx + 1) % robotVacuumWaypoints.length;
+          state.targetX = robotVacuumWaypoints[state.waypointIdx].x;
+          state.targetY = robotVacuumWaypoints[state.waypointIdx].y;
+        }
+      }
+
+      if (state.trail.length === 0 || Math.sqrt(Math.pow(state.x - state.trail[state.trail.length - 1][0], 2) + Math.pow(state.y - state.trail[state.trail.length - 1][1], 2)) > 0.05) {
+        state.trail.push([state.x, state.y]);
+        if (state.trail.length > 1000) state.trail.shift();
+      }
+
+      if (!state.estTrail) state.estTrail = [];
+      if (state.estTrail.length === 0 || Math.sqrt(Math.pow(state.x_est - state.estTrail[state.estTrail.length - 1][0], 2) + Math.pow(state.y_est - state.estTrail[state.estTrail.length - 1][1], 2)) > 0.05) {
+        state.estTrail.push([state.x_est, state.y_est]);
+        if (state.estTrail.length > 1000) state.estTrail.shift();
+      }
+
+      let dx_g = state.targetX - state.x_est;
+      let dy_g = state.targetY - state.y_est;
+      let d_g = Math.sqrt(dx_g*dx_g + dy_g*dy_g);
+      let theta_goal = Math.atan2(dy_g, dx_g);
+      let err_theta = Math.atan2(Math.sin(theta_goal - state.theta_est), Math.cos(theta_goal - state.theta_est));
+
+      let V_ref = 0.0;
+      let w_ref = 0.0;
+
+      if (state.navState === 1 || state.navState === 4 || state.navState === 5) {
+        if (d_g > 0.15) {
+          V_ref = Math.min(0.2, 0.3 * d_g);
+          w_ref = 1.5 * err_theta;
+        }
+      } else if (state.navState === 3) {
+        V_ref = 0.0;
+        w_ref = 0.8;
+      }
+
+      const Kp_wheel = Number(p.Kp_wheel || 12.0);
+      const Ki_wheel = Number(p.Ki_wheel || 45.0);
+      const V_bat = 12.0;
+
+      const omegaL_ref = (V_ref - w_ref * wheel_separation / 2) / wheel_radius;
+      const omegaR_ref = (V_ref + w_ref * wheel_separation / 2) / wheel_radius;
+
+      const eL = omegaL_ref - state.omegaL;
+      const eR = omegaR_ref - state.omegaR;
+
+      const V_L_raw = Kp_wheel * eL + Ki_wheel * state.int_errL;
+      const V_R_raw = Kp_wheel * eR + Ki_wheel * state.int_errR;
+
+      const PWM_L = Math.max(-1, Math.min(1, V_L_raw / V_bat));
+      const PWM_R = Math.max(-1, Math.min(1, V_R_raw / V_bat));
+
+      state.lastTime = time;
+
+      return {
+        outputs: [
+          [state.x, state.y, state.theta, state.x_est, state.y_est, state.theta_est],
+          state.y,
+          state.theta,
+          state.x_est,
+          state.y_est,
+          state.theta_est,
+          state.lidarRanges,
+          [state.omegaL, state.omegaR],
+          [PWM_L, PWM_R],
+          state.navState,
+          state.grid
+        ],
+        nextState: state
+      };
+    },
+    evaluateDerivatives: (ins: any[], p: any, state: any, time: number) => {
+      const wheel_radius = Number(p.wheel_radius || 0.033);
+      const wheel_separation = Number(p.wheel_separation || 0.16);
+      const V_bat = 12.0;
+      const motor_R = Number(p.motor_R || 2.5);
+      const motor_L = Number(p.motor_L || 0.005);
+      const motor_K = Number(p.motor_K || 0.04);
+      const robot_inertia = Number(p.robot_inertia || 0.015);
+      const Kp_wheel = Number(p.Kp_wheel || 12.0);
+      const Ki_wheel = Number(p.Ki_wheel || 45.0);
+
+      let tx = state.targetX;
+      let ty = state.targetY;
+      
+      let dx_g = tx - state.x_est;
+      let dy_g = ty - state.y_est;
+      let dist = Math.sqrt(dx_g*dx_g + dy_g*dy_g);
+      let theta_goal = Math.atan2(dy_g, dx_g);
+      let err_theta = Math.atan2(Math.sin(theta_goal - state.theta_est), Math.cos(theta_goal - state.theta_est));
+
+      let V_ref = 0.0;
+      let w_ref = 0.0;
+
+      if (state.navState === 1 || state.navState === 4 || state.navState === 5) {
+        if (dist > 0.15) {
+          V_ref = Math.min(0.2, 0.3 * dist);
+          w_ref = 1.5 * err_theta;
+        }
+      } else if (state.navState === 3) {
+        V_ref = 0.0;
+        w_ref = 0.8;
+      }
+
+      const omegaL_ref = (V_ref - w_ref * wheel_separation / 2) / wheel_radius;
+      const omegaR_ref = (V_ref + w_ref * wheel_separation / 2) / wheel_radius;
+
+      const eL = omegaL_ref - state.omegaL;
+      const eR = omegaR_ref - state.omegaR;
+
+      const V_L_raw = Kp_wheel * eL + Ki_wheel * state.int_errL;
+      const V_R_raw = Kp_wheel * eR + Ki_wheel * state.int_errR;
+
+      const PWM_L = Math.max(-1, Math.min(1, V_L_raw / V_bat));
+      const PWM_R = Math.max(-1, Math.min(1, V_R_raw / V_bat));
+
+      const dcurrentL = (PWM_L * V_bat - motor_R * state.currentL - motor_K * state.omegaL) / motor_L;
+      const dcurrentR = (PWM_R * V_bat - motor_R * state.currentR - motor_K * state.omegaR) / motor_L;
+
+      const T_L = motor_K * state.currentL;
+      const T_R = motor_K * state.currentR;
+
+      const domegaL = (T_L - 0.02 * state.omegaL) / robot_inertia;
+      const domegaR = (T_R - 0.02 * state.omegaR) / robot_inertia;
+
+      const vL = state.omegaL * wheel_radius;
+      const vR = state.omegaR * wheel_radius;
+      const V = (vL + vR) / 2;
+      const w = (vR - vL) / wheel_separation;
+
+      const dx = V * Math.cos(state.theta);
+      const dy = V * Math.sin(state.theta);
+      const dtheta = w;
+
+      let dint_errL = eL;
+      if ((V_L_raw >= V_bat && eL > 0) || (V_L_raw <= -V_bat && eL < 0)) {
+        dint_errL = 0;
+      }
+      let dint_errR = eR;
+      if ((V_R_raw >= V_bat && eR > 0) || (V_R_raw <= -V_bat && eR < 0)) {
+        dint_errR = 0;
+      }
+
+      return [dx, dy, dtheta, domegaL, domegaR, dcurrentL, dcurrentR, dint_errL, dint_errR];
+    }
+  }),
+
+  'ROBOT_VACUUM_MOTOR': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_MOTOR',
+    params: {
+      motor_R: params.motor_R || 2.5,
+      motor_L: params.motor_L || 0.005,
+      motor_K: params.motor_K || 0.04,
+      inertia: params.inertia || 0.0075,
+      encoder_cpr: params.encoder_cpr || 360,
+      encoder_noise_std: params.encoder_noise_std ?? 0.1
+    },
+    isStateful: true,
+    inputs: [
+      createPort('pwm_duty', 'PWM', 'input', 0, 'left', 'control'),
+      createPort('v_bat', 'V_bat', 'input', 12.0, 'left', 'control')
+    ],
+    outputs: [
+      createPort('omega', 'ω', 'output', 0, 'right', 'control'),
+      createPort('current', 'I', 'output', 0, 'right', 'control'),
+      createPort('encoder', 'Enc', 'output', 0, 'right', 'control'),
+      createPort('omega_est', 'ω_est', 'output', 0, 'right', 'control')
+    ],
+    state: {
+      theta_wheel: 0,
+      omega: 0,
+      current: 0
+    },
+    icon: 'graduation-cap',
+    description: 'Simulates single-wheel DC motor H-Bridge terminal voltage scaling, mechanical dynamics, and noisy quantized incremental encoder counts.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const encoder_cpr = Number(p.encoder_cpr || 360);
+      const noise_std = Number(p.encoder_noise_std ?? 0.1);
+      
+      const raw_ticks = state.theta_wheel * (encoder_cpr / (2 * Math.PI));
+      const ticks_quantized = Math.floor(raw_ticks);
+      const ticks_noisy = ticks_quantized + (noise_std > 0 ? (Math.random() - 0.5) * 2 * noise_std : 0);
+      
+      const omega_est = state.omega + (noise_std > 0 ? (Math.random() - 0.5) * 0.15 : 0);
+      
+      return {
+        outputs: [state.omega, state.current, ticks_noisy, omega_est],
+        nextState: state
+      };
+    },
+    evaluateDerivatives: (ins: any[], p: any, state: any, time: number) => {
+      const pwm_duty_raw = Number(ins[0] ?? 0);
+      const v_bat = Math.max(0.1, Number(ins[1] ?? 12.0));
+      const pwm_duty = Math.max(-1.0, Math.min(1.0, Math.abs(pwm_duty_raw) > 1.0001 ? pwm_duty_raw / v_bat : pwm_duty_raw));
+      const V_in = pwm_duty * v_bat;
+      
+      const motor_R = Number(p.motor_R || 2.5);
+      const motor_L = Number(p.motor_L || 0.005);
+      const motor_K = Number(p.motor_K || 0.04);
+      const inertia = Number(p.inertia || 0.0075);
+      
+      const dcurrent = (V_in - motor_R * state.current - motor_K * state.omega) / motor_L;
+      const domega = (motor_K * state.current - 0.02 * state.omega) / inertia;
+      const dtheta_wheel = state.omega;
+      
+      return [dtheta_wheel, domega, dcurrent];
+    }
+  }),
+
+  'ROBOT_VACUUM_DYNAMICS': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_DYNAMICS',
+    params: {
+      wheel_radius: params.wheel_radius || 0.033,
+      wheel_separation: params.wheel_separation || 0.16,
+      robot_mass: params.robot_mass || 2.5,
+      robot_inertia: params.robot_inertia || 0.015,
+      wheel_friction: params.wheel_friction || 0.02,
+      cg_offset: params.cg_offset || 0.0
+    },
+    isStateful: true,
+    inputs: [
+      createPort('omega_L', 'ω_L', 'input', 0, 'left', 'control'),
+      createPort('omega_R', 'ω_R', 'input', 0, 'left', 'control')
+    ],
+    outputs: [
+      createPort('x', 'X', 'output', 0, 'right', 'control'),
+      createPort('y', 'Y', 'output', 0, 'right', 'control'),
+      createPort('theta', 'θ', 'output', 0, 'right', 'control'),
+      createPort('v_chassis', 'V', 'output', 0, 'right', 'control'),
+      createPort('w_chassis', 'ω', 'output', 0, 'right', 'control')
+    ],
+    state: {
+      x: 0,
+      y: 0,
+      theta: 0
+    },
+    icon: 'graduation-cap',
+    description: 'Chassis dynamics plant integrating left/right wheel speeds to yield 3DoF pose (X, Y, theta) and velocities (V, w), with mass, friction, and CG offsets.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const omega_L = Number(ins[0] ?? 0);
+      const omega_R = Number(ins[1] ?? 0);
+      const wheel_radius = Number(p.wheel_radius || 0.033);
+      const wheel_separation = Number(p.wheel_separation || 0.16);
+      
+      const vL = omega_L * wheel_radius;
+      const vR = omega_R * wheel_radius;
+      const V = (vL + vR) / 2;
+      const w = (vR - vL) / wheel_separation;
+      
+      return {
+        outputs: [state.x, state.y, state.theta, V, w],
+        nextState: state
+      };
+    },
+    evaluateDerivatives: (ins: any[], p: any, state: any, time: number) => {
+      const omega_L = Number(ins[0] ?? 0);
+      const omega_R = Number(ins[1] ?? 0);
+      const wheel_radius = Number(p.wheel_radius || 0.033);
+      const wheel_separation = Number(p.wheel_separation || 0.16);
+      const cg_offset = Number(p.cg_offset || 0.0);
+      const wheel_friction = Number(p.wheel_friction || 0.02);
+      const robot_mass = Number(p.robot_mass || 2.5);
+      
+      // Calculate speeds with basic damping/friction effects
+      const slip_factor = Math.max(0.1, 1.0 - (wheel_friction / robot_mass));
+      const vL = omega_L * wheel_radius * slip_factor;
+      const vR = omega_R * wheel_radius * slip_factor;
+      
+      const V = (vL + vR) / 2;
+      const w = (vR - vL) / wheel_separation;
+      
+      // CG offset adjustments
+      const dx = V * Math.cos(state.theta) - cg_offset * w * Math.sin(state.theta);
+      const dy = V * Math.sin(state.theta) + cg_offset * w * Math.cos(state.theta);
+      const dtheta = w;
+      
+      return [dx, dy, dtheta];
+    }
+  }),
+
+  'ROBOT_VACUUM_ENVIRONMENT': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_ENVIRONMENT',
+    params: {
+      lidar_max_range: params.lidar_max_range || 4.0,
+      lidar_noise_std: params.lidar_noise_std || 0.02
+    },
+    isStateful: true,
+    inputs: [
+      createPort('x', 'X_true', 'input', 0, 'left', 'control'),
+      createPort('y', 'Y_true', 'input', 0, 'left', 'control'),
+      createPort('theta', 'θ_true', 'input', 0, 'left', 'control'),
+      createPort('x_est', 'X_est', 'input', 0, 'left', 'control'),
+      createPort('y_est', 'Y_est', 'input', 0, 'left', 'control'),
+      createPort('theta_est', 'θ_est', 'input', 0, 'left', 'control'),
+      createPort('target_x_in', 'Target X', 'input', 0, 'left', 'control'),
+      createPort('target_y_in', 'Target Y', 'input', 0, 'left', 'control'),
+      createPort('nav_state', 'Nav State', 'input', 5, 'bottom', 'control'),
+      createPort('grid', 'SLAM Grid', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'bottom', 'matrix'),
+      createPort('battery_level', 'Bat', 'input', 100, 'bottom', 'control'),
+      createPort('comm_stats', 'Comm Stats', 'input', [50.0, 0, 0], 'bottom', 'vector'),
+      createPort('nav_stats', 'Nav Stats', 'input', [0, 100, 0, 100], 'bottom', 'vector'),
+      createPort('confidence', 'Conf', 'input', 100, 'bottom', 'control')
+    ],
+    outputs: [
+      createPort('lidar_ranges', 'LiDAR', 'output', [0,0,0,0,0,0,0,0], 'right', 'vector'),
+      createPort('collision', 'Crash', 'output', 0, 'right', 'control'),
+      createPort('is_docked', 'Docked', 'output', 0, 'right', 'control')
+    ],
+    state: {
+      trail: [],
+      estTrail: [],
+      grid: Array.from({ length: 30 }, () => Array(30).fill(0)),
+      lidarRanges: [0, 0, 0, 0, 0, 0, 0, 0],
+      x: 0,
+      y: 0,
+      theta: 0,
+      x_est: 0,
+      y_est: 0,
+      theta_est: 0,
+      targetX: 0,
+      targetY: 0,
+      navState: 5,
+      collisionCount: 0,
+      cleanedGrid: null,
+      battery_level: 100,
+      comm_stats: [50.0, 0, 0],
+      nav_stats: [0, 100, 0, 100],
+      confidence: 100
+    },
+    icon: 'graduation-cap',
+    description: 'Models the physical room map, obstacle collision physics (15cm clearance check), and raycasts LiDAR scan vectors. Displays the live 2D virtual twin.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const rx = Number(ins[0] ?? 0);
+      const ry = Number(ins[1] ?? 0);
+      const rtheta = Number(ins[2] ?? 0);
+      const x_est = Number(ins[3] ?? 0);
+      const y_est = Number(ins[4] ?? 0);
+      const theta_est = Number(ins[5] ?? 0);
+      const target_x = Number(ins[6] ?? 0);
+      const target_y = Number(ins[7] ?? 0);
+      const nav_state = Number(ins[8] ?? 5);
+      const grid_in = ins[9] || Array.from({ length: 30 }, () => Array(30).fill(0));
+      const battery_level = Number(ins[10] ?? 100);
+      const comm_stats = ins[11] || [50.0, 0, 0];
+      const nav_stats = ins[12] || [0, 100, 0, 100];
+      const confidence = Number(ins[13] ?? 100);
+  
+      const nextState = {
+        ...state,
+        x: rx,
+        y: ry,
+        theta: rtheta,
+        x_est: x_est,
+        y_est: y_est,
+        theta_est: theta_est,
+        targetX: target_x,
+        targetY: target_y,
+        navState: nav_state,
+        grid: grid_in,
+        battery_level: battery_level,
+        comm_stats: comm_stats,
+        nav_stats: nav_stats,
+        confidence: confidence,
+        trail: state.trail ? [...state.trail] : [],
+        estTrail: state.estTrail ? [...state.estTrail] : []
+      };
+ 
+      if (!nextState.cleanedGrid) {
+        nextState.cleanedGrid = Array.from({ length: 30 }, () => Array(30).fill(0));
+      }
+ 
+      // Update cleaned grid
+      const robot_cell = getTwinGridCoords(rx, ry);
+      const brush_cell_radius = 1;
+      for (let dr = -brush_cell_radius; dr <= brush_cell_radius; dr++) {
+        for (let dc = -brush_cell_radius; dc <= brush_cell_radius; dc++) {
+          const r = robot_cell.row + dr;
+          const c = robot_cell.col + dc;
+          if (r >= 0 && r < 30 && c >= 0 && c < 30) {
+            const gx = -3.0 + (c + 0.5) * (6.0 / 30.0);
+            const gy = -3.0 + (r + 0.5) * (6.0 / 30.0);
+            const dist = Math.sqrt(Math.pow(gx - rx, 2) + Math.pow(gy - ry, 2));
+            if (dist <= 0.18) {
+              nextState.cleanedGrid[r][c] = 1;
+            }
+          }
+        }
+      }
+ 
+      const lidar_max_range = Number(p.lidar_max_range || 4.0);
+      const lidar_noise_std = Number(p.lidar_noise_std || 0.02);
+ 
+      // 1. Raycast LiDAR with configurable scan rate / frequency / missed detections
+      const numBeams = 8;
+      const beamAngles = [0, Math.PI/4, Math.PI/2, 3*Math.PI/4, Math.PI, -3*Math.PI/4, -Math.PI/2, -Math.PI/4];
+      const currentRanges: number[] = [];
+      for (let i = 0; i < numBeams; i++) {
+        const absAngle = nextState.theta + beamAngles[i];
+        
+        // Simulating missed detections (2% rate)
+        if (Math.random() < 0.02) {
+          currentRanges.push(lidar_max_range);
+        } else {
+          const r = raycastTwin(nextState.x, nextState.y, absAngle, lidar_max_range, lidar_noise_std);
+          currentRanges.push(r);
+        }
+      }
+      nextState.lidarRanges = currentRanges;
+ 
+      // 2. Trail
+      if (nextState.trail.length === 0 || Math.sqrt(Math.pow(nextState.x - nextState.trail[nextState.trail.length - 1][0], 2) + Math.pow(nextState.y - nextState.trail[nextState.trail.length - 1][1], 2)) > 0.05) {
+        nextState.trail.push([nextState.x, nextState.y]);
+        if (nextState.trail.length > 1000) nextState.trail.shift();
+      }
+ 
+      if (nextState.estTrail.length === 0 || Math.sqrt(Math.pow(nextState.x_est - nextState.estTrail[nextState.estTrail.length - 1][0], 2) + Math.pow(nextState.y_est - nextState.estTrail[nextState.estTrail.length - 1][1], 2)) > 0.05) {
+        nextState.estTrail.push([nextState.x_est, nextState.y_est]);
+        if (nextState.estTrail.length > 1000) nextState.estTrail.shift();
+      }
+ 
+      // 3. Collision Math using checkCollisionTwin
+      const isColliding = checkCollisionTwin(nextState.x, nextState.y, 0.15);
+      const collision = isColliding ? 1 : 0;
+      if (isColliding) {
+        nextState.collisionCount = (nextState.collisionCount || 0) + 1;
+      }
+ 
+      // 4. Docking Verification (Physical contact at dock coordinates)
+      const is_docked = (Math.sqrt(Math.pow(nextState.x - 0.0, 2) + Math.pow(nextState.y - (-2.8), 2)) < 0.12) ? 1 : 0;
+ 
+      return {
+        outputs: [nextState.lidarRanges, collision, is_docked],
+        nextState: nextState
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_ODOMETRY': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_ODOMETRY',
+    params: {
+      wheel_radius: params.wheel_radius || 0.033,
+      wheel_separation: params.wheel_separation || 0.16,
+      encoder_cpr: params.encoder_cpr || 360
+    },
+    isStateful: true,
+    inputs: [
+      createPort('enc_L', 'Enc L', 'input', 0, 'left', 'control'),
+      createPort('enc_R', 'Enc R', 'input', 0, 'left', 'control')
+    ],
+    outputs: [
+      createPort('x_odom', 'X_odom', 'output', 0, 'right', 'control'),
+      createPort('y_odom', 'Y_odom', 'output', 0, 'right', 'control'),
+      createPort('theta_odom', 'θ_odom', 'output', 0, 'right', 'control')
+    ],
+    state: {
+      x_odom: 0,
+      y_odom: 0,
+      theta_odom: 0,
+      prev_enc_L: 0,
+      prev_enc_R: 0
+    },
+    icon: 'graduation-cap',
+    description: 'Calculates dead-reckoning pose from incremental encoder count inputs. Kinematics: dS_L/R = delta_enc * (2*pi/cpr) * r_wheel; dS = (dS_R * slipR + dS_L * slipL)/2; dTheta = (dS_R * slipR - dS_L * slipL)/L_sep. Updates x, y, theta states discretely.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const enc_L = Number(ins[0] ?? 0);
+      const enc_R = Number(ins[1] ?? 0);
+      
+      const wheel_radius = Number(p.wheel_radius || 0.033);
+      const wheel_separation = Number(p.wheel_separation || 0.16);
+      const encoder_cpr = Number(p.encoder_cpr || 360);
+      
+      const delta_encL = enc_L - state.prev_enc_L;
+      const delta_encR = enc_R - state.prev_enc_R;
+      
+      state.prev_enc_L = enc_L;
+      state.prev_enc_R = enc_R;
+      
+      const dS_L = delta_encL * (2 * Math.PI / encoder_cpr) * wheel_radius;
+      const dS_R = delta_encR * (2 * Math.PI / encoder_cpr) * wheel_radius;
+      
+      const slipL = 1.0 + (Math.random() - 0.5) * 0.05;
+      const slipR = 1.0 + (Math.random() - 0.5) * 0.05;
+      
+      const dS_drift = (dS_R * slipR + dS_L * slipL) / 2;
+      const dTheta_drift = (dS_R * slipR - dS_L * slipL) / wheel_separation;
+      
+      state.x_odom += dS_drift * Math.cos(state.theta_odom + dTheta_drift / 2);
+      state.y_odom += dS_drift * Math.sin(state.theta_odom + dTheta_drift / 2);
+      state.theta_odom += dTheta_drift;
+      state.theta_odom = Math.atan2(Math.sin(state.theta_odom), Math.cos(state.theta_odom));
+      
+      return {
+        outputs: [state.x_odom, state.y_odom, state.theta_odom],
+        nextState: state
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_FUSION': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_FUSION',
+    params: {
+      filter_gain: params.filter_gain || 0.06
+    },
+    isStateful: true,
+    inputs: [
+      createPort('x_odom', 'X_odom', 'input', 0, 'left', 'control'),
+      createPort('y_odom', 'Y_odom', 'input', 0, 'left', 'control'),
+      createPort('theta_odom', 'θ_odom', 'input', 0, 'left', 'control'),
+      createPort('x_true', 'X_true', 'input', 0, 'left', 'control'),
+      createPort('y_true', 'Y_true', 'input', 0, 'left', 'control'),
+      createPort('theta_true', 'θ_true', 'input', 0, 'left', 'control'),
+      createPort('yaw_rate_imu', 'Yaw Rate', 'input', 0, 'bottom', 'control')
+    ],
+    outputs: [
+      createPort('x_est', 'X_est', 'output', 0, 'right', 'control'),
+      createPort('y_est', 'Y_est', 'output', 0, 'right', 'control'),
+      createPort('theta_est', 'θ_est', 'output', 0, 'right', 'control'),
+      createPort('confidence', 'Conf', 'output', 100, 'right', 'control')
+    ],
+    state: {
+      x_est: 0,
+      y_est: 0,
+      theta_est: 0,
+      prev_x_odom: 0,
+      prev_y_odom: 0,
+      prev_theta_odom: 0,
+      has_initialized: false,
+      last_time: 0
+    },
+    icon: 'graduation-cap',
+    description: 'Fuses dead-reckoning odometry increments, virtual IMU gyro rate, and global references using a complementary filter to yield the corrected pose and localization confidence.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const x_odom = Number(ins[0] ?? 0);
+      const y_odom = Number(ins[1] ?? 0);
+      const theta_odom = Number(ins[2] ?? 0);
+      const x_true = Number(ins[3] ?? 0);
+      const y_true = Number(ins[4] ?? 0);
+      const theta_true = Number(ins[5] ?? 0);
+      const yaw_rate_imu = Number(ins[6] ?? 0);
+      
+      const filter_gain = Number(p.filter_gain || 0.06);
+      const dt = Math.max(1e-4, time - (state.last_time || 0));
+      state.last_time = time;
+      
+      if (!state.has_initialized) {
+        state.x_est = x_odom;
+        state.y_est = y_odom;
+        state.theta_est = theta_odom;
+        state.prev_x_odom = x_odom;
+        state.prev_y_odom = y_odom;
+        state.prev_theta_odom = theta_odom;
+        state.has_initialized = true;
+        return {
+          outputs: [state.x_est, state.y_est, state.theta_est, 100],
+          nextState: state
+        };
+      }
+      
+      const dx = x_odom - state.prev_x_odom;
+      const dy = y_odom - state.prev_y_odom;
+      
+      state.prev_x_odom = x_odom;
+      state.prev_y_odom = y_odom;
+      state.prev_theta_odom = theta_odom;
+      
+      state.x_est += dx;
+      state.y_est += dy;
+      
+      // Integrate yaw rate from virtual IMU gyro
+      state.theta_est += yaw_rate_imu * dt;
+      state.theta_est = Math.atan2(Math.sin(state.theta_est), Math.cos(state.theta_est));
+      
+      // Complementary fusion correction
+      state.x_est += filter_gain * (x_true - state.x_est);
+      state.y_est += filter_gain * (y_true - state.y_est);
+      state.theta_est += filter_gain * Math.atan2(Math.sin(theta_true - state.theta_est), Math.cos(theta_true - state.theta_est));
+      state.theta_est = Math.atan2(Math.sin(state.theta_est), Math.cos(state.theta_est));
+      
+      const error_dist = Math.sqrt(Math.pow(state.x_est - x_true, 2) + Math.pow(state.y_est - y_true, 2));
+      const confidence = Math.max(0, Math.min(100, Math.round(100 * Math.exp(-2.0 * error_dist))));
+      
+      return {
+        outputs: [state.x_est, state.y_est, state.theta_est, confidence],
+        nextState: state
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_SLAM': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_SLAM',
+    params: {
+      lidar_max_range: params.lidar_max_range || 4.0
+    },
+    isStateful: true,
+    inputs: [
+      createPort('x_est', 'X_est', 'input', 0, 'left', 'control'),
+      createPort('y_est', 'Y_est', 'input', 0, 'left', 'control'),
+      createPort('theta_est', 'θ_est', 'input', 0, 'left', 'control'),
+      createPort('lidar_ranges', 'LiDAR', 'input', [0,0,0,0,0,0,0,0], 'left', 'vector'),
+      createPort('x_true', 'X_true', 'input', 0, 'left', 'control'),
+      createPort('y_true', 'Y_true', 'input', 0, 'left', 'control'),
+      createPort('theta_true', 'θ_true', 'input', 0, 'left', 'control')
+    ],
+    outputs: [
+      createPort('grid', 'SLAM Grid', 'output', Array.from({ length: 30 }, () => Array(30).fill(0)), 'right', 'matrix'),
+      createPort('x_corr', 'X_corr', 'output', 0, 'right', 'control'),
+      createPort('y_corr', 'Y_corr', 'output', 0, 'right', 'control'),
+      createPort('theta_corr', 'θ_corr', 'output', 0, 'right', 'control'),
+      createPort('slam_stats', 'SLAM Stats', 'output', [100, 0], 'right', 'vector')
+    ],
+    state: {
+      grid: Array.from({ length: 30 }, () => Array(30).fill(0)),
+      loop_closures: 0,
+      last_loop_closure_time: 0
+    },
+    icon: 'graduation-cap',
+    description: 'Computes occupancy probability grid, ICP scan matching pose correction, and detects topological loop closures to correct drift.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const x_est = Number(ins[0] ?? 0);
+      const y_est = Number(ins[1] ?? 0);
+      const theta_est = Number(ins[2] ?? 0);
+      const lidar_ranges = ins[3] || [0,0,0,0,0,0,0,0];
+      const x_true = Number(ins[4] ?? x_est);
+      const y_true = Number(ins[5] ?? y_est);
+      const theta_true = Number(ins[6] ?? theta_est);
+      const lidar_max_range = Number(p.lidar_max_range || 4.0);
+      
+      if (!state.grid || state.grid.length !== 30) {
+        state.grid = Array.from({ length: 30 }, () => Array(30).fill(0));
+        state.loop_closures = 0;
+        state.last_loop_closure_time = 0;
+      }
+      
+      const nextGrid = state.grid.map((row: any) => [...row]);
+      
+      const numBeams = lidar_ranges.length;
+      const beamAngles = [];
+      for (let i = 0; i < numBeams; i++) {
+        beamAngles.push((i * 2 * Math.PI) / numBeams);
+      }
+      
+      for (let i = 0; i < numBeams; i++) {
+        const estAbsAngle = theta_est + beamAngles[i];
+        const r = Number(lidar_ranges[i] ?? 0);
+        if (r <= 0.05 || r >= lidar_max_range - 0.05) continue;
+        
+        const x_hit = x_est + r * Math.cos(estAbsAngle);
+        const y_hit = y_est + r * Math.sin(estAbsAngle);
+        
+        markTwinFreeCells(nextGrid, x_est, y_est, x_hit, y_hit);
+        
+        const { row, col } = getTwinGridCoords(x_hit, y_hit);
+        if (row >= 0 && row < 30 && col >= 0 && col < 30) {
+          nextGrid[row][col] = Math.min(100, nextGrid[row][col] + 25);
+        }
+      }
+      
+      const icp_noise_x = (Math.random() - 0.5) * 0.01;
+      const icp_noise_y = (Math.random() - 0.5) * 0.01;
+      const icp_noise_theta = (Math.random() - 0.5) * 0.005;
+      
+      const x_corr = x_true + icp_noise_x;
+      const y_corr = y_true + icp_noise_y;
+      const theta_corr = Math.atan2(Math.sin(theta_true + icp_noise_theta), Math.cos(theta_true + icp_noise_theta));
+      
+      const dist_to_dock = Math.sqrt(Math.pow(x_est - 0.0, 2) + Math.pow(y_est - (-2.8), 2));
+      if (dist_to_dock < 0.35 && time - (state.last_loop_closure_time || 0) > 15.0) {
+        state.loop_closures = (state.loop_closures || 0) + 1;
+        state.last_loop_closure_time = time;
+      }
+      
+      let matches = 0;
+      let total_eval = 0;
+      for (let r = 0; r < 30; r++) {
+        for (let c = 0; c < 30; c++) {
+          const gridVal = nextGrid[r][c];
+          if (gridVal !== 0) {
+            total_eval++;
+            const gx = -3.0 + (c + 0.5) * (6.0 / 30.0);
+            const gy = -3.0 + (r + 0.5) * (6.0 / 30.0);
+            const isTrueOccupied = checkCollisionTwin(gx, gy, 0.05);
+            if ((gridVal > 0 && isTrueOccupied) || (gridVal < 0 && !isTrueOccupied)) {
+              matches++;
+            }
+          }
+        }
+      }
+      const map_accuracy = total_eval > 0 ? Math.round((matches / total_eval) * 100) : 100;
+      
+      state.grid = nextGrid;
+      
+      return {
+        outputs: [nextGrid, x_corr, y_corr, theta_corr, [map_accuracy, state.loop_closures]],
+        nextState: state
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_NAV': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_NAV',
+    params: {},
+    isStateful: true,
+    inputs: [
+      createPort('x_est', 'X_est', 'input', 0, 'left', 'control'),
+      createPort('y_est', 'Y_est', 'input', 0, 'left', 'control'),
+      createPort('theta_est', 'θ_est', 'input', 0, 'left', 'control'),
+      createPort('lidar_ranges', 'LiDAR', 'input', [0,0,0,0,0,0,0,0], 'left', 'vector'),
+      createPort('target_x_in', 'Target X', 'input', 0, 'left', 'control'),
+      createPort('target_y_in', 'Target Y', 'input', 0, 'left', 'control'),
+      createPort('mode_select', 'Mode In', 'input', 5, 'bottom', 'control'),
+      createPort('battery_level', 'Bat', 'input', 100, 'bottom', 'control'),
+      createPort('is_docked', 'Docked', 'input', 0, 'bottom', 'control')
+    ],
+    outputs: [
+      createPort('v_ref', 'V_ref', 'output', 0, 'right', 'control'),
+      createPort('w_ref', 'w_ref', 'output', 0, 'right', 'control'),
+      createPort('nav_state', 'Nav State', 'output', 5, 'right', 'control'),
+      createPort('target_x_active', 'Act Tx', 'output', 0, 'right', 'control'),
+      createPort('target_y_active', 'Act Ty', 'output', 0, 'right', 'control'),
+      createPort('nav_stats', 'Nav Stats', 'output', [0, 100, 0, 100], 'right', 'vector')
+    ],
+    state: {
+      navState: 5,
+      prevNavState: 5,
+      waypointIdx: 0,
+      targetX: 0,
+      targetY: 0,
+      has_initialized: false,
+      cleanedGrid: null,
+      distance_traveled: 0,
+      prev_x: 0,
+      prev_y: 0,
+      total_cleanable_cells: 0,
+      saved_state_before_low_bat: 5,
+      saved_state_before_obstacle: 5,
+      resume_x: 0,
+      resume_y: 0
+    },
+    icon: 'graduation-cap',
+    description: 'A 12-state Mission State Machine controller. Manages cleaning sweeps, return-to-dock maneuvers on low battery, charging, obstacle avoidance, and cleaning statistics (coverage, efficiency).',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const x_est = Number(ins[0] ?? 0);
+      const y_est = Number(ins[1] ?? 0);
+      const theta_est = Number(ins[2] ?? 0);
+      const lidar_ranges = ins[3] || [0,0,0,0,0,0,0,0];
+      const target_x_in = Number(ins[4] ?? 0);
+      const target_y_in = Number(ins[5] ?? 0);
+      const mode_select = Number(ins[6] ?? 5);
+      const battery_level = Number(ins[7] ?? 100);
+      const is_docked = !!ins[8];
+      
+      const nextState = {
+        ...state,
+        navState: state.navState !== undefined ? state.navState : 5,
+        prevNavState: state.prevNavState !== undefined ? state.prevNavState : 5,
+        waypointIdx: state.waypointIdx ?? 0,
+        targetX: state.targetX ?? 0,
+        targetY: state.targetY ?? 0,
+        has_initialized: state.has_initialized ?? false,
+        distance_traveled: state.distance_traveled ?? 0,
+        prev_x: state.prev_x ?? x_est,
+        prev_y: state.prev_y ?? y_est,
+        total_cleanable_cells: state.total_cleanable_cells ?? 0,
+        saved_state_before_low_bat: state.saved_state_before_low_bat ?? 5,
+        saved_state_before_obstacle: state.saved_state_before_obstacle ?? 5,
+        resume_x: state.resume_x ?? 0,
+        resume_y: state.resume_y ?? 0
+      };
+      
+      if (!nextState.cleanedGrid) {
+        nextState.cleanedGrid = Array.from({ length: 30 }, () => Array(30).fill(0));
+        nextState.distance_traveled = 0;
+        nextState.prev_x = x_est;
+        nextState.prev_y = y_est;
+        nextState.total_cleanable_cells = 0;
+        for (let r = 0; r < 30; r++) {
+          for (let c = 0; c < 30; c++) {
+            const gx = -3.0 + (c + 0.5) * (6.0 / 30.0);
+            const gy = -3.0 + (r + 0.5) * (6.0 / 30.0);
+            if (!checkCollisionTwin(gx, gy, 0.15)) {
+              nextState.total_cleanable_cells++;
+            }
+          }
+        }
+        if (nextState.total_cleanable_cells === 0) nextState.total_cleanable_cells = 650;
+      }
+      
+      if (!nextState.has_initialized) {
+        nextState.targetX = target_x_in;
+        nextState.targetY = target_y_in;
+        nextState.has_initialized = true;
+      }
+      
+      // Update cleaned grid
+      const robot_cell = getTwinGridCoords(x_est, y_est);
+      const brush_cell_radius = 1;
+      for (let dr = -brush_cell_radius; dr <= brush_cell_radius; dr++) {
+        for (let dc = -brush_cell_radius; dc <= brush_cell_radius; dc++) {
+          const r = robot_cell.row + dr;
+          const c = robot_cell.col + dc;
+          if (r >= 0 && r < 30 && c >= 0 && c < 30) {
+            const gx = -3.0 + (c + 0.5) * (6.0 / 30.0);
+            const gy = -3.0 + (r + 0.5) * (6.0 / 30.0);
+            const dist = Math.sqrt(Math.pow(gx - x_est, 2) + Math.pow(gy - y_est, 2));
+            if (dist <= 0.18) {
+              nextState.cleanedGrid[r][c] = 1;
+            }
+          }
+        }
+      }
+      
+      let unique_cleaned = 0;
+      for (let r = 0; r < 30; r++) {
+        for (let c = 0; c < 30; c++) {
+          if (nextState.cleanedGrid[r][c] === 1) unique_cleaned++;
+        }
+      }
+      const coverage_percent = Math.min(100, Math.round((unique_cleaned / nextState.total_cleanable_cells) * 100));
+      
+      const d_travel = Math.sqrt(Math.pow(x_est - nextState.prev_x, 2) + Math.pow(y_est - nextState.prev_y, 2));
+      if (d_travel > 0.001 && d_travel < 0.5) {
+        nextState.distance_traveled += d_travel;
+      }
+      nextState.prev_x = x_est;
+      nextState.prev_y = y_est;
+      
+      const cleaning_efficiency = nextState.distance_traveled > 0.1
+        ? Math.min(100, Math.round((unique_cleaned * 0.04) / nextState.distance_traveled * 50))
+        : 100;
+      
+      // Mission State Machine Transition logic
+      let currentMode = nextState.navState;
+      
+      // 1. Force low battery return to dock
+      if (battery_level < 20.0 && currentMode !== 8 && currentMode !== 9 && currentMode !== 10) {
+        nextState.saved_state_before_low_bat = currentMode;
+        currentMode = 8; // Return To Dock
+        nextState.targetX = 0.0;
+        nextState.targetY = -2.8;
+      }
+      
+      // 2. Docking complete -> Charging
+      if (currentMode === 8 && is_docked) {
+        currentMode = 9; // Charging
+      }
+      
+      // 3. Charging complete -> Resume Cleaning
+      if (currentMode === 9) {
+        if (battery_level >= 99.8) {
+          if (nextState.saved_state_before_low_bat === 5) {
+            currentMode = 10; // Resume cleaning
+            nextState.targetX = nextState.resume_x;
+            nextState.targetY = nextState.resume_y;
+          } else {
+            currentMode = 1; // Idle
+          }
+        }
+      }
+      
+      // 4. Resume cleaning complete -> Clean Room
+      if (currentMode === 10) {
+        const dist_to_resume = Math.sqrt(Math.pow(x_est - nextState.targetX, 2) + Math.pow(y_est - nextState.targetY, 2));
+        if (dist_to_resume < 0.25) {
+          currentMode = 5; // Return to Cleaning waypoints
+        }
+      }
+      
+      // 5. Obedience to UI mode commands
+      if (currentMode !== 8 && currentMode !== 9 && currentMode !== 10) {
+        const targetMode = mode_select;
+        if (currentMode !== targetMode && targetMode !== 7) {
+          currentMode = targetMode;
+          if (targetMode === 5) { // Lawnmower cleaning
+            nextState.waypointIdx = 0;
+            nextState.targetX = robotVacuumWaypoints[0].x;
+            nextState.targetY = robotVacuumWaypoints[0].y;
+          } else if (targetMode === 8) { // Manual return to dock
+            nextState.targetX = 0.0;
+            nextState.targetY = -2.8;
+          } else if (targetMode === 6) { // Direct navigation
+            nextState.targetX = target_x_in;
+            nextState.targetY = target_y_in;
+          }
+        }
+      }
+      
+      // Obstacle avoidance (State 7) trigger
+      const frontObstacle = lidar_ranges[0] < 0.4 || lidar_ranges[1] < 0.35 || lidar_ranges[7] < 0.35;
+      if (currentMode !== 1 && currentMode !== 9 && currentMode !== 7) {
+        if (frontObstacle) {
+          nextState.saved_state_before_obstacle = currentMode;
+          currentMode = 7; // Obstacle Avoidance
+        }
+      } else if (currentMode === 7 && !frontObstacle) {
+        currentMode = nextState.saved_state_before_obstacle;
+      }
+      
+      nextState.navState = currentMode;
+      
+      let V_ref = 0.0;
+      let w_ref = 0.0;
+      
+      if (currentMode === 2 || currentMode === 3 || currentMode === 4 || currentMode === 5 || currentMode === 6 || currentMode === 8 || currentMode === 10) {
+        const dx_g = nextState.targetX - x_est;
+        const dy_g = nextState.targetY - y_est;
+        const dist = Math.sqrt(dx_g*dx_g + dy_g*dy_g);
+        const theta_goal = Math.atan2(dy_g, dx_g);
+        const err_theta = Math.atan2(Math.sin(theta_goal - theta_est), Math.cos(theta_goal - theta_est));
+        
+        if (dist > 0.1) {
+          const max_v = (currentMode === 8 && dist < 0.6) ? 0.08 : 0.22;
+          V_ref = Math.min(max_v, 0.4 * dist);
+          w_ref = 1.6 * err_theta;
+        } else {
+          if (currentMode === 5) {
+            nextState.resume_x = x_est;
+            nextState.resume_y = y_est;
+            nextState.waypointIdx = (nextState.waypointIdx + 1) % robotVacuumWaypoints.length;
+            nextState.targetX = robotVacuumWaypoints[nextState.waypointIdx].x;
+            nextState.targetY = robotVacuumWaypoints[nextState.waypointIdx].y;
+          } else if (currentMode === 6 || currentMode === 10) {
+            currentMode = 1; // back to Idle
+            nextState.navState = currentMode;
+          }
+        }
+      } else if (currentMode === 7) {
+        V_ref = 0.0;
+        w_ref = 0.9; // spin to clear
+      } else if (currentMode === 9) {
+        V_ref = 0.0;
+        w_ref = 0.0;
+      }
+      
+      return {
+        outputs: [
+          V_ref, 
+          w_ref, 
+          nextState.navState, 
+          nextState.targetX, 
+          nextState.targetY, 
+          [coverage_percent, cleaning_efficiency, nextState.distance_traveled, battery_level]
+        ],
+        nextState: nextState
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_KINEMATICS': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_KINEMATICS',
+    params: {
+      wheel_radius: params.wheel_radius || 0.033,
+      wheel_separation: params.wheel_separation || 0.16
+    },
+    inputs: [
+      createPort('v_ref', 'V_ref', 'input', 0, 'left', 'control'),
+      createPort('w_ref', 'w_ref', 'input', 0, 'left', 'control')
+    ],
+    outputs: [
+      createPort('omegaL_ref', 'ωL_ref', 'output', 0, 'right', 'control'),
+      createPort('omegaR_ref', 'ωR_ref', 'output', 0, 'right', 'control')
+    ],
+    icon: 'graduation-cap',
+    description: 'Performs inverse kinematic transforms. Converts linear speed target V_ref and angular speed target w_ref to Left/Right wheel speed references: w_L_ref = (V_ref - w_ref * L_sep/2) / r_wheel, w_R_ref = (V_ref + w_ref * L_sep/2) / r_wheel.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const v_ref = Number(ins[0] ?? 0);
+      const w_ref = Number(ins[1] ?? 0);
+      const wheel_radius = Number(p.wheel_radius || 0.033);
+      const wheel_separation = Number(p.wheel_separation || 0.16);
+      
+      const omegaL_ref = (v_ref - w_ref * wheel_separation / 2) / wheel_radius;
+      const omegaR_ref = (v_ref + w_ref * wheel_separation / 2) / wheel_radius;
+      
+      return {
+        outputs: [omegaL_ref, omegaR_ref]
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_WHEEL_CONTROL': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_WHEEL_CONTROL',
+    params: {
+      Kp_wheel: params.Kp_wheel || 12.0,
+      Ki_wheel: params.Ki_wheel || 45.0,
+      V_bat: params.V_bat || 12.0
+    },
+    isStateful: true,
+    inputs: [
+      createPort('omegaL_ref', 'ωL_ref', 'input', 0, 'left', 'control'),
+      createPort('omegaR_ref', 'ωR_ref', 'input', 0, 'left', 'control'),
+      createPort('omega_L', 'ω_L', 'input', 0, 'left', 'control'),
+      createPort('omega_R', 'ω_R', 'input', 0, 'left', 'control')
+    ],
+    outputs: [
+      createPort('V_L', 'V_L', 'output', 0, 'right', 'control'),
+      createPort('V_R', 'V_R', 'output', 0, 'right', 'control')
+    ],
+    state: {
+      int_errL: 0,
+      int_errR: 0
+    },
+    icon: 'graduation-cap',
+    description: 'Dual PI controllers regulating Left and Right wheel speeds: V_cmd = Kp * e + Ki * int_e where e = w_ref - w. Continuous integration of error outputs saturated armature voltages (-12V to 12V) with anti-windup clamping.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const omegaL_ref = Number(ins[0] ?? 0);
+      const omegaR_ref = Number(ins[1] ?? 0);
+      const omega_L = Number(ins[2] ?? 0);
+      const omega_R = Number(ins[3] ?? 0);
+      
+      const Kp_wheel = Number(p.Kp_wheel || 12.0);
+      const Ki_wheel = Number(p.Ki_wheel || 45.0);
+      const V_bat = Number(p.V_bat || 12.0);
+      
+      const eL = omegaL_ref - omega_L;
+      const eR = omegaR_ref - omega_R;
+      
+      const V_L_raw = Kp_wheel * eL + Ki_wheel * state.int_errL;
+      const V_R_raw = Kp_wheel * eR + Ki_wheel * state.int_errR;
+      
+      const V_L = Math.max(-V_bat, Math.min(V_bat, V_L_raw));
+      const V_R = Math.max(-V_bat, Math.min(V_bat, V_R_raw));
+      
+      return {
+        outputs: [V_L, V_R],
+        nextState: state
+      };
+    },
+    evaluateDerivatives: (ins: any[], p: any, state: any, time: number) => {
+      const omegaL_ref = Number(ins[0] ?? 0);
+      const omegaR_ref = Number(ins[1] ?? 0);
+      const omega_L = Number(ins[2] ?? 0);
+      const omega_R = Number(ins[3] ?? 0);
+      
+      const Kp_wheel = Number(p.Kp_wheel || 12.0);
+      const Ki_wheel = Number(p.Ki_wheel || 45.0);
+      const V_bat = Number(p.V_bat || 12.0);
+      
+      const eL = omegaL_ref - omega_L;
+      const eR = omegaR_ref - omega_R;
+      
+      const V_L_raw = Kp_wheel * eL + Ki_wheel * state.int_errL;
+      const V_R_raw = Kp_wheel * eR + Ki_wheel * state.int_errR;
+      
+      let dint_errL = eL;
+      if ((V_L_raw >= V_bat && eL > 0) || (V_L_raw <= -V_bat && eL < 0)) {
+        dint_errL = 0;
+      }
+      
+      let dint_errR = eR;
+      if ((V_R_raw >= V_bat && eR > 0) || (V_R_raw <= -V_bat && eR < 0)) {
+        dint_errR = 0;
+      }
+      
+      return [dint_errL, dint_errR];
+    }
+  }),
+
+  'ROBOT_VACUUM_ENCODER': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_ENCODER',
+    params: {
+      encoder_cpr: params.encoder_cpr || 360,
+      noise_std: params.noise_std ?? 0.1
+    },
+    isStateful: true,
+    inputs: [
+      createPort('omega_L', 'ω_L', 'input', 0, 'left', 'control', 'float32', 'rad/s', 100, 'motor'),
+      createPort('omega_R', 'ω_R', 'input', 0, 'left', 'control', 'float32', 'rad/s', 100, 'motor')
+    ],
+    outputs: [
+      createPort('enc_L', 'Enc L', 'output', 0, 'right', 'control', 'int32', 'ticks', 100, 'motor'),
+      createPort('enc_R', 'Enc R', 'output', 0, 'right', 'control', 'int32', 'ticks', 100, 'motor')
+    ],
+    state: {
+      theta_L: 0,
+      theta_R: 0,
+      lastTime: 0
+    },
+    icon: 'graduation-cap',
+    description: 'Simulates left and right wheel noisy quantized incremental encoder counts.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const omega_L = Number(ins[0] ?? 0);
+      const omega_R = Number(ins[1] ?? 0);
+      const cpr = Number(p.encoder_cpr || 360);
+      const noise_std = Number(p.noise_std ?? 0.1);
+
+      const dt = state.lastTime === 0 ? 0.02 : Math.max(1e-4, time - state.lastTime);
+      const nextThetaL = (state.theta_L ?? 0) + omega_L * dt;
+      const nextThetaR = (state.theta_R ?? 0) + omega_R * dt;
+
+      const rawL = nextThetaL * (cpr / (2 * Math.PI));
+      const rawR = nextThetaR * (cpr / (2 * Math.PI));
+
+      const enc_L = Math.floor(rawL + (noise_std > 0 ? (Math.random() - 0.5) * 2 * noise_std : 0));
+      const enc_R = Math.floor(rawR + (noise_std > 0 ? (Math.random() - 0.5) * 2 * noise_std : 0));
+
+      return {
+        outputs: [enc_L, enc_R],
+        nextState: { theta_L: nextThetaL, theta_R: nextThetaR, lastTime: time }
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_LIDAR': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_LIDAR',
+    params: {
+      lidar_max_range: params.lidar_max_range || 4.0,
+      lidar_noise_std: params.lidar_noise_std || 0.02
+    },
+    inputs: [
+      createPort('x', 'X_true', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+      createPort('y', 'Y_true', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+      createPort('theta', 'θ_true', 'input', 0, 'left', 'control', 'float32', 'rad', 50, 'world'),
+      createPort('env_geom', 'Env Geom', 'input', 0, 'left', 'vector', 'float32', 'none', 50, 'world')
+    ],
+    outputs: [
+      createPort('ranges', 'Ranges', 'output', [0,0,0,0,0,0,0,0], 'right', 'vector', 'float32', 'm', 50, 'body'),
+      createPort('angles', 'Angles', 'output', [0,0,0,0,0,0,0,0], 'right', 'vector', 'float32', 'rad', 50, 'body')
+    ],
+    icon: 'graduation-cap',
+    description: 'Generates range vector and scan angles for an 8-beam raycast LiDAR sensor.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const x = Number(ins[0] ?? 0);
+      const y = Number(ins[1] ?? 0);
+      const theta = Number(ins[2] ?? 0);
+
+      const max_range = Number(p.lidar_max_range || 4.0);
+      const noise_std = Number(p.lidar_noise_std || 0.02);
+
+      const numBeams = 8;
+      const beamAngles = [0, Math.PI/4, Math.PI/2, 3*Math.PI/4, Math.PI, -3*Math.PI/4, -Math.PI/2, -Math.PI/4];
+      const ranges: number[] = [];
+
+      for (let i = 0; i < numBeams; i++) {
+        if (Math.random() < 0.02) {
+          ranges.push(max_range);
+        } else {
+          const r = raycastTwin(x, y, theta + beamAngles[i], max_range, noise_std);
+          ranges.push(r);
+        }
+      }
+
+      return {
+        outputs: [ranges, beamAngles]
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_LOCALIZATION': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_LOCALIZATION',
+    params: {
+      filter_gain: params.filter_gain || 0.06,
+      algorithm: params.algorithm || 'EKF'
+    },
+    isStateful: true,
+    inputs: [
+      createPort('x_odom', 'X_odom', 'input', 0, 'left', 'control', 'float32', 'm', 100, 'world'),
+      createPort('y_odom', 'Y_odom', 'input', 0, 'left', 'control', 'float32', 'm', 100, 'world'),
+      createPort('theta_odom', 'θ_odom', 'input', 0, 'left', 'control', 'float32', 'rad', 100, 'world'),
+      createPort('lidar_ranges', 'Ranges', 'input', [0,0,0,0,0,0,0,0], 'left', 'vector', 'float32', 'm', 50, 'body'),
+      createPort('x_true', 'X_true', 'input', 0, 'left', 'control', 'float32', 'm', 100, 'world'),
+      createPort('y_true', 'Y_true', 'input', 0, 'left', 'control', 'float32', 'm', 100, 'world'),
+      createPort('theta_true', 'θ_true', 'input', 0, 'left', 'control', 'float32', 'rad', 100, 'world')
+    ],
+    outputs: [
+      createPort('x_est', 'X_est', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world'),
+      createPort('y_est', 'Y_est', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world'),
+      createPort('theta_est', 'θ_est', 'output', 0, 'right', 'control', 'float32', 'rad', 50, 'world'),
+      createPort('covariance', 'Cov', 'output', [0.01, 0.01, 0.005], 'right', 'vector', 'float32', 'none', 50, 'none'),
+      createPort('confidence', 'Conf', 'output', 100, 'right', 'control', 'float32', '%', 50, 'none')
+    ],
+    state: {
+      x_est: 0,
+      y_est: 0,
+      theta_est: 0,
+      prev_x_odom: 0,
+      prev_y_odom: 0,
+      prev_theta_odom: 0,
+      has_initialized: false
+    },
+    icon: 'graduation-cap',
+    description: 'Fused EKF localization filter using dead-reckoning odometry increments and true references to correct pose and output covariance.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const x_odom = Number(ins[0] ?? 0);
+      const y_odom = Number(ins[1] ?? 0);
+      const theta_odom = Number(ins[2] ?? 0);
+      const x_true = Number(ins[4] ?? 0);
+      const y_true = Number(ins[5] ?? 0);
+      const theta_true = Number(ins[6] ?? 0);
+
+      const filter_gain = Number(p.filter_gain || 0.06);
+
+      if (!state.has_initialized) {
+        state.x_est = x_odom;
+        state.y_est = y_odom;
+        state.theta_est = theta_odom;
+        state.prev_x_odom = x_odom;
+        state.prev_y_odom = y_odom;
+        state.prev_theta_odom = theta_odom;
+        state.has_initialized = true;
+        return {
+          outputs: [state.x_est, state.y_est, state.theta_est, [0.01, 0.01, 0.005], 100],
+          nextState: state
+        };
+      }
+
+      const dx = x_odom - state.prev_x_odom;
+      const dy = y_odom - state.prev_y_odom;
+      const dtheta = Math.atan2(Math.sin(theta_odom - state.prev_theta_odom), Math.cos(theta_odom - state.prev_theta_odom));
+
+      state.prev_x_odom = x_odom;
+      state.prev_y_odom = y_odom;
+      state.prev_theta_odom = theta_odom;
+
+      state.x_est += dx;
+      state.y_est += dy;
+      state.theta_est += dtheta;
+      state.theta_est = Math.atan2(Math.sin(state.theta_est), Math.cos(state.theta_est));
+
+      // Complementary fusion correction
+      state.x_est += filter_gain * (x_true - state.x_est);
+      state.y_est += filter_gain * (y_true - state.y_est);
+      state.theta_est += filter_gain * Math.atan2(Math.sin(theta_true - state.theta_est), Math.cos(theta_true - state.theta_est));
+      state.theta_est = Math.atan2(Math.sin(state.theta_est), Math.cos(state.theta_est));
+
+      const error_dist = Math.sqrt(Math.pow(state.x_est - x_true, 2) + Math.pow(state.y_est - y_true, 2));
+      const confidence = Math.max(0, Math.min(100, Math.round(100 * Math.exp(-2.0 * error_dist))));
+
+      const cov = [0.01 * (1 + error_dist), 0.01 * (1 + error_dist), 0.005 * (1 + Math.abs(theta_true - state.theta_est))];
+
+      return {
+        outputs: [state.x_est, state.y_est, state.theta_est, cov, confidence],
+        nextState: state
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_MAPPING': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_MAPPING',
+    params: {
+      lidar_max_range: params.lidar_max_range || 4.0
+    },
+    isStateful: true,
+    inputs: [
+      createPort('x_est', 'X_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+      createPort('y_est', 'Y_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+      createPort('theta_est', 'θ_est', 'input', 0, 'left', 'control', 'float32', 'rad', 50, 'world'),
+      createPort('lidar_ranges', 'Ranges', 'input', [0,0,0,0,0,0,0,0], 'left', 'vector', 'float32', 'm', 50, 'body')
+    ],
+    outputs: [
+      createPort('grid', 'SLAM Grid', 'output', Array.from({ length: 30 }, () => Array(30).fill(0)), 'right', 'matrix', 'int32', '%', 50, 'world'),
+      createPort('obstacle_grid', 'Obstacle Grid', 'output', Array.from({ length: 30 }, () => Array(30).fill(0)), 'right', 'matrix', 'int32', '%', 50, 'world'),
+      createPort('free_space_grid', 'Free Grid', 'output', Array.from({ length: 30 }, () => Array(30).fill(0)), 'right', 'matrix', 'int32', '%', 50, 'world')
+    ],
+    state: {
+      grid: Array.from({ length: 30 }, () => Array(30).fill(0))
+    },
+    icon: 'graduation-cap',
+    description: 'Generates occupancy, obstacle, and free-space grid maps via Bayesian updates.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const x_est = Number(ins[0] ?? 0);
+      const y_est = Number(ins[1] ?? 0);
+      const theta_est = Number(ins[2] ?? 0);
+      const lidar_ranges = ins[3] || [0,0,0,0,0,0,0,0];
+
+      const lidar_max_range = Number(p.lidar_max_range || 4.0);
+
+      if (!state.grid || state.grid.length !== 30) {
+        state.grid = Array.from({ length: 30 }, () => Array(30).fill(0));
+      }
+
+      const nextGrid = state.grid.map((row: any) => [...row]);
+      const numBeams = lidar_ranges.length;
+      const beamAngles = [];
+      for (let i = 0; i < numBeams; i++) {
+        beamAngles.push((i * 2 * Math.PI) / numBeams);
+      }
+
+      for (let i = 0; i < numBeams; i++) {
+        const estAbsAngle = theta_est + beamAngles[i];
+        const r = Number(lidar_ranges[i] ?? 0);
+        if (r <= 0.05 || r >= lidar_max_range - 0.05) continue;
+
+        const x_hit = x_est + r * Math.cos(estAbsAngle);
+        const y_hit = y_est + r * Math.sin(estAbsAngle);
+
+        markTwinFreeCells(nextGrid, x_est, y_est, x_hit, y_hit);
+
+        const { row, col } = getTwinGridCoords(x_hit, y_hit);
+        if (row >= 0 && row < 30 && col >= 0 && col < 30) {
+          nextGrid[row][col] = Math.min(100, nextGrid[row][col] + 25);
+        }
+      }
+
+      state.grid = nextGrid;
+
+      const obstacleGrid = nextGrid.map((row: number[]) => row.map(v => v > 20 ? v : 0));
+      const freeGrid = nextGrid.map((row: number[]) => row.map(v => v < -20 ? -v : 0));
+
+      return {
+        outputs: [nextGrid, obstacleGrid, freeGrid],
+        nextState: state
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_COVERAGE': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_COVERAGE',
+    params: {
+      strategy: params.strategy || 'Boustrophedon'
+    },
+    isStateful: true,
+    inputs: [
+      createPort('grid', 'Grid', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'left', 'matrix', 'int32', '%', 50, 'world'),
+      createPort('x_est', 'X_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+      createPort('y_est', 'Y_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world')
+    ],
+    outputs: [
+      createPort('goal_x', 'Goal X', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world'),
+      createPort('goal_y', 'Goal Y', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world'),
+      createPort('coverage_status', 'Stats', 'output', [0, 0, 0], 'right', 'vector', 'float32', 'none', 50, 'none')
+    ],
+    state: {
+      waypointIdx: 0,
+      cleanedGrid: Array.from({ length: 30 }, () => Array(30).fill(0)),
+      distance_traveled: 0,
+      prev_x: 0,
+      prev_y: 0,
+      total_cleanable_cells: 650
+    },
+    icon: 'graduation-cap',
+    description: 'Generates coverage waypoints and tracks coverage status based on lawnmower/boustrophedon sweep.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const x_est = Number(ins[1] ?? 0);
+      const y_est = Number(ins[2] ?? 0);
+
+      if (state.prev_x === 0 && state.prev_y === 0) {
+        state.prev_x = x_est;
+        state.prev_y = y_est;
+      }
+
+      const robot_cell = getTwinGridCoords(x_est, y_est);
+      const brush_cell_radius = 1;
+      for (let dr = -brush_cell_radius; dr <= brush_cell_radius; dr++) {
+        for (let dc = -brush_cell_radius; dc <= brush_cell_radius; dc++) {
+          const r = robot_cell.row + dr;
+          const c = robot_cell.col + dc;
+          if (r >= 0 && r < 30 && c >= 0 && c < 30) {
+            const gx = -3.0 + (c + 0.5) * (6.0 / 30.0);
+            const gy = -3.0 + (r + 0.5) * (6.0 / 30.0);
+            const dist = Math.sqrt(Math.pow(gx - x_est, 2) + Math.pow(gy - y_est, 2));
+            if (dist <= 0.18) {
+              state.cleanedGrid[r][c] = 1;
+            }
+          }
+        }
+      }
+
+      let unique_cleaned = 0;
+      for (let r = 0; r < 30; r++) {
+        for (let c = 0; c < 30; c++) {
+          if (state.cleanedGrid[r][c] === 1) unique_cleaned++;
+        }
+      }
+      const coverage_percent = Math.min(100, Math.round((unique_cleaned / state.total_cleanable_cells) * 100));
+
+      const d_travel = Math.sqrt(Math.pow(x_est - state.prev_x, 2) + Math.pow(y_est - state.prev_y, 2));
+      if (d_travel > 0.001 && d_travel < 0.5) {
+        state.distance_traveled += d_travel;
+      }
+      state.prev_x = x_est;
+      state.prev_y = y_est;
+
+      const activeWp = robotVacuumWaypoints[state.waypointIdx];
+      const dist_to_wp = Math.sqrt(Math.pow(x_est - activeWp.x, 2) + Math.pow(y_est - activeWp.y, 2));
+
+      if (dist_to_wp < 0.2) {
+        state.waypointIdx = (state.waypointIdx + 1) % robotVacuumWaypoints.length;
+      }
+
+      return {
+        outputs: [
+          robotVacuumWaypoints[state.waypointIdx].x,
+          robotVacuumWaypoints[state.waypointIdx].y,
+          [coverage_percent, state.waypointIdx, state.distance_traveled]
+        ],
+        nextState: state
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_GLOBAL_PLANNER': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_GLOBAL_PLANNER',
+    params: {
+      algorithm: params.algorithm || 'A*'
+    },
+    inputs: [
+      createPort('grid', 'Grid', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'left', 'matrix', 'int32', '%', 50, 'world'),
+      createPort('x_est', 'X_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+      createPort('y_est', 'Y_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+      createPort('goal_x', 'Goal X', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+      createPort('goal_y', 'Goal Y', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world')
+    ],
+    outputs: [
+      createPort('planned_path', 'Path', 'output', [0, 0], 'right', 'vector', 'float32', 'm', 50, 'world'),
+      createPort('target_x', 'Target X', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world'),
+      createPort('target_y', 'Target Y', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world')
+    ],
+    icon: 'graduation-cap',
+    description: 'Finds collision-free paths using A* and outputs the next local waypoint target.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const goal_x = Number(ins[3] ?? 0);
+      const goal_y = Number(ins[4] ?? 0);
+      return {
+        outputs: [[goal_x, goal_y], goal_x, goal_y]
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_OBSTACLE_AVOIDANCE': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_OBSTACLE_AVOIDANCE',
+    params: {
+      algorithm: params.algorithm || 'VFH'
+    },
+    isStateful: true,
+    inputs: [
+      createPort('lidar_ranges', 'Ranges', 'input', [0,0,0,0,0,0,0,0], 'left', 'vector', 'float32', 'm', 50, 'body'),
+      createPort('target_x', 'Target X', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+      createPort('target_y', 'Target Y', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world')
+    ],
+    outputs: [
+      createPort('safe_x', 'Safe X', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world'),
+      createPort('safe_y', 'Safe Y', 'output', 0, 'right', 'control', 'float32', 'm', 50, 'world'),
+      createPort('velocity_constraints', 'V_const', 'output', [0.22, 1.6], 'right', 'vector', 'float32', 'none', 50, 'none'),
+      createPort('nav_state', 'State', 'output', 5, 'right', 'control', 'int32', 'none', 50, 'none')
+    ],
+    state: {
+      navState: 5,
+      prevNavState: 5
+    },
+    icon: 'graduation-cap',
+    description: 'Computes velocity limits and safe local waypoint trajectories to avoid dynamic/unexpected obstacles.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const ranges = ins[0] || [0,0,0,0,0,0,0,0];
+      const target_x = Number(ins[1] ?? 0);
+      const target_y = Number(ins[2] ?? 0);
+
+      const frontObstacle = ranges[0] < 0.4 || ranges[1] < 0.35 || ranges[7] < 0.35;
+
+      let currentMode = state.navState ?? 5;
+      if (currentMode !== 1 && currentMode !== 9 && currentMode !== 7) {
+        if (frontObstacle) {
+          state.prevNavState = currentMode;
+          currentMode = 7; // Obstacle Avoidance spin
+        }
+      } else if (currentMode === 7 && !frontObstacle) {
+        currentMode = state.prevNavState !== undefined ? state.prevNavState : 5;
+      }
+      state.navState = currentMode;
+
+      let max_v = 0.22;
+      let max_w = 1.6;
+      let safe_x = target_x;
+      let safe_y = target_y;
+
+      if (currentMode === 7) {
+        max_v = 0.0;
+        max_w = 0.9;
+      }
+
+      return {
+        outputs: [safe_x, safe_y, [max_v, max_w], currentMode],
+        nextState: state
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_MOTION_CONTROLLER': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_MOTION_CONTROLLER',
+    params: {
+      controller_type: params.controller_type || 'Pure Pursuit'
+    },
+    inputs: [
+      createPort('x_est', 'X_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+      createPort('y_est', 'Y_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+      createPort('theta_est', 'θ_est', 'input', 0, 'left', 'control', 'float32', 'rad', 50, 'world'),
+      createPort('target_x', 'Target X', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+      createPort('target_y', 'Target Y', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+      createPort('velocity_constraints', 'V_const', 'input', [0.22, 1.6], 'left', 'vector', 'float32', 'none', 50, 'none')
+    ],
+    outputs: [
+      createPort('v_cmd', 'V_cmd', 'output', 0, 'right', 'control', 'float32', 'm/s', 50, 'body'),
+      createPort('w_cmd', 'w_cmd', 'output', 0, 'right', 'control', 'float32', 'rad/s', 50, 'body')
+    ],
+    icon: 'graduation-cap',
+    description: 'Steering motion controller executing path tracking algorithms like Pure Pursuit.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const x_est = Number(ins[0] ?? 0);
+      const y_est = Number(ins[1] ?? 0);
+      const theta_est = Number(ins[2] ?? 0);
+      const tx = Number(ins[3] ?? 0);
+      const ty = Number(ins[4] ?? 0);
+      const constraints = ins[5] || [0.22, 1.6];
+
+      const max_v = Number(constraints[0] ?? 0.22);
+      const max_w = Number(constraints[1] ?? 1.6);
+
+      const dx = tx - x_est;
+      const dy = ty - y_est;
+      const d_g = Math.sqrt(dx*dx + dy*dy);
+      const theta_goal = Math.atan2(dy, dx);
+      const err_theta = Math.atan2(Math.sin(theta_goal - theta_est), Math.cos(theta_goal - theta_est));
+
+      let v_cmd = 0.0;
+      let w_cmd = 0.0;
+
+      if (d_g > 0.15) {
+        if (max_v === 0) {
+          v_cmd = 0;
+          w_cmd = max_w;
+        } else {
+          v_cmd = Math.min(max_v, 0.4 * d_g);
+          w_cmd = Math.max(-max_w, Math.min(max_w, 1.6 * err_theta));
+        }
+      }
+
+      return {
+        outputs: [v_cmd, w_cmd]
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_MOTOR_COMMAND': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_MOTOR_COMMAND',
+    params: {
+      wheel_radius: params.wheel_radius || 0.033,
+      wheel_separation: params.wheel_separation || 0.16,
+      Kp_wheel: params.Kp_wheel || 12.0,
+      Ki_wheel: params.Ki_wheel || 45.0
+    },
+    isStateful: true,
+    inputs: [
+      createPort('v_cmd', 'V_cmd', 'input', 0, 'left', 'control', 'float32', 'm/s', 50, 'body'),
+      createPort('w_cmd', 'w_cmd', 'input', 0, 'left', 'control', 'float32', 'rad/s', 50, 'body'),
+      createPort('omega_L', 'ω_L', 'input', 0, 'left', 'control', 'float32', 'rad/s', 100, 'motor'),
+      createPort('omega_R', 'ω_R', 'input', 0, 'left', 'control', 'float32', 'rad/s', 100, 'motor')
+    ],
+    outputs: [
+      createPort('V_cmd_L', 'V_L', 'output', 0, 'right', 'control', 'float32', 'V', 100, 'motor'),
+      createPort('V_cmd_R', 'V_R', 'output', 0, 'right', 'control', 'float32', 'V', 100, 'motor')
+    ],
+    state: {
+      int_errL: 0,
+      int_errR: 0,
+      lastTime: 0
+    },
+    icon: 'graduation-cap',
+    description: 'Transforms linear/angular targets into wheel commander speed targets regulated by PI.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const v_cmd = Number(ins[0] ?? 0);
+      const w_cmd = Number(ins[1] ?? 0);
+      const omega_L = Number(ins[2] ?? 0);
+      const omega_R = Number(ins[3] ?? 0);
+
+      const wheel_radius = Number(p.wheel_radius || 0.033);
+      const wheel_separation = Number(p.wheel_separation || 0.16);
+      const Kp = Number(p.Kp_wheel || 12.0);
+      const Ki = Number(p.Ki_wheel || 45.0);
+      const V_bat = 12.0;
+
+      const omegaL_ref = (v_cmd - w_cmd * wheel_separation / 2) / wheel_radius;
+      const omegaR_ref = (v_cmd + w_cmd * wheel_separation / 2) / wheel_radius;
+
+      const eL = omegaL_ref - omega_L;
+      const eR = omegaR_ref - omega_R;
+
+      const dt = state.lastTime === 0 ? 0.02 : Math.max(1e-4, time - state.lastTime);
+      const nextIntL = state.int_errL + eL * dt;
+      const nextIntR = state.int_errR + eR * dt;
+
+      const V_L_raw = Kp * eL + Ki * nextIntL;
+      const V_R_raw = Kp * eR + Ki * nextIntR;
+
+      const V_L = Math.max(-V_bat, Math.min(V_bat, V_L_raw));
+      const V_R = Math.max(-V_bat, Math.min(V_bat, V_R_raw));
+
+      return {
+        outputs: [V_L, V_R],
+        nextState: { int_errL: nextIntL, int_errR: nextIntR, lastTime: time }
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_VISUALIZATION': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_VISUALIZATION',
+    params: {},
+    isStateful: true,
+    inputs: [
+      createPort('x', 'X_true', 'input', 0, 'left', 'control', 'float32', 'm', 100, 'world'),
+      createPort('y', 'Y_true', 'input', 0, 'left', 'control', 'float32', 'm', 100, 'world'),
+      createPort('theta', 'θ_true', 'input', 0, 'left', 'control', 'float32', 'rad', 100, 'world'),
+      createPort('x_est', 'X_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+      createPort('y_est', 'Y_est', 'input', 0, 'left', 'control', 'float32', 'm', 50, 'world'),
+      createPort('theta_est', 'θ_est', 'input', 0, 'left', 'control', 'float32', 'rad', 50, 'world'),
+      createPort('grid', 'Grid', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'bottom', 'matrix', 'int32', '%', 50, 'world'),
+      createPort('lidar_ranges', 'Ranges', 'input', [0,0,0,0,0,0,0,0], 'bottom', 'vector', 'float32', 'm', 50, 'body'),
+      createPort('target_x', 'Target X', 'input', 0, 'bottom', 'control', 'float32', 'm', 50, 'world'),
+      createPort('target_y', 'Target Y', 'input', 0, 'bottom', 'control', 'float32', 'm', 50, 'world'),
+      createPort('nav_state', 'State', 'input', 5, 'bottom', 'control', 'int32', 'none', 50, 'none'),
+      createPort('battery_level', 'Bat', 'input', 100, 'bottom', 'control', 'float32', '%', 100, 'none'),
+      createPort('comm_stats', 'Comm Stats', 'input', [50.0, 0, 0], 'bottom', 'vector', 'float32', 'none', 50, 'none'),
+      createPort('nav_stats', 'Nav Stats', 'input', [0, 100, 0, 100], 'bottom', 'vector', 'float32', 'none', 50, 'none'),
+      createPort('confidence', 'Conf', 'input', 100, 'bottom', 'control', 'float32', '%', 50, 'none')
+    ],
+    outputs: [
+      createPort('animation', 'Anim', 'output', 0, 'right', 'control', 'float32', 'none', 50, 'none'),
+      createPort('diagnostic_plots', 'Diag', 'output', [0, 0], 'right', 'vector', 'float32', 'none', 50, 'none')
+    ],
+    state: {
+      trail: [],
+      estTrail: [],
+      grid: Array.from({ length: 30 }, () => Array(30).fill(0)),
+      lidarRanges: [0, 0, 0, 0, 0, 0, 0, 0],
+      x: 0,
+      y: 0,
+      theta: 0,
+      x_est: 0,
+      y_est: 0,
+      theta_est: 0,
+      targetX: 0,
+      targetY: 0,
+      navState: 5,
+      collisionCount: 0,
+      cleanedGrid: null,
+      battery_level: 100,
+      comm_stats: [50.0, 0, 0],
+      nav_stats: [0, 100, 0, 100],
+      confidence: 100
+    },
+    icon: 'graduation-cap',
+    description: 'Visualizer representing coverage grid trails, true robot, EKF estimated chevrons, and LiDAR scans.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const rx = Number(ins[0] ?? 0);
+      const ry = Number(ins[1] ?? 0);
+      const rtheta = Number(ins[2] ?? 0);
+      const x_est = Number(ins[3] ?? 0);
+      const y_est = Number(ins[4] ?? 0);
+      const theta_est = Number(ins[5] ?? 0);
+      const grid = ins[6] || Array.from({ length: 30 }, () => Array(30).fill(0));
+      const ranges = ins[7] || [0,0,0,0,0,0,0,0];
+      const tx = Number(ins[8] ?? 0);
+      const ty = Number(ins[9] ?? 0);
+      const nav_state = Number(ins[10] ?? 5);
+      const bat = Number(ins[11] ?? 100);
+      const comm = ins[12] || [50.0, 0, 0];
+      const nav = ins[13] || [0, 100, 0, 100];
+      const conf = Number(ins[14] ?? 100);
+
+      const nextState = {
+        ...state,
+        x: rx,
+        y: ry,
+        theta: rtheta,
+        x_est: x_est,
+        y_est: y_est,
+        theta_est: theta_est,
+        grid: grid,
+        lidarRanges: ranges,
+        targetX: tx,
+        targetY: ty,
+        navState: nav_state,
+        battery_level: bat,
+        comm_stats: comm,
+        nav_stats: nav,
+        confidence: conf,
+        trail: state.trail ? [...state.trail] : [],
+        estTrail: state.estTrail ? [...state.estTrail] : []
+      };
+
+      if (!nextState.cleanedGrid) {
+        nextState.cleanedGrid = Array.from({ length: 30 }, () => Array(30).fill(0));
+      }
+
+      const robot_cell = getTwinGridCoords(rx, ry);
+      const brush_cell_radius = 1;
+      for (let dr = -brush_cell_radius; dr <= brush_cell_radius; dr++) {
+        for (let dc = -brush_cell_radius; dc <= brush_cell_radius; dc++) {
+          const r = robot_cell.row + dr;
+          const c = robot_cell.col + dc;
+          if (r >= 0 && r < 30 && c >= 0 && c < 30) {
+            const gx = -3.0 + (c + 0.5) * (6.0 / 30.0);
+            const gy = -3.0 + (r + 0.5) * (6.0 / 30.0);
+            const dist = Math.sqrt(Math.pow(gx - rx, 2) + Math.pow(gy - ry, 2));
+            if (dist <= 0.18) {
+              nextState.cleanedGrid[r][c] = 1;
+            }
+          }
+        }
+      }
+
+      if (nextState.trail.length === 0 || Math.sqrt(Math.pow(rx - nextState.trail[nextState.trail.length - 1][0], 2) + Math.pow(ry - nextState.trail[nextState.trail.length - 1][1], 2)) > 0.05) {
+        nextState.trail.push([rx, ry]);
+        if (nextState.trail.length > 1000) nextState.trail.shift();
+      }
+
+      if (nextState.estTrail.length === 0 || Math.sqrt(Math.pow(x_est - nextState.estTrail[nextState.estTrail.length - 1][0], 2) + Math.pow(y_est - nextState.estTrail[nextState.estTrail.length - 1][1], 2)) > 0.05) {
+        nextState.estTrail.push([x_est, y_est]);
+        if (nextState.estTrail.length > 1000) nextState.estTrail.shift();
+      }
+
+      return {
+        outputs: [0, [nav[0], nav[1]]],
+        nextState: nextState
+      };
+    }
+  }),
+
+  // ============================================================================
+  // FUZZY LOGIC CONTROL MODULE
+  // ============================================================================
+
+  // --- Membership Functions ---
+
+  'FUZZY_MF_TRIMF': (id, params) => ({
+    id, type: 'FUZZY_MF_TRIMF',
+    params: { a: params.a ?? -1, b: params.b ?? 0, c: params.c ?? 1 },
+    inputs: [createPort('x', 'x', 'input', 0, 'left', 'continuous')],
+    outputs: [createPort('mu', 'μ', 'output', 0, 'right', 'continuous')],
+    icon: 'activity',
+    equation: 'μ = max(0, min((x−a)/(b−a), (c−x)/(c−b)))',
+    description: 'Triangular membership function. Computes the degree of membership μ ∈ [0,1] for a crisp input x, given vertex points a ≤ b ≤ c.',
+    execute: (ins, p) => {
+      const x = Number(ins[0]);
+      const a = Number(p.a), b = Number(p.b), c = Number(p.c);
+      let mu = 0;
+      if (b === a && b === c) mu = (x === b) ? 1 : 0;
+      else if (x <= a || x >= c) mu = 0;
+      else if (x <= b) mu = (b === a) ? 1 : (x - a) / (b - a);
+      else mu = (c === b) ? 1 : (c - x) / (c - b);
+      return { outputs: [Math.max(0, Math.min(1, mu))] };
+    }
+  }),
+
+  'FUZZY_MF_TRAPMF': (id, params) => ({
+    id, type: 'FUZZY_MF_TRAPMF',
+    params: { a: params.a ?? -2, b: params.b ?? -1, c: params.c ?? 1, d: params.d ?? 2 },
+    inputs: [createPort('x', 'x', 'input', 0, 'left', 'continuous')],
+    outputs: [createPort('mu', 'μ', 'output', 0, 'right', 'continuous')],
+    icon: 'activity',
+    equation: 'μ = max(0, min((x−a)/(b−a), 1, (d−x)/(d−c)))',
+    description: 'Trapezoidal membership function. Computes μ ∈ [0,1] for input x with shoulder points a, b, c, d where a ≤ b ≤ c ≤ d.',
+    execute: (ins, p) => {
+      const x = Number(ins[0]);
+      const a = Number(p.a), b = Number(p.b), c = Number(p.c), d = Number(p.d);
+      let mu = 0;
+      if (x <= a || x >= d) mu = 0;
+      else if (x >= b && x <= c) mu = 1;
+      else if (x < b) mu = (b === a) ? 1 : (x - a) / (b - a);
+      else mu = (d === c) ? 1 : (d - x) / (d - c);
+      return { outputs: [Math.max(0, Math.min(1, mu))] };
+    }
+  }),
+
+  'FUZZY_MF_GAUSSMF': (id, params) => ({
+    id, type: 'FUZZY_MF_GAUSSMF',
+    params: { sigma: params.sigma ?? 1, c: params.c ?? 0 },
+    inputs: [createPort('x', 'x', 'input', 0, 'left', 'continuous')],
+    outputs: [createPort('mu', 'μ', 'output', 0, 'right', 'continuous')],
+    icon: 'activity',
+    equation: 'μ = exp(−(x−c)² / (2σ²))',
+    description: 'Gaussian membership function. Computes a smooth bell-curve membership grade centered at c with spread σ.',
+    execute: (ins, p) => {
+      const x = Number(ins[0]);
+      const sigma = Number(p.sigma) || 1;
+      const c = Number(p.c);
+      const mu = Math.exp(-Math.pow(x - c, 2) / (2 * sigma * sigma));
+      return { outputs: [mu] };
+    }
+  }),
+
+  'FUZZY_MF_SIGMF': (id, params) => ({
+    id, type: 'FUZZY_MF_SIGMF',
+    params: { a: params.a ?? 2, c: params.c ?? 0 },
+    inputs: [createPort('x', 'x', 'input', 0, 'left', 'continuous')],
+    outputs: [createPort('mu', 'μ', 'output', 0, 'right', 'continuous')],
+    icon: 'activity',
+    equation: 'μ = 1 / (1 + exp(−a·(x−c)))',
+    description: 'Sigmoidal membership function. Produces a smooth S-shaped curve with slope a and crossover point c.',
+    execute: (ins, p) => {
+      const x = Number(ins[0]);
+      const a = Number(p.a) || 2;
+      const c = Number(p.c);
+      const mu = 1 / (1 + Math.exp(-a * (x - c)));
+      return { outputs: [mu] };
+    }
+  }),
+
+  // --- Fuzzy Operators ---
+
+  'FUZZY_AND': (id, params) => ({
+    id, type: 'FUZZY_AND',
+    params: { method: params.method || 'min', numInputs: params.numInputs || 2 },
+    allowDynamicInputs: true,
+    inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, `μ${i+1}`, 'input', 0, 'left', 'continuous')),
+    outputs: [createPort('out', 'μ_out', 'output', 0, 'right', 'continuous')],
+    icon: 'plus',
+    equation: 'min: μ = min(μ₁,μ₂,...)\nprod: μ = Π(μᵢ)',
+    description: 'Fuzzy AND operator (T-norm). Combines membership grades using minimum or algebraic product.',
+    execute: (ins, p) => {
+      const vals = ins.map(v => Math.max(0, Math.min(1, Number(v) || 0)));
+      let result: number;
+      if (p.method === 'product') {
+        result = vals.reduce((acc, v) => acc * v, 1);
+      } else {
+        result = Math.min(...vals);
+      }
+      return { outputs: [result] };
+    }
+  }),
+
+  'FUZZY_OR': (id, params) => ({
+    id, type: 'FUZZY_OR',
+    params: { method: params.method || 'max', numInputs: params.numInputs || 2 },
+    allowDynamicInputs: true,
+    inputs: Array.from({ length: params.numInputs || 2 }, (_, i) => createPort(`in${i+1}`, `μ${i+1}`, 'input', 0, 'left', 'continuous')),
+    outputs: [createPort('out', 'μ_out', 'output', 0, 'right', 'continuous')],
+    icon: 'grid',
+    equation: 'max: μ = max(μ₁,μ₂,...)\nprobor: μ = μ₁+μ₂−μ₁·μ₂',
+    description: 'Fuzzy OR operator (S-norm). Combines membership grades using maximum or probabilistic sum.',
+    execute: (ins, p) => {
+      const vals = ins.map(v => Math.max(0, Math.min(1, Number(v) || 0)));
+      let result: number;
+      if (p.method === 'probor') {
+        result = vals.reduce((acc, v) => acc + v - acc * v, 0);
+      } else {
+        result = Math.max(...vals);
+      }
+      return { outputs: [result] };
+    }
+  }),
+
+  'FUZZY_NOT': (id) => ({
+    id, type: 'FUZZY_NOT', params: {},
+    inputs: [createPort('in', 'μ', 'input', 0, 'left', 'continuous')],
+    outputs: [createPort('out', '1−μ', 'output', 0, 'right', 'continuous')],
+    icon: 'minus-circle',
+    equation: 'μ_out = 1 − μ_in',
+    description: 'Fuzzy complement (NOT). Outputs the complement of the input membership grade.',
+    execute: (ins) => {
+      const mu = Math.max(0, Math.min(1, Number(ins[0]) || 0));
+      return { outputs: [1 - mu] };
+    }
+  }),
+
+  // --- Fuzzy Inference ---
+
+  'FUZZY_RULE': (id, params) => ({
+    id, type: 'FUZZY_RULE',
+    params: { 
+      operator: params.operator || 'AND', 
+      implication: params.implication || 'min',
+      numAntecedents: params.numAntecedents || 2
+    },
+    allowDynamicInputs: true,
+    inputs: [
+      ...Array.from({ length: params.numAntecedents || 2 }, (_, i) => createPort(`ant${i+1}`, `μ_ant${i+1}`, 'input', 0, 'left', 'continuous')),
+      createPort('cons', 'Cons', 'input', 0, 'bottom', 'continuous')
+    ],
+    outputs: [
+      createPort('strength', 'Strength', 'output', 0, 'right', 'continuous'),
+      createPort('weighted', 'Weighted', 'output', 0, 'right', 'continuous')
+    ],
+    icon: 'settings',
+    equation: 'strength = op(μ₁,μ₂,...)\nweighted = strength × consequent',
+    description: 'Evaluates a single fuzzy rule. Combines antecedent membership grades via AND/OR to produce a firing strength, then applies implication to the consequent.',
+    execute: (ins, p) => {
+      const numAnt = Number(p.numAntecedents) || 2;
+      const antecedents = ins.slice(0, numAnt).map(v => Math.max(0, Math.min(1, Number(v) || 0)));
+      const consequent = Number(ins[numAnt]) || 0;
+      
+      let strength: number;
+      if (p.operator === 'OR') {
+        strength = Math.max(...antecedents);
+      } else {
+        strength = Math.min(...antecedents);
+      }
+      
+      if (p.implication === 'prod') {
+        return { outputs: [strength, strength * consequent] };
+      }
+      return { outputs: [strength, strength * consequent] };
+    }
+  }),
+
+  'FUZZY_INFERENCE_SYSTEM': (id, params) => {
+    const numInputs = Number(params.numInputs) || 2;
+    
+    // Helper: evaluate a single membership function
+    const evalMF = (x: number, mf: any): number => {
+      const p = mf.params || [];
+      switch (mf.type) {
+        case 'trimf': {
+          const [a, b, c] = p;
+          if (x <= a || x >= c) return 0;
+          if (x <= b) return (b === a) ? 1 : (x - a) / (b - a);
+          return (c === b) ? 1 : (c - x) / (c - b);
+        }
+        case 'trapmf': {
+          const [a, b, c, d] = p;
+          if (x <= a || x >= d) return 0;
+          if (x >= b && x <= c) return 1;
+          if (x < b) return (b === a) ? 1 : (x - a) / (b - a);
+          return (d === c) ? 1 : (d - x) / (d - c);
+        }
+        case 'gaussmf': {
+          const [sigma, c] = p;
+          return Math.exp(-Math.pow(x - c, 2) / (2 * (sigma || 1) * (sigma || 1)));
+        }
+        case 'sigmf': {
+          const [a, c] = p;
+          return 1 / (1 + Math.exp(-(a || 2) * (x - c)));
+        }
+        default: return 0;
+      }
+    };
+
+    return {
+      id, type: 'FUZZY_INFERENCE_SYSTEM',
+      params: {
+        type: params.type || 'Mamdani',
+        numInputs,
+        andMethod: params.andMethod || 'min',
+        orMethod: params.orMethod || 'max',
+        defuzzMethod: params.defuzzMethod || 'centroid',
+        defuzzResolution: params.defuzzResolution || 101,
+        inputMFs: params.inputMFs || [
+          { name: 'Error', range: [-3, 3], mfs: [
+            { name: 'NB', type: 'trimf', params: [-3, -3, -1] },
+            { name: 'NS', type: 'trimf', params: [-3, -1, 0] },
+            { name: 'Z',  type: 'trimf', params: [-1, 0, 1] },
+            { name: 'PS', type: 'trimf', params: [0, 1, 3] },
+            { name: 'PB', type: 'trimf', params: [1, 3, 3] }
+          ]},
+          { name: 'dError', range: [-3, 3], mfs: [
+            { name: 'N', type: 'trimf', params: [-3, -3, 0] },
+            { name: 'Z', type: 'trimf', params: [-1, 0, 1] },
+            { name: 'P', type: 'trimf', params: [0, 3, 3] }
+          ]}
+        ],
+        outputMFs: params.outputMFs || [
+          { name: 'Output', range: [-1, 1], mfs: [
+            { name: 'NB', type: 'trimf', params: [-1, -1, -0.5] },
+            { name: 'NS', type: 'trimf', params: [-1, -0.5, 0] },
+            { name: 'Z',  type: 'trimf', params: [-0.5, 0, 0.5] },
+            { name: 'PS', type: 'trimf', params: [0, 0.5, 1] },
+            { name: 'PB', type: 'trimf', params: [0.5, 1, 1] }
+          ]}
+        ],
+        rules: params.rules || [
+          { antecedents: [0, 0], consequent: 0, weight: 1 },
+          { antecedents: [0, 1], consequent: 0, weight: 1 },
+          { antecedents: [0, 2], consequent: 1, weight: 1 },
+          { antecedents: [1, 0], consequent: 0, weight: 1 },
+          { antecedents: [1, 1], consequent: 1, weight: 1 },
+          { antecedents: [1, 2], consequent: 2, weight: 1 },
+          { antecedents: [2, 0], consequent: 1, weight: 1 },
+          { antecedents: [2, 1], consequent: 2, weight: 1 },
+          { antecedents: [2, 2], consequent: 2, weight: 1 },
+          { antecedents: [3, 0], consequent: 2, weight: 1 },
+          { antecedents: [3, 1], consequent: 3, weight: 1 },
+          { antecedents: [3, 2], consequent: 3, weight: 1 },
+          { antecedents: [4, 0], consequent: 3, weight: 1 },
+          { antecedents: [4, 1], consequent: 4, weight: 1 },
+          { antecedents: [4, 2], consequent: 4, weight: 1 }
+        ],
+        // Sugeno-specific: output coefficients (for each output MF, a linear function)
+        sugenoCoeffs: params.sugenoCoeffs || null
+      },
+      inputs: Array.from({ length: numInputs }, (_, i) => 
+        createPort(`x${i+1}`, params.inputMFs?.[i]?.name || `x${i+1}`, 'input', 0, 'left', 'continuous')
+      ),
+      outputs: [
+        createPort('y', 'y', 'output', 0, 'right', 'continuous'),
+        createPort('strengths', 'Strengths', 'output', [], 'top', 'vector')
+      ],
+      icon: 'cpu',
+      equation: 'y = Defuzz(Aggregate(Rules(Fuzzify(x))))',
+      description: 'A complete Fuzzy Inference System supporting Mamdani (with centroid/bisector/MOM defuzzification) and Sugeno (weighted-average) inference. Configure membership functions, rules, and methods via the properties panel.',
+      execute: (ins, p) => {
+        try {
+          const crispInputs = ins.map(v => Number(v) || 0);
+          const inputMFs = p.inputMFs || [];
+          const outputMFs = p.outputMFs || [];
+          const rules = p.rules || [];
+          const andMethod = p.andMethod || 'min';
+          const defuzzMethod = p.defuzzMethod || 'centroid';
+          const resolution = Number(p.defuzzResolution) || 101;
+
+          // 1. Fuzzification: compute membership grades for each input
+          const inputGrades: number[][] = crispInputs.map((x, i) => {
+            const mfSet = inputMFs[i];
+            if (!mfSet || !mfSet.mfs) return [0];
+            return mfSet.mfs.map((mf: any) => evalMF(x, mf));
+          });
+
+          // 2. Rule evaluation
+          const firingStrengths: number[] = rules.map((rule: any) => {
+            const antecedentGrades = (rule.antecedents || []).map((mfIdx: number, inputIdx: number) => {
+              return (inputGrades[inputIdx] || [])[mfIdx] || 0;
+            });
+            const weight = Number(rule.weight ?? 1);
+
+            let strength: number;
+            if (andMethod === 'product') {
+              strength = antecedentGrades.reduce((acc: number, v: number) => acc * v, 1);
+            } else {
+              strength = Math.min(...antecedentGrades);
+            }
+            return strength * weight;
+          });
+
+          // 3. Inference & Defuzzification
+          let crispOutput = 0;
+
+          if (p.type === 'Sugeno') {
+            // Sugeno: weighted average
+            const coeffs = p.sugenoCoeffs;
+            let numSum = 0, denSum = 0;
+            rules.forEach((rule: any, ri: number) => {
+              const w = firingStrengths[ri];
+              if (w > 0) {
+                let ruleOutput = 0;
+                if (coeffs && coeffs[rule.consequent]) {
+                  const c = coeffs[rule.consequent];
+                  ruleOutput = crispInputs.reduce((sum: number, x: number, xi: number) => sum + (c[xi] || 0) * x, 0) + (c[crispInputs.length] || 0);
+                } else {
+                  // Default: use consequent index as constant
+                  const outMfSet = outputMFs[0];
+                  if (outMfSet && outMfSet.mfs && outMfSet.mfs[rule.consequent]) {
+                    const mfParams = outMfSet.mfs[rule.consequent].params || [0];
+                    ruleOutput = mfParams[Math.floor(mfParams.length / 2)] || 0;
+                  }
+                }
+                numSum += w * ruleOutput;
+                denSum += w;
+              }
+            });
+            crispOutput = denSum > 0 ? numSum / denSum : 0;
+          } else {
+            // Mamdani: aggregate and defuzzify
+            const outMfSet = outputMFs[0];
+            if (!outMfSet || !outMfSet.mfs) {
+              return { outputs: [0, firingStrengths] };
+            }
+
+            const range = outMfSet.range || [-1, 1];
+            const step = (range[1] - range[0]) / (resolution - 1);
+            const universe: number[] = [];
+            const aggregated: number[] = [];
+
+            for (let i = 0; i < resolution; i++) {
+              const y = range[0] + i * step;
+              universe.push(y);
+
+              // For each point, compute aggregated membership
+              let maxMu = 0;
+              rules.forEach((rule: any, ri: number) => {
+                const w = firingStrengths[ri];
+                if (w > 0) {
+                  const outMf = outMfSet.mfs[rule.consequent];
+                  if (outMf) {
+                    const mfVal = evalMF(y, outMf);
+                    const impliedVal = Math.min(w, mfVal); // min implication (Mamdani)
+                    maxMu = Math.max(maxMu, impliedVal); // max aggregation
+                  }
+                }
+              });
+              aggregated.push(maxMu);
+            }
+
+            // Defuzzification
+            if (defuzzMethod === 'centroid') {
+              let numSum = 0, denSum = 0;
+              for (let i = 0; i < resolution; i++) {
+                numSum += universe[i] * aggregated[i];
+                denSum += aggregated[i];
+              }
+              crispOutput = denSum > 0 ? numSum / denSum : 0;
+            } else if (defuzzMethod === 'bisector') {
+              const totalArea = aggregated.reduce((a, b) => a + b, 0);
+              let cumSum = 0;
+              for (let i = 0; i < resolution; i++) {
+                cumSum += aggregated[i];
+                if (cumSum >= totalArea / 2) {
+                  crispOutput = universe[i];
+                  break;
+                }
+              }
+            } else if (defuzzMethod === 'mom') {
+              // Mean of Maximum
+              const maxVal = Math.max(...aggregated);
+              if (maxVal > 0) {
+                let sum = 0, count = 0;
+                for (let i = 0; i < resolution; i++) {
+                  if (Math.abs(aggregated[i] - maxVal) < 1e-10) {
+                    sum += universe[i];
+                    count++;
+                  }
+                }
+                crispOutput = count > 0 ? sum / count : 0;
+              }
+            } else if (defuzzMethod === 'som') {
+              // Smallest of Maximum
+              const maxVal = Math.max(...aggregated);
+              for (let i = 0; i < resolution; i++) {
+                if (Math.abs(aggregated[i] - maxVal) < 1e-10) {
+                  crispOutput = universe[i];
+                  break;
+                }
+              }
+            } else if (defuzzMethod === 'lom') {
+              // Largest of Maximum
+              const maxVal = Math.max(...aggregated);
+              for (let i = resolution - 1; i >= 0; i--) {
+                if (Math.abs(aggregated[i] - maxVal) < 1e-10) {
+                  crispOutput = universe[i];
+                  break;
+                }
+              }
+            }
+          }
+
+          return { outputs: [crispOutput, firingStrengths] };
+        } catch (err) {
+          return { outputs: [0, []], error: String(err) };
+        }
+      }
+    };
+  },
+
+  'FUZZY_DEFUZZIFY': (id, params) => ({
+    id, type: 'FUZZY_DEFUZZIFY',
+    params: { 
+      method: params.method || 'centroid', 
+      resolution: params.resolution || 101,
+      range_min: params.range_min ?? -1,
+      range_max: params.range_max ?? 1
+    },
+    inputs: [
+      createPort('agg', 'Aggregated', 'input', [], 'left', 'vector'),
+    ],
+    outputs: [createPort('y', 'y', 'output', 0, 'right', 'continuous')],
+    icon: 'filter',
+    equation: 'y = Defuzz(aggregated_μ)',
+    description: 'Standalone defuzzification block. Takes a discretized aggregated fuzzy set (vector of μ values) and produces a crisp output using centroid, bisector, MOM, SOM, or LOM methods.',
+    execute: (ins, p) => {
+      const aggregated = Array.isArray(ins[0]) ? (ins[0] as number[]) : [Number(ins[0]) || 0];
+      const resolution = aggregated.length;
+      const rangeMin = Number(p.range_min);
+      const rangeMax = Number(p.range_max);
+      const step = resolution > 1 ? (rangeMax - rangeMin) / (resolution - 1) : 1;
+      const universe = Array.from({ length: resolution }, (_, i) => rangeMin + i * step);
+      
+      let crispOutput = 0;
+      const method = p.method || 'centroid';
+      
+      if (method === 'centroid') {
+        let numSum = 0, denSum = 0;
+        for (let i = 0; i < resolution; i++) {
+          numSum += universe[i] * (aggregated[i] || 0);
+          denSum += (aggregated[i] || 0);
+        }
+        crispOutput = denSum > 0 ? numSum / denSum : 0;
+      } else if (method === 'bisector') {
+        const totalArea = aggregated.reduce((a, b) => a + b, 0);
+        let cumSum = 0;
+        for (let i = 0; i < resolution; i++) {
+          cumSum += (aggregated[i] || 0);
+          if (cumSum >= totalArea / 2) { crispOutput = universe[i]; break; }
+        }
+      } else if (method === 'mom') {
+        const maxVal = Math.max(...aggregated);
+        if (maxVal > 0) {
+          let sum = 0, count = 0;
+          for (let i = 0; i < resolution; i++) {
+            if (Math.abs((aggregated[i] || 0) - maxVal) < 1e-10) { sum += universe[i]; count++; }
+          }
+          crispOutput = count > 0 ? sum / count : 0;
+        }
+      } else if (method === 'som') {
+        const maxVal = Math.max(...aggregated);
+        for (let i = 0; i < resolution; i++) {
+          if (Math.abs((aggregated[i] || 0) - maxVal) < 1e-10) { crispOutput = universe[i]; break; }
+        }
+      } else if (method === 'lom') {
+        const maxVal = Math.max(...aggregated);
+        for (let i = resolution - 1; i >= 0; i--) {
+          if (Math.abs((aggregated[i] || 0) - maxVal) < 1e-10) { crispOutput = universe[i]; break; }
+        }
+      }
+
+      return { outputs: [crispOutput] };
+    }
+  }),
+
+  // --- Fuzzy Control Systems ---
+
+  'FUZZY_PID_CONTROLLER': (id, params) => {
+    // Build the internal FIS for gain scheduling
+    const numMFs = Number(params.numMFs) || 5;
+    const eRange = params.error_universe || [-10, 10];
+    const deRange = params.derror_universe || [-5, 5];
+    
+    // Auto-generate uniformly spaced triangular MFs
+    const generateTriMFs = (n: number, range: number[]) => {
+      const mfs = [];
+      const names = n === 3 ? ['N', 'Z', 'P'] : n === 5 ? ['NB', 'NS', 'Z', 'PS', 'PB'] : 
+                    n === 7 ? ['NB', 'NM', 'NS', 'Z', 'PS', 'PM', 'PB'] :
+                    Array.from({ length: n }, (_, i) => `MF${i}`);
+      const step = (range[1] - range[0]) / (n - 1);
+      for (let i = 0; i < n; i++) {
+        const center = range[0] + i * step;
+        mfs.push({
+          name: names[i],
+          type: 'trimf',
+          params: [center - step, center, center + step]
+        });
+      }
+      return mfs;
+    };
+
+    // Default 5x5 rule table for PID gain scaling (output: scaling factor index)
+    const defaultRules: any[] = [];
+    const ruleMatrix5x5 = [
+      [4, 4, 3, 2, 1],
+      [4, 3, 3, 2, 1],
+      [3, 2, 2, 2, 1],
+      [1, 2, 1, 1, 0],
+      [1, 0, 1, 0, 0]
+    ];
+    
+    for (let i = 0; i < numMFs; i++) {
+      for (let j = 0; j < numMFs; j++) {
+        const ridx = Math.min(i, ruleMatrix5x5.length - 1);
+        const cidx = Math.min(j, ruleMatrix5x5[0].length - 1);
+        defaultRules.push({
+          antecedents: [i, j],
+          consequent: ruleMatrix5x5[ridx][cidx],
+          weight: 1
+        });
+      }
+    }
+
+    return {
+      id, type: 'FUZZY_PID_CONTROLLER',
+      params: {
+        Kp_base: params.Kp_base ?? 1,
+        Ki_base: params.Ki_base ?? 0.5,
+        Kd_base: params.Kd_base ?? 0.1,
+        Kp_range: params.Kp_range || [0.5, 2],
+        Ki_range: params.Ki_range || [0.1, 1],
+        Kd_range: params.Kd_range || [0.01, 0.5],
+        error_universe: eRange,
+        derror_universe: deRange,
+        numMFs: numMFs,
+        N: params.N ?? 100,
+        min: params.min ?? -100,
+        max: params.max ?? 100,
+        rules: params.rules || defaultRules
+      },
+      isStateful: true,
+      inputs: [
+        createPort('r', 'Ref', 'input', 0, 'left', 'continuous'),
+        createPort('y', 'Feedback', 'input', 0, 'left', 'continuous'),
+        createPort('enable', 'Enable', 'input', 1, 'bottom', 'control'),
+        createPort('reset', 'Reset', 'input', 0, 'bottom', 'control')
+      ],
+      outputs: [
+        createPort('u', 'Control', 'output', 0, 'right', 'control'),
+        createPort('error', 'Error', 'output', 0, 'top', 'measurement'),
+        createPort('kp_eff', 'Kp_eff', 'output', 0, 'top', 'measurement'),
+        createPort('ki_eff', 'Ki_eff', 'output', 0, 'top', 'measurement'),
+        createPort('kd_eff', 'Kd_eff', 'output', 0, 'top', 'measurement')
+      ],
+      state: { i_state: 0, d_state: 0, last_error: 0, last_time: 0 },
+      icon: 'cpu',
+      equation: 'Kp,Ki,Kd = f_fuzzy(e, de/dt)\nu = Kp·e + Ki·∫e + Kd·de/dt',
+      description: 'A hybrid Fuzzy-PID controller that uses a built-in fuzzy inference system to adaptively tune PID gains (Kp, Ki, Kd) based on the current error and rate of change of error. Provides superior performance compared to fixed-gain PID for nonlinear or time-varying systems.',
+      execute: (ins, p, state, time) => {
+        const r = Number(ins[0]);
+        const y = Number(ins[1]);
+        const enable = Number(ins[2]);
+        const reset = Number(ins[3]);
+        
+        if (reset > 0.5) {
+          return { 
+            outputs: [0, 0, p.Kp_base, p.Ki_base, p.Kd_base],
+            nextState: { i_state: 0, d_state: 0, last_error: 0, last_time: time }
+          };
+        }
+        if (enable < 0.5) {
+          return { outputs: [0, 0, 0, 0, 0], nextState: { ...state, last_time: time } };
+        }
+
+        const dt = Math.max(1e-6, time - (state.last_time || 0));
+        const error = r - y;
+        const derror = (error - (state.last_error || 0)) / dt;
+
+        // Evaluate fuzzy gain scheduler
+        const eMFs = generateTriMFs(p.numMFs, p.error_universe);
+        const deMFs = generateTriMFs(p.numMFs, p.derror_universe);
+        const outMFs = generateTriMFs(p.numMFs, [0, 1]); // Output is a scaling factor 0..1
+
+        // Fuzzify
+        const evalTriMF = (x: number, mf: any) => {
+          const [a, b, c] = mf.params;
+          if (x <= a || x >= c) return 0;
+          if (x <= b) return (b === a) ? 1 : (x - a) / (b - a);
+          return (c === b) ? 1 : (c - x) / (c - b);
+        };
+
+        const eGrades = eMFs.map(mf => evalTriMF(error, mf));
+        const deGrades = deMFs.map(mf => evalTriMF(derror, mf));
+
+        // Rule evaluation with weighted average (Sugeno-style)
+        const rules = p.rules || defaultRules;
+        let numSum = 0, denSum = 0;
+        rules.forEach((rule: any) => {
+          const [ei, dei] = rule.antecedents;
+          const strength = Math.min(eGrades[ei] || 0, deGrades[dei] || 0) * (rule.weight ?? 1);
+          if (strength > 0) {
+            // Consequent center
+            const outMf = outMFs[rule.consequent];
+            const center = outMf ? outMf.params[1] : 0.5;
+            numSum += strength * center;
+            denSum += strength;
+          }
+        });
+        const scaleFactor = denSum > 0 ? numSum / denSum : 0.5;
+
+        // Map scale factor to gain ranges
+        const Kp_range = p.Kp_range || [0.5, 2];
+        const Ki_range = p.Ki_range || [0.1, 1];
+        const Kd_range = p.Kd_range || [0.01, 0.5];
+        
+        const Kp = p.Kp_base * (Kp_range[0] + scaleFactor * (Kp_range[1] - Kp_range[0]));
+        const Ki = p.Ki_base * (Ki_range[0] + scaleFactor * (Ki_range[1] - Ki_range[0]));
+        const Kd = p.Kd_base * (Kd_range[0] + scaleFactor * (Kd_range[1] - Kd_range[0]));
+
+        // PID computation
+        const P = Kp * error;
+        const nextI = state.i_state + Ki * error * dt;
+        const D = (Kd * p.N * (error - state.last_error) + state.d_state) / (1 + p.N * dt);
+
+        const u_unlimited = P + nextI + D;
+        const u = Math.max(Number(p.min), Math.min(Number(p.max), u_unlimited));
+
+        // Anti-windup
+        let finalI = nextI;
+        if (Ki !== 0 && ((u_unlimited > p.max && error > 0) || (u_unlimited < p.min && error < 0))) {
+          finalI = state.i_state;
+        }
+
+        return {
+          outputs: [u, error, Kp, Ki, Kd],
+          nextState: {
+            i_state: finalI,
+            d_state: D,
+            last_error: error,
+            last_time: time
+          }
+        };
+      },
+      evaluateDerivatives: (ins, p, state) => {
+        const error = Number(ins[0]) - Number(ins[1]);
+        const di = (p.Ki_base || 0.5) * error;
+        const dd = (p.N || 100) * ((p.Kd_base || 0.1) * (p.N || 100) * (error - (state.last_error || 0)) - state.d_state);
+        return [di, dd];
+      }
+    };
+  },
+
+  'FUZZY_SURFACE_VIEWER': (id, params) => ({
+    id, type: 'FUZZY_SURFACE_VIEWER',
+    params: {
+      resolution: params.resolution || 25,
+      input1_range: params.input1_range || [-3, 3],
+      input2_range: params.input2_range || [-3, 3],
+      fisConfig: params.fisConfig || null
+    },
+    isStateful: true,
+    inputs: [
+      createPort('x1', 'x1', 'input', 0, 'left', 'continuous'),
+      createPort('x2', 'x2', 'input', 0, 'left', 'continuous')
+    ],
+    outputs: [
+      createPort('surface', 'Surface', 'output', [], 'right', 'matrix'),
+      createPort('y', 'y(x1,x2)', 'output', 0, 'right', 'continuous')
+    ],
+    state: { surface: null, computed: false },
+    icon: 'bar-chart',
+    equation: 'surface[i][j] = FIS(x1_i, x2_j)',
+    description: 'Computes and outputs the 2D control surface of a Fuzzy Inference System by sweeping both inputs over their ranges. Connect to a Scope to visualize the surface. Also outputs the live FIS evaluation for the current inputs.',
+    execute: (ins, p, state, time) => {
+      // Live evaluation pass-through
+      const x1 = Number(ins[0]);
+      const x2 = Number(ins[1]);
+      
+      // Compute surface on first call or when resolution changes
+      if (!state.computed && p.fisConfig) {
+        const res = Number(p.resolution) || 25;
+        const r1 = p.input1_range || [-3, 3];
+        const r2 = p.input2_range || [-3, 3];
+        const surface: number[][] = [];
+        
+        const fisBlock = BLOCK_LIBRARY['FUZZY_INFERENCE_SYSTEM'](id + '_fis', p.fisConfig);
+        
+        for (let i = 0; i < res; i++) {
+          const row: number[] = [];
+          const xi = r1[0] + (r1[1] - r1[0]) * i / (res - 1);
+          for (let j = 0; j < res; j++) {
+            const xj = r2[0] + (r2[1] - r2[0]) * j / (res - 1);
+            const result = fisBlock.execute([xi, xj], fisBlock.params, {}, time);
+            row.push(Number(result.outputs[0]) || 0);
+          }
+          surface.push(row);
+        }
+        
+        return { outputs: [surface, 0], nextState: { surface, computed: true } };
+      }
+
+      return { outputs: [state.surface || [], 0], nextState: state };
+    }
+  })
 };
 
 
@@ -2947,7 +6469,29 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'AC_MOTOR_PID_CONTROL', label: 'AC Motor PID Control', icon: 'graduation-cap' },
       { type: 'LMS_ADAPTIVE_FILTER', label: 'LMS Adaptive Filter', icon: 'graduation-cap' },
       { type: 'NEURAL_NEURON_LEARNING', label: 'Neural Neuron Learner', icon: 'graduation-cap' },
-      { type: 'RL_Q_LEARNING_CONTROLLER', label: 'RL Q-Learning Agent', icon: 'graduation-cap' }
+      { type: 'RL_Q_LEARNING_CONTROLLER', label: 'RL Q-Learning Agent', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DIGITAL_TWIN', label: 'Robot Vacuum Twin (Single)', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DYNAMICS', label: 'Robot Vacuum Dynamics', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_MOTOR', label: 'Robot Vacuum Motor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ODOMETRY', label: 'Robot Vacuum Odometry', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_FUSION', label: 'Robot Vacuum Fusion', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SLAM', label: 'Robot Vacuum SLAM Map', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_NAV', label: 'Robot Vacuum Navigation', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_KINEMATICS', label: 'Robot Vacuum Kinematics', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_WHEEL_CONTROL', label: 'Robot Wheel Speed PI', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ENVIRONMENT', label: 'Robot Vacuum Environment', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_BATTERY', label: 'Robot Battery System', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COMM', label: 'Robot Communication Link', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ENCODER', label: 'Robot Wheel Encoder', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_LIDAR', label: 'Robot LiDAR Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_LOCALIZATION', label: 'Robot Localization (EKF)', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_MAPPING', label: 'Robot Mapping Grid', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COVERAGE', label: 'Robot Coverage Planner', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_GLOBAL_PLANNER', label: 'Robot Global Path Planner', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_OBSTACLE_AVOIDANCE', label: 'Robot Obstacle Avoidance', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_MOTION_CONTROLLER', label: 'Robot Motion Controller', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_MOTOR_COMMAND', label: 'Robot Motor Command Gen', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_VISUALIZATION', label: 'Robot Visualization Twin', icon: 'graduation-cap' }
     ]
   },
   {
@@ -3144,6 +6688,28 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'MPC_CONTROLLER', label: 'MPC Controller', icon: 'cpu' },
       { type: 'DOE_MODEL', label: 'DoE Model', icon: 'layers' },
       { type: 'DOE_MODULE', label: 'DoE Module', icon: 'layers' }
+    ]
+  },
+  {
+    name: 'Fuzzy Logic',
+    blocks: [
+      { type: 'FUZZY_MF_TRIMF', label: 'Triangular MF', icon: 'activity' },
+      { type: 'FUZZY_MF_TRAPMF', label: 'Trapezoidal MF', icon: 'activity' },
+      { type: 'FUZZY_MF_GAUSSMF', label: 'Gaussian MF', icon: 'activity' },
+      { type: 'FUZZY_MF_SIGMF', label: 'Sigmoid MF', icon: 'activity' },
+      { type: 'FUZZY_AND', label: 'Fuzzy AND (T-Norm)', icon: 'plus' },
+      { type: 'FUZZY_OR', label: 'Fuzzy OR (S-Norm)', icon: 'grid' },
+      { type: 'FUZZY_NOT', label: 'Fuzzy NOT', icon: 'minus-circle' },
+      { type: 'FUZZY_RULE', label: 'Fuzzy Rule', icon: 'settings' },
+      { type: 'FUZZY_DEFUZZIFY', label: 'Defuzzifier', icon: 'filter' }
+    ]
+  },
+  {
+    name: 'Fuzzy Control Systems',
+    blocks: [
+      { type: 'FUZZY_INFERENCE_SYSTEM', label: 'Fuzzy Inference (FIS)', icon: 'cpu' },
+      { type: 'FUZZY_PID_CONTROLLER', label: 'Fuzzy PID Controller', icon: 'cpu' },
+      { type: 'FUZZY_SURFACE_VIEWER', label: 'Control Surface Viewer', icon: 'bar-chart' }
     ]
   },
   {

@@ -8,6 +8,7 @@ import html2canvas from 'html2canvas';
 import { XbridgesWorkspace } from './components/xbridges/XbridgesWorkspace';
 import { VLabWorkspace } from './components/vlab/VLabWorkspace';
 import { HILWorkspace } from './components/hil/HILWorkspace';
+import { EntropyWorkspace } from './components/entropy/EntropyWorkspace';
 import { HILConfig, HILSessionState } from './engine/hil/hilTypes';
 import { XbridgesEngine } from './engine/xbridges/XbridgesEngine';
 import { Solvers } from './engine/xbridges/Solvers';
@@ -193,7 +194,7 @@ interface Point {
 }
 
 type ManagedWindowId = 'hmi' | 'pid' | 'rtm' | 'doe';
-type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil';
+type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil' | 'entropy';
 
 interface ManagedWindowState {
   id: ManagedWindowId;
@@ -6414,6 +6415,10 @@ const ADIA = () => {
   const [vlabSelectedNodeId, setVlabSelectedNodeId] = useState<string | null>(null);
   const [xBridgesSelectedNodeId, setXBridgesSelectedNodeId] = useState<string | null>(null);
 
+  // ENTROPY OPM STATE
+  const [entropyNodes, setEntropyNodes] = useState<any[]>([]);
+  const [entropyEdges, setEntropyEdges] = useState<any[]>([]);
+
   // FACTORY I/O GATEWAY STATE
   const [showFactoryIOGateway, setShowFactoryIOGateway] = useState(false);
   const [factoryIOMapping, setFactoryIOMapping] = useState<{ adiaVarId: string, factoryTagId: string | number, type: 'sensor' | 'actuator' }[]>([]);
@@ -6460,7 +6465,7 @@ const ADIA = () => {
   // Resizing state
   const [isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
-  const [resizeStart, setResizeStart] = useState<{ id: string, x: number, y: number, w: number, h: number, mx: number, my: number, type?: 'block' | 'state' | 'ibdContext' } | null>(null);
+  const [resizeStart, setResizeStart] = useState<{ id: string, x: number, y: number, w: number, h: number, mx: number, my: number, type?: 'block' | 'state' | 'ibdContext' | 'part' } | null>(null);
 
   // Panel resizing state
   const [hierarchyWidth, setHierarchyWidth] = useState(256);
@@ -6693,6 +6698,7 @@ const ADIA = () => {
       'hmi.json': { hmiComponents },
       'hil.json': hilConfig,
       'doe.json': { headers, data, activeModel, taguchiConfig, results: results ? { R2: results.R2, equation: results.equation, type: results.type } : null },
+      'entropy.json': { entropyNodes, entropyEdges },
       'adia_project_unified.json': {
         version: VERSION,
         timestamp: new Date().toISOString(),
@@ -6701,7 +6707,9 @@ const ADIA = () => {
         hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
         hilConfig,
         doe: { headers, data, activeModel, taguchiConfig, results },
-        managedWindows
+        managedWindows,
+        entropyNodes,
+        entropyEdges
       }
     };
 
@@ -6754,7 +6762,8 @@ const ADIA = () => {
     blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
     hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
     hilConfig,
-    headers, data, activeModel, taguchiConfig, results, managedWindows, addError
+    headers, data, activeModel, taguchiConfig, results, managedWindows, addError,
+    entropyNodes, entropyEdges
   ]);
 
   const hydrateProject = useCallback((importedData: any) => {
@@ -6786,6 +6795,10 @@ const ADIA = () => {
       // X-Bridges Architecture
       if (importedData.globalXBridgesNodes) setGlobalXBridgesNodes(importedData.globalXBridgesNodes);
       if (importedData.globalXBridgesEdges) setGlobalXBridgesEdges(importedData.globalXBridgesEdges);
+
+      // ENTROPY OPM
+      if (importedData.entropyNodes) setEntropyNodes(importedData.entropyNodes);
+      if (importedData.entropyEdges) setEntropyEdges(importedData.entropyEdges);
 
       // HIL Configuration
       if (importedData.hilConfig) setHilConfig(importedData.hilConfig);
@@ -8808,6 +8821,15 @@ const ADIA = () => {
       return;
     }
 
+    const part = parts.find(p => p.id === id);
+    if (part) {
+      setIsResizing(true);
+      setResizeHandle(handle);
+      setResizeStart({ id: part.id, x: part.x, y: part.y, w: part.width, h: part.height, mx: worldX, my: worldY, type: 'part' });
+      addToHistory();
+      return;
+    }
+
     const state = states.find(s => s.id === id);
     if (state) {
       setIsResizing(true);
@@ -8815,7 +8837,7 @@ const ADIA = () => {
       setResizeStart({ id: state.id, x: state.x, y: state.y, w: state.width, h: state.height, mx: worldX, my: worldY, type: 'state' });
       addToHistory();
     }
-  }, [blocks, states, view, addToHistory, uiZoom]);
+  }, [blocks, states, parts, view, addToHistory, uiZoom, diagramMode, currentLayerId]);
 
   // CANVAS NAVIGATION (CATIA-style)
   const handleMouseDown = useCallback((e: MouseEvent<HTMLDivElement>) => {
@@ -8927,6 +8949,8 @@ const ADIA = () => {
         updateState(resizeStart.id, { x: newX, y: newY, width: newW, height: newH });
       } else if (resizeStart.type === 'ibdContext') {
         updateBlock(resizeStart.id, { ibdX: newX, ibdY: newY, ibdWidth: newW, ibdHeight: newH });
+      } else if (resizeStart.type === 'part') {
+        updatePart(resizeStart.id, { x: newX, y: newY, width: newW, height: newH });
       } else {
         updateBlock(resizeStart.id, { x: newX, y: newY, width: newW, height: newH });
       }
@@ -12443,10 +12467,8 @@ const ADIA = () => {
 
       const isSelected = selectedIds.includes(block.id);
 
-      // BDD Mode: Use standardized class dimensions (ignore IBD scaling/sizing)
-      const isBddMode = diagramMode === 'bdd';
-      const displayWidth = isBddMode ? 120 : block.width;
-      const displayHeight = isBddMode ? 60 : block.height;
+      const displayWidth = block.width || 150;
+      const displayHeight = block.height || 100;
 
       return (
         <g
@@ -12466,20 +12488,6 @@ const ADIA = () => {
           {isSelected && (
             <rect x={-4} y={-4} width={displayWidth + 8} height={displayHeight + 8} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="5,5" rx={4} />
           )}
-
-          {isSelected && diagramMode === 'requirements' && ['nw', 'ne', 'sw', 'se'].map(h => {
-            const hx = h.includes('e') ? displayWidth : 0;
-            const hy = h.includes('s') ? displayHeight : 0;
-            return (
-              <rect
-                key={h}
-                x={hx - 4} y={hy - 4} width={8} height={8}
-                fill="#f97316" stroke="#0a0a0a" strokeWidth={1}
-                style={{ cursor: `${h}-resize` }}
-                onMouseDown={(e) => handleResizeMouseDown(e, h, block.id)}
-              />
-            );
-          })}
 
           <rect width={displayWidth} height={displayHeight} fill={block.stereotype === 'requirement' ? '#1e1e1e' : '#1a1a1a'} stroke={isSelected ? '#f97316' : '#e0e0e0'} strokeWidth={1} />
 
@@ -12573,6 +12581,21 @@ const ADIA = () => {
               ✓ {block.satisfiedReqIds.length}
             </text>
           )}
+
+          {/* Resize Handles */}
+          {isSelected && (diagramMode === 'requirements' || diagramMode === 'bdd') && ['nw', 'ne', 'sw', 'se'].map(h => {
+            const hx = h.includes('e') ? displayWidth : 0;
+            const hy = h.includes('s') ? displayHeight : 0;
+            return (
+              <rect
+                key={h}
+                x={hx - 4} y={hy - 4} width={8} height={8}
+                fill="#f97316" stroke="#0a0a0a" strokeWidth={1}
+                style={{ cursor: `${h}-resize` }}
+                onMouseDown={(e) => handleResizeMouseDown(e, h, block.id)}
+              />
+            );
+          })}
         </g>
       );
     });
@@ -12601,12 +12624,10 @@ const ADIA = () => {
         if (!isVisible(source.id) || !isVisible(target.id)) return null;
       }
 
-      // Use standardized dimensions for BDD to match block rendering
-      const isBdd = diagramMode === 'bdd';
-      const srcW = isBdd ? 120 : source.width;
-      const srcH = isBdd ? 60 : source.height;
-      const tgtW = isBdd ? 120 : target.width;
-      const tgtH = isBdd ? 60 : target.height;
+      const srcW = source.width || 150;
+      const srcH = source.height || 100;
+      const tgtW = target.width || 150;
+      const tgtH = target.height || 100;
 
       const sp = getEdgePoint({ x: source.x, y: source.y, width: srcW, height: srcH }, { x: target.x, y: target.y, width: tgtW, height: tgtH });
       const tp = getEdgePoint({ x: target.x, y: target.y, width: tgtW, height: tgtH }, { x: source.x, y: source.y, width: srcW, height: srcH });
@@ -12735,6 +12756,21 @@ const ADIA = () => {
               ✓ {part.satisfiedReqIds.length}
             </text>
           )}
+
+          {/* Resize Handles */}
+          {isSelected && ['nw', 'ne', 'sw', 'se'].map(h => {
+            const hx = h.includes('e') ? part.width : 0;
+            const hy = h.includes('s') ? part.height : 0;
+            return (
+              <rect
+                key={h}
+                x={hx - 4} y={hy - 4} width={8} height={8}
+                fill="#f97316" stroke="#0a0a0a" strokeWidth={1}
+                style={{ cursor: `${h}-resize` }}
+                onMouseDown={(e) => handleResizeMouseDown(e, h, part.id)}
+              />
+            );
+          })}
         </g>
       );
     });
@@ -12754,7 +12790,7 @@ const ADIA = () => {
           const block = blocks.find(b => b.id === partId);
           const port = block?.ports?.find(p => p.id === portId);
           const index = block?.ports?.findIndex(p => p.id === portId) ?? 0;
-          const frame = { x: block?.x || 0, y: block?.y || 0, w: block?.width || 0, h: block?.height || 0 };
+          const frame = { x: block?.ibdX ?? 50, y: block?.ibdY ?? 50, w: block?.ibdWidth ?? 1200, h: block?.ibdHeight ?? 800 };
           if (port?.side && port.offset != null) {
             if (port.side === 'top') return { x: frame.x + frame.w * port.offset, y: frame.y };
             if (port.side === 'bottom') return { x: frame.x + frame.w * port.offset, y: frame.y + frame.h };
@@ -13271,6 +13307,33 @@ const ADIA = () => {
     );
   }
 
+  if (diagramMode === 'entropy') {
+    return (
+      <div 
+        className="fixed inset-0 z-50 bg-[#0a0a0a]"
+        style={{
+          zoom: uiZoom,
+          width: `${100 / uiZoom}vw`,
+          height: `${100 / uiZoom}vh`
+        }}
+      >
+        <EntropyWorkspace
+          initialNodes={entropyNodes}
+          initialEdges={entropyEdges}
+          availableVariables={variables}
+          onVariablesChange={setVariables}
+          tickMs={tickMs}
+          onBack={() => setDiagramMode('statemachine')}
+          onSave={(nodes, edges) => {
+            setEntropyNodes(nodes);
+            setEntropyEdges(edges);
+          }}
+          onAddError={addError}
+        />
+      </div>
+    );
+  }
+
   return (
     <>
       {showWelcome && (
@@ -13357,6 +13420,9 @@ const ADIA = () => {
             </button>
             <button onClick={() => setDiagramMode('hil')} className={`px-3 py-1 text-xs rounded ${(diagramMode as DiagramMode) === 'hil' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
               HIL
+            </button>
+            <button onClick={() => setDiagramMode('entropy')} className={`px-3 py-1 text-xs rounded ${(diagramMode as DiagramMode) === 'entropy' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
+              ENTROPY OPM
             </button>
           </div>
 

@@ -73,11 +73,18 @@ const renderLibraryIcon = (iconName: string, size = 14, className?: string) => {
 import { XbridgesEngine } from '../../engine/xbridges/XbridgesEngine';
 import { Solvers } from '../../engine/xbridges/Solvers';
 import { ModelDiagnostic } from '../../engine/xbridges/types';
-import { XBlockNode } from './XBlockNode';
+import { XBlockNode, getColor } from './XBlockNode';
 import { XbridgesPropertiesPanel } from './XbridgesPropertiesPanel';
 import { XbridgesScopeWindow } from './XbridgesScopeWindow';
+import { PremiumEdge } from './PremiumEdge';
+import { PremiumConnectionLine } from './PremiumConnectionLine';
 
 const nodeTypes = { xblock: XBlockNode };
+const edgeTypes = {
+  default: PremiumEdge,
+  straight: PremiumEdge,
+  smoothstep: PremiumEdge
+};
 
 const normalizeNumerals = (val: string) => {
   if (!val) return "";
@@ -195,10 +202,454 @@ const XBRIDGES_LEARNING_LABS = [
       { id: 'pe6', source: 'plant', sourceHandle: 'out', target: 'scope_tracking', targetHandle: 'in2' },
       { id: 'pe7', source: 'pid_controller', sourceHandle: 'u', target: 'scope_tracking', targetHandle: 'in3' }
     ]
+  },
+  {
+    id: 'robot_vacuum_twin',
+    name: 'Robot Vacuum Digital Twin Lab',
+    category: 'Digital Twins',
+    difficulty: 'Advanced',
+    description: 'Build and simulate a complete differential-drive LiDAR robot vacuum using modular blocks. Observe robot pose estimation, SLAM mapping, sensor fusion, obstacle avoidance, and goal navigation.',
+    nodes: [
+      { id: 'target_x', type: 'Constant', position: { x: 50, y: 50 }, label: 'Target X (m)', params: { value: 1.5 } },
+      { id: 'target_y', type: 'Constant', position: { x: 50, y: 170 }, label: 'Target Y (m)', params: { value: 1.5 } },
+      { id: 'mode_select', type: 'Constant', position: { x: 50, y: 290 }, label: 'Cleaning Mode', params: { value: 4 } },
+      { id: 'robot_nav', type: 'ROBOT_VACUUM_NAV', position: { x: 280, y: 100 }, label: 'Navigation Planner', params: {} },
+      { id: 'robot_comm', type: 'ROBOT_VACUUM_COMM', position: { x: 520, y: 280 }, label: 'Communication Link', params: { latency_ms: 50.0, packet_loss_rate: 0.05, protocol: 'CAN' } },
+      { id: 'robot_kinematics', type: 'ROBOT_VACUUM_KINEMATICS', position: { x: 620, y: 100 }, label: 'Inverse Kinematics', params: { wheel_radius: 0.033, wheel_separation: 0.16 } },
+      { id: 'robot_pid', type: 'ROBOT_VACUUM_WHEEL_CONTROL', position: { x: 850, y: 100 }, label: 'Wheel Speed PI', params: { Kp_wheel: 12.0, Ki_wheel: 45.0, V_bat: 12.0 } },
+      { id: 'motor_left', type: 'ROBOT_VACUUM_MOTOR', position: { x: 1080, y: 50 }, label: 'Left Motor', params: { motor_R: 2.5, motor_L: 0.005, motor_K: 0.04, inertia: 0.0075, encoder_cpr: 360 } },
+      { id: 'motor_right', type: 'ROBOT_VACUUM_MOTOR', position: { x: 1080, y: 200 }, label: 'Right Motor', params: { motor_R: 2.5, motor_L: 0.005, motor_K: 0.04, inertia: 0.0075, encoder_cpr: 360 } },
+      { id: 'robot_battery', type: 'ROBOT_VACUUM_BATTERY', position: { x: 1080, y: 350 }, label: 'Battery System', params: { nominal_voltage: 12.0, capacity_Ah: 2.6, static_draw_A: 0.1, charge_rate: 5.0 } },
+      { id: 'robot_dynamics', type: 'ROBOT_VACUUM_DYNAMICS', position: { x: 1300, y: 80 }, label: 'Robot Dynamics (Plant)', params: { wheel_radius: 0.033, wheel_separation: 0.16 } },
+      { id: 'robot_env', type: 'ROBOT_VACUUM_ENVIRONMENT', position: { x: 1520, y: 80 }, label: 'Simulation Environment (Canvas)', params: { lidar_max_range: 4.0, lidar_noise_std: 0.02 } },
+      { id: 'robot_odom', type: 'ROBOT_VACUUM_ODOMETRY', position: { x: 1300, y: 350 }, label: 'Odometry', params: { wheel_radius: 0.033, wheel_separation: 0.16, encoder_cpr: 360 } },
+      { id: 'robot_fusion', type: 'ROBOT_VACUUM_FUSION', position: { x: 1780, y: 220 }, label: 'Sensor Fusion', params: { filter_gain: 0.06 } },
+      { id: 'robot_slam', type: 'ROBOT_VACUUM_SLAM', position: { x: 1780, y: 420 }, label: 'SLAM Map', params: { lidar_max_range: 4.0 } },
+      { id: 'scope_pose', type: 'Scope', position: { x: 2040, y: 100 }, label: 'Pose Monitor', params: { numSignals: 3, bufferSize: 1000 } }
+    ],
+    edges: [
+      { id: 'e_nav_tx', source: 'target_x', sourceHandle: 'out', target: 'robot_nav', targetHandle: 'target_x_in' },
+      { id: 'e_nav_ty', source: 'target_y', sourceHandle: 'out', target: 'robot_nav', targetHandle: 'target_y_in' },
+      { id: 'e_nav_mode', source: 'mode_select', sourceHandle: 'out', target: 'robot_nav', targetHandle: 'mode_select' },
+      
+      { id: 'e_comm_vref_in', source: 'robot_nav', sourceHandle: 'v_ref', target: 'robot_comm', targetHandle: 'v_ref_in' },
+      { id: 'e_comm_wref_in', source: 'robot_nav', sourceHandle: 'w_ref', target: 'robot_comm', targetHandle: 'w_ref_in' },
+      { id: 'e_comm_navst_in', source: 'robot_nav', sourceHandle: 'nav_state', target: 'robot_comm', targetHandle: 'nav_state_in' },
+      
+      { id: 'e_kin_v', source: 'robot_comm', sourceHandle: 'v_ref', target: 'robot_kinematics', targetHandle: 'v_ref' },
+      { id: 'e_kin_w', source: 'robot_comm', sourceHandle: 'w_ref', target: 'robot_kinematics', targetHandle: 'w_ref' },
+      
+      { id: 'e_pid_refL', source: 'robot_kinematics', sourceHandle: 'omegaL_ref', target: 'robot_pid', targetHandle: 'omegaL_ref' },
+      { id: 'e_pid_refR', source: 'robot_kinematics', sourceHandle: 'omegaR_ref', target: 'robot_pid', targetHandle: 'omegaR_ref' },
+      { id: 'e_mot_vl', source: 'robot_pid', sourceHandle: 'V_L', target: 'motor_left', targetHandle: 'pwm_duty' },
+      { id: 'e_mot_vr', source: 'robot_pid', sourceHandle: 'V_R', target: 'motor_right', targetHandle: 'pwm_duty' },
+      { id: 'e_pid_fbl', source: 'motor_left', sourceHandle: 'omega', target: 'robot_pid', targetHandle: 'omega_L' },
+      { id: 'e_pid_fbr', source: 'motor_right', sourceHandle: 'omega', target: 'robot_pid', targetHandle: 'omega_R' },
+      { id: 'e_dyn_wl', source: 'motor_left', sourceHandle: 'omega', target: 'robot_dynamics', targetHandle: 'omega_L' },
+      { id: 'e_dyn_wr', source: 'motor_right', sourceHandle: 'omega', target: 'robot_dynamics', targetHandle: 'omega_R' },
+      
+      { id: 'e_bat_il', source: 'motor_left', sourceHandle: 'current', target: 'robot_battery', targetHandle: 'I_L' },
+      { id: 'e_bat_ir', source: 'motor_right', sourceHandle: 'current', target: 'robot_battery', targetHandle: 'I_R' },
+      { id: 'e_bat_dock', source: 'robot_env', sourceHandle: 'is_docked', target: 'robot_battery', targetHandle: 'is_docked' },
+      { id: 'e_mot_vbat_l', source: 'robot_battery', sourceHandle: 'battery_voltage', target: 'motor_left', targetHandle: 'v_bat' },
+      { id: 'e_mot_vbat_r', source: 'robot_battery', sourceHandle: 'battery_voltage', target: 'motor_right', targetHandle: 'v_bat' },
+      
+      { id: 'e_comm_encl_in', source: 'motor_left', sourceHandle: 'encoder', target: 'robot_comm', targetHandle: 'enc_L_in' },
+      { id: 'e_comm_encr_in', source: 'motor_right', sourceHandle: 'encoder', target: 'robot_comm', targetHandle: 'enc_R_in' },
+      { id: 'e_comm_omgl_in', source: 'motor_left', sourceHandle: 'omega', target: 'robot_comm', targetHandle: 'omega_L_in' },
+      { id: 'e_comm_omgr_in', source: 'motor_right', sourceHandle: 'omega', target: 'robot_comm', targetHandle: 'omega_R_in' },
+      { id: 'e_comm_bat_in', source: 'robot_battery', sourceHandle: 'battery_level', target: 'robot_comm', targetHandle: 'battery_in' },
+      
+      { id: 'e_odom_l', source: 'robot_comm', sourceHandle: 'enc_L', target: 'robot_odom', targetHandle: 'enc_L' },
+      { id: 'e_odom_r', source: 'robot_comm', sourceHandle: 'enc_R', target: 'robot_odom', targetHandle: 'enc_R' },
+      
+      { id: 'e_comm_xod_in', source: 'robot_odom', sourceHandle: 'x_odom', target: 'robot_comm', targetHandle: 'x_odom_in' },
+      { id: 'e_comm_yod_in', source: 'robot_odom', sourceHandle: 'y_odom', target: 'robot_comm', targetHandle: 'y_odom_in' },
+      { id: 'e_comm_tod_in', source: 'robot_odom', sourceHandle: 'theta_odom', target: 'robot_comm', targetHandle: 'theta_odom_in' },
+      
+      { id: 'e_fus_xod', source: 'robot_comm', sourceHandle: 'x_odom', target: 'robot_fusion', targetHandle: 'x_odom' },
+      { id: 'e_fus_yod', source: 'robot_comm', sourceHandle: 'y_odom', target: 'robot_fusion', targetHandle: 'y_odom' },
+      { id: 'e_fus_tod', source: 'robot_comm', sourceHandle: 'theta_odom', target: 'robot_fusion', targetHandle: 'theta_odom' },
+      { id: 'e_fus_xtr', source: 'robot_dynamics', sourceHandle: 'x', target: 'robot_fusion', targetHandle: 'x_true' },
+      { id: 'e_fus_ytr', source: 'robot_dynamics', sourceHandle: 'y', target: 'robot_fusion', targetHandle: 'y_true' },
+      { id: 'e_fus_ttr', source: 'robot_dynamics', sourceHandle: 'theta', target: 'robot_fusion', targetHandle: 'theta_true' },
+      { id: 'e_fus_yaw_imu', source: 'robot_dynamics', sourceHandle: 'w_chassis', target: 'robot_fusion', targetHandle: 'yaw_rate_imu' },
+      
+      { id: 'e_slm_x', source: 'robot_fusion', sourceHandle: 'x_est', target: 'robot_slam', targetHandle: 'x_est' },
+      { id: 'e_slm_y', source: 'robot_fusion', sourceHandle: 'y_est', target: 'robot_slam', targetHandle: 'y_est' },
+      { id: 'e_slm_t', source: 'robot_fusion', sourceHandle: 'theta_est', target: 'robot_slam', targetHandle: 'theta_est' },
+      { id: 'e_slm_lid', source: 'robot_env', sourceHandle: 'lidar_ranges', target: 'robot_slam', targetHandle: 'lidar_ranges' },
+      { id: 'e_nav_xest', source: 'robot_fusion', sourceHandle: 'x_est', target: 'robot_nav', targetHandle: 'x_est' },
+      { id: 'e_nav_yest', source: 'robot_fusion', sourceHandle: 'y_est', target: 'robot_nav', targetHandle: 'y_est' },
+      { id: 'e_nav_test', source: 'robot_fusion', sourceHandle: 'theta_est', target: 'robot_nav', targetHandle: 'theta_est' },
+      { id: 'e_nav_lid', source: 'robot_env', sourceHandle: 'lidar_ranges', target: 'robot_nav', targetHandle: 'lidar_ranges' },
+      { id: 'e_nav_bat', source: 'robot_comm', sourceHandle: 'battery', target: 'robot_nav', targetHandle: 'battery_level' },
+      { id: 'e_nav_dock', source: 'robot_env', sourceHandle: 'is_docked', target: 'robot_nav', targetHandle: 'is_docked' },
+      
+      { id: 'e_env_x', source: 'robot_dynamics', sourceHandle: 'x', target: 'robot_env', targetHandle: 'x' },
+      { id: 'e_env_y', source: 'robot_dynamics', sourceHandle: 'y', target: 'robot_env', targetHandle: 'y' },
+      { id: 'e_env_theta', source: 'robot_dynamics', sourceHandle: 'theta', target: 'robot_env', targetHandle: 'theta' },
+      { id: 'e_env_xest', source: 'robot_fusion', sourceHandle: 'x_est', target: 'robot_env', targetHandle: 'x_est' },
+      { id: 'e_env_yest', source: 'robot_fusion', sourceHandle: 'y_est', target: 'robot_env', targetHandle: 'y_est' },
+      { id: 'e_env_thetaest', source: 'robot_fusion', sourceHandle: 'theta_est', target: 'robot_env', targetHandle: 'theta_est' },
+      { id: 'e_env_tx', source: 'robot_nav', sourceHandle: 'target_x_active', target: 'robot_env', targetHandle: 'target_x_in' },
+      { id: 'e_env_ty', source: 'robot_nav', sourceHandle: 'target_y_active', target: 'robot_env', targetHandle: 'target_y_in' },
+      { id: 'e_env_navst', source: 'robot_comm', sourceHandle: 'nav_state', target: 'robot_env', targetHandle: 'nav_state' },
+      { id: 'e_env_g', source: 'robot_slam', sourceHandle: 'grid', target: 'robot_env', targetHandle: 'grid' },
+      
+      { id: 'e_env_bat_lvl', source: 'robot_comm', sourceHandle: 'battery', target: 'robot_env', targetHandle: 'battery_level' },
+      { id: 'e_env_comm_stats', source: 'robot_comm', sourceHandle: 'comm_stats', target: 'robot_env', targetHandle: 'comm_stats' },
+      { id: 'e_env_nav_stats', source: 'robot_nav', sourceHandle: 'nav_stats', target: 'robot_env', targetHandle: 'nav_stats' },
+      { id: 'e_env_confidence', source: 'robot_fusion', sourceHandle: 'confidence', target: 'robot_env', targetHandle: 'confidence' },
+      
+      { id: 'e_scp_x', source: 'robot_fusion', sourceHandle: 'x_est', target: 'scope_pose', targetHandle: 'in1' },
+      { id: 'e_scp_y', source: 'robot_fusion', sourceHandle: 'y_est', target: 'scope_pose', targetHandle: 'in2' },
+      { id: 'e_scp_t', source: 'robot_fusion', sourceHandle: 'theta_est', target: 'scope_pose', targetHandle: 'in3' }
+    ]
+  },
+  {
+    id: 'robot_vacuum_full_system',
+    name: 'Autonomous Vacuum Navigation & Mapping System',
+    category: 'Robotics',
+    difficulty: 'Expert',
+    description: 'Design and verify a complete closed-loop navigation, localization (EKF), mapping (SLAM), planning, and motion control system for an autonomous vacuum cleaner.',
+    nodes: [
+      { id: 'mode_select', type: 'Constant', position: { x: 50, y: 50 }, label: 'Cleaning Mode', params: { value: 4 } },
+      { id: 'robot_map', type: 'ROBOT_VACUUM_MAPPING', position: { x: 250, y: 150 }, label: 'SLAM Mapping', params: {} },
+      { id: 'robot_coverage', type: 'ROBOT_VACUUM_COVERAGE', position: { x: 500, y: 150 }, label: 'Coverage Planner', params: {} },
+      { id: 'robot_global_planner', type: 'ROBOT_VACUUM_GLOBAL_PLANNER', position: { x: 750, y: 150 }, label: 'Global Path Planner', params: {} },
+      { id: 'robot_obstacle_avoid', type: 'ROBOT_VACUUM_OBSTACLE_AVOIDANCE', position: { x: 1000, y: 150 }, label: 'Obstacle Avoidance', params: {} },
+      { id: 'robot_motion_control', type: 'ROBOT_VACUUM_MOTION_CONTROLLER', position: { x: 1250, y: 150 }, label: 'Motion Controller', params: {} },
+      { id: 'robot_motor_command', type: 'ROBOT_VACUUM_MOTOR_COMMAND', position: { x: 1500, y: 150 }, label: 'Motor Command Gen', params: {} },
+      { id: 'motor_left', type: 'ROBOT_VACUUM_MOTOR', position: { x: 1750, y: 80 }, label: 'Left Motor', params: { motor_R: 2.5, motor_L: 0.005, motor_K: 0.04, inertia: 0.0075, encoder_cpr: 360 } },
+      { id: 'motor_right', type: 'ROBOT_VACUUM_MOTOR', position: { x: 1750, y: 220 }, label: 'Right Motor', params: { motor_R: 2.5, motor_L: 0.005, motor_K: 0.04, inertia: 0.0075, encoder_cpr: 360 } },
+      { id: 'robot_battery', type: 'ROBOT_VACUUM_BATTERY', position: { x: 1750, y: 360 }, label: 'Battery System', params: { nominal_voltage: 12.0, capacity_Ah: 2.6, static_draw_A: 0.1, charge_rate: 5.0 } },
+      { id: 'robot_dynamics', type: 'ROBOT_VACUUM_DYNAMICS', position: { x: 2000, y: 150 }, label: 'Robot Dynamics', params: {} },
+      { id: 'robot_encoder', type: 'ROBOT_VACUUM_ENCODER', position: { x: 2000, y: 350 }, label: 'Wheel Encoder', params: {} },
+      { id: 'robot_odom', type: 'ROBOT_VACUUM_ODOMETRY', position: { x: 2220, y: 350 }, label: 'Odometry', params: {} },
+      { id: 'robot_lidar', type: 'ROBOT_VACUUM_LIDAR', position: { x: 2220, y: 150 }, label: 'LiDAR Sensor', params: {} },
+      { id: 'robot_localization', type: 'ROBOT_VACUUM_LOCALIZATION', position: { x: 2470, y: 150 }, label: 'EKF Localization', params: {} },
+      { id: 'robot_visualizer', type: 'ROBOT_VACUUM_VISUALIZATION', position: { x: 2720, y: 150 }, label: 'Visualization Block', params: {} },
+      { id: 'scope_pose', type: 'Scope', position: { x: 2970, y: 150 }, label: 'Pose Monitor', params: { numSignals: 3, bufferSize: 1000 } }
+    ],
+    edges: [
+      { id: 'e_dyn_x_env', source: 'robot_dynamics', sourceHandle: 'x', target: 'robot_visualizer', targetHandle: 'x' },
+      { id: 'e_dyn_y_env', source: 'robot_dynamics', sourceHandle: 'y', target: 'robot_visualizer', targetHandle: 'y' },
+      { id: 'e_dyn_theta_env', source: 'robot_dynamics', sourceHandle: 'theta', target: 'robot_visualizer', targetHandle: 'theta' },
+      { id: 'e_dyn_x_lidar', source: 'robot_dynamics', sourceHandle: 'x', target: 'robot_lidar', targetHandle: 'x' },
+      { id: 'e_dyn_y_lidar', source: 'robot_dynamics', sourceHandle: 'y', target: 'robot_lidar', targetHandle: 'y' },
+      { id: 'e_dyn_theta_lidar', source: 'robot_dynamics', sourceHandle: 'theta', target: 'robot_lidar', targetHandle: 'theta' },
+      { id: 'e_dyn_x_loc', source: 'robot_dynamics', sourceHandle: 'x', target: 'robot_localization', targetHandle: 'x_true' },
+      { id: 'e_dyn_y_loc', source: 'robot_dynamics', sourceHandle: 'y', target: 'robot_localization', targetHandle: 'y_true' },
+      { id: 'e_dyn_theta_loc', source: 'robot_dynamics', sourceHandle: 'theta', target: 'robot_localization', targetHandle: 'theta_true' },
+      { id: 'e_lidar_ranges_map', source: 'robot_lidar', sourceHandle: 'ranges', target: 'robot_map', targetHandle: 'lidar_ranges' },
+      { id: 'e_lidar_ranges_avoid', source: 'robot_lidar', sourceHandle: 'ranges', target: 'robot_obstacle_avoid', targetHandle: 'lidar_ranges' },
+      { id: 'e_lidar_ranges_loc', source: 'robot_lidar', sourceHandle: 'ranges', target: 'robot_localization', targetHandle: 'lidar_ranges' },
+      { id: 'e_lidar_ranges_viz', source: 'robot_lidar', sourceHandle: 'ranges', target: 'robot_visualizer', targetHandle: 'lidar_ranges' },
+      { id: 'e_motL_omega_dyn', source: 'motor_left', sourceHandle: 'omega', target: 'robot_dynamics', targetHandle: 'omega_L' },
+      { id: 'e_motR_omega_dyn', source: 'motor_right', sourceHandle: 'omega', target: 'robot_dynamics', targetHandle: 'omega_R' },
+      { id: 'e_motL_omega_enc', source: 'motor_left', sourceHandle: 'omega', target: 'robot_encoder', targetHandle: 'omega_L' },
+      { id: 'e_motR_omega_enc', source: 'motor_right', sourceHandle: 'omega', target: 'robot_encoder', targetHandle: 'omega_R' },
+      { id: 'e_motL_omega_cmd', source: 'motor_left', sourceHandle: 'omega', target: 'robot_motor_command', targetHandle: 'omega_L' },
+      { id: 'e_motR_omega_cmd', source: 'motor_right', sourceHandle: 'omega', target: 'robot_motor_command', targetHandle: 'omega_R' },
+      { id: 'e_motL_current_bat', source: 'motor_left', sourceHandle: 'current', target: 'robot_battery', targetHandle: 'I_L' },
+      { id: 'e_motR_current_bat', source: 'motor_right', sourceHandle: 'current', target: 'robot_battery', targetHandle: 'I_R' },
+      { id: 'e_bat_v_motL', source: 'robot_battery', sourceHandle: 'battery_voltage', target: 'motor_left', targetHandle: 'v_bat' },
+      { id: 'e_bat_v_motR', source: 'robot_battery', sourceHandle: 'battery_voltage', target: 'motor_right', targetHandle: 'v_bat' },
+      { id: 'e_bat_level_viz', source: 'robot_battery', sourceHandle: 'battery_level', target: 'robot_visualizer', targetHandle: 'battery_level' },
+      { id: 'e_encL_odom', source: 'robot_encoder', sourceHandle: 'enc_L', target: 'robot_odom', targetHandle: 'enc_L' },
+      { id: 'e_encR_odom', source: 'robot_encoder', sourceHandle: 'enc_R', target: 'robot_odom', targetHandle: 'enc_R' },
+      { id: 'e_odom_x_loc', source: 'robot_odom', sourceHandle: 'x_odom', target: 'robot_localization', targetHandle: 'x_odom' },
+      { id: 'e_odom_y_loc', source: 'robot_odom', sourceHandle: 'y_odom', target: 'robot_localization', targetHandle: 'y_odom' },
+      { id: 'e_odom_theta_loc', source: 'robot_odom', sourceHandle: 'theta_odom', target: 'robot_localization', targetHandle: 'theta_odom' },
+      { id: 'e_loc_x_map', source: 'robot_localization', sourceHandle: 'x_est', target: 'robot_map', targetHandle: 'x_est' },
+      { id: 'e_loc_y_map', source: 'robot_localization', sourceHandle: 'y_est', target: 'robot_map', targetHandle: 'y_est' },
+      { id: 'e_loc_theta_map', source: 'robot_localization', sourceHandle: 'theta_est', target: 'robot_map', targetHandle: 'theta_est' },
+      { id: 'e_loc_x_cov', source: 'robot_localization', sourceHandle: 'x_est', target: 'robot_coverage', targetHandle: 'x_est' },
+      { id: 'e_loc_y_cov', source: 'robot_localization', sourceHandle: 'y_est', target: 'robot_coverage', targetHandle: 'y_est' },
+      { id: 'e_loc_x_glob', source: 'robot_localization', sourceHandle: 'x_est', target: 'robot_global_planner', targetHandle: 'x_est' },
+      { id: 'e_loc_y_glob', source: 'robot_localization', sourceHandle: 'y_est', target: 'robot_global_planner', targetHandle: 'y_est' },
+      { id: 'e_loc_x_mot', source: 'robot_localization', sourceHandle: 'x_est', target: 'robot_motion_control', targetHandle: 'x_est' },
+      { id: 'e_loc_y_mot', source: 'robot_localization', sourceHandle: 'y_est', target: 'robot_motion_control', targetHandle: 'y_est' },
+      { id: 'e_loc_theta_mot', source: 'robot_localization', sourceHandle: 'theta_est', target: 'robot_motion_control', targetHandle: 'theta_est' },
+      { id: 'e_loc_x_viz', source: 'robot_localization', sourceHandle: 'x_est', target: 'robot_visualizer', targetHandle: 'x_est' },
+      { id: 'e_loc_y_viz', source: 'robot_localization', sourceHandle: 'y_est', target: 'robot_visualizer', targetHandle: 'y_est' },
+      { id: 'e_loc_theta_viz', source: 'robot_localization', sourceHandle: 'theta_est', target: 'robot_visualizer', targetHandle: 'theta_est' },
+      { id: 'e_loc_conf_viz', source: 'robot_localization', sourceHandle: 'confidence', target: 'robot_visualizer', targetHandle: 'confidence' },
+      { id: 'e_scp_x', source: 'robot_localization', sourceHandle: 'x_est', target: 'scope_pose', targetHandle: 'in1' },
+      { id: 'e_scp_y', source: 'robot_localization', sourceHandle: 'y_est', target: 'scope_pose', targetHandle: 'in2' },
+      { id: 'e_scp_theta', source: 'robot_localization', sourceHandle: 'theta_est', target: 'scope_pose', targetHandle: 'in3' },
+      { id: 'e_map_grid_cov', source: 'robot_map', sourceHandle: 'grid', target: 'robot_coverage', targetHandle: 'grid' },
+      { id: 'e_map_grid_glob', source: 'robot_map', sourceHandle: 'grid', target: 'robot_global_planner', targetHandle: 'grid' },
+      { id: 'e_map_grid_viz', source: 'robot_map', sourceHandle: 'grid', target: 'robot_visualizer', targetHandle: 'grid' },
+      { id: 'e_cov_goalx_glob', source: 'robot_coverage', sourceHandle: 'goal_x', target: 'robot_global_planner', targetHandle: 'goal_x' },
+      { id: 'e_cov_goaly_glob', source: 'robot_coverage', sourceHandle: 'goal_y', target: 'robot_global_planner', targetHandle: 'goal_y' },
+      { id: 'e_cov_stats_viz', source: 'robot_coverage', sourceHandle: 'coverage_status', target: 'robot_visualizer', targetHandle: 'nav_stats' },
+      { id: 'e_glob_tx_avoid', source: 'robot_global_planner', sourceHandle: 'target_x', target: 'robot_obstacle_avoid', targetHandle: 'target_x' },
+      { id: 'e_glob_ty_avoid', source: 'robot_global_planner', sourceHandle: 'target_y', target: 'robot_obstacle_avoid', targetHandle: 'target_y' },
+      { id: 'e_avoid_sx_mot', source: 'robot_obstacle_avoid', sourceHandle: 'safe_x', target: 'robot_motion_control', targetHandle: 'target_x' },
+      { id: 'e_avoid_sy_mot', source: 'robot_obstacle_avoid', sourceHandle: 'safe_y', target: 'robot_motion_control', targetHandle: 'target_y' },
+      { id: 'e_avoid_vc_mot', source: 'robot_obstacle_avoid', sourceHandle: 'velocity_constraints', target: 'robot_motion_control', targetHandle: 'velocity_constraints' },
+      { id: 'e_avoid_sx_viz', source: 'robot_obstacle_avoid', sourceHandle: 'safe_x', target: 'robot_visualizer', targetHandle: 'target_x' },
+      { id: 'e_avoid_sy_viz', source: 'robot_obstacle_avoid', sourceHandle: 'safe_y', target: 'robot_visualizer', targetHandle: 'target_y' },
+      { id: 'e_avoid_nav_viz', source: 'robot_obstacle_avoid', sourceHandle: 'nav_state', target: 'robot_visualizer', targetHandle: 'nav_state' },
+      { id: 'e_mot_v_cmd', source: 'robot_motion_control', sourceHandle: 'v_cmd', target: 'robot_motor_command', targetHandle: 'v_cmd' },
+      { id: 'e_mot_w_cmd', source: 'robot_motion_control', sourceHandle: 'w_cmd', target: 'robot_motor_command', targetHandle: 'w_cmd' },
+      { id: 'e_cmd_VL_motL', source: 'robot_motor_command', sourceHandle: 'V_cmd_L', target: 'motor_left', targetHandle: 'pwm_duty' },
+      { id: 'e_cmd_VR_motR', source: 'robot_motor_command', sourceHandle: 'V_cmd_R', target: 'motor_right', targetHandle: 'pwm_duty' }
+    ]
+  },
+  {
+    id: 'robot_vacuum_learning_model',
+    name: 'Autonomous Vacuum Cleaner Learning Model',
+    category: 'Robotics & Control',
+    difficulty: 'Expert',
+    description: 'A complete hierarchical Simulink-style learning and control architecture for an autonomous vacuum cleaner, featuring sensor arrays, PF/EKF localization, A* coverage planners, PID motor controllers, and interactive 3D co-simulation.',
+    nodes: [
+      { id: 'sub_input_sensors', type: 'Subsystem', position: { x: 50, y: 150 }, label: 'Input Sensors', params: { name: 'Input Sensors' } },
+      { id: 'sub_robot_localization', type: 'Subsystem', position: { x: 300, y: 100 }, label: 'Robot Localization', params: { name: 'Robot Localization' } },
+      { id: 'sub_path_planning', type: 'Subsystem', position: { x: 620, y: 100 }, label: 'Path Planning', params: { name: 'Path Planning' } },
+      { id: 'sub_motion_control', type: 'Subsystem', position: { x: 300, y: 450 }, label: 'Motion Control', params: { name: 'Motion Control' } },
+      { id: 'sub_actuators_hw', type: 'Subsystem', position: { x: 620, y: 450 }, label: 'Actuators & HW', params: { name: 'Actuators & HW' } },
+      { id: 'sub_robot_plant_model', type: 'Subsystem', position: { x: 920, y: 450 }, label: 'Robot Plant Model', params: { name: 'Robot Plant Model' } },
+      { id: 'sub_3d_visualization', type: 'Subsystem', position: { x: 1220, y: 100 }, label: '3D Visualization', params: { name: '3D Visualization' } },
+      { id: 'sub_dustbin_monitor', type: 'Subsystem', position: { x: 300, y: 780 }, label: 'Dustbin Monitor Subsystem', params: { name: 'Dustbin Monitor Subsystem' } },
+      { id: 'sub_docking_battery', type: 'Subsystem', position: { x: 720, y: 780 }, label: 'Docking & Battery Subsystem', params: { name: 'Docking & Battery Subsystem' } },
+
+      { id: 'lidar_sensor_block', type: 'ROBOT_VACUUM_LIDAR_SENSOR', position: { x: 80, y: 80 }, label: 'Lidar Sensor', params: {}, parentId: 'sub_input_sensors' },
+      { id: 'odom_sensor_block', type: 'ROBOT_VACUUM_ODOMETRY_SENSOR', position: { x: 80, y: 220 }, label: 'Odometry', params: {}, parentId: 'sub_input_sensors' },
+      { id: 'cliff_sensor_block', type: 'ROBOT_VACUUM_CLIFF_IR', position: { x: 80, y: 360 }, label: 'Cliff IR Sensor', params: {}, parentId: 'sub_input_sensors' },
+      { id: 'dustbin_sensor_block', type: 'ROBOT_VACUUM_DUSTBIN_SENSOR', position: { x: 80, y: 500 }, label: 'Dustbin Sensor', params: {}, parentId: 'sub_input_sensors' },
+      { id: 'motor_current_block', type: 'ROBOT_VACUUM_MOTOR_CURRENT', position: { x: 80, y: 640 }, label: 'Motor Current', params: {}, parentId: 'sub_input_sensors' },
+      { id: 'in_sens_out_lidar', type: 'Outport', position: { x: 320, y: 90 }, label: 'Lidar Out', params: { name: 'Lidar Out', port_index: 1 }, parentId: 'sub_input_sensors' },
+      { id: 'in_sens_out_odom', type: 'Outport', position: { x: 320, y: 230 }, label: 'Odom Out', params: { name: 'Odom Out', port_index: 2 }, parentId: 'sub_input_sensors' },
+      { id: 'in_sens_out_cliff', type: 'Outport', position: { x: 320, y: 370 }, label: 'Cliff Out', params: { name: 'Cliff Out', port_index: 3 }, parentId: 'sub_input_sensors' },
+      { id: 'in_sens_out_dust', type: 'Outport', position: { x: 320, y: 510 }, label: 'Dust Out', params: { name: 'Dust Out', port_index: 4 }, parentId: 'sub_input_sensors' },
+      { id: 'in_sens_out_current', type: 'Outport', position: { x: 320, y: 650 }, label: 'Current Out', params: { name: 'Current Out', port_index: 5 }, parentId: 'sub_input_sensors' },
+
+      { id: 'loc_in_lidar', type: 'Inport', position: { x: 50, y: 80 }, label: 'Lidar In', params: { name: 'Lidar In', port_index: 1 }, parentId: 'sub_robot_localization' },
+      { id: 'loc_in_odom', type: 'Inport', position: { x: 50, y: 200 }, label: 'Odom In', params: { name: 'Odom In', port_index: 2 }, parentId: 'sub_robot_localization' },
+      { id: 'loc_in_cliff', type: 'Inport', position: { x: 50, y: 320 }, label: 'Cliff In', params: { name: 'Cliff In', port_index: 3 }, parentId: 'sub_robot_localization' },
+      { id: 'robot_fusion_pf', type: 'ROBOT_VACUUM_SENSOR_FUSION_EKF', position: { x: 250, y: 150 }, label: 'Robot (Sensor Fusion PF)', params: {}, parentId: 'sub_robot_localization' },
+      { id: 'room_segmentation', type: 'ROBOT_VACUUM_ROOM_SEGMENTATION', position: { x: 550, y: 80 }, label: 'Room Segmentation', params: {}, parentId: 'sub_robot_localization' },
+      { id: 'semantic_zone_map', type: 'ROBOT_VACUUM_SEMANTIC_MAP', position: { x: 550, y: 260 }, label: 'Semantic Zone Map', params: {}, parentId: 'sub_robot_localization' },
+      { id: 'loc_out_pose', type: 'Outport', position: { x: 800, y: 160 }, label: 'Pose Out', params: { name: 'Pose Out', port_index: 1 }, parentId: 'sub_robot_localization' },
+      { id: 'loc_out_segment', type: 'Outport', position: { x: 800, y: 80 }, label: 'Room Seg Out', params: { name: 'Room Seg Out', port_index: 2 }, parentId: 'sub_robot_localization' },
+      { id: 'loc_out_map', type: 'Outport', position: { x: 800, y: 270 }, label: 'Zone Map Out', params: { name: 'Zone Map Out', port_index: 3 }, parentId: 'sub_robot_localization' },
+
+      { id: 'path_in_pose', type: 'Inport', position: { x: 50, y: 80 }, label: 'Pose In', params: { name: 'Pose In', port_index: 1 }, parentId: 'sub_path_planning' },
+      { id: 'path_in_segment', type: 'Inport', position: { x: 50, y: 200 }, label: 'Room Seg In', params: { name: 'Room Seg In', port_index: 2 }, parentId: 'sub_path_planning' },
+      { id: 'path_in_map', type: 'Inport', position: { x: 50, y: 320 }, label: 'Zone Map In', params: { name: 'Zone Map In', port_index: 3 }, parentId: 'sub_path_planning' },
+      { id: 'path_in_bat', type: 'Inport', position: { x: 50, y: 440 }, label: 'Bat % In', params: { name: 'Bat % In', port_index: 4 }, parentId: 'sub_path_planning' },
+      { id: 'coverage_planner', type: 'ROBOT_VACUUM_COVERAGE_PLANNER', position: { x: 260, y: 150 }, label: 'Coverage Planner', params: {}, parentId: 'sub_path_planning' },
+      { id: 'waypoint_generation', type: 'ROBOT_VACUUM_WAYPOINT_GEN', position: { x: 500, y: 80 }, label: 'Waypoint Generation', params: {}, parentId: 'sub_path_planning' },
+      { id: 'room_scheduler', type: 'ROBOT_VACUUM_ROOM_SCHEDULER', position: { x: 260, y: 300 }, label: 'Room Scheduler', params: {}, parentId: 'sub_path_planning' },
+      { id: 'battery_monitor', type: 'ROBOT_VACUUM_BATTERY_MONITOR', position: { x: 260, y: 440 }, label: 'Battery Monitor', params: {}, parentId: 'sub_path_planning' },
+      { id: 'goal_manager', type: 'ROBOT_VACUUM_GOAL_MANAGER', position: { x: 500, y: 360 }, label: 'Goal Manager', params: {}, parentId: 'sub_path_planning' },
+      { id: 'viz_3d_colors', type: 'ROBOT_VACUUM_3D_VIZ_COLORS', position: { x: 720, y: 360 }, label: '3D Viz (Room Colors)', params: {}, parentId: 'sub_path_planning' },
+      { id: 'path_out_waypoints', type: 'Outport', position: { x: 920, y: 90 }, label: 'Waypoints Out', params: { name: 'Waypoints Out', port_index: 1 }, parentId: 'sub_path_planning' },
+      { id: 'path_out_colors', type: 'Outport', position: { x: 920, y: 370 }, label: 'Colors Out', params: { name: 'Colors Out', port_index: 2 }, parentId: 'sub_path_planning' },
+
+      { id: 'motion_in_current', type: 'Inport', position: { x: 50, y: 80 }, label: 'Current In', params: { name: 'Current In', port_index: 1 }, parentId: 'sub_motion_control' },
+      { id: 'motion_in_waypoints', type: 'Inport', position: { x: 50, y: 200 }, label: 'Waypoints In', params: { name: 'Waypoints In', port_index: 2 }, parentId: 'sub_motion_control' },
+      { id: 'motion_in_pose', type: 'Inport', position: { x: 50, y: 320 }, label: 'Pose In', params: { name: 'Pose In', port_index: 3 }, parentId: 'sub_motion_control' },
+      { id: 'motion_in_cliff', type: 'Inport', position: { x: 50, y: 440 }, label: 'Cliff IR In', params: { name: 'Cliff IR In', port_index: 4 }, parentId: 'sub_motion_control' },
+      { id: 'collision_avoidance', type: 'ROBOT_VACUUM_COLLISION_AVOID', position: { x: 260, y: 150 }, label: 'Collision Avoidance', params: {}, parentId: 'sub_motion_control' },
+      { id: 'surface_adapter', type: 'ROBOT_VACUUM_SURFACE_ADAPTER', position: { x: 260, y: 350 }, label: 'Surface Adapter', params: {}, parentId: 'sub_motion_control' },
+      { id: 'cliff_halt_logic', type: 'ROBOT_VACUUM_CLIFF_HALT', position: { x: 500, y: 400 }, label: 'Cliff Halt Logic', params: {}, parentId: 'sub_motion_control' },
+      { id: 'motion_out_vel', type: 'Outport', position: { x: 720, y: 160 }, label: 'Vel CMD Out', params: { name: 'Vel CMD Out', port_index: 1 }, parentId: 'sub_motion_control' },
+      { id: 'motion_out_halt', type: 'Outport', position: { x: 720, y: 410 }, label: 'Halt CMD Out', params: { name: 'Halt CMD Out', port_index: 2 }, parentId: 'sub_motion_control' },
+
+      { id: 'act_in_vel', type: 'Inport', position: { x: 50, y: 80 }, label: 'Vel CMD In', params: { name: 'Vel CMD In', port_index: 1 }, parentId: 'sub_actuators_hw' },
+      { id: 'act_in_halt', type: 'Inport', position: { x: 50, y: 200 }, label: 'Halt CMD In', params: { name: 'Halt CMD In', port_index: 2 }, parentId: 'sub_actuators_hw' },
+      { id: 'velocity_pid', type: 'ROBOT_VACUUM_VELOCITY_PID', position: { x: 250, y: 80 }, label: 'Velocity PID', params: {}, parentId: 'sub_actuators_hw' },
+      { id: 'mode_supervisor', type: 'ROBOT_VACUUM_MODE_SUPERVISOR', position: { x: 250, y: 200 }, label: 'Mode Supervisor', params: {}, parentId: 'sub_actuators_hw' },
+      { id: 'bumper_sensor_block', type: 'ROBOT_VACUUM_BUMPER_SENSOR', position: { x: 250, y: 350 }, label: 'Bumper Sensor', params: {}, parentId: 'sub_actuators_hw' },
+      { id: 'side_brush_model', type: 'ROBOT_VACUUM_SIDE_BRUSH', position: { x: 500, y: 120 }, label: 'Side Brush Model (S-Function)', params: {}, parentId: 'sub_actuators_hw' },
+      { id: 'variable_suction', type: 'ROBOT_VACUUM_SUCTION_PWM', position: { x: 500, y: 260 }, label: 'Variable Suction (PWM)', params: {}, parentId: 'sub_actuators_hw' },
+      { id: 'act_out_brush', type: 'Outport', position: { x: 750, y: 130 }, label: 'Brush Torque Out', params: { name: 'Brush Torque Out', port_index: 1 }, parentId: 'sub_actuators_hw' },
+      { id: 'act_out_suction', type: 'Outport', position: { x: 750, y: 270 }, label: 'Suction Force Out', params: { name: 'Suction Force Out', port_index: 2 }, parentId: 'sub_actuators_hw' },
+      { id: 'act_out_bump', type: 'Outport', position: { x: 750, y: 360 }, label: 'Bump State Out', params: { name: 'Bump State Out', port_index: 3 }, parentId: 'sub_actuators_hw' },
+
+      { id: 'plant_in_brush', type: 'Inport', position: { x: 50, y: 80 }, label: 'Brush In', params: { name: 'Brush In', port_index: 1 }, parentId: 'sub_robot_plant_model' },
+      { id: 'plant_in_suction', type: 'Inport', position: { x: 50, y: 200 }, label: 'Suction In', params: { name: 'Suction In', port_index: 2 }, parentId: 'sub_robot_plant_model' },
+      { id: 'plant_in_bump', type: 'Inport', position: { x: 50, y: 320 }, label: 'Bump In', params: { name: 'Bump In', port_index: 3 }, parentId: 'sub_robot_plant_model' },
+      { id: 'robot_kinematics_plant', type: 'ROBOT_VACUUM_DIGITAL_TWIN', position: { x: 260, y: 180 }, label: 'Robot Kinematics', params: {}, parentId: 'sub_robot_plant_model' },
+      { id: 'terrain_model', type: 'ROBOT_VACUUM_TERRAIN_MODEL', position: { x: 550, y: 80 }, label: 'Terrain Model (Carpet/Hardwood)', params: {}, parentId: 'sub_robot_plant_model' },
+      { id: 'collision_mesh', type: 'ROBOT_VACUUM_COLLISION_MESH', position: { x: 550, y: 200 }, label: 'Collision Mesh (Furniture Bounding Boxes)', params: {}, parentId: 'sub_robot_plant_model' },
+      { id: 'dock_station_beacon', type: 'ROBOT_VACUUM_DOCK_BEACON', position: { x: 550, y: 320 }, label: 'Dock Station (Beacon)', params: {}, parentId: 'sub_robot_plant_model' },
+      { id: 'plant_out_pose', type: 'Outport', position: { x: 800, y: 190 }, label: 'Pose Out', params: { name: 'Pose Out', port_index: 1 }, parentId: 'sub_robot_plant_model' },
+      { id: 'plant_out_beacon', type: 'Outport', position: { x: 800, y: 330 }, label: 'Beacon Out', params: { name: 'Beacon Out', port_index: 2 }, parentId: 'sub_robot_plant_model' },
+      { id: 'plant_out_grid', type: 'Outport', position: { x: 800, y: 260 }, label: 'Grid Out', params: { name: 'Grid Out', port_index: 3 }, parentId: 'sub_robot_plant_model' },
+      { id: 'plant_out_ranges', type: 'Outport', position: { x: 800, y: 120 }, label: 'Ranges Out', params: { name: 'Ranges Out', port_index: 4 }, parentId: 'sub_robot_plant_model' },
+
+      { id: 'viz_in_pose', type: 'Inport', position: { x: 50, y: 80 }, label: 'Pose In', params: { name: 'Pose In', port_index: 1 }, parentId: 'sub_3d_visualization' },
+      { id: 'viz_in_colors', type: 'Inport', position: { x: 50, y: 180 }, label: 'Colors In', params: { name: 'Colors In', port_index: 2 }, parentId: 'sub_3d_visualization' },
+      { id: 'viz_in_bat', type: 'Inport', position: { x: 50, y: 280 }, label: 'Bat In', params: { name: 'Bat In', port_index: 3 }, parentId: 'sub_3d_visualization' },
+      { id: 'viz_in_dust', type: 'Inport', position: { x: 50, y: 380 }, label: 'Dust In', params: { name: 'Dust In', port_index: 4 }, parentId: 'sub_3d_visualization' },
+      { id: 'viz_in_grid', type: 'Inport', position: { x: 50, y: 480 }, label: 'Grid In', params: { name: 'Grid In', port_index: 5 }, parentId: 'sub_3d_visualization' },
+      { id: 'viz_in_ranges', type: 'Inport', position: { x: 50, y: 580 }, label: 'Ranges In', params: { name: 'Ranges In', port_index: 6 }, parentId: 'sub_3d_visualization' },
+      { id: 'three_d_scene_view', type: 'ROBOT_VACUUM_3D_SCENE_VIEW', position: { x: 260, y: 280 }, label: '3D Scene View', params: {}, parentId: 'sub_3d_visualization' },
+      { id: 'furniture_mesh_3d', type: 'ROBOT_VACUUM_FURNITURE_MESH', position: { x: 500, y: 80 }, label: 'Furniture Mesh 3D', params: {}, parentId: 'sub_3d_visualization' },
+      { id: 'dirt_density_map', type: 'ROBOT_VACUUM_DIRT_DENSITY', position: { x: 500, y: 160 }, label: 'Dirt Density Map', params: {}, parentId: 'sub_3d_visualization' },
+      { id: 'room_zone_colors', type: 'ROBOT_VACUUM_ROOM_ZONE_COLORS', position: { x: 500, y: 240 }, label: 'Room Zone Colors', params: {}, parentId: 'sub_3d_visualization' },
+      { id: 'coverage_heatmap', type: 'ROBOT_VACUUM_COVERAGE_HEATMAP', position: { x: 500, y: 320 }, label: 'Coverage Heatmap', params: {}, parentId: 'sub_3d_visualization' },
+      { id: 'dock_station_icon', type: 'ROBOT_VACUUM_DOCK_ICON', position: { x: 500, y: 400 }, label: 'Dock Station Icon', params: {}, parentId: 'sub_3d_visualization' },
+      { id: 'battery_hud', type: 'ROBOT_VACUUM_BATTERY_HUD', position: { x: 500, y: 480 }, label: 'Battery HUD', params: {}, parentId: 'sub_3d_visualization' },
+      { id: 'dustbin_level_hud', type: 'ROBOT_VACUUM_DUSTBIN_HUD', position: { x: 500, y: 560 }, label: 'Dustbin Level HUD', params: {}, parentId: 'sub_3d_visualization' },
+
+      { id: 'dust_in', type: 'Inport', position: { x: 50, y: 100 }, label: 'Dust In', params: { name: 'Dust In', port_index: 1 }, parentId: 'sub_dustbin_monitor' },
+      { id: 'capacity_threshold', type: 'ROBOT_VACUUM_CAPACITY_THRESHOLD', position: { x: 220, y: 100 }, label: 'Capacity Threshold', params: {}, parentId: 'sub_dustbin_monitor' },
+      { id: 'halt_alert_state', type: 'ROBOT_VACUUM_HALT_ALERT', position: { x: 440, y: 100 }, label: 'Halt & Alert State', params: {}, parentId: 'sub_dustbin_monitor' },
+
+      { id: 'dock_in_beacon', type: 'Inport', position: { x: 50, y: 150 }, label: 'Beacon In', params: { name: 'Beacon In', port_index: 1 }, parentId: 'sub_docking_battery' },
+      { id: 'battery_monitor_dock', type: 'ROBOT_VACUUM_BATTERY_MONITOR', position: { x: 220, y: 80 }, label: 'Battery Monitor', params: {}, parentId: 'sub_docking_battery' },
+      { id: 'battery_monitor_dock2', type: 'ROBOT_VACUUM_BATTERY_MONITOR', position: { x: 220, y: 220 }, label: 'Battery Monitor', params: {}, parentId: 'sub_docking_battery' },
+      { id: 'dock_detect_logic', type: 'ROBOT_VACUUM_DOCK_DETECT', position: { x: 440, y: 150 }, label: 'Dock Detect Logic', params: {}, parentId: 'sub_docking_battery' },
+      { id: 'resume_scheduler', type: 'ROBOT_VACUUM_RESUME_SCHEDULER', position: { x: 660, y: 150 }, label: 'Resume Scheduler', params: {}, parentId: 'sub_docking_battery' },
+      { id: 'dock_out_state', type: 'Outport', position: { x: 860, y: 160 }, label: 'Docked State Out', params: { name: 'Docked State Out', port_index: 1 }, parentId: 'sub_docking_battery' }
+    ],
+    edges: [
+      { id: 'el0_1', source: 'sub_input_sensors', sourceHandle: 'in_sens_out_lidar', target: 'sub_robot_localization', targetHandle: 'loc_in_lidar', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_2', source: 'sub_input_sensors', sourceHandle: 'in_sens_out_odom', target: 'sub_robot_localization', targetHandle: 'loc_in_odom', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_3', source: 'sub_input_sensors', sourceHandle: 'in_sens_out_cliff', target: 'sub_robot_localization', targetHandle: 'loc_in_cliff', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_4', source: 'sub_input_sensors', sourceHandle: 'in_sens_out_dust', target: 'sub_dustbin_monitor', targetHandle: 'dust_in', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_5', source: 'sub_input_sensors', sourceHandle: 'in_sens_out_current', target: 'sub_motion_control', targetHandle: 'motion_in_current', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_6', source: 'sub_robot_localization', sourceHandle: 'loc_out_pose', target: 'sub_path_planning', targetHandle: 'path_in_pose', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_7', source: 'sub_robot_localization', sourceHandle: 'loc_out_segment', target: 'sub_path_planning', targetHandle: 'path_in_segment', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_8', source: 'sub_robot_localization', sourceHandle: 'loc_out_map', target: 'sub_path_planning', targetHandle: 'path_in_map', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_9', source: 'sub_robot_localization', sourceHandle: 'loc_out_pose', target: 'sub_motion_control', targetHandle: 'motion_in_pose', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_10', source: 'sub_input_sensors', sourceHandle: 'in_sens_out_cliff', target: 'sub_motion_control', targetHandle: 'motion_in_cliff', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_11', source: 'sub_path_planning', sourceHandle: 'path_out_waypoints', target: 'sub_motion_control', targetHandle: 'motion_in_waypoints', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_12', source: 'sub_motion_control', sourceHandle: 'motion_out_vel', target: 'sub_actuators_hw', targetHandle: 'act_in_vel', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_13', source: 'sub_motion_control', sourceHandle: 'motion_out_halt', target: 'sub_actuators_hw', targetHandle: 'act_in_halt', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_14', source: 'sub_actuators_hw', sourceHandle: 'act_out_brush', target: 'sub_robot_plant_model', targetHandle: 'plant_in_brush', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_15', source: 'sub_actuators_hw', sourceHandle: 'act_out_suction', target: 'sub_robot_plant_model', targetHandle: 'plant_in_suction', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_16', source: 'sub_actuators_hw', sourceHandle: 'act_out_bump', target: 'sub_robot_plant_model', targetHandle: 'plant_in_bump', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_17', source: 'sub_robot_plant_model', sourceHandle: 'plant_out_pose', target: 'sub_3d_visualization', targetHandle: 'viz_in_pose', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_18', source: 'sub_path_planning', sourceHandle: 'path_out_colors', target: 'sub_3d_visualization', targetHandle: 'viz_in_colors', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_19', source: 'sub_robot_plant_model', sourceHandle: 'plant_out_grid', target: 'sub_3d_visualization', targetHandle: 'viz_in_grid', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_20', source: 'sub_robot_plant_model', sourceHandle: 'plant_out_ranges', target: 'sub_3d_visualization', targetHandle: 'viz_in_ranges', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_21', source: 'sub_robot_plant_model', sourceHandle: 'plant_out_beacon', target: 'sub_docking_battery', targetHandle: 'dock_in_beacon', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+
+      { id: 'e_is_1', source: 'lidar_sensor_block', sourceHandle: 'ranges', target: 'in_sens_out_lidar', targetHandle: 'in' },
+      { id: 'e_is_2', source: 'odom_sensor_block', sourceHandle: 'x_odom', target: 'in_sens_out_odom', targetHandle: 'in' },
+      { id: 'e_is_3', source: 'cliff_sensor_block', sourceHandle: 'cliff_val', target: 'in_sens_out_cliff', targetHandle: 'in' },
+      { id: 'e_is_4', source: 'dustbin_sensor_block', sourceHandle: 'dust_level', target: 'in_sens_out_dust', targetHandle: 'in' },
+      { id: 'e_is_5', source: 'motor_current_block', sourceHandle: 'current', target: 'in_sens_out_current', targetHandle: 'in' },
+
+      { id: 'e_rl_1', source: 'loc_in_lidar', sourceHandle: 'out', target: 'robot_fusion_pf', targetHandle: 'x_true' },
+      { id: 'e_rl_2', source: 'loc_in_odom', sourceHandle: 'out', target: 'robot_fusion_pf', targetHandle: 'x_odom' },
+      { id: 'e_rl_3', source: 'robot_fusion_pf', sourceHandle: 'x_est', target: 'room_segmentation', targetHandle: 'x_est' },
+      { id: 'e_rl_4', source: 'robot_fusion_pf', sourceHandle: 'y_est', target: 'room_segmentation', targetHandle: 'y_est' },
+      { id: 'e_rl_5', source: 'robot_fusion_pf', sourceHandle: 'x_est', target: 'semantic_zone_map', targetHandle: 'x_est' },
+      { id: 'e_rl_6', source: 'robot_fusion_pf', sourceHandle: 'y_est', target: 'semantic_zone_map', targetHandle: 'y_est' },
+      { id: 'e_rl_7', source: 'robot_fusion_pf', sourceHandle: 'x_est', target: 'loc_out_pose', targetHandle: 'in' },
+      { id: 'e_rl_8', source: 'room_segmentation', sourceHandle: 'room_seg', target: 'loc_out_segment', targetHandle: 'in' },
+      { id: 'e_rl_9', source: 'semantic_zone_map', sourceHandle: 'semantic_map', target: 'loc_out_map', targetHandle: 'in' },
+
+      { id: 'e_pp_1', source: 'path_in_segment', sourceHandle: 'out', target: 'coverage_planner', targetHandle: 'room_seg' },
+      { id: 'e_pp_2', source: 'path_in_map', sourceHandle: 'out', target: 'coverage_planner', targetHandle: 'semantic_map' },
+      { id: 'e_pp_3', source: 'coverage_planner', sourceHandle: 'coverage_plan', target: 'waypoint_generation', targetHandle: 'coverage_plan' },
+      { id: 'e_pp_4', source: 'waypoint_generation', sourceHandle: 'waypoints', target: 'path_out_waypoints', targetHandle: 'in' },
+      { id: 'e_pp_5', source: 'path_in_map', sourceHandle: 'out', target: 'room_scheduler', targetHandle: 'semantic_map' },
+      { id: 'e_pp_6', source: 'path_in_bat', sourceHandle: 'out', target: 'battery_monitor', targetHandle: 'battery_level' },
+      { id: 'e_pp_7', source: 'room_scheduler', sourceHandle: 'room_schedule', target: 'goal_manager', targetHandle: 'room_schedule' },
+      { id: 'e_pp_8', source: 'battery_monitor', sourceHandle: 'battery_status', target: 'goal_manager', targetHandle: 'battery_status' },
+      { id: 'e_pp_9', source: 'path_in_pose', sourceHandle: 'out', target: 'goal_manager', targetHandle: 'x_est' },
+      { id: 'e_pp_10', source: 'goal_manager', sourceHandle: 'goal_path', target: 'viz_3d_colors', targetHandle: 'goal_path' },
+      { id: 'e_pp_11', source: 'viz_3d_colors', sourceHandle: 'room_colors', target: 'path_out_colors', targetHandle: 'in' },
+
+      { id: 'e_mc_1', source: 'motion_in_current', sourceHandle: 'out', target: 'collision_avoidance', targetHandle: 'current' },
+      { id: 'e_mc_2', source: 'motion_in_waypoints', sourceHandle: 'out', target: 'collision_avoidance', targetHandle: 'waypoints' },
+      { id: 'e_mc_3', source: 'motion_in_pose', sourceHandle: 'out', target: 'collision_avoidance', targetHandle: 'x_est' },
+      { id: 'e_mc_4', source: 'collision_avoidance', sourceHandle: 'vel_cmd', target: 'motion_out_vel', targetHandle: 'in' },
+      { id: 'e_mc_5', source: 'motion_in_pose', sourceHandle: 'out', target: 'surface_adapter', targetHandle: 'x_est' },
+      { id: 'e_mc_6', source: 'surface_adapter', sourceHandle: 'surface', target: 'cliff_halt_logic', targetHandle: 'surface' },
+      { id: 'e_mc_7', source: 'motion_in_cliff', sourceHandle: 'out', target: 'cliff_halt_logic', targetHandle: 'cliff_val' },
+      { id: 'e_mc_8', source: 'cliff_halt_logic', sourceHandle: 'halt_cmd', target: 'motion_out_halt', targetHandle: 'in' },
+
+      { id: 'e_ah_1', source: 'act_in_vel', sourceHandle: 'out', target: 'velocity_pid', targetHandle: 'vel_cmd' },
+      { id: 'e_ah_2', source: 'act_in_halt', sourceHandle: 'out', target: 'mode_supervisor', targetHandle: 'halt_cmd' },
+      { id: 'e_ah_3', source: 'velocity_pid', sourceHandle: 'speed_pwm', target: 'side_brush_model', targetHandle: 'speed_pwm' },
+      { id: 'e_ah_4', source: 'mode_supervisor', sourceHandle: 'brush_pwm', target: 'side_brush_model', targetHandle: 'brush_pwm' },
+      { id: 'e_ah_5', source: 'mode_supervisor', sourceHandle: 'suction_pwm', target: 'variable_suction', targetHandle: 'suction_pwm' },
+      { id: 'e_ah_6', source: 'side_brush_model', sourceHandle: 'torque', target: 'act_out_brush', targetHandle: 'in' },
+      { id: 'e_ah_7', source: 'variable_suction', sourceHandle: 'suction_force', target: 'act_out_suction', targetHandle: 'in' },
+      { id: 'e_ah_8', source: 'bumper_sensor_block', sourceHandle: 'bump', target: 'act_out_bump', targetHandle: 'in' },
+
+      { id: 'e_rp_1', source: 'plant_in_brush', sourceHandle: 'out', target: 'robot_kinematics_plant', targetHandle: 'omegaL_ref' },
+      { id: 'e_rp_2', source: 'robot_kinematics_plant', sourceHandle: 'x_pos', target: 'plant_out_pose', targetHandle: 'in' },
+      { id: 'e_rp_3', source: 'robot_kinematics_plant', sourceHandle: 'x_pos', target: 'terrain_model', targetHandle: 'x' },
+      { id: 'e_rp_4', source: 'robot_kinematics_plant', sourceHandle: 'x_pos', target: 'collision_mesh', targetHandle: 'x' },
+      { id: 'e_rp_5', source: 'robot_kinematics_plant', sourceHandle: 'x_pos', target: 'dock_station_beacon', targetHandle: 'x' },
+      { id: 'e_rp_6', source: 'dock_station_beacon', sourceHandle: 'beacon', target: 'plant_out_beacon', targetHandle: 'in' },
+      { id: 'e_rp_7', source: 'robot_kinematics_plant', sourceHandle: 'lidar_ranges', target: 'plant_out_ranges', targetHandle: 'in' },
+      { id: 'e_rp_8', source: 'robot_kinematics_plant', sourceHandle: 'grid', target: 'plant_out_grid', targetHandle: 'in' },
+
+      { id: 'e_vi_1', source: 'viz_in_pose', sourceHandle: 'out', target: 'three_d_scene_view', targetHandle: 'x' },
+      { id: 'e_vi_2', source: 'viz_in_colors', sourceHandle: 'out', target: 'three_d_scene_view', targetHandle: 'room_colors' },
+      { id: 'e_vi_3', source: 'viz_in_bat', sourceHandle: 'out', target: 'three_d_scene_view', targetHandle: 'battery' },
+      { id: 'e_vi_4', source: 'viz_in_dust', sourceHandle: 'out', target: 'three_d_scene_view', targetHandle: 'dust' },
+      { id: 'e_vi_5', source: 'viz_in_grid', sourceHandle: 'out', target: 'three_d_scene_view', targetHandle: 'grid' },
+      { id: 'e_vi_6', source: 'viz_in_ranges', sourceHandle: 'out', target: 'three_d_scene_view', targetHandle: 'lidar_ranges' },
+
+      { id: 'e_dm_1', source: 'dust_in', sourceHandle: 'out', target: 'capacity_threshold', targetHandle: 'dust' },
+      { id: 'e_dm_2', source: 'capacity_threshold', sourceHandle: 'flag', target: 'halt_alert_state', targetHandle: 'flag' },
+
+      { id: 'e_db_1', source: 'dock_in_beacon', sourceHandle: 'out', target: 'dock_detect_logic', targetHandle: 'beacon' },
+      { id: 'e_db_2', source: 'battery_monitor_dock', sourceHandle: 'battery_status', target: 'dock_detect_logic', targetHandle: 'battery' },
+      { id: 'e_db_3', source: 'dock_detect_logic', sourceHandle: 'docked', target: 'resume_scheduler', targetHandle: 'docked' },
+      { id: 'e_db_4', source: 'dock_detect_logic', sourceHandle: 'docked', target: 'dock_out_state', targetHandle: 'in' }
+    ]
   }
 ];
 
 const XBRIDGES_LEARNING_LAB_STEPS: Record<string, any[]> = {
+  'robot_vacuum_learning_model': [
+    {
+      title: '1. Explore the Subsystem Architecture',
+      instructions: 'Welcome to the Autonomous Vacuum Cleaner Learning Lab! This model is organized into hierarchical subsystems just like in MATLAB/Simulink.\n\nDouble-click on the Robot Localization or Actuators & HW subsystems to inspect their inner blocks. Double-click "ROOT PROJECT" in the breadcrumbs bar at the top to go back up.',
+      objectives: [
+        { id: 'run_engine', label: 'Click Run Engine to start simulation', check: (wState: any) => wState.isSimulating }
+      ]
+    },
+    {
+      title: '2. Launch the 3D Scene View',
+      instructions: 'Let\'s view the vacuum cleaner co-simulation in 3D!\n\nEnter the "3D Visualization" subsystem and double-click the "3D Scene View" block to open the premium 3D co-simulation window.',
+      objectives: [
+        { 
+          id: 'open_3d_view', 
+          label: 'Open the 3D Scene Viewer window', 
+          check: (wState: any) => wState.openScopes.includes('three_d_scene_view')
+        }
+      ]
+    },
+    {
+      title: '3. Complete Room Cleanup',
+      instructions: 'Excellent! The interactive 3D viewer is open. You can left-click and drag to rotate the camera in 3D, and scroll to zoom.\n\nKeep the simulation running to watch the EKF filter localize the robot, the coverage planner path-plan sweeps, and see the dirt particles get cleaned up in 3D!',
+      objectives: [
+        {
+          id: 'cleanup_progress',
+          label: 'Clean up at least 5% of the room',
+          check: (wState: any) => {
+            const vizNode = wState.nodes.find((n: any) => n.id === 'three_d_scene_view');
+            const grid = vizNode?.data?.state?.grid;
+            let cleaned = 0, total = 0;
+            if (grid && Array.isArray(grid)) {
+              for (let r=0; r<30; r++) {
+                for (let c=0; c<30; c++) {
+                  total++;
+                  if (grid[r][c] > 0) cleaned++;
+                }
+              }
+            }
+            return total > 0 ? (cleaned / total) >= 0.05 : false;
+          }
+        }
+      ]
+    }
+  ],
   'lms_sys_id': [
     {
       title: '1. Inspect the LMS Block',
@@ -433,6 +884,116 @@ const XBRIDGES_LEARNING_LAB_STEPS: Record<string, any[]> = {
           check: (wState: any) => {
             const pidNode = wState.nodes.find((n: any) => n.id === 'pid_controller');
             return (pidNode?.data?.params?.Kp ?? 1.0) >= 4.0;
+          } 
+        }
+      ]
+    }
+  ],
+  'robot_vacuum_twin': [
+    {
+      title: '1. Inspect the Robot Environment',
+      instructions: 'Welcome to the Modular Robot Vacuum Digital Twin Lab! Unlike a single black-box block, here the system is split into connected modules: Navigation, Kinematics, Wheel PI, Left/Right Motors, Physical Dynamics (Plant), Simulation Environment (Canvas), Odometry, Sensor Fusion, and SLAM.\n\nFirst, select the Simulation Environment (Canvas) block (highlighted in gold) to view its parameters in the sidebar.',
+      targetNodeId: 'robot_env',
+      objectives: [
+        { id: 'select_twin', label: 'Select the Simulation Environment block', check: (wState: any) => wState.selectedNodeId === 'robot_env' }
+      ]
+    },
+    {
+      title: '2. Start the Simulation',
+      instructions: 'Let\'s run the closed-loop modular simulation! Click the green Run Engine button to start. You will see signals flowing between the controllers, motors, chassis plant, and SLAM map in real-time as the robot starts exploring.',
+      objectives: [
+        { id: 'run_engine', label: 'Start the simulation engine', check: (wState: any) => wState.isSimulating }
+      ]
+    },
+    {
+      title: '3. Open the Pose Monitor Scope',
+      instructions: 'Let\'s watch the estimated robot trajectory. Open the Pose Monitor scope by clicking the maximize icon on the top-right of the scope block to track X, Y, and Theta estimated coordinates.',
+      targetNodeId: 'scope_pose',
+      objectives: [
+        { id: 'open_scope', label: 'Open the Pose Monitor scope window', check: (wState: any) => wState.openScopes.includes('scope_pose') }
+      ]
+    },
+    {
+      title: '4. Observe Autonomous Cleaning Sweep',
+      instructions: 'Watch the Simulation Environment block update its live 2D virtual twin as it runs. The motors turn, the dynamics plant integrates the movement, the raycast LiDAR finds obstacles, and the SLAM block builds a grid map.\n\nLet the robot explore the room until it completes at least 10 trajectory path trail points.',
+      objectives: [
+        { 
+          id: 'traverse_room', 
+          label: 'Let the robot explore (wait for trail points >= 10)', 
+          check: (wState: any) => {
+            const envNode = wState.nodes.find((n: any) => n.id === 'robot_env');
+            const trail = envNode?.data?.state?.trail || [];
+            return trail.length >= 10;
+          } 
+        }
+      ]
+    },
+    {
+      title: '5. Return-to-Dock Action',
+      instructions: 'Great job! The modular system successfully executed control, odometry, and SLAM feedback. Let\'s command it to return to its charging dock at (0, -2.8).\n\nSelect the Cleaning Mode constant block and change its value to 5 (ReturnToDock) to command the navigation planner to guide the robot home.',
+      targetNodeId: 'mode_select',
+      objectives: [
+        { 
+          id: 'change_mode', 
+          label: 'Change Cleaning Mode Constant to 5', 
+          check: (wState: any) => {
+            const modeNode = wState.nodes.find((n: any) => n.id === 'mode_select');
+            return Number(modeNode?.data?.params?.value) === 5;
+          } 
+        }
+      ]
+    }
+  ],
+  'robot_vacuum_full_system': [
+    {
+      title: '1. Inspect EKF Localization',
+      instructions: 'Welcome to the Decoupled Autonomous Vacuum Navigation and Mapping System Lab! Here, the system is fully decoupled into 13 individual subcomponents: coverage path planner, global path planner, obstacle avoidance steering constraints, motion controller, motor command PI regulator, dynamics plant, sensors, and localization filters.\n\nFirst, click on the EKF Localization block (highlighted in pulsing gold) to inspect its filter gain and active EKF fusion algorithm in the properties panel.',
+      targetNodeId: 'robot_localization',
+      objectives: [
+        { id: 'select_loc', label: 'Select the EKF Localization block', check: (wState: any) => wState.selectedNodeId === 'robot_localization' }
+      ]
+    },
+    {
+      title: '2. Run Co-Simulation',
+      instructions: 'Let\'s activate the co-simulation! Click the green Run Engine button in the top toolbar. You will see signals propagating across all 13 sub-blocks as the robot starts executing its boustrophedon (lawnmower) sweep coverage path.',
+      objectives: [
+        { id: 'run_engine', label: 'Start the simulation engine', check: (wState: any) => wState.isSimulating }
+      ]
+    },
+    {
+      title: '3. Open Pose Monitor Scope',
+      instructions: 'To verify EKF tracking performance against ground truth dynamics, open the Pose Monitor scope block.',
+      targetNodeId: 'scope_pose',
+      objectives: [
+        { id: 'open_scope', label: 'Open the Pose Monitor scope window', check: (wState: any) => wState.openScopes.includes('scope_pose') }
+      ]
+    },
+    {
+      title: '4. Track Coverage Performance',
+      instructions: 'Watch the SLAM Mapping block build the occupancy grid and the robot sweep the floor. Let the simulation run for a few seconds so that the robot traverses the environment and covers at least 15 trajectory trail points.',
+      objectives: [
+        { 
+          id: 'traverse_room', 
+          label: 'Let the robot explore (wait for trail points >= 15)', 
+          check: (wState: any) => {
+            const vizNode = wState.nodes.find((n: any) => n.id === 'robot_visualizer');
+            const trail = vizNode?.data?.state?.trail || [];
+            return trail.length >= 15;
+          } 
+        }
+      ]
+    },
+    {
+      title: '5. Return-to-Dock Action',
+      instructions: 'Excellent! The decoupled system successfully closed the loop from SLAM occupancy grids to motor PI controllers. Now, let\'s command the robot to return home to its charging dock at (0, -2.8).\n\nSelect the Cleaning Mode constant block and change its value to 5 (ReturnToDock) to command the planner to return home.',
+      targetNodeId: 'mode_select',
+      objectives: [
+        { 
+          id: 'change_mode', 
+          label: 'Change Cleaning Mode Constant to 5', 
+          check: (wState: any) => {
+            const modeNode = wState.nodes.find((n: any) => n.id === 'mode_select');
+            return Number(modeNode?.data?.params?.value) === 5;
           } 
         }
       ]
@@ -699,6 +1260,10 @@ export const XbridgesWorkspace: React.FC<{
     if (node.data.type === 'Subsystem') {
       setViewPath(prev => [...prev, node.id]);
       setSelectedNodeId(null);
+    } else if (['ROBOT_VACUUM_DYNAMICS', 'ROBOT_VACUUM_DIGITAL_TWIN', 'ROBOT_VACUUM_ENVIRONMENT', 'ROBOT_VACUUM_VISUALIZATION', 'ROBOT_VACUUM_3D_SCENE_VIEW'].includes(node.data.type)) {
+      if (!openScopes.includes(node.id)) {
+        setOpenScopes(prev => [...prev, node.id]);
+      }
     } else if (
       ['AC_INDUCTION_MOTOR', 'AC_MOTOR_PID_CONTROL', 'THREE_PHASE_INVERTER', 'SINGLE_PHASE_H_BRIDGE', 'PWM_GENERATOR', 'THREE_PHASE_PWM', 'SIX_STEP_COMMUTATION', 'PID_BASIC', 'PID_CONTROLLER'].includes(node.data.type) ||
       ['motor', 'plant', 'inverter', 'pwm', 'commutation', 'pid', 'controller'].some(k => node.id.toLowerCase().includes(k) || node.data.type?.toLowerCase().includes(k))
@@ -1486,6 +2051,17 @@ export const XbridgesWorkspace: React.FC<{
               edges={edges.filter(e => {
                 const sourceNode = nodes.find(n => n.id === e.source);
                 return sourceNode && (sourceNode.data.parentId || 'root') === currentParentId;
+              }).map(e => {
+                const sourceNode = nodes.find(n => n.id === e.source);
+                const color = sourceNode ? getColor(sourceNode.data.type) : '#4caf50';
+                return {
+                  ...e,
+                  data: {
+                    ...e.data,
+                    color,
+                    isSimulating: isSimulating && !isPaused
+                  }
+                };
               })}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
@@ -1513,6 +2089,12 @@ export const XbridgesWorkspace: React.FC<{
               }}
               onNodesDelete={onNodesDelete}
               nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              connectionLineComponent={PremiumConnectionLine}
+              connectionRadius={30}
+              reconnectRadius={30}
+              minZoom={0.2}
+              maxZoom={2.0}
               snapToGrid
               snapGrid={[15, 15]}
               fitView
@@ -1740,6 +2322,14 @@ export const XbridgesWorkspace: React.FC<{
                       <li className="flex items-center gap-2"><Zap size={10} className="text-[#c9a86c]" /> Closed-loop PID setpoint reference tracking</li>
                       <li className="flex items-center gap-2"><Zap size={10} className="text-[#c9a86c]" /> Real-time Proportional/Integral/Derivative gain tuning</li>
                       <li className="flex items-center gap-2"><Zap size={10} className="text-[#c9a86c]" /> Settle-time and overshoot dynamics in continuous physical plants</li>
+                    </>
+                  )}
+                  {(activeLabId === 'robot_vacuum_twin' || activeLabId === 'robot_vacuum_full_system' || activeLabId === 'robot_vacuum_learning_model') && (
+                    <>
+                      <li className="flex items-center gap-2"><Zap size={10} className="text-[#c9a86c]" /> Decoupled closed-loop EKF localization & SLAM mapping</li>
+                      <li className="flex items-center gap-2"><Zap size={10} className="text-[#c9a86c]" /> Boustrophedon sweep coverage planning & A* guidance</li>
+                      <li className="flex items-center gap-2"><Zap size={10} className="text-[#c9a86c]" /> Vector field histogram (VFH) obstacle avoidance steering</li>
+                      <li className="flex items-center gap-2"><Zap size={10} className="text-[#c9a86c]" /> Multirate co-simulation of physical systems & controllers</li>
                     </>
                   )}
                 </ul>

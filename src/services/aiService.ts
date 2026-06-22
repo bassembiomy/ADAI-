@@ -117,3 +117,94 @@ export async function getAiResponse(apiKey: string, history: any[], currentConte
   }
   throw new Error("Empty response from Gemini API.");
 }
+
+// Local LM Studio / Custom Local LLM Service
+export async function getLocalAiResponse(
+  baseUrl: string,
+  model: string,
+  history: any[],
+  currentContext: any
+): Promise<string> {
+  const url = baseUrl.trim() || "http://localhost:1234/api/v1/chat";
+  
+  // Format conversation history and context into 'input'
+  let inputContent = "";
+  if (history && history.length > 1) {
+    inputContent += "Previous conversation history:\n";
+    for (let i = 0; i < history.length - 1; i++) {
+      const role = history[i].role === 'user' ? 'User' : 'Assistant';
+      inputContent += `${role}: ${history[i].content}\n`;
+    }
+    inputContent += "\n";
+  }
+  
+  if (currentContext) {
+    inputContent += `Current Project Context:\n${JSON.stringify(currentContext, null, 2)}\n\n`;
+  }
+  
+  inputContent += `User Request: ${history[history.length - 1].content}`;
+
+  console.log("Calling Local LLM at", url, "with model", model || "qwen3-8b");
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: model || "qwen3-8b",
+      system_prompt: SYSTEM_PROMPT,
+      input: inputContent
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Local LLM Error (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json();
+  console.log("Local AI Response Data:", data);
+
+  if (typeof data === 'string') return data;
+  if (data.response) return data.response;
+  if (data.message) {
+    if (typeof data.message === 'string') return data.message;
+    if (data.message.content) return data.message.content;
+  }
+  if (data.choices && data.choices[0]) {
+    const choice = data.choices[0];
+    if (choice.message && choice.message.content) return choice.message.content;
+    if (choice.text) return choice.text;
+  }
+  if (data.text) return data.text;
+  return JSON.stringify(data);
+}
+
+// Fetch list of models from LM Studio / Local LLM Endpoint
+export async function fetchLocalModels(baseUrl: string): Promise<string[]> {
+  try {
+    let cleanUrl = baseUrl.trim();
+    // Remove the chat endpoint suffix if present to find the base path
+    cleanUrl = cleanUrl.replace(/\/api\/v1\/chat\/?$/, '');
+    cleanUrl = cleanUrl.replace(/\/v1\/chat\/completions\/?$/, '');
+    cleanUrl = cleanUrl.replace(/\/+$/, '');
+    
+    // Try common endpoints to fetch models list
+    for (const path of ['/api/v1/models', '/v1/models', '/models']) {
+      try {
+        const response = await fetch(`${cleanUrl}${path}`);
+        if (!response.ok) continue;
+        const data = await response.json();
+        if (data && Array.isArray(data.data)) {
+          return data.data.map((m: any) => m.id);
+        }
+      } catch (e) {
+        // Try next path
+      }
+    }
+    return [];
+  } catch (e) {
+    console.warn("Failed to fetch local models:", e);
+    return [];
+  }
+}
+

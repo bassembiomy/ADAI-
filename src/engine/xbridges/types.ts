@@ -18,6 +18,10 @@ export interface XPort {
   value: XValue;
   dimensions?: number[]; // [length] for vector, [rows, cols] for matrix. Empty/undefined for scalar.
   inferredType?: string; // For UI display in properties panel
+  dataType?: string;
+  unit?: string;
+  sampleRate?: number;
+  frame?: string;
 }
 
 export interface XBlock {

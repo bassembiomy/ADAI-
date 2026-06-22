@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, X, ChevronRight, ChevronLeft, Bot, User, Trash2, Key, Globe, Zap } from 'lucide-react';
-import { getAiResponse, getN8nAiResponse } from '../services/aiService';
+import { Send, Sparkles, X, ChevronRight, ChevronLeft, Bot, User, Trash2, Key, Globe, Zap, RefreshCw } from 'lucide-react';
+import { getAiResponse, getN8nAiResponse, getLocalAiResponse, fetchLocalModels } from '../services/aiService';
 import { processAiResponse } from '../utils/aiActionProcessor';
 
 interface Message {
@@ -19,13 +19,21 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
   isOpen, onToggle, currentContext, onExecuteActions
 }) => {
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'model', content: "Hello! I am your AI Architect. I am now connected to the n8n Orchestrator. How can I help you design your system or perform statistical analysis today?" }
+    { role: 'model', content: "Hello! I am your AI Architect. How can I help you design your system or perform statistical analysis today?" }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [useOrchestrator, setUseOrchestrator] = useState(true);
+  
+  // AI Engine Selection: 'n8n' | 'gemini' | 'local'
+  const [aiEngine, setAiEngine] = useState<'n8n' | 'gemini' | 'local'>(
+    (localStorage.getItem('ai_engine') as any) || 'n8n'
+  );
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
-  const [showKeyInput, setShowKeyInput] = useState(!apiKey && !useOrchestrator);
+  const [localBaseUrl, setLocalBaseUrl] = useState(localStorage.getItem('local_llm_base_url') || 'http://localhost:1234/api/v1/chat');
+  const [localModel, setLocalModel] = useState(localStorage.getItem('local_llm_model') || 'qwen3-8b');
+  const [localModels, setLocalModels] = useState<string[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [showSettings, setShowSettings] = useState(!apiKey && aiEngine === 'gemini');
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -35,10 +43,33 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
     }
   }, [messages]);
 
+  // Load local models when local engine is activated or URL changes
+  useEffect(() => {
+    if (aiEngine === 'local') {
+      refreshModels(localBaseUrl);
+    }
+  }, [aiEngine, localBaseUrl]);
+
+  const refreshModels = async (url: string) => {
+    setIsLoadingModels(true);
+    try {
+      const models = await fetchLocalModels(url);
+      setLocalModels(models);
+      if (models.length > 0 && !models.includes(localModel)) {
+        setLocalModel(models[0]);
+        localStorage.setItem('local_llm_model', models[0]);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch models from local API:", e);
+    } finally {
+      setIsLoadingModels(false);
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim()) return;
-    if (!useOrchestrator && !apiKey) {
-      setShowKeyInput(true);
+    if (aiEngine === 'gemini' && !apiKey) {
+      setShowSettings(true);
       return;
     }
 
@@ -50,10 +81,12 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
 
     try {
       let responseText: string;
-      if (useOrchestrator) {
+      if (aiEngine === 'n8n') {
         responseText = await getN8nAiResponse(input, currentContext, apiKey, newMessages);
-      } else {
+      } else if (aiEngine === 'gemini') {
         responseText = await getAiResponse(apiKey, newMessages, currentContext);
+      } else {
+        responseText = await getLocalAiResponse(localBaseUrl, localModel, newMessages, currentContext);
       }
 
       const { message, actions } = processAiResponse(responseText);
@@ -74,19 +107,24 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
     }
   };
 
-  const saveKey = () => {
+  const saveSettings = () => {
     localStorage.setItem('gemini_api_key', apiKey);
-    setShowKeyInput(false);
+    localStorage.setItem('local_llm_base_url', localBaseUrl);
+    localStorage.setItem('local_llm_model', localModel);
+    localStorage.setItem('ai_engine', aiEngine);
+    setShowSettings(false);
   };
 
   return (
     <>
       <button
         onClick={onToggle}
-        className={`fixed right-0 top-1/2 -translate-y-1/2 p-2 bg-[#111] border border-[#333] border-r-0 rounded-l-xl text-indigo-400 hover:text-indigo-300 shadow-2xl z-[60] transition-all duration-300 ${isOpen ? 'mr-[400px]' : 'mr-0'}`}
+        className={`fixed right-0 top-1/2 -translate-y-1/2 p-2 bg-[#111] border border-[#333] border-r-0 rounded-l-xl shadow-2xl z-[60] transition-all duration-300 ${isOpen ? 'mr-[400px]' : 'mr-0'} ${
+          aiEngine === 'n8n' ? 'text-emerald-400 hover:text-emerald-300' : aiEngine === 'gemini' ? 'text-indigo-400 hover:text-indigo-300' : 'text-purple-400 hover:text-purple-300'
+        }`}
       >
         <div className="flex flex-col items-center gap-2 py-2">
-          {isOpen ? <ChevronRight size={20} /> : <Sparkles size={20} />}
+          {isOpen ? <ChevronRight size={20} /> : (aiEngine === 'n8n' ? <Zap size={20} /> : aiEngine === 'gemini' ? <Sparkles size={20} /> : <Bot size={20} />)}
           {!isOpen && <span className="text-[9px] font-black uppercase [writing-mode:vertical-lr] tracking-widest opacity-70">AI Architect</span>}
         </div>
       </button>
@@ -99,28 +137,25 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
             {/* Header */}
             <div className="h-16 flex items-center justify-between px-6 border-b border-[#222] bg-gradient-to-r from-indigo-950/20 to-transparent">
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${useOrchestrator ? 'bg-emerald-500/20 text-emerald-400' : 'bg-indigo-500/20 text-indigo-400'}`}>
-                  {useOrchestrator ? <Zap size={18} /> : <Sparkles size={18} />}
+                <div className={`p-2 rounded-lg ${
+                  aiEngine === 'n8n' ? 'bg-emerald-500/20 text-emerald-400' : aiEngine === 'gemini' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-purple-500/20 text-purple-400'
+                }`}>
+                  {aiEngine === 'n8n' ? <Zap size={18} /> : aiEngine === 'gemini' ? <Sparkles size={18} /> : <Bot size={18} />}
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-white tracking-tight">AI Architect Assistant</h2>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${useOrchestrator ? 'bg-emerald-500' : 'bg-indigo-500'}`} />
+                    <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                      aiEngine === 'n8n' ? 'bg-emerald-500' : aiEngine === 'gemini' ? 'bg-indigo-500' : 'bg-purple-500'
+                    }`} />
                     <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">
-                      {useOrchestrator ? 'n8n Orchestrator Active' : 'Gemini Engine Active'}
+                      {aiEngine === 'n8n' ? 'n8n Orchestrator Active' : aiEngine === 'gemini' ? 'Gemini Engine Active' : 'Local LLM Active'}
                     </span>
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => setUseOrchestrator(!useOrchestrator)} 
-                  className={`p-2 rounded-lg transition-colors ${useOrchestrator ? 'text-emerald-400 bg-emerald-500/10' : 'text-gray-400 hover:bg-[#222]'}`}
-                  title={useOrchestrator ? "Switch to Gemini" : "Switch to n8n Orchestrator"}
-                >
-                  <Globe size={16} />
-                </button>
-                <button onClick={() => setShowKeyInput(!showKeyInput)} className="p-2 hover:bg-[#222] rounded-lg text-gray-400" title="API Settings">
+                <button onClick={() => setShowSettings(!showSettings)} className={`p-2 hover:bg-[#222] rounded-lg transition-colors ${showSettings ? 'text-indigo-400 bg-indigo-500/10' : 'text-gray-400'}`} title="API Settings">
                   <Key size={16} />
                 </button>
                 <button onClick={() => setMessages([{ role: 'model', content: "Chat cleared." }])} className="p-2 hover:bg-[#222] rounded-lg text-gray-400" title="Clear Chat">
@@ -129,20 +164,113 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
               </div>
             </div>
 
-            {/* API Key Input */}
-            {showKeyInput && (
-              <div className="p-4 bg-amber-500/5 border-b border-amber-500/20">
-                <label className="text-[10px] font-bold text-amber-500/70 uppercase px-1 mb-1 block">Gemini API Key</label>
-                <div className="flex gap-2">
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    className="flex-1 bg-black border border-[#333] rounded-lg px-3 py-1.5 text-xs text-white focus:border-amber-500/50 outline-none"
-                    placeholder="Paste your API key..."
-                  />
-                  <button onClick={saveKey} className="bg-amber-600 hover:bg-amber-500 text-white px-3 rounded-lg text-xs font-bold transition-colors">
-                    Save
+            {/* API Settings Pane */}
+            {showSettings && (
+              <div className="p-4 bg-[#141414] border-b border-[#222] space-y-4">
+                {/* Engine Selector */}
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase mb-1.5 block">AI Engine Mode</label>
+                  <div className="grid grid-cols-3 gap-1 bg-black p-1 rounded-lg border border-[#222]">
+                    <button
+                      onClick={() => setAiEngine('n8n')}
+                      className={`py-1 px-1.5 rounded text-[10px] font-bold transition-all ${
+                        aiEngine === 'n8n'
+                          ? 'bg-emerald-600 text-white shadow'
+                          : 'text-gray-400 hover:text-white hover:bg-[#222]'
+                      }`}
+                    >
+                      n8n
+                    </button>
+                    <button
+                      onClick={() => setAiEngine('gemini')}
+                      className={`py-1 px-1.5 rounded text-[10px] font-bold transition-all ${
+                        aiEngine === 'gemini'
+                          ? 'bg-indigo-600 text-white shadow'
+                          : 'text-gray-400 hover:text-white hover:bg-[#222]'
+                      }`}
+                    >
+                      Gemini
+                    </button>
+                    <button
+                      onClick={() => setAiEngine('local')}
+                      className={`py-1 px-1.5 rounded text-[10px] font-bold transition-all ${
+                        aiEngine === 'local'
+                          ? 'bg-purple-600 text-white shadow'
+                          : 'text-gray-400 hover:text-white hover:bg-[#222]'
+                      }`}
+                    >
+                      LM Studio
+                    </button>
+                  </div>
+                </div>
+
+                {/* Gemini Engine API Settings */}
+                {aiEngine === 'gemini' && (
+                  <div>
+                    <label className="text-[10px] font-bold text-indigo-400 uppercase px-1 mb-1 block">Gemini API Key</label>
+                    <input
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      className="w-full bg-black border border-[#333] rounded-lg px-3 py-1.5 text-xs text-white focus:border-indigo-500/50 outline-none"
+                      placeholder="Paste your Gemini API key..."
+                    />
+                  </div>
+                )}
+
+                {/* Local Engine Settings */}
+                {aiEngine === 'local' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-purple-400 uppercase px-1 mb-1 block">LM Studio URL</label>
+                      <input
+                        type="text"
+                        value={localBaseUrl}
+                        onChange={(e) => setLocalBaseUrl(e.target.value)}
+                        className="w-full bg-black border border-[#333] rounded-lg px-3 py-1.5 text-xs text-white focus:border-purple-500/50 outline-none"
+                        placeholder="http://localhost:1234/api/v1/chat"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between items-center px-1 mb-1">
+                        <label className="text-[10px] font-bold text-purple-400 uppercase">Loaded Model</label>
+                        <button
+                          onClick={() => refreshModels(localBaseUrl)}
+                          disabled={isLoadingModels}
+                          className="text-[9px] text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors disabled:opacity-50"
+                        >
+                          <RefreshCw size={10} className={isLoadingModels ? 'animate-spin' : ''} />
+                          Refresh Models
+                        </button>
+                      </div>
+                      <div className="flex gap-2">
+                        {localModels.length > 0 ? (
+                          <select
+                            value={localModel}
+                            onChange={(e) => setLocalModel(e.target.value)}
+                            className="flex-1 bg-black border border-[#333] rounded-lg px-3 py-1.5 text-xs text-white focus:border-purple-500/50 outline-none"
+                          >
+                            {localModels.map((m) => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={localModel}
+                            onChange={(e) => setLocalModel(e.target.value)}
+                            className="flex-1 bg-black border border-[#333] rounded-lg px-3 py-1.5 text-xs text-white focus:border-purple-500/50 outline-none"
+                            placeholder="e.g. qwen3-8b"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2">
+                  <button onClick={saveSettings} className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                    Save & Close
                   </button>
                 </div>
               </div>
@@ -167,9 +295,15 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
               {isLoading && (
                 <div className="flex justify-start animate-pulse">
                   <div className="bg-[#1a1a1a] border border-[#333] rounded-2xl rounded-tl-none p-3 flex gap-2 items-center">
-                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" />
-                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.2s]" />
-                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.4s]" />
+                    <div className={`w-1.5 h-1.5 rounded-full animate-bounce ${
+                      aiEngine === 'n8n' ? 'bg-emerald-500' : aiEngine === 'gemini' ? 'bg-indigo-500' : 'bg-purple-500'
+                    }`} />
+                    <div className={`w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:0.2s] ${
+                      aiEngine === 'n8n' ? 'bg-emerald-500' : aiEngine === 'gemini' ? 'bg-indigo-500' : 'bg-purple-500'
+                    }`} />
+                    <div className={`w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:0.4s] ${
+                      aiEngine === 'n8n' ? 'bg-emerald-500' : aiEngine === 'gemini' ? 'bg-indigo-500' : 'bg-purple-500'
+                    }`} />
                   </div>
                 </div>
               )}
@@ -182,19 +316,33 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                  placeholder={useOrchestrator ? "Tell the Orchestrator what to model..." : "Ask me to design something..."}
-                  className={`w-full bg-[#161616] border border-[#333] rounded-xl pl-4 pr-12 py-3 text-xs text-white placeholder:text-gray-600 outline-none resize-none h-20 transition-all ${useOrchestrator ? 'focus:border-emerald-500/50' : 'focus:border-indigo-500/50'}`}
+                  placeholder={
+                    aiEngine === 'n8n'
+                      ? "Tell the Orchestrator what to model..."
+                      : aiEngine === 'gemini'
+                      ? "Ask Gemini to design something..."
+                      : "Instruct your local LM Studio model..."
+                  }
+                  className={`w-full bg-[#161616] border border-[#333] rounded-xl pl-4 pr-12 py-3 text-xs text-white placeholder:text-gray-600 outline-none resize-none h-20 transition-all ${
+                    aiEngine === 'n8n' ? 'focus:border-emerald-500/50' : aiEngine === 'gemini' ? 'focus:border-indigo-500/50' : 'focus:border-purple-500/50'
+                  }`}
                 />
                 <button
                   onClick={handleSend}
                   disabled={!input.trim() || isLoading}
-                  className={`absolute right-2 bottom-2 p-2 rounded-lg transition-all ${useOrchestrator ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-indigo-600 hover:bg-indigo-500'} disabled:bg-gray-800 disabled:text-gray-600 text-white shadow-lg`}
+                  className={`absolute right-2 bottom-2 p-2 rounded-lg transition-all ${
+                    aiEngine === 'n8n' ? 'bg-emerald-600 hover:bg-emerald-500' : aiEngine === 'gemini' ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-purple-600 hover:bg-purple-500'
+                  } disabled:bg-gray-800 disabled:text-gray-600 text-white shadow-lg`}
                 >
                   <Send size={16} />
                 </button>
               </div>
               <p className="text-[9px] text-center text-gray-600 mt-2">
-                {useOrchestrator ? 'Connected to n8n Orchestrator for automated modeling.' : 'Using Gemini for architectural guidance.'}
+                {aiEngine === 'n8n'
+                  ? 'Connected to n8n Orchestrator for automated modeling.'
+                  : aiEngine === 'gemini'
+                  ? 'Using Gemini API for architectural guidance.'
+                  : `Connected to LM Studio (${localModel}).`}
               </p>
             </div>
           </>

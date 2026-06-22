@@ -531,9 +531,38 @@ export const HELP_DATA: Record<string, {
       {
         title: "VFD Drive Control",
         body: "Implementing FOC for an induction motor."
+      },
+      {
+        title: "Differential Drive LiDAR Robot Vacuum Twin",
+        body: "A complete, modular co-simulation of a differential-drive robot vacuum. The system is split into 9 separate connected blocks (similar to Simulink): \n1. **Robot Vacuum Navigation**: Selects targets, executes waypoints, and reacts to obstacles.\n2. **Inverse Kinematics**: Translates linear/angular reference velocities to wheel speed references.\n3. **Wheel Speed PI**: Implements closed-loop speed control for left/right motors.\n4. **Robot Vacuum Motor**: Simulates the DC motor armature winding and rotor inertia (instantiated twice: Left and Right).\n5. **Robot Dynamics (Plant)**: Computes 3DoF continuous chassis kinematics: dX/dt = V * cos(θ), dY/dt = V * sin(θ), dθ/dt = ω.\n6. **Simulation Environment (Canvas)**: Models the physical room boundary walls, 3 circle obstacles, and 2 box obstacles, calculates mathematically precise 8-beam LiDAR raycasting, checks for physical collisions (within 15cm radius), and renders the live visual digital twin.\n7. **Odometry**: Tracks encoder counts to estimate raw robot coordinates.\n8. **Sensor Fusion**: Implements a complementary filter to correct odometry drift with true references.\n9. **SLAM Map**: Integrates LiDAR range vectors to build a 2D occupancy grid."
       }
     ],
-    related: ["vlab-fundamentals", "vfd-control"]
+    related: ["vlab-fundamentals", "vfd-control", "robot-vacuum-digital-twin"]
+  },
+  "robot-vacuum-digital-twin": {
+    title: "LiDAR Robot Vacuum Digital Twin Reference",
+    category: "Tutorials",
+    description: "Comprehensive subsystem reference and mathematical models for the modular differential-drive robot vacuum.",
+    content: "The LiDAR Robot Vacuum Digital Twin is a modular signal-flow co-simulation demonstrating feedback control, motor dynamics, dead reckoning, sensor fusion, and occupancy grid SLAM mapping.",
+    sections: [
+      {
+        title: "1. Block Diagram Architecture",
+        body: "Unlike standard black-box simulations, the digital twin is fully transparent, consisting of separate blocks connected in a feedback loop:\n- **Navigation Planner** -> **Inverse Kinematics** -> **Wheel speed PID** -> **Left/Right Motor Plants** -> **Robot Dynamics (Plant)** -> **Simulation Environment (Canvas)** -> **Encoder Odometry** -> **Sensor Fusion Filter** -> **SLAM Map Builder**."
+      },
+      {
+        title: "2. Physical Dynamics & Motors",
+        body: "The **Robot Dynamics (Plant)** block solves continuous equations representing 3DoF chassis kinematics: dX/dt = V * cos(θ), dY/dt = V * sin(θ), dθ/dt = ω. The motor blocks simulate DC winding inductance L_m and resistance R_m: di/dt = (V_in - R_m * i - K_e * ω_wheel) / L_m, and rotor acceleration: dω/dt = (K_t * i - damping * ω) / J."
+      },
+      {
+        title: "3. Spatial Simulation Environment",
+        body: "The **Simulation Environment (Canvas)** block models the physical space containing 3 circle obstacles and 2 box obstacles within a 5.7m x 5.7m room. It performs mathematically rigorous 2D intersection calculations to simulate 8 LiDAR distance sensors raycasting outward from the robot chassis. It also checks if the robot's physical boundary (15cm radius) intersects with any walls or obstacles, generating a binary `collision` signal and incrementing the total collision count."
+      },
+      {
+        title: "4. Odometry, Fusion & SLAM",
+        body: "The **Odometry** block integrates encoder pulses, which simulates slippage and drift. The **Sensor Fusion** block applies a complementary filter (gain = 0.06) to drift-correct the estimate towards the true position. The **SLAM** block projects the 8 raycasted LiDAR ranges from the estimated pose to update a 30x30 occupancy probability grid."
+      }
+    ],
+    related: ["learning-labs", "xbridges-ref"]
   },
   "state-machine-fundamentals": {
     title: "State Machine (Stateflow) Fundamentals",

@@ -2,12 +2,76 @@
 
 export const XBRIDGES_CATEGORIES = [
   {
+    name: 'Robot Vacuum Learning',
+    blocks: [
+      { type: 'ROBOT_VACUUM_LIDAR_SENSOR', label: 'Lidar Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ODOMETRY_SENSOR', label: 'Odometry Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_CLIFF_IR', label: 'Cliff IR Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DUSTBIN_SENSOR', label: 'Dustbin Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_MOTOR_CURRENT', label: 'Motor Current', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SENSOR_FUSION_EKF', label: 'EKF Localization', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ROOM_SEGMENTATION', label: 'Room Segmentation', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SEMANTIC_MAP', label: 'Semantic Zone Map', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COVERAGE_PLANNER', label: 'Coverage Planner', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ROOM_SCHEDULER', label: 'Room Scheduler', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_BATTERY_MONITOR', label: 'Battery Monitor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_GOAL_MANAGER', label: 'Goal Manager', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_3D_VIZ_COLORS', label: '3D Visualization (Room Colors)', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_WAYPOINT_GEN', label: 'Waypoint Generation', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COLLISION_AVOID', label: 'Collision Avoidance', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SURFACE_ADAPTER', label: 'Surface Adapter', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_CLIFF_HALT', label: 'Cliff Halt Logic', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_VELOCITY_PID', label: 'Velocity PID', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_MODE_SUPERVISOR', label: 'Mode Supervisor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_BUMPER_SENSOR', label: 'Bumper Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SIDE_BRUSH', label: 'Side Brush Model', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SUCTION_PWM', label: 'Variable Suction', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_TERRAIN_MODEL', label: 'Terrain Model', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COLLISION_MESH', label: 'Collision Mesh', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DOCK_BEACON', label: 'Dock Station (Beacon)', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_CAPACITY_THRESHOLD', label: 'Capacity Threshold', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_HALT_ALERT', label: 'Halt & Alert State', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DOCK_DETECT', label: 'Dock Detect Logic', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_RESUME_SCHEDULER', label: 'Resume Scheduler', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_3D_SCENE_VIEW', label: '3D Scene View', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_FURNITURE_MESH', label: 'Furniture Mesh 3D', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DIRT_DENSITY', label: 'Dirt Density Map', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ROOM_ZONE_COLORS', label: 'Room Zone Colors', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COVERAGE_HEATMAP', label: 'Coverage Heatmap', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DOCK_ICON', label: 'Dock Station Icon', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_BATTERY_HUD', label: 'Battery HUD', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DUSTBIN_HUD', label: 'Dustbin Level HUD', icon: 'graduation-cap' }
+    ]
+  },
+  {
     name: 'Learning Models',
     blocks: [
       { type: 'AC_MOTOR_PID_CONTROL', label: 'AC Motor PID Control', icon: 'graduation-cap' },
       { type: 'LMS_ADAPTIVE_FILTER', label: 'LMS Adaptive Filter', icon: 'graduation-cap' },
       { type: 'NEURAL_NEURON_LEARNING', label: 'Neural Neuron Learner', icon: 'graduation-cap' },
-      { type: 'RL_Q_LEARNING_CONTROLLER', label: 'RL Q-Learning Agent', icon: 'graduation-cap' }
+      { type: 'RL_Q_LEARNING_CONTROLLER', label: 'RL Q-Learning Agent', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DIGITAL_TWIN', label: 'Robot Vacuum Twin (Single)', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_DYNAMICS', label: 'Robot Vacuum Dynamics', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_MOTOR', label: 'Robot Vacuum Motor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ODOMETRY', label: 'Robot Vacuum Odometry', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_FUSION', label: 'Robot Vacuum Fusion', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_SLAM', label: 'Robot Vacuum SLAM Map', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_NAV', label: 'Robot Vacuum Navigation', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_KINEMATICS', label: 'Robot Vacuum Kinematics', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_WHEEL_CONTROL', label: 'Robot Wheel Speed PI', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ENVIRONMENT', label: 'Robot Vacuum Environment', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_BATTERY', label: 'Robot Battery System', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COMM', label: 'Robot Communication Link', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_ENCODER', label: 'Robot Wheel Encoder', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_LIDAR', label: 'Robot LiDAR Sensor', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_LOCALIZATION', label: 'Robot Localization (EKF)', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_MAPPING', label: 'Robot Mapping Grid', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_COVERAGE', label: 'Robot Coverage Planner', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_GLOBAL_PLANNER', label: 'Robot Global Path Planner', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_OBSTACLE_AVOIDANCE', label: 'Robot Obstacle Avoidance', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_MOTION_CONTROLLER', label: 'Robot Motion Controller', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_MOTOR_COMMAND', label: 'Robot Motor Command Gen', icon: 'graduation-cap' },
+      { type: 'ROBOT_VACUUM_VISUALIZATION', label: 'Robot Visualization Twin', icon: 'graduation-cap' }
     ]
   },
   {
@@ -250,6 +314,28 @@ export const XBRIDGES_CATEGORIES = [
     name: 'Analysis & DOE',
     blocks: [
       { type: 'DOE_MODULE', label: 'DOE Module', icon: 'bar-chart' }
+    ]
+  },
+  {
+    name: 'Fuzzy Logic',
+    blocks: [
+      { type: 'FUZZY_MF_TRIMF', label: 'Triangular MF', icon: 'activity' },
+      { type: 'FUZZY_MF_TRAPMF', label: 'Trapezoidal MF', icon: 'activity' },
+      { type: 'FUZZY_MF_GAUSSMF', label: 'Gaussian MF', icon: 'activity' },
+      { type: 'FUZZY_MF_SIGMF', label: 'Sigmoid MF', icon: 'activity' },
+      { type: 'FUZZY_AND', label: 'Fuzzy AND (T-Norm)', icon: 'plus' },
+      { type: 'FUZZY_OR', label: 'Fuzzy OR (S-Norm)', icon: 'grid' },
+      { type: 'FUZZY_NOT', label: 'Fuzzy NOT', icon: 'minus-circle' },
+      { type: 'FUZZY_RULE', label: 'Fuzzy Rule', icon: 'settings' },
+      { type: 'FUZZY_DEFUZZIFY', label: 'Defuzzifier', icon: 'filter' }
+    ]
+  },
+  {
+    name: 'Fuzzy Control Systems',
+    blocks: [
+      { type: 'FUZZY_INFERENCE_SYSTEM', label: 'Fuzzy Inference (FIS)', icon: 'cpu' },
+      { type: 'FUZZY_PID_CONTROLLER', label: 'Fuzzy PID Controller', icon: 'cpu' },
+      { type: 'FUZZY_SURFACE_VIEWER', label: 'Control Surface Viewer', icon: 'bar-chart' }
     ]
   }
 ];

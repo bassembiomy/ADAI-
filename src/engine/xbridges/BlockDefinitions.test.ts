@@ -235,5 +235,266 @@ describe('X-Bridges Learning Models Block Tests', () => {
     expect(state.speed).not.toBe(0);
   });
 
+  it('TC-ROBOT-01: Robot Vacuum Digital Twin Kinetics and SLAM', () => {
+    const block = BLOCK_LIBRARY['ROBOT_VACUUM_DIGITAL_TWIN']('robot_test', {
+      wheel_radius: 0.033,
+      wheel_separation: 0.16,
+      lidar_max_range: 4.0
+    });
+
+    let state = block.state;
+    expect(state.x).toBe(0);
+    expect(state.y).toBe(0);
+    expect(state.navState).toBe(4);
+
+    let res = block.execute([1.5, 1.5, 4], block.params, state, 0.02);
+    state = res.nextState;
+
+    expect(res.outputs.length).toBe(10);
+    expect(res.outputs[0]).toBe(0);
+    expect(state.lidarRanges.length).toBe(8);
+    
+    let mappedCount = 0;
+    for (let r = 0; r < 30; r++) {
+      for (let c = 0; c < 30; c++) {
+        if (state.grid[r][c] !== 0) mappedCount++;
+      }
+    }
+    expect(mappedCount).toBeGreaterThan(0);
+
+    const derivs = block.evaluateDerivatives!([1.5, 1.5, 4], block.params, state, 0.02);
+    expect(derivs.length).toBe(9);
+    expect(typeof derivs[0]).toBe('number');
+  });
+
+  it('TC-ROBOT-02: Modular Robot Vacuum Feedback Loop Compilation and Step', () => {
+    const model = {
+      blocks: [
+        BLOCK_LIBRARY['Constant']('target_x', { value: 1.5 }),
+        BLOCK_LIBRARY['Constant']('target_y', { value: 1.5 }),
+        BLOCK_LIBRARY['Constant']('mode_select', { value: 4 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_NAV']('robot_nav', {}),
+        BLOCK_LIBRARY['ROBOT_VACUUM_KINEMATICS']('robot_kinematics', { wheel_radius: 0.033, wheel_separation: 0.16 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_WHEEL_CONTROL']('robot_pid', { Kp_wheel: 12.0, Ki_wheel: 45.0, V_bat: 12.0 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_MOTOR']('motor_left', { motor_R: 2.5, motor_L: 0.005, motor_K: 0.04, inertia: 0.0075, encoder_cpr: 360 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_MOTOR']('motor_right', { motor_R: 2.5, motor_L: 0.005, motor_K: 0.04, inertia: 0.0075, encoder_cpr: 360 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_DYNAMICS']('robot_dynamics', { wheel_radius: 0.033, wheel_separation: 0.16 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_ENVIRONMENT']('robot_env', { lidar_max_range: 4.0, lidar_noise_std: 0.02 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_ODOMETRY']('robot_odom', { wheel_radius: 0.033, wheel_separation: 0.16, encoder_cpr: 360 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_FUSION']('robot_fusion', { filter_gain: 0.06 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_SLAM']('robot_slam', { lidar_max_range: 4.0 }),
+        BLOCK_LIBRARY['Scope']('scope_pose', { numSignals: 3, bufferSize: 1000 })
+      ],
+      connections: [
+        { sourceBlock: 'target_x', sourcePort: 'out', targetBlock: 'robot_nav', targetPort: 'target_x_in' },
+        { sourceBlock: 'target_y', sourcePort: 'out', targetBlock: 'robot_nav', targetPort: 'target_y_in' },
+        { sourceBlock: 'mode_select', sourcePort: 'out', targetBlock: 'robot_nav', targetPort: 'mode_select' },
+
+        { sourceBlock: 'robot_nav', sourcePort: 'v_ref', targetBlock: 'robot_kinematics', targetPort: 'v_ref' },
+        { sourceBlock: 'robot_nav', sourcePort: 'w_ref', targetBlock: 'robot_kinematics', targetPort: 'w_ref' },
+
+        { sourceBlock: 'robot_kinematics', sourcePort: 'omegaL_ref', targetBlock: 'robot_pid', targetPort: 'omegaL_ref' },
+        { sourceBlock: 'robot_kinematics', sourcePort: 'omegaR_ref', targetBlock: 'robot_pid', targetPort: 'omegaR_ref' },
+        { sourceBlock: 'motor_left', sourcePort: 'omega', targetBlock: 'robot_pid', targetPort: 'omega_L' },
+        { sourceBlock: 'motor_right', sourcePort: 'omega', targetBlock: 'robot_pid', targetPort: 'omega_R' },
+
+        { sourceBlock: 'robot_pid', sourcePort: 'V_L', targetBlock: 'motor_left', targetPort: 'pwm_duty' },
+        { sourceBlock: 'robot_pid', sourcePort: 'V_R', targetBlock: 'motor_right', targetPort: 'pwm_duty' },
+
+        { sourceBlock: 'motor_left', sourcePort: 'omega', targetBlock: 'robot_dynamics', targetPort: 'omega_L' },
+        { sourceBlock: 'motor_right', sourcePort: 'omega', targetBlock: 'robot_dynamics', targetPort: 'omega_R' },
+
+        { sourceBlock: 'motor_left', sourcePort: 'encoder', targetBlock: 'robot_odom', targetPort: 'enc_L' },
+        { sourceBlock: 'motor_right', sourcePort: 'encoder', targetBlock: 'robot_odom', targetPort: 'enc_R' },
+
+        { sourceBlock: 'robot_odom', sourcePort: 'x_odom', targetBlock: 'robot_fusion', targetPort: 'x_odom' },
+        { sourceBlock: 'robot_odom', sourcePort: 'y_odom', targetBlock: 'robot_fusion', targetPort: 'y_odom' },
+        { sourceBlock: 'robot_odom', sourcePort: 'theta_odom', targetBlock: 'robot_fusion', targetPort: 'theta_odom' },
+        { sourceBlock: 'robot_dynamics', sourcePort: 'x', targetBlock: 'robot_fusion', targetPort: 'x_true' },
+        { sourceBlock: 'robot_dynamics', sourcePort: 'y', targetBlock: 'robot_fusion', targetPort: 'y_true' },
+        { sourceBlock: 'robot_dynamics', sourcePort: 'theta', targetBlock: 'robot_fusion', targetPort: 'theta_true' },
+
+        { sourceBlock: 'robot_fusion', sourcePort: 'x_est', targetBlock: 'robot_slam', targetPort: 'x_est' },
+        { sourceBlock: 'robot_fusion', sourcePort: 'y_est', targetBlock: 'robot_slam', targetPort: 'y_est' },
+        { sourceBlock: 'robot_fusion', sourcePort: 'theta_est', targetBlock: 'robot_slam', targetPort: 'theta_est' },
+        { sourceBlock: 'robot_env', sourcePort: 'lidar_ranges', targetBlock: 'robot_slam', targetPort: 'lidar_ranges' },
+
+        { sourceBlock: 'robot_fusion', sourcePort: 'x_est', targetBlock: 'robot_nav', targetPort: 'x_est' },
+        { sourceBlock: 'robot_fusion', sourcePort: 'y_est', targetBlock: 'robot_nav', targetPort: 'y_est' },
+        { sourceBlock: 'robot_fusion', sourcePort: 'theta_est', targetBlock: 'robot_nav', targetPort: 'theta_est' },
+        { sourceBlock: 'robot_env', sourcePort: 'lidar_ranges', targetBlock: 'robot_nav', targetPort: 'lidar_ranges' },
+
+        { sourceBlock: 'robot_dynamics', sourcePort: 'x', targetBlock: 'robot_env', targetPort: 'x' },
+        { sourceBlock: 'robot_dynamics', sourcePort: 'y', targetBlock: 'robot_env', targetPort: 'y' },
+        { sourceBlock: 'robot_dynamics', sourcePort: 'theta', targetBlock: 'robot_env', targetPort: 'theta' },
+        { sourceBlock: 'robot_fusion', sourcePort: 'x_est', targetBlock: 'robot_env', targetPort: 'x_est' },
+        { sourceBlock: 'robot_fusion', sourcePort: 'y_est', targetBlock: 'robot_env', targetPort: 'y_est' },
+        { sourceBlock: 'robot_fusion', sourcePort: 'theta_est', targetBlock: 'robot_env', targetPort: 'theta_est' },
+        { sourceBlock: 'robot_nav', sourcePort: 'target_x_active', targetBlock: 'robot_env', targetPort: 'target_x_in' },
+        { sourceBlock: 'robot_nav', sourcePort: 'target_y_active', targetBlock: 'robot_env', targetPort: 'target_y_in' },
+        { sourceBlock: 'robot_nav', sourcePort: 'nav_state', targetBlock: 'robot_env', targetPort: 'nav_state' },
+        { sourceBlock: 'robot_slam', sourcePort: 'grid', targetBlock: 'robot_env', targetPort: 'grid' },
+
+        { sourceBlock: 'robot_fusion', sourcePort: 'x_est', targetBlock: 'scope_pose', targetPort: 'in1' },
+        { sourceBlock: 'robot_fusion', sourcePort: 'y_est', targetBlock: 'scope_pose', targetPort: 'in2' },
+        { sourceBlock: 'robot_fusion', sourcePort: 'theta_est', targetBlock: 'scope_pose', targetPort: 'in3' }
+      ]
+    };
+
+    const engine = new XbridgesEngine(model);
+    const diags = engine.compile();
+    expect(diags.filter(d => d.severity === 'error').length).toBe(0);
+
+    const dynamicsBlock = engine.getBlock('robot_dynamics')!;
+    const slamBlock = engine.getBlock('robot_slam')!;
+    const motorLBlock = engine.getBlock('motor_left')!;
+
+    expect(dynamicsBlock.state.x).toBe(0);
+    expect(motorLBlock.state.omega).toBe(0);
+
+    // Run 5 RK4 simulation steps
+    let time = 0;
+    const dt = 0.02;
+    for (let i = 0; i < 5; i++) {
+      Solvers.stepRK4(engine, time, dt);
+      time += dt;
+    }
+
+    // After stepping, SLAM mapping grid should have updated cells
+    let mappedCount = 0;
+    const grid = slamBlock.state.grid;
+    for (let r = 0; r < 30; r++) {
+      for (let c = 0; c < 30; c++) {
+        if (grid[r][c] !== 0) mappedCount++;
+      }
+    }
+    expect(mappedCount).toBeGreaterThan(0);
+
+    // Motor currents/speeds should have non-zero states due to control voltage integration
+    expect(motorLBlock.state.omega).not.toBe(0);
+    expect(motorLBlock.state.current).not.toBe(0);
+  });
+
+  it('TC-ROBOT-03: Decoupled Robot Vacuum Loop Compilation and Step', () => {
+    const model = {
+      blocks: [
+        BLOCK_LIBRARY['Constant']('mode_select', { value: 4 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_MAPPING']('robot_map', {}),
+        BLOCK_LIBRARY['ROBOT_VACUUM_COVERAGE']('robot_coverage', {}),
+        BLOCK_LIBRARY['ROBOT_VACUUM_GLOBAL_PLANNER']('robot_global_planner', {}),
+        BLOCK_LIBRARY['ROBOT_VACUUM_OBSTACLE_AVOIDANCE']('robot_obstacle_avoid', {}),
+        BLOCK_LIBRARY['ROBOT_VACUUM_MOTION_CONTROLLER']('robot_motion_control', {}),
+        BLOCK_LIBRARY['ROBOT_VACUUM_MOTOR_COMMAND']('robot_motor_command', {}),
+        BLOCK_LIBRARY['ROBOT_VACUUM_MOTOR']('motor_left', { motor_R: 2.5, motor_L: 0.005, motor_K: 0.04, inertia: 0.0075, encoder_cpr: 360 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_MOTOR']('motor_right', { motor_R: 2.5, motor_L: 0.005, motor_K: 0.04, inertia: 0.0075, encoder_cpr: 360 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_BATTERY']('robot_battery', { nominal_voltage: 12.0, capacity_Ah: 2.6 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_DYNAMICS']('robot_dynamics', { wheel_radius: 0.033, wheel_separation: 0.16 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_ENCODER']('robot_encoder', {}),
+        BLOCK_LIBRARY['ROBOT_VACUUM_ODOMETRY']('robot_odom', { wheel_radius: 0.033, wheel_separation: 0.16, encoder_cpr: 360 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_LIDAR']('robot_lidar', {}),
+        BLOCK_LIBRARY['ROBOT_VACUUM_LOCALIZATION']('robot_localization', { filter_gain: 0.06 }),
+        BLOCK_LIBRARY['ROBOT_VACUUM_VISUALIZATION']('robot_visualizer', {}),
+        BLOCK_LIBRARY['Scope']('scope_pose', { numSignals: 3, bufferSize: 1000 })
+      ],
+      connections: [
+        { sourceBlock: 'robot_dynamics', sourcePort: 'x', targetBlock: 'robot_visualizer', targetPort: 'x' },
+        { sourceBlock: 'robot_dynamics', sourcePort: 'y', targetBlock: 'robot_visualizer', targetPort: 'y' },
+        { sourceBlock: 'robot_dynamics', sourcePort: 'theta', targetBlock: 'robot_visualizer', targetPort: 'theta' },
+        { sourceBlock: 'robot_dynamics', sourcePort: 'x', targetBlock: 'robot_lidar', targetPort: 'x' },
+        { sourceBlock: 'robot_dynamics', sourcePort: 'y', targetBlock: 'robot_lidar', targetPort: 'y' },
+        { sourceBlock: 'robot_dynamics', sourcePort: 'theta', targetBlock: 'robot_lidar', targetPort: 'theta' },
+        { sourceBlock: 'robot_dynamics', sourcePort: 'x', targetBlock: 'robot_localization', targetPort: 'x_true' },
+        { sourceBlock: 'robot_dynamics', sourcePort: 'y', targetBlock: 'robot_localization', targetPort: 'y_true' },
+        { sourceBlock: 'robot_dynamics', sourcePort: 'theta', targetBlock: 'robot_localization', targetPort: 'theta_true' },
+        { sourceBlock: 'robot_lidar', sourcePort: 'ranges', targetBlock: 'robot_map', targetPort: 'lidar_ranges' },
+        { sourceBlock: 'robot_lidar', sourcePort: 'ranges', targetBlock: 'robot_obstacle_avoid', targetPort: 'lidar_ranges' },
+        { sourceBlock: 'robot_lidar', sourcePort: 'ranges', targetBlock: 'robot_localization', targetPort: 'lidar_ranges' },
+        { sourceBlock: 'robot_lidar', sourcePort: 'ranges', targetBlock: 'robot_visualizer', targetPort: 'lidar_ranges' },
+        { sourceBlock: 'motor_left', sourcePort: 'omega', targetBlock: 'robot_dynamics', targetPort: 'omega_L' },
+        { sourceBlock: 'motor_right', sourcePort: 'omega', targetBlock: 'robot_dynamics', targetPort: 'omega_R' },
+        { sourceBlock: 'motor_left', sourcePort: 'omega', targetBlock: 'robot_encoder', targetPort: 'omega_L' },
+        { sourceBlock: 'motor_right', sourcePort: 'omega', targetBlock: 'robot_encoder', targetPort: 'omega_R' },
+        { sourceBlock: 'motor_left', sourcePort: 'omega', targetBlock: 'robot_motor_command', targetPort: 'omega_L' },
+        { sourceBlock: 'motor_right', sourcePort: 'omega', targetBlock: 'robot_motor_command', targetPort: 'omega_R' },
+        { sourceBlock: 'motor_left', sourcePort: 'current', targetBlock: 'robot_battery', targetPort: 'I_L' },
+        { sourceBlock: 'motor_right', sourcePort: 'current', targetBlock: 'robot_battery', targetPort: 'I_R' },
+        { sourceBlock: 'robot_battery', sourcePort: 'battery_voltage', targetBlock: 'motor_left', targetPort: 'v_bat' },
+        { sourceBlock: 'robot_battery', sourcePort: 'battery_voltage', targetBlock: 'motor_right', targetPort: 'v_bat' },
+        { sourceBlock: 'robot_battery', sourcePort: 'battery_level', targetBlock: 'robot_visualizer', targetPort: 'battery_level' },
+        { sourceBlock: 'robot_encoder', sourcePort: 'enc_L', targetBlock: 'robot_odom', targetPort: 'enc_L' },
+        { sourceBlock: 'robot_encoder', sourcePort: 'enc_R', targetBlock: 'robot_odom', targetPort: 'enc_R' },
+        { sourceBlock: 'robot_odom', sourcePort: 'x_odom', targetBlock: 'robot_localization', targetPort: 'x_odom' },
+        { sourceBlock: 'robot_odom', sourcePort: 'y_odom', targetBlock: 'robot_localization', targetPort: 'y_odom' },
+        { sourceBlock: 'robot_odom', sourcePort: 'theta_odom', targetBlock: 'robot_localization', targetPort: 'theta_odom' },
+        { sourceBlock: 'robot_localization', sourcePort: 'x_est', targetBlock: 'robot_map', targetPort: 'x_est' },
+        { sourceBlock: 'robot_localization', sourcePort: 'y_est', targetBlock: 'robot_map', targetPort: 'y_est' },
+        { sourceBlock: 'robot_localization', sourcePort: 'theta_est', targetBlock: 'robot_map', targetPort: 'theta_est' },
+        { sourceBlock: 'robot_localization', sourcePort: 'x_est', targetBlock: 'robot_coverage', targetPort: 'x_est' },
+        { sourceBlock: 'robot_localization', sourcePort: 'y_est', targetBlock: 'robot_coverage', targetPort: 'y_est' },
+        { sourceBlock: 'robot_localization', sourcePort: 'x_est', targetBlock: 'robot_global_planner', targetPort: 'x_est' },
+        { sourceBlock: 'robot_localization', sourcePort: 'y_est', targetBlock: 'robot_global_planner', targetPort: 'y_est' },
+        { sourceBlock: 'robot_localization', sourcePort: 'x_est', targetBlock: 'robot_motion_control', targetPort: 'x_est' },
+        { sourceBlock: 'robot_localization', sourcePort: 'y_est', targetBlock: 'robot_motion_control', targetPort: 'y_est' },
+        { sourceBlock: 'robot_localization', sourcePort: 'theta_est', targetBlock: 'robot_motion_control', targetPort: 'theta_est' },
+        { sourceBlock: 'robot_localization', sourcePort: 'x_est', targetBlock: 'robot_visualizer', targetPort: 'x_est' },
+        { sourceBlock: 'robot_localization', sourcePort: 'y_est', targetBlock: 'robot_visualizer', targetPort: 'y_est' },
+        { sourceBlock: 'robot_localization', sourcePort: 'theta_est', targetBlock: 'robot_visualizer', targetPort: 'theta_est' },
+        { sourceBlock: 'robot_localization', sourcePort: 'confidence', targetBlock: 'robot_visualizer', targetPort: 'confidence' },
+        { sourceBlock: 'robot_localization', sourcePort: 'x_est', targetBlock: 'scope_pose', targetPort: 'in1' },
+        { sourceBlock: 'robot_localization', sourcePort: 'y_est', targetBlock: 'scope_pose', targetPort: 'in2' },
+        { sourceBlock: 'robot_localization', sourcePort: 'theta_est', targetBlock: 'scope_pose', targetPort: 'in3' },
+        { sourceBlock: 'robot_map', sourcePort: 'grid', targetBlock: 'robot_coverage', targetPort: 'grid' },
+        { sourceBlock: 'robot_map', sourcePort: 'grid', targetBlock: 'robot_global_planner', targetPort: 'grid' },
+        { sourceBlock: 'robot_map', sourcePort: 'grid', targetBlock: 'robot_visualizer', targetPort: 'grid' },
+        { sourceBlock: 'robot_coverage', sourcePort: 'goal_x', targetBlock: 'robot_global_planner', targetPort: 'goal_x' },
+        { sourceBlock: 'robot_coverage', sourcePort: 'goal_y', targetBlock: 'robot_global_planner', targetPort: 'goal_y' },
+        { sourceBlock: 'robot_coverage', sourcePort: 'coverage_status', targetBlock: 'robot_visualizer', targetPort: 'nav_stats' },
+        { sourceBlock: 'robot_global_planner', sourcePort: 'target_x', targetBlock: 'robot_obstacle_avoid', targetPort: 'target_x' },
+        { sourceBlock: 'robot_global_planner', sourcePort: 'target_y', targetBlock: 'robot_obstacle_avoid', targetPort: 'target_y' },
+        { sourceBlock: 'robot_obstacle_avoid', sourcePort: 'safe_x', targetBlock: 'robot_motion_control', targetPort: 'target_x' },
+        { sourceBlock: 'robot_obstacle_avoid', sourcePort: 'safe_y', targetBlock: 'robot_motion_control', targetPort: 'target_y' },
+        { sourceBlock: 'robot_obstacle_avoid', sourcePort: 'velocity_constraints', targetBlock: 'robot_motion_control', targetPort: 'velocity_constraints' },
+        { sourceBlock: 'robot_obstacle_avoid', sourcePort: 'safe_x', targetBlock: 'robot_visualizer', targetPort: 'target_x' },
+        { sourceBlock: 'robot_obstacle_avoid', sourcePort: 'safe_y', targetBlock: 'robot_visualizer', targetPort: 'target_y' },
+        { sourceBlock: 'robot_obstacle_avoid', sourcePort: 'nav_state', targetBlock: 'robot_visualizer', targetPort: 'nav_state' },
+        { sourceBlock: 'robot_motion_control', sourcePort: 'v_cmd', targetBlock: 'robot_motor_command', targetPort: 'v_cmd' },
+        { sourceBlock: 'robot_motion_control', sourcePort: 'w_cmd', targetBlock: 'robot_motor_command', targetPort: 'w_cmd' },
+        { sourceBlock: 'robot_motor_command', sourcePort: 'V_cmd_L', targetBlock: 'motor_left', targetPort: 'pwm_duty' },
+        { sourceBlock: 'robot_motor_command', sourcePort: 'V_cmd_R', targetBlock: 'motor_right', targetPort: 'pwm_duty' }
+      ]
+    };
+
+    const engine = new XbridgesEngine(model);
+    const diags = engine.compile();
+
+    expect(diags.filter(d => d.severity === 'error').length).toBe(0);
+
+    const dynamicsBlock = engine.getBlock('robot_dynamics')!;
+    const mapBlock = engine.getBlock('robot_map')!;
+    const motorLBlock = engine.getBlock('motor_left')!;
+
+    expect(dynamicsBlock.state.x).toBe(0);
+    expect(motorLBlock.state.omega).toBe(0);
+
+    let time = 0;
+    const dt = 0.02;
+    for (let i = 0; i < 5; i++) {
+      Solvers.stepRK4(engine, time, dt);
+      time += dt;
+    }
+
+    expect(motorLBlock.state.omega).not.toBe(0);
+    expect(motorLBlock.state.current).not.toBe(0);
+
+    let mappedCount = 0;
+    const grid = mapBlock.state.grid;
+    for (let r = 0; r < 30; r++) {
+      for (let c = 0; c < 30; c++) {
+        if (grid[r][c] !== 0) mappedCount++;
+      }
+    }
+    expect(mappedCount).toBeGreaterThan(0);
+  });
+
 });
 
