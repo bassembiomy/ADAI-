@@ -23,6 +23,45 @@ const WAYPOINTS = [
   { x: 2.5, y: 2.2 }
 ];
 
+// Room A (Corridor) + Room B (Living) + Room C (Bedroom) + Room D (Kitchen)
+const MATLAB_WAYPOINTS = [
+  // Room A – Corridor (x∈[-6,2], y∈[-6,2])
+  { x: -5.6, y: -5.6 }, { x: -5.6, y:  1.6 },
+  { x: -4.9, y:  1.6 }, { x: -4.9, y: -5.6 },
+  { x: -4.2, y: -5.6 }, { x: -4.2, y:  1.6 },
+  { x: -3.5, y:  1.6 }, { x: -3.5, y: -5.6 },
+  { x: -2.8, y: -5.6 }, { x: -2.8, y: -3.4 },
+  { x: -2.1, y: -3.4 }, { x: -2.1, y: -5.6 },
+  { x: -1.4, y: -5.6 }, { x: -1.4, y: -3.4 },
+  { x: -0.7, y: -3.4 }, { x: -0.7, y: -5.6 },
+  { x: -2.8, y:  1.6 }, { x: -2.8, y: -2.6 },
+  { x: -2.1, y: -2.6 }, { x: -2.1, y:  1.6 },
+  { x: -1.4, y:  1.6 }, { x: -1.4, y: -2.6 },
+  { x: -0.7, y: -2.6 }, { x: -0.7, y:  1.6 },
+  { x:  0.0, y:  1.6 }, { x:  0.0, y: -2.6 },
+  { x:  0.7, y: -2.6 }, { x:  0.7, y:  1.6 },
+  { x:  1.4, y:  1.6 }, { x:  1.4, y: -5.6 },
+  // Room B – Living Room (x∈[-6,-2], y∈[2,6])
+  { x: -5.6, y: 2.5 }, { x: -5.6, y: 5.6 },
+  { x: -4.9, y: 5.6 }, { x: -4.9, y: 2.5 },
+  { x: -4.2, y: 2.5 }, { x: -4.2, y: 5.6 },
+  { x: -3.5, y: 5.6 }, { x: -3.5, y: 2.5 },
+  { x: -2.8, y: 2.5 }, { x: -2.8, y: 5.6 },
+  { x: -2.1, y: 5.6 }, { x: -2.1, y: 2.5 },
+  // Room C – Bedroom (x∈[2,6], y∈[-2,6])
+  { x: 2.4, y: -1.6 }, { x: 2.4, y:  5.6 },
+  { x: 3.1, y:  5.6 }, { x: 3.1, y: -1.6 },
+  { x: 3.8, y: -1.6 }, { x: 3.8, y:  5.6 },
+  { x: 4.5, y:  5.6 }, { x: 4.5, y: -1.6 },
+  { x: 5.2, y: -1.6 }, { x: 5.2, y:  5.6 },
+  // Room D – Kitchen (x∈[2,6], y∈[-6,-2])
+  { x: 2.4, y: -5.6 }, { x: 2.4, y: -2.5 },
+  { x: 3.1, y: -2.5 }, { x: 3.1, y: -5.6 },
+  { x: 3.8, y: -5.6 }, { x: 3.8, y: -2.5 },
+  { x: 4.5, y: -2.5 }, { x: 4.5, y: -5.6 },
+  { x: 5.2, y: -5.6 }, { x: 5.2, y: -2.5 },
+];
+
 interface ScopeWindowProps {
   block: any;
   onClose: () => void;
@@ -47,12 +86,18 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
   const dragStartRef = React.useRef<{ x: number; y: number } | null>(null);
   
   const dirtParticlesRef = React.useRef<{ x: number; y: number; active: boolean }[]>([]);
-  if (dirtParticlesRef.current.length === 0) {
+  const [dirtEnv, setDirtEnv] = React.useState<'normal' | 'matlab' | null>(null);
+  
+  if (dirtEnv === null && block.state) {
+    const isMatlab = Math.abs(block.state.x || 0) > 3.1 || Math.abs(block.state.y || 0) > 3.1 || Math.abs(block.state.x_est || 0) > 3.1 || Math.abs(block.state.y_est || 0) > 3.1;
+    const range = isMatlab ? 11.0 : 5.6;
+    dirtParticlesRef.current = [];
     for (let i = 0; i < 80; i++) {
-      let dx = (Math.random() - 0.5) * 5.6;
-      let dy = (Math.random() - 0.5) * 5.6;
+      let dx = (Math.random() - 0.5) * range;
+      let dy = (Math.random() - 0.5) * range;
       dirtParticlesRef.current.push({ x: dx, y: dy, active: true });
     }
+    setDirtEnv(isMatlab ? 'matlab' : 'normal');
   }
 
   const triggerRedraw = () => setRedrawTrigger(prev => prev + 1);
@@ -109,9 +154,13 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
     }
 
     if (viewMode === '2d') {
-      const scaleX = (x: number) => 20 + (x + 3.0) / 6.0 * (W - 40);
-      const scaleY = (y: number) => H - 20 - (y + 3.0) / 6.0 * (H - 40);
-      const scaleR = (r: number) => r / 6.0 * (W - 40);
+      const isMatlabEnv = state && (Math.abs(state.x || 0) > 3.1 || Math.abs(state.y || 0) > 3.1 || Math.abs(state.x_est || 0) > 3.1 || Math.abs(state.y_est || 0) > 3.1);
+      const minVal = isMatlabEnv ? -6.0 : -3.0;
+      const sizeVal = isMatlabEnv ? 12.0 : 6.0;
+
+      const scaleX = (x: number) => 20 + (x - minVal) / sizeVal * (W - 40);
+      const scaleY = (y: number) => H - 20 - (y - minVal) / sizeVal * (H - 40);
+      const scaleR = (r: number) => r / sizeVal * (W - 40);
 
       const grid = state.grid;
       if (grid && Array.isArray(grid)) {
@@ -138,7 +187,11 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
       ctx.lineWidth = 3;
       ctx.strokeRect(20, 20, W - 40, H - 40);
 
-      const circles = [
+      const circles = isMatlabEnv ? [
+        { cx: 0.0, cy: 0.0, r: 0.3 },
+        { cx: -4.0, cy: 0.0, r: 0.3 },
+        { cx: 4.0, cy: 1.0, r: 0.3 }
+      ] : [
         { cx: 1.2, cy: 1.0, r: 0.4 },
         { cx: -1.2, cy: -1.2, r: 0.45 },
         { cx: 0.0, cy: 2.0, r: 0.3 }
@@ -153,7 +206,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
         ctx.stroke();
       });
 
-      const boxes = [
+      const boxes = isMatlabEnv ? [] : [
         { x1: -2.0, y1: 0.5, x2: -1.0, y2: 1.5 },
         { x1: 1.0, y1: -2.0, x2: 2.0, y2: -1.0 }
       ];
@@ -167,15 +220,102 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
         ctx.strokeRect(bx, by, bw, bh);
       });
 
+      if (isMatlabEnv && state.dyn_x !== undefined && state.dyn_y !== undefined) {
+        ctx.fillStyle = 'rgba(6, 182, 212, 0.65)';
+        ctx.strokeStyle = '#06b6d4';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(scaleX(state.dyn_x), scaleY(state.dyn_y), scaleR(0.5), 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      const dock_x = isMatlabEnv ? -5.1 : 0.0;
+      const dock_y = isMatlabEnv ? -5.1 : -2.8;
+
       ctx.fillStyle = '#10b981';
       ctx.beginPath();
-      ctx.arc(scaleX(0), scaleY(-2.8), 7, 0, 2 * Math.PI);
+      ctx.arc(scaleX(dock_x), scaleY(dock_y), 7, 0, 2 * Math.PI);
       ctx.fill();
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 9px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('DOCK', scaleX(0), scaleY(-2.8));
+      ctx.fillText('DOCK', scaleX(dock_x), scaleY(dock_y));
+
+      // Draw interior wall segments (MATLAB environment)
+      if (isMatlabEnv) {
+        const matlabWalls = [
+          { x1: -6.0, y1: -6.0, x2: 6.0, y2: -6.0 },
+          { x1: 6.0, y1: -6.0, x2: 6.0, y2: 6.0 },
+          { x1: 6.0, y1: 6.0, x2: -6.0, y2: 6.0 },
+          { x1: -6.0, y1: 6.0, x2: -6.0, y2: -6.0 },
+          // Interior walls
+          { x1: -6.0, y1: 2.0, x2: -2.0, y2: 2.0 },   // H-wall top-left
+          { x1: 2.0,  y1: -2.0, x2: 2.0, y2: 4.0 },   // V-wall mid-right
+          { x1: -3.0, y1: -3.0, x2: 1.0, y2: -3.0 },  // H-wall corridor partial
+          { x1: 3.0,  y1: -2.0, x2: 6.0, y2: -2.0 },  // H-wall kitchen divider
+        ];
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        for (const w of matlabWalls) {
+          ctx.beginPath();
+          ctx.moveTo(scaleX(w.x1), scaleY(w.y1));
+          ctx.lineTo(scaleX(w.x2), scaleY(w.y2));
+          ctx.stroke();
+        }
+
+        // Draw doorway indicators (gaps in walls where robot can transit)
+        const doorways = [
+          { x1: -2.0, y1: 2.0, x2: 0.0, y2: 2.0, label: '↕' },   // Corridor↔Living Room
+          { x1: 2.0, y1: -6.0, x2: 2.0, y2: -2.0, label: '↔' },   // Corridor↔Bedroom/Kitchen
+          { x1: 2.0, y1: 4.0, x2: 2.0, y2: 6.0, label: '↔' },     // top gap
+        ];
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.6)';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([6, 4]);
+        for (const d of doorways) {
+          ctx.beginPath();
+          ctx.moveTo(scaleX(d.x1), scaleY(d.y1));
+          ctx.lineTo(scaleX(d.x2), scaleY(d.y2));
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        // Room labels
+        const roomLabels = [
+          { label: '🚶 CORRIDOR', x: -2.5, y: -4.0 },
+          { label: '🛋 LIVING RM', x: -4.0, y: 4.0 },
+          { label: '🛏 BEDROOM',  x: 4.0,  y: 2.0 },
+          { label: '🍳 KITCHEN',  x: 4.0,  y: -4.0 },
+        ];
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (const rl of roomLabels) {
+          ctx.fillText(rl.label, scaleX(rl.x), scaleY(rl.y));
+        }
+
+        // Highlight current room being cleaned
+        if (state.bt_state === 'COVERAGE' || state.bt_state === 'TRANSIT') {
+          const roomBounds: Record<number, { x1: number, y1: number, x2: number, y2: number, color: string }> = {
+            0: { x1: -6, y1: -6, x2: 2, y2: 2, color: 'rgba(59, 130, 246, 0.08)' },
+            1: { x1: -6, y1: 2, x2: -2, y2: 6, color: 'rgba(16, 185, 129, 0.08)' },
+            2: { x1: 2, y1: -2, x2: 6, y2: 6, color: 'rgba(139, 92, 246, 0.08)' },
+            3: { x1: 2, y1: -6, x2: 6, y2: -2, color: 'rgba(245, 158, 11, 0.08)' },
+          };
+          const cur = roomBounds[state.current_room ?? 0];
+          if (cur) {
+            ctx.fillStyle = cur.color;
+            ctx.fillRect(
+              scaleX(cur.x1), scaleY(cur.y2),
+              scaleX(cur.x2) - scaleX(cur.x1), scaleY(cur.y1) - scaleY(cur.y2)
+            );
+          }
+        }
+      }
 
       if (state.targetX !== undefined && state.targetY !== undefined && state.navState !== 0) {
         ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
@@ -193,16 +333,41 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
         ctx.fill();
       }
 
-      ctx.strokeStyle = 'rgba(59, 130, 246, 0.2)';
+      const wps = isMatlabEnv ? MATLAB_WAYPOINTS : WAYPOINTS;
+      ctx.strokeStyle = 'rgba(59, 130, 246, 0.15)';
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
-      ctx.moveTo(scaleX(WAYPOINTS[0].x), scaleY(WAYPOINTS[0].y));
-      for (let i = 1; i < WAYPOINTS.length; i++) {
-        ctx.lineTo(scaleX(WAYPOINTS[i].x), scaleY(WAYPOINTS[i].y));
+      ctx.moveTo(scaleX(wps[0].x), scaleY(wps[0].y));
+      for (let i = 1; i < wps.length; i++) {
+        ctx.lineTo(scaleX(wps[i].x), scaleY(wps[i].y));
       }
       ctx.stroke();
       ctx.setLineDash([]);
+
+      if (state.astar_path && Array.isArray(state.astar_path) && state.astar_path.length > 1) {
+        // Color the A* path by current state
+        const pathColor = state.bt_state === 'COVERAGE' ? '#ec4899' :
+                          state.bt_state === 'TRANSIT' ? '#06b6d4' :
+                          state.bt_state === 'PLAN_ROOM' ? '#f59e0b' :
+                          state.bt_state === 'RETURN_DOCK' ? (state.using_constrained ? '#f59e0b' : '#f97316') :
+                          '#ec4899';
+        ctx.strokeStyle = pathColor;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(scaleX(state.astar_path[0][0]), scaleY(state.astar_path[0][1]));
+        for (let i = 1; i < state.astar_path.length; i++) {
+          ctx.lineTo(scaleX(state.astar_path[i][0]), scaleY(state.astar_path[i][1]));
+        }
+        ctx.stroke();
+        // Draw intermediate waypoint dots
+        ctx.fillStyle = pathColor;
+        for (const pt of state.astar_path) {
+          ctx.beginPath();
+          ctx.arc(scaleX(pt[0]), scaleY(pt[1]), 3, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+      }
 
       const trail = state.trail;
       if (trail && Array.isArray(trail) && trail.length > 1) {
@@ -235,11 +400,19 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
 
       const ranges = state.lidarRanges;
       if (ranges && Array.isArray(ranges)) {
-        const beamAngles = [0, Math.PI/4, Math.PI/2, 3*Math.PI/4, Math.PI, -3*Math.PI/4, -Math.PI/2, -Math.PI/4];
+        const numBeams = ranges.length;
+        const beamAngles: number[] = [];
+        if (numBeams === 45) {
+          for (let i = -180; i <= 179; i += 8) {
+            beamAngles.push(i * Math.PI / 180);
+          }
+        } else {
+          beamAngles.push(0, Math.PI/4, Math.PI/2, 3*Math.PI/4, Math.PI, -3*Math.PI/4, -Math.PI/2, -Math.PI/4);
+        }
         ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
         ctx.lineWidth = 1;
         for (let i = 0; i < ranges.length; i++) {
-          const absAngle = (state.theta || 0) + beamAngles[i];
+          const absAngle = (state.theta || 0) + (beamAngles[i] ?? 0);
           const r = ranges[i];
           const lx = (state.x || 0) + r * Math.cos(absAngle);
           const ly = (state.y || 0) + r * Math.sin(absAngle);
@@ -291,6 +464,55 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
       ctx.lineTo(ex + er * Math.cos(-(state.theta_est || 0)), ey + er * Math.sin(-(state.theta_est || 0)));
       ctx.stroke();
 
+      // ── State Machine HUD Overlay ─────────────────────────────────────────
+      if (state.bt_state !== undefined) {
+        const stateColors: Record<string, string> = {
+          INIT: '#64748b', PLAN_ROOM: '#f59e0b', COVERAGE: '#ec4899',
+          TRANSIT: '#06b6d4', RETURN_DOCK: '#f97316', DOCKED: '#10b981'
+        };
+        const roomNames: Record<number, string> = {
+          0: 'Corridor', 1: 'Living Room', 2: 'Bedroom', 3: 'Kitchen'
+        };
+        const stCol = stateColors[state.bt_state] || '#94a3b8';
+        const bat = typeof state.battery_level === 'number' ? state.battery_level : 100;
+        const batCol = bat > 60 ? '#10b981' : bat > 30 ? '#f59e0b' : '#ef4444';
+        const cleaned = Array.isArray(state.cleaned_rooms) ? state.cleaned_rooms.length : 0;
+        const pathLen = Array.isArray(state.astar_path) ? state.astar_path.length : 0;
+        const roomName = roomNames[state.current_room ?? 0] || '?';
+
+        // Background panel
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+        ctx.beginPath();
+        (ctx as any).roundRect ? (ctx as any).roundRect(28, 28, 176, 108, 8)
+                               : ctx.rect(28, 28, 176, 108);
+        ctx.fill();
+
+        ctx.font = 'bold 11px monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+
+        // State label
+        ctx.fillStyle = stCol;
+        ctx.fillText(`⚙ ${state.bt_state}`, 40, 38);
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '10px monospace';
+        ctx.fillText(`Room:  ${roomName} (${state.current_room ?? 0})`, 40, 56);
+        ctx.fillText(`Done:  ${cleaned}/4 rooms`, 40, 70);
+        ctx.fillText(`Path:  ${pathLen} pts`, 40, 84);
+        ctx.fillText(`WP:    ${state.waypoint_idx ?? 0}/${(state.room_waypoints?.length ?? 0)}`, 40, 98);
+
+        // Battery bar
+        const barX = 40, barY = 113, barW = 150, barH = 10;
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.8)';
+        ctx.fillRect(barX, barY, barW, barH);
+        ctx.fillStyle = batCol;
+        ctx.fillRect(barX, barY, barW * (bat / 100), barH);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '9px monospace';
+        ctx.fillText(`🔋 ${bat.toFixed(0)}%`, barX + barW + 4, barY);
+      }
+
     } else {
       const yaw = yawRef.current;
       const pitch = pitchRef.current;
@@ -298,6 +520,11 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
 
       const rx_true = state.x ?? 0;
       const ry_true = state.y ?? 0;
+      
+      const isMatlabEnv = Math.abs(rx_true) > 3.1 || Math.abs(ry_true) > 3.1 || Math.abs(state.x_est || 0) > 3.1 || Math.abs(state.y_est || 0) > 3.1;
+      const minVal = isMatlabEnv ? -6.0 : -3.0;
+      const sizeVal = isMatlabEnv ? 12.0 : 6.0;
+
       dirtParticlesRef.current.forEach(particle => {
         if (particle.active) {
           const dist = Math.sqrt(Math.pow(particle.x - rx_true, 2) + Math.pow(particle.y - ry_true, 2));
@@ -361,9 +588,10 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
 
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.1)';
       ctx.lineWidth = 1;
-      for (let g = -3.0; g <= 3.0; g += 0.5) {
-        let p1 = project(g, -3.0, 0);
-        let p2 = project(g, 3.0, 0);
+      const gridStep = 0.5 * (sizeVal / 6.0);
+      for (let g = minVal; g <= -minVal; g += gridStep) {
+        let p1 = project(g, minVal, 0);
+        let p2 = project(g, -minVal, 0);
         if (p1.visible && p2.visible) {
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
@@ -371,8 +599,8 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
           ctx.stroke();
         }
         
-        let p3 = project(-3.0, g, 0);
-        let p4 = project(3.0, g, 0);
+        let p3 = project(minVal, g, 0);
+        let p4 = project(-minVal, g, 0);
         if (p3.visible && p4.visible) {
           ctx.beginPath();
           ctx.moveTo(p3.x, p3.y);
@@ -382,13 +610,13 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
       }
 
       if (showSlam && state.grid && Array.isArray(state.grid)) {
-        const cellSize = 6.0 / 30;
+        const cellSize = sizeVal / 30;
         for (let r = 0; r < 30; r++) {
           for (let c = 0; c < 30; c++) {
             const val = state.grid[r][c];
             if (val !== 0) {
-              const gx = -3.0 + c * cellSize;
-              const gy = -3.0 + r * cellSize;
+              const gx = minVal + c * cellSize;
+              const gy = minVal + r * cellSize;
               
               const c1 = project(gx, gy, 0.001);
               const c2 = project(gx + cellSize, gy, 0.001);
@@ -415,12 +643,13 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
         }
       }
 
+      const wps = isMatlabEnv ? MATLAB_WAYPOINTS : WAYPOINTS;
       ctx.strokeStyle = 'rgba(59, 130, 246, 0.15)';
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 6]);
       ctx.beginPath();
       let firstWaypoint = true;
-      for (const wp of WAYPOINTS) {
+      for (const wp of wps) {
         const p = project(wp.x, wp.y, 0.001);
         if (p.visible) {
           if (firstWaypoint) {
@@ -433,6 +662,25 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
       }
       ctx.stroke();
       ctx.setLineDash([]);
+
+      if (state.astar_path && Array.isArray(state.astar_path) && state.astar_path.length > 1) {
+        ctx.strokeStyle = state.using_constrained ? 'rgba(245, 158, 11, 0.95)' : 'rgba(236, 72, 153, 0.85)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        let first = true;
+        for (const pt of state.astar_path) {
+          const p = project(pt[0], pt[1], 0.003);
+          if (p.visible) {
+            if (first) {
+              ctx.moveTo(p.x, p.y);
+              first = false;
+            } else {
+              ctx.lineTo(p.x, p.y);
+            }
+          }
+        }
+        ctx.stroke();
+      }
 
       const trail = state.trail || [];
       if (trail.length > 1) {
@@ -482,10 +730,19 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
       }
       const renderables: Renderable[] = [];
 
-      const H_wall = 0.45;
+      const H_wall = isMatlabEnv ? 1.2 : 0.45;
       const wallColors = state.room_colors || ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
       
-      const ROOM_WALLS = [
+      const wallsToRender = isMatlabEnv ? [
+        { x1: -6.0, y1: -6.0, x2: 6.0, y2: -6.0 },
+        { x1: 6.0, y1: -6.0, x2: 6.0, y2: 6.0 },
+        { x1: 6.0, y1: 6.0, x2: -6.0, y2: 6.0 },
+        { x1: -6.0, y1: 6.0, x2: -6.0, y2: -6.0 },
+        { x1: -6.0, y1: 2.0, x2: -2.0, y2: 2.0 },
+        { x1: 2.0, y1: -2.0, x2: 2.0, y2: 4.0 },
+        { x1: -3.0, y1: -3.0, x2: 1.0, y2: -3.0 },
+        { x1: 3.0, y1: -2.0, x2: 6.0, y2: -2.0 }
+      ] : [
         { x1: -3.0, y1: -3.0, x2: -3.0, y2: 3.0 },
         { x1: 3.0, y1: -3.0, x2: 3.0, y2: 3.0 },
         { x1: -3.0, y1: -3.0, x2: 3.0, y2: -3.0 },
@@ -499,7 +756,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
         { x1: 0.0, y1: 1.3, x2: 0.0, y2: 3.0 }
       ];
 
-      ROOM_WALLS.forEach((w, idx) => {
+      wallsToRender.forEach((w, idx) => {
         const d1 = project(w.x1, w.y1, 0);
         const d2 = project(w.x2, w.y2, 0);
         const d3 = project(w.x2, w.y2, H_wall);
@@ -530,13 +787,18 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
         }
       });
 
-      const ROOM_CIRCLES = [
-        { cx: 1.8, cy: -2.0, r: 0.4 },
-        { cx: -1.5, cy: -2.0, r: 0.3 }
+      const circlesToRender = isMatlabEnv ? [
+        { cx: 0.0, cy: 0.0, r: 0.3 },
+        { cx: -4.0, cy: 0.0, r: 0.3 },
+        { cx: 4.0, cy: 1.0, r: 0.3 }
+      ] : [
+        { cx: 1.2, cy: 1.0, r: 0.4 },
+        { cx: -1.2, cy: -1.2, r: 0.45 },
+        { cx: 0.0, cy: 2.0, r: 0.3 }
       ];
-      const H_cyl = 0.35;
+      const H_cyl = isMatlabEnv ? 1.2 : 0.35;
       
-      ROOM_CIRCLES.forEach((c) => {
+      circlesToRender.forEach((c) => {
         const segments = 16;
         const bottomPts: { x: number; y: number; depth: number }[] = [];
         const topPts: { x: number; y: number; depth: number }[] = [];
@@ -562,9 +824,9 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
               ctx.lineTo(topPts[i].x, topPts[i].y);
               ctx.closePath();
               
-              ctx.fillStyle = 'rgba(71, 85, 105, 0.3)';
+              ctx.fillStyle = isMatlabEnv ? 'rgba(71, 85, 105, 0.45)' : 'rgba(71, 85, 105, 0.3)';
               ctx.fill();
-              ctx.strokeStyle = 'rgba(100, 116, 139, 0.4)';
+              ctx.strokeStyle = isMatlabEnv ? 'rgba(148, 163, 184, 0.5)' : 'rgba(100, 116, 139, 0.4)';
               ctx.lineWidth = 0.5;
               ctx.stroke();
             }
@@ -575,22 +837,22 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
               ctx.lineTo(topPts[i].x, topPts[i].y);
             }
             ctx.closePath();
-            ctx.fillStyle = 'rgba(71, 85, 105, 0.6)';
+            ctx.fillStyle = isMatlabEnv ? 'rgba(148, 163, 184, 0.7)' : 'rgba(71, 85, 105, 0.6)';
             ctx.fill();
-            ctx.strokeStyle = 'rgba(100, 116, 139, 0.8)';
+            ctx.strokeStyle = isMatlabEnv ? 'rgba(203, 213, 225, 0.9)' : 'rgba(100, 116, 139, 0.8)';
             ctx.lineWidth = 1.5;
             ctx.stroke();
           }
         });
       });
 
-      const ROOM_BOXES = [
+      const boxesToRender = isMatlabEnv ? [] : [
         { x1: -2.5, y1: 1.5, x2: -1.0, y2: 2.2 },
         { x1: 1.0, y1: 1.0, x2: 2.5, y2: 2.5 }
       ];
       const H_box = 0.35;
       
-      ROOM_BOXES.forEach((b) => {
+      boxesToRender.forEach((b) => {
         const v = [
           project(b.x1, b.y1, 0),
           project(b.x2, b.y1, 0),
@@ -647,21 +909,76 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
         });
       });
 
-      const dockP = project(0.0, -2.8, 0);
+      if (isMatlabEnv && state.dyn_x !== undefined && state.dyn_y !== undefined) {
+        const segments = 16;
+        const dyn_x = state.dyn_x;
+        const dyn_y = state.dyn_y;
+        const dyn_r = 0.5;
+        const dyn_h = 1.2;
+        const bottomPts: { x: number; y: number; depth: number }[] = [];
+        const topPts: { x: number; y: number; depth: number }[] = [];
+        
+        for (let i = 0; i <= segments; i++) {
+          const angle = (i / segments) * 2 * Math.PI;
+          const wx = dyn_x + dyn_r * Math.cos(angle);
+          const wy = dyn_y + dyn_r * Math.sin(angle);
+          bottomPts.push(project(wx, wy, 0));
+          topPts.push(project(wx, wy, dyn_h));
+        }
+        
+        const avgDepth = bottomPts.reduce((acc, p) => acc + p.depth, 0) / bottomPts.length;
+        
+        renderables.push({
+          depth: avgDepth,
+          draw: (ctx) => {
+            for (let i = 0; i < segments; i++) {
+              ctx.beginPath();
+              ctx.moveTo(bottomPts[i].x, bottomPts[i].y);
+              ctx.lineTo(bottomPts[i+1].x, bottomPts[i+1].y);
+              ctx.lineTo(topPts[i+1].x, topPts[i+1].y);
+              ctx.lineTo(topPts[i].x, topPts[i].y);
+              ctx.closePath();
+              
+              ctx.fillStyle = 'rgba(6, 182, 212, 0.35)';
+              ctx.fill();
+              ctx.strokeStyle = 'rgba(34, 211, 238, 0.4)';
+              ctx.lineWidth = 0.5;
+              ctx.stroke();
+            }
+            
+            ctx.beginPath();
+            ctx.moveTo(topPts[0].x, topPts[0].y);
+            for (let i = 1; i < topPts.length; i++) {
+              ctx.lineTo(topPts[i].x, topPts[i].y);
+            }
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(6, 182, 212, 0.6)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(34, 211, 238, 0.85)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }
+        });
+      }
+
+      const dock_x = isMatlabEnv ? -5.1 : 0.0;
+      const dock_y = isMatlabEnv ? -5.1 : -2.8;
+      const dockP = project(dock_x, dock_y, 0);
+
       if (dockP.visible) {
         renderables.push({
           depth: dockP.depth,
           draw: (ctx) => {
             const dw = 0.15, dh = 0.08;
             const dv = [
-              project(-dw, -2.8 - dw/2, 0),
-              project(dw, -2.8 - dw/2, 0),
-              project(dw, -2.8 + dw/2, 0),
-              project(-dw, -2.8 + dw/2, 0),
-              project(-dw, -2.8 - dw/2, dh),
-              project(dw, -2.8 - dw/2, dh),
-              project(dw, -2.8 + dw/2, dh),
-              project(-dw, -2.8 + dw/2, dh)
+              project(dock_x - dw, dock_y - dw/2, 0),
+              project(dock_x + dw, dock_y - dw/2, 0),
+              project(dock_x + dw, dock_y + dw/2, 0),
+              project(dock_x - dw, dock_y + dw/2, 0),
+              project(dock_x - dw, dock_y - dw/2, dh),
+              project(dock_x + dw, dock_y - dw/2, dh),
+              project(dock_x + dw, dock_y + dw/2, dh),
+              project(dock_x - dw, dock_y + dw/2, dh)
             ];
             
             const dfaces = [[0,1,5,4], [1,2,6,5], [2,3,7,6], [3,0,4,7]];
@@ -693,7 +1010,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
               ctx.stroke();
             }
 
-            const dlbl = project(0.0, -2.8, dh + 0.01);
+            const dlbl = project(dock_x, dock_y, dh + 0.01);
             if (dlbl.visible) {
               ctx.fillStyle = '#10b981';
               ctx.font = 'bold 8px sans-serif';
@@ -926,11 +1243,19 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
       renderables.forEach((r) => r.draw(ctx));
 
       if (showLidar && state.lidarRanges && Array.isArray(state.lidarRanges)) {
-        const beamAngles = [0, Math.PI/4, Math.PI/2, 3*Math.PI/4, Math.PI, -3*Math.PI/4, -Math.PI/2, -Math.PI/4];
+        const numBeams = state.lidarRanges.length;
+        const beamAngles: number[] = [];
+        if (numBeams === 45) {
+          for (let i = -180; i <= 179; i += 8) {
+            beamAngles.push(i * Math.PI / 180);
+          }
+        } else {
+          beamAngles.push(0, Math.PI/4, Math.PI/2, 3*Math.PI/4, Math.PI, -3*Math.PI/4, -Math.PI/2, -Math.PI/4);
+        }
         const turretH = 0.075;
         
         state.lidarRanges.forEach((r: number, i: number) => {
-          const absAngle = (state.theta || 0) + beamAngles[i];
+          const absAngle = (state.theta || 0) + (beamAngles[i] ?? 0);
           const hitX = rx_true + r * Math.cos(absAngle);
           const hitY = ry_true + r * Math.sin(absAngle);
           
@@ -1156,6 +1481,52 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
                         <div>
                           <div className="text-[8px] text-gray-600 font-bold uppercase">Δθ (rad)</div>
                           <div className="text-xs font-mono font-bold text-red-400">{errorTheta.toFixed(4)}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="col-span-2 p-4 rounded-xl bg-amber-500/[0.03] border border-amber-500/10 space-y-2">
+                      <span className="text-[9px] text-amber-500 uppercase font-black tracking-wider block">
+                        Dynamics & Energy Routing (SRS v2.0)
+                      </span>
+                      <div className="grid grid-cols-2 gap-4 font-mono text-xs text-gray-300">
+                        <div>
+                          <span className="text-[8px] text-gray-600 font-bold uppercase block">Linear Speed V (m/s)</span>
+                          <span className="text-gray-200 font-bold">
+                            {Number(state.v_chassis ?? 0).toFixed(3)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[8px] text-gray-600 font-bold uppercase block">Angular Speed ω (rad/s)</span>
+                          <span className="text-gray-200 font-bold">
+                            {Number(state.w_chassis ?? 0).toFixed(3)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[8px] text-gray-600 font-bold uppercase block">Optimal Energy E_opt</span>
+                          <span className="text-gray-200 font-bold">
+                            {Number(state.E_opt ?? 0).toFixed(3)}%
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[8px] text-gray-600 font-bold uppercase block">Remaining Path E_path</span>
+                          <span className="text-gray-200 font-bold">
+                            {Number(state.E_path ?? 0).toFixed(3)}%
+                          </span>
+                        </div>
+                        <div className="col-span-2 flex justify-between items-center pt-1 border-t border-white/5">
+                          <div>
+                            <span className="text-[8px] text-gray-600 font-bold uppercase">Energy Ratio Re</span>
+                            <div className="text-sm font-bold text-amber-400">
+                              {Number(state.Re ?? 1.0).toFixed(3)}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[8px] text-gray-600 font-bold uppercase block">Routing Mode</span>
+                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${state.using_constrained ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}`}>
+                              {state.using_constrained ? 'Constrained A*' : 'Standard A*'}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>

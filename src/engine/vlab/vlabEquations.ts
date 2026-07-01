@@ -73,6 +73,63 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [(across[0] - across[1]) - branch[0] * R];
   },
   
+  diode: ({ across, branch, params }) => {
+    const Ron = params.Ron || 0.01;
+    const Roff = params.Roff || 1e6;
+    const Vf = params.Vf !== undefined ? params.Vf : 0.7;
+    const Is = params.Is || 1e-12;
+    const n = params.n || 1.0;
+    const Vt = 0.02585; // thermal voltage at 300K
+    const V = across[0] - across[1];
+    
+    // Smooth approximation for switch conductance
+    const smooth = 0.5 * (1 + Math.tanh((V - Vf) / (n * Vt)));
+    const R = Ron * smooth + Roff * (1 - smooth);
+    return [(V - Vf * smooth) - branch[0] * R];
+  },
+  
+  nmos: ({ across, branch, params }) => {
+    // across[0] = Vd, across[1] = Vs, across[2] = Vg
+    const kn = params.kn || 0.5;
+    const Vth = params.Vth || 2.0;
+    const lambda = params.lambda || 0.01;
+    
+    const Vgs = across[2] - across[1];
+    const Vds = across[0] - across[1];
+    const Vov = Vgs - Vth;
+    
+    let Id_target = 0;
+    if (Vov > 0) {
+      if (Vds < Vov) {
+        Id_target = kn * (Vov * Vds - 0.5 * Vds * Vds) * (1 + lambda * Vds);
+      } else {
+        Id_target = 0.5 * kn * Vov * Vov * (1 + lambda * Vds);
+      }
+    }
+    
+    // Smooth transition at threshold Vgs = Vth
+    const smooth = 0.5 * (1 + Math.tanh(Vov * 5));
+    const Id = Id_target * smooth;
+    return [branch[0] - Id];
+  },
+  
+  igbt: ({ across, branch, params }) => {
+    // across[0] = Vc, across[1] = Ve, across[2] = Vg
+    const Vge_th = params.Vge_th || 5.5;
+    const Vce_sat = params.Vce_sat || 1.5;
+    const Rd = params.Rd || 0.05;
+    const Roff = params.Roff || 1e6;
+    
+    const Vge = across[2] - across[1];
+    const Vce = across[0] - across[1];
+    
+    const gate = 0.5 * (1 + Math.tanh((Vge - Vge_th) * 2));
+    const Ic_on = Math.max(0, Vce - Vce_sat) / Rd;
+    const Ic_off = Vce / Roff;
+    
+    return [branch[0] - (gate * Ic_on + (1 - gate) * Ic_off)];
+  },
+  
   v_sensor: ({ across, branch, params }) => {
     // branch[0] is leakage current: I_leak - V/R_int = 0
     // branch[1] is output signal: signal_out - V = 0
@@ -441,9 +498,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   temp_sensor: ({ across, branch }) => {
-    // output difference to signal
-    const dT = across[0] - across[1];
-    return [branch[0] - dT];
+    // Output absolute temperature at terminal A (across[0]) in Kelvin.
+    return [branch[0] - across[0]];
   },
   
   heat_sensor: ({ across, branch }) => {
@@ -521,10 +577,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   microwave_inverter: ({ across, branch, params }) => {
     // branch[0] is current_in, branch[1] is current_out
-    const ctrl_val = across[4] !== undefined ? across[4] : 1.0;
+    const ctrl_val = across[2] !== undefined ? across[2] : 1.0;
     const v_out_target = (params.v_out || 4000) * ctrl_val;
-    const V_in = across[0] - across[1];
-    const V_out = across[2] - across[3];
+    const V_in = across[0];
+    const V_out = across[1];
     return [
       V_out - v_out_target,
       branch[0] + (v_out_target / Math.max(1.0, Math.abs(V_in || 230))) * branch[1]
@@ -534,22 +590,27 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   magnetron: ({ across, branch, params }) => {
     // branch[0] is current, branch[1] is heat_flow
     const V = across[0] - across[1];
+    const P_rated = params.P_rated || 900;
     const eff = (params.efficiency !== undefined ? params.efficiency : 65) / 100;
-    const I_target = Math.max(0, V - 3500) / 1000;
-    const Q_target = V * branch[0] * eff;
+    const R_load = (230 * 230) / Math.max(1, P_rated);
+    const I = V / Math.max(1, R_load);
+    const Q = Math.abs(I * V) * eff;
     return [
-      branch[0] - I_target,
-      branch[1] - Q_target
+      branch[0] - I,
+      branch[1] - Q
     ];
   },
 
   upper_heater: ({ across, branch, params }) => {
     // branch[0] is current, branch[1] is heat_flow
-    const R = params.resistance || 35;
     const V = across[0] - across[1];
+    const R = params.resistance || 35.0;
+    const eff = params.efficiency || 0.9;
+    const I = V / R;
+    const Q = I * I * R * eff;
     return [
-      V - branch[0] * R,
-      branch[1] - branch[0] * branch[0] * R
+      branch[0] - I,
+      branch[1] - Q
     ];
   },
 
@@ -571,7 +632,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const T_amb = 298.15;
     const C = (vol * 0.0012 * 1005) + 500;
     const U_A = 0.8;
-    const temp = state[0];
+    const temp = state[0] > 1.0 ? state[0] : T_amb;
     const Q_loss = U_A * (temp - T_amb);
     const Q_in = branch[0] + branch[1] + branch[2];
     
@@ -820,166 +881,255 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const La = params.La || params.inductance || 0.01;
     const Ke = params.Ke || 0.05;
     const Kt = params.Kt || Ke;
+    const J = params.J || params.inertia || 0.01;
+    const B = params.B || params.damping || 0.001;
     
     const V = across[0] - across[1];
     const omega = across[2];
+    const domega = dAcross[2];
     const Ia = branch[0];
     const dIa = dBranch[0];
     const torque = branch[1];
     
     return [
       V - Ia * Ra - La * dIa - Ke * omega,
-      torque - Kt * Ia,
+      torque - (Kt * Ia - J * domega - B * omega),
       dState[0] - omega
     ];
   },
 
-  ac_motor: ({ across, branch, state, dState, params }) => {
+  ac_motor: ({ across, dAcross, branch, state, dState, params, ctx }) => {
     // 3-phase induction motor simplified dq-model
     const Rs = params.Rs || 0.1;
     const P = params.P || params.pole_pairs || 2;
     const Lm = 0.05;
     const Lr = 0.06;
     const Kt = 1.5 * P * Lm / Lr;
+    const J = params.J || params.inertia || 0.05;
+    const B = params.B || params.damping || 0.005;
     
-    const Va = across[0];
-    const Vb = across[1];
-    const Vc = across[2];
-    const omega = across[3];
+    const Va = across[0] - across[3];
+    const Vb = across[1] - across[3];
+    const Vc = across[2] - across[3];
+    const omega = across[4];
+    const domega = dAcross[4];
     
     const ia = branch[0];
     const ib = branch[1];
     const ic = branch[2];
     const torque = branch[3];
     
-    // Clarke conversion to get is_q
-    const iq = (2 * ia - ib - ic) / 3;
+    // Clarke conversion of actual voltages to get instantaneous Valpha, Vbeta
+    const Valpha = (2 * Va - Vb - Vc) / 3;
+    const Vbeta = (Vb - Vc) / Math.sqrt(3);
+    const Vmag = Math.sqrt(Valpha * Valpha + Vbeta * Vbeta);
+    
+    // Read the grid frequency from global parameters (written by the controller/inverter)
+    const w_sync = ctx.parameters['grid_freq'] !== undefined ? ctx.parameters['grid_freq'] : 314.159;
+    
+    // Electromagnetic torque is proportional to stator voltage magnitude, slip frequency
+    const slip_speed = w_sync / P - omega;
+    const Te = Kt * 0.15 * Vmag * slip_speed;
     
     return [
       Va - ia * Rs,
       Vb - ib * Rs,
       Vc - ic * Rs,
-      torque - Kt * 0.1 * iq, // Ke estimate
+      torque - (Te - J * domega - B * omega),
       dState[0] - omega
     ];
   },
 
-  bldc_motor: ({ across, branch, state, dState, params }) => {
+  bldc_motor: ({ across, dAcross, branch, state, dState, params, ctx }) => {
     const Rs = params.Rs || 0.2;
     const P = params.P || 4;
     const Ke = params.Ke || 0.1;
+    const J = params.J || params.inertia || 0.02;
+    const B = params.B || params.damping || 0.002;
     
-    const Va = across[0];
-    const Vb = across[1];
-    const Vc = across[2];
-    const omega = across[3];
+    const Va = across[0] - across[3];
+    const Vb = across[1] - across[3];
+    const Vc = across[2] - across[3];
+    const omega = across[4];
+    const domega = dAcross[4];
     
     const ia = branch[0];
     const ib = branch[1];
     const ic = branch[2];
     const torque = branch[3];
     
+    // Clarke conversion of actual voltages to get instantaneous Valpha, Vbeta
+    const Valpha = (2 * Va - Vb - Vc) / 3;
+    const Vbeta = (Vb - Vc) / Math.sqrt(3);
+    const Vmag = Math.sqrt(Valpha * Valpha + Vbeta * Vbeta);
+    
+    const w_sync = ctx.parameters['grid_freq'] !== undefined ? ctx.parameters['grid_freq'] : 314.159;
+    
+    // Synchronous torque coupling
+    const slip_speed = w_sync / P - omega;
+    const Te = Ke * 0.15 * Vmag * slip_speed;
+    
     return [
       Va - ia * Rs,
       Vb - ib * Rs,
       Vc - ic * Rs,
-      torque - Ke * (ia - ib), // simplified commutation torque
+      torque - (Te - J * domega - B * omega),
       dState[0] - omega
     ];
   },
 
-  pmsm: ({ across, branch, state, dState, params }) => {
+  pmsm: ({ across, dAcross, branch, state, dState, params, ctx }) => {
     const Rs = params.Rs || 0.1;
     const P = params.pole_pairs || 4;
     const Kt = params.Kt || 0.2;
+    const J = params.J || params.inertia || 0.02;
+    const B = params.B || params.damping || 0.002;
     
-    const Va = across[0];
-    const Vb = across[1];
-    const Vc = across[2];
-    const omega = across[3];
+    const Va = across[0] - across[3];
+    const Vb = across[1] - across[3];
+    const Vc = across[2] - across[3];
+    const omega = across[4];
+    const domega = dAcross[4];
     
     const ia = branch[0];
     const ib = branch[1];
     const ic = branch[2];
     const torque = branch[3];
     
+    // Clarke conversion of actual voltages to get instantaneous Valpha, Vbeta
+    const Valpha = (2 * Va - Vb - Vc) / 3;
+    const Vbeta = (Vb - Vc) / Math.sqrt(3);
+    const Vmag = Math.sqrt(Valpha * Valpha + Vbeta * Vbeta);
+    
+    const w_sync = ctx.parameters['grid_freq'] !== undefined ? ctx.parameters['grid_freq'] : 314.159;
+    
+    // Synchronous torque coupling
+    const slip_speed = w_sync / P - omega;
+    const Te = Kt * 0.15 * Vmag * slip_speed;
+    
     return [
       Va - ia * Rs,
       Vb - ib * Rs,
       Vc - ic * Rs,
-      torque - Kt * ia,
+      torque - (Te - J * domega - B * omega),
       dState[0] - omega
     ];
   },
 
   // ── INVERTERS & CONTROL BLOCKS ─────────────────────────────────────────────
-  pwm_3ph_2level: ({ across, branch, params }) => {
-    // averaged model: Va, Vb, Vc = Vdc/2 * u_abc
-    // across[0]: Vdc_plus, across[1]: Vdc_minus
-    // across[2,3,4]: control inputs duty cycles (A, B, C)
-    // branch[0,1,2]: Va, Vb, Vc output signal branches
-    const Vdc = across[0] - across[1];
-    const ma = across[2] || 0;
-    const mb = across[3] || 0;
-    const mc = across[4] || 0;
+  pwm_3ph_2level: ({ across, branch, params, ctx }) => {
+    // across[0]: vabc (Physical control input: can be v_mag or w_ref)
+    // across[1]: p (DC+), across[2]: n (DC-)
+    // across[3]: a (Phase A), across[4]: b (Phase B), across[5]: c (Phase C)
+    // branch[0]: current_a, branch[1]: current_b, branch[2]: current_c (through variables)
     
+    const ctrl = across[0] !== undefined ? across[0] : 0.5;
+    const Vp = across[1];
+    const Vn = across[2];
+    const Vdc = Vp - Vn;
+    
+    let ma = 0.5, mb = 0.5, mc = 0.5;
+    let w_rad = 314.159;
+    
+    // Auto-detect control mode based on magnitude
+    if (Math.abs(ctrl) > 10.0) {
+      // Input is speed reference (RPM or rad/s)
+      w_rad = ctrl > 100 ? ctrl * (2 * Math.PI / 60) : ctrl; // RPM to rad/s if large
+      ma = 0.5 + 0.4 * Math.sin(w_rad * ctx.time);
+      mb = 0.5 + 0.4 * Math.sin(w_rad * ctx.time - 2 * Math.PI / 3);
+      mc = 0.5 + 0.4 * Math.sin(w_rad * ctx.time + 2 * Math.PI / 3);
+    } else {
+      // Input is duty cycle or voltage magnitude (e.g. from PID)
+      const v_mag = Math.max(0.0, Math.min(1.0, ctrl));
+      w_rad = 314.159; // Nominal 50Hz
+      ma = 0.5 + 0.4 * v_mag * Math.sin(w_rad * ctx.time);
+      mb = 0.5 + 0.4 * v_mag * Math.sin(w_rad * ctx.time - 2 * Math.PI / 3);
+      mc = 0.5 + 0.4 * v_mag * Math.sin(w_rad * ctx.time + 2 * Math.PI / 3);
+    }
+    
+    if (ctx.parameters['grid_freq'] === undefined) {
+      ctx.parameters['grid_freq'] = w_rad;
+    }
+    
+    const Va_target = Vn + Vdc * ma;
+    const Vb_target = Vn + Vdc * mb;
+    const Vc_target = Vn + Vdc * mc;
+    
+    const R_out = 1e-3;
     return [
-      branch[0] - (Vdc * ma),
-      branch[1] - (Vdc * mb),
-      branch[2] - (Vdc * mc)
+      (across[3] - Va_target) - branch[0] * R_out,
+      (across[4] - Vb_target) - branch[1] * R_out,
+      (across[5] - Vc_target) - branch[2] * R_out
     ];
   },
 
-  vfd_controller: ({ across, branch, params, ctx }) => {
-    // Mode = 0 (V/f), 1 (FOC)
-    // input is ref_speed
-    // outputs are A, B, C duty cycles
-    const mode = params.mode !== undefined ? params.mode : 1;
-    const w_ref = across[0] || 0;
-    
-    let da = 0.5, db = 0.5, dc = 0.5;
-    if (mode === 0) {
-      // V/f logic
-      const V_mag = Math.max(0.1, Math.min(1.0, Math.abs(w_ref) / 1500));
-      const w_rad = w_ref * (2 * Math.PI / 60);
-      da = 0.5 + 0.5 * V_mag * Math.sin(w_rad * ctx.time);
-      db = 0.5 + 0.5 * V_mag * Math.sin(w_rad * ctx.time - 2 * Math.PI / 3);
-      dc = 0.5 + 0.5 * V_mag * Math.sin(w_rad * ctx.time + 2 * Math.PI / 3);
-    } else {
-      // FOC logic (duty cycles)
-      const w_rad = w_ref * (2 * Math.PI / 60);
-      da = 0.5 + 0.4 * Math.sin(w_rad * ctx.time);
-      db = 0.5 + 0.4 * Math.sin(w_rad * ctx.time - 2 * Math.PI / 3);
-      dc = 0.5 + 0.4 * Math.sin(w_rad * ctx.time + 2 * Math.PI / 3);
-    }
-    
-    return [
-      branch[0] - da,
-      branch[1] - db,
-      branch[2] - dc
-    ];
+  vfd_controller: ({ across, branch, params, ctx, ports }) => {
+    const wRefIdx = ports.findIndex(p => p.toLowerCase().startsWith('w') && p.toLowerCase().includes('ref'));
+    const w_ref = (wRefIdx !== -1 && across[wRefIdx] !== undefined) ? across[wRefIdx] : 1500;
+    const w_rad = w_ref * (2 * Math.PI / 60);
+    ctx.parameters['grid_freq'] = w_rad;
+    const V_mag = Math.max(0.1, Math.min(1.0, Math.abs(w_ref) / 1500));
+
+    const isPhysicalOutput = (pId: string) => {
+      const id = pId.toLowerCase();
+      return ['g', 'vabc', 'vis', 'y', 'out'].includes(id) || id.startsWith('out') || id.startsWith('signal');
+    };
+    const outputs = ports.filter(isPhysicalOutput);
+    const residuals = outputs.map((outPort, idx) => {
+      const id = outPort.toLowerCase();
+      if (id === 'vabc') return branch[idx] - V_mag;
+      if (id === 'g') return branch[idx] - 1.0;
+      return branch[idx] - 0.0;
+    });
+    return residuals;
+  },
+
+  im_foc_ctrl: ({ across, branch, params, ctx, ports }) => {
+    const wRefIdx = ports.findIndex(p => p.toLowerCase().startsWith('w') && p.toLowerCase().includes('ref'));
+    const w_ref_val = (wRefIdx !== -1 && across[wRefIdx] !== undefined) ? across[wRefIdx] : undefined;
+    const w_ref = w_ref_val !== undefined ? w_ref_val : (params.target_rpm ? params.target_rpm : 1500);
+    const w_rad = w_ref * (2 * Math.PI / 60);
+    ctx.parameters['grid_freq'] = w_rad;
+
+    const isPhysicalOutput = (pId: string) => {
+      const id = pId.toLowerCase();
+      return ['g', 'vabc', 'vis', 'y', 'out'].includes(id) || id.startsWith('out') || id.startsWith('signal');
+    };
+    const outputs = ports.filter(isPhysicalOutput);
+    const residuals = outputs.map((outPort, idx) => {
+      const id = outPort.toLowerCase();
+      if (id === 'vabc') return branch[idx] - 1.0;
+      if (id === 'g') return branch[idx] - 1.0;
+      return branch[idx] - 0.0;
+    });
+    return residuals;
   },
 
   // ── GAS AND MOIST AIR DOMAINS ──────────────────────────────────────────────
   ma_ref: () => [],
 
-  ma_chamber: ({ across, dAcross, branch, params }) => {
-    // across[0] pressure, across[1] temperature
-    // heat flow entering is branch[1]
+  ma_chamber: ({ across, branch, state, dState, params }) => {
+    // across[0]: P_a (Fluid), across[1]: P_b (Fluid), across[2]: T_h (Thermal)
+    // branch[0]: mass_flow at port a, branch[1]: heat_flow at port h
     const V = params.V || 0.005;
+    const T_amb = 298.15;
     const rho = 1.2, Cp = 1005;
     const C = rho * Cp * V;
+    const temp = state[0] > 1.0 ? state[0] : T_amb;
     return [
-      branch[0] - 0.0, // simplified mass flow
-      branch[1] - C * dAcross[1]
+      branch[0] - 0.0,
+      branch[1] - C * dState[0],
+      across[2] - temp
     ];
   },
 
   ma_pressure_source: ({ across, branch, params }) => {
-    // pressure rise based on control speed input
+    // Pb - Pa - P_max * ctrl = 0
     const P_max = params.P || 150;
-    const ctrl = across[1] !== undefined ? across[1] : 1.0;
-    return [across[0] - P_max * ctrl];
+    const ctrl = across[2] !== undefined ? across[2] : 1.0;
+    const Pa = across[0];
+    const Pb = across[1];
+    return [(Pb - Pa) - P_max * ctrl];
   },
 
   lms_adaptive_filter: ({ across, branch, state, dState, params }) => {
@@ -1457,7 +1607,109 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   heat_flow_sensor: ({ across, branch }) => [
     across[0] - across[1],
     branch[1] - branch[0]
-  ]
+  ],
+
+  // ── FLUID / PNEUMATIC DOMAIN ────────────────────────────────────────────────
+  fluid_ref: () => [],
+
+  fluid_resistance: ({ across, branch, params }) => {
+    const Rf = params.Rf || 1e5;
+    return [(across[0] - across[1]) - branch[0] * Rf];
+  },
+
+  orifice: ({ across, branch, params }) => {
+    const Cd = params.Cd || 0.6;
+    const A = params.A || 1e-4;
+    const rho = params.rho || 1.2;
+    const dP = across[0] - across[1];
+    const mdot = Cd * A * Math.sqrt(2 * rho * Math.abs(dP)) * Math.sign(dP);
+    return [branch[0] - mdot];
+  },
+
+  fluid_capacitance: ({ across, dAcross, branch, params }) => {
+    const Cf = params.Cf || 1e-5;
+    return [branch[0] - Cf * dAcross[0]];
+  },
+
+  fluid_inertance: ({ across, branch, dBranch, params }) => {
+    const Li = params.Li || 100;
+    return [(across[0] - across[1]) - Li * dBranch[0]];
+  },
+
+  pressure_source: ({ across, branch, params }) => {
+    const P = params.P || 101325;
+    return [across[0] - P];
+  },
+
+  ctrl_pressure_source: ({ across, branch }) => {
+    const P = across[2] !== undefined ? across[2] : 101325;
+    return [across[0] - P];
+  },
+
+  mass_flow_source: ({ branch, params }) => {
+    const mdot = params.mdot || 0.01;
+    return [branch[0] - mdot];
+  },
+
+  check_valve: ({ across, branch, params }) => {
+    const Rf = params.Rf || 1e3;
+    const dP = across[0] - across[1];
+    const g = 0.5 * (1 + Math.tanh(dP * 1000));
+    return [branch[0] - g * dP / Rf];
+  },
+
+  relief_valve: ({ across, branch, params }) => {
+    const P_set = params.P_set || 5e5;
+    const Rf_open = params.Rf_open || 1e2;
+    const Rf_closed = params.Rf_closed || 1e10;
+    const dP = across[0] - across[1];
+    const open = 0.5 * (1 + Math.tanh((across[0] - P_set) * 1e-4));
+    const R = Rf_open * open + Rf_closed * (1 - open);
+    return [dP - branch[0] * R];
+  },
+
+  steam_generator_fluid: ({ across, branch, params }) => {
+    const P = across[0];
+    const T_sat = 100 + (P - 101325) / 3600;
+    const h_fg = (2257 - 2.175 * Math.max(0, T_sat - 100)) * 1000;
+    const Q_in = across[2] !== undefined ? across[2] : (params.Q || 1000);
+    const mdot_steam = Math.max(0, Q_in / h_fg);
+    return [branch[0] - mdot_steam];
+  },
+
+  steam_accumulator: ({ across, dAcross, branch, params }) => {
+    const V = params.V || 0.5;
+    const P = across[0];
+    const rho_steam = 0.6 + (P - 101325) * 4e-6;
+    const Cf = V * 1e-3 * rho_steam / 1e5;
+    return [
+      across[0] - across[1],
+      branch[0] - branch[1] - Cf * dAcross[0]
+    ];
+  },
+
+  steam_nozzle: ({ across, branch, params }) => {
+    const Cd = params.Cd || 0.5;
+    const d = params.d || 0.5e-3;
+    const A = Math.PI * d * d / 4;
+    const P = across[0];
+    const P_atm = 101325;
+    const rho = 0.6;
+    const dP = Math.max(0, P - P_atm);
+    const mdot = Cd * A * Math.sqrt(2 * rho * dP);
+    return [branch[0] - mdot];
+  },
+
+  pressure_sensor: ({ across, branch }) => {
+    return [branch[0] - across[0]];
+  },
+
+  flow_sensor: ({ across, branch }) => {
+    return [
+      across[0] - across[1],
+      branch[1] - branch[0]
+    ];
+  }
 };
 
 const rlStateCache = new Map<string, {

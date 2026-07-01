@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import { XPort } from '../../engine/xbridges/types';
-import { XBRIDGES_CATEGORIES, raycastTwin, ROOM_WALLS, ROOM_CIRCLES, ROOM_BOXES } from '../../engine/xbridges/BlockDefinitions';
+import { XBRIDGES_CATEGORIES, raycastTwin, ROOM_WALLS, ROOM_CIRCLES, ROOM_BOXES, polyToString, zpgToString } from '../../engine/xbridges/BlockDefinitions';
 
 // Map icon string names to Lucide icon components
 const LucideIconMap: Record<string, React.ComponentType<any>> = {
@@ -577,7 +577,7 @@ export const getColor = (type: string) => {
   if (['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR', 'SWITCH', 'IF_ELSE', 'SWITCH_CASE'].includes(type)) return '#6f42c1'; // Logic (Purple)
   if (['BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight'].includes(type)) return '#563d7c'; // Bitwise (Indigo)
   if (['DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Integrator', 'INTEGRATOR_CONTINUOUS', 'INTEGRATOR_DISCRETE', 'PID_CONTROLLER', 'PID_BASIC', 'FUZZY_PID_CONTROLLER'].includes(type)) return '#d73a49'; // Sequential/Control (Red)
-  if (['MPC_CONTROLLER', 'Subsystem', 'DOE_MODEL', 'AC_MOTOR_PID_CONTROL', 'LMS_ADAPTIVE_FILTER', 'NEURAL_NEURON_LEARNING', 'RL_Q_LEARNING_CONTROLLER', 'ROBOT_VACUUM_DIGITAL_TWIN', 'ROBOT_VACUUM_DYNAMICS', 'ROBOT_VACUUM_MOTOR', 'ROBOT_VACUUM_ODOMETRY', 'ROBOT_VACUUM_FUSION', 'ROBOT_VACUUM_SLAM', 'ROBOT_VACUUM_NAV', 'ROBOT_VACUUM_KINEMATICS', 'ROBOT_VACUUM_WHEEL_CONTROL', 'ROBOT_VACUUM_ENVIRONMENT'].includes(type)) return '#c9a86c'; // MPC/Subsystem/DOE/Learning/Robots (Copper/Gold)
+  if (['MPC_CONTROLLER', 'Subsystem', 'DOE_MODEL', 'AC_MOTOR_PID_CONTROL', 'LMS_ADAPTIVE_FILTER', 'NEURAL_NEURON_LEARNING', 'RL_Q_LEARNING_CONTROLLER', 'ROBOT_VACUUM_DIGITAL_TWIN', 'ROBOT_VACUUM_DYNAMICS', 'ROBOT_VACUUM_MOTOR', 'ROBOT_VACUUM_ODOMETRY', 'ROBOT_VACUUM_FUSION', 'ROBOT_VACUUM_SLAM', 'ROBOT_VACUUM_NAV', 'ROBOT_VACUUM_KINEMATICS', 'ROBOT_VACUUM_WHEEL_CONTROL', 'ROBOT_VACUUM_ENVIRONMENT', 'ROBOT_VACUUM_BOUSTROPHEDON_SWEEP', 'ROBOT_VACUUM_ERODE_MASK', 'ROBOT_VACUUM_DOOR_TRACKER', 'ROBOT_VACUUM_DOOR_CROSSING', 'ROBOT_VACUUM_CONTINUOUS_ENERGY', 'ROBOT_VACUUM_TOPOLOGY_RETURN', 'ROBOT_VACUUM_THETA_STAR'].includes(type)) return '#c9a86c'; // MPC/Subsystem/DOE/Learning/Robots (Copper/Gold)
   if (['WHITE_NOISE', 'BAND_LIMITED_NOISE', 'LOW_PASS_FILTER', 'HIGH_PASS_FILTER', 'MOVING_AVERAGE'].includes(type)) return '#17a2b8'; // Signal Processing (Cyan/Teal)
   if (['KALMAN_FILTER', 'EXTENDED_KALMAN_FILTER'].includes(type)) return '#20c997'; // Estimation (Mint)
   if (['THREE_PHASE_INVERTER', 'SINGLE_PHASE_H_BRIDGE'].includes(type)) return '#ef4444'; // Power (Red)
@@ -740,6 +740,10 @@ export const XBlockNode = ({ data, id, selected }: any) => {
 
     const isVertical = port.position === 'top' || port.position === 'bottom';
 
+    const isSelected = data.selectedHandle && 
+                       data.selectedHandle.nodeId === id && 
+                       data.selectedHandle.handleId === port.id;
+
     return (
       <div 
         key={port.id} 
@@ -757,16 +761,24 @@ export const XBlockNode = ({ data, id, selected }: any) => {
           type={isInput ? 'target' : 'source'}
           position={position}
           id={port.id}
+          className="cursor-pointer hover:scale-125 transition-all duration-300"
           style={{
-            background: getHandleColor(port.type),
-            width: 8,
-            height: 8,
-            border: '2px solid #1a1a1a',
-            zIndex: 10,
-            ...(port.position === 'left' ? { left: -14 } : {}),
-            ...(port.position === 'right' ? { right: -14 } : {}),
-            ...(port.position === 'top' ? { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' } : {}),
-            ...(port.position === 'bottom' ? { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' } : {}),
+            background: isSelected ? '#c9a86c' : getHandleColor(port.type),
+            width: isSelected ? 14 : 10,
+            height: isSelected ? 14 : 10,
+            border: isSelected ? '2px solid #ffffff' : '1.5px solid #0f172a',
+            borderRadius: '50%', // Circle dot (like Simulink)
+            zIndex: 15,
+            boxShadow: isSelected ? '0 0 12px #c9a86c, 0 0 6px #c9a86c' : 'none',
+            transition: 'all 0.3s ease',
+            ...(port.position === 'left' ? { left: isSelected ? -20 : -18, position: 'absolute', top: '50%', transform: 'translateY(-50%)' } : {}),
+            ...(port.position === 'right' ? { right: isSelected ? -20 : -18, position: 'absolute', top: '50%', transform: 'translateY(-50%)' } : {}),
+            ...(port.position === 'top' ? { top: '50%', left: '50%', transform: 'translate(-50%, -50%)', position: 'absolute' } : {}),
+            ...(port.position === 'bottom' ? { top: '50%', left: '50%', transform: 'translate(-50%, -50%)', position: 'absolute' } : {}),
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            data.onPortClick?.(id, port.id, isInput ? 'target' : 'source', port.type);
           }}
         />
         <span 
@@ -789,12 +801,12 @@ export const XBlockNode = ({ data, id, selected }: any) => {
   return (
     <div 
       ref={nodeRef}
-      className={`relative rounded-xl transition-all duration-500 border-2 ${selected ? 'ring-4 ring-white/10 scale-105 z-50' : 'hover:border-white/20'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
+      className={`relative rounded-md transition-all duration-500 border-2 ${selected ? 'ring-4 ring-white/10 scale-105 z-50' : 'hover:border-white/20'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
       style={{ 
         background: 'rgba(20, 20, 20, 0.8)',
         backdropFilter: 'blur(20px)',
         borderColor: selected ? color : 'rgba(255,255,255,0.05)',
-        minWidth: data.type === 'Scope' ? 260 : 130,
+        minWidth: data.type === 'Scope' ? 260 : ['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN'].includes(data.type) ? 170 : 130,
         boxShadow: selected 
           ? `0 20px 50px -10px rgba(0,0,0,0.8), 0 0 30px ${color}33` 
           : '0 10px 30px -10px rgba(0,0,0,0.5)'
@@ -804,7 +816,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       
       {/* Header with Glowing Accent */}
       <div 
-        className="px-4 py-2.5 border-b border-white/5 flex items-center justify-between relative overflow-hidden rounded-t-[10px]"
+        className="px-4 py-2.5 border-b border-white/5 flex items-center justify-between relative overflow-hidden rounded-t-[4px]"
         style={{ background: `linear-gradient(to right, ${color}15, transparent)` }}
       >
         <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-right from-white/10 to-transparent" />
@@ -825,19 +837,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
         </div>
         
         <div className="flex items-center gap-1 z-10">
-          {(() => {
-            const isVLabLink = ['AC_INDUCTION_MOTOR', 'AC_MOTOR_PID_CONTROL', 'THREE_PHASE_INVERTER', 'SINGLE_PHASE_H_BRIDGE', 'PWM_GENERATOR', 'THREE_PHASE_PWM', 'SIX_STEP_COMMUTATION'].includes(data.type) ||
-              ['motor', 'plant', 'inverter', 'pwm', 'commutation'].some(k => id.toLowerCase().includes(k) || data.type?.toLowerCase().includes(k));
-            if (!isVLabLink) return null;
-            return (
-              <span 
-                className="text-[7px] font-black px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 uppercase tracking-widest cursor-pointer flex items-center gap-0.5 mr-1"
-                title="Double-click to navigate to V-Lab physical plant"
-              >
-                <FlaskConical size={8} /> V-Lab
-              </span>
-            );
-          })()}
+
           {data.type === 'Scope' && (
             <div className="flex bg-black/30 p-0.5 rounded-lg border border-white/5">
               <button 
@@ -943,6 +943,45 @@ export const XBlockNode = ({ data, id, selected }: any) => {
                    {(data.params?.rules || []).length} Rules
                  </span>
                </div>
+            </div>
+          ) : ['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN'].includes(data.type) ? (
+            <div className="flex flex-col items-center select-text">
+               {data.type === 'TRANSFER_FUNCTION' && (
+                 <div className="flex flex-col items-center py-2 px-3 min-w-[120px]">
+                   <div className="font-mono text-[11px] text-emerald-300 text-center leading-snug whitespace-nowrap">
+                     {polyToString(data.params?.numerator || [1], 's')}
+                   </div>
+                   <div className="w-full h-[1.5px] bg-emerald-500/50 my-1.5 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.3)]" />
+                   <div className="font-mono text-[11px] text-emerald-300 text-center leading-snug whitespace-nowrap">
+                     {polyToString(data.params?.denominator || [1, 1], 's')}
+                   </div>
+                 </div>
+               )}
+               {data.type === 'DISCRETE_TRANSFER_FUNCTION' && (
+                 <div className="flex flex-col items-center py-2 px-3 min-w-[120px]">
+                   <div className="font-mono text-[11px] text-emerald-300 text-center leading-snug whitespace-nowrap">
+                     {polyToString(data.params?.numerator || [1], 'z')}
+                   </div>
+                   <div className="w-full h-[1.5px] bg-emerald-500/50 my-1.5 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.3)]" />
+                   <div className="font-mono text-[11px] text-emerald-300 text-center leading-snug whitespace-nowrap">
+                     {polyToString(data.params?.denominator || [1, 1], 'z')}
+                   </div>
+                 </div>
+               )}
+               {data.type === 'ZERO_POLE_GAIN' && (() => {
+                 const { num, den } = zpgToString(data.params?.zeros || [], data.params?.poles || [-1], data.params?.gain ?? 1, 's');
+                 return (
+                   <div className="flex flex-col items-center py-2 px-3 min-w-[120px]">
+                     <div className="font-mono text-[11px] text-emerald-300 text-center leading-snug whitespace-nowrap">
+                       {num}
+                     </div>
+                     <div className="w-full h-[1.5px] bg-emerald-500/50 my-1.5 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.3)]" />
+                     <div className="font-mono text-[11px] text-emerald-300 text-center leading-snug whitespace-nowrap">
+                       {den}
+                     </div>
+                   </div>
+                 );
+               })()}
             </div>
           ) : (
             <div className="flex flex-col items-center">

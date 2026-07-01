@@ -244,6 +244,26 @@ describe('VLab Learning Labs Simulation Tests', () => {
 
       expect(errorThrown).toBeNull();
       expect(successCount).toBe(5);
+
+      // Verify that all scopes receive a non-zero, physically correct reading
+      if (lab.id === 'air_fryer_thermal') {
+        expect(state.scopeValues).toBeGreaterThan(0.001);
+      } else if (lab.id === 'blender_mixer') {
+        expect(Math.abs(state.scopeValues)).toBeGreaterThan(0.1);
+      } else if (lab.id === 'pid_ac_motor') {
+        expect(Math.abs(state.scopeValues.value)).toBeGreaterThan(0.1);
+        expect(state.scopeValues.target).toBeCloseTo(1500, -1);
+      } else if (lab.id === 'vfd_inverter_drive') {
+        expect(Math.abs(state.scopeValues.value)).toBeGreaterThan(0.1);
+        expect(state.scopeValues.target).toBe(500);
+      } else if (lab.id === 'smart_washing_machine') {
+        expect(Math.abs(state.scopeValues.value)).toBeGreaterThan(0.1);
+        expect(state.scopeValues.amps).toBeGreaterThan(0.001);
+      } else if (lab.id === 'advanced_microwave_design') {
+        expect(state.scopeValues).toBeGreaterThan(25.001);
+      } else if (lab.id === 'voltage_sensing_circuit') {
+        expect(Math.abs(state.scopeValues.value)).toBeGreaterThan(1.0);
+      }
     });
   });
 });

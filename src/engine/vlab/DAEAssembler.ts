@@ -367,6 +367,11 @@ export class DAEAssembler {
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
           states.push('theta');
           break;
+        case 'ma_chamber':
+          branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }] });
+          branches.push({ name: 'heat_flow', ports: [{ id: 'h', sign: 1 }] });
+          states.push('temp');
+          break;
         case 'inertia':
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
           break;
@@ -433,16 +438,19 @@ export class DAEAssembler {
         case 'microwave_inverter':
           branches.push({ name: 'current_in', ports: [{ id: 'p_in', sign: -1 }, { id: 'n_in', sign: 1 }] });
           branches.push({ name: 'current_out', ports: [{ id: 'p_out', sign: -1 }, { id: 'n_out', sign: 1 }] });
-          break;
-        case 'ma_chamber':
-          branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }] });
-          branches.push({ name: 'heat_flow', ports: [{ id: 'h', sign: -1 }] });
-          break;
         case 'microwave_cavity':
           branches.push({ name: 'heat_flow1', ports: [{ id: 'h1', sign: -1 }] });
           branches.push({ name: 'heat_flow2', ports: [{ id: 'h2', sign: -1 }] });
           branches.push({ name: 'heat_flow3', ports: [{ id: 'h3', sign: -1 }] });
+          branches.push({ name: 'signal_t', ports: [{ id: 't', sign: 1 }] });
           states.push('temp');
+          break;
+        case 'washing_basket':
+          branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
+        case 'pwm_3ph_2level':
+          branches.push({ name: 'current_a', ports: [{ id: 'a', sign: -1 }, { id: 'n', sign: 1 }] });
+          branches.push({ name: 'current_b', ports: [{ id: 'b', sign: -1 }, { id: 'n', sign: 1 }] });
+          branches.push({ name: 'current_c', ports: [{ id: 'c', sign: -1 }, { id: 'n', sign: 1 }] });
           break;
         case 'ma_pipe':
           branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
@@ -482,6 +490,40 @@ export class DAEAssembler {
           break;
         case 'ac_motor_pid_control':
           states.push('ias', 'ibs', 'psiar', 'psibr', 'omega', 'theta', 'i_state', 'd_state');
+          break;
+        case 'diode':
+          branches.push({ name: 'current', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
+          break;
+        case 'nmos':
+          branches.push({ name: 'drain_current', ports: [{ id: 'd', sign: -1 }, { id: 's', sign: 1 }] });
+          break;
+        case 'igbt':
+          branches.push({ name: 'collector_current', ports: [{ id: 'c', sign: -1 }, { id: 'e', sign: 1 }] });
+          break;
+        case 'fluid_resistance':
+        case 'orifice':
+        case 'check_valve':
+        case 'relief_valve':
+        case 'steam_generator_fluid':
+        case 'steam_nozzle':
+        case 'flow_sensor':
+          branches.push({ name: 'mass_flow', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
+          break;
+        case 'fluid_capacitance':
+        case 'pressure_source':
+        case 'ctrl_pressure_source':
+        case 'mass_flow_source':
+        case 'fluid_ref':
+        case 'pressure_sensor':
+          branches.push({ name: 'mass_flow', ports: [{ id: 'p', sign: -1 }] });
+          break;
+        case 'fluid_inertance':
+          branches.push({ name: 'mass_flow', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
+          states.push('mdot');
+          break;
+        case 'steam_accumulator':
+          branches.push({ name: 'flow_in', ports: [{ id: 'pin', sign: -1 }] });
+          branches.push({ name: 'flow_out', ports: [{ id: 'pout', sign: 1 }] });
           break;
         default:
           if (ports.includes('p') && ports.includes('n')) {
@@ -642,6 +684,19 @@ export class DAEAssembler {
       }
     });
 
+    // Automatically treat unconnected case/reference ports (e.g. c, n, ref) as reference nodes (0 potential/speed)
+    nodes.forEach(node => {
+      const ports = nodePorts.get(node.id) || [];
+      ports.forEach(portId => {
+        const key = `${node.id}_${portId}`;
+        const root = uf.find(key);
+        const portsInRoot = rootToPorts.get(root) || [];
+        if (portsInRoot.length === 1 && ['c', 'n', 'ref', 'gnd'].includes(portId.toLowerCase())) {
+          referenceNodeIds.add(root);
+        }
+      });
+    });
+
     // For each physical node that is NOT a reference node,
     // construct its Kirchhoff through-variable sign maps
     physicalNodes.forEach(pn => {
@@ -679,16 +734,49 @@ export class DAEAssembler {
       });
     });
 
-    // 6. Build Scope mapping
+    // 6. Build Scope mapping — map each scope port to its connected source variable index (or unconnected fallback)
     const scopeOutputs = new Map<string, number[]>();
     nodes.forEach(node => {
       const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
       if (type === 'scope') {
         const ports = nodePorts.get(node.id) || [];
         const indices = ports.map(pId => {
-          // Find the source node connected to this scope port
-          const key = `${node.id}_${pId}`;
-          return portToVarIndex.get(key)!;
+          const targetKey = `${node.id}_${pId}`;
+          const edge = edges.find(e => {
+            let tPort = (e.targetHandle || 'p').replace(/_[st]$/, '');
+            if (tPort.startsWith(e.target + '-')) {
+              tPort = tPort.slice(e.target.length + 1);
+            }
+            return e.target === node.id && tPort === pId;
+          });
+          
+          if (edge) {
+            let srcPort = (edge.sourceHandle || 'y').replace(/_[st]$/, '');
+            if (srcPort.startsWith(edge.source + '-')) {
+              srcPort = srcPort.slice(edge.source.length + 1);
+            }
+            const srcKey = `${edge.source}_${srcPort}`;
+            
+            const srcDomain = nodePortDomains.get(srcKey) || 'electrical';
+            if (srcDomain === 'physical') {
+              const sourceBranchIndices = componentBranchVarIndices.get(edge.source) || [];
+              const sourcePorts = nodePorts.get(edge.source) || [];
+              const sourceNode = nodes.find(n => n.id === edge.source);
+              const sourceType = (sourceNode?.data as any)?.type || sourceNode?.type || (sourceNode?.data as any)?.blockId || '';
+              const sourceSpec = getComponentSpec(edge.source, sourceType, sourcePorts);
+              
+              const matchingBranchIdx = sourceSpec.branches.findIndex(b =>
+                b.name === `signal_${srcPort}` || b.ports.some(p => p.id === srcPort)
+              );
+              if (matchingBranchIdx !== -1 && sourceBranchIndices[matchingBranchIdx] !== undefined) {
+                return sourceBranchIndices[matchingBranchIdx];
+              }
+            }
+            const varIdx = portToVarIndex.get(srcKey);
+            return varIdx !== undefined ? varIdx : portToVarIndex.get(targetKey)!;
+          } else {
+            return portToVarIndex.get(targetKey)!;
+          }
         });
         scopeOutputs.set(node.id, indices);
       }

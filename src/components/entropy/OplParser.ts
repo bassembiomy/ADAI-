@@ -1,5 +1,5 @@
 import { Node, Edge } from 'reactflow';
-import { OPMNodeData, OPMEdgeData, OPMNodeType, OPMLinkType, OPMState } from './EntropyTypes';
+import { OPMNodeData, OPMEdgeData, OPMNodeType, OPMLinkType, OPMState, OPMPort } from './EntropyTypes';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface OplSyntaxError {
@@ -160,6 +160,37 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
     const x = existing ? existing.position.x : Math.random() * 500 + 50;
     const y = existing ? existing.position.y : Math.random() * 400 + 50;
 
+    const defaultInputs: OPMPort[] = [];
+    const defaultOutputs: OPMPort[] = [];
+
+    if (type === 'object') {
+      defaultInputs.push(
+        { id: 'res-in', name: 'Result', type: 'result', direction: 'input', position: 'left' },
+        { id: 'eff-in', name: 'Effect', type: 'effect', direction: 'input', position: 'top' }
+      );
+      defaultOutputs.push(
+        { id: 'std-out', name: 'Out', type: 'standard', direction: 'output', position: 'right' },
+        { id: 'agt-out', name: 'Agent', type: 'agent', direction: 'output', position: 'bottom' },
+        { id: 'inst-out', name: 'Instrument', type: 'instrument', direction: 'output', position: 'bottom' }
+      );
+    } else if (type === 'process') {
+      defaultInputs.push(
+        { id: 'con-in', name: 'Consume', type: 'consumption', direction: 'input', position: 'left' },
+        { id: 'agt-in', name: 'Agent', type: 'agent', direction: 'input', position: 'left' },
+        { id: 'inst-in', name: 'Instrument', type: 'instrument', direction: 'input', position: 'left' },
+        { id: 'trg-in', name: 'Trigger', type: 'trigger', direction: 'input', position: 'top' },
+        { id: 'cond-in', name: 'Condition', type: 'condition', direction: 'input', position: 'top' }
+      );
+      defaultOutputs.push(
+        { id: 'res-out', name: 'Result', type: 'result', direction: 'output', position: 'right' },
+        { id: 'eff-out', name: 'Effect', type: 'effect', direction: 'output', position: 'right' }
+      );
+    } else if (type === 'state') {
+      defaultOutputs.push(
+        { id: 'val-out', name: 'Val', type: 'standard', direction: 'output', position: 'right' }
+      );
+    }
+
     node = {
       id,
       type: type === 'state' ? 'opmState' : type === 'process' ? 'opmProcess' : 'opmObject',
@@ -171,6 +202,8 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
         states: existing ? existing.data.states : [],
         attributes: existing ? existing.data.attributes : [],
         parentId: parentNodeId || (existing ? existing.data.parentId : null),
+        inputs: existing ? (existing.data.inputs || defaultInputs) : defaultInputs,
+        outputs: existing ? (existing.data.outputs || defaultOutputs) : defaultOutputs,
       },
       parentNode: parentNodeId || undefined,
       extent: parentNodeId ? 'parent' : undefined
@@ -265,6 +298,8 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
         id: `e-${whole.id}-${part.id}`,
         source: whole.id,
         target: part.id,
+        sourceHandle: 'std-out',
+        targetHandle: 'res-in',
         data: { type: 'aggregation' }
       });
       return;
@@ -281,6 +316,8 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
         id: `e-${sub.id}-${superObj.id}`,
         source: sub.id,
         target: superObj.id,
+        sourceHandle: 'std-out',
+        targetHandle: 'res-in',
         data: { type: 'generalization' }
       });
       return;
@@ -297,6 +334,8 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
         id: `e-${obj.id}-${attr.id}`,
         source: obj.id,
         target: attr.id,
+        sourceHandle: 'std-out',
+        targetHandle: 'res-in',
         data: { type: 'exhibition' }
       });
       return;
@@ -313,6 +352,8 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
         id: `e-${obj.id}-${proc.id}`,
         source: obj.id,
         target: proc.id,
+        sourceHandle: 'agt-out',
+        targetHandle: 'agt-in',
         data: { type: 'agent' }
       });
       return;
@@ -329,6 +370,8 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
         id: `e-${obj.id}-${proc.id}`,
         source: obj.id,
         target: proc.id,
+        sourceHandle: 'inst-out',
+        targetHandle: 'inst-in',
         data: { type: 'instrument' }
       });
       return;
@@ -343,6 +386,7 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
       const objTarget = match[2];
       
       let sourceId = '';
+      let isState = false;
       const stateMatch = objTarget.match(/(.+?)\s+in\s+state\s+(.+)/i);
       if (stateMatch) {
         const objName = stateMatch[1];
@@ -350,6 +394,7 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
         const stateKey = `${objName.toLowerCase()}:${stateName.toLowerCase()}`;
         const stateNode = stateMap.get(stateKey);
         sourceId = stateNode ? stateNode.id : getOrCreateNode(objName, 'object').id;
+        isState = !!stateNode;
       } else {
         sourceId = getOrCreateNode(objTarget, 'object').id;
       }
@@ -358,6 +403,8 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
         id: `e-${sourceId}-${proc.id}`,
         source: sourceId,
         target: proc.id,
+        sourceHandle: isState ? 'val-out' : 'std-out',
+        targetHandle: 'con-in',
         data: { type: 'consumption' }
       });
       return;
@@ -386,6 +433,8 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
         id: `e-${proc.id}-${targetId}`,
         source: proc.id,
         target: targetId,
+        sourceHandle: 'res-out',
+        targetHandle: 'res-in',
         data: { type: 'result' }
       });
       return;
@@ -410,12 +459,16 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
           id: `e-${stateANode.id}-${proc.id}`,
           source: stateANode.id,
           target: proc.id,
+          sourceHandle: 'val-out',
+          targetHandle: 'con-in',
           data: { type: 'consumption' }
         });
         edges.push({
           id: `e-${proc.id}-${stateBNode.id}`,
           source: proc.id,
           target: stateBNode.id,
+          sourceHandle: 'res-out',
+          targetHandle: 'res-in',
           data: { type: 'result' }
         });
       } else {
@@ -425,6 +478,8 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
           id: `e-${proc.id}-${objNode.id}`,
           source: proc.id,
           target: objNode.id,
+          sourceHandle: 'eff-out',
+          targetHandle: 'eff-in',
           data: { type: 'effect', conditionText: `changes from ${stateAName} to ${stateBName}` }
         });
       }
@@ -449,6 +504,8 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
           id: `e-${stateNode.id}-${procNode.id}`,
           source: stateNode.id,
           target: procNode.id,
+          sourceHandle: 'val-out',
+          targetHandle: 'trg-in',
           data: { type: 'trigger' }
         });
       }
@@ -465,6 +522,8 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
         id: `e-${obj.id}-${proc.id}`,
         source: obj.id,
         target: proc.id,
+        sourceHandle: 'std-out',
+        targetHandle: 'trg-in',
         data: { type: 'trigger' }
       });
       return;
@@ -488,6 +547,8 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
           id: `e-${stateNode.id}-${procNode.id}`,
           source: stateNode.id,
           target: procNode.id,
+          sourceHandle: 'val-out',
+          targetHandle: 'cond-in',
           data: { type: 'condition' }
         });
       }
@@ -504,6 +565,8 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
         id: `e-${obj.id}-${proc.id}`,
         source: obj.id,
         target: proc.id,
+        sourceHandle: 'std-out',
+        targetHandle: 'cond-in',
         data: { type: 'condition' }
       });
       return;

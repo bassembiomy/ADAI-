@@ -3,6 +3,7 @@
   "files.associations": {
     "*.css": "tailwindcss",
     "*.c": "cpp",
-    "*.h": "cpp"
+    "*.h": "cpp",
+    "*.m": "matlab"
   }
 }

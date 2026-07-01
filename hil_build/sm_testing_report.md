@@ -1,5 +1,5 @@
 # ADIA Code Generation: Testing & Validation Report
-**Timestamp:** 2026-06-15T10:02:34.158Z
+**Timestamp:** 2026-06-30T14:07:55.858Z
 **Compliance Level:** MISRA-C:2012 / IEC 61508 SIL-2
 
 ## 1. Syntax & Compliance Check
@@ -147,11 +147,11 @@ System handles the missing action gracefully with no crash, hang, or undefined b
 - **Target Microcontroller:** Arduino_Mega
 - **Baud Rate:** 115200 bps
 - **System Clock:** 16 MHz
-- **Connection Port:** COM5
+- **Connection Port:** Auto-Detect
 
 | Channel Name | Pin | Peripheral | Direction | Mapped ADIA Variable | Scaling |
 |--------------|-----|------------|-----------|----------------------|---------|
-| `ch_1` | `PA0` | `GPIO` | `In` | `value` | `1` |
+| `ch_1` | `PA0` | `GPIO` | `In` | `flag` | `1` |
 
 
 ---

@@ -13,7 +13,8 @@ import ReactFlow, {
   BackgroundVariant,
   Handle,
   Position,
-  ConnectionLineType
+  ConnectionLineType,
+  getBezierPath
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import * as math from 'mathjs';
@@ -1586,26 +1587,7 @@ const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boo
           }`}
         style={{ minWidth: 80, minHeight: 60 }}
       >
-        {/* X-Bridges Link Badge */}
-        {(() => {
-          const isXbridgesLink = (
-            data.type?.startsWith('ps_') || 
-            (data.type || '').includes('pid') || 
-            ['lms_adaptive_filter', 'neural_neuron_learning', 'rl_q_learning_controller', 'ac_motor_pid_control'].includes(data.type || '') ||
-            ['speed_pid', 'pid_controller', 'controller', 'error_calc', 'ref_speed'].some(k => id.includes(k) || (data.type || '').includes(k))
-          );
-          
-          if (!isXbridgesLink) return null;
-          
-          return (
-            <span 
-              className="absolute top-1 right-1 text-[7px] font-black px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase tracking-widest cursor-pointer flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity z-20"
-              title="Double-click to navigate to X-Bridges control loop"
-            >
-              <Network size={8} /> Logic
-            </span>
-          );
-        })()}
+
         {/* Bidirectional Ports with Offsets */}
         {Object.entries(portsBySide).map(([side, sidePorts]: [any, any]) => (
           sidePorts.map((port: any, index: number) => {
@@ -1618,25 +1600,27 @@ const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boo
             return (
               <div
                 key={port.id}
-                className="absolute"
+                className="absolute w-2.5 h-2.5"
                 style={{
                   top: (side === 'left' || side === 'right') ? `calc(50% + ${offset}px)` : (side === 'top' ? 0 : '100%'),
                   left: (side === 'top' || side === 'bottom') ? `calc(50% + ${offset}px)` : (side === 'left' ? 0 : '100%'),
                   transform: 'translate(-50%, -50%)'
                 }}
               >
-                {/* Unique Handle IDs to prevent connection ambiguity */}
+                {/* Both target and source handles are styled identically to look like a single square dot */}
                 <Handle
                   type="target"
                   position={position}
                   id={`${id}-${port.id}_t`}
-                  className="!w-3 !h-3 !bg-blue-400 !border-2 !border-white/40 hover:!bg-blue-300 hover:!scale-125 transition-all shadow-lg"
+                  className="!w-full !h-full !border !border-white/50 hover:!scale-125 transition-all rounded-none shadow-lg !absolute !top-0 !left-0"
+                  style={{ backgroundColor: data.color || '#3b82f6' }}
                 />
                 <Handle
                   type="source"
                   position={position}
                   id={`${id}-${port.id}_s`}
-                  className="!w-3 !h-3 !bg-transparent !border-none" // Invisible source handle
+                  className="!w-full !h-full !border !border-white/50 hover:!scale-125 transition-all rounded-none shadow-lg !absolute !top-0 !left-0"
+                  style={{ backgroundColor: data.color || '#3b82f6' }}
                 />
 
                 {/* Port Label */}
@@ -1667,6 +1651,135 @@ const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boo
       </div>
     </div>
   );
+};
+
+const VLabEdge = ({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  style = {},
+  markerEnd,
+  className,
+}: any) => {
+  // Center of the handle (10px wide, so offset by 5px)
+  let adjustedSourceX = sourceX;
+  let adjustedSourceY = sourceY;
+  if (sourcePosition === Position.Left) {
+    adjustedSourceX += 5;
+  } else if (sourcePosition === Position.Right) {
+    adjustedSourceX -= 5;
+  } else if (sourcePosition === Position.Top) {
+    adjustedSourceY += 5;
+  } else if (sourcePosition === Position.Bottom) {
+    adjustedSourceY -= 5;
+  }
+
+  let adjustedTargetX = targetX;
+  let adjustedTargetY = targetY;
+  if (targetPosition === Position.Left) {
+    adjustedTargetX += 5;
+  } else if (targetPosition === Position.Right) {
+    adjustedTargetX -= 5;
+  } else if (targetPosition === Position.Top) {
+    adjustedTargetY += 5;
+  } else if (targetPosition === Position.Bottom) {
+    adjustedTargetY -= 5;
+  }
+
+  const [edgePath] = getBezierPath({
+    sourceX: adjustedSourceX,
+    sourceY: adjustedSourceY,
+    sourcePosition,
+    targetX: adjustedTargetX,
+    targetY: adjustedTargetY,
+    targetPosition,
+  });
+
+  return (
+    <>
+      <path
+        id={id}
+        className={`react-flow__edge-path ${className || ''}`}
+        d={edgePath}
+        markerEnd={markerEnd}
+        style={style}
+      />
+      {/* Thick invisible interaction path to make clicking/hovering easy */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={15}
+        className="react-flow__edge-interaction cursor-pointer"
+      />
+    </>
+  );
+};
+
+const VLabConnectionLine = ({
+  fromX,
+  fromY,
+  fromPosition,
+  toX,
+  toY,
+  toPosition,
+  connectionLineStyle,
+}: any) => {
+  let adjustedFromX = fromX;
+  let adjustedFromY = fromY;
+  if (fromPosition === Position.Left) {
+    adjustedFromX += 5;
+  } else if (fromPosition === Position.Right) {
+    adjustedFromX -= 5;
+  } else if (fromPosition === Position.Top) {
+    adjustedFromY += 5;
+  } else if (fromPosition === Position.Bottom) {
+    adjustedFromY -= 5;
+  }
+
+  let adjustedToX = toX;
+  let adjustedToY = toY;
+  if (toPosition) {
+    if (toPosition === Position.Left) {
+      adjustedToX += 5;
+    } else if (toPosition === Position.Right) {
+      adjustedToX -= 5;
+    } else if (toPosition === Position.Top) {
+      adjustedToY += 5;
+    } else if (toPosition === Position.Bottom) {
+      adjustedToY -= 5;
+    }
+  }
+
+  const [path] = getBezierPath({
+    sourceX: adjustedFromX,
+    sourceY: adjustedFromY,
+    sourcePosition: fromPosition,
+    targetX: adjustedToX,
+    targetY: adjustedToY,
+    targetPosition: toPosition || (fromPosition === Position.Left ? Position.Right : Position.Left),
+  });
+
+  return (
+    <g>
+      <path
+        fill="none"
+        stroke="#6c9ac6"
+        strokeWidth={2}
+        className="react-flow__connection-path"
+        d={path}
+        style={connectionLineStyle}
+      />
+    </g>
+  );
+};
+
+const edgeTypes = {
+  default: VLabEdge,
 };
 
 const nodeTypes = {
@@ -2608,15 +2721,6 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const onNodeDoubleClick = (_: any, node: Node) => {
     if ((node.data as any).type === 'scope') {
       setOpenScopes(prev => prev.includes(node.id) ? prev : [...prev, node.id]);
-    } else if (
-      (node.data as any).type?.startsWith('ps_') || 
-      (node.data as any).type?.includes('pid') || 
-      ['lms_adaptive_filter', 'neural_neuron_learning', 'rl_q_learning_controller', 'ac_motor_pid_control'].includes((node.data as any).type || '') ||
-      ['speed_pid', 'pid_controller', 'controller', 'error_calc', 'ref_speed'].some(k => node.id.includes(k) || (node.data as any).type?.includes(k))
-    ) {
-      if (onNavigateToXbridges) {
-        onNavigateToXbridges(node.id);
-      }
     }
   };
 
@@ -2961,6 +3065,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             onNodeDoubleClick={onNodeDoubleClick}
             onInit={setReactFlowInstance}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            connectionLineComponent={VLabConnectionLine}
             connectionLineStyle={{ stroke: '#6c9ac6', strokeWidth: 2 }}
             connectionLineType={ConnectionLineType.Bezier}
             fitView
@@ -3075,7 +3181,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         {/* Right Sidebar: Properties & Equations */}
         <div className="w-80 bg-[#0d0d0d] border-l border-[#222] flex flex-col">
           {selectedNode ? (
-            <>
+            <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col min-h-0">
               {/* Properties Section */}
               <div className="p-4 border-b border-[#222]">
                 <div className="flex items-center gap-2 mb-4">
@@ -3122,61 +3228,59 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                     ))}
                   </div>
                 </div>
+              </div>
 
-                {/* Interface & Ports Section */}
-                <div className="p-4 border-b border-[#222]">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Activity size={16} className="text-emerald-500" />
-                    <h3 className="text-xs font-bold uppercase tracking-widest">Interface & Ports</h3>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    {(selectedNode.data as any).ports?.map((port: any) => (
-                      <div key={port.id} className="bg-[#141414] p-2 rounded-lg border border-[#222] flex items-center justify-between group hover:border-emerald-500/30 transition-all">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-1.5 h-1.5 rounded-full ${
-                            port.pos === 'left' ? 'bg-blue-500' :
-                            port.pos === 'right' ? 'bg-emerald-500' :
-                            port.pos === 'top' ? 'bg-amber-500' : 'bg-purple-500'
-                          }`} />
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[9px] font-mono text-emerald-500/70">[{port.id}]</span>
-                              <span className="text-[10px] font-bold text-gray-200 uppercase tracking-tight">
-                                {port.label || 'Unlabeled'}
-                              </span>
-                            </div>
-                            <div className="mt-1">
-                              <span className="text-[8px] px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-gray-500 font-mono uppercase tracking-tighter">
-                                {port.domain || (selectedNode.data as any).domain || 'General'}
-                              </span>
-                            </div>
+              {/* Interface & Ports Section */}
+              <div className="p-4 border-b border-[#222]">
+                <div className="flex items-center gap-2 mb-4">
+                  <Activity size={16} className="text-emerald-500" />
+                  <h3 className="text-xs font-bold uppercase tracking-widest">Interface & Ports</h3>
+                </div>
+                
+                <div className="space-y-2">
+                  {(selectedNode.data as any).ports?.map((port: any) => (
+                    <div key={port.id} className="bg-[#141414] p-2 rounded-lg border border-[#222] flex items-center justify-between group hover:border-emerald-500/30 transition-all">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-1.5 h-1.5 rounded-full ${
+                          port.pos === 'left' ? 'bg-blue-500' :
+                          port.pos === 'right' ? 'bg-emerald-500' :
+                          port.pos === 'top' ? 'bg-amber-500' : 'bg-purple-500'
+                        }`} />
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] font-mono text-emerald-500/70">[{port.id}]</span>
+                            <span className="text-[10px] font-bold text-gray-200 uppercase tracking-tight">
+                              {port.label || 'Unlabeled'}
+                            </span>
+                          </div>
+                          <div className="mt-1">
+                            <span className="text-[8px] px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-gray-500 font-mono uppercase tracking-tighter">
+                              {port.domain || (selectedNode.data as any).domain || 'General'}
+                            </span>
                           </div>
                         </div>
-                        <div className="text-right">
-                           <div className="text-[9px] text-emerald-500/80 font-bold uppercase">
-                             {port.pos === 'left' ? 'Input' : port.pos === 'right' ? 'Output' : 'Control'}
-                           </div>
-                           <div className="text-[8px] text-gray-700">
-                             {port.pos === 'left' ? 'Terminal A' : port.pos === 'right' ? 'Terminal B' : 'Signal Port'}
-                           </div>
-                        </div>
                       </div>
-                    ))}
-                  </div>
+                      <div className="text-right">
+                         <div className="text-[9px] text-emerald-500/80 font-bold uppercase">
+                           {port.pos === 'left' ? 'Input' : port.pos === 'right' ? 'Output' : 'Control'}
+                         </div>
+                         <div className="text-[8px] text-gray-700">
+                           {port.pos === 'left' ? 'Terminal A' : port.pos === 'right' ? 'Terminal B' : 'Signal Port'}
+                         </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
               {/* Equations Section */}
-              <div className="flex-1 flex flex-col overflow-hidden">
-                <div className="p-4 border-b border-[#222]">
-                  <div className="flex items-center gap-2">
-                    <Activity size={16} className="text-blue-500" />
-                    <h3 className="text-xs font-bold uppercase tracking-widest">Governing Equations</h3>
-                  </div>
+              <div className="p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Activity size={16} className="text-blue-500" />
+                  <h3 className="text-xs font-bold uppercase tracking-widest">Governing Equations</h3>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4">
+                <div>
                   {selectedBlockDef ? (
                     <div className="space-y-4">
                       <div className="bg-[#141414] p-4 rounded-xl border border-[#222] flex flex-col items-center justify-center min-h-[100px] text-center">
@@ -3202,14 +3306,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                       </div>
                     </div>
                   ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-600 text-center px-4">
+                    <div className="flex flex-col items-center justify-center text-gray-600 text-center px-4 py-8">
                       <Box size={32} className="mb-2 opacity-20" />
                       <p className="text-[10px] font-medium italic">No equations defined for this block type.</p>
                     </div>
                   )}
                 </div>
               </div>
-            </>
+            </div>
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-gray-600 text-center p-8">
               <div className="w-16 h-16 rounded-full bg-[#141414] border border-[#222] flex items-center justify-center mb-4">

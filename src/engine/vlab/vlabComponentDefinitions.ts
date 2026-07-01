@@ -13,6 +13,108 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'Voltage (V)', through: 'Current (I)',
     description: 'Implements a linear resistor following Ohm\'s law. Connect to model energy dissipation in electrical networks.'
   },
+  diode: {
+    equations: ['I = Is*(exp(V/n*Vt) - 1)', 'simplified: V = I*Ron when V > Vf'],
+    latex: ['I = I_s \\left(e^{V/nV_T} - 1\\right)'],
+    across: 'Voltage (V)', through: 'Current (I)',
+    description: 'Shockley diode model with smooth tanh transition. Parameters: Ron (forward resistance), Roff (reverse), Vf (forward drop).'
+  },
+  nmos: {
+    equations: ['Id = kn/2*(Vgs-Vth)² (sat)', 'Id = kn*(Vov*Vds - Vds²/2) (lin)'],
+    latex: ['I_D = \\frac{k_n}{2}(V_{GS}-V_{th})^2(1+\\lambda V_{DS})'],
+    across: 'Voltage (V)', through: 'Current (I)',
+    description: 'SPICE Level-1 N-MOSFET. Three regions: cut-off, linear, saturation. Gate draws no current (infinite impedance).'
+  },
+  igbt: {
+    equations: ['Ic = (Vce - Vce_sat)/Rd when Vge >= Vge_th', 'Ic = 0 when Vge < Vge_th'],
+    latex: ['I_C = \\frac{V_{CE} - V_{CE,sat}}{R_d} \\cdot g(V_{GE})'],
+    across: 'Voltage (V)', through: 'Current (I)',
+    description: 'IGBT power switch. Modeled as MOSFET-gated BJT. Dominant in motor drives and inverter bridges.'
+  },
+  fluid_resistance: {
+    equations: ['P1 - P2 = Rf * mdot'],
+    latex: ['\\Delta P = R_f \\cdot \\dot{m}'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Models laminar flow resistance in a fluid pipe where pressure drop is proportional to mass flow.'
+  },
+  orifice: {
+    equations: ['mdot = Cd * A * sqrt(2*rho*|dP|)*sign(dP)'],
+    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho |\\Delta P|} \\text{sign}(\\Delta P)'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Models turbulent restriction or nozzle orifice flow according to Bernoulli\'s equation.'
+  },
+  fluid_capacitance: {
+    equations: ['mdot = Cf * dP/dt'],
+    latex: ['\\dot{m} = C_f \\frac{dP}{dt}'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Models fluid compressibility storage in a constant volume chamber.'
+  },
+  fluid_inertance: {
+    equations: ['P1 - P2 = Li * d_mdot/dt'],
+    latex: ['\\Delta P = L_i \\frac{d\\dot{m}}{dt}'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Models fluid momentum/inertia in a column of fluid.'
+  },
+  pressure_source: {
+    equations: ['P = P_const'],
+    latex: ['P = P_0'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Maintains a constant pressure potential at its output terminal.'
+  },
+  ctrl_pressure_source: {
+    equations: ['P = P_ctrl'],
+    latex: ['P = P_{ctrl}'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Maintains pressure potential equal to an input physical signal.'
+  },
+  mass_flow_source: {
+    equations: ['mdot = mdot_const'],
+    latex: ['\\dot{m} = \\dot{m}_0'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Injects a constant mass flow rate into the network.'
+  },
+  check_valve: {
+    equations: ['mdot = dP / Rf when dP > 0', 'mdot = 0 when dP <= 0'],
+    latex: ['\\dot{m} = \\frac{\\Delta P}{R_f} \\cdot H(\\Delta P)'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'A one-way valve that only permits fluid flow in the positive direction.'
+  },
+  relief_valve: {
+    equations: ['dP = mdot * Rf_open when P1 > P_set', 'dP = mdot * Rf_closed when P1 <= P_set'],
+    latex: ['\\Delta P = \\dot{m} \\cdot R_{valve}(P)'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Safety valve that opens to vent pressure when the inlet pressure exceeds a set threshold.'
+  },
+  steam_generator_fluid: {
+    equations: ['mdot = Q / h_fg'],
+    latex: ['\\dot{m} = \\frac{Q}{h_{fg}}'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Converts heating power (W) into steam mass flow rate using latent heat of vaporization.'
+  },
+  steam_accumulator: {
+    equations: ['P1 = P2', 'mdot_in - mdot_out = Cf * dP/dt'],
+    latex: ['P_{in} = P_{out}', '\\dot{m}_{in} - \\dot{m}_{out} = C_f \\frac{dP}{dt}'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Models a steam pressure vessel or boiler drum accumulator. Combines mass storage and pressure equalization.'
+  },
+  steam_nozzle: {
+    equations: ['mdot = Cd * A * sqrt(2*rho*(P - P_atm))'],
+    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho (P - P_{atm})}'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Models steam discharging to atmosphere through a throttled nozzle outlet.'
+  },
+  pressure_sensor: {
+    equations: ['S = P'],
+    latex: ['S = P'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Measures fluid pressure at its input and outputs it as a physical signal.'
+  },
+  flow_sensor: {
+    equations: ['P1 = P2', 'S = mdot'],
+    latex: ['P_{in} = P_{out}', 'S = \\dot{m}'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Ideal flow meter with zero pressure drop that measures mass flow rate.'
+  },
   variable_resistor: {
     equations: ['I = (Vp - Vn)/R_ctrl'],
     latex: ['V = I \\cdot R(r)'],

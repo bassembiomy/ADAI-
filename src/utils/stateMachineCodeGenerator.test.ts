@@ -89,12 +89,12 @@ describe('StateMachineCodeGenerator', () => {
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
     
     // Check transition from Idle to Active
-    expect(coreC).toContain('if (instance->data.sensor_val > 10.0f)');
+    expect(coreC).toContain('if ((instance->data.sensor_val > 10.0f))');
     expect(coreC).toContain('SM_Enter_State(instance, SM_ST_ACTIVE, false);');
     
     // Check transition from Active to Idle
     // Note: counter is uint16, so 100 should become 100U
-    expect(coreC).toContain('if (instance->data.counter >= 100U)');
+    expect(coreC).toContain('if ((instance->data.counter >= 100U))');
     expect(coreC).toContain('SM_Enter_State(instance, SM_ST_IDLE, false);');
   });
 
@@ -186,7 +186,7 @@ describe('StateMachineCodeGenerator', () => {
     expect(userLogicC).toContain('instance->data.counter = (uint16_t)(2U);');
 
     // Verify parenthesization in transition condition
-    expect(coreC).toContain('if ((instance->data.sensor_val > 5.0f) && (instance->data.counter < 10U))');
+    expect(coreC).toContain('if (((instance->data.sensor_val > 5.0f) && (instance->data.counter < 10U)))');
 
     // Verify bracket wrapping in transition action
     expect(coreC).toContain('if ((instance->data.is_active)) {');

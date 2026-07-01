@@ -1,7 +1,7 @@
-// src/engine/xbridges/Solvers.ts
 import { XbridgesEngine } from './XbridgesEngine';
 import { SolverOptions } from './types';
 import { VectorUtils } from './VectorUtils';
+import { AdaptiveSolver } from './AdaptiveSolver';
 
 export class Solvers {
   static stepEuler(engine: XbridgesEngine, t: number, dt: number) {
@@ -104,7 +104,9 @@ export class Solvers {
   }
 
   static runFixedStep(engine: XbridgesEngine, options: SolverOptions) {
-      if (options.solver === 'rk4' || options.solver === 'ode4' as any) {
+      if (options.solver === 'ode45' || (options.solver as string) === 'ode45') {
+          AdaptiveSolver.runODE45(engine, options);
+      } else if (options.solver === 'rk4' || options.solver === 'ode4' as any) {
           this.runRK4(engine, options);
       } else {
           this.runEuler(engine, options);

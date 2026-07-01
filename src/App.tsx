@@ -19,7 +19,8 @@ import {
   ChevronDown, ChevronRight, Play, Pause, Square, BookOpen,
   MousePointer2, Upload, FileText, Download,
   Activity, Zap, Database, Cpu, Layout, Maximize2, X,
-  LayoutGrid, Rows, Network, Flame, RefreshCcw, Wind, Cloud
+  LayoutGrid, Rows, Network, Flame, RefreshCcw, Wind, Cloud,
+  Eye, Paperclip
 } from 'lucide-react';
 import { FactoryIOGateway } from './components/FactoryIOGateway';
 import { AiArchitectSidebar } from './components/AiArchitectSidebar';
@@ -249,6 +250,8 @@ interface BlockData {
   ibdY?: number;
   ibdWidth?: number;
   ibdHeight?: number;
+  attachedFiles?: { name: string; content: string }[];
+  assignedTo?: string;
 }
 
 interface RelationshipData {
@@ -934,6 +937,7 @@ const TraceabilityMatrix = ({
         Name: prefix + r.name,
         Status: r.status || '',
         Priority: r.priority || '',
+        'Assigned To': r.assignedTo || 'Unassigned',
         Description: r.description || '',
         Links: outgoing,
         SatisfiedBy: satisfiedBy
@@ -963,11 +967,11 @@ const TraceabilityMatrix = ({
       </div>
       <div className="flex-1 overflow-auto p-0">
         <table className="w-full text-left text-xs text-[#e0e0e0] border-collapse">
-          <thead className="bg-[#1a1a1a] text-[#888] sticky top-0 z-10 shadow-sm"><tr><th className="p-3 font-medium border-b border-[#333]">ID</th><th className="p-3 font-medium border-b border-[#333]">Name</th><th className="p-3 font-medium border-b border-[#333]">Status</th><th className="p-3 font-medium border-b border-[#333]">Priority</th><th className="p-3 font-medium border-b border-[#333]">Links (Out)</th><th className="p-3 font-medium border-b border-[#333]">Satisfied By</th></tr></thead>
+          <thead className="bg-[#1a1a1a] text-[#888] sticky top-0 z-10 shadow-sm"><tr><th className="p-3 font-medium border-b border-[#333]">ID</th><th className="p-3 font-medium border-b border-[#333]">Name</th><th className="p-3 font-medium border-b border-[#333]">Status</th><th className="p-3 font-medium border-b border-[#333]">Priority</th><th className="p-3 font-medium border-b border-[#333]">Assigned To</th><th className="p-3 font-medium border-b border-[#333]">Links (Out)</th><th className="p-3 font-medium border-b border-[#333]">Satisfied By</th></tr></thead>
           <tbody className="divide-y divide-[#222]">
             {orderedReqs.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-[#666]">
+                <td colSpan={7} className="p-8 text-center text-[#666]">
                   <div className="flex flex-col items-center justify-center">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mb-3 opacity-50">
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
@@ -1004,6 +1008,11 @@ const TraceabilityMatrix = ({
                         'bg-[#222] text-[#888] border-[#333]'
                       }`}>
                       {r.priority || 'Medium'}
+                    </span>
+                  </td>
+                  <td className="p-3">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${r.assignedTo ? 'bg-blue-950/40 text-blue-400 border-blue-800/30' : 'bg-[#222]/40 text-[#666] border-[#333]/40'}`}>
+                      {r.assignedTo || 'Unassigned'}
                     </span>
                   </td>
                   <td className="p-3 text-[#888]">
@@ -6249,6 +6258,7 @@ const ADIA = () => {
 
   // BDD STATE (SysML)
   const [diagramMode, setDiagramMode] = useState<DiagramMode>('statemachine' as DiagramMode);
+  const [activePropTab, setActivePropTab] = useState<'general' | 'assign'>('general');
 
   // HIL (Hardware-in-the-Loop) state
   const [hilConfig, setHilConfig] = useState<HILConfig>({
@@ -8461,21 +8471,8 @@ const ADIA = () => {
   }, [blocks, addError]);
 
   const createRequirement = useCallback((x: number, y: number) => {
-    addToHistory();
-    const newId = uuidv4();
     createBlock(x, y, 'requirement');
-
-    if (diagramMode === 'requirements' && currentLayerId !== 'root') {
-      const newRel: RelationshipData = {
-        id: uuidv4(),
-        sourceId: currentLayerId,
-        targetId: newId,
-        type: 'composition',
-        label: '',
-      };
-      setRelationships(prev => [...prev, newRel]);
-    }
-  }, [createBlock, addToHistory, diagramMode, currentLayerId]);
+  }, [createBlock]);
 
   const createRelationship = useCallback((sourceId: string, targetId: string, type: RelationshipData['type'] = 'association') => {
     addToHistory();
@@ -8557,10 +8554,26 @@ const ADIA = () => {
     // Only layout visible requirements
     const visibleReqs = reqs.filter(block => {
       if (currentLayerId === 'root') {
-        return !relationships.some(r => r.targetId === block.id && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'));
-      } else {
-        return relationships.some(r => r.sourceId === currentLayerId && r.targetId === block.id && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'));
+        return true;
       }
+      // Check if block is a descendant of currentLayerId
+      const descendants = new Set<string>();
+      const queue = [currentLayerId];
+      const visited = new Set<string>();
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (visited.has(current)) continue;
+        visited.add(current);
+        relationships
+          .filter(r => r.sourceId === current && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'))
+          .forEach(r => {
+            if (!descendants.has(r.targetId)) {
+              descendants.add(r.targetId);
+              queue.push(r.targetId);
+            }
+          });
+      }
+      return descendants.has(block.id);
     });
 
     if (visibleReqs.length === 0) return;
@@ -10144,6 +10157,7 @@ const ADIA = () => {
                 <th style="padding: 10px; border: 1px solid #ddd;">Name</th>
                 <th style="padding: 10px; border: 1px solid #ddd;">Status</th>
                 <th style="padding: 10px; border: 1px solid #ddd;">Priority</th>
+                <th style="padding: 10px; border: 1px solid #ddd;">Assigned To</th>
                 <th style="padding: 10px; border: 1px solid #ddd;">Description</th>
               </tr>`;
 
@@ -10175,6 +10189,7 @@ const ADIA = () => {
           <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${prefix}${r.name}</td>
           <td style="padding: 10px; border: 1px solid #ddd;">${r.status || 'Draft'}</td>
           <td style="padding: 10px; border: 1px solid #ddd;">${r.priority || 'Medium'}</td>
+          <td style="padding: 10px; border: 1px solid #ddd;">${r.assignedTo || 'Unassigned'}</td>
           <td style="padding: 10px; border: 1px solid #ddd;">${r.description || ''}</td>
         </tr>`;
 
@@ -12447,18 +12462,29 @@ const ADIA = () => {
       if (diagramMode === 'requirements') {
         if (block.stereotype !== 'requirement') return null;
 
-        if (currentLayerId === 'root') {
-          // In root, only show requirements that are NOT children of any other requirement
-          const isChild = relationships.some(r => r.targetId === block.id && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'));
-          if (isChild) return null;
-        } else {
-          // In a layer, only show requirements that ARE children of currentLayerId
-          const isChildOfCurrent = relationships.some(r => r.sourceId === currentLayerId && r.targetId === block.id && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'));
-          if (!isChildOfCurrent) return null;
+        if (currentLayerId !== 'root') {
+          // Only show requirements that are descendants of currentLayerId
+          const descendants = new Set<string>();
+          const queue = [currentLayerId];
+          const visited = new Set<string>();
+          while (queue.length > 0) {
+            const current = queue.shift()!;
+            if (visited.has(current)) continue;
+            visited.add(current);
+            relationships
+              .filter(r => r.sourceId === current && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'))
+              .forEach(r => {
+                if (!descendants.has(r.targetId)) {
+                  descendants.add(r.targetId);
+                  queue.push(r.targetId);
+                }
+              });
+          }
+          if (!descendants.has(block.id)) return null;
         }
       }
 
-      if (diagramMode === 'bdd' && (block.stereotype === 'requirement' || block.stereotype === 'interface' || block.stereotype === 'interfaceBlock')) return null;
+      if (diagramMode === 'bdd' && block.stereotype === 'requirement') return null;
 
       // In BDD mode, hide any block that is being used as a type for a part.
       if (diagramMode === 'bdd' && parts.some(p => p.typeId === block.id)) {
@@ -12511,6 +12537,17 @@ const ADIA = () => {
                   block.status === 'Approved' ? '#6c9ac6' :
                     block.status === 'Draft' ? '#888' : '#c96c8a'
               } />
+              {/* Attached PDFs Indicator */}
+              {block.attachedFiles && block.attachedFiles.length > 0 && (
+                <g transform={`translate(${displayWidth - 35}, -40)`}>
+                  <title>{`${block.attachedFiles.length} PDF(s) attached`}</title>
+                  <rect x="0" y="0" width="8" height="10" rx="1" fill="none" stroke="#f97316" strokeWidth={1} />
+                  <line x1="2" y1="3" x2="6" y2="3" stroke="#f97316" strokeWidth={1} />
+                  <line x1="2" y1="5" x2="6" y2="5" stroke="#f97316" strokeWidth={1} />
+                  <line x1="2" y1="7" x2="5" y2="7" stroke="#f97316" strokeWidth={1} />
+                  <text x="11" y="9" fill="#f97316" fontSize={8} fontWeight="bold">{block.attachedFiles.length}</text>
+                </g>
+              )}
             </g>
           ) : (
             <g transform="translate(5, 45)">
@@ -12615,11 +12652,24 @@ const ADIA = () => {
       // Check visibility for requirements
       if (diagramMode === 'requirements') {
         const isVisible = (id: string) => {
-          if (currentLayerId === 'root') {
-            return !relationships.some(r => r.targetId === id && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'));
-          } else {
-            return relationships.some(r => r.sourceId === currentLayerId && r.targetId === id && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'));
+          if (currentLayerId === 'root') return true;
+          const descendants = new Set<string>();
+          const queue = [currentLayerId];
+          const visited = new Set<string>();
+          while (queue.length > 0) {
+            const current = queue.shift()!;
+            if (visited.has(current)) continue;
+            visited.add(current);
+            relationships
+              .filter(r => r.sourceId === current && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'))
+              .forEach(r => {
+                if (!descendants.has(r.targetId)) {
+                  descendants.add(r.targetId);
+                  queue.push(r.targetId);
+                }
+              });
           }
+          return descendants.has(id);
         };
         if (!isVisible(source.id) || !isVisible(target.id)) return null;
       }
@@ -13323,6 +13373,7 @@ const ADIA = () => {
           availableVariables={variables}
           onVariablesChange={setVariables}
           tickMs={tickMs}
+          onTickMsChange={setTickMs}
           onBack={() => setDiagramMode('statemachine')}
           onSave={(nodes, edges) => {
             setEntropyNodes(nodes);
@@ -14886,41 +14937,231 @@ const ADIA = () => {
                   </div>
                   {selectedBlock.stereotype === 'requirement' && (
                     <>
-                      <div><Label>Req ID</Label><Input value={selectedBlock.reqId || ''} onChange={(e) => updateBlock(selectedBlock.id, { reqId: e.target.value })} className="mt-1" /></div>
-                      <div><Label>Status</Label>
-                        <select value={selectedBlock.status || ''} onChange={(e) => updateBlock(selectedBlock.id, { status: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                          <option value="Draft">Draft</option>
-                          <option value="Approved">Approved</option>
-                          <option value="Verified">Verified</option>
-                          <option value="Implemented">Implemented</option>
-                        </select>
+                      {/* Tabs Header */}
+                      <div className="flex border-b border-[#333] mb-4">
+                        <button
+                          onClick={() => setActivePropTab('general')}
+                          className={`flex-1 py-1.5 text-xs font-semibold border-b-2 transition-colors ${
+                            activePropTab === 'general'
+                              ? 'border-[#f97316] text-[#e0e0e0]'
+                              : 'border-transparent text-[#666] hover:text-[#aaa]'
+                          }`}
+                        >
+                          General
+                        </button>
+                        <button
+                          onClick={() => setActivePropTab('assign')}
+                          className={`flex-1 py-1.5 text-xs font-semibold border-b-2 transition-colors ${
+                            activePropTab === 'assign'
+                              ? 'border-[#f97316] text-[#e0e0e0]'
+                              : 'border-transparent text-[#666] hover:text-[#aaa]'
+                          }`}
+                        >
+                          Assign
+                        </button>
                       </div>
-                      <div><Label>Priority</Label>
-                        <select value={selectedBlock.priority || ''} onChange={(e) => updateBlock(selectedBlock.id, { priority: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                          <option value="High">High</option>
-                          <option value="Medium">Medium</option>
-                          <option value="Low">Low</option>
-                        </select>
-                      </div>
-                      <div><Label>Description</Label><textarea value={selectedBlock.description || ''} onChange={(e) => updateBlock(selectedBlock.id, { description: e.target.value })} className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]" /></div>
-                      <div>
-                        <Label>Risk</Label>
-                        <select value={selectedBlock.risk || 'Medium'} onChange={(e) => updateBlock(selectedBlock.id, { risk: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                          <option value="High">High</option>
-                          <option value="Medium">Medium</option>
-                          <option value="Low">Low</option>
-                        </select>
-                      </div>
-                      <div>
-                        <Label>Verification Method</Label>
-                        <select value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
-                          <option value="Test">Test</option>
-                          <option value="Analysis">Analysis</option>
-                          <option value="Inspection">Inspection</option>
-                          <option value="Demonstration">Demonstration</option>
-                        </select>
-                      </div>
-                      <div><Label>Source</Label><Input value={selectedBlock.source || ''} onChange={(e) => updateBlock(selectedBlock.id, { source: e.target.value })} className="mt-1" /></div>
+
+                      {activePropTab === 'general' ? (
+                        <>
+                          <div><Label>Req ID</Label><Input value={selectedBlock.reqId || ''} onChange={(e) => updateBlock(selectedBlock.id, { reqId: e.target.value })} className="mt-1" /></div>
+                          <div><Label>Status</Label>
+                            <select value={selectedBlock.status || ''} onChange={(e) => updateBlock(selectedBlock.id, { status: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                              <option value="Draft">Draft</option>
+                              <option value="Approved">Approved</option>
+                              <option value="Verified">Verified</option>
+                              <option value="Implemented">Implemented</option>
+                            </select>
+                          </div>
+                          <div><Label>Priority</Label>
+                            <select value={selectedBlock.priority || ''} onChange={(e) => updateBlock(selectedBlock.id, { priority: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                              <option value="High">High</option>
+                              <option value="Medium">Medium</option>
+                              <option value="Low">Low</option>
+                            </select>
+                          </div>
+                          <div><Label>Description</Label><textarea value={selectedBlock.description || ''} onChange={(e) => updateBlock(selectedBlock.id, { description: e.target.value })} className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]" /></div>
+                          <div>
+                            <Label>Risk</Label>
+                            <select value={selectedBlock.risk || 'Medium'} onChange={(e) => updateBlock(selectedBlock.id, { risk: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                              <option value="High">High</option>
+                              <option value="Medium">Medium</option>
+                              <option value="Low">Low</option>
+                            </select>
+                          </div>
+                          <div>
+                            <Label>Verification Method</Label>
+                            <select value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                              <option value="Test">Test</option>
+                              <option value="Analysis">Analysis</option>
+                              <option value="Inspection">Inspection</option>
+                              <option value="Demonstration">Demonstration</option>
+                            </select>
+                          </div>
+                          <div><Label>Source</Label><Input value={selectedBlock.source || ''} onChange={(e) => updateBlock(selectedBlock.id, { source: e.target.value })} className="mt-1" /></div>
+
+                          <div className="mt-4 pt-3 border-t border-[#333]">
+                            <Label className="flex items-center justify-between text-xs font-semibold text-[#aaa] mb-2">
+                              <span>Attached PDFs</span>
+                              <span className="text-[10px] text-[#666]">({(selectedBlock.attachedFiles || []).length})</span>
+                            </Label>
+                            
+                            <div className="space-y-2 mb-2 max-h-40 overflow-y-auto">
+                              {(!selectedBlock.attachedFiles || selectedBlock.attachedFiles.length === 0) ? (
+                                <div className="text-xs text-[#666] italic py-1">No PDF files attached.</div>
+                              ) : (
+                                selectedBlock.attachedFiles.map((file, idx) => (
+                                  <div key={idx} className="flex items-center justify-between bg-[#0a0a0a] p-2 rounded border border-[#333] gap-2">
+                                    <div className="flex items-center gap-2 overflow-hidden flex-1">
+                                      <FileText size={14} className="text-[#f97316] shrink-0" />
+                                      <span className="text-xs text-[#e0e0e0] truncate" title={file.name}>
+                                        {file.name}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button
+                                        onClick={() => {
+                                          try {
+                                            const base64Parts = file.content.split(',');
+                                            const mime = base64Parts[0].match(/:(.*?);/)?.[1] || 'application/pdf';
+                                            const byteString = atob(base64Parts[1]);
+                                            const ab = new ArrayBuffer(byteString.length);
+                                            const ia = new Uint8Array(ab);
+                                            for (let i = 0; i < byteString.length; i++) {
+                                              ia[i] = byteString.charCodeAt(i);
+                                            }
+                                            const blob = new Blob([ab], { type: mime });
+                                            const url = URL.createObjectURL(blob);
+                                            window.open(url, '_blank');
+                                          } catch (err) {
+                                            console.error('Error opening PDF:', err);
+                                            addError('error', 'Failed to open PDF.');
+                                          }
+                                        }}
+                                        title="View PDF"
+                                        className="p-1 hover:bg-[#222] rounded text-[#aaa] hover:text-[#f97316] transition-colors"
+                                      >
+                                        <Eye size={12} />
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          try {
+                                            const base64Parts = file.content.split(',');
+                                            const mime = base64Parts[0].match(/:(.*?);/)?.[1] || 'application/pdf';
+                                            const byteString = atob(base64Parts[1]);
+                                            const ab = new ArrayBuffer(byteString.length);
+                                            const ia = new Uint8Array(ab);
+                                            for (let i = 0; i < byteString.length; i++) {
+                                              ia[i] = byteString.charCodeAt(i);
+                                            }
+                                            const blob = new Blob([ab], { type: mime });
+                                            const url = URL.createObjectURL(blob);
+                                            const link = document.createElement('a');
+                                            link.href = url;
+                                            link.download = file.name;
+                                            link.click();
+                                            URL.revokeObjectURL(url);
+                                          } catch (err) {
+                                            console.error('Error downloading PDF:', err);
+                                            addError('error', 'Failed to download PDF.');
+                                          }
+                                        }}
+                                        title="Download PDF"
+                                        className="p-1 hover:bg-[#222] rounded text-[#aaa] hover:text-[#f97316] transition-colors"
+                                      >
+                                        <Download size={12} />
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          const currentFiles = selectedBlock.attachedFiles || [];
+                                          const updatedFiles = currentFiles.filter((_, i) => i !== idx);
+                                          updateBlock(selectedBlock.id, { attachedFiles: updatedFiles });
+                                          addError('info', `Removed PDF: ${file.name}`);
+                                        }}
+                                        title="Remove PDF"
+                                        className="p-1 hover:bg-[#222] rounded text-[#aaa] hover:text-red-400 transition-colors"
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+
+                            <div>
+                              <input
+                                type="file"
+                                id="req-pdf-upload"
+                                accept=".pdf"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  if (file.type !== 'application/pdf' && !file.name.endsWith('.pdf')) {
+                                    addError('error', 'Only PDF files are supported.');
+                                    return;
+                                  }
+                                  const reader = new FileReader();
+                                  reader.onload = (event) => {
+                                    const base64Content = event.target?.result as string;
+                                    const currentFiles = selectedBlock.attachedFiles || [];
+                                    const updatedFiles = [...currentFiles, { name: file.name, content: base64Content }];
+                                    updateBlock(selectedBlock.id, { attachedFiles: updatedFiles });
+                                    addError('info', `Attached PDF: ${file.name}`);
+                                  };
+                                  reader.readAsDataURL(file);
+                                  e.target.value = '';
+                                }}
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => document.getElementById('req-pdf-upload')?.click()}
+                                className="w-full flex items-center justify-center gap-2 border-[#333] hover:border-[#f97316] hover:bg-[#f97316]/10 text-xs mt-1"
+                              >
+                                <Upload size={12} />
+                                Attach PDF File
+                              </Button>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="space-y-4">
+                          <div>
+                            <Label>Assigned To</Label>
+                            <Input
+                              value={selectedBlock.assignedTo || ''}
+                              onChange={(e) => updateBlock(selectedBlock.id, { assignedTo: e.target.value })}
+                              className="mt-1"
+                              placeholder="e.g. John Doe, Control Team, Subsystem A"
+                            />
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] text-[#888] uppercase font-bold tracking-wider">Quick Team Assignment</span>
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                              {["Control Team", "Hardware Team", "Software Team", "Safety Engineer", "QA Team", "System Architect"].map(team => (
+                                <button
+                                  key={team}
+                                  onClick={() => updateBlock(selectedBlock.id, { assignedTo: team })}
+                                  className={`px-2 py-1 rounded text-[10px] border transition-colors ${
+                                    selectedBlock.assignedTo === team
+                                      ? 'bg-[#f97316]/20 text-[#f97316] border-[#f97316]/30'
+                                      : 'bg-[#111] text-[#aaa] border-[#333] hover:border-[#555]'
+                                  }`}
+                                >
+                                  {team}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="bg-[#111] border border-[#222] p-3 rounded text-[11px] text-[#888] space-y-1.5">
+                            <span className="font-bold text-[#aaa]">About Assignment</span>
+                            <p>Assigning a requirement establishes clear ownership for implementing and validating it. The assignee or team is displayed directly in the **Requirements Traceability Matrix (RTM)**.</p>
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
                   <div>

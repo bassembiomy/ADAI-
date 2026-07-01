@@ -4,6 +4,85 @@ import { VectorUtils } from './VectorUtils';
 import * as math from 'mathjs';
 import { MpcSolver } from './MpcSolver';
 
+export function polyToString(coeffs: number[], variable = 's'): string {
+  if (!coeffs || coeffs.length === 0) return '0';
+  const cleaned = coeffs.map(c => {
+    const num = Number(c);
+    return isNaN(num) ? 0 : num;
+  });
+  if (cleaned.every(c => c === 0)) return '0';
+  
+  const n = cleaned.length - 1;
+  let result = '';
+  
+  for (let i = 0; i <= n; i++) {
+    const c = cleaned[i];
+    if (c === 0) continue;
+    
+    const power = n - i;
+    let termStr = '';
+    
+    if (result !== '') {
+      termStr += c > 0 ? ' + ' : ' - ';
+    } else if (c < 0) {
+      termStr += '-';
+    }
+    
+    const absVal = Math.abs(c);
+    if (absVal !== 1 || power === 0) {
+      termStr += Number(absVal.toFixed(4)).toString();
+    }
+    
+    if (power > 0) {
+      termStr += variable;
+      if (power > 1) {
+        const superscripts: Record<string, string> = {
+          '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+          '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹'
+        };
+        const powerStr = power.toString().split('').map(char => superscripts[char] || char).join('');
+        termStr += powerStr;
+      }
+    }
+    result += termStr;
+  }
+  return result;
+}
+
+export function zpgToString(zeros: number[], poles: number[], gain: number, variable = 's'): { num: string; den: string } {
+  const formatRoots = (roots: number[]) => {
+    if (!roots || roots.length === 0) return '';
+    return roots.map(r => {
+      const val = Number(r);
+      const cleanVal = isNaN(val) ? 0 : val;
+      if (cleanVal === 0) return `(${variable})`;
+      const sign = cleanVal < 0 ? '+' : '-';
+      const absVal = Math.abs(cleanVal);
+      return `(${variable}${sign}${Number(absVal.toFixed(4)).toString()})`;
+    }).join('');
+  };
+
+  const g = Number(gain);
+  const cleanGain = isNaN(g) ? 1 : g;
+  
+  let numStr = '';
+  const zerosStr = formatRoots(zeros);
+  if (cleanGain === 1 && zerosStr !== '') {
+    numStr = zerosStr;
+  } else if (cleanGain === -1 && zerosStr !== '') {
+    numStr = `-${zerosStr}`;
+  } else {
+    numStr = `${Number(cleanGain.toFixed(4)).toString()}${zerosStr}`;
+  }
+  
+  const denStr = formatRoots(poles);
+  
+  return {
+    num: numStr || '1',
+    den: denStr || '1'
+  };
+}
+
 const createPort = (
   id: string,
   name: string,
@@ -28,7 +107,7 @@ const createPort = (
   frame
 });
 
-// Helper functions and waypoints for ROBOT_VACUUM_DIGITAL_TWIN
+// // Helper functions and waypoints for ROBOT_VACUUM_DIGITAL_TWIN
 export const ROOM_WALLS = [
   // Outer boundary walls
   { x1: -3.0, y1: -3.0, x2: -3.0, y2: 3.0 },
@@ -60,6 +139,23 @@ export const ROOM_BOXES = [
   { x1: 1.0, y1: 1.0, x2: 2.5, y2: 2.5 }   // Bed in Bedroom
 ];
 
+export const MATLAB_WALLS = [
+  { x1: -6.0, y1: -6.0, x2: 6.0, y2: -6.0 },
+  { x1: 6.0, y1: -6.0, x2: 6.0, y2: 6.0 },
+  { x1: 6.0, y1: 6.0, x2: -6.0, y2: 6.0 },
+  { x1: -6.0, y1: 6.0, x2: -6.0, y2: -6.0 },
+  { x1: -6.0, y1: 2.0, x2: -2.0, y2: 2.0 },
+  { x1: 2.0, y1: -2.0, x2: 2.0, y2: 4.0 },
+  { x1: -3.0, y1: -3.0, x2: 1.0, y2: -3.0 },
+  { x1: 3.0, y1: -2.0, x2: 6.0, y2: -2.0 }
+];
+
+export const MATLAB_OBSTACLES = [
+  { cx: 0.0, cy: 0.0, r: 0.3 },
+  { cx: -4.0, cy: 0.0, r: 0.3 },
+  { cx: 4.0, cy: 1.0, r: 0.3 }
+];
+
 const robotVacuumWaypoints = [
   { x: -2.2, y: -2.2 },
   { x: -2.2, y: 2.2 },
@@ -77,29 +173,474 @@ const robotVacuumWaypoints = [
   { x: 2.5, y: 2.5 }
 ];
 
-const getTwinGridCoords = (gx: number, gy: number) => {
-  const col = Math.floor((gx + 3.0) / 6.0 * 30);
-  const row = Math.floor((gy + 3.0) / 6.0 * 30);
+// ============================================================
+// ROOM LAYOUT (based on MATLAB_WALLS geometry):
+//  Interior walls:
+//    H-wall: y=2.0,  x∈[-6,-2]   → splits Corridor (bottom) from Living Room (top-left)
+//    V-wall: x=2.0,  y∈[-2, 4]   → splits left area from right area
+//    H-wall: y=-3.0, x∈[-3, 1]   → partial corridor wall
+//    H-wall: y=-2.0, x∈[ 3, 6]   → splits Bedroom (top-right) from Kitchen (bottom-right)
+//  Doorways (gaps in walls):
+//    Corridor↔LivingRoom:  x∈[-2, 0], y≈2.0  (gap in H-wall past x=-2)
+//    Corridor↔Bedroom:     y∈[-6,-2], x≈2.0  (gap below V-wall start at y=-2)
+//    Corridor↔Kitchen:     y∈[-6,-2], x≈2.0  (same gap — Kitchen entrance)
+//  Dock: (-5.1, -5.1) — Room A (Corridor)
+//  Schedule: Corridor(A) → LivingRoom(B) → Bedroom(C) → Kitchen(D) → DOCK
+// ============================================================
+//
+//  ROOM A — Corridor/Hallway  x∈[-6,2], y∈[-6,2]  (minus partial wall at y=-3)
+//  ROOM B — Living Room       x∈[-6,2], y∈[2,6]
+//  ROOM C — Bedroom           x∈[2,6],  y∈[-2,6]
+//  ROOM D — Kitchen           x∈[2,6],  y∈[-6,-2]
+
+// Zigzag cols at 0.7m spacing, staying 0.4m from walls
+export const ROOM_WAYPOINTS_MAP: Record<number, number[][]> = {
+  // Room A (Corridor): x∈[-6,2], y∈[-6,2]
+  0: [
+    [-5.4, -5.4], [-5.4,  1.4],
+    [-4.9,  1.4], [-4.9, -5.4],
+    [-4.2, -5.4], [-4.2,  1.4],
+    [-3.5,  1.4], [-3.5, -5.4],
+    [-2.8, -5.4], [-2.8, -3.4],
+    [-2.1, -3.4], [-2.1, -5.4],
+    [-1.4, -5.4], [-1.4, -3.4],
+    [-0.7, -3.4], [-0.7, -5.4],
+    [-2.8,  1.4], [-2.8, -2.6],
+    [-2.1, -2.6], [-2.1,  1.4],
+    [-1.4,  1.4], [-1.4, -2.6],
+    [-0.7, -2.6], [-0.7,  1.4],
+    [ 0.0,  1.4], [ 0.0, -2.6],
+    [ 0.7, -2.6], [ 0.7,  1.4],
+    [ 1.4,  1.4], [ 1.4, -5.4],
+  ],
+  // Room B (Living Room): x∈[-6,-2], y∈[2,6]
+  1: [
+    [-5.4, 2.6], [-5.4, 5.4],
+    [-4.9, 5.4], [-4.9, 2.6],
+    [-4.2, 2.6], [-4.2, 5.4],
+    [-3.5, 5.4], [-3.5, 2.6],
+    [-2.8, 2.6], [-2.8, 5.4],
+    [-2.1, 5.4], [-2.1, 2.6],
+  ],
+  // Room C (Bedroom): x∈[2,6], y∈[-2,6]
+  2: [
+    [2.4, -1.4], [2.4,  5.4],
+    [3.1,  5.4], [3.1, -1.4],
+    [3.8, -1.4], [3.8,  5.4],
+    [4.5,  5.4], [4.5, -1.4],
+    [5.2, -1.4], [5.2,  5.4],
+  ],
+  // Room D (Kitchen): x∈[2,6], y∈[-6,-2]
+  3: [
+    [2.4, -5.4], [2.4, -2.6],
+    [3.1, -2.6], [3.1, -5.4],
+    [3.8, -5.4], [3.8, -2.6],
+    [4.5, -2.6], [4.5, -5.4],
+    [5.2, -5.4], [5.2, -2.6],
+  ]
+};
+
+// Pre-seed a 30x30 occupancy grid with all MATLAB_WALLS so A* plans around walls from t=0
+export const seedGridWithWalls = (): number[][] => {
+  const grid: number[][] = Array.from({ length: 30 }, () => Array(30).fill(0));
+  const MAP_MIN = -6.0;
+  const MAP_SIZE = 12.0;
+
+  const worldToGrid = (wx: number, wy: number) => ({
+    col: Math.max(0, Math.min(29, Math.floor((wx - MAP_MIN) / MAP_SIZE * 30))),
+    row: Math.max(0, Math.min(29, Math.floor((wy - MAP_MIN) / MAP_SIZE * 30)))
+  });
+
+  // Rasterise every wall segment into the grid with 1 cell padding on each side
+  const rasteriseWall = (x1: number, y1: number, x2: number, y2: number) => {
+    const steps = Math.ceil(Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)) / (MAP_SIZE / 30) * 3);
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      const wx = x1 + (x2 - x1) * t;
+      const wy = y1 + (y2 - y1) * t;
+      // Mark a 3x3 neighbourhood around each wall point as occupied (100)
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const { row, col } = worldToGrid(wx, wy);
+          const r = row + dr;
+          const c = col + dc;
+          if (r >= 0 && r < 30 && c >= 0 && c < 30) {
+            grid[r][c] = 100;
+          }
+        }
+      }
+    }
+  };
+
+  for (const w of MATLAB_WALLS) {
+    rasteriseWall(w.x1, w.y1, w.x2, w.y2);
+  }
+  // Also seed obstacles
+  for (const obs of MATLAB_OBSTACLES) {
+    const steps = 20;
+    for (let s = 0; s < steps; s++) {
+      const ang = (s / steps) * 2 * Math.PI;
+      rasteriseWall(
+        obs.cx + obs.r * Math.cos(ang), obs.cy + obs.r * Math.sin(ang),
+        obs.cx + obs.r * Math.cos(ang + 2 * Math.PI / steps), obs.cy + obs.r * Math.sin(ang + 2 * Math.PI / steps)
+      );
+    }
+  }
+
+  return grid;
+};
+
+const getTwinGridCoords = (gx: number, gy: number, isMatlab = false) => {
+  const minVal = isMatlab ? -6.0 : -3.0;
+  const sizeVal = isMatlab ? 12.0 : 6.0;
+  const col = Math.floor((gx - minVal) / sizeVal * 30);
+  const row = Math.floor((gy - minVal) / sizeVal * 30);
   return { row, col };
 };
 
-const markTwinFreeCells = (grid: number[][], x1: number, y1: number, x2: number, y2: number) => {
+const markTwinFreeCells = (grid: number[][], x1: number, y1: number, x2: number, y2: number, isMatlab = false) => {
   const steps = 15;
+  const minVal = isMatlab ? -6.0 : -3.0;
+  const sizeVal = isMatlab ? 12.0 : 6.0;
   for (let s = 0; s < steps; s++) {
     const t = s / steps;
     const px = x1 + (x2 - x1) * t;
     const py = y1 + (y2 - y1) * t;
-    const col = Math.floor((px + 3.0) / 6.0 * 30);
-    const row = Math.floor((py + 3.0) / 6.0 * 30);
+    const col = Math.floor((px - minVal) / sizeVal * 30);
+    const row = Math.floor((py - minVal) / sizeVal * 30);
     if (row >= 0 && row < 30 && col >= 0 && col < 30) {
       grid[row][col] = Math.max(-100, grid[row][col] - 8);
     }
   }
 };
 
-export const checkCollisionTwin = (x: number, y: number, radius = 0.15) => {
-  // 1. Check ROOM_WALLS collision (distance from point to segment)
-  for (const w of ROOM_WALLS) {
+export const angdiff = (rad: number) => {
+  return Math.atan2(Math.sin(rad), Math.cos(rad));
+};
+
+export const angdiff_vec = (x: number, y: number, theta: number, tx: number, ty: number) => {
+  const heading = Math.atan2(ty - y, tx - x);
+  return angdiff(heading - theta);
+};
+
+export const simple_dbscan = (pts: [number, number][], eps: number, minPts: number): number[] => {
+  const n = pts.length;
+  const labels = new Array(n).fill(0);
+  let clusterId = 0;
+
+  const getNeighbors = (idx: number) => {
+    const neighbors: number[] = [];
+    const p1 = pts[idx];
+    for (let i = 0; i < n; i++) {
+      const p2 = pts[i];
+      const dist = Math.sqrt(Math.pow(p1[0] - p2[0], 2) + Math.pow(p1[1] - p2[1], 2));
+      if (dist <= eps) {
+        neighbors.push(i);
+      }
+    }
+    return neighbors;
+  };
+
+  for (let i = 0; i < n; i++) {
+    if (labels[i] !== 0) continue;
+    const neighbors = getNeighbors(i);
+    if (neighbors.length < minPts) {
+      labels[i] = -1;
+    } else {
+      clusterId++;
+      labels[i] = clusterId;
+      const queue = [...neighbors.filter(idx => idx !== i)];
+      for (let j = 0; j < queue.length; j++) {
+        const curr = queue[j];
+        if (labels[curr] === -1) {
+          labels[curr] = clusterId;
+        }
+        if (labels[curr] !== 0) continue;
+        labels[curr] = clusterId;
+        const currNeighbors = getNeighbors(curr);
+        if (currNeighbors.length >= minPts) {
+          for (const neighborIdx of currNeighbors) {
+            if (labels[neighborIdx] === 0 && !queue.includes(neighborIdx)) {
+              queue.push(neighborIdx);
+            }
+          }
+        }
+      }
+    }
+  }
+  return labels;
+};
+
+export const lineOfSightClear = (p1: [number, number], p2: [number, number], grid: number[][], radius = 0.15) => {
+  const steps = 15;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = p1[0] + (p2[0] - p1[0]) * t;
+    const y = p1[1] + (p2[1] - p1[1]) * t;
+    if (checkCollisionTwin(x, y, radius, true)) return false;
+  }
+  return true;
+};
+
+export const astar_planner = (
+  start: [number, number],
+  goal: [number, number],
+  grid: number[][],
+  safetyRadius = 0.36,
+  Wd = 1.0
+): [number, number][] => {
+  const getCoords = (x: number, y: number) => {
+    const col = Math.max(0, Math.min(29, Math.floor((x + 6.0) / 12.0 * 30)));
+    const row = Math.max(0, Math.min(29, Math.floor((y + 6.0) / 12.0 * 30)));
+    return { row, col };
+  };
+
+  const getPose = (row: number, col: number): [number, number] => {
+    const x = -6.0 + (col + 0.5) * (12.0 / 30);
+    const y = -6.0 + (row + 0.5) * (12.0 / 30);
+    return [x, y];
+  };
+
+  const startGrid = getCoords(start[0], start[1]);
+  const goalGrid = getCoords(goal[0], goal[1]);
+
+  interface Node {
+    row: number;
+    col: number;
+    g: number;
+    h: number;
+    f: number;
+    parent: Node | null;
+  }
+
+  const openList: Node[] = [];
+  const closedSet = new Set<string>();
+
+  const startNode: Node = {
+    row: startGrid.row,
+    col: startGrid.col,
+    g: 0,
+    h: Math.abs(startGrid.row - goalGrid.row) + Math.abs(startGrid.col - goalGrid.col),
+    f: 0,
+    parent: null
+  };
+  startNode.f = startNode.g + startNode.h;
+  openList.push(startNode);
+
+  // Pre-collect occupied coordinates in meters to optimize distance check
+  const occupiedCoords: [number, number][] = [];
+  for (let gr = 0; gr < 30; gr++) {
+    for (let gc = 0; gc < 30; gc++) {
+      if (grid[gr][gc] > 50) {
+        occupiedCoords.push(getPose(gr, gc));
+      }
+    }
+  }
+
+  const isObstacleDistance = (r: number, c: number) => {
+    // Never block start or goal cells themselves
+    if ((r === startGrid.row && c === startGrid.col) || (r === goalGrid.row && c === goalGrid.col)) {
+      return false;
+    }
+    const [x, y] = getPose(r, c);
+    for (const [ox, oy] of occupiedCoords) {
+      const dist = Math.sqrt((x - ox) ** 2 + (y - oy) ** 2);
+      if (dist < safetyRadius) return true;
+    }
+    return false;
+  };
+
+  let foundNode: Node | null = null;
+  const maxIterations = 1500;
+  let iter = 0;
+
+  while (openList.length > 0 && iter < maxIterations) {
+    iter++;
+    openList.sort((a, b) => a.f - b.f);
+    const curr = openList.shift()!;
+    
+    if (curr.row === goalGrid.row && curr.col === goalGrid.col) {
+      foundNode = curr;
+      break;
+    }
+
+    const key = `${curr.row},${curr.col}`;
+    closedSet.add(key);
+
+    const directions = [
+      [-1, 0, 1], [1, 0, 1], [0, -1, 1], [0, 1, 1],
+      [-1, -1, 1.414], [-1, 1, 1.414], [1, -1, 1.414], [1, 1, 1.414]
+    ];
+
+    for (const [dr, dc, cost] of directions) {
+      const nr = curr.row + dr;
+      const nc = curr.col + dc;
+
+      if (nr < 0 || nr >= 30 || nc < 0 || nc >= 30) continue;
+      if (closedSet.has(`${nr},${nc}`)) continue;
+      if (isObstacleDistance(nr, nc)) continue;
+
+      const g = curr.g + cost * Wd;
+      const h = Math.sqrt(Math.pow(nr - goalGrid.row, 2) + Math.pow(nc - goalGrid.col, 2));
+      const f = g + h;
+
+      const existing = openList.find(n => n.row === nr && n.col === nc);
+      if (existing) {
+        if (g < existing.g) {
+          existing.g = g;
+          existing.f = f;
+          existing.parent = curr;
+        }
+      } else {
+        openList.push({ row: nr, col: nc, g, h, f, parent: curr });
+      }
+    }
+  }
+
+  const path: [number, number][] = [];
+  if (foundNode) {
+    let curr: Node | null = foundNode;
+    while (curr) {
+      path.push(getPose(curr.row, curr.col));
+      curr = curr.parent;
+    }
+    path.reverse();
+  }
+
+  if (path.length === 0) {
+    path.push(start);
+    path.push(goal);
+  }
+
+  const shortcutted: [number, number][] = [path[0]];
+  let currIdx = 0;
+  while (currIdx < path.length - 1) {
+    let nextIdx = path.length - 1;
+    while (nextIdx > currIdx + 1) {
+      let hasCollision = false;
+      const p1 = path[currIdx];
+      const p2 = path[nextIdx];
+      const steps = 15;
+      for (let s = 1; s < steps; s++) {
+        const t = s / steps;
+        const px = p1[0] + (p2[0] - p1[0]) * t;
+        const py = p1[1] + (p2[1] - p1[1]) * t;
+        const gridCoords = getCoords(px, py);
+        if (grid[gridCoords.row][gridCoords.col] > 50) {
+          hasCollision = true;
+          break;
+        }
+      }
+      if (!hasCollision) {
+        break;
+      }
+      nextIdx--;
+    }
+    shortcutted.push(path[nextIdx]);
+    currIdx = nextIdx;
+  }
+
+  return shortcutted;
+};
+
+export const dwa_planner = (
+  pose: [number, number, number],
+  waypoint: [number, number],
+  dynObstacle: [number, number],
+  dynObsRadius: number,
+  grid: number[][]
+): [number, number, boolean] => {
+  const [x, y, theta] = pose;
+  const [wx, wy] = waypoint;
+
+  let best_v = 0.0;
+  let best_w = 0.0;
+  let best_score = -Infinity;
+  let path_ok = false;
+
+  const getGridVal = (px: number, py: number) => {
+    const col = Math.max(0, Math.min(29, Math.floor((px + 6.0) / 12.0 * 30)));
+    const row = Math.max(0, Math.min(29, Math.floor((py + 6.0) / 12.0 * 30)));
+    return grid[row][col];
+  };
+
+  const v_samples = [0.1, 0.2, 0.3, 0.4];
+  const w_samples = [-2.0, -1.2, -0.6, 0.0, 0.6, 1.2, 2.0];
+
+  for (const v of v_samples) {
+    for (const w of w_samples) {
+      let tx = x;
+      let ty = y;
+      let ttheta = theta;
+      let min_dist_static = Infinity;
+      let min_dist_dyn = Infinity;
+
+      for (let step = 0; step < 10; step++) {
+        tx += v * Math.cos(ttheta) * 0.15;
+        ty += v * Math.sin(ttheta) * 0.15;
+        ttheta += w * 0.15;
+
+        const cellVal = getGridVal(tx, ty);
+        if (cellVal > 50) {
+          min_dist_static = 0.0;
+          break;
+        }
+
+        if (checkCollisionTwin(tx, ty, 0.15, true)) {
+          min_dist_static = 0.0;
+          break;
+        }
+
+        const d_dyn = Math.sqrt(Math.pow(tx - dynObstacle[0], 2) + Math.pow(ty - dynObstacle[1], 2));
+        if (d_dyn < min_dist_dyn) {
+          min_dist_dyn = d_dyn;
+        }
+      }
+
+      if (min_dist_static <= 0.15 || min_dist_dyn <= dynObsRadius) {
+        continue;
+      }
+
+      const dx_g = wx - tx;
+      const dy_g = wy - ty;
+      const goal_heading = Math.atan2(dy_g, dx_g);
+      const heading_diff = Math.abs(angdiff(goal_heading - ttheta));
+      const dist_to_goal = Math.sqrt(dx_g*dx_g + dy_g*dy_g);
+
+      const score = - 3.5 * heading_diff - 1.5 * dist_to_goal + 2.0 * v;
+      if (score > best_score) {
+        best_score = score;
+        best_v = v;
+        best_w = w;
+        path_ok = true;
+      }
+    }
+  }
+
+  return [best_v, best_w, path_ok];
+};
+
+export const potential_field_escape = (
+  x: number,
+  y: number,
+  theta: number,
+  tx: number,
+  ty: number,
+  escapeDir: number
+): number => {
+  const goal_heading = Math.atan2(ty - y, tx - x);
+  const goal_err = angdiff(goal_heading - theta);
+  const repelling_w = 1.8 * (escapeDir || 1);
+  return angdiff(0.4 * goal_err + 0.8 * repelling_w);
+};
+
+export const checkCollisionTwin = (x: number, y: number, radius = 0.15, isMatlab = false) => {
+  const walls = isMatlab ? MATLAB_WALLS : ROOM_WALLS;
+  const circles = isMatlab ? MATLAB_OBSTACLES : ROOM_CIRCLES;
+  const boxes = isMatlab ? [] : ROOM_BOXES;
+
+  // 1. Check walls
+  for (const w of walls) {
     const l2 = Math.pow(w.x2 - w.x1, 2) + Math.pow(w.y2 - w.y1, 2);
     let t = 0;
     if (l2 > 0) {
@@ -112,14 +653,14 @@ export const checkCollisionTwin = (x: number, y: number, radius = 0.15) => {
     if (dist < radius) return true;
   }
 
-  // 2. Check ROOM_CIRCLES collision
-  for (const c of ROOM_CIRCLES) {
+  // 2. Check circles
+  for (const c of circles) {
     const dist = Math.sqrt(Math.pow(c.cx - x, 2) + Math.pow(c.cy - y, 2));
     if (dist < c.r + radius) return true;
   }
 
-  // 3. Check ROOM_BOXES collision
-  for (const b of ROOM_BOXES) {
+  // 3. Check boxes
+  for (const b of boxes) {
     const closestX = Math.max(b.x1, Math.min(x, b.x2));
     const closestY = Math.max(b.y1, Math.min(y, b.y2));
     const dist = Math.sqrt(Math.pow(closestX - x, 2) + Math.pow(closestY - y, 2));
@@ -129,7 +670,7 @@ export const checkCollisionTwin = (x: number, y: number, radius = 0.15) => {
   return false;
 };
 
-export const raycastTwin = (rx: number, ry: number, angle: number, maxRange: number, noiseStd: number) => {
+export const raycastTwin = (rx: number, ry: number, angle: number, maxRange: number, noiseStd: number, isMatlab = false) => {
   const dx = Math.cos(angle);
   const dy = Math.sin(angle);
   let min_dist = maxRange;
@@ -147,13 +688,17 @@ export const raycastTwin = (rx: number, ry: number, angle: number, maxRange: num
     }
   };
 
-  // 1. Raycast ROOM_WALLS
-  for (const w of ROOM_WALLS) {
+  const walls = isMatlab ? MATLAB_WALLS : ROOM_WALLS;
+  const circles = isMatlab ? MATLAB_OBSTACLES : ROOM_CIRCLES;
+  const boxes = isMatlab ? [] : ROOM_BOXES;
+
+  // 1. Raycast walls
+  for (const w of walls) {
     checkSegment(w.x1, w.y1, w.x2, w.y2);
   }
 
-  // 2. Raycast ROOM_CIRCLES
-  for (const c of ROOM_CIRCLES) {
+  // 2. Raycast circles
+  for (const c of circles) {
     const sx = c.cx - rx;
     const sy = c.cy - ry;
     const proj = sx * dx + sy * dy;
@@ -167,8 +712,8 @@ export const raycastTwin = (rx: number, ry: number, angle: number, maxRange: num
     }
   }
 
-  // 3. Raycast ROOM_BOXES
-  for (const b of ROOM_BOXES) {
+  // 3. Raycast boxes
+  for (const b of boxes) {
     checkSegment(b.x1, b.y1, b.x2, b.y1);
     checkSegment(b.x2, b.y1, b.x2, b.y2);
     checkSegment(b.x2, b.y2, b.x1, b.y2);
@@ -182,21 +727,36 @@ export const raycastTwin = (rx: number, ry: number, angle: number, maxRange: num
 export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> = {
   // --- Autonomous Vacuum Cleaner Learning Blocks ---
   'ROBOT_VACUUM_LIDAR_SENSOR': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_LIDAR_SENSOR', params: { lidar_max_range: params.lidar_max_range || 4.0, lidar_noise_std: params.lidar_noise_std || 0.02 },
-    inputs: [createPort('x', 'X', 'input'), createPort('y', 'Y', 'input'), createPort('theta', 'θ', 'input')],
-    outputs: [createPort('ranges', 'Ranges', 'output', [0,0,0,0,0,0,0,0], 'right', 'vector')],
+    id, type: 'ROBOT_VACUUM_LIDAR_SENSOR', params: { lidar_max_range: params.lidar_max_range || 5.5, lidar_noise_std: params.lidar_noise_std || 0.015 },
+    // Accepts either a pose array [x,y,theta,...] as ins[0] OR individual x/y/theta
+    inputs: [createPort('x', 'X / Pose Array', 'input'), createPort('y', 'Y', 'input'), createPort('theta', 'θ', 'input')],
+    outputs: [createPort('ranges', 'Ranges', 'output', Array(45).fill(0), 'right', 'vector'), createPort('x_odom', 'X_odom', 'output', 0)],
     icon: 'graduation-cap',
     execute: (ins, p, state, time) => {
-      const rx = Number(ins[0] ?? 0);
-      const ry = Number(ins[1] ?? 0);
-      const rtheta = Number(ins[2] ?? 0);
-      const ranges: number[] = [];
-      const beamAngles = [0, Math.PI/4, Math.PI/2, 3*Math.PI/4, Math.PI, -3*Math.PI/4, -Math.PI/2, -Math.PI/4];
-      for (let i = 0; i < 8; i++) {
-        const absAngle = rtheta + beamAngles[i];
-        ranges.push(raycastTwin(rx, ry, absAngle, p.lidar_max_range, p.lidar_noise_std));
+      // Support pose-array input (from Digital Twin) or separate x/y/theta
+      let rx: number, ry: number, rtheta: number;
+      const poseInput = ins[0];
+      if (Array.isArray(poseInput)) {
+        rx = Number(poseInput[0] ?? 0);
+        ry = Number(poseInput[1] ?? 0);
+        rtheta = Number(poseInput[2] ?? 0);
+      } else {
+        rx = Number(poseInput ?? 0);
+        ry = Number(ins[1] ?? 0);
+        rtheta = Number(ins[2] ?? 0);
       }
-      return { outputs: [ranges] };
+      const isMatlab = Math.abs(rx) > 3.1 || Math.abs(ry) > 3.1;
+      const ranges: number[] = [];
+      const numBeams = 45;
+      const beamAngles: number[] = [];
+      for (let i = -180; i <= 179; i += 8) {
+        beamAngles.push(i * Math.PI / 180);
+      }
+      for (let i = 0; i < numBeams; i++) {
+        const absAngle = rtheta + beamAngles[i];
+        ranges.push(raycastTwin(rx, ry, absAngle, p.lidar_max_range, p.lidar_noise_std, isMatlab));
+      }
+      return { outputs: [ranges, Array.isArray(poseInput) ? poseInput.slice(0, 3) : [rx, ry, rtheta]] };
     }
   }),
 
@@ -229,12 +789,20 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'ROBOT_VACUUM_CLIFF_IR': (id, params) => ({
     id, type: 'ROBOT_VACUUM_CLIFF_IR', params: { cliff_threshold: params.cliff_threshold || 0.2 },
-    inputs: [createPort('x', 'X', 'input'), createPort('y', 'Y', 'input')],
+    // Accepts pose array [x,y,...] as ins[0] OR separate x/y
+    inputs: [createPort('x', 'X / Pose Array', 'input'), createPort('y', 'Y', 'input')],
     outputs: [createPort('cliff_val', 'Cliff', 'output')],
     icon: 'graduation-cap',
     execute: (ins) => {
-      const x = Number(ins[0] ?? 0);
-      const y = Number(ins[1] ?? 0);
+      let x: number, y: number;
+      const poseInput = ins[0];
+      if (Array.isArray(poseInput)) {
+        x = Number(poseInput[0] ?? 0);
+        y = Number(poseInput[1] ?? 0);
+      } else {
+        x = Number(poseInput ?? 0);
+        y = Number(ins[1] ?? 0);
+      }
       const isNearCliff = Math.abs(x) > 2.8 || Math.abs(y) > 2.8;
       return { outputs: [isNearCliff ? 0.6 : 0.05] };
     }
@@ -242,35 +810,45 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'ROBOT_VACUUM_DUSTBIN_SENSOR': (id, params) => ({
     id, type: 'ROBOT_VACUUM_DUSTBIN_SENSOR', params: {},
+    isStateful: true,
+    state: { dustPct: 0 },
+    // Accepts either a grid OR runs standalone with time-based sim
     inputs: [createPort('clean_grid', 'Clean Grid', 'input')],
     outputs: [createPort('dust_level', 'Dust %', 'output')],
     icon: 'graduation-cap',
-    execute: (ins) => {
+    execute: (ins, p, state, time) => {
       const grid = ins[0] as any;
-      let cleaned = 0;
-      let total = 0;
-      if (grid && Array.isArray(grid)) {
+      // If we get an actual 2D grid, compute fill %; otherwise simulate dust accumulation
+      if (grid && Array.isArray(grid) && Array.isArray(grid[0])) {
+        let cleaned = 0, total = 0;
         for (let r = 0; r < grid.length; r++) {
           for (let c = 0; c < grid[r].length; c++) {
             total++;
             if (grid[r][c] > 0) cleaned++;
           }
         }
+        const pct = total > 0 ? (cleaned / total) * 100 : 0;
+        state.dustPct = pct;
+        return { outputs: [pct], nextState: state };
       }
-      const pct = total > 0 ? (cleaned / total) * 100 : 0;
-      return { outputs: [pct] };
+      // Standalone: simulate dust level rising from 5% + small noise
+      state.dustPct = Math.min(100, 5 + (time ?? 0) * 0.5 + Math.random() * 2);
+      return { outputs: [state.dustPct], nextState: state };
     }
   }),
 
   'ROBOT_VACUUM_MOTOR_CURRENT': (id, params) => ({
     id, type: 'ROBOT_VACUUM_MOTOR_CURRENT', params: {},
+    // Accepts motor current inputs; if unconnected, generates realistic current based on time
     inputs: [createPort('current_L', 'I_L', 'input'), createPort('current_R', 'I_R', 'input')],
     outputs: [createPort('current', 'I_motor', 'output')],
     icon: 'graduation-cap',
-    execute: (ins) => {
+    execute: (ins, p, state, time) => {
       const il = Math.abs(Number(ins[0] ?? 0));
       const ir = Math.abs(Number(ins[1] ?? 0));
-      return { outputs: [il + ir] };
+      // If no current inputs, generate realistic motor current (0.3-0.8A typical)
+      const total = (il + ir > 0) ? (il + ir) : (0.5 + 0.15 * Math.sin((time ?? 0) * 3.7));
+      return { outputs: [total] };
     }
   }),
 
@@ -291,21 +869,128 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     ],
     icon: 'graduation-cap',
     isStateful: true,
-    state: { x_est: 0, y_est: 0, theta_est: 0 },
+    state: {
+      x_est: 0,
+      y_est: 0,
+      theta_est: 0,
+      P: [[0.1, 0, 0], [0, 0.1, 0], [0, 0, 0.05]],
+      prev_x_odom: null as number | null,
+      prev_y_odom: null as number | null,
+      prev_theta_odom: null as number | null
+    },
     execute: (ins, p, state) => {
-      const xt = Number(ins[0] ?? 0);
-      const yt = Number(ins[1] ?? 0);
-      const tt = Number(ins[2] ?? 0);
-      const xo = Number(ins[3] ?? 0);
-      const yo = Number(ins[4] ?? 0);
-      const to = Number(ins[5] ?? 0);
-      const K = p.filter_gain;
-      const nextX = xo + K * (xt - xo);
-      const nextY = yo + K * (yt - yo);
-      const nextTheta = to + K * Math.atan2(Math.sin(tt - to), Math.cos(tt - to));
+      let xt: number, yt: number, tt: number;
+      const poseInput = ins[0];
+      if (Array.isArray(poseInput)) {
+        xt = Number(poseInput[0] ?? 0);
+        yt = Number(poseInput[1] ?? 0);
+        tt = Number(poseInput[2] ?? 0);
+      } else {
+        xt = Number(poseInput ?? 0);
+        yt = Number(ins[1] ?? 0);
+        tt = Number(ins[2] ?? 0);
+      }
+
+      let xo: number, yo: number, to: number;
+      const odomInput = ins[3];
+      if (Array.isArray(odomInput)) {
+        xo = Number(odomInput[0] ?? 0);
+        yo = Number(odomInput[1] ?? 0);
+        to = Number(odomInput[2] ?? 0);
+      } else {
+        xo = Number(odomInput ?? 0);
+        yo = Number(ins[4] ?? 0);
+        to = Number(ins[5] ?? 0);
+      }
+
+      if (state.prev_x_odom === null || state.prev_x_odom === undefined) {
+        state.prev_x_odom = xo;
+        state.prev_y_odom = yo;
+        state.prev_theta_odom = to;
+        state.x_est = xo;
+        state.y_est = yo;
+        state.theta_est = to;
+      }
+
+      const dx_odom = xo - (state.prev_x_odom ?? xo);
+      const dy_odom = yo - (state.prev_y_odom ?? yo);
+      const dtheta_odom = angdiff(to - (state.prev_theta_odom ?? to));
+      const dS = Math.sqrt(dx_odom * dx_odom + dy_odom * dy_odom) * Math.sign(dx_odom * Math.cos(to) + dy_odom * Math.sin(to));
+
+      const pred_x = state.x_est + dS * Math.cos(state.theta_est + dtheta_odom / 2);
+      const pred_y = state.y_est + dS * Math.sin(state.theta_est + dtheta_odom / 2);
+      const pred_theta = angdiff(state.theta_est + dtheta_odom);
+
+      const F = [
+        [1, 0, -dS * Math.sin(state.theta_est)],
+        [0, 1, dS * Math.cos(state.theta_est)],
+        [0, 0, 1]
+      ];
+      const Q = [[0.005, 0, 0], [0, 0.005, 0], [0, 0, 0.002]];
+      const R = [[0.04, 0, 0], [0, 0.04, 0], [0, 0, 0.008]];
+      const P = state.P || [[0.1, 0, 0], [0, 0.1, 0], [0, 0, 0.05]];
+
+      const F_P = [
+        [F[0][0]*P[0][0]+F[0][1]*P[1][0]+F[0][2]*P[2][0], F[0][0]*P[0][1]+F[0][1]*P[1][1]+F[0][2]*P[2][1], F[0][0]*P[0][2]+F[0][1]*P[1][2]+F[0][2]*P[2][2]],
+        [F[1][0]*P[0][0]+F[1][1]*P[1][0]+F[1][2]*P[2][0], F[1][0]*P[0][1]+F[1][1]*P[1][1]+F[1][2]*P[2][1], F[1][0]*P[0][2]+F[1][1]*P[1][2]+F[1][2]*P[2][2]],
+        [F[2][0]*P[0][0]+F[2][1]*P[1][0]+F[2][2]*P[2][0], F[2][0]*P[0][1]+F[2][1]*P[1][1]+F[2][2]*P[2][1], F[2][0]*P[0][2]+F[2][1]*P[1][2]+F[2][2]*P[2][2]]
+      ];
+      const P_pred = [
+        [F_P[0][0]*F[0][0]+F_P[0][0]*F[0][1]+F_P[0][2]*F[0][2] + Q[0][0], F_P[0][0]*F[1][0]+F_P[0][1]*F[1][1]+F_P[0][2]*F[1][2], F_P[0][0]*F[2][0]+F_P[0][1]*F[2][1]+F_P[0][2]*F[2][2]],
+        [F_P[1][0]*F[0][0]+F_P[1][1]*F[0][1]+F_P[1][2]*F[0][2], F_P[1][0]*F[1][0]+F_P[1][1]*F[1][1]+F_P[1][2]*F[1][2] + Q[1][1], F_P[1][0]*F[2][0]+F_P[1][1]*F[2][1]+F_P[1][2]*F[2][2]],
+        [F_P[2][0]*F[0][0]+F_P[2][1]*F[0][1]+F_P[2][2]*F[0][2], F_P[2][0]*F[1][0]+F_P[2][1]*F[1][1]+F_P[2][2]*F[1][2], F_P[2][0]*F[2][0]+F_P[2][1]*F[2][1]+F_P[2][2]*F[2][2] + Q[2][2]]
+      ];
+
+      const S = [
+        [P_pred[0][0] + R[0][0], P_pred[0][1], P_pred[0][2]],
+        [P_pred[1][0], P_pred[1][1] + R[1][1], P_pred[1][2]],
+        [P_pred[2][0], P_pred[2][1], P_pred[2][2] + R[2][2]]
+      ];
+      const detS = S[0][0]*(S[1][1]*S[2][2] - S[1][2]*S[2][1]) - S[0][1]*(S[1][0]*S[2][2] - S[1][2]*S[2][0]) + S[0][2]*(S[1][0]*S[2][1] - S[1][1]*S[2][0]);
+      
+      let nextX = pred_x;
+      let nextY = pred_y;
+      let nextTheta = pred_theta;
+      let nextP = P_pred;
+
+      if (Math.abs(detS) > 1e-9) {
+        const invS = [
+          [(S[1][1]*S[2][2] - S[1][2]*S[2][1])/detS, -(S[0][1]*S[2][2] - S[0][2]*S[2][1])/detS, (S[0][1]*S[1][2] - S[0][2]*S[1][1])/detS],
+          [-(S[1][0]*S[2][2] - S[1][2]*S[2][0])/detS, (S[0][0]*S[2][2] - S[0][2]*S[2][0])/detS, -(S[0][0]*S[1][2] - S[0][2]*S[1][0])/detS],
+          [(S[1][0]*S[2][1] - S[1][1]*S[2][0])/detS, -(S[0][0]*S[2][1] - S[0][1]*S[2][0])/detS, (S[0][0]*S[1][1] - S[0][1]*S[1][0])/detS]
+        ];
+        const K_gain = [
+          [P_pred[0][0]*invS[0][0]+P_pred[0][1]*invS[1][0]+P_pred[0][2]*invS[2][0], P_pred[0][0]*invS[0][1]+P_pred[0][1]*invS[1][1]+P_pred[0][2]*invS[2][1], P_pred[0][0]*invS[0][2]+P_pred[0][1]*invS[1][2]+P_pred[0][2]*invS[2][2]],
+          [P_pred[1][0]*invS[0][0]+P_pred[1][1]*invS[1][0]+P_pred[1][2]*invS[2][0], P_pred[1][0]*invS[0][1]+P_pred[1][1]*invS[1][1]+P_pred[1][2]*invS[2][1], P_pred[1][0]*invS[0][2]+P_pred[1][1]*invS[1][2]+P_pred[1][2]*invS[2][2]],
+          [P_pred[2][0]*invS[0][0]+P_pred[2][1]*invS[1][0]+P_pred[2][2]*invS[2][0], P_pred[2][0]*invS[0][1]+P_pred[2][1]*invS[1][1]+P_pred[2][2]*invS[2][1], P_pred[2][0]*invS[0][2]+P_pred[2][1]*invS[1][2]+P_pred[2][2]*invS[2][2]]
+        ];
+
+        const innov_x = xt - pred_x;
+        const innov_y = yt - pred_y;
+        const innov_theta = angdiff(tt - pred_theta);
+
+        nextX = pred_x + K_gain[0][0]*innov_x + K_gain[0][1]*innov_y + K_gain[0][2]*innov_theta;
+        nextY = pred_y + K_gain[1][0]*innov_x + K_gain[1][1]*innov_y + K_gain[1][2]*innov_theta;
+        nextTheta = angdiff(pred_theta + K_gain[2][0]*innov_x + K_gain[2][1]*innov_y + K_gain[2][2]*innov_theta);
+
+        nextP = [
+          [(1 - K_gain[0][0])*P_pred[0][0] - K_gain[0][1]*P_pred[1][0] - K_gain[0][2]*P_pred[2][0], (1 - K_gain[0][0])*P_pred[0][1] - K_gain[0][1]*P_pred[1][1] - K_gain[0][2]*P_pred[2][1], (1 - K_gain[0][0])*P_pred[0][2] - K_gain[0][1]*P_pred[1][2] - K_gain[0][2]*P_pred[2][2]],
+          [-K_gain[1][0]*P_pred[0][0] + (1 - K_gain[1][1])*P_pred[1][0] - K_gain[1][2]*P_pred[2][0], -K_gain[1][0]*P_pred[0][1] + (1 - K_gain[1][1])*P_pred[1][1] - K_gain[1][2]*P_pred[2][1], -K_gain[1][0]*P_pred[0][2] + (1 - K_gain[1][1])*P_pred[1][2] - K_gain[1][2]*P_pred[2][2]],
+          [-K_gain[2][0]*P_pred[0][0] - K_gain[2][1]*P_pred[1][0] + (1 - K_gain[2][2])*P_pred[2][0], -K_gain[2][0]*P_pred[0][1] - K_gain[2][1]*P_pred[1][1] + (1 - K_gain[2][2])*P_pred[2][1], -K_gain[2][0]*P_pred[0][2] - K_gain[2][1]*P_pred[1][2] + (1 - K_gain[2][2])*P_pred[2][2]]
+        ];
+      }
+
       return {
         outputs: [nextX, nextY, nextTheta],
-        nextState: { x_est: nextX, y_est: nextY, theta_est: nextTheta }
+        nextState: {
+          x_est: nextX,
+          y_est: nextY,
+          theta_est: nextTheta,
+          P: nextP,
+          prev_x_odom: xo,
+          prev_y_odom: yo,
+          prev_theta_odom: to
+        }
       };
     }
   }),
@@ -434,27 +1119,111 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     icon: 'graduation-cap',
     execute: (ins, p) => {
       const waypoints = (ins[1] || [0, 0]) as any;
-      const ranges = (ins[2] || [4, 4, 4, 4, 4, 4, 4, 4]) as any;
+      const ranges = (ins[2] || Array(45).fill(4.0)) as any;
       const x = Number(ins[3] ?? 0);
       const y = Number(ins[4] ?? 0);
       const theta = Number(ins[5] ?? 0);
-      
-      const frontDist = ranges[0] ?? 4.0;
-      let target_v = 0.2;
-      let target_w = 0.0;
 
-      if (frontDist < p.collision_dist) {
-        target_v = 0.0;
-        target_w = 0.8;
+      const tx = waypoints[0] ?? 0;
+      const ty = waypoints[1] ?? 0;
+
+      const numBeams = ranges.length;
+      const beamAngles: number[] = [];
+      if (numBeams === 45) {
+        for (let i = -180; i <= 179; i += 8) {
+          beamAngles.push(i * Math.PI / 180);
+        }
       } else {
-        const tx = waypoints[0] ?? 0;
-        const ty = waypoints[1] ?? 0;
-        const dx = tx - x;
-        const dy = ty - y;
-        const heading = Math.atan2(dy, dx);
-        target_w = 1.5 * Math.atan2(Math.sin(heading - theta), Math.cos(heading - theta));
-        target_v = Math.min(0.2, 0.4 * Math.sqrt(dx*dx + dy*dy));
+        const defaultBeams = [0, Math.PI/4, Math.PI/2, 3*Math.PI/4, Math.PI, -3*Math.PI/4, -Math.PI/2, -Math.PI/4];
+        beamAngles.push(...defaultBeams);
       }
+
+      const obsPts: [number, number][] = [];
+      let min_360 = 5.5;
+      let min_front = 5.5;
+      let min_angle = 0;
+
+      for (let i = 0; i < numBeams; i++) {
+        const r = ranges[i];
+        if (r < 5.5) {
+          const absAngle = theta + (beamAngles[i] ?? 0);
+          const px = x + r * Math.cos(absAngle);
+          const py = y + r * Math.sin(absAngle);
+          obsPts.push([px, py]);
+          if (r < min_360) {
+            min_360 = r;
+            min_angle = beamAngles[i] ?? 0;
+          }
+          if (Math.abs(beamAngles[i] ?? 0) <= 30 * Math.PI / 180) {
+            if (r < min_front) min_front = r;
+          }
+        }
+      }
+
+      const escapeDir = Math.sign(min_angle + 1e-6);
+
+      let best_v = 0.0;
+      let best_w = 0.0;
+      let best_score = -Infinity;
+      let path_ok = false;
+
+      const v_samples = [0.05, 0.12, 0.22, 0.32];
+      const w_samples = [-2.5, -1.5, -0.6, 0.0, 0.6, 1.5, 2.5];
+
+      for (const v of v_samples) {
+        for (const w of w_samples) {
+          let tx_sim = x;
+          let ty_sim = y;
+          let ttheta_sim = theta;
+          let hit = false;
+
+          for (let step = 0; step < 8; step++) {
+            tx_sim += v * Math.cos(ttheta_sim) * 0.15;
+            ty_sim += v * Math.sin(ttheta_sim) * 0.15;
+            ttheta_sim += w * 0.15;
+
+            for (const pt of obsPts) {
+              const d = Math.sqrt(Math.pow(tx_sim - pt[0], 2) + Math.pow(ty_sim - pt[1], 2));
+              if (d < p.collision_dist) {
+                hit = true;
+                break;
+              }
+            }
+            if (hit) break;
+          }
+
+          if (hit) continue;
+
+          const dx_g = tx - tx_sim;
+          const dy_g = ty - ty_sim;
+          const goal_heading = Math.atan2(dy_g, dx_g);
+          const heading_diff = Math.abs(angdiff(goal_heading - ttheta_sim));
+          const dist_to_goal = Math.sqrt(dx_g*dx_g + dy_g*dy_g);
+
+          const score = - 3.5 * heading_diff - 1.5 * dist_to_goal + 2.0 * v;
+          if (score > best_score) {
+            best_score = score;
+            best_v = v;
+            best_w = w;
+            path_ok = true;
+          }
+        }
+      }
+
+      let target_v = best_v;
+      let target_w = best_w;
+
+      if (!path_ok) {
+        if (min_front < 0.6) {
+          target_w = potential_field_escape(x, y, theta, tx, ty, escapeDir);
+          target_v = 0.05;
+        } else {
+          const heading_err = angdiff_vec(x, y, theta, tx, ty);
+          target_w = 1.8 * heading_err;
+          target_v = 0.10;
+        }
+      }
+
       return { outputs: [[target_v, target_w]] };
     }
   }),
@@ -644,7 +1413,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       createPort('battery', 'Battery Level', 'input', 100, 'bottom', 'control'),
       createPort('dust', 'Dustbin Level', 'input', 0, 'bottom', 'control'),
       createPort('grid', 'Grid', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'bottom', 'matrix'),
-      createPort('lidar_ranges', 'Ranges', 'input', [0,0,0,0,0,0,0,0], 'bottom', 'vector')
+      createPort('lidar_ranges', 'Ranges', 'input', Array(45).fill(0), 'bottom', 'vector'),
+      createPort('astar_path', 'A* Path', 'input', [], 'bottom', 'vector')
     ],
     outputs: [createPort('animation', '3D Scene View', 'output')],
     state: {
@@ -657,10 +1427,11 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       trail: [],
       estTrail: [],
       grid: Array.from({ length: 30 }, () => Array(30).fill(0)),
-      lidarRanges: [0,0,0,0,0,0,0,0],
+      lidarRanges: Array(45).fill(0),
       battery_level: 100,
       dustbin_level: 0,
-      room_colors: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444']
+      room_colors: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'],
+      astar_path: []
     },
     icon: 'graduation-cap',
     execute: (ins, p, state) => {
@@ -676,7 +1447,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       const bat = Number(ins[4] ?? 100);
       const dust = Number(ins[5] ?? 0);
       const grid = ins[6] || Array.from({ length: 30 }, () => Array(30).fill(0));
-      const ranges = ins[7] || [0,0,0,0,0,0,0,0];
+      const ranges = ins[7] || Array(45).fill(0);
+      const astar_path = ins[8] || [];
 
       const nextState = {
         ...state,
@@ -691,6 +1463,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         dustbin_level: dust,
         grid: grid,
         lidarRanges: ranges,
+        astar_path: astar_path,
         trail: state.trail ? [...state.trail] : [],
         estTrail: state.estTrail ? [...state.estTrail] : []
       };
@@ -2655,9 +3428,15 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     const C = [Array.from({ length: n }, (_, i) => b[n - i] - d[n - i] * b0)];
     const D = [[b0]];
 
-    const ss = BLOCK_LIBRARY['STATE_SPACE'](id, { ...params, A, B, C, D });
+    const ss = BLOCK_LIBRARY['STATE_SPACE'](id, { 
+      ...params, 
+      numerator: num, 
+      denominator: den, 
+      A, B, C, D 
+    });
     return {
       ...ss,
+      type: 'TRANSFER_FUNCTION',
       icon: 'settings-2',
       equation: 'G(s) = (b0*sⁿ + ... + bn) / (a0*sⁿ + ... + an)',
       description: 'Models a linear system using its Laplace-domain transfer function coefficients. Automatically converts to state-space for simulation.'
@@ -2686,11 +3465,37 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     const num = poly(z).map(c => c * k);
     const den = poly(p);
 
-    return BLOCK_LIBRARY['TRANSFER_FUNCTION'](id, { ...params, numerator: num, denominator: den });
+    const tf = BLOCK_LIBRARY['TRANSFER_FUNCTION'](id, { 
+      ...params, 
+      zeros: z, 
+      poles: p, 
+      gain: k, 
+      numerator: num, 
+      denominator: den 
+    });
+    return {
+      ...tf,
+      type: 'ZERO_POLE_GAIN',
+      equation: 'H(s) = K * (s-z1)...(s-zm) / (s-p1)...(s-pn)',
+      description: 'Models a system in zero-pole-gain form. Converts to transfer function and state-space internally.'
+    };
   },
 
   'DISCRETE_TRANSFER_FUNCTION': (id, params) => {
-    return BLOCK_LIBRARY['TRANSFER_FUNCTION'](id, { ...params, representation: 'discrete' });
+    const num = params.numerator || [1];
+    const den = params.denominator || [1, 1];
+    const tf = BLOCK_LIBRARY['TRANSFER_FUNCTION'](id, { 
+      ...params, 
+      numerator: num, 
+      denominator: den, 
+      representation: 'discrete' 
+    });
+    return {
+      ...tf,
+      type: 'DISCRETE_TRANSFER_FUNCTION',
+      equation: 'H(z) = (b0*zⁿ + ... + bn) / (a0*zⁿ + ... + an)',
+      description: 'Discrete-time transfer function.'
+    };
   },
 
   'PID_BASIC': (id, params) => ({
@@ -3580,9 +4385,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     return {
       id, type: 'RL_Q_LEARNING_CONTROLLER',
       params: { 
-        alpha: params.alpha || 0.1, 
-        gamma: params.gamma || 0.9, 
-        epsilon: params.epsilon || 0.1,
+        alpha: params.alpha !== undefined ? params.alpha : 0.1, 
+        gamma: params.gamma !== undefined ? params.gamma : 0.9, 
+        epsilon: params.epsilon !== undefined ? params.epsilon : 0.1,
         numStates,
         numActions
       },
@@ -3840,6 +4645,402 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   }),
 
+  'ROBOT_VACUUM_BOUSTROPHEDON_SWEEP': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_BOUSTROPHEDON_SWEEP',
+    params: {
+      spacing: params.spacing || 0.54
+    },
+    isStateful: true,
+    inputs: [
+      createPort('room_id', 'Room ID', 'input', 0, 'left', 'control'),
+      createPort('grid', 'Grid Mask', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'left', 'matrix'),
+      createPort('pose', 'Robot Pose', 'input', [0, 0, 0], 'left', 'vector')
+    ],
+    outputs: [
+      createPort('waypoints', 'Waypoints', 'output', [], 'right', 'matrix'),
+      createPort('current_waypoint', 'Active WP', 'output', [0, 0], 'right', 'vector'),
+      createPort('done', 'Done', 'output', 0, 'right', 'control')
+    ],
+    state: {
+      sweepWaypoints: [] as [number, number][],
+      currentIndex: 0,
+      currentRoom: -1,
+      isDone: false
+    },
+    icon: 'navigation',
+    description: 'Generates boustrophedon sweep waypoints inside the selected room zone and tracks execution.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const room_id = Number(ins[0] ?? 0);
+      const pose = ins[2] as number[] || [0, 0, 0];
+      const rx = pose[0] ?? 0;
+      const ry = pose[1] ?? 0;
+      const spacing = Number(p.spacing || 0.54);
+
+      if (state.currentRoom !== room_id || state.sweepWaypoints.length === 0) {
+        state.currentRoom = room_id;
+        state.sweepWaypoints = [];
+        state.currentIndex = 0;
+        state.isDone = false;
+
+        const wps: [number, number][] = [];
+        const roomBounds: Record<number, {xmin: number, xmax: number, ymin: number, ymax: number}> = {
+          0: { xmin: -5.6, xmax: 1.6, ymin: -5.6, ymax: 1.6 },
+          1: { xmin: -5.6, xmax: -2.1, ymin: 2.5, ymax: 5.6 },
+          2: { xmin: 2.4, xmax: 5.6, ymin: -1.6, ymax: 5.6 },
+          3: { xmin: 2.4, xmax: 5.6, ymin: -5.6, ymax: -2.5 }
+        };
+
+        const bounds = roomBounds[room_id] || roomBounds[0];
+        const numLines = Math.max(1, Math.floor((bounds.xmax - bounds.xmin) / spacing));
+        let dir = 1;
+        for (let i = 0; i <= numLines; i++) {
+          const x = bounds.xmin + i * spacing;
+          if (dir === 1) {
+            wps.push([x, bounds.ymin]);
+            wps.push([x, bounds.ymax]);
+          } else {
+            wps.push([x, bounds.ymax]);
+            wps.push([x, bounds.ymin]);
+          }
+          dir = -dir;
+        }
+        state.sweepWaypoints = wps;
+      }
+
+      if (state.sweepWaypoints.length > 0 && !state.isDone) {
+        const target = state.sweepWaypoints[state.currentIndex];
+        const dist = Math.sqrt(Math.pow(rx - target[0], 2) + Math.pow(ry - target[1], 2));
+        if (dist < 0.4) {
+          state.currentIndex++;
+          if (state.currentIndex >= state.sweepWaypoints.length) {
+            state.isDone = true;
+            state.currentIndex = state.sweepWaypoints.length - 1;
+          }
+        }
+      }
+
+      const activeWp = state.sweepWaypoints[state.currentIndex] || [0, 0];
+      return {
+        outputs: [
+          state.sweepWaypoints,
+          activeWp,
+          state.isDone ? 1 : 0
+        ],
+        nextState: state
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_ERODE_MASK': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_ERODE_MASK',
+    params: {
+      radius: params.radius || 0.3
+    },
+    isStateful: true,
+    inputs: [
+      createPort('grid', 'Room Mask', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'left', 'matrix')
+    ],
+    outputs: [
+      createPort('eroded', 'Eroded Mask', 'output', Array.from({ length: 30 }, () => Array(30).fill(0)), 'right', 'matrix')
+    ],
+    state: {
+      erodedGrid: null as number[][] | null
+    },
+    icon: 'crop',
+    description: 'Erodes the room free space boundary mask using the robot physical radius to prevent wall collisions.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const grid = ins[0] as number[][];
+      const radius = Number(p.radius || 0.3);
+      const cell_size = 12.0 / 30.0;
+      const k_cells = Math.max(1, Math.round(radius / cell_size));
+
+      const eroded = Array.from({ length: 30 }, () => Array(30).fill(0));
+      for (let r = 0; r < 30; r++) {
+        for (let c = 0; c < 30; c++) {
+          if (grid[r][c] === 100) {
+            eroded[r][c] = 100;
+          } else {
+            let is_safe = true;
+            for (let dr = -k_cells; dr <= k_cells; dr++) {
+              for (let dc = -k_cells; dc <= k_cells; dc++) {
+                const nr = r + dr;
+                const nc = c + dc;
+                if (nr >= 0 && nr < 30 && nc >= 0 && nc < 30) {
+                  if (grid[nr][nc] === 100 && Math.sqrt(dr*dr + dc*dc) * cell_size <= radius) {
+                    is_safe = false;
+                    break;
+                  }
+                }
+              }
+              if (!is_safe) break;
+            }
+            eroded[r][c] = is_safe ? grid[r][c] : 100;
+          }
+        }
+      }
+
+      state.erodedGrid = eroded;
+      return {
+        outputs: [eroded],
+        nextState: state
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_DOOR_TRACKER': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_DOOR_TRACKER',
+    params: {},
+    isStateful: true,
+    inputs: [
+      createPort('pose', 'Robot Pose', 'input', [0, 0, 0], 'left', 'vector'),
+      createPort('zone_map', 'Zone Map', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'left', 'matrix')
+    ],
+    outputs: [
+      createPort('entry_door', 'Entry Door', 'output', [0, 0], 'right', 'vector'),
+      createPort('log', 'Tracker Log', 'output', [], 'right', 'matrix')
+    ],
+    state: {
+      lastRoom: -1,
+      entry_door: [-5.1, -5.1] as [number, number],
+      log: [] as [number, number, number][]
+    },
+    icon: 'log-in',
+    description: 'Tracks which door/exit the robot used to enter the current room for return path planning.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const pose = ins[0] as number[] || [0, 0, 0];
+      const rx = pose[0] ?? 0;
+      const ry = pose[1] ?? 0;
+
+      let currentRoom = -1;
+      if (rx >= -6 && rx < 2 && ry >= -6 && ry < 2) currentRoom = 0;
+      else if (rx >= -6 && rx < 2 && ry >= 2 && ry <= 6) currentRoom = 1;
+      else if (rx >= 2 && rx <= 6 && ry >= -2 && ry <= 6) currentRoom = 2;
+      else if (rx >= 2 && rx <= 6 && ry >= -6 && ry < -2) currentRoom = 3;
+
+      if (state.lastRoom === -1) {
+        state.lastRoom = currentRoom;
+      } else if (currentRoom !== state.lastRoom && currentRoom !== -1) {
+        state.entry_door = [rx, ry];
+        state.log.push([currentRoom, rx, ry]);
+        state.lastRoom = currentRoom;
+      }
+
+      return {
+        outputs: [
+          state.entry_door,
+          state.log
+        ],
+        nextState: state
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_DOOR_CROSSING': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_DOOR_CROSSING',
+    params: {},
+    isStateful: false,
+    inputs: [
+      createPort('pose', 'Robot Pose', 'input', [0, 0, 0], 'left', 'vector'),
+      createPort('door_pos', 'Door Pos', 'input', [0, 0], 'left', 'vector'),
+      createPort('target_room', 'Target Room', 'input', 0, 'bottom', 'control')
+    ],
+    outputs: [
+      createPort('crossed', 'Crossed', 'output', 0, 'right', 'control')
+    ],
+    icon: 'check-square',
+    description: 'Completes door traversal and returns true when the robot centroid has physically passed into the target room cells.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const pose = ins[0] as number[] || [0, 0, 0];
+      const rx = pose[0] ?? 0;
+      const ry = pose[1] ?? 0;
+      const target_room = Number(ins[2] ?? 0);
+
+      let currentRoom = -1;
+      if (rx >= -6 && rx < 2 && ry >= -6 && ry < 2) currentRoom = 0;
+      else if (rx >= -6 && rx < 2 && ry >= 2 && ry <= 6) currentRoom = 1;
+      else if (rx >= 2 && rx <= 6 && ry >= -2 && ry <= 6) currentRoom = 2;
+      else if (rx >= 2 && rx <= 6 && ry >= -6 && ry < -2) currentRoom = 3;
+
+      const crossed = (currentRoom === target_room);
+      return {
+        outputs: [crossed ? 1 : 0]
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_CONTINUOUS_ENERGY': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_CONTINUOUS_ENERGY',
+    params: {
+      energy_per_meter: params.energy_per_meter || 0.005,
+      safety_margin: params.safety_margin || 5.0
+    },
+    isStateful: false,
+    inputs: [
+      createPort('battery', 'Bat %', 'input', 100, 'left', 'control'),
+      createPort('pose', 'Robot Pose', 'input', [0, 0, 0], 'left', 'vector'),
+      createPort('dock_pos', 'Dock Pos', 'input', [-5.1, -5.1], 'left', 'vector'),
+      createPort('exits_sequence', 'Exits Seq', 'input', [], 'left', 'matrix')
+    ],
+    outputs: [
+      createPort('e_required', 'E Req', 'output', 0, 'right', 'control'),
+      createPort('return_trigger', 'Return Trig', 'output', 0, 'right', 'control')
+    ],
+    icon: 'battery-charging',
+    description: 'Continuously monitors battery level against estimated energy requirements along the door-hopping path back to the dock.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const battery = Number(ins[0] ?? 100);
+      const pose = ins[1] as number[] || [0, 0, 0];
+      const rx = pose[0] ?? 0;
+      const ry = pose[1] ?? 0;
+      const dock_pos = ins[2] as number[] || [-5.1, -5.1];
+      const exits = ins[3] as [number, number][];
+
+      const energy_per_meter = Number(p.energy_per_meter || 0.005);
+      const safety_margin = Number(p.safety_margin || 5.0);
+
+      let dist = 0;
+      let cx = rx, cy = ry;
+      if (exits && exits.length > 0) {
+        for (const e of exits) {
+          dist += Math.sqrt(Math.pow(e[0] - cx, 2) + Math.pow(e[1] - cy, 2));
+          cx = e[0];
+          cy = e[1];
+        }
+      }
+      dist += Math.sqrt(Math.pow(dock_pos[0] - cx, 2) + Math.pow(dock_pos[1] - cy, 2));
+
+      const e_required = dist * energy_per_meter * 100.0 * 1.25;
+      const return_trigger = (battery <= e_required + safety_margin);
+
+      return {
+        outputs: [e_required, return_trigger ? 1 : 0]
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_TOPOLOGY_RETURN': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_TOPOLOGY_RETURN',
+    params: {},
+    isStateful: true,
+    inputs: [
+      createPort('topo_graph', 'Graph', 'input', [], 'left', 'matrix'),
+      createPort('current_room', 'Room ID', 'input', 0, 'left', 'control'),
+      createPort('dock_room', 'Dock Room', 'input', 0, 'left', 'control'),
+      createPort('exits', 'Detected Exits', 'input', [], 'left', 'matrix')
+    ],
+    outputs: [
+      createPort('path_rooms', 'Path Rooms', 'output', [], 'right', 'vector'),
+      createPort('exits_sequence', 'Exits Seq', 'output', [], 'right', 'matrix')
+    ],
+    state: {},
+    icon: 'git-branch',
+    description: 'Plans a room-by-room door hopping return sequence using room connectivity graph search.',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const current_room = Number(ins[1] ?? 0);
+      const dock_room = Number(ins[2] ?? 0);
+      
+      const doors: Record<string, [number, number]> = {
+        '0-1': [-1, 2],
+        '1-0': [-1, 2],
+        '0-2': [2, 0],
+        '2-0': [2, 0],
+        '0-3': [2, -4],
+        '3-0': [2, -4]
+      };
+
+      const path_rooms: number[] = [];
+      const exits_sequence: [number, number][] = [];
+
+      if (current_room !== dock_room) {
+        path_rooms.push(current_room);
+        path_rooms.push(dock_room);
+        
+        const transition = `${current_room}-${dock_room}`;
+        if (doors[transition]) {
+          exits_sequence.push(doors[transition]);
+        } else {
+          const door1 = doors[`${current_room}-0`];
+          const door2 = doors[`0-${dock_room}`];
+          if (door1) exits_sequence.push(door1);
+          if (door2) exits_sequence.push(door2);
+        }
+      }
+
+      return {
+        outputs: [path_rooms, exits_sequence],
+        nextState: state
+      };
+    }
+  }),
+
+  'ROBOT_VACUUM_THETA_STAR': (id: string, params: any) => ({
+    id, type: 'ROBOT_VACUUM_THETA_STAR',
+    params: {
+      inflation: params.inflation || 0.3
+    },
+    isStateful: true,
+    inputs: [
+      createPort('grid', 'Grid', 'input', Array.from({ length: 30 }, () => Array(30).fill(0)), 'left', 'matrix'),
+      createPort('start', 'Start', 'input', [0,0], 'left', 'vector'),
+      createPort('goal', 'Goal', 'input', [0,0], 'left', 'vector')
+    ],
+    outputs: [
+      createPort('path', 'Path', 'output', [], 'right', 'matrix'),
+      createPort('next_point', 'Next Pt', 'output', [0, 0], 'right', 'vector'),
+      createPort('failed', 'Failed', 'output', 0, 'right', 'control')
+    ],
+    state: {
+      lastStart: [0, 0],
+      lastGoal: [0, 0],
+      path: [] as [number, number][]
+    },
+    icon: 'activity',
+    description: 'Calculates path to target using A* with line-of-sight shortcutting optimization (Theta*).',
+    execute: (ins: any[], p: any, state: any, time: number) => {
+      const grid = ins[0] as number[][];
+      const start = ins[1] as number[] || [0, 0];
+      const goal = ins[2] as number[] || [0, 0];
+
+      const s_wp = [start[0] ?? 0, start[1] ?? 0] as [number, number];
+      const g_wp = [goal[0] ?? 0, goal[1] ?? 0] as [number, number];
+
+      const dist_start = Math.sqrt(Math.pow(s_wp[0] - state.lastStart[0], 2) + Math.pow(s_wp[1] - state.lastStart[1], 2));
+      const dist_goal = Math.sqrt(Math.pow(g_wp[0] - state.lastGoal[0], 2) + Math.pow(g_wp[1] - state.lastGoal[1], 2));
+
+      if (dist_start > 0.4 || dist_goal > 0.4 || state.path.length === 0) {
+        state.lastStart = s_wp;
+        state.lastGoal = g_wp;
+        const astarPath = astar_planner(s_wp, g_wp, grid, 0.28, 1.0);
+        
+        if (astarPath.length > 2) {
+          const optPath: [number, number][] = [astarPath[0]];
+          let currentIdx = 0;
+          while (currentIdx < astarPath.length - 1) {
+            let furthestLosIdx = currentIdx + 1;
+            for (let j = currentIdx + 2; j < astarPath.length; j++) {
+              if (lineOfSightClear(astarPath[currentIdx], astarPath[j], grid, 0.15)) {
+                furthestLosIdx = j;
+              }
+            }
+            optPath.push(astarPath[furthestLosIdx]);
+            currentIdx = furthestLosIdx;
+          }
+          state.path = optPath;
+        } else {
+          state.path = astarPath;
+        }
+      }
+
+      const nextPt = state.path[0] || g_wp;
+      const failed = (state.path.length === 0);
+
+      return {
+        outputs: [state.path, nextPt, failed ? 1 : 0],
+        nextState: state
+      };
+    }
+  }),
+
   'ROBOT_VACUUM_DIGITAL_TWIN': (id: string, params: any) => ({
     id, type: 'ROBOT_VACUUM_DIGITAL_TWIN',
     params: {
@@ -3853,14 +5054,15 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       robot_inertia: params.robot_inertia || 0.015,
       Kp_wheel: params.Kp_wheel || 12.0,
       Ki_wheel: params.Ki_wheel || 45.0,
-      lidar_noise_std: params.lidar_noise_std || 0.02,
-      lidar_max_range: params.lidar_max_range || 4.0
+      lidar_noise_std: params.lidar_noise_std || 0.015,
+      lidar_max_range: params.lidar_max_range || 5.5
     },
     isStateful: true,
     inputs: [
       createPort('target_x', 'Target X', 'input', 0, 'left', 'control'),
       createPort('target_y', 'Target Y', 'input', 0, 'left', 'control'),
-      createPort('mode_select', 'Mode', 'input', 4, 'bottom', 'control')
+      createPort('mode_select', 'Mode', 'input', 4, 'bottom', 'control'),
+      createPort('vel_cmd', 'Vel CMD', 'input', [0, 0], 'left', 'vector')
     ],
     outputs: [
       createPort('x_pos', 'X', 'output', 0, 'right', 'control'),
@@ -3869,217 +5071,693 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       createPort('x_est', 'X_est', 'output', 0, 'right', 'control'),
       createPort('y_est', 'Y_est', 'output', 0, 'right', 'control'),
       createPort('theta_est', 'θ_est', 'output', 0, 'right', 'control'),
-      createPort('lidar_ranges', 'LiDAR', 'output', [0,0,0,0,0,0,0,0], 'right', 'vector'),
+      createPort('lidar_ranges', 'LiDAR', 'output', Array(45).fill(0), 'right', 'vector'),
       createPort('wheel_vels', 'V_wheels', 'output', [0,0], 'right', 'vector'),
       createPort('control_signals', 'PWM', 'output', [0,0], 'right', 'vector'),
       createPort('nav_state', 'Mode_out', 'output', 0, 'right', 'control'),
-      createPort('grid', 'Grid', 'output', Array.from({ length: 30 }, () => Array(30).fill(0)), 'right', 'matrix')
+      createPort('grid', 'Grid', 'output', Array.from({ length: 30 }, () => Array(30).fill(0)), 'right', 'matrix'),
+      createPort('astar_path', 'A* Path', 'output', [], 'right', 'vector')
     ],
     state: {
-      x: 0,
-      y: 0,
-      theta: 0,
+      x: -5.1,
+      y: -5.1,
+      theta: Math.PI / 2,
+      x_est: -5.05,
+      y_est: -5.15,
+      theta_est: Math.PI / 2 + 2 * Math.PI / 180,
+      odomX: -5.05,
+      odomY: -5.15,
+      odomTheta: Math.PI / 2 + 2 * Math.PI / 180,
+      P: [[0.2, 0, 0], [0, 0.2, 0], [0, 0, 0.08]],
+      scan_ref: null,
+      scan_ref_pose: null,
+      lc_cooldown: 0,
+      loop_closure_done: false,
+      zoning_done: false,
+      // ── Behaviour-tree / Coverage state machine ──────────────────────────
+      // States: INIT → SEED → PLAN_ROOM → COVERAGE → TRANSIT → RETURN_DOCK → DOCKED
+      bt_state: 'INIT',
+      // Room IDs: 0=Corridor, 1=LivingRoom, 2=Bedroom, 3=Kitchen
+      current_room: 0,
+      cleaned_rooms: [] as number[],
+      waypoint_idx: 0,
+      room_waypoints: [] as number[][],
+      // A* transit path
+      astar_path: [] as [number, number][],
+      path_idx: 0,
+      // Recovery
+      recovery_state: 'NONE',
+      recovery_timer: 0,
+      recovery_attempts: 0,
+      stuck_counter: 0,
+      last_pose: [-5.1, -5.1] as [number, number],
+      rotation_dir: 1,
+      backup_timer: 0,
+      // LiDAR proximity
+      min_front: 5.5,
+      min_360: 5.5,
+      escape_dir: 1,
+      // SLAM occupancy grid — pre-seeded with walls
+      grid: seedGridWithWalls(),
+      trail: [] as [number, number][],
+      estTrail: [] as [number, number][],
+      lidarRanges: Array(45).fill(0),
+      lastTime: 0,
+      dyn_x: 1.5,
+      dyn_y: 0.5,
+      step_size: 0.6,
       omegaL: 0,
       omegaR: 0,
       currentL: 0,
       currentR: 0,
       int_errL: 0,
       int_errR: 0,
-
-      x_est: 0,
-      y_est: 0,
-      theta_est: 0,
-
-      odomX: 0,
-      odomY: 0,
-      odomTheta: 0,
-      encoderL: 0,
-      encoderR: 0,
-      prevEncoderL: 0,
-      prevEncoderR: 0,
-      navState: 4,
-      grid: Array.from({ length: 30 }, () => Array(30).fill(0)),
-      trail: [],
-      estTrail: [],
-      lidarRanges: [0, 0, 0, 0, 0, 0, 0, 0],
-      lastTime: 0,
-      waypointIdx: 0,
-      targetX: 0,
-      targetY: 0,
-      collisionCount: 0
+      battery_level: 100.0,
+      E_opt: 0,
+      E_path: 0,
+      Re: 1.0,
+      using_constrained: false,
+      replan_cooldown: 0,
+      v_chassis: 0,
+      w_chassis: 0,
+      path_blocked: false
     },
     icon: 'graduation-cap',
-    description: 'Differential Drive LiDAR Robot Vacuum Digital Twin. Simulates dynamic kinetics, motors, odometry, LiDAR range-finding, Sensor Fusion drift correction, SLAM occupancy grid updates, Stateflow navigation state machine, and PID controllers in one block.',
+    description: 'MATLAB Autonomous Vacuum cleaner Plant/Control/Perception/Planning Closed Loop Co-simulation Block.',
     execute: (ins: any[], p: any, state: any, time: number) => {
-      const target_x_in = Number(ins[0] ?? 0);
-      const target_y_in = Number(ins[1] ?? 0);
       const mode_select = Number(ins[2] ?? 4);
+      const vel_cmd_in = ins[3] as number[];
 
-      const wheel_radius = Number(p.wheel_radius || 0.033);
-      const wheel_separation = Number(p.wheel_separation || 0.16);
-      const encoder_cpr = Number(p.encoder_cpr || 360);
-      const lidar_noise_std = Number(p.lidar_noise_std || 0.02);
-      const lidar_max_range = Number(p.lidar_max_range || 4.0);
+      const lidar_noise_std = Number(p.lidar_noise_std || 0.015);
+      const lidar_max_range = Number(p.lidar_max_range || 5.5);
 
-      const dt = Math.max(1e-4, time - (state.lastTime || 0));
+      const dt = 0.08; // Fixed step in MATLAB
+      state.lastTime = time;
 
-      if (state.lastTime === 0) {
-        state.targetX = target_x_in;
-        state.targetY = target_y_in;
+      // 1. Dynamic Obstacle Trajectory
+      state.dyn_x = 1.5 + 3.5 * Math.sin(0.4 * time);
+      state.dyn_y = 0.5 + 1.2 * Math.cos(0.4 * time);
+
+      // 2. LiDAR scan (45 rays at angles -180:8:179)
+      const numBeams = 45;
+      const beamAngles: number[] = [];
+      for (let i = -180; i <= 179; i += 8) {
+        beamAngles.push(i * Math.PI / 180);
       }
 
-      const d_thetaL = state.omegaL * dt;
-      const d_thetaR = state.omegaR * dt;
-      state.encoderL += d_thetaL * (encoder_cpr / (2 * Math.PI));
-      state.encoderR += d_thetaR * (encoder_cpr / (2 * Math.PI));
+      const currentRanges: number[] = [];
+      let min_360 = lidar_max_range;
+      let min_front = lidar_max_range;
+      let min_angle = 0;
 
-      const delta_encL = state.encoderL - state.prevEncoderL;
-      const delta_encR = state.encoderR - state.prevEncoderR;
-      state.prevEncoderL = state.encoderL;
-      state.prevEncoderR = state.encoderR;
+      for (let i = 0; i < numBeams; i++) {
+        const absAngle = state.theta + beamAngles[i];
+        // Raycast against walls & obstacles (isMatlab = true)
+        let r = raycastTwin(state.x, state.y, absAngle, lidar_max_range, lidar_noise_std, true);
 
-      const dS_L = delta_encL * (2 * Math.PI / encoder_cpr) * wheel_radius;
-      const dS_R = delta_encR * (2 * Math.PI / encoder_cpr) * wheel_radius;
-      
+        // Raycast against dynamic obstacle
+        const dx_dyn = state.dyn_x - state.x;
+        const dy_dyn = state.dyn_y - state.y;
+        const heading_dyn = Math.atan2(dy_dyn, dx_dyn);
+        const rel_heading = Math.atan2(Math.sin(heading_dyn - absAngle), Math.cos(heading_dyn - absAngle));
+        if (Math.abs(rel_heading) < 0.35) {
+          const dist_dyn = Math.sqrt(dx_dyn*dx_dyn + dy_dyn*dy_dyn);
+          // Check intersection with sphere of radius 0.5
+          const sx = state.dyn_x - state.x;
+          const sy = state.dyn_y - state.y;
+          const proj = sx * Math.cos(absAngle) + sy * Math.sin(absAngle);
+          if (proj > 0) {
+            const distSq = (sx*sx + sy*sy) - proj*proj;
+            if (distSq < 0.25) { // r=0.5
+              const h = Math.sqrt(0.25 - distSq);
+              const t_hit = proj - h;
+              if (t_hit > 0 && t_hit < r) {
+                r = t_hit;
+              }
+            }
+          }
+        }
+
+        // Noise injection (TC-03): 15% random range noise
+        if (Math.random() < 0.15) {
+          r = 0.1 + Math.random() * (lidar_max_range - 0.2);
+        }
+
+        currentRanges.push(r);
+        if (r < min_360) {
+          min_360 = r;
+          min_angle = beamAngles[i];
+        }
+        if (Math.abs(beamAngles[i]) <= 30 * Math.PI / 180) {
+          if (r < min_front) min_front = r;
+        }
+      }
+      state.lidarRanges = currentRanges;
+      state.min_360 = min_360;
+      state.min_front = min_front;
+      state.escape_dir = Math.sign(min_angle + 1e-6);
+
+      // 3. Odometry updates with noise
       const slipL = 1.0 + (Math.random() - 0.5) * 0.05;
       const slipR = 1.0 + (Math.random() - 0.5) * 0.05;
-      const dS_drift = (dS_R * slipR + dS_L * slipL) / 2;
-      const dTheta_drift = (dS_R * slipR - dS_L * slipL) / wheel_separation;
+      const dS_L = state.omegaL * dt * p.wheel_radius * slipL;
+      const dS_R = state.omegaR * dt * p.wheel_radius * slipR;
+      const dS_drift = (dS_R + dS_L) / 2;
+      const dTheta_drift = (dS_R - dS_L) / p.wheel_separation;
 
       state.odomX += dS_drift * Math.cos(state.odomTheta + dTheta_drift / 2);
       state.odomY += dS_drift * Math.sin(state.odomTheta + dTheta_drift / 2);
-      state.odomTheta += dTheta_drift;
-      state.odomTheta = Math.atan2(Math.sin(state.odomTheta), Math.cos(state.odomTheta));
+      state.odomTheta = angdiff(state.odomTheta + dTheta_drift);
 
-      state.x_est += dS_drift * Math.cos(state.theta_est + dTheta_drift / 2);
-      state.y_est += dS_drift * Math.sin(state.theta_est + dTheta_drift / 2);
-      state.theta_est += dTheta_drift;
-      state.theta_est = Math.atan2(Math.sin(state.theta_est), Math.cos(state.theta_est));
+      // 4. EKF SLAM Prediction and Correction
+      const pred_x = state.x_est + dS_drift * Math.cos(state.theta_est + dTheta_drift / 2);
+      const pred_y = state.y_est + dS_drift * Math.sin(state.theta_est + dTheta_drift / 2);
+      const pred_theta = angdiff(state.theta_est + dTheta_drift);
 
-      const K_slam = 0.06;
-      state.x_est += K_slam * (state.x - state.x_est);
-      state.y_est += K_slam * (state.y - state.y_est);
-      state.theta_est += K_slam * Math.atan2(Math.sin(state.theta - state.theta_est), Math.cos(state.theta - state.theta_est));
-      state.theta_est = Math.atan2(Math.sin(state.theta_est), Math.cos(state.theta_est));
+      // EKF Covariance prediction P_pred = F * P * F^T + Q
+      const F = [
+        [1, 0, -dS_drift * Math.sin(state.theta_est)],
+        [0, 1, dS_drift * Math.cos(state.theta_est)],
+        [0, 0, 1]
+      ];
+      const Q = [[0.005, 0, 0], [0, 0.005, 0], [0, 0, 0.002]];
+      const R = [[0.04, 0, 0], [0, 0.04, 0], [0, 0, 0.008]];
+      const P = state.P;
 
-      const numBeams = 8;
-      const beamAngles = [0, Math.PI/4, Math.PI/2, 3*Math.PI/4, Math.PI, -3*Math.PI/4, -Math.PI/2, -Math.PI/4];
-      const currentRanges: number[] = [];
-      for (let i = 0; i < numBeams; i++) {
-        const absAngle = state.theta + beamAngles[i];
-        const r = raycastTwin(state.x, state.y, absAngle, lidar_max_range, lidar_noise_std);
-        currentRanges.push(r);
+      const F_P = [
+        [F[0][0]*P[0][0]+F[0][1]*P[1][0]+F[0][2]*P[2][0], F[0][0]*P[0][1]+F[0][1]*P[1][1]+F[0][2]*P[2][1], F[0][0]*P[0][2]+F[0][1]*P[1][2]+F[0][2]*P[2][2]],
+        [F[1][0]*P[0][0]+F[1][1]*P[1][0]+F[1][2]*P[2][0], F[1][0]*P[0][1]+F[1][1]*P[1][1]+F[1][2]*P[2][1], F[1][0]*P[0][2]+F[1][1]*P[1][2]+F[1][2]*P[2][2]],
+        [F[2][0]*P[0][0]+F[2][1]*P[1][0]+F[2][2]*P[2][0], F[2][0]*P[0][1]+F[2][1]*P[1][1]+F[2][2]*P[2][1], F[2][0]*P[0][2]+F[2][1]*P[1][2]+F[2][2]*P[2][2]]
+      ];
+      const P_pred = [
+        [F_P[0][0]*F[0][0]+F_P[0][1]*F[0][1]+F_P[0][2]*F[0][2] + Q[0][0], F_P[0][0]*F[1][0]+F_P[0][1]*F[1][1]+F_P[0][2]*F[1][2], F_P[0][0]*F[2][0]+F_P[0][1]*F[2][1]+F_P[0][2]*F[2][2]],
+        [F_P[1][0]*F[0][0]+F_P[1][1]*F[0][1]+F_P[1][2]*F[0][2], F_P[1][0]*F[1][0]+F_P[1][1]*F[1][1]+F_P[1][2]*F[1][2] + Q[1][1], F_P[1][0]*F[2][0]+F_P[1][1]*F[2][1]+F_P[1][2]*F[2][2]],
+        [F_P[2][0]*F[0][0]+F_P[2][1]*F[0][1]+F_P[2][2]*F[0][2], F_P[2][0]*F[1][0]+F_P[2][1]*F[1][1]+F_P[2][2]*F[1][2], F_P[2][0]*F[2][0]+F_P[2][1]*F[2][1]+F_P[2][2]*F[2][2] + Q[2][2]]
+      ];
+
+      // Measured pose from EKF sensor (adds noise)
+      const meas_x = state.x + (Math.random() - 0.5) * 2 * 0.04;
+      const meas_y = state.y + (Math.random() - 0.5) * 2 * 0.04;
+      const meas_theta = angdiff(state.theta + (Math.random() - 0.5) * 2 * 0.008);
+
+      // K = P_pred * (P_pred + R)^-1
+      const S = [
+        [P_pred[0][0] + R[0][0], P_pred[0][1], P_pred[0][2]],
+        [P_pred[1][0], P_pred[1][1] + R[1][1], P_pred[1][2]],
+        [P_pred[2][0], P_pred[2][1], P_pred[2][2] + R[2][2]]
+      ];
+      const detS = S[0][0]*(S[1][1]*S[2][2] - S[1][2]*S[2][1]) - S[0][1]*(S[1][0]*S[2][2] - S[1][2]*S[2][0]) + S[0][2]*(S[1][0]*S[2][1] - S[1][1]*S[2][0]);
+      let K = [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+      ];
+      if (Math.abs(detS) > 1e-9 && !isNaN(detS)) {
+        const invS = [
+          [(S[1][1]*S[2][2] - S[1][2]*S[2][1])/detS, -(S[0][1]*S[2][2] - S[0][2]*S[2][1])/detS, (S[0][1]*S[1][2] - S[0][2]*S[1][1])/detS],
+          [-(S[1][0]*S[2][2] - S[1][2]*S[2][0])/detS, (S[0][0]*S[2][2] - S[0][2]*S[2][0])/detS, -(S[0][0]*S[1][2] - S[0][2]*S[1][0])/detS],
+          [(S[1][0]*S[2][1] - S[1][1]*S[2][0])/detS, -(S[0][0]*S[2][1] - S[0][1]*S[2][0])/detS, (S[0][0]*S[1][1] - S[0][1]*S[1][0])/detS]
+        ];
+        K = [
+          [P_pred[0][0]*invS[0][0]+P_pred[0][1]*invS[1][0]+P_pred[0][2]*invS[2][0], P_pred[0][0]*invS[0][1]+P_pred[0][1]*invS[1][1]+P_pred[0][2]*invS[2][1], P_pred[0][0]*invS[0][2]+P_pred[0][1]*invS[1][2]+P_pred[0][2]*invS[2][2]],
+          [P_pred[1][0]*invS[0][0]+P_pred[1][1]*invS[1][0]+P_pred[1][2]*invS[2][0], P_pred[1][0]*invS[0][1]+P_pred[1][1]*invS[1][1]+P_pred[1][2]*invS[2][1], P_pred[1][0]*invS[0][2]+P_pred[1][1]*invS[1][2]+P_pred[1][2]*invS[2][2]],
+          [P_pred[2][0]*invS[0][0]+P_pred[2][1]*invS[1][0]+P_pred[2][2]*invS[2][0], P_pred[2][0]*invS[0][1]+P_pred[2][1]*invS[1][1]+P_pred[2][2]*invS[2][1], P_pred[2][0]*invS[0][2]+P_pred[2][1]*invS[1][2]+P_pred[2][2]*invS[2][2]]
+        ];
       }
-      state.lidarRanges = currentRanges;
 
-      for (let i = 0; i < numBeams; i++) {
-        const estAbsAngle = state.theta_est + beamAngles[i];
-        const r = currentRanges[i];
-        const x_hit = state.x_est + r * Math.cos(estAbsAngle);
-        const y_hit = state.y_est + r * Math.sin(estAbsAngle);
-        markTwinFreeCells(state.grid, state.x_est, state.y_est, x_hit, y_hit);
-        if (r < lidar_max_range - 0.05) {
-          const { row, col } = getTwinGridCoords(x_hit, y_hit);
-          if (row >= 0 && row < 30 && col >= 0 && col < 30) {
-            state.grid[row][col] = Math.min(100, state.grid[row][col] + 30);
+      const innov_x = meas_x - pred_x;
+      const innov_y = meas_y - pred_y;
+      const innov_theta = angdiff(meas_theta - pred_theta);
+
+      state.x_est = pred_x + K[0][0]*innov_x + K[0][1]*innov_y + K[0][2]*innov_theta;
+      state.y_est = pred_y + K[1][0]*innov_x + K[1][1]*innov_y + K[1][2]*innov_theta;
+      state.theta_est = angdiff(pred_theta + K[2][0]*innov_x + K[2][1]*innov_y + K[2][2]*innov_theta);
+
+      if (Math.abs(detS) > 1e-9 && !isNaN(detS)) {
+        state.P = [
+          [(1 - K[0][0])*P_pred[0][0] - K[0][1]*P_pred[1][0] - K[0][2]*P_pred[2][0], (1 - K[0][0])*P_pred[0][1] - K[0][1]*P_pred[1][1] - K[0][2]*P_pred[2][1], (1 - K[0][0])*P_pred[0][2] - K[0][1]*P_pred[1][2] - K[0][2]*P_pred[2][2]],
+          [-K[1][0]*P_pred[0][0] + (1 - K[1][1])*P_pred[1][0] - K[1][2]*P_pred[2][0], -K[1][0]*P_pred[0][1] + (1 - K[1][1])*P_pred[1][1] - K[1][2]*P_pred[2][1], -K[1][0]*P_pred[0][2] + (1 - K[1][1])*P_pred[1][2] - K[1][2]*P_pred[2][2]],
+          [-K[2][0]*P_pred[0][0] - K[2][1]*P_pred[1][0] + (1 - K[2][2])*P_pred[2][0], -K[2][0]*P_pred[0][1] - K[2][1]*P_pred[1][1] + (1 - K[2][2])*P_pred[2][1], -K[2][0]*P_pred[0][2] - K[2][1]*P_pred[1][2] + (1 - K[2][2])*P_pred[2][2]]
+        ];
+      } else {
+        state.P = P_pred;
+      }
+
+      // Regularize covariance P to remain positive-definite and symmetric
+      for (let i = 0; i < 3; i++) {
+        state.P[i][i] = Math.max(1e-6, state.P[i][i]);
+        for (let j = i + 1; j < 3; j++) {
+          const val = (state.P[i][j] + state.P[j][i]) / 2;
+          state.P[i][j] = val;
+          state.P[j][i] = val;
+        }
+      }
+
+      // 5. Loop Closure matching with ICP near dock
+      state.lc_cooldown = Math.max(0, state.lc_cooldown - dt);
+      const dist_dock = Math.sqrt(Math.pow(state.x_est - (-5.1), 2) + Math.pow(state.y_est - (-5.1), 2));
+      const near_dock = dist_dock < 2.0;
+      if (near_dock) {
+        if (!state.scan_ref) {
+          state.scan_ref = currentRanges;
+          state.scan_ref_pose = [state.x_est, state.y_est, state.theta_est];
+        } else if (state.lc_cooldown <= 0) {
+          let err_sum = 0;
+          for (let i = 0; i < numBeams; i++) {
+            err_sum += Math.pow(currentRanges[i] - state.scan_ref[i], 2);
+          }
+          const icp_score = Math.sqrt(err_sum / numBeams);
+          if (icp_score < 0.15) {
+            const alpha = 0.4;
+            state.x_est += alpha * (state.scan_ref_pose[0] - state.x_est);
+            state.y_est += alpha * (state.scan_ref_pose[1] - state.y_est);
+            state.theta_est = angdiff(state.theta_est + alpha * angdiff(state.scan_ref_pose[2] - state.theta_est));
+            for (let r = 0; r < 3; r++) {
+              for (let c = 0; c < 3; c++) {
+                state.P[r][c] *= (1 - alpha);
+              }
+            }
+            state.loop_closure_done = true;
+            state.lc_cooldown = 20.0;
           }
         }
       }
 
-      let currentMode = mode_select;
-      if (state.navState !== currentMode && currentMode !== 3) {
-        state.navState = currentMode;
-        if (currentMode === 4) {
-          state.waypointIdx = 0;
-          state.targetX = robotVacuumWaypoints[0].x;
-          state.targetY = robotVacuumWaypoints[0].y;
-        } else if (currentMode === 5) {
-          state.targetX = 0;
-          state.targetY = -2.8;
-        } else if (currentMode === 1) {
-          state.targetX = state.x_est + 2.0 * Math.cos(state.theta_est);
-          state.targetY = state.y_est + 2.0 * Math.sin(state.theta_est);
-        } else {
-          state.targetX = target_x_in;
-          state.targetY = target_y_in;
+      // 6. SLAM Occupancy Grid Map Update (DBSCAN + cell marking, isMatlab = true)
+      const scanPts: [number, number][] = [];
+      for (let i = 0; i < numBeams; i++) {
+        if (currentRanges[i] < lidar_max_range - 0.1) {
+          const absAngle = state.theta_est + beamAngles[i];
+          const px = state.x_est + currentRanges[i] * Math.cos(absAngle);
+          const py = state.y_est + currentRanges[i] * Math.sin(absAngle);
+          scanPts.push([px, py]);
         }
       }
 
-      const frontObstacle = currentRanges[0] < 0.45 || currentRanges[1] < 0.4 || currentRanges[7] < 0.4;
-      if (state.navState !== 0) {
-        if (frontObstacle && state.navState !== 3) {
-          state.prevNavState = state.navState;
-          state.navState = 3;
-        } else if (state.navState === 3 && !frontObstacle) {
-          state.navState = state.prevNavState !== undefined ? state.prevNavState : 4;
+      if (scanPts.length >= 3) {
+        const dbLabels = simple_dbscan(scanPts, 0.5, 3);
+        for (let i = 0; i < scanPts.length; i++) {
+          if (dbLabels[i] > 0) {
+            const pt = scanPts[i];
+            const { row, col } = getTwinGridCoords(pt[0], pt[1], true);
+            if (row >= 0 && row < 30 && col >= 0 && col < 30) {
+              state.grid[row][col] = Math.min(100, state.grid[row][col] + 30);
+            }
+          }
+        }
+      }
+      
+      const selfCoords = getTwinGridCoords(state.x_est, state.y_est, true);
+      if (selfCoords.row >= 0 && selfCoords.row < 30 && selfCoords.col >= 0 && selfCoords.col < 30) {
+        state.grid[selfCoords.row][selfCoords.col] = -100;
+      }
+
+      // Initialize battery level if not present
+      if (state.battery_level === undefined) {
+        state.battery_level = 100.0;
+        state.E_opt = 0;
+        state.E_path = 0;
+        state.Re = 1.0;
+        state.using_constrained = false;
+        state.replan_cooldown = 0;
+        state.v_chassis = 0;
+        state.w_chassis = 0;
+        state.path_blocked = false;
+      }
+
+      // 7. High-level Planning & Behavior Tree Controller
+      let v = 0;
+      let w = 0;
+
+      if (vel_cmd_in && (vel_cmd_in[0] !== 0 || vel_cmd_in[1] !== 0)) {
+        v = vel_cmd_in[0] ?? 0;
+        w = vel_cmd_in[1] ?? 0;
+      } else {
+        // ────────────────────────────────────────────────────────────────────
+        // FULL STATE MACHINE:
+        //   INIT → PLAN_ROOM → COVERAGE → TRANSIT → RETURN_DOCK → DOCKED
+        // ────────────────────────────────────────────────────────────────────
+        if (state.replan_cooldown > 0) state.replan_cooldown -= dt;
+
+        // Global override: battery low or forced return
+        if ((state.battery_level <= 30.0 || mode_select === 5) &&
+            (state.bt_state === 'COVERAGE' || state.bt_state === 'TRANSIT' || state.bt_state === 'PLAN_ROOM')) {
+          state.bt_state = 'RETURN_DOCK';
+          state.astar_path = astar_planner(
+            [state.x_est, state.y_est], [-5.1, -5.1], state.grid, 0.28, 1.0
+          );
+          state.path_idx = 0;
+          state.stuck_counter = 0;
+          state.recovery_state = 'NONE';
+          state.replan_cooldown = 0;
+        }
+
+        // ── STATE: INIT ──────────────────────────────────────────────────────
+        // Ensure the wall-seeded grid is in place, then immediately move to PLAN_ROOM
+        if (state.bt_state === 'INIT') {
+          // Re-seed grid just in case it wasn't initialised correctly
+          if (!state.grid || state.grid[0][0] === 0) {
+            state.grid = seedGridWithWalls();
+          }
+          state.current_room = 0;      // Start: Corridor
+          state.cleaned_rooms = [];
+          state.bt_state = 'PLAN_ROOM';
+          state.waypoint_idx = 0;
+          state.room_waypoints = [...ROOM_WAYPOINTS_MAP[0]];
+          state.astar_path = astar_planner(
+            [state.x_est, state.y_est],
+            state.room_waypoints[0] as [number, number],
+            state.grid, 0.28, 1.0
+          );
+          state.path_idx = 0;
+          v = 0; w = 0;
+        }
+
+        // ── STATE: PLAN_ROOM ─────────────────────────────────────────────────
+        // Navigate via A* to the starting waypoint of the current room
+        else if (state.bt_state === 'PLAN_ROOM') {
+          const roomStart = state.room_waypoints[0] as [number, number];
+          const distToStart = Math.sqrt(
+            Math.pow(state.x_est - roomStart[0], 2) +
+            Math.pow(state.y_est - roomStart[1], 2)
+          );
+
+          if (distToStart < 0.45) {
+            // Arrived at room start → begin zigzag coverage
+            state.bt_state = 'COVERAGE';
+            state.waypoint_idx = 0;
+            state.astar_path = [...state.room_waypoints] as [number, number][];
+            state.path_idx = 0;
+            v = 0; w = 0;
+          } else {
+            // Follow the A* path to room start
+            if (state.astar_path.length === 0) {
+              state.astar_path = astar_planner(
+                [state.x_est, state.y_est], roomStart, state.grid, 0.28, 1.0
+              );
+              state.path_idx = 0;
+            }
+            // Advance path index past already-reached waypoints
+            while (state.path_idx < state.astar_path.length - 1 &&
+                   Math.sqrt(
+                     Math.pow(state.x_est - state.astar_path[state.path_idx][0], 2) +
+                     Math.pow(state.y_est - state.astar_path[state.path_idx][1], 2)
+                   ) < 0.35) {
+              state.path_idx++;
+            }
+            const tgt = state.astar_path[state.path_idx] || roomStart;
+            const hErr = angdiff_vec(state.x_est, state.y_est, state.theta_est, tgt[0], tgt[1]);
+            if (Math.abs(hErr) > 45 * Math.PI / 180) {
+              v = 0; w = 2.8 * hErr;
+            } else {
+              v = 0.22; w = 2.2 * hErr;
+            }
+          }
+        }
+
+        // ── STATE: COVERAGE ──────────────────────────────────────────────────
+        // Follow pre-computed room zigzag waypoints one-by-one
+        else if (state.bt_state === 'COVERAGE') {
+          // Guard: ensure waypoints are loaded
+          if (!state.room_waypoints || state.room_waypoints.length === 0) {
+            state.room_waypoints = [...ROOM_WAYPOINTS_MAP[state.current_room]];
+            state.waypoint_idx = 0;
+          }
+
+          // Clamp index
+          const wpIdx = Math.min(state.waypoint_idx, state.room_waypoints.length - 1);
+          const target = state.room_waypoints[wpIdx] as [number, number];
+          const dist = Math.sqrt(
+            Math.pow(state.x_est - target[0], 2) + Math.pow(state.y_est - target[1], 2)
+          );
+          const hErr = angdiff_vec(state.x_est, state.y_est, state.theta_est, target[0], target[1]);
+
+          // Expose remaining zigzag path for scope rendering
+          state.astar_path = state.room_waypoints.slice(wpIdx) as [number, number][];
+
+          // Wall proximity: slow down and turn away
+          if (state.min_front < 0.4) {
+            v = 0; w = 2.5 * state.escape_dir;
+          } else if (Math.abs(hErr) > 40 * Math.PI / 180) {
+            // Rotate in place to face next waypoint
+            v = 0; w = 2.8 * hErr;
+          } else {
+            // Drive forward proportionally
+            v = Math.min(0.32, 0.22 + 0.1 * (dist / 2.0));
+            w = 2.2 * hErr;
+          }
+
+          // Advance to next waypoint when close enough
+          if (dist < 0.32) {
+            state.waypoint_idx++;
+            if (state.waypoint_idx >= state.room_waypoints.length) {
+              // ── Room complete ──
+              if (!state.cleaned_rooms.includes(state.current_room)) {
+                state.cleaned_rooms.push(state.current_room);
+              }
+              const schedule = [0, 1, 2, 3]; // Corridor → Living → Bedroom → Kitchen
+              const nextRoom = schedule.find(r => !state.cleaned_rooms.includes(r));
+
+              if (nextRoom !== undefined) {
+                // Transit to next room via A*
+                state.current_room = nextRoom;
+                state.room_waypoints = [...ROOM_WAYPOINTS_MAP[nextRoom]];
+                const transitGoal = state.room_waypoints[0] as [number, number];
+                state.astar_path = astar_planner(
+                  [state.x_est, state.y_est], transitGoal, state.grid, 0.28, 1.0
+                );
+                state.path_idx = 0;
+                state.bt_state = 'TRANSIT';
+              } else {
+                // All rooms done → Return to dock
+                state.astar_path = astar_planner(
+                  [state.x_est, state.y_est], [-5.1, -5.1], state.grid, 0.28, 1.0
+                );
+                state.path_idx = 0;
+                state.bt_state = 'RETURN_DOCK';
+              }
+            }
+          }
+        }
+
+        // ── STATE: TRANSIT ───────────────────────────────────────────────────
+        // Follow A* path through doorways to next room start
+        else if (state.bt_state === 'TRANSIT') {
+          if (state.astar_path.length === 0) {
+            const transitGoal = (state.room_waypoints[0] || [-5.1, -5.1]) as [number, number];
+            state.astar_path = astar_planner(
+              [state.x_est, state.y_est], transitGoal, state.grid, 0.28, 1.0
+            );
+            state.path_idx = 0;
+          }
+
+          // Advance path index
+          while (state.path_idx < state.astar_path.length - 1 &&
+                 Math.sqrt(
+                   Math.pow(state.x_est - state.astar_path[state.path_idx][0], 2) +
+                   Math.pow(state.y_est - state.astar_path[state.path_idx][1], 2)
+                 ) < 0.35) {
+            state.path_idx++;
+          }
+
+          const transitTarget = state.astar_path[state.path_idx] ||
+                                (state.room_waypoints[0] || [-5.1, -5.1]);
+          const hErr = angdiff_vec(state.x_est, state.y_est, state.theta_est, transitTarget[0], transitTarget[1]);
+          const distToTarget = Math.sqrt(
+            Math.pow(state.x_est - transitTarget[0], 2) +
+            Math.pow(state.y_est - transitTarget[1], 2)
+          );
+
+          if (state.min_front < 0.35) {
+            v = -0.06; w = 1.8 * state.escape_dir;
+          } else if (Math.abs(hErr) > 45 * Math.PI / 180) {
+            v = 0; w = 3.0 * hErr;
+          } else {
+            v = 0.22; w = 2.2 * hErr;
+          }
+
+          // Arrived at final transit point → start PLAN_ROOM (drive to first coverage wp)
+          const finalGoal = state.room_waypoints[0] || [-5.1, -5.1];
+          const distToRoomStart = Math.sqrt(
+            Math.pow(state.x_est - finalGoal[0], 2) +
+            Math.pow(state.y_est - finalGoal[1], 2)
+          );
+          if (state.path_idx >= state.astar_path.length - 1 && distToRoomStart < 0.45) {
+            state.bt_state = 'COVERAGE';
+            state.waypoint_idx = 0;
+            state.astar_path = [...state.room_waypoints] as [number, number][];
+            state.path_idx = 0;
+          }
+        }
+
+        // ── STATE: RETURN_DOCK ───────────────────────────────────────────────
+        // Use A* + DWA to navigate back to the charging dock
+        else if (state.bt_state === 'RETURN_DOCK') {
+          if (dist_dock < 0.15) {
+            state.bt_state = 'DOCKED';
+            v = 0; w = 0;
+          } else if (dist_dock < 0.6) {
+            // Precise approach
+            const hErr = angdiff_vec(state.x_est, state.y_est, state.theta_est, -5.1, -5.1);
+            if (state.min_360 < 0.3) {
+              v = -0.06; w = 1.2 * state.escape_dir;
+            } else if (Math.abs(hErr) > 15 * Math.PI / 180) {
+              v = 0.03; w = 3.0 * hErr;
+            } else {
+              v = 0.12; w = 1.5 * hErr;
+            }
+          } else {
+            // Energy routing (FR-5.2 / FR-5.3)
+            const D_euclid = dist_dock;
+            state.E_opt = D_euclid * 0.08;
+            let path_length = 0;
+            const rem = state.astar_path.slice(state.path_idx);
+            if (rem.length >= 2) {
+              for (let i = 0; i < rem.length - 1; i++) {
+                path_length += Math.sqrt(
+                  Math.pow(rem[i+1][0] - rem[i][0], 2) + Math.pow(rem[i+1][1] - rem[i][1], 2)
+                );
+              }
+            } else { path_length = D_euclid; }
+            state.E_path = path_length * 0.08;
+            state.Re = state.E_opt > 1e-6 ? state.E_path / state.E_opt : 1.0;
+
+            const planner_radius = state.Re >= 1.5 ? 0.24 : 0.28;
+            const planner_Wd = state.Re >= 1.5 ? 2.5 : 1.0;
+
+            if (state.Re >= 1.5 && !state.using_constrained && state.replan_cooldown <= 0) {
+              state.astar_path = astar_planner([state.x_est, state.y_est], [-5.1, -5.1], state.grid, planner_radius, planner_Wd);
+              state.path_idx = 0;
+              state.using_constrained = true;
+              state.replan_cooldown = 6.0;
+            } else if (state.Re < 1.5 && state.using_constrained && state.replan_cooldown <= 0) {
+              state.astar_path = astar_planner([state.x_est, state.y_est], [-5.1, -5.1], state.grid, 0.28, 1.0);
+              state.path_idx = 0;
+              state.using_constrained = false;
+              state.replan_cooldown = 2.0;
+            }
+            if (state.astar_path.length === 0) {
+              state.astar_path = astar_planner([state.x_est, state.y_est], [-5.1, -5.1], state.grid, planner_radius, planner_Wd);
+              state.path_idx = 0;
+            }
+
+            // Stuck detection + recovery
+            const pose_delta = Math.sqrt(
+              Math.pow(state.x_est - state.last_pose[0], 2) +
+              Math.pow(state.y_est - state.last_pose[1], 2)
+            );
+            if (pose_delta > 0.04 * dt) {
+              state.stuck_counter = 0;
+              state.last_pose = [state.x_est, state.y_est];
+            } else {
+              state.stuck_counter++;
+            }
+            const stuck_secs = state.stuck_counter * dt;
+            if (state.recovery_state === 'NONE' && stuck_secs > 3.0) {
+              state.recovery_state = 'REPLAN';
+              state.recovery_attempts++;
+              state.stuck_counter = 0;
+              state.astar_path = astar_planner([state.x_est, state.y_est], [-5.1, -5.1], state.grid, planner_radius, planner_Wd);
+              state.path_idx = 0;
+            } else if (state.recovery_state === 'REPLAN' && stuck_secs > 3.0) {
+              state.recovery_state = 'ROTATE';
+              state.recovery_timer = 0;
+              state.stuck_counter = 0;
+              state.rotation_dir = state.escape_dir || 1;
+            } else if (state.recovery_state === 'ROTATE') {
+              state.recovery_timer += dt;
+              v = 0; w = 2.8 * state.rotation_dir;
+              if (state.recovery_timer > 2.5) { state.recovery_state = 'BACKUP'; state.backup_timer = 0; state.stuck_counter = 0; }
+            } else if (state.recovery_state === 'BACKUP') {
+              state.backup_timer += dt;
+              v = -0.12; w = 0.8 * state.rotation_dir;
+              if (state.backup_timer > 1.5) {
+                state.recovery_state = 'NONE';
+                state.stuck_counter = 0;
+                state.astar_path = astar_planner([state.x_est, state.y_est], [-5.1, -5.1], state.grid, 0.24, 2.5);
+                state.path_idx = 0;
+                state.using_constrained = true;
+                state.replan_cooldown = 3.0;
+              }
+            }
+
+            if (state.recovery_state === 'NONE' || state.recovery_state === 'REPLAN') {
+              while (state.path_idx < state.astar_path.length - 1 &&
+                     Math.sqrt(
+                       Math.pow(state.x_est - state.astar_path[state.path_idx][0], 2) +
+                       Math.pow(state.y_est - state.astar_path[state.path_idx][1], 2)
+                     ) < 0.35) {
+                state.path_idx++;
+              }
+              const tgt = state.astar_path[state.path_idx] || [-5.1, -5.1];
+              const hErr = angdiff_vec(state.x_est, state.y_est, state.theta_est, tgt[0], tgt[1]);
+              if (state.min_360 < 0.35) {
+                v = -0.06; w = 1.5 * state.escape_dir;
+              } else if (Math.abs(hErr) > 50 * Math.PI / 180) {
+                v = 0; w = 3.2 * hErr;
+              } else {
+                const [dwa_v, dwa_w, dwa_ok] = dwa_planner(
+                  [state.x_est, state.y_est, state.theta_est],
+                  [tgt[0], tgt[1]], [state.dyn_x, state.dyn_y], 0.5, state.grid
+                );
+                if (dwa_ok) { v = dwa_v; w = dwa_w; }
+                else {
+                  v = state.min_front > 0.5 ? 0.12 : 0;
+                  w = 2.5 * hErr;
+                }
+              }
+            }
+          }
+        }
+
+        // ── STATE: DOCKED ────────────────────────────────────────────────────
+        else if (state.bt_state === 'DOCKED') {
+          v = 0; w = 0;
         }
       }
 
-      if (state.navState === 1 || state.navState === 5) {
-        const dx_g = state.targetX - state.x_est;
-        const dy_g = state.targetY - state.y_est;
-        const d_goal = Math.sqrt(dx_g*dx_g + dy_g*dy_g);
-        if (d_goal < 0.15) {
-          state.navState = 0;
-        }
-      } else if (state.navState === 4) {
-        const dx_g = state.targetX - state.x_est;
-        const dy_g = state.targetY - state.y_est;
-        const d_goal = Math.sqrt(dx_g*dx_g + dy_g*dy_g);
-        if (d_goal < 0.2) {
-          state.waypointIdx = (state.waypointIdx + 1) % robotVacuumWaypoints.length;
-          state.targetX = robotVacuumWaypoints[state.waypointIdx].x;
-          state.targetY = robotVacuumWaypoints[state.waypointIdx].y;
-        }
+      // Convert v, w reference to motor wheel velocity commands
+      const wheel_radius = Number(p.wheel_radius || 0.033);
+      const wheel_separation = Number(p.wheel_separation || 0.16);
+      state.omegaL = (v - w * wheel_separation / 2) / wheel_radius;
+      state.omegaR = (v + w * wheel_separation / 2) / wheel_radius;
+
+      // Integration of true pose with collision prevention (isMatlab = true)
+      const next_x = state.x + v * Math.cos(state.theta) * dt;
+      const next_y = state.y + v * Math.sin(state.theta) * dt;
+      const next_theta = angdiff(state.theta + w * dt);
+
+      if (!checkCollisionTwin(next_x, next_y, 0.15, true)) {
+        state.x = next_x;
+        state.y = next_y;
+      }
+      state.theta = next_theta;
+
+      // Save true and estimated chassis velocities
+      state.v_chassis = v;
+      state.w_chassis = w;
+
+      // Deplete battery level Kinematically (FR-5.1, NFR-3)
+      const C_move = 0.08;
+      const C_turn = 0.012;
+      const charge_rate = 5.0; // %/s
+
+      if (state.bt_state === 'DOCKED' || mode_select === 9) {
+        state.battery_level = Math.min(100.0, state.battery_level + charge_rate * dt);
+      } else {
+        const dB = dt * (C_move * Math.abs(v) + C_turn * Math.abs(w));
+        state.battery_level = Math.max(0, state.battery_level - dB);
       }
 
+      // Save trails
       if (state.trail.length === 0 || Math.sqrt(Math.pow(state.x - state.trail[state.trail.length - 1][0], 2) + Math.pow(state.y - state.trail[state.trail.length - 1][1], 2)) > 0.05) {
         state.trail.push([state.x, state.y]);
         if (state.trail.length > 1000) state.trail.shift();
       }
-
-      if (!state.estTrail) state.estTrail = [];
       if (state.estTrail.length === 0 || Math.sqrt(Math.pow(state.x_est - state.estTrail[state.estTrail.length - 1][0], 2) + Math.pow(state.y_est - state.estTrail[state.estTrail.length - 1][1], 2)) > 0.05) {
         state.estTrail.push([state.x_est, state.y_est]);
         if (state.estTrail.length > 1000) state.estTrail.shift();
       }
-
-      let dx_g = state.targetX - state.x_est;
-      let dy_g = state.targetY - state.y_est;
-      let d_g = Math.sqrt(dx_g*dx_g + dy_g*dy_g);
-      let theta_goal = Math.atan2(dy_g, dx_g);
-      let err_theta = Math.atan2(Math.sin(theta_goal - state.theta_est), Math.cos(theta_goal - state.theta_est));
-
-      let V_ref = 0.0;
-      let w_ref = 0.0;
-
-      if (state.navState === 1 || state.navState === 4 || state.navState === 5) {
-        if (d_g > 0.15) {
-          V_ref = Math.min(0.2, 0.3 * d_g);
-          w_ref = 1.5 * err_theta;
-        }
-      } else if (state.navState === 3) {
-        V_ref = 0.0;
-        w_ref = 0.8;
-      }
-
-      const Kp_wheel = Number(p.Kp_wheel || 12.0);
-      const Ki_wheel = Number(p.Ki_wheel || 45.0);
-      const V_bat = 12.0;
-
-      const omegaL_ref = (V_ref - w_ref * wheel_separation / 2) / wheel_radius;
-      const omegaR_ref = (V_ref + w_ref * wheel_separation / 2) / wheel_radius;
-
-      const eL = omegaL_ref - state.omegaL;
-      const eR = omegaR_ref - state.omegaR;
-
-      const V_L_raw = Kp_wheel * eL + Ki_wheel * state.int_errL;
-      const V_R_raw = Kp_wheel * eR + Ki_wheel * state.int_errR;
-
-      const PWM_L = Math.max(-1, Math.min(1, V_L_raw / V_bat));
-      const PWM_R = Math.max(-1, Math.min(1, V_R_raw / V_bat));
-
-      state.lastTime = time;
 
       return {
         outputs: [
@@ -4091,9 +5769,14 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
           state.theta_est,
           state.lidarRanges,
           [state.omegaL, state.omegaR],
-          [PWM_L, PWM_R],
-          state.navState,
-          state.grid
+          [0.8, 0.8], // Dummy PWM signals
+          state.bt_state === 'COVERAGE' ? 4 :
+          state.bt_state === 'RETURN_DOCK' ? 5 :
+          state.bt_state === 'TRANSIT' ? 3 :
+          state.bt_state === 'PLAN_ROOM' ? 2 :
+          state.bt_state === 'DOCKED' ? 6 : 0,
+          state.grid,
+          state.astar_path
         ],
         nextState: state
       };
@@ -4109,30 +5792,70 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       const Kp_wheel = Number(p.Kp_wheel || 12.0);
       const Ki_wheel = Number(p.Ki_wheel || 45.0);
 
-      let tx = state.targetX;
-      let ty = state.targetY;
+      // Get target velocities v, w
+      const vel_cmd_in = ins[3] as number[];
       
-      let dx_g = tx - state.x_est;
-      let dy_g = ty - state.y_est;
-      let dist = Math.sqrt(dx_g*dx_g + dy_g*dy_g);
-      let theta_goal = Math.atan2(dy_g, dx_g);
-      let err_theta = Math.atan2(Math.sin(theta_goal - state.theta_est), Math.cos(theta_goal - state.theta_est));
+      let v = 0;
+      let w = 0;
+      if (vel_cmd_in && (vel_cmd_in[0] !== 0 || vel_cmd_in[1] !== 0)) {
+        v = vel_cmd_in[0] ?? 0;
+        w = vel_cmd_in[1] ?? 0;
+      } else {
+        const dist_dock = Math.sqrt(Math.pow(state.x_est - (-5.1), 2) + Math.pow(state.y_est - (-5.1), 2));
 
-      let V_ref = 0.0;
-      let w_ref = 0.0;
-
-      if (state.navState === 1 || state.navState === 4 || state.navState === 5) {
-        if (dist > 0.15) {
-          V_ref = Math.min(0.2, 0.3 * dist);
-          w_ref = 1.5 * err_theta;
+        if (state.bt_state === 'COVERAGE') {
+          const room_wps = (state.room_waypoints?.length > 0)
+            ? state.room_waypoints
+            : ROOM_WAYPOINTS_MAP[state.current_room ?? 0];
+          const wpIdx = Math.min(state.waypoint_idx ?? 0, room_wps.length - 1);
+          const target = room_wps[wpIdx] || [-5.1, -5.1];
+          const hErr = angdiff_vec(state.x_est, state.y_est, state.theta_est, target[0], target[1]);
+          if (state.min_front < 0.4) {
+            v = 0; w = 2.5 * (state.escape_dir || 1);
+          } else if (Math.abs(hErr) > 40 * Math.PI / 180) {
+            v = 0; w = 2.8 * hErr;
+          } else {
+            v = 0.28; w = 2.2 * hErr;
+          }
+        } else if (state.bt_state === 'PLAN_ROOM' || state.bt_state === 'TRANSIT') {
+          const tgt = state.astar_path[state.path_idx ?? 0] || [-5.1, -5.1];
+          const hErr = angdiff_vec(state.x_est, state.y_est, state.theta_est, tgt[0], tgt[1]);
+          if (state.min_front < 0.35) {
+            v = -0.05; w = 1.8 * (state.escape_dir || 1);
+          } else if (Math.abs(hErr) > 45 * Math.PI / 180) {
+            v = 0; w = 2.8 * hErr;
+          } else {
+            v = 0.22; w = 2.2 * hErr;
+          }
+        } else if (state.bt_state === 'RETURN_DOCK') {
+          if (dist_dock < 0.15) {
+            v = 0; w = 0;
+          } else if (dist_dock < 0.6) {
+            const hErr = angdiff_vec(state.x_est, state.y_est, state.theta_est, -5.1, -5.1);
+            if (state.min_360 < 0.3) {
+              v = -0.06; w = 1.2 * (state.escape_dir || 1);
+            } else if (Math.abs(hErr) > 15 * Math.PI / 180) {
+              v = 0.03; w = 3.0 * hErr;
+            } else {
+              v = 0.12; w = 1.5 * hErr;
+            }
+          } else {
+            const tgt = state.astar_path[state.path_idx ?? 0] || [-5.1, -5.1];
+            const hErr = angdiff_vec(state.x_est, state.y_est, state.theta_est, tgt[0], tgt[1]);
+            if (state.min_360 < 0.35) {
+              v = -0.06; w = 1.5 * (state.escape_dir || 1);
+            } else if (Math.abs(hErr) > 50 * Math.PI / 180) {
+              v = 0; w = 3.2 * hErr;
+            } else {
+              v = 0.15; w = 2.5 * hErr;
+            }
+          }
         }
-      } else if (state.navState === 3) {
-        V_ref = 0.0;
-        w_ref = 0.8;
+        // INIT and DOCKED: stay put
       }
 
-      const omegaL_ref = (V_ref - w_ref * wheel_separation / 2) / wheel_radius;
-      const omegaR_ref = (V_ref + w_ref * wheel_separation / 2) / wheel_radius;
+      const omegaL_ref = (v - w * wheel_separation / 2) / wheel_radius;
+      const omegaR_ref = (v + w * wheel_separation / 2) / wheel_radius;
 
       const eL = omegaL_ref - state.omegaL;
       const eR = omegaR_ref - state.omegaR;
@@ -4154,12 +5877,12 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
       const vL = state.omegaL * wheel_radius;
       const vR = state.omegaR * wheel_radius;
-      const V = (vL + vR) / 2;
-      const w = (vR - vL) / wheel_separation;
+      const V_actual = (vL + vR) / 2;
+      const w_actual = (vR - vL) / wheel_separation;
 
-      const dx = V * Math.cos(state.theta);
-      const dy = V * Math.sin(state.theta);
-      const dtheta = w;
+      const dx = V_actual * Math.cos(state.theta);
+      const dy = V_actual * Math.sin(state.theta);
+      const dtheta = w_actual;
 
       let dint_errL = eL;
       if ((V_L_raw >= V_bat && eL > 0) || (V_L_raw <= -V_bat && eL < 0)) {
@@ -4170,7 +5893,21 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         dint_errR = 0;
       }
 
-      return [dx, dy, dtheta, domegaL, domegaR, dcurrentL, dcurrentR, dint_errL, dint_errR];
+      const next_x = state.x + dx * 0.08;
+      const next_y = state.y + dy * 0.08;
+      const collided = checkCollisionTwin(next_x, next_y, 0.15, true);
+
+      return {
+        x: collided ? 0 : dx,
+        y: collided ? 0 : dy,
+        theta: dtheta,
+        omegaL: domegaL,
+        omegaR: domegaR,
+        currentL: dcurrentL,
+        currentR: dcurrentR,
+        int_errL: dint_errL,
+        int_errR: dint_errR
+      };
     }
   }),
 
@@ -4303,7 +6040,11 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       const dy = V * Math.sin(state.theta) + cg_offset * w * Math.cos(state.theta);
       const dtheta = w;
       
-      return [dx, dy, dtheta];
+      const next_x = state.x + dx * 0.08;
+      const next_y = state.y + dy * 0.08;
+      const collided = checkCollisionTwin(next_x, next_y, 0.15, false);
+
+      return [collided ? 0 : dx, collided ? 0 : dy, dtheta];
     }
   }),
 
@@ -6463,6 +8204,18 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
 
 export const XBRIDGES_CATEGORIES = [
+  {
+    name: 'Navigation & Autonomous',
+    blocks: [
+      { type: 'ROBOT_VACUUM_BOUSTROPHEDON_SWEEP', label: 'Boustrophedon Sweep', icon: 'navigation' },
+      { type: 'ROBOT_VACUUM_ERODE_MASK', label: 'Room Mask Erosion', icon: 'crop' },
+      { type: 'ROBOT_VACUUM_DOOR_TRACKER', label: 'Entry Door Tracker', icon: 'log-in' },
+      { type: 'ROBOT_VACUUM_DOOR_CROSSING', label: 'Door Crossing Detector', icon: 'check-square' },
+      { type: 'ROBOT_VACUUM_CONTINUOUS_ENERGY', label: 'Continuous Energy Monitor', icon: 'battery-charging' },
+      { type: 'ROBOT_VACUUM_TOPOLOGY_RETURN', label: 'Topology Return Planner', icon: 'git-branch' },
+      { type: 'ROBOT_VACUUM_THETA_STAR', label: 'Theta* Path Planner', icon: 'activity' }
+    ]
+  },
   {
     name: 'Learning Models',
     blocks: [

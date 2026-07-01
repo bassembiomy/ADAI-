@@ -243,16 +243,16 @@ describe('X-Bridges Learning Models Block Tests', () => {
     });
 
     let state = block.state;
-    expect(state.x).toBe(0);
-    expect(state.y).toBe(0);
-    expect(state.navState).toBe(4);
+    expect(state.x).toBe(-5.1);
+    expect(state.y).toBe(-5.1);
+    expect(state.bt_state).toBe('INIT');
 
     let res = block.execute([1.5, 1.5, 4], block.params, state, 0.02);
     state = res.nextState;
 
-    expect(res.outputs.length).toBe(10);
-    expect(res.outputs[0]).toBe(0);
-    expect(state.lidarRanges.length).toBe(8);
+    expect(res.outputs.length).toBe(12);
+    expect(Array.isArray(res.outputs[0])).toBe(true);
+    expect(state.lidarRanges.length).toBe(45);
     
     let mappedCount = 0;
     for (let r = 0; r < 30; r++) {
@@ -263,8 +263,8 @@ describe('X-Bridges Learning Models Block Tests', () => {
     expect(mappedCount).toBeGreaterThan(0);
 
     const derivs = block.evaluateDerivatives!([1.5, 1.5, 4], block.params, state, 0.02);
-    expect(derivs.length).toBe(9);
-    expect(typeof derivs[0]).toBe('number');
+    expect(typeof derivs).toBe('object');
+    expect(typeof derivs.x).toBe('number');
   });
 
   it('TC-ROBOT-02: Modular Robot Vacuum Feedback Loop Compilation and Step', () => {

@@ -23,6 +23,14 @@ export interface OPMState {
   value?: string;
 }
 
+export interface OPMPort {
+  id: string;
+  name: string;
+  type: 'consumption' | 'result' | 'effect' | 'agent' | 'instrument' | 'trigger' | 'condition' | 'standard';
+  direction: 'input' | 'output';
+  position: 'left' | 'right' | 'top' | 'bottom';
+}
+
 export interface OPMNodeData {
   name: string;
   type: OPMNodeType;
@@ -32,6 +40,8 @@ export interface OPMNodeData {
   parentId?: string | null;
   // For hierarchical refinement:
   zoomedIn?: boolean;
+  inputs?: OPMPort[];
+  outputs?: OPMPort[];
 }
 
 export interface OPMEdgeData {
@@ -39,6 +49,8 @@ export interface OPMEdgeData {
   label?: string;
   // Conditions or specifications
   conditionText?: string;
+  isSimulating?: boolean;
+  isActiveFlow?: boolean;
 }
 
 export interface SimulationLog {

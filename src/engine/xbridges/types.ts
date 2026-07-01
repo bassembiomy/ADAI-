@@ -59,13 +59,15 @@ export interface XModel {
 }
 
 export interface SolverOptions {
-  solver: 'euler' | 'rk4' | 'ode45' | 'fixedStep';
+  solver: 'euler' | 'rk4' | 'ode4' | 'ode45' | 'fixedStep';
   fixedStep?: number; // e.g. 0.01 for RK4/Euler
   startTime: number;
   stopTime: number;
   maxStep?: number;
   minStep?: number;
   tolerance?: number;
+  relTol?: number;
+  absTol?: number;
 }
 
 export interface ModelDiagnostic {

@@ -232,20 +232,55 @@ export const OPMEdge: React.FC<EdgeProps<OPMEdgeData>> = ({
         </defs>
       </svg>
 
+      {/* Background thicker glow path */}
+      <path
+        id={`${id}-glow`}
+        d={edgePath}
+        fill="none"
+        stroke={selected ? '#fb923c' : (data?.isActiveFlow ? strokeColor : '#27272a')}
+        strokeWidth={selected ? 5 : (data?.isActiveFlow ? 5.5 : 2.5)}
+        strokeOpacity={selected ? 0.35 : (data?.isActiveFlow ? 0.6 : 0.05)}
+        className="transition-all duration-300 pointer-events-none"
+        style={{
+          filter: (selected || data?.isActiveFlow) ? `drop-shadow(0 0 5px ${selected ? '#fb923c' : strokeColor})` : undefined
+        }}
+      />
+
       {/* Main Edge Path */}
       <path
         id={id}
         style={{
           ...style,
-          stroke: strokeColor,
-          strokeWidth,
+          stroke: selected ? '#fb923c' : (data?.isActiveFlow ? strokeColor : '#52525b'),
+          strokeWidth: selected ? 2.5 : (data?.isActiveFlow ? 2.2 : 1.2),
           strokeDasharray,
         }}
-        className="react-flow__edge-path transition-all"
+        className="react-flow__edge-path transition-all duration-300"
         d={edgePath}
         markerEnd={customMarkerEnd || markerEnd}
         markerStart={customMarkerStart}
       />
+
+      {/* Thick invisible interaction path to make clicking/hovering easy */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={15}
+        className="react-flow__edge-interaction cursor-pointer"
+      />
+
+      {/* Moving Signal Particle / Pulse (only on active execution flows) */}
+      {data?.isActiveFlow && (
+        <circle r="3.5" fill="#ffffff" style={{ filter: 'drop-shadow(0 0 5px #ffffff)' }}>
+          <animateMotion 
+            dur="1.2s" 
+            repeatCount="indefinite" 
+            path={edgePath} 
+            calcMode="linear"
+          />
+        </circle>
+      )}
 
       {/* Edge label if present */}
       {data?.label && (

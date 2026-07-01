@@ -44,6 +44,18 @@ export const XBRIDGES_CATEGORIES = [
     ]
   },
   {
+    name: 'Navigation & Autonomous',
+    blocks: [
+      { type: 'ROBOT_VACUUM_BOUSTROPHEDON_SWEEP', label: 'Boustrophedon Sweep', icon: 'navigation' },
+      { type: 'ROBOT_VACUUM_ERODE_MASK', label: 'Room Mask Erosion', icon: 'crop' },
+      { type: 'ROBOT_VACUUM_DOOR_TRACKER', label: 'Entry Door Tracker', icon: 'log-in' },
+      { type: 'ROBOT_VACUUM_DOOR_CROSSING', label: 'Door Crossing Detector', icon: 'check-square' },
+      { type: 'ROBOT_VACUUM_CONTINUOUS_ENERGY', label: 'Continuous Energy Monitor', icon: 'battery-charging' },
+      { type: 'ROBOT_VACUUM_TOPOLOGY_RETURN', label: 'Topology Return Planner', icon: 'git-branch' },
+      { type: 'ROBOT_VACUUM_THETA_STAR', label: 'Theta* Path Planner', icon: 'activity' }
+    ]
+  },
+  {
     name: 'Learning Models',
     blocks: [
       { type: 'AC_MOTOR_PID_CONTROL', label: 'AC Motor PID Control', icon: 'graduation-cap' },

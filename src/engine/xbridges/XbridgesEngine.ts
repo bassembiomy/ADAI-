@@ -304,10 +304,13 @@ export class XbridgesEngine {
 
     // Detect if we need to re-seed state.
     // The keys are: initialCondition, initW1, initW2, initBias, alpha, gamma, epsilon, numStates, numActions, etc.
-    const reseedKeys = ['initialCondition', 'initW1', 'initW2', 'initBias', 'alpha', 'gamma', 'epsilon', 'numStates', 'numActions'];
+    const reseedKeys = [
+      'initialCondition', 'initW1', 'initW2', 'initBias', 'alpha', 'gamma', 'epsilon', 
+      'numStates', 'numActions', 'numerator', 'denominator', 'zeros', 'poles', 'gain'
+    ];
     let needsReseed = false;
     for (const key of reseedKeys) {
-      if (newParams[key] !== undefined && newParams[key] !== block.params[key]) {
+      if (newParams[key] !== undefined && JSON.stringify(newParams[key]) !== JSON.stringify(block.params[key])) {
         needsReseed = true;
       }
     }
@@ -316,11 +319,12 @@ export class XbridgesEngine {
     block.params = { ...block.params, ...newParams };
 
     if (needsReseed) {
-      // Re-seed state from BLOCK_LIBRARY
+      // Re-seed state and re-generate parameters (e.g. state-space matrices A, B, C, D) from BLOCK_LIBRARY
       try {
         if (BLOCK_LIBRARY[block.type]) {
           const freshBlock = BLOCK_LIBRARY[block.type](block.id, block.params);
           block.state = freshBlock.state;
+          block.params = { ...block.params, ...freshBlock.params };
         }
       } catch (e) {
         console.error(`Failed to re-seed state for block ${blockId}:`, e);

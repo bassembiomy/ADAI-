@@ -1102,7 +1102,7 @@ export const XbridgesWorkspace: React.FC<{
             try {
               const freshBlock = BLOCK_LIBRARY[d.type](d.id, d.params || {});
               // Always start with fresh state on Play - never resume trained/stale state
-              return { ...freshBlock, id: d.id, state: freshBlock.state, params: { ...freshBlock.params, ...d.params } };
+              return { ...freshBlock, id: d.id, state: freshBlock.state, params: { ...d.params, ...freshBlock.params } };
             } catch (e) {
               return d; // fallback to raw data if rebuild fails
             }
@@ -1410,6 +1410,15 @@ export const XbridgesWorkspace: React.FC<{
             updatedData.inputs = freshDef.inputs;
             updatedData.outputs = freshDef.outputs;
           }
+
+          if (['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN'].includes(n.data.type)) {
+            try {
+              const freshDef = BLOCK_LIBRARY[n.data.type](blockId, newParams);
+              updatedData.params = { ...newParams, ...freshDef.params };
+            } catch (e) {
+              console.error(`Failed to refresh params for ${n.data.type}:`, e);
+            }
+          }
         }
 
         return { ...n, data: updatedData };
@@ -1489,6 +1498,7 @@ export const XbridgesWorkspace: React.FC<{
     setCurrentStepIndex(0);
     setCompletedObjectives({});
     setLabCompleted(false);
+    setViewPath(['root']);
     setNodes([]);
     setEdges([]);
   };
@@ -1572,6 +1582,7 @@ export const XbridgesWorkspace: React.FC<{
     setCurrentStepIndex(0);
     setCompletedObjectives({});
     setLabCompleted(false);
+    setViewPath(['root']);
 
     const newNodes = lab.nodes.map(n => {
       const blockDef = BLOCK_LIBRARY[n.type](n.id, n.params || {});
@@ -1581,7 +1592,7 @@ export const XbridgesWorkspace: React.FC<{
         position: n.position,
         data: {
           ...blockDef,
-          parentId: currentParentId,
+          parentId: (n as any).parentId || 'root',
           selected: false,
           onUpdate: (newData: any) => updateBlock(n.id, newData),
           onOpenScope: (blockId: string) => setOpenScopes(prev => prev.includes(blockId) ? prev : [...prev, blockId])

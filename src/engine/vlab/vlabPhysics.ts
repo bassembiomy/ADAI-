@@ -3,6 +3,12 @@ import { DAEAssembler } from './DAEAssembler';
 import { ImplicitSolver } from './ImplicitSolver';
 import { EquationContext, AssembledSystem, PhysicalDomain } from './types';
 
+// SDIRK-3 Butcher tableau constants
+const GAMMA = 0.4358665215;
+const A21 = 0.5 * (1 - GAMMA);
+const A31 = -0.25 * (6 * GAMMA * GAMMA - 16 * GAMMA + 1);
+const A32 = 0.25 * (6 * GAMMA * GAMMA - 20 * GAMMA + 5);
+
 class EventTriggerError extends Error {
   hEvent: number;
   constructor(hEvent: number) {
@@ -51,10 +57,12 @@ export class VLabPhysicsEngine {
       x = new Array(system.systemSize).fill(0);
       
       // Initialize reference temperatures to 293.15 K (20°C) instead of 0
-      // for thermal nodes to avoid absolute zero calculations
+      // for thermal nodes to avoid absolute zero calculations, and fluid/gas pressures to 101325 Pa (1 atm)
       system.variableNames.forEach((name, idx) => {
         if (name.includes('(thermal)')) {
           x[idx] = 293.15;
+        } else if (name.includes('(fluid)') || name.includes('(gas)')) {
+          x[idx] = 101325;
         } else if (name.includes('_state_')) {
           const parts = name.split('_state_');
           if (parts.length === 2) {
@@ -88,6 +96,7 @@ export class VLabPhysicsEngine {
     let prevX = prevState?.prevX ? [...prevState.prevX] : undefined;
     let lastDt = prevState?.prevDt;
     let bdfOrder = (prevX && lastDt) ? 2 : 1;
+    let useSdirk = prevState?.useSdirk || prevState?.solver === 'sdirk3' || false;
     
     // Choose initial step size. Start with last accepted size but never start below 1ms
     // to avoid excessive step count.
@@ -118,40 +127,112 @@ export class VLabPhysicsEngine {
             stateDerivatives: new Array(system.systemSize).fill(0)
           };
           
-          if (bdfOrder === 2 && prevX && lastDt) {
-            ctx.prevPrevStates = [...prevX];
-            ctx.prevDt = lastDt;
-            ctx.order = 2;
-          } else {
-            ctx.order = 1;
-          }
-          
-          // Formulate derivative function depending on BDF order
-          let solveResiduals: (solveX: number[], solveCtx: EquationContext) => number[];
-          if (ctx.order === 2 && ctx.prevPrevStates && ctx.prevDt) {
-            const r = h / ctx.prevDt;
-            const a0 = (2 * r + 1) / (h * (r + 1));
-            const a1 = -(r + 1) / h;
-            const a2 = (r * r) / (h * (r + 1));
-            
-            solveResiduals = (solveX, solveCtx) => {
+          if (useSdirk) {
+            // SDIRK-3 Solve Stage 1
+            const ctx1 = {
+              dt: h * GAMMA,
+              time: t + h * GAMMA,
+              parameters: {},
+              prevStates: [...xCurrent],
+              states: [...xCurrent],
+              stateDerivatives: new Array(system.systemSize).fill(0),
+              order: 1
+            };
+            const solveResiduals1 = (solveX: number[], solveCtx: EquationContext) => {
               const dx = solveX.map((val, idx) => {
                 if (system.isDifferentialState[idx]) {
-                  return a0 * val + a1 * solveCtx.prevStates[idx] + a2 * solveCtx.prevPrevStates![idx];
+                  return (val - solveCtx.prevStates[idx]) / (h * GAMMA);
                 } else {
                   return (val - solveCtx.prevStates[idx]) / h;
                 }
               });
               return system.residuals(solveX, dx, solveCtx);
             };
-          } else {
-            solveResiduals = (solveX, solveCtx) => {
-              const dx = solveX.map((val, idx) => (val - solveCtx.prevStates[idx]) / h);
+            const X1 = this.solver.solve(solveResiduals1, xCurrent, ctx1);
+            const g1 = X1.map((val, idx) => system.isDifferentialState[idx] ? (val - xCurrent[idx]) / (h * GAMMA) : 0);
+
+            // SDIRK-3 Solve Stage 2
+            const z2 = xCurrent.map((val, idx) => system.isDifferentialState[idx] ? val + h * A21 * g1[idx] : val);
+            const ctx2 = {
+              dt: h * GAMMA,
+              time: t + h * (GAMMA + A21),
+              parameters: {},
+              prevStates: [...z2],
+              states: [...z2],
+              stateDerivatives: new Array(system.systemSize).fill(0),
+              order: 1
+            };
+            const solveResiduals2 = (solveX: number[], solveCtx: EquationContext) => {
+              const dx = solveX.map((val, idx) => {
+                if (system.isDifferentialState[idx]) {
+                  return (val - solveCtx.prevStates[idx]) / (h * GAMMA);
+                } else {
+                  return (val - solveCtx.prevStates[idx]) / h;
+                }
+              });
               return system.residuals(solveX, dx, solveCtx);
             };
+            const X2 = this.solver.solve(solveResiduals2, X1, ctx2);
+            const g2 = X2.map((val, idx) => system.isDifferentialState[idx] ? (val - z2[idx]) / (h * GAMMA) : 0);
+
+            // SDIRK-3 Solve Stage 3
+            const z3 = xCurrent.map((val, idx) => system.isDifferentialState[idx] ? val + h * A31 * g1[idx] + h * A32 * g2[idx] : val);
+            const ctx3 = {
+              dt: h * GAMMA,
+              time: t + h,
+              parameters: {},
+              prevStates: [...z3],
+              states: [...z3],
+              stateDerivatives: new Array(system.systemSize).fill(0),
+              order: 1
+            };
+            const solveResiduals3 = (solveX: number[], solveCtx: EquationContext) => {
+              const dx = solveX.map((val, idx) => {
+                if (system.isDifferentialState[idx]) {
+                  return (val - solveCtx.prevStates[idx]) / (h * GAMMA);
+                } else {
+                  return (val - solveCtx.prevStates[idx]) / h;
+                }
+              });
+              return system.residuals(solveX, dx, solveCtx);
+            };
+            nextX = this.solver.solve(solveResiduals3, X2, ctx3);
+          } else {
+            if (bdfOrder === 2 && prevX && lastDt) {
+              ctx.prevPrevStates = [...prevX];
+              ctx.prevDt = lastDt;
+              ctx.order = 2;
+            } else {
+              ctx.order = 1;
+            }
+            
+            // Formulate derivative function depending on BDF order
+            let solveResiduals: (solveX: number[], solveCtx: EquationContext) => number[];
+            if (ctx.order === 2 && ctx.prevPrevStates && ctx.prevDt) {
+              const r = h / ctx.prevDt;
+              const a0 = (2 * r + 1) / (h * (r + 1));
+              const a1 = -(r + 1) / h;
+              const a2 = (r * r) / (h * (r + 1));
+              
+              solveResiduals = (solveX, solveCtx) => {
+                const dx = solveX.map((val, idx) => {
+                  if (system.isDifferentialState[idx]) {
+                    return a0 * val + a1 * solveCtx.prevStates[idx] + a2 * solveCtx.prevPrevStates![idx];
+                  } else {
+                    return (val - solveCtx.prevStates[idx]) / h;
+                  }
+                });
+                return system.residuals(solveX, dx, solveCtx);
+              };
+            } else {
+              solveResiduals = (solveX, solveCtx) => {
+                const dx = solveX.map((val, idx) => (val - solveCtx.prevStates[idx]) / h);
+                return system.residuals(solveX, dx, solveCtx);
+              };
+            }
+            
+            nextX = this.solver.solve(solveResiduals, xCurrent, ctx);
           }
-          
-          nextX = this.solver.solve(solveResiduals, xCurrent, ctx);
           
           // --- Zero Crossing & Event Detection ---
           const eventInfo = this.detectZeroCrossings(nodes, edges, xCurrent, nextX, system);
@@ -162,7 +243,7 @@ export class VLabPhysicsEngine {
           
           // --- Local Truncation Error (LTE) Control ---
           let lte = 0;
-          if (h > 1e-6) {
+          if (h > 1e-6 && !useSdirk) {
             const bdf1Residuals = (solveX: number[], solveCtx: EquationContext) => {
               const dx = solveX.map((val, idx) => (val - solveCtx.prevStates[idx]) / h);
               return system.residuals(solveX, dx, solveCtx);
@@ -189,7 +270,7 @@ export class VLabPhysicsEngine {
           }
           
           // Grow step size if error is low or if we are successfully resolving minimum steps
-          if ((lte < 0.1 || h <= 1e-6) && h < 0.05) {
+          if ((lte < 0.1 || h <= 1e-6 || useSdirk) && h < 0.05) {
             h = Math.min(h * 1.5, 0.05);
           }
           
@@ -212,6 +293,10 @@ export class VLabPhysicsEngine {
               bdfOrder = 1; // force BDF-1 across discontinuity
             }
           } else {
+            if (!useSdirk) {
+              useSdirk = true;
+              console.warn("DAE BDF solver convergence issue. Promoting to SDIRK-3.");
+            }
             if (h <= 1e-6) {
               // Non-convergence at minimum step size.
               // Throw the error so the simulation triggers the Euler fallback solver
@@ -239,22 +324,24 @@ export class VLabPhysicsEngine {
 
     if (hasAirChamber) {
       // ── Air Fryer Lab ──
-      const idx = system.variableNames.findIndex(name => name.includes('air_chamber') || name.includes('temp_sensor') || name.includes('cooking_basket'));
-      const temp = idx !== -1 ? xCurrent[idx] : 293.15;
-      scopeValues = Math.max(0.0, temp - 293.15); // Return Celsius offset
+      // temp_sensor outputs absolute temperature in Kelvin. We convert to Celsius offset.
+      const indices = system.scopeOutputs.get('thermal_scope') || [];
+      const tempK = indices.length > 0 ? xCurrent[indices[0]] : 293.15;
+      scopeValues = Math.max(0.0, tempK - 293.15); // Return Celsius offset (T - 20°C ambient)
     } 
     else if (hasBlenderMotor) {
       // ── Blender Lab ──
-      const idx = system.variableNames.findIndex(name => name.includes('blade_inertia') || name.includes('speed_sensor') || name.includes('blender_motor_across'));
-      const omega = idx !== -1 ? xCurrent[idx] : 0;
+      // speed_sensor outputs omega (rad/s). We convert to RPM.
+      const indices = system.scopeOutputs.get('blender_scope') || [];
+      const omega = indices.length > 0 ? xCurrent[indices[0]] : 0;
       scopeValues = omega * (60 / (2 * Math.PI)); // Return RPM
     } 
     else if (hasSpeedPID) {
       // ── PID Speed Control Lab ──
-      const wIdx = system.variableNames.findIndex(name => name.includes('speed_sensor') || name.includes('ac_motor') || name.includes('encoder'));
+      const indices = system.scopeOutputs.get('scope') || [];
+      const omega = indices.length > 0 ? xCurrent[indices[0]] : 0;
       const refIdx = system.variableNames.findIndex(name => name.includes('ref_speed'));
-      const omega = wIdx !== -1 ? xCurrent[wIdx] : 0;
-      const ref = refIdx !== -1 ? xCurrent[refIdx] : 0;
+      const ref = refIdx !== -1 ? xCurrent[refIdx] : 157;
       scopeValues = {
         value: omega * (60 / (2 * Math.PI)),
         target: ref * (60 / (2 * Math.PI))
@@ -262,9 +349,9 @@ export class VLabPhysicsEngine {
     } 
     else if (hasBasketLoad) {
       // ── Washing Machine Lab ──
-      const wIdx = system.variableNames.findIndex(name => name.includes('basket_load') || name.includes('speed_sensor'));
-      const iIdx = system.variableNames.findIndex(name => name.includes('dc_motor_branch_current') || name.includes('basket_load_branch') || name.includes('amps'));
-      const omega = wIdx !== -1 ? xCurrent[wIdx] : 0;
+      const indices = system.scopeOutputs.get('wash_scope') || [];
+      const omega = indices.length > 0 ? xCurrent[indices[0]] : 0;
+      const iIdx = system.variableNames.findIndex(name => name.includes('wash_motor_branch_ia') || name.includes('inverter_branch_current_a'));
       const amps = iIdx !== -1 ? Math.abs(xCurrent[iIdx]) : 0;
       scopeValues = {
         value: omega * (60 / (2 * Math.PI)),
@@ -273,9 +360,9 @@ export class VLabPhysicsEngine {
     } 
     else if (hasVfdController) {
       // ── VFD Inverter Lab ──
-      const wIdx = system.variableNames.findIndex(name => name.includes('im_motor') || name.includes('vfd_scope') || name.includes('encoder'));
+      const indices = system.scopeOutputs.get('vfd_scope') || [];
+      const omega = indices.length > 0 ? xCurrent[indices[0]] : 0;
       const refIdx = system.variableNames.findIndex(name => name.includes('ref_speed'));
-      const omega = wIdx !== -1 ? xCurrent[wIdx] : 0;
       const ref = refIdx !== -1 ? xCurrent[refIdx] : 0;
       scopeValues = {
         value: omega * (60 / (2 * Math.PI)),
@@ -284,12 +371,13 @@ export class VLabPhysicsEngine {
     } 
     else if (hasMwCavity) {
       // ── Microwave Lab ──
-      const idx = system.variableNames.findIndex(name => name.includes('mw_cavity'));
-      scopeValues = idx !== -1 ? xCurrent[idx] : 25.0; // Return absolute Celsius
+      const indices = system.scopeOutputs.get('mw_scope') || [];
+      const tempK = indices.length > 0 ? xCurrent[indices[0]] : 298.15;
+      scopeValues = tempK - 273.15; // Return absolute Celsius
     } 
     else {
       // ── Generic Scope Output Mapping ──
-      const scopeNodes = nodes.filter(n => (n.data as any)?.type === 'scope');
+      const scopeNodes = nodes.filter(n => (n.data as any)?.type === 'scope' || (n.data as any)?.blockId === 'scope');
       if (scopeNodes.length > 0) {
         const scopeId = scopeNodes[0].id;
         const indices = system.scopeOutputs.get(scopeId);
@@ -318,7 +406,8 @@ export class VLabPhysicsEngine {
       prevDt: lastDt,
       time: tTarget,
       systemSize: system.systemSize,
-      scopeValues
+      scopeValues,
+      useSdirk
     };
   }
 
@@ -349,6 +438,10 @@ export class VLabPhysicsEngine {
         });
         
         const params = comp.params;
+        const getPortVal = (portId: string): number => {
+          const pIdx = ports.indexOf(portId);
+          return pIdx !== -1 ? acrossVals[pIdx] : 0;
+        };
         
         if (type === 'switch') {
           const ctrl = acrossVals[2] !== undefined ? acrossVals[2] : 0;
@@ -380,6 +473,26 @@ export class VLabPhysicsEngine {
           const val = acrossVals[0] || 0;
           indicators.push(val - start);
           indicators.push(val - end);
+        }
+        else if (type === 'diode') {
+          const V = getPortVal('p') - getPortVal('n');
+          const Vf = params.Vf !== undefined ? params.Vf : 0.7;
+          indicators.push(V - Vf);
+        }
+        else if (type === 'nmos') {
+          const Vgs = getPortVal('g') - getPortVal('s');
+          const Vds = getPortVal('d') - getPortVal('s');
+          const Vth = params.Vth !== undefined ? params.Vth : 2.0;
+          indicators.push(Vgs - Vth);
+          indicators.push(Vds - (Vgs - Vth));
+        }
+        else if (type === 'igbt') {
+          const Vge = getPortVal('g') - getPortVal('e');
+          const Vce = getPortVal('c') - getPortVal('e');
+          const Vge_th = params.Vge_th !== undefined ? params.Vge_th : 5.5;
+          const Vce_sat = params.Vce_sat !== undefined ? params.Vce_sat : 1.5;
+          indicators.push(Vge - Vge_th);
+          indicators.push(Vce - Vce_sat);
         }
         
         return indicators;

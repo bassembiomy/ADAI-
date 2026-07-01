@@ -96,6 +96,47 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         description: 'An ideal switch controlled by a physical signal. When the control signal is positive, the switch is closed with a low resistance Ron.'
       },
       {
+        id: 'diode', name: 'Diode', color: '#60a5fa', icon: 'diode', category: 'Semiconductors',
+        params: {
+          Ron: { value: 0.01, unit: 'Ω', label: 'On Resistance' },
+          Roff: { value: 1e6, unit: 'Ω', label: 'Off Resistance' },
+          Vf: { value: 0.7, unit: 'V', label: 'Forward Voltage' }
+        },
+        ports: [{ id: 'p', pos: 'left', label: 'A' }, { id: 'n', pos: 'right', label: 'K' }],
+        equation: 'V = I * Ron + Vf',
+        description: 'An ideal diode with piecewise-linear behavior and forward voltage drop.'
+      },
+      {
+        id: 'nmos', name: 'N-MOSFET', color: '#60a5fa', icon: 'nmos', category: 'Semiconductors',
+        params: {
+          kn: { value: 0.5, unit: 'A/V²', label: 'Transconductance' },
+          Vth: { value: 2.0, unit: 'V', label: 'Threshold Voltage' },
+          lambda: { value: 0.01, unit: '1/V', label: 'Channel Mod.' }
+        },
+        ports: [
+          { id: 'd', pos: 'top', label: 'D' },
+          { id: 's', pos: 'bottom', label: 'S' },
+          { id: 'g', pos: 'left', label: 'G', domain: 'physical' }
+        ],
+        equation: 'Id = f(Vgs, Vds)',
+        description: 'N-channel MOSFET Level-1 model with physical signal gate input.'
+      },
+      {
+        id: 'igbt', name: 'IGBT', color: '#60a5fa', icon: 'igbt', category: 'Semiconductors',
+        params: {
+          Vge_th: { value: 5.5, unit: 'V', label: 'Gate Threshold' },
+          Vce_sat: { value: 1.5, unit: 'V', label: 'Saturation Vce' },
+          Rd: { value: 0.05, unit: 'Ω', label: 'On Resistance' }
+        },
+        ports: [
+          { id: 'c', pos: 'top', label: 'C' },
+          { id: 'e', pos: 'bottom', label: 'E' },
+          { id: 'g', pos: 'left', label: 'G', domain: 'physical' }
+        ],
+        equation: 'Ic = (Vce - Vce_sat)/Rd',
+        description: 'Insulated Gate Bipolar Transistor modeled as a voltage-controlled switch with Saturation Voltage.'
+      },
+      {
         id: 'rotational_electromechanical_converter', name: 'Rotational EM Converter', color: '#f59e0b', icon: 'rotational_em', category: 'Couplings',
         params: { 
           K: { value: 1, unit: 'V-s/rad', label: 'Motor Constant' },
@@ -1643,6 +1684,97 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         id: 'conn_label', name: 'Connection Label', color: '#4b5563', icon: 'conn_label', category: 'General',
         params: { tag: { value: 'A', unit: '', label: 'Label' } },
         ports: [{ id: 'a', pos: 'left', label: '' }]
+      }
+    ]
+  },
+  {
+    type: 'Fluid / Steam',
+    blocks: [
+      {
+        id: 'fluid_ref', name: 'Fluid Ground (Atm)', color: '#06b6d4', icon: 'minus', category: 'Elements',
+        params: {},
+        ports: [{ id: 'p', pos: 'bottom', label: 'P' }]
+      },
+      {
+        id: 'fluid_resistance', name: 'Fluid Resistance', color: '#06b6d4', icon: 'fluid_res', category: 'Elements',
+        params: { Rf: { value: 1e5, unit: 'Pa·s/kg', label: 'Resistance' } },
+        ports: [{ id: 'p', pos: 'left', label: 'In' }, { id: 'n', pos: 'right', label: 'Out' }]
+      },
+      {
+        id: 'orifice', name: 'Orifice', color: '#06b6d4', icon: 'orifice', category: 'Elements',
+        params: {
+          Cd: { value: 0.6, unit: '1', label: 'Discharge Coeff.' },
+          A: { value: 1e-4, unit: 'm²', label: 'Area' },
+          rho: { value: 1.2, unit: 'kg/m³', label: 'Density' }
+        },
+        ports: [{ id: 'p', pos: 'left', label: 'In' }, { id: 'n', pos: 'right', label: 'Out' }]
+      },
+      {
+        id: 'fluid_capacitance', name: 'Fluid Capacitance', color: '#06b6d4', icon: 'database', category: 'Elements',
+        params: { Cf: { value: 1e-5, unit: 'kg/Pa', label: 'Capacitance' } },
+        ports: [{ id: 'p', pos: 'left', label: 'In' }]
+      },
+      {
+        id: 'fluid_inertance', name: 'Fluid Inertance', color: '#06b6d4', icon: 'arrow-right', category: 'Elements',
+        params: { Li: { value: 100, unit: 'Pa·s²/kg', label: 'Inertance' } },
+        ports: [{ id: 'p', pos: 'left', label: 'In' }, { id: 'n', pos: 'right', label: 'Out' }]
+      },
+      {
+        id: 'pressure_source', name: 'Pressure Source', color: '#06b6d4', icon: 'zap', category: 'Sources',
+        params: { P: { value: 101325, unit: 'Pa', label: 'Pressure' } },
+        ports: [{ id: 'p', pos: 'right', label: 'Out' }]
+      },
+      {
+        id: 'ctrl_pressure_source', name: 'Ctrl Pressure Source', color: '#06b6d4', icon: 'zap', category: 'Sources',
+        params: {},
+        ports: [{ id: 'p', pos: 'right', label: 'Out' }, { id: 'ctrl', pos: 'left', label: 'In', domain: 'physical' }]
+      },
+      {
+        id: 'mass_flow_source', name: 'Mass Flow Source', color: '#06b6d4', icon: 'wind', category: 'Sources',
+        params: { mdot: { value: 0.01, unit: 'kg/s', label: 'Mass Flow' } },
+        ports: [{ id: 'p', pos: 'right', label: 'Out' }]
+      },
+      {
+        id: 'check_valve', name: 'Check Valve', color: '#06b6d4', icon: 'check_valve', category: 'Elements',
+        params: { Rf: { value: 1e3, unit: 'Pa·s/kg', label: 'On Resistance' } },
+        ports: [{ id: 'p', pos: 'left', label: 'In' }, { id: 'n', pos: 'right', label: 'Out' }]
+      },
+      {
+        id: 'relief_valve', name: 'Relief Valve', color: '#06b6d4', icon: 'relief_valve', category: 'Elements',
+        params: {
+          P_set: { value: 5e5, unit: 'Pa', label: 'Set Pressure' },
+          Rf_open: { value: 1e2, unit: 'Pa·s/kg', label: 'Open Res.' },
+          Rf_closed: { value: 1e10, unit: 'Pa·s/kg', label: 'Closed Res.' }
+        },
+        ports: [{ id: 'p', pos: 'left', label: 'In' }, { id: 'n', pos: 'right', label: 'Out' }]
+      },
+      {
+        id: 'steam_generator_fluid', name: 'Steam Generator', color: '#06b6d4', icon: 'steam_gen', category: 'Couplings',
+        params: { Q: { value: 1000, unit: 'W', label: 'Heater Power' } },
+        ports: [{ id: 'p', pos: 'right', label: 'Steam' }, { id: 'q_in', pos: 'left', label: 'Heat', domain: 'physical' }]
+      },
+      {
+        id: 'steam_accumulator', name: 'Steam Accumulator', color: '#06b6d4', icon: 'accumulator', category: 'Elements',
+        params: { V: { value: 0.5, unit: 'm³', label: 'Volume' } },
+        ports: [{ id: 'pin', pos: 'left', label: 'In' }, { id: 'pout', pos: 'right', label: 'Out' }]
+      },
+      {
+        id: 'steam_nozzle', name: 'Steam Nozzle', color: '#06b6d4', icon: 'nozzle', category: 'Elements',
+        params: {
+          Cd: { value: 0.5, unit: '1', label: 'Discharge Coeff.' },
+          d: { value: 0.5e-3, unit: 'm', label: 'Diameter' }
+        },
+        ports: [{ id: 'p', pos: 'left', label: 'In' }]
+      },
+      {
+        id: 'pressure_sensor', name: 'Pressure Sensor', color: '#06b6d4', icon: 'eye', category: 'Sensors',
+        params: {},
+        ports: [{ id: 'p', pos: 'left', label: 'In' }, { id: 'out', pos: 'right', label: 'P', domain: 'physical' }]
+      },
+      {
+        id: 'flow_sensor', name: 'Flow Sensor', color: '#06b6d4', icon: 'eye', category: 'Sensors',
+        params: {},
+        ports: [{ id: 'p', pos: 'left', label: 'In' }, { id: 'n', pos: 'right', label: 'Out' }, { id: 'out', pos: 'top', label: 'F', domain: 'physical' }]
       }
     ]
   },
