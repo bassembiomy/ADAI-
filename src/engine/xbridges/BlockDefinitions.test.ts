@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BLOCK_LIBRARY } from './BlockDefinitions';
+import { BLOCK_LIBRARY, potential_field_escape, astar_planner, getTwinGridCoords } from './BlockDefinitions';
 import { XbridgesEngine } from './XbridgesEngine';
 import { Solvers } from './Solvers';
 
@@ -494,6 +494,163 @@ describe('X-Bridges Learning Models Block Tests', () => {
       }
     }
     expect(mappedCount).toBeGreaterThan(0);
+  });
+
+  it('TC-SOURCES-04: Step Block Simulation Behavior (Simulink-like)', () => {
+    // 1. Default Step block: stepTime = 1, initialValue = 0, finalValue = 1
+    const stepDefault = BLOCK_LIBRARY['Step']('step_default', {});
+    
+    // Test t < stepTime
+    const outBefore1 = stepDefault.execute([], stepDefault.params, null, 0.5);
+    expect(outBefore1.outputs[0]).toBe(0);
+
+    // Test t >= stepTime
+    const outAfter1 = stepDefault.execute([], stepDefault.params, null, 1.0);
+    expect(outAfter1.outputs[0]).toBe(1);
+    const outAfter2 = stepDefault.execute([], stepDefault.params, null, 2.5);
+    expect(outAfter2.outputs[0]).toBe(1);
+
+    // 2. Custom Step block: stepTime = 3.5, initialValue = -2.5, finalValue = 15.0
+    const stepCustom = BLOCK_LIBRARY['Step']('step_custom', {
+      stepTime: 3.5,
+      initialValue: -2.5,
+      finalValue: 15.0
+    });
+    
+    expect(stepCustom.execute([], stepCustom.params, null, 0).outputs[0]).toBe(-2.5);
+    expect(stepCustom.execute([], stepCustom.params, null, 3.49).outputs[0]).toBe(-2.5);
+    expect(stepCustom.execute([], stepCustom.params, null, 3.5).outputs[0]).toBe(15.0);
+    expect(stepCustom.execute([], stepCustom.params, null, 5.0).outputs[0]).toBe(15.0);
+
+    // 3. Vector Step block (supporting multi-channel steps)
+    const stepVector = BLOCK_LIBRARY['Step']('step_vector', {
+      stepTime: 0.5,
+      initialValue: '[0, 1]',
+      finalValue: '[10, 20]'
+    });
+
+    expect(stepVector.execute([], stepVector.params, null, 0.4).outputs[0]).toEqual([0, 1]);
+    expect(stepVector.execute([], stepVector.params, null, 0.5).outputs[0]).toEqual([10, 20]);
+  });
+
+  it('TC-ROBOT-05: Theta* Path Planner block and shortcutting', () => {
+    const block = BLOCK_LIBRARY['ROBOT_VACUUM_THETA_STAR']('theta_star_test', {
+      inflation: 0.3
+    });
+    const grid = Array.from({ length: 30 }, () => Array(30).fill(0));
+    // Place a wall in the middle
+    for (let r = 10; r < 20; r++) {
+      grid[r][15] = 100;
+    }
+
+    const start = [0.0, 0.0];
+    const goal = [2.0, 2.0];
+    let state = block.state;
+    const res = block.execute([grid, start, goal], block.params, state, 0.0);
+    expect((res.outputs[0] as any).length).toBeGreaterThan(0); // Should find a path
+    expect(res.outputs[2]).toBe(0); // Failed output should be 0 (false)
+  });
+
+  it('TC-ROBOT-06: Potential Field Escape (APF) and Collision Avoidance', () => {
+    // 1. Test potential_field_escape directly
+    const escapeDir = -1; // repelling to the right (negative angular velocity direction)
+    const target_w = potential_field_escape(0, 0, 0, 1, 0, escapeDir);
+    expect(target_w).toBeDefined();
+    expect(typeof target_w).toBe('number');
+
+    // 2. Test ROBOT_VACUUM_COLLISION_AVOID fallback when blocked
+    const block = BLOCK_LIBRARY['ROBOT_VACUUM_COLLISION_AVOID']('col_avoid_test', {
+      collision_dist: 0.4
+    });
+    
+    // Simulate obstacle right in front (within 0.6m)
+    const ranges = Array(45).fill(4.0);
+    ranges[22] = 0.2; // Very close front obstacle
+
+    const ins = [
+      0.8, // current (not used)
+      [1.0, 0.0], // waypoints (trying to go straight ahead)
+      ranges, // LiDAR ranges
+      0.0, // x_est
+      0.0, // y_est
+      0.0 // theta_est
+    ];
+
+    const res = block.execute(ins, block.params, null, 0.0);
+    const [v, w] = res.outputs[0] as number[];
+    expect(v).toBe(0.0); // Fallback velocity when blocked should be 0.0
+    expect(w).not.toBe(0.0); // Should try to rotate
+  });
+
+  it('TC-ROBOT-07: Pure Pursuit Path Tracking', () => {
+    const block = BLOCK_LIBRARY['ROBOT_VACUUM_MOTION_CONTROLLER']('pure_pursuit_test', {});
+    const constraints = [0.22, 1.6]; // max_v, max_w
+
+    // Simulate robot at 0,0 heading 0, target at 1.0, 1.0 (requires turning left and driving forward)
+    const ins = [
+      0.0, // x_est
+      0.0, // y_est
+      0.0, // theta_est
+      1.0, // target_x
+      1.0, // target_y
+      constraints
+    ];
+
+    const res = block.execute(ins, block.params, null, 0.0);
+    const [v_cmd, w_cmd] = res.outputs as number[];
+    expect(v_cmd).toBeGreaterThan(0.0); // Should move forward
+    expect(w_cmd).toBeGreaterThan(0.0); // Should steer left towards target
+  });
+
+  it('TC-ROBOT-08: SLAM EKF Localization and Mapping', () => {
+    const block = BLOCK_LIBRARY['ROBOT_VACUUM_SLAM']('slam_test', {
+      lidar_max_range: 4.0
+    });
+    
+    let state = block.state;
+    expect(state.grid.length).toBe(30);
+
+    const ranges = Array(45).fill(4.0);
+    ranges[0] = 2.0;
+
+    const ins = [
+      0.0, // x_est
+      0.0, // y_est
+      0.0, // theta_est
+      ranges
+    ];
+
+    const res = block.execute(ins, block.params, state, 0.0);
+    state = res.nextState;
+
+    let mappedCount = 0;
+    const grid = state.grid;
+    for (let r = 0; r < 30; r++) {
+      for (let c = 0; c < 30; c++) {
+        if (grid[r][c] !== 0) mappedCount++;
+      }
+    }
+    expect(mappedCount).toBeGreaterThan(0);
+  });
+
+  it('TC-ROBOT-09: Auto-detection of Room Layout in astar_planner', () => {
+    // 1. Reset g_isMatlabActive via a simulation time step of 0
+    const ts_block = BLOCK_LIBRARY['ROBOT_VACUUM_THETA_STAR']('theta_star_test_layout', {});
+    ts_block.execute([Array.from({ length: 30 }, () => Array(30).fill(0)), [0, 0], [0, 0]], ts_block.params, ts_block.state, 0.0);
+
+    // 2. Call astar_planner with standard bounds (start/goal within [-3, 3])
+    const grid30 = Array.from({ length: 30 }, () => Array(30).fill(0));
+    const path_std = astar_planner([-1.0, -1.0], [1.0, 1.0], grid30);
+    expect(path_std.length).toBeGreaterThan(0);
+
+    // 3. Call astar_planner with MATLAB bounds (out of [-3, 3])
+    // it should auto-detect and switch to MATLAB bounds
+    const path_matlab = astar_planner([-5.0, -5.0], [5.0, 5.0], grid30);
+    expect(path_matlab.length).toBeGreaterThan(0);
+
+    // 4. Verify getTwinGridCoords now defaults to MATLAB bounds
+    const coords = getTwinGridCoords(-5.0, -5.0);
+    expect(coords.row).toBe(2);
   });
 
 });

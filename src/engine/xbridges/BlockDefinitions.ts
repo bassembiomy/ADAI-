@@ -290,18 +290,28 @@ export const seedGridWithWalls = (): number[][] => {
   return grid;
 };
 
-const getTwinGridCoords = (gx: number, gy: number, isMatlab = false) => {
-  const minVal = isMatlab ? -6.0 : -3.0;
-  const sizeVal = isMatlab ? 12.0 : 6.0;
+export let g_isMatlabActive = false;
+
+export const getTwinGridCoords = (gx: number, gy: number, isMatlab = false) => {
+  if (Math.abs(gx) > 3.05 || Math.abs(gy) > 3.05) {
+    g_isMatlabActive = true;
+  }
+  const activeMatlab = isMatlab || g_isMatlabActive;
+  const minVal = activeMatlab ? -6.0 : -3.0;
+  const sizeVal = activeMatlab ? 12.0 : 6.0;
   const col = Math.floor((gx - minVal) / sizeVal * 30);
   const row = Math.floor((gy - minVal) / sizeVal * 30);
   return { row, col };
 };
 
 const markTwinFreeCells = (grid: number[][], x1: number, y1: number, x2: number, y2: number, isMatlab = false) => {
+  if (Math.abs(x1) > 3.05 || Math.abs(y1) > 3.05 || Math.abs(x2) > 3.05 || Math.abs(y2) > 3.05) {
+    g_isMatlabActive = true;
+  }
+  const activeMatlab = isMatlab || g_isMatlabActive;
   const steps = 15;
-  const minVal = isMatlab ? -6.0 : -3.0;
-  const sizeVal = isMatlab ? 12.0 : 6.0;
+  const minVal = activeMatlab ? -6.0 : -3.0;
+  const sizeVal = activeMatlab ? 12.0 : 6.0;
   for (let s = 0; s < steps; s++) {
     const t = s / steps;
     const px = x1 + (x2 - x1) * t;
@@ -378,6 +388,12 @@ export const lineOfSightClear = (p1: [number, number], p2: [number, number], gri
     const x = p1[0] + (p2[0] - p1[0]) * t;
     const y = p1[1] + (p2[1] - p1[1]) * t;
     if (checkCollisionTwin(x, y, radius, true)) return false;
+    if (grid) {
+      const { row, col } = getTwinGridCoords(x, y, true);
+      if (row >= 0 && row < 30 && col >= 0 && col < 30) {
+        if (grid[row][col] > 50) return false;
+      }
+    }
   }
   return true;
 };
@@ -387,17 +403,26 @@ export const astar_planner = (
   goal: [number, number],
   grid: number[][],
   safetyRadius = 0.36,
-  Wd = 1.0
+  Wd = 1.0,
+  isMatlab = false
 ): [number, number][] => {
+  if (Math.abs(start[0]) > 3.05 || Math.abs(start[1]) > 3.05 ||
+      Math.abs(goal[0]) > 3.05 || Math.abs(goal[1]) > 3.05) {
+    g_isMatlabActive = true;
+  }
+  const activeMatlab = isMatlab || g_isMatlabActive;
+  const minVal = activeMatlab ? -6.0 : -3.0;
+  const sizeVal = activeMatlab ? 12.0 : 6.0;
+
   const getCoords = (x: number, y: number) => {
-    const col = Math.max(0, Math.min(29, Math.floor((x + 6.0) / 12.0 * 30)));
-    const row = Math.max(0, Math.min(29, Math.floor((y + 6.0) / 12.0 * 30)));
+    const col = Math.max(0, Math.min(29, Math.floor((x - minVal) / sizeVal * 30)));
+    const row = Math.max(0, Math.min(29, Math.floor((y - minVal) / sizeVal * 30)));
     return { row, col };
   };
 
   const getPose = (row: number, col: number): [number, number] => {
-    const x = -6.0 + (col + 0.5) * (12.0 / 30);
-    const y = -6.0 + (row + 0.5) * (12.0 / 30);
+    const x = minVal + (col + 0.5) * (sizeVal / 30);
+    const y = minVal + (row + 0.5) * (sizeVal / 30);
     return [x, y];
   };
 
@@ -635,9 +660,13 @@ export const potential_field_escape = (
 };
 
 export const checkCollisionTwin = (x: number, y: number, radius = 0.15, isMatlab = false) => {
-  const walls = isMatlab ? MATLAB_WALLS : ROOM_WALLS;
-  const circles = isMatlab ? MATLAB_OBSTACLES : ROOM_CIRCLES;
-  const boxes = isMatlab ? [] : ROOM_BOXES;
+  if (Math.abs(x) > 3.05 || Math.abs(y) > 3.05) {
+    g_isMatlabActive = true;
+  }
+  const activeMatlab = isMatlab || g_isMatlabActive;
+  const walls = activeMatlab ? MATLAB_WALLS : ROOM_WALLS;
+  const circles = activeMatlab ? MATLAB_OBSTACLES : ROOM_CIRCLES;
+  const boxes = activeMatlab ? [] : ROOM_BOXES;
 
   // 1. Check walls
   for (const w of walls) {
@@ -671,6 +700,10 @@ export const checkCollisionTwin = (x: number, y: number, radius = 0.15, isMatlab
 };
 
 export const raycastTwin = (rx: number, ry: number, angle: number, maxRange: number, noiseStd: number, isMatlab = false) => {
+  if (Math.abs(rx) > 3.05 || Math.abs(ry) > 3.05) {
+    g_isMatlabActive = true;
+  }
+  const activeMatlab = isMatlab || g_isMatlabActive;
   const dx = Math.cos(angle);
   const dy = Math.sin(angle);
   let min_dist = maxRange;
@@ -688,9 +721,9 @@ export const raycastTwin = (rx: number, ry: number, angle: number, maxRange: num
     }
   };
 
-  const walls = isMatlab ? MATLAB_WALLS : ROOM_WALLS;
-  const circles = isMatlab ? MATLAB_OBSTACLES : ROOM_CIRCLES;
-  const boxes = isMatlab ? [] : ROOM_BOXES;
+  const walls = activeMatlab ? MATLAB_WALLS : ROOM_WALLS;
+  const circles = activeMatlab ? MATLAB_OBSTACLES : ROOM_CIRCLES;
+  const boxes = activeMatlab ? [] : ROOM_BOXES;
 
   // 1. Raycast walls
   for (const w of walls) {
@@ -1049,13 +1082,26 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'ROBOT_VACUUM_BATTERY_MONITOR': (id, params) => ({
-    id, type: 'ROBOT_VACUUM_BATTERY_MONITOR', params: { low_level: params.low_level || 20.0 },
-    inputs: [createPort('battery_level', 'Bat %', 'input')],
+    id, type: 'ROBOT_VACUUM_BATTERY_MONITOR', params: { drain_rate: params.drain_rate || 0.5, safety_margin: params.safety_margin || 5.0 },
+    inputs: [
+      createPort('battery_level', 'Bat %', 'input'),
+      createPort('x_est', 'X_est', 'input'),
+      createPort('y_est', 'Y_est', 'input')
+    ],
     outputs: [createPort('battery_status', 'Bat Status', 'output')],
     icon: 'graduation-cap',
     execute: (ins, p) => {
       const bat = Number(ins[0] ?? 100);
-      const status = bat < p.low_level ? 1 : 0;
+      const x = Number(ins[1] ?? 0);
+      const y = Number(ins[2] ?? 0);
+      // Distance to dock at (0, -2.8)
+      const dist = Math.sqrt(Math.pow(x, 2) + Math.pow(y - (-2.8), 2));
+      const drain_rate = Number(p.drain_rate) || 0.5;
+      const safety_margin = Number(p.safety_margin) || 5.0;
+      
+      const needed_power = (dist * drain_rate) + safety_margin;
+      const status = bat <= needed_power ? 1 : 0;
+      
       return { outputs: [status] };
     }
   }),
@@ -1089,19 +1135,110 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'ROBOT_VACUUM_WAYPOINT_GEN': (id, params) => ({
     id, type: 'ROBOT_VACUUM_WAYPOINT_GEN', params: {},
-    inputs: [createPort('coverage_plan', 'Coverage Plan', 'input')],
+    isStateful: true,
+    state: {
+      phase: 'INIT', // INIT, MAPPING, CLEANING, EXITING, DOCKING
+      currentRoom: -1,
+      waypoints: [] as {x: number, y: number}[],
+      wpIndex: 0
+    },
+    inputs: [
+      createPort('coverage_plan', 'Coverage Plan', 'input'),
+      createPort('battery_status', 'Bat Status', 'input'),
+      createPort('x_est', 'X_est', 'input'),
+      createPort('y_est', 'Y_est', 'input')
+    ],
     outputs: [createPort('waypoints', 'Waypoints', 'output')],
     icon: 'graduation-cap',
-    execute: (ins) => {
+    execute: (ins, p, state) => {
       const room = Number(ins[0] ?? 1);
-      const waypoints = [
-        { x: -1.5, y: 1.5 },
-        { x: 1.5, y: 1.5 },
-        { x: 1.5, y: -1.5 },
-        { x: -1.5, y: -1.5 }
-      ];
-      const idx = Math.max(0, Math.min(waypoints.length - 1, room - 1));
-      return { outputs: [[waypoints[idx].x, waypoints[idx].y]] };
+      const batStatus = Number(ins[1] ?? 0);
+      const x = Number(ins[2] ?? 0);
+      const y = Number(ins[3] ?? 0);
+      
+      let nextState = { ...state };
+      
+      // Override for docking
+      if (batStatus === 1 && nextState.phase !== 'DOCKING') {
+        nextState.phase = 'DOCKING';
+        // Shortest path to dock at (0, -2.8)
+        nextState.waypoints = [{ x: 0, y: -2.8 }];
+        nextState.wpIndex = 0;
+      }
+      
+      if (nextState.phase !== 'DOCKING') {
+        if (room !== nextState.currentRoom) {
+          nextState.currentRoom = room;
+          nextState.phase = 'MAPPING';
+          nextState.wpIndex = 0;
+          
+          // Define semantic room boundaries based on Room number
+          let bounds = { x1: -2, y1: -2, x2: 2, y2: 2 };
+          if (room === 1) bounds = { x1: -2.5, y1: 0, x2: 0, y2: 2.5 };
+          else if (room === 2) bounds = { x1: 0, y1: 0, x2: 2.5, y2: 2.5 };
+          else if (room === 3) bounds = { x1: 0, y1: -2.5, x2: 2.5, y2: 0 };
+          else if (room === 4) bounds = { x1: -2.5, y1: -2.5, x2: 0, y2: 0 };
+          
+          // Phase 1: Mapping (Boundary tracing)
+          nextState.waypoints = [
+            { x: bounds.x1, y: bounds.y1 },
+            { x: bounds.x1, y: bounds.y2 },
+            { x: bounds.x2, y: bounds.y2 },
+            { x: bounds.x2, y: bounds.y1 },
+            { x: bounds.x1, y: bounds.y1 }
+          ];
+        }
+        
+        // Progress waypoints
+        const currentTarget = nextState.waypoints[nextState.wpIndex] || { x: 0, y: 0 };
+        const distToTarget = Math.sqrt(Math.pow(x - currentTarget.x, 2) + Math.pow(y - currentTarget.y, 2));
+        
+        if (distToTarget < 0.3) {
+          if (nextState.wpIndex < nextState.waypoints.length - 1) {
+            nextState.wpIndex++;
+          } else {
+            // Reached end of current phase waypoints
+            if (nextState.phase === 'MAPPING') {
+              nextState.phase = 'CLEANING';
+              nextState.wpIndex = 0;
+              // Phase 2: Optimum Cleaning (Zig-zag boustrophedon inside bounds)
+              let bounds = { x1: -2, y1: -2, x2: 2, y2: 2 };
+              if (room === 1) bounds = { x1: -2.3, y1: 0.2, x2: -0.2, y2: 2.3 };
+              else if (room === 2) bounds = { x1: 0.2, y1: 0.2, x2: 2.3, y2: 2.3 };
+              else if (room === 3) bounds = { x1: 0.2, y1: -2.3, x2: 2.3, y2: -0.2 };
+              else if (room === 4) bounds = { x1: -2.3, y1: -2.3, x2: -0.2, y2: -0.2 };
+              
+              nextState.waypoints = [];
+              let step = 0.4; // cleaning width
+              let yScan = bounds.y1;
+              let leftToRight = true;
+              while (yScan <= bounds.y2) {
+                if (leftToRight) {
+                  nextState.waypoints.push({ x: bounds.x1, y: yScan });
+                  nextState.waypoints.push({ x: bounds.x2, y: yScan });
+                } else {
+                  nextState.waypoints.push({ x: bounds.x2, y: yScan });
+                  nextState.waypoints.push({ x: bounds.x1, y: yScan });
+                }
+                leftToRight = !leftToRight;
+                yScan += step;
+              }
+            } else if (nextState.phase === 'CLEANING') {
+              nextState.phase = 'EXITING';
+              nextState.wpIndex = 0;
+              // Phase 3: Go to exit (central area)
+              nextState.waypoints = [{ x: 0, y: 0 }]; 
+            }
+          }
+        }
+      }
+      
+      const activeWaypoint = nextState.waypoints[nextState.wpIndex] || { x: x, y: y };
+      
+      return {
+        outputs: [[activeWaypoint.x, activeWaypoint.y]],
+        nextState
+      };
     }
   }),
 
@@ -1216,7 +1353,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       if (!path_ok) {
         if (min_front < 0.6) {
           target_w = potential_field_escape(x, y, theta, tx, ty, escapeDir);
-          target_v = 0.05;
+          target_v = 0.0;
         } else {
           const heading_err = angdiff_vec(x, y, theta, tx, ty);
           target_w = 1.8 * heading_err;
@@ -1827,6 +1964,33 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   }),
 
+  'Step': (id, params) => ({
+    id, type: 'Step', params: {
+      stepTime: params.stepTime !== undefined ? params.stepTime : 1,
+      initialValue: params.initialValue !== undefined ? params.initialValue : 0,
+      finalValue: params.finalValue !== undefined ? params.finalValue : 1
+    },
+    inputs: [],
+    outputs: [createPort('out', 'Out', 'output', params.initialValue !== undefined ? params.initialValue : 0)],
+    equation: 'y = (t < stepTime) ? initialValue : finalValue',
+    description: 'Output transitions from initialValue to finalValue at stepTime.',
+    execute: (ins, p, state, time) => {
+      const stepTime = Number(p.stepTime ?? 1);
+      let initVal = p.initialValue !== undefined ? p.initialValue : 0;
+      let finVal = p.finalValue !== undefined ? p.finalValue : 1;
+      
+      if (typeof initVal === 'string') {
+        try { initVal = JSON.parse(initVal); } catch(e) {}
+      }
+      if (typeof finVal === 'string') {
+        try { finVal = JSON.parse(finVal); } catch(e) {}
+      }
+      
+      const val = (time < stepTime) ? initVal : finVal;
+      return { outputs: [val] };
+    }
+  }),
+
   // --- Element-wise Arithmetic ---
   'VectorAdd': (id) => ({
     id, type: 'VectorAdd', params: {},
@@ -1990,28 +2154,72 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   'Scope': (id, params) => {
     const numSignals = Number(params.numSignals) || 1;
     const bufferSize = Number(params.bufferSize) || 1000;
+    const limitDataPoints = params.limitDataPoints !== undefined ? !!params.limitDataPoints : true;
+    const timeRange = params.timeRange !== undefined ? params.timeRange : 'auto';
+    const decimation = Number(params.decimation) || 1;
+    const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : -1;
+    const showGrid = params.showGrid !== undefined ? !!params.showGrid : true;
+    const showLegend = params.showLegend !== undefined ? !!params.showLegend : true;
     
     return {
       id, type: 'Scope',
-      params: { numSignals, bufferSize },
+      params: { 
+        numSignals, 
+        bufferSize, 
+        limitDataPoints, 
+        timeRange, 
+        decimation, 
+        sampleTime, 
+        showGrid, 
+        showLegend 
+      },
       isStateful: true,
       inputs: Array.from({ length: numSignals }, (_, i) => 
         createPort(`in${i+1}`, `In ${i+1}`, 'input')
       ),
       outputs: [],
-      state: { history: [] },
+      state: { history: [], stepCount: 0, lastSampleTime: 0 },
       execute: (ins, p, state, time) => {
-        const history = [...(state.history || [])];
-        const sample: any = { t: time };
-        for (let i = 0; i < numSignals; i++) {
-          sample[`y${i+1}`] = Number(ins[i] || 0);
+        const pNumSignals = Number(p.numSignals) || 1;
+        const pBufferSize = Number(p.bufferSize) || 1000;
+        const pLimitDataPoints = p.limitDataPoints !== undefined ? !!p.limitDataPoints : true;
+        const pDecimation = Number(p.decimation) || 1;
+        const pSampleTime = p.sampleTime !== undefined ? Number(p.sampleTime) : -1;
+
+        let history = [...(state.history || [])];
+        let stepCount = state.stepCount || 0;
+        let lastSampleTime = state.lastSampleTime || 0;
+
+        stepCount++;
+
+        let shouldSample = true;
+        if (pDecimation > 1 && (stepCount % pDecimation !== 0)) {
+          shouldSample = false;
+        }
+
+        if (pSampleTime > 0) {
+          if (time - lastSampleTime < pSampleTime - 1e-9 && history.length > 0) {
+            shouldSample = false;
+          }
+        }
+
+        if (shouldSample) {
+          const sample: any = { t: time };
+          for (let i = 0; i < pNumSignals; i++) {
+            sample[`y${i+1}`] = Number(ins[i] || 0);
+          }
+          history.push(sample);
+          
+          if (pSampleTime > 0) {
+            lastSampleTime = time;
+          }
+
+          if (pLimitDataPoints && history.length > pBufferSize) {
+            history.shift();
+          }
         }
         
-        history.push(sample);
-        if (history.length > bufferSize) {
-          history.shift();
-        }
-        return { outputs: [], nextState: { history } };
+        return { outputs: [], nextState: { history, stepCount, lastSampleTime } };
       }
     };
   },
@@ -4997,6 +5205,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     icon: 'activity',
     description: 'Calculates path to target using A* with line-of-sight shortcutting optimization (Theta*).',
     execute: (ins: any[], p: any, state: any, time: number) => {
+      if (time === 0 || time === 0.0) {
+        g_isMatlabActive = false;
+      }
       const grid = ins[0] as number[][];
       const start = ins[1] as number[] || [0, 0];
       const goal = ins[2] as number[] || [0, 0];
@@ -5105,6 +5316,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       // A* transit path
       astar_path: [] as [number, number][],
       path_idx: 0,
+      coverage_bypass_path: [] as [number, number][],
+      bypass_path_idx: 0,
       // Recovery
       recovery_state: 'NONE',
       recovery_timer: 0,
@@ -5145,6 +5358,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     icon: 'graduation-cap',
     description: 'MATLAB Autonomous Vacuum cleaner Plant/Control/Perception/Planning Closed Loop Co-simulation Block.',
     execute: (ins: any[], p: any, state: any, time: number) => {
+      if (time === 0 || time === 0.0) {
+        g_isMatlabActive = false;
+      }
       const mode_select = Number(ins[2] ?? 4);
       const vel_cmd_in = ins[3] as number[];
 
@@ -5487,13 +5703,74 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
           // Clamp index
           const wpIdx = Math.min(state.waypoint_idx, state.room_waypoints.length - 1);
           const target = state.room_waypoints[wpIdx] as [number, number];
-          const dist = Math.sqrt(
-            Math.pow(state.x_est - target[0], 2) + Math.pow(state.y_est - target[1], 2)
-          );
-          const hErr = angdiff_vec(state.x_est, state.y_est, state.theta_est, target[0], target[1]);
 
-          // Expose remaining zigzag path for scope rendering
-          state.astar_path = state.room_waypoints.slice(wpIdx) as [number, number][];
+          // Initialize bypass path properties if not exist
+          if (!state.coverage_bypass_path) {
+            state.coverage_bypass_path = [];
+            state.bypass_path_idx = 0;
+          }
+
+          // Check if line of sight to target is blocked, and plan a bypass if needed
+          if (state.coverage_bypass_path.length === 0) {
+            if (!lineOfSightClear([state.x_est, state.y_est], target, state.grid, 0.25)) {
+              const bypass = astar_planner([state.x_est, state.y_est], target, state.grid, 0.24, 2.5);
+              if (bypass.length > 0) {
+                state.coverage_bypass_path = bypass;
+                state.bypass_path_idx = 0;
+              } else {
+                // If target is completely unreachable, skip it
+                state.waypoint_idx++;
+                state.coverage_bypass_path = [];
+                state.bypass_path_idx = 0;
+                v = 0; w = 0;
+                return {
+                  outputs: [
+                    [state.x, state.y, state.theta, state.x_est, state.y_est, state.theta_est],
+                    state.y,
+                    state.theta,
+                    state.x_est,
+                    state.y_est,
+                    state.theta_est,
+                    state.lidarRanges,
+                    [state.omegaL, state.omegaR],
+                    [0.8, 0.8],
+                    4,
+                    state.grid,
+                    state.astar_path
+                  ],
+                  nextState: state
+                };
+              }
+            }
+          }
+
+          // Expose remaining zigzag path or bypass path for scope rendering
+          if (state.coverage_bypass_path.length > 0) {
+            state.astar_path = state.coverage_bypass_path.slice(state.bypass_path_idx);
+          } else {
+            state.astar_path = state.room_waypoints.slice(wpIdx) as [number, number][];
+          }
+
+          let activeTarget = target;
+          let isFollowingBypass = false;
+
+          if (state.coverage_bypass_path.length > 0) {
+            isFollowingBypass = true;
+            // Advance bypass path index
+            while (state.bypass_path_idx < state.coverage_bypass_path.length - 1 &&
+                   Math.sqrt(
+                     Math.pow(state.x_est - state.coverage_bypass_path[state.bypass_path_idx][0], 2) +
+                     Math.pow(state.y_est - state.coverage_bypass_path[state.bypass_path_idx][1], 2)
+                   ) < 0.35) {
+              state.bypass_path_idx++;
+            }
+            activeTarget = state.coverage_bypass_path[state.bypass_path_idx];
+          }
+
+          const dist = Math.sqrt(
+            Math.pow(state.x_est - activeTarget[0], 2) + Math.pow(state.y_est - activeTarget[1], 2)
+          );
+          const hErr = angdiff_vec(state.x_est, state.y_est, state.theta_est, activeTarget[0], activeTarget[1]);
 
           // Wall proximity: slow down and turn away
           if (state.min_front < 0.4) {
@@ -5508,7 +5785,23 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
           }
 
           // Advance to next waypoint when close enough
-          if (dist < 0.32) {
+          let shouldAdvance = false;
+          if (isFollowingBypass) {
+            const distToFinalTarget = Math.sqrt(
+              Math.pow(state.x_est - target[0], 2) + Math.pow(state.y_est - target[1], 2)
+            );
+            if (distToFinalTarget < 0.32 || (state.bypass_path_idx >= state.coverage_bypass_path.length - 1 && dist < 0.32)) {
+              state.coverage_bypass_path = [];
+              state.bypass_path_idx = 0;
+              shouldAdvance = true;
+            }
+          } else {
+            if (dist < 0.32) {
+              shouldAdvance = true;
+            }
+          }
+
+          if (shouldAdvance) {
             state.waypoint_idx++;
             if (state.waypoint_idx >= state.room_waypoints.length) {
               // ── Room complete ──
@@ -5641,70 +5934,28 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
               state.path_idx = 0;
             }
 
-            // Stuck detection + recovery
-            const pose_delta = Math.sqrt(
-              Math.pow(state.x_est - state.last_pose[0], 2) +
-              Math.pow(state.y_est - state.last_pose[1], 2)
-            );
-            if (pose_delta > 0.04 * dt) {
-              state.stuck_counter = 0;
-              state.last_pose = [state.x_est, state.y_est];
+            while (state.path_idx < state.astar_path.length - 1 &&
+                   Math.sqrt(
+                     Math.pow(state.x_est - state.astar_path[state.path_idx][0], 2) +
+                     Math.pow(state.y_est - state.astar_path[state.path_idx][1], 2)
+                   ) < 0.35) {
+              state.path_idx++;
+            }
+            const tgt = state.astar_path[state.path_idx] || [-5.1, -5.1];
+            const hErr = angdiff_vec(state.x_est, state.y_est, state.theta_est, tgt[0], tgt[1]);
+            if (state.min_360 < 0.35) {
+              v = -0.06; w = 1.5 * state.escape_dir;
+            } else if (Math.abs(hErr) > 50 * Math.PI / 180) {
+              v = 0; w = 3.2 * hErr;
             } else {
-              state.stuck_counter++;
-            }
-            const stuck_secs = state.stuck_counter * dt;
-            if (state.recovery_state === 'NONE' && stuck_secs > 3.0) {
-              state.recovery_state = 'REPLAN';
-              state.recovery_attempts++;
-              state.stuck_counter = 0;
-              state.astar_path = astar_planner([state.x_est, state.y_est], [-5.1, -5.1], state.grid, planner_radius, planner_Wd);
-              state.path_idx = 0;
-            } else if (state.recovery_state === 'REPLAN' && stuck_secs > 3.0) {
-              state.recovery_state = 'ROTATE';
-              state.recovery_timer = 0;
-              state.stuck_counter = 0;
-              state.rotation_dir = state.escape_dir || 1;
-            } else if (state.recovery_state === 'ROTATE') {
-              state.recovery_timer += dt;
-              v = 0; w = 2.8 * state.rotation_dir;
-              if (state.recovery_timer > 2.5) { state.recovery_state = 'BACKUP'; state.backup_timer = 0; state.stuck_counter = 0; }
-            } else if (state.recovery_state === 'BACKUP') {
-              state.backup_timer += dt;
-              v = -0.12; w = 0.8 * state.rotation_dir;
-              if (state.backup_timer > 1.5) {
-                state.recovery_state = 'NONE';
-                state.stuck_counter = 0;
-                state.astar_path = astar_planner([state.x_est, state.y_est], [-5.1, -5.1], state.grid, 0.24, 2.5);
-                state.path_idx = 0;
-                state.using_constrained = true;
-                state.replan_cooldown = 3.0;
-              }
-            }
-
-            if (state.recovery_state === 'NONE' || state.recovery_state === 'REPLAN') {
-              while (state.path_idx < state.astar_path.length - 1 &&
-                     Math.sqrt(
-                       Math.pow(state.x_est - state.astar_path[state.path_idx][0], 2) +
-                       Math.pow(state.y_est - state.astar_path[state.path_idx][1], 2)
-                     ) < 0.35) {
-                state.path_idx++;
-              }
-              const tgt = state.astar_path[state.path_idx] || [-5.1, -5.1];
-              const hErr = angdiff_vec(state.x_est, state.y_est, state.theta_est, tgt[0], tgt[1]);
-              if (state.min_360 < 0.35) {
-                v = -0.06; w = 1.5 * state.escape_dir;
-              } else if (Math.abs(hErr) > 50 * Math.PI / 180) {
-                v = 0; w = 3.2 * hErr;
-              } else {
-                const [dwa_v, dwa_w, dwa_ok] = dwa_planner(
-                  [state.x_est, state.y_est, state.theta_est],
-                  [tgt[0], tgt[1]], [state.dyn_x, state.dyn_y], 0.5, state.grid
-                );
-                if (dwa_ok) { v = dwa_v; w = dwa_w; }
-                else {
-                  v = state.min_front > 0.5 ? 0.12 : 0;
-                  w = 2.5 * hErr;
-                }
+              const [dwa_v, dwa_w, dwa_ok] = dwa_planner(
+                [state.x_est, state.y_est, state.theta_est],
+                [tgt[0], tgt[1]], [state.dyn_x, state.dyn_y], 0.5, state.grid
+              );
+              if (dwa_ok) { v = dwa_v; w = dwa_w; }
+              else {
+                v = state.min_front > 0.5 ? 0.12 : 0;
+                w = 2.5 * hErr;
               }
             }
           }
@@ -5713,6 +5964,92 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         // ── STATE: DOCKED ────────────────────────────────────────────────────
         else if (state.bt_state === 'DOCKED') {
           v = 0; w = 0;
+        }
+
+        // Global Stuck Detection & Recovery Override
+        const isNavigating = ['PLAN_ROOM', 'COVERAGE', 'TRANSIT', 'RETURN_DOCK'].includes(state.bt_state);
+        if (isNavigating) {
+          const pose_delta = Math.sqrt(
+            Math.pow(state.x_est - state.last_pose[0], 2) +
+            Math.pow(state.y_est - state.last_pose[1], 2)
+          );
+          if (pose_delta > 0.04 * dt) {
+            state.stuck_counter = 0;
+            state.last_pose = [state.x_est, state.y_est];
+            if (state.recovery_state === 'NONE') {
+              state.recovery_attempts = 0;
+            }
+          } else {
+            if (Math.abs(v) > 0.01) {
+              state.stuck_counter++;
+            }
+          }
+
+          const stuck_secs = state.stuck_counter * dt;
+          if (state.recovery_state === 'NONE' && stuck_secs > 3.0) {
+            if (state.bt_state === 'COVERAGE') {
+              state.recovery_state = 'ROTATE';
+              state.recovery_timer = 0;
+              state.stuck_counter = 0;
+              state.rotation_dir = state.escape_dir || 1;
+              state.recovery_attempts++;
+            } else {
+              state.recovery_state = 'REPLAN';
+              state.recovery_attempts++;
+              state.stuck_counter = 0;
+              let goal: [number, number] = [-5.1, -5.1];
+              if (state.bt_state === 'PLAN_ROOM') {
+                goal = state.room_waypoints[0] as [number, number];
+              } else if (state.bt_state === 'TRANSIT') {
+                goal = (state.room_waypoints[0] || [-5.1, -5.1]) as [number, number];
+              }
+              const planner_radius = state.bt_state === 'RETURN_DOCK' && state.Re >= 1.5 ? 0.24 : 0.28;
+              const planner_Wd = state.bt_state === 'RETURN_DOCK' && state.Re >= 1.5 ? 2.5 : 1.0;
+              state.astar_path = astar_planner([state.x_est, state.y_est], goal, state.grid, planner_radius, planner_Wd);
+              state.path_idx = 0;
+            }
+          } else if (state.recovery_state === 'REPLAN' && stuck_secs > 3.0) {
+            state.recovery_state = 'ROTATE';
+            state.recovery_timer = 0;
+            state.stuck_counter = 0;
+            state.rotation_dir = state.escape_dir || 1;
+          } else if (state.recovery_state === 'ROTATE') {
+            state.recovery_timer += dt;
+            v = 0;
+            w = 2.8 * state.rotation_dir;
+            if (state.recovery_timer > 2.5) {
+              state.recovery_state = 'BACKUP';
+              state.backup_timer = 0;
+              state.stuck_counter = 0;
+            }
+          } else if (state.recovery_state === 'BACKUP') {
+            state.backup_timer += dt;
+            v = -0.12;
+            w = 0.8 * state.rotation_dir;
+            if (state.backup_timer > 1.5) {
+              state.recovery_state = 'NONE';
+              state.stuck_counter = 0;
+              if (state.bt_state === 'COVERAGE') {
+                if (state.recovery_attempts >= 2) {
+                  state.waypoint_idx++;
+                  state.recovery_attempts = 0;
+                }
+              } else {
+                let goal: [number, number] = [-5.1, -5.1];
+                if (state.bt_state === 'PLAN_ROOM') {
+                  goal = state.room_waypoints[0] as [number, number];
+                } else if (state.bt_state === 'TRANSIT') {
+                  goal = (state.room_waypoints[0] || [-5.1, -5.1]) as [number, number];
+                }
+                const planner_radius = state.bt_state === 'RETURN_DOCK' && state.Re >= 1.5 ? 0.24 : 0.28;
+                const planner_Wd = state.bt_state === 'RETURN_DOCK' && state.Re >= 1.5 ? 2.5 : 1.0;
+                state.astar_path = astar_planner([state.x_est, state.y_est], goal, state.grid, planner_radius, planner_Wd);
+                state.path_idx = 0;
+                state.using_constrained = true;
+                state.replan_cooldown = 3.0;
+              }
+            }
+          }
         }
       }
 
@@ -5732,6 +6069,13 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         state.y = next_y;
       }
       state.theta = next_theta;
+
+      state.navState = 
+        state.bt_state === 'COVERAGE' ? 4 :
+        state.bt_state === 'RETURN_DOCK' ? 5 :
+        state.bt_state === 'TRANSIT' ? 3 :
+        state.bt_state === 'PLAN_ROOM' ? 2 :
+        state.bt_state === 'DOCKED' ? 6 : 0;
 
       // Save true and estimated chassis velocities
       state.v_chassis = v;
@@ -7026,6 +7370,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     icon: 'graduation-cap',
     description: 'Generates occupancy, obstacle, and free-space grid maps via Bayesian updates.',
     execute: (ins: any[], p: any, state: any, time: number) => {
+      if (time === 0 || time === 0.0) {
+        g_isMatlabActive = false;
+      }
       const x_est = Number(ins[0] ?? 0);
       const y_est = Number(ins[1] ?? 0);
       const theta_est = Number(ins[2] ?? 0);
@@ -8252,7 +8599,8 @@ export const XBRIDGES_CATEGORIES = [
     blocks: [
       { type: 'Constant', label: 'Constant', icon: 'square' },
       { type: 'WaveformGen', label: 'Waveform Gen', icon: 'activity' },
-      { type: 'Clock', label: 'Clock', icon: 'rotate-cw' }
+      { type: 'Clock', label: 'Clock', icon: 'rotate-cw' },
+      { type: 'Step', label: 'Step', icon: 'trending-up' }
     ]
   },
   {

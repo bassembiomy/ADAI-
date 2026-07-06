@@ -59,7 +59,7 @@ export class VLabPhysicsEngine {
       // Initialize reference temperatures to 293.15 K (20°C) instead of 0
       // for thermal nodes to avoid absolute zero calculations, and fluid/gas pressures to 101325 Pa (1 atm)
       system.variableNames.forEach((name, idx) => {
-        if (name.includes('(thermal)')) {
+        if (name.includes('(thermal)') || name.includes('_state_temp') || name.includes('_state_temp_')) {
           x[idx] = 293.15;
         } else if (name.includes('(fluid)') || name.includes('(gas)')) {
           x[idx] = 101325;

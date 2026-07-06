@@ -28,14 +28,33 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
   const [aiEngine, setAiEngine] = useState<'n8n' | 'gemini' | 'local'>(
     (localStorage.getItem('ai_engine') as any) || 'n8n'
   );
-  const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
+  const [apiKey, setApiKey] = useState('');
   const [localBaseUrl, setLocalBaseUrl] = useState(localStorage.getItem('local_llm_base_url') || 'http://localhost:1234/api/v1/chat');
   const [localModel, setLocalModel] = useState(localStorage.getItem('local_llm_model') || 'qwen3-8b');
   const [localModels, setLocalModels] = useState<string[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
-  const [showSettings, setShowSettings] = useState(!apiKey && aiEngine === 'gemini');
+  const [showSettings, setShowSettings] = useState(aiEngine === 'gemini');
 
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Load API Key from secure storage on mount
+  useEffect(() => {
+    const loadApiKey = async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const electron = (window as any).require?.('electron');
+        if (electron?.ipcRenderer) {
+          const storedKey = await electron.ipcRenderer.invoke('load-api-key', { service: 'gemini' });
+          if (storedKey) {
+            setApiKey(storedKey);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load API key from secure vault:", err);
+      }
+    };
+    loadApiKey();
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -107,11 +126,20 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
     }
   };
 
-  const saveSettings = () => {
-    localStorage.setItem('gemini_api_key', apiKey);
+  const saveSettings = async () => {
     localStorage.setItem('local_llm_base_url', localBaseUrl);
     localStorage.setItem('local_llm_model', localModel);
     localStorage.setItem('ai_engine', aiEngine);
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const electron = (window as any).require?.('electron');
+      if (electron?.ipcRenderer) {
+        await electron.ipcRenderer.invoke('store-api-key', { service: 'gemini', key: apiKey });
+      }
+    } catch (err) {
+      console.warn("Failed to store API key in secure vault:", err);
+    }
     setShowSettings(false);
   };
 

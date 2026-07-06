@@ -64,14 +64,28 @@ const MATLAB_WAYPOINTS = [
 
 interface ScopeWindowProps {
   block: any;
+  onUpdate?: (data: any) => void;
   onClose: () => void;
 }
 
-export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose }) => {
+export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdate, onClose }) => {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const isRobotTwin = ['ROBOT_VACUUM_DIGITAL_TWIN', 'ROBOT_VACUUM_DYNAMICS', 'ROBOT_VACUUM_ENVIRONMENT', 'ROBOT_VACUUM_3D_SCENE_VIEW'].includes(block.type);
   const history = block.state?.history || [];
   const numSignals = block.params?.numSignals || 1;
+  const timeRange = block.params?.timeRange || 'auto';
+  const showGrid = block.params?.showGrid !== false;
+  const showLegend = block.params?.showLegend !== false;
+
+  const displayData = React.useMemo(() => {
+    if (timeRange === 'auto' || history.length === 0) return history;
+    const limit = Number(timeRange);
+    if (isNaN(limit)) return history;
+    const maxTime = history[history.length - 1].t;
+    return history.filter((pt: any) => pt.t >= maxTime - limit);
+  }, [history, timeRange]);
+
+  const [showSettings, setShowSettings] = React.useState(false);
 
   // 3D View configuration state
   const [viewMode, setViewMode] = React.useState<'3d' | '2d'>(block.type === 'ROBOT_VACUUM_3D_SCENE_VIEW' ? '3d' : '2d');
@@ -88,16 +102,18 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
   const dirtParticlesRef = React.useRef<{ x: number; y: number; active: boolean }[]>([]);
   const [dirtEnv, setDirtEnv] = React.useState<'normal' | 'matlab' | null>(null);
   
-  if (dirtEnv === null && block.state) {
+  if (block.state) {
     const isMatlab = Math.abs(block.state.x || 0) > 3.1 || Math.abs(block.state.y || 0) > 3.1 || Math.abs(block.state.x_est || 0) > 3.1 || Math.abs(block.state.y_est || 0) > 3.1;
-    const range = isMatlab ? 11.0 : 5.6;
-    dirtParticlesRef.current = [];
-    for (let i = 0; i < 80; i++) {
-      let dx = (Math.random() - 0.5) * range;
-      let dy = (Math.random() - 0.5) * range;
-      dirtParticlesRef.current.push({ x: dx, y: dy, active: true });
+    if (dirtEnv === null || (dirtEnv === 'normal' && isMatlab)) {
+      const range = isMatlab ? 11.0 : 5.6;
+      dirtParticlesRef.current = [];
+      for (let i = 0; i < 80; i++) {
+        let dx = (Math.random() - 0.5) * range;
+        let dy = (Math.random() - 0.5) * range;
+        dirtParticlesRef.current.push({ x: dx, y: dy, active: true });
+      }
+      setDirtEnv(isMatlab ? 'matlab' : 'normal');
     }
-    setDirtEnv(isMatlab ? 'matlab' : 'normal');
   }
 
   const triggerRedraw = () => setRedrawTrigger(prev => prev + 1);
@@ -154,7 +170,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
     }
 
     if (viewMode === '2d') {
-      const isMatlabEnv = state && (Math.abs(state.x || 0) > 3.1 || Math.abs(state.y || 0) > 3.1 || Math.abs(state.x_est || 0) > 3.1 || Math.abs(state.y_est || 0) > 3.1);
+      const isMatlabEnv = (dirtEnv === 'matlab') || (state && (Math.abs(state.x || 0) > 3.1 || Math.abs(state.y || 0) > 3.1 || Math.abs(state.x_est || 0) > 3.1 || Math.abs(state.y_est || 0) > 3.1));
       const minVal = isMatlabEnv ? -6.0 : -3.0;
       const sizeVal = isMatlabEnv ? 12.0 : 6.0;
 
@@ -521,7 +537,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
       const rx_true = state.x ?? 0;
       const ry_true = state.y ?? 0;
       
-      const isMatlabEnv = Math.abs(rx_true) > 3.1 || Math.abs(ry_true) > 3.1 || Math.abs(state.x_est || 0) > 3.1 || Math.abs(state.y_est || 0) > 3.1;
+      const isMatlabEnv = (dirtEnv === 'matlab') || Math.abs(rx_true) > 3.1 || Math.abs(ry_true) > 3.1 || Math.abs(state.x_est || 0) > 3.1 || Math.abs(state.y_est || 0) > 3.1;
       const minVal = isMatlabEnv ? -6.0 : -3.0;
       const sizeVal = isMatlabEnv ? 12.0 : 6.0;
 
@@ -1620,6 +1636,20 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
                 <Download size={14} />
                 Export CSV
               </button>
+              {onUpdate && (
+                <button 
+                  onClick={() => setShowSettings(!showSettings)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all text-xs font-bold ${
+                    showSettings 
+                      ? 'bg-[#c9a86c]/20 text-[#c9a86c] border-[#c9a86c]/30' 
+                      : 'bg-white/5 text-gray-300 hover:bg-white/10 border-white/5'
+                  }`}
+                  title="Scope Settings"
+                >
+                  <Settings2 size={14} />
+                  Settings
+                </button>
+              )}
               <button 
                 onClick={onClose}
                 className="p-2 hover:bg-white/5 rounded-lg text-gray-400 hover:text-white transition-all"
@@ -1630,12 +1660,111 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
           </div>
 
           <div className="flex-1 flex overflow-hidden">
+            {/* Collapsible settings panel */}
+            {showSettings && onUpdate && (
+              <div className="w-64 border-r border-white/5 bg-black/20 p-5 space-y-4 flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
+                <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Scope Settings</div>
+                
+                {/* Time Range */}
+                <div className="space-y-1">
+                  <label className="block text-[9px] font-bold text-gray-400 uppercase">Time Range</label>
+                  <select
+                    value={String(block.params?.timeRange || 'auto')}
+                    onChange={(e) => onUpdate({ ...block.params, timeRange: e.target.value })}
+                    className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#c9a86c] font-bold rounded focus:border-[#c9a86c] outline-none"
+                  >
+                    <option value="auto">Auto (Full)</option>
+                    <option value="1">1s</option>
+                    <option value="2">2s</option>
+                    <option value="5">5s</option>
+                    <option value="10">10s</option>
+                    <option value="30">30s</option>
+                    <option value="60">60s</option>
+                  </select>
+                </div>
+
+                {/* Limit Data Points */}
+                <div className="space-y-1">
+                  <label className="block text-[9px] font-bold text-gray-400 uppercase">Limit Data Points</label>
+                  <select
+                    value={String(block.params?.limitDataPoints !== false)}
+                    onChange={(e) => onUpdate({ ...block.params, limitDataPoints: e.target.value === 'true' })}
+                    className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-gray-300 rounded focus:border-[#c9a86c] outline-none"
+                  >
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                  </select>
+                </div>
+
+                {/* Buffer Size */}
+                <div className="space-y-1">
+                  <label className="block text-[9px] font-bold text-gray-400 uppercase">Max Points (Buffer)</label>
+                  <input
+                    type="number"
+                    value={block.params?.bufferSize || 1000}
+                    onChange={(e) => onUpdate({ ...block.params, bufferSize: parseInt(e.target.value) || 1000 })}
+                    className="w-full text-xs px-2.5 py-1 border border-[#333] bg-[#0a0a0a] text-white rounded focus:border-[#c9a86c] outline-none font-mono"
+                  />
+                </div>
+
+                {/* Decimation */}
+                <div className="space-y-1">
+                  <label className="block text-[9px] font-bold text-gray-400 uppercase">Decimation</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={block.params?.decimation || 1}
+                    onChange={(e) => onUpdate({ ...block.params, decimation: parseInt(e.target.value) || 1 })}
+                    className="w-full text-xs px-2.5 py-1 border border-[#333] bg-[#0a0a0a] text-white rounded focus:border-[#c9a86c] outline-none font-mono"
+                  />
+                </div>
+
+                {/* Sample Time */}
+                <div className="space-y-1">
+                  <label className="block text-[9px] font-bold text-gray-400 uppercase">Sample Time (s)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={block.params?.sampleTime ?? -1}
+                    onChange={(e) => onUpdate({ ...block.params, sampleTime: parseFloat(e.target.value) || -1 })}
+                    className="w-full text-xs px-2.5 py-1 border border-[#333] bg-[#0a0a0a] text-white rounded focus:border-[#c9a86c] outline-none font-mono"
+                  />
+                </div>
+
+                {/* Show Grid */}
+                <div className="space-y-1">
+                  <label className="block text-[9px] font-bold text-gray-400 uppercase">Grid</label>
+                  <select
+                    value={String(block.params?.showGrid !== false)}
+                    onChange={(e) => onUpdate({ ...block.params, showGrid: e.target.value === 'true' })}
+                    className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-gray-300 rounded focus:border-[#c9a86c] outline-none"
+                  >
+                    <option value="true">Show</option>
+                    <option value="false">Hide</option>
+                  </select>
+                </div>
+
+                {/* Show Legend */}
+                <div className="space-y-1">
+                  <label className="block text-[9px] font-bold text-gray-400 uppercase">Legend</label>
+                  <select
+                    value={String(block.params?.showLegend !== false)}
+                    onChange={(e) => onUpdate({ ...block.params, showLegend: e.target.value === 'true' })}
+                    className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-gray-300 rounded focus:border-[#c9a86c] outline-none"
+                  >
+                    <option value="true">Show</option>
+                    <option value="false">Hide</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
             {/* Main Plot Area */}
             <div className="flex-1 p-6 flex flex-col min-w-0">
               <div className="flex-1 bg-black/40 rounded-xl border border-white/5 p-4 shadow-inner">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={history}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
+                  <LineChart data={displayData}>
+                    {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />}
                     <XAxis 
                       dataKey="t" 
                       type="number" 
@@ -1656,7 +1785,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onClose
                       labelStyle={{ color: '#888', marginBottom: '4px' }}
                       labelFormatter={(t) => `Time: ${Number(t).toFixed(4)}s`}
                     />
-                    <Legend iconType="circle" />
+                    {showLegend && <Legend iconType="circle" />}
                     {Array.from({ length: numSignals }, (_, i) => (
                       <Line 
                         key={i}

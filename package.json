@@ -12,7 +12,9 @@
     "preview": "vite preview",
     "start": "electron-forge start",
     "package": "npm run build && electron-forge package",
-    "make": "npm run build && electron-forge make"
+    "make": "npm run build && electron-forge make",
+    "audit:security": "npm audit --audit-level=high",
+    "prebuild": "npm audit --audit-level=critical"
   },
   "config": {
     "forge": "./forge.config.cjs"
@@ -33,8 +35,10 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tailwindcss/vite": "^4.1.18",
+    "@types/dompurify": "^3.0.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dompurify": "^3.4.11",
     "electron-squirrel-startup": "^1.0.1",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",

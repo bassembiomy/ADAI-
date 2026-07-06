@@ -221,8 +221,17 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       },
       { 
         id: 'scope', name: 'Scope', color: '#fbbf24', icon: 'scope', category: 'Sinks',
-        params: { time_range: { value: 10, unit: 's', label: 'Time Range' } },
-        ports: [{ id: 'in1', pos: 'left', label: '1', domain: 'Physical' }, { id: 'in2', pos: 'left', label: '2', domain: 'Physical' }]
+        params: { 
+          numSignals: { value: 1, unit: 'channels', label: 'Number of Input Ports' },
+          time_range: { value: 10, unit: 's', label: 'Time Range' },
+          limit_data_points: { value: 'on', unit: '', label: 'Limit data points to last' },
+          buffer_size: { value: 1000, unit: 'points', label: 'Max Points' },
+          decimation: { value: 1, unit: '', label: 'Decimation' },
+          sample_time: { value: -1, unit: 's', label: 'Sample Time' },
+          show_grid: { value: 'on', unit: '', label: 'Show Grid' },
+          show_legend: { value: 'on', unit: '', label: 'Show Legend' }
+        },
+        ports: [{ id: 'in1', pos: 'left', label: '1', domain: 'Physical' }]
       },
       {
         id: 'v_sensor', name: 'Voltage Sensor', color: '#fbbf24', icon: 'v_sensor', category: 'Sensors',

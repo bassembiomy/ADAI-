@@ -91,6 +91,7 @@ export const XBRIDGES_CATEGORIES = [
     blocks: [
       { type: 'Constant', label: 'Constant', icon: 'square' },
       { type: 'WaveformGen', label: 'Waveform Gen', icon: 'activity' },
+      { type: 'Step', label: 'Step', icon: 'trending-up' }
     ]
   },
   {

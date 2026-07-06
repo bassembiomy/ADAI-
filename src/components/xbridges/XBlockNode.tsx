@@ -572,7 +572,7 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
 };
 
 export const getColor = (type: string) => {
-  if (['Constant', 'WaveformGen', 'Clock', 'Scope', 'DELAY', 'MUX', 'DEMUX', 'TERMINATOR', 'DATA_TYPE_CONVERSION'].includes(type)) return '#007acc'; // Signal (Blue)
+  if (['Constant', 'WaveformGen', 'Clock', 'Step', 'Scope', 'DELAY', 'MUX', 'DEMUX', 'TERMINATOR', 'DATA_TYPE_CONVERSION'].includes(type)) return '#007acc'; // Signal (Blue)
   if (['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow', 'UnaryNeg', 'Abs', 'SumElements', 'Mean', 'Max', 'MatrixMul', 'Transpose', 'Inverse', 'Determinant', 'GAIN', 'PRODUCT', 'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'TRANSFER_FUNCTION', 'STATE_SPACE', 'ZERO_POLE_GAIN', 'DISCRETE_TRANSFER_FUNCTION'].includes(type)) return '#28a745'; // Math (Green)
   if (['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR', 'SWITCH', 'IF_ELSE', 'SWITCH_CASE'].includes(type)) return '#6f42c1'; // Logic (Purple)
   if (['BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight'].includes(type)) return '#563d7c'; // Bitwise (Indigo)
@@ -771,10 +771,10 @@ export const XBlockNode = ({ data, id, selected }: any) => {
             zIndex: 15,
             boxShadow: isSelected ? '0 0 12px #c9a86c, 0 0 6px #c9a86c' : 'none',
             transition: 'all 0.3s ease',
-            ...(port.position === 'left' ? { left: isSelected ? -20 : -18, position: 'absolute', top: '50%', transform: 'translateY(-50%)' } : {}),
-            ...(port.position === 'right' ? { right: isSelected ? -20 : -18, position: 'absolute', top: '50%', transform: 'translateY(-50%)' } : {}),
-            ...(port.position === 'top' ? { top: '50%', left: '50%', transform: 'translate(-50%, -50%)', position: 'absolute' } : {}),
-            ...(port.position === 'bottom' ? { top: '50%', left: '50%', transform: 'translate(-50%, -50%)', position: 'absolute' } : {}),
+            ...(port.position === 'left' ? { left: isSelected ? -20 : -18, position: 'absolute', top: `calc(50% - ${isSelected ? 7 : 5}px)` } : {}),
+            ...(port.position === 'right' ? { right: isSelected ? -20 : -18, position: 'absolute', top: `calc(50% - ${isSelected ? 7 : 5}px)` } : {}),
+            ...(port.position === 'top' ? { top: `calc(50% - ${isSelected ? 7 : 5}px)`, left: `calc(50% - ${isSelected ? 7 : 5}px)`, position: 'absolute' } : {}),
+            ...(port.position === 'bottom' ? { top: `calc(50% - ${isSelected ? 7 : 5}px)`, left: `calc(50% - ${isSelected ? 7 : 5}px)`, position: 'absolute' } : {}),
           }}
           onClick={(e) => {
             e.stopPropagation();
@@ -802,6 +802,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
     <div 
       ref={nodeRef}
       className={`relative rounded-md transition-all duration-500 border-2 ${selected ? 'ring-4 ring-white/10 scale-105 z-50' : 'hover:border-white/20'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
+      onMouseDown={(e) => data.onNodeMouseDown && data.onNodeMouseDown(e)}
       style={{ 
         background: 'rgba(20, 20, 20, 0.8)',
         backdropFilter: 'blur(20px)',
@@ -809,7 +810,10 @@ export const XBlockNode = ({ data, id, selected }: any) => {
         minWidth: data.type === 'Scope' ? 260 : ['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN'].includes(data.type) ? 170 : 130,
         boxShadow: selected 
           ? `0 20px 50px -10px rgba(0,0,0,0.8), 0 0 30px ${color}33` 
-          : '0 10px 30px -10px rgba(0,0,0,0.5)'
+          : '0 10px 30px -10px rgba(0,0,0,0.5)',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column'
       }}
     >
       <NodeResizer minWidth={100} minHeight={40} isVisible={selected} lineStyle={{ borderColor: color }} handleStyle={{ background: color, border: 'none', borderRadius: '4px' }} />
@@ -859,7 +863,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
         </div>
       </div>
 
-      <div className="flex p-3 gap-5 relative">
+      <div className="flex flex-1 p-3 gap-5 relative min-h-0">
         {/* Decorative Grid Overlay for Node Body */}
         <div className="absolute inset-0 opacity-[0.02] pointer-events-none" 
              style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '10px 10px' }} />
@@ -874,7 +878,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
           {['ROBOT_VACUUM_DIGITAL_TWIN', 'ROBOT_VACUUM_ENVIRONMENT', 'ROBOT_VACUUM_VISUALIZATION'].includes(data.type) ? (
             <RobotTwinCanvas state={data.state} />
           ) : data.type === 'Scope' ? (
-            <div className="w-full h-[90px] bg-black/60 rounded-xl border border-white/5 p-2 shadow-inner group/scope overflow-hidden relative">
+            <div className="w-full flex-1 min-h-[90px] bg-black/60 rounded-xl border border-white/5 p-2 shadow-inner group/scope overflow-hidden relative">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(16,185,129,0.1),transparent)]" />
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data.state?.history?.slice(-50).map((sample: any, i: number) => {
@@ -991,6 +995,12 @@ export const XBlockNode = ({ data, id, selected }: any) => {
                {data.type === 'Constant' && (
                  <div className="px-2 py-0.5 rounded-full bg-black/40 border border-white/5 text-[10px] font-mono font-bold text-white/70 tabular-nums">
                    {data.params?.value}
+                 </div>
+               )}
+               {data.type === 'Step' && (
+                 <div className="px-2 py-0.5 rounded bg-black/40 border border-white/5 text-[9px] font-mono text-center font-bold text-white/70 tabular-nums">
+                   <div>t ≥ {data.params?.stepTime}</div>
+                   <div className="text-[8px] text-gray-500 font-sans">{String(data.params?.initialValue)} → {String(data.params?.finalValue)}</div>
                  </div>
                )}
                {data.type === 'GAIN' && (

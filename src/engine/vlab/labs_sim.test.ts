@@ -262,7 +262,7 @@ describe('VLab Learning Labs Simulation Tests', () => {
       } else if (lab.id === 'advanced_microwave_design') {
         expect(state.scopeValues).toBeGreaterThan(25.001);
       } else if (lab.id === 'voltage_sensing_circuit') {
-        expect(Math.abs(state.scopeValues.value)).toBeGreaterThan(1.0);
+        expect(Math.abs(state.scopeValues)).toBeGreaterThan(1.0);
       }
     });
   });

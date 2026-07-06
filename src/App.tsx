@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent } from 'react';
 import * as math from 'mathjs';
 import Plot from 'react-plotly.js';
+import DOMPurify from 'dompurify';
 import { v4 as uuidv4 } from 'uuid';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -23,6 +24,8 @@ import {
   Eye, Paperclip
 } from 'lucide-react';
 import { FactoryIOGateway } from './components/FactoryIOGateway';
+import { ThreeDXGateway } from './components/ThreeDXGateway';
+import type { AdiaExportItem } from './types/threeDX_types';
 import { AiArchitectSidebar } from './components/AiArchitectSidebar';
 import { executeAiActions } from './utils/aiActionProcessor';
 import { IntroStandbyOverlay } from './components/IntroStandbyOverlay';
@@ -252,6 +255,7 @@ interface BlockData {
   ibdHeight?: number;
   attachedFiles?: { name: string; content: string }[];
   assignedTo?: string;
+  layerId?: string; // Which requirements layer this block belongs to ('root' or a block id)
 }
 
 interface RelationshipData {
@@ -427,6 +431,7 @@ const getJunctionEdgePoint = (junction: { x: number; y: number }, target: { x: n
 
 const migrateBlocks = (blocksToMigrate: any[]): BlockData[] => {
   return (blocksToMigrate || []).map((b: any) => {
+    let migrated = { ...b, constraints: b.constraints || [] };
     if (b.properties && b.properties.length > 0 && typeof b.properties[0] === 'string') {
       const newProperties: ValuePropertyData[] = b.properties.map((pStr: string) => {
         const [name, rest] = pStr.split(':');
@@ -438,9 +443,13 @@ const migrateBlocks = (blocksToMigrate: any[]): BlockData[] => {
           defaultValue: defaultValue?.trim(),
         };
       });
-      return { ...b, properties: newProperties, constraints: b.constraints || [] };
+      migrated = { ...migrated, properties: newProperties };
     }
-    return { ...b, constraints: b.constraints || [] };
+    // Migrate old requirement blocks that lack layerId: default to 'root'
+    if (migrated.stereotype === 'requirement' && migrated.layerId === undefined) {
+      migrated.layerId = 'root';
+    }
+    return migrated;
   });
 };
 
@@ -5002,7 +5011,7 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
                             {section.list.map((item, i) => (
                               <div key={i} className="flex items-start gap-3 p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
                                 <div className="w-1.5 h-1.5 rounded-full bg-orange-500 mt-1.5 shrink-0"></div>
-                                <span className="text-sm text-gray-300 font-light" dangerouslySetInnerHTML={{ __html: item.replace(/\*\*(.*?)\*\*/g, '<b class="text-white">$1</b>') }}></span>
+                                <span className="text-sm text-gray-300 font-light" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.replace(/\*\*(.*?)\*\*/g, '<b class="text-white">$1</b>')) }}></span>
                               </div>
                             ))}
                           </div>
@@ -5599,7 +5608,14 @@ const GlobalReportPreviewModal = ({
             `}</style>
             <div 
               dangerouslySetInnerHTML={{ 
-                __html: reportData.html.replace(/.*?<body>/s, '').replace(/<\/body>.*?/s, '') 
+                __html: DOMPurify.sanitize(reportData.html.replace(/.*?<body>/s, '').replace(/<\/body>.*?/s, ''), {
+                  ALLOWED_TAGS: [
+                    'h1','h2','h3','h4','p','span','div','table','tr','td','th','thead','tbody','b','i','strong','em','br','hr','ul','ol','li','img','svg','path','rect','circle','text','line','g'
+                  ],
+                  ALLOWED_ATTR: [
+                    'class','style','width','height','viewBox','xmlns','d','cx','cy','r','x','y','fill','stroke','stroke-width','transform','text-anchor','dominant-baseline','src','alt'
+                  ]
+                })
               }} 
             />
           </div>
@@ -6435,6 +6451,54 @@ const ADIA = () => {
   const [factoryIOEnabled, setFactoryIOEnabled] = useState(true);
   const [factoryIOStatus, setFactoryIOStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
 
+  // 3DEXPERIENCE GATEWAY STATE
+  const [show3DXGateway, setShow3DXGateway] = useState(false);
+
+  /**
+   * Builds the list of ADIA documents that can be uploaded to 3DEXPERIENCE.
+   * Computed lazily so the upload panel always reflects the current workspace state.
+   */
+  const adiaExportItems: AdiaExportItem[] = useMemo(() => {
+    const projectPayload = {
+      states, junctions, transitions, layers, variables,
+      blocks, relationships, parts, connectors, interfaceRealizations,
+    };
+    const projectJson = JSON.stringify(projectPayload, null, 2);
+    const hasProject = states.length > 0 || blocks.length > 0;
+
+    return [
+      {
+        type: 'project_json',
+        fileName: `adia_project_${new Date().toISOString().slice(0, 10)}.json`,
+        label: 'ADIA Project JSON',
+        content: projectJson,
+        mimeType: 'application/json',
+        encoding: 'utf8',
+        available: hasProject,
+      },
+      {
+        type: 'xbridges_model',
+        fileName: `xbridges_model_${new Date().toISOString().slice(0, 10)}.json`,
+        label: 'X-Bridges Model',
+        content: JSON.stringify({ nodes: globalXBridgesNodes, edges: globalXBridgesEdges }, null, 2),
+        mimeType: 'application/json',
+        encoding: 'utf8',
+        available: globalXBridgesNodes.length > 0,
+      },
+      {
+        type: 'vlab_model',
+        fileName: `vlab_model_${new Date().toISOString().slice(0, 10)}.json`,
+        label: 'V-Lab Model',
+        content: JSON.stringify({ nodes: vlabNodes, edges: vlabEdges }, null, 2),
+        mimeType: 'application/json',
+        encoding: 'utf8',
+        available: vlabNodes && vlabNodes.length > 0,
+      },
+    ] as AdiaExportItem[];
+  }, [states, junctions, transitions, layers, variables, blocks, relationships, parts, connectors, interfaceRealizations, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
+
+
+
   // AI SIDEBAR STATE
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
 
@@ -6700,9 +6764,9 @@ const ADIA = () => {
   const handleExportProject = useCallback(async () => {
     const projectFiles = {
       'statemachine.json': { states, junctions, transitions, layers, variables, view, tickMs },
-      'bdd.json': { blocks: blocks.filter(b => b.stereotype !== 'Requirement'), relationships, customStereotypes },
+      'bdd.json': { blocks: blocks.filter(b => b.stereotype !== 'requirement'), relationships, customStereotypes },
       'ibd.json': { parts, connectors, interfaceRealizations },
-      'requirements.json': { blocks: blocks.filter(b => b.stereotype === 'Requirement'), relationships },
+      'requirements.json': { blocks: blocks.filter(b => b.stereotype === 'requirement'), relationships },
       'xbridges.json': { globalXBridgesNodes, globalXBridgesEdges },
       'vlab.json': { vlabNodes, vlabEdges },
       'hmi.json': { hmiComponents },
@@ -6787,8 +6851,8 @@ const ADIA = () => {
       if (importedData.view) setView(importedData.view);
       if (importedData.tickMs) setTickMs(importedData.tickMs);
 
-      // SysML & Requirements
-      if (importedData.blocks) setBlocks(importedData.blocks);
+      // SysML & Requirements — always migrate to ensure layerId is set
+      if (importedData.blocks) setBlocks(migrateBlocks(importedData.blocks));
       if (importedData.relationships) setRelationships(importedData.relationships);
       if (importedData.parts) setParts(importedData.parts);
       if (importedData.connectors) setConnectors(importedData.connectors);
@@ -8084,6 +8148,20 @@ const ADIA = () => {
     simStepRef.current = simulationStep;
   }, [simulationStep]);
 
+  // One-time migration: ensure all requirement blocks have a layerId.
+  // Blocks without layerId are old data and belong to the root layer.
+  useEffect(() => {
+    setBlocks(prev => {
+      const needsMigration = prev.some(b => b.stereotype === 'requirement' && b.layerId === undefined);
+      if (!needsMigration) return prev;
+      return prev.map(b =>
+        b.stereotype === 'requirement' && b.layerId === undefined
+          ? { ...b, layerId: 'root' }
+          : b
+      );
+    });
+  }, []); // Run once on mount
+
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -8165,6 +8243,21 @@ const ADIA = () => {
     setSelectedIds([]);
     addError('info', 'Returned to parent layer');
   }, [layerStack, diagramMode, addError]);
+
+  const goToLayer = useCallback((index: number) => {
+    if (index >= layerPath.length - 1) return;
+    const targetLayerId = layerStack[index];
+    setLayerStack(prev => prev.slice(0, index));
+    setLayerPath(prev => prev.slice(0, index + 1));
+    setCurrentLayerId(targetLayerId);
+
+    if (diagramMode === 'ibd' && targetLayerId === 'root') {
+      setDiagramMode('bdd');
+    }
+
+    setSelectedIds([]);
+    addError('info', `Navigated to layer: ${layerPath[index]}`);
+  }, [layerStack, layerPath, diagramMode, addError]);
 
   // STATE MACHINE EDITOR
   const createState = useCallback((x: number, y: number, parentId?: string) => {
@@ -8417,6 +8510,8 @@ const ADIA = () => {
   const createBlock = useCallback((x: number, y: number, stereotype: string = 'block') => {
     addToHistory();
     const newId = uuidv4();
+    // For requirements, store which layer this block was created in
+    const blockLayerId = (stereotype === 'requirement' && diagramMode === 'requirements') ? currentLayerId : undefined;
     const newBlock: BlockData = {
       id: newId,
       name: `New${stereotype.charAt(0).toUpperCase() + stereotype.slice(1)}`,
@@ -8437,21 +8532,9 @@ const ADIA = () => {
       risk: stereotype === 'requirement' ? 'Medium' : undefined,
       verificationMethod: stereotype === 'requirement' ? 'Test' : undefined,
       source: stereotype === 'requirement' ? '' : undefined,
+      layerId: blockLayerId,
     };
     setBlocks(prev => [...prev, newBlock]);
-
-    if (stereotype === 'requirement' && diagramMode === 'requirements' && currentLayerId !== 'root') {
-      const newRel: RelationshipData = {
-        id: uuidv4(),
-        sourceId: currentLayerId,
-        targetId: newId,
-        type: 'composition',
-        label: '',
-        sourceMultiplicity: '1',
-        targetMultiplicity: '1'
-      };
-      setRelationships(prev => [...prev, newRel]);
-    }
 
     setSelectedIds([newBlock.id]);
     addError('info', `Created ${stereotype}: ${newBlock.name}`);
@@ -8551,30 +8634,8 @@ const ADIA = () => {
     const reqs = blocks.filter(b => b.stereotype === 'requirement');
     if (reqs.length === 0) return;
 
-    // Only layout visible requirements
-    const visibleReqs = reqs.filter(block => {
-      if (currentLayerId === 'root') {
-        return true;
-      }
-      // Check if block is a descendant of currentLayerId
-      const descendants = new Set<string>();
-      const queue = [currentLayerId];
-      const visited = new Set<string>();
-      while (queue.length > 0) {
-        const current = queue.shift()!;
-        if (visited.has(current)) continue;
-        visited.add(current);
-        relationships
-          .filter(r => r.sourceId === current && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'))
-          .forEach(r => {
-            if (!descendants.has(r.targetId)) {
-              descendants.add(r.targetId);
-              queue.push(r.targetId);
-            }
-          });
-      }
-      return descendants.has(block.id);
-    });
+    // Only layout requirements belonging to the current layer
+    const visibleReqs = reqs.filter(block => (block.layerId ?? 'root') === currentLayerId);
 
     if (visibleReqs.length === 0) return;
     const visibleIds = new Set(visibleReqs.map(r => r.id));
@@ -9208,6 +9269,30 @@ const ADIA = () => {
     const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
     const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
 
+    if (e.button === 2) {
+      e.preventDefault();
+      const stateToClone = states.find(s => s.id === stateId);
+      if (!stateToClone) return;
+      const newId = uuidv4();
+      const newState = {
+        ...stateToClone,
+        id: newId,
+        name: `${stateToClone.name}_copy`,
+        x: stateToClone.x,
+        y: stateToClone.y,
+      };
+      addToHistory();
+      setStates(prev => [...prev, newState]);
+      setLayers(prev => prev.map(l => l.id === currentLayerId ? {
+        ...l,
+        stateIds: [...l.stateIds, newId]
+      } : l));
+      setSelectedIds([newId]);
+      setIsDragging(true);
+      setDragOffset({ x: worldX, y: worldY });
+      return;
+    }
+
     if (e.ctrlKey) {
       setSelectedIds(prev => prev.includes(stateId) ? prev.filter(id => id !== stateId) : [...prev, stateId]);
     } else {
@@ -9221,7 +9306,7 @@ const ADIA = () => {
 
     // For dragging, we track the mouse position relative to world
     setDragOffset({ x: worldX, y: worldY });
-  }, [isCreatingTransition, transitionSourceId, states, view, createTransition, selectedIds, addToHistory, uiZoom]);
+  }, [isCreatingTransition, transitionSourceId, states, view, createTransition, selectedIds, addToHistory, uiZoom, currentLayerId]);
 
   const handleJunctionMouseDown = useCallback((e: MouseEvent<SVGGElement>, junctionId: string) => {
     e.stopPropagation();
@@ -9247,6 +9332,28 @@ const ADIA = () => {
     const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
     const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
 
+    if (e.button === 2) {
+      e.preventDefault();
+      const junctionToClone = junctions.find(j => j.id === junctionId);
+      if (!junctionToClone) return;
+      const newId = uuidv4();
+      const newJunction = {
+        ...junctionToClone,
+        id: newId,
+        name: junctionToClone.name ? `${junctionToClone.name}_copy` : `J${junctions.length + 1}`,
+      };
+      addToHistory();
+      setJunctions(prev => [...prev, newJunction]);
+      setLayers(prev => prev.map(l => l.id === currentLayerId ? {
+        ...l,
+        junctionIds: [...l.junctionIds, newId]
+      } : l));
+      setSelectedIds([newId]);
+      setIsDragging(true);
+      setDragOffset({ x: worldX, y: worldY });
+      return;
+    }
+
     if (e.ctrlKey) {
       setSelectedIds(prev => prev.includes(junctionId) ? prev.filter(id => id !== junctionId) : [...prev, junctionId]);
     } else {
@@ -9258,7 +9365,7 @@ const ADIA = () => {
     addToHistory(); // Save state before dragging
     setIsDragging(true);
     setDragOffset({ x: worldX, y: worldY });
-  }, [isCreatingTransition, transitionSourceId, junctions, view, createTransition, selectedIds, addToHistory, uiZoom]);
+  }, [isCreatingTransition, transitionSourceId, junctions, view, createTransition, selectedIds, addToHistory, uiZoom, currentLayerId]);
 
   const handleBlockMouseDown = useCallback((e: MouseEvent<SVGGElement>, blockId: string) => {
     e.stopPropagation();
@@ -9290,6 +9397,28 @@ const ADIA = () => {
     const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
     const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
 
+    if (e.button === 2) {
+      e.preventDefault();
+      const blockToClone = blocks.find(b => b.id === blockId);
+      if (!blockToClone) return;
+      const newId = uuidv4();
+      const newBlock = {
+        ...blockToClone,
+        id: newId,
+        name: `${blockToClone.name}_copy`,
+        ports: blockToClone.ports.map(p => ({
+          ...p,
+          id: uuidv4()
+        }))
+      };
+      addToHistory();
+      setBlocks(prev => [...prev, newBlock]);
+      setSelectedIds([newId]);
+      setIsDragging(true);
+      setDragOffset({ x: worldX, y: worldY });
+      return;
+    }
+
     if (e.ctrlKey) {
       setSelectedIds(prev => prev.includes(blockId) ? prev.filter(id => id !== blockId) : [...prev, blockId]);
     } else {
@@ -9309,6 +9438,24 @@ const ADIA = () => {
     const worldX = ((e.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
     const worldY = ((e.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
 
+    if (e.button === 2) {
+      e.preventDefault();
+      const partToClone = parts.find(p => p.id === partId);
+      if (!partToClone) return;
+      const newId = uuidv4();
+      const newPart = {
+        ...partToClone,
+        id: newId,
+        name: `${partToClone.name}_copy`
+      };
+      addToHistory();
+      setParts(prev => [...prev, newPart]);
+      setSelectedIds([newId]);
+      setIsDragging(true);
+      setDragOffset({ x: worldX, y: worldY });
+      return;
+    }
+
     if (e.ctrlKey) {
       setSelectedIds(prev => prev.includes(partId) ? prev.filter(id => id !== partId) : [...prev, partId]);
     } else {
@@ -9317,7 +9464,7 @@ const ADIA = () => {
     addToHistory();
     setIsDragging(true);
     setDragOffset({ x: worldX, y: worldY });
-  }, [isCreatingConnector, view, selectedIds, addToHistory, uiZoom]);
+  }, [isCreatingConnector, view, selectedIds, addToHistory, uiZoom, parts]);
 
   const handleStateDoubleClick = useCallback((e: MouseEvent<SVGGElement>, stateId: string) => {
     e.stopPropagation();
@@ -10989,6 +11136,10 @@ const ADIA = () => {
             let lpTimers = {};
             let audioCtx = null;
 
+            function escapeHtml(str) {
+              return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+
             function logEvent(event, detail = "") {
               const el = document.getElementById("sim-event-log");
               if (!el) return;
@@ -10999,7 +11150,7 @@ const ADIA = () => {
               entry.style.gap = "8px";
               entry.style.borderBottom = "1px solid #1a1a20";
               entry.style.padding = "3px 0";
-              entry.innerHTML = "<span style='color: #555568; min-width: 50px;'>" + ts + "</span><span style='color: #4db8ff; min-width: 100px; font-weight: bold;'>" + event + "</span><span style='color: #8888a0;'>" + detail + "</span>";
+              entry.innerHTML = "<span style='color: #555568; min-width: 50px;'>" + escapeHtml(ts) + "</span><span style='color: #4db8ff; min-width: 100px; font-weight: bold;'>" + escapeHtml(event) + "</span><span style='color: #8888a0;'>" + escapeHtml(detail) + "</span>";
               el.prepend(entry);
               while (el.children.length > 40) el.removeChild(el.lastChild);
             }
@@ -11297,7 +11448,7 @@ const ADIA = () => {
                 cell.style.border = "1px solid #2a2a36";
                 cell.style.borderRadius = "6px";
                 cell.style.padding = "6px 8px";
-                cell.innerHTML = "<div style='font-size: 8px; color: #555568; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + layerName + "</div><div style='font-size: 11px; font-weight: bold; color: #f97316; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + stateName + "</div>";
+                cell.innerHTML = "<div style='font-size: 8px; color: #555568; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + escapeHtml(layerName) + "</div><div style='font-size: 11px; font-weight: bold; color: #f97316; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + escapeHtml(stateName) + "</div>";
                 db.appendChild(cell);
               });
 
@@ -11310,7 +11461,7 @@ const ADIA = () => {
                 cell.style.border = "1px solid #2a2a36";
                 cell.style.borderRadius = "6px";
                 cell.style.padding = "6px 8px";
-                cell.innerHTML = "<div style='font-size: 8px; color: #555568; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + v.name + "</div><div style='font-size: 11px; font-weight: bold; color: " + (v.type === "bool" && val ? "#22c55e" : "#e8e8ec") + "; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + displayVal + "</div>";
+                cell.innerHTML = "<div style='font-size: 8px; color: #555568; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + escapeHtml(v.name) + "</div><div style='font-size: 11px; font-weight: bold; color: " + (v.type === "bool" && val ? "#22c55e" : "#e8e8ec") + "; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + escapeHtml(displayVal) + "</div>";
                 db.appendChild(cell);
               });
             }
@@ -11797,10 +11948,13 @@ const ADIA = () => {
             })).filter(t => (idMap.has(t.sourceId) || states.some(s => s.id === t.sourceId) || junctions.some(j => j.id === t.sourceId)) && (idMap.has(t.targetId) || states.some(s => s.id === t.targetId) || junctions.some(j => j.id === t.targetId)));
 
             // BDD/Requirements
-            const newBlocks = (clipboard.blocks || []).map(b => {
+            const newBlocks = (clipboard.blocks || []).map((b: BlockData) => {
               const newId = uuidv4();
               idMap.set(b.id, newId);
-              return { ...b, id: newId, x: b.x + 20, y: b.y + 20, name: `${b.name}_copy` };
+              const updatedBlock = { ...b, id: newId, x: b.x + 20, y: b.y + 20, name: `${b.name}_copy` };
+              // Paste requirement blocks into the current layer
+              if (b.stereotype === 'requirement') updatedBlock.layerId = currentLayerId;
+              return updatedBlock;
             });
             const newRelationships = (clipboard.relationships || []).map(r => ({
               ...r,
@@ -12461,27 +12615,10 @@ const ADIA = () => {
 
       if (diagramMode === 'requirements') {
         if (block.stereotype !== 'requirement') return null;
-
-        if (currentLayerId !== 'root') {
-          // Only show requirements that are descendants of currentLayerId
-          const descendants = new Set<string>();
-          const queue = [currentLayerId];
-          const visited = new Set<string>();
-          while (queue.length > 0) {
-            const current = queue.shift()!;
-            if (visited.has(current)) continue;
-            visited.add(current);
-            relationships
-              .filter(r => r.sourceId === current && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'))
-              .forEach(r => {
-                if (!descendants.has(r.targetId)) {
-                  descendants.add(r.targetId);
-                  queue.push(r.targetId);
-                }
-              });
-          }
-          if (!descendants.has(block.id)) return null;
-        }
+        // Use layerId for visibility: show only blocks belonging to the current layer.
+        // Blocks without layerId (legacy) default to root.
+        const blockLayer = block.layerId ?? 'root';
+        if (blockLayer !== currentLayerId) return null;
       }
 
       if (diagramMode === 'bdd' && block.stereotype === 'requirement') return null;
@@ -12649,29 +12786,10 @@ const ADIA = () => {
       if (diagramMode === 'bdd' && isReqRel) return null;
       if (diagramMode === 'requirements' && !isReqRel) return null;
 
-      // Check visibility for requirements
+      // Check visibility for requirements: both source and target must be in the current layer
       if (diagramMode === 'requirements') {
-        const isVisible = (id: string) => {
-          if (currentLayerId === 'root') return true;
-          const descendants = new Set<string>();
-          const queue = [currentLayerId];
-          const visited = new Set<string>();
-          while (queue.length > 0) {
-            const current = queue.shift()!;
-            if (visited.has(current)) continue;
-            visited.add(current);
-            relationships
-              .filter(r => r.sourceId === current && (r.type === 'composition' || r.type === 'derive' || r.type === 'deriveReqt'))
-              .forEach(r => {
-                if (!descendants.has(r.targetId)) {
-                  descendants.add(r.targetId);
-                  queue.push(r.targetId);
-                }
-              });
-          }
-          return descendants.has(id);
-        };
-        if (!isVisible(source.id) || !isVisible(target.id)) return null;
+        const isBlockVisible = (block: BlockData) => (block.layerId ?? 'root') === currentLayerId;
+        if (!isBlockVisible(source) || !isBlockVisible(target)) return null;
       }
 
       const srcW = source.width || 150;
@@ -13689,6 +13807,19 @@ const ADIA = () => {
             Factory I/O
           </Button>
 
+          {/* 3DEXPERIENCE Gateway Button */}
+          <Button
+            id="3dx-toolbar-btn"
+            variant="outline"
+            size="sm"
+            onClick={() => setShow3DXGateway(true)}
+            className="border-[#0056b3]/60 text-[#4da6ff] hover:bg-[#0056b3]/10"
+            title="Connect to 3DEXPERIENCE Platform"
+          >
+            <Cloud size={14} className="mr-1.5" />
+            3DEXPERIENCE
+          </Button>
+
           <div className="flex-1" />
 
           {/* Status indicators */}
@@ -13881,7 +14012,7 @@ const ADIA = () => {
                     {layerPath.map((name, index) => ( // REQ-HSM-041 & 042
                       <React.Fragment key={index}>
                         <button
-                          onClick={index < layerPath.length - 1 ? exitLayer : undefined}
+                          onClick={index < layerPath.length - 1 ? () => goToLayer(index) : undefined}
                           disabled={index === layerPath.length - 1}
                           className={`flex items-center gap-1 px-2 py-0.5 rounded ${index === layerPath.length - 1
                             ? 'bg-[#f97316] text-[#0a0a0a] font-medium'
@@ -14031,38 +14162,6 @@ const ADIA = () => {
                       size="sm"
                       onClick={() => {
                         const rect = canvasRef.current?.getBoundingClientRect();
-                        if (rect) createBlock((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale, 'block');
-                      }}
-                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
-                    >
-                      Block
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        createRequirement(mousePos.x, mousePos.y);
-                      }}
-                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
-                    >
-                      Req
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        const rect = canvasRef.current?.getBoundingClientRect();
-                        if (rect) createBlock(((rect.width / uiZoom) / 2 - view.offsetX) / view.scale, ((rect.height / uiZoom) / 2 - view.offsetY) / view.scale, 'interfaceBlock');
-                      }}
-                      className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
-                    >
-                      Intf Block
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        const rect = canvasRef.current?.getBoundingClientRect();
                         if (rect) createPart((rect.width / 2 - view.offsetX) / view.scale, (rect.height / 2 - view.offsetY) / view.scale);
                       }}
                       className="h-6 px-2 text-[#e0e0e0] hover:bg-[#222]"
@@ -14092,27 +14191,29 @@ const ADIA = () => {
                   </>
                 )}
 
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    if (isCreatingTransition) {
-                      setIsCreatingTransition(false);
-                      setTransitionSourceId(null);
-                    } else {
-                      setIsCreatingTransition(true);
-                    }
-                  }}
-                  className={`h-6 px-2 ${isCreatingTransition ? 'bg-[#f97316] text-[#0a0a0a]' : 'text-[#e0e0e0] hover:bg-[#222]'
-                    }`}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                    <polyline points="15 3 21 3 21 9" />
-                    <line x1="10" y1="14" x2="21" y2="3" />
-                  </svg>
-                  {isCreatingTransition ? 'Cancel' : 'Connect'}
-                </Button>
+                {diagramMode !== 'ibd' && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      if (isCreatingTransition) {
+                        setIsCreatingTransition(false);
+                        setTransitionSourceId(null);
+                      } else {
+                        setIsCreatingTransition(true);
+                      }
+                    }}
+                    className={`h-6 px-2 ${isCreatingTransition ? 'bg-[#f97316] text-[#0a0a0a]' : 'text-[#e0e0e0] hover:bg-[#222]'
+                      }`}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
+                    {isCreatingTransition ? 'Cancel' : 'Connect'}
+                  </Button>
+                )}
 
                 <Separator orientation="vertical" className="h-3 bg-[#333] mx-1.5" />
 
@@ -14204,6 +14305,7 @@ const ADIA = () => {
 
               <div
                 ref={canvasRef}
+                id="adia-diagram-canvas"
                 className="absolute inset-0"
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
@@ -14211,6 +14313,7 @@ const ADIA = () => {
                 onMouseLeave={handleMouseUp}
                 onDoubleClick={handleDoubleClick}
                 onWheel={handleWheel}
+                onContextMenu={(e) => e.preventDefault()}
               >
                 <svg width="100%" height="100%" style={{ pointerEvents: 'none' }}>
                   <defs>
@@ -15933,6 +16036,25 @@ const ADIA = () => {
             />
           </FloatingWindow>
         )}
+
+        {/* ── 3DEXPERIENCE Gateway Modal ──────────────────────────────────────── */}
+        <ThreeDXGateway
+          isOpen={show3DXGateway}
+          onClose={() => setShow3DXGateway(false)}
+          adiaExports={adiaExportItems}
+          onImportJson={(jsonStr) => {
+            try {
+              const parsed = JSON.parse(jsonStr);
+              if (parsed && typeof parsed === 'object') {
+                hydrateProject(parsed);
+                addError('info', '3DEXPERIENCE: Project imported successfully.');
+              }
+            } catch {
+              addError('error', '3DEXPERIENCE: Downloaded file is not valid JSON.');
+            }
+            setShow3DXGateway(false);
+          }}
+        />
       </div>
     </>
   );

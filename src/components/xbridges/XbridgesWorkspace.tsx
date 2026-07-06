@@ -17,9 +17,9 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { 
   Play, Pause, Square, Save, Trash2, Box, Network, MousePointer2, Settings2, ChevronDown, ChevronRight, Search, Triangle, Layers,
-  Activity, Plus, Minus, X, Divide, ChevronUp, MinusCircle, Maximize, Maximize2, Sigma, BarChart, ArrowUp, Grid, RotateCw, RefreshCcw,
+  Activity, Plus, Minus, X, Divide, ChevronUp, MinusCircle, Maximize, Maximize2, Minimize2, Sigma, BarChart, ArrowUp, Grid, RotateCw, RefreshCcw,
   Hash, TrendingUp, Monitor, Download, LogIn, LogOut, ChevronLeft, Zap, Settings, ZapOff, Cpu, Wind, Filter, Eye,
-  GraduationCap, ArrowRightCircle, ArrowLeftCircle
+  GraduationCap, ArrowRightCircle, ArrowLeftCircle, Cloud, CheckCircle2, AlertCircle
 } from 'lucide-react';
 import { XBRIDGES_CATEGORIES, BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 
@@ -434,10 +434,12 @@ const XBRIDGES_LEARNING_LABS = [
       { id: 'room_segmentation', type: 'ROBOT_VACUUM_ROOM_SEGMENTATION', position: { x: 550, y: 80 }, label: 'Room Segmentation', params: {}, parentId: 'sub_robot_localization' },
       { id: 'semantic_zone_map', type: 'ROBOT_VACUUM_SEMANTIC_MAP', position: { x: 550, y: 260 }, label: 'Semantic Zone Map', params: {}, parentId: 'sub_robot_localization' },
       { id: 'loc_out_pose', type: 'Outport', position: { x: 800, y: 160 }, label: 'Pose Out', params: { name: 'Pose Out', port_index: 1 }, parentId: 'sub_robot_localization' },
+      { id: 'loc_out_y', type: 'Outport', position: { x: 800, y: 220 }, label: 'Pose Y Out', params: { name: 'Pose Y Out', port_index: 4 }, parentId: 'sub_robot_localization' },
       { id: 'loc_out_segment', type: 'Outport', position: { x: 800, y: 80 }, label: 'Room Seg Out', params: { name: 'Room Seg Out', port_index: 2 }, parentId: 'sub_robot_localization' },
       { id: 'loc_out_map', type: 'Outport', position: { x: 800, y: 270 }, label: 'Zone Map Out', params: { name: 'Zone Map Out', port_index: 3 }, parentId: 'sub_robot_localization' },
 
       { id: 'path_in_pose', type: 'Inport', position: { x: 50, y: 80 }, label: 'Pose In', params: { name: 'Pose In', port_index: 1 }, parentId: 'sub_path_planning' },
+      { id: 'path_in_y', type: 'Inport', position: { x: 50, y: 140 }, label: 'Pose Y In', params: { name: 'Pose Y In', port_index: 5 }, parentId: 'sub_path_planning' },
       { id: 'path_in_segment', type: 'Inport', position: { x: 50, y: 200 }, label: 'Room Seg In', params: { name: 'Room Seg In', port_index: 2 }, parentId: 'sub_path_planning' },
       { id: 'path_in_map', type: 'Inport', position: { x: 50, y: 320 }, label: 'Zone Map In', params: { name: 'Zone Map In', port_index: 3 }, parentId: 'sub_path_planning' },
       { id: 'path_in_bat', type: 'Inport', position: { x: 50, y: 440 }, label: 'Bat % In', params: { name: 'Bat % In', port_index: 4 }, parentId: 'sub_path_planning' },
@@ -453,6 +455,7 @@ const XBRIDGES_LEARNING_LABS = [
       { id: 'motion_in_current', type: 'Inport', position: { x: 50, y: 80 }, label: 'Current In', params: { name: 'Current In', port_index: 1 }, parentId: 'sub_motion_control' },
       { id: 'motion_in_waypoints', type: 'Inport', position: { x: 50, y: 200 }, label: 'Waypoints In', params: { name: 'Waypoints In', port_index: 2 }, parentId: 'sub_motion_control' },
       { id: 'motion_in_pose', type: 'Inport', position: { x: 50, y: 320 }, label: 'Pose In', params: { name: 'Pose In', port_index: 3 }, parentId: 'sub_motion_control' },
+      { id: 'motion_in_y', type: 'Inport', position: { x: 50, y: 380 }, label: 'Pose Y In', params: { name: 'Pose Y In', port_index: 5 }, parentId: 'sub_motion_control' },
       { id: 'motion_in_cliff', type: 'Inport', position: { x: 50, y: 440 }, label: 'Cliff IR In', params: { name: 'Cliff IR In', port_index: 4 }, parentId: 'sub_motion_control' },
       { id: 'collision_avoidance', type: 'ROBOT_VACUUM_COLLISION_AVOID', position: { x: 260, y: 150 }, label: 'Collision Avoidance', params: {}, parentId: 'sub_motion_control' },
       { id: 'surface_adapter', type: 'ROBOT_VACUUM_SURFACE_ADAPTER', position: { x: 260, y: 350 }, label: 'Surface Adapter', params: {}, parentId: 'sub_motion_control' },
@@ -516,9 +519,11 @@ const XBRIDGES_LEARNING_LABS = [
       { id: 'el0_4', source: 'sub_input_sensors', sourceHandle: 'in_sens_out_dust', target: 'sub_dustbin_monitor', targetHandle: 'dust_in', style: { stroke: '#c9a86c', strokeWidth: 3 } },
       { id: 'el0_5', source: 'sub_input_sensors', sourceHandle: 'in_sens_out_current', target: 'sub_motion_control', targetHandle: 'motion_in_current', style: { stroke: '#c9a86c', strokeWidth: 3 } },
       { id: 'el0_6', source: 'sub_robot_localization', sourceHandle: 'loc_out_pose', target: 'sub_path_planning', targetHandle: 'path_in_pose', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_6_y', source: 'sub_robot_localization', sourceHandle: 'loc_out_y', target: 'sub_path_planning', targetHandle: 'path_in_y', style: { stroke: '#c9a86c', strokeWidth: 3 } },
       { id: 'el0_7', source: 'sub_robot_localization', sourceHandle: 'loc_out_segment', target: 'sub_path_planning', targetHandle: 'path_in_segment', style: { stroke: '#c9a86c', strokeWidth: 3 } },
       { id: 'el0_8', source: 'sub_robot_localization', sourceHandle: 'loc_out_map', target: 'sub_path_planning', targetHandle: 'path_in_map', style: { stroke: '#c9a86c', strokeWidth: 3 } },
       { id: 'el0_9', source: 'sub_robot_localization', sourceHandle: 'loc_out_pose', target: 'sub_motion_control', targetHandle: 'motion_in_pose', style: { stroke: '#c9a86c', strokeWidth: 3 } },
+      { id: 'el0_9_y', source: 'sub_robot_localization', sourceHandle: 'loc_out_y', target: 'sub_motion_control', targetHandle: 'motion_in_y', style: { stroke: '#c9a86c', strokeWidth: 3 } },
       { id: 'el0_10', source: 'sub_input_sensors', sourceHandle: 'in_sens_out_cliff', target: 'sub_motion_control', targetHandle: 'motion_in_cliff', style: { stroke: '#c9a86c', strokeWidth: 3 } },
       { id: 'el0_11', source: 'sub_path_planning', sourceHandle: 'path_out_waypoints', target: 'sub_motion_control', targetHandle: 'motion_in_waypoints', style: { stroke: '#c9a86c', strokeWidth: 3 } },
       { id: 'el0_12', source: 'sub_motion_control', sourceHandle: 'motion_out_vel', target: 'sub_actuators_hw', targetHandle: 'act_in_vel', style: { stroke: '#c9a86c', strokeWidth: 3 } },
@@ -545,6 +550,7 @@ const XBRIDGES_LEARNING_LABS = [
       { id: 'e_rl_5', source: 'robot_fusion_pf', sourceHandle: 'x_est', target: 'semantic_zone_map', targetHandle: 'x_est' },
       { id: 'e_rl_6', source: 'robot_fusion_pf', sourceHandle: 'y_est', target: 'semantic_zone_map', targetHandle: 'y_est' },
       { id: 'e_rl_7', source: 'robot_fusion_pf', sourceHandle: 'x_est', target: 'loc_out_pose', targetHandle: 'in' },
+      { id: 'e_rl_7_y', source: 'robot_fusion_pf', sourceHandle: 'y_est', target: 'loc_out_y', targetHandle: 'in' },
       { id: 'e_rl_8', source: 'room_segmentation', sourceHandle: 'room_seg', target: 'loc_out_segment', targetHandle: 'in' },
       { id: 'e_rl_9', source: 'semantic_zone_map', sourceHandle: 'semantic_map', target: 'loc_out_map', targetHandle: 'in' },
 
@@ -557,12 +563,19 @@ const XBRIDGES_LEARNING_LABS = [
       { id: 'e_pp_7', source: 'room_scheduler', sourceHandle: 'room_schedule', target: 'goal_manager', targetHandle: 'room_schedule' },
       { id: 'e_pp_8', source: 'battery_monitor', sourceHandle: 'battery_status', target: 'goal_manager', targetHandle: 'battery_status' },
       { id: 'e_pp_9', source: 'path_in_pose', sourceHandle: 'out', target: 'goal_manager', targetHandle: 'x_est' },
+      { id: 'e_pp_9_y', source: 'path_in_y', sourceHandle: 'out', target: 'goal_manager', targetHandle: 'y_est' },
+      { id: 'e_pp_9_bat_wp', source: 'battery_monitor', sourceHandle: 'battery_status', target: 'waypoint_generation', targetHandle: 'battery_status' },
+      { id: 'e_pp_9_x_wp', source: 'path_in_pose', sourceHandle: 'out', target: 'waypoint_generation', targetHandle: 'x_est' },
+      { id: 'e_pp_9_y_wp', source: 'path_in_y', sourceHandle: 'out', target: 'waypoint_generation', targetHandle: 'y_est' },
+      { id: 'e_pp_9_x_bat', source: 'path_in_pose', sourceHandle: 'out', target: 'battery_monitor', targetHandle: 'x_est' },
+      { id: 'e_pp_9_y_bat', source: 'path_in_y', sourceHandle: 'out', target: 'battery_monitor', targetHandle: 'y_est' },
       { id: 'e_pp_10', source: 'goal_manager', sourceHandle: 'goal_path', target: 'viz_3d_colors', targetHandle: 'goal_path' },
       { id: 'e_pp_11', source: 'viz_3d_colors', sourceHandle: 'room_colors', target: 'path_out_colors', targetHandle: 'in' },
 
       { id: 'e_mc_1', source: 'motion_in_current', sourceHandle: 'out', target: 'collision_avoidance', targetHandle: 'current' },
       { id: 'e_mc_2', source: 'motion_in_waypoints', sourceHandle: 'out', target: 'collision_avoidance', targetHandle: 'waypoints' },
       { id: 'e_mc_3', source: 'motion_in_pose', sourceHandle: 'out', target: 'collision_avoidance', targetHandle: 'x_est' },
+      { id: 'e_mc_3_y', source: 'motion_in_y', sourceHandle: 'out', target: 'collision_avoidance', targetHandle: 'y_est' },
       { id: 'e_mc_4', source: 'collision_avoidance', sourceHandle: 'vel_cmd', target: 'motion_out_vel', targetHandle: 'in' },
       { id: 'e_mc_5', source: 'motion_in_pose', sourceHandle: 'out', target: 'surface_adapter', targetHandle: 'x_est' },
       { id: 'e_mc_6', source: 'surface_adapter', sourceHandle: 'surface', target: 'cliff_halt_logic', targetHandle: 'surface' },
@@ -1017,6 +1030,14 @@ export const XbridgesWorkspace: React.FC<{
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [simLimitInput, setSimLimitInput] = useState('');
+  const simLimitRef = React.useRef<number | null>(null);
+
+  useEffect(() => {
+    const val = parseFloat(simLimitInput);
+    simLimitRef.current = (!isNaN(val) && val > 0) ? val : null;
+  }, [simLimitInput]);
+
   const [isLibCollapsed, setIsLibCollapsed] = useState(false);
   const [isPropsCollapsed, setIsPropsCollapsed] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -1031,6 +1052,103 @@ export const XbridgesWorkspace: React.FC<{
 
   // Tutorial / Learning Lab State
   const [activeLabId, setActiveLabId] = useState<string | null>(null);
+  const [isLabGuideMinimized, setIsLabGuideMinimized] = useState(false);
+
+  // 3DEXPERIENCE Sync State
+  const [show3dxSyncModal, setShow3dxSyncModal] = useState(false);
+  const [tdxWorkspaces, setTdxWorkspaces] = useState<any[]>([]);
+  const [tdxDocs, setTdxDocs] = useState<any[]>([]);
+  const [selectedTdxWorkspace, setSelectedTdxWorkspace] = useState('');
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [syncAction, setSyncAction] = useState<'push' | 'pull'>('push');
+
+  const handle3dxSyncInit = async (action: 'push' | 'pull') => {
+    setSyncAction(action);
+    setSyncStatus('loading');
+    setShow3dxSyncModal(true);
+
+    try {
+      const electron = (window as any).require?.('electron');
+      if (!electron) throw new Error('Not in desktop environment');
+      
+      const creds = await electron.ipcRenderer.invoke('3dx-load-credentials');
+      if (!creds) {
+        alert('Please login to 3DEXPERIENCE from the main dashboard gateway first.');
+        setShow3dxSyncModal(false);
+        return;
+      }
+
+      const res = await electron.ipcRenderer.invoke('3dx-get-workspaces');
+      if (res && res.workspaces) {
+        setTdxWorkspaces(res.workspaces);
+        if (res.workspaces.length > 0) {
+          setSelectedTdxWorkspace(res.workspaces[0].id);
+        }
+      }
+
+      if (action === 'pull') {
+        const docRes = await electron.ipcRenderer.invoke('3dx-search-documents', { query: 'xbridges' });
+        if (docRes && docRes.documents) {
+          setTdxDocs(docRes.documents.filter((d: any) => d.fileType === 'json' || d.mimeType === 'application/json'));
+        }
+      }
+
+      setSyncStatus('idle');
+    } catch (err) {
+      console.error(err);
+      setSyncStatus('error');
+    }
+  };
+
+  const handle3dxPush = async () => {
+    setSyncStatus('loading');
+    try {
+      const electron = (window as any).require?.('electron');
+      const payload = {
+        fileName: `xbridges_workspace_${new Date().toISOString().slice(0,10)}.json`,
+        content: JSON.stringify({ nodes, edges }, null, 2),
+        encoding: 'utf8',
+        mimeType: 'application/json',
+        targetWorkspaceId: selectedTdxWorkspace,
+        title: 'XBridges Workspace Sync',
+        description: `Uploaded from XBridges Advanced Logic Suite — ${new Date().toLocaleString()}`
+      };
+      const res = await electron.ipcRenderer.invoke('3dx-upload-document', payload);
+      if (res.success) {
+        setSyncStatus('success');
+        setTimeout(() => setShow3dxSyncModal(false), 1500);
+      } else {
+        setSyncStatus('error');
+      }
+    } catch (err) {
+      console.error(err);
+      setSyncStatus('error');
+    }
+  };
+
+  const handle3dxPull = async (docId: string) => {
+    setSyncStatus('loading');
+    try {
+      const electron = (window as any).require?.('electron');
+      const res = await electron.ipcRenderer.invoke('3dx-download-document', { documentId: docId });
+      if (res.success && res.content) {
+        const data = JSON.parse(res.content);
+        if (data.nodes && data.edges) {
+          setNodes(data.nodes);
+          setEdges(data.edges);
+          setSyncStatus('success');
+          setTimeout(() => setShow3dxSyncModal(false), 1500);
+        } else {
+          setSyncStatus('error');
+        }
+      } else {
+        setSyncStatus('error');
+      }
+    } catch (err) {
+      console.error(err);
+      setSyncStatus('error');
+    }
+  };
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [completedObjectives, setCompletedObjectives] = useState<Record<string, boolean>>({});
   const [labCompleted, setLabCompleted] = useState(false);
@@ -1056,6 +1174,54 @@ export const XbridgesWorkspace: React.FC<{
   const engineRef = React.useRef<XbridgesEngine | null>(null);
   const timeRef = React.useRef(0);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+
+  // Right-click drag-to-copy state
+  const [rightClickDrag, setRightClickDrag] = useState<{
+    clonedNodeId: string;
+    startMouseX: number;
+    startMouseY: number;
+    startNodeX: number;
+    startNodeY: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!rightClickDrag) return;
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      const zoom = reactFlowInstance?.getZoom() || 1;
+      const dx = (e.clientX - rightClickDrag.startMouseX) / zoom;
+      const dy = (e.clientY - rightClickDrag.startMouseY) / zoom;
+      
+      setNodes(nds => nds.map(n => n.id === rightClickDrag.clonedNodeId ? {
+        ...n,
+        position: {
+          x: rightClickDrag.startNodeX + dx,
+          y: rightClickDrag.startNodeY + dy
+        }
+      } : n));
+    };
+
+    const handleWindowMouseUp = (e: MouseEvent) => {
+      if (e.button === 2) {
+        e.preventDefault();
+        setRightClickDrag(null);
+      }
+    };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    window.addEventListener('contextmenu', handleContextMenu);
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+      window.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, [rightClickDrag, reactFlowInstance, setNodes]);
 
   // Select and focus programmatic node from V-Lab
   useEffect(() => {
@@ -1137,6 +1303,19 @@ export const XbridgesWorkspace: React.FC<{
 
           timeRef.current += fixedStep;
 
+          if (simLimitRef.current !== null && timeRef.current >= simLimitRef.current) {
+            timeRef.current = simLimitRef.current;
+            setIsSimulating(false);
+            setNodes(nds => nds.map(n => {
+              const engineBlock = engineRef.current!['blockMap'].get(n.id);
+              if (engineBlock && n.type === 'xblock') {
+                return { ...n, data: { ...n.data, state: engineBlock.state } };
+              }
+              return n;
+            }));
+            return;
+          }
+
           // Throttle UI updates to ~15fps (every 4th frame at 60fps) to prevent ReactFlow lag
           updateThrottle++;
           if (updateThrottle % 4 === 0) {
@@ -1167,6 +1346,38 @@ export const XbridgesWorkspace: React.FC<{
   const saveHistory = useCallback(() => {
     setHistory(prev => [...prev.slice(-19), { nodes, edges }]);
   }, [nodes, edges]);
+
+  const handleNodeMouseDown = useCallback((event: React.MouseEvent, node: Node) => {
+    if (event.button === 2) {
+      event.preventDefault();
+      event.stopPropagation();
+      saveHistory();
+      const newNodeId = `${node.data.type || 'block'}-${Date.now()}`;
+      const clonedNode: Node = {
+        ...node,
+        id: newNodeId,
+        position: {
+          x: node.position.x,
+          y: node.position.y
+        },
+        selected: true,
+        data: {
+          ...node.data,
+          id: newNodeId,
+          selected: true
+        }
+      };
+      setNodes(nds => [...nds.map(n => ({ ...n, selected: false })), clonedNode]);
+      setSelectedNodeId(newNodeId);
+      setRightClickDrag({
+        clonedNodeId: newNodeId,
+        startMouseX: event.clientX,
+        startMouseY: event.clientY,
+        startNodeX: node.position.x,
+        startNodeY: node.position.y
+      });
+    }
+  }, [saveHistory, setNodes, setSelectedNodeId]);
 
   // Auto-save on unmount to prevent data loss (FR-Persistence)
   const nodesRef = React.useRef(nodes);
@@ -1579,6 +1790,7 @@ export const XbridgesWorkspace: React.FC<{
     setSelectedNodeId(null);
     setOpenScopes([]);
     setActiveLabId(labId);
+    setIsLabGuideMinimized(false);
     setCurrentStepIndex(0);
     setCompletedObjectives({});
     setLabCompleted(false);
@@ -1623,7 +1835,7 @@ export const XbridgesWorkspace: React.FC<{
   ).filter(b => b.label.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="flex h-full w-full bg-[#0a0a0a] text-gray-300 font-sans overflow-hidden select-none relative">
+    <div id="xbridges-workspace-container" className="flex h-full w-full bg-[#0a0a0a] text-gray-300 font-sans overflow-hidden select-none relative">
       {/* Quick Search Menu */}
       {searchMenuPos && (
         <div
@@ -1925,6 +2137,21 @@ export const XbridgesWorkspace: React.FC<{
                   />
                 </div>
               </div>
+
+              <div className="flex flex-col">
+                <span className="text-[8px] text-gray-600 font-black uppercase tracking-widest mb-1">End Time</span>
+                <div className="relative group">
+                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-rose-500 text-[8px] font-bold italic">s</div>
+                  <input
+                    type="text"
+                    value={simLimitInput}
+                    onChange={e => setSimLimitInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}
+                    disabled={isSimulating}
+                    placeholder="Unlimited"
+                    className="w-20 bg-white/5 border border-white/5 rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-mono font-bold text-gray-300 focus:outline-none focus:border-rose-500 transition-all hover:bg-white/[0.08] disabled:opacity-50"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2003,6 +2230,22 @@ export const XbridgesWorkspace: React.FC<{
                   </div>
                 )}
 
+                <button
+                  onClick={() => handle3dxSyncInit('push')}
+                  className="p-2.5 rounded-xl bg-blue-900/25 text-[#4da6ff] hover:bg-blue-900/40 border border-blue-800/30 transition-all cursor-pointer"
+                  title="Push to 3DEXPERIENCE"
+                >
+                  <Cloud size={18} />
+                </button>
+
+                <button
+                  onClick={() => handle3dxSyncInit('pull')}
+                  className="p-2.5 rounded-xl bg-blue-900/25 text-[#4da6ff] hover:bg-blue-900/40 border border-blue-800/30 transition-all cursor-pointer"
+                  title="Pull from 3DEXPERIENCE"
+                >
+                  <Download size={18} />
+                </button>
+
                 {onBack && (
                   <button
                     onClick={() => { if (onSave) onSave(nodes, edges); onBack(); }}
@@ -2040,7 +2283,7 @@ export const XbridgesWorkspace: React.FC<{
         </div>
 
         <div className="flex-1 relative flex">
-          <div className="flex-1 relative">
+          <div className="flex-1 relative" onContextMenu={(e) => e.preventDefault()}>
             <ReactFlow
               // Pass native React Flow selected state alongside custom data and an update callback
               onInit={setReactFlowInstance}
@@ -2055,7 +2298,8 @@ export const XbridgesWorkspace: React.FC<{
                     ...n.data,
                     pulse: isTarget,
                     onUpdate: (newData: any) => updateBlock(n.id, newData),
-                    onOpenScope: (blockId: string) => setOpenScopes(prev => prev.includes(blockId) ? prev : [...prev, blockId])
+                    onOpenScope: (blockId: string) => setOpenScopes(prev => prev.includes(blockId) ? prev : [...prev, blockId]),
+                    onNodeMouseDown: (e: React.MouseEvent) => handleNodeMouseDown(e, n)
                   }
                 };
               })}
@@ -2135,116 +2379,138 @@ export const XbridgesWorkspace: React.FC<{
 
               {activeLabId && (
                 <Panel position="bottom-left" className="m-4 z-50">
-                  <div className="w-[360px] bg-[#0d0d0d]/95 backdrop-blur-xl border border-[#c9a86c]/30 rounded-2xl shadow-2xl p-5 border-l-4 border-l-[#c9a86c] flex flex-col text-gray-300 transition-all duration-300 animate-in slide-in-from-left duration-300 select-text">
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="p-1.5 rounded-lg bg-[#c9a86c]/20 text-[#c9a86c] shadow-[0_0_10px_rgba(201,168,108,0.2)] animate-pulse">
-                          <GraduationCap size={16} />
-                        </div>
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#c9a86c]">Learning Lab</span>
+                  {isLabGuideMinimized ? (
+                    <button
+                      onClick={() => setIsLabGuideMinimized(false)}
+                      className="flex items-center gap-2.5 bg-[#0d0d0d]/95 backdrop-blur-xl border border-[#c9a86c]/30 rounded-full shadow-2xl px-4 py-2 hover:bg-[#c9a86c]/5 border-l-4 border-l-[#c9a86c] transition-all text-left group"
+                    >
+                      <div className="p-1.5 rounded-full bg-[#c9a86c]/20 text-[#c9a86c]">
+                        <GraduationCap size={14} className="group-hover:scale-110 transition-transform" />
                       </div>
-                      <button
-                        onClick={exitActiveLab}
-                        className="text-[9px] font-black tracking-widest text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1 rounded transition-colors"
-                      >
-                        EXIT LAB
-                      </button>
-                    </div>
-
-                    {/* Lab Title & Steps */}
-                    {(() => {
-                      const steps = XBRIDGES_LEARNING_LAB_STEPS[activeLabId];
-                      const step = steps ? steps[currentStepIndex] : null;
-                      if (!step) return null;
-
-                      const totalSteps = steps.length;
-                      const percent = Math.round(((currentStepIndex + 1) / totalSteps) * 100);
-                      const allDone = step.objectives.every((obj: any) => !!completedObjectives[obj.id]);
-
-                      return (
-                        <>
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">
-                              STEP {currentStepIndex + 1} OF {totalSteps}
-                            </span>
-                            <span className="text-[9px] font-black text-[#c9a86c]">{percent}%</span>
+                      <div className="flex flex-col pr-1">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-[#c9a86c]">Lab Guide</span>
+                        <span className="text-[8px] text-gray-500 font-mono">Step {currentStepIndex + 1} • Click to open</span>
+                      </div>
+                    </button>
+                  ) : (
+                    <div className="w-[360px] bg-[#0d0d0d]/95 backdrop-blur-xl border border-[#c9a86c]/30 rounded-2xl shadow-2xl p-5 border-l-4 border-l-[#c9a86c] flex flex-col text-gray-300 transition-all duration-300 animate-in slide-in-from-left duration-300 select-text">
+                      {/* Header */}
+                      <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setIsLabGuideMinimized(true)}
+                            className="p-1 rounded text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+                            title="Minimize Lab Guide"
+                          >
+                            <Minimize2 size={12} />
+                          </button>
+                          <div className="p-1.5 rounded-lg bg-[#c9a86c]/20 text-[#c9a86c] shadow-[0_0_10px_rgba(201,168,108,0.2)] animate-pulse">
+                            <GraduationCap size={16} />
                           </div>
-                          
-                          {/* Progress bar */}
-                          <div className="w-full h-1 bg-white/5 rounded-full mb-4 overflow-hidden">
-                            <div 
-                              className="h-full bg-gradient-to-r from-[#c9a86c]/50 to-[#c9a86c] transition-all duration-500"
-                              style={{ width: `${percent}%` }}
-                            />
-                          </div>
+                          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#c9a86c]">Learning Lab</span>
+                        </div>
+                        <button
+                          onClick={exitActiveLab}
+                          className="text-[9px] font-black tracking-widest text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1 rounded transition-colors"
+                        >
+                          EXIT LAB
+                        </button>
+                      </div>
 
-                          <h3 className="text-xs font-black text-white uppercase tracking-wider mb-2">
-                            {step.title}
-                          </h3>
-                          <p className="text-[10px] text-gray-400 leading-relaxed mb-4 whitespace-pre-line">
-                            {step.instructions}
-                          </p>
+                      {/* Lab Title & Steps */}
+                      {(() => {
+                        const steps = XBRIDGES_LEARNING_LAB_STEPS[activeLabId];
+                        const step = steps ? steps[currentStepIndex] : null;
+                        if (!step) return null;
 
-                          {/* Objectives Checklist */}
-                          <div className="space-y-2 mb-5">
-                            <div className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-1.5">OBJECTIVES:</div>
-                            {step.objectives.map((obj: any) => {
-                              const done = !!completedObjectives[obj.id];
-                              return (
-                                <div 
-                                  key={obj.id}
-                                  className={`flex items-center gap-2.5 p-2 rounded-xl transition-all duration-300 ${done ? 'bg-emerald-500/5 border border-emerald-500/10 text-emerald-400' : 'bg-white/[0.02] border border-white/5 text-gray-400'}`}
-                                >
-                                  <div className={`w-4 h-4 rounded-full flex items-center justify-center border transition-all ${done ? 'bg-emerald-500 border-emerald-400 text-white' : 'border-gray-700'}`}>
-                                    {done ? <Zap size={10} className="fill-current" /> : <div className="w-1.5 h-1.5 rounded-full bg-gray-700" />}
+                        const totalSteps = steps.length;
+                        const percent = Math.round(((currentStepIndex + 1) / totalSteps) * 100);
+                        const allDone = step.objectives.every((obj: any) => !!completedObjectives[obj.id]);
+
+                        return (
+                          <>
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">
+                                STEP {currentStepIndex + 1} OF {totalSteps}
+                              </span>
+                              <span className="text-[9px] font-black text-[#c9a86c]">{percent}%</span>
+                            </div>
+                            
+                            {/* Progress bar */}
+                            <div className="w-full h-1 bg-white/5 rounded-full mb-4 overflow-hidden">
+                              <div 
+                                className="h-full bg-gradient-to-r from-[#c9a86c]/50 to-[#c9a86c] transition-all duration-500"
+                                style={{ width: `${percent}%` }}
+                              />
+                            </div>
+
+                            <h3 className="text-xs font-black text-white uppercase tracking-wider mb-2">
+                              {step.title}
+                            </h3>
+                            <p className="text-[10px] text-gray-400 leading-relaxed mb-4 whitespace-pre-line">
+                              {step.instructions}
+                            </p>
+
+                            {/* Objectives Checklist */}
+                            <div className="space-y-2 mb-5">
+                              <div className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-1.5">OBJECTIVES:</div>
+                              {step.objectives.map((obj: any) => {
+                                const done = !!completedObjectives[obj.id];
+                                return (
+                                  <div 
+                                    key={obj.id}
+                                    className={`flex items-center gap-2.5 p-2 rounded-xl transition-all duration-300 ${done ? 'bg-emerald-500/5 border border-emerald-500/10 text-emerald-400' : 'bg-white/[0.02] border border-white/5 text-gray-400'}`}
+                                  >
+                                    <div className={`w-4 h-4 rounded-full flex items-center justify-center border transition-all ${done ? 'bg-emerald-500 border-emerald-400 text-white' : 'border-gray-700'}`}>
+                                      {done ? <Zap size={10} className="fill-current" /> : <div className="w-1.5 h-1.5 rounded-full bg-gray-700" />}
+                                    </div>
+                                    <span className={`text-[10px] font-bold ${done ? 'line-through text-emerald-400/80' : 'text-gray-400'}`}>
+                                      {obj.label}
+                                    </span>
                                   </div>
-                                  <span className={`text-[10px] font-bold ${done ? 'line-through text-emerald-400/80' : 'text-gray-400'}`}>
-                                    {obj.label}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
+                                );
+                              })}
+                            </div>
 
-                          {/* Controls */}
-                          <div className="flex gap-2 border-t border-white/5 pt-3">
-                            <button
-                              onClick={() => {
-                                if (currentStepIndex > 0) {
-                                  setCurrentStepIndex(currentStepIndex - 1);
-                                  setCompletedObjectives({});
-                                }
-                              }}
-                              disabled={currentStepIndex === 0}
-                              className="flex-1 py-2 rounded-xl border border-white/10 text-xs font-bold hover:bg-white/5 transition-all disabled:opacity-20 disabled:cursor-not-allowed text-gray-400"
-                            >
-                              Back
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (allDone) {
-                                  if (currentStepIndex < totalSteps - 1) {
-                                    setCurrentStepIndex(currentStepIndex + 1);
+                            {/* Controls */}
+                            <div className="flex gap-2 border-t border-white/5 pt-3">
+                              <button
+                                onClick={() => {
+                                  if (currentStepIndex > 0) {
+                                    setCurrentStepIndex(currentStepIndex - 1);
                                     setCompletedObjectives({});
-                                  } else {
-                                    setLabCompleted(true);
                                   }
-                                }
-                              }}
-                              disabled={!allDone}
-                              className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 ${allDone
-                                ? 'bg-[#c9a86c] text-[#0a0a0a] shadow-[0_0_20px_rgba(201,168,108,0.4)] hover:scale-105 active:scale-95 cursor-pointer'
-                                : 'bg-white/5 border border-white/5 text-gray-600 cursor-not-allowed'
-                              }`}
-                            >
-                              {currentStepIndex === totalSteps - 1 ? 'Finish Lab' : 'Next Step'}
-                            </button>
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
+                                }}
+                                disabled={currentStepIndex === 0}
+                                className="flex-1 py-2 rounded-xl border border-white/10 text-xs font-bold hover:bg-white/5 transition-all disabled:opacity-20 disabled:cursor-not-allowed text-gray-400"
+                              >
+                                Back
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (allDone) {
+                                    if (currentStepIndex < totalSteps - 1) {
+                                      setCurrentStepIndex(currentStepIndex + 1);
+                                      setCompletedObjectives({});
+                                    } else {
+                                      setLabCompleted(true);
+                                    }
+                                  }
+                                }}
+                                disabled={!allDone}
+                                className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 ${allDone
+                                  ? 'bg-[#c9a86c] text-[#0a0a0a] shadow-[0_0_20px_rgba(201,168,108,0.4)] hover:scale-105 active:scale-95 cursor-pointer'
+                                  : 'bg-white/5 border border-white/5 text-gray-600 cursor-not-allowed'
+                                }`}
+                              >
+                                {currentStepIndex === totalSteps - 1 ? 'Finish Lab' : 'Next Step'}
+                              </button>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </Panel>
               )}
             </ReactFlow>
@@ -2278,6 +2544,7 @@ export const XbridgesWorkspace: React.FC<{
               <XbridgesScopeWindow
                 key={scopeId}
                 block={scopeNode.data}
+                onUpdate={(newData) => updateBlock(scopeId, { params: { ...scopeNode.data.params, ...newData } })}
                 onClose={() => setOpenScopes(prev => prev.filter(id => id !== scopeId))}
               />
             );
@@ -2352,6 +2619,92 @@ export const XbridgesWorkspace: React.FC<{
               >
                 Continue to Library
               </button>
+            </div>
+          </div>
+        )}
+        {/* 3DEXPERIENCE Sync Modal */}
+        {show3dxSyncModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] animate-in fade-in duration-200">
+            <div className="bg-[#0c0c10] border border-[#1e2a3a] rounded-2xl w-[480px] p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-[#1a2133] pb-3">
+                <div className="flex items-center gap-2">
+                  <Cloud className="text-[#4da6ff]" size={18} />
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                    {syncAction === 'push' ? 'Push Workspace to 3DX' : 'Pull Workspace from 3DX'}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShow3dxSyncModal(false)}
+                  className="text-gray-500 hover:text-white p-1 hover:bg-white/5 rounded-md transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {syncStatus === 'loading' ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-3">
+                  <RefreshCcw size={24} className="text-[#4da6ff] animate-spin" />
+                  <span className="text-xs text-gray-400">Connecting to 3DEXPERIENCE...</span>
+                </div>
+              ) : syncStatus === 'success' ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-3">
+                  <CheckCircle2 size={24} className="text-emerald-400" />
+                  <span className="text-xs text-emerald-400 font-bold">Workspace Synced Successfully!</span>
+                </div>
+              ) : syncStatus === 'error' ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-3 text-center">
+                  <AlertCircle size={24} className="text-red-400" />
+                  <span className="text-xs text-red-400 font-bold">Sync Failed</span>
+                  <p className="text-[10px] text-gray-500 max-w-xs mx-auto">
+                    Please ensure you have an active internet connection and are authenticated to the 3DEXPERIENCE platform.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {syncAction === 'push' ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Target Workspace</label>
+                        <select
+                          value={selectedTdxWorkspace}
+                          onChange={(e) => setSelectedTdxWorkspace(e.target.value)}
+                          className="w-full bg-[#06080c] border border-[#1e2a3a] rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
+                        >
+                          {tdxWorkspaces.map(ws => (
+                            <option key={ws.id} value={ws.id}>{ws.title}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        onClick={handle3dxPush}
+                        className="w-full py-2.5 bg-[#0056b3] hover:bg-[#0069d9] text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                      >
+                        Push Now
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Select Document to Import</label>
+                      {tdxDocs.length === 0 ? (
+                        <div className="py-4 text-center text-xs text-gray-600">No compatible XBridges workspaces found.</div>
+                      ) : (
+                        <div className="max-h-[200px] overflow-y-auto border border-[#1a2133] rounded-lg divide-y divide-[#1a2133] bg-[#06080c]">
+                          {tdxDocs.map(doc => (
+                            <div
+                              key={doc.id}
+                              onClick={() => handle3dxPull(doc.id)}
+                              className="p-3 text-xs text-gray-400 hover:text-white hover:bg-white/5 cursor-pointer transition-all flex items-center justify-between"
+                            >
+                              <span className="font-medium truncate mr-2">{doc.title}</span>
+                              <span className="text-[9px] text-gray-600 font-mono flex-shrink-0">{new Date(doc.modified).toLocaleDateString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

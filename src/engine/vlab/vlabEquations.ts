@@ -498,18 +498,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
   
   temp_sensor: ({ across, branch }) => {
-    // Output absolute temperature at terminal A (across[0]) in Kelvin.
-    return [branch[0] - across[0]];
-  },
-  
-  heat_sensor: ({ across, branch }) => {
-    // rigid thermal link: Ta = Tb
-    // outputs through heat Q to signal
+    // across[0]: T_a, across[1]: T_b
+    // branch[0]: heat_flow through sensor, branch[1]: output signal
     return [
-      across[0] - across[1],
-      branch[1] - branch[0]
+      branch[0],             // zero heat flow
+      branch[1] - across[0]  // output signal = T_a
     ];
   },
+  
+  heat_sensor: (args) => blockEquations.heat_flow_sensor(args),
   
   heat_src: ({ branch, params }) => {
     const Q = params.Q || params.Q_const || 100;

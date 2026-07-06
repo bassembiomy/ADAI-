@@ -485,11 +485,16 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                     {key.replace(/([A-Z])/g, ' $1').trim()}
                   </label>
                   
-                  {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'numCases', 'numSignals', 'bufferSize', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication'].includes(key) && 
+                   {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'numCases', 'numSignals', 'bufferSize', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication', 'limitDataPoints', 'showGrid', 'showLegend', 'timeRange'].includes(key) && 
                   (key !== 'type' || block.type === 'WaveformGen' || block.type === 'FUZZY_INFERENCE_SYSTEM') ? (
                     <select
-                      value={displayValue as string}
-                      onChange={(e) => onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } })}
+                      value={String(displayValue)}
+                      onChange={(e) => {
+                        let val: any = e.target.value;
+                        if (val === 'true') val = true;
+                        if (val === 'false') val = false;
+                        onUpdate(block.id, { params: { ...block.params, [key]: val } });
+                      }}
                       className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-emerald-400 font-bold rounded focus:border-[#c9a86c] outline-none transition-all cursor-pointer"
                     >
                       {key === 'mode' && (
@@ -538,6 +543,35 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                           {[100, 500, 1000, 2000, 5000, 10000].map(n => (
                             <option key={n} value={n}>{n} Samples</option>
                           ))}
+                        </>
+                      )}
+                      {key === 'limitDataPoints' && (
+                        <>
+                          <option value="true">On (Yes)</option>
+                          <option value="false">Off (No)</option>
+                        </>
+                      )}
+                      {key === 'showGrid' && (
+                        <>
+                          <option value="true">On (Yes)</option>
+                          <option value="false">Off (No)</option>
+                        </>
+                      )}
+                      {key === 'showLegend' && (
+                        <>
+                          <option value="true">On (Yes)</option>
+                          <option value="false">Off (No)</option>
+                        </>
+                      )}
+                      {key === 'timeRange' && (
+                        <>
+                          <option value="auto">Auto (Full)</option>
+                          <option value="1">1s</option>
+                          <option value="2">2s</option>
+                          <option value="5">5s</option>
+                          <option value="10">10s</option>
+                          <option value="30">30s</option>
+                          <option value="60">60s</option>
                         </>
                       )}
                       {key === 'numCases' && (
@@ -685,6 +719,9 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                     />
                   )}
                   {key === 'value' && block.type === 'Constant' && (
+                    <p className="text-[10px] text-gray-500 mt-1">Hint: Type `[1, 2, 3]` for vectors.</p>
+                  )}
+                  {(key === 'initialValue' || key === 'finalValue') && block.type === 'Step' && (
                     <p className="text-[10px] text-gray-500 mt-1">Hint: Type `[1, 2, 3]` for vectors.</p>
                   )}
                 </div>

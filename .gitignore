@@ -10,3 +10,11 @@ hil_build/*.exe
 hil_build/*.bin
 hil_build/*.hex
 hil_build/*.o
+
+# Security
+*.keystore
+*.pem
+*.key
+adia_secrets.*
+audit.log
+adia_vault.bin

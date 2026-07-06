@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useMemo, useEffect } from 'react';
+import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -22,7 +22,7 @@ import { VLabWorkspaceProps } from './VLabWorkspaceTypes';
 import { VLAB_LIBRARY, VLabBlock, VLabPort } from '../../utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../engine/vlab/vlabComponentDefinitions';
 import { VLabPhysicsEngine } from '../../engine/vlab/vlabPhysics';
-import { Settings2, Play, Pause, Square, Send, ChevronLeft, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus, Network } from 'lucide-react';
+import { Settings2, Play, Pause, Square, Send, ChevronLeft, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus, Network, Cloud, Download, CheckCircle2, AlertCircle } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
 
@@ -1574,14 +1574,17 @@ const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boo
   }, {});
 
   return (
-    <div className={`relative group flex flex-col items-center transition-all ${selected ? 'z-50' : 'z-10'}`}>
+    <div 
+      className={`relative group flex flex-col items-center transition-all ${selected ? 'z-50' : 'z-10'} h-full w-full`}
+      onMouseDown={(e) => data.onNodeMouseDown && data.onNodeMouseDown(e)}
+    >
       {/* Component Name */}
       <span className="text-[9px] font-black text-white/40 mb-1 pointer-events-none uppercase tracking-widest text-center max-w-[100px] truncate">
         {data.label}
       </span>
       {/* Component Symbol Container */}
       <div
-        className={`relative flex items-center justify-center transition-all duration-300 ${selected
+        className={`relative flex-1 flex w-full items-center justify-center transition-all duration-300 ${selected
             ? 'bg-purple-500/5 shadow-[0_0_30px_rgba(168,85,247,0.15)] scale-105'
             : 'bg-transparent'
           }`}
@@ -1602,9 +1605,8 @@ const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boo
                 key={port.id}
                 className="absolute w-2.5 h-2.5"
                 style={{
-                  top: (side === 'left' || side === 'right') ? `calc(50% + ${offset}px)` : (side === 'top' ? 0 : '100%'),
-                  left: (side === 'top' || side === 'bottom') ? `calc(50% + ${offset}px)` : (side === 'left' ? 0 : '100%'),
-                  transform: 'translate(-50%, -50%)'
+                  top: (side === 'left' || side === 'right') ? `calc(50% + ${offset}px - 5px)` : (side === 'top' ? '-5px' : 'calc(100% - 5px)'),
+                  left: (side === 'top' || side === 'bottom') ? `calc(50% + ${offset}px - 5px)` : (side === 'left' ? '-5px' : 'calc(100% - 5px)')
                 }}
               >
                 {/* Both target and source handles are styled identically to look like a single square dot */}
@@ -1665,37 +1667,12 @@ const VLabEdge = ({
   markerEnd,
   className,
 }: any) => {
-  // Center of the handle (10px wide, so offset by 5px)
-  let adjustedSourceX = sourceX;
-  let adjustedSourceY = sourceY;
-  if (sourcePosition === Position.Left) {
-    adjustedSourceX += 5;
-  } else if (sourcePosition === Position.Right) {
-    adjustedSourceX -= 5;
-  } else if (sourcePosition === Position.Top) {
-    adjustedSourceY += 5;
-  } else if (sourcePosition === Position.Bottom) {
-    adjustedSourceY -= 5;
-  }
-
-  let adjustedTargetX = targetX;
-  let adjustedTargetY = targetY;
-  if (targetPosition === Position.Left) {
-    adjustedTargetX += 5;
-  } else if (targetPosition === Position.Right) {
-    adjustedTargetX -= 5;
-  } else if (targetPosition === Position.Top) {
-    adjustedTargetY += 5;
-  } else if (targetPosition === Position.Bottom) {
-    adjustedTargetY -= 5;
-  }
-
   const [edgePath] = getBezierPath({
-    sourceX: adjustedSourceX,
-    sourceY: adjustedSourceY,
+    sourceX,
+    sourceY,
     sourcePosition,
-    targetX: adjustedTargetX,
-    targetY: adjustedTargetY,
+    targetX,
+    targetY,
     targetPosition,
   });
 
@@ -1729,38 +1706,12 @@ const VLabConnectionLine = ({
   toPosition,
   connectionLineStyle,
 }: any) => {
-  let adjustedFromX = fromX;
-  let adjustedFromY = fromY;
-  if (fromPosition === Position.Left) {
-    adjustedFromX += 5;
-  } else if (fromPosition === Position.Right) {
-    adjustedFromX -= 5;
-  } else if (fromPosition === Position.Top) {
-    adjustedFromY += 5;
-  } else if (fromPosition === Position.Bottom) {
-    adjustedFromY -= 5;
-  }
-
-  let adjustedToX = toX;
-  let adjustedToY = toY;
-  if (toPosition) {
-    if (toPosition === Position.Left) {
-      adjustedToX += 5;
-    } else if (toPosition === Position.Right) {
-      adjustedToX -= 5;
-    } else if (toPosition === Position.Top) {
-      adjustedToY += 5;
-    } else if (toPosition === Position.Bottom) {
-      adjustedToY -= 5;
-    }
-  }
-
   const [path] = getBezierPath({
-    sourceX: adjustedFromX,
-    sourceY: adjustedFromY,
+    sourceX: fromX,
+    sourceY: fromY,
     sourcePosition: fromPosition,
-    targetX: adjustedToX,
-    targetY: adjustedToY,
+    targetX: toX,
+    targetY: toY,
     targetPosition: toPosition || (fromPosition === Position.Left ? Position.Right : Position.Left),
   });
 
@@ -1793,14 +1744,26 @@ const getSignalColor = (index: number) => {
 };
 
 const ScopeView = ({
-  data, title, isPaused, onExpand, onAutoScale
+  data, title, isPaused, onExpand, onAutoScale, params
 }: {
-  data: any[], title?: string, isPaused?: boolean, onExpand?: () => void, onAutoScale?: () => void
+  data: any[], title?: string, isPaused?: boolean, onExpand?: () => void, onAutoScale?: () => void, params?: any
 }) => {
   const lastPoint = data.length > 0 ? data[data.length - 1] : { value: 0 };
   const lastVal = lastPoint.value ?? 0;
   const [scaleKey, setScaleKey] = useState(0);
   const [zoomLevel, setZoomLevel] = useState(1.0);
+
+  const timeRange = params?.time_range?.value || 10;
+  const showGrid = params?.show_grid?.value !== 'off';
+  const showLegend = params?.show_legend?.value !== 'off';
+
+  const displayData = useMemo(() => {
+    if (timeRange === 'auto' || data.length === 0) return data;
+    const limit = Number(timeRange);
+    if (isNaN(limit)) return data;
+    const maxTime = data[data.length - 1].time;
+    return data.filter(pt => pt.time >= maxTime - limit);
+  }, [data, timeRange]);
 
   // Find all keys except 'time'
   const keys = data.length > 0 ? Object.keys(data[0]).filter(k => k !== 'time') : ['value'];
@@ -1832,14 +1795,16 @@ const ScopeView = ({
           </div>
         </div>
 
-        <div className="flex gap-4 pr-2">
-          {keys.map((k, i) => (
-            <div key={k} className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getSignalColor(i) }} />
-              <span className="text-[8px] text-gray-500 font-black uppercase tracking-tighter">{k}</span>
-            </div>
-          ))}
-        </div>
+        {showLegend && (
+          <div className="flex gap-4 pr-2">
+            {keys.map((k, i) => (
+              <div key={k} className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getSignalColor(i) }} />
+                <span className="text-[8px] text-gray-500 font-black uppercase tracking-tighter">{k}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 p-5 relative overflow-hidden">
@@ -1860,7 +1825,7 @@ const ScopeView = ({
         </div>
 
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart key={scaleKey} data={data} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+          <AreaChart key={scaleKey} data={displayData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
             <defs>
               {keys.map((k, i) => (
                 <linearGradient key={k} id={`grad-${k}`} x1="0" y1="0" x2="0" y2="1">
@@ -1869,7 +1834,7 @@ const ScopeView = ({
                 </linearGradient>
               ))}
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff03" vertical={false} />
+            {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="#ffffff03" vertical={false} />}
             <XAxis
               dataKey="time"
               stroke="#ffffff10"
@@ -1982,11 +1947,12 @@ const ScopeView = ({
   );
 };
 
-const VLabScopeWindow = ({ id, data, onClose, title, isPaused }: { id: string, data: any[], onClose: () => void, title: string, isPaused: boolean }) => {
+const VLabScopeWindow = ({ id, data, onClose, title, isPaused, params, onUpdate }: { id: string, data: any[], onClose: () => void, title: string, isPaused: boolean, params: any, onUpdate?: (data: any) => void }) => {
   const [pos, setPos] = useState({ x: 100 + Math.random() * 50, y: 100 + Math.random() * 50 });
   const [isDragging, setIsDragging] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     const handleMove = (e: MouseEvent) => {
@@ -2019,6 +1985,15 @@ const VLabScopeWindow = ({ id, data, onClose, title, isPaused }: { id: string, d
           <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] truncate max-w-[120px]">{title}</span>
         </div>
         <div className="flex items-center gap-1">
+          {onUpdate && (
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className={`p-1.5 rounded-md transition-all ${showSettings ? 'bg-purple-500/20 text-purple-400' : 'text-gray-500 hover:text-white'}`}
+              title="Scope Settings"
+            >
+              <Settings size={14} />
+            </button>
+          )}
           <button
             onClick={() => setIsMinimized(!isMinimized)}
             className="p-1.5 hover:bg-white/5 rounded-md transition-all text-gray-500 hover:text-white"
@@ -2042,8 +2017,110 @@ const VLabScopeWindow = ({ id, data, onClose, title, isPaused }: { id: string, d
         </div>
       </div>
       {!isMinimized && (
-        <div className="flex-1 min-h-0">
-          <ScopeView data={data} title={title} isPaused={isPaused} />
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {showSettings && onUpdate && (
+            <div className="w-48 border-r border-white/5 bg-black/40 p-4 space-y-3 flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
+              <div className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Settings</div>
+              
+              {/* Time Range */}
+              <div className="space-y-1">
+                <label className="block text-[8px] font-bold text-gray-400 uppercase">Time Range</label>
+                <select
+                  value={String(params.time_range?.value || '10')}
+                  onChange={(e) => {
+                    const val = e.target.value === 'auto' ? 'auto' : parseFloat(e.target.value);
+                    onUpdate({ time_range: { ...params.time_range, value: val } });
+                  }}
+                  className="w-full text-xs px-1.5 py-1 border border-[#333] bg-[#111] text-purple-400 font-bold rounded outline-none"
+                >
+                  <option value="auto">Auto (Full)</option>
+                  <option value="1">1s</option>
+                  <option value="2">2s</option>
+                  <option value="5">5s</option>
+                  <option value="10">10s</option>
+                  <option value="30">30s</option>
+                  <option value="60">60s</option>
+                </select>
+              </div>
+
+              {/* Limit Data Points */}
+              <div className="space-y-1">
+                <label className="block text-[8px] font-bold text-gray-400 uppercase">Limit Points</label>
+                <select
+                  value={String(params.limit_data_points?.value || 'on')}
+                  onChange={(e) => onUpdate({ limit_data_points: { ...params.limit_data_points, value: e.target.value } })}
+                  className="w-full text-xs px-1.5 py-1 border border-[#333] bg-[#111] text-gray-300 rounded outline-none"
+                >
+                  <option value="on">On (Yes)</option>
+                  <option value="off">Off (No)</option>
+                </select>
+              </div>
+
+              {/* Buffer Size */}
+              <div className="space-y-1">
+                <label className="block text-[8px] font-bold text-gray-400 uppercase">Max Points</label>
+                <input
+                  type="number"
+                  value={params.buffer_size?.value || 1000}
+                  onChange={(e) => onUpdate({ buffer_size: { ...params.buffer_size, value: parseInt(e.target.value) || 1000 } })}
+                  className="w-full text-xs px-1.5 py-0.5 border border-[#333] bg-[#111] text-white rounded outline-none font-mono"
+                />
+              </div>
+
+              {/* Decimation */}
+              <div className="space-y-1">
+                <label className="block text-[8px] font-bold text-gray-400 uppercase">Decimation</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={params.decimation?.value || 1}
+                  onChange={(e) => onUpdate({ decimation: { ...params.decimation, value: parseInt(e.target.value) || 1 } })}
+                  className="w-full text-xs px-1.5 py-0.5 border border-[#333] bg-[#111] text-white rounded outline-none font-mono"
+                />
+              </div>
+
+              {/* Sample Time */}
+              <div className="space-y-1">
+                <label className="block text-[8px] font-bold text-gray-400 uppercase">Sample Time (s)</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={params.sample_time?.value ?? -1}
+                  onChange={(e) => onUpdate({ sample_time: { ...params.sample_time, value: parseFloat(e.target.value) || -1 } })}
+                  className="w-full text-xs px-1.5 py-0.5 border border-[#333] bg-[#111] text-white rounded outline-none font-mono"
+                />
+              </div>
+
+              {/* Grid */}
+              <div className="space-y-1">
+                <label className="block text-[8px] font-bold text-gray-400 uppercase">Grid</label>
+                <select
+                  value={String(params.show_grid?.value || 'on')}
+                  onChange={(e) => onUpdate({ show_grid: { ...params.show_grid, value: e.target.value } })}
+                  className="w-full text-xs px-1.5 py-1 border border-[#333] bg-[#111] text-gray-300 rounded outline-none"
+                >
+                  <option value="on">Show</option>
+                  <option value="off">Hide</option>
+                </select>
+              </div>
+
+              {/* Legend */}
+              <div className="space-y-1">
+                <label className="block text-[8px] font-bold text-gray-400 uppercase">Legend</label>
+                <select
+                  value={String(params.show_legend?.value || 'on')}
+                  onChange={(e) => onUpdate({ show_legend: { ...params.show_legend, value: e.target.value } })}
+                  className="w-full text-xs px-1.5 py-1 border border-[#333] bg-[#111] text-gray-300 rounded outline-none"
+                >
+                  <option value="on">Show</option>
+                  <option value="off">Hide</option>
+                </select>
+              </div>
+            </div>
+          )}
+          <div className="flex-1 min-h-0">
+            <ScopeView data={data} title={title} isPaused={isPaused} params={params} />
+          </div>
         </div>
       )}
     </div>
@@ -2082,6 +2159,110 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const [isSimulating, setIsSimulating] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [simTime, setSimTime] = useState(0);
+  const [vlabLimitInput, setVlabLimitInput] = useState('');
+  const vlabLimitRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const val = parseFloat(vlabLimitInput);
+    vlabLimitRef.current = (!isNaN(val) && val > 0) ? val : null;
+  }, [vlabLimitInput]);
+
+  // 3DEXPERIENCE Sync State
+  const [show3dxSyncModal, setShow3dxSyncModal] = useState(false);
+  const [tdxWorkspaces, setTdxWorkspaces] = useState<any[]>([]);
+  const [tdxDocs, setTdxDocs] = useState<any[]>([]);
+  const [selectedTdxWorkspace, setSelectedTdxWorkspace] = useState('');
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [syncAction, setSyncAction] = useState<'push' | 'pull'>('push');
+
+  const handle3dxSyncInit = async (action: 'push' | 'pull') => {
+    setSyncAction(action);
+    setSyncStatus('loading');
+    setShow3dxSyncModal(true);
+
+    try {
+      const electron = (window as any).require?.('electron');
+      if (!electron) throw new Error('Not in desktop environment');
+      
+      const creds = await electron.ipcRenderer.invoke('3dx-load-credentials');
+      if (!creds) {
+        alert('Please login to 3DEXPERIENCE from the main dashboard gateway first.');
+        setShow3dxSyncModal(false);
+        return;
+      }
+
+      const res = await electron.ipcRenderer.invoke('3dx-get-workspaces');
+      if (res && res.workspaces) {
+        setTdxWorkspaces(res.workspaces);
+        if (res.workspaces.length > 0) {
+          setSelectedTdxWorkspace(res.workspaces[0].id);
+        }
+      }
+
+      if (action === 'pull') {
+        const docRes = await electron.ipcRenderer.invoke('3dx-search-documents', { query: 'vlab' });
+        if (docRes && docRes.documents) {
+          setTdxDocs(docRes.documents.filter((d: any) => d.fileType === 'json' || d.mimeType === 'application/json'));
+        }
+      }
+
+      setSyncStatus('idle');
+    } catch (err) {
+      console.error(err);
+      setSyncStatus('error');
+    }
+  };
+
+  const handle3dxPush = async () => {
+    setSyncStatus('loading');
+    try {
+      const electron = (window as any).require?.('electron');
+      const payload = {
+        fileName: `vlab_model_${new Date().toISOString().slice(0,10)}.json`,
+        content: JSON.stringify({ nodes, edges }, null, 2),
+        encoding: 'utf8',
+        mimeType: 'application/json',
+        targetWorkspaceId: selectedTdxWorkspace,
+        title: 'VLab Physics Model Sync',
+        description: `Uploaded from V-Lab Physics Simulator — ${new Date().toLocaleString()}`
+      };
+      const res = await electron.ipcRenderer.invoke('3dx-upload-document', payload);
+      if (res.success) {
+        setSyncStatus('success');
+        setTimeout(() => setShow3dxSyncModal(false), 1500);
+      } else {
+        setSyncStatus('error');
+      }
+    } catch (err) {
+      console.error(err);
+      setSyncStatus('error');
+    }
+  };
+
+  const handle3dxPull = async (docId: string) => {
+    setSyncStatus('loading');
+    try {
+      const electron = (window as any).require?.('electron');
+      const res = await electron.ipcRenderer.invoke('3dx-download-document', { documentId: docId });
+      if (res.success && res.content) {
+        const data = JSON.parse(res.content);
+        if (data.nodes && data.edges) {
+          setNodes(data.nodes);
+          setEdges(data.edges);
+          setSyncStatus('success');
+          setTimeout(() => setShow3dxSyncModal(false), 1500);
+        } else {
+          setSyncStatus('error');
+        }
+      } else {
+        setSyncStatus('error');
+      }
+    } catch (err) {
+      console.error(err);
+      setSyncStatus('error');
+    }
+  };
+
   const [scopeData, setScopeData] = useState<any[]>([]);
   const [openScopes, setOpenScopes] = useState<string[]>([]);
   const [activeSidebarTab, setActiveSidebarTab] = useState<'library' | 'labs'>('library');
@@ -2090,6 +2271,92 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const [quickSearchPos, setQuickSearchPos] = useState({ x: 0, y: 0 });
   const [quickSearchQuery, setQuickSearchQuery] = useState('');
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+
+  // Right-click drag-to-copy state
+  const [rightClickDrag, setRightClickDrag] = useState<{
+    clonedNodeId: string;
+    startMouseX: number;
+    startMouseY: number;
+    startNodeX: number;
+    startNodeY: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!rightClickDrag) return;
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      const zoom = reactFlowInstance?.getZoom() || 1;
+      const dx = (e.clientX - rightClickDrag.startMouseX) / zoom;
+      const dy = (e.clientY - rightClickDrag.startMouseY) / zoom;
+      
+      setNodes(nds => nds.map(n => n.id === rightClickDrag.clonedNodeId ? {
+        ...n,
+        position: {
+          x: rightClickDrag.startNodeX + dx,
+          y: rightClickDrag.startNodeY + dy
+        }
+      } : n));
+    };
+
+    const handleWindowMouseUp = (e: MouseEvent) => {
+      if (e.button === 2) {
+        e.preventDefault();
+        setRightClickDrag(null);
+      }
+    };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    window.addEventListener('contextmenu', handleContextMenu);
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+      window.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, [rightClickDrag, reactFlowInstance, setNodes]);
+
+  const handleNodeMouseDown = useCallback((event: React.MouseEvent, node: Node) => {
+    if (event.button === 2) {
+      event.preventDefault();
+      event.stopPropagation();
+      setHistory(h => [...h, { nodes, edges }].slice(-20));
+      const newNodeId = `${node.data.type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+      const clonedNode: Node = {
+        ...node,
+        id: newNodeId,
+        position: {
+          x: node.position.x,
+          y: node.position.y
+        },
+        selected: true,
+        data: {
+          ...node.data,
+          id: newNodeId,
+          selected: true
+        }
+      };
+      setNodes(nds => [...nds.map(n => ({ ...n, selected: false })), clonedNode]);
+      setSelectedNodeId(newNodeId);
+      setRightClickDrag({
+        clonedNodeId: newNodeId,
+        startMouseX: event.clientX,
+        startMouseY: event.clientY,
+        startNodeX: node.position.x,
+        startNodeY: node.position.y
+      });
+    }
+  }, [nodes, edges, setNodes, setSelectedNodeId]);
+
+  const scopeParamsRef = useRef<any>({});
+  useEffect(() => {
+    const scopeNode = nodes.find(n => (n.data as any).type === 'scope');
+    scopeParamsRef.current = scopeNode?.data?.params || {};
+  }, [nodes]);
 
   // Select and focus programmatic node
   useEffect(() => {
@@ -2415,30 +2682,69 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     const step = buildSimEngine();
     const DT = 0.05;   // seconds per tick (wall-clock 50 ms)
 
-    const interval = setInterval(() => {
+    let stepCount = 0;
+    let lastSampleTime = 0;
+
+    let interval: any;
+    interval = setInterval(() => {
       try {
         setSimTime(prevT => {
           const t = prevT;
+          if (vlabLimitRef.current !== null && t >= vlabLimitRef.current) {
+            setIsSimulating(false);
+            clearInterval(interval);
+            setStatus({ message: `Simulation reached limit of ${vlabLimitRef.current}s.`, type: 'success' });
+            return t;
+          }
           const val = step(t, DT);
           
           if (val === null || val === undefined) return t + DT;
 
-          setScopeData(prev => {
-            let newPoint: any;
-            if (typeof val === 'number') {
-              if (!Number.isFinite(val)) return prev;
-              newPoint = { time: parseFloat(t.toFixed(3)), value: parseFloat(val.toFixed(6)) };
-            } else {
-              const entries = Object.entries(val).map(([k, v]) => {
-                const numVal = parseFloat((v as number).toFixed(6));
-                return [k, Number.isFinite(numVal) ? numVal : 0];
-              });
-              newPoint = { time: parseFloat(t.toFixed(3)), ...Object.fromEntries(entries) };
+          stepCount++;
+
+          const scopeParams = scopeParamsRef.current || {};
+          const decimation = Number(scopeParams.decimation?.value) || 1;
+          const sampleTime = scopeParams.sample_time?.value !== undefined ? Number(scopeParams.sample_time.value) : -1;
+          const limitDataPoints = scopeParams.limit_data_points?.value !== 'off';
+          const bufferSize = Number(scopeParams.buffer_size?.value) || 1000;
+
+          let shouldSample = true;
+          if (decimation > 1 && (stepCount % decimation !== 0)) {
+            shouldSample = false;
+          }
+
+          if (sampleTime > 0) {
+            if (t - lastSampleTime < sampleTime - 1e-9 && lastSampleTime > 0) {
+              shouldSample = false;
             }
-            
-            const next = [...prev, newPoint];
-            return next.slice(-200);
-          });
+          }
+
+          if (shouldSample) {
+            setScopeData(prev => {
+              let newPoint: any;
+              if (typeof val === 'number') {
+                if (!Number.isFinite(val)) return prev;
+                newPoint = { time: parseFloat(t.toFixed(3)), value: parseFloat(val.toFixed(6)) };
+              } else {
+                const entries = Object.entries(val).map(([k, v]) => {
+                  const numVal = parseFloat((v as number).toFixed(6));
+                  return [k, Number.isFinite(numVal) ? numVal : 0];
+                });
+                newPoint = { time: parseFloat(t.toFixed(3)), ...Object.fromEntries(entries) };
+              }
+              
+              const next = [...prev, newPoint];
+              if (limitDataPoints) {
+                return next.slice(-bufferSize);
+              }
+              return next.slice(-20000); // safety cap
+            });
+
+            if (sampleTime > 0) {
+              lastSampleTime = t;
+            }
+          }
+
           return t + DT;
         });
       } catch (err) {
@@ -2739,15 +3045,28 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     if (!selectedNodeId) return;
     setNodes(nds => nds.map(n => {
       if (n.id === selectedNodeId) {
+        const updatedParams = {
+          ...n.data.params,
+          [paramKey]: { ...n.data.params[paramKey], value }
+        };
+        const updatedData = {
+          ...n.data,
+          params: updatedParams
+        };
+
+        if (n.data.type === 'scope' && (paramKey === 'numSignals' || paramKey === 'numPorts')) {
+          const num = Math.max(1, Math.min(8, Number(value) || 1));
+          updatedData.ports = Array.from({ length: num }, (_, i) => ({
+            id: `in${i + 1}`,
+            pos: 'left',
+            label: `${i + 1}`,
+            domain: 'Physical'
+          }));
+        }
+
         return {
           ...n,
-          data: {
-            ...n.data,
-            params: {
-              ...n.data.params,
-              [paramKey]: { ...n.data.params[paramKey], value }
-            }
-          }
+          data: updatedData
         };
       }
       return n;
@@ -2833,7 +3152,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   };
 
   return (
-    <div className="flex h-full w-full bg-[#050505] text-[#e0e0e0] overflow-hidden">
+    <div id="vlab-workspace-container" className="flex h-full w-full bg-[#050505] text-[#e0e0e0] overflow-hidden">
       {/* Top Bar */}
       <div className="absolute top-0 left-0 right-0 h-12 bg-[#0d0d0d] border-b border-[#222] flex items-center justify-between px-4 z-10">
         <div className="flex items-center gap-4">
@@ -2850,6 +3169,22 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Simulation End Time Input */}
+          <div className="flex items-center gap-2 bg-[#141414] border border-[#2d2d2d] rounded-lg px-2.5 py-1 text-xs font-bold text-gray-300 shadow-md">
+            <span className="text-[9px] text-gray-500 uppercase font-black tracking-wider">End Time</span>
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                value={vlabLimitInput}
+                onChange={e => setVlabLimitInput(e.target.value.replace(/[^0-9.]/g, ''))}
+                disabled={isSimulating}
+                placeholder="Unlimited"
+                className="w-16 bg-black/40 border border-[#2d2d2d] focus:border-[#a855f7]/50 rounded px-1.5 py-0.5 text-center text-xs font-mono font-bold text-[#c084fc] focus:outline-none transition-all disabled:opacity-50"
+              />
+              <span className="text-[9px] text-gray-500 font-mono ml-1 font-bold">s</span>
+            </div>
+          </div>
+
           <button
             onClick={() => {
               if (isSimulating) {
@@ -2900,9 +3235,25 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
           <button
             onClick={() => onSendToDOE({ nodes, edges })}
-            className="flex items-center gap-2 bg-[#1a1a1a] border border-[#333] hover:bg-[#222] text-gray-300 px-4 py-1.5 rounded-lg text-xs font-bold"
+            className="flex items-center gap-2 bg-[#1a1a1a] border border-[#333] hover:bg-[#222] text-gray-300 px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
           >
             <Send size={14} /> EXPORT TO DOE
+          </button>
+
+          <button
+            onClick={() => handle3dxSyncInit('push')}
+            className="flex items-center gap-2 bg-blue-900/25 hover:bg-blue-900/45 text-[#4da6ff] border border-blue-800/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+            title="Push to 3DEXPERIENCE"
+          >
+            <Cloud size={14} /> PUSH 3DX
+          </button>
+
+          <button
+            onClick={() => handle3dxSyncInit('pull')}
+            className="flex items-center gap-2 bg-blue-900/25 hover:bg-blue-900/45 text-[#4da6ff] border border-blue-800/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+            title="Pull from 3DEXPERIENCE"
+          >
+            <Download size={14} /> PULL 3DX
           </button>
         </div>
       </div>
@@ -3049,9 +3400,15 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         </div>
 
         {/* Center: Flow Canvas */}
-        <div className="flex-1 relative bg-[#0a0a0a]" onDrop={onDrop} onDragOver={onDragOver}>
+        <div className="flex-1 relative bg-[#0a0a0a]" onDrop={onDrop} onDragOver={onDragOver} onContextMenu={(e) => e.preventDefault()}>
           <ReactFlow
-            nodes={nodes}
+            nodes={nodes.map(n => ({
+              ...n,
+              data: {
+                ...n.data,
+                onNodeMouseDown: (e: React.MouseEvent) => handleNodeMouseDown(e, n)
+              }
+            }))}
             edges={edges.map(e => ({
               ...e,
               className: invalidEdges.has(e.id) ? 'edge-error' : '',
@@ -3132,6 +3489,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   data={scopeData}
                   title={selectedNode.data.label}
                   isPaused={isPaused}
+                  params={selectedNode.data.params || {}}
                   onExpand={() => setOpenScopes(prev => prev.includes(selectedNode.id) ? prev : [...prev, selectedNode.id])}
                 />
               </Panel>
@@ -3215,15 +3573,54 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                           <label className="text-[10px] text-gray-400 font-bold uppercase">{param.label || key}</label>
                           <span className="text-[10px] text-gray-600">{param.unit || ''}</span>
                         </div>
-                        <input
-                          type={typeof (param.value ?? 0) === 'number' ? "number" : "text"}
-                          value={param.value ?? ''}
-                          onChange={(e) => {
-                            const val = typeof (param.value ?? 0) === 'number' ? parseFloat(e.target.value) : e.target.value;
-                            updateParameter(key, val);
-                          }}
-                          className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none"
-                        />
+                        {['limit_data_points', 'show_grid', 'show_legend'].includes(key) ? (
+                          <select
+                            value={String(param.value ?? 'on')}
+                            onChange={(e) => updateParameter(key, e.target.value)}
+                            className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-[#a855f7] font-bold cursor-pointer"
+                          >
+                            <option value="on">On (Yes)</option>
+                            <option value="off">Off (No)</option>
+                          </select>
+                        ) : key === 'time_range' ? (
+                          <select
+                            value={String(param.value ?? '10')}
+                            onChange={(e) => {
+                              const val = e.target.value === 'auto' ? 'auto' : parseFloat(e.target.value);
+                              updateParameter(key, val);
+                            }}
+                            className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-mono font-bold cursor-pointer"
+                          >
+                            <option value="auto">Auto (Full)</option>
+                            <option value="1">1s</option>
+                            <option value="2">2s</option>
+                            <option value="5">5s</option>
+                            <option value="10">10s</option>
+                            <option value="30">30s</option>
+                            <option value="60">60s</option>
+                            <option value="300">300s</option>
+                          </select>
+                        ) : key === 'numSignals' || key === 'numPorts' ? (
+                          <select
+                            value={String(param.value ?? 1)}
+                            onChange={(e) => updateParameter(key, parseInt(e.target.value))}
+                            className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-bold cursor-pointer"
+                          >
+                            {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                              <option key={n} value={n}>{n} Channels</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type={typeof (param.value ?? 0) === 'number' ? "number" : "text"}
+                            value={param.value ?? ''}
+                            onChange={(e) => {
+                              const val = typeof (param.value ?? 0) === 'number' ? parseFloat(e.target.value) : e.target.value;
+                              updateParameter(key, val);
+                            }}
+                            className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none"
+                          />
+                        )}
                       </div>
                     ))}
                   </div>
@@ -3337,10 +3734,117 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             title={scopeNode.data.label}
             data={scopeData}
             isPaused={isPaused}
+            params={scopeNode.data.params || {}}
+            onUpdate={(newData) => {
+              setNodes(nds => nds.map(n => {
+                if (n.id === scopeId) {
+                  const updatedParams = { ...n.data.params, ...newData };
+                  const updatedData = { ...n.data, params: updatedParams };
+                  if (newData.numSignals) {
+                    const num = Math.max(1, Math.min(8, Number(newData.numSignals.value) || 1));
+                    updatedData.ports = Array.from({ length: num }, (_, i) => ({
+                      id: `in${i + 1}`,
+                      pos: 'left',
+                      label: `${i + 1}`,
+                      domain: 'Physical'
+                    }));
+                  }
+                  return { ...n, data: updatedData };
+                }
+                return n;
+              }));
+            }}
             onClose={() => setOpenScopes(prev => prev.filter(id => id !== scopeId))}
           />
         );
       })}
+
+        {/* 3DEXPERIENCE Sync Modal */}
+        {show3dxSyncModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] animate-in fade-in duration-200">
+            <div className="bg-[#0c0c10] border border-[#1e2a3a] rounded-2xl w-[480px] p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-[#1a2133] pb-3">
+                <div className="flex items-center gap-2">
+                  <Cloud className="text-[#4da6ff]" size={18} />
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                    {syncAction === 'push' ? 'Push Workspace to 3DX' : 'Pull Workspace from 3DX'}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShow3dxSyncModal(false)}
+                  className="text-gray-500 hover:text-white p-1 hover:bg-white/5 rounded-md transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {syncStatus === 'loading' ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-3">
+                  <RefreshCcw size={24} className="text-[#4da6ff] animate-spin" />
+                  <span className="text-xs text-gray-400">Connecting to 3DEXPERIENCE...</span>
+                </div>
+              ) : syncStatus === 'success' ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-3">
+                  <CheckCircle2 size={24} className="text-emerald-400" />
+                  <span className="text-xs text-emerald-400 font-bold">Workspace Synced Successfully!</span>
+                </div>
+              ) : syncStatus === 'error' ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-3 text-center">
+                  <AlertCircle size={24} className="text-red-400" />
+                  <span className="text-xs text-red-400 font-bold">Sync Failed</span>
+                  <p className="text-[10px] text-gray-500 max-w-xs mx-auto">
+                    Please ensure you have an active internet connection and are authenticated to the 3DEXPERIENCE platform.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {syncAction === 'push' ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Target Workspace</label>
+                        <select
+                          value={selectedTdxWorkspace}
+                          onChange={(e) => setSelectedTdxWorkspace(e.target.value)}
+                          className="w-full bg-[#06080c] border border-[#1e2a3a] rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
+                        >
+                          {tdxWorkspaces.map(ws => (
+                            <option key={ws.id} value={ws.id}>{ws.title}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        onClick={handle3dxPush}
+                        className="w-full py-2.5 bg-[#0056b3] hover:bg-[#0069d9] text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                      >
+                        Push Now
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Select Document to Import</label>
+                      {tdxDocs.length === 0 ? (
+                        <div className="py-4 text-center text-xs text-gray-600">No compatible VLab models found.</div>
+                      ) : (
+                        <div className="max-h-[200px] overflow-y-auto border border-[#1a2133] rounded-lg divide-y divide-[#1a2133] bg-[#06080c]">
+                          {tdxDocs.map(doc => (
+                            <div
+                              key={doc.id}
+                              onClick={() => handle3dxPull(doc.id)}
+                              className="p-3 text-xs text-gray-400 hover:text-white hover:bg-white/5 cursor-pointer transition-all flex items-center justify-between"
+                            >
+                              <span className="font-medium truncate mr-2">{doc.title}</span>
+                              <span className="text-[9px] text-gray-600 font-mono flex-shrink-0">{new Date(doc.modified).toLocaleDateString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {

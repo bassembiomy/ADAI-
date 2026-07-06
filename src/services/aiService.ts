@@ -24,11 +24,14 @@ You can return structured commands in your response to modify the project. Use t
 }
 `;
 
-const N8N_WEBHOOK_URL = "https://bebo007.app.n8n.cloud/webhook/adia-ai-orchestrator";
+const N8N_WEBHOOK_URL = (import.meta as any).env.VITE_N8N_WEBHOOK_URL || "";
 
 // New n8n Orchestrator function with automatic fallback and debugging
 export async function getN8nAiResponse(prompt: string, context: any, apiKey?: string, history?: any[]): Promise<string> {
-  console.log("AI Architect: Calling Orchestrator at", N8N_WEBHOOK_URL);
+  if (!N8N_WEBHOOK_URL) {
+    throw new Error("AI Orchestrator URL is not configured. Please check VITE_N8N_WEBHOOK_URL in environment settings.");
+  }
+  console.log("AI Architect: Calling Orchestrator...");
   
   try {
     const response = await fetch(N8N_WEBHOOK_URL, {

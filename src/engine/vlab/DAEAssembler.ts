@@ -334,7 +334,9 @@ export class DAEAssembler {
         branches.push({ name: 'force', ports: [{ id: 'f', sign: -1 }, { id: 'b', sign: 1 }] });
         break;
       case 'heat_flow_sensor':
+      case 'heat_sensor':
         branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
+        branches.push({ name: 'signal_h', ports: [{ id: 'h', sign: 1 }] });
         break;
         case 'transformer':
         case 'gyrator':
@@ -355,7 +357,7 @@ export class DAEAssembler {
           break;
         case 'dc_motor':
           branches.push({ name: 'current', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
-          branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
+          branches.push({ name: 'torque', ports: [{ id: 'r', sign: 1 }] });
           states.push('theta');
           break;
         case 'ac_motor':
@@ -364,7 +366,7 @@ export class DAEAssembler {
           branches.push({ name: 'ia', ports: [{ id: 'a', sign: -1 }] });
           branches.push({ name: 'ib', ports: [{ id: 'b', sign: -1 }] });
           branches.push({ name: 'ic', ports: [{ id: 'c', sign: -1 }] });
-          branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
+          branches.push({ name: 'torque', ports: [{ id: 'r', sign: 1 }] });
           states.push('theta');
           break;
         case 'ma_chamber':
@@ -419,9 +421,13 @@ export class DAEAssembler {
         case 'conductive_heat':
         case 'convective_heat':
         case 'radiative_heat':
-        case 'heat_sensor':
           branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
           break;
+        case 'temp_sensor':
+          branches.push({ name: 'heat_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
+          branches.push({ name: 'signal_t', ports: [{ id: 't', sign: 1 }] });
+          break;
+
         case 'thermal_mass':
         case 'heat_src':
         case 'temp_src':
@@ -436,8 +442,9 @@ export class DAEAssembler {
           branches.push({ name: 'heat_flow', ports: [{ id: 'h', sign: 1 }] });
           break;
         case 'microwave_inverter':
-          branches.push({ name: 'current_in', ports: [{ id: 'p_in', sign: -1 }, { id: 'n_in', sign: 1 }] });
-          branches.push({ name: 'current_out', ports: [{ id: 'p_out', sign: -1 }, { id: 'n_out', sign: 1 }] });
+          branches.push({ name: 'current_in', ports: [{ id: 'ac_in', sign: -1 }] });
+          branches.push({ name: 'current_out', ports: [{ id: 'hv_out', sign: 1 }] });
+          break;
         case 'microwave_cavity':
           branches.push({ name: 'heat_flow1', ports: [{ id: 'h1', sign: -1 }] });
           branches.push({ name: 'heat_flow2', ports: [{ id: 'h2', sign: -1 }] });
@@ -447,6 +454,7 @@ export class DAEAssembler {
           break;
         case 'washing_basket':
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
+          break;
         case 'pwm_3ph_2level':
           branches.push({ name: 'current_a', ports: [{ id: 'a', sign: -1 }, { id: 'n', sign: 1 }] });
           branches.push({ name: 'current_b', ports: [{ id: 'b', sign: -1 }, { id: 'n', sign: 1 }] });
@@ -455,8 +463,10 @@ export class DAEAssembler {
         case 'ma_pipe':
           branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
           break;
-        case 'ma_flow_src':
-        case 'ma_pres_src':
+        case 'ma_flow_source':
+        case 'ma_pressure_source':
+          branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
+          break;
         case 'ma_moisture_source':
           branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }] });
           break;
