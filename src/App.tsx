@@ -4159,6 +4159,149 @@ const ReportDialog = ({
   );
 };
 
+const NewProjectDialog = ({
+  onClose,
+  onCreate
+}: {
+  onClose: () => void;
+  onCreate: (name: string) => void;
+}) => {
+  const [name, setName] = useState('');
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" onMouseDown={onClose}>
+      <div className="bg-[#1a1a1a] border border-[#f97316] rounded-lg w-[400px] flex flex-col shadow-2xl" onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}>
+        <div className="h-12 flex items-center px-5 border-b border-[#222]">
+          <h2 className="text-lg font-bold text-[#f97316]">Create New Project</h2>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <Label>Project Name</Label>
+            <Input
+              autoFocus
+              value={name}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
+              placeholder="e.g. HVAC Control System"
+              className="w-full mt-1 border-[#333] focus:border-[#f97316]"
+              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === 'Enter' && name.trim()) {
+                  onCreate(name.trim());
+                }
+              }}
+            />
+          </div>
+          <div className="flex gap-2 justify-end pt-2">
+            <Button onClick={onClose} className="px-4 py-2 border border-[#333] bg-transparent text-white hover:bg-[#222]">Cancel</Button>
+            <Button
+              onClick={() => name.trim() && onCreate(name.trim())}
+              disabled={!name.trim()}
+              className="px-4 py-2 bg-[#f97316] text-[#0a0a0a] font-bold hover:bg-[#ea580c] disabled:opacity-50"
+            >
+              Create Project
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SaveSelectionDialog = ({
+  onClose,
+  onSave
+}: {
+  onClose: () => void;
+  onSave: (selectedKeys: string[]) => void;
+}) => {
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([
+    'statemachine', 'bdd', 'ibd', 'requirements', 'xbridges', 
+    'vlab', 'hmi', 'hil', 'doe', 'entropy', 'unified'
+  ]);
+
+  const modules = [
+    { id: 'unified', name: 'Unified Project File (contains everything in one file)', desc: 'adia_project_unified.json' },
+    { id: 'statemachine', name: 'State Machine Module', desc: 'statemachine.json' },
+    { id: 'bdd', name: 'SysML BDD Module', desc: 'bdd.json' },
+    { id: 'ibd', name: 'SysML IBD Module', desc: 'ibd.json' },
+    { id: 'requirements', name: 'Requirements Module', desc: 'requirements.json' },
+    { id: 'xbridges', name: 'X-Bridges Module', desc: 'xbridges.json' },
+    { id: 'vlab', name: 'V-Lab Physical Model Module', desc: 'vlab.json' },
+    { id: 'hmi', name: 'HMI Dashboard Layout', desc: 'hmi.json' },
+    { id: 'hil', name: 'HIL Configuration', desc: 'hil.json' },
+    { id: 'doe', name: 'DOE RSM Analysis Data', desc: 'doe.json' },
+    { id: 'entropy', name: 'ENTROPY OPM Module', desc: 'entropy.json' },
+  ];
+
+  const handleToggle = (id: string) => {
+    setSelectedKeys(prev => 
+      prev.includes(id) ? prev.filter(k => k !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleAll = () => {
+    if (selectedKeys.length === modules.length) {
+      setSelectedKeys([]);
+    } else {
+      setSelectedKeys(modules.map(m => m.id));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 animate-fade-in" onMouseDown={onClose}>
+      <div className="bg-[#1a1a1a] border border-[#f97316] rounded-xl w-[500px] max-h-[90vh] flex flex-col shadow-2xl" onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}>
+        <div className="h-14 flex items-center justify-between px-6 border-b border-[#222]">
+          <h2 className="text-lg font-bold text-[#f97316]">Select Modules to Save</h2>
+          <button 
+            onClick={handleToggleAll} 
+            className="text-xs text-[#888] hover:text-[#f97316] transition-colors cursor-pointer"
+          >
+            {selectedKeys.length === modules.length ? 'Deselect All' : 'Select All'}
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-6 space-y-3">
+          <p className="text-xs text-[#888] mb-2">Check the modules you want to export. By default, all are selected.</p>
+          <div className="space-y-2 border border-[#222] rounded-lg p-3 bg-[#111]/40">
+            {modules.map(m => (
+              <label 
+                key={m.id} 
+                className="flex items-start gap-3 p-2 rounded hover:bg-[#222]/50 cursor-pointer transition-colors"
+              >
+                <input 
+                  type="checkbox" 
+                  checked={selectedKeys.includes(m.id)}
+                  onChange={() => handleToggle(m.id)}
+                  className="mt-0.5 rounded border-[#333] text-[#f97316] focus:ring-[#f97316] focus:ring-offset-0 focus:ring-0 bg-transparent w-4 h-4 cursor-pointer"
+                />
+                <div className="flex flex-col select-none">
+                  <span className="text-sm font-semibold text-[#e0e0e0]">{m.name}</span>
+                  <span className="text-[10px] text-[#666] font-mono">{m.desc}</span>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="h-16 flex items-center justify-end px-6 border-t border-[#222] gap-3">
+          <Button 
+            onClick={onClose} 
+            className="px-4 py-2 border border-[#333] bg-transparent text-white hover:bg-[#222]"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => onSave(selectedKeys)}
+            disabled={selectedKeys.length === 0}
+            className="px-5 py-2 bg-[#f97316] text-[#0a0a0a] font-bold hover:bg-[#ea580c] disabled:opacity-50"
+          >
+            Save Selected
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const TickRateInput = ({ value, onChange }: { value: number, onChange: (val: number) => void }) => {
   const [localValue, setLocalValue] = useState(String(value));
 
@@ -4767,6 +4910,17 @@ const PlotlyPlots = ({
   );
 };
 // Help Data moved to HelpData.ts
+
+const ALL_MODULES = [
+  { id: 'statemachine', label: 'State Machine' },
+  { id: 'bdd', label: 'SysML BDD' },
+  { id: 'requirements', label: 'Requirements' },
+  { id: 'ibd', label: 'SysML IBD' },
+  { id: 'xbridges', label: 'X-Bridges' },
+  { id: 'vlab', label: 'V-Lab' },
+  { id: 'hil', label: 'HIL' },
+  { id: 'entropy', label: 'ENTROPY OPM' },
+] as const;
 
 const DynamicIcon = ({ name, size, className }: { name?: string; size: number; className?: string }) => {
   switch (name) {
@@ -5626,7 +5780,13 @@ const GlobalReportPreviewModal = ({
 };
 
 const ADIA = () => {
-  const [showWelcome, setShowWelcome] = useState(true);
+  const [currentProjectName, setCurrentProjectName] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('projectName') || 'Main Project';
+  });
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [showSaveSelectionModal, setShowSaveSelectionModal] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(() => !window.location.search.includes('projectName'));
   const [showStandby, setShowStandby] = useState(false);
 
   // Standby Timeout Listener (30 seconds of inactivity)
@@ -6273,7 +6433,17 @@ const ADIA = () => {
   const [showHelpModal, setShowHelpModal] = useState(false);
 
   // BDD STATE (SysML)
-  const [diagramMode, setDiagramMode] = useState<DiagramMode>('statemachine' as DiagramMode);
+  // Tab Management State
+  const [openTabs, setOpenTabs] = useState<string[]>(['statemachine']);
+  const [diagramMode, setDiagramModeState] = useState<DiagramMode>('statemachine' as DiagramMode);
+
+  const setDiagramMode = useCallback((mode: DiagramMode) => {
+    setDiagramModeState(mode);
+    setOpenTabs(prev => {
+      if (prev.includes(mode)) return prev;
+      return [...prev, mode];
+    });
+  }, []);
   const [activePropTab, setActivePropTab] = useState<'general' | 'assign'>('general');
 
   // HIL (Hardware-in-the-Loop) state
@@ -6761,21 +6931,45 @@ const ADIA = () => {
     addError('info', 'Professional report generated and downloaded.');
   }, [results, data, headers, addError]);
 
-  const handleExportProject = useCallback(async () => {
-    const projectFiles = {
-      'statemachine.json': { states, junctions, transitions, layers, variables, view, tickMs },
-      'bdd.json': { blocks: blocks.filter(b => b.stereotype !== 'requirement'), relationships, customStereotypes },
-      'ibd.json': { parts, connectors, interfaceRealizations },
-      'requirements.json': { blocks: blocks.filter(b => b.stereotype === 'requirement'), relationships },
-      'xbridges.json': { globalXBridgesNodes, globalXBridgesEdges },
-      'vlab.json': { vlabNodes, vlabEdges },
-      'hmi.json': { hmiComponents },
-      'hil.json': hilConfig,
-      'doe.json': { headers, data, activeModel, taguchiConfig, results: results ? { R2: results.R2, equation: results.equation, type: results.type } : null },
-      'entropy.json': { entropyNodes, entropyEdges },
-      'adia_project_unified.json': {
+  const executeExportProject = useCallback(async (selectedKeys: string[]) => {
+    const projectFiles: Record<string, any> = {};
+
+    if (selectedKeys.includes('statemachine')) {
+      projectFiles['statemachine.json'] = { states, junctions, transitions, layers, variables, view, tickMs };
+    }
+    if (selectedKeys.includes('bdd')) {
+      projectFiles['bdd.json'] = { blocks: blocks.filter(b => b.stereotype !== 'requirement'), relationships, customStereotypes };
+    }
+    if (selectedKeys.includes('ibd')) {
+      projectFiles['ibd.json'] = { parts, connectors, interfaceRealizations };
+    }
+    if (selectedKeys.includes('requirements')) {
+      projectFiles['requirements.json'] = { blocks: blocks.filter(b => b.stereotype === 'requirement'), relationships };
+    }
+    if (selectedKeys.includes('xbridges')) {
+      projectFiles['xbridges.json'] = { globalXBridgesNodes, globalXBridgesEdges };
+    }
+    if (selectedKeys.includes('vlab')) {
+      projectFiles['vlab.json'] = { vlabNodes, vlabEdges };
+    }
+    if (selectedKeys.includes('hmi')) {
+      projectFiles['hmi.json'] = { hmiComponents };
+    }
+    if (selectedKeys.includes('hil')) {
+      projectFiles['hil.json'] = hilConfig;
+    }
+    if (selectedKeys.includes('doe')) {
+      projectFiles['doe.json'] = { headers, data, activeModel, taguchiConfig, results: results ? { R2: results.R2, equation: results.equation, type: results.type } : null };
+    }
+    if (selectedKeys.includes('entropy')) {
+      projectFiles['entropy.json'] = { entropyNodes, entropyEdges };
+    }
+    if (selectedKeys.includes('unified')) {
+      projectFiles['adia_project_unified.json'] = {
         version: VERSION,
         timestamp: new Date().toISOString(),
+        projectName: currentProjectName,
+        openTabs,
         states, junctions, transitions, layers, variables, view, tickMs,
         blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
         hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
@@ -6784,8 +6978,13 @@ const ADIA = () => {
         managedWindows,
         entropyNodes,
         entropyEdges
-      }
-    };
+      };
+    }
+
+    if (Object.keys(projectFiles).length === 0) {
+      addError('warning', 'No modules selected to save.');
+      return;
+    }
 
     // Electron specialized multi-file save
     if ((window as any).require) {
@@ -6793,7 +6992,7 @@ const ADIA = () => {
         const { ipcRenderer } = (window as any).require('electron');
         const success = await ipcRenderer.invoke('save-project-folder', projectFiles);
         if (success) {
-          addError('info', 'Project exported as individual module files in selected directory');
+          addError('info', 'Selected project modules exported in selected directory');
         }
         return;
       } catch (err) {
@@ -6811,7 +7010,7 @@ const ADIA = () => {
           await writable.write(JSON.stringify(data, null, 2));
           await writable.close();
         }
-        addError('info', 'Unified Project saved successfully to selected directory');
+        addError('info', 'Selected unified project saved successfully to selected directory');
         return;
       } catch (err) {
         console.warn('Directory picker failed or canceled, falling back to multiple downloads:', err);
@@ -6830,19 +7029,25 @@ const ADIA = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
-    addError('info', 'All project modules exported as individual files (Ctrl+S)');
+    addError('info', 'Selected project modules exported as files.');
   }, [
     states, junctions, transitions, layers, variables, view, tickMs,
     blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
     hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
     hilConfig,
     headers, data, activeModel, taguchiConfig, results, managedWindows, addError,
-    entropyNodes, entropyEdges
+    entropyNodes, entropyEdges, currentProjectName, openTabs
   ]);
+
+  const handleExportProject = useCallback(() => {
+    setShowSaveSelectionModal(true);
+  }, []);
 
   const hydrateProject = useCallback((importedData: any) => {
     try {
       // Logic & Simulation
+      if (importedData.projectName) setCurrentProjectName(importedData.projectName);
+      if (importedData.openTabs) setOpenTabs(importedData.openTabs);
       if (importedData.states) setStates(importedData.states);
       if (importedData.junctions) setJunctions(importedData.junctions);
       if (importedData.transitions) setTransitions(importedData.transitions);
@@ -6914,7 +7119,8 @@ const ADIA = () => {
     setHilConfig,
     setHeaders, setData, setActiveModel, setTaguchiConfig, setResults, setManagedWindows,
     setIsRunning, setActiveStates, setStateTimers, setTraceHistory, setScopeData, setSimulationTime,
-    setSelectedIds, setHistory, setHistoryIndex, setCurrentLayerId, setLayerStack, setLayerPath, addError
+    setSelectedIds, setHistory, setHistoryIndex, setCurrentLayerId, setLayerStack, setLayerPath, addError,
+    setCurrentProjectName, setOpenTabs
   ]);
 
   // Computed values
@@ -13556,11 +13762,26 @@ const ADIA = () => {
         {/* Top Toolbar - WITH VISIBLE SIMULATION CONTROLS */}
         <header className="h-14 bg-[#1a1a1a] border-b border-[#222] flex items-center px-4 gap-4 shrink-0 overflow-x-auto no-scrollbar">
           <div className="flex items-center gap-3">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
+            <button
+              onClick={() => setShowNewProjectModal(true)}
+              className="p-1 hover:bg-[#2a2a2a] rounded-lg transition-all duration-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316]/50 group"
+              title="Create New Project Screen (Parallel)"
+            >
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="group-hover:scale-110 transition-transform duration-200">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            </button>
             <div>
-              <div className="font-bold text-2xl tracking-tight">ADIA</div>
+              <div className="font-bold text-2xl tracking-tight text-white flex items-center gap-2">
+                <span>ADIA</span>
+                <input
+                  type="text"
+                  value={currentProjectName}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentProjectName(e.target.value)}
+                  className="bg-[#222] text-[#888] hover:text-[#fff] focus:text-[#fff] text-xs font-normal px-2 py-0.5 rounded border border-[#333] focus:border-[#f97316]/50 focus:outline-none tracking-normal w-32 focus:w-48 transition-all text-center cursor-pointer focus:cursor-text"
+                  title="Click to rename project"
+                />
+              </div>
               <div className="text-xs text-[#888] mt-[-3px]">{VERSION}</div>
             </div>
           </div>
@@ -13839,6 +14060,83 @@ const ADIA = () => {
             </div>
           </div>
         </header>
+
+        {/* Tab Bar for Active Modules */}
+        <div className="h-10 bg-[#141414] border-b border-[#222] flex items-center px-4 gap-2 overflow-x-auto shrink-0 select-none no-scrollbar">
+          {openTabs.map((tabId) => {
+            const moduleInfo = ALL_MODULES.find(m => m.id === tabId);
+            if (!moduleInfo) return null;
+            const isActive = diagramMode === tabId;
+            const isAllCollapsed = isHierarchyCollapsed && isVariablesCollapsed && isPropertiesCollapsed;
+            
+            return (
+              <div
+                key={tabId}
+                onClick={() => setDiagramMode(tabId as any)}
+                className={`h-8 flex items-center px-3 gap-3 rounded-t border-t-2 transition-all duration-150 cursor-pointer select-none ${
+                  isActive
+                    ? 'bg-[#1a1a1a] border-[#f97316] text-[#e0e0e0] font-bold shadow'
+                    : 'bg-[#1e1e1e]/40 border-transparent text-[#888] hover:text-[#ccc] hover:bg-[#1e1e1e]/70'
+                }`}
+              >
+                <span className="text-xs tracking-wide">{moduleInfo.label}</span>
+                
+                {/* Maximize / Minimize button (visible when active) */}
+                {isActive && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isAllCollapsed) {
+                        // Restore sidebars
+                        setIsHierarchyCollapsed(false);
+                        setIsVariablesCollapsed(false);
+                        setIsPropertiesCollapsed(false);
+                      } else {
+                        // Maximize canvas by collapsing sidebars
+                        setIsHierarchyCollapsed(true);
+                        setIsVariablesCollapsed(true);
+                        setIsPropertiesCollapsed(true);
+                      }
+                    }}
+                    className="p-0.5 hover:bg-[#2a2a2a] rounded transition-colors text-[#666] hover:text-[#f97316] focus:outline-none"
+                    title={isAllCollapsed ? "Restore Layout (Minimize)" : "Maximize View"}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      {isAllCollapsed ? (
+                        // Restore / Minimize icon
+                        <path d="M4 14h6v6m10-10h-6V4" />
+                      ) : (
+                        // Maximize icon
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3m18-5h-3a2 2 0 0 0-2 2v3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 0-2 2h-3" />
+                      )}
+                    </svg>
+                  </button>
+                )}
+
+                {/* Close/Exit Tab (always available if there's more than one tab open) */}
+                {openTabs.length > 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const nextTabs = openTabs.filter(t => t !== tabId);
+                      setOpenTabs(nextTabs);
+                      if (isActive) {
+                        setDiagramMode(nextTabs[0] as any);
+                      }
+                    }}
+                    className="p-0.5 hover:bg-[#2a2a2a] rounded transition-colors text-[#666] hover:text-[#ff4d4d] focus:outline-none"
+                    title="Close Tab (Exit)"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
 
         {/* Main Content Area */}
         <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
@@ -15886,6 +16184,29 @@ const ADIA = () => {
           <ReportDialog
             onClose={() => setShowReportDialog(false)}
             onGenerate={handleGenerateReport}
+          />
+        )}
+
+        {/* New Project Dialog */}
+        {showNewProjectModal && (
+          <NewProjectDialog
+            onClose={() => setShowNewProjectModal(false)}
+            onCreate={(name) => {
+              setShowNewProjectModal(false);
+              const newUrl = `${window.location.origin}${window.location.pathname}?projectName=${encodeURIComponent(name)}`;
+              window.open(newUrl, '_blank');
+            }}
+          />
+        )}
+
+        {/* Save Selection Dialog */}
+        {showSaveSelectionModal && (
+          <SaveSelectionDialog
+            onClose={() => setShowSaveSelectionModal(false)}
+            onSave={(selectedKeys) => {
+              setShowSaveSelectionModal(false);
+              executeExportProject(selectedKeys);
+            }}
           />
         )}
 

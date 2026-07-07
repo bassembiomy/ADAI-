@@ -88,33 +88,58 @@ function createWindow() {
     });
   }
 
-  // Prevent navigation to untrusted URLs
-  win.webContents.on('will-navigate', (event, url) => {
-    const allowed = ['http://localhost:3000', 'http://127.0.0.1:3000', 'file://'];
-    if (app.isPackaged) {
-      if (!url.startsWith('file://')) {
-        event.preventDefault();
-        console.warn('Blocked navigation to:', url);
+  // Global web-contents-created handler to apply security rules and allow local parallel windows
+  app.on('web-contents-created', (event, contents) => {
+    // Prevent navigation to untrusted URLs
+    contents.on('will-navigate', (event, url) => {
+      const allowed = ['http://localhost:3000', 'http://127.0.0.1:3000', 'file://'];
+      if (app.isPackaged) {
+        if (!url.startsWith('file://')) {
+          event.preventDefault();
+          console.warn('Blocked navigation to:', url);
+        }
+      } else {
+        if (!allowed.some(prefix => url.startsWith(prefix))) {
+          event.preventDefault();
+          console.warn('Blocked navigation to:', url);
+        }
       }
-    } else {
-      if (!allowed.some(prefix => url.startsWith(prefix))) {
-        event.preventDefault();
-        console.warn('Blocked navigation to:', url);
-      }
-    }
-  });
+    });
 
-  // Prevent opening new windows
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    const { shell } = require('electron');
-    const trustedDomains = ['3dexperience.3ds.com', 'iam.3dexperience.3ds.com'];
-    try {
-      const parsed = new URL(url);
-      if (trustedDomains.some(d => parsed.hostname.endsWith(d))) {
-        shell.openExternal(url);
-      }
-    } catch {}
-    return { action: 'deny' };
+    // Window open handler: allow local project workspace urls, deny/externalize others
+    contents.setWindowOpenHandler(({ url }) => {
+      const { shell } = require('electron');
+      const trustedDomains = ['3dexperience.3ds.com', 'iam.3dexperience.3ds.com'];
+      try {
+        const parsed = new URL(url);
+        
+        // Allow opening new windows for project workspace (development or production local file)
+        const isLocalDev = parsed.origin.startsWith('http://localhost:') || parsed.origin.startsWith('http://127.0.0.1:');
+        const isLocalFile = parsed.protocol === 'file:';
+        if (isLocalDev || isLocalFile) {
+          return {
+            action: 'allow',
+            overrideBrowserWindowOptions: {
+              width: 1400,
+              height: 900,
+              webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+                enableRemoteModule: false,
+                sandbox: true,
+                preload: path.join(__dirname, 'preload.cjs'),
+              },
+              backgroundColor: "#0a0a0a",
+            }
+          };
+        }
+
+        if (trustedDomains.some(d => parsed.hostname.endsWith(d))) {
+          shell.openExternal(url);
+        }
+      } catch {}
+      return { action: 'deny' };
+    });
   });
 
   if (!app.isPackaged) {

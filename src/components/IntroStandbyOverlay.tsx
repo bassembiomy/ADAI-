@@ -373,22 +373,6 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
               )}
             </div>
 
-            {/* Progress Bar Container */}
-            <div className="w-80 flex flex-col gap-2 mt-2">
-              <div className="w-full h-[3px] bg-white/5 relative rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-orange-600 via-amber-400 to-orange-600 shadow-[0_0_8px_#f97316] transition-all duration-100 ease-out" 
-                  style={{ width: `${Math.min(100, Math.round(((logIndex + (bootLogs[logIndex] ? charIndex / bootLogs[logIndex].length : 0)) / bootLogs.length) * 100))}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-[9px] font-mono text-white/30 uppercase tracking-[0.2em]">
-                <span>System Booting</span>
-                <span className="text-orange-500 font-bold">
-                  {Math.min(100, Math.round(((logIndex + (bootLogs[logIndex] ? charIndex / bootLogs[logIndex].length : 0)) / bootLogs.length) * 100))}%
-                </span>
-              </div>
-            </div>
-
             {/* Click to skip indicator */}
             <span className="text-[8px] font-mono text-white/20 uppercase tracking-[0.1em] mt-1 animate-pulse">
               Click anywhere or press any key to skip
