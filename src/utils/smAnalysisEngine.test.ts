@@ -292,4 +292,72 @@ describe('smAnalysisEngine', () => {
     expect(safetyScenario).toBeDefined();
     expect(safetyScenario?.name).toContain('Safety: Error triggers safe-state transition');
   });
+
+  it('should support parallel states and analyze their reachability correctly', () => {
+    const states: StateData[] = [
+      {
+        id: 's1', name: 'StateA', x: 0, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'root', children: [],
+        priority: 1, isParallel: true, regionId: 'MAIN', autostart: true
+      },
+      {
+        id: 's2', name: 'StateB', x: 200, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'green', parentId: 'root', children: [],
+        priority: 2, isParallel: true, regionId: 'MAIN', autostart: true
+      }
+    ];
+
+    const result = analyzeStateMachine({
+      tickMs: 10,
+      states,
+      junctions: [],
+      transitions: [],
+      variables: mockVariables,
+      layers: mockLayers,
+      safetyMode: false
+    });
+
+    // Both should be reachable since they are parallel and marked autostart
+    expect(result.metrics.stateReachability).toBe(100);
+    expect(result.cornerCases.filter(c => c.category === 'unreachable')).toHaveLength(0);
+  });
+
+  it('should support hierarchical layers and analyze nested state reachability correctly', () => {
+    const states: StateData[] = [
+      {
+        id: 's1', name: 'ParentState', x: 0, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'root', children: [],
+        priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
+      },
+      {
+        id: 's2', name: 'NestedState', x: 200, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'green', parentId: 'child_layer', children: [],
+        priority: 2, isParallel: false, regionId: 'MAIN', autostart: true
+      }
+    ];
+
+    const layers: Layer[] = [
+      { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] },
+      { id: 'child_layer', name: 'child_layer', parentStateId: 's1', stateIds: ['s2'], transitionIds: [], junctionIds: [] }
+    ];
+
+    const result = analyzeStateMachine({
+      tickMs: 10,
+      states,
+      junctions: [],
+      transitions: [],
+      variables: mockVariables,
+      layers,
+      safetyMode: false
+    });
+
+    // Both parent and nested autostart states should be reachable
+    expect(result.metrics.stateReachability).toBe(100);
+    expect(result.cornerCases.filter(c => c.category === 'unreachable')).toHaveLength(0);
+  });
 });
+

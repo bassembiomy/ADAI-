@@ -597,16 +597,38 @@ export const XBlockNode = ({ data, id, selected }: any) => {
   // Update node internals when handles are modified (adding/removing ports)
   React.useEffect(() => {
     updateNodeInternals(id);
+
+    // Staggered timeouts to ensure React Flow re-measures coordinates after
+    // CSS loads, fonts load, and the canvas zoom/fitView finishes.
+    const t1 = setTimeout(() => updateNodeInternals(id), 50);
+    const t2 = setTimeout(() => updateNodeInternals(id), 200);
+    const t3 = setTimeout(() => updateNodeInternals(id), 500);
+    const t4 = setTimeout(() => updateNodeInternals(id), 1000);
+    const t5 = setTimeout(() => updateNodeInternals(id), 2000);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+      clearTimeout(t5);
+    };
   }, [id, allPorts.length, data.inputs, data.outputs, updateNodeInternals]);
 
   // Update node internals when the DOM element is resized (NodeResizer or content change)
   React.useEffect(() => {
     if (!nodeRef.current) return;
+    let t: NodeJS.Timeout;
     const observer = new ResizeObserver(() => {
       updateNodeInternals(id);
+      // Run after a tick to ensure reflow completes
+      t = setTimeout(() => updateNodeInternals(id), 0);
     });
     observer.observe(nodeRef.current);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      clearTimeout(t);
+    };
   }, [id, updateNodeInternals]);
 
   const downloadCSV = () => {

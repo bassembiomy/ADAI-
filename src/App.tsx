@@ -205,6 +205,7 @@ interface ManagedWindowState {
   title: string;
   isOpen: boolean;
   isMinimized: boolean;
+  isMaximized?: boolean;
   pos: { x: number; y: number };
   size: { width: number; height: number };
   zIndex: number;
@@ -826,6 +827,20 @@ const FloatingWindow = ({
         width: '100%',
         height: '100%',
         zIndex: 100
+      } : windowState.isMinimized ? {
+        position: 'absolute',
+        left: windowState.pos.x,
+        top: windowState.pos.y,
+        width: windowState.size.width,
+        height: '32px',
+        zIndex: windowState.zIndex,
+      } : windowState.isMaximized ? {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        zIndex: windowState.zIndex,
       } : {
         position: 'absolute',
         left: windowState.pos.x,
@@ -838,23 +853,76 @@ const FloatingWindow = ({
       onMouseDown={() => !isMobile && onUpdate(windowState.id, { zIndex: Date.now() })}
     >
       <div
-        className="h-8 bg-[#1a1a1a] border-b border-[#222] flex items-center justify-between px-3 cursor-move select-none shrink-0"
+        className={`h-8 bg-[#1a1a1a] border-b border-[#222] flex items-center justify-between px-3 select-none shrink-0 ${
+          isMobile || windowState.isMaximized ? '' : 'cursor-move'
+        }`}
         onMouseDown={(e) => {
-          if (isMobile) return;
+          if (isMobile || windowState.isMaximized) return;
           e.stopPropagation();
           setIsDragging(true);
           setDragOffset({ x: e.clientX - windowState.pos.x, y: e.clientY - windowState.pos.y });
         }}
       >
         <span className="text-xs font-bold text-[#f97316]">{windowState.title}</span>
-        <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="text-[#666] hover:text-[#e0e0e0]">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
+        <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
+          {/* Minimize Button */}
+          <button
+            onClick={() => onUpdate(windowState.id, { isMinimized: !windowState.isMinimized })}
+            title={windowState.isMinimized ? "Restore" : "Minimize"}
+            className="w-6 h-6 rounded flex items-center justify-center text-[#888] hover:text-[#e0e0e0] hover:bg-[#2a2a2a] transition-colors"
+          >
+            {windowState.isMinimized ? (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="4 14 10 14 10 20"></polyline>
+                <polyline points="20 10 14 10 14 4"></polyline>
+                <line x1="14" y1="10" x2="21" y2="3"></line>
+                <line x1="10" y1="14" x2="3" y2="21"></line>
+              </svg>
+            ) : (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            )}
+          </button>
+
+          {/* Maximize Button */}
+          <button
+            onClick={() => onUpdate(windowState.id, { isMaximized: !windowState.isMaximized, isMinimized: false })}
+            title={windowState.isMaximized ? "Restore Size" : "Maximize"}
+            className="w-6 h-6 rounded flex items-center justify-center text-[#888] hover:text-[#e0e0e0] hover:bg-[#2a2a2a] transition-colors"
+          >
+            {windowState.isMaximized ? (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="8" y="4" width="12" height="12" rx="1"></rect>
+                <path d="M4 8v11a1 1 0 0 0 1 1h11"></path>
+              </svg>
+            ) : (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              </svg>
+            )}
+          </button>
+
+          {/* Close/Exit Button */}
+          <button
+            onClick={onClose}
+            title="Close"
+            className="w-6 h-6 rounded flex items-center justify-center text-[#888] hover:text-white hover:bg-red-600 transition-colors"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
       </div>
-      <div className="flex-1 overflow-hidden relative flex flex-col">
+      <div
+        className="flex-1 overflow-hidden relative flex flex-col"
+        style={{ display: windowState.isMinimized ? 'none' : 'flex' }}
+      >
         {children}
       </div>
-      {!isMobile && <div
+      {!isMobile && !windowState.isMaximized && !windowState.isMinimized && <div
         className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-20"
         onMouseDown={(e) => {
           e.stopPropagation();
@@ -5764,10 +5832,10 @@ const GlobalReportPreviewModal = ({
               dangerouslySetInnerHTML={{ 
                 __html: DOMPurify.sanitize(reportData.html.replace(/.*?<body>/s, '').replace(/<\/body>.*?/s, ''), {
                   ALLOWED_TAGS: [
-                    'h1','h2','h3','h4','p','span','div','table','tr','td','th','thead','tbody','b','i','strong','em','br','hr','ul','ol','li','img','svg','path','rect','circle','text','line','g'
+                    'h1','h2','h3','h4','p','span','div','table','tr','td','th','thead','tbody','b','i','strong','em','br','hr','ul','ol','li','img','svg','path','rect','circle','text','line','g','polygon','defs','marker'
                   ],
                   ALLOWED_ATTR: [
-                    'class','style','width','height','viewBox','xmlns','d','cx','cy','r','x','y','fill','stroke','stroke-width','transform','text-anchor','dominant-baseline','src','alt'
+                    'class','style','width','height','viewBox','xmlns','d','cx','cy','r','x','y','fill','stroke','stroke-width','transform','text-anchor','dominant-baseline','src','alt','x1','y1','x2','y2','points','stroke-dasharray','marker-start','marker-end','markerWidth','markerHeight','refX','refY','orient','opacity','font-size','font-family','font-weight'
                   ]
                 })
               }} 
@@ -6263,10 +6331,10 @@ const ADIA = () => {
 
   // Window Management State
   const [managedWindows, setManagedWindows] = useState<Record<ManagedWindowId, ManagedWindowState>>({
-    hmi: { id: 'hmi', title: 'HMI Dashboard', isOpen: false, isMinimized: false, pos: { x: 110, y: 110 }, size: { width: 900, height: 600 }, zIndex: 10 },
-    pid: { id: 'pid', title: 'PID Tuner', isOpen: false, isMinimized: false, pos: { x: 160, y: 160 }, size: { width: 1000, height: 700 }, zIndex: 10 },
-    rtm: { id: 'rtm', title: 'Requirements Traceability Matrix', isOpen: false, isMinimized: false, pos: { x: 210, y: 210 }, size: { width: 900, height: 600 }, zIndex: 10 },
-    doe: { id: 'doe', title: 'DOE RSM Analysis', isOpen: false, isMinimized: false, pos: { x: 260, y: 260 }, size: { width: 1100, height: 750 }, zIndex: 10 },
+    hmi: { id: 'hmi', title: 'HMI Dashboard', isOpen: false, isMinimized: false, isMaximized: false, pos: { x: 110, y: 110 }, size: { width: 900, height: 600 }, zIndex: 10 },
+    pid: { id: 'pid', title: 'PID Tuner', isOpen: false, isMinimized: false, isMaximized: false, pos: { x: 160, y: 160 }, size: { width: 1000, height: 700 }, zIndex: 10 },
+    rtm: { id: 'rtm', title: 'Requirements Traceability Matrix', isOpen: false, isMinimized: false, isMaximized: false, pos: { x: 210, y: 210 }, size: { width: 900, height: 600 }, zIndex: 10 },
+    doe: { id: 'doe', title: 'DOE RSM Analysis', isOpen: false, isMinimized: false, isMaximized: false, pos: { x: 260, y: 260 }, size: { width: 1100, height: 750 }, zIndex: 10 },
   });
 
   const [isHierarchyCollapsed, setIsHierarchyCollapsed] = useState(false);
@@ -6282,10 +6350,19 @@ const ADIA = () => {
   }, []);
 
   const toggleWindow = useCallback((id: ManagedWindowId) => {
-    setManagedWindows(prev => ({
-      ...prev,
-      [id]: { ...prev[id], isOpen: !prev[id].isOpen }
-    }));
+    setManagedWindows(prev => {
+      const current = prev[id];
+      if (current.isOpen && current.isMinimized) {
+        return {
+          ...prev,
+          [id]: { ...current, isMinimized: false }
+        };
+      }
+      return {
+        ...prev,
+        [id]: { ...current, isOpen: !current.isOpen }
+      };
+    });
   }, []);
 
   const [layers, setLayers] = useState<Layer[]>([{
@@ -7553,6 +7630,7 @@ const ADIA = () => {
         const autostartStates = layerStates.filter(s => s.autostart);
         const autostartJunctions = layerJunctions.filter(j => j.autostart);
         const totalAutostarts = autostartStates.length + autostartJunctions.length;
+        const allParallel = layerStates.length > 0 && layerStates.every(s => s.isParallel);
 
         if (totalAutostarts === 0) {
           const layerName = layer.name || (layer.id === 'root' ? 'Root' : layer.id);
@@ -7565,7 +7643,7 @@ const ADIA = () => {
             elementId: layerStates[0].id,
             canAutoFix: true
           });
-        } else if (totalAutostarts > 1) {
+        } else if (totalAutostarts > 1 && !allParallel) {
           [...autostartStates, ...autostartJunctions].forEach(s => {
             const layerName = layer.name || (layer.id === 'root' ? 'Root' : layer.id);
             newErrors.push({
@@ -7850,7 +7928,6 @@ const ADIA = () => {
     let variablesChanged = false;
     const newActiveStates = { ...activeStates };
     const stepFiredTransitions: Record<string, number> = {};
-    let transitionFired = false;
     // Helper to execute code
     const executeAction = (code: string, context: any, location: string) => {
       if (!code || !code.trim()) return;
@@ -7903,23 +7980,49 @@ const ADIA = () => {
       if (!s) return;
 
       const layerId = s.parentId || 'root';
-      activeMap[layerId] = s.id;
+      const siblingStates = states.filter(st => (st.parentId || 'root') === layerId);
+      const isParallelLayer = siblingStates.length > 0 && siblingStates.every(st => st.isParallel);
+
+      if (isParallelLayer) {
+        activeMap[layerId + '_' + s.id] = s.id;
+      } else {
+        activeMap[layerId] = s.id;
+      }
       nextStateTimers[s.id] = 0;
       executeAction(s.entry, workingContext, `Entry ${s.name}`);
 
       // Check for sub-layer AutoStart
       const childLayer = layers.find(l => l.parentStateId === s.id);
       if (childLayer) {
-        let childToEnterId: string | undefined;
-        if (fromHistory === 'deep') {
-          childToEnterId = lastActiveStates[childLayer.id];
-        }
+        const childStates = states.filter(st => st.parentId === s.id);
+        const allParallel = childStates.length > 0 && childStates.every(st => st.isParallel);
+        if (allParallel) {
+          const regionsMap = new Map<string, StateData[]>();
+          childStates.forEach(cs => {
+            const rId = cs.regionId || 'MAIN';
+            if (!regionsMap.has(rId)) regionsMap.set(rId, []);
+            regionsMap.get(rId)!.push(cs);
+          });
 
-        if (childToEnterId) {
-          enterState(childToEnterId, activeMap, 'deep');
+          regionsMap.forEach(groupStates => {
+            const autostarts = groupStates.filter(st => st.autostart).sort((a, b) => a.priority - b.priority);
+            const statesToEnter = autostarts.length > 0 ? autostarts : [...groupStates].sort((a, b) => a.priority - b.priority);
+            if (statesToEnter.length > 0) {
+              enterState(statesToEnter[0].id, activeMap, fromHistory ? 'deep' : false);
+            }
+          });
         } else {
-          const targetId = resolveAutoStart(childLayer.id, workingContext, true);
-          if (targetId) enterState(targetId, activeMap, false);
+          let childToEnterId: string | undefined;
+          if (fromHistory === 'deep') {
+            childToEnterId = lastActiveStates[childLayer.id];
+          }
+
+          if (childToEnterId) {
+            enterState(childToEnterId, activeMap, 'deep');
+          } else {
+            const targetId = resolveAutoStart(childLayer.id, workingContext, true);
+            if (targetId) enterState(targetId, activeMap, false);
+          }
         }
       }
     };
@@ -7934,11 +8037,30 @@ const ADIA = () => {
 
       const childLayer = layers.find(l => l.parentStateId === s.id);
       if (childLayer) {
-        const activeChildId = activeMap[childLayer.id];
-        if (activeChildId) exitState(activeChildId, activeMap);
-        delete activeMap[childLayer.id];
+        const childStates = states.filter(st => st.parentId === s.id);
+        const allParallel = childStates.length > 0 && childStates.every(st => st.isParallel);
+        if (allParallel) {
+          childStates.forEach(child => {
+            const activeKey = childLayer.id + '_' + child.id;
+            if (activeMap[activeKey]) {
+              exitState(child.id, activeMap);
+            }
+          });
+        } else {
+          const activeChildId = activeMap[childLayer.id];
+          if (activeChildId) exitState(activeChildId, activeMap);
+          delete activeMap[childLayer.id];
+        }
       }
       executeAction(s.exit, workingContext, `Exit ${s.name}`);
+
+      const siblingStates = states.filter(st => (st.parentId || 'root') === layerId);
+      const isParallelLayer = siblingStates.length > 0 && siblingStates.every(st => st.isParallel);
+      if (isParallelLayer) {
+        delete activeMap[layerId + '_' + s.id];
+      } else {
+        delete activeMap[layerId];
+      }
     };
 
     // 4. Process Transitions (Per Region)
@@ -7946,20 +8068,33 @@ const ADIA = () => {
 
     // Failsafe: If no states active, try autostart
     if (regions.length === 0) {
-      const autoStarts = states.filter(s => s.autostart);
-      if (autoStarts.length > 0) {
-        autoStarts.forEach((s, i) => {
-          if (s.parentId === 'root') enterState(s.id, newActiveStates);
-        });
-      } else if (states.length > 0) {
-        // Absolute fallback
-        const roots = states.filter(s => s.parentId === 'root');
-        if (roots.length > 0) enterState(roots[0].id, newActiveStates);
+      const rootStates = states.filter(s => !s.parentId || s.parentId === 'root');
+      const rootParallel = rootStates.length > 0 && rootStates.every(s => s.isParallel);
+      if (rootParallel) {
+        const autostartParallelStates = rootStates.filter(s => s.autostart).sort((a, b) => a.priority - b.priority);
+        const statesToEnter = autostartParallelStates.length > 0 ? autostartParallelStates : rootStates.sort((a, b) => a.priority - b.priority);
+        statesToEnter.forEach(s => enterState(s.id, newActiveStates));
+      } else {
+        const autoStarts = states.filter(s => s.autostart && (!s.parentId || s.parentId === 'root'));
+        if (autoStarts.length > 0) {
+          autoStarts.forEach(s => enterState(s.id, newActiveStates));
+        } else if (states.length > 0) {
+          const roots = states.filter(s => !s.parentId || s.parentId === 'root');
+          if (roots.length > 0) enterState(roots[0].id, newActiveStates);
+        }
       }
     }
 
-    // Iterate regions to handle transitions
-    for (const region of Object.keys(newActiveStates)) {
+    // Iterate regions to handle transitions (priority sorted)
+    const sortedRegions = Object.keys(newActiveStates).sort((a, b) => {
+      const stateA = states.find(s => s.id === newActiveStates[a]);
+      const stateB = states.find(s => s.id === newActiveStates[b]);
+      const priorityA = stateA ? stateA.priority : 0;
+      const priorityB = stateB ? stateB.priority : 0;
+      return priorityA - priorityB;
+    });
+    for (const region of sortedRegions) {
+      let transitionFired = false;
       const currentStateId = newActiveStates[region];
 
       const currentState = states.find(s => s.id === currentStateId);
@@ -8092,9 +8227,63 @@ const ADIA = () => {
                 nextStateTimers[targetState.id] = 0;
               }
             } else {
-              exitState(currentState.id, newActiveStates);
+              const srcId = currentState.id;
+              const dstId = targetState.id;
+
+              const getAncestors = (id: string): string[] => {
+                const ancestors: string[] = [];
+                let currId = id;
+                while (currId) {
+                  const st = states.find(s => s.id === currId);
+                  if (!st) break;
+                  if (st.parentId && st.parentId !== 'root') {
+                    ancestors.push(st.parentId);
+                    currId = st.parentId;
+                  } else {
+                    break;
+                  }
+                }
+                return ancestors;
+              };
+
+              const findLCA = (id1: string | null, id2: string | null): string | null => {
+                if (!id1 || !id2) return null;
+                const anc1 = [id1, ...getAncestors(id1)];
+                const anc2 = [id2, ...getAncestors(id2)];
+                for (const a1 of anc1) {
+                  if (anc2.includes(a1)) return a1;
+                }
+                return null;
+              };
+
+              const lca = findLCA(srcId, dstId);
+
+              // Calculate exit sequence (from srcId up to LCA)
+              const exitSeq: string[] = [];
+              let curr: string | null = srcId;
+              while (curr && curr !== lca) {
+                exitSeq.push(curr);
+                const st = states.find(s => s.id === curr);
+                curr = st?.parentId && st.parentId !== 'root' ? st.parentId : null;
+              }
+
+              // Calculate entry sequence (from LCA down to dstId)
+              const entrySeq: string[] = [];
+              curr = dstId;
+              while (curr && curr !== lca) {
+                entrySeq.unshift(curr);
+                const st = states.find(s => s.id === curr);
+                curr = st?.parentId && st.parentId !== 'root' ? st.parentId : null;
+              }
+
+              // Exit states in sequence
+              exitSeq.forEach(sid => exitState(sid, newActiveStates));
+
+              // Run actions
               pathActions.forEach(act => executeAction(act, workingContext, 'Transition Action'));
-              enterState(targetState.id, newActiveStates);
+
+              // Enter states in sequence
+              entrySeq.forEach(sid => enterState(sid, newActiveStates));
             }
 
             transitionFired = true;
@@ -8118,9 +8307,13 @@ const ADIA = () => {
     }
 
     // 5. Process During Actions & X-Bridges Sub-Models
-    Object.values(newActiveStates).forEach(stateId => {
-      const state = states.find(s => s.id === stateId);
-      if (!state) return;
+    const sortedDuringStates = Object.values(newActiveStates)
+      .map(sid => states.find(s => s.id === sid))
+      .filter((s): s is StateData => !!s)
+      .sort((a, b) => a.priority - b.priority);
+
+    sortedDuringStates.forEach(state => {
+      const stateId = state.id;
 
       // Regular During Action
       if (state.during) {
@@ -8290,22 +8483,67 @@ const ADIA = () => {
       if (!s) return;
 
       const layerId = s.parentId || 'root';
-      newActive[layerId] = s.id;
+      const siblingStates = states.filter(st => (st.parentId || 'root') === layerId);
+      const isParallelLayer = siblingStates.length > 0 && siblingStates.every(st => st.isParallel);
+
+      if (isParallelLayer) {
+        newActive[layerId + '_' + s.id] = s.id;
+      } else {
+        newActive[layerId] = s.id;
+      }
       initialTimers[s.id] = 0;
 
       const childLayer = layers.find(l => l.parentStateId === s.id);
       if (childLayer) {
-        const targetId = resolveAutoStart(childLayer.id, initialContext, true);
-        if (targetId) activateState(targetId);
+        const childStates = states.filter(st => st.parentId === s.id);
+        const allParallel = childStates.length > 0 && childStates.every(st => st.isParallel);
+        if (allParallel) {
+          const regionsMap = new Map<string, StateData[]>();
+          childStates.forEach(cs => {
+            const rId = cs.regionId || 'MAIN';
+            if (!regionsMap.has(rId)) regionsMap.set(rId, []);
+            regionsMap.get(rId)!.push(cs);
+          });
+
+          regionsMap.forEach(groupStates => {
+            const autostarts = groupStates.filter(st => st.autostart).sort((a, b) => a.priority - b.priority);
+            const statesToEnter = autostarts.length > 0 ? autostarts : [...groupStates].sort((a, b) => a.priority - b.priority);
+            if (statesToEnter.length > 0) {
+              activateState(statesToEnter[0].id);
+            }
+          });
+        } else {
+          const targetId = resolveAutoStart(childLayer.id, initialContext, true);
+          if (targetId) activateState(targetId);
+        }
       }
     };
 
-    const rootTargetId = resolveAutoStart('root', initialContext, true);
-    if (rootTargetId) {
-      activateState(rootTargetId);
-    } else if (states.length > 0) {
-      const roots = states.filter(s => s.parentId === 'root');
-      if (roots.length > 0) activateState(roots[0].id);
+    const rootStates = states.filter(s => !s.parentId || s.parentId === 'root');
+    const rootParallel = rootStates.length > 0 && rootStates.every(s => s.isParallel);
+    if (rootParallel) {
+      const regionsMap = new Map<string, StateData[]>();
+      rootStates.forEach(rs => {
+        const rId = rs.regionId || 'MAIN';
+        if (!regionsMap.has(rId)) regionsMap.set(rId, []);
+        regionsMap.get(rId)!.push(rs);
+      });
+
+      regionsMap.forEach(groupStates => {
+        const autostarts = groupStates.filter(st => st.autostart).sort((a, b) => a.priority - b.priority);
+        const statesToEnter = autostarts.length > 0 ? autostarts : [...groupStates].sort((a, b) => a.priority - b.priority);
+        if (statesToEnter.length > 0) {
+          activateState(statesToEnter[0].id);
+        }
+      });
+    } else {
+      const rootTargetId = resolveAutoStart('root', initialContext, true);
+      if (rootTargetId) {
+        activateState(rootTargetId);
+      } else if (states.length > 0) {
+        const roots = states.filter(s => s.parentId === 'root');
+        if (roots.length > 0) activateState(roots[0].id);
+      }
     }
 
     setVariables(prev => prev.map(v => {
@@ -9356,11 +9594,28 @@ const ADIA = () => {
         const block = blocks.find(b => b.id === id);
         if (block) {
           if (diagramMode === 'ibd' && block.id === currentLayerId) {
-            const newX = (block.ibdX ?? 50) + dx;
-            const newY = (block.ibdY ?? 50) + dy;
+            const oldX = block.ibdX ?? 50;
+            const oldY = block.ibdY ?? 50;
+            const newX = oldX + dx;
+            const newY = oldY + dy;
+            const snappedX = snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX;
+            const snappedY = snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY;
+            const actualDx = snappedX - oldX;
+            const actualDy = snappedY - oldY;
+
             updateBlock(id, {
-              ibdX: snapEnabled ? snapToGrid(newX, GRID_SIZE) : newX,
-              ibdY: snapEnabled ? snapToGrid(newY, GRID_SIZE) : newY
+              ibdX: snappedX,
+              ibdY: snappedY
+            });
+
+            // Make all parts in this context follow the context block boundary
+            parts.forEach(p => {
+              if (p.blockId === id && !idsToMove.has(p.id)) {
+                updatePart(p.id, {
+                  x: p.x + actualDx,
+                  y: p.y + actualDy
+                });
+              }
             });
           } else {
             const newX = block.x + dx;
@@ -9816,8 +10071,15 @@ const ADIA = () => {
         const nodeIds = new Set(nodes.map(n => n.id));
 
         edges.forEach((e: any) => {
-          const srcId = e.sourceId || e.sourcePartId;
-          const tgtId = e.targetId || e.targetPartId;
+          let srcId = e.sourceId || e.sourcePartId;
+          let tgtId = e.targetId || e.targetPartId;
+
+          if (type === 'bdd' && e.type === 'generalization') {
+            const temp = srcId;
+            srcId = tgtId;
+            tgtId = temp;
+          }
+
           if (!nodeIds.has(srcId) || !nodeIds.has(tgtId)) return;
           if (srcId === tgtId) return;
 
@@ -9920,10 +10182,11 @@ const ADIA = () => {
           });
         }
 
-        // Place unvisited
+        // Place unvisited nodes at the next single level
+        const maxLevel = Math.max(...Array.from(levelMap.values()), -1);
         nodes.forEach(n => {
           if (!levelMap.has(n.id)) {
-            levelMap.set(n.id, (Math.max(...Array.from(levelMap.values()), 0)) + 1);
+            levelMap.set(n.id, maxLevel + 1);
           }
         });
 
@@ -9940,18 +10203,28 @@ const ADIA = () => {
 
         sortedLevels.forEach(level => {
           const levelNodes = levelGroups.get(level)!;
-          const totalWidth = levelNodes.reduce((sum, n) => sum + (n.width || 140) + NODE_GAP_X, -NODE_GAP_X);
-          const startX = Math.max(0, (MAX_ROW_WIDTH - totalWidth) / 2);
-          let curX = startX;
-          const maxH = Math.max(...levelNodes.map(n => n.height || 80));
+          
+          // Let's wrap level nodes into rows of max 4 nodes for better page fitting
+          const MAX_NODES_PER_ROW = 4;
+          const rows: any[][] = [];
+          for (let i = 0; i < levelNodes.length; i += MAX_NODES_PER_ROW) {
+            rows.push(levelNodes.slice(i, i + MAX_NODES_PER_ROW));
+          }
 
-          levelNodes.forEach(n => {
-            n.displayX = curX;
-            n.displayY = curY;
-            curX += (n.width || 140) + NODE_GAP_X;
+          rows.forEach(rowNodes => {
+            const totalWidth = rowNodes.reduce((sum, n) => sum + (n.width || 140) + NODE_GAP_X, -NODE_GAP_X);
+            const startX = Math.max(0, (MAX_ROW_WIDTH - totalWidth) / 2);
+            let curX = startX;
+            const maxH = Math.max(...rowNodes.map(n => n.height || 80));
+
+            rowNodes.forEach(n => {
+              n.displayX = curX;
+              n.displayY = curY;
+              curX += (n.width || 140) + NODE_GAP_X;
+            });
+
+            curY += maxH + NODE_GAP_Y;
           });
-
-          curY += maxH + NODE_GAP_Y;
         });
 
       } else if (type === 'ibd') {
@@ -9994,8 +10267,8 @@ const ADIA = () => {
       const displayNodes = nodes.map(n => {
         const isBdd = type === 'bdd';
         const isReq = type === 'req';
-        const width = isBdd ? 140 : isReq ? (n.width || 160) : n.width;
-        const height = isBdd ? 70 : isReq ? (n.height || 80) : n.height;
+        const width = isBdd ? (n.width || 140) : isReq ? (n.width || 160) : n.width;
+        const height = isBdd ? (n.height || 70) : isReq ? (n.height || 80) : n.height;
         return { ...n, width, height, displayX: n.x || 0, displayY: n.y || 0 };
       });
 
@@ -10024,7 +10297,9 @@ const ADIA = () => {
       }
 
       // ── AUTO-LAYOUT: reposition nodes for report readability ──
-      autoLayoutForReport(displayNodes, edgesCopy, type);
+      if (type !== 'bdd' && type !== 'ibd') {
+        autoLayoutForReport(displayNodes, edgesCopy, type);
+      }
 
       // Rebuild the map after layout (positions changed)
       displayNodes.forEach(n => displayNodesMap.set(n.id, n));
@@ -10045,6 +10320,27 @@ const ADIA = () => {
         maxX = Math.max(maxX, n.displayX + n.width);
         maxY = Math.max(maxY, n.displayY + n.height);
       });
+
+      const contextBlock = contextId ? blocks.find(b => b.id === contextId) : null;
+      const contextFrame = (type === 'ibd' && contextBlock) ? {
+        x: contextBlock.ibdX ?? 50,
+        y: contextBlock.ibdY ?? 50,
+        w: contextBlock.ibdWidth ?? 1200,
+        h: contextBlock.ibdHeight ?? 800
+      } : (type === 'ibd' ? {
+        x: minX - 80,
+        y: minY - 80,
+        w: maxX - minX + 160,
+        h: maxY - minY + 160
+      } : { x: minX, y: minY, w: maxX - minX, h: maxY - minY });
+
+      // Update min/max X/Y based on the contextFrame
+      if (type === 'ibd') {
+        minX = contextFrame.x;
+        minY = contextFrame.y;
+        maxX = contextFrame.x + contextFrame.w;
+        maxY = contextFrame.y + contextFrame.h;
+      }
 
       const padding = 60;
       const rawWidth = Math.max(200, maxX - minX + padding * 2);
@@ -10086,46 +10382,78 @@ const ADIA = () => {
             pMaxY = Math.max(pMaxY, n.displayY + n.height);
           });
 
+          const pFramePadding = type === 'ibd' ? 80 : 0;
+          const pMinX_adjusted = type === 'ibd' ? pMinX - pFramePadding : pMinX;
+          const pMinY_adjusted = type === 'ibd' ? pMinY - pFramePadding : pMinY;
+          const pMaxX_adjusted = type === 'ibd' ? pMaxX + pFramePadding : pMaxX;
+          const pMaxY_adjusted = type === 'ibd' ? pMaxY + pFramePadding : pMaxY;
+
           const pPad = 50;
-          const pW = Math.max(200, pMaxX - pMinX + pPad * 2);
-          const pH = Math.max(150, pMaxY - pMinY + pPad * 2);
+          const pW = Math.max(200, pMaxX_adjusted - pMinX_adjusted + pPad * 2);
+          const pH = Math.max(150, pMaxY_adjusted - pMinY_adjusted + pPad * 2);
           const pDispW = Math.min(pW, MAX_SVG_WIDTH);
           const pScale = pW > MAX_SVG_WIDTH ? MAX_SVG_WIDTH / pW : 1;
           const pDispH = pH * pScale;
-          const pVB = `${pMinX - pPad} ${pMinY - pPad} ${pW} ${pH}`;
+          const pVB = `${pMinX_adjusted - pPad} ${pMinY_adjusted - pPad} ${pW} ${pH}`;
 
           allSvg += `<div style="margin: 12px 0; border: 1px solid #ddd; padding: 12px; background: #fcfcfc; page-break-inside: avoid;">`;
           allSvg += `<div style="font-size: 10px; color: #999; margin-bottom: 6px; text-align: right;">Page ${pageIdx + 1} of ${pages.length} (${displayNodes.length} elements)</div>`;
-          allSvg += renderSingleSVG(pageNodes, pageEdges, type, pVB, pDispW, pDispH, displayNodesMap);
+          allSvg += renderSingleSVG(pageNodes, pageEdges, type, pVB, pDispW, pDispH, displayNodesMap, contextId);
           allSvg += `</div>`;
         });
         return allSvg;
       }
 
       let svgResult = `<div style="margin: 16px 0; border: 1px solid #ddd; padding: 12px; background: #fcfcfc; page-break-inside: avoid;">`;
-      svgResult += renderSingleSVG(displayNodes, edgesCopy, type, viewBox, displayWidth, displayHeight, displayNodesMap);
+      svgResult += renderSingleSVG(displayNodes, edgesCopy, type, viewBox, displayWidth, displayHeight, displayNodesMap, contextId);
       svgResult += `</div>`;
       return svgResult;
     };
 
     // Single SVG rendering helper (used by renderDiagramSVG and pagination)
-    const renderSingleSVG = (displayNodes: any[], edges: any[], type: string, viewBox: string, svgWidth: number, svgHeight: number, displayNodesMap: Map<string, any>) => {
+    const renderSingleSVG = (displayNodes: any[], edges: any[], type: string, viewBox: string, svgWidth: number, svgHeight: number, displayNodesMap: Map<string, any>, contextId?: string) => {
+      const contextBlock = contextId ? blocks.find(b => b.id === contextId) : null;
 
-      let svg = `<svg width="${svgWidth}" height="${svgHeight}" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Segoe UI', Tahoma, sans-serif; max-width: 100%; height: auto;">`;
-
-      // Defs for markers
-      svg += `<defs>
-          <marker id="m-arrow-${type}" markerWidth="10" markerHeight="10" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#333" /></marker>
-          <marker id="m-arrow-filled-${type}" markerWidth="10" markerHeight="10" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#333" stroke="#333" /></marker>
-          <marker id="m-diamond-${type}" markerWidth="16" markerHeight="10" refX="16" refY="5" orient="auto"><path d="M0,5 L8,0 L16,5 L8,10 Z" fill="#fff" stroke="#333" /></marker>
-          <marker id="m-diamond-fill-${type}" markerWidth="16" markerHeight="10" refX="16" refY="5" orient="auto"><path d="M0,5 L8,0 L16,5 L8,10 Z" fill="#333" stroke="#333" /></marker>
-          <marker id="m-triangle-${type}" markerWidth="12" markerHeight="10" refX="12" refY="5" orient="auto"><path d="M0,0 L12,5 L0,10 Z" fill="#fff" stroke="#333" /></marker>
-        </defs>`;
+      // Calculate bounds for this page's nodes to render local context frame
+      let minX_ = Infinity, minY_ = Infinity, maxX_ = -Infinity, maxY_ = -Infinity;
+      displayNodes.forEach(n => {
+        minX_ = Math.min(minX_, n.displayX);
+        minY_ = Math.min(minY_, n.displayY);
+        maxX_ = Math.max(maxX_, n.displayX + n.width);
+        maxY_ = Math.max(maxY_, n.displayY + n.height);
+      });
+      const framePadding = type === 'ibd' ? 80 : 0;
+      const contextFrame = {
+        x: minX_ - framePadding,
+        y: minY_ - framePadding,
+        w: maxX_ - minX_ + framePadding * 2,
+        h: maxY_ - minY_ + framePadding * 2
+      };
 
       // Helper for Port Position
-      const getPortPos = (node: any, portId: string) => {
+      const getPortPos = (nodeOrId: any, portId: string) => {
+        const isString = typeof nodeOrId === 'string';
+        const id = isString ? nodeOrId : nodeOrId?.id;
+
+        if (type === 'ibd' && id === contextId) {
+          const block = contextBlock;
+          const port = block?.ports?.find((p: any) => p.id === portId);
+          const side = port?.side || 'left';
+          const offset = port?.offset ?? 0.5;
+
+          let x = 0, y = 0;
+          if (side === 'top') { x = contextFrame.x + contextFrame.w * offset; y = contextFrame.y; }
+          else if (side === 'bottom') { x = contextFrame.x + contextFrame.w * offset; y = contextFrame.y + contextFrame.h; }
+          else if (side === 'left') { x = contextFrame.x; y = contextFrame.y + contextFrame.h * offset; }
+          else { x = contextFrame.x + contextFrame.w; y = contextFrame.y + contextFrame.h * offset; }
+          return { x, y };
+        }
+
+        const node = isString ? displayNodes.find(n => n.id === id) : nodeOrId;
+        if (!node) return { x: 0, y: 0 };
+
         let block = type === 'ibd' ? blocks.find(b => b.id === node.typeId) : node;
-        if (!block) return { x: node.displayX, y: node.displayY };
+        if (!block) return { x: node.displayX + (node.width || 120) / 2, y: node.displayY + (node.height || 80) / 2 };
 
         const port = block.ports?.find((p: any) => p.id === portId);
         const portIndex = block.ports?.findIndex((p: any) => p.id === portId) ?? 0;
@@ -10155,6 +10483,41 @@ const ADIA = () => {
 
       const getBox = (n: any) => ({ x: n.displayX, y: n.displayY, width: n.width, height: n.height });
       const getCenter = (n: any) => ({ x: n.displayX + n.width / 2, y: n.displayY + n.height / 2 });
+
+      let svg = `<svg width="${svgWidth}" height="${svgHeight}" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Segoe UI', Tahoma, sans-serif; max-width: 100%; height: auto;">`;
+
+      // Defs for markers
+      svg += `<defs>
+          <marker id="m-arrow-${type}" markerWidth="10" markerHeight="10" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#333" /></marker>
+          <marker id="m-arrow-filled-${type}" markerWidth="10" markerHeight="10" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#333" stroke="#333" /></marker>
+          <marker id="m-diamond-${type}" markerWidth="16" markerHeight="10" refX="16" refY="5" orient="auto"><path d="M0,5 L8,0 L16,5 L8,10 Z" fill="#fff" stroke="#333" /></marker>
+          <marker id="m-diamond-fill-${type}" markerWidth="16" markerHeight="10" refX="16" refY="5" orient="auto"><path d="M0,5 L8,0 L16,5 L8,10 Z" fill="#333" stroke="#333" /></marker>
+          <marker id="m-triangle-${type}" markerWidth="12" markerHeight="10" refX="12" refY="5" orient="auto"><path d="M0,0 L12,5 L0,10 Z" fill="#fff" stroke="#333" /></marker>
+        </defs>`;
+
+      // If IBD, render the outer context block boundary and its ports
+      if (type === 'ibd') {
+        const ctxBlockName = contextBlock ? contextBlock.name : 'System';
+        svg += `<rect x="${contextFrame.x}" y="${contextFrame.y}" width="${contextFrame.w}" height="${contextFrame.h}" fill="none" stroke="#666" stroke-width="1.5" stroke-dasharray="4,4" rx="6" />`;
+        svg += `<text x="${contextFrame.x + 10}" y="${contextFrame.y + 20}" fill="#666" font-size="12" font-weight="bold">ibd [Block] ${ctxBlockName}</text>`;
+
+        if (contextBlock && contextBlock.ports) {
+          contextBlock.ports.forEach((p: any) => {
+            const portPos = getPortPos(contextId, p.id);
+            svg += `<rect x="${portPos.x - 4}" y="${portPos.y - 4}" width="8" height="8" fill="#333" stroke="#f97316" stroke-width="1" />`;
+
+            const side = p.side || 'left';
+            let tx = portPos.x, ty = portPos.y;
+            let anchor = "middle";
+            if (side === 'left') { tx -= 6; anchor = "end"; ty += 3; }
+            else if (side === 'right') { tx += 6; anchor = "start"; ty += 3; }
+            else if (side === 'top') { ty -= 6; }
+            else if (side === 'bottom') { ty += 10; }
+
+            svg += `<text x="${tx}" y="${ty}" text-anchor="${anchor}" font-size="8" fill="#666">${p.name}</text>`;
+          });
+        }
+      }
 
       // Render Nodes
       displayNodes.forEach(n => {
@@ -10228,7 +10591,7 @@ const ADIA = () => {
 
         // Render Ports
         let block = type === 'ibd' ? blocks.find(b => b.id === n.typeId) : n;
-        if (block && block.ports && (type === 'ibd' || type === 'bdd')) {
+        if (block && block.ports && type === 'ibd') {
           block.ports.forEach((p: any, i: number) => {
             const portPos = getPortPos(n, p.id);
             const px = portPos.x - n.displayX;
@@ -10260,9 +10623,15 @@ const ADIA = () => {
         let target = type === 'ibd' ? displayNodes.find(n => n.id === e.targetPartId) : displayNodes.find(n => n.id === e.targetId);
 
         if (type === 'ibd') {
-          if (source && target) {
-            sp = getPortPos(source, e.sourcePortId);
-            tp = getPortPos(target, e.targetPortId);
+          const isSourceCtx = e.sourcePartId === contextId || !e.sourcePartId;
+          const isTargetCtx = e.targetPartId === contextId || !e.targetPartId;
+
+          const sRef = source || (isSourceCtx ? contextId : null);
+          const tRef = target || (isTargetCtx ? contextId : null);
+
+          if (sRef && tRef) {
+            sp = getPortPos(sRef, e.sourcePortId);
+            tp = getPortPos(tRef, e.targetPortId);
           }
         } else if (type === 'statemachine') {
           if (source && target) {
@@ -10317,17 +10686,27 @@ const ADIA = () => {
             };
           } else {
             const relType = e.type;
-            if (relType === 'composition') markerStart = `url(#m-diamond-fill-${type})`;
-            else if (relType === 'aggregation') markerStart = `url(#m-diamond-${type})`;
-            else if (relType === 'generalization') markerEnd = `url(#m-triangle-${type})`;
-            else if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace'].includes(relType)) {
-              strokeDash = '4,2';
-              middleLabel = `«${relType}»`;
-              markerEnd = `url(#m-arrow-${type})`;
-            } else if (relType === 'allocation') {
-              strokeDash = '5,5';
-              middleLabel = '«allocate»';
-              markerEnd = `url(#m-arrow-${type})`;
+            if (type === 'bdd' || type === 'req') {
+              if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace'].includes(relType)) {
+                strokeDash = '4,2';
+                middleLabel = `«${relType}»`;
+              } else if (relType === 'allocation') {
+                strokeDash = '5,5';
+                middleLabel = '«allocate»';
+              }
+            } else {
+              if (relType === 'composition') markerStart = `url(#m-diamond-fill-${type})`;
+              else if (relType === 'aggregation') markerStart = `url(#m-diamond-${type})`;
+              else if (relType === 'generalization') markerEnd = `url(#m-triangle-${type})`;
+              else if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace'].includes(relType)) {
+                strokeDash = '4,2';
+                middleLabel = `«${relType}»`;
+                markerEnd = `url(#m-arrow-${type})`;
+              } else if (relType === 'allocation') {
+                strokeDash = '5,5';
+                middleLabel = '«allocate»';
+                markerEnd = `url(#m-arrow-${type})`;
+              }
             }
           }
 
@@ -10336,6 +10715,20 @@ const ADIA = () => {
             svg += `<path d="${dPath}" fill="none" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" marker-end="${markerEnd}" />`;
           } else {
             svg += `<line x1="${sp.x}" y1="${sp.y}" x2="${tp.x}" y2="${tp.y}" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" marker-start="${markerStart}" marker-end="${markerEnd}" />`;
+            
+            if (type === 'bdd' || type === 'req') {
+              const relType = e.type;
+              const angle = Math.atan2(tp.y - sp.y, tp.x - sp.x) * 180 / Math.PI;
+              if (relType === 'generalization') {
+                svg += `<polygon points="${tp.x},${tp.y} ${tp.x - 12},${tp.y - 6} ${tp.x - 12},${tp.y + 6}" fill="#fff" stroke="${strokeColor}" stroke-width="1.5" transform="rotate(${angle}, ${tp.x}, ${tp.y})" />`;
+              } else if (relType === 'composition') {
+                svg += `<polygon points="${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}" fill="${strokeColor}" stroke="${strokeColor}" stroke-width="1.5" transform="rotate(${angle}, ${sp.x}, ${sp.y})" />`;
+              } else if (relType === 'aggregation') {
+                svg += `<polygon points="${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}" fill="#fff" stroke="${strokeColor}" stroke-width="1.5" transform="rotate(${angle}, ${sp.x}, ${sp.y})" />`;
+              } else if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'allocation'].includes(relType)) {
+                svg += `<path d="M ${tp.x - 10} ${tp.y - 5} L ${tp.x} ${tp.y} L ${tp.x - 10} ${tp.y + 5}" fill="none" stroke="${strokeColor}" stroke-width="1.5" transform="rotate(${angle}, ${tp.x}, ${tp.y})" />`;
+              }
+            }
           }
 
           if (middleLabel || e.label) {
@@ -10573,8 +10966,6 @@ const ADIA = () => {
     // 2. BDD
     const bddBlocks = blocks.filter(b => {
       if (b.stereotype === 'requirement') return false;
-      // Check if this block is used as a type for any part
-      if (parts.some(p => p.typeId === b.id)) return false;
       return true;
     });
 
@@ -10583,14 +10974,12 @@ const ADIA = () => {
         const s = blocks.find(b => b.id === r.sourceId);
         const t = blocks.find(b => b.id === r.targetId);
         if (!s || !t) return false;
-        // Check if source or target are hidden
-        const sHidden = parts.some(p => p.typeId === s.id);
-        const tHidden = parts.some(p => p.typeId === t.id);
-        return s.stereotype !== 'requirement' && t.stereotype !== 'requirement' && !sHidden && !tHidden;
+        return s.stereotype !== 'requirement' && t.stereotype !== 'requirement';
       });
-      html += `<div class="diagram-container"><div class="diagram-cell">` + renderDiagramSVG(bddBlocks, bddRels, 'bdd') + `</div></div>`;
 
-      html += `<h2>2. System Architecture (BDD)</h2><div class="tree">`;
+      html += `<h2>2. System Architecture (BDD)</h2>`;
+      html += `<div class="diagram-container"><div class="diagram-cell">` + renderDiagramSVG(bddBlocks, bddRels, 'bdd') + `</div></div>`;
+      html += `<div class="tree">`;
       bddBlocks.forEach(b => {
         html += `<div class="item">
                 <div class="item-header">«${b.stereotype}» ${b.name}</div>`;
@@ -10611,11 +11000,10 @@ const ADIA = () => {
 
     // 3. IBD
     if (parts.length > 0) {
-      html += `<h2>3. Internal Structure (IBD)</h2><div class="tree">`;
+      html += `<h2>3. Internal Structure (IBD)</h2>`;
 
       // Generate diagrams for each context
       const contextIds = Array.from(new Set(parts.map(p => p.blockId).filter(id => id !== null))) as string[];
-      html += `<div class="diagram-container">`;
       contextIds.forEach(ctxId => {
         const ctxBlock = blocks.find(b => b.id === ctxId);
         const ctxName = ctxBlock ? ctxBlock.name : (ctxId === 'root' ? 'Root' : 'Unknown');
@@ -10623,28 +11011,58 @@ const ADIA = () => {
         const ctxConns = connectors.filter(c => {
           const s = parts.find(p => p.id === c.sourcePartId);
           const t = parts.find(p => p.id === c.targetPartId);
-          return (s && s.blockId === ctxId) && (t && t.blockId === ctxId);
+
+          // Connectors in this context block
+          const sInCtx = s && s.blockId === ctxId;
+          const tInCtx = t && t.blockId === ctxId;
+
+          // Or environment connectors linked to this context block ports
+          const isEnvSource = !c.sourcePartId && t && t.blockId === ctxId;
+          const isEnvTarget = !c.targetPartId && s && s.blockId === ctxId;
+
+          return sInCtx || tInCtx || isEnvSource || isEnvTarget;
         });
+
         if (ctxParts.length > 0) {
-          html += `<div class="diagram-cell"><h3>Context: ${ctxName}</h3>` + renderDiagramSVG(ctxParts, ctxConns, 'ibd') + `</div>`;
+          html += `<div class="tree" style="margin-bottom: 30px;">`;
+          html += `<h3>Context: ${ctxName}</h3>`;
+          html += `<div class="diagram-container"><div class="diagram-cell">` + renderDiagramSVG(ctxParts, ctxConns, 'ibd', ctxId) + `</div></div>`;
+
+          // Parts list for this context
+          html += `<div class="props"><strong>Parts:</strong><ul>`;
+          ctxParts.forEach(p => {
+            const typeName = blocks.find(b => b.id === p.typeId)?.name || 'Unknown';
+            html += `<li>${p.name} : ${typeName}</li>`;
+          });
+          html += `</ul></div>`;
+
+          // Connectors list for this context
+          if (ctxConns.length > 0) {
+            html += `<div class="props"><strong>Connections:</strong><ul>`;
+            ctxConns.forEach(c => {
+              const sPart = parts.find(p => p.id === c.sourcePartId)?.name || 'Env';
+              const tPart = parts.find(p => p.id === c.targetPartId)?.name || 'Env';
+
+              const sBlock = parts.find(p => p.id === c.sourcePartId)
+                ? blocks.find(b => b.id === (parts.find(p => p.id === c.sourcePartId)?.typeId))
+                : ctxBlock;
+              const tBlock = parts.find(p => p.id === c.targetPartId)
+                ? blocks.find(b => b.id === (parts.find(p => p.id === c.targetPartId)?.typeId))
+                : ctxBlock;
+
+              const sPortName = sBlock?.ports?.find((p: any) => p.id === c.sourcePortId)?.name || c.sourcePortId || '';
+              const tPortName = tBlock?.ports?.find((p: any) => p.id === c.targetPortId)?.name || c.targetPortId || '';
+
+              const sDesc = sPart + (sPortName ? `.${sPortName}` : '');
+              const tDesc = tPart + (tPortName ? `.${tPortName}` : '');
+
+              html += `<li><span class="tag">Conn</span> ${sDesc} &harr; ${tDesc} ${c.itemFlow ? '(' + c.itemFlow + ')' : ''}</li>`;
+            });
+            html += `</ul></div>`;
+          }
+          html += `</div>`;
         }
       });
-      html += `</div>`;
-
-      parts.forEach(p => {
-        const typeName = blocks.find(b => b.id === p.typeId)?.name || 'Unknown';
-        html += `<div class="item"><div class="item-header">${p.name} : ${typeName}</div></div>`;
-      });
-      if (connectors.length > 0) {
-        html += `<h3>Connections</h3><div class="tree">`;
-        connectors.forEach(c => {
-          const sPart = parts.find(p => p.id === c.sourcePartId)?.name || 'Env';
-          const tPart = parts.find(p => p.id === c.targetPartId)?.name || 'Env';
-          html += `<div class="item"><span class="tag">Conn</span> ${sPart} &harr; ${tPart} ${c.itemFlow ? '(' + c.itemFlow + ')' : ''}</div>`;
-        });
-        html += `</div>`;
-      }
-      html += `</div>`;
     }
 
     // 4. State Machine
@@ -11432,21 +11850,38 @@ const ADIA = () => {
               const s = PROJECT_DATA.states.find(st => st.id === stateId);
               if (!s) return;
               const layerId = s.parentId || "root";
-              activeMap[layerId] = s.id;
+              const siblingStates = PROJECT_DATA.states.filter(st => (st.parentId || "root") === layerId);
+              const isParallelLayer = siblingStates.length > 0 && siblingStates.every(st => st.isParallel);
+
+              if (isParallelLayer) {
+                activeMap[layerId + "_" + s.id] = s.id;
+              } else {
+                activeMap[layerId] = s.id;
+              }
               stateTimers[s.id] = 0;
               executeAction(s.entry, "Entry " + s.name);
               
               const childLayer = PROJECT_DATA.layers.find(l => l.parentStateId === s.id);
               if (childLayer) {
-                let childToEnterId;
-                if (fromHistory === "deep") {
-                  childToEnterId = lastActiveStates[childLayer.id];
-                }
-                if (childToEnterId) {
-                  enterState(childToEnterId, activeMap, "deep");
+                const childStates = PROJECT_DATA.states.filter(st => st.parentId === s.id);
+                const allParallel = childStates.length > 0 && childStates.every(st => st.isParallel);
+                if (allParallel) {
+                  const autostartParallelStates = childStates.filter(st => st.autostart).sort((a, b) => a.priority - b.priority);
+                  const statesToEnter = autostartParallelStates.length > 0 ? autostartParallelStates : childStates.sort((a, b) => a.priority - b.priority);
+                  statesToEnter.forEach(child => {
+                    enterState(child.id, activeMap, fromHistory ? "deep" : false);
+                  });
                 } else {
-                  const targetId = resolveAutoStart(childLayer.id);
-                  if (targetId) enterState(targetId, activeMap, false);
+                  let childToEnterId;
+                  if (fromHistory === "deep") {
+                    childToEnterId = lastActiveStates[childLayer.id];
+                  }
+                  if (childToEnterId) {
+                    enterState(childToEnterId, activeMap, "deep");
+                  } else {
+                    const targetId = resolveAutoStart(childLayer.id);
+                    if (targetId) enterState(targetId, activeMap, false);
+                  }
                 }
               }
             }
@@ -11465,11 +11900,30 @@ const ADIA = () => {
               
               const childLayer = PROJECT_DATA.layers.find(l => l.parentStateId === s.id);
               if (childLayer) {
-                const activeChildId = activeMap[childLayer.id];
-                if (activeChildId) exitState(activeChildId, activeMap);
-                delete activeMap[childLayer.id];
+                const childStates = PROJECT_DATA.states.filter(st => st.parentId === s.id);
+                const allParallel = childStates.length > 0 && childStates.every(st => st.isParallel);
+                if (allParallel) {
+                  childStates.forEach(child => {
+                    const activeKey = childLayer.id + "_" + child.id;
+                    if (activeMap[activeKey]) {
+                      exitState(child.id, activeMap);
+                    }
+                  });
+                } else {
+                  const activeChildId = activeMap[childLayer.id];
+                  if (activeChildId) exitState(activeChildId, activeMap);
+                  delete activeMap[childLayer.id];
+                }
               }
               executeAction(s.exit, "Exit " + s.name);
+
+              const siblingStates = PROJECT_DATA.states.filter(st => (st.parentId || "root") === layerId);
+              const isParallelLayer = siblingStates.length > 0 && siblingStates.every(st => st.isParallel);
+              if (isParallelLayer) {
+                delete activeMap[layerId + "_" + s.id];
+              } else {
+                delete activeMap[layerId];
+              }
             }
 
             function getNode(id) {
@@ -11507,9 +11961,15 @@ const ADIA = () => {
 
               const nextActiveStates = { ...activeStates };
               let transitionFired = false;
-              const regions = Object.keys(activeStates);
+              const sortedRegions = Object.keys(activeStates).sort((a, b) => {
+                const stateA = PROJECT_DATA.states.find(s => s.id === activeStates[a]);
+                const stateB = PROJECT_DATA.states.find(s => s.id === activeStates[b]);
+                const priorityA = stateA ? stateA.priority : 0;
+                const priorityB = stateB ? stateB.priority : 0;
+                return priorityA - priorityB;
+              });
 
-              for (const region of regions) {
+              for (const region of sortedRegions) {
                 const currentStateId = activeStates[region];
                 if (!nextActiveStates[region]) continue;
                 const currentState = PROJECT_DATA.states.find(s => s.id === currentStateId);
@@ -11616,9 +12076,56 @@ const ADIA = () => {
                           stateTimers[targetState.id] = 0;
                         }
                       } else {
-                        exitState(currentState.id, nextActiveStates);
+                        const srcId = currentState.id;
+                        const dstId = targetState.id;
+
+                        const getAncestors = (id) => {
+                          const ancestors = [];
+                          let currId = id;
+                          while (currId) {
+                            const st = PROJECT_DATA.states.find(s => s.id === currId);
+                            if (!st) break;
+                            if (st.parentId && st.parentId !== 'root') {
+                              ancestors.push(st.parentId);
+                              currId = st.parentId;
+                            } else {
+                              break;
+                            }
+                          }
+                          return ancestors;
+                        };
+
+                        const findLCA = (id1, id2) => {
+                          if (!id1 || !id2) return null;
+                          const anc1 = [id1, ...getAncestors(id1)];
+                          const anc2 = [id2, ...getAncestors(id2)];
+                          for (const a1 of anc1) {
+                            if (anc2.includes(a1)) return a1;
+                          }
+                          return null;
+                        };
+
+                        const lca = findLCA(srcId, dstId);
+
+                        const exitSeq = [];
+                        let curr = srcId;
+                        while (curr && curr !== lca) {
+                          exitSeq.push(curr);
+                          const st = PROJECT_DATA.states.find(s => s.id === curr);
+                          curr = st?.parentId && st.parentId !== 'root' ? st.parentId : null;
+                        }
+
+                        const entrySeq = [];
+                        curr = dstId;
+                        while (curr && curr !== lca) {
+                          entrySeq.unshift(curr);
+                          const st = PROJECT_DATA.states.find(s => s.id === curr);
+                          curr = st?.parentId && st.parentId !== 'root' ? st.parentId : null;
+                        }
+
+                        exitSeq.forEach(sid => exitState(sid, nextActiveStates));
                         pathActions.forEach(act => executeAction(act, "Transition Action"));
-                        enterState(targetState.id, nextActiveStates);
+                        entrySeq.forEach(sid => enterState(sid, nextActiveStates));
                       }
                       transitionFired = true;
                       logEvent("Transition", currentState.name + " → " + targetState.name);
@@ -11628,9 +12135,13 @@ const ADIA = () => {
                 }
               }
 
-              Object.values(nextActiveStates).forEach(stateId => {
-                const state = PROJECT_DATA.states.find(s => s.id === stateId);
-                if (state && state.during) {
+              const sortedDuringStates = Object.values(nextActiveStates)
+                .map(sid => PROJECT_DATA.states.find(s => s.id === sid))
+                .filter(s => !!s)
+                .sort((a, b) => a.priority - b.priority);
+
+              sortedDuringStates.forEach(state => {
+                if (state.during) {
                   executeAction(state.during, "During " + state.name);
                 }
               });
@@ -11882,11 +12393,29 @@ const ADIA = () => {
               });
 
               const rootStates = PROJECT_DATA.states.filter(s => s.parentId === "root" || !s.parentId);
-              const autostarts = rootStates.filter(s => s.autostart);
-              if (autostarts.length > 0) {
-                autostarts.forEach(s => enterState(s.id, activeStates));
-              } else if (rootStates.length > 0) {
-                enterState(rootStates[0].id, activeStates);
+              const rootParallel = rootStates.length > 0 && rootStates.every(s => s.isParallel);
+              if (rootParallel) {
+                const regionsMap = {};
+                rootStates.forEach(rs => {
+                  const rId = rs.regionId || "MAIN";
+                  if (!regionsMap[rId]) regionsMap[rId] = [];
+                  regionsMap[rId].push(rs);
+                });
+
+                Object.values(regionsMap).forEach(groupStates => {
+                  const autostarts = groupStates.filter(st => st.autostart).sort((a, b) => a.priority - b.priority);
+                  const statesToEnter = autostarts.length > 0 ? autostarts : [...groupStates].sort((a, b) => a.priority - b.priority);
+                  if (statesToEnter.length > 0) {
+                    enterState(statesToEnter[0].id, activeStates);
+                  }
+                });
+              } else {
+                const autostarts = rootStates.filter(s => s.autostart);
+                if (autostarts.length > 0) {
+                  autostarts.forEach(s => enterState(s.id, activeStates));
+                } else if (rootStates.length > 0) {
+                  enterState(rootStates[0].id, activeStates);
+                }
               }
 
               const intervalTime = Math.max(100, PROJECT_DATA.tickMs || 100);
@@ -11939,11 +12468,29 @@ const ADIA = () => {
                 stepCount = 0;
                 
                 const rootStates = PROJECT_DATA.states.filter(s => s.parentId === "root" || !s.parentId);
-                const autostarts = rootStates.filter(s => s.autostart);
-                if (autostarts.length > 0) {
-                  autostarts.forEach(s => enterState(s.id, activeStates));
-                } else if (rootStates.length > 0) {
-                  enterState(rootStates[0].id, activeStates);
+                const rootParallel = rootStates.length > 0 && rootStates.every(s => s.isParallel);
+                if (rootParallel) {
+                  const regionsMap = {};
+                  rootStates.forEach(rs => {
+                    const rId = rs.regionId || "MAIN";
+                    if (!regionsMap[rId]) regionsMap[rId] = [];
+                    regionsMap[rId].push(rs);
+                  });
+
+                  Object.values(regionsMap).forEach(groupStates => {
+                    const autostarts = groupStates.filter(st => st.autostart).sort((a, b) => a.priority - b.priority);
+                    const statesToEnter = autostarts.length > 0 ? autostarts : [...groupStates].sort((a, b) => a.priority - b.priority);
+                    if (statesToEnter.length > 0) {
+                      enterState(statesToEnter[0].id, activeStates);
+                    }
+                  });
+                } else {
+                  const autostarts = rootStates.filter(s => s.autostart);
+                  if (autostarts.length > 0) {
+                    autostarts.forEach(s => enterState(s.id, activeStates));
+                  } else if (rootStates.length > 0) {
+                    enterState(rootStates[0].id, activeStates);
+                  }
                 }
                 updateUi();
                 logEvent("Sim Reset", "All states and variables reset to default");
@@ -12817,6 +13364,17 @@ const ADIA = () => {
           );
         }
         if (block.stereotype !== 'interface' && block.stereotype !== 'interfaceBlock') return null;
+
+        // Only show interface blocks / interfaces in IBD if they are realized by a part in the current layer,
+        // or if they are currently being connected.
+        const isRealizedInCurrentLayer = interfaceRealizations.some(realization => {
+          if (realization.interfaceId !== block.id) return false;
+          const part = parts.find(p => p.id === realization.partId);
+          return part && part.blockId === currentLayerId;
+        });
+        const isConnectionSource = isCreatingTransition && transitionSourceId === block.id;
+
+        if (!isRealizedInCurrentLayer && !isConnectionSource) return null;
       }
 
       if (diagramMode === 'requirements') {
@@ -12979,7 +13537,7 @@ const ADIA = () => {
         </g>
       );
     });
-  }, [blocks, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown]);
+  }, [blocks, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
     return relationships.map(rel => {
@@ -15756,17 +16314,6 @@ const ADIA = () => {
                   <div>
                     <Label>Part Name</Label>
                     <Input value={selectedPart.name} onChange={(e) => updatePart(selectedPart.id, { name: e.target.value })} className="mt-1" />
-                  </div>
-                  <div>
-                    <Label>Block Definition</Label>
-                    <select
-                      value={selectedPart.typeId || ''}
-                      onChange={(e) => updatePart(selectedPart.id, { typeId: e.target.value })}
-                      className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
-                    >
-                      <option value="">[Undefined]</option>
-                      {blocks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </select>
                   </div>
                   <div>
                     <Label>Multiplicity</Label>

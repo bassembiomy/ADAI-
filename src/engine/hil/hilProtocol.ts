@@ -1,9 +1,21 @@
 /**
  * HIL Communication Protocol
  * Handles encoding/decoding of signal values for serial exchange.
- * Supports:
- *   1. Binary frame format: [START_BYTE(0xAA)][LENGTH(1B)][CHANNEL_ID_LEN(1B)][CHANNEL_ID_STR][VALUE_TYPE(1B)][VALUE_BYTES(4B/8B)][CHECKSUM(1B)]
- *   2. Text mode fallback: "CH_NAME=VALUE;CH_NAME2=VALUE2\n"
+ * 
+ * Protocol Formats:
+ * 
+ * 1. Binary frame format (little-endian):
+ *    [START_BYTE(0xAA)][LENGTH(1B)][CHANNEL_ID_LEN(1B)][CHANNEL_ID_STR][VALUE_TYPE(1B)][VALUE_BYTES(1B/4B/8B)][CHECKSUM(1B)]
+ *    - START_BYTE: 0xAA sentinel.
+ *    - LENGTH: Total frame size (includes all bytes from START_BYTE to CHECKSUM).
+ *    - CHANNEL_ID_LEN: Number of bytes in channel ID string.
+ *    - CHANNEL_ID_STR: UTF-8 encoded channel ID string.
+ *    - VALUE_TYPE: Type discriminator (0x01: BOOL, 0x02: INT, 0x03: FLOAT, 0x04: DOUBLE).
+ *    - VALUE_BYTES: Binary payload (1 byte for BOOL, 4 bytes for INT/FLOAT, 8 bytes for DOUBLE).
+ *    - CHECKSUM: Simple 8-bit sum modulo 256 of all bytes starting from LENGTH up to VALUE_BYTES (skips START_BYTE).
+ * 
+ * 2. Text mode fallback:
+ *    "CH_NAME=VALUE;CH_NAME2=VALUE2\n"
  */
 
 export const START_BYTE = 0xAA;
@@ -68,6 +80,10 @@ export function encodeBinaryFrame(channelId: string, value: number, dataType: st
   } else {
     view.setFloat64(offset, value, true);
     offset += 8;
+  }
+  
+  if (offset !== length - 1) {
+    throw new Error(`Frame construction offset mismatch: expected ${length - 1}, got ${offset}`);
   }
   
   buffer[offset] = calculateChecksum(buffer, 1, offset);
@@ -141,7 +157,7 @@ export function decodeTextFrame(line: string): Record<string, number> {
       const id = part.substring(0, eqIdx).trim();
       const valStr = part.substring(eqIdx + 1).trim();
       const val = parseFloat(valStr);
-      if (!isNaN(val) && id) {
+      if (!isNaN(val) && id && id.length > 0) {
         result[id] = val;
       }
     }

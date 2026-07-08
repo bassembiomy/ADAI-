@@ -192,4 +192,140 @@ describe('StateMachineCodeGenerator', () => {
     expect(coreC).toContain('if ((instance->data.is_active)) {');
     expect(coreC).toContain('instance->data.counter = (uint16_t)(3U);');
   });
+
+  it('should generate correct C code for parallel states and layers', () => {
+    const parallelStates: StateData[] = [
+      {
+        id: 's1', name: 'StateA', x: 0, y: 0, width: 100, height: 100,
+        entry: 'counter = 1;', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'root', children: [],
+        priority: 1, isParallel: true, regionId: 'REGION_A', autostart: true
+      },
+      {
+        id: 's2', name: 'StateB', x: 200, y: 0, width: 100, height: 100,
+        entry: 'sensor_val = 5.5;', during: '', exit: '',
+        isActive: false, color: 'green', parentId: 'root', children: [],
+        priority: 2, isParallel: true, regionId: 'REGION_B', autostart: true
+      }
+    ];
+
+    const parallelChart = {
+      tickMs: 10,
+      states: parallelStates,
+      junctions: [] as JunctionData[],
+      transitions: [] as TransitionData[],
+      variables: mockVariables,
+      layers: mockLayers,
+      safetyMode: false
+    };
+
+    const result = generateMISRACCode(parallelChart);
+    expect(result.errors).toHaveLength(0);
+
+    const configH = result.files.find(f => f.name === 'sm_config.h')?.content || '';
+    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
+
+    // Verify config.h contains state_active bool array
+    expect(configH).toContain('bool state_active[SM_NUM_STATES];');
+
+    // Verify sm_core.c uses state_active checks and priority order execution
+    expect(coreC).toContain('instance->state_active[0U] = true;');
+    expect(coreC).toContain('instance->state_active[1U] = true;');
+    expect(coreC).toContain('if (instance->state_active[0U]) {');
+    expect(coreC).toContain('if (instance->state_active[1U]) {');
+  });
+
+  it('should generate correct C code for parallel states with internal transitions', () => {
+    const parallelStates: StateData[] = [
+      {
+        id: 's1', name: 'StateA', x: 0, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'root', children: [],
+        priority: 1, isParallel: true, regionId: 'REGION_A', autostart: true,
+        internalTransitions: '[is_active] / counter = 10;'
+      },
+      {
+        id: 's2', name: 'StateB', x: 200, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'green', parentId: 'root', children: [],
+        priority: 2, isParallel: true, regionId: 'REGION_B', autostart: true
+      }
+    ];
+
+    const parallelChart = {
+      tickMs: 10,
+      states: parallelStates,
+      junctions: [] as JunctionData[],
+      transitions: [] as TransitionData[],
+      variables: mockVariables,
+      layers: mockLayers,
+      safetyMode: false
+    };
+
+    const result = generateMISRACCode(parallelChart);
+    expect(result.errors).toHaveLength(0);
+
+    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
+
+    // Verify it parses the internal transition and uses local transitioned flag
+    expect(coreC).toContain('bool transitioned_0 = false;');
+    expect(coreC).toContain('if ((instance->data.is_active)) {');
+    expect(coreC).toContain('instance->data.counter = (uint16_t)(10U);');
+    expect(coreC).toContain('transitioned_0 = true;');
+    
+    // Specifically ensure SM_Step_Layer_0 body doesn't contain early return;
+    const stepLayerFuncStart = coreC.indexOf('static void SM_Step_Layer_0');
+    expect(stepLayerFuncStart).toBeGreaterThan(-1);
+    const stepLayerFuncEnd = coreC.indexOf('}', stepLayerFuncStart);
+    const stepLayerFuncBody = coreC.substring(stepLayerFuncStart, stepLayerFuncEnd);
+    expect(stepLayerFuncBody).not.toContain('return;');
+  });
+
+  it('should generate MISRA-C and SIL-2 safety checks with explicit timer and type conversions', () => {
+    const customStates: StateData[] = [
+      {
+        id: 's1', name: 'StateWithLongNameThatNeedsTruncationForMISRACompliance', x: 0, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'root', children: [],
+        priority: 1, isParallel: false, regionId: 'LONG_REGION_NAME_THAT_NEEDS_TRUNCATION', autostart: true,
+        internalTransitions: 'after(5) / counter = 15;\n[is_active] / counter = 0;'
+      }
+    ];
+
+    const customLayers: Layer[] = [
+      { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }
+    ];
+
+    const customChart = {
+      tickMs: 20,
+      states: customStates,
+      junctions: [] as JunctionData[],
+      transitions: [] as TransitionData[],
+      variables: mockVariables,
+      layers: customLayers,
+      safetyMode: false
+    };
+
+    const result = generateMISRACCode(customChart);
+    expect(result.errors).toHaveLength(0);
+
+    const configH = result.files.find(f => f.name === 'sm_config.h')?.content || '';
+    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
+    const safetyC = result.files.find(f => f.name === 'sm_safety.c')?.content || '';
+
+    // Verify MISRA 5.1 Name Truncation
+    expect(configH).toContain('SM_ST_STATEWITHLONGNAMETHATNE'); // Max 28 chars
+    expect(configH).toContain('SM_GRP_LONG_REGION_NAME_THAT'); // Max 28 chars
+
+    // Verify SM_TICK_MS #define macro
+    expect(configH).toContain('#define SM_TICK_MS (20U)');
+
+    // Verify SM_Validate_State_Consistency call in coreC and definition in safetyC
+    expect(coreC).toContain('instance->error_status = SM_Validate_State_Consistency(instance);');
+    expect(safetyC).toContain('SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t* instance)');
+    expect(safetyC).toContain('SM_March_RAM_Test');
+
+    // Verify after(5) transition checks (5 * 20 = 100ms)
+    expect(coreC).toContain('(instance->state_timers[0U] >= 100U)');
+  });
 });

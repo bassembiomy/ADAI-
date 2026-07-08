@@ -79,39 +79,39 @@ void HAL_Drivers_Init(void) {
 
 bool HAL_GPIO_Read(const char* pin, const char* name) {
     (void)pin;
-    ${gpioReadChannels
+    ${gpioReadChannels.length > 0 ? gpioReadChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        return ${mcu.peripherals.GPIO.read(ch.pin, ch.name)};\n    }`)
-      .join('\n    ')}
+      .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
     return false;
 }
 
 void HAL_GPIO_Write(const char* pin, const char* name, bool value) {
     (void)pin;
-    ${gpioWriteChannels
+    ${gpioWriteChannels.length > 0 ? gpioWriteChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        ${mcu.peripherals.GPIO.write(ch.pin, ch.name, 'value')}\n        return;\n    }`)
-      .join('\n    ')}
+      .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
 }
 
 uint32_t HAL_ADC_Read(const char* pin, const char* name) {
     (void)pin;
-    ${adcChannels
+    ${adcChannels.length > 0 ? adcChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        return ${mcu.peripherals.ADC.read(ch.pin, ch.name)};\n    }`)
-      .join('\n    ')}
+      .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
     return 0;
 }
 
 void HAL_DAC_Write(const char* pin, const char* name, uint32_t value) {
     (void)pin;
-    ${dacChannels
+    ${dacChannels.length > 0 ? dacChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        ${mcu.peripherals.DAC.write(ch.pin, ch.name, 'value')}\n        return;\n    }`)
-      .join('\n    ')}
+      .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
 }
 
 void HAL_PWM_Write(const char* pin, const char* name, uint32_t value) {
     (void)pin;
-    ${pwmChannels
+    ${pwmChannels.length > 0 ? pwmChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        ${mcu.peripherals.PWM.write(ch.pin, ch.name, 'value')}\n        return;\n    }`)
-      .join('\n    ')}
+      .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
 }
 
 ${mcu.serialTransmit.trim()}
@@ -215,12 +215,14 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
           valExpr = `(float)HAL_ADC_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}")`;
         }
       }
-      return `    len += sprintf(buf + len, "${ch.name}=%.4f${idx === config.channels.length - 1 ? '' : ';'}", (double)(${valExpr}));`;
+      return `    if (len < (int)(sizeof(buf) - 32U)) {\n        len += snprintf(buf + len, sizeof(buf) - (size_t)len, "${ch.name}=%.4f${idx === config.channels.length - 1 ? '' : ';'}", (double)(${valExpr}));\n    }`;
     })
     .join('\n');
 
   const hilInterfaceC = `${disclaimer}#include "hil_interface.h"
 #include "hal_drivers.h"
+#include "sm_safety.h"
+#include "sm_core.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -239,18 +241,27 @@ void HIL_ProcessMessage(const char* msg) {
     char temp[256];
     strncpy(temp, msg, sizeof(temp));
     temp[sizeof(temp)-1] = '\\0';
-    char* token = strtok(temp, ";");
-    while (token != NULL) {
+    
+    char* p = temp;
+    while (*p != '\\0') {
+        char* token = p;
+        while (*p != '\\0' && *p != ';') {
+            p++;
+        }
+        if (*p == ';') {
+            *p = '\\0';
+            p++;
+        }
+        
         char name[64];
-        float val;
+        float val = 0.0f;
         if (sscanf(token, "%63[^=]=%f", name, &val) == 2) {
-            ${inputChannels
+            ${inputChannels.length > 0 ? inputChannels
               .map(
                 ch => `if (strcmp(name, "${ch.name}") == 0) {\n                override_val_${ch.name} = val;\n                override_active_${ch.name} = true;\n            } else if (strcmp(name, "${ch.name}_release") == 0) {\n                override_active_${ch.name} = false;\n            }`
               )
-              .join(' else ')}
+              .join(' else ') + '\n            else { /* MISRA 15.7 */ }' : '/* No input channels */'}
         }
-        token = strtok(NULL, ";");
     }
 }
 
@@ -258,8 +269,13 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance) {
     char buf[512];
     int len = 0;
     (void)instance;
-${telemetryCompositions || '    len += sprintf(buf + len, "info=no_channels");'}
-    sprintf(buf + len, "\\n");
+${telemetryCompositions || '    len += snprintf(buf + len, sizeof(buf) - (size_t)len, "info=no_channels");'}
+    
+    if (SM_GetError(instance) != SM_ERR_NONE) {
+        len += snprintf(buf + len, sizeof(buf) - (size_t)len, ";ERROR=%d", (int)SM_GetError(instance));
+    }
+    
+    (void)snprintf(buf + len, sizeof(buf) - (size_t)len, "\\n");
     HIL_SendString(buf);
 }
 `;
@@ -288,7 +304,7 @@ int main(void) {
         HIL_Sync_Inputs(&sm_instance);
 
         /* Tick the State Machine */
-        SM_Step(&sm_instance, 10);
+        SM_Step(&sm_instance, SM_TICK_MS);
 
         /* Synchronize State Machine outputs to hardware */
         HIL_Sync_Outputs(&sm_instance);

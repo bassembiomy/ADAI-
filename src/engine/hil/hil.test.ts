@@ -137,4 +137,82 @@ describe('HIL Code Generator', () => {
     expect(testingReport).toContain('## 8. HIL Driver Mapping Report');
     expect(testingReport).toContain('Target Microcontroller:** STM32F4');
   });
+
+  it('should handle binary frame checksum mismatch and reject it', () => {
+    const channelId = 'temp_sensor';
+    const value = 27.5;
+    const dataType = 'float';
+
+    const encoded = encodeBinaryFrame(channelId, value, dataType);
+    // Tamper with the checksum byte (last byte)
+    encoded[encoded.length - 1] = (encoded[encoded.length - 1] + 1) & 0xFF;
+
+    const decoded = decodeBinaryFrame(encoded);
+    expect(decoded).toBeNull();
+  });
+
+  it('should decode empty and malformed text frames safely without setting empty keys', () => {
+    const emptyDecoded = decodeTextFrame('');
+    expect(emptyDecoded).toEqual({});
+
+    const malformedDecoded = decodeTextFrame('  =100; =; motor_speed=12.5');
+    expect(malformedDecoded).toEqual({ motor_speed: 12.5 });
+  });
+
+  it('should correctly round-trip binary frames for different data types', () => {
+    // 1. Bool type
+    const boolFrame = encodeBinaryFrame('flag', 1.0, 'bool');
+    const boolDecoded = decodeBinaryFrame(boolFrame);
+    expect(boolDecoded).not.toBeNull();
+    expect(boolDecoded!.channelId).toBe('flag');
+    expect(boolDecoded!.value).toBe(1.0);
+
+    // 2. Double type
+    const doubleFrame = encodeBinaryFrame('speed', 1234.5678, 'double');
+    const doubleDecoded = decodeBinaryFrame(doubleFrame);
+    expect(doubleDecoded).not.toBeNull();
+    expect(doubleDecoded!.channelId).toBe('speed');
+    expect(doubleDecoded!.value).toBeCloseTo(1234.5678, 4);
+  });
+
+  it('should generate correct C files for STM32F1, ESP32, and Arduino target MCUs', () => {
+    // STM32F1
+    const f1Config = { ...mockConfig, target: 'STM32F1' as const };
+    const f1Files = generateHALCode(f1Config, smVariables);
+    expect(f1Files).toHaveLength(6);
+    const f1DriversC = f1Files.find(f => f.name === 'hal_drivers.c')?.content || '';
+    expect(f1DriversC).toContain('#include "stm32f1xx_hal.h"');
+    expect(f1DriversC).toContain('HAL_UART_Receive(&huart1');
+
+    // ESP32
+    const espConfig = { ...mockConfig, target: 'ESP32' as const };
+    const espFiles = generateHALCode(espConfig, smVariables);
+    expect(espFiles).toHaveLength(6);
+
+    // Arduino_Uno
+    const unoConfig = { ...mockConfig, target: 'Arduino_Uno' as const };
+    const unoFiles = generateHALCode(unoConfig, smVariables);
+    expect(unoFiles).toHaveLength(6);
+    const mainUno = unoFiles.find(f => f.name === 'main_hil.c')?.content || '';
+    expect(mainUno).toContain('#include "Arduino.h"');
+  });
+
+  it('should enforce SM_TICK_MS tick rate and SM_GetError telemetry reporting', () => {
+    const files = generateHALCode(mockConfig, smVariables);
+    const mainHil = files.find(f => f.name === 'main_hil.c')?.content || '';
+    expect(mainHil).toContain('SM_Step(&sm_instance, SM_TICK_MS);');
+
+    const interfaceC = files.find(f => f.name === 'hil_interface.c')?.content || '';
+    expect(interfaceC).toContain('if (SM_GetError(instance) != SM_ERR_NONE)');
+    expect(interfaceC).toContain('snprintf(buf + len, sizeof(buf) - (size_t)len, ";ERROR=%d"');
+  });
+
+  it('should comply with MISRA rules (no strtok, terminal else for strcmp)', () => {
+    const files = generateHALCode(mockConfig, smVariables);
+    const interfaceC = files.find(f => f.name === 'hil_interface.c')?.content || '';
+    expect(interfaceC).not.toContain('strtok');
+
+    const driversC = files.find(f => f.name === 'hal_drivers.c')?.content || '';
+    expect(driversC).toContain('else { /* MISRA 15.7 */ }');
+  });
 });

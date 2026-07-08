@@ -20,7 +20,7 @@ export interface HILMapping {
   adiaVarId: string; // The variable name from state machine or signal from X-Bridges
   channelId: string; // The ID of the DriverChannel
   direction: 'read' | 'write'; // read: hardware -> ADIA (input to SM), write: ADIA -> hardware (output from SM)
-  conversionExpr?: string; // Optional mathjs/js expression for signal conversion (e.g. "x * 2.0")
+  conversionExpr?: string | null; // Optional mathjs/js expression for signal conversion (e.g. "x * 2.0")
 }
 
 export interface HILConfig {

@@ -113,6 +113,86 @@ const buildAdjacencyList = (transitions: TransitionData[]): AdjList => {
   return adj;
 };
 
+const getReachableNodes = (
+  states: StateData[],
+  junctions: JunctionData[],
+  transitions: TransitionData[],
+  layers: Layer[],
+): Set<string> => {
+  const reachable = new Set<string>();
+  const autostarts = states.filter(
+    (s) => s.autostart && (!s.parentId || s.parentId === 'root'),
+  );
+  const autostartJunctions = junctions.filter(
+    (j) => j.autostart && (!j.parentId || j.parentId === 'root'),
+  );
+  const startIds = [...autostarts.map(s => s.id), ...autostartJunctions.map(j => j.id)];
+  if (startIds.length === 0) {
+    const rootStates = states.filter(s => !s.parentId || s.parentId === 'root');
+    const rootParallel = rootStates.length > 0 && rootStates.every(s => s.isParallel);
+    if (rootParallel) {
+      startIds.push(...rootStates.map(s => s.id));
+    }
+  }
+
+  if (startIds.length === 0) return reachable;
+
+  const queue = [...startIds];
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    if (reachable.has(cur)) continue;
+    reachable.add(cur);
+
+    // Follow transitions
+    transitions
+      .filter((t) => t.sourceId === cur)
+      .forEach((t) => {
+        if (!reachable.has(t.targetId)) queue.push(t.targetId);
+      });
+
+    // Enter child layers implicitly
+    const stateObj = states.find(s => s.id === cur);
+    if (stateObj) {
+      const childLayers = layers.filter(l => l.parentStateId === stateObj.id);
+      childLayers.forEach(cl => {
+        const layerStates = states.filter(s => cl.stateIds.includes(s.id));
+        const allParallel = layerStates.length > 0 && layerStates.every(s => s.isParallel);
+
+        if (allParallel) {
+          const regionsMap = new Map<string, StateData[]>();
+          layerStates.forEach(s => {
+            const rId = s.regionId || 'MAIN';
+            if (!regionsMap.has(rId)) regionsMap.set(rId, []);
+            regionsMap.get(rId)!.push(s);
+          });
+          regionsMap.forEach(groupStates => {
+            const autostartsInGroup = groupStates.filter(st => st.autostart);
+            const statesToEnter = autostartsInGroup.length > 0 ? autostartsInGroup : groupStates;
+            if (statesToEnter.length > 0 && !reachable.has(statesToEnter[0].id)) {
+              queue.push(statesToEnter[0].id);
+            }
+          });
+        } else {
+          const defaultState = layerStates.find(s => s.autostart);
+          if (defaultState) {
+            if (!reachable.has(defaultState.id)) queue.push(defaultState.id);
+          } else {
+            const defaultJunc = junctions.find(j => cl.junctionIds.includes(j.id) && j.autostart);
+            if (defaultJunc) {
+              if (!reachable.has(defaultJunc.id)) queue.push(defaultJunc.id);
+            } else if (layerStates.length > 0) {
+              if (!reachable.has(layerStates[0].id)) queue.push(layerStates[0].id);
+            }
+          }
+        }
+      });
+    }
+  }
+
+  return reachable;
+};
+
+
 // ─── 1. Critical Path Analysis ───────────────────────────────────────────────
 
 const MAX_PATHS = 100;
@@ -187,18 +267,29 @@ const computeCriticalPaths = (
 ): CriticalPath[] => {
   const adj = buildAdjacencyList(transitions);
 
-  // Find the autostart state (root level)
-  const autostart = states.find(
+  // Find all autostart elements (root level)
+  const autostarts = states.filter(
     (s) => s.autostart && (!s.parentId || s.parentId === 'root'),
   );
-  const autostartJunction = junctions.find(
+  const autostartJunctions = junctions.filter(
     (j) => j.autostart && (!j.parentId || j.parentId === 'root'),
   );
 
-  const startId = autostart?.id || autostartJunction?.id;
-  if (!startId) return [];
+  const startIds = [...autostarts.map(s => s.id), ...autostartJunctions.map(j => j.id)];
+  if (startIds.length === 0) {
+    const rootStates = states.filter(s => !s.parentId || s.parentId === 'root');
+    const rootParallel = rootStates.length > 0 && rootStates.every(s => s.isParallel);
+    if (rootParallel) {
+      startIds.push(...rootStates.map(s => s.id));
+    }
+  }
 
-  const rawPaths = enumeratePaths(startId, adj);
+  if (startIds.length === 0) return [];
+
+  const rawPaths: RawPath[] = [];
+  for (const startId of startIds) {
+    rawPaths.push(...enumeratePaths(startId, adj));
+  }
   if (rawPaths.length === 0) return [];
 
   // Sort by descending length
@@ -234,6 +325,7 @@ const detectCornerCases = (
   junctions: JunctionData[],
   transitions: TransitionData[],
   variables: VariableDef[],
+  layers: Layer[],
   tickMs: number,
 ): CornerCase[] => {
   const cases: CornerCase[] = [];
@@ -258,43 +350,22 @@ const detectCornerCases = (
   });
 
   // --- Unreachable states ---
-  const autostart = states.find(
-    (s) => s.autostart && (!s.parentId || s.parentId === 'root'),
-  );
-  const autostartJunction = junctions.find(
-    (j) => j.autostart && (!j.parentId || j.parentId === 'root'),
-  );
-  const startId = autostart?.id || autostartJunction?.id;
-
-  if (startId) {
-    const reachable = new Set<string>();
-    const queue = [startId];
-    while (queue.length > 0) {
-      const cur = queue.shift()!;
-      if (reachable.has(cur)) continue;
-      reachable.add(cur);
-      transitions
-        .filter((t) => t.sourceId === cur)
-        .forEach((t) => {
-          if (!reachable.has(t.targetId)) queue.push(t.targetId);
-        });
+  const reachable = getReachableNodes(states, junctions, transitions, layers);
+  states.forEach((s) => {
+    if (!reachable.has(s.id)) {
+      cases.push({
+        id: nextId(),
+        category: 'unreachable',
+        severity: 'warning',
+        elementId: s.id,
+        elementName: s.name,
+        description: `State "${s.name}" is not reachable from the autostart state. It represents dead logic.`,
+        recommendation:
+          'Add a transition leading to this state or remove it to reduce complexity.',
+      });
     }
+  });
 
-    states.forEach((s) => {
-      if (!reachable.has(s.id)) {
-        cases.push({
-          id: nextId(),
-          category: 'unreachable',
-          severity: 'warning',
-          elementId: s.id,
-          elementName: s.name,
-          description: `State "${s.name}" is not reachable from the autostart state. It represents dead logic.`,
-          recommendation:
-            'Add a transition leading to this state or remove it to reduce complexity.',
-        });
-      }
-    });
-  }
 
   // --- Unconditional self-loops ---
   transitions.forEach((t) => {
@@ -664,7 +735,7 @@ export const analyzeStateMachine = (chart: {
   layers: Layer[];
   safetyMode: boolean;
 }): SMAnalysisResult => {
-  const { states, junctions, transitions, variables, tickMs } = chart;
+  const { states, junctions, transitions, variables, layers = [], tickMs } = chart;
 
   // 1. Critical paths
   const criticalPaths = computeCriticalPaths(states, junctions, transitions);
@@ -675,6 +746,7 @@ export const analyzeStateMachine = (chart: {
     junctions,
     transitions,
     variables,
+    layers,
     tickMs,
   );
 
@@ -690,30 +762,25 @@ export const analyzeStateMachine = (chart: {
 
   // 4. Metrics
   const adj = buildAdjacencyList(transitions);
-  const autostart = states.find(
+  const reachableForMetrics = getReachableNodes(states, junctions, transitions, layers);
+  const reachableCount = states.filter((s) => reachableForMetrics.has(s.id)).length;
+
+  const startIds: string[] = [];
+  const autostarts = states.filter(
     (s) => s.autostart && (!s.parentId || s.parentId === 'root'),
   );
-  const autostartJunction = junctions.find(
+  const autostartJunctions = junctions.filter(
     (j) => j.autostart && (!j.parentId || j.parentId === 'root'),
   );
-  const startId = autostart?.id || autostartJunction?.id;
-
-  let reachableCount = 0;
-  if (startId) {
-    const reachable = new Set<string>();
-    const queue = [startId];
-    while (queue.length > 0) {
-      const cur = queue.shift()!;
-      if (reachable.has(cur)) continue;
-      reachable.add(cur);
-      transitions
-        .filter((t) => t.sourceId === cur)
-        .forEach((t) => {
-          if (!reachable.has(t.targetId)) queue.push(t.targetId);
-        });
+  startIds.push(...autostarts.map(s => s.id), ...autostartJunctions.map(j => j.id));
+  if (startIds.length === 0) {
+    const rootStates = states.filter(s => !s.parentId || s.parentId === 'root');
+    const rootParallel = rootStates.length > 0 && rootStates.every(s => s.isParallel);
+    if (rootParallel) {
+      startIds.push(...rootStates.map(s => s.id));
     }
-    reachableCount = states.filter((s) => reachable.has(s.id)).length;
   }
+
 
   // Branch coverage: fraction of transitions covered by test scenarios
   const coveredTransitionIds = new Set<string>();
@@ -731,7 +798,12 @@ export const analyzeStateMachine = (chart: {
     });
   });
 
-  const rawPaths = startId ? enumeratePaths(startId, adj) : [];
+  const rawPaths: RawPath[] = [];
+  if (startIds.length > 0) {
+    for (const sid of startIds) {
+      rawPaths.push(...enumeratePaths(sid, adj));
+    }
+  }
 
   return {
     criticalPaths,

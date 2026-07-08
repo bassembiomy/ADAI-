@@ -38,6 +38,16 @@ TIM_HandleTypeDef htim1;
 #define RX_BUF_SIZE 128
 uint8_t rx_buffer[RX_BUF_SIZE];
 uint8_t rx_index = 0;
+
+static uint32_t HAL_ADC_ReadChannel(void) {
+    uint32_t val = 0U;
+    HAL_ADC_Start(&hadc1);
+    if (HAL_ADC_PollForConversion(&hadc1, 10U) == HAL_OK) {
+        val = HAL_ADC_GetValue(&hadc1);
+    }
+    (void)HAL_ADC_Stop(&hadc1);
+    return val;
+}
 `,
     systemInit: `
   HAL_Init();
@@ -134,7 +144,7 @@ void HIL_SendString(const char* str) {
   HAL_ADC_Init(&hadc1);`;
         },
         read: (pin, name) => {
-          return `({ \n    uint32_t val = 0;\n    HAL_ADC_Start(&hadc1);\n    if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK) {\n        val = HAL_ADC_GetValue(&hadc1);\n    }\n    HAL_ADC_Stop(&hadc1);\n    val;\n  })`;
+          return `HAL_ADC_ReadChannel()`;
         },
         write: () => `/* ADC is Read-Only */`
       },
@@ -217,6 +227,16 @@ ADC_HandleTypeDef hadc1;
 #define RX_BUF_SIZE 128
 uint8_t rx_buffer[RX_BUF_SIZE];
 uint8_t rx_index = 0;
+
+static uint32_t HAL_ADC_ReadChannel(void) {
+    uint32_t val = 0U;
+    HAL_ADC_Start(&hadc1);
+    if (HAL_ADC_PollForConversion(&hadc1, 10U) == HAL_OK) {
+        val = HAL_ADC_GetValue(&hadc1);
+    }
+    (void)HAL_ADC_Stop(&hadc1);
+    return val;
+}
 `,
     systemInit: `
   HAL_Init();
@@ -306,7 +326,7 @@ void HIL_SendString(const char* str) {
   HAL_ADC_Init(&hadc1);`;
         },
         read: (pin, name) => {
-          return `({ \n    uint32_t val = 0;\n    HAL_ADC_Start(&hadc1);\n    if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK) {\n        val = HAL_ADC_GetValue(&hadc1);\n    }\n    HAL_ADC_Stop(&hadc1);\n    val;\n  })`;
+          return `HAL_ADC_ReadChannel()`;
         },
         write: () => `/* ADC is Read-Only */`
       },

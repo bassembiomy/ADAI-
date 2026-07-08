@@ -2041,7 +2041,7 @@ export const XbridgesWorkspace: React.FC<{
       </div>
 
       {/* Main Canvas Area */}
-      <div className="flex-1 relative flex flex-col">
+      <div className="flex-1 relative flex flex-col min-h-0">
         {/* Premium Top Toolbar */}
         <div className="h-16 bg-[#0a0a0a]/80 backdrop-blur-2xl border-b border-white/5 flex items-center justify-between px-6 z-30 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
           <div className="flex items-center gap-6">
@@ -2282,7 +2282,7 @@ export const XbridgesWorkspace: React.FC<{
           })}
         </div>
 
-        <div className="flex-1 relative flex">
+        <div className="flex-1 relative flex min-h-0">
           <div className="flex-1 relative" onContextMenu={(e) => e.preventDefault()}>
             <ReactFlow
               // Pass native React Flow selected state alongside custom data and an update callback
