@@ -72,12 +72,14 @@ const renderLibraryIcon = (iconName: string, size = 14, className?: string) => {
 
 import { XbridgesEngine } from '../../engine/xbridges/XbridgesEngine';
 import { Solvers } from '../../engine/xbridges/Solvers';
+import { AdaptiveSolver } from '../../engine/xbridges/AdaptiveSolver';
 import { ModelDiagnostic } from '../../engine/xbridges/types';
 import { XBlockNode, getColor } from './XBlockNode';
 import { XbridgesPropertiesPanel } from './XbridgesPropertiesPanel';
 import { XbridgesScopeWindow } from './XbridgesScopeWindow';
 import { PremiumEdge } from './PremiumEdge';
 import { PremiumConnectionLine } from './PremiumConnectionLine';
+import { WorkspaceContext } from './context';
 
 const nodeTypes = { xblock: XBlockNode };
 const edgeTypes = {
@@ -1023,13 +1025,16 @@ export const XbridgesWorkspace: React.FC<{
   onSave?: (nodes: any[], edges: any[]) => void;
   onSaveAll?: () => void;
   onLaunchDoe?: () => void;
-  onNavigateToVlab?: (targetBlockId?: string) => void;
   initialSelectedNodeId?: string | null;
-}> = ({ initialNodes = [], initialEdges = [], availableVariables = [], tickMs, onBack, onSave, onSaveAll, onLaunchDoe, onNavigateToVlab, initialSelectedNodeId }) => {
+}> = ({ initialNodes = [], initialEdges = [], availableVariables = [], tickMs, onBack, onSave, onSaveAll, onLaunchDoe, initialSelectedNodeId }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const isPausedRef = React.useRef(isPaused);
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
   const [simLimitInput, setSimLimitInput] = useState('');
   const simLimitRef = React.useRef<number | null>(null);
 
@@ -1157,7 +1162,7 @@ export const XbridgesWorkspace: React.FC<{
   const [viewPath, setViewPath] = useState<string[]>(['root']);
   const currentParentId = viewPath[viewPath.length - 1];
 
-  const [solverType, setSolverType] = useState<'euler' | 'rk4'>('rk4');
+  const [solverType, setSolverType] = useState<'euler' | 'ode2' | 'ode3' | 'rk4' | 'ode5' | 'ode23' | 'ode45'>('rk4');
   const [edgeType, setEdgeType] = useState<'default' | 'straight' | 'smoothstep'>('smoothstep');
   const initialStep = tickMs ? tickMs / 1000 : 0.02;
   const [fixedStep, setFixedStep] = useState(initialStep);
@@ -1284,7 +1289,7 @@ export const XbridgesWorkspace: React.FC<{
       setDiagnostics(compileDiagnostics);
 
       const tick = () => {
-        if (engineRef.current && !isPaused) {
+        if (engineRef.current && !isPausedRef.current) {
           // Sync SM Variables to Inports (Data Connectivity)
           nodes.forEach(node => {
             if (node.data.type === 'Inport' && node.data.params?.smVarId && availableVariables) {
@@ -1299,6 +1304,11 @@ export const XbridgesWorkspace: React.FC<{
           });
 
           if (solverType === 'rk4') Solvers.stepRK4(engineRef.current, timeRef.current, fixedStep);
+          else if (solverType === 'ode2') Solvers.stepODE2(engineRef.current, timeRef.current, fixedStep);
+          else if (solverType === 'ode3') Solvers.stepODE3(engineRef.current, timeRef.current, fixedStep);
+          else if (solverType === 'ode5') Solvers.stepODE5(engineRef.current, timeRef.current, fixedStep);
+          else if (solverType === 'ode23') AdaptiveSolver.stepODE23(engineRef.current, timeRef.current, fixedStep);
+          else if (solverType === 'ode45') AdaptiveSolver.stepODE45(engineRef.current, timeRef.current, fixedStep);
           else Solvers.stepEuler(engineRef.current, timeRef.current, fixedStep);
 
           timeRef.current += fixedStep;
@@ -1475,13 +1485,6 @@ export const XbridgesWorkspace: React.FC<{
       if (!openScopes.includes(node.id)) {
         setOpenScopes(prev => [...prev, node.id]);
       }
-    } else if (
-      ['AC_INDUCTION_MOTOR', 'AC_MOTOR_PID_CONTROL', 'THREE_PHASE_INVERTER', 'SINGLE_PHASE_H_BRIDGE', 'PWM_GENERATOR', 'THREE_PHASE_PWM', 'SIX_STEP_COMMUTATION', 'PID_BASIC', 'PID_CONTROLLER'].includes(node.data.type) ||
-      ['motor', 'plant', 'inverter', 'pwm', 'commutation', 'pid', 'controller'].some(k => node.id.toLowerCase().includes(k) || node.data.type?.toLowerCase().includes(k))
-    ) {
-      if (onNavigateToVlab) {
-        onNavigateToVlab(node.id);
-      }
     }
   };
 
@@ -1610,6 +1613,7 @@ export const XbridgesWorkspace: React.FC<{
 
           const hasChanged =
             newParams.numInputs !== oldParams.numInputs ||
+            newParams.signs !== oldParams.signs ||
             newParams.cases !== oldParams.cases ||
             newParams.numCases !== oldParams.numCases ||
             newParams.numSignals !== oldParams.numSignals ||
@@ -1649,6 +1653,11 @@ export const XbridgesWorkspace: React.FC<{
     if (!engineRef.current) return;
 
     if (solverType === 'rk4') Solvers.stepRK4(engineRef.current, timeRef.current, fixedStep);
+    else if (solverType === 'ode2') Solvers.stepODE2(engineRef.current, timeRef.current, fixedStep);
+    else if (solverType === 'ode3') Solvers.stepODE3(engineRef.current, timeRef.current, fixedStep);
+    else if (solverType === 'ode5') Solvers.stepODE5(engineRef.current, timeRef.current, fixedStep);
+    else if (solverType === 'ode23') AdaptiveSolver.stepODE23(engineRef.current, timeRef.current, fixedStep);
+    else if (solverType === 'ode45') AdaptiveSolver.stepODE45(engineRef.current, timeRef.current, fixedStep);
     else Solvers.stepEuler(engineRef.current, timeRef.current, fixedStep);
 
     timeRef.current += fixedStep;
@@ -1835,20 +1844,20 @@ export const XbridgesWorkspace: React.FC<{
   ).filter(b => b.label.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div id="xbridges-workspace-container" className="flex h-full w-full bg-[#0a0a0a] text-gray-300 font-sans overflow-hidden select-none relative">
+    <div id="xbridges-workspace-container" className="flex h-full w-full bg-[#111] text-[#e0e0e0] font-sans overflow-hidden select-none relative">
       {/* Quick Search Menu */}
       {searchMenuPos && (
         <div
-          className="fixed z-[9999] w-[260px] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl overflow-hidden"
+          className="fixed z-[9999] w-[260px] bg-[#1a1a1a]/95 backdrop-blur-xl border border-[#333] rounded-lg shadow-2xl overflow-hidden"
           style={{ left: searchMenuPos.x, top: searchMenuPos.y }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="p-3 border-b border-white/5 flex items-center gap-2">
-            <Search size={14} className="text-emerald-500" />
+          <div className="p-3 border-b border-[#333] flex items-center gap-2">
+            <Search size={14} className="text-[#c9a86c]" />
             <input
               autoFocus
               placeholder="Search blocks..."
-              className="bg-transparent border-none outline-none text-sm w-full text-white placeholder-white/20 font-bold"
+              className="bg-transparent border-none outline-none text-sm w-full text-[#e0e0e0] placeholder-slate-600 font-bold"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => {
@@ -1864,47 +1873,47 @@ export const XbridgesWorkspace: React.FC<{
             {filteredBlocks.map((b, i) => (
               <div
                 key={i}
-                className="flex items-center justify-between p-2 hover:bg-emerald-500/10 rounded cursor-pointer group transition-colors"
+                className="flex items-center justify-between p-2 hover:bg-[#222] rounded cursor-pointer group transition-colors"
                 onClick={() => addBlockAtPos(b.type, searchMenuPos.x, searchMenuPos.y)}
               >
                 <div className="flex items-center gap-3">
-                  <div className="text-gray-500 group-hover:text-emerald-400 transition-colors flex items-center justify-center w-5 h-5">
+                  <div className="text-slate-500 group-hover:text-[#c9a86c] transition-colors flex items-center justify-center w-5 h-5">
                     {renderLibraryIcon(b.icon)}
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-xs font-bold text-white/90 group-hover:text-emerald-400">{b.label}</span>
-                    <span className="text-[9px] text-white/30 uppercase tracking-widest">{b.category}</span>
+                    <span className="text-xs font-bold text-[#e0e0e0] group-hover:text-[#c9a86c]">{b.label}</span>
+                    <span className="text-[9px] text-slate-500 uppercase tracking-widest">{b.category}</span>
                   </div>
                 </div>
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity text-emerald-500">
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity text-[#c9a86c]">
                   {renderLibraryIcon(b.icon, 12)}
                 </div>
               </div>
             ))}
             {filteredBlocks.length === 0 && (
-              <div className="p-4 text-center text-xs text-white/20 italic">No blocks found</div>
+              <div className="p-4 text-center text-xs text-slate-400 italic">No blocks found</div>
             )}
           </div>
         </div>
       )}
       {/* Sidebar Library */}
-      <div className={`${isLibCollapsed ? 'w-12' : 'w-72'} bg-[#0d0d0d] border-r border-white/5 flex flex-col shadow-[10px_0_30px_rgba(0,0,0,0.5)] z-40 transition-all duration-500 ease-in-out relative group`}>
+      <div className={`${isLibCollapsed ? 'w-12' : 'w-72'} bg-[#1a1a1a] border-r border-[#333] flex flex-col shadow-sm z-40 transition-all duration-500 ease-in-out relative group`}>
         {/* Cinematic Header */}
-        <div className="p-5 border-b border-white/5 bg-gradient-to-br from-white/[0.03] to-transparent flex items-center justify-between overflow-hidden">
+        <div className="p-5 border-b border-[#333] bg-gradient-to-br from-[#222] to-transparent flex items-center justify-between overflow-hidden">
           {!isLibCollapsed && (
             <div className="flex flex-col animate-in fade-in slide-in-from-left-4 duration-500">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-[#c9a86c]/20 shadow-[0_0_15px_rgba(201,168,108,0.2)]">
+                <div className="p-1.5 rounded-lg bg-[#c9a86c]/10 border border-[#c9a86c]/20 shadow-sm">
                   <Network size={20} className="text-[#c9a86c]" />
                 </div>
-                <span className="text-sm font-black uppercase tracking-[0.3em] text-white/90 drop-shadow-sm">X-Bridges</span>
+                <span className="text-sm font-black uppercase tracking-[0.3em] text-[#e0e0e0] drop-shadow-sm">X-Bridges</span>
               </div>
-              <span className="text-[8px] text-[#c9a86c]/60 font-black uppercase tracking-widest mt-1 ml-9">Advanced Logic Suite</span>
+              <span className="text-[8px] text-[#c9a86c]/90 font-black uppercase tracking-widest mt-1 ml-9">Advanced Logic Suite</span>
             </div>
           )}
           <button
             onClick={() => setIsLibCollapsed(!isLibCollapsed)}
-            className={`p-2 rounded-xl bg-white/5 border border-white/10 text-[#c9a86c] hover:bg-[#c9a86c]/10 hover:border-[#c9a86c]/30 transition-all ${isLibCollapsed ? 'mx-auto' : ''}`}
+            className={`p-2 rounded-xl bg-[#222] border border-[#333] text-[#c9a86c] hover:bg-[#c9a86c]/10 hover:border-[#c9a86c]/30 transition-all ${isLibCollapsed ? 'mx-auto' : ''}`}
             title={isLibCollapsed ? "Expand Library" : "Collapse Library"}
           >
             <Triangle size={12} className={`transition-transform duration-500 ${isLibCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
@@ -1913,12 +1922,12 @@ export const XbridgesWorkspace: React.FC<{
 
         {/* Search Bar */}
         {!isLibCollapsed && (
-          <div className="px-4 py-3 border-b border-white/5 bg-white/[0.01]">
+          <div className="px-4 py-3 border-b border-[#333] bg-[#111]/50">
             <div className="relative group">
-              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-[#c9a86c] transition-colors" />
+              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-[#c9a86c] transition-colors" />
               <input 
                 placeholder="Search Logic..."
-                className="w-full bg-white/5 border border-white/5 rounded-xl py-2 pl-9 pr-4 text-[10px] font-bold text-white placeholder-gray-700 focus:outline-none focus:border-[#c9a86c]/30 focus:bg-white/[0.08] transition-all"
+                className="w-full bg-[#0a0a0a] border border-[#333] rounded-xl py-2 pl-9 pr-4 text-[10px] font-bold text-[#e0e0e0] placeholder-slate-600 focus:outline-none focus:border-[#c9a86c]/50 focus:ring-1 focus:ring-[#c9a86c]/50 transition-all"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -1928,12 +1937,12 @@ export const XbridgesWorkspace: React.FC<{
 
         {/* Sidebar Tab Switcher */}
         {!isLibCollapsed && (
-          <div className="p-3 border-b border-white/5 flex gap-1 bg-white/[0.01]">
+          <div className="p-3 border-b border-[#333] flex gap-1 bg-[#111]/50">
             <button
               onClick={() => setActiveSidebarTab('library')}
               className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeSidebarTab === 'library'
-                  ? 'bg-[#c9a86c]/10 text-[#c9a86c] border border-[#c9a86c]/20 shadow-[0_0_15px_rgba(201,168,108,0.1)]'
-                  : 'text-gray-500 hover:bg-white/5 border border-transparent hover:text-gray-300'
+                  ? 'bg-[#222] text-[#c9a86c] border border-[#333] shadow-sm'
+                  : 'text-slate-500 hover:bg-[#222] border border-transparent hover:text-[#e0e0e0]'
                 }`}
             >
               <Layers size={14} />
@@ -1942,8 +1951,8 @@ export const XbridgesWorkspace: React.FC<{
             <button
               onClick={() => setActiveSidebarTab('labs')}
               className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeSidebarTab === 'labs'
-                  ? 'bg-[#c9a86c]/10 text-[#c9a86c] border border-[#c9a86c]/20 shadow-[0_0_15px_rgba(201,168,108,0.1)]'
-                  : 'text-gray-500 hover:bg-white/5 border border-transparent hover:text-gray-300'
+                  ? 'bg-[#222] text-[#c9a86c] border border-[#333] shadow-sm'
+                  : 'text-slate-500 hover:bg-[#222] border border-transparent hover:text-[#e0e0e0]'
                 }`}
             >
               <GraduationCap size={14} />
@@ -1960,10 +1969,10 @@ export const XbridgesWorkspace: React.FC<{
                 <div key={cat.name} className="flex flex-col">
                   <button
                     onClick={() => toggleCategory(cat.name)}
-                    className={`flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isExpanded ? 'bg-white/[0.05] text-[#c9a86c]' : 'text-gray-500 hover:bg-white/[0.03] hover:text-gray-300'}`}
+                    className={`flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isExpanded ? 'bg-[#222] text-[#c9a86c] border-l-2 border-[#c9a86c]' : 'text-slate-500 hover:bg-[#222] hover:text-[#e0e0e0]'}`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`w-1 h-1 rounded-full ${isExpanded ? 'bg-[#c9a86c]' : 'bg-gray-700'}`} />
+                      <div className={`w-1 h-1 rounded-full ${isExpanded ? 'bg-[#c9a86c]' : 'bg-slate-600'}`} />
                       {cat.name}
                     </div>
                     {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -1976,12 +1985,12 @@ export const XbridgesWorkspace: React.FC<{
                           key={b.type}
                           draggable
                           onDragStart={(e) => onDragStart(e, b.type)}
-                          className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 cursor-grab active:cursor-grabbing transition-all group border border-transparent hover:border-white/5"
+                          className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[#222] border border-transparent hover:border-[#333] cursor-grab active:cursor-grabbing transition-all group"
                         >
-                          <div className="text-gray-600 group-hover:text-[#c9a86c] transition-colors flex items-center justify-center w-5 h-5">
+                          <div className="text-slate-500 group-hover:text-[#c9a86c] transition-colors flex items-center justify-center w-5 h-5">
                             {renderLibraryIcon(b.icon)}
                           </div>
-                          <span className="text-xs font-bold text-gray-500 group-hover:text-white/90 transition-colors">
+                          <span className="text-xs font-bold text-slate-400 group-hover:text-[#e0e0e0] transition-colors">
                             {b.label}
                           </span>
                         </div>
@@ -1993,12 +2002,12 @@ export const XbridgesWorkspace: React.FC<{
             })
           ) : (
             <div className="space-y-4 animate-in fade-in duration-500">
-              <div className="mb-4 p-4 bg-[#c9a86c]/5 border border-[#c9a86c]/10 rounded-2xl">
+              <div className="mb-4 p-4 bg-[#c9a86c]/5 border border-[#c9a86c]/20 rounded-2xl">
                 <h3 className="text-[10px] font-black text-[#c9a86c] uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
                   <GraduationCap size={14} />
                   Co-Simulation Labs
                 </h3>
-                <p className="text-[10px] text-gray-500 leading-relaxed italic">
+                <p className="text-[10px] text-slate-500 leading-relaxed italic">
                   Select a pre-configured co-simulation learning model to understand online learning algorithms, adaptive filters, and neural feedback controls.
                 </p>
               </div>
@@ -2007,26 +2016,26 @@ export const XbridgesWorkspace: React.FC<{
                 <div
                   key={lab.id}
                   onClick={() => loadLabTemplate(lab.id)}
-                  className="group relative bg-white/[0.02] border border-white/5 rounded-2xl overflow-hidden cursor-pointer hover:border-[#c9a86c]/30 hover:bg-white/[0.04] transition-all duration-300 active:scale-95 shadow-xl p-5"
+                  className="group relative bg-[#1a1a1a] border border-[#333] rounded-2xl overflow-hidden cursor-pointer hover:border-[#c9a86c]/40 hover:bg-[#222]/80 hover:shadow-md transition-all duration-300 active:scale-95 p-5"
                 >
                   <div className="flex justify-between items-start mb-3">
                     <div className="p-2 bg-[#c9a86c]/10 rounded-xl border border-[#c9a86c]/20 text-[#c9a86c]">
                       <GraduationCap size={18} />
                     </div>
-                    <span className="text-[8px] font-black px-2 py-0.5 bg-white/5 rounded-full text-gray-400 uppercase tracking-widest border border-white/5">
+                    <span className="text-[8px] font-black px-2 py-0.5 bg-[#222] rounded-full text-slate-400 uppercase tracking-widest border border-[#333]">
                       {lab.difficulty}
                     </span>
                   </div>
 
-                  <h4 className="text-xs font-black text-gray-200 uppercase tracking-wider mb-1.5 group-hover:text-[#c9a86c] transition-colors">
+                  <h4 className="text-xs font-black text-[#e0e0e0] uppercase tracking-wider mb-1.5 group-hover:text-[#c9a86c] transition-colors">
                     {lab.name}
                   </h4>
-                  <p className="text-[10px] text-gray-500 leading-relaxed mb-4 line-clamp-3">
+                  <p className="text-[10px] text-slate-500 leading-relaxed mb-4 line-clamp-3">
                     {lab.description}
                   </p>
 
                   <div className="flex items-center justify-between">
-                    <span className="text-[9px] font-bold text-gray-600 uppercase tracking-tighter">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
                       {lab.category}
                     </span>
                     <div className="flex items-center gap-1 text-[10px] font-black text-[#c9a86c] group-hover:translate-x-1 transition-transform">
@@ -2043,9 +2052,9 @@ export const XbridgesWorkspace: React.FC<{
       {/* Main Canvas Area */}
       <div className="flex-1 relative flex flex-col min-h-0">
         {/* Premium Top Toolbar */}
-        <div className="h-16 bg-[#0a0a0a]/80 backdrop-blur-2xl border-b border-white/5 flex items-center justify-between px-6 z-30 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+        <div className="h-16 bg-[#1a1a1a]/90 backdrop-blur-2xl border-b border-[#333] flex items-center justify-between px-6 z-30 shadow-sm">
           <div className="flex items-center gap-6">
-            <div className="flex items-center bg-white/5 p-1 rounded-2xl border border-white/5 shadow-inner">
+            <div className="flex items-center bg-[#222] p-1 rounded-2xl border border-[#333] shadow-inner">
               <button
                 onClick={() => setIsSimulating(!isSimulating)}
                 className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition-all duration-300 ${isSimulating
@@ -2063,7 +2072,7 @@ export const XbridgesWorkspace: React.FC<{
                     onClick={() => setIsPaused(!isPaused)}
                     className={`p-2.5 rounded-xl transition-all ${isPaused
                         ? 'bg-amber-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.3)]'
-                        : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                        : 'text-slate-400 hover:bg-[#333] hover:text-[#e0e0e0]'
                       }`}
                     title={isPaused ? "Resume" : "Pause"}
                   >
@@ -2074,8 +2083,8 @@ export const XbridgesWorkspace: React.FC<{
                     onClick={stepSimulation}
                     disabled={!isPaused}
                     className={`p-2.5 rounded-xl transition-all ${isPaused
-                        ? 'text-emerald-500 hover:bg-emerald-500/10'
-                        : 'opacity-20 cursor-not-allowed text-gray-600'
+                        ? 'text-emerald-600 hover:bg-emerald-55'
+                        : 'opacity-20 cursor-not-allowed text-slate-400'
                       }`}
                     title="Single Step"
                   >
@@ -2085,27 +2094,32 @@ export const XbridgesWorkspace: React.FC<{
               )}
             </div>
 
-            <div className="h-8 w-px bg-white/5" />
+            <div className="h-8 w-px bg-[#333]" />
             
             <div className="flex items-center gap-4">
               <div className="flex flex-col">
-                <span className="text-[8px] text-gray-600 font-black uppercase tracking-widest mb-1">Solver Method</span>
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Solver Method</span>
                 <div className="relative group">
                   <Settings2 size={10} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#c9a86c]" />
                   <select
                     value={solverType}
                     onChange={e => setSolverType(e.target.value as any)}
                     disabled={isSimulating}
-                    className="bg-white/5 border border-white/5 rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-bold text-gray-300 focus:outline-none focus:border-[#c9a86c]/30 appearance-none cursor-pointer hover:bg-white/[0.08] transition-all disabled:opacity-50"
+                    className="bg-[#0a0a0a] border border-[#333] rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-bold text-[#e0e0e0] focus:outline-none focus:border-[#c9a86c]/55 appearance-none cursor-pointer hover:bg-[#222] transition-all disabled:opacity-50"
                   >
-                    <option value="rk4">Fixed-Step RK4</option>
-                    <option value="euler">Explicit Euler</option>
+                    <option value="rk4">Fixed-Step RK4 (ODE4)</option>
+                    <option value="euler">Explicit Euler (ODE1)</option>
+                    <option value="ode2">Heun Method (ODE2)</option>
+                    <option value="ode3">Bogacki-Shampine (ODE3)</option>
+                    <option value="ode5">Dormand-Prince (ODE5)</option>
+                    <option value="ode23">Adaptive ODE23 (BS)</option>
+                    <option value="ode45">Adaptive ODE45 (DP)</option>
                   </select>
                 </div>
               </div>
 
               <div className="flex flex-col">
-                <span className="text-[8px] text-gray-600 font-black uppercase tracking-widest mb-1">Routing Style</span>
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Routing Style</span>
                 <div className="relative group">
                   <Network size={10} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#c9a86c]" />
                   <select
@@ -2115,7 +2129,7 @@ export const XbridgesWorkspace: React.FC<{
                       setEdgeType(newType);
                       setEdges(eds => eds.map(edge => ({ ...edge, type: newType })));
                     }}
-                    className="bg-white/5 border border-white/5 rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-bold text-gray-300 focus:outline-none focus:border-[#c9a86c]/30 appearance-none cursor-pointer hover:bg-white/[0.08] transition-all"
+                    className="bg-[#0a0a0a] border border-[#333] rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-bold text-[#e0e0e0] focus:outline-none focus:border-[#c9a86c]/55 appearance-none cursor-pointer hover:bg-[#222] transition-all"
                   >
                     <option value="smoothstep">Orthogonal</option>
                     <option value="default">Bezier Curve</option>
@@ -2125,21 +2139,21 @@ export const XbridgesWorkspace: React.FC<{
               </div>
 
               <div className="flex flex-col">
-                <span className="text-[8px] text-gray-600 font-black uppercase tracking-widest mb-1">Time Step (Δt)</span>
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Time Step (Δt)</span>
                 <div className="relative group">
-                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-500 text-[8px] font-bold italic">s</div>
+                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600 text-[8px] font-bold italic">s</div>
                   <input
                     type="text"
                     value={stepSizeInput}
                     onChange={e => setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}
                     disabled={!!tickMs}
-                    className={`w-20 bg-white/5 border border-white/5 rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-mono font-bold focus:outline-none focus:border-emerald-500 transition-all ${tickMs ? 'text-amber-500 opacity-80 cursor-not-allowed' : 'text-gray-300 hover:bg-white/[0.08]'}`}
+                    className={`w-20 bg-[#0a0a0a] border border-[#333] rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-mono font-bold focus:outline-none focus:border-emerald-500 transition-all ${tickMs ? 'text-[#c9a86c] opacity-80 cursor-not-allowed' : 'text-[#e0e0e0] hover:bg-[#222]'}`}
                   />
                 </div>
               </div>
 
               <div className="flex flex-col">
-                <span className="text-[8px] text-gray-600 font-black uppercase tracking-widest mb-1">End Time</span>
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">End Time</span>
                 <div className="relative group">
                   <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-rose-500 text-[8px] font-bold italic">s</div>
                   <input
@@ -2148,7 +2162,7 @@ export const XbridgesWorkspace: React.FC<{
                     onChange={e => setSimLimitInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}
                     disabled={isSimulating}
                     placeholder="Unlimited"
-                    className="w-20 bg-white/5 border border-white/5 rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-mono font-bold text-gray-300 focus:outline-none focus:border-rose-500 transition-all hover:bg-white/[0.08] disabled:opacity-50"
+                    className="w-20 bg-[#0a0a0a] border border-[#333] rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-mono font-bold text-[#e0e0e0] focus:outline-none focus:border-rose-500 transition-all hover:bg-[#222] disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -2157,11 +2171,11 @@ export const XbridgesWorkspace: React.FC<{
 
           <div className="flex items-center gap-4">
             <div className="flex flex-col items-end">
-              <span className="text-[8px] text-gray-600 font-black uppercase tracking-widest mb-1">Engine Status</span>
+              <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Engine Status</span>
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
-                  <div className={`w-2 h-2 rounded-full ${isSimulating ? 'bg-emerald-500 shadow-[0_0_10px_#10b981] animate-pulse' : 'bg-gray-700'}`} />
-                  <span className={`text-[10px] font-mono font-bold tabular-nums ${isSimulating ? 'text-emerald-500' : 'text-gray-500'}`}>
+                <div className="flex items-center gap-2 bg-[#0a0a0a] px-3 py-1.5 rounded-lg border border-[#333]">
+                  <div className={`w-2 h-2 rounded-full ${isSimulating ? 'bg-emerald-500 shadow-[0_0_10px_#10b981] animate-pulse' : 'bg-[#444]'}`} />
+                  <span className={`text-[10px] font-mono font-bold tabular-nums ${isSimulating ? 'text-emerald-400' : 'text-slate-500'}`}>
                     {isSimulating ? `T = ${timeRef.current.toFixed(4)}s` : 'IDLE'}
                   </span>
                 </div>
@@ -2173,18 +2187,18 @@ export const XbridgesWorkspace: React.FC<{
                       onClick={() => setShowDiagnostics(v => !v)}
                       className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-bold transition-all ${
                         diagnostics.some(d => d.severity === 'error')
-                          ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20'
-                          : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
+                          ? 'bg-red-900/20 border-red-700/30 text-red-400 hover:bg-red-900/30'
+                          : 'bg-amber-900/20 border-amber-700/30 text-amber-400 hover:bg-amber-900/30'
                       }`}
                       title="Model Diagnostics"
                     >
                       <span className="font-mono">
                         {diagnostics.filter(d => d.severity === 'error').length > 0 && (
-                          <span className="text-red-400">{diagnostics.filter(d => d.severity === 'error').length}E</span>
+                          <span className="text-red-500">{diagnostics.filter(d => d.severity === 'error').length}E</span>
                         )}
                         {diagnostics.filter(d => d.severity === 'error').length > 0 && diagnostics.filter(d => d.severity === 'warning').length > 0 && ' '}
                         {diagnostics.filter(d => d.severity === 'warning').length > 0 && (
-                          <span className="text-amber-400">{diagnostics.filter(d => d.severity === 'warning').length}W</span>
+                          <span className="text-amber-500">{diagnostics.filter(d => d.severity === 'warning').length}W</span>
                         )}
                       </span>
                       <span>DIAG</span>
@@ -2192,10 +2206,10 @@ export const XbridgesWorkspace: React.FC<{
 
                     {/* Floating Diagnostics Panel */}
                     {showDiagnostics && (
-                      <div className="absolute top-full right-0 mt-2 w-[400px] bg-[#0f0f0f]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl z-[9999] overflow-hidden">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-white/[0.02]">
-                          <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/70">Model Diagnostics</span>
-                          <button onClick={() => setShowDiagnostics(false)} className="text-gray-600 hover:text-white transition-colors">
+                      <div className="absolute top-full right-0 mt-2 w-[400px] bg-[#1a1a1a] border border-[#333] rounded-xl shadow-2xl z-[9999] overflow-hidden text-[#e0e0e0] animate-in fade-in slide-in-from-top-2 duration-200">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-[#333] bg-[#111]/50">
+                          <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Model Diagnostics</span>
+                          <button onClick={() => setShowDiagnostics(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
                             <X size={14} />
                           </button>
                         </div>
@@ -2205,22 +2219,22 @@ export const XbridgesWorkspace: React.FC<{
                               key={i}
                               className={`flex gap-3 p-2.5 rounded-lg text-[11px] ${
                                 d.severity === 'error'
-                                  ? 'bg-red-500/10 border border-red-500/20'
+                                  ? 'bg-red-900/15 border border-red-700/25'
                                   : d.severity === 'warning'
-                                  ? 'bg-amber-500/10 border border-amber-500/20'
-                                  : 'bg-blue-500/10 border border-blue-500/20'
+                                  ? 'bg-amber-900/15 border border-amber-700/25'
+                                  : 'bg-blue-900/15 border border-blue-700/25'
                               }`}
                             >
                               <span className={`font-black text-[9px] uppercase mt-0.5 shrink-0 ${
-                                d.severity === 'error' ? 'text-red-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-blue-400'
+                                d.severity === 'error' ? 'text-red-500' : d.severity === 'warning' ? 'text-amber-500' : 'text-blue-500'
                               }`}>
                                 {d.severity === 'error' ? '✖' : d.severity === 'warning' ? '⚠' : 'ℹ'}
                               </span>
                               <div className="flex flex-col gap-0.5 min-w-0">
                                 <span className={`font-black text-[9px] tracking-wider uppercase ${
-                                  d.severity === 'error' ? 'text-red-400' : d.severity === 'warning' ? 'text-amber-400' : 'text-blue-400'
+                                  d.severity === 'error' ? 'text-red-500' : d.severity === 'warning' ? 'text-amber-500' : 'text-blue-500'
                                 }`}>[{d.code}]</span>
-                                <span className="text-white/60 leading-relaxed break-words">{d.message}</span>
+                                <span className="text-slate-300 leading-relaxed break-words">{d.message}</span>
                               </div>
                             </div>
                           ))}
@@ -2232,7 +2246,7 @@ export const XbridgesWorkspace: React.FC<{
 
                 <button
                   onClick={() => handle3dxSyncInit('push')}
-                  className="p-2.5 rounded-xl bg-blue-900/25 text-[#4da6ff] hover:bg-blue-900/40 border border-blue-800/30 transition-all cursor-pointer"
+                  className="p-2.5 rounded-xl bg-blue-900/20 text-blue-400 hover:bg-blue-900/30 border border-blue-800/30 transition-all cursor-pointer shadow-sm"
                   title="Push to 3DEXPERIENCE"
                 >
                   <Cloud size={18} />
@@ -2240,7 +2254,7 @@ export const XbridgesWorkspace: React.FC<{
 
                 <button
                   onClick={() => handle3dxSyncInit('pull')}
-                  className="p-2.5 rounded-xl bg-blue-900/25 text-[#4da6ff] hover:bg-blue-900/40 border border-blue-800/30 transition-all cursor-pointer"
+                  className="p-2.5 rounded-xl bg-blue-900/20 text-blue-400 hover:bg-blue-900/30 border border-blue-800/30 transition-all cursor-pointer shadow-sm"
                   title="Pull from 3DEXPERIENCE"
                 >
                   <Download size={18} />
@@ -2249,7 +2263,7 @@ export const XbridgesWorkspace: React.FC<{
                 {onBack && (
                   <button
                     onClick={() => { if (onSave) onSave(nodes, edges); onBack(); }}
-                    className="p-2.5 rounded-xl bg-[#c9a86c]/10 text-[#c9a86c] hover:bg-[#c9a86c]/20 border border-[#c9a86c]/20 transition-all"
+                    className="p-2.5 rounded-xl bg-[#222] text-[#e0e0e0] hover:bg-[#333] border border-[#333] transition-all shadow-sm"
                     title="Save & Exit"
                   >
                     <Save size={18} />
@@ -2261,9 +2275,9 @@ export const XbridgesWorkspace: React.FC<{
         </div>
 
         {/* Path Navigation (Breadcrumbs) */}
-        <div className="h-10 bg-[#0d0d0d] border-b border-white/5 flex items-center px-6 gap-3 z-20">
-          <div className="p-1 rounded bg-white/5">
-            <Layers size={12} className="text-gray-600" />
+        <div className="h-10 bg-[#111] border-b border-[#333] flex items-center px-6 gap-3 z-20">
+          <div className="p-1 rounded bg-[#222]">
+            <Layers size={12} className="text-slate-500" />
           </div>
           {viewPath.map((pathId, idx) => {
             const nodeName = pathId === 'root' ? 'ROOT PROJECT' : (nodes.find(n => n.id === pathId)?.data.params.name || pathId);
@@ -2272,11 +2286,11 @@ export const XbridgesWorkspace: React.FC<{
               <React.Fragment key={pathId}>
                 <button
                   onClick={() => setViewPath(viewPath.slice(0, idx + 1))}
-                  className={`text-[9px] font-black tracking-[0.2em] uppercase transition-all hover:text-[#c9a86c] ${isLast ? 'text-[#c9a86c]' : 'text-gray-500'}`}
+                  className={`text-[9px] font-black tracking-[0.2em] uppercase transition-all hover:text-[#c9a86c] ${isLast ? 'text-[#c9a86c]' : 'text-slate-500'}`}
                 >
                   {nodeName}
                 </button>
-                {!isLast && <ChevronRight size={10} className="text-gray-800" />}
+                {!isLast && <ChevronRight size={10} className="text-[#444]" />}
               </React.Fragment>
             );
           })}
@@ -2284,8 +2298,8 @@ export const XbridgesWorkspace: React.FC<{
 
         <div className="flex-1 relative flex min-h-0">
           <div className="flex-1 relative" onContextMenu={(e) => e.preventDefault()}>
-            <ReactFlow
-              // Pass native React Flow selected state alongside custom data and an update callback
+            <WorkspaceContext.Provider value={{ saveHistory }}>
+              <ReactFlow
               onInit={setReactFlowInstance}
               nodes={nodes.filter(n => (n.data.parentId || 'root') === currentParentId).map(n => {
                 const steps = activeLabId ? XBRIDGES_LEARNING_LAB_STEPS[activeLabId] : null;
@@ -2327,7 +2341,6 @@ export const XbridgesWorkspace: React.FC<{
               onNodeDoubleClick={onNodeDoubleClick}
               onPaneClick={(e) => {
                 if (e.detail === 2) {
-                  // Double click
                   setSearchMenuPos({ x: e.clientX, y: e.clientY });
                 } else {
                   setSearchMenuPos(null);
@@ -2359,7 +2372,6 @@ export const XbridgesWorkspace: React.FC<{
                 edgeType === 'smoothstep' ? ConnectionLineType.SmoothStep :
                 ConnectionLineType.Bezier
               }
-              // FR-2.1: Dynamic edge routing, FR-2.4: Selection width
               defaultEdgeOptions={{
                 type: edgeType,
                 animated: true,
@@ -2368,13 +2380,12 @@ export const XbridgesWorkspace: React.FC<{
               }}
               elevateNodesOnSelect
             >
-              {/* FR-3.4 and FR-3.5: Pan/Zoom controls, Minimap, Grid Background */}
-              <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#404040" />
-              <Controls className="bg-[#1e1e1e] border-[#404040] fill-white" />
+              <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#2a2a2a" />
+              <Controls className="bg-[#1a1a1a] border-[#333] fill-[#e0e0e0] shadow-md [&_button]:bg-[#1a1a1a] [&_button]:border-b-[#333] [&_path]:fill-[#e0e0e0] hover:[&_button]:bg-[#222]" />
               <MiniMap
-                nodeColor={(n) => n.data.selected ? '#4caf50' : '#2d2d2d'}
-                maskColor="rgba(0, 0, 0, 0.6)"
-                className="bg-[#1e1e1e] border border-[#404040]"
+                nodeColor={(n) => n.data.selected ? '#10b981' : '#444'}
+                maskColor="rgba(0, 0, 0, 0.4)"
+                className="bg-[#1a1a1a] border border-[#333] rounded-lg shadow-md"
               />
 
               {activeLabId && (
@@ -2382,42 +2393,40 @@ export const XbridgesWorkspace: React.FC<{
                   {isLabGuideMinimized ? (
                     <button
                       onClick={() => setIsLabGuideMinimized(false)}
-                      className="flex items-center gap-2.5 bg-[#0d0d0d]/95 backdrop-blur-xl border border-[#c9a86c]/30 rounded-full shadow-2xl px-4 py-2 hover:bg-[#c9a86c]/5 border-l-4 border-l-[#c9a86c] transition-all text-left group"
+                      className="flex items-center gap-2.5 bg-[#1a1a1a] border border-[#333] rounded-full shadow-lg px-4 py-2 hover:bg-[#222] border-l-4 border-l-[#c9a86c] transition-all text-left group"
                     >
-                      <div className="p-1.5 rounded-full bg-[#c9a86c]/20 text-[#c9a86c]">
+                      <div className="p-1.5 rounded-full bg-[#c9a86c]/10 text-[#c9a86c]">
                         <GraduationCap size={14} className="group-hover:scale-110 transition-transform" />
                       </div>
                       <div className="flex flex-col pr-1">
                         <span className="text-[9px] font-black uppercase tracking-wider text-[#c9a86c]">Lab Guide</span>
-                        <span className="text-[8px] text-gray-500 font-mono">Step {currentStepIndex + 1} • Click to open</span>
+                        <span className="text-[8px] text-slate-500 font-mono">Step {currentStepIndex + 1} • Click to open</span>
                       </div>
                     </button>
                   ) : (
-                    <div className="w-[360px] bg-[#0d0d0d]/95 backdrop-blur-xl border border-[#c9a86c]/30 rounded-2xl shadow-2xl p-5 border-l-4 border-l-[#c9a86c] flex flex-col text-gray-300 transition-all duration-300 animate-in slide-in-from-left duration-300 select-text">
-                      {/* Header */}
-                      <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-3">
+                    <div className="w-[360px] bg-[#1a1a1a] border border-[#333] rounded-2xl shadow-2xl p-5 border-l-4 border-l-[#c9a86c] flex flex-col text-[#e0e0e0] transition-all duration-300 animate-in slide-in-from-left duration-300 select-text">
+                      <div className="flex items-center justify-between border-b border-[#333] pb-3 mb-3">
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => setIsLabGuideMinimized(true)}
-                            className="p-1 rounded text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+                            className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-[#333] transition-colors"
                             title="Minimize Lab Guide"
                           >
                             <Minimize2 size={12} />
                           </button>
-                          <div className="p-1.5 rounded-lg bg-[#c9a86c]/20 text-[#c9a86c] shadow-[0_0_10px_rgba(201,168,108,0.2)] animate-pulse">
+                          <div className="p-1.5 rounded-lg bg-[#c9a86c]/10 text-[#c9a86c] shadow-[0_0_10px_rgba(201,168,108,0.2)] animate-pulse">
                             <GraduationCap size={16} />
                           </div>
                           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#c9a86c]">Learning Lab</span>
                         </div>
                         <button
                           onClick={exitActiveLab}
-                          className="text-[9px] font-black tracking-widest text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1 rounded transition-colors"
+                          className="text-[9px] font-black tracking-widest text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded transition-colors"
                         >
                           EXIT LAB
                         </button>
                       </div>
 
-                      {/* Lab Title & Steps */}
                       {(() => {
                         const steps = XBRIDGES_LEARNING_LAB_STEPS[activeLabId];
                         const step = steps ? steps[currentStepIndex] : null;
@@ -2430,41 +2439,39 @@ export const XbridgesWorkspace: React.FC<{
                         return (
                           <>
                             <div className="flex justify-between items-center mb-2">
-                              <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">
+                              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
                                 STEP {currentStepIndex + 1} OF {totalSteps}
                               </span>
                               <span className="text-[9px] font-black text-[#c9a86c]">{percent}%</span>
                             </div>
                             
-                            {/* Progress bar */}
-                            <div className="w-full h-1 bg-white/5 rounded-full mb-4 overflow-hidden">
+                            <div className="w-full h-1 bg-slate-100 rounded-full mb-4 overflow-hidden">
                               <div 
                                 className="h-full bg-gradient-to-r from-[#c9a86c]/50 to-[#c9a86c] transition-all duration-500"
                                 style={{ width: `${percent}%` }}
                               />
                             </div>
 
-                            <h3 className="text-xs font-black text-white uppercase tracking-wider mb-2">
+                            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2">
                               {step.title}
                             </h3>
-                            <p className="text-[10px] text-gray-400 leading-relaxed mb-4 whitespace-pre-line">
+                            <p className="text-[10px] text-slate-500 leading-relaxed mb-4 whitespace-pre-line">
                               {step.instructions}
                             </p>
 
-                            {/* Objectives Checklist */}
                             <div className="space-y-2 mb-5">
-                              <div className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-1.5">OBJECTIVES:</div>
+                              <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">OBJECTIVES:</div>
                               {step.objectives.map((obj: any) => {
                                 const done = !!completedObjectives[obj.id];
                                 return (
                                   <div 
                                     key={obj.id}
-                                    className={`flex items-center gap-2.5 p-2 rounded-xl transition-all duration-300 ${done ? 'bg-emerald-500/5 border border-emerald-500/10 text-emerald-400' : 'bg-white/[0.02] border border-white/5 text-gray-400'}`}
+                                    className={`flex items-center gap-2.5 p-2 rounded-xl transition-all duration-300 ${done ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-slate-50 border border-slate-200 text-slate-650'}`}
                                   >
-                                    <div className={`w-4 h-4 rounded-full flex items-center justify-center border transition-all ${done ? 'bg-emerald-500 border-emerald-400 text-white' : 'border-gray-700'}`}>
-                                      {done ? <Zap size={10} className="fill-current" /> : <div className="w-1.5 h-1.5 rounded-full bg-gray-700" />}
+                                    <div className={`w-4 h-4 rounded-full flex items-center justify-center border transition-all ${done ? 'bg-emerald-500 border-emerald-400 text-white' : 'border-slate-300'}`}>
+                                      {done ? <Zap size={10} className="fill-current" /> : <div className="w-1.5 h-1.5 rounded-full bg-slate-350" />}
                                     </div>
-                                    <span className={`text-[10px] font-bold ${done ? 'line-through text-emerald-400/80' : 'text-gray-400'}`}>
+                                    <span className={`text-[10px] font-bold ${done ? 'line-through text-emerald-600/80' : 'text-slate-600'}`}>
                                       {obj.label}
                                     </span>
                                   </div>
@@ -2472,8 +2479,7 @@ export const XbridgesWorkspace: React.FC<{
                               })}
                             </div>
 
-                            {/* Controls */}
-                            <div className="flex gap-2 border-t border-white/5 pt-3">
+                            <div className="flex gap-2 border-t border-slate-100 pt-3">
                               <button
                                 onClick={() => {
                                   if (currentStepIndex > 0) {
@@ -2482,7 +2488,7 @@ export const XbridgesWorkspace: React.FC<{
                                   }
                                 }}
                                 disabled={currentStepIndex === 0}
-                                className="flex-1 py-2 rounded-xl border border-white/10 text-xs font-bold hover:bg-white/5 transition-all disabled:opacity-20 disabled:cursor-not-allowed text-gray-400"
+                                className="flex-1 py-2 rounded-xl border border-slate-200 text-xs font-bold hover:bg-slate-50 transition-all disabled:opacity-20 disabled:cursor-not-allowed text-slate-500"
                               >
                                 Back
                               </button>
@@ -2499,8 +2505,8 @@ export const XbridgesWorkspace: React.FC<{
                                 }}
                                 disabled={!allDone}
                                 className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 ${allDone
-                                  ? 'bg-[#c9a86c] text-[#0a0a0a] shadow-[0_0_20px_rgba(201,168,108,0.4)] hover:scale-105 active:scale-95 cursor-pointer'
-                                  : 'bg-white/5 border border-white/5 text-gray-600 cursor-not-allowed'
+                                  ? 'bg-[#c9a86c] text-white shadow-md hover:scale-105 active:scale-95 cursor-pointer'
+                                  : 'bg-slate-50 border border-slate-200 text-slate-400 cursor-not-allowed'
                                 }`}
                               >
                                 {currentStepIndex === totalSteps - 1 ? 'Finish Lab' : 'Next Step'}
@@ -2514,18 +2520,17 @@ export const XbridgesWorkspace: React.FC<{
                 </Panel>
               )}
             </ReactFlow>
+            </WorkspaceContext.Provider>
 
-            {/* Simple Clear Button to help user reset if old blocks are stuck */}
             <button
               onClick={() => { setNodes([]); setEdges([]); setSelectedNodeId(null); }}
-              className="absolute top-4 right-4 z-50 bg-[#1a1a1a] border border-[#333] text-red-500 hover:bg-red-900/20 px-3 py-1.5 rounded text-xs font-bold shadow-lg flex items-center gap-2"
+              className="absolute top-4 right-4 z-50 bg-[#1a1a1a] border border-[#333] text-red-500 hover:bg-red-900/20 px-3 py-1.5 rounded text-xs font-bold shadow-md flex items-center gap-2"
             >
               <Trash2 size={12} />
               Clear Canvas
             </button>
           </div>
 
-          {/* Right-Side Properties Panel */}
           {selectedNode && (
             <XbridgesPropertiesPanel
               block={selectedNode.data as any}
@@ -2536,7 +2541,6 @@ export const XbridgesWorkspace: React.FC<{
             />
           )}
 
-          {/* Floating Scope Windows */}
           {openScopes.map(scopeId => {
             const scopeNode = nodes.find(n => n.id === scopeId);
             if (!scopeNode) return null;
@@ -2552,28 +2556,27 @@ export const XbridgesWorkspace: React.FC<{
         </div>
 
         {labCompleted && (
-          <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-300">
-            <div className="w-[450px] bg-[#0d0d0d] border border-[#c9a86c]/40 rounded-3xl shadow-[0_0_50px_rgba(201,168,108,0.2)] p-8 text-center flex flex-col items-center relative overflow-hidden select-text animate-in zoom-in-95 duration-300">
-              {/* Ambient gold glow */}
-              <div className="absolute -top-20 -left-20 w-48 h-48 rounded-full bg-[#c9a86c]/10 blur-3xl" />
-              <div className="absolute -bottom-20 -right-20 w-48 h-48 rounded-full bg-[#c9a86c]/10 blur-3xl" />
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-300">
+            <div className="w-[450px] bg-[#1a1a1a] border border-[#333] rounded-3xl shadow-2xl p-8 text-center flex flex-col items-center relative overflow-hidden select-text animate-in zoom-in-95 duration-300">
+              <div className="absolute -top-20 -left-20 w-48 h-48 rounded-full bg-[#c9a86c]/5 blur-3xl" />
+              <div className="absolute -bottom-20 -right-20 w-48 h-48 rounded-full bg-[#c9a86c]/5 blur-3xl" />
 
-              <div className="w-16 h-16 rounded-full bg-[#c9a86c]/20 border border-[#c9a86c]/30 text-[#c9a86c] flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(201,168,108,0.3)] animate-bounce z-10">
+              <div className="w-16 h-16 rounded-full bg-[#c9a86c]/10 border border-[#c9a86c]/20 text-[#c9a86c] flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(201,168,108,0.2)] animate-bounce z-10">
                 <GraduationCap size={32} />
               </div>
 
               <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#c9a86c] mb-1.5 z-10">Lab Completed Successfully</span>
-              <h2 className="text-lg font-black text-white uppercase tracking-wider mb-4 z-10">
+              <h2 className="text-lg font-black text-[#e0e0e0] uppercase tracking-wider mb-4 z-10">
                 {XBRIDGES_LEARNING_LABS.find(l => l.id === activeLabId)?.name || 'Co-Simulation Lab'}
               </h2>
               
-              <p className="text-xs text-gray-400 leading-relaxed mb-6 z-10">
+              <p className="text-xs text-slate-500 leading-relaxed mb-6 z-10">
                 Congratulations! You have completed all steps in this module. You have successfully simulated, monitored, and fine-tuned online learning models in the ADIA X-Bridges environment.
               </p>
 
-              <div className="w-full bg-white/[0.02] border border-white/5 rounded-2xl p-5 mb-6 text-left z-10">
-                <div className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-2">CONCEPTS MASTERED:</div>
-                <ul className="space-y-1.5 text-[10px] text-gray-300 font-bold">
+              <div className="w-full bg-[#0a0a0a] border border-[#333] rounded-2xl p-5 mb-6 text-left z-10">
+                <div className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">CONCEPTS MASTERED:</div>
+                <ul className="space-y-1.5 text-[10px] text-[#e0e0e0] font-bold">
                   {activeLabId === 'lms_sys_id' && (
                     <>
                       <li className="flex items-center gap-2"><Zap size={10} className="text-[#c9a86c]" /> 2-tap online LMS Filter weight adaptation</li>
@@ -2584,7 +2587,7 @@ export const XbridgesWorkspace: React.FC<{
                   {activeLabId === 'neural_approx' && (
                     <>
                       <li className="flex items-center gap-2"><Zap size={10} className="text-[#c9a86c]" /> Single-neuron online backpropagation / gradient descent</li>
-                      <li className="flex items-center gap-2"><Zap size={10} className="text-[#c9a86c]" /> Approximation of arbitrary plant reference models</li>
+                      <li className="flex items-center gap-2"><Zap size={10} className="text-[#c9a86c]" /> Plant approximation of arbitrary reference models</li>
                       <li className="flex items-center gap-2"><Zap size={10} className="text-[#c9a86c]" /> Discrete-time step solver dynamics (dt)</li>
                     </>
                   )}
@@ -2615,27 +2618,26 @@ export const XbridgesWorkspace: React.FC<{
 
               <button
                 onClick={exitActiveLab}
-                className="w-full py-3 rounded-2xl bg-[#c9a86c] text-[#0a0a0a] text-xs font-black uppercase tracking-[0.15em] hover:scale-105 active:scale-95 transition-all shadow-[0_0_30px_rgba(201,168,108,0.4)] z-10"
+                className="w-full py-3 rounded-2xl bg-[#c9a86c] text-white text-xs font-black uppercase tracking-[0.15em] hover:scale-105 active:scale-95 transition-all shadow-md z-10"
               >
                 Continue to Library
               </button>
             </div>
           </div>
         )}
-        {/* 3DEXPERIENCE Sync Modal */}
         {show3dxSyncModal && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] animate-in fade-in duration-200">
-            <div className="bg-[#0c0c10] border border-[#1e2a3a] rounded-2xl w-[480px] p-6 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between border-b border-[#1a2133] pb-3">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[9999] animate-in fade-in duration-200">
+            <div className="bg-[#1a1a1a] border border-[#333] rounded-2xl w-[480px] p-6 shadow-2xl space-y-4 text-[#e0e0e0]">
+              <div className="flex items-center justify-between border-b border-[#333] pb-3">
                 <div className="flex items-center gap-2">
-                  <Cloud className="text-[#4da6ff]" size={18} />
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  <Cloud className="text-blue-400" size={18} />
+                  <h3 className="text-sm font-bold text-[#e0e0e0] uppercase tracking-wider">
                     {syncAction === 'push' ? 'Push Workspace to 3DX' : 'Pull Workspace from 3DX'}
                   </h3>
                 </div>
                 <button
                   onClick={() => setShow3dxSyncModal(false)}
-                  className="text-gray-500 hover:text-white p-1 hover:bg-white/5 rounded-md transition-colors cursor-pointer"
+                  className="text-slate-500 hover:text-slate-300 p-1 hover:bg-[#333] rounded-md transition-colors cursor-pointer"
                 >
                   <X size={16} />
                 </button>
@@ -2643,19 +2645,19 @@ export const XbridgesWorkspace: React.FC<{
 
               {syncStatus === 'loading' ? (
                 <div className="py-12 flex flex-col items-center justify-center gap-3">
-                  <RefreshCcw size={24} className="text-[#4da6ff] animate-spin" />
-                  <span className="text-xs text-gray-400">Connecting to 3DEXPERIENCE...</span>
+                  <RefreshCcw size={24} className="text-blue-400 animate-spin" />
+                  <span className="text-xs text-slate-400">Connecting to 3DEXPERIENCE...</span>
                 </div>
               ) : syncStatus === 'success' ? (
                 <div className="py-12 flex flex-col items-center justify-center gap-3">
-                  <CheckCircle2 size={24} className="text-emerald-400" />
+                  <CheckCircle2 size={24} className="text-emerald-500" />
                   <span className="text-xs text-emerald-400 font-bold">Workspace Synced Successfully!</span>
                 </div>
               ) : syncStatus === 'error' ? (
                 <div className="py-12 flex flex-col items-center justify-center gap-3 text-center">
-                  <AlertCircle size={24} className="text-red-400" />
-                  <span className="text-xs text-red-400 font-bold">Sync Failed</span>
-                  <p className="text-[10px] text-gray-500 max-w-xs mx-auto">
+                  <AlertCircle size={24} className="text-red-500" />
+                  <span className="text-xs text-red-500 font-bold">Sync Failed</span>
+                  <p className="text-[10px] text-slate-400 max-w-xs mx-auto">
                     Please ensure you have an active internet connection and are authenticated to the 3DEXPERIENCE platform.
                   </p>
                 </div>
@@ -2664,11 +2666,11 @@ export const XbridgesWorkspace: React.FC<{
                   {syncAction === 'push' ? (
                     <div className="space-y-3">
                       <div>
-                        <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Target Workspace</label>
+                        <label className="text-[10px] text-slate-400 uppercase tracking-wider block mb-1">Target Workspace</label>
                         <select
                           value={selectedTdxWorkspace}
                           onChange={(e) => setSelectedTdxWorkspace(e.target.value)}
-                          className="w-full bg-[#06080c] border border-[#1e2a3a] rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
+                          className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#e0e0e0] focus:outline-none focus:border-[#c9a86c]"
                         >
                           {tdxWorkspaces.map(ws => (
                             <option key={ws.id} value={ws.id}>{ws.title}</option>
@@ -2677,26 +2679,26 @@ export const XbridgesWorkspace: React.FC<{
                       </div>
                       <button
                         onClick={handle3dxPush}
-                        className="w-full py-2.5 bg-[#0056b3] hover:bg-[#0069d9] text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                        className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
                       >
                         Push Now
                       </button>
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Select Document to Import</label>
+                      <label className="text-[10px] text-slate-400 uppercase tracking-wider block mb-1">Select Document to Import</label>
                       {tdxDocs.length === 0 ? (
-                        <div className="py-4 text-center text-xs text-gray-600">No compatible XBridges workspaces found.</div>
+                        <div className="py-4 text-center text-xs text-slate-400">No compatible XBridges workspaces found.</div>
                       ) : (
-                        <div className="max-h-[200px] overflow-y-auto border border-[#1a2133] rounded-lg divide-y divide-[#1a2133] bg-[#06080c]">
+                        <div className="max-h-[200px] overflow-y-auto border border-[#333] rounded-lg divide-y divide-[#222] bg-[#0a0a0a]">
                           {tdxDocs.map(doc => (
                             <div
                               key={doc.id}
                               onClick={() => handle3dxPull(doc.id)}
-                              className="p-3 text-xs text-gray-400 hover:text-white hover:bg-white/5 cursor-pointer transition-all flex items-center justify-between"
+                              className="p-3 text-xs text-slate-400 hover:text-[#e0e0e0] hover:bg-[#222] cursor-pointer transition-all flex items-center justify-between"
                             >
                               <span className="font-medium truncate mr-2">{doc.title}</span>
-                              <span className="text-[9px] text-gray-600 font-mono flex-shrink-0">{new Date(doc.modified).toLocaleDateString()}</span>
+                              <span className="text-[9px] text-slate-500 font-mono flex-shrink-0">{new Date(doc.modified).toLocaleDateString()}</span>
                             </div>
                           ))}
                         </div>

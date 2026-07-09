@@ -573,7 +573,7 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
 
 export const getColor = (type: string) => {
   if (['Constant', 'WaveformGen', 'Clock', 'Step', 'Scope', 'DELAY', 'MUX', 'DEMUX', 'TERMINATOR', 'DATA_TYPE_CONVERSION'].includes(type)) return '#007acc'; // Signal (Blue)
-  if (['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow', 'UnaryNeg', 'Abs', 'SumElements', 'Mean', 'Max', 'MatrixMul', 'Transpose', 'Inverse', 'Determinant', 'GAIN', 'PRODUCT', 'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'TRANSFER_FUNCTION', 'STATE_SPACE', 'ZERO_POLE_GAIN', 'DISCRETE_TRANSFER_FUNCTION'].includes(type)) return '#28a745'; // Math (Green)
+  if (['SUM_JUNCTION', 'VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow', 'UnaryNeg', 'Abs', 'SumElements', 'Mean', 'Max', 'MatrixMul', 'Transpose', 'Inverse', 'Determinant', 'GAIN', 'PRODUCT', 'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'TRANSFER_FUNCTION', 'STATE_SPACE', 'ZERO_POLE_GAIN', 'DISCRETE_TRANSFER_FUNCTION', 'MatrixConcat', 'MatrixDiag', 'IdentityMatrix', 'SubMatrix', 'MatrixSolve'].includes(type)) return '#28a745'; // Math (Green)
   if (['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR', 'SWITCH', 'IF_ELSE', 'SWITCH_CASE'].includes(type)) return '#6f42c1'; // Logic (Purple)
   if (['BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight'].includes(type)) return '#563d7c'; // Bitwise (Indigo)
   if (['DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Integrator', 'INTEGRATOR_CONTINUOUS', 'INTEGRATOR_DISCRETE', 'PID_CONTROLLER', 'PID_BASIC', 'FUZZY_PID_CONTROLLER'].includes(type)) return '#d73a49'; // Sequential/Control (Red)
@@ -673,6 +673,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
     switch (type) {
       case 'Constant': return <Square size={12} />;
       case 'WaveformGen': return <Activity size={12} />;
+      case 'SUM_JUNCTION': return <Sigma size={12} />;
       case 'VectorAdd': return <Plus size={12} />;
       case 'VectorSub': return <Minus size={12} />;
       case 'VectorMul': return <X size={12} />;
@@ -683,7 +684,13 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       case 'SumElements': return <Sigma size={12} />;
       case 'Mean': return <BarChart size={12} />;
       case 'Max': return <ArrowUp size={12} />;
-      case 'MatrixMul': return <Grid size={12} />;
+      case 'MatrixMul': 
+      case 'MatrixConcat':
+      case 'MatrixDiag':
+      case 'IdentityMatrix':
+      case 'SubMatrix':
+      case 'MatrixSolve':
+      case 'DEMUX': return <Grid size={12} />;
       case 'Transpose': return <RotateCw size={12} />;
       case 'Inverse': return <RefreshCcw size={12} />;
       case 'Determinant': return <Hash size={12} />;
@@ -788,7 +795,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
             background: isSelected ? '#c9a86c' : getHandleColor(port.type),
             width: isSelected ? 14 : 10,
             height: isSelected ? 14 : 10,
-            border: isSelected ? '2px solid #ffffff' : '1.5px solid #0f172a',
+            border: isSelected ? '2px solid #000000' : '1.5px solid #1e293b',
             borderRadius: '50%', // Circle dot (like Simulink)
             zIndex: 15,
             boxShadow: isSelected ? '0 0 12px #c9a86c, 0 0 6px #c9a86c' : 'none',
@@ -804,7 +811,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
           }}
         />
         <span 
-          className={`text-[8px] font-mono text-gray-500 uppercase tracking-tighter mx-1.5 transition-opacity duration-200 group-hover:text-white`}
+          className={`text-[8px] font-mono text-slate-400 uppercase tracking-tighter mx-1.5 transition-opacity duration-200 group-hover:text-slate-200 font-bold`}
           style={{
             marginTop: port.position === 'top' ? 12 : 0,
             marginBottom: port.position === 'bottom' ? 12 : 0,
@@ -823,16 +830,16 @@ export const XBlockNode = ({ data, id, selected }: any) => {
   return (
     <div 
       ref={nodeRef}
-      className={`relative rounded-md transition-all duration-500 border-2 ${selected ? 'ring-4 ring-white/10 scale-105 z-50' : 'hover:border-white/20'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
+      className={`relative rounded-md transition-all duration-500 border-2 ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[#444]'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
       onMouseDown={(e) => data.onNodeMouseDown && data.onNodeMouseDown(e)}
       style={{ 
-        background: 'rgba(20, 20, 20, 0.8)',
+        background: 'rgba(26, 26, 26, 0.95)',
         backdropFilter: 'blur(20px)',
-        borderColor: selected ? color : 'rgba(255,255,255,0.05)',
+        borderColor: selected ? color : '#333333',
         minWidth: data.type === 'Scope' ? 260 : ['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN'].includes(data.type) ? 170 : 130,
         boxShadow: selected 
-          ? `0 20px 50px -10px rgba(0,0,0,0.8), 0 0 30px ${color}33` 
-          : '0 10px 30px -10px rgba(0,0,0,0.5)',
+          ? `0 12px 24px -8px rgba(0,0,0,0.5), 0 0 16px ${color}33` 
+          : '0 4px 12px -4px rgba(0,0,0,0.4)',
         height: '100%',
         display: 'flex',
         flexDirection: 'column'
@@ -842,16 +849,16 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       
       {/* Header with Glowing Accent */}
       <div 
-        className="px-4 py-2.5 border-b border-white/5 flex items-center justify-between relative overflow-hidden rounded-t-[4px]"
-        style={{ background: `linear-gradient(to right, ${color}15, transparent)` }}
+        className="px-4 py-2.5 border-b border-[#333] flex items-center justify-between relative overflow-hidden rounded-t-[4px]"
+        style={{ background: `linear-gradient(to right, ${color}0c, transparent)` }}
       >
-        <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-right from-white/10 to-transparent" />
+        <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-right from-slate-800 to-transparent" />
         <div className="flex items-center gap-2.5 z-10">
-          <div className="p-1.5 rounded-lg bg-black/40 shadow-inner" style={{ color }}>
+          <div className="p-1.5 rounded-lg bg-[#222] border border-[#333] shadow-sm" style={{ color }}>
             {getIcon(data.type)}
           </div>
           <div className="flex flex-col">
-            <span className="text-[9px] font-black text-white/90 uppercase tracking-[0.2em] leading-tight">
+            <span className="text-[9px] font-black text-slate-200 uppercase tracking-[0.2em] leading-tight">
               {data.label || data.type}
             </span>
             {data.params?.smVarId && (
@@ -865,17 +872,17 @@ export const XBlockNode = ({ data, id, selected }: any) => {
         <div className="flex items-center gap-1 z-10">
 
           {data.type === 'Scope' && (
-            <div className="flex bg-black/30 p-0.5 rounded-lg border border-white/5">
+            <div className="flex bg-[#222] p-0.5 rounded-lg border border-[#333]">
               <button 
                 onClick={(e) => { e.stopPropagation(); data.onOpenScope && data.onOpenScope(id); }}
-                className="p-1.5 hover:bg-white/10 rounded-md transition-all text-blue-400/70 hover:text-blue-400"
+                className="p-1.5 hover:bg-[#333] rounded-md transition-all text-blue-400 hover:text-blue-500"
                 title="Full Screen Scope"
               >
                 <Maximize2 size={12} />
               </button>
               <button 
                 onClick={(e) => { e.stopPropagation(); downloadCSV(); }}
-                className="p-1.5 hover:bg-white/10 rounded-md transition-all text-emerald-400/70 hover:text-emerald-400"
+                className="p-1.5 hover:bg-[#333] rounded-md transition-all text-emerald-400 hover:text-emerald-500"
                 title="Export Data"
               >
                 <Download size={12} />
@@ -887,8 +894,8 @@ export const XBlockNode = ({ data, id, selected }: any) => {
 
       <div className="flex flex-1 p-3 gap-5 relative min-h-0">
         {/* Decorative Grid Overlay for Node Body */}
-        <div className="absolute inset-0 opacity-[0.02] pointer-events-none" 
-             style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '10px 10px' }} />
+        <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
+             style={{ backgroundImage: 'radial-gradient(circle, rgba(255, 255, 255, 0.15) 1px, transparent 1px)', backgroundSize: '10px 10px' }} />
 
         {/* Inputs Column */}
         <div className="flex flex-col flex-1 justify-center gap-2 z-10">
@@ -900,7 +907,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
           {['ROBOT_VACUUM_DIGITAL_TWIN', 'ROBOT_VACUUM_ENVIRONMENT', 'ROBOT_VACUUM_VISUALIZATION'].includes(data.type) ? (
             <RobotTwinCanvas state={data.state} />
           ) : data.type === 'Scope' ? (
-            <div className="w-full flex-1 min-h-[90px] bg-black/60 rounded-xl border border-white/5 p-2 shadow-inner group/scope overflow-hidden relative">
+            <div className="w-full flex-1 min-h-[90px] bg-slate-950 rounded-xl border border-slate-800 p-2 shadow-inner group/scope overflow-hidden relative">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(16,185,129,0.1),transparent)]" />
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data.state?.history?.slice(-50).map((sample: any, i: number) => {
@@ -935,10 +942,10 @@ export const XBlockNode = ({ data, id, selected }: any) => {
             </div>
           ) : data.type === 'Subsystem' ? (
             <div className="flex flex-col items-center group/sub cursor-pointer">
-              <div className="p-3 rounded-2xl bg-white/5 border border-white/10 group-hover/sub:bg-[#c9a86c]/10 group-hover/sub:border-[#c9a86c]/30 transition-all duration-500 shadow-xl">
+              <div className="p-3 rounded-2xl bg-[#222] border border-[#333] group-hover/sub:bg-[#c9a86c]/15 group-hover/sub:border-[#c9a86c]/30 transition-all duration-500 shadow-md">
                 <Layers size={24} className="text-[#c9a86c] drop-shadow-[0_0_10px_rgba(201,168,108,0.3)]" />
               </div>
-              <span className="text-[7px] font-black text-gray-500 uppercase tracking-widest mt-2 group-hover/sub:text-[#c9a86c]">Double-click to Enter</span>
+              <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest mt-2 group-hover/sub:text-[#c9a86c]">Double-click to Enter</span>
             </div>
           ) : data.type === 'DOE_MODEL' ? (
             <div className="flex flex-col items-center text-center">
@@ -949,7 +956,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
                  {data.modelType || 'RSM'} MODEL
                </span>
                {data.metrics?.R2 !== undefined && (
-                 <div className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                 <div className="px-2 py-0.5 rounded-full bg-emerald-950/30 border border-emerald-900/30">
                    <span className="text-[9px] font-mono font-bold text-emerald-400">
                      R²: {(data.metrics.R2 * 100).toFixed(1)}%
                    </span>
@@ -958,14 +965,14 @@ export const XBlockNode = ({ data, id, selected }: any) => {
             </div>
           ) : data.type === 'FUZZY_INFERENCE_SYSTEM' ? (
             <div className="flex flex-col items-center text-center">
-               <div className="p-3 rounded-2xl bg-violet-500/10 border border-violet-500/20 mb-3 shadow-[0_0_15px_rgba(139,92,246,0.15)]">
+               <div className="p-3 rounded-2xl bg-violet-950/30 border border-violet-900/30 mb-3 shadow-[0_0_15px_rgba(139,92,246,0.15)]">
                    <Cpu size={28} className="text-violet-400 drop-shadow-[0_0_8px_rgba(139,92,246,0.4)]" />
                </div>
                <span className="text-[8px] font-black text-violet-400 uppercase tracking-[0.2em] mb-1">
                  {data.params?.type || 'Mamdani'} FIS
                </span>
-               <div className="px-2 py-0.5 rounded-full bg-violet-500/10 border border-violet-500/20">
-                 <span className="text-[9px] font-mono font-bold text-violet-300">
+               <div className="px-2 py-0.5 rounded-full bg-violet-950/30 border border-violet-900/30">
+                 <span className="text-[9px] font-mono font-bold text-violet-400">
                    {(data.params?.rules || []).length} Rules
                  </span>
                </div>
@@ -974,22 +981,22 @@ export const XBlockNode = ({ data, id, selected }: any) => {
             <div className="flex flex-col items-center select-text">
                {data.type === 'TRANSFER_FUNCTION' && (
                  <div className="flex flex-col items-center py-2 px-3 min-w-[120px]">
-                   <div className="font-mono text-[11px] text-emerald-300 text-center leading-snug whitespace-nowrap">
+                   <div className="font-mono text-[11px] text-emerald-400 text-center leading-snug whitespace-nowrap">
                      {polyToString(data.params?.numerator || [1], 's')}
                    </div>
-                   <div className="w-full h-[1.5px] bg-emerald-500/50 my-1.5 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.3)]" />
-                   <div className="font-mono text-[11px] text-emerald-300 text-center leading-snug whitespace-nowrap">
+                   <div className="w-full h-[1.5px] bg-emerald-500/40 my-1.5 rounded-full" />
+                   <div className="font-mono text-[11px] text-emerald-400 text-center leading-snug whitespace-nowrap">
                      {polyToString(data.params?.denominator || [1, 1], 's')}
                    </div>
                  </div>
                )}
                {data.type === 'DISCRETE_TRANSFER_FUNCTION' && (
                  <div className="flex flex-col items-center py-2 px-3 min-w-[120px]">
-                   <div className="font-mono text-[11px] text-emerald-300 text-center leading-snug whitespace-nowrap">
+                   <div className="font-mono text-[11px] text-emerald-400 text-center leading-snug whitespace-nowrap">
                      {polyToString(data.params?.numerator || [1], 'z')}
                    </div>
-                   <div className="w-full h-[1.5px] bg-emerald-500/50 my-1.5 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.3)]" />
-                   <div className="font-mono text-[11px] text-emerald-300 text-center leading-snug whitespace-nowrap">
+                   <div className="w-full h-[1.5px] bg-emerald-500/40 my-1.5 rounded-full" />
+                   <div className="font-mono text-[11px] text-emerald-400 text-center leading-snug whitespace-nowrap">
                      {polyToString(data.params?.denominator || [1, 1], 'z')}
                    </div>
                  </div>
@@ -998,11 +1005,11 @@ export const XBlockNode = ({ data, id, selected }: any) => {
                  const { num, den } = zpgToString(data.params?.zeros || [], data.params?.poles || [-1], data.params?.gain ?? 1, 's');
                  return (
                    <div className="flex flex-col items-center py-2 px-3 min-w-[120px]">
-                     <div className="font-mono text-[11px] text-emerald-300 text-center leading-snug whitespace-nowrap">
+                     <div className="font-mono text-[11px] text-emerald-400 text-center leading-snug whitespace-nowrap">
                        {num}
                      </div>
-                     <div className="w-full h-[1.5px] bg-emerald-500/50 my-1.5 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.3)]" />
-                     <div className="font-mono text-[11px] text-emerald-300 text-center leading-snug whitespace-nowrap">
+                     <div className="w-full h-[1.5px] bg-emerald-500/40 my-1.5 rounded-full" />
+                     <div className="font-mono text-[11px] text-emerald-400 text-center leading-snug whitespace-nowrap">
                        {den}
                      </div>
                    </div>
@@ -1011,26 +1018,82 @@ export const XBlockNode = ({ data, id, selected }: any) => {
             </div>
           ) : (
             <div className="flex flex-col items-center">
-               <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 mb-2 shadow-inner">
+               <div className="p-3 rounded-xl bg-[#222] border border-[#333] mb-2 shadow-inner">
                   <div style={{ color }} className="scale-150 drop-shadow-[0_0_8px_currentColor]">{getIcon(data.type)}</div>
                </div>
                {data.type === 'Constant' && (
-                 <div className="px-2 py-0.5 rounded-full bg-black/40 border border-white/5 text-[10px] font-mono font-bold text-white/70 tabular-nums">
+                 <div className="px-2 py-0.5 rounded-full bg-[#222] border border-[#333] text-[10px] font-mono font-bold text-slate-300 tabular-nums">
                    {data.params?.value}
                  </div>
                )}
                {data.type === 'Step' && (
-                 <div className="px-2 py-0.5 rounded bg-black/40 border border-white/5 text-[9px] font-mono text-center font-bold text-white/70 tabular-nums">
+                 <div className="px-2 py-0.5 rounded bg-[#222] border border-[#333] text-[9px] font-mono text-center font-bold text-slate-300 tabular-nums">
                    <div>t ≥ {data.params?.stepTime}</div>
-                   <div className="text-[8px] text-gray-500 font-sans">{String(data.params?.initialValue)} → {String(data.params?.finalValue)}</div>
+                   <div className="text-[8px] text-slate-500 font-sans">{String(data.params?.initialValue)} → {String(data.params?.finalValue)}</div>
                  </div>
                )}
                {data.type === 'GAIN' && (
-                 <div className="flex items-center gap-1.5 text-[10px] font-black text-white/40 uppercase tracking-tighter">
+                 <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-500 uppercase tracking-tighter">
                    <span>GAIN</span>
                    <span className="text-[#c9a86c] font-mono">{data.params?.gain}</span>
                  </div>
                )}
+                {data.type === 'MatrixConcat' && (
+                  <div className="px-2 py-0.5 rounded bg-[#222] border border-[#333] text-[9px] font-mono font-bold text-slate-300">
+                    Axis: {data.params?.axis === 1 ? 'Horizontal' : 'Vertical'}
+                  </div>
+                )}
+                {data.type === 'MatrixDiag' && (
+                  <div className="px-2 py-0.5 rounded bg-[#222] border border-[#333] text-[9px] font-mono font-bold text-slate-300 capitalize">
+                    Mode: {data.params?.diagMode || 'create'}
+                  </div>
+                )}
+                {data.type === 'IdentityMatrix' && (
+                  <div className="px-2 py-0.5 rounded bg-[#222] border border-[#333] text-[9px] font-mono font-bold text-slate-300">
+                    {data.params?.dim ?? 3} x {data.params?.dim ?? 3}
+                  </div>
+                )}
+                {data.type === 'SubMatrix' && (
+                  <div className="px-2 py-0.5 rounded bg-[#222] border border-[#333] text-[8px] font-mono font-bold text-slate-300 leading-normal text-center">
+                    <div>Rows: [{data.params?.rowStart ?? 0}, {data.params?.rowEnd ?? 0}]</div>
+                    <div>Cols: [{data.params?.colStart ?? 0}, {data.params?.colEnd ?? 0}]</div>
+                  </div>
+                )}
+               {data.type === 'SUM_JUNCTION' && (() => {
+                  const signs: string[] = data.params?.signs || Array(Math.max(2, data.params?.numInputs || 2)).fill('+');
+                  return (
+                    <div className="flex flex-col items-center">
+                      {/* Simulink-style circle with Sigma */}
+                      <div
+                        className="flex items-center justify-center rounded-full border-2 shadow-sm"
+                        style={{
+                          width: 42,
+                          height: 42,
+                          borderColor: '#28a745',
+                          background: 'radial-gradient(circle, rgba(40,167,69,0.08) 0%, rgba(0,0,0,0) 80%)'
+                        }}
+                      >
+                        <Sigma size={18} style={{ color: '#28a745' }} />
+                      </div>
+                      {/* Signs display */}
+                      <div className="flex flex-wrap justify-center gap-1 mt-1.5 max-w-[90px]">
+                        {signs.map((s, i) => (
+                          <span
+                            key={i}
+                            className="text-[9px] font-black font-mono leading-none px-1 py-0.5 rounded"
+                            style={{
+                              color: s === '-' ? '#ef4444' : '#28a745',
+                              background: s === '-' ? 'rgba(239,68,68,0.15)' : 'rgba(40,167,69,0.15)',
+                              border: `1px solid ${s === '-' ? 'rgba(239,68,68,0.3)' : 'rgba(40,167,69,0.3)'}`
+                            }}
+                          >
+                            {s === '-' ? '−' : '+'}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
             </div>
           )}
         </div>

@@ -5,6 +5,12 @@
 
 :root {
   color-scheme: dark;
+  --bg-main: #181818;
+  --bg-main-rgb: 24, 24, 24;
+  --bg-panel: #242424;
+  --bg-panel-rgb: 36, 36, 36;
+  --border-dark: #323232;
+  --border-med: #424242;
 }
 
 body {
@@ -14,7 +20,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #0a0a0a;
+  background-color: var(--bg-main);
   color: white;
   overflow: hidden;
 }
@@ -30,22 +36,22 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0a0a0a;
+  background: var(--bg-main);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #222;
+  background: var(--border-dark);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #333;
+  background: var(--border-med);
 }
 
 .react-flow__node {
   border-radius: 8px;
-  background: #1a1a1a;
-  border: 1px solid #333;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-med);
   color: white;
   font-size: 12px;
 }
@@ -54,7 +60,7 @@ body {
   width: 8px;
   height: 8px;
   background: #666;
-  border: 2px solid #1a1a1a;
+  border: 2px solid var(--bg-panel);
 }
 
 .react-flow__edge-path {
@@ -63,13 +69,13 @@ body {
 }
 
 .react-flow__controls {
-  background: #1a1a1a;
-  border: 1px solid #333;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-med);
 }
 
 .react-flow__controls-button {
-  background: #222;
-  border-bottom: 1px solid #333;
+  background: var(--border-dark);
+  border-bottom: 1px solid var(--border-med);
   fill: #fff;
 }
 
@@ -87,7 +93,7 @@ input[type=range]:focus {
 
 input[type=range]::-webkit-slider-runnable-track {
   height: 4px;
-  background: #333;
+  background: var(--border-med);
   border-radius: 2px;
 }
 
@@ -103,7 +109,7 @@ input[type=range]::-webkit-slider-thumb {
 
 input[type=range]::-moz-range-track {
   height: 4px;
-  background: #333;
+  background: var(--border-med);
   border-radius: 2px;
 }
 
@@ -129,7 +135,7 @@ input[type=range]::-moz-range-thumb {
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(201, 168, 108, 0.5); /* Premium gold-copper thumb */
   border-radius: 5px;
-  border: 2px solid #141414; /* Inset padding effect */
+  border: 2px solid var(--bg-main); /* Inset padding effect matches background */
   transition: background 0.3s;
 }
 
@@ -163,7 +169,7 @@ input[type=range]::-moz-range-thumb {
   width: 10px !important;
   height: 10px !important;
   border-radius: 2px !important;
-  border: 2px solid #0a0a0a !important;
+  border: 2px solid var(--bg-main) !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
   cursor: crosshair !important;
@@ -222,6 +228,35 @@ input[type=range]::-moz-range-thumb {
     r: 5px;
     opacity: 1;
   }
+}
+
+/* Tailwind Compiled Utility Selector Overrides for Global Theming */
+.bg-\[\#0a0a0a\] {
+  background-color: var(--bg-main) !important;
+}
+.bg-\[\#1a1a1a\] {
+  background-color: var(--bg-panel) !important;
+}
+.bg-\[\#0a0a0a\]\/80 {
+  background-color: rgba(var(--bg-main-rgb), 0.8) !important;
+}
+.bg-\[\#1a1a1a\]\/95 {
+  background-color: rgba(var(--bg-panel-rgb), 0.95) !important;
+}
+.border-\[\#222\] {
+  border-color: var(--border-dark) !important;
+}
+.border-\[\#333\] {
+  border-color: var(--border-med) !important;
+}
+.text-\[\#0a0a0a\] {
+  color: var(--bg-main) !important;
+}
+.hover\:bg-\[\#1a1a1a\]:hover {
+  background-color: var(--bg-panel) !important;
+}
+.hover\:bg-\[\#222\]:hover {
+  background-color: var(--border-dark) !important;
 }
 
 

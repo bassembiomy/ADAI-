@@ -1320,7 +1320,13 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
       headers,
       ...history.map((h: any) => [
         h.t, 
-        ...Array.from({ length: numSignals }, (_, i) => h[`y${i+1}`])
+        ...Array.from({ length: numSignals }, (_, i) => {
+          const rawVal = h[`y${i+1}_raw`] !== undefined ? h[`y${i+1}_raw`] : h[`y${i+1}`];
+          if (Array.isArray(rawVal)) {
+            return `"${JSON.stringify(rawVal).replace(/"/g, '""')}"`;
+          }
+          return rawVal;
+        })
       ])
     ];
     
@@ -1400,13 +1406,13 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
                   )}
                   <button 
                     onClick={() => setShowLidar(prev => !prev)}
-                    className={`px-2.5 py-1 rounded-md border text-[9px] font-black uppercase transition-all ${showLidar ? 'bg-red-500/10 border-red-500/35 text-red-400' : 'bg-white/5 border-white/10 text-gray-300'}`}
+                    className={`px-2.5 py-1 rounded-md border text-[9px] font-black uppercase transition-all ${showLidar ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'}`}
                   >
                     LiDAR: {showLidar ? 'SHOW' : 'HIDE'}
                   </button>
                   <button 
                     onClick={() => setShowSlam(prev => !prev)}
-                    className={`px-2.5 py-1 rounded-md border text-[9px] font-black uppercase transition-all ${showSlam ? 'bg-blue-500/10 border-blue-500/35 text-blue-400' : 'bg-white/5 border-white/10 text-gray-300'}`}
+                    className={`px-2.5 py-1 rounded-md border text-[9px] font-black uppercase transition-all ${showSlam ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'}`}
                   >
                     SLAM: {showSlam ? 'SHOW' : 'HIDE'}
                   </button>
@@ -1421,15 +1427,15 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
                   onMouseUp={handleMouseUp}
                   onMouseLeave={handleMouseUp}
                   onWheel={handleWheel}
-                  className={`rounded-xl shadow-2xl border border-white/10 ${viewMode === '3d' ? 'cursor-grab active:cursor-grabbing' : ''}`} 
+                  className={`rounded-xl shadow-2xl border border-slate-200 ${viewMode === '3d' ? 'cursor-grab active:cursor-grabbing' : ''}`} 
                 />
 
                 {/* HUD Overlay inside Canvas Panel */}
-                <div className="absolute bottom-4 left-4 right-4 flex justify-between bg-black/75 backdrop-blur-md border border-white/10 px-4 py-2.5 rounded-xl text-[10px] font-mono z-10 shadow-lg">
+                <div className="absolute bottom-4 left-4 right-4 flex justify-between bg-white/90 backdrop-blur-md border border-slate-200 px-4 py-2.5 rounded-xl text-[10px] font-mono z-10 shadow-lg text-slate-700">
                   <div className="flex gap-4">
                     <div>
-                      <span className="text-gray-500 uppercase text-[8px] font-bold block">Cleanup Progress</span>
-                      <span className="text-amber-400 font-bold">
+                      <span className="text-slate-400 uppercase text-[8px] font-bold block">Cleanup Progress</span>
+                      <span className="text-amber-600 font-bold">
                         {(() => {
                           const total = dirtParticlesRef.current.length;
                           const cleaned = dirtParticlesRef.current.filter(p => !p.active).length;
@@ -1438,108 +1444,108 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
                       </span>
                     </div>
                     <div>
-                      <span className="text-gray-500 uppercase text-[8px] font-bold block">Battery</span>
-                      <span className={`${(state.battery_level ?? 100) < 20 ? 'text-red-400' : 'text-emerald-400'} font-bold`}>
+                      <span className="text-slate-400 uppercase text-[8px] font-bold block">Battery</span>
+                      <span className={`${(state.battery_level ?? 100) < 20 ? 'text-red-600' : 'text-emerald-600'} font-bold`}>
                         {Number(state.battery_level !== undefined ? state.battery_level : (state.battery ?? 100)).toFixed(1)}%
                       </span>
                     </div>
                     <div>
-                      <span className="text-gray-500 uppercase text-[8px] font-bold block">Dustbin Level</span>
-                      <span className={`${(state.dustbin_level ?? 0) > 85 ? 'text-red-400' : 'text-sky-400'} font-bold`}>
+                      <span className="text-slate-400 uppercase text-[8px] font-bold block">Dustbin Level</span>
+                      <span className={`${(state.dustbin_level ?? 0) > 85 ? 'text-red-600' : 'text-sky-600'} font-bold`}>
                         {Number(state.dustbin_level !== undefined ? state.dustbin_level : (state.dust ?? 0)).toFixed(1)}%
                       </span>
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-gray-500 uppercase text-[8px] font-bold block">LiDAR Scanner Status</span>
-                    <span className="text-emerald-400 font-bold animate-pulse">ACTIVE (8Hz)</span>
+                    <span className="text-slate-400 uppercase text-[8px] font-bold block">LiDAR Scanner Status</span>
+                    <span className="text-emerald-600 font-bold animate-pulse">ACTIVE (8Hz)</span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex-[4] overflow-y-auto space-y-6 bg-black/20 border border-white/5 rounded-2xl p-6 min-h-0">
+              <div className="flex-[4] overflow-y-auto space-y-6 bg-slate-50 border border-slate-200 rounded-2xl p-6 min-h-0">
                 <div className="space-y-4">
-                  <div className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <div className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                     <Activity size={14} className="text-amber-500" />
                     Real-time Telemetry
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-1">
-                      <span className="text-[9px] text-gray-500 uppercase font-black">Actual Pose</span>
-                      <div className="text-xs font-mono font-bold text-gray-200">
+                    <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm space-y-1">
+                      <span className="text-[9px] text-slate-400 uppercase font-black">Actual Pose</span>
+                      <div className="text-xs font-mono font-bold text-slate-700">
                         X: {Number(state.x ?? 0).toFixed(3)} m<br/>
                         Y: {Number(state.y ?? 0).toFixed(3)} m<br/>
                         θ: {Number(state.theta ?? 0).toFixed(3)} rad
                       </div>
                     </div>
 
-                    <div className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-1">
-                      <span className="text-[9px] text-gray-500 uppercase font-black">Estimated Pose</span>
-                      <div className="text-xs font-mono font-bold text-gray-200">
+                    <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm space-y-1">
+                      <span className="text-[9px] text-slate-400 uppercase font-black">Estimated Pose</span>
+                      <div className="text-xs font-mono font-bold text-slate-700">
                         X: {Number(state.x_est ?? 0).toFixed(3)} m<br/>
                         Y: {Number(state.y_est ?? 0).toFixed(3)} m<br/>
                         θ: {Number(state.theta_est ?? 0).toFixed(3)} rad
                       </div>
                     </div>
 
-                    <div className="col-span-2 p-4 rounded-xl bg-white/5 border border-white/5 space-y-2">
-                      <span className="text-[9px] text-gray-500 uppercase font-black">Estimation Drift Error</span>
+                    <div className="col-span-2 p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                      <span className="text-[9px] text-slate-500 uppercase font-black">Estimation Drift Error</span>
                       <div className="grid grid-cols-3 gap-2">
                         <div>
-                          <div className="text-[8px] text-gray-600 font-bold uppercase">ΔX (m)</div>
-                          <div className="text-xs font-mono font-bold text-red-400">{errorX.toFixed(4)}</div>
+                          <div className="text-[8px] text-slate-400 font-bold uppercase">ΔX (m)</div>
+                          <div className="text-xs font-mono font-bold text-red-600">{errorX.toFixed(4)}</div>
                         </div>
                         <div>
-                          <div className="text-[8px] text-gray-600 font-bold uppercase">ΔY (m)</div>
-                          <div className="text-xs font-mono font-bold text-red-400">{errorY.toFixed(4)}</div>
+                          <div className="text-[8px] text-slate-400 font-bold uppercase">ΔY (m)</div>
+                          <div className="text-xs font-mono font-bold text-red-600">{errorY.toFixed(4)}</div>
                         </div>
                         <div>
-                          <div className="text-[8px] text-gray-600 font-bold uppercase">Δθ (rad)</div>
-                          <div className="text-xs font-mono font-bold text-red-400">{errorTheta.toFixed(4)}</div>
+                          <div className="text-[8px] text-slate-400 font-bold uppercase">Δθ (rad)</div>
+                          <div className="text-xs font-mono font-bold text-red-600">{errorTheta.toFixed(4)}</div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="col-span-2 p-4 rounded-xl bg-amber-500/[0.03] border border-amber-500/10 space-y-2">
+                    <div className="col-span-2 p-4 rounded-xl bg-[#0a0a0a] border border-[#333] space-y-2">
                       <span className="text-[9px] text-amber-500 uppercase font-black tracking-wider block">
                         Dynamics & Energy Routing (SRS v2.0)
                       </span>
-                      <div className="grid grid-cols-2 gap-4 font-mono text-xs text-gray-300">
+                      <div className="grid grid-cols-2 gap-4 font-mono text-xs text-[#e0e0e0]">
                         <div>
-                          <span className="text-[8px] text-gray-600 font-bold uppercase block">Linear Speed V (m/s)</span>
-                          <span className="text-gray-200 font-bold">
+                          <span className="text-[8px] text-slate-400 font-bold uppercase block">Linear Speed V (m/s)</span>
+                          <span className="text-[#e0e0e0] font-bold">
                             {Number(state.v_chassis ?? 0).toFixed(3)}
                           </span>
                         </div>
                         <div>
-                          <span className="text-[8px] text-gray-600 font-bold uppercase block">Angular Speed ω (rad/s)</span>
-                          <span className="text-gray-200 font-bold">
+                          <span className="text-[8px] text-slate-500 font-bold uppercase block">Angular Speed ω (rad/s)</span>
+                          <span className="text-[#e0e0e0] font-bold">
                             {Number(state.w_chassis ?? 0).toFixed(3)}
                           </span>
                         </div>
                         <div>
-                          <span className="text-[8px] text-gray-600 font-bold uppercase block">Optimal Energy E_opt</span>
-                          <span className="text-gray-200 font-bold">
+                          <span className="text-[8px] text-slate-400 font-bold uppercase block">Optimal Energy E_opt</span>
+                          <span className="text-[#e0e0e0] font-bold">
                             {Number(state.E_opt ?? 0).toFixed(3)}%
                           </span>
                         </div>
                         <div>
-                          <span className="text-[8px] text-gray-600 font-bold uppercase block">Remaining Path E_path</span>
-                          <span className="text-gray-200 font-bold">
+                          <span className="text-[8px] text-slate-500 font-bold uppercase block">Remaining Path E_path</span>
+                          <span className="text-[#e0e0e0] font-bold">
                             {Number(state.E_path ?? 0).toFixed(3)}%
                           </span>
                         </div>
-                        <div className="col-span-2 flex justify-between items-center pt-1 border-t border-white/5">
+                        <div className="col-span-2 flex justify-between items-center pt-1 border-t border-[#333]">
                           <div>
-                            <span className="text-[8px] text-gray-600 font-bold uppercase">Energy Ratio Re</span>
+                            <span className="text-[8px] text-slate-500 font-bold uppercase">Energy Ratio Re</span>
                             <div className="text-sm font-bold text-amber-400">
                               {Number(state.Re ?? 1.0).toFixed(3)}
                             </div>
                           </div>
                           <div className="text-right">
-                            <span className="text-[8px] text-gray-600 font-bold uppercase block">Routing Mode</span>
-                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${state.using_constrained ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}`}>
+                            <span className="text-[8px] text-slate-500 font-bold uppercase block">Routing Mode</span>
+                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${state.using_constrained ? 'bg-amber-900/20 text-amber-400 border border-amber-700/30' : 'bg-emerald-900/20 text-emerald-400 border border-emerald-700/30'}`}>
                               {state.using_constrained ? 'Constrained A*' : 'Standard A*'}
                             </span>
                           </div>
@@ -1550,24 +1556,24 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
                 </div>
 
                 <div className="space-y-4">
-                  <div className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <div className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                     <BarChart2 size={14} className="text-amber-500" />
                     LiDAR Laser Scans
                   </div>
-                  <div className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-2 font-mono text-[10px]">
+                  <div className="p-4 rounded-xl bg-[#0a0a0a] border border-[#333] space-y-2 font-mono text-[10px]">
                     {state.lidarRanges?.map((val: number, idx: number) => {
                       const percentage = Math.min(100, (val / (block.params?.lidar_max_range || 4.0)) * 100);
                       const angleNames = ['0° (F)', '45° (FL)', '90° (L)', '135° (BL)', '180° (B)', '-135° (BR)', '-90° (R)', '-45° (FR)'];
                       return (
                         <div key={idx} className="flex items-center gap-3">
-                          <span className="w-16 font-bold text-gray-400">{angleNames[idx]}</span>
-                          <div className="flex-1 h-2 bg-slate-950 rounded overflow-hidden">
+                          <span className="w-16 font-bold text-slate-500">{angleNames[idx]}</span>
+                          <div className="flex-1 h-2 bg-[#222] rounded overflow-hidden">
                             <div 
                               className="h-full bg-red-500/80 rounded" 
                               style={{ width: `${percentage}%` }}
                             />
                           </div>
-                          <span className="w-10 text-right font-bold text-red-400">{val.toFixed(2)}m</span>
+                          <span className="w-10 text-right font-bold text-red-655">{val.toFixed(2)}m</span>
                         </div>
                       );
                     })}
@@ -1575,15 +1581,15 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
                 </div>
 
                 <div className="space-y-3">
-                  <div className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <div className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                     <Info size={14} className="text-amber-500" />
                     Mathematical Principles
                   </div>
-                  <div className="p-4 rounded-xl bg-amber-500/[0.02] border border-amber-500/10 text-[10px] text-gray-400 space-y-3 leading-relaxed">
+                  <div className="p-4 rounded-xl bg-[#0a0a0a] border border-[#333] text-[10px] text-slate-400 space-y-3 leading-relaxed">
                     <p>
                       <strong>1. Chassis Kinematics (Plant)</strong><br />
                       The differential drive forward kinematics translate Left/Right wheel velocities to linear ($V$) and angular ($\omega$) velocities:
-                      <code className="block p-1 bg-slate-900 rounded my-1 text-[9px] text-slate-300">
+                      <code className="block p-1 bg-[#111] border border-[#333] rounded my-1 text-[9px] text-[#c9a86c]">
                         V = R * (ω_R + ω_L) / 2<br />
                         ω = R * (ω_R - ω_L) / L_sep
                       </code>
@@ -1591,7 +1597,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
                     <p>
                       <strong>2. Sensor Fusion complementary filter</strong><br />
                       Dead-reckoning odometry drifts due to wheel slippage. The complementary filter corrects the estimated state towards the true coordinates:
-                      <code className="block p-1 bg-slate-900 rounded my-1 text-[9px] text-slate-300">
+                      <code className="block p-1 bg-[#111] border border-[#333] rounded my-1 text-[9px] text-[#c9a86c]">
                         x_est = x_est_raw + K_slam * (x_true - x_est)<br />
                         y_est = y_est_raw + K_slam * (y_true - y_est)
                       </code>
@@ -1610,19 +1616,19 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
   return (
     <Dialog.Root open={true} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] h-[85vh] bg-[#141414] border border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col z-[101] outline-none">
+        <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100]" />
+        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] h-[85vh] bg-[#111] border border-[#333] rounded-xl shadow-2xl overflow-hidden flex flex-col z-[101] outline-none">
           {/* Header */}
-          <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between bg-black/20">
+          <div className="px-6 py-4 border-b border-[#333] flex items-center justify-between bg-[#1a1a1a]">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400">
+              <div className="p-2 rounded-lg bg-blue-900/20 text-blue-400 border border-blue-800/30">
                 <Activity size={20} />
               </div>
               <div>
-                <Dialog.Title className="text-lg font-black text-white uppercase tracking-wider">
+                <Dialog.Title className="text-lg font-black text-[#e0e0e0] uppercase tracking-wider">
                   Scope Viewer
                 </Dialog.Title>
-                <div className="text-[10px] font-mono text-gray-500 uppercase tracking-tighter">
+                <div className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">
                   Block ID: {block.id} • {numSignals} Channels • {history.length} Samples
                 </div>
               </div>
@@ -1631,7 +1637,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
             <div className="flex items-center gap-2">
               <button 
                 onClick={downloadCSV}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all text-xs font-bold"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-900/20 text-emerald-400 hover:bg-emerald-900/30 border border-emerald-800/30 transition-all text-xs font-bold"
               >
                 <Download size={14} />
                 Export CSV
@@ -1641,8 +1647,8 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
                   onClick={() => setShowSettings(!showSettings)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all text-xs font-bold ${
                     showSettings 
-                      ? 'bg-[#c9a86c]/20 text-[#c9a86c] border-[#c9a86c]/30' 
-                      : 'bg-white/5 text-gray-300 hover:bg-white/10 border-white/5'
+                      ? 'bg-[#c9a86c]/10 text-[#c9a86c] border-[#c9a86c]/30' 
+                      : 'bg-[#222] text-slate-400 hover:bg-[#333] border-[#333]'
                   }`}
                   title="Scope Settings"
                 >
@@ -1652,7 +1658,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
               )}
               <button 
                 onClick={onClose}
-                className="p-2 hover:bg-white/5 rounded-lg text-gray-400 hover:text-white transition-all"
+                className="p-2 hover:bg-[#333] rounded-lg text-slate-500 hover:text-slate-200 transition-all"
               >
                 <X size={20} />
               </button>
@@ -1662,16 +1668,16 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
           <div className="flex-1 flex overflow-hidden">
             {/* Collapsible settings panel */}
             {showSettings && onUpdate && (
-              <div className="w-64 border-r border-white/5 bg-black/20 p-5 space-y-4 flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
-                <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Scope Settings</div>
+              <div className="w-64 border-r border-[#333] bg-[#1a1a1a] p-5 space-y-4 flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
+                <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Scope Settings</div>
                 
                 {/* Time Range */}
                 <div className="space-y-1">
-                  <label className="block text-[9px] font-bold text-gray-400 uppercase">Time Range</label>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase">Time Range</label>
                   <select
                     value={String(block.params?.timeRange || 'auto')}
                     onChange={(e) => onUpdate({ ...block.params, timeRange: e.target.value })}
-                    className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#c9a86c] font-bold rounded focus:border-[#c9a86c] outline-none"
+                    className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] focus:border-[#c9a86c] outline-none cursor-pointer"
                   >
                     <option value="auto">Auto (Full)</option>
                     <option value="1">1s</option>
@@ -1685,11 +1691,11 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
 
                 {/* Limit Data Points */}
                 <div className="space-y-1">
-                  <label className="block text-[9px] font-bold text-gray-400 uppercase">Limit Data Points</label>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase">Limit Data Points</label>
                   <select
                     value={String(block.params?.limitDataPoints !== false)}
                     onChange={(e) => onUpdate({ ...block.params, limitDataPoints: e.target.value === 'true' })}
-                    className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-gray-300 rounded focus:border-[#c9a86c] outline-none"
+                    className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] focus:border-[#c9a86c] outline-none cursor-pointer"
                   >
                     <option value="true">Yes</option>
                     <option value="false">No</option>
@@ -1698,46 +1704,46 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
 
                 {/* Buffer Size */}
                 <div className="space-y-1">
-                  <label className="block text-[9px] font-bold text-gray-400 uppercase">Max Points (Buffer)</label>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase">Max Points (Buffer)</label>
                   <input
                     type="number"
                     value={block.params?.bufferSize || 1000}
                     onChange={(e) => onUpdate({ ...block.params, bufferSize: parseInt(e.target.value) || 1000 })}
-                    className="w-full text-xs px-2.5 py-1 border border-[#333] bg-[#0a0a0a] text-white rounded focus:border-[#c9a86c] outline-none font-mono"
+                    className="w-full text-xs px-2.5 py-1 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] rounded focus:border-[#c9a86c] outline-none font-mono"
                   />
                 </div>
 
                 {/* Decimation */}
                 <div className="space-y-1">
-                  <label className="block text-[9px] font-bold text-gray-400 uppercase">Decimation</label>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase">Decimation</label>
                   <input
                     type="number"
                     min="1"
                     value={block.params?.decimation || 1}
                     onChange={(e) => onUpdate({ ...block.params, decimation: parseInt(e.target.value) || 1 })}
-                    className="w-full text-xs px-2.5 py-1 border border-[#333] bg-[#0a0a0a] text-white rounded focus:border-[#c9a86c] outline-none font-mono"
+                    className="w-full text-xs px-2.5 py-1 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] rounded focus:border-[#c9a86c] outline-none font-mono"
                   />
                 </div>
 
                 {/* Sample Time */}
                 <div className="space-y-1">
-                  <label className="block text-[9px] font-bold text-gray-400 uppercase">Sample Time (s)</label>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase">Sample Time (s)</label>
                   <input
                     type="number"
                     step="any"
                     value={block.params?.sampleTime ?? -1}
                     onChange={(e) => onUpdate({ ...block.params, sampleTime: parseFloat(e.target.value) || -1 })}
-                    className="w-full text-xs px-2.5 py-1 border border-[#333] bg-[#0a0a0a] text-white rounded focus:border-[#c9a86c] outline-none font-mono"
+                    className="w-full text-xs px-2.5 py-1 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] rounded focus:border-[#c9a86c] outline-none font-mono"
                   />
                 </div>
 
                 {/* Show Grid */}
                 <div className="space-y-1">
-                  <label className="block text-[9px] font-bold text-gray-400 uppercase">Grid</label>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase">Grid</label>
                   <select
                     value={String(block.params?.showGrid !== false)}
                     onChange={(e) => onUpdate({ ...block.params, showGrid: e.target.value === 'true' })}
-                    className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-gray-300 rounded focus:border-[#c9a86c] outline-none"
+                    className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] focus:border-[#c9a86c] outline-none cursor-pointer"
                   >
                     <option value="true">Show</option>
                     <option value="false">Hide</option>
@@ -1746,11 +1752,11 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
 
                 {/* Show Legend */}
                 <div className="space-y-1">
-                  <label className="block text-[9px] font-bold text-gray-400 uppercase">Legend</label>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase">Legend</label>
                   <select
                     value={String(block.params?.showLegend !== false)}
                     onChange={(e) => onUpdate({ ...block.params, showLegend: e.target.value === 'true' })}
-                    className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-gray-300 rounded focus:border-[#c9a86c] outline-none"
+                    className="w-full text-xs px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] focus:border-[#c9a86c] outline-none cursor-pointer"
                   >
                     <option value="true">Show</option>
                     <option value="false">Hide</option>
@@ -1761,7 +1767,7 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
 
             {/* Main Plot Area */}
             <div className="flex-1 p-6 flex flex-col min-w-0">
-              <div className="flex-1 bg-black/40 rounded-xl border border-white/5 p-4 shadow-inner">
+              <div className="flex-1 bg-slate-950 rounded-xl border border-slate-800 p-4 shadow-inner">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={displayData}>
                     {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />}
@@ -1769,21 +1775,47 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
                       dataKey="t" 
                       type="number" 
                       domain={['auto', 'auto']} 
-                      stroke="#444" 
+                      stroke="#64748b" 
                       fontSize={10}
                       tickFormatter={(t) => `${t.toFixed(2)}s`}
                     />
                     <YAxis 
-                      stroke="#444" 
+                      stroke="#64748b" 
                       fontSize={10} 
                       width={40}
                       tickFormatter={(v) => v.toFixed(1)}
                     />
                     <Tooltip 
-                      contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', fontSize: '12px' }}
-                      itemStyle={{ fontWeight: 'bold' }}
-                      labelStyle={{ color: '#888', marginBottom: '4px' }}
-                      labelFormatter={(t) => `Time: ${Number(t).toFixed(4)}s`}
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="bg-slate-950/95 border border-slate-800 p-3 rounded-lg text-xs shadow-xl space-y-2 max-w-sm max-h-60 overflow-auto">
+                              <p className="text-slate-400 font-mono">Time: {Number(label).toFixed(4)}s</p>
+                              <div className="space-y-1">
+                                {payload.map((pld: any, index: number) => {
+                                  const rawVal = pld.payload[`y${index+1}_raw`] !== undefined ? pld.payload[`y${index+1}_raw`] : pld.value;
+                                  let displayVal = '';
+                                  if (Array.isArray(rawVal)) {
+                                    displayVal = JSON.stringify(rawVal);
+                                  } else {
+                                    displayVal = typeof rawVal === 'number' ? rawVal.toFixed(4) : String(rawVal);
+                                  }
+                                  return (
+                                    <div key={index} className="flex items-start gap-2 font-bold" style={{ color: pld.color }}>
+                                      <span className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: pld.color }} />
+                                      <div className="flex flex-col">
+                                        <span className="text-[10px] text-slate-400 uppercase tracking-wider">{pld.name}</span>
+                                        <span className="font-mono text-slate-100 text-xs break-all">{displayVal}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
                     />
                     {showLegend && <Legend iconType="circle" />}
                     {Array.from({ length: numSignals }, (_, i) => (
@@ -1804,9 +1836,9 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
             </div>
 
             {/* Statistics Sidebar */}
-            <div className="w-80 border-l border-white/5 bg-black/10 p-6 overflow-y-auto space-y-6">
+            <div className="w-80 border-l border-[#333] bg-[#1a1a1a] p-6 overflow-y-auto space-y-6">
               <div className="space-y-4">
-                <div className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
+                <div className="flex items-center gap-2 text-xs font-black text-slate-500 uppercase tracking-widest">
                   <BarChart2 size={14} className="text-[#c9a86c]" />
                   Real-time Measurements
                 </div>
@@ -1816,22 +1848,33 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
                     const stats = calculateStats(`y${i+1}`);
                     const color = getSignalColor(i);
                     return (
-                      <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-3">
+                      <div key={i} className="p-4 rounded-xl bg-[#0a0a0a] border border-[#333] space-y-3 shadow-sm">
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full" style={{ background: color }} />
-                          <span className="text-xs font-bold text-white">Channel {i+1}</span>
+                          <span className="text-xs font-bold text-[#e0e0e0]">Channel {i+1}</span>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
+                          <div className="col-span-2">
+                            <div className="text-[9px] text-slate-400 uppercase font-black">Last Value</div>
+                            <div className="text-xs font-mono text-[#c9a86c] break-all font-bold">
+                              {(() => {
+                                if (history.length === 0) return '0.0000';
+                                const lastSample = history[history.length - 1];
+                                const rawVal = lastSample[`y${i+1}_raw`] !== undefined ? lastSample[`y${i+1}_raw`] : lastSample[`y${i+1}`];
+                                return Array.isArray(rawVal) ? JSON.stringify(rawVal) : typeof rawVal === 'number' ? rawVal.toFixed(4) : String(rawVal);
+                              })()}
+                            </div>
+                          </div>
                           <div>
-                            <div className="text-[9px] text-gray-500 uppercase font-black">Mean</div>
+                            <div className="text-[9px] text-slate-400 uppercase font-black">Mean</div>
                             <div className="text-sm font-mono text-emerald-400">{stats.mean.toFixed(4)}</div>
                           </div>
                           <div>
-                            <div className="text-[9px] text-gray-500 uppercase font-black">RMS</div>
+                            <div className="text-[9px] text-slate-500 uppercase font-black">RMS</div>
                             <div className="text-sm font-mono text-blue-400">{stats.rms.toFixed(4)}</div>
                           </div>
                           <div className="col-span-2">
-                            <div className="text-[9px] text-gray-500 uppercase font-black">Peak-to-Peak</div>
+                            <div className="text-[9px] text-slate-500 uppercase font-black">Peak-to-Peak</div>
                             <div className="text-sm font-mono text-amber-400">{stats.pk2pk.toFixed(4)}</div>
                           </div>
                         </div>
@@ -1841,9 +1884,9 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10 flex gap-3">
+              <div className="p-4 rounded-xl bg-amber-900/10 border border-amber-700/20 flex gap-3">
                 <Info size={16} className="text-amber-500 shrink-0" />
-                <p className="text-[10px] text-amber-500/80 leading-relaxed italic">
+                <p className="text-[10px] text-amber-400 leading-relaxed italic">
                   Statistics are calculated based on the current visible buffer ({history.length} samples).
                 </p>
               </div>

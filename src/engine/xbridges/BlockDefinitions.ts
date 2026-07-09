@@ -1955,11 +1955,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [],
     outputs: [createPort('out', 'Out', 'output', params.value ?? 1)],
     execute: (_, p) => {
-        // Support parsing arrays if user typed "[1, 2, 3]"
-        let v = p.value;
-        if (typeof v === 'string') {
-            try { v = JSON.parse(v); } catch(e) {}
-        }
+        // Support parsing arrays/vectors if user typed "[1 2 3]" or "[1, 2, 3]"
+        const v = VectorUtils.parseMatlabArray(p.value);
         return { outputs: [v] };
     }
   }),
@@ -1976,22 +1973,62 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     description: 'Output transitions from initialValue to finalValue at stepTime.',
     execute: (ins, p, state, time) => {
       const stepTime = Number(p.stepTime ?? 1);
-      let initVal = p.initialValue !== undefined ? p.initialValue : 0;
-      let finVal = p.finalValue !== undefined ? p.finalValue : 1;
-      
-      if (typeof initVal === 'string') {
-        try { initVal = JSON.parse(initVal); } catch(e) {}
-      }
-      if (typeof finVal === 'string') {
-        try { finVal = JSON.parse(finVal); } catch(e) {}
-      }
+      const initVal = VectorUtils.parseMatlabArray(p.initialValue !== undefined ? p.initialValue : 0);
+      const finVal = VectorUtils.parseMatlabArray(p.finalValue !== undefined ? p.finalValue : 1);
       
       const val = (time < stepTime) ? initVal : finVal;
       return { outputs: [val] };
+    },
+    ZeroCrossingFn: (ins, p, state, time) => {
+      const stepTime = Number(p.stepTime ?? 1);
+      return [time - stepTime];
     }
   }),
-
   // --- Element-wise Arithmetic ---
+  /**
+   * Sum block — equivalent to Simulink's Sum block.
+   * params.signs: string of '+' and '-' characters, one per input port.
+   *   e.g. '++' (default), '+-', '-+', '+++'
+   * params.numInputs: number of input ports (derived from signs.length, min 1).
+   * Supports scalar and vector (element-wise) inputs.
+   */
+  'Sum': (id, params) => {
+    const signsStr: string = (params.signs && typeof params.signs === 'string' && params.signs.length > 0)
+      ? params.signs.replace(/[^+\-]/g, '')
+      : (params.numInputs ? '+'.repeat(Number(params.numInputs)) : '++');
+    const n = Math.max(1, signsStr.length);
+    const inputs = Array.from({ length: n }, (_, i) =>
+      createPort(`in${i + 1}`, signsStr[i] === '-' ? `− In${i + 1}` : `+ In${i + 1}`, 'input')
+    );
+    return {
+      id, type: 'Sum',
+      params: {
+        signs: signsStr,
+        numInputs: n,
+        ...params
+      },
+      allowDynamicInputs: false,
+      inputs,
+      outputs: [createPort('out', 'Out', 'output')],
+      icon: 'sigma',
+      equation: 'y = Σ(sᵢ · uᵢ)  where sᵢ ∈ {+1, −1}',
+      description: 'Sums multiple inputs with configurable per-port signs (+/−). Equivalent to Simulink Sum block.',
+      execute: (ins: any[], p: any) => {
+        const signs: string = (p.signs && typeof p.signs === 'string') ? p.signs : '+'.repeat(ins.length);
+        let result = (signs[0] === '-')
+          ? VectorUtils.applyElementWise(ins[0], -1, 'multiply')
+          : ins[0];
+        for (let i = 1; i < ins.length; i++) {
+          const term = (signs[i] === '-')
+            ? VectorUtils.applyElementWise(ins[i], -1, 'multiply')
+            : ins[i];
+          result = VectorUtils.applyElementWise(result, term, 'add');
+        }
+        return { outputs: [result] };
+      }
+    };
+  },
+
   'VectorAdd': (id) => ({
     id, type: 'VectorAdd', params: {},
     allowDynamicInputs: true,
@@ -2130,6 +2167,68 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       outputs: [createPort('out', 'Out', 'output')],
       execute: (ins) => ({ outputs: [VectorUtils.determinant(ins[0])] })
   }),
+
+  'MatrixConcat': (id, params) => ({
+    id, type: 'MatrixConcat',
+    params: { axis: params.axis ?? 0 },
+    allowDynamicInputs: true,
+    inputs: [createPort('in1', 'In1', 'input'), createPort('in2', 'In2', 'input')],
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins, p) => {
+      const axis = Number(p.axis ?? 0);
+      if (ins.length === 0) return { outputs: [[]] };
+      let result = ins[0];
+      for (let i = 1; i < ins.length; i++) {
+        result = VectorUtils.concat(result, ins[i], axis);
+      }
+      return { outputs: [result] };
+    }
+  }),
+
+  'MatrixDiag': (id, params) => ({
+    id, type: 'MatrixDiag',
+    params: { diagMode: params.diagMode ?? 'create' },
+    inputs: [createPort('in', 'In', 'input')],
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [VectorUtils.diag(ins[0])] })
+  }),
+
+  'IdentityMatrix': (id, params) => ({
+    id, type: 'IdentityMatrix',
+    params: { dim: params.dim ?? 3 },
+    inputs: [],
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (_, p) => {
+      const dim = Math.max(1, Math.floor(Number(p.dim) || 3));
+      return { outputs: [VectorUtils.identity(dim)] };
+    }
+  }),
+
+  'SubMatrix': (id, params) => ({
+    id, type: 'SubMatrix',
+    params: {
+      rowStart: params.rowStart ?? 0,
+      rowEnd: params.rowEnd ?? 0,
+      colStart: params.colStart ?? 0,
+      colEnd: params.colEnd ?? 0
+    },
+    inputs: [createPort('in', 'In', 'input')],
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins, p) => {
+      const rStart = Number(p.rowStart ?? 0);
+      const rEnd = Number(p.rowEnd ?? 0);
+      const cStart = Number(p.colStart ?? 0);
+      const cEnd = Number(p.colEnd ?? 0);
+      return { outputs: [VectorUtils.submatrix(ins[0], rStart, rEnd, cStart, cEnd)] };
+    }
+  }),
+
+  'MatrixSolve': (id) => ({
+    id, type: 'MatrixSolve', params: {},
+    inputs: [createPort('in1', 'A', 'input'), createPort('in2', 'B', 'input')],
+    outputs: [createPort('out', 'x', 'output')],
+    execute: (ins) => ({ outputs: [VectorUtils.solve(ins[0], ins[1])] })
+  }),
   
   // --- Continuous ---
   'Integrator': (id, params) => ({
@@ -2206,7 +2305,24 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         if (shouldSample) {
           const sample: any = { t: time };
           for (let i = 0; i < pNumSignals; i++) {
-            sample[`y${i+1}`] = Number(ins[i] || 0);
+            const val = ins[i];
+            if (Array.isArray(val)) {
+              let firstScalar: any = val;
+              while (Array.isArray(firstScalar)) {
+                if (firstScalar.length === 0) {
+                  firstScalar = 0;
+                  break;
+                }
+                firstScalar = firstScalar[0];
+              }
+              const numVal = typeof firstScalar === 'number' ? firstScalar : (Number(firstScalar) || 0);
+              sample[`y${i+1}`] = isNaN(numVal) ? 0 : numVal;
+              sample[`y${i+1}_raw`] = val;
+            } else {
+              const numVal = Number(val ?? 0);
+              sample[`y${i+1}`] = isNaN(numVal) ? 0 : numVal;
+              sample[`y${i+1}_raw`] = val;
+            }
           }
           history.push(sample);
           
@@ -3240,7 +3356,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     icon: 'activity',
     equation: 'y = u * K',
     description: 'Multiplies the input signal by a constant gain factor K.',
-    execute: (ins, p) => ({ outputs: [Number(ins[0]) * Number(p.gain)] })
+    execute: (ins, p) => {
+      const g = VectorUtils.parseMatlabArray(p.gain);
+      return { outputs: [VectorUtils.applyElementWise(ins[0], g, 'multiply')] };
+    }
   }),
 
   'PRODUCT': (id, params) => ({
@@ -3455,192 +3574,371 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   }),
 
-  'PID_CONTROLLER': (id, params) => ({
-    id, type: 'PID_CONTROLLER',
-    params: {
-      mode: params.mode || 'PID',
-      Kp: params.Kp !== undefined ? params.Kp : 1,
-      Ki: params.Ki !== undefined ? params.Ki : 1,
-      Kd: params.Kd !== undefined ? params.Kd : 0.01,
-      N: params.N !== undefined ? params.N : 100,
-      beta: params.beta !== undefined ? params.beta : 1,
-      gamma: params.gamma !== undefined ? params.gamma : 0,
-      min: params.min !== undefined ? params.min : -100,
-      max: params.max !== undefined ? params.max : 100,
-      method: params.method || 'forward_euler'
-    },
-    isStateful: true,
-    inputs: [
+  'PID_CONTROLLER': (id, params) => {
+    const mode = params.mode || 'PID';
+    const Kp = params.Kp !== undefined ? Number(params.Kp) : 1;
+    const Ki = params.Ki !== undefined ? Number(params.Ki) : 1;
+    const Kd = params.Kd !== undefined ? Number(params.Kd) : 0.01;
+    const N = params.N !== undefined ? Number(params.N) : 100;
+    const beta = params.beta !== undefined ? Number(params.beta) : 1;
+    const gamma = params.gamma !== undefined ? Number(params.gamma) : 0;
+    const minVal = params.min !== undefined ? Number(params.min) : -100;
+    const maxVal = params.max !== undefined ? Number(params.max) : 100;
+    const method = params.method || 'forward_euler';
+    const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : -1;
+
+    const inputs = [
       createPort('r', 'Ref', 'input'),
       createPort('y', 'Feedback', 'input'),
       createPort('enable', 'Enable', 'input', 1, 'bottom', 'control'),
       createPort('reset', 'Reset', 'input', 0, 'bottom', 'control')
-    ],
-    outputs: [
-      createPort('u', 'Control', 'output', 0, 'right', 'control'),
-      createPort('error', 'Error', 'output', 0, 'top', 'measurement'),
-      createPort('p_term', 'P', 'output', 0, 'top', 'measurement'),
-      createPort('i_term', 'I', 'output', 0, 'top', 'measurement'),
-      createPort('d_term', 'D', 'output', 0, 'top', 'measurement')
-    ],
-    state: { i_state: 0, d_state: 0, last_ed: 0, last_time: 0 },
-    execute: (ins, p, state, time) => {
-      const r = Number(ins[0]);
-      const y = Number(ins[1]);
-      const enable = Number(ins[2]);
-      const reset = Number(ins[3]);
-      
-      if (reset > 0.5) {
-        return { 
-          outputs: [0, 0, 0, 0, 0], 
-          nextState: { i_state: 0, d_state: 0, last_ed: 0, last_time: time } 
+    ];
+
+    const block: XBlock = {
+      id, type: 'PID_CONTROLLER',
+      params: { mode, Kp, Ki, Kd, N, beta, gamma, min: minVal, max: maxVal, method, sampleTime },
+      isStateful: true,
+      inputs,
+      outputs: [
+        createPort('u', 'Control', 'output', 0, 'right', 'control'),
+        createPort('error', 'Error', 'output', 0, 'top', 'measurement'),
+        createPort('p_term', 'P', 'output', 0, 'top', 'measurement'),
+        createPort('i_term', 'I', 'output', 0, 'top', 'measurement'),
+        createPort('d_term', 'D', 'output', 0, 'top', 'measurement')
+      ],
+      state: { i_state: 0, d_state: 0, last_e: 0, last_ed: 0 },
+      icon: 'activity',
+      equation: 'u = P + I + D',
+      description: 'Standard PID controller supporting continuous or discrete time, various discretization methods, setpoint weighting, limits, and clamping anti-windup.',
+      execute: (ins, p, state) => {
+        const r = Number(ins[0]) || 0;
+        const y = Number(ins[1]) || 0;
+        const enable = Number(ins[2]);
+        const reset = Number(ins[3]);
+
+        if (reset > 0.5) {
+          return {
+            outputs: [0, 0, 0, 0, 0],
+            nextState: { i_state: 0, d_state: 0, last_e: 0, last_ed: 0 }
+          };
+        }
+        if (enable < 0.5) {
+          return { outputs: [0, 0, 0, 0, 0], nextState: state };
+        }
+
+        const error = r - y;
+        const ed = p.gamma * r - y;
+        const P = p.Kp * (p.beta * r - y);
+
+        if (p.sampleTime > 0) {
+          const dt = p.sampleTime;
+          let nextI = state.i_state || 0;
+          let I_out = nextI;
+          let D = 0;
+          let nextD = state.d_state || 0;
+
+          if (p.mode === 'PI' || p.mode === 'PID') {
+            if (p.method === 'forward_euler') {
+              I_out = state.i_state || 0;
+              nextI = I_out + p.Ki * error * dt;
+            } else if (p.method === 'backward_euler') {
+              nextI = (state.i_state || 0) + p.Ki * error * dt;
+              I_out = nextI;
+            } else {
+              nextI = (state.i_state || 0) + p.Ki * (error + (state.last_e || 0)) / 2 * dt;
+              I_out = nextI;
+            }
+          }
+
+          if (p.mode === 'PD' || p.mode === 'PID') {
+            if (p.method === 'forward_euler') {
+              D = p.Kd * p.N * (ed - (state.d_state || 0));
+              nextD = (state.d_state || 0) + p.N * (ed - (state.d_state || 0)) * dt;
+            } else if (p.method === 'backward_euler') {
+              D = (p.Kd * p.N * (ed - (state.d_state || 0))) / (1 + p.N * dt);
+              nextD = ((state.d_state || 0) + p.N * ed * dt) / (1 + p.N * dt);
+            } else {
+              D = (2 * p.Kd * p.N * (ed - (state.d_state || 0))) / (2 + p.N * dt);
+              nextD = ((state.d_state || 0) * (2 - p.N * dt) + 2 * p.N * ed * dt) / (2 + p.N * dt);
+            }
+          }
+
+          const u_unlimited = P + I_out + D;
+          const u = Math.max(p.min, Math.min(p.max, u_unlimited));
+
+          if (p.Ki !== 0 && ((u_unlimited > p.max && error > 0) || (u_unlimited < p.min && error < 0))) {
+            nextI = state.i_state || 0;
+          }
+
+          return {
+            outputs: [u, error, P, I_out, D],
+            nextState: { i_state: nextI, d_state: nextD, last_e: error, last_ed: ed }
+          };
+        } else {
+          const I = state.i_state || 0;
+          const D = p.Kd * p.N * (ed - (state.d_state || 0));
+          const u_unlimited = P + I + D;
+          const u = Math.max(p.min, Math.min(p.max, u_unlimited));
+
+          return {
+            outputs: [u, error, P, I, D]
+          };
+        }
+      }
+    };
+
+    if (sampleTime <= 0) {
+      block.evaluateDerivatives = (ins, p, state) => {
+        const r = Number(ins[0]) || 0;
+        const y = Number(ins[1]) || 0;
+        const error = r - y;
+        const ed = p.gamma * r - y;
+
+        const P = p.Kp * (p.beta * r - y);
+        const I = state.i_state || 0;
+        const D = p.Kd * p.N * (ed - (state.d_state || 0));
+        const u_unlimited = P + I + D;
+
+        let di = p.Ki * error;
+        if (p.Ki !== 0) {
+          if ((u_unlimited > p.max && error > 0) || (u_unlimited < p.min && error < 0)) {
+            di = 0;
+          }
+        }
+        const dd = p.N * (ed - (state.d_state || 0));
+        return { i_state: di, d_state: dd };
+      };
+    }
+
+    return block;
+  },
+
+  'INTEGRATOR': (id, params) => {
+    const x0 = Number(params.initialCondition) || 0;
+    const limit = !!params.limitOutput;
+    const maxVal = params.upperLimit !== undefined ? Number(params.upperLimit) : Infinity;
+    const minVal = params.lowerLimit !== undefined ? Number(params.lowerLimit) : -Infinity;
+    const resetMode = params.externalReset || 'none';
+
+    const inputs = [createPort('u', 'u', 'input')];
+    if (resetMode !== 'none') {
+      inputs.push(createPort('reset', 'Reset', 'input', 0, 'bottom', 'control'));
+    }
+
+    return {
+      id, type: 'INTEGRATOR',
+      params: { initialCondition: x0, limitOutput: limit, upperLimit: maxVal, lowerLimit: minVal, externalReset: resetMode },
+      isStateful: true,
+      inputs,
+      outputs: [createPort('y', 'y', 'output', x0)],
+      state: { x: x0, prevReset: 0 },
+      icon: 'activity',
+      equation: 'y = ∫ u dt',
+      description: 'Continuous-time integration of the input signal. Supports saturation limits and external reset triggers.',
+      execute: (ins, p, state) => {
+        let x = Number(state.x) || 0;
+        let prevReset = Number(state.prevReset) || 0;
+        
+        if (p.externalReset !== 'none') {
+          const resetVal = Number(ins[1]) || 0;
+          let triggered = false;
+          if (p.externalReset === 'rising' && resetVal > 0 && prevReset <= 0) triggered = true;
+          else if (p.externalReset === 'falling' && resetVal <= 0 && prevReset > 0) triggered = true;
+          else if (p.externalReset === 'either' && ((resetVal > 0 && prevReset <= 0) || (resetVal <= 0 && prevReset > 0))) triggered = true;
+          else if (p.externalReset === 'level' && resetVal > 0.5) triggered = true;
+
+          if (triggered) {
+            x = p.initialCondition;
+          }
+          prevReset = resetVal;
+        }
+
+        if (p.limitOutput) {
+          x = Math.max(p.lowerLimit, Math.min(p.upperLimit, x));
+        }
+
+        return {
+          outputs: [x],
+          nextState: { x, prevReset }
+        };
+      },
+      evaluateDerivatives: (ins, p, state) => {
+        const u = Number(ins[0]) || 0;
+        const x = Number(state.x) || 0;
+
+        if (p.limitOutput) {
+          if (x >= p.upperLimit && u > 0) return { x: 0 };
+          if (x <= p.lowerLimit && u < 0) return { x: 0 };
+        }
+        return { x: u };
+      }
+    };
+  },
+
+  'UNIT_DELAY': (id, params) => {
+    const x0 = params.initialCondition !== undefined ? params.initialCondition : 0;
+    const ts = Number(params.sampleTime) || 0.1;
+    return {
+      id, type: 'UNIT_DELAY',
+      params: { initialCondition: x0, sampleTime: ts },
+      isStateful: true,
+      inputs: [createPort('u', 'u', 'input')],
+      outputs: [createPort('y', 'y', 'output', x0)],
+      state: { x: x0 },
+      icon: 'arrow-right',
+      equation: 'y(k) = u(k-1)',
+      description: 'Discrete-time unit delay. Delays the input signal by one sample period.',
+      execute: (ins, p, state) => {
+        return {
+          outputs: [state.x],
+          nextState: { x: ins[0] }
         };
       }
-      
-      if (enable < 0.5) {
-        return { outputs: [0, 0, 0, 0, 0], nextState: { ...state, last_time: time } };
-      }
+    };
+  },
 
-      const dt = Math.max(1e-6, time - (state.last_time || 0));
-      const error = r - y;
-      
-      // 1. Proportional Term (with setpoint weighting beta)
-      const P = p.Kp * (p.beta * r - y);
-      
-      // 2. Integral Term (with clamping anti-windup)
-      let nextI = state.i_state;
-      if (p.mode === 'PI' || p.mode === 'PID') {
-        const i_inc = p.Ki * error * dt;
-        nextI = state.i_state + i_inc;
+  'MEMORY': (id, params) => {
+    const x0 = params.initialCondition !== undefined ? params.initialCondition : 0;
+    return {
+      id, type: 'MEMORY',
+      params: { initialCondition: x0 },
+      isStateful: true,
+      inputs: [createPort('u', 'u', 'input')],
+      outputs: [createPort('y', 'y', 'output', x0)],
+      state: { x: x0 },
+      icon: 'database',
+      equation: 'y(t) = u(t_prev)',
+      description: 'Continuous-time memory. Outputs the input signal from the previous integration step.',
+      execute: (ins, p, state) => {
+        return {
+          outputs: [state.x],
+          nextState: { x: ins[0] }
+        };
       }
-      
-      // 3. Derivative Term (with filter N and setpoint weighting gamma)
-      let D = 0;
-      let nextD = state.d_state;
-      if (p.mode === 'PD' || p.mode === 'PID') {
-        const ed = p.gamma * r - y;
-        const diff_e = (ed - (state.last_ed || 0));
-        // D(s) = (Kd * N * s) / (s + N)
-        D = (p.Kd * p.N * diff_e + state.d_state) / (1 + p.N * dt);
-        nextD = D;
+    };
+  },
+
+  'DERIVATIVE': (id, params) => {
+    const tau = Number(params.tau) || 0.01;
+    return {
+      id, type: 'DERIVATIVE',
+      params: { tau },
+      isStateful: true,
+      inputs: [createPort('u', 'u', 'input')],
+      outputs: [createPort('y', 'y', 'output', 0)],
+      state: { x: 0 },
+      icon: 'trending-up',
+      equation: 'y = du/dt ≈ s / (tau*s + 1) * u',
+      description: 'Filtered derivative block to calculate du/dt without high-frequency noise amplification.',
+      execute: (ins, p, state) => {
+        const u = Number(ins[0]) || 0;
+        const x = Number(state.x) || 0;
+        const dy = (u - x) / p.tau;
+        return { outputs: [dy] };
+      },
+      evaluateDerivatives: (ins, p, state) => {
+        const u = Number(ins[0]) || 0;
+        const x = Number(state.x) || 0;
+        const dx = (u - x) / p.tau;
+        return { x: dx };
       }
-      
-      const u_unlimited = P + nextI + D;
-      const u = Math.max(p.min, Math.min(p.max, u_unlimited));
-      
-      // Anti-Windup Clamping
-      if (p.Ki !== 0) {
-        if ((u_unlimited > p.max && error > 0) || (u_unlimited < p.min && error < 0)) {
-           nextI = state.i_state;
+    };
+  },
+
+  'STATE_SPACE': (id, params) => {
+    const representation = params.representation || 'continuous';
+    const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : -1;
+    const A = params.A || [[-1]];
+    const B = params.B || [[1]];
+    const C = params.C || [[1]];
+    const D = params.D || [[0]];
+    const x0 = params.x0 || new Array(A.length).fill(0);
+
+    const block: XBlock = {
+      id, type: 'STATE_SPACE',
+      params: { A, B, C, D, x0, representation, sampleTime },
+      icon: 'settings-2',
+      equation: 'dx/dt = Ax + Bu\ny = Cx + Du',
+      description: 'Models a linear time-invariant (LTI) system in state-space representation. Supports both continuous and discrete-time domains.',
+      isStateful: true,
+      inputs: [createPort('u', 'u', 'input', 0, 'left', 'vector')],
+      outputs: [
+        createPort('y', 'y', 'output', 0, 'right', 'vector'),
+        createPort('x', 'x', 'output', 0, 'top', 'vector')
+      ],
+      state: { 
+        x: x0.length === A.length ? [...x0] : new Array(A.length).fill(0), 
+        lastTime: 0 
+      },
+      execute: (ins, p, state, time) => {
+        const u = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
+        const x = state.x as number[];
+        
+        const y = p.C.map((row: number[]) => {
+          const cx = row.reduce((sum, val, j) => sum + val * (Number(x[j]) || 0), 0);
+          const du = p.D[0].reduce((sum: number, _: any, j: number) => sum + (Number(p.D[0][j]) || 0) * (Number(u[j]) || 0), 0);
+          return cx + du;
+        });
+
+        if (p.representation === 'discrete') {
+          const nextX = p.A.map((row: number[], i: number) => {
+            const ax = row.reduce((sum, val, j) => sum + val * (Number(x[j]) || 0), 0);
+            const bu = p.B[i].reduce((sum: number, val: number, j: number) => sum + val * (Number(u[j]) || 0), 0);
+            return ax + bu;
+          });
+          return { outputs: [y, x], nextState: { x: nextX, lastTime: time } };
         }
+
+        return { outputs: [y, x] };
       }
+    };
 
-      return {
-        outputs: [u, error, P, nextI, D],
-        nextState: {
-          i_state: nextI,
-          d_state: nextD,
-          last_ed: p.gamma * r - y,
-          last_time: time
-        }
-      };
-    },
-    evaluateDerivatives: (ins, p, state) => {
-      const r = Number(ins[0]);
-      const y = Number(ins[1]);
-      const error = r - y;
-      const di = p.Ki * error;
-      const ed = p.gamma * r - y;
-      const dd = p.N * (p.Kd * p.N * (ed - (state.last_ed || 0)) - state.d_state);
-      return [di, dd];
-    }
-  }),
-
-  // --- Linear Systems ---
-  'STATE_SPACE': (id, params) => ({
-    id, type: 'STATE_SPACE',
-    params: {
-      A: params.A || [[-1]], B: params.B || [[1]],
-      C: params.C || [[1]], D: params.D || [[0]],
-      x0: params.x0 || [0],
-      representation: params.representation || 'continuous'
-    },
-    icon: 'settings-2',
-    equation: 'dx/dt = Ax + Bu\\ny = Cx + Du',
-    description: 'Models a linear time-invariant (LTI) system in state-space representation. Supports both continuous and discrete-time domains.',
-    isStateful: true,
-    inputs: [createPort('u', 'u', 'input', 0, 'left', 'vector')],
-    outputs: [
-      createPort('y', 'y', 'output', 0, 'right', 'vector'),
-      createPort('x', 'x', 'output', 0, 'top', 'vector')
-    ],
-    state: { x: params.x0 || [0], lastTime: 0 },
-    execute: (ins, p, state, time) => {
-      const u = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
-      const x = state.x as number[];
-      
-      // y = C*x + D*u
-      const y = p.C.map((row: number[]) => {
-        const cx = row.reduce((sum, val, i) => sum + val * (Number(x[i]) || 0), 0);
-        const du = p.D[0].reduce((sum: number, _: any, i: number) => sum + (Number(p.D[0][i]) || 0) * (Number(u[i]) || 0), 0);
-        return cx + du;
-      });
-
-      if (p.representation === 'discrete') {
-        const dt = Math.max(1e-6, time - (state.lastTime || 0));
-        // x[k+1] = A*x[k] + B*u[k]
-        const nextX = p.A.map((row: number[], i: number) => {
+    if (representation === 'continuous' && sampleTime <= 0) {
+      block.evaluateDerivatives = (ins, p, state) => {
+        const u = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
+        const x = state.x as number[];
+        const dx = p.A.map((row: number[], i: number) => {
           const ax = row.reduce((sum, val, j) => sum + val * (Number(x[j]) || 0), 0);
           const bu = p.B[i].reduce((sum: number, val: number, j: number) => sum + val * (Number(u[j]) || 0), 0);
           return ax + bu;
         });
-        return { outputs: [y, x], nextState: { x: nextX, lastTime: time } };
-      }
-
-      return { outputs: [y, x], nextState: { ...state, lastTime: time } };
-    },
-    evaluateDerivatives: (ins, p, state) => {
-      const u = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
-      const x = state.x as number[];
-      // dx/dt = A*x + B*u
-      return p.A.map((row: number[], i: number) => {
-        const ax = row.reduce((sum, val, j) => sum + val * (Number(x[j]) || 0), 0);
-        const bu = p.B[i].reduce((sum: number, val: number, j: number) => sum + val * (Number(u[j]) || 0), 0);
-        return ax + bu;
-      });
+        return { x: dx };
+      };
     }
-  }),
+
+    return block;
+  },
 
   'TRANSFER_FUNCTION': (id, params) => {
     const num = params.numerator || [1];
     const den = params.denominator || [1, 1];
     const n = den.length - 1;
     const a0 = den[0] || 1;
+    const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : -1;
     
-    // Normalize denominator (a0 = 1)
     const d = den.map((val: number) => val / a0);
     const b = num.map((val: number) => val / a0);
     
-    // Pad numerator with leading zeros if needed
     while (b.length <= n) b.unshift(0);
     
-    // Convert to CCF State-Space
     const A = Array.from({ length: n }, (_, i) => 
       Array.from({ length: n }, (__, j) => {
         if (i < n - 1) return j === i + 1 ? 1 : 0;
-        return -d[n - j];
+        return -d[j + 1];
       })
     );
     const B = Array.from({ length: n }, (_, i) => [i === n - 1 ? 1 : 0]);
     const b0 = b[0];
-    const C = [Array.from({ length: n }, (_, i) => b[n - i] - d[n - i] * b0)];
+    const C = [Array.from({ length: n }, (_, i) => b[i + 1] - b0 * d[i + 1])];
     const D = [[b0]];
 
     const ss = BLOCK_LIBRARY['STATE_SPACE'](id, { 
       ...params, 
       numerator: num, 
       denominator: den, 
-      A, B, C, D 
+      A, B, C, D,
+      representation: 'continuous',
+      sampleTime
     });
     return {
       ...ss,
@@ -3655,8 +3953,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     const z = params.zeros || [];
     const p = params.poles || [-1];
     const k = params.gain !== undefined ? params.gain : 1;
+    const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : -1;
 
-    // Helper to multiply (s - r) terms
     const poly = (roots: number[]) => {
       let coeffs = [1];
       for (const r of roots) {
@@ -3679,7 +3977,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       poles: p, 
       gain: k, 
       numerator: num, 
-      denominator: den 
+      denominator: den,
+      sampleTime
     });
     return {
       ...tf,
@@ -3692,90 +3991,155 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   'DISCRETE_TRANSFER_FUNCTION': (id, params) => {
     const num = params.numerator || [1];
     const den = params.denominator || [1, 1];
-    const tf = BLOCK_LIBRARY['TRANSFER_FUNCTION'](id, { 
+    const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : 0.1;
+
+    const n = den.length - 1;
+    const a0 = den[0] || 1;
+    
+    const d = den.map((val: number) => val / a0);
+    const b = num.map((val: number) => val / a0);
+    
+    while (b.length <= n) b.unshift(0);
+    
+    const A = Array.from({ length: n }, (_, i) => 
+      Array.from({ length: n }, (__, j) => {
+        if (i < n - 1) return j === i + 1 ? 1 : 0;
+        return -d[n - j];
+      })
+    );
+    const B = Array.from({ length: n }, (_, i) => [i === n - 1 ? 1 : 0]);
+    const b0 = b[0];
+    const C = [Array.from({ length: n }, (_, i) => b[n - i] - d[n - i] * b0)];
+    const D = [[b0]];
+
+    const ss = BLOCK_LIBRARY['STATE_SPACE'](id, { 
       ...params, 
       numerator: num, 
       denominator: den, 
-      representation: 'discrete' 
+      A, B, C, D,
+      representation: 'discrete',
+      sampleTime
     });
+
     return {
-      ...tf,
+      ...ss,
       type: 'DISCRETE_TRANSFER_FUNCTION',
       equation: 'H(z) = (b0*zⁿ + ... + bn) / (a0*zⁿ + ... + an)',
       description: 'Discrete-time transfer function.'
     };
   },
 
-  'PID_BASIC': (id, params) => ({
-    id, type: 'PID_BASIC',
-    params: {
-      mode: params.mode || 'PID',
-      Kp: params.Kp !== undefined ? params.Kp : 1,
-      Ki: params.Ki !== undefined ? params.Ki : 1,
-      Kd: params.Kd !== undefined ? params.Kd : 0,
-      N: params.N !== undefined ? params.N : 100,
-      min: params.min !== undefined ? params.min : -100,
-      max: params.max !== undefined ? params.max : 100,
-      method: params.method || 'forward_euler'
-    },
-    icon: 'settings-2',
-    equation: 'u = PI + D',
-    description: 'A basic PID controller implementation with saturation and anti-windup. Ideal for simple control loops.',
-    isStateful: true,
-    inputs: [
+  'PID_BASIC': (id, params) => {
+    const mode = params.mode || 'PID';
+    const Kp = params.Kp !== undefined ? Number(params.Kp) : 1;
+    const Ki = params.Ki !== undefined ? Number(params.Ki) : 1;
+    const Kd = params.Kd !== undefined ? Number(params.Kd) : 0;
+    const N = params.N !== undefined ? Number(params.N) : 100;
+    const minVal = params.min !== undefined ? Number(params.min) : -100;
+    const maxVal = params.max !== undefined ? Number(params.max) : 100;
+    const method = params.method || 'forward_euler';
+    const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : -1;
+
+    const inputs = [
       createPort('e', 'Error', 'input'),
       createPort('enable', 'Enable', 'input', 1, 'bottom', 'control'),
       createPort('reset', 'Reset', 'input', 0, 'bottom', 'control')
-    ],
-    outputs: [
-      createPort('u', 'Control', 'output', 0, 'right', 'control')
-    ],
-    state: { i_state: 0, d_state: 0, last_e: 0, last_time: 0 },
-    execute: (ins, p, state, time) => {
-      const error = Number(ins[0]);
-      const enable = Number(ins[1]);
-      const reset = Number(ins[2]);
-      
-      if (reset > 0.5) return { outputs: [0], nextState: { i_state: 0, d_state: 0, last_e: 0, last_time: time } };
-      if (enable < 0.5) return { outputs: [0], nextState: { ...state, last_time: time } };
+    ];
 
-      const dt = Math.max(1e-6, time - (state.last_time || 0));
-      
-      const P = p.Kp * error;
-      
-      let nextI = state.i_state;
-      if (p.mode === 'PI' || p.mode === 'PID') {
-        nextI = state.i_state + p.Ki * error * dt;
-      }
-      
-      let D = 0;
-      let nextD = state.d_state;
-      if (p.mode === 'PD' || p.mode === 'PID') {
-        const diff_e = (error - (state.last_e || 0));
-        D = (p.Kd * p.N * diff_e + state.d_state) / (1 + p.N * dt);
-        nextD = D;
-      }
-      
-      const u_unlimited = P + nextI + D;
-      const u = Math.max(p.min, Math.min(p.max, u_unlimited));
-      
-      // Anti-Windup Clamping
-      if (p.Ki !== 0 && ((u_unlimited > p.max && error > 0) || (u_unlimited < p.min && error < 0))) {
-        nextI = state.i_state;
-      }
+    const block: XBlock = {
+      id, type: 'PID_BASIC',
+      params: { mode, Kp, Ki, Kd, N, min: minVal, max: maxVal, method, sampleTime },
+      icon: 'settings-2',
+      equation: 'u = PI + D',
+      description: 'A basic PID controller implementation with saturation and anti-windup. Ideal for simple control loops.',
+      isStateful: true,
+      inputs,
+      outputs: [
+        createPort('u', 'Control', 'output', 0, 'right', 'control')
+      ],
+      state: { i_state: 0, d_state: 0, last_e: 0 },
+      execute: (ins, p, state) => {
+        const error = Number(ins[0]) || 0;
+        const enable = Number(ins[1]);
+        const reset = Number(ins[2]);
+        
+        if (reset > 0.5) return { outputs: [0], nextState: { i_state: 0, d_state: 0, last_e: 0 } };
+        if (enable < 0.5) return { outputs: [0], nextState: state };
 
-      return {
-        outputs: [u],
-        nextState: { i_state: nextI, d_state: nextD, last_e: error, last_time: time }
+        const P = p.Kp * error;
+        
+        if (p.sampleTime > 0) {
+          const dt = p.sampleTime;
+          let nextI = state.i_state || 0;
+          let D = 0;
+          let nextD = state.d_state || 0;
+
+          if (p.mode === 'PI' || p.mode === 'PID') {
+            if (p.method === 'forward_euler') {
+              nextI = (state.i_state || 0) + p.Ki * (state.last_e || 0) * dt;
+            } else if (p.method === 'backward_euler') {
+              nextI = (state.i_state || 0) + p.Ki * error * dt;
+            } else {
+              nextI = (state.i_state || 0) + p.Ki * (error + (state.last_e || 0)) / 2 * dt;
+            }
+          }
+          
+          if (p.mode === 'PD' || p.mode === 'PID') {
+            if (p.method === 'forward_euler') {
+              D = p.Kd * p.N * (error - (state.d_state || 0));
+              nextD = (state.d_state || 0) + p.N * (error - (state.d_state || 0)) * dt;
+            } else if (p.method === 'backward_euler') {
+              D = (p.Kd * p.N * (error - (state.d_state || 0))) / (1 + p.N * dt);
+              nextD = ((state.d_state || 0) + p.N * error * dt) / (1 + p.N * dt);
+            } else {
+              D = (2 * p.Kd * p.N * (error - (state.d_state || 0))) / (2 + p.N * dt);
+              nextD = ((state.d_state || 0) * (2 - p.N * dt) + 2 * p.N * error * dt) / (2 + p.N * dt);
+            }
+          }
+          
+          const u_unlimited = P + nextI + D;
+          const u = Math.max(p.min, Math.min(p.max, u_unlimited));
+          
+          if (p.Ki !== 0 && ((u_unlimited > p.max && error > 0) || (u_unlimited < p.min && error < 0))) {
+            nextI = state.i_state || 0;
+          }
+
+          return {
+            outputs: [u],
+            nextState: { i_state: nextI, d_state: nextD, last_e: error }
+          };
+        } else {
+          const I = state.i_state || 0;
+          const D = p.Kd * p.N * (error - (state.d_state || 0));
+          const u_unlimited = P + I + D;
+          const u = Math.max(p.min, Math.min(p.max, u_unlimited));
+
+          return { outputs: [u] };
+        }
+      }
+    };
+
+    if (sampleTime <= 0) {
+      block.evaluateDerivatives = (ins, p, state) => {
+        const error = Number(ins[0]) || 0;
+        const P = p.Kp * error;
+        const I = state.i_state || 0;
+        const D = p.Kd * p.N * (error - (state.d_state || 0));
+        const u_unlimited = P + I + D;
+
+        let di = p.Ki * error;
+        if (p.Ki !== 0) {
+          if ((u_unlimited > p.max && error > 0) || (u_unlimited < p.min && error < 0)) {
+            di = 0;
+          }
+        }
+        const dd = p.N * (error - (state.d_state || 0));
+        return { i_state: di, d_state: dd };
       };
-    },
-    evaluateDerivatives: (ins, p, state) => {
-      const error = Number(ins[0]);
-      const di = p.Ki * error;
-      const dd = p.N * (p.Kd * p.N * (error - (state.last_e || 0)) - state.d_state);
-      return [di, dd];
     }
-  }),
+
+    return block;
+  },
 
   // --- Noise Sources ---
   'WHITE_NOISE': (id, params) => ({
@@ -3784,7 +4148,6 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     inputs: [],
     outputs: [createPort('y', 'y', 'output')],
     execute: (ins, p) => {
-      // Box-Muller transform for Gaussian noise
       const u1 = Math.random();
       const u2 = Math.random();
       const standardNormal = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
@@ -3801,13 +4164,11 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     outputs: [createPort('y', 'y', 'output')],
     state: { y: 0, lastTime: 0 },
     execute: (ins, p, state, time) => {
-      // 1. Generate White Noise
       const u1 = Math.random();
       const u2 = Math.random();
       const standardNormal = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
       const whiteNoise = Number(p.mean) + Math.sqrt(Number(p.variance)) * standardNormal;
 
-      // 2. Apply LPF
       const dt = Math.max(1e-6, time - (state.lastTime || 0));
       const tau = 1 / (2 * Math.PI * Number(p.fc));
       const alpha = dt / (tau + dt);
@@ -3817,47 +4178,78 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   }),
 
-  'LOW_PASS_FILTER': (id, params) => ({
-    id, type: 'LOW_PASS_FILTER',
-    params: { fc: params.fc || 10, method: params.method || 'discrete' },
-    icon: 'activity',
-    equation: 'τ*dy/dt + y = u',
-    description: 'A first-order low-pass filter that attenuates high-frequency noise above the cutoff frequency fc.',
-    isStateful: true,
-    inputs: [createPort('u', 'u', 'input')],
-    outputs: [createPort('y', 'y', 'output')],
-    state: { y: 0, lastTime: 0 },
-    execute: (ins, p, state, time) => {
-      const u = Number(ins[0]);
-      const dt = Math.max(1e-6, time - (state.lastTime || 0));
-      const tau = 1 / (2 * Math.PI * Number(p.fc));
-      const alpha = dt / (tau + dt);
-      const y = alpha * u + (1 - alpha) * state.y;
-      return { outputs: [y], nextState: { y, lastTime: time } };
-    },
-    evaluateDerivatives: (ins, p, state) => {
-      const u = Number(ins[0]);
-      const tau = 1 / (2 * Math.PI * Number(p.fc));
-      return [(u - state.y) / tau];
+  'LOW_PASS_FILTER': (id, params) => {
+    const fc = Number(params.fc) || 10;
+    const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : -1;
+    const block: XBlock = {
+      id, type: 'LOW_PASS_FILTER',
+      params: { fc, sampleTime },
+      icon: 'activity',
+      equation: 'τ*dy/dt + y = u',
+      description: 'A first-order low-pass filter that attenuates high-frequency noise above the cutoff frequency fc.',
+      isStateful: true,
+      inputs: [createPort('u', 'u', 'input')],
+      outputs: [createPort('y', 'y', 'output')],
+      state: { y: 0 },
+      execute: (ins, p, state) => {
+        const u = Number(ins[0]) || 0;
+        if (p.sampleTime > 0) {
+          const dt = p.sampleTime;
+          const tau = 1 / (2 * Math.PI * p.fc);
+          const alpha = dt / (tau + dt);
+          const y = alpha * u + (1 - alpha) * (state.y || 0);
+          return { outputs: [y], nextState: { y } };
+        } else {
+          return { outputs: [state.y || 0] };
+        }
+      }
+    };
+    if (sampleTime <= 0) {
+      block.evaluateDerivatives = (ins, p, state) => {
+        const u = Number(ins[0]) || 0;
+        const tau = 1 / (2 * Math.PI * p.fc);
+        return { y: (u - (state.y || 0)) / tau };
+      };
     }
-  }),
+    return block;
+  },
 
-  'HIGH_PASS_FILTER': (id, params) => ({
-    id, type: 'HIGH_PASS_FILTER',
-    params: { fc: params.fc || 10 },
-    isStateful: true,
-    inputs: [createPort('u', 'u', 'input')],
-    outputs: [createPort('y', 'y', 'output')],
-    state: { y: 0, last_u: 0, lastTime: 0 },
-    execute: (ins, p, state, time) => {
-      const u = Number(ins[0]);
-      const dt = Math.max(1e-6, time - (state.lastTime || 0));
-      const tau = 1 / (2 * Math.PI * Number(p.fc));
-      const alpha = tau / (tau + dt);
-      const y = alpha * (state.y + u - state.last_u);
-      return { outputs: [y], nextState: { y, last_u: u, lastTime: time } };
+  'HIGH_PASS_FILTER': (id, params) => {
+    const fc = Number(params.fc) || 10;
+    const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : -1;
+    const block: XBlock = {
+      id, type: 'HIGH_PASS_FILTER',
+      params: { fc, sampleTime },
+      isStateful: true,
+      inputs: [createPort('u', 'u', 'input')],
+      outputs: [createPort('y', 'y', 'output')],
+      state: { y: 0, last_u: 0 },
+      execute: (ins, p, state) => {
+        const u = Number(ins[0]) || 0;
+        if (p.sampleTime > 0) {
+          const dt = p.sampleTime;
+          const tau = 1 / (2 * Math.PI * p.fc);
+          const alpha = tau / (tau + dt);
+          const y = alpha * ((state.y || 0) + u - (state.last_u || 0));
+          return { outputs: [y], nextState: { y, last_u: u } };
+        } else {
+          return { outputs: [state.y || 0] };
+        }
+      }
+    };
+    if (sampleTime <= 0) {
+      block.evaluateDerivatives = (ins, p, state) => {
+        const u = Number(ins[0]) || 0;
+        const invTau = 2 * Math.PI * p.fc;
+        return { y: -invTau * (state.y || 0) - invTau * u };
+      };
+      block.execute = (ins, p, state) => {
+        const u = Number(ins[0]) || 0;
+        return { outputs: [(state.y || 0) + u] };
+      };
     }
-  }),
+    return block;
+  },
 
   'MOVING_AVERAGE': (id, params) => ({
     id, type: 'MOVING_AVERAGE',
@@ -8521,14 +8913,20 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       const x1 = Number(ins[0]);
       const x2 = Number(ins[1]);
       
+      let yVal = 0;
+      let fisBlock: any = null;
+      if (p.fisConfig) {
+        fisBlock = BLOCK_LIBRARY['FUZZY_INFERENCE_SYSTEM'](id + '_fis', p.fisConfig);
+        const result = fisBlock.execute([x1, x2], fisBlock.params, {}, time);
+        yVal = Number(result.outputs[0]) || 0;
+      }
+      
       // Compute surface on first call or when resolution changes
-      if (!state.computed && p.fisConfig) {
+      if (!state.computed && p.fisConfig && fisBlock) {
         const res = Number(p.resolution) || 25;
         const r1 = p.input1_range || [-3, 3];
         const r2 = p.input2_range || [-3, 3];
         const surface: number[][] = [];
-        
-        const fisBlock = BLOCK_LIBRARY['FUZZY_INFERENCE_SYSTEM'](id + '_fis', p.fisConfig);
         
         for (let i = 0; i < res; i++) {
           const row: number[] = [];
@@ -8541,10 +8939,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
           surface.push(row);
         }
         
-        return { outputs: [surface, 0], nextState: { surface, computed: true } };
+        return { outputs: [surface, yVal], nextState: { surface, computed: true } };
       }
 
-      return { outputs: [state.surface || [], 0], nextState: state };
+      return { outputs: [state.surface || [], yVal], nextState: state };
     }
   })
 };
@@ -8606,6 +9004,7 @@ export const XBRIDGES_CATEGORIES = [
   {
     name: 'Element-wise Math',
     blocks: [
+      { type: 'Sum', label: 'Sum', icon: 'sigma' },
       { type: 'VectorAdd', label: 'Add', icon: 'plus' },
       { type: 'VectorSub', label: 'Subtract', icon: 'minus' },
       { type: 'VectorMul', label: 'Multiply', icon: 'x' },
@@ -8631,7 +9030,12 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'MatrixMul', label: 'Matrix Multiply', icon: 'grid' },
       { type: 'Transpose', label: 'Transpose', icon: 'rotate-cw' },
       { type: 'Inverse', label: 'Inverse', icon: 'refresh-ccw' },
-      { type: 'Determinant', label: 'Determinant', icon: 'hash' }
+      { type: 'Determinant', label: 'Determinant', icon: 'hash' },
+      { type: 'MatrixConcat', label: 'Matrix Concatenate', icon: 'grid' },
+      { type: 'MatrixDiag', label: 'Diagonal Matrix / Extract', icon: 'grid' },
+      { type: 'IdentityMatrix', label: 'Identity Matrix Generator', icon: 'grid' },
+      { type: 'SubMatrix', label: 'Submatrix Selector', icon: 'grid' },
+      { type: 'MatrixSolve', label: 'Linear System Solver', icon: 'grid' }
     ]
   },
   {

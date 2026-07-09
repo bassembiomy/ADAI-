@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { XBlock, XPort } from '../../engine/xbridges/types';
 import { X, Plus, Trash2, Settings2, Hash, Layers, Activity } from 'lucide-react';
 import { polyToString, zpgToString } from '../../engine/xbridges/BlockDefinitions';
+import { VectorUtils } from '../../engine/xbridges/VectorUtils';
 
 interface Props {
   block: XBlock | null;
@@ -14,9 +15,14 @@ interface Props {
 
 const normalizeNumerals = (val: string) => {
   if (!val) return "";
-  return val.replace(/[٠١٢٣٤٥٦٧٨٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d).toString())
-            .replace(/[۰۱۲۳۴۵۶۷۸۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d).toString())
-            .replace(/[٫،,]/g, '.');
+  const withoutArabic = val.replace(/[٠١٢٣٤٥٦٧٨٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d).toString())
+                           .replace(/[۰۱۲۳۴۵۶۷۸۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d).toString());
+  // If it's a vector/matrix representation (contains brackets or braces), do NOT replace standard comma ',' with '.'
+  // but keep replacing Arabic decimal separator '٫' with '.' and Arabic comma '،' with ','
+  if (withoutArabic.includes('[') || withoutArabic.includes(']') || withoutArabic.includes('{') || withoutArabic.includes('}')) {
+    return withoutArabic.replace(/[٫]/g, '.').replace(/[،]/g, ',');
+  }
+  return withoutArabic.replace(/[٫]/g, '.').replace(/[،,]/g, '.');
 };
 
 export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVariables, onUpdate, onLaunchDoe, onClose }) => {
@@ -25,13 +31,34 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [localLabel, setLocalLabel] = useState(block.label || block.type);
   const [localParams, setLocalParams] = useState(JSON.stringify(block.params, null, 2));
+  // Local string state for numeric param inputs to allow decimal mid-typing (e.g. "0." → "0.1")
+  const [localInputValues, setLocalInputValues] = useState<Record<string, string>>({});
 
   // Sync when block changes
   useEffect(() => {
     setLocalLabel(block.label || block.type);
     setLocalParams(JSON.stringify(block.params, null, 2));
+    // Reset local string inputs when switching blocks
+    setLocalInputValues({});
     setIsCollapsed(false); // Auto-expand when a new block is selected
   }, [block.id]);
+
+  // Keep localInputValues in sync with external param changes (e.g. simulation updates)
+  // Only update keys that are NOT currently being edited
+  useEffect(() => {
+    setLocalInputValues(prev => {
+      const next: Record<string, string> = {};
+      Object.entries(block.params).forEach(([k, v]) => {
+        // Only overwrite if the user hasn't typed something different
+        if (prev[k] === undefined) {
+          next[k] = String(typeof v === 'object' ? JSON.stringify(v) : v);
+        } else {
+          next[k] = prev[k];
+        }
+      });
+      return next;
+    });
+  }, [block.params]);
 
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [isMouseDown, setIsMouseDown] = useState(false);
@@ -186,9 +213,9 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
   );
 
   return (
-    <div className={`${isCollapsed ? 'w-12' : 'w-80'} bg-[#141414] border-l border-[#222] flex flex-col h-full shadow-2xl z-50 text-gray-300 transition-all duration-300 overflow-hidden select-text`}>
+    <div className={`${isCollapsed ? 'w-12' : 'w-80'} bg-[#1a1a1a] border-l border-[#333] flex flex-col h-full shadow-2xl z-50 text-[#e0e0e0] transition-all duration-300 overflow-hidden select-text`}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-[#222] bg-[#1a1a1a]">
+      <div className="flex items-center justify-between p-4 border-b border-[#333] bg-[#0a0a0a]">
         {!isCollapsed && (
           <div className="flex items-center gap-2 text-[#c9a86c] font-bold animate-in fade-in duration-300">
             <Settings2 size={16} />
@@ -198,13 +225,13 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
         <div className={`flex items-center gap-2 ${isCollapsed ? 'flex-col w-full' : ''}`}>
           <button 
             onClick={() => setIsCollapsed(!isCollapsed)} 
-            className="p-1.5 rounded bg-[#0a0a0a] border border-[#333] text-[#c9a86c] hover:bg-[#c9a86c]/10 transition-all"
+            className="p-1.5 rounded bg-[#222] border border-[#333] text-[#c9a86c] hover:bg-[#c9a86c]/15 transition-all"
             title={isCollapsed ? "Expand Properties" : "Collapse Properties"}
           >
             <Triangle size={12} className={`transition-transform duration-300 ${isCollapsed ? '-rotate-90' : 'rotate-90'}`} fill="currentColor" />
           </button>
           {!isCollapsed && (
-            <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors p-1">
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-250 transition-colors p-1">
               <X size={16} />
             </button>
           )}
@@ -222,30 +249,30 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
       >
         {/* General */}
         <section className="space-y-3">
-          <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">General</h3>
+          <h3 className="text-[10px] font-bold text-slate-455 uppercase tracking-wider">General</h3>
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Block Name</label>
+            <label className="block text-xs font-medium text-slate-455 mb-1">Block Name</label>
             <input 
               type="text" 
               value={localLabel}
               onChange={handleLabelChange}
-              className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-white rounded focus:border-[#c9a86c] outline-none transition-all"
+              className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] rounded focus:border-[#c9a86c] focus:ring-1 focus:ring-[#c9a86c]/50 outline-none transition-all"
             />
           </div>
           <div className="flex justify-between items-center bg-[#0a0a0a] p-2 rounded border border-[#333]">
-            <span className="text-xs text-gray-500">Block Type</span>
+            <span className="text-xs text-slate-400">Block Type</span>
             <span className="text-xs font-mono font-medium text-[#c9a86c]">{block.type}</span>
           </div>
           {block.description && (
-            <div className="bg-[#0a0a0a] p-3 rounded border border-[#333] text-xs text-gray-400 space-y-1.5 shadow-inner">
-              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Description & Notes</span>
-              <p className="leading-relaxed whitespace-pre-wrap font-sans text-gray-400">{block.description}</p>
+            <div className="bg-[#0a0a0a] p-3 rounded border border-[#333] text-xs text-slate-400 space-y-1.5 shadow-inner">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Description & Notes</span>
+              <p className="leading-relaxed whitespace-pre-wrap font-sans text-slate-400">{block.description}</p>
             </div>
           )}
           {block.type === 'DOE_MODULE' && onLaunchDoe && (
             <button 
               onClick={onLaunchDoe}
-              className="w-full p-3 bg-[#c9a86c] text-black rounded font-bold text-xs flex items-center justify-center gap-2 hover:bg-[#b8975a] transition-all shadow-lg"
+              className="w-full p-3 bg-[#c9a86c] text-white rounded font-bold text-xs flex items-center justify-center gap-2 hover:bg-[#b8975a] transition-all shadow-md"
             >
               <Layers size={14} /> Launch Modeling Workspace
             </button>
@@ -254,38 +281,151 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
 
         {/* Parameters */}
         <section className="space-y-3">
-          <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Parameters</h3>
+          <h3 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">Parameters</h3>
 
+          {/* ── SUM_JUNCTION / Sum Sign Editor ── */}
+          {(block.type === 'SUM_JUNCTION' || block.type === 'Sum') && (() => {
+            const numInputs: number = block.params.numInputs || 2;
+            const signs: string[] = block.params.signs
+              ? [...block.params.signs]
+              : Array(numInputs).fill('+');
+            // Ensure signs array is always in sync with numInputs
+            while (signs.length < numInputs) signs.push('+');
+
+            const toggleSign = (idx: number) => {
+              const newSigns = [...signs];
+              newSigns[idx] = newSigns[idx] === '-' ? '+' : '-';
+              // Also update port names to reflect +/-
+              const newInputs = [...block.inputs].map((p, i) => ({
+                ...p,
+                name: newSigns[i] === '-' ? `\u2212In${i + 1}` : `+In${i + 1}`
+              }));
+              onUpdate(block.id, {
+                params: { ...block.params, signs: newSigns },
+                inputs: newInputs
+              });
+            };
+
+            const addSignedInput = () => {
+              const newSigns = [...signs, '+'];
+              const newNumInputs = numInputs + 1;
+              const newId = `in${newNumInputs}`;
+              const newInputs = [
+                ...block.inputs,
+                { id: newId, name: `+In${newNumInputs}`, type: 'auto' as const, direction: 'input' as const, value: 0 }
+              ];
+              onUpdate(block.id, {
+                params: { ...block.params, numInputs: newNumInputs, signs: newSigns },
+                inputs: newInputs
+              });
+            };
+
+            const removeSignedInput = (idx: number) => {
+              if (numInputs <= 2) return;
+              const newSigns = signs.filter((_, i) => i !== idx);
+              const newNumInputs = numInputs - 1;
+              const newInputs = block.inputs
+                .filter((_, i) => i !== idx)
+                .map((p, i) => ({
+                  ...p,
+                  id: `in${i + 1}`,
+                  name: newSigns[i] === '-' ? `\u2212In${i + 1}` : `+In${i + 1}`
+                }));
+              onUpdate(block.id, {
+                params: { ...block.params, numInputs: newNumInputs, signs: newSigns },
+                inputs: newInputs
+              });
+            };
+
+            return (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-455">Input Signs</label>
+                  <button
+                    onClick={addSignedInput}
+                    className="flex items-center gap-1 text-[10px] font-bold text-[#28a745] bg-[#28a745]/10 px-2 py-1 rounded hover:bg-[#28a745]/20 transition-all border border-[#28a745]/20"
+                  >
+                    <Plus size={10} /> Add Input
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {signs.slice(0, numInputs).map((sign, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 bg-[#0a0a0a] border border-[#333] rounded-lg px-2 py-1.5"
+                    >
+                      {/* Port index */}
+                      <span className="text-[9px] font-bold text-slate-400 w-10 shrink-0 uppercase tracking-tight">
+                        In {idx + 1}
+                      </span>
+                      {/* Sign toggle */}
+                      <button
+                        onClick={() => toggleSign(idx)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1 rounded-md font-black text-sm transition-all duration-200"
+                        style={{
+                          color: sign === '-' ? '#ef4444' : '#28a745',
+                          background: sign === '-' ? 'rgba(239,68,68,0.15)' : 'rgba(40,167,69,0.15)',
+                          border: `1.5px solid ${sign === '-' ? 'rgba(239,68,68,0.3)' : 'rgba(40,167,69,0.3)'}`
+                        }}
+                        title="Click to toggle +/−"
+                      >
+                        <span className="text-base leading-none">{sign === '-' ? '−' : '+'}</span>
+                        <span className="text-[9px] font-semibold opacity-60">{sign === '-' ? 'Subtract' : 'Add'}</span>
+                      </button>
+                      {/* Remove button (only if > 2 inputs) */}
+                      {numInputs > 2 && (
+                        <button
+                          onClick={() => removeSignedInput(idx)}
+                          className="text-slate-500 hover:text-red-500 p-1 rounded transition-colors shrink-0"
+                          title="Remove this input"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {/* Equation preview */}
+                <div className="bg-[#0a0a0a] border border-[#333] rounded-lg p-2.5 text-center">
+                  <span className="text-[9px] text-slate-500 uppercase tracking-wider block mb-1">Equation</span>
+                  <span className="text-xs font-mono text-[#28a745]">
+                    Y = {signs.slice(0, numInputs).map((s, i) => `${s === '-' ? '\u2212' : (i === 0 ? '' : '+')}u${i + 1}`).join(' ')}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+ 
           {/* Custom Simulink-style Transfer Function / ZPG Editors */}
           {['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION'].includes(block.type) && (
             <div className="space-y-4">
               {renderEquationPreview()}
-
+ 
               {/* Numerator */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-gray-300">Numerator Coefficients</label>
+                  <label className="text-xs font-semibold text-slate-455">Numerator Coefficients</label>
                   <button 
                     onClick={() => addArrayParam('numerator')}
-                    className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-500/10 px-2 py-0.5 rounded transition-all"
+                    className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30 transition-all"
                   >
                     + Add
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-1.5 p-2 bg-[#0a0a0a] border border-[#222] rounded-lg">
+                <div className="flex flex-wrap gap-1.5 p-2 bg-[#0a0a0a] border border-[#333] rounded-lg">
                   {(block.params.numerator || [1]).map((val: number, idx: number) => (
-                    <div key={idx} className="flex items-center bg-[#181818] border border-[#333] rounded px-1.5 py-0.5 gap-1">
+                    <div key={idx} className="flex items-center bg-[#222] border border-[#333] rounded px-1.5 py-0.5 gap-1">
                       <input 
                         type="number" 
                         step="any"
                         value={val}
                         onChange={(e) => updateArrayParam('numerator', idx, Number(e.target.value))}
-                        className="w-10 bg-transparent text-xs text-white outline-none border-none text-center font-mono"
+                        className="w-10 bg-transparent text-xs text-[#e0e0e0] outline-none border-none text-center font-mono"
                       />
                       {(block.params.numerator || [1]).length > 1 && (
                         <button 
                           onClick={() => removeArrayParam('numerator', idx)}
-                          className="text-red-400 hover:text-red-300 p-0.5 rounded"
+                          className="text-red-500 hover:text-red-400 p-0.5 rounded"
                         >
                           <X size={10} />
                         </button>
@@ -298,35 +438,35 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                   placeholder="Or type raw array, e.g. [1, 2, 1]"
                   defaultValue={JSON.stringify(block.params.numerator || [1])}
                   onBlur={(e) => handleRawArrayInput('numerator', e.target.value)}
-                  className="w-full text-xs font-mono px-2 py-1.5 border border-[#222] bg-[#0a0a0a] text-gray-400 rounded outline-none focus:border-emerald-500/50"
+                  className="w-full text-xs font-mono px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-slate-400 rounded outline-none focus:border-[#c9a86c]"
                 />
               </div>
-
+ 
               {/* Denominator */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-gray-300">Denominator Coefficients</label>
+                  <label className="text-xs font-semibold text-slate-455">Denominator Coefficients</label>
                   <button 
                     onClick={() => addArrayParam('denominator')}
-                    className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-500/10 px-2 py-0.5 rounded transition-all"
+                    className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30 transition-all"
                   >
                     + Add
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-1.5 p-2 bg-[#0a0a0a] border border-[#222] rounded-lg">
+                <div className="flex flex-wrap gap-1.5 p-2 bg-[#0a0a0a] border border-[#333] rounded-lg">
                   {(block.params.denominator || [1, 1]).map((val: number, idx: number) => (
-                    <div key={idx} className="flex items-center bg-[#181818] border border-[#333] rounded px-1.5 py-0.5 gap-1">
+                    <div key={idx} className="flex items-center bg-[#222] border border-[#333] rounded px-1.5 py-0.5 gap-1">
                       <input 
                         type="number" 
                         step="any"
                         value={val}
                         onChange={(e) => updateArrayParam('denominator', idx, Number(e.target.value))}
-                        className="w-10 bg-transparent text-xs text-white outline-none border-none text-center font-mono"
+                        className="w-10 bg-transparent text-xs text-[#e0e0e0] outline-none border-none text-center font-mono"
                       />
                       {(block.params.denominator || [1, 1]).length > 1 && (
                         <button 
                           onClick={() => removeArrayParam('denominator', idx)}
-                          className="text-red-400 hover:text-red-300 p-0.5 rounded"
+                          className="text-red-500 hover:text-red-400 p-0.5 rounded"
                         >
                           <X size={10} />
                         </button>
@@ -339,55 +479,55 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                   placeholder="Or type raw array, e.g. [1, 2, 1]"
                   defaultValue={JSON.stringify(block.params.denominator || [1, 1])}
                   onBlur={(e) => handleRawArrayInput('denominator', e.target.value)}
-                  className="w-full text-xs font-mono px-2 py-1.5 border border-[#222] bg-[#0a0a0a] text-gray-400 rounded outline-none focus:border-emerald-500/50"
+                  className="w-full text-xs font-mono px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-slate-400 rounded outline-none focus:border-[#c9a86c]"
                 />
               </div>
             </div>
           )}
-
+ 
           {block.type === 'ZERO_POLE_GAIN' && (
             <div className="space-y-4">
               {renderEquationPreview()}
-
+ 
               {/* Gain (K) */}
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-300">Gain (K)</label>
+                <label className="text-xs font-semibold text-slate-455">Gain (K)</label>
                 <input 
                   type="number" 
                   step="any"
                   value={block.params.gain ?? 1}
                   onChange={(e) => onUpdate(block.id, { params: { ...block.params, gain: Number(e.target.value) || 1 } })}
-                  className="w-full text-sm font-mono px-2.5 py-1.5 border border-[#222] bg-[#0a0a0a] text-white rounded outline-none focus:border-emerald-500/50"
+                  className="w-full text-sm font-mono px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] rounded outline-none focus:border-[#c9a86c]"
                 />
               </div>
-
+ 
               {/* Zeros */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-gray-300">Zeros</label>
+                  <label className="text-xs font-semibold text-slate-455">Zeros</label>
                   <button 
                     onClick={() => addArrayParam('zeros')}
-                    className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-500/10 px-2 py-0.5 rounded transition-all"
+                    className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30 transition-all"
                   >
                     + Add
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-1.5 p-2 bg-[#0a0a0a] border border-[#222] rounded-lg">
+                <div className="flex flex-wrap gap-1.5 p-2 bg-[#0a0a0a] border border-[#333] rounded-lg">
                   {(block.params.zeros || []).length === 0 ? (
-                    <span className="text-[10px] text-gray-500 italic">None (no zeros)</span>
+                    <span className="text-[10px] text-slate-500 italic">None (no zeros)</span>
                   ) : (
                     (block.params.zeros || []).map((val: number, idx: number) => (
-                      <div key={idx} className="flex items-center bg-[#181818] border border-[#333] rounded px-1.5 py-0.5 gap-1">
+                      <div key={idx} className="flex items-center bg-[#222] border border-[#333] rounded px-1.5 py-0.5 gap-1">
                         <input 
                           type="number" 
                           step="any"
                           value={val}
                           onChange={(e) => updateArrayParam('zeros', idx, Number(e.target.value))}
-                          className="w-10 bg-transparent text-xs text-white outline-none border-none text-center font-mono"
+                          className="w-10 bg-transparent text-xs text-[#e0e0e0] outline-none border-none text-center font-mono"
                         />
                         <button 
                           onClick={() => removeArrayParam('zeros', idx)}
-                          className="text-red-400 hover:text-red-300 p-0.5 rounded"
+                          className="text-red-500 hover:text-red-400 p-0.5 rounded"
                         >
                           <X size={10} />
                         </button>
@@ -400,35 +540,35 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                   placeholder="Or type raw array, e.g. [-1, -2]"
                   defaultValue={JSON.stringify(block.params.zeros || [])}
                   onBlur={(e) => handleRawArrayInput('zeros', e.target.value)}
-                  className="w-full text-xs font-mono px-2 py-1.5 border border-[#222] bg-[#0a0a0a] text-gray-400 rounded outline-none focus:border-emerald-500/50"
+                  className="w-full text-xs font-mono px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-slate-400 rounded outline-none focus:border-[#c9a86c]"
                 />
               </div>
-
+ 
               {/* Poles */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-gray-300">Poles</label>
+                  <label className="text-xs font-semibold text-slate-455">Poles</label>
                   <button 
                     onClick={() => addArrayParam('poles')}
-                    className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-500/10 px-2 py-0.5 rounded transition-all"
+                    className="text-emerald-400 hover:text-emerald-300 text-[10px] font-bold bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-900/30 transition-all"
                   >
                     + Add
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-1.5 p-2 bg-[#0a0a0a] border border-[#222] rounded-lg">
+                <div className="flex flex-wrap gap-1.5 p-2 bg-[#0a0a0a] border border-[#333] rounded-lg">
                   {(block.params.poles || [-1]).map((val: number, idx: number) => (
-                    <div key={idx} className="flex items-center bg-[#181818] border border-[#333] rounded px-1.5 py-0.5 gap-1">
+                    <div key={idx} className="flex items-center bg-[#222] border border-[#333] rounded px-1.5 py-0.5 gap-1">
                       <input 
                         type="number" 
                         step="any"
                         value={val}
                         onChange={(e) => updateArrayParam('poles', idx, Number(e.target.value))}
-                        className="w-10 bg-transparent text-xs text-white outline-none border-none text-center font-mono"
+                        className="w-10 bg-transparent text-xs text-[#e0e0e0] outline-none border-none text-center font-mono"
                       />
                       {(block.params.poles || [-1]).length > 1 && (
                         <button 
                           onClick={() => removeArrayParam('poles', idx)}
-                          className="text-red-400 hover:text-red-300 p-0.5 rounded"
+                          className="text-red-500 hover:text-red-400 p-0.5 rounded"
                         >
                           <X size={10} />
                         </button>
@@ -441,7 +581,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                   placeholder="Or type raw array, e.g. [-2, -3]"
                   defaultValue={JSON.stringify(block.params.poles || [-1])}
                   onBlur={(e) => handleRawArrayInput('poles', e.target.value)}
-                  className="w-full text-xs font-mono px-2 py-1.5 border border-[#222] bg-[#0a0a0a] text-gray-400 rounded outline-none focus:border-emerald-500/50"
+                  className="w-full text-xs font-mono px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-slate-400 rounded outline-none focus:border-[#c9a86c]"
                 />
               </div>
             </div>
@@ -451,6 +591,10 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
             .filter(([key]) => {
               if (['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN'].includes(block.type)) {
                 return !['A', 'B', 'C', 'D', 'numerator', 'denominator', 'zeros', 'poles', 'gain', 'representation'].includes(key);
+              }
+              // SUM_JUNCTION: hide signs and numInputs from generic renderer (handled by sign editor above)
+              if (block.type === 'SUM_JUNCTION') {
+                return !['signs', 'numInputs'].includes(key);
               }
               return true;
             })
@@ -464,11 +608,11 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
               if (key === 'smVarId' && (block.type === 'Inport' || block.type === 'Outport')) {
                 return (
                     <div key={key}>
-                      <label className="block text-xs font-medium text-gray-400 mb-1">Source/Target SM Variable</label>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">Source/Target SM Variable</label>
                       <select
                         value={displayValue as string}
                         onChange={(e) => onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } })}
-                        className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-amber-400 rounded focus:border-[#c9a86c] outline-none transition-all"
+                        className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] rounded focus:border-[#c9a86c] outline-none transition-all cursor-pointer"
                       >
                         <option value="">None / Manual Map</option>
                         {availableVariables?.map(v => (
@@ -481,11 +625,11 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
 
               return (
                 <div key={key}>
-                  <label className="block text-xs font-medium text-gray-400 mb-1 capitalize">
+                  <label className="block text-xs font-medium text-slate-400 mb-1 capitalize">
                     {key.replace(/([A-Z])/g, ' $1').trim()}
                   </label>
                   
-                   {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'numCases', 'numSignals', 'bufferSize', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication', 'limitDataPoints', 'showGrid', 'showLegend', 'timeRange'].includes(key) && 
+                   {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'numCases', 'numSignals', 'bufferSize', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication', 'limitDataPoints', 'showGrid', 'showLegend', 'timeRange', 'diagMode', 'axis'].includes(key) && 
                   (key !== 'type' || block.type === 'WaveformGen' || block.type === 'FUZZY_INFERENCE_SYSTEM') ? (
                     <select
                       value={String(displayValue)}
@@ -495,7 +639,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                         if (val === 'false') val = false;
                         onUpdate(block.id, { params: { ...block.params, [key]: val } });
                       }}
-                      className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-emerald-400 font-bold rounded focus:border-[#c9a86c] outline-none transition-all cursor-pointer"
+                      className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-emerald-400 font-bold rounded focus:border-[#c9a86c] focus:ring-1 focus:ring-[#c9a86c]/50 outline-none transition-all cursor-pointer"
                     >
                       {key === 'mode' && (
                         <>
@@ -616,6 +760,18 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                           <option value="divide">Divide</option>
                         </>
                       )}
+                      {key === 'diagMode' && (
+                        <>
+                          <option value="create">Create Diagonal Matrix from Vector</option>
+                          <option value="extract">Extract Diagonal Vector from Matrix</option>
+                        </>
+                      )}
+                      {key === 'axis' && (
+                        <>
+                          <option value="0">Vertical (Axis 0 - Rows)</option>
+                          <option value="1">Horizontal (Axis 1 - Columns)</option>
+                        </>
+                      )}
                       {key === 'angle_unit' && (
                         <>
                           <option value="radians">Radians</option>
@@ -697,63 +853,98 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                       )}
                     </select>
                   ) : (
-                    <input 
-                      type="text" 
-                      value={displayValue}
+                    <input
+                      type="text"
+                      value={localInputValues[key] !== undefined ? localInputValues[key] : String(displayValue)}
                       onChange={(e) => {
-                        let val: any = normalizeNumerals(e.target.value);
-                        if (val !== '') {
-                          if (!isNaN(Number(val))) {
-                            val = Number(val);
-                          } else if (val.startsWith('[') || val.startsWith('{')) {
-                            try { val = JSON.parse(val); } catch(err) {}
+                        const raw = normalizeNumerals(e.target.value);
+                        // Update the local display string immediately
+                        setLocalInputValues(prev => ({ ...prev, [key]: raw }));
+
+                        const trimmedRaw = raw.trim();
+                        
+                        // 1. Do not commit arrays/matrices or multi-word inputs mid-typing
+                        if (trimmedRaw.startsWith('[') || trimmedRaw.includes(' ') || trimmedRaw.includes(';')) {
+                          return;
+                        }
+
+                        // 2. Do not commit incomplete numbers mid-typing
+                        if (raw === '' || raw === '-' || raw.endsWith('.') || raw.endsWith('e') || raw.endsWith('e-') || raw.endsWith('e+')) {
+                          return;
+                        }
+
+                        // 3. Commit valid scalar numbers to allow real-time tuning
+                        if (!isNaN(Number(trimmedRaw))) {
+                          const val = Number(trimmedRaw);
+                          let finalVal = val;
+                          if (isObjectParam) {
+                            finalVal = { ...block.params[key], value: val };
                           }
+                          onUpdate(block.id, { params: { ...block.params, [key]: finalVal } });
+                        }
+                      }}
+                      onBlur={(e) => {
+                        // On blur, always commit the final value
+                        const raw = normalizeNumerals(e.target.value);
+                        const trimmedRaw = raw.trim();
+                        let val: any = raw;
+                        if (trimmedRaw !== '' && !isNaN(Number(trimmedRaw))) {
+                          val = Number(trimmedRaw);
+                        } else if (trimmedRaw.startsWith('[') || trimmedRaw.startsWith('{')) {
+                           val = VectorUtils.parseMatlabArray(trimmedRaw);
                         }
                         let finalVal = val;
                         if (isObjectParam) {
                           finalVal = { ...block.params[key], value: val };
                         }
                         onUpdate(block.id, { params: { ...block.params, [key]: finalVal } });
+                        // Sync local display to committed value so it shows clean form
+                        setLocalInputValues(prev => ({ ...prev, [key]: String(typeof finalVal === 'object' ? JSON.stringify(finalVal) : finalVal) }));
                       }}
-                      className="w-full text-sm font-mono px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-white rounded focus:border-[#emerald-500] outline-none transition-all"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          (e.target as HTMLInputElement).blur();
+                        }
+                      }}
+                      className="w-full text-sm font-mono px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] rounded focus:border-[#c9a86c] outline-none transition-all"
                     />
                   )}
                   {key === 'value' && block.type === 'Constant' && (
-                    <p className="text-[10px] text-gray-500 mt-1">Hint: Type `[1, 2, 3]` for vectors.</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Hint: Type `[1, 2, 3]` or MATLAB style `[1 2 3]` for vectors.</p>
                   )}
                   {(key === 'initialValue' || key === 'finalValue') && block.type === 'Step' && (
-                    <p className="text-[10px] text-gray-500 mt-1">Hint: Type `[1, 2, 3]` for vectors.</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Hint: Type `[1, 2, 3]` or MATLAB style `[1 2 3]` for vectors.</p>
                   )}
                 </div>
               );
             })}
           
           {Object.keys(block.params).length === 0 && (
-            <div className="text-xs text-gray-500 italic">No parameters available</div>
+            <div className="text-xs text-slate-400 italic">No parameters available</div>
           )}
         </section>
 
         {/* Ports */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Input Ports</h3>
-            {block.allowDynamicInputs && (
-              <button onClick={handleAddInput} className="text-[#c9a86c] hover:text-[#e5c994] flex items-center gap-1 text-[10px] font-bold bg-[#c9a86c]/10 px-2 py-1 rounded transition-colors">
+            <h3 className="text-[10px] font-bold text-slate-455 uppercase tracking-wider">Input Ports</h3>
+            {block.allowDynamicInputs && block.type !== 'SUM_JUNCTION' && (
+              <button onClick={handleAddInput} className="text-[#c9a86c] hover:text-[#b8975a] flex items-center gap-1 text-[10px] font-bold bg-[#c9a86c]/10 px-2 py-1 rounded transition-colors">
                 <Plus size={10} /> Add
               </button>
             )}
           </div>
           <div className="space-y-2">
             {(block.inputs || []).map(port => (
-              <div key={port.id} className="bg-[#0a0a0a] border border-[#222] p-2 rounded-lg space-y-1">
+              <div key={port.id} className="bg-[#0a0a0a] border border-[#333] p-2 rounded-lg space-y-1">
                 <div className="flex items-center justify-between">
                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.4)]" />
-                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">
-                         {port.id} <span className="text-gray-600 lowercase ml-1">({port.name})</span>
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-sm" />
+                      <span className="text-[9px] font-bold text-slate-300 uppercase tracking-tight">
+                         {port.id} <span className="text-slate-500 lowercase ml-1">({port.name})</span>
                       </span>
                    </div>
-                   <span className="text-[8px] text-blue-400 font-mono bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/10 uppercase tracking-tighter">
+                   <span className="text-[8px] text-blue-400 font-mono bg-blue-900/20 px-1.5 py-0.5 rounded border border-blue-800/30 uppercase tracking-tighter">
                      {port.type}
                    </span>
                 </div>
@@ -762,32 +953,32 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                     type="text" 
                     value={port.name}
                     onChange={(e) => updatePortName(port.id, e.target.value, true)}
-                    className="flex-1 text-xs px-2 py-1 border border-[#333] bg-[#141414] text-white rounded focus:border-[#c9a86c] outline-none"
+                    className="flex-1 text-xs px-2 py-1 border border-[#333] bg-[#1a1a1a] text-[#e0e0e0] rounded focus:border-[#c9a86c] outline-none"
                     placeholder="Port Label"
                   />
-                  {block.allowDynamicInputs && (block.inputs || []).length > 2 && (
-                    <button onClick={() => handleRemoveInput(port.id)} className="text-gray-500 hover:text-red-500 p-1 transition-colors">
+                  {block.allowDynamicInputs && block.type !== 'SUM_JUNCTION' && (block.inputs || []).length > 2 && (
+                    <button onClick={() => handleRemoveInput(port.id)} className="text-slate-500 hover:text-red-500 p-1 transition-colors">
                       <Trash2 size={12} />
                     </button>
                   )}
                 </div>
               </div>
             ))}
-            {(block.inputs || []).length === 0 && <p className="text-xs text-gray-600 italic px-2">No inputs</p>}
+            {(block.inputs || []).length === 0 && <p className="text-xs text-slate-400 italic px-2">No inputs</p>}
           </div>
 
-          <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-4">Output Ports</h3>
+          <h3 className="text-[10px] font-bold text-slate-455 uppercase tracking-wider mt-4">Output Ports</h3>
           <div className="space-y-2">
             {(block.outputs || []).map(port => (
-              <div key={port.id} className="bg-[#0a0a0a] border border-[#222] p-2 rounded-lg space-y-1">
+              <div key={port.id} className="bg-[#0a0a0a] border border-[#333] p-2 rounded-lg space-y-1">
                 <div className="flex items-center justify-between">
                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
-                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">
-                         {port.id} <span className="text-gray-600 lowercase ml-1">({port.name})</span>
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm" />
+                      <span className="text-[9px] font-bold text-slate-300 uppercase tracking-tight">
+                         {port.id} <span className="text-slate-500 lowercase ml-1">({port.name})</span>
                       </span>
                    </div>
-                   <span className="text-[8px] text-emerald-400 font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/10 uppercase tracking-tighter">
+                   <span className="text-[8px] text-emerald-400 font-mono bg-emerald-900/20 px-1.5 py-0.5 rounded border border-emerald-800/30 uppercase tracking-tighter">
                      {port.type}
                    </span>
                 </div>
@@ -796,47 +987,47 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                     type="text" 
                     value={port.name}
                     onChange={(e) => updatePortName(port.id, e.target.value, false)}
-                    className="flex-1 text-xs px-2 py-1 border border-[#333] bg-[#141414] text-white rounded focus:border-[#c9a86c] outline-none"
+                    className="flex-1 text-xs px-2 py-1 border border-[#333] bg-[#1a1a1a] text-[#e0e0e0] rounded focus:border-[#c9a86c] outline-none"
                     placeholder="Port Label"
                   />
                 </div>
               </div>
             ))}
-            {(block.outputs || []).length === 0 && <p className="text-xs text-gray-600 italic px-2">No outputs</p>}
+            {(block.outputs || []).length === 0 && <p className="text-xs text-slate-400 italic px-2">No outputs</p>}
           </div>
         </section>
 
         {/* Model Analysis Report (For DOE Models) */}
         {block.type === 'DOE_MODEL' && (block as any).metrics && (
-           <section className="mt-8 border-t border-white/5 pt-6 space-y-4">
-              <h3 className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest flex items-center gap-2">
+           <section className="mt-8 border-t border-[#333] pt-6 space-y-4">
+              <h3 className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-2">
                  <Activity size={12} /> Model Analysis Report
               </h3>
               
-              <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-4 space-y-3">
+              <div className="bg-emerald-900/10 border border-emerald-800/30 rounded-xl p-4 space-y-3">
                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-0.5">
-                       <span className="text-[8px] text-emerald-500/60 uppercase font-black">R-Squared</span>
-                       <div className="text-xl font-black text-white leading-none">{(block as any).metrics.R2 ? ((block as any).metrics.R2 * 100).toFixed(2) : '0.00'}%</div>
+                       <span className="text-[8px] text-emerald-400/80 uppercase font-black">R-Squared</span>
+                       <div className="text-xl font-black text-[#e0e0e0] leading-none">{(block as any).metrics.R2 ? ((block as any).metrics.R2 * 100).toFixed(2) : '0.00'}%</div>
                     </div>
                     {(block as any).metrics.R2Adj !== undefined && (
                        <div className="space-y-0.5">
-                          <span className="text-[8px] text-emerald-500/60 uppercase font-black">Adj. R-Squared</span>
-                          <div className="text-xl font-black text-white/70 leading-none">{((block as any).metrics.R2Adj * 100).toFixed(2)}%</div>
+                          <span className="text-[8px] text-emerald-400/80 uppercase font-black">Adj. R-Squared</span>
+                          <div className="text-xl font-black text-[#c0c0c0] leading-none">{((block as any).metrics.R2Adj * 100).toFixed(2)}%</div>
                        </div>
                     )}
                  </div>
 
-                 <div className="h-px bg-emerald-500/10" />
+                 <div className="h-px bg-emerald-800/30" />
 
                  <div className="space-y-1.5">
-                    <span className="text-[8px] text-emerald-500/60 uppercase font-black">Regression Equation</span>
-                    <div className="bg-black/40 p-2 rounded-lg border border-white/5 font-mono text-[9px] text-emerald-400 whitespace-pre-wrap break-all leading-relaxed">
+                    <span className="text-[8px] text-emerald-400/80 uppercase font-black">Regression Equation</span>
+                    <div className="bg-[#0a0a0a] p-2 rounded-lg border border-[#333] font-mono text-[9px] text-emerald-400 whitespace-pre-wrap break-all leading-relaxed">
                        {(block as any).metrics.equation}
                     </div>
                  </div>
               </div>
-           </section>
+            </section>
         )}
       </div>
     </div>

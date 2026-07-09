@@ -38,6 +38,7 @@ export interface XBlock {
   equation?: string; // For Help Center documentation
   icon?: string; // For Help Center documentation
   description?: string; // For Help Center documentation
+  nextTick?: number; // Scheduled sample-time tick for discrete blocks
   
   // The execute function now handles arrays and matrices
   // It receives an array of input values, the block's parameters, the block's state, and current simulation time
@@ -50,6 +51,9 @@ export interface XBlock {
   // Optional: For continuous-time blocks (like Integrators), this returns the state derivative (dx/dt)
   // This is required for solvers like ODE1 and ODE4.
   evaluateDerivatives?: (inputs: XValue[], params: Record<string, any>, state: any, time: number) => any;
+
+  // Optional: Returns zero-crossing values for discontinuities bracketing
+  ZeroCrossingFn?: (inputs: XValue[], params: Record<string, any>, state: any, time: number) => number[];
 }
 
 
@@ -59,7 +63,7 @@ export interface XModel {
 }
 
 export interface SolverOptions {
-  solver: 'euler' | 'rk4' | 'ode4' | 'ode45' | 'fixedStep';
+  solver: 'euler' | 'ode1' | 'ode2' | 'ode3' | 'ode4' | 'rk4' | 'ode5' | 'ode23' | 'ode45' | 'fixedStep' | 'ode113' | 'ode23s' | 'ode15s';
   fixedStep?: number; // e.g. 0.01 for RK4/Euler
   startTime: number;
   stopTime: number;
@@ -68,6 +72,11 @@ export interface SolverOptions {
   tolerance?: number;
   relTol?: number;
   absTol?: number;
+  algTol?: number;   // Tolerance for Newton-Raphson algebraic loop solver
+  maxIter?: number;  // Max iterations for Newton-Raphson algebraic loop solver
+  zeroTol?: number;  // Zero-crossing detection time tolerance
+  stiffDetect?: boolean; // Enable/disable stiffness detection
+  outputTimes?: number[]; // Specific times to output results
 }
 
 export interface ModelDiagnostic {

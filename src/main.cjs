@@ -72,7 +72,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
     },
     title: "ADIA Engineering Suite",
-    backgroundColor: "#0a0a0a",
+    backgroundColor: "#181818",
     // icon: path.join(__dirname, '../icon.png'),
   });
 
@@ -129,7 +129,7 @@ function createWindow() {
                 sandbox: true,
                 preload: path.join(__dirname, 'preload.cjs'),
               },
-              backgroundColor: "#0a0a0a",
+              backgroundColor: "#181818",
             }
           };
         }
@@ -854,7 +854,7 @@ ipcMain.handle('3dx-oauth-start', async (event, { tenantUrl, clientId }) => {
         
         if (!returnedState || returnedState !== pendingOAuthState) {
           res.writeHead(400, { 'Content-Type': 'text/html' });
-          res.end(`<html><body style="font-family:sans-serif;background:#0a0a0a;color:#ff4d4d;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+          res.end(`<html><body style="font-family:sans-serif;background:#181818;color:#ff4d4d;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
             <div style="text-align:center"><h2>❌ Authentication Failed</h2>
             <p>OAuth state mismatch — potential CSRF attack detected.</p></div></body></html>`);
           server.close();
@@ -864,7 +864,7 @@ ipcMain.handle('3dx-oauth-start', async (event, { tenantUrl, clientId }) => {
         pendingOAuthState = null;
 
         res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(`<html><body style="font-family:sans-serif;background:#0a0a0a;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+        res.end(`<html><body style="font-family:sans-serif;background:#181818;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
           <div style="text-align:center"><h2 style="color:#4da6ff">&#x2713; Authentication Complete</h2>
           <p>You may close this window and return to ADIA.</p></div></body></html>`);
         server.close();

@@ -159,38 +159,201 @@ export class VectorUtils {
   }
 
   static integrateState(state: any, deriv: any, factor: number): any {
+    if (typeof state === 'boolean') {
+      return state;
+    }
     if (typeof state === 'number') {
       return state + (Number(deriv) || 0) * factor;
     }
     if (Array.isArray(state)) {
       return state.map((val, idx) => {
-        const d = Array.isArray(deriv) ? deriv[idx] : deriv;
-        return val + (Number(d) || 0) * factor;
+        const d = Array.isArray(deriv) 
+          ? deriv[idx] 
+          : (typeof deriv === 'object' && deriv !== null ? (deriv[idx] ?? 0) : deriv);
+        return this.integrateState(val, d, factor);
       });
     }
     if (typeof state === 'object' && state !== null) {
       const nextState = { ...state };
-      const keys = Object.keys(state);
-      if (Array.isArray(deriv)) {
+      if (typeof deriv === 'object' && deriv !== null && !Array.isArray(deriv)) {
+        for (const key in deriv) {
+          if (key in nextState) {
+            nextState[key] = this.integrateState(state[key], deriv[key], factor);
+          }
+        }
+      } else if (Array.isArray(deriv)) {
+        const keys = Object.keys(state);
         deriv.forEach((d, idx) => {
           const key = keys[idx];
           if (key !== undefined) {
-            nextState[key] = (Number(state[key]) || 0) + (Number(d) || 0) * factor;
+            nextState[key] = this.integrateState(state[key], d, factor);
           }
         });
-      } else if (typeof deriv === 'object' && deriv !== null) {
-        for (const key in deriv) {
-          if (key in nextState) {
-            nextState[key] = (Number(state[key]) || 0) + (Number(deriv[key]) || 0) * factor;
-          }
-        }
       } else {
+        const keys = Object.keys(state);
         keys.forEach(key => {
-          nextState[key] = (Number(state[key]) || 0) + (Number(deriv) || 0) * factor;
+          nextState[key] = this.integrateState(state[key], deriv, factor);
         });
       }
       return nextState;
     }
     return state;
   }
+
+  static zeroLike(val: any): any {
+    if (typeof val === 'number') {
+      return 0;
+    }
+    if (typeof val === 'boolean') {
+      return false;
+    }
+    if (Array.isArray(val)) {
+      return val.map(v => this.zeroLike(v));
+    }
+    if (typeof val === 'object' && val !== null) {
+      const res: any = {};
+      for (const key in val) {
+        res[key] = this.zeroLike(val[key]);
+      }
+      return res;
+    }
+    return 0;
+  }
+
+  static identity(n: number): number[][] {
+    try {
+      const size = Math.max(1, Math.floor(n));
+      const mat = math.identity(size) as any;
+      return (mat.toArray ? mat.toArray() : mat) as number[][];
+    } catch (e: any) {
+      throw new Error(`Identity Matrix Error: ${e.message}`);
+    }
+  }
+
+  static diag(a: XValue): XValue {
+    try {
+      if (!Array.isArray(a)) {
+        return [[Number(a) || 0]];
+      }
+      const res = math.diag(a as any) as any;
+      return (res && typeof res.toArray === 'function') ? res.toArray() : res;
+    } catch (e: any) {
+      throw new Error(`Diag Error: ${e.message}`);
+    }
+  }
+
+  static solve(a: XValue, b: XValue): XValue {
+    try {
+      const res = math.lusolve(a as any, b as any) as any;
+      return (res && typeof res.toArray === 'function') ? res.toArray() : res;
+    } catch (e: any) {
+      throw new Error(`Solve Error: ${e.message}`);
+    }
+  }
+
+  static concat(a: XValue, b: XValue, axis: number): XValue {
+    try {
+      const res = math.concat(a as any, b as any, axis) as any;
+      return (res && typeof res.toArray === 'function') ? res.toArray() : res;
+    } catch (e: any) {
+      throw new Error(`Concatenation Error: ${e.message}`);
+    }
+  }
+
+  static submatrix(a: XValue, rowStart: number, rowEnd: number, colStart: number, colEnd: number): XValue {
+    try {
+      if (!Array.isArray(a)) {
+        throw new Error("Input must be a vector or matrix");
+      }
+      if (!Array.isArray(a[0])) {
+        const start = Math.max(0, rowStart);
+        const end = Math.min(a.length - 1, rowEnd);
+        return a.slice(start, end + 1) as any;
+      }
+      const mat = a as any[][];
+      const rStart = Math.max(0, rowStart);
+      const rEnd = Math.min(mat.length - 1, rowEnd);
+      const cStart = Math.max(0, colStart);
+      const cEnd = Math.min(mat[0].length - 1, colEnd);
+      
+      const result: any[][] = [];
+      for (let i = rStart; i <= rEnd; i++) {
+        result.push(mat[i].slice(cStart, cEnd + 1));
+      }
+      return result;
+    } catch (e: any) {
+      throw new Error(`Submatrix Extraction Error: ${e.message}`);
+    }
+  }
+
+  /**
+   * Parses a MATLAB-style vector/matrix string or JSON string into a number, array, or matrix.
+   * e.g., "[1 2 3 4]" -> [1, 2, 3, 4], "[1 2; 3 4]" -> [[1, 2], [3, 4]]
+   */
+  static parseMatlabArray(val: any): any {
+    if (typeof val !== 'string') return val;
+    const trimmed = val.trim();
+    if (trimmed === '') return '';
+
+    // Check if it is a number
+    if (!isNaN(Number(trimmed))) {
+      return Number(trimmed);
+    }
+
+    // Try to normalize brackets and parse as JSON
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        let res = trimmed;
+        let prev;
+        do {
+          prev = res;
+          res = res.replace(/\[([^\[\]]+)\]/g, (m: string, p1: string) => {
+            if (p1.includes(';')) {
+              const rows = p1.split(';').map((r: string) => {
+                const parts = r.trim().split(/[\s,]+/).filter(Boolean);
+                return '[' + parts.join(',') + ']';
+              });
+              return '[' + rows.join(',') + ']';
+            } else {
+              const parts = p1.trim().split(/[\s,]+/).filter(Boolean);
+              return '[' + parts.join(',') + ']';
+            }
+          });
+        } while (res !== prev);
+        
+        return JSON.parse(res);
+      } catch (e) {
+        // If JSON.parse fails, fallback to legacy/other methods
+      }
+    }
+
+    // Fallback to legacy parsing if JSON normalization failed
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      const content = trimmed.slice(1, -1).trim();
+      if (content === '') return [];
+
+      if (content.includes(';')) {
+        // Matrix: rows separated by semicolons
+        const rows = content.split(';');
+        const matrix = rows.map(row => {
+          const parts = row.trim().split(/[\s,]+/);
+          return parts.map(p => Number(p)).filter(n => !isNaN(n));
+        }).filter((r: number[]) => r.length > 0);
+        return matrix;
+      } else {
+        // 1D Vector: separated by spaces and/or commas
+        const parts = content.split(/[\s,]+/);
+        const arr = parts.map(p => Number(p)).filter(n => !isNaN(n));
+        return arr;
+      }
+    }
+
+    // Fallback to JSON parse directly
+    try {
+      return JSON.parse(trimmed);
+    } catch (e) {}
+
+    return val;
+  }
 }
+

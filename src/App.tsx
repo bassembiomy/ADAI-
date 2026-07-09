@@ -8093,8 +8093,8 @@ const ADIA = () => {
       const priorityB = stateB ? stateB.priority : 0;
       return priorityA - priorityB;
     });
+    let transitionFired = false;
     for (const region of sortedRegions) {
-      let transitionFired = false;
       const currentStateId = newActiveStates[region];
 
       const currentState = states.find(s => s.id === currentStateId);
@@ -14096,47 +14096,6 @@ const ADIA = () => {
           }}
           onSaveAll={handleExportProject}
           initialSelectedNodeId={xBridgesSelectedNodeId}
-          onNavigateToVlab={(nodeId) => {
-            const findMatchingNode = (targetNodes: any[], sourceNodeId?: string) => {
-              if (!sourceNodeId) return null;
-              const srcLower = sourceNodeId.toLowerCase();
-              const groups = [
-                ['pid', 'controller', 'ctrl', 'ps_pid_ctrl', 'pid_basic', 'pid_controller'],
-                ['motor', 'plant', 'ac_motor', 'ac_induction_motor', 'induction', 'engine'],
-                ['inverter', 'pwm', 'gate', 'pwm_3ph_2level', 'three_phase_inverter', 'commutation'],
-                ['error', 'subtract', 'sub', 'error_calc', 'error_sub', 'ps_subtract', 'vectorsub'],
-                ['ref', 'constant', 'gen', 'signal', 'ref_speed', 'ref_signal', 'ps_constant', 'waveformgen']
-              ];
-              let match = targetNodes.find(n => n.id === sourceNodeId);
-              if (match) return match;
-              for (const group of groups) {
-                const isSourceInGroup = group.some(keyword => srcLower.includes(keyword));
-                if (isSourceInGroup) {
-                  match = targetNodes.find(n => {
-                    const id = n.id.toLowerCase();
-                    const type = (n.data?.type || n.type || '').toLowerCase();
-                    return group.some(keyword => id.includes(keyword) || type.includes(keyword));
-                  });
-                  if (match) return match;
-                }
-              }
-              const cleanId = srcLower.replace(/_[0-9]+$/, '');
-              return targetNodes.find(n => {
-                const id = n.id.toLowerCase();
-                const type = (n.data?.type || n.type || '').toLowerCase();
-                return id.includes(cleanId) || type.includes(cleanId) || cleanId.includes(id) || cleanId.includes(type);
-              });
-            };
-
-            const targetNode = findMatchingNode(vlabNodes, nodeId);
-            if (targetNode) {
-              setVlabSelectedNodeId(targetNode.id);
-            } else {
-              setVlabSelectedNodeId(null);
-            }
-            setDiagramMode('vlab');
-            setTimeout(() => setVlabSelectedNodeId(null), 1000);
-          }}
         />
       </div>
     );

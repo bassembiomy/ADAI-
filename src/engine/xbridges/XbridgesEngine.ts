@@ -1,18 +1,42 @@
 // src/engine/xbridges/XbridgesEngine.ts
-import { XModel, XBlock, ModelDiagnostic } from './types';
+import { XModel, XBlock, ModelDiagnostic, SolverOptions } from './types';
 import { BLOCK_LIBRARY } from './BlockDefinitions';
+import { VectorUtils } from './VectorUtils';
+import * as math from 'mathjs';
 
 export class XbridgesEngine {
   private model: XModel;
-  private executionOrder: XBlock[] = [];
-  private compiled = false;
+  public executionOrder: XBlock[] = [];
+  public compiled = false;
   private blockMap = new Map<string, XBlock>();
   private signalValues = new Map<string, any>(); // key: "blockId.portId"
   public diagnostics: ModelDiagnostic[] = [];
+  public options: SolverOptions | null = null;
+
+  private sortedBlocks: XBlock[] = [];
+  private cycleBlocks: XBlock[] = [];
+  private downstreamBlocks: XBlock[] = [];
+  private nextSampleTime = new Map<string, number>();
+  private lastOutputs = new Map<string, any[]>();
 
   constructor(model: XModel) {
     this.model = model;
-    this.model.blocks.forEach(b => this.blockMap.set(b.id, b));
+    this.model.blocks.forEach(b => {
+      if (!b.execute) {
+        const typeKey = Object.keys(BLOCK_LIBRARY).find(k => k.toLowerCase() === b.type.toLowerCase());
+        if (typeKey) {
+          const fresh = BLOCK_LIBRARY[typeKey](b.id, b.params || {});
+          b.execute = fresh.execute;
+          b.evaluateDerivatives = fresh.evaluateDerivatives;
+          b.ZeroCrossingFn = fresh.ZeroCrossingFn;
+          if (!b.inputs || b.inputs.length === 0) b.inputs = fresh.inputs;
+          if (!b.outputs || b.outputs.length === 0) b.outputs = fresh.outputs;
+          if (b.state === undefined) b.state = fresh.state;
+          if (b.isStateful === undefined) b.isStateful = fresh.isStateful;
+        }
+      }
+      this.blockMap.set(b.id, b);
+    });
   }
 
   private flatBlocks: XBlock[] = [];
@@ -129,7 +153,7 @@ export class XbridgesEngine {
     });
   }
 
-  public compile(): ModelDiagnostic[] {
+  public compile(startTime = 0): ModelDiagnostic[] {
     this.diagnostics = [];
     this.flatten();
     this.validateConnections();
@@ -161,11 +185,11 @@ export class XbridgesEngine {
       if (degree === 0) queue.push(blockId);
     });
 
-    this.executionOrder = [];
+    const sortedBlocks: XBlock[] = [];
     while (queue.length > 0) {
       const u = queue.shift()!;
       const block = this.blockMap.get(u)!;
-      this.executionOrder.push(block);
+      sortedBlocks.push(block);
 
       adjList.get(u)!.forEach(v => {
         if (!block.isStateful) {
@@ -175,24 +199,66 @@ export class XbridgesEngine {
       });
     }
 
-    if (this.executionOrder.length !== this.flatBlocks.length) {
-      const missing = this.flatBlocks.filter(b => !this.executionOrder.includes(b));
-      const missingIds = missing.map(b => b.id);
-      const missingLabels = missing.map(b => b.label || b.type).join(', ');
-      this.diagnostics.push({
-        severity: 'error',
-        code: 'ALGEBRAIC_LOOP',
-        message: `Algebraic loop detected involving blocks: ${missingLabels}. Try introducing a Unit Delay or Integrator to break the loop.`,
-        blockIds: missingIds
+    const missing = this.flatBlocks.filter(b => !sortedBlocks.includes(b));
+    const cycleBlocks: XBlock[] = [];
+    const downstreamBlocks: XBlock[] = [];
+
+    if (missing.length > 0) {
+      // Find which blocks are in actual loops (strongly connected)
+      const canReach = (startId: string, targetId: string): boolean => {
+        const visited = new Set<string>();
+        const q = [startId];
+        while (q.length > 0) {
+          const curr = q.shift()!;
+          if (curr === targetId && visited.size > 0) return true;
+          if (visited.has(curr)) continue;
+          visited.add(curr);
+          
+          const outputs = this.flatConnections.filter(c => c.sourceBlock === curr);
+          outputs.forEach(c => {
+            q.push(c.targetBlock);
+          });
+        }
+        return false;
+      };
+
+      missing.forEach(b => {
+        if (canReach(b.id, b.id)) {
+          cycleBlocks.push(b);
+        } else {
+          downstreamBlocks.push(b);
+        }
       });
-      missing.forEach(m => this.executionOrder.push(m));
+
+      const missingLabels = cycleBlocks.map(b => b.label || b.type).join(', ');
+      if (cycleBlocks.length > 0) {
+        this.diagnostics.push({
+          severity: 'warning',
+          code: 'ALGEBRAIC_LOOP',
+          message: `Algebraic loop detected involving blocks: ${missingLabels}. Solving using Newton-Raphson iteration.`,
+          blockIds: cycleBlocks.map(b => b.id)
+        });
+      }
     }
 
-    // 3. Initialize signal map
+    this.sortedBlocks = sortedBlocks;
+    this.cycleBlocks = cycleBlocks;
+    this.downstreamBlocks = downstreamBlocks;
+    this.executionOrder = [...sortedBlocks, ...cycleBlocks, ...downstreamBlocks];
+
+    // 3. Initialize signal map, sample times, and ZOH caches
+    this.nextSampleTime.clear();
+    this.lastOutputs.clear();
     this.flatBlocks.forEach(b => {
       b.outputs.forEach(out => {
         this.signalValues.set(`${b.id}.${out.id}`, out.value);
       });
+      const ts = Number(b.params.sampleTime);
+      if (ts > 0) {
+        b.nextTick = startTime;
+        this.nextSampleTime.set(b.id, startTime);
+        this.lastOutputs.set(b.id, b.outputs.map(out => out.value));
+      }
     });
 
     this.compiled = true;
@@ -209,21 +275,171 @@ export class XbridgesEngine {
     });
   }
 
+  private checkNumericalStability(block: XBlock, val: any, context: string) {
+    const isInvalid = (v: any): boolean => {
+      if (typeof v === 'number') {
+        return isNaN(v) || !isFinite(v);
+      }
+      if (Array.isArray(v)) {
+        return v.some(isInvalid);
+      }
+      if (typeof v === 'object' && v !== null) {
+        return Object.values(v).some(isInvalid);
+      }
+      return false;
+    };
+
+    if (isInvalid(val)) {
+      const msg = `Numerical instability detected in block '${block.label || block.type}' (${context}): value is NaN or Infinite.`;
+      if (!this.diagnostics.some(d => d.message === msg)) {
+        this.diagnostics.push({
+          severity: 'warning',
+          code: 'NUMERICAL_INSTABILITY',
+          message: msg,
+          blockIds: [block.id]
+        });
+      }
+    }
+  }
+
+  private executeBlockOrCache(block: XBlock, time: number, tempStates?: Map<string, any>) {
+    const ts = Number(block.params.sampleTime);
+    if (ts > 0) {
+      const nextTime = block.nextTick ?? this.nextSampleTime.get(block.id) ?? 0;
+      if (time < nextTime - 1e-9) {
+        const cached = this.lastOutputs.get(block.id);
+        if (cached) {
+          block.outputs.forEach((outPort, i) => {
+            this.signalValues.set(`${block.id}.${outPort.id}`, cached[i]);
+          });
+          return;
+        }
+      }
+    }
+
+    const inputValues = this.gatherInputs(block);
+    const currentState = tempStates?.has(block.id) ? tempStates.get(block.id) : block.state;
+    
+    try {
+      const result = block.execute(inputValues, block.params, currentState, time);
+      result.outputs.forEach((val, i) => {
+        this.checkNumericalStability(block, val, `Output[${i}]`);
+      });
+
+      block.outputs.forEach((outPort, i) => {
+        this.signalValues.set(`${block.id}.${outPort.id}`, result.outputs[i]);
+      });
+
+      if (ts > 0) {
+        this.lastOutputs.set(block.id, [...result.outputs]);
+      }
+    } catch (err: any) {
+       console.error(`Error executing block ${block.label || block.type}: ${err.message}`);
+    }
+  }
+
+  private solveAlgebraicLoop(time: number, tempStates?: Map<string, any>, algTol = 1e-6, maxIter = 100) {
+    const loopKeys: { blockId: string; portId: string; block: XBlock; portIndex: number }[] = [];
+    this.cycleBlocks.forEach(b => {
+      b.outputs.forEach((out, idx) => {
+        loopKeys.push({ blockId: b.id, portId: out.id, block: b, portIndex: idx });
+      });
+    });
+
+    const n = loopKeys.length;
+    if (n === 0) return;
+
+    const getZ = (): number[] => {
+      return loopKeys.map(lk => {
+        const val = this.signalValues.get(`${lk.blockId}.${lk.portId}`);
+        return typeof val === 'number' ? val : 0;
+      });
+    };
+
+    const setZ = (z: number[]) => {
+      z.forEach((val, idx) => {
+        const lk = loopKeys[idx];
+        this.signalValues.set(`${lk.blockId}.${lk.portId}`, val);
+      });
+    };
+
+    const evaluateF = (z: number[]): number[] => {
+      setZ(z);
+      const fVal: number[] = new Array(n).fill(0);
+      
+      this.cycleBlocks.forEach(block => {
+        const inputValues = this.gatherInputs(block);
+        const currentState = tempStates?.has(block.id) ? tempStates.get(block.id) : block.state;
+        try {
+          const result = block.execute(inputValues, block.params, currentState, time);
+          block.outputs.forEach((outPort, i) => {
+            this.signalValues.set(`${block.id}.${outPort.id}`, result.outputs[i]);
+          });
+        } catch (err) {}
+      });
+
+      loopKeys.forEach((lk, idx) => {
+        const val = this.signalValues.get(`${lk.blockId}.${lk.portId}`);
+        fVal[idx] = typeof val === 'number' ? val : 0;
+      });
+      return fVal;
+    };
+
+    let z = getZ();
+    const eps = 1e-6;
+
+    for (let iter = 0; iter < maxIter; iter++) {
+      const fz = evaluateF(z);
+      const g = z.map((zi, i) => zi - fz[i]);
+      const gNorm = Math.max(...g.map(Math.abs));
+
+      if (gNorm < algTol) {
+        setZ(z);
+        return;
+      }
+
+      const J: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
+      for (let j = 0; j < n; j++) {
+        const zPerturbed = [...z];
+        zPerturbed[j] += eps;
+        const fzPerturbed = evaluateF(zPerturbed);
+        for (let i = 0; i < n; i++) {
+          const df_ij = (fzPerturbed[i] - fz[i]) / eps;
+          J[i][j] = (i === j ? 1 : 0) - df_ij;
+        }
+      }
+
+      try {
+        const negG = g.map(val => -val);
+        const deltaZ = math.lusolve(J, negG) as number[];
+        const dZ = math.flatten(deltaZ) as number[];
+        z = z.map((zi, i) => zi + (dZ[i] || 0));
+      } catch (err) {
+        z = z.map((zi, i) => zi - 0.1 * g[i]);
+      }
+    }
+
+    setZ(z);
+  }
+
   public computeOutputs(time: number, tempStates?: Map<string, any>) {
     if (!this.compiled) this.compile();
 
-    for (const block of this.executionOrder) {
-      const inputValues = this.gatherInputs(block);
-      const currentState = tempStates?.has(block.id) ? tempStates.get(block.id) : block.state;
-      
-      try {
-        const result = block.execute(inputValues, block.params, currentState, time);
-        block.outputs.forEach((outPort, i) => {
-          this.signalValues.set(`${block.id}.${outPort.id}`, result.outputs[i]);
-        });
-      } catch (err: any) {
-         console.error(`Error executing block ${block.label || block.type}: ${err.message}`);
-      }
+    // 1. Run sorted upstream blocks
+    for (const block of this.sortedBlocks) {
+      this.executeBlockOrCache(block, time, tempStates);
+    }
+
+    // 2. Solve algebraic loops
+    if (this.cycleBlocks.length > 0) {
+      const algTol = this.options?.algTol ?? 1e-6;
+      const maxIter = this.options?.maxIter ?? 100;
+      this.solveAlgebraicLoop(time, tempStates, algTol, maxIter);
+    }
+
+    // 3. Run downstream blocks
+    for (const block of this.downstreamBlocks) {
+      this.executeBlockOrCache(block, time, tempStates);
     }
   }
 
@@ -235,6 +451,7 @@ export class XbridgesEngine {
         const currentState = tempStates?.has(block.id) ? tempStates.get(block.id) : block.state;
         try {
           const dx = block.evaluateDerivatives(inputValues, block.params, currentState, time);
+          this.checkNumericalStability(block, dx, 'Derivative');
           derivatives.set(block.id, dx);
         } catch (err: any) {
           console.error(`Error computing derivative for ${block.label || block.type}: ${err.message}`);
@@ -246,18 +463,108 @@ export class XbridgesEngine {
 
   public updateDiscreteStates(time: number) {
     for (const block of this.executionOrder) {
-      // If block has evaluateDerivatives, its state is continuous and updated by the solver.
-      // Otherwise, it's discrete and we update it here via execute().
       if (!block.evaluateDerivatives) {
-        const inputValues = this.gatherInputs(block);
-        try {
-          const result = block.execute(inputValues, block.params, block.state, time);
-          if (result.nextState !== undefined) {
-             block.state = result.nextState;
+        const ts = Number(block.params.sampleTime);
+        if (ts > 0) {
+          const nextTime = block.nextTick ?? this.nextSampleTime.get(block.id) ?? 0;
+          if (time >= nextTime - 1e-9) {
+            const inputValues = this.gatherInputs(block);
+            try {
+              const result = block.execute(inputValues, block.params, block.state, time);
+              if (result.nextState !== undefined) {
+                 block.state = result.nextState;
+              }
+              const nextScheduled = nextTime + ts;
+              block.nextTick = nextScheduled;
+              this.nextSampleTime.set(block.id, nextScheduled);
+            } catch (err: any) {}
           }
-        } catch (err: any) {}
+        } else {
+          const inputValues = this.gatherInputs(block);
+          try {
+            const result = block.execute(inputValues, block.params, block.state, time);
+            if (result.nextState !== undefined) {
+               block.state = result.nextState;
+            }
+          } catch (err: any) {}
+        }
       }
     }
+  }
+
+  public getZeroCrossings(time: number, tempStates?: Map<string, any>): Map<string, number[]> {
+    const zcValues = new Map<string, number[]>();
+    for (const block of this.executionOrder) {
+      if (block.ZeroCrossingFn) {
+        const inputValues = this.gatherInputs(block);
+        const currentState = tempStates?.has(block.id) ? tempStates.get(block.id) : block.state;
+        try {
+          const val = block.ZeroCrossingFn(inputValues, block.params, currentState, time);
+          zcValues.set(block.id, val);
+        } catch (err) {}
+      }
+    }
+    return zcValues;
+  }
+
+  public hasZeroCrossingSignChange(zcPrev: Map<string, number[]>, zcCurr: Map<string, number[]>): boolean {
+    for (const [blockId, prevVals] of zcPrev.entries()) {
+      const currVals = zcCurr.get(blockId);
+      if (currVals) {
+        for (let i = 0; i < prevVals.length; i++) {
+          if (prevVals[i] * currVals[i] < 0) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  public bracketZeroCrossing(
+    tPrev: number,
+    tCurr: number,
+    statesPrev: Map<string, any>,
+    statesCurr: Map<string, any>,
+    zeroTol = 1e-6
+  ): number {
+    let tLow = tPrev;
+    let tHigh = tCurr;
+    
+    const interpolateStates = (frac: number): Map<string, any> => {
+      const inter = new Map<string, any>();
+      statesPrev.forEach((sPrev, blockId) => {
+        const sCurr = statesCurr.get(blockId);
+        if (sCurr !== undefined) {
+          inter.set(blockId, VectorUtils.integrateState(sPrev, VectorUtils.applyElementWise(sCurr, sPrev, 'subtract'), frac));
+        } else {
+          inter.set(blockId, sPrev);
+        }
+      });
+      return inter;
+    };
+
+    const zcPrev = this.getZeroCrossings(tPrev, statesPrev);
+
+    for (let iter = 0; iter < 30; iter++) {
+      if (tHigh - tLow < zeroTol) {
+        break;
+      }
+      const tMid = (tLow + tHigh) / 2;
+      const frac = (tMid - tPrev) / (tCurr - tPrev || 1e-9);
+      const statesMid = interpolateStates(frac);
+      
+      this.computeOutputs(tMid, statesMid);
+      const zcMid = this.getZeroCrossings(tMid, statesMid);
+      
+      if (this.hasZeroCrossingSignChange(zcPrev, zcMid)) {
+        tHigh = tMid;
+      } else {
+        tLow = tMid;
+      }
+    }
+
+    return tHigh;
   }
 
   public commitStateUpdates(nextStates: Map<string, any>) {
@@ -268,7 +575,6 @@ export class XbridgesEngine {
     }
   }
 
-  // Compatibility or simple execution
   public step(time: number, dt: number) {
     this.computeOutputs(time);
     this.updateDiscreteStates(time);

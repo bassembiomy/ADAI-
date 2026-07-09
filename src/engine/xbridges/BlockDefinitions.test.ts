@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { BLOCK_LIBRARY, potential_field_escape, astar_planner, getTwinGridCoords } from './BlockDefinitions';
 import { XbridgesEngine } from './XbridgesEngine';
 import { Solvers } from './Solvers';
+import { VectorUtils } from './VectorUtils';
 
 describe('X-Bridges Learning Models Block Tests', () => {
 
@@ -653,5 +654,426 @@ describe('X-Bridges Learning Models Block Tests', () => {
     expect(coords.row).toBe(2);
   });
 
+  it('TC-MATH-01: TRANSFER_FUNCTION Continuous Integration and Outport y', () => {
+    // A simple transfer function block: G(s) = 1 / (s + 1)
+    const block = BLOCK_LIBRARY['TRANSFER_FUNCTION']('tf_test', {
+      numerator: [1],
+      denominator: [1, 1],
+      representation: 'continuous'
+    });
+    
+    expect(block.evaluateDerivatives).toBeDefined();
+
+    // Initial state: x = [0]
+    let state = block.state;
+    expect(state.x).toEqual([0]);
+
+    // Let's execute block: input = 1.0
+    // y = C*x + D*u
+    // In G(s) = 1 / (s + 1), C = [1], D = [0]
+    let res = block.execute([1.0], block.params, state, 0.0);
+    expect(res.outputs[0]).toEqual([0]); // C*x + D*u = 1*0 + 0*1 = 0
+
+    // Evaluate derivatives
+    // dx/dt = A*x + B*u = -1*0 + 1*1 = 1
+    const deriv = block.evaluateDerivatives!([1.0], block.params, state, 0.0);
+    expect(deriv).toEqual({ x: [1.0] });
+
+    // Integrate state using VectorUtils
+    const nextState = VectorUtils.integrateState(state, deriv, 0.1);
+    expect(nextState.x).toEqual([0.1]); // 0 + 1 * 0.1 = 0.1
+
+    // Execute with new state
+    res = block.execute([1.0], block.params, nextState, 0.1);
+    // y = C*x + D*u = 1*0.1 + 0*1 = 0.1
+    expect((res.outputs[0] as number[])[0]).toBeCloseTo(0.1, 5);
+  });
+
+  it('TC-MATH-02: DISCRETE_TRANSFER_FUNCTION and Discrete Update', () => {
+    // A simple discrete transfer function: H(z) = 1 / (z - 0.5)
+    // which has A = [0.5], B = [1], C = [1], D = [0]
+    const block = BLOCK_LIBRARY['DISCRETE_TRANSFER_FUNCTION']('dtf_test', {
+      numerator: [1],
+      denominator: [1, -0.5],
+      representation: 'discrete'
+    });
+
+    // Discrete blocks should NOT have evaluateDerivatives
+    expect(block.evaluateDerivatives).toBeUndefined();
+
+    // Initial state: x = [0]
+    let state = block.state;
+    expect(state.x).toEqual([0]);
+
+    // Step 1: Input = 1.0, Time = 0
+    let res = block.execute([1.0], block.params, state, 0.0);
+    // y = 1*0 + 0*1 = 0
+    expect(res.outputs[0]).toEqual([0]);
+    // nextState x = A*x + B*u = 0.5*0 + 1*1 = 1
+    expect(res.nextState.x).toEqual([1.0]);
+
+    // Step 2: Input = 1.0, Time = 0.1
+    state = res.nextState;
+    res = block.execute([1.0], block.params, state, 0.1);
+    // y = 1*1 + 0*1 = 1
+    expect(res.outputs[0]).toEqual([1.0]);
+    // nextState x = A*x + B*u = 0.5*1 + 1*1 = 1.5
+    expect(res.nextState.x).toEqual([1.5]);
+  });
+
+  it('TC-MATH-03: FUZZY_SURFACE_VIEWER Live Output evaluation', () => {
+    const fisConfig = {
+      rules: []
+    };
+    const block = BLOCK_LIBRARY['FUZZY_SURFACE_VIEWER']('fsv_test', {
+      fisConfig,
+      resolution: 3,
+      input1_range: [-1, 1],
+      input2_range: [-1, 1]
+    });
+
+    const res = block.execute([0, 0], block.params, block.state, 0.0);
+    expect(res.outputs.length).toBe(2);
+    expect(typeof res.outputs[1]).toBe('number');
+  });
+
+  it('TC-SIM-01: Standalone Integrator Block Test', () => {
+    const block = BLOCK_LIBRARY['INTEGRATOR']('int_test', {
+      initialCondition: 1.0,
+      limitOutput: true,
+      lowerLimit: 0.0,
+      upperLimit: 2.0,
+      externalReset: 'rising'
+    });
+
+    expect(block.isStateful).toBe(true);
+
+    let res = block.execute([0.5, 0.0], block.params, block.state, 0.0);
+    expect(res.outputs[0]).toBe(1.0);
+
+    let dx = block.evaluateDerivatives!([0.5, 0.0], block.params, block.state, 0.0);
+    expect(dx.x).toBe(0.5);
+
+    let satState = { x: 2.0, prevReset: 0 };
+    dx = block.evaluateDerivatives!([0.5, 0.0], block.params, satState, 0.0);
+    expect(dx.x).toBe(0);
+
+    let stateWithReset = { x: 1.8, prevReset: 0 };
+    res = block.execute([0.5, 1.0], block.params, stateWithReset, 0.0);
+    expect(res.outputs[0]).toBe(1.0);
+    expect(res.nextState.prevReset).toBe(1.0);
+  });
+
+  it('TC-SIM-02: Transfer Function CCF Step Response', () => {
+    const blocks = [
+      {
+        id: 'step',
+        type: 'CONSTANT',
+        params: { value: 1.0 },
+        inputs: [],
+        outputs: [{ id: 'out', name: 'out', type: 'continuous', direction: 'output', value: 1.0 }]
+      },
+      BLOCK_LIBRARY['TRANSFER_FUNCTION']('tf', { numerator: [1], denominator: [1, 1] })
+    ];
+
+    const connections = [
+      { sourceBlock: 'step', sourcePort: 'out', targetBlock: 'tf', targetPort: 'u' }
+    ];
+
+    const model = { blocks, connections };
+    const engine = new XbridgesEngine(model as any);
+
+    Solvers.runFixedStep(engine, {
+      solver: 'ode45',
+      startTime: 0,
+      stopTime: 1.0,
+      fixedStep: 0.01,
+      relTol: 1e-4,
+      absTol: 1e-6
+    });
+
+    const tfVal = engine.getSignalValue('tf', 'y');
+    expect(tfVal[0]).toBeCloseTo(0.63212, 3);
+  });
+
+  it('TC-SIM-03: Algebraic Loop Newton-Raphson Solver', () => {
+    const blocks = [
+      {
+        id: 'u1',
+        type: 'CONSTANT',
+        params: { value: 1.0 },
+        inputs: [],
+        outputs: [{ id: 'out', name: 'out', type: 'continuous', direction: 'output', value: 1.0 }]
+      },
+      {
+        id: 'sum',
+        type: 'ADD',
+        params: { numInputs: 2 },
+        inputs: [
+          { id: 'in1', name: 'A', type: 'continuous', direction: 'input', value: 0 },
+          { id: 'in2', name: 'B', type: 'continuous', direction: 'input', value: 0 }
+        ],
+        outputs: [{ id: 'out', name: 'Out', type: 'continuous', direction: 'output', value: 0 }],
+        execute: (ins: any[]) => ({ outputs: [Number(ins[0] ?? 0) + Number(ins[1] ?? 0)] })
+      },
+      {
+        id: 'gain',
+        type: 'GAIN',
+        params: { gain: 2.0 },
+        inputs: [{ id: 'in', name: 'In', type: 'continuous', direction: 'input', value: 0 }],
+        outputs: [{ id: 'out', name: 'Out', type: 'continuous', direction: 'output', value: 0 }],
+        execute: (ins: any[], p: any) => ({ outputs: [Number(ins[0] ?? 0) * p.gain] })
+      }
+    ];
+
+    const connections = [
+      { sourceBlock: 'u1', sourcePort: 'out', targetBlock: 'sum', targetPort: 'in1' },
+      { sourceBlock: 'sum', sourcePort: 'out', targetBlock: 'gain', targetPort: 'in' },
+      { sourceBlock: 'gain', sourcePort: 'out', targetBlock: 'sum', targetPort: 'in2' }
+    ];
+
+    const model = { blocks, connections };
+    const engine = new XbridgesEngine(model as any);
+
+    const diagnostics = engine.compile(0);
+    expect(diagnostics.some(d => d.code === 'ALGEBRAIC_LOOP')).toBe(true);
+
+    engine.computeOutputs(0);
+
+    const sumVal = engine.getSignalValue('sum', 'out');
+    const gainVal = engine.getSignalValue('gain', 'out');
+
+    expect(sumVal).toBeCloseTo(-1.0, 4);
+    expect(gainVal).toBeCloseTo(-2.0, 4);
+  });
+
+  it('TC-SIM-04: Fixed-Step Solvers Comparison on dx/dt = -x', () => {
+    const createModel = () => {
+      return {
+        blocks: [
+          BLOCK_LIBRARY['INTEGRATOR']('int', { initialCondition: 1.0 }),
+          BLOCK_LIBRARY['GAIN']('gain', { gain: -1.0 })
+        ],
+        connections: [
+          { sourceBlock: 'int', sourcePort: 'y', targetBlock: 'gain', targetPort: 'u' },
+          { sourceBlock: 'gain', sourcePort: 'y', targetBlock: 'int', targetPort: 'u' }
+        ]
+      };
+    };
+
+    let engine = new XbridgesEngine(createModel() as any);
+    Solvers.runFixedStep(engine, { solver: 'ode2', startTime: 0, stopTime: 1.0, fixedStep: 0.01 });
+    let val = engine.getBlock('int')!.state.x;
+    expect(val).toBeCloseTo(0.367879, 2);
+
+    engine = new XbridgesEngine(createModel() as any);
+    Solvers.runFixedStep(engine, { solver: 'ode3', startTime: 0, stopTime: 1.0, fixedStep: 0.01 });
+    val = engine.getBlock('int')!.state.x;
+    expect(val).toBeCloseTo(0.367879, 2);
+
+    engine = new XbridgesEngine(createModel() as any);
+    Solvers.runFixedStep(engine, { solver: 'ode4', startTime: 0, stopTime: 1.0, fixedStep: 0.01 });
+    val = engine.getBlock('int')!.state.x;
+    expect(val).toBeCloseTo(0.367879, 2);
+
+    engine = new XbridgesEngine(createModel() as any);
+    Solvers.runFixedStep(engine, { solver: 'ode5', startTime: 0, stopTime: 1.0, fixedStep: 0.01 });
+    val = engine.getBlock('int')!.state.x;
+    expect(val).toBeCloseTo(0.367879, 2);
+  });
+
+  it('TC-SIM-05: Selectable Discretization in PID Controller', () => {
+    const blockFE = BLOCK_LIBRARY['PID_CONTROLLER']('pid', {
+      mode: 'PI', Kp: 1.0, Ki: 2.0, sampleTime: 0.1, method: 'forward_euler'
+    });
+    
+    let res = blockFE.execute([1.0, 0.0], blockFE.params, blockFE.state, 0.0);
+    expect(res.outputs[0]).toBeCloseTo(1.0, 5);
+    expect(res.nextState.i_state).toBeCloseTo(0.2, 5);
+
+    const blockTrap = BLOCK_LIBRARY['PID_CONTROLLER']('pid', {
+      mode: 'PI', Kp: 1.0, Ki: 2.0, sampleTime: 0.1, method: 'trapezoidal'
+    });
+    res = blockTrap.execute([1.0, 0.0], blockTrap.params, blockTrap.state, 0.0);
+    expect(res.outputs[0]).toBeCloseTo(1.1, 5);
+    expect(res.nextState.i_state).toBeCloseTo(0.1, 5);
+  });
+
+  it('TC-SIM-06: Unit Delay, Memory, and Filtered Derivative Blocks', () => {
+    const ud = BLOCK_LIBRARY['UNIT_DELAY']('ud', { initialCondition: 1.0, sampleTime: 0.1 });
+    let res = ud.execute([5.0], ud.params, ud.state, 0.0);
+    expect(res.outputs[0]).toBe(1.0);
+    expect(res.nextState.x).toBe(5.0);
+
+    const mem = BLOCK_LIBRARY['MEMORY']('mem', { initialCondition: 2.0 });
+    res = mem.execute([4.0], mem.params, mem.state, 0.0);
+    expect(res.outputs[0]).toBe(2.0);
+    expect(res.nextState.x).toBe(4.0);
+
+    const deriv = BLOCK_LIBRARY['DERIVATIVE']('deriv', { tau: 0.1 });
+    const dx = deriv.evaluateDerivatives!([1.0], deriv.params, { x: 0.0 }, 0.0);
+    expect(dx.x).toBe(10);
+  });
+
+  it('TC-SIM-07: Variable Step Solver ODE23 Bogacki-Shampine Verification', () => {
+    const createModel = () => {
+      return {
+        blocks: [
+          BLOCK_LIBRARY['INTEGRATOR']('int', { initialCondition: 1.0 })
+        ],
+        connections: [
+          { sourceBlock: 'int', sourcePort: 'y', targetBlock: 'int', targetPort: 'u' }
+        ]
+      };
+    };
+
+    const engine = new XbridgesEngine(createModel() as any);
+    Solvers.runFixedStep(engine, {
+      solver: 'ode23',
+      startTime: 0,
+      stopTime: 1.0,
+      relTol: 1e-4,
+      absTol: 1e-6
+    });
+
+    const val = engine.getBlock('int')!.state.x;
+    expect(val).toBeCloseTo(2.71828, 3);
+  });
+
+  it('TC-SIM-08: Zero-Crossing Detection and Step Correction', () => {
+    const evalTimes: number[] = [];
+    const blocks = [
+      BLOCK_LIBRARY['Step']('step_src', { stepTime: 0.573, initialValue: 0.0, finalValue: 2.0 }),
+      {
+        id: 'monitor',
+        type: 'MONITOR',
+        params: {},
+        inputs: [{ id: 'in', name: 'in', type: 'continuous', direction: 'input', value: 0 }],
+        outputs: [],
+        execute: (ins: any[], p: any, state: any, time: number) => {
+          evalTimes.push(time);
+          return { outputs: [] };
+        }
+      }
+    ];
+    const connections = [
+      { sourceBlock: 'step_src', sourcePort: 'out', targetBlock: 'monitor', targetPort: 'in' }
+    ];
+    
+    const model = { blocks, connections };
+    const engine = new XbridgesEngine(model as any);
+
+    Solvers.runFixedStep(engine, {
+      solver: 'rk4',
+      startTime: 0,
+      stopTime: 1.0,
+      fixedStep: 0.1,
+      zeroTol: 1e-6
+    });
+
+    // Verify that the event time (0.573) was hit exactly within tolerance
+    const hasEventTime = evalTimes.some(t => Math.abs(t - 0.573) < 1e-4);
+    expect(hasEventTime).toBe(true);
+  });
+
+  describe('Matrix Blocks and Operations', () => {
+    it('should concatenate matrices horizontally and vertically', () => {
+      const concatH = BLOCK_LIBRARY['MatrixConcat']('concat', { axis: 1 });
+      const resH = concatH.execute([[[1, 2]], [[3, 4]]], concatH.params, {}, 0);
+      expect(resH.outputs[0]).toEqual([[1, 2, 3, 4]]);
+
+      const concatV = BLOCK_LIBRARY['MatrixConcat']('concat', { axis: 0 });
+      const resV = concatV.execute([[[1, 2]], [[3, 4]]], concatV.params, {}, 0);
+      expect(resV.outputs[0]).toEqual([[1, 2], [3, 4]]);
+    });
+
+    it('should create diagonal matrices and extract diagonals', () => {
+      const diagBlock = BLOCK_LIBRARY['MatrixDiag']('diag', {});
+      const resCreate = diagBlock.execute([[1, 2]], diagBlock.params, {}, 0);
+      expect(resCreate.outputs[0]).toEqual([[1, 0], [0, 2]]);
+
+      const resExtract = diagBlock.execute([[[1, 0], [0, 2]]], diagBlock.params, {}, 0);
+      expect(resExtract.outputs[0]).toEqual([1, 2]);
+    });
+
+    it('should generate identity matrices', () => {
+      const identityBlock = BLOCK_LIBRARY['IdentityMatrix']('ident', { dim: 2 });
+      const res = identityBlock.execute([], identityBlock.params, {}, 0);
+      expect(res.outputs[0]).toEqual([[1, 0], [0, 1]]);
+    });
+
+    it('should extract submatrices correctly', () => {
+      const subBlock = BLOCK_LIBRARY['SubMatrix']('sub', { rowStart: 0, rowEnd: 0, colStart: 1, colEnd: 2 });
+      const res = subBlock.execute([[[1, 2, 3], [4, 5, 6]]], subBlock.params, {}, 0);
+      expect(res.outputs[0]).toEqual([[2, 3]]);
+    });
+
+    it('should solve linear systems', () => {
+      const solveBlock = BLOCK_LIBRARY['MatrixSolve']('solve', {});
+      // Solve A * x = B -> [[2, 1], [1, 3]] * x = [[5], [5]] -> x = [[2], [1]]
+      const res = solveBlock.execute([[[2, 1], [1, 3]], [[5], [5]]], solveBlock.params, {}, 0);
+      const out = res.outputs[0] as any;
+      expect(out[0][0]).toBeCloseTo(2, 5);
+      expect(out[1][0]).toBeCloseTo(1, 5);
+    });
+
+    it('should scale matrices/vectors with GAIN block', () => {
+      const gainBlock = BLOCK_LIBRARY['GAIN']('gain', { gain: 2 });
+      const res = gainBlock.execute([[[1, 2], [3, 4]]], gainBlock.params, {}, 0);
+      expect(res.outputs[0]).toEqual([[2, 4], [6, 8]]);
+    });
+
+    it('should multiply two 2D matrices with MatrixMul block', () => {
+      const mulBlock = BLOCK_LIBRARY['MatrixMul']('mul', {});
+      const res = mulBlock.execute([[[1, 2], [3, 4]], [[5, 6], [7, 8]]], mulBlock.params, {}, 0);
+      expect(res.outputs[0]).toEqual([[19, 22], [43, 50]]);
+    });
+
+    it('should handle matrix/vector inputs in Scope block', () => {
+      const scopeBlock = BLOCK_LIBRARY['Scope']('scope', { numSignals: 1 });
+      const res = scopeBlock.execute([[[1, 2], [3, 4]]], scopeBlock.params, { history: [], stepCount: 0, lastSampleTime: 0 }, 0);
+      console.log('Scope history sample:', res.nextState?.history[0]);
+    });
+  });
+
+  describe('MATLAB-style Array Parsing', () => {
+    it('should parse MATLAB-style vectors in Constant block', () => {
+      const constBlock = BLOCK_LIBRARY['Constant']('const', { value: '[1 2 3 4 5]' });
+      const res = constBlock.execute([], constBlock.params, {}, 0);
+      expect(res.outputs[0]).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it('should parse MATLAB-style matrices in Constant block', () => {
+      const constBlock1 = BLOCK_LIBRARY['Constant']('const', { value: '[1 2; 3 4]' });
+      const res1 = constBlock1.execute([], constBlock1.params, {}, 0);
+      expect(res1.outputs[0]).toEqual([[1, 2], [3, 4]]);
+
+      const constBlock2 = BLOCK_LIBRARY['Constant']('const', { value: '[[1 2], [3 5]]' });
+      const res2 = constBlock2.execute([], constBlock2.params, {}, 0);
+      expect(res2.outputs[0]).toEqual([[1, 2], [3, 5]]);
+
+      const constBlock3 = BLOCK_LIBRARY['Constant']('const', { value: '[[1, 2], [3, 5]]' });
+      const res3 = constBlock3.execute([], constBlock3.params, {}, 0);
+      expect(res3.outputs[0]).toEqual([[1, 2], [3, 5]]);
+    });
+
+    it('should parse MATLAB-style vectors in Step block', () => {
+      const stepBlock = BLOCK_LIBRARY['Step']('step', { stepTime: 1.0, initialValue: '[10 20]', finalValue: '[30 40]' });
+      const resInit = stepBlock.execute([], stepBlock.params, {}, 0.5);
+      expect(resInit.outputs[0]).toEqual([10, 20]);
+
+      const resFinal = stepBlock.execute([], stepBlock.params, {}, 1.5);
+      expect(resFinal.outputs[0]).toEqual([30, 40]);
+    });
+
+    it('should parse MATLAB-style vectors in GAIN block', () => {
+      const gainBlock = BLOCK_LIBRARY['GAIN']('gain', { gain: '[2 3]' });
+      const res = gainBlock.execute([[10, 20]], gainBlock.params, {}, 0);
+      expect(res.outputs[0]).toEqual([20, 60]);
+    });
+  });
+
 });
+
+
 
