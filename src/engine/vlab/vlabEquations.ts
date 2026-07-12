@@ -1518,8 +1518,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     ];
   },
   pmsm_foc: ({ across, branch, state, dState, params }) => {
-    const Kp = 5.0;
-    const Ki = 100.0;
+    const Kp = params.Kp !== undefined ? (typeof params.Kp === 'object' && params.Kp !== null ? Number(params.Kp.value) : Number(params.Kp)) : 5.0;
+    const Ki = params.Ki !== undefined ? (typeof params.Ki === 'object' && params.Ki !== null ? Number(params.Ki.value) : Number(params.Ki)) : 100.0;
     const ref_speed = across[0] || 0;
     const iabc = across[1] || 0;
     const w = across[2] || 0;

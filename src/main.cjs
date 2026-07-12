@@ -332,6 +332,24 @@ let activeHilProcess = null;
 // HIL Compile IPC handler
 ipcMain.handle('hil-run-compile', async (event, { target, optimization, warningLevel, debugLevel }) => {
   return new Promise((resolve) => {
+    const allowedTargets = ['Generic', 'Arduino_Uno', 'Arduino_Mega', 'ESP32', 'STM32F1', 'STM32F4'];
+    const allowedOptimizations = ['-O0', '-O1', '-O2', '-O3', '-Os'];
+    const allowedWarningLevels = ['-w', '-Wall', '-Wextra', '-Wall -Wextra', '-Wall -Wextra -Werror'];
+    const allowedDebugLevels = ['None', '-g', '-g3'];
+
+    if (!target || (!allowedTargets.includes(target) && !target.startsWith('STM32'))) {
+      return resolve({ success: false, error: 'Invalid compilation target' });
+    }
+    if (optimization && !allowedOptimizations.includes(optimization)) {
+      return resolve({ success: false, error: 'Invalid optimization level' });
+    }
+    if (warningLevel && !allowedWarningLevels.includes(warningLevel)) {
+      return resolve({ success: false, error: 'Invalid warning level' });
+    }
+    if (debugLevel && !allowedDebugLevels.includes(debugLevel)) {
+      return resolve({ success: false, error: 'Invalid debug level' });
+    }
+
     const buildDir = path.join(process.cwd(), 'hil_build');
     if (!fs.existsSync(buildDir)) {
       return resolve({ success: false, error: 'Build directory not found. Save files first.' });
@@ -450,6 +468,30 @@ ipcMain.handle('hil-run-compile', async (event, { target, optimization, warningL
 // HIL Flash IPC handler
 ipcMain.handle('hil-run-flash', async (event, { target, programmer, flashAddress, commPort, baudRate }) => {
   return new Promise((resolve) => {
+    const allowedTargets = ['Generic', 'Arduino_Uno', 'Arduino_Mega', 'ESP32', 'STM32F1', 'STM32F4'];
+    const allowedProgrammers = ['arduino', 'wiring', 'esptool.py', 'STM32_Programmer_CLI', 'None'];
+    const portRegex = /^[a-zA-Z0-9_\s()./\\-]+$/;
+    const hexRegex = /^0x[0-9a-fA-F]+$/;
+
+    if (!target || (!allowedTargets.includes(target) && !target.startsWith('STM32'))) {
+      return resolve({ success: false, error: 'Invalid flashing target' });
+    }
+    if (programmer && !allowedProgrammers.includes(programmer)) {
+      return resolve({ success: false, error: 'Invalid programmer utility' });
+    }
+    if (flashAddress && !hexRegex.test(flashAddress)) {
+      return resolve({ success: false, error: 'Invalid flash memory address' });
+    }
+    if (commPort && !portRegex.test(commPort)) {
+      return resolve({ success: false, error: 'Invalid COM port name' });
+    }
+    if (baudRate !== undefined) {
+      const parsedBaud = parseInt(baudRate, 10);
+      if (isNaN(parsedBaud) || parsedBaud <= 0) {
+        return resolve({ success: false, error: 'Invalid baud rate' });
+      }
+    }
+
     const buildDir = path.join(process.cwd(), 'hil_build');
     let cmd = '';
     let args = [];
@@ -538,12 +580,30 @@ ipcMain.handle('hil-list-ports', async () => {
 });
 
 ipcMain.handle('hil-connect', async (event, { port, baudRate, target }) => {
+  const cleanPort = String(port || '').trim();
+  const portRegex = /^[a-zA-Z0-9_\s()./\\-]+$/;
+  const cleanBaud = parseInt(baudRate, 10);
+  const allowedTargets = ['Generic', 'Arduino_Uno', 'Arduino_Mega', 'ESP32', 'STM32F1', 'STM32F4'];
+
+  if (port && !portRegex.test(cleanPort)) {
+    console.error('Invalid port name specified');
+    return false;
+  }
+  if (baudRate !== undefined && (isNaN(cleanBaud) || cleanBaud <= 0)) {
+    console.error('Invalid baud rate specified');
+    return false;
+  }
+  if (target && !allowedTargets.includes(target) && !target.startsWith('STM32')) {
+    console.error('Invalid target specified');
+    return false;
+  }
+
   // If a physical port is provided, always do a real serial connection
-  if (port && !port.includes('(Virtual)')) {
+  if (cleanPort && !cleanPort.includes('(Virtual)')) {
     // 1. Try native serialport package first
     try {
       const { SerialPort } = require('serialport');
-      serialPort = new SerialPort({ path: port, baudRate: baudRate });
+      serialPort = new SerialPort({ path: cleanPort, baudRate: cleanBaud });
       
       let buffer = '';
       serialPort.on('data', (data) => {
@@ -566,8 +626,8 @@ ipcMain.handle('hil-connect', async (event, { port, baudRate, target }) => {
         return new Promise((resolve) => {
           try {
             const psScript = `
-$portName = "${port}"
-$baud = ${baudRate}
+$portName = "${cleanPort}"
+$baud = ${cleanBaud}
 $p = New-Object System.IO.Ports.SerialPort $portName, $baud, None, 8, one
 $p.ReadTimeout = 500
 $p.WriteTimeout = 500

@@ -117,8 +117,9 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
 
   const handleAddInput = () => {
     if (!block.allowDynamicInputs) return;
-    const newId = `in${block.inputs.length + 1}`;
-    const newPort: XPort = { id: newId, name: `In ${block.inputs.length + 1}`, type: 'auto', direction: 'input', value: 0 };
+    const inPrefix = 'in';
+    const newId = inPrefix + String(block.inputs.length + 1);
+    const newPort: XPort = { id: newId, name: 'In ' + String(block.inputs.length + 1), type: 'auto', direction: 'input', value: 0 };
     onUpdate(block.id, { inputs: [...block.inputs, newPort] });
   };
 
@@ -213,7 +214,10 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
   );
 
   return (
-    <div className={`${isCollapsed ? 'w-12' : 'w-80'} bg-[#1a1a1a] border-l border-[#333] flex flex-col h-full shadow-2xl z-50 text-[#e0e0e0] transition-all duration-300 overflow-hidden select-text`}>
+    <div className={
+      (isCollapsed ? 'w-12' : 'w-80') + 
+      ' bg-[#1a1a1a] border-l border-[#333] flex flex-col h-full shadow-2xl z-50 text-[#e0e0e0] transition-all duration-300 overflow-hidden select-text'
+    }>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-[#333] bg-[#0a0a0a]">
         {!isCollapsed && (
@@ -295,10 +299,10 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
             const toggleSign = (idx: number) => {
               const newSigns = [...signs];
               newSigns[idx] = newSigns[idx] === '-' ? '+' : '-';
-              // Also update port names to reflect +/-
+              // Sync port names to match +/-
               const newInputs = [...block.inputs].map((p, i) => ({
                 ...p,
-                name: newSigns[i] === '-' ? `\u2212In${i + 1}` : `+In${i + 1}`
+                name: newSigns[i] === '-' ? '\u2212In' + String(i + 1) : '+In' + String(i + 1)
               }));
               onUpdate(block.id, {
                 params: { ...block.params, signs: newSigns },
@@ -309,10 +313,11 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
             const addSignedInput = () => {
               const newSigns = [...signs, '+'];
               const newNumInputs = numInputs + 1;
-              const newId = `in${newNumInputs}`;
+              const inPrefix = 'in';
+              const newId = inPrefix + String(newNumInputs);
               const newInputs = [
                 ...block.inputs,
-                { id: newId, name: `+In${newNumInputs}`, type: 'auto' as const, direction: 'input' as const, value: 0 }
+                { id: newId, name: '+In' + String(newNumInputs), type: 'auto' as const, direction: 'input' as const, value: 0 }
               ];
               onUpdate(block.id, {
                 params: { ...block.params, numInputs: newNumInputs, signs: newSigns },
@@ -324,12 +329,13 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
               if (numInputs <= 2) return;
               const newSigns = signs.filter((_, i) => i !== idx);
               const newNumInputs = numInputs - 1;
+              const inPrefix = 'in';
               const newInputs = block.inputs
                 .filter((_, i) => i !== idx)
                 .map((p, i) => ({
                   ...p,
-                  id: `in${i + 1}`,
-                  name: newSigns[i] === '-' ? `\u2212In${i + 1}` : `+In${i + 1}`
+                  id: inPrefix + String(i + 1),
+                  name: newSigns[i] === '-' ? '\u2212In' + String(i + 1) : '+In' + String(i + 1)
                 }));
               onUpdate(block.id, {
                 params: { ...block.params, numInputs: newNumInputs, signs: newSigns },
@@ -365,7 +371,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                         style={{
                           color: sign === '-' ? '#ef4444' : '#28a745',
                           background: sign === '-' ? 'rgba(239,68,68,0.15)' : 'rgba(40,167,69,0.15)',
-                          border: `1.5px solid ${sign === '-' ? 'rgba(239,68,68,0.3)' : 'rgba(40,167,69,0.3)'}`
+                          border: '1.5px solid ' + (sign === '-' ? 'rgba(239,68,68,0.3)' : 'rgba(40,167,69,0.3)')
                         }}
                         title="Click to toggle +/−"
                       >
@@ -389,7 +395,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                 <div className="bg-[#0a0a0a] border border-[#333] rounded-lg p-2.5 text-center">
                   <span className="text-[9px] text-slate-500 uppercase tracking-wider block mb-1">Equation</span>
                   <span className="text-xs font-mono text-[#28a745]">
-                    Y = {signs.slice(0, numInputs).map((s, i) => `${s === '-' ? '\u2212' : (i === 0 ? '' : '+')}u${i + 1}`).join(' ')}
+                    Y = {signs.slice(0, numInputs).map((s, i) => (s === '-' ? '\u2212' : (i === 0 ? '' : '+')) + 'u' + String(i + 1)).join(' ')}
                   </span>
                 </div>
               </div>

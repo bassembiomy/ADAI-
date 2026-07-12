@@ -52,7 +52,11 @@ const OPMConnectionLine = ({
 
     const isSourceStart = sourceHandleEl.classList.contains('source');
     const oppositeType = isSourceStart ? 'target' : 'source';
-    const handleElements = document.querySelectorAll(`.react-flow__handle.${oppositeType}`);
+    const handleElements = document.querySelectorAll(
+      oppositeType === 'target'
+        ? '.react-flow__handle.target'
+        : '.react-flow__handle.source'
+    );
 
     const targets: { x: number; y: number; flowX: number; flowY: number }[] = [];
     handleElements.forEach((el) => {
@@ -1211,6 +1215,10 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     });
   }, [filteredEdges, nodes, simRunning]);
 
+  const numIn = selectedNode?.data?.inputs?.length || 0;
+  const numOut = selectedNode?.data?.outputs?.length || 0;
+  const selectedNodePortsCount = numIn + numOut;
+
   return (
     <div className="flex h-full w-full bg-[#0d0d0d] text-[#e0e0e0] font-sans">
       {/* 1. Left canvas and sidebar */}
@@ -1534,7 +1542,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   <div className="text-[10px] text-[#777] uppercase font-bold tracking-wider mb-1 flex items-center justify-between">
                     <span>Ports Manager</span>
                     <span className="text-[8px] text-gray-500 font-mono">
-                      {((selectedNode.data.inputs || []).length + (selectedNode.data.outputs || []).length)} Ports
+                      {selectedNodePortsCount} Ports
                     </span>
                   </div>
 

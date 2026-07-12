@@ -853,7 +853,8 @@ const FloatingWindow = ({
       onMouseDown={() => !isMobile && onUpdate(windowState.id, { zIndex: Date.now() })}
     >
       <div
-        className={`h-8 bg-[#1a1a1a] border-b border-[#222] flex items-center justify-between px-3 select-none shrink-0 ${
+        style={{ userSelect: 'none' }}
+        className={`h-8 bg-[#1a1a1a] border-b border-[#222] flex items-center justify-between px-3 shrink-0 ${
           isMobile || windowState.isMaximized ? '' : 'cursor-move'
         }`}
         onMouseDown={(e) => {
@@ -3673,6 +3674,8 @@ const HmiDashboardContent = ({
                 document.addEventListener('mouseup', handleMouseUp);
               };
 
+              const posText = `Pos ${currentIndex + 1}`;
+
               return (
                 <div className="relative w-full h-full flex items-center justify-center" onMouseDown={handleRotaryMouseDown} style={{ cursor: editMode ? 'default' : 'pointer' }}>
                   <svg viewBox="0 0 100 100" className="w-full h-full">
@@ -3687,7 +3690,7 @@ const HmiDashboardContent = ({
                       <line x1="50" y1="20" x2="50" y2="50" stroke="#f97316" strokeWidth="2" />
                     </g>
                   </svg>
-                  <div className="absolute bottom-1 text-[9px] text-white font-mono select-none">Pos {currentIndex + 1}</div>
+                  <div className="absolute bottom-1 text-[9px] text-white font-mono select-none">{posText}</div>
                 </div>
               );
             }
@@ -3823,8 +3826,8 @@ const HmiDashboardContent = ({
       <div className="h-10 flex items-center px-4 border-b border-[#222] justify-between bg-[#1a1a1a] shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex bg-[#0a0a0a] rounded p-0.5 border border-[#333]">
-            <button onClick={() => setEditMode(true)} className={`px-3 py-1 text-xs rounded ${editMode ? 'bg-[#333] text-white' : 'text-[#888]'}`}>Edit</button>
-            <button onClick={() => { setEditMode(false); setSelectedId(null); }} className={`px-3 py-1 text-xs rounded ${!editMode ? 'bg-[#f97316] text-black font-bold' : 'text-[#888]'}`}>Run</button>
+            <button onClick={() => setEditMode(true)} className={"px-3 py-1 text-xs rounded " + (editMode ? "bg-[#333] text-white" : "text-[#888]")}>Edit</button>
+            <button onClick={() => { setEditMode(false); setSelectedId(null); }} className={"px-3 py-1 text-xs rounded " + (!editMode ? "bg-[#f97316] text-black font-bold" : "text-[#888]")}>Run</button>
           </div>
         </div>
       </div>
@@ -11761,7 +11764,13 @@ const ADIA = () => {
             let audioCtx = null;
 
             function escapeHtml(str) {
-              return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+              return String(str || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;')
+                .replace(/\x60/g, '&#96;');
             }
 
             function logEvent(event, detail = "") {
@@ -11774,7 +11783,26 @@ const ADIA = () => {
               entry.style.gap = "8px";
               entry.style.borderBottom = "1px solid #1a1a20";
               entry.style.padding = "3px 0";
-              entry.innerHTML = "<span style='color: #555568; min-width: 50px;'>" + escapeHtml(ts) + "</span><span style='color: #4db8ff; min-width: 100px; font-weight: bold;'>" + escapeHtml(event) + "</span><span style='color: #8888a0;'>" + escapeHtml(detail) + "</span>";
+
+              const s1 = document.createElement("span");
+              s1.style.color = "#555568";
+              s1.style.minWidth = "50px";
+              s1.textContent = ts;
+
+              const s2 = document.createElement("span");
+              s2.style.color = "#4db8ff";
+              s2.style.minWidth = "100px";
+              s2.style.fontWeight = "bold";
+              s2.textContent = event;
+
+              const s3 = document.createElement("span");
+              s3.style.color = "#8888a0";
+              s3.textContent = detail;
+
+              entry.appendChild(s1);
+              entry.appendChild(s2);
+              entry.appendChild(s3);
+
               el.prepend(entry);
               while (el.children.length > 40) el.removeChild(el.lastChild);
             }
@@ -12153,7 +12181,7 @@ const ADIA = () => {
             function updateDashboard() {
               const db = document.getElementById("sim-dashboard");
               if (!db) return;
-              db.innerHTML = "";
+              db.textContent = "";
 
               PROJECT_DATA.layers.forEach(layer => {
                 const layerName = layer.name || (layer.id === "root" ? "Root Region" : "Region");
@@ -12165,7 +12193,28 @@ const ADIA = () => {
                 cell.style.border = "1px solid #2a2a36";
                 cell.style.borderRadius = "6px";
                 cell.style.padding = "6px 8px";
-                cell.innerHTML = "<div style='font-size: 8px; color: #555568; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + escapeHtml(layerName) + "</div><div style='font-size: 11px; font-weight: bold; color: #f97316; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + escapeHtml(stateName) + "</div>";
+
+                const d1 = document.createElement("div");
+                d1.style.fontSize = "8px";
+                d1.style.color = "#555568";
+                d1.style.textTransform = "uppercase";
+                d1.style.overflow = "hidden";
+                d1.style.textOverflow = "ellipsis";
+                d1.style.whiteSpace = "nowrap";
+                d1.textContent = layerName;
+
+                const d2 = document.createElement("div");
+                d2.style.fontSize = "11px";
+                d2.style.fontWeight = "bold";
+                d2.style.color = "#f97316";
+                d2.style.marginTop = "2px";
+                d2.style.overflow = "hidden";
+                d2.style.textOverflow = "ellipsis";
+                d2.style.whiteSpace = "nowrap";
+                d2.textContent = stateName;
+
+                cell.appendChild(d1);
+                cell.appendChild(d2);
                 db.appendChild(cell);
               });
 
@@ -12178,7 +12227,28 @@ const ADIA = () => {
                 cell.style.border = "1px solid #2a2a36";
                 cell.style.borderRadius = "6px";
                 cell.style.padding = "6px 8px";
-                cell.innerHTML = "<div style='font-size: 8px; color: #555568; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + escapeHtml(v.name) + "</div><div style='font-size: 11px; font-weight: bold; color: " + (v.type === "bool" && val ? "#22c55e" : "#e8e8ec") + "; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'>" + escapeHtml(displayVal) + "</div>";
+
+                const d1 = document.createElement("div");
+                d1.style.fontSize = "8px";
+                d1.style.color = "#555568";
+                d1.style.textTransform = "uppercase";
+                d1.style.overflow = "hidden";
+                d1.style.textOverflow = "ellipsis";
+                d1.style.whiteSpace = "nowrap";
+                d1.textContent = v.name;
+
+                const d2 = document.createElement("div");
+                d2.style.fontSize = "11px";
+                d2.style.fontWeight = "bold";
+                d2.style.color = v.type === "bool" && val ? "#22c55e" : "#e8e8ec";
+                d2.style.marginTop = "2px";
+                d2.style.overflow = "hidden";
+                d2.style.textOverflow = "ellipsis";
+                d2.style.whiteSpace = "nowrap";
+                d2.textContent = displayVal;
+
+                cell.appendChild(d1);
+                cell.appendChild(d2);
                 db.appendChild(cell);
               });
             }
@@ -12324,7 +12394,7 @@ const ADIA = () => {
                       }
                     }
                     if (indicatorsEl && Array.isArray(c.oledIndicatorEmojis)) {
-                      indicatorsEl.innerHTML = "";
+                      indicatorsEl.textContent = "";
                       c.oledIndicatorEmojis.forEach((emoji, idx) => {
                         const varId = c.oledIndicatorVarIds?.[idx];
                         const iVal = varId ? !!getVarValById(varId) : false;
@@ -12497,7 +12567,7 @@ const ADIA = () => {
               },
               clearLog() {
                 const el = document.getElementById("sim-event-log");
-                if (el) el.innerHTML = "";
+                if (el) el.textContent = "";
               },
               toggleClick(id) {
                 const c = PROJECT_DATA.hmiComponents.find(x => x.id === id);

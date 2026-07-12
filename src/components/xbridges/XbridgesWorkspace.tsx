@@ -617,6 +617,110 @@ const XBRIDGES_LEARNING_LABS = [
       { id: 'e_db_3', source: 'dock_detect_logic', sourceHandle: 'docked', target: 'resume_scheduler', targetHandle: 'docked' },
       { id: 'e_db_4', source: 'dock_detect_logic', sourceHandle: 'docked', target: 'dock_out_state', targetHandle: 'in' }
     ]
+  },
+  {
+    id: 'dem_particle_washing_machine',
+    name: 'Washing Machine DEM Physics Lab',
+    category: 'Particle Dynamics',
+    difficulty: 'Expert',
+    description: 'Deconstruct a multi-physics Discrete Element Method (DEM) model of a washing machine into its core components. Connect individual blocks representing drum geometry, particle systems, contact models, cloth elastic bonds, and fluid drag coupling.',
+    nodes: [
+      { id: 'rpm_val', type: 'Constant', position: { x: 50, y: 50 }, label: 'Drum RPM', params: { value: 45 } },
+      { id: 'fill_val', type: 'Constant', position: { x: 50, y: 550 }, label: 'Water Fill Level', params: { value: 0.35 } },
+      { id: 'const_two', type: 'Constant', position: { x: 1050, y: 400 }, label: 'Power Exponent', params: { value: 2 } },
+      
+      { id: 'dem_drum', type: 'DEM_DRUM', position: { x: 250, y: 50 }, label: 'DEM Drum Geometry', params: { drum_radius: 0.8 } },
+      { id: 'dem_particles', type: 'DEM_PARTICLE_SYSTEM', position: { x: 550, y: 250 }, label: 'DEM Particle System', params: { num_sheets: 2, clothes_weight: 0.4, grid_rows: 4, grid_cols: 4, num_particles: 32, particle_radius: 0.05, particle_mass: 0.0125, gravity: 9.81 } },
+      
+      { id: 'hertz_contact', type: 'DEM_HERTZ_CONTACT', position: { x: 900, y: 50 }, label: 'Hertz Contact Model', params: { stiffness_normal: 500, damping_normal: 5, friction_coeff: 0.4 } },
+      { id: 'bond_fabric', type: 'DEM_BOND_FABRIC', position: { x: 900, y: 250 }, label: 'Fabric Bond Model', params: { num_sheets: 2, grid_rows: 4, grid_cols: 4, bond_stiffness: 150, bond_damping: 5 } },
+      { id: 'fluid_coupling', type: 'DEM_FLUID_COUPLING', position: { x: 900, y: 450 }, label: 'Fluid Phase Coupling', params: { drag_coeff: 0.8 } },
+      
+      { id: 'pow_block', type: 'VectorPow', position: { x: 1100, y: 250 }, label: 'Velocity Squared' },
+      { id: 'sum_elements', type: 'SumElements', position: { x: 1300, y: 250 }, label: 'Sum of Squared Vel' },
+      { id: 'ke_gain', type: 'GAIN', position: { x: 1450, y: 250 }, label: 'KE Factor (0.5 * m)', params: { gain: 0.05 } },
+      { id: 'scope_ke', type: 'Scope', position: { x: 1650, y: 150 }, label: 'System Energies', params: { numSignals: 2, bufferSize: 1000 } }
+    ],
+    edges: [
+      { id: 'de1', source: 'rpm_val', sourceHandle: 'out', target: 'dem_drum', targetHandle: 'rpm' },
+      { id: 'de2', source: 'dem_drum', sourceHandle: 'drum_state', target: 'hertz_contact', targetHandle: 'drum_state' },
+      { id: 'de3', source: 'dem_drum', sourceHandle: 'drum_state', target: 'fluid_coupling', targetHandle: 'drum_state' },
+      { id: 'de4', source: 'dem_drum', sourceHandle: 'drum_state', target: 'dem_particles', targetHandle: 'drum_state' },
+      
+      { id: 'de5', source: 'dem_particles', sourceHandle: 'positions', target: 'hertz_contact', targetHandle: 'positions' },
+      { id: 'de6', source: 'dem_particles', sourceHandle: 'velocities', target: 'hertz_contact', targetHandle: 'velocities' },
+      { id: 'de7', source: 'dem_particles', sourceHandle: 'positions', target: 'bond_fabric', targetHandle: 'positions' },
+      { id: 'de8', source: 'dem_particles', sourceHandle: 'velocities', target: 'bond_fabric', targetHandle: 'velocities' },
+      { id: 'de9', source: 'dem_particles', sourceHandle: 'positions', target: 'fluid_coupling', targetHandle: 'positions' },
+      { id: 'de10', source: 'dem_particles', sourceHandle: 'velocities', target: 'fluid_coupling', targetHandle: 'velocities' },
+      
+      { id: 'de11', source: 'fill_val', sourceHandle: 'out', target: 'fluid_coupling', targetHandle: 'fill_level' },
+      { id: 'de12', source: 'hertz_contact', sourceHandle: 'contact_forces', target: 'dem_particles', targetHandle: 'contact_forces' },
+      { id: 'de13', source: 'bond_fabric', sourceHandle: 'bond_forces', target: 'dem_particles', targetHandle: 'bond_forces' },
+      { id: 'de14', source: 'fluid_coupling', sourceHandle: 'fluid_forces', target: 'dem_particles', targetHandle: 'fluid_forces' },
+      
+      { id: 'de15', source: 'dem_particles', sourceHandle: 'velocities', target: 'pow_block', targetHandle: 'in1' },
+      { id: 'de16', source: 'const_two', sourceHandle: 'out', target: 'pow_block', targetHandle: 'in2' },
+      { id: 'de17', source: 'pow_block', sourceHandle: 'out', target: 'sum_elements', targetHandle: 'in' },
+      { id: 'de18', source: 'sum_elements', sourceHandle: 'out', target: 'ke_gain', targetHandle: 'u' },
+      { id: 'de19', source: 'ke_gain', sourceHandle: 'y', target: 'scope_ke', targetHandle: 'in1' },
+      { id: 'de20', source: 'dem_drum', sourceHandle: 'omega', target: 'scope_ke', targetHandle: 'in2' }
+    ]
+  },
+  {
+    id: 'dem_cfd_cosimulation',
+    name: 'Washing Machine DEM-CFD Co-Simulation Lab',
+    category: 'Particle Dynamics',
+    difficulty: 'Expert',
+    description: 'Simulate high-fidelity 2-way co-simulation between SPH fluid water solver and DEM fabric particles. Train an online neural surrogate learner on vibration and cleanliness telemetry to find the optimal drum speed.',
+    nodes: [
+      { id: 'rpm_val', type: 'Constant', position: { x: 50, y: 80 }, label: 'Drum RPM', params: { value: 55 } },
+      { id: 'fill_val', type: 'Constant', position: { x: 50, y: 380 }, label: 'Water Fill Level', params: { value: 0.35 } },
+      { id: 'dem_drum', type: 'DEM_DRUM', position: { x: 250, y: 80 }, label: 'DEM Drum Geometry', params: { drum_radius: 0.8 } },
+      { id: 'cfd_sph', type: 'CFD_SPH_WATER_SOLVER', position: { x: 500, y: 220 }, label: 'CFD SPH Water Solver', params: { num_fluid_particles: 40, fluid_density: 1000, fluid_viscosity: 1.5, sph_smoothing_length: 0.12, sph_stiffness: 25 } },
+      { id: 'dem_particles', type: 'DEM_PARTICLE_SYSTEM', position: { x: 780, y: 80 }, label: 'DEM Particle System', params: { num_sheets: 2, grid_rows: 4, grid_cols: 4, particle_radius: 0.05 } },
+      { id: 'dem_cfd_coupler', type: 'DEM_CFD_COSIMULATION_INTERFACE', position: { x: 780, y: 380 }, label: 'CFD-DEM 2-Way Coupling', params: { drag_model: 'Gidaspow', drag_coeff: 0.8 } },
+      { id: 'hertz_contact', type: 'DEM_HERTZ_CONTACT', position: { x: 1080, y: 80 }, label: 'Hertz Contact Model', params: { stiffness_normal: 500, damping_normal: 5, friction_coeff: 0.4 } },
+      { id: 'bond_fabric', type: 'DEM_BOND_FABRIC', position: { x: 1080, y: 230 }, label: 'Fabric Bond Model', params: { num_sheets: 2, grid_rows: 4, grid_cols: 4, bond_stiffness: 150, bond_damping: 5 } },
+      { id: 'fabric_analyzer', type: 'FABRIC_HARMONIC_ANALYZER', position: { x: 1380, y: 80 }, label: 'Fabric Harmonic Analyzer', params: { drum_mass: 15.0, suspension_stiffness: 8000 } },
+      { id: 'surrogate_learner', type: 'CFD_DEM_SURROGATE_LEARNER', position: { x: 1380, y: 380 }, label: 'CFD-DEM Surrogate Learner', params: { learning_rate: 0.04, mode: 'training' } },
+      { id: 'scope_vibration', type: 'Scope', position: { x: 1680, y: 80 }, label: 'Vibration Actual vs Pred', params: { numSignals: 2, bufferSize: 500 } },
+      { id: 'scope_cleanliness', type: 'Scope', position: { x: 1680, y: 280 }, label: 'Cleanliness Actual vs Pred', params: { numSignals: 2, bufferSize: 500 } }
+    ],
+    edges: [
+      { id: 'cde1', source: 'rpm_val', sourceHandle: 'out', target: 'dem_drum', targetHandle: 'rpm' },
+      { id: 'cde2', source: 'rpm_val', sourceHandle: 'out', target: 'surrogate_learner', targetHandle: 'rpm' },
+      { id: 'cde3', source: 'fill_val', sourceHandle: 'out', target: 'cfd_sph', targetHandle: 'fill_level' },
+      { id: 'cde4', source: 'fill_val', sourceHandle: 'out', target: 'surrogate_learner', targetHandle: 'fill_level' },
+      { id: 'cde5', source: 'dem_drum', sourceHandle: 'drum_state', target: 'cfd_sph', targetHandle: 'drum_state' },
+      { id: 'cde6', source: 'dem_drum', sourceHandle: 'drum_state', target: 'dem_particles', targetHandle: 'drum_state' },
+      { id: 'cde7', source: 'dem_drum', sourceHandle: 'drum_state', target: 'hertz_contact', targetHandle: 'drum_state' },
+      { id: 'cde8', source: 'dem_drum', sourceHandle: 'drum_state', target: 'dem_cfd_coupler', targetHandle: 'drum_state' },
+      { id: 'cde9', source: 'dem_drum', sourceHandle: 'drum_state', target: 'fabric_analyzer', targetHandle: 'drum_state' },
+      { id: 'cde10', source: 'dem_particles', sourceHandle: 'positions', target: 'dem_cfd_coupler', targetHandle: 'dem_positions' },
+      { id: 'cde11', source: 'dem_particles', sourceHandle: 'velocities', target: 'dem_cfd_coupler', targetHandle: 'dem_velocities' },
+      { id: 'cde12', source: 'cfd_sph', sourceHandle: 'fluid_positions', target: 'dem_cfd_coupler', targetHandle: 'fluid_positions' },
+      { id: 'cde13', source: 'cfd_sph', sourceHandle: 'fluid_velocities', target: 'dem_cfd_coupler', targetHandle: 'fluid_velocities' },
+      { id: 'cde14', source: 'dem_particles', sourceHandle: 'positions', target: 'hertz_contact', targetHandle: 'positions' },
+      { id: 'cde15', source: 'dem_particles', sourceHandle: 'velocities', target: 'hertz_contact', targetHandle: 'velocities' },
+      { id: 'cde16', source: 'dem_particles', sourceHandle: 'positions', target: 'bond_fabric', targetHandle: 'positions' },
+      { id: 'cde17', source: 'dem_particles', sourceHandle: 'velocities', target: 'bond_fabric', targetHandle: 'velocities' },
+      { id: 'cde18', source: 'hertz_contact', sourceHandle: 'contact_forces', target: 'dem_particles', targetHandle: 'contact_forces' },
+      { id: 'cde19', source: 'bond_fabric', sourceHandle: 'bond_forces', target: 'dem_particles', targetHandle: 'bond_forces' },
+      { id: 'cde20', source: 'dem_cfd_coupler', sourceHandle: 'dem_coupling_forces', target: 'dem_particles', targetHandle: 'fluid_forces' },
+      { id: 'cde21', source: 'dem_cfd_coupler', sourceHandle: 'fluid_coupling_forces', target: 'cfd_sph', targetHandle: 'coupling_forces' },
+      { id: 'cde22', source: 'dem_particles', sourceHandle: 'positions', target: 'fabric_analyzer', targetHandle: 'fabric_positions' },
+      { id: 'cde23', source: 'dem_particles', sourceHandle: 'velocities', target: 'fabric_analyzer', targetHandle: 'fabric_velocities' },
+      { id: 'cde24', source: 'dem_cfd_coupler', sourceHandle: 'fluid_coupling_forces', target: 'fabric_analyzer', targetHandle: 'fluid_forces' },
+      { id: 'cde25', source: 'fabric_analyzer', sourceHandle: 'vibration_amplitude', target: 'surrogate_learner', targetHandle: 'vibration_amp' },
+      { id: 'cde26', source: 'dem_particles', sourceHandle: 'cleanliness', target: 'surrogate_learner', targetHandle: 'cleanliness' },
+      { id: 'cde27', source: 'fabric_analyzer', sourceHandle: 'vibration_amplitude', target: 'scope_vibration', targetHandle: 'in1' },
+      { id: 'cde28', source: 'surrogate_learner', sourceHandle: 'predicted_vibration', target: 'scope_vibration', targetHandle: 'in2' },
+      { id: 'cde29', source: 'dem_particles', sourceHandle: 'cleanliness', target: 'scope_cleanliness', targetHandle: 'in1' },
+      { id: 'cde30', source: 'surrogate_learner', sourceHandle: 'predicted_cleanliness', target: 'scope_cleanliness', targetHandle: 'in2' },
+      { id: 'cde31', source: 'cfd_sph', sourceHandle: 'drum_fluid_torque', target: 'surrogate_learner', targetHandle: 'fluid_torque' },
+      { id: 'cde32', source: 'cfd_sph', sourceHandle: 'slosh_intensity', target: 'surrogate_learner', targetHandle: 'slosh_intensity' }
+    ]
   }
 ];
 
@@ -1013,6 +1117,122 @@ const XBRIDGES_LEARNING_LAB_STEPS: Record<string, any[]> = {
         }
       ]
     }
+  ],
+  'dem_particle_washing_machine': [
+    {
+      title: '1. Inspect the DEM Particles Block',
+      instructions: 'Welcome to the Multi-Physics DEM Washing Machine Simulation Lab! In this lab, we have decomposed the monolithic washing machine digital twin into individual modular blocks: Geometry, Particles, Hertzian Contact, Fabric Bonds, and Fluid Coupling.\n\nFirst, select the DEM Particle System block to inspect its physical parameters (particle radius, mass, gravity, and quantity) in the properties panel.',
+      targetNodeId: 'dem_particles',
+      objectives: [
+        { id: 'select_particles', label: 'Select the DEM Particle System block', check: (wState: any) => wState.selectedNodeId === 'dem_particles' }
+      ]
+    },
+    {
+      title: '2. Start the Simulation Solver',
+      instructions: 'Let\'s run the Discrete Element Method (DEM) engine. Click the green Run Engine button in the top toolbar to begin the time-stepping co-simulation solver.',
+      objectives: [
+        { id: 'run_engine', label: 'Start the simulation engine', check: (wState: any) => wState.isSimulating }
+      ]
+    },
+    {
+      title: '3. Open the Energy Scope',
+      instructions: 'The physics solver is executing! Let\'s monitor the live signal trace of the system energies.\n\nClick the maximize icon on the System Energies scope block (at the top right of the block) to open the floating scope window.',
+      targetNodeId: 'scope_ke',
+      objectives: [
+        { id: 'open_scope_ke', label: 'Open the System Energies scope window', check: (wState: any) => wState.openScopes.includes('scope_ke') }
+      ]
+    },
+    {
+      title: '4. Observe Multi-Physics Dynamics',
+      instructions: 'Watch the real-time animations on the block nodes! The blue lines represent elastic cloth bonds, which stretch and stress. The sloshing water level is shown at the bottom of the drum.\n\nKeep the engine simulating until the elapsed time reaches at least 1.0s to let the system stabilize.',
+      objectives: [
+        { 
+          id: 'simulate_a_bit', 
+          label: 'Let the solver run (wait for time >= 1.0s)', 
+          check: (wState: any) => {
+            const scopeNode = wState.nodes.find((n: any) => n.id === 'scope_ke');
+            const history = scopeNode?.data?.state?.history || [];
+            if (history.length === 0) return false;
+            const lastSample = history[history.length - 1];
+            return (lastSample?.t ?? 0) >= 1.0;
+          }
+        }
+      ]
+    },
+    {
+      title: '5. Increase Drum Speed (RPM)',
+      instructions: 'Great job! Now let\'s observe centrifugal acceleration. Select the Drum RPM constant block, and increase its value to 80 RPM or higher. Notice how the particles climb higher along the drum walls due to centripetal and friction forces!',
+      targetNodeId: 'rpm_val',
+      objectives: [
+        { 
+          id: 'change_rpm', 
+          label: 'Set Drum RPM constant to >= 80', 
+          check: (wState: any) => {
+            const rpmNode = wState.nodes.find((n: any) => n.id === 'rpm_val');
+            return Number(rpmNode?.data?.params?.value) >= 80;
+          } 
+        }
+      ]
+    }
+  ],
+  'dem_cfd_cosimulation': [
+    {
+      title: '1. Inspect SPH Fluid Phase',
+      instructions: 'Welcome to the Washing Machine SPH CFD-DEM Co-Simulation Lab! This workspace couples a Smoothed Particle Hydrodynamics (SPH) 2D fluid solver with DEM fabric sheets.\n\nFirst, select the CFD SPH Water Solver block to inspect its parameters in the properties panel.',
+      targetNodeId: 'cfd_sph',
+      objectives: [
+        { id: 'select_sph', label: 'Select the CFD SPH Water Solver block', check: (wState: any) => wState.selectedNodeId === 'cfd_sph' }
+      ]
+    },
+    {
+      title: '2. Run Coupled Solver',
+      instructions: 'Let\'s run the coupled execution loop. Click the green Run Engine button in the top toolbar to begin the time-stepping co-simulation solver.',
+      objectives: [
+        { id: 'run_engine_coupled', label: 'Start the simulation engine', check: (wState: any) => wState.isSimulating }
+      ]
+    },
+    {
+      title: '3. Trace Suspension Vibration',
+      instructions: 'The coupled solver is running, and fluid-structure interaction forces are affecting the drum! Let\'s monitor our suspension vibrations.\n\nOpen the Vibration Actual vs Pred scope block by clicking its maximize button.',
+      targetNodeId: 'scope_vibration',
+      objectives: [
+        { id: 'open_scope_vib', label: 'Open the Vibration scope window', check: (wState: any) => wState.openScopes.includes('scope_vibration') }
+      ]
+    },
+    {
+      title: '4. Monitor Surrogate Learning',
+      instructions: 'Select the CFD-DEM Surrogate Learner block. Watch as it runs Stochastic Gradient Descent (SGD) online. The prediction error will decrease as the drum rotates.\n\nKeep the engine simulating until the elapsed time reaches at least 2.0s to allow the surrogate network to train.',
+      targetNodeId: 'surrogate_learner',
+      objectives: [
+        { 
+          id: 'simulate_coupled', 
+          label: 'Let the solver run (wait for time >= 2.0s)', 
+          check: (wState: any) => {
+            const scopeNode = wState.nodes.find((n: any) => n.id === 'scope_vibration');
+            const history = scopeNode?.data?.state?.history || [];
+            if (history.length === 0) return false;
+            const lastSample = history[history.length - 1];
+            return (lastSample?.t ?? 0) >= 2.0;
+          }
+        }
+      ]
+    },
+    {
+      title: '5. Set Optimal RPM',
+      instructions: 'Fantastic! The surrogate learning model has trained and recommends the optimal speed to maximize cleaning and minimize vibrations.\n\nSelect the Drum RPM constant block, and set its value between 50 and 70 RPM to apply the recommended optimal operating speed.',
+      targetNodeId: 'rpm_val',
+      objectives: [
+        { 
+          id: 'set_opt_rpm', 
+          label: 'Set Drum RPM constant to [50, 70]', 
+          check: (wState: any) => {
+            const rpmNode = wState.nodes.find((n: any) => n.id === 'rpm_val');
+            const val = Number(rpmNode?.data?.params?.value);
+            return val >= 50 && val <= 70;
+          }
+        }
+      ]
+    }
   ]
 };
 
@@ -1054,6 +1274,7 @@ export const XbridgesWorkspace: React.FC<{
   const [history, setHistory] = useState<{ nodes: Node[], edges: Edge[] }[]>([]);
   const [activeSidebarTab, setActiveSidebarTab] = useState<'library' | 'labs'>('library');
   const [diagnostics, setDiagnostics] = useState<ModelDiagnostic[]>([]);
+  const [showConfirmClear, setShowConfirmClear] = useState(false);
 
   // Tutorial / Learning Lab State
   const [activeLabId, setActiveLabId] = useState<string | null>(null);
@@ -2523,7 +2744,7 @@ export const XbridgesWorkspace: React.FC<{
             </WorkspaceContext.Provider>
 
             <button
-              onClick={() => { setNodes([]); setEdges([]); setSelectedNodeId(null); }}
+              onClick={() => setShowConfirmClear(true)}
               className="absolute top-4 right-4 z-50 bg-[#1a1a1a] border border-[#333] text-red-500 hover:bg-red-900/20 px-3 py-1.5 rounded text-xs font-bold shadow-md flex items-center gap-2"
             >
               <Trash2 size={12} />
@@ -2707,6 +2928,45 @@ export const XbridgesWorkspace: React.FC<{
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {showConfirmClear && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999]" onMouseDown={() => setShowConfirmClear(false)}>
+            <div className="bg-[#1a1a1a] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
+              <div className="h-12 flex items-center px-5 border-b border-red-900/50">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" className="mr-3">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <h2 className="text-lg font-bold text-red-400">Clear Canvas</h2>
+              </div>
+
+              <div className="p-5 bg-red-950/25 rounded-lg border border-red-900 m-5">
+                <p className="text-red-300 text-sm whitespace-pre-wrap">Are you sure you want to clear the canvas? This will permanently delete all blocks and connections in your current workspace.</p>
+              </div>
+
+              <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
+                <button
+                  onClick={() => setShowConfirmClear(false)}
+                  className="px-5 py-2 border border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] rounded bg-transparent text-sm transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setNodes([]);
+                    setEdges([]);
+                    setSelectedNodeId(null);
+                    setShowConfirmClear(false);
+                  }}
+                  className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors cursor-pointer font-bold"
+                >
+                  Clear Canvas
+                </button>
+              </div>
             </div>
           </div>
         )}

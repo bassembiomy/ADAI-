@@ -1073,6 +1073,335 @@ describe('X-Bridges Learning Models Block Tests', () => {
     });
   });
 
+  describe('DEM Particle Simulation and Washing Machine Blocks', () => {
+    it('should execute DEM_DRUM and update angle based on RPM', () => {
+      const drumBlock = BLOCK_LIBRARY['DEM_DRUM']('drum_test', { drum_radius: 0.8 });
+      const state = { angle: 0, initialized: true };
+      const res = drumBlock.execute([45], drumBlock.params, state, 0);
+      expect(res.outputs[0]).toBeGreaterThan(0); // angle
+      expect(res.outputs[1]).toBeCloseTo((45 * 2 * Math.PI) / 60, 4); // omega
+      expect(res.outputs[2]).toEqual([0.8, res.outputs[0], res.outputs[1]]); // drum_state
+    });
+
+    it('should execute DEM_PARTICLE_SYSTEM with contact, bond, and fluid forces', () => {
+      const pSystem = BLOCK_LIBRARY['DEM_PARTICLE_SYSTEM']('ps_test', { num_particles: 32, particle_radius: 0.05 });
+      const state = pSystem.state;
+      const resInit = pSystem.execute([[], [], [], [0.8, 0, 0]], pSystem.params, state, 0);
+      
+      expect((resInit.outputs[0] as number[]).length).toBe(64); // 32 particles * 2D positions
+      expect(resInit.nextState.initialized).toBe(true);
+      expect(resInit.nextState.particles.length).toBe(32);
+      expect(resInit.nextState.bonds.length).toBeGreaterThan(0);
+
+      // Execute another step with contact forces
+      const contactForces = new Array(64).fill(0.1);
+      const resStep = pSystem.execute([contactForces, [], [], [0.8, 0.1, 1.5]], pSystem.params, resInit.nextState, 0.08);
+      expect((resStep.outputs[0] as number[]).length).toBe(64);
+      expect(resStep.nextState.drum_angle).toBe(0.1);
+    });
+
+    it('should execute DEM_HERTZ_CONTACT and compute contact forces', () => {
+      const contactBlock = BLOCK_LIBRARY['DEM_HERTZ_CONTACT']('hertz_test', { stiffness_normal: 500 });
+      const positions = new Array(64).fill(0).map((_, i) => (i % 2 === 0 ? 0.1 * i : 0));
+      const velocities = new Array(64).fill(0);
+      const drumState = [0.8, 0.2, 1.0];
+      const radius = 0.05;
+
+      const res = contactBlock.execute([positions, velocities, drumState, radius], contactBlock.params, { initialized: false }, 0);
+      expect((res.outputs[0] as number[]).length).toBe(64); // force vector length
+      expect(res.nextState.particles.length).toBe(32);
+      expect(res.nextState.drum_angle).toBe(0.2);
+    });
+
+    it('should execute DEM_BOND_FABRIC and compute elastic forces', () => {
+      const bondBlock = BLOCK_LIBRARY['DEM_BOND_FABRIC']('bond_test', { bond_stiffness: 150 });
+      const positions = new Array(64).fill(0).map((_, i) => (i % 2 === 0 ? 0.05 * i : 0.01 * i));
+      const velocities = new Array(64).fill(0);
+      const radius = 0.05;
+
+      const res = bondBlock.execute([positions, velocities, radius], bondBlock.params, { initialized: false }, 0);
+      expect((res.outputs[0] as number[]).length).toBe(64); // forces
+      expect((res.outputs[1] as number[]).length).toBeGreaterThan(0); // bonds output (forces magnitudes)
+      expect(res.nextState.bonds.length).toBeGreaterThan(0);
+      expect(res.nextState.particles.length).toBe(32);
+    });
+
+    it('should execute DEM_FLUID_COUPLING and compute drag forces', () => {
+      const fluidBlock = BLOCK_LIBRARY['DEM_FLUID_COUPLING']('fluid_test', { drag_coeff: 0.8 });
+      const positions = new Array(64).fill(0).map((_, i) => (i % 2 === 0 ? 0.1 : -0.5)); // particles placed in water region
+      const velocities = new Array(64).fill(1.0);
+      const fillLevel = 0.35;
+      const drumState = [0.8, 0.2, 1.5];
+
+      const res = fluidBlock.execute([positions, velocities, fillLevel, drumState], fluidBlock.params, { initialized: false }, 0);
+      expect((res.outputs[0] as number[]).length).toBe(64);
+      expect(res.nextState.particles.length).toBe(32);
+      expect(res.nextState.drum_angle).toBe(0.2);
+    });
+
+    it('should compile and simulate the complete modular washing machine loop in XbridgesEngine', () => {
+      const model = {
+        blocks: [
+          BLOCK_LIBRARY['Constant']('rpm_val', { value: 45 }),
+          BLOCK_LIBRARY['Constant']('fill_val', { value: 0.35 }),
+          BLOCK_LIBRARY['Constant']('const_two', { value: 2 }),
+          BLOCK_LIBRARY['DEM_DRUM']('dem_drum', { drum_radius: 0.8 }),
+          BLOCK_LIBRARY['DEM_PARTICLE_SYSTEM']('dem_particles', { num_particles: 32, particle_radius: 0.05 }),
+          BLOCK_LIBRARY['DEM_HERTZ_CONTACT']('hertz_contact', { stiffness_normal: 500 }),
+          BLOCK_LIBRARY['DEM_BOND_FABRIC']('bond_fabric', { bond_stiffness: 150 }),
+          BLOCK_LIBRARY['DEM_FLUID_COUPLING']('fluid_coupling', { drag_coeff: 0.8 }),
+          BLOCK_LIBRARY['VectorPow']('pow_block', {}),
+          BLOCK_LIBRARY['SumElements']('sum_elements', {}),
+          BLOCK_LIBRARY['GAIN']('ke_gain', { gain: 0.05 }),
+          BLOCK_LIBRARY['Scope']('scope_ke', { numSignals: 2 })
+        ],
+        connections: [
+          { sourceBlock: 'rpm_val', sourcePort: 'out', targetBlock: 'dem_drum', targetPort: 'rpm' },
+          { sourceBlock: 'dem_drum', sourcePort: 'drum_state', targetBlock: 'hertz_contact', targetPort: 'drum_state' },
+          { sourceBlock: 'dem_drum', sourcePort: 'drum_state', targetBlock: 'fluid_coupling', targetPort: 'drum_state' },
+          { sourceBlock: 'dem_drum', sourcePort: 'drum_state', targetBlock: 'dem_particles', targetPort: 'drum_state' },
+          
+          { sourceBlock: 'dem_particles', sourcePort: 'positions', targetBlock: 'hertz_contact', targetPort: 'positions' },
+          { sourceBlock: 'dem_particles', sourcePort: 'velocities', targetBlock: 'hertz_contact', targetPort: 'velocities' },
+          { sourceBlock: 'dem_particles', sourcePort: 'positions', targetBlock: 'bond_fabric', targetPort: 'positions' },
+          { sourceBlock: 'dem_particles', sourcePort: 'velocities', targetBlock: 'bond_fabric', targetPort: 'velocities' },
+          { sourceBlock: 'dem_particles', sourcePort: 'positions', targetBlock: 'fluid_coupling', targetPort: 'positions' },
+          { sourceBlock: 'dem_particles', sourcePort: 'velocities', targetBlock: 'fluid_coupling', targetPort: 'velocities' },
+          
+          { sourceBlock: 'fill_val', sourcePort: 'out', targetBlock: 'fluid_coupling', targetPort: 'fill_level' },
+          { sourceBlock: 'hertz_contact', sourcePort: 'contact_forces', targetBlock: 'dem_particles', targetPort: 'contact_forces' },
+          { sourceBlock: 'bond_fabric', sourcePort: 'bond_forces', targetBlock: 'dem_particles', targetPort: 'bond_forces' },
+          { sourceBlock: 'fluid_coupling', sourcePort: 'fluid_forces', targetBlock: 'dem_particles', targetPort: 'fluid_forces' },
+          
+          { sourceBlock: 'dem_particles', sourcePort: 'velocities', targetBlock: 'pow_block', targetPort: 'in1' },
+          { sourceBlock: 'const_two', sourcePort: 'out', targetBlock: 'pow_block', targetPort: 'in2' },
+          { sourceBlock: 'pow_block', sourcePort: 'out', targetBlock: 'sum_elements', targetPort: 'in' },
+          { sourceBlock: 'sum_elements', sourcePort: 'out', targetBlock: 'ke_gain', targetPort: 'u' },
+          { sourceBlock: 'ke_gain', sourcePort: 'y', targetBlock: 'scope_ke', targetPort: 'in1' },
+          { sourceBlock: 'dem_drum', sourcePort: 'omega', targetBlock: 'scope_ke', targetPort: 'in2' }
+        ]
+      };
+
+      const engine = new XbridgesEngine(model);
+      const diagnostics = engine.compile(0);
+      expect(diagnostics.filter(d => d.severity === 'error').length).toBe(0);
+
+      // Verify that no algebraic loops are flagged (since the loop starts at stateful dem_particles)
+      const loops = diagnostics.filter(d => d.code === 'ALGEBRAIC_LOOP');
+      expect(loops.length).toBe(0);
+
+      // Simulate a few steps
+      let time = 0;
+      const dt = 0.08;
+      for (let i = 0; i < 5; i++) {
+        Solvers.stepEuler(engine, time, dt);
+        time += dt;
+      }
+
+      // Check that the scope received data
+      const scope = engine.executionOrder.find(b => b.id === 'scope_ke');
+      expect(scope?.state?.history.length).toBe(5);
+      expect(scope?.state?.history[4].t).toBeCloseTo(0.32, 4);
+    });
+  });
+
+  describe('Washing Machine CFD-DEM Co-Simulation Blocks', () => {
+    it('should initialize and execute CFD_SPH_WATER_SOLVER correctly', () => {
+      const solverBlock = BLOCK_LIBRARY['CFD_SPH_WATER_SOLVER']('cfd_sph', {
+        num_fluid_particles: 20,
+        fluid_density: 1000,
+        fluid_viscosity: 1.5,
+        sph_smoothing_length: 0.12,
+        sph_stiffness: 25
+      });
+
+      expect(solverBlock.isStateful).toBe(true);
+      expect(solverBlock.state.initialized).toBe(false);
+
+      // Execute initial step (initializes state)
+      const resInit = solverBlock.execute([0.35, [0.8, 0.5, 2.5], []], solverBlock.params, solverBlock.state, 0);
+      expect(resInit.nextState.initialized).toBe(true);
+      expect(resInit.nextState.fluidParticles.length).toBe(20);
+      expect((resInit.outputs[0] as number[]).length).toBe(40); // 20 * 2 (x, y)
+      expect((resInit.outputs[1] as number[]).length).toBe(40); // 20 * 2 (vx, vy)
+
+      // Execute next step (simulates motion)
+      const resStep = solverBlock.execute([0.35, [0.8, 0.5, 2.5], []], solverBlock.params, resInit.nextState, 0);
+      expect(resStep.nextState.fluidParticles.length).toBe(20);
+      expect(resStep.nextState.fluidParticles[0].x).not.toBeNaN();
+    });
+
+    it('should initialize and execute DEM_CFD_COSIMULATION_INTERFACE correctly', () => {
+      const couplerBlock = BLOCK_LIBRARY['DEM_CFD_COSIMULATION_INTERFACE']('coupler', {
+        drag_model: 'Gidaspow',
+        drag_coeff: 0.8
+      });
+
+      // Dummy fluid positions (4 particles) and DEM positions (4 particles)
+      const demPos = [0.1, -0.2, 0.2, -0.3, -0.1, -0.4, 0.05, -0.5];
+      const demVel = [0.1, 0, -0.1, 0.1, 0, -0.1, 0.2, 0.2];
+      const fluidPos = [0.12, -0.18, 0.18, -0.32, -0.08, -0.38, 0.04, -0.52];
+      const fluidVel = [0.08, -0.05, -0.12, 0.08, 0.02, -0.08, 0.18, 0.22];
+      const drumState = [0.8, 0.2, 2.0];
+
+      const res = couplerBlock.execute([demPos, demVel, fluidPos, fluidVel, drumState], couplerBlock.params, couplerBlock.state, 0);
+      expect((res.outputs[0] as number[]).length).toBe(8); // dem coupling forces
+      expect((res.outputs[1] as number[]).length).toBe(8); // fluid coupling forces
+    });
+
+    it('should execute FABRIC_HARMONIC_ANALYZER and suspension dynamics correctly', () => {
+      const analyzerBlock = BLOCK_LIBRARY['FABRIC_HARMONIC_ANALYZER']('analyzer', {
+        drum_mass: 15.0,
+        suspension_stiffness: 8000
+      });
+
+      const demPos = [0.2, -0.3, 0.3, -0.4];
+      const demVel = [0.5, 0.5, -0.5, -0.5];
+      const fluidForces = [1.0, 1.0, -1.0, -1.0];
+      const drumState = [0.8, 0.2, 5.0];
+
+      let state = analyzerBlock.state;
+      // Execute 3 steps to integrate suspension spring-damper system
+      for (let i = 0; i < 3; i++) {
+        const res = analyzerBlock.execute([demPos, demVel, fluidForces, drumState], analyzerBlock.params, state, 0);
+        state = res.nextState;
+        expect(res.outputs[0]).toBeGreaterThanOrEqual(0); // vibration amplitude
+        expect(res.outputs[1]).toEqual([0.25, -0.35]); // eccentricity
+        expect(state.dx).not.toBeNaN();
+        expect(state.dy).not.toBeNaN();
+      }
+    });
+
+    it('should train CFD_DEM_SURROGATE_LEARNER online and recommend optimal RPM and design parameters', () => {
+      const learnerBlock = BLOCK_LIBRARY['CFD_DEM_SURROGATE_LEARNER']('learner', {
+        learning_rate: 0.04,
+        mode: 'training'
+      });
+
+      let state = learnerBlock.state;
+      let lastRes: any = null;
+
+      // Train surrogate on a mock trajectory (increasing RPM leads to cleaning but also vibration)
+      for (let step = 0; step < 50; step++) {
+        const rpm = 30 + (step % 5) * 15; // 30, 45, 60, 75, 90
+        const fill = 0.35;
+        // Vibration increases quadratically with RPM
+        const actualVib = 0.01 + 0.0001 * rpm * rpm + (Math.random() - 0.5) * 0.01;
+        // Cleanliness increases with RPM up to a threshold (centrifuging) then drops
+        const actualClean = Math.min(100, rpm * 1.2 - 0.005 * rpm * rpm);
+        const fluidTorque = 0.4 + (step % 3) * 0.1;
+        const sloshIntensity = 0.3 + (step % 4) * 0.15;
+
+        lastRes = learnerBlock.execute([rpm, fill, actualVib, actualClean, fluidTorque, sloshIntensity], learnerBlock.params, state, 0);
+        state = lastRes.nextState;
+
+        // Verify outputs are computed
+        expect(lastRes.outputs[0]).toBeGreaterThanOrEqual(0);
+        expect(lastRes.outputs[1]).toBeGreaterThanOrEqual(0);
+        expect(lastRes.outputs[1]).toBeLessThanOrEqual(100);
+      }
+
+      // Check optimizer has recommended an optimal RPM and design parameters
+      const recommendedRpm = lastRes.outputs[4] as number;
+      expect(recommendedRpm).toBeGreaterThanOrEqual(15);
+      expect(recommendedRpm).toBeLessThanOrEqual(140);
+
+      const recommendedFill = lastRes.outputs[5] as number;
+      expect(recommendedFill).toBeGreaterThanOrEqual(0.2);
+      expect(recommendedFill).toBeLessThanOrEqual(0.6);
+
+      const recommendedRad = lastRes.outputs[6] as number;
+      expect(recommendedRad).toBeGreaterThanOrEqual(0.6);
+      expect(recommendedRad).toBeLessThanOrEqual(1.0);
+
+      const recommendedLifters = lastRes.outputs[7] as number;
+      expect(recommendedLifters).toBeGreaterThanOrEqual(3);
+      expect(recommendedLifters).toBeLessThanOrEqual(5);
+
+      // Verify Classified Motion Pattern and Rotation Direction
+      const motionPattern = lastRes.outputs[8] as number;
+      expect([0, 1, 2]).toContain(motionPattern);
+
+      const rotationDir = lastRes.outputs[9] as number;
+      expect([0, 1, 2]).toContain(rotationDir);
+    });
+  });
+
+  describe('Trigonometric & Hyperbolic Blocks', () => {
+    it('should calculate inverse trigonometric functions in radians and degrees', () => {
+      const asinRad = BLOCK_LIBRARY['ASIN']('asin_r', { angle_unit: 'radians' });
+      const asinDeg = BLOCK_LIBRARY['ASIN']('asin_d', { angle_unit: 'degrees' });
+
+      // ASIN
+      expect(asinRad.execute([0.5], asinRad.params, null, 0).outputs[0]).toBeCloseTo(Math.asin(0.5), 5);
+      expect(asinDeg.execute([0.5], asinDeg.params, null, 0).outputs[0]).toBeCloseTo(30, 5);
+
+      // ACOS
+      const acosRad = BLOCK_LIBRARY['ACOS']('acos_r', { angle_unit: 'radians' });
+      const acosDeg = BLOCK_LIBRARY['ACOS']('acos_d', { angle_unit: 'degrees' });
+      expect(acosRad.execute([0.5], acosRad.params, null, 0).outputs[0]).toBeCloseTo(Math.acos(0.5), 5);
+      expect(acosDeg.execute([0.5], acosDeg.params, null, 0).outputs[0]).toBeCloseTo(60, 5);
+
+      // ATAN
+      const atanRad = BLOCK_LIBRARY['ATAN']('atan_r', { angle_unit: 'radians' });
+      const atanDeg = BLOCK_LIBRARY['ATAN']('atan_d', { angle_unit: 'degrees' });
+      expect(atanRad.execute([1.0], atanRad.params, null, 0).outputs[0]).toBeCloseTo(Math.atan(1.0), 5);
+      expect(atanDeg.execute([1.0], atanDeg.params, null, 0).outputs[0]).toBeCloseTo(45, 5);
+
+      // ACOT
+      const acotRad = BLOCK_LIBRARY['ACOT']('acot_r', { angle_unit: 'radians' });
+      expect(acotRad.execute([1.0], acotRad.params, null, 0).outputs[0]).toBeCloseTo(Math.atan(1.0), 5);
+    });
+
+    it('should calculate hyperbolic functions', () => {
+      const sinhBlock = BLOCK_LIBRARY['SINH']('sinh', {});
+      const coshBlock = BLOCK_LIBRARY['COSH']('cosh', {});
+      const tanhBlock = BLOCK_LIBRARY['TANH']('tanh', {});
+      const cothBlock = BLOCK_LIBRARY['COTH']('coth', {});
+
+      expect(sinhBlock.execute([1.2], {}, null, 0).outputs[0]).toBeCloseTo(Math.sinh(1.2), 5);
+      expect(coshBlock.execute([1.2], {}, null, 0).outputs[0]).toBeCloseTo(Math.cosh(1.2), 5);
+      expect(tanhBlock.execute([1.2], {}, null, 0).outputs[0]).toBeCloseTo(Math.tanh(1.2), 5);
+      expect(cothBlock.execute([1.2], {}, null, 0).outputs[0]).toBeCloseTo(1 / Math.tanh(1.2), 5);
+    });
+
+    it('should calculate inverse hyperbolic functions', () => {
+      const asinhBlock = BLOCK_LIBRARY['ASINH']('asinh', {});
+      const acoshBlock = BLOCK_LIBRARY['ACOSH']('acosh', {});
+      const atanhBlock = BLOCK_LIBRARY['ATANH']('atanh', {});
+
+      expect(asinhBlock.execute([0.8], {}, null, 0).outputs[0]).toBeCloseTo(Math.asinh(0.8), 5);
+      expect(acoshBlock.execute([1.5], {}, null, 0).outputs[0]).toBeCloseTo(Math.acosh(1.5), 5);
+      expect(atanhBlock.execute([0.5], {}, null, 0).outputs[0]).toBeCloseTo(Math.atanh(0.5), 5);
+    });
+  });
+
+  describe('CURRENT_CONTROLLER_DQ Block', () => {
+    it('should default Ki_d to 10 but respect user properties when they are changed', () => {
+      const dqDefault = BLOCK_LIBRARY['CURRENT_CONTROLLER_DQ']('dq_def', {});
+      expect(dqDefault.params.Ki_d).toBe(10);
+      expect(dqDefault.params.iMax).toBe(100);
+
+      const dqChanged = BLOCK_LIBRARY['CURRENT_CONTROLLER_DQ']('dq_chg', { Ki_d: 0, iMax: 50 });
+      expect(dqChanged.params.Ki_d).toBe(0);
+      expect(dqChanged.params.iMax).toBe(50);
+    });
+
+    it('should limit the reference currents using iMax', () => {
+      const dq = BLOCK_LIBRARY['CURRENT_CONTROLLER_DQ']('dq', { Kp_d: 2, Ki_d: 0, Kp_q: 2, Ki_q: 0, iMax: 10 });
+      
+      // Reference currents are [12, 5], magnitude = 13, greater than iMax = 10.
+      // Ratio = 10 / 13.
+      // Limited id_ref = 12 * 10 / 13 = 9.230769
+      // Limited iq_ref = 5 * 10 / 13 = 3.84615
+      // With measured current id = 0, iq = 0, error is [9.230769, 3.84615]
+      // Output is Kp * error = [18.461538, 7.6923]
+      const res = dq.execute([12, 5, 0, 0], dq.params, dq.state, 0.1);
+      expect(res.outputs[0]).toBeCloseTo(18.461538, 4);
+      expect(res.outputs[1]).toBeCloseTo(7.6923, 4);
+    });
+  });
+
 });
 
 

@@ -69,7 +69,7 @@ export class VectorUtils {
       if (opName === 'divide' && Array.isArray(a) && Array.isArray(b)) {
         return math.dotDivide(a as any, b as any) as any;
       }
-      if (opName === 'pow' && Array.isArray(a) && Array.isArray(b)) {
+      if (opName === 'pow' && (Array.isArray(a) || Array.isArray(b))) {
         return math.dotPow(a as any, b as any) as any;
       }
       

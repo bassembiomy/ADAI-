@@ -26,7 +26,11 @@ export const PremiumConnectionLine = ({
 
     const isSourceStart = sourceHandleEl.classList.contains('source');
     const oppositeType = isSourceStart ? 'target' : 'source';
-    const handleElements = document.querySelectorAll(`.react-flow__handle.${oppositeType}`);
+    const handleElements = document.querySelectorAll(
+      oppositeType === 'target'
+        ? '.react-flow__handle.target'
+        : '.react-flow__handle.source'
+    );
 
     const targets: { x: number; y: number; flowX: number; flowY: number }[] = [];
     handleElements.forEach((el) => {

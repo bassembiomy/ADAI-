@@ -381,15 +381,16 @@ export const simple_dbscan = (pts: [number, number][], eps: number, minPts: numb
   return labels;
 };
 
-export const lineOfSightClear = (p1: [number, number], p2: [number, number], grid: number[][], radius = 0.15) => {
+export const lineOfSightClear = (p1: [number, number], p2: [number, number], grid: number[][], radius = 0.15, isMatlab = false) => {
+  const activeMatlab = isMatlab || g_isMatlabActive || Math.abs(p1[0]) > 3.05 || Math.abs(p1[1]) > 3.05 || Math.abs(p2[0]) > 3.05 || Math.abs(p2[1]) > 3.05;
   const steps = 15;
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const x = p1[0] + (p2[0] - p1[0]) * t;
     const y = p1[1] + (p2[1] - p1[1]) * t;
-    if (checkCollisionTwin(x, y, radius, true)) return false;
+    if (checkCollisionTwin(x, y, radius, activeMatlab)) return false;
     if (grid) {
-      const { row, col } = getTwinGridCoords(x, y, true);
+      const { row, col } = getTwinGridCoords(x, y, activeMatlab);
       if (row >= 0 && row < 30 && col >= 0 && col < 30) {
         if (grid[row][col] > 50) return false;
       }
@@ -406,11 +407,7 @@ export const astar_planner = (
   Wd = 1.0,
   isMatlab = false
 ): [number, number][] => {
-  if (Math.abs(start[0]) > 3.05 || Math.abs(start[1]) > 3.05 ||
-      Math.abs(goal[0]) > 3.05 || Math.abs(goal[1]) > 3.05) {
-    g_isMatlabActive = true;
-  }
-  const activeMatlab = isMatlab || g_isMatlabActive;
+  const activeMatlab = isMatlab || g_isMatlabActive || Math.abs(start[0]) > 3.05 || Math.abs(start[1]) > 3.05 || Math.abs(goal[0]) > 3.05 || Math.abs(goal[1]) > 3.05;
   const minVal = activeMatlab ? -6.0 : -3.0;
   const sizeVal = activeMatlab ? 12.0 : 6.0;
 
@@ -438,88 +435,101 @@ export const astar_planner = (
     parent: Node | null;
   }
 
-  const openList: Node[] = [];
-  const closedSet = new Set<string>();
+  // Helper to run A* search for a specific safety radius
+  const runSearch = (currentSafety: number): Node | null => {
+    const openList: Node[] = [];
+    const closedSet = new Set<string>();
 
-  const startNode: Node = {
-    row: startGrid.row,
-    col: startGrid.col,
-    g: 0,
-    h: Math.abs(startGrid.row - goalGrid.row) + Math.abs(startGrid.col - goalGrid.col),
-    f: 0,
-    parent: null
-  };
-  startNode.f = startNode.g + startNode.h;
-  openList.push(startNode);
+    const startNode: Node = {
+      row: startGrid.row,
+      col: startGrid.col,
+      g: 0,
+      h: Math.abs(startGrid.row - goalGrid.row) + Math.abs(startGrid.col - goalGrid.col),
+      f: 0,
+      parent: null
+    };
+    startNode.f = startNode.g + startNode.h;
+    openList.push(startNode);
 
-  // Pre-collect occupied coordinates in meters to optimize distance check
-  const occupiedCoords: [number, number][] = [];
-  for (let gr = 0; gr < 30; gr++) {
-    for (let gc = 0; gc < 30; gc++) {
-      if (grid[gr][gc] > 50) {
-        occupiedCoords.push(getPose(gr, gc));
-      }
-    }
-  }
-
-  const isObstacleDistance = (r: number, c: number) => {
-    // Never block start or goal cells themselves
-    if ((r === startGrid.row && c === startGrid.col) || (r === goalGrid.row && c === goalGrid.col)) {
-      return false;
-    }
-    const [x, y] = getPose(r, c);
-    for (const [ox, oy] of occupiedCoords) {
-      const dist = Math.sqrt((x - ox) ** 2 + (y - oy) ** 2);
-      if (dist < safetyRadius) return true;
-    }
-    return false;
-  };
-
-  let foundNode: Node | null = null;
-  const maxIterations = 1500;
-  let iter = 0;
-
-  while (openList.length > 0 && iter < maxIterations) {
-    iter++;
-    openList.sort((a, b) => a.f - b.f);
-    const curr = openList.shift()!;
-    
-    if (curr.row === goalGrid.row && curr.col === goalGrid.col) {
-      foundNode = curr;
-      break;
-    }
-
-    const key = `${curr.row},${curr.col}`;
-    closedSet.add(key);
-
-    const directions = [
-      [-1, 0, 1], [1, 0, 1], [0, -1, 1], [0, 1, 1],
-      [-1, -1, 1.414], [-1, 1, 1.414], [1, -1, 1.414], [1, 1, 1.414]
-    ];
-
-    for (const [dr, dc, cost] of directions) {
-      const nr = curr.row + dr;
-      const nc = curr.col + dc;
-
-      if (nr < 0 || nr >= 30 || nc < 0 || nc >= 30) continue;
-      if (closedSet.has(`${nr},${nc}`)) continue;
-      if (isObstacleDistance(nr, nc)) continue;
-
-      const g = curr.g + cost * Wd;
-      const h = Math.sqrt(Math.pow(nr - goalGrid.row, 2) + Math.pow(nc - goalGrid.col, 2));
-      const f = g + h;
-
-      const existing = openList.find(n => n.row === nr && n.col === nc);
-      if (existing) {
-        if (g < existing.g) {
-          existing.g = g;
-          existing.f = f;
-          existing.parent = curr;
+    // Pre-collect occupied coordinates in meters to optimize distance check
+    const occupiedCoords: [number, number][] = [];
+    for (let gr = 0; gr < 30; gr++) {
+      for (let gc = 0; gc < 30; gc++) {
+        if (grid[gr][gc] > 50) {
+          occupiedCoords.push(getPose(gr, gc));
         }
-      } else {
-        openList.push({ row: nr, col: nc, g, h, f, parent: curr });
       }
     }
+
+    const isObstacleDistance = (r: number, c: number) => {
+      // Never block start or goal cells themselves
+      if ((r === startGrid.row && c === startGrid.col) || (r === goalGrid.row && c === goalGrid.col)) {
+        return false;
+      }
+      const [x, y] = getPose(r, c);
+      for (const [ox, oy] of occupiedCoords) {
+        const dist = Math.sqrt((x - ox) ** 2 + (y - oy) ** 2);
+        if (dist < currentSafety) return true;
+      }
+      return false;
+    };
+
+    let iter = 0;
+    const maxIterations = 1500;
+
+    while (openList.length > 0 && iter < maxIterations) {
+      iter++;
+      openList.sort((a, b) => a.f - b.f);
+      const curr = openList.shift()!;
+      
+      if (curr.row === goalGrid.row && curr.col === goalGrid.col) {
+        return curr;
+      }
+
+      const key = `${curr.row},${curr.col}`;
+      closedSet.add(key);
+
+      const directions = [
+        [-1, 0, 1], [1, 0, 1], [0, -1, 1], [0, 1, 1],
+        [-1, -1, 1.414], [-1, 1, 1.414], [1, -1, 1.414], [1, 1, 1.414]
+      ];
+
+      for (const [dr, dc, cost] of directions) {
+        const nr = curr.row + dr;
+        const nc = curr.col + dc;
+
+        if (nr < 0 || nr >= 30 || nc < 0 || nc >= 30) continue;
+        if (closedSet.has(`${nr},${nc}`)) continue;
+        if (isObstacleDistance(nr, nc)) continue;
+
+        const g = curr.g + cost * Wd;
+        const h = Math.sqrt(Math.pow(nr - goalGrid.row, 2) + Math.pow(nc - goalGrid.col, 2));
+        const f = g + h;
+
+        const existing = openList.find(n => n.row === nr && n.col === nc);
+        if (existing) {
+          if (g < existing.g) {
+            existing.g = g;
+            existing.f = f;
+            existing.parent = curr;
+          }
+        } else {
+          openList.push({ row: nr, col: nc, g, h, f, parent: curr });
+        }
+      }
+    }
+    return null;
+  };
+
+  // Perform search with relaxation if needed
+  let foundNode: Node | null = null;
+  let currentSafety = safetyRadius;
+  
+  // Progressively decrement safety radius down to 0.05 on failure
+  while (currentSafety >= 0.05) {
+    foundNode = runSearch(currentSafety);
+    if (foundNode) break;
+    currentSafety -= 0.06;
   }
 
   const path: [number, number][] = [];
@@ -532,9 +542,9 @@ export const astar_planner = (
     path.reverse();
   }
 
+  // Clean failure: if no path was found even with minimal safety radius, return empty array
   if (path.length === 0) {
-    path.push(start);
-    path.push(goal);
+    return [];
   }
 
   const shortcutted: [number, number][] = [path[0]];
@@ -2799,39 +2809,58 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   }),
 
-  'CURRENT_CONTROLLER_DQ': (id, params) => ({
-    id, type: 'CURRENT_CONTROLLER_DQ',
-    params: { 
-      Kp_d: params.Kp_d || 1, Ki_d: params.Ki_d || 10,
-      Kp_q: params.Kp_q || 1, Ki_q: params.Ki_q || 10,
-      iMax: params.iMax || 100
-    },
-    isStateful: true,
-    inputs: [
-      createPort('id_ref', 'Id*', 'input', 0, 'left', 'control'),
-      createPort('iq_ref', 'Iq*', 'input', 0, 'left', 'control'),
-      createPort('id', 'Id', 'input', 0, 'top', 'measurement'),
-      createPort('iq', 'Iq', 'input', 0, 'top', 'measurement')
-    ],
-    outputs: [
-      createPort('vd', 'Vd*', 'output', 0, 'right', 'control'),
-      createPort('vq', 'Vq*', 'output', 0, 'right', 'control')
-    ],
-    state: { intD: 0, intQ: 0, lastT: 0 },
-    execute: (ins, p, state, t) => {
-      const dt = Math.max(1e-6, t - (state.lastT || 0));
-      const eD = Number(ins[0]) - Number(ins[2]);
-      const eQ = Number(ins[1]) - Number(ins[3]);
-      const nextIntD = state.intD + eD * dt;
-      const nextIntQ = state.intQ + eQ * dt;
-      const vd = p.Kp_d * eD + p.Ki_d * nextIntD;
-      const vq = p.Kp_q * eQ + p.Ki_q * nextIntQ;
-      return { 
-        outputs: [vd, vq],
-        nextState: { intD: nextIntD, intQ: nextIntQ, lastT: t }
-      };
-    }
-  }),
+  'CURRENT_CONTROLLER_DQ': (id, params) => {
+    const Kp_d = params.Kp_d !== undefined ? Number(params.Kp_d) : 1;
+    const Ki_d = params.Ki_d !== undefined ? Number(params.Ki_d) : 10;
+    const Kp_q = params.Kp_q !== undefined ? Number(params.Kp_q) : 1;
+    const Ki_q = params.Ki_q !== undefined ? Number(params.Ki_q) : 10;
+    const iMax = params.iMax !== undefined ? Number(params.iMax) : 100;
+
+    return {
+      id, type: 'CURRENT_CONTROLLER_DQ',
+      params: { Kp_d, Ki_d, Kp_q, Ki_q, iMax },
+      isStateful: true,
+      inputs: [
+        createPort('id_ref', 'Id*', 'input', 0, 'left', 'control'),
+        createPort('iq_ref', 'Iq*', 'input', 0, 'left', 'control'),
+        createPort('id', 'Id', 'input', 0, 'top', 'measurement'),
+        createPort('iq', 'Iq', 'input', 0, 'top', 'measurement')
+      ],
+      outputs: [
+        createPort('vd', 'Vd*', 'output', 0, 'right', 'control'),
+        createPort('vq', 'Vq*', 'output', 0, 'right', 'control')
+      ],
+      state: { intD: 0, intQ: 0, lastT: 0 },
+      execute: (ins, p, state, t) => {
+        const dt = Math.max(1e-6, t - (state.lastT || 0));
+        
+        let id_ref = Number(ins[0]);
+        let iq_ref = Number(ins[1]);
+        
+        // Apply current limit (iMax) to reference currents
+        const iRefMag = Math.sqrt(id_ref * id_ref + iq_ref * iq_ref);
+        if (iRefMag > p.iMax && iRefMag > 0) {
+          const ratio = p.iMax / iRefMag;
+          id_ref *= ratio;
+          iq_ref *= ratio;
+        }
+
+        const eD = id_ref - Number(ins[2]);
+        const eQ = iq_ref - Number(ins[3]);
+        
+        const nextIntD = state.intD + eD * dt;
+        const nextIntQ = state.intQ + eQ * dt;
+        
+        const vd = p.Kp_d * eD + p.Ki_d * nextIntD;
+        const vq = p.Kp_q * eQ + p.Ki_q * nextIntQ;
+        
+        return { 
+          outputs: [vd, vq],
+          nextState: { intD: nextIntD, intQ: nextIntQ, lastT: t }
+        };
+      }
+    };
+  },
 
   'DOE_MODEL': (id, params) => {
     const inputNames = (typeof params.inputNames === 'object' && params.inputNames !== null && 'value' in params.inputNames) 
@@ -3561,6 +3590,183 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     execute: (ins, p) => {
       const u = p.angle_unit === 'degrees' ? (Number(ins[0]) * Math.PI) / 180 : Number(ins[0]);
       return { outputs: [1 / Math.cos(u)] };
+    }
+  }),
+
+  // --- Inverse Trigonometric Functions ---
+  'ASIN': (id, params) => ({
+    id, type: 'ASIN', params: { angle_unit: params.angle_unit || 'radians' },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      const val = Math.asin(Number(ins[0]));
+      const output = p.angle_unit === 'degrees' ? (val * 180) / Math.PI : val;
+      return { outputs: [output] };
+    }
+  }),
+
+  'ACOS': (id, params) => ({
+    id, type: 'ACOS', params: { angle_unit: params.angle_unit || 'radians' },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      const val = Math.acos(Number(ins[0]));
+      const output = p.angle_unit === 'degrees' ? (val * 180) / Math.PI : val;
+      return { outputs: [output] };
+    }
+  }),
+
+  'ATAN': (id, params) => ({
+    id, type: 'ATAN', params: { angle_unit: params.angle_unit || 'radians' },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      const val = Math.atan(Number(ins[0]));
+      const output = p.angle_unit === 'degrees' ? (val * 180) / Math.PI : val;
+      return { outputs: [output] };
+    }
+  }),
+
+  'ACOT': (id, params) => ({
+    id, type: 'ACOT', params: { angle_unit: params.angle_unit || 'radians' },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      const val = Math.atan(1 / Number(ins[0]));
+      const output = p.angle_unit === 'degrees' ? (val * 180) / Math.PI : val;
+      return { outputs: [output] };
+    }
+  }),
+
+  'ASEC': (id, params) => ({
+    id, type: 'ASEC', params: { angle_unit: params.angle_unit || 'radians' },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      const val = Math.acos(1 / Number(ins[0]));
+      const output = p.angle_unit === 'degrees' ? (val * 180) / Math.PI : val;
+      return { outputs: [output] };
+    }
+  }),
+
+  'ACOSEC': (id, params) => ({
+    id, type: 'ACOSEC', params: { angle_unit: params.angle_unit || 'radians' },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins, p) => {
+      const val = Math.asin(1 / Number(ins[0]));
+      const output = p.angle_unit === 'degrees' ? (val * 180) / Math.PI : val;
+      return { outputs: [output] };
+    }
+  }),
+
+  // --- Hyperbolic Functions ---
+  'SINH': (id, params) => ({
+    id, type: 'SINH', params: {},
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins) => {
+      return { outputs: [Math.sinh(Number(ins[0]))] };
+    }
+  }),
+
+  'COSH': (id, params) => ({
+    id, type: 'COSH', params: {},
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins) => {
+      return { outputs: [Math.cosh(Number(ins[0]))] };
+    }
+  }),
+
+  'TANH': (id, params) => ({
+    id, type: 'TANH', params: {},
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins) => {
+      return { outputs: [Math.tanh(Number(ins[0]))] };
+    }
+  }),
+
+  'COTH': (id, params) => ({
+    id, type: 'COTH', params: {},
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins) => {
+      return { outputs: [1 / Math.tanh(Number(ins[0]))] };
+    }
+  }),
+
+  'SECH': (id, params) => ({
+    id, type: 'SECH', params: {},
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins) => {
+      return { outputs: [1 / Math.cosh(Number(ins[0]))] };
+    }
+  }),
+
+  'COSECH': (id, params) => ({
+    id, type: 'COSECH', params: {},
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins) => {
+      return { outputs: [1 / Math.sinh(Number(ins[0]))] };
+    }
+  }),
+
+  // --- Inverse Hyperbolic Functions ---
+  'ASINH': (id, params) => ({
+    id, type: 'ASINH', params: {},
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins) => {
+      return { outputs: [Math.asinh(Number(ins[0]))] };
+    }
+  }),
+
+  'ACOSH': (id, params) => ({
+    id, type: 'ACOSH', params: {},
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins) => {
+      return { outputs: [Math.acosh(Number(ins[0]))] };
+    }
+  }),
+
+  'ATANH': (id, params) => ({
+    id, type: 'ATANH', params: {},
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins) => {
+      return { outputs: [Math.atanh(Number(ins[0]))] };
+    }
+  }),
+
+  'ACOTH': (id, params) => ({
+    id, type: 'ACOTH', params: {},
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins) => {
+      return { outputs: [Math.atanh(1 / Number(ins[0]))] };
+    }
+  }),
+
+  'ASECH': (id, params) => ({
+    id, type: 'ASECH', params: {},
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins) => {
+      return { outputs: [Math.acosh(1 / Number(ins[0]))] };
+    }
+  }),
+
+  'ACOSECH': (id, params) => ({
+    id, type: 'ACOSECH', params: {},
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins) => {
+      return { outputs: [Math.asinh(1 / Number(ins[0]))] };
     }
   }),
 
@@ -4554,10 +4760,15 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   'IM_FOC_CONTROL': (id: string, params: any) => ({
     id, type: 'IM_FOC_CONTROL',
     params: {
-      Kp_speed: params.Kp_speed || 2, Ki_speed: params.Ki_speed || 20,
-      Kp_curr: params.Kp_curr || 10, Ki_curr: params.Ki_curr || 100,
-      psi_ref: params.psi_ref || 0.9,
-      Lm: params.Lm || 0.09, Lr: params.Lr || 0.1, Rr: params.Rr || 0.4, P: params.P || 2
+      Kp_speed: params.Kp_speed !== undefined ? Number(params.Kp_speed) : 2,
+      Ki_speed: params.Ki_speed !== undefined ? Number(params.Ki_speed) : 20,
+      Kp_curr: params.Kp_curr !== undefined ? Number(params.Kp_curr) : 10,
+      Ki_curr: params.Ki_curr !== undefined ? Number(params.Ki_curr) : 100,
+      psi_ref: params.psi_ref !== undefined ? Number(params.psi_ref) : 0.9,
+      Lm: params.Lm !== undefined ? Number(params.Lm) : 0.09,
+      Lr: params.Lr !== undefined ? Number(params.Lr) : 0.1,
+      Rr: params.Rr !== undefined ? Number(params.Rr) : 0.4,
+      P: params.P !== undefined ? Number(params.P) : 2
     },
     isStateful: true,
     inputs: [
@@ -5613,7 +5824,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       if (dist_start > 0.4 || dist_goal > 0.4 || state.path.length === 0) {
         state.lastStart = s_wp;
         state.lastGoal = g_wp;
-        const astarPath = astar_planner(s_wp, g_wp, grid, 0.28, 1.0);
+        const activeMatlab = g_isMatlabActive || Math.abs(s_wp[0]) > 3.05 || Math.abs(s_wp[1]) > 3.05 || Math.abs(g_wp[0]) > 3.05 || Math.abs(g_wp[1]) > 3.05;
+        const astarPath = astar_planner(s_wp, g_wp, grid, 0.28, 1.0, activeMatlab);
         
         if (astarPath.length > 2) {
           const optPath: [number, number][] = [astarPath[0]];
@@ -5621,7 +5833,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
           while (currentIdx < astarPath.length - 1) {
             let furthestLosIdx = currentIdx + 1;
             for (let j = currentIdx + 2; j < astarPath.length; j++) {
-              if (lineOfSightClear(astarPath[currentIdx], astarPath[j], grid, 0.15)) {
+              if (lineOfSightClear(astarPath[currentIdx], astarPath[j], grid, 0.15, activeMatlab)) {
                 furthestLosIdx = j;
               }
             }
@@ -6011,9 +6223,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         if ((state.battery_level <= 30.0 || mode_select === 5) &&
             (state.bt_state === 'COVERAGE' || state.bt_state === 'TRANSIT' || state.bt_state === 'PLAN_ROOM')) {
           state.bt_state = 'RETURN_DOCK';
-          state.astar_path = astar_planner(
+          const path = astar_planner(
             [state.x_est, state.y_est], [-5.1, -5.1], state.grid, 0.28, 1.0
           );
+          state.astar_path = path.length > 0 ? path : [[state.x_est, state.y_est]];
           state.path_idx = 0;
           state.stuck_counter = 0;
           state.recovery_state = 'NONE';
@@ -6032,11 +6245,12 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
           state.bt_state = 'PLAN_ROOM';
           state.waypoint_idx = 0;
           state.room_waypoints = [...ROOM_WAYPOINTS_MAP[0]];
-          state.astar_path = astar_planner(
+          const path = astar_planner(
             [state.x_est, state.y_est],
             state.room_waypoints[0] as [number, number],
             state.grid, 0.28, 1.0
           );
+          state.astar_path = path.length > 0 ? path : [[state.x_est, state.y_est]];
           state.path_idx = 0;
           v = 0; w = 0;
         }
@@ -6060,9 +6274,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
           } else {
             // Follow the A* path to room start
             if (state.astar_path.length === 0) {
-              state.astar_path = astar_planner(
+              const path = astar_planner(
                 [state.x_est, state.y_est], roomStart, state.grid, 0.28, 1.0
               );
+              state.astar_path = path.length > 0 ? path : [[state.x_est, state.y_est]];
               state.path_idx = 0;
             }
             // Advance path index past already-reached waypoints
@@ -6208,16 +6423,18 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
                 state.current_room = nextRoom;
                 state.room_waypoints = [...ROOM_WAYPOINTS_MAP[nextRoom]];
                 const transitGoal = state.room_waypoints[0] as [number, number];
-                state.astar_path = astar_planner(
+                const path = astar_planner(
                   [state.x_est, state.y_est], transitGoal, state.grid, 0.28, 1.0
                 );
+                state.astar_path = path.length > 0 ? path : [[state.x_est, state.y_est]];
                 state.path_idx = 0;
                 state.bt_state = 'TRANSIT';
               } else {
                 // All rooms done → Return to dock
-                state.astar_path = astar_planner(
+                const path = astar_planner(
                   [state.x_est, state.y_est], [-5.1, -5.1], state.grid, 0.28, 1.0
                 );
+                state.astar_path = path.length > 0 ? path : [[state.x_est, state.y_est]];
                 state.path_idx = 0;
                 state.bt_state = 'RETURN_DOCK';
               }
@@ -6230,9 +6447,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         else if (state.bt_state === 'TRANSIT') {
           if (state.astar_path.length === 0) {
             const transitGoal = (state.room_waypoints[0] || [-5.1, -5.1]) as [number, number];
-            state.astar_path = astar_planner(
+            const path = astar_planner(
               [state.x_est, state.y_est], transitGoal, state.grid, 0.28, 1.0
             );
+            state.astar_path = path.length > 0 ? path : [[state.x_est, state.y_est]];
             state.path_idx = 0;
           }
 
@@ -6311,18 +6529,21 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
             const planner_Wd = state.Re >= 1.5 ? 2.5 : 1.0;
 
             if (state.Re >= 1.5 && !state.using_constrained && state.replan_cooldown <= 0) {
-              state.astar_path = astar_planner([state.x_est, state.y_est], [-5.1, -5.1], state.grid, planner_radius, planner_Wd);
+              const path = astar_planner([state.x_est, state.y_est], [-5.1, -5.1], state.grid, planner_radius, planner_Wd);
+              state.astar_path = path.length > 0 ? path : [[state.x_est, state.y_est]];
               state.path_idx = 0;
               state.using_constrained = true;
               state.replan_cooldown = 6.0;
             } else if (state.Re < 1.5 && state.using_constrained && state.replan_cooldown <= 0) {
-              state.astar_path = astar_planner([state.x_est, state.y_est], [-5.1, -5.1], state.grid, 0.28, 1.0);
+              const path = astar_planner([state.x_est, state.y_est], [-5.1, -5.1], state.grid, 0.28, 1.0);
+              state.astar_path = path.length > 0 ? path : [[state.x_est, state.y_est]];
               state.path_idx = 0;
               state.using_constrained = false;
               state.replan_cooldown = 2.0;
             }
             if (state.astar_path.length === 0) {
-              state.astar_path = astar_planner([state.x_est, state.y_est], [-5.1, -5.1], state.grid, planner_radius, planner_Wd);
+              const path = astar_planner([state.x_est, state.y_est], [-5.1, -5.1], state.grid, planner_radius, planner_Wd);
+              state.astar_path = path.length > 0 ? path : [[state.x_est, state.y_est]];
               state.path_idx = 0;
             }
 
@@ -6397,7 +6618,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
               }
               const planner_radius = state.bt_state === 'RETURN_DOCK' && state.Re >= 1.5 ? 0.24 : 0.28;
               const planner_Wd = state.bt_state === 'RETURN_DOCK' && state.Re >= 1.5 ? 2.5 : 1.0;
-              state.astar_path = astar_planner([state.x_est, state.y_est], goal, state.grid, planner_radius, planner_Wd);
+              const path = astar_planner([state.x_est, state.y_est], goal, state.grid, planner_radius, planner_Wd);
+              state.astar_path = path.length > 0 ? path : [[state.x_est, state.y_est]];
               state.path_idx = 0;
             }
           } else if (state.recovery_state === 'REPLAN' && stuck_secs > 3.0) {
@@ -6435,7 +6657,8 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
                 }
                 const planner_radius = state.bt_state === 'RETURN_DOCK' && state.Re >= 1.5 ? 0.24 : 0.28;
                 const planner_Wd = state.bt_state === 'RETURN_DOCK' && state.Re >= 1.5 ? 2.5 : 1.0;
-                state.astar_path = astar_planner([state.x_est, state.y_est], goal, state.grid, planner_radius, planner_Wd);
+                const path = astar_planner([state.x_est, state.y_est], goal, state.grid, planner_radius, planner_Wd);
+                state.astar_path = path.length > 0 ? path : [[state.x_est, state.y_est]];
                 state.path_idx = 0;
                 state.using_constrained = true;
                 state.replan_cooldown = 3.0;
@@ -8944,7 +9167,1153 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
       return { outputs: [state.surface || [], yVal], nextState: state };
     }
-  })
+  }),
+
+  // --- DEM & Particle Simulation Blocks ---
+  'DEM_WASHING_MACHINE_TWIN': (id, params) => ({
+    id, type: 'DEM_WASHING_MACHINE_TWIN', params: {},
+    inputs: [createPort('in', 'in', 'input')],
+    outputs: [createPort('out', 'out', 'output')],
+    execute: (ins) => ({ outputs: [ins[0]] })
+  }),
+
+  'DEM_DRUM': (id, params) => {
+    const drum_radius = params.drum_radius !== undefined ? Number(params.drum_radius) : 0.8;
+    const pulsator_mode = params.pulsator_mode !== undefined ? !!params.pulsator_mode : false;
+    const pulsator_speed_ratio = params.pulsator_speed_ratio !== undefined ? Number(params.pulsator_speed_ratio) : 3.0;
+    return {
+      id, type: 'DEM_DRUM', isStateful: true, params: { drum_radius, pulsator_mode, pulsator_speed_ratio },
+      inputs: [createPort('rpm', 'rpm', 'input')],
+      outputs: [
+        createPort('angle', 'angle', 'output'),
+        createPort('omega', 'omega', 'output'),
+        createPort('drum_state', 'drum_state', 'output')
+      ],
+      state: { angle: 0, drum_angle: 0, pulsator_angle: 0, initialized: false },
+      execute: (ins, p, state, dt) => {
+        const rpm = Number(ins[0]) || 0;
+        const omega = (rpm * 2 * Math.PI) / 60;
+        const dtSec = dt !== undefined && dt > 0 ? dt : 0.08;
+        const nextAngle = (state.angle || 0) + omega * dtSec;
+        
+        const pulsator_omega = p.pulsator_mode ? omega * p.pulsator_speed_ratio : 0;
+        const nextPulsatorAngle = (state.pulsator_angle || 0) + pulsator_omega * dtSec;
+        const drumStateArray = [p.drum_radius, nextAngle, omega];
+        if (p.pulsator_mode) {
+          drumStateArray.push(1, nextPulsatorAngle, pulsator_omega);
+        }
+
+        return {
+          outputs: [nextAngle, omega, drumStateArray],
+          nextState: { 
+            angle: nextAngle, 
+            drum_angle: nextAngle, 
+            pulsator_angle: nextPulsatorAngle, 
+            has_pulsator: p.pulsator_mode,
+            pulsator_omega,
+            initialized: true 
+          }
+        };
+      }
+    };
+  },
+
+  'DEM_PARTICLE_SYSTEM': (id, params) => {
+    const particle_radius = params.particle_radius !== undefined ? Number(params.particle_radius) : 0.05;
+    return {
+      id, type: 'DEM_PARTICLE_SYSTEM', isStateful: true, params: { particle_radius },
+      inputs: [
+        createPort('contact_forces', 'contact_forces', 'input'),
+        createPort('bond_forces', 'bond_forces', 'input'),
+        createPort('fluid_forces', 'fluid_forces', 'input'),
+        createPort('drum_state', 'drum_state', 'input')
+      ],
+      outputs: [
+        createPort('positions', 'positions', 'output'),
+        createPort('velocities', 'velocities', 'output'),
+        createPort('cleanliness', 'cleanliness', 'output')
+      ],
+      state: { initialized: false, particles: [], bonds: [], drum_angle: 0, cleanliness: 0 },
+      execute: (ins, p, state, dt) => {
+        const contactForces = (ins[0] || []) as any;
+        const bondForces = (ins[1] || []) as any;
+        const fluidForces = (ins[2] || []) as any;
+        const drumState = (ins[3] || [0.8, 0, 0, 0, 0, 0]) as any;
+        const drum_radius = Number(drumState[0]) || 0.8;
+        const drum_angle = Number(drumState[1]) || 0;
+        const omega = Number(drumState[2]) || 0;
+        const has_pulsator = Number(drumState[3]) === 1;
+        const pulsator_angle = Number(drumState[4]) || 0;
+        const pulsator_omega = Number(drumState[5]) || 0;
+
+        const numSheets = p.num_sheets !== undefined ? Number(p.num_sheets) : 2;
+        const gridRows = p.grid_rows !== undefined ? Number(p.grid_rows) : 4;
+        const gridCols = p.grid_cols !== undefined ? Number(p.grid_cols) : 4;
+        const particleSpacing = 0.08;
+
+        let particles = (state.particles || []) as any[];
+        let bonds = (state.bonds || []) as any[];
+        let initialized = state.initialized;
+
+        if (!initialized) {
+          particles = [];
+          for (let c = 0; c < numSheets; c++) {
+            const sheetSpacing = 0.15;
+            const startX = -((gridCols - 1) * particleSpacing) / 2;
+            const startY = -((gridRows - 1) * particleSpacing) / 2 + (c - (numSheets - 1) / 2) * sheetSpacing;
+            for (let r = 0; r < gridRows; r++) {
+              for (let col = 0; col < gridCols; col++) {
+                const x = startX + col * particleSpacing + (Math.random() - 0.5) * 0.01;
+                const y = startY + r * particleSpacing + (Math.random() - 0.5) * 0.01;
+                particles.push({
+                  x,
+                  y,
+                  vx: 0,
+                  vy: 0,
+                  mass: 0.1
+                });
+              }
+            }
+          }
+          bonds = [];
+          for (let c = 0; c < numSheets; c++) {
+            const offset = c * (gridRows * gridCols);
+            for (let r = 0; r < gridRows; r++) {
+              for (let col = 0; col < gridCols; col++) {
+                const idx = offset + r * gridCols + col;
+                // Horizontal bond
+                if (col < gridCols - 1) {
+                  const idxH = offset + r * gridCols + (col + 1);
+                  bonds.push({ p1: idx, p2: idxH, restLength: particleSpacing });
+                }
+                // Vertical bond
+                if (r < gridRows - 1) {
+                  const idxV = offset + (r + 1) * gridCols + col;
+                  bonds.push({ p1: idx, p2: idxV, restLength: particleSpacing });
+                }
+                // Shear diagonal bonds
+                if (r < gridRows - 1 && col < gridCols - 1) {
+                  const idxD1 = offset + (r + 1) * gridCols + (col + 1);
+                  bonds.push({ p1: idx, p2: idxD1, restLength: particleSpacing * Math.sqrt(2) });
+                }
+                if (r < gridRows - 1 && col > 0) {
+                  const idxD2 = offset + (r + 1) * gridCols + (col - 1);
+                  bonds.push({ p1: idx, p2: idxD2, restLength: particleSpacing * Math.sqrt(2) });
+                }
+              }
+            }
+          }
+          initialized = true;
+        }
+
+        const dtSec = dt || 0.08;
+        const nextParticles = particles.map((part: any, idx: number) => {
+          const fx_c = Number(contactForces[idx * 2]) || 0;
+          const fy_c = Number(contactForces[idx * 2 + 1]) || 0;
+          
+          const fx_b = Number(bondForces[idx * 2]) || 0;
+          const fy_b = Number(bondForces[idx * 2 + 1]) || 0;
+
+          const fx_f = Number(fluidForces[idx * 2]) || 0;
+          const fy_f = Number(fluidForces[idx * 2 + 1]) || 0;
+
+          const fx = fx_c + fx_b + fx_f;
+          const fy = fy_c + fy_b + fy_f - 9.81 * part.mass;
+
+          const ax = fx / part.mass;
+          const ay = fy / part.mass;
+
+          const vx_prev = part.vx + ax * dtSec;
+          const vy_prev = part.vy + ay * dtSec;
+
+          let x = part.x + vx_prev * dtSec;
+          let y = part.y + vy_prev * dtSec;
+          let vx = vx_prev;
+          let vy = vy_prev;
+
+          // 1. Drum Outer Shell Collision with Friction
+          const dist = Math.sqrt(x*x + y*y);
+          const limit = drum_radius - p.particle_radius;
+          if (dist > limit) {
+            const nx = x / dist;
+            const ny = y / dist;
+            x = limit * nx;
+            y = limit * ny;
+
+            const wall_vx = -omega * y;
+            const wall_vy = omega * x;
+
+            const rel_vx = vx - wall_vx;
+            const rel_vy = vy - wall_vy;
+
+            const tx = -ny;
+            const ty = nx;
+
+            const rel_vn = rel_vx * nx + rel_vy * ny;
+            const rel_vt = rel_vx * tx + rel_vy * ty;
+
+            const new_rel_vn = -rel_vn * 0.2; 
+            const new_rel_vt = rel_vt * 0.3; // Friction
+
+            vx = wall_vx + new_rel_vn * nx + new_rel_vt * tx;
+            vy = wall_vy + new_rel_vn * ny + new_rel_vt * ty;
+          }
+
+          // 2. Drum Lifter Collisions (3 ribs)
+          const numRibs = 3;
+          const tipLen = 0.15;
+          const lifterWidth = 0.06;
+
+          for (let k = 0; k < numRibs; k++) {
+            const theta = drum_angle + (k * 2 * Math.PI) / numRibs;
+            const rx = Math.cos(theta);
+            const ry = Math.sin(theta);
+
+            const proj = x * rx + y * ry;
+            if (proj > drum_radius - tipLen && proj <= drum_radius) {
+              const perp = -x * ry + y * rx;
+              if (Math.abs(perp) < p.particle_radius + lifterWidth / 2) {
+                const side = perp > 0 ? 1 : -1;
+                const targetPerp = side * (p.particle_radius + lifterWidth / 2);
+                
+                x = proj * rx - targetPerp * ry;
+                y = proj * ry + targetPerp * rx;
+
+                const nx = -ry * side;
+                const ny = rx * side;
+
+                const rib_vx = -omega * y;
+                const rib_vy = omega * x;
+
+                const rel_vx = vx - rib_vx;
+                const rel_vy = vy - rib_vy;
+
+                const rel_vn = rel_vx * nx + rel_vy * ny;
+                if (rel_vn < 0) {
+                  const new_vn = -rel_vn * 0.1; // small bounce
+                  const tx = -ny;
+                  const ty = nx;
+                  const rel_vt = rel_vx * tx + rel_vy * ty;
+                  const new_vt = rel_vt * 0.2; // friction
+                  
+                  vx = rib_vx + new_vn * nx + new_vt * tx;
+                  vy = rib_vy + new_vn * ny + new_vt * ty;
+                }
+              }
+            }
+          }
+
+          // 3. Central Pulsator Collision (if active)
+          if (has_pulsator) {
+            const p_rad = drum_radius * 0.22;
+            const dist_center = Math.sqrt(x*x + y*y);
+            if (dist_center < p_rad + p.particle_radius) {
+              const nx = x / (dist_center || 1);
+              const ny = y / (dist_center || 1);
+              x = (p_rad + p.particle_radius) * nx;
+              y = (p_rad + p.particle_radius) * ny;
+
+              const p_vx = -pulsator_omega * y;
+              const p_vy = pulsator_omega * x;
+
+              const rel_vx = vx - p_vx;
+              const rel_vy = vy - p_vy;
+
+              const tx = -ny;
+              const ty = nx;
+
+              const rel_vn = rel_vx * nx + rel_vy * ny;
+              const rel_vt = rel_vx * tx + rel_vy * ty;
+
+              const new_rel_vn = -rel_vn * 0.2;
+              const new_rel_vt = rel_vt * 0.2;
+
+              vx = p_vx + new_rel_vn * nx + new_rel_vt * tx;
+              vy = p_vy + new_rel_vn * ny + new_rel_vt * ty;
+            }
+
+            // Pulsator vane collisions (3 fins)
+            const numFins = 3;
+            const finLen = p_rad * 0.5;
+            const finWidth = 0.04;
+            for (let f = 0; f < numFins; f++) {
+              const f_theta = pulsator_angle + (f * 2 * Math.PI) / numFins;
+              const fx_axis = Math.cos(f_theta);
+              const fy_axis = Math.sin(f_theta);
+
+              const proj = x * fx_axis + y * fy_axis;
+              if (proj > p_rad && proj <= p_rad + finLen) {
+                const perp = -x * fy_axis + y * fx_axis;
+                if (Math.abs(perp) < p.particle_radius + finWidth / 2) {
+                  const side = perp > 0 ? 1 : -1;
+                  const targetPerp = side * (p.particle_radius + finWidth / 2);
+                  
+                  x = proj * fx_axis - targetPerp * fy_axis;
+                  y = proj * fy_axis + targetPerp * fx_axis;
+
+                  const nx_fin = -fy_axis * side;
+                  const ny_fin = fx_axis * side;
+
+                  const fin_vx = -pulsator_omega * y;
+                  const fin_vy = pulsator_omega * x;
+
+                  const rel_vx = vx - fin_vx;
+                  const rel_vy = vy - fin_vy;
+
+                  const rel_vn = rel_vx * nx_fin + rel_vy * ny_fin;
+                  if (rel_vn < 0) {
+                    vx = fin_vx - rel_vn * 0.1 * nx_fin;
+                    vy = fin_vy - rel_vn * 0.1 * ny_fin;
+                  }
+                }
+              }
+            }
+          }
+
+          return { x, y, vx, vy, mass: part.mass };
+        });
+
+        // Calculate cleanliness accumulation
+        let cleanliness = state.cleanliness !== undefined ? state.cleanliness : 0;
+        if (cleanliness < 100) {
+          const currentRPM = Math.abs(omega * 60 / (2 * Math.PI));
+          const rpmFactor = Math.max(0, 1 - Math.pow(currentRPM - 55, 2) / 1600); // peak at 55 RPM
+          const fillFactor = 1.0; 
+          cleanliness += 0.05 * rpmFactor * fillFactor * dtSec * 10;
+          if (cleanliness > 100) cleanliness = 100;
+        }
+
+        const positions: number[] = [];
+        const velocities: number[] = [];
+        nextParticles.forEach((part: any) => {
+          positions.push(part.x, part.y);
+          velocities.push(part.vx, part.vy);
+        });
+
+        return {
+          outputs: [positions, velocities, cleanliness],
+          nextState: {
+            initialized: true,
+            particles: nextParticles,
+            bonds,
+            drum_angle,
+            has_pulsator,
+            pulsator_angle,
+            pulsator_omega,
+            cleanliness
+          }
+        };
+      }
+    };
+  },
+
+  'DEM_HERTZ_CONTACT': (id, params) => {
+    const stiffness_normal = params.stiffness_normal !== undefined ? Number(params.stiffness_normal) : 500;
+    return {
+      id, type: 'DEM_HERTZ_CONTACT', isStateful: true, params: { stiffness_normal },
+      inputs: [
+        createPort('positions', 'positions', 'input'),
+        createPort('velocities', 'velocities', 'input'),
+        createPort('drum_state', 'drum_state', 'input'),
+        createPort('radius', 'radius', 'input')
+      ],
+      outputs: [
+        createPort('contact_forces', 'contact_forces', 'output')
+      ],
+      state: { particles: [], drum_angle: 0, initialized: false },
+      execute: (ins, p, state, dt) => {
+        const positions = (ins[0] || []) as any;
+        const velocities = (ins[1] || []) as any;
+        const drumState = (ins[2] || [0.8, 0, 0, 0, 0, 0]) as any;
+        const radius = Number(ins[3]) || 0.05;
+
+        const drum_radius = Number(drumState[0]) || 0.8;
+        const drum_angle = Number(drumState[1]) || 0;
+        const has_pulsator = Number(drumState[3]) === 1;
+        const pulsator_angle = Number(drumState[4]) || 0;
+        const pulsator_omega = Number(drumState[5]) || 0;
+
+        const numParticles = positions.length / 2;
+        const particles = [];
+        for (let i = 0; i < numParticles; i++) {
+          particles.push({
+            x: positions[i * 2],
+            y: positions[i * 2 + 1],
+            vx: velocities[i * 2] || 0,
+            vy: velocities[i * 2 + 1] || 0
+          });
+        }
+
+        const forces = new Array(numParticles * 2).fill(0);
+        for (let i = 0; i < numParticles; i++) {
+          for (let j = i + 1; j < numParticles; j++) {
+            const dx = particles[j].x - particles[i].x;
+            const dy = particles[j].y - particles[i].y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const overlap = 2 * radius - dist;
+            if (overlap > 0) {
+              const nx = dx / (dist || 1);
+              const ny = dy / (dist || 1);
+              const fn = p.stiffness_normal * Math.pow(overlap, 1.5);
+              forces[i * 2] -= fn * nx;
+              forces[i * 2 + 1] -= fn * ny;
+              forces[j * 2] += fn * nx;
+              forces[j * 2 + 1] += fn * ny;
+            }
+          }
+
+          const dist = Math.sqrt(particles[i].x * particles[i].x + particles[i].y * particles[i].y);
+          const limit = drum_radius - radius;
+          const overlap = dist - limit;
+          if (overlap > 0) {
+            const nx = particles[i].x / (dist || 1);
+            const ny = particles[i].y / (dist || 1);
+            const fn = p.stiffness_normal * Math.pow(overlap, 1.5);
+            forces[i * 2] -= fn * nx;
+            forces[i * 2 + 1] -= fn * ny;
+          }
+        }
+
+        return {
+          outputs: [forces],
+          nextState: { 
+            initialized: true, 
+            particles, 
+            drum_angle,
+            has_pulsator,
+            pulsator_angle,
+            pulsator_omega
+          }
+        };
+      }
+    };
+  },
+
+  'DEM_BOND_FABRIC': (id, params) => {
+    const bond_stiffness = params.bond_stiffness !== undefined ? Number(params.bond_stiffness) : 150;
+    return {
+      id, type: 'DEM_BOND_FABRIC', isStateful: true, params: { bond_stiffness },
+      inputs: [
+        createPort('positions', 'positions', 'input'),
+        createPort('velocities', 'velocities', 'input'),
+        createPort('radius', 'radius', 'input')
+      ],
+      outputs: [
+        createPort('bond_forces', 'bond_forces', 'output'),
+        createPort('bond_magnitudes', 'bond_magnitudes', 'output')
+      ],
+      state: { bonds: [], particles: [], initialized: false },
+      execute: (ins, p, state, dt) => {
+        const positions = (ins[0] || []) as any;
+        const velocities = (ins[1] || []) as any;
+        const radius = Number(ins[2]) || 0.05;
+
+        const numParticles = positions.length / 2;
+        const particles: any[] = [];
+        for (let i = 0; i < numParticles; i++) {
+          particles.push({
+            x: positions[i * 2],
+            y: positions[i * 2 + 1],
+            vx: velocities[i * 2] || 0,
+            vy: velocities[i * 2 + 1] || 0
+          });
+        }
+
+        const numSheets = p.num_sheets !== undefined ? Number(p.num_sheets) : 2;
+        const gridRows = p.grid_rows !== undefined ? Number(p.grid_rows) : 4;
+        const gridCols = p.grid_cols !== undefined ? Number(p.grid_cols) : 4;
+        const particleSpacing = 0.08;
+
+        let bonds = (state.bonds || []) as any[];
+        if (bonds.length === 0 && numParticles > 0) {
+          bonds = [];
+          for (let c = 0; c < numSheets; c++) {
+            const offset = c * (gridRows * gridCols);
+            for (let r = 0; r < gridRows; r++) {
+              for (let col = 0; col < gridCols; col++) {
+                const idx = offset + r * gridCols + col;
+                if (idx >= numParticles) continue;
+                // Horizontal bond
+                if (col < gridCols - 1) {
+                  const idxH = offset + r * gridCols + (col + 1);
+                  if (idxH < numParticles) {
+                    bonds.push({ p1: idx, p2: idxH, restLength: particleSpacing });
+                  }
+                }
+                // Vertical bond
+                if (r < gridRows - 1) {
+                  const idxV = offset + (r + 1) * gridCols + col;
+                  if (idxV < numParticles) {
+                    bonds.push({ p1: idx, p2: idxV, restLength: particleSpacing });
+                  }
+                }
+                // Shear diagonal bonds
+                if (r < gridRows - 1 && col < gridCols - 1) {
+                  const idxD1 = offset + (r + 1) * gridCols + (col + 1);
+                  if (idxD1 < numParticles) {
+                    bonds.push({ p1: idx, p2: idxD1, restLength: particleSpacing * Math.sqrt(2) });
+                  }
+                }
+                if (r < gridRows - 1 && col > 0) {
+                  const idxD2 = offset + (r + 1) * gridCols + (col - 1);
+                  if (idxD2 < numParticles) {
+                    bonds.push({ p1: idx, p2: idxD2, restLength: particleSpacing * Math.sqrt(2) });
+                  }
+                }
+              }
+            }
+          }
+          if (bonds.length === 0) {
+            for (let i = 0; i < numParticles; i++) {
+              const j = (i + 1) % numParticles;
+              bonds.push({ p1: i, p2: j, restLength: 0.1 });
+            }
+          }
+        }
+
+        const forces = new Array(numParticles * 2).fill(0);
+        const magnitudes: number[] = [];
+
+        bonds.forEach((bond: any) => {
+          const p1 = particles[bond.p1];
+          const p2 = particles[bond.p2];
+          if (!p1 || !p2) return;
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          const strain = dist - bond.restLength;
+          const forceMag = p.bond_stiffness * strain;
+          
+          const nx = dx / (dist || 1);
+          const ny = dy / (dist || 1);
+
+          forces[bond.p1 * 2] += forceMag * nx;
+          forces[bond.p1 * 2 + 1] += forceMag * ny;
+          forces[bond.p2 * 2] -= forceMag * nx;
+          forces[bond.p2 * 2 + 1] -= forceMag * ny;
+
+          magnitudes.push(Math.abs(forceMag));
+        });
+
+        return {
+          outputs: [forces, magnitudes],
+          nextState: { initialized: true, bonds, particles }
+        };
+      }
+    };
+  },
+
+  'DEM_FLUID_COUPLING': (id, params) => {
+    const drag_coeff = params.drag_coeff !== undefined ? Number(params.drag_coeff) : 0.8;
+    return {
+      id, type: 'DEM_FLUID_COUPLING', params: { drag_coeff },
+      inputs: [
+        createPort('positions', 'positions', 'input'),
+        createPort('velocities', 'velocities', 'input'),
+        createPort('fill_level', 'fill_level', 'input'),
+        createPort('drum_state', 'drum_state', 'input')
+      ],
+      outputs: [
+        createPort('fluid_forces', 'fluid_forces', 'output')
+      ],
+      state: { particles: [], drum_angle: 0 },
+      execute: (ins, p, state, dt) => {
+        const positions = (ins[0] || []) as any;
+        const velocities = (ins[1] || []) as any;
+        const fillLevel = Number(ins[2]) || 0.35;
+        const drumState = (ins[3] || [0.8, 0, 0]) as any;
+
+        const drum_radius = Number(drumState[0]) || 0.8;
+        const drum_angle = Number(drumState[1]) || 0;
+        const drum_omega = Number(drumState[2]) || 0;
+
+        const numParticles = positions.length / 2;
+        const particles: any[] = [];
+        for (let i = 0; i < numParticles; i++) {
+          particles.push({
+            x: positions[i * 2],
+            y: positions[i * 2 + 1],
+            vx: velocities[i * 2],
+            vy: velocities[i * 2 + 1]
+          });
+        }
+
+        const y_water = -drum_radius + fillLevel * 2 * drum_radius;
+        const forces = new Array(numParticles * 2).fill(0);
+
+        for (let i = 0; i < numParticles; i++) {
+          if (particles[i].y < y_water) {
+            const fluid_vx = -drum_omega * particles[i].y;
+            const fluid_vy = drum_omega * particles[i].x;
+
+            const rel_vx = fluid_vx - particles[i].vx;
+            const rel_vy = fluid_vy - particles[i].vy;
+
+            forces[i * 2] = p.drag_coeff * rel_vx;
+            forces[i * 2 + 1] = p.drag_coeff * rel_vy;
+          }
+        }
+
+        return {
+          outputs: [forces],
+          nextState: { particles, drum_angle }
+        };
+      }
+    };
+  },
+
+  'CFD_SPH_WATER_SOLVER': (id, params) => {
+    const num_fluid_particles = params.num_fluid_particles !== undefined ? Number(params.num_fluid_particles) : 20;
+    const fluid_density = params.fluid_density !== undefined ? Number(params.fluid_density) : 1000;
+    const fluid_viscosity = params.fluid_viscosity !== undefined ? Number(params.fluid_viscosity) : 1.5;
+    const sph_smoothing_length = params.sph_smoothing_length !== undefined ? Number(params.sph_smoothing_length) : 0.12;
+    const sph_stiffness = params.sph_stiffness !== undefined ? Number(params.sph_stiffness) : 25;
+
+    return {
+      id, type: 'CFD_SPH_WATER_SOLVER', isStateful: true,
+      params: { num_fluid_particles, fluid_density, fluid_viscosity, sph_smoothing_length, sph_stiffness },
+      inputs: [
+        createPort('fill_level', 'fill_level', 'input'),
+        createPort('drum_state', 'drum_state', 'input'),
+        createPort('coupling_forces', 'coupling_forces', 'input')
+      ],
+      outputs: [
+        createPort('fluid_positions', 'fluid_positions', 'output'),
+        createPort('fluid_velocities', 'fluid_velocities', 'output'),
+        createPort('drum_fluid_torque', 'drum_fluid_torque', 'output'),
+        createPort('slosh_intensity', 'slosh_intensity', 'output')
+      ],
+      state: { initialized: false, fluidParticles: [], drum_angle: 0 },
+      execute: (ins, p, state, dt) => {
+        const fillLevel = Number(ins[0]) || 0.35;
+        const drumState = (ins[1] || [0.8, 0, 0, 0, 0, 0]) as any;
+        const couplingForces = (ins[2] || []) as any;
+        const drum_radius = Number(drumState[0]) || 0.8;
+        const drum_angle = Number(drumState[1]) || 0;
+        const drum_omega = Number(drumState[2]) || 0;
+        const has_pulsator = Number(drumState[3]) === 1;
+        const pulsator_angle = Number(drumState[4]) || 0;
+        const pulsator_omega = Number(drumState[5]) || 0;
+
+        let fluidParticles = (state.fluidParticles || []) as any[];
+        let initialized = state.initialized;
+
+        if (!initialized) {
+          fluidParticles = [];
+          const y_water = -drum_radius + fillLevel * 2 * drum_radius;
+          for (let i = 0; i < p.num_fluid_particles; i++) {
+            const angle = Math.PI + (i / p.num_fluid_particles) * Math.PI;
+            const r = drum_radius * 0.6 * (0.3 + 0.7 * Math.random());
+            fluidParticles.push({
+              x: r * Math.cos(angle),
+              y: Math.min(y_water, r * Math.sin(angle)),
+              vx: 0,
+              vy: 0
+            });
+          }
+          initialized = true;
+        }
+
+        const dtSec = dt || 0.01;
+        const nextParticles = fluidParticles.map((part: any, idx: number) => {
+          const fx_c = Number(couplingForces[idx * 2]) || 0;
+          const fy_c = Number(couplingForces[idx * 2 + 1]) || 0;
+
+          const ax = fx_c / 0.05;
+          const ay = -9.81 + fy_c / 0.05;
+
+          const vx_prev = part.vx + ax * dtSec;
+          const vy_prev = part.vy + ay * dtSec;
+
+          let x = part.x + vx_prev * dtSec;
+          let y = part.y + vy_prev * dtSec;
+          let vx = vx_prev;
+          let vy = vy_prev;
+
+          // 1. Drum Outer Shell Collision with Friction
+          const dist = Math.sqrt(x*x + y*y);
+          const limit = drum_radius - 0.02;
+          if (dist > limit) {
+            const nx = x / dist;
+            const ny = y / dist;
+            x = limit * nx;
+            y = limit * ny;
+
+            const wall_vx = -drum_omega * y;
+            const wall_vy = drum_omega * x;
+
+            const rel_vx = vx - wall_vx;
+            const rel_vy = vy - wall_vy;
+
+            const tx = -ny;
+            const ty = nx;
+
+            const rel_vn = rel_vx * nx + rel_vy * ny;
+            const rel_vt = rel_vx * tx + rel_vy * ty;
+
+            const new_rel_vn = -rel_vn * 0.1;
+            const new_rel_vt = rel_vt * 0.1; // sticks to outer wall
+
+            vx = wall_vx + new_rel_vn * nx + new_rel_vt * tx;
+            vy = wall_vy + new_rel_vn * ny + new_rel_vt * ty;
+          }
+
+          // 2. Lifter Collisions (3 ribs)
+          const numRibs = 3;
+          const tipLen = 0.15;
+          const lifterWidth = 0.06;
+          const fRadius = 0.025;
+
+          for (let k = 0; k < numRibs; k++) {
+            const theta = drum_angle + (k * 2 * Math.PI) / numRibs;
+            const rx = Math.cos(theta);
+            const ry = Math.sin(theta);
+
+            const proj = x * rx + y * ry;
+            if (proj > drum_radius - tipLen && proj <= drum_radius) {
+              const perp = -x * ry + y * rx;
+              if (Math.abs(perp) < fRadius + lifterWidth / 2) {
+                const side = perp > 0 ? 1 : -1;
+                const targetPerp = side * (fRadius + lifterWidth / 2);
+                
+                x = proj * rx - targetPerp * ry;
+                y = proj * ry + targetPerp * rx;
+
+                const nx = -ry * side;
+                const ny = rx * side;
+
+                const rib_vx = -drum_omega * y;
+                const rib_vy = drum_omega * x;
+
+                const rel_vx = vx - rib_vx;
+                const rel_vy = vy - rib_vy;
+
+                const rel_vn = rel_vx * nx + rel_vy * ny;
+                if (rel_vn < 0) {
+                  const new_vn = -rel_vn * 0.05;
+                  const tx = -ny;
+                  const ty = nx;
+                  const rel_vt = rel_vx * tx + rel_vy * ty;
+                  const new_vt = rel_vt * 0.05; // sticks to lifter
+                  
+                  vx = rib_vx + new_vn * nx + new_vt * tx;
+                  vy = rib_vy + new_vn * ny + new_vt * ty;
+                }
+              }
+            }
+          }
+
+          // 3. Central Pulsator Collision (if active)
+          if (has_pulsator) {
+            const p_rad = drum_radius * 0.22;
+            const dist_center = Math.sqrt(x*x + y*y);
+            if (dist_center < p_rad + fRadius) {
+              const nx = x / (dist_center || 1);
+              const ny = y / (dist_center || 1);
+              x = (p_rad + fRadius) * nx;
+              y = (p_rad + fRadius) * ny;
+
+              const p_vx = -pulsator_omega * y;
+              const p_vy = pulsator_omega * x;
+
+              const rel_vx = vx - p_vx;
+              const rel_vy = vy - p_vy;
+
+              const tx = -ny;
+              const ty = nx;
+
+              const rel_vn = rel_vx * nx + rel_vy * ny;
+              const rel_vt = rel_vx * tx + rel_vy * ty;
+
+              const new_rel_vn = -rel_vn * 0.05;
+              const new_rel_vt = rel_vt * 0.05;
+
+              vx = p_vx + new_rel_vn * nx + new_rel_vt * tx;
+              vy = p_vy + new_rel_vn * ny + new_rel_vt * ty;
+            }
+
+            // Pulsator vane collisions (3 fins)
+            const numFins = 3;
+            const finLen = p_rad * 0.5;
+            const finWidth = 0.04;
+            for (let f = 0; f < numFins; f++) {
+              const f_theta = pulsator_angle + (f * 2 * Math.PI) / numFins;
+              const fx_axis = Math.cos(f_theta);
+              const fy_axis = Math.sin(f_theta);
+
+              const proj = x * fx_axis + y * fy_axis;
+              if (proj > p_rad && proj <= p_rad + finLen) {
+                const perp = -x * fy_axis + y * fx_axis;
+                if (Math.abs(perp) < fRadius + finWidth / 2) {
+                  const side = perp > 0 ? 1 : -1;
+                  const targetPerp = side * (fRadius + finWidth / 2);
+                  
+                  x = proj * fx_axis - targetPerp * fy_axis;
+                  y = proj * fy_axis + targetPerp * fx_axis;
+
+                  const nx_fin = -fy_axis * side;
+                  const ny_fin = fx_axis * side;
+
+                  const fin_vx = -pulsator_omega * y;
+                  const fin_vy = pulsator_omega * x;
+
+                  const rel_vx = vx - fin_vx;
+                  const rel_vy = vy - fin_vy;
+
+                  const rel_vn = rel_vx * nx_fin + rel_vy * ny_fin;
+                  if (rel_vn < 0) {
+                    vx = fin_vx - rel_vn * 0.05 * nx_fin;
+                    vy = fin_vy - rel_vn * 0.05 * ny_fin;
+                  }
+                }
+              }
+            }
+          }
+
+          return { x, y, vx, vy };
+        });
+
+        let drum_fluid_torque = 0;
+        let slosh_intensity = 0;
+
+        if (nextParticles.length > 0) {
+          let sum_torque = 0;
+          let sum_v2 = 0;
+          let sum_y = 0;
+          
+          nextParticles.forEach((part: any) => {
+            const dist = Math.sqrt(part.x * part.x + part.y * part.y);
+            if (dist > drum_radius - 0.05) {
+              const tangential_speed = -part.vx * (part.y / dist) + part.vy * (part.x / dist);
+              const relative_speed = drum_omega * drum_radius - tangential_speed;
+              sum_torque += 0.5 * relative_speed * drum_radius;
+            }
+            sum_v2 += part.vx * part.vx + part.vy * part.vy;
+            sum_y += part.y;
+          });
+
+          drum_fluid_torque = Math.max(0.1, sum_torque * 0.1);
+          
+          const avg_y = sum_y / nextParticles.length;
+          let var_y = 0;
+          nextParticles.forEach((part: any) => {
+            var_y += Math.pow(part.y - avg_y, 2);
+          });
+          const std_y = Math.sqrt(var_y / nextParticles.length) || 0.1;
+          slosh_intensity = (sum_v2 / nextParticles.length) * 0.5 + std_y * 2.0;
+        }
+
+        const positions: number[] = [];
+        const velocities: number[] = [];
+        nextParticles.forEach((part: any) => {
+          positions.push(part.x, part.y);
+          velocities.push(part.vx, part.vy);
+        });
+
+        return {
+          outputs: [positions, velocities, drum_fluid_torque, slosh_intensity],
+          nextState: {
+            initialized: true,
+            fluidParticles: nextParticles,
+            drum_angle,
+            has_pulsator,
+            pulsator_angle,
+            pulsator_omega
+          }
+        };
+      }
+    };
+  },
+
+  'DEM_CFD_COSIMULATION_INTERFACE': (id, params) => {
+    const drag_model = params.drag_model || 'Gidaspow';
+    const drag_coeff = params.drag_coeff !== undefined ? Number(params.drag_coeff) : 0.8;
+
+    return {
+      id, type: 'DEM_CFD_COSIMULATION_INTERFACE', isStateful: true, params: { drag_model, drag_coeff },
+      inputs: [
+        createPort('dem_positions', 'dem_positions', 'input'),
+        createPort('dem_velocities', 'dem_velocities', 'input'),
+        createPort('fluid_positions', 'fluid_positions', 'input'),
+        createPort('fluid_velocities', 'fluid_velocities', 'input'),
+        createPort('drum_state', 'drum_state', 'input')
+      ],
+      outputs: [
+        createPort('dem_coupling_forces', 'dem_coupling_forces', 'output'),
+        createPort('fluid_coupling_forces', 'fluid_coupling_forces', 'output')
+      ],
+      state: { initialized: false, particles: [], fluidParticles: [], drum_angle: 0 },
+      execute: (ins, p, state, dt) => {
+        const demPos = (ins[0] || []) as any;
+        const demVel = (ins[1] || []) as any;
+        const fluidPos = (ins[2] || []) as any;
+        const fluidVel = (ins[3] || []) as any;
+        const drumState = (ins[4] || [0.8, 0, 0, 0, 0, 0]) as any;
+
+        const drum_angle = Number(drumState[1]) || 0;
+        const has_pulsator = Number(drumState[3]) === 1;
+        const pulsator_angle = Number(drumState[4]) || 0;
+        const pulsator_omega = Number(drumState[5]) || 0;
+
+        const demForces = new Array(demPos.length).fill(0);
+        const fluidForces = new Array(fluidPos.length).fill(0);
+
+        const numDem = demPos.length / 2;
+        const numFluid = fluidPos.length / 2;
+
+        const particles: any[] = [];
+        for (let i = 0; i < numDem; i++) {
+          particles.push({
+            x: demPos[i * 2],
+            y: demPos[i * 2 + 1],
+            vx: demVel[i * 2] || 0,
+            vy: demVel[i * 2 + 1] || 0
+          });
+        }
+
+        const fluidParticles: any[] = [];
+        for (let j = 0; j < numFluid; j++) {
+          fluidParticles.push({
+            x: fluidPos[j * 2],
+            y: fluidPos[j * 2 + 1],
+            vx: fluidVel[j * 2] || 0,
+            vy: fluidVel[j * 2 + 1] || 0
+          });
+        }
+
+        for (let i = 0; i < numDem; i++) {
+          const dx_dem = demPos[i * 2];
+          const dy_dem = demPos[i * 2 + 1];
+          const vx_dem = demVel[i * 2];
+          const vy_dem = demVel[i * 2 + 1];
+
+          for (let j = 0; j < numFluid; j++) {
+            const dx_fluid = fluidPos[j * 2];
+            const dy_fluid = fluidPos[j * 2 + 1];
+            const vx_fluid = fluidVel[j * 2];
+            const vy_fluid = fluidVel[j * 2 + 1];
+
+            const dx = dx_fluid - dx_dem;
+            const dy = dy_fluid - dy_dem;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+
+            if (dist < 0.1) {
+              const rel_vx = vx_fluid - vx_dem;
+              const rel_vy = vy_fluid - vy_dem;
+              const fx = p.drag_coeff * rel_vx;
+              const fy = p.drag_coeff * rel_vy;
+
+              demForces[i * 2] += fx;
+              demForces[i * 2 + 1] += fy;
+
+              fluidForces[j * 2] -= fx;
+              fluidForces[j * 2 + 1] -= fy;
+            }
+          }
+        }
+
+        return {
+          outputs: [demForces, fluidForces],
+          nextState: {
+            initialized: true,
+            particles,
+            fluidParticles,
+            drum_angle,
+            has_pulsator,
+            pulsator_angle,
+            pulsator_omega
+          }
+        };
+      }
+    };
+  },
+
+  'FABRIC_HARMONIC_ANALYZER': (id, params) => {
+    const drum_mass = params.drum_mass !== undefined ? Number(params.drum_mass) : 15.0;
+    const suspension_stiffness = params.suspension_stiffness !== undefined ? Number(params.suspension_stiffness) : 8000;
+
+    return {
+      id, type: 'FABRIC_HARMONIC_ANALYZER', isStateful: true, params: { drum_mass, suspension_stiffness },
+      inputs: [
+        createPort('dem_positions', 'dem_positions', 'input'),
+        createPort('dem_velocities', 'dem_velocities', 'input'),
+        createPort('fluid_forces', 'fluid_forces', 'input'),
+        createPort('drum_state', 'drum_state', 'input')
+      ],
+      outputs: [
+        createPort('vibration_amplitude', 'vibration_amplitude', 'output'),
+        createPort('eccentricity', 'eccentricity', 'output')
+      ],
+      state: { dx: 0, dy: 0, vx: 0, vy: 0, history: [], initialized: false },
+      execute: (ins, p, state, dt) => {
+        const demPos = (ins[0] || []) as any;
+        const drumState = (ins[3] || [0.8, 0, 0]) as any;
+        const drum_omega = Number(drumState[2]) || 0;
+
+        const numParticles = demPos.length / 2;
+        let ecc_x = 0;
+        let ecc_y = 0;
+        if (numParticles > 0) {
+          let sum_x = 0;
+          let sum_y = 0;
+          for (let i = 0; i < numParticles; i++) {
+            sum_x += demPos[i * 2];
+            sum_y += demPos[i * 2 + 1];
+          }
+          ecc_x = sum_x / numParticles;
+          ecc_y = sum_y / numParticles;
+        }
+
+        const dtSec = dt || 0.08;
+        const c_damping = 100;
+
+        const fx_ecc = p.drum_mass * ecc_x * drum_omega * drum_omega;
+        const fy_ecc = p.drum_mass * ecc_y * drum_omega * drum_omega;
+
+        const fx_susp = -p.suspension_stiffness * state.dx - c_damping * state.vx + fx_ecc;
+        const fy_susp = -p.suspension_stiffness * state.dy - c_damping * state.vy + fy_ecc;
+
+        const ax = fx_susp / p.drum_mass;
+        const ay = fy_susp / p.drum_mass;
+
+        const vx = state.vx + ax * dtSec;
+        const vy = state.vy + ay * dtSec;
+
+        const dx = state.dx + vx * dtSec;
+        const dy = state.dy + vy * dtSec;
+
+        const vibration_amplitude = Math.sqrt(dx*dx + dy*dy);
+
+        const history = [...(state.history || [])];
+        history.push(vibration_amplitude);
+        if (history.length > 100) {
+          history.shift();
+        }
+
+        const freq = Math.abs(drum_omega) / (2 * Math.PI);
+
+        return {
+          outputs: [vibration_amplitude, [ecc_x, ecc_y]],
+          nextState: { dx, dy, vx, vy, history, freq, eccentricity: [ecc_x, ecc_y], initialized: true }
+        };
+      }
+    };
+  },
+
+  'CFD_DEM_SURROGATE_LEARNER': (id, params) => {
+    const learning_rate = params.learning_rate !== undefined ? Number(params.learning_rate) : 0.04;
+    const mode = params.mode || 'training';
+
+    return {
+      id, type: 'CFD_DEM_SURROGATE_LEARNER', isStateful: true, params: { learning_rate, mode },
+      inputs: [
+        createPort('rpm', 'rpm', 'input'),
+        createPort('fill', 'fill', 'input'),
+        createPort('actual_vibration', 'actual_vibration', 'input'),
+        createPort('actual_cleanliness', 'actual_cleanliness', 'input'),
+        createPort('fluid_torque', 'fluid_torque', 'input'),
+        createPort('slosh_intensity', 'slosh_intensity', 'input')
+      ],
+      outputs: [
+        createPort('predicted_vibration', 'predicted_vibration', 'output'),
+        createPort('predicted_cleanliness', 'predicted_cleanliness', 'output'),
+        createPort('predicted_torque', 'predicted_torque', 'output'),
+        createPort('predicted_slosh', 'predicted_slosh', 'output'),
+        createPort('recommended_rpm', 'recommended_rpm', 'output'),
+        createPort('recommended_fill', 'recommended_fill', 'output'),
+        createPort('recommended_radius', 'recommended_radius', 'output'),
+        createPort('recommended_lifters', 'recommended_lifters', 'output'),
+        createPort('motion_pattern', 'motion_pattern', 'output'),
+        createPort('rotation_direction', 'rotation_direction', 'output')
+      ],
+      state: {
+        w_vib: 0.001,
+        b_vib: 0.01,
+        w_clean: 0.5,
+        b_clean: 10,
+        w_torque: 0.01,
+        b_torque: 0.4,
+        w_slosh: 0.01,
+        b_slosh: 0.3
+      },
+      execute: (ins, p, state, dt) => {
+        const rpm = Number(ins[0]) || 0;
+        const fill = Number(ins[1]) || 0;
+        const actualVib = Number(ins[2]) || 0;
+        const actualClean = Number(ins[3]) || 0;
+        const fluidTorque = Number(ins[4]) || 0;
+        const sloshIntensity = Number(ins[5]) || 0;
+
+        let { w_vib, b_vib, w_clean, b_clean, w_torque, b_torque, w_slosh, b_slosh } = state;
+
+        const pred_vib = Math.max(0, w_vib * rpm + b_vib);
+        const pred_clean = Math.max(0, Math.min(100, w_clean * rpm + b_clean));
+        const pred_torque = Math.max(0, w_torque * rpm + b_torque);
+        const pred_slosh = Math.max(0, w_slosh * rpm + b_slosh);
+
+        if (p.mode === 'training') {
+          const lr = p.learning_rate;
+          
+          const err_vib = actualVib - pred_vib;
+          w_vib += lr * err_vib * rpm * 0.0001;
+          b_vib += lr * err_vib * 0.01;
+
+          const err_clean = actualClean - pred_clean;
+          w_clean += lr * err_clean * rpm * 0.0001;
+          b_clean += lr * err_clean * 0.01;
+
+          const err_torque = fluidTorque - pred_torque;
+          w_torque += lr * err_torque * rpm * 0.0001;
+          b_torque += lr * err_torque * 0.01;
+
+          const err_slosh = sloshIntensity - pred_slosh;
+          w_slosh += lr * err_slosh * rpm * 0.0001;
+          b_slosh += lr * err_slosh * 0.01;
+        }
+
+        let bestRpm = 45;
+        let maxObjective = -Infinity;
+        for (let r = 15; r <= 140; r += 5) {
+          const v = Math.max(0, w_vib * r + b_vib);
+          const c = Math.max(0, Math.min(100, w_clean * r + b_clean));
+          const objective = c - 200 * v;
+          if (objective > maxObjective) {
+            maxObjective = objective;
+            bestRpm = r;
+          }
+        }
+
+        bestRpm = Math.max(15, Math.min(140, bestRpm));
+        const recommended_fill = Math.max(0.2, Math.min(0.6, 0.35 + 0.01 * (bestRpm - 45)));
+        const recommended_radius = Math.max(0.6, Math.min(1.0, 0.8));
+        const recommended_lifters = Math.max(3, Math.min(5, 4));
+
+        let motion_pattern = 0;
+        if (bestRpm > 80) motion_pattern = 2;
+        else if (bestRpm > 45) motion_pattern = 1;
+
+        const rotation_direction = bestRpm > 0 ? 1 : 0;
+
+        return {
+          outputs: [
+            pred_vib,
+            pred_clean,
+            pred_torque,
+            pred_slosh,
+            bestRpm,
+            recommended_fill,
+            recommended_radius,
+            recommended_lifters,
+            motion_pattern,
+            rotation_direction
+          ],
+          nextState: {
+            w_vib, b_vib, w_clean, b_clean, w_torque, b_torque, w_slosh, b_slosh
+          }
+        };
+      }
+    };
+  }
 };
 
 
@@ -9058,14 +10427,32 @@ export const XBRIDGES_CATEGORIES = [
     ]
   },
   {
-    name: 'Trigonometric',
+    name: 'Trigonometric & Hyperbolic',
     blocks: [
       { type: 'SIN', label: 'Sine', icon: 'activity' },
       { type: 'COS', label: 'Cosine', icon: 'activity' },
       { type: 'TAN', label: 'Tangent', icon: 'activity' },
       { type: 'COT', label: 'Cotangent', icon: 'activity' },
       { type: 'SEC', label: 'Secant', icon: 'activity' },
-      { type: 'COSEC', label: 'Cosecant', icon: 'activity' }
+      { type: 'COSEC', label: 'Cosecant', icon: 'activity' },
+      { type: 'ASIN', label: 'Arcsine', icon: 'activity' },
+      { type: 'ACOS', label: 'Arccosine', icon: 'activity' },
+      { type: 'ATAN', label: 'Arctangent', icon: 'activity' },
+      { type: 'ACOT', label: 'Arccotangent', icon: 'activity' },
+      { type: 'ASEC', label: 'Arcsecant', icon: 'activity' },
+      { type: 'ACOSEC', label: 'Arccosecant', icon: 'activity' },
+      { type: 'SINH', label: 'Hyperbolic Sine', icon: 'activity' },
+      { type: 'COSH', label: 'Hyperbolic Cosine', icon: 'activity' },
+      { type: 'TANH', label: 'Hyperbolic Tangent', icon: 'activity' },
+      { type: 'COTH', label: 'Hyperbolic Cotangent', icon: 'activity' },
+      { type: 'SECH', label: 'Hyperbolic Secant', icon: 'activity' },
+      { type: 'COSECH', label: 'Hyperbolic Cosecant', icon: 'activity' },
+      { type: 'ASINH', label: 'Inverse Hyperbolic Sine', icon: 'activity' },
+      { type: 'ACOSH', label: 'Inverse Hyperbolic Cosine', icon: 'activity' },
+      { type: 'ATANH', label: 'Inverse Hyperbolic Tangent', icon: 'activity' },
+      { type: 'ACOTH', label: 'Inverse Hyperbolic Cotangent', icon: 'activity' },
+      { type: 'ASECH', label: 'Inverse Hyperbolic Secant', icon: 'activity' },
+      { type: 'ACOSECH', label: 'Inverse Hyperbolic Cosecant', icon: 'activity' }
     ]
   },
   {

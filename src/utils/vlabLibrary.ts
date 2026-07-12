@@ -1207,7 +1207,11 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       },
       {
         id: 'pmsm_foc', name: 'PMSM Field-Oriented Control', color: '#4b5563', icon: 'pmsm_foc', category: 'PMSM Control',
-        params: { Rs: { value: 0.1, unit: 'Ohm', label: 'Stator Res' } },
+        params: {
+          Rs: { value: 0.1, unit: 'Ohm', label: 'Stator Res' },
+          Kp: { value: 5.0, unit: '', label: 'Proportional Gain (Kp)' },
+          Ki: { value: 100.0, unit: '', label: 'Integral Gain (Ki)' }
+        },
         ports: [
           { id: 'ref', pos: 'left', label: 'Reference' },
           { id: 'iabc_s', pos: 'left', label: 'iabcSens' },

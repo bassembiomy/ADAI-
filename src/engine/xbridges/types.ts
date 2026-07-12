@@ -40,8 +40,6 @@ export interface XBlock {
   description?: string; // For Help Center documentation
   nextTick?: number; // Scheduled sample-time tick for discrete blocks
   
-  // The execute function now handles arrays and matrices
-  // It receives an array of input values, the block's parameters, the block's state, and current simulation time
   execute: (inputs: XValue[], params: Record<string, any>, state: any, time: number) => { 
     outputs: XValue[]; 
     nextState?: any; 

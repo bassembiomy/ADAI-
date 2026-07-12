@@ -2,6 +2,20 @@
 
 export const XBRIDGES_CATEGORIES = [
   {
+    name: 'DEM & Particle Simulation',
+    blocks: [
+      { type: 'DEM_WASHING_MACHINE_TWIN', label: 'Washing Machine Twin', icon: 'rotate-cw' },
+      { type: 'DEM_DRUM', label: 'DEM Drum Geometry', icon: 'rotate-cw' },
+      { type: 'DEM_PARTICLE_SYSTEM', label: 'DEM Particle System', icon: 'layers' },
+      { type: 'DEM_HERTZ_CONTACT', label: 'Hertz Contact Model', icon: 'activity' },
+      { type: 'DEM_BOND_FABRIC', label: 'Fabric Bond Model', icon: 'network' },
+      { type: 'DEM_FLUID_COUPLING', label: 'Fluid Phase Coupling', icon: 'wind' },
+      { type: 'CFD_SPH_WATER_SOLVER', label: 'CFD SPH Water Solver', icon: 'wind' },
+      { type: 'DEM_CFD_COSIMULATION_INTERFACE', label: 'CFD-DEM 2-Way Coupling', icon: 'refresh-ccw' },
+      { type: 'FABRIC_HARMONIC_ANALYZER', label: 'Fabric Harmonic Analyzer', icon: 'activity' }
+    ]
+  },
+  {
     name: 'Robot Vacuum Learning',
     blocks: [
       { type: 'ROBOT_VACUUM_LIDAR_SENSOR', label: 'Lidar Sensor', icon: 'graduation-cap' },
@@ -62,6 +76,7 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'LMS_ADAPTIVE_FILTER', label: 'LMS Adaptive Filter', icon: 'graduation-cap' },
       { type: 'NEURAL_NEURON_LEARNING', label: 'Neural Neuron Learner', icon: 'graduation-cap' },
       { type: 'RL_Q_LEARNING_CONTROLLER', label: 'RL Q-Learning Agent', icon: 'graduation-cap' },
+      { type: 'CFD_DEM_SURROGATE_LEARNER', label: 'CFD-DEM Surrogate Learner', icon: 'graduation-cap' },
       { type: 'ROBOT_VACUUM_DIGITAL_TWIN', label: 'Robot Vacuum Twin (Single)', icon: 'graduation-cap' },
       { type: 'ROBOT_VACUUM_DYNAMICS', label: 'Robot Vacuum Dynamics', icon: 'graduation-cap' },
       { type: 'ROBOT_VACUUM_MOTOR', label: 'Robot Vacuum Motor', icon: 'graduation-cap' },
@@ -276,7 +291,7 @@ export const XBRIDGES_CATEGORIES = [
     ]
   },
   {
-    name: 'Trigonometric Functions',
+    name: 'Trigonometric & Hyperbolic Functions',
     blocks: [
       { type: 'SIN', label: 'Sine', icon: 'trending-up' },
       { type: 'COS', label: 'Cosine', icon: 'trending-up' },
@@ -284,6 +299,24 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'COT', label: 'Cotangent', icon: 'trending-up' },
       { type: 'SEC', label: 'Secant', icon: 'trending-up' },
       { type: 'COSEC', label: 'Cosecant', icon: 'trending-up' },
+      { type: 'ASIN', label: 'Arcsine', icon: 'trending-up' },
+      { type: 'ACOS', label: 'Arccosine', icon: 'trending-up' },
+      { type: 'ATAN', label: 'Arctangent', icon: 'trending-up' },
+      { type: 'ACOT', label: 'Arccotangent', icon: 'trending-up' },
+      { type: 'ASEC', label: 'Arcsecant', icon: 'trending-up' },
+      { type: 'ACOSEC', label: 'Arccosecant', icon: 'trending-up' },
+      { type: 'SINH', label: 'Hyperbolic Sine', icon: 'trending-up' },
+      { type: 'COSH', label: 'Hyperbolic Cosine', icon: 'trending-up' },
+      { type: 'TANH', label: 'Hyperbolic Tangent', icon: 'trending-up' },
+      { type: 'COTH', label: 'Hyperbolic Cotangent', icon: 'trending-up' },
+      { type: 'SECH', label: 'Hyperbolic Secant', icon: 'trending-up' },
+      { type: 'COSECH', label: 'Hyperbolic Cosecant', icon: 'trending-up' },
+      { type: 'ASINH', label: 'Inverse Hyperbolic Sine', icon: 'trending-up' },
+      { type: 'ACOSH', label: 'Inverse Hyperbolic Cosine', icon: 'trending-up' },
+      { type: 'ATANH', label: 'Inverse Hyperbolic Tangent', icon: 'trending-up' },
+      { type: 'ACOTH', label: 'Inverse Hyperbolic Cotangent', icon: 'trending-up' },
+      { type: 'ASECH', label: 'Inverse Hyperbolic Secant', icon: 'trending-up' },
+      { type: 'ACOSECH', label: 'Inverse Hyperbolic Cosecant', icon: 'trending-up' }
     ]
   },
   {

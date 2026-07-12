@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import { XPort } from '../../engine/xbridges/types';
-import { XBRIDGES_CATEGORIES, raycastTwin, ROOM_WALLS, ROOM_CIRCLES, ROOM_BOXES, polyToString, zpgToString } from '../../engine/xbridges/BlockDefinitions';
+import { XBRIDGES_CATEGORIES, raycastTwin, ROOM_WALLS, ROOM_CIRCLES, ROOM_BOXES, MATLAB_WALLS, MATLAB_OBSTACLES, polyToString, zpgToString } from '../../engine/xbridges/BlockDefinitions';
 
 // Map icon string names to Lucide icon components
 const LucideIconMap: Record<string, React.ComponentType<any>> = {
@@ -114,9 +114,19 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
         return;
       }
 
-      const scaleX = (x: number) => 10 + (x + 3.0) / 6.0 * (W - 20);
-      const scaleY = (y: number) => H - 10 - (y + 3.0) / 6.0 * (H - 20);
-      const scaleR = (r: number) => r / 6.0 * (W - 20);
+      // Detect if we should use Matlab coordinates range [-6.0, 6.0]
+      const rx_val = currentState.x ?? 0;
+      const ry_val = currentState.y ?? 0;
+      const rx_est_val = currentState.x_est ?? 0;
+      const ry_est_val = currentState.y_est ?? 0;
+      const isMatlabActive = Math.abs(rx_val) > 3.05 || Math.abs(ry_val) > 3.05 || Math.abs(rx_est_val) > 3.05 || Math.abs(ry_est_val) > 3.05;
+
+      const minVal = isMatlabActive ? -6.0 : -3.0;
+      const sizeVal = isMatlabActive ? 12.0 : 6.0;
+
+      const scaleX = (x: number) => 10 + (x - minVal) / sizeVal * (W - 20);
+      const scaleY = (y: number) => H - 10 - (y - minVal) / sizeVal * (H - 20);
+      const scaleR = (r: number) => r / sizeVal * (W - 20);
 
       // 1. Draw SLAM occupancy grid
       const grid = currentState.grid;
@@ -160,21 +170,26 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
       // Draw subtle grid overlay texture
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
       ctx.lineWidth = 0.5;
-      for (let x = -3.0; x <= 3.0; x += 0.5) {
+      const gridStep = isMatlabActive ? 1.0 : 0.5;
+      for (let x = minVal; x <= -minVal; x += gridStep) {
         ctx.beginPath();
-        ctx.moveTo(scaleX(x), scaleY(-3.0));
-        ctx.lineTo(scaleX(x), scaleY(3.0));
+        ctx.moveTo(scaleX(x), scaleY(minVal));
+        ctx.lineTo(scaleX(x), scaleY(-minVal));
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(scaleX(-3.0), scaleY(x));
-        ctx.lineTo(scaleX(3.0), scaleY(x));
+        ctx.moveTo(scaleX(minVal), scaleY(x));
+        ctx.lineTo(scaleX(-minVal), scaleY(x));
         ctx.stroke();
       }
+
+      const walls = isMatlabActive ? MATLAB_WALLS : ROOM_WALLS;
+      const circles = isMatlabActive ? MATLAB_OBSTACLES : ROOM_CIRCLES;
+      const boxes = isMatlabActive ? [] : ROOM_BOXES;
 
       // Draw Multi-room Internal and boundary walls
       ctx.strokeStyle = '#475569';
       ctx.lineWidth = 2.0;
-      ROOM_WALLS.forEach(w => {
+      walls.forEach(w => {
         ctx.beginPath();
         ctx.moveTo(scaleX(w.x1), scaleY(w.y1));
         ctx.lineTo(scaleX(w.x2), scaleY(w.y2));
@@ -183,7 +198,7 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
 
       // 2. Draw Obstacles (Holographic / Metallic gradient style with glow)
       const obstacleGlow = 0.04 * Math.sin(now * 0.003);
-      ROOM_CIRCLES.forEach((c, idx) => {
+      circles.forEach((c, idx) => {
         ctx.fillStyle = `rgba(51, 65, 85, ${0.15 + obstacleGlow})`;
         ctx.strokeStyle = `rgba(148, 163, 184, ${0.25 + 0.05 * Math.sin(now * 0.002 + idx)})`;
         ctx.lineWidth = 1;
@@ -208,7 +223,7 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
         ctx.stroke();
       });
 
-      ROOM_BOXES.forEach((b, idx) => {
+      boxes.forEach((b, idx) => {
         const bx = scaleX(b.x1);
         const by = scaleY(b.y2);
         const bw = scaleR(b.x2 - b.x1);
@@ -248,20 +263,23 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
       const dockPulseRadius = ((now * 0.05) % 60);
       const dockAlpha = 1 - (dockPulseRadius / 60);
       
+      const dockX = isMatlabActive ? -5.1 : 0.0;
+      const dockY = isMatlabActive ? -5.1 : -2.8;
+
       ctx.fillStyle = '#10b981';
       ctx.beginPath();
-      ctx.arc(scaleX(0), scaleY(-2.8), 5, 0, 2 * Math.PI);
+      ctx.arc(scaleX(dockX), scaleY(dockY), 5, 0, 2 * Math.PI);
       ctx.fill();
 
       ctx.strokeStyle = `rgba(16, 185, 129, ${dockAlpha * (isDocking || isCharging ? 0.8 : 0.35)})`;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(scaleX(0), scaleY(-2.8), 5 + dockPulseRadius, 0, 2 * Math.PI);
+      ctx.arc(scaleX(dockX), scaleY(dockY), 5 + dockPulseRadius, 0, 2 * Math.PI);
       ctx.stroke();
 
       if (isDocking || isCharging) {
         ctx.beginPath();
-        ctx.arc(scaleX(0), scaleY(-2.8), 5 + (dockPulseRadius + 30) % 60, 0, 2 * Math.PI);
+        ctx.arc(scaleX(dockX), scaleY(dockY), 5 + (dockPulseRadius + 30) % 60, 0, 2 * Math.PI);
         ctx.stroke();
       }
 
@@ -269,7 +287,7 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
       ctx.font = 'bold 7px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('D', scaleX(0), scaleY(-2.8));
+      ctx.fillText('D', scaleX(dockX), scaleY(dockY));
 
       // Draw active path targets
       if (currentState.targetX !== undefined && currentState.targetY !== undefined && currentState.navState !== 1) {
@@ -571,9 +589,601 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
   );
 };
 
+const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const stateRef = React.useRef(state);
+
+  React.useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationFrameId: number;
+
+    const draw = () => {
+      const currentState = stateRef.current;
+      const W = canvas.width;
+      const H = canvas.height;
+      const now = performance.now();
+
+      // Clear with sleek dark blue background (Simcenter style)
+      ctx.fillStyle = '#090d16';
+      ctx.fillRect(0, 0, W, H);
+
+      if (!currentState || !currentState.initialized) {
+        ctx.fillStyle = '#475569';
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('WAITING FOR DEM STEP', W / 2, H / 2);
+        animationFrameId = requestAnimationFrame(draw);
+        return;
+      }
+
+      const R_d = 0.8;
+      const scale = (W - 24) / (2 * R_d);
+
+      // Dynamic vibration offset from suspension model (Sanitized against NaN)
+      const dx_offset = (currentState.dx !== undefined && !isNaN(currentState.dx)) ? currentState.dx * scale * 50 : 0;
+      const dy_offset = (currentState.dy !== undefined && !isNaN(currentState.dy)) ? currentState.dy * scale * 50 : 0;
+      const cx = W / 2 + Math.max(-15, Math.min(15, dx_offset));
+      const cy = H / 2 - Math.max(-15, Math.min(15, dy_offset));
+
+      const toCanvasX = (x: number) => cx + x * scale;
+      const toCanvasY = (y: number) => cy - y * scale;
+      const toCanvasLength = (l: number) => l * scale;
+
+      const drumAngle = (currentState.drum_angle !== undefined && !isNaN(currentState.drum_angle)) ? currentState.drum_angle : 0;
+      const particles = currentState.particles || [];
+      const bonds = currentState.bonds || [];
+      const numSheets = currentState.num_sheets || 2;
+      const gridRows = currentState.grid_rows || 4;
+      const gridCols = currentState.grid_cols || 4;
+      const clothSize = gridRows * gridCols;
+      const fluidParticles = currentState.fluidParticles || [];
+
+      // 1. Draw Water Fluid Phase (SPH/Sloshing Wave)
+      if (fluidParticles.length === 0) {
+        const fill = 0.35;
+        const Y_water = -R_d + 2 * R_d * fill;
+        const canvasY_water = toCanvasY(Y_water);
+        
+        const waveFreq = 0.005;
+        const waveAmp = 5;
+        const waveOffset = Math.sin(now * waveFreq + drumAngle) * waveAmp;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, toCanvasLength(R_d), 0, 2 * Math.PI);
+        ctx.clip();
+
+        const waterGrad = ctx.createLinearGradient(0, canvasY_water + waveOffset, 0, H);
+        waterGrad.addColorStop(0, 'rgba(14, 165, 233, 0.4)');
+        waterGrad.addColorStop(1, 'rgba(3, 105, 161, 0.65)');
+        ctx.fillStyle = waterGrad;
+
+        ctx.beginPath();
+        ctx.moveTo(0, canvasY_water + waveOffset);
+        for (let x = 0; x <= W; x += 10) {
+          const sineY = Math.sin((x / W) * Math.PI * 2 + now * 0.003) * 3;
+          ctx.lineTo(x, canvasY_water + waveOffset + sineY);
+        }
+        ctx.lineTo(W, H);
+        ctx.lineTo(0, H);
+        ctx.closePath();
+        ctx.fill();
+
+        // Dynamic detergent foam/bubbles on water surface
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 0.5;
+        for (let x = 10; x < W - 10; x += 15) {
+          const sineY = Math.sin((x / W) * Math.PI * 2 + now * 0.003) * 3;
+          const foamY = canvasY_water + waveOffset + sineY;
+          const count = 3;
+          for (let b = 0; b < count; b++) {
+            const bx = x + Math.sin(now * 0.002 + b) * 4;
+            const by = foamY + Math.cos(now * 0.002 + b) * 2 - 2;
+            const br = 2 + (Math.sin(bx * 0.05 + now * 0.001) + 1) * 2;
+            if (Math.pow(bx - cx, 2) + Math.pow(by - cy, 2) < Math.pow(toCanvasLength(R_d - 0.05), 2)) {
+              ctx.beginPath();
+              ctx.arc(bx, by, br, 0, 2 * Math.PI);
+              ctx.fill();
+              ctx.stroke();
+            }
+          }
+        }
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        for (let i = 0; i < 8; i++) {
+          const bx = cx + Math.sin(i * 1.7 + now * 0.001) * toCanvasLength(R_d * 0.7);
+          const by = cy + (0.3 + 0.5 * Math.cos(i * 2.3 + now * 0.001)) * toCanvasLength(R_d);
+          if (Math.pow(bx - cx, 2) + Math.pow(by - cy, 2) < Math.pow(toCanvasLength(R_d - 0.1), 2)) {
+            ctx.beginPath();
+            ctx.arc(bx, by, 1.5 + (i % 3), 0, 2 * Math.PI);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      }
+
+      // Draw SPH fluid particles if present (Sanitized against NaN)
+      if (fluidParticles.length > 0) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(14, 165, 233, 0.75)';
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.9)';
+        ctx.lineWidth = 1;
+        const fRad = Math.max(2, toCanvasLength(0.025));
+
+        fluidParticles.forEach((p: any) => {
+          if (!p || isNaN(p.x) || isNaN(p.y)) return;
+          const fx = toCanvasX(p.x);
+          const fy = toCanvasY(p.y);
+          if (Math.pow(fx - cx, 2) + Math.pow(fy - cy, 2) < Math.pow(toCanvasLength(R_d + 0.05), 2)) {
+            ctx.beginPath();
+            ctx.arc(fx, fy, fRad, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.beginPath();
+            ctx.arc(fx - fRad / 3, fy - fRad / 3, fRad * 0.25, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(14, 165, 233, 0.75)';
+          }
+        });
+        ctx.restore();
+      }
+
+      // 2. Draw Rotating Drum Geometry
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, toCanvasLength(R_d), 0, 2 * Math.PI);
+      ctx.stroke();
+
+      const numRibs = 3;
+      ctx.fillStyle = '#64748b';
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < numRibs; i++) {
+        const angle = drumAngle + (i * 2 * Math.PI) / numRibs;
+        
+        const rx = R_d * Math.cos(angle);
+        const ry = R_d * Math.sin(angle);
+        
+        const tipLen = 0.15;
+        const rtx = (R_d - tipLen) * Math.cos(angle);
+        const rty = (R_d - tipLen) * Math.sin(angle);
+
+        const baseWidth = 0.08;
+        const b1x = R_d * Math.cos(angle - baseWidth);
+        const b1y = R_d * Math.sin(angle - baseWidth);
+        const b2x = R_d * Math.cos(angle + baseWidth);
+        const b2y = R_d * Math.sin(angle + baseWidth);
+
+        ctx.beginPath();
+        ctx.moveTo(toCanvasX(b1x), toCanvasY(b1y));
+        ctx.lineTo(toCanvasX(rtx), toCanvasY(rty));
+        ctx.lineTo(toCanvasX(b2x), toCanvasY(b2y));
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      // 2b. Draw Central Pulsator Hub (if active)
+      if (currentState.has_pulsator) {
+        const pRad = toCanvasLength(R_d * 0.22);
+        
+        // Draw pulsator base
+        const pGrad = ctx.createRadialGradient(cx, cy, 1, cx, cy, pRad);
+        pGrad.addColorStop(0, '#334155');
+        pGrad.addColorStop(1, '#1e293b');
+        ctx.fillStyle = pGrad;
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, pRad, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+
+        // Draw 3 pulsator fins
+        const numFins = 3;
+        const pulsAngle = currentState.pulsator_angle || 0;
+        ctx.fillStyle = '#475569';
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 1.2;
+        for (let f = 0; f < numFins; f++) {
+          const theta = pulsAngle + (f * 2 * Math.PI) / numFins;
+          const tipLen = pRad * 0.5;
+          const ftx = (pRad + tipLen) * Math.cos(theta);
+          const fty = (pRad + tipLen) * Math.sin(theta);
+
+          const baseWidth = 0.08;
+          const fb1x = pRad * Math.cos(theta - baseWidth);
+          const fb1y = pRad * Math.sin(theta - baseWidth);
+          const fb2x = pRad * Math.cos(theta + baseWidth);
+          const fb2y = pRad * Math.sin(theta + baseWidth);
+
+          ctx.beginPath();
+          ctx.moveTo(toCanvasX(fb1x), toCanvasY(fb1y));
+          ctx.lineTo(toCanvasX(ftx), toCanvasY(fty));
+          ctx.lineTo(toCanvasX(fb2x), toCanvasY(fb2y));
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+
+      // 3. Draw Cloth Fabric Meshes (Semi-transparent sheet envelopes)
+      for (let c = 0; c < numSheets; c++) {
+        const offset = c * clothSize;
+        if (offset + clothSize > particles.length) continue;
+
+        for (let row = 0; row < gridRows - 1; row++) {
+          for (let col = 0; col < gridCols - 1; col++) {
+            const iA = offset + row * gridCols + col;
+            const iB = offset + row * gridCols + (col + 1);
+            const iC = offset + (row + 1) * gridCols + (col + 1);
+            const iD = offset + (row + 1) * gridCols + col;
+
+            const pA = particles[iA];
+            const pB = particles[iB];
+            const pC = particles[iC];
+            const pD = particles[iD];
+
+            if (pA && pB && pC && pD && !isNaN(pA.x) && !isNaN(pA.y) && !isNaN(pB.x) && !isNaN(pB.y) && !isNaN(pC.x) && !isNaN(pC.y) && !isNaN(pD.x) && !isNaN(pD.y)) {
+              ctx.beginPath();
+              ctx.moveTo(toCanvasX(pA.x), toCanvasY(pA.y));
+              ctx.lineTo(toCanvasX(pB.x), toCanvasY(pB.y));
+              ctx.lineTo(toCanvasX(pC.x), toCanvasY(pC.y));
+              ctx.lineTo(toCanvasX(pD.x), toCanvasY(pD.y));
+              ctx.closePath();
+              
+              const hue = (c * 137.5 + 200) % 360;
+              ctx.fillStyle = `hsla(${hue}, 75%, 65%, 0.4)`;
+              ctx.fill();
+            }
+          }
+        }
+      }
+
+      // 4. Draw Bond Fabric Mesh (Strain Stress-hotspots overlay)
+      ctx.lineWidth = 1.8;
+      bonds.forEach((bond: any) => {
+        const idx1 = bond.i1 !== undefined ? bond.i1 : bond.p1;
+        const idx2 = bond.i2 !== undefined ? bond.i2 : bond.p2;
+        const L0 = bond.L0 !== undefined ? bond.L0 : bond.restLength;
+        const p1 = particles[idx1];
+        const p2 = particles[idx2];
+        if (!p1 || !p2 || isNaN(p1.x) || isNaN(p1.y) || isNaN(p2.x) || isNaN(p2.y)) return;
+
+        const x1 = toCanvasX(p1.x);
+        const y1 = toCanvasY(p1.y);
+        const x2 = toCanvasX(p2.x);
+        const y2 = toCanvasY(p2.y);
+
+        const currentL = Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+        const strain = Math.abs(currentL - L0) / (L0 || 1e-5);
+        
+        const t = Math.min(1.0, strain * 4.0); 
+        ctx.strokeStyle = `rgba(${Math.floor(40 + t * 215)}, ${Math.floor(200 - t * 150)}, ${Math.floor(100 - t * 50)}, 0.8)`;
+
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      });
+
+      // 5. Draw Cloth Particles (Mesh Nodes)
+      const pRadius = currentState.radius || 0.05;
+      const drawRad = toCanvasLength(pRadius) * 0.7;
+
+      particles.forEach((p: any) => {
+        if (!p || isNaN(p.x) || isNaN(p.y)) return;
+        const px = toCanvasX(p.x);
+        const py = toCanvasY(p.y);
+        
+        const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+        const hue = Math.max(0, Math.min(240, 240 - (speed / 1.5) * 240));
+        
+        const radGrad = ctx.createRadialGradient(
+          px - drawRad / 3, py - drawRad / 3, drawRad * 0.1,
+          px, py, drawRad
+        );
+        radGrad.addColorStop(0, `hsl(${hue}, 100%, 75%)`);
+        radGrad.addColorStop(0.4, `hsl(${hue}, 90%, 50%)`);
+        radGrad.addColorStop(1, `hsl(${hue}, 100%, 25%)`);
+
+        ctx.fillStyle = radGrad;
+        ctx.beginPath();
+        ctx.arc(px, py, drawRad, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.beginPath();
+        ctx.arc(px - drawRad/3, py - drawRad/3, drawRad * 0.2, 0, 2 * Math.PI);
+        ctx.fill();
+
+        if (speed > 0.1) {
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(px + (p.vx / speed) * (drawRad * 1.5), py - (p.vy / speed) * (drawRad * 1.5));
+          ctx.stroke();
+        }
+      });
+
+      // 6. Draw Glass Door Rim
+      const rimRad = toCanvasLength(R_d + 0.05);
+      const doorGrad = ctx.createRadialGradient(cx, cy, rimRad * 0.85, cx, cy, rimRad);
+      doorGrad.addColorStop(0, 'rgba(15, 23, 42, 0)');
+      doorGrad.addColorStop(0.8, 'rgba(148, 163, 184, 0.15)');
+      doorGrad.addColorStop(1, 'rgba(148, 163, 184, 0.4)');
+      
+      ctx.fillStyle = doorGrad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rimRad, 0, 2 * Math.PI);
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rimRad * 0.9, Math.PI * 1.25, Math.PI * 1.75);
+      ctx.stroke();
+
+      // 7. HUD Telemetry Text
+      ctx.fillStyle = '#0ea5e9';
+      ctx.font = 'bold 7px monospace';
+      ctx.textAlign = 'left';
+      
+      const rpmVal = Math.round((currentState.drum_angle ? (drumAngle * 60) / (2 * Math.PI * (now * 0.001)) : 45)); 
+      ctx.fillText(`RPM: ${rpmVal || 45}`, 8, 14);
+      ctx.fillText(`SHEETS: ${numSheets} (${gridRows}x${gridCols})`, 8, 24);
+      ctx.fillText(`PARTICLES: ${particles.length}`, 8, 34);
+
+      let totalKE = 0;
+      particles.forEach((p: any) => {
+        const mass = (currentState.clothes_weight ? currentState.clothes_weight / particles.length : 0.1);
+        totalKE += 0.5 * mass * (p.vx * p.vx + p.vy * p.vy);
+      });
+      ctx.fillText(`KE: ${totalKE.toFixed(3)} J`, 8, H - 8);
+
+      const cleanVal = currentState.cleanliness ?? 0;
+      const barW = 60;
+      const barH = 4;
+      const barX = W - barW - 8;
+      const barY = H - barH - 8;
+
+      ctx.fillStyle = 'rgba(30, 41, 59, 0.5)';
+      ctx.fillRect(barX, barY, barW, barH);
+      ctx.fillStyle = '#10b981';
+      ctx.fillRect(barX, barY, barW * (cleanVal / 100), barH);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.strokeRect(barX, barY, barW, barH);
+      
+      ctx.fillStyle = '#10b981';
+      ctx.font = 'bold 7px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(`CLEAN: ${cleanVal.toFixed(1)}%`, W - 8, H - 14);
+
+      animationFrameId = requestAnimationFrame(draw);
+    };
+
+    animationFrameId = requestAnimationFrame(draw);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={190}
+      height={190}
+      className="rounded-lg border border-white/10 shadow-inner bg-[#020617]"
+    />
+  );
+};
+
+const HarmonicAnalyzerCanvas: React.FC<{ state: any }> = ({ state }) => {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const stateRef = React.useRef(state);
+
+  React.useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let animId: number;
+
+    const draw = () => {
+      const s = stateRef.current;
+      const W = canvas.width;
+      const H = canvas.height;
+      const now = performance.now();
+
+      // Background
+      ctx.fillStyle = '#070d1a';
+      ctx.fillRect(0, 0, W, H);
+
+      // Grid lines (oscilloscope style)
+      ctx.strokeStyle = 'rgba(14, 165, 233, 0.08)';
+      ctx.lineWidth = 1;
+      for (let gx = 0; gx <= W; gx += W / 6) {
+        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke();
+      }
+      for (let gy = 0; gy <= H; gy += H / 4) {
+        ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
+      }
+
+      const history: number[] = (s?.history || []).map((v: any) => (
+        typeof v === 'number' ? v : 0
+      ));
+
+      const midY = H * 0.45;
+      const maxAmp = Math.max(...history, 0.001);
+      const scale = Math.min((H * 0.38) / maxAmp, 800);
+
+      // Zero baseline
+      ctx.strokeStyle = 'rgba(14, 165, 233, 0.25)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(W, midY); ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (history.length > 1) {
+        // Fill under waveform
+        const grad = ctx.createLinearGradient(0, midY - scale * maxAmp, 0, midY + scale * maxAmp);
+        grad.addColorStop(0, 'rgba(239, 68, 68, 0.25)');
+        grad.addColorStop(0.5, 'rgba(251, 146, 60, 0.12)');
+        grad.addColorStop(1, 'rgba(239, 68, 68, 0.05)');
+
+        ctx.beginPath();
+        ctx.moveTo(0, midY);
+        history.forEach((val, i) => {
+          const x = (i / (history.length - 1)) * W;
+          const y = midY - val * scale;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.lineTo(W, midY);
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Waveform line
+        const lineGrad = ctx.createLinearGradient(0, 0, W, 0);
+        lineGrad.addColorStop(0, '#f97316');
+        lineGrad.addColorStop(0.5, '#ef4444');
+        lineGrad.addColorStop(1, '#f97316');
+        ctx.strokeStyle = lineGrad;
+        ctx.lineWidth = 2;
+        ctx.shadowColor = '#ef4444';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        history.forEach((val, i) => {
+          const x = (i / (history.length - 1)) * W;
+          const y = midY - val * scale;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Scan line (moving cursor)
+        const scanX = ((now * 0.03) % W);
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.6)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(scanX, 0); ctx.lineTo(scanX, H * 0.85); ctx.stroke();
+      } else {
+        ctx.fillStyle = '#334155';
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('AWAITING VIBRATION DATA', W / 2, midY);
+      }
+
+      // Suspension displacement indicator (bottom panel)
+      const panelY = H * 0.73;
+      const panelH = H * 0.24;
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
+      ctx.fillRect(0, panelY, W, panelH);
+      ctx.strokeStyle = 'rgba(14, 165, 233, 0.15)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0, panelY, W, panelH);
+
+      const dx = isNaN(s?.dx) ? 0 : Math.max(-0.02, Math.min(0.02, s?.dx ?? 0));
+      const dy = isNaN(s?.dy) ? 0 : Math.max(-0.02, Math.min(0.02, s?.dy ?? 0));
+      const dispScale = 1200;
+      const drumCX = W / 2 + dx * dispScale;
+      const drumCY = panelY + panelH / 2 - dy * dispScale;
+      const drumR = Math.min(panelH * 0.32, 18);
+
+      // Housing box
+      ctx.strokeStyle = 'rgba(100, 116, 139, 0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(W * 0.1, panelY + 4, W * 0.8, panelH - 8);
+
+      // Suspension springs (4 corners)
+      const corners = [
+        [W * 0.1, panelY + 4], [W * 0.9, panelY + 4],
+        [W * 0.1, panelY + panelH - 4], [W * 0.9, panelY + panelH - 4]
+      ];
+      ctx.strokeStyle = 'rgba(14, 165, 233, 0.5)';
+      ctx.lineWidth = 1;
+      corners.forEach(([cx, cy]) => {
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(drumCX, drumCY);
+        ctx.stroke();
+      });
+
+      // Drum body (vibrating mass)
+      const vibGrad = ctx.createRadialGradient(drumCX - drumR * 0.3, drumCY - drumR * 0.3, 1, drumCX, drumCY, drumR);
+      vibGrad.addColorStop(0, 'rgba(251, 146, 60, 0.9)');
+      vibGrad.addColorStop(1, 'rgba(239, 68, 68, 0.5)');
+      ctx.fillStyle = vibGrad;
+      ctx.beginPath();
+      ctx.arc(drumCX, drumCY, drumR, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.strokeStyle = '#f97316';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // HUD labels
+      const vibAmp = history.length ? history[history.length - 1] : 0;
+      const freq = isNaN(s?.freq) ? 0 : (s?.freq ?? 0);
+      const ex = Array.isArray(s?.eccentricity) ? (s.eccentricity[0] ?? 0) : 0;
+      const ey = Array.isArray(s?.eccentricity) ? (s.eccentricity[1] ?? 0) : 0;
+
+      ctx.fillStyle = '#ef4444';
+      ctx.font = 'bold 7px monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText('HARMONIC ANALYZER', 6, 5);
+
+      ctx.fillStyle = '#f97316';
+      ctx.fillText(`AMP: ${vibAmp.toFixed(4)} m`, 6, 15);
+      ctx.fillText(`FREQ: ${freq.toFixed(2)} Hz`, 6, 25);
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText(`Ex: ${ex.toFixed(3)}m`, W - 6, 5);
+      ctx.fillText(`Ey: ${ey.toFixed(3)}m`, W - 6, 15);
+
+      animId = requestAnimationFrame(draw);
+    };
+
+    animId = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(animId);
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={190}
+      height={190}
+      className="rounded-lg border border-white/10 shadow-inner bg-[#070d1a]"
+    />
+  );
+};
+
 export const getColor = (type: string) => {
+  if (['DEM_WASHING_MACHINE_TWIN', 'DEM_DRUM', 'DEM_PARTICLE_SYSTEM', 'DEM_HERTZ_CONTACT', 'DEM_BOND_FABRIC', 'DEM_FLUID_COUPLING', 'CFD_SPH_WATER_SOLVER', 'DEM_CFD_COSIMULATION_INTERFACE', 'FABRIC_HARMONIC_ANALYZER'].includes(type)) return '#0ea5e9'; // DEM & Particles (Sky Blue)
+  if (['CFD_DEM_SURROGATE_LEARNER'].includes(type)) return '#c9a86c'; // Gold/Copper
   if (['Constant', 'WaveformGen', 'Clock', 'Step', 'Scope', 'DELAY', 'MUX', 'DEMUX', 'TERMINATOR', 'DATA_TYPE_CONVERSION'].includes(type)) return '#007acc'; // Signal (Blue)
-  if (['SUM_JUNCTION', 'VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow', 'UnaryNeg', 'Abs', 'SumElements', 'Mean', 'Max', 'MatrixMul', 'Transpose', 'Inverse', 'Determinant', 'GAIN', 'PRODUCT', 'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'TRANSFER_FUNCTION', 'STATE_SPACE', 'ZERO_POLE_GAIN', 'DISCRETE_TRANSFER_FUNCTION', 'MatrixConcat', 'MatrixDiag', 'IdentityMatrix', 'SubMatrix', 'MatrixSolve'].includes(type)) return '#28a745'; // Math (Green)
+  if (['SUM_JUNCTION', 'VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow', 'UnaryNeg', 'Abs', 'SumElements', 'Mean', 'Max', 'MatrixMul', 'Transpose', 'Inverse', 'Determinant', 'GAIN', 'PRODUCT', 'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'ASIN', 'ACOS', 'ATAN', 'ACOT', 'ASEC', 'ACOSEC', 'SINH', 'COSH', 'TANH', 'COTH', 'SECH', 'COSECH', 'ASINH', 'ACOSH', 'ATANH', 'ACOTH', 'ASECH', 'ACOSECH', 'TRANSFER_FUNCTION', 'STATE_SPACE', 'ZERO_POLE_GAIN', 'DISCRETE_TRANSFER_FUNCTION', 'MatrixConcat', 'MatrixDiag', 'IdentityMatrix', 'SubMatrix', 'MatrixSolve'].includes(type)) return '#28a745'; // Math (Green)
   if (['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR', 'SWITCH', 'IF_ELSE', 'SWITCH_CASE'].includes(type)) return '#6f42c1'; // Logic (Purple)
   if (['BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight'].includes(type)) return '#563d7c'; // Bitwise (Indigo)
   if (['DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Integrator', 'INTEGRATOR_CONTINUOUS', 'INTEGRATOR_DISCRETE', 'PID_CONTROLLER', 'PID_BASIC', 'FUZZY_PID_CONTROLLER'].includes(type)) return '#d73a49'; // Sequential/Control (Red)
@@ -736,10 +1346,28 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       case 'EXTENDED_KALMAN_FILTER': return <Eye size={12} />;
       case 'SIN':
       case 'COS':
-      case 'TAN': return <TrendingUp size={12} />;
+      case 'TAN':
       case 'COT':
       case 'SEC':
-      case 'COSEC': return <TrendingUp size={12} />;
+      case 'COSEC':
+      case 'ASIN':
+      case 'ACOS':
+      case 'ATAN':
+      case 'ACOT':
+      case 'ASEC':
+      case 'ACOSEC':
+      case 'SINH':
+      case 'COSH':
+      case 'TANH':
+      case 'COTH':
+      case 'SECH':
+      case 'COSECH':
+      case 'ASINH':
+      case 'ACOSH':
+      case 'ATANH':
+      case 'ACOTH':
+      case 'ASECH':
+      case 'ACOSECH': return <TrendingUp size={12} />;
       case 'Subsystem':
       case 'DOE_MODEL': return <Layers size={12} />;
       default: return <Box size={12} />;
@@ -773,6 +1401,9 @@ export const XBlockNode = ({ data, id, selected }: any) => {
                        data.selectedHandle.nodeId === id && 
                        data.selectedHandle.handleId === port.id;
 
+    const offsetSize = isSelected ? 7 : 5;
+    const calcStyle = `calc(50% - ${offsetSize}px)`;
+
     return (
       <div 
         key={port.id} 
@@ -800,10 +1431,10 @@ export const XBlockNode = ({ data, id, selected }: any) => {
             zIndex: 15,
             boxShadow: isSelected ? '0 0 12px #c9a86c, 0 0 6px #c9a86c' : 'none',
             transition: 'all 0.3s ease',
-            ...(port.position === 'left' ? { left: isSelected ? -20 : -18, position: 'absolute', top: `calc(50% - ${isSelected ? 7 : 5}px)` } : {}),
-            ...(port.position === 'right' ? { right: isSelected ? -20 : -18, position: 'absolute', top: `calc(50% - ${isSelected ? 7 : 5}px)` } : {}),
-            ...(port.position === 'top' ? { top: `calc(50% - ${isSelected ? 7 : 5}px)`, left: `calc(50% - ${isSelected ? 7 : 5}px)`, position: 'absolute' } : {}),
-            ...(port.position === 'bottom' ? { top: `calc(50% - ${isSelected ? 7 : 5}px)`, left: `calc(50% - ${isSelected ? 7 : 5}px)`, position: 'absolute' } : {}),
+            ...(port.position === 'left' ? { left: isSelected ? -20 : -18, position: 'absolute', top: calcStyle } : {}),
+            ...(port.position === 'right' ? { right: isSelected ? -20 : -18, position: 'absolute', top: calcStyle } : {}),
+            ...(port.position === 'top' ? { top: calcStyle, left: calcStyle, position: 'absolute' } : {}),
+            ...(port.position === 'bottom' ? { top: calcStyle, left: calcStyle, position: 'absolute' } : {}),
           }}
           onClick={(e) => {
             e.stopPropagation();
@@ -906,6 +1537,42 @@ export const XBlockNode = ({ data, id, selected }: any) => {
         <div className="flex flex-col items-center justify-center py-1 min-w-[40px] flex-[4] z-10">
           {['ROBOT_VACUUM_DIGITAL_TWIN', 'ROBOT_VACUUM_ENVIRONMENT', 'ROBOT_VACUUM_VISUALIZATION'].includes(data.type) ? (
             <RobotTwinCanvas state={data.state} />
+          ) : data.type === 'FABRIC_HARMONIC_ANALYZER' ? (
+            <HarmonicAnalyzerCanvas state={data.state} />
+          ) : ['DEM_WASHING_MACHINE_TWIN', 'DEM_DRUM', 'DEM_PARTICLE_SYSTEM', 'DEM_HERTZ_CONTACT', 'DEM_BOND_FABRIC', 'DEM_FLUID_COUPLING', 'CFD_SPH_WATER_SOLVER', 'DEM_CFD_COSIMULATION_INTERFACE'].includes(data.type) ? (
+            <WashingMachineDEMCanvas state={data.state} />
+          ) : data.type === 'CFD_DEM_SURROGATE_LEARNER' ? (
+            (() => {
+              const pattern = data.state?.motion_pattern ?? 0;
+              const patternStr = pattern === 2 ? 'Centrifuging' : pattern === 1 ? 'Cataracting' : 'Cascading';
+              
+              const rotDir = data.state?.rotation_direction ?? 0;
+              const rotDirStr = rotDir === 2 ? 'Alternating' : rotDir === 1 ? 'Counter-CW' : 'Clockwise';
+
+              return (
+                <div className="flex flex-col items-center text-center p-1.5 min-w-[130px]">
+                   <div className="p-2 rounded-2xl bg-[#c9a86c]/10 border border-[#c9a86c]/20 mb-1.5 shadow-[0_0_12px_rgba(201,168,108,0.1)]">
+                      <GraduationCap size={20} className="text-[#c9a86c] drop-shadow-[0_0_6px_rgba(201,168,108,0.4)]" />
+                   </div>
+                   <span className="text-[7px] font-black text-[#c9a86c] uppercase tracking-[0.2em] mb-1">
+                     SURROGATE OPTIMIZER
+                   </span>
+                   <div className="text-[6.5px] font-mono text-slate-400 mt-1 space-y-0.5 text-left w-full px-1">
+                     <div className="flex justify-between"><span>Vib Err:</span><span className="text-slate-300 font-bold">{(data.state?.vibration_error ?? 0).toFixed(4)}</span></div>
+                     <div className="flex justify-between"><span>Clean Err:</span><span className="text-slate-300 font-bold">{(data.state?.cleanliness_error ?? 0).toFixed(1)}%</span></div>
+                     <div className="h-[1px] bg-slate-800 my-1 w-full" />
+                     <div className="text-[7px] text-[#c9a86c] font-black uppercase tracking-wider mb-0.5">Optimal Design</div>
+                     <div className="flex justify-between text-emerald-400 font-bold"><span>Opt RPM:</span><span>{Math.round(data.state?.optimal_rpm ?? 45)}</span></div>
+                     <div className="flex justify-between text-emerald-400"><span>Opt Rad:</span><span>{(data.state?.optimal_drum_radius ?? 0.8).toFixed(2)}m</span></div>
+                     <div className="flex justify-between text-emerald-400"><span>Opt Fill:</span><span>{Math.round((data.state?.optimal_fill_level ?? 0.35) * 100)}%</span></div>
+                     <div className="flex justify-between text-emerald-400"><span>Opt Lifters:</span><span>{Math.round(data.state?.optimal_lifter_count ?? 3)}</span></div>
+                     <div className="h-[1px] bg-slate-800 my-1 w-full" />
+                     <div className="flex justify-between text-sky-400"><span>Motion:</span><span className="font-bold">{patternStr}</span></div>
+                     <div className="flex justify-between text-sky-400"><span>Rotation:</span><span className="font-bold">{rotDirStr}</span></div>
+                   </div>
+                </div>
+              );
+            })()
           ) : data.type === 'Scope' ? (
             <div className="w-full flex-1 min-h-[90px] bg-slate-950 rounded-xl border border-slate-800 p-2 shadow-inner group/scope overflow-hidden relative">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(16,185,129,0.1),transparent)]" />

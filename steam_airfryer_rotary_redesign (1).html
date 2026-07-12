@@ -162,7 +162,6 @@
   .led-row { display: flex; gap: 6px; align-items: center; justify-content: center; }
   .led { width: 6px; height: 6px; border-radius: 50%; background: var(--surface3); border: 1px solid var(--border); }
   .led.on { background: var(--accent3); border-color: var(--accent3); box-shadow: 0 0 6px rgba(61,232,138,0.6); }
-  .led.steam { }
   .led.steam.on { background: var(--accent2); border-color: var(--accent2); box-shadow: 0 0 6px rgba(77,184,255,0.6); }
   .led.warn.on { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 6px var(--glow); }
 
@@ -633,14 +632,34 @@ let S = {
 
 // ===== DOM =====
 const $ = id => document.getElementById(id);
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function buildModeIcons(){
   const wrap = $('mode-icons');
-  wrap.innerHTML = '';
+  wrap.textContent = '';
   MODES.forEach((m, i) => {
     const d = document.createElement('div');
     d.className = 'mode-icon';
     d.id = 'mi-'+i;
-    d.innerHTML = `<span class="emoji">${m.emoji}</span><span class="lbl">${m.name.split(' ')[0]}</span>`;
+    
+    const sEmoji = document.createElement('span');
+    sEmoji.className = 'emoji';
+    sEmoji.textContent = m.emoji;
+    
+    const sLbl = document.createElement('span');
+    sLbl.className = 'lbl';
+    sLbl.textContent = m.name.split(' ')[0];
+    
+    d.appendChild(sEmoji);
+    d.appendChild(sLbl);
     d.onclick = () => { if(!S.power) return; selectModeByIndex(i); };
     wrap.appendChild(d);
   });
@@ -654,12 +673,28 @@ function log(action, detail=''){
   const ts = `${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}.${String(Math.floor(now.getMilliseconds()/100))}`;
   const entry = document.createElement('div');
   entry.className = 'log-entry';
-  entry.innerHTML = `<span class="log-time">${ts}</span><span class="log-action">${action}</span><span class="log-detail">${detail}</span>`;
+  
+  const sTime = document.createElement('span');
+  sTime.className = 'log-time';
+  sTime.textContent = ts;
+  
+  const sAction = document.createElement('span');
+  sAction.className = 'log-action';
+  sAction.textContent = action;
+  
+  const sDetail = document.createElement('span');
+  sDetail.className = 'log-detail';
+  sDetail.textContent = detail;
+  
+  entry.appendChild(sTime);
+  entry.appendChild(sAction);
+  entry.appendChild(sDetail);
+  
   el.prepend(entry);
   while(el.children.length > 50) el.removeChild(el.lastChild);
   $('db-action').textContent = action;
 }
-function clearLog(){ $('event-log').innerHTML = ''; }
+function clearLog(){ $('event-log').textContent = ''; }
 
 // ===== UPDATE DISPLAY =====
 function fmt(min){ return `${String(Math.floor(min)).padStart(2,'0')}:${String((min%1)*60).padStart(2,'0')}`; }
