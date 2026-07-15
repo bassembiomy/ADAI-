@@ -4381,7 +4381,7 @@ const TickRateInput = ({ value, onChange }: { value: number, onChange: (val: num
   }, [value]);
 
   const commit = () => {
-    const num = parseInt(normalizeNumerals(localValue));
+    const num = parseFloat(normalizeNumerals(localValue));
     if (!isNaN(num) && num > 0) {
       onChange(num);
     } else {
@@ -12696,6 +12696,24 @@ const ADIA = () => {
         return;
       }
 
+      // Run Simulation (Ctrl + R)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyR') {
+        e.preventDefault();
+        startSimulation();
+      }
+
+      // Pause Simulation (Ctrl + P)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyP') {
+        e.preventDefault();
+        pauseSimulation();
+      }
+
+      // Stop Simulation (Ctrl + O)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyO') {
+        e.preventDefault();
+        resetSimulation();
+      }
+
       if (e.code === 'Space' && !e.repeat) {
         isSpacePressed.current = true;
         document.body.style.cursor = 'grab';
@@ -12935,7 +12953,7 @@ const ADIA = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedIds, view, deleteState, deleteJunction, deleteTransition, deleteBlock, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, addToHistory, undo, redo, addError, handleExportProject, diagramMode]);
+  }, [selectedIds, view, deleteState, deleteJunction, deleteTransition, deleteBlock, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, addToHistory, undo, redo, addError, handleExportProject, diagramMode, startSimulation, pauseSimulation, resetSimulation]);
 
   // CODE GENERATION (FULLY FUNCTIONAL WITH USER FEEDBACK)
   const generateCode = useCallback(async () => {

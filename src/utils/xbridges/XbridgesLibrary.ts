@@ -338,6 +338,7 @@ export const XBRIDGES_CATEGORIES = [
   {
     name: 'Basic Filters',
     blocks: [
+      { type: 'DISCRETE_IMPULSE', label: 'Discrete Impulse', icon: 'zap' },
       { type: 'LOW_PASS_FILTER', label: 'Low-Pass Filter', icon: 'filter' },
       { type: 'HIGH_PASS_FILTER', label: 'High-Pass Filter', icon: 'filter' },
       { type: 'MOVING_AVERAGE', label: 'Moving Average', icon: 'filter' },

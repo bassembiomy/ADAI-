@@ -2760,7 +2760,29 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      if (isInput) return;
+
+      // Run Simulation (Ctrl + R)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyR') {
+        e.preventDefault();
+        setIsSimulating(true);
+        setIsPaused(false);
+      }
+
+      // Pause Simulation (Ctrl + P)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyP') {
+        e.preventDefault();
+        setIsPaused(true);
+      }
+
+      // Stop Simulation (Ctrl + O)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyO') {
+        e.preventDefault();
+        setIsSimulating(false);
+        setIsPaused(false);
+      }
 
       // Undo (Ctrl + Z)
       if (e.ctrlKey && e.key === 'z') {

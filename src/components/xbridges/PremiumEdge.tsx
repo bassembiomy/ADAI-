@@ -180,12 +180,12 @@ export const PremiumEdge = ({
         id={`${id}-glow`}
         d={edgePath}
         fill="none"
-        stroke={selected ? '#c9a86c' : color}
-        strokeWidth={selected ? 6 : 4}
-        strokeOpacity={0.2}
+        stroke={selected ? '#ff9100' : color}
+        strokeWidth={selected ? 10 : 4}
+        strokeOpacity={selected ? 0.6 : 0.2}
         className="transition-all duration-300 pointer-events-none"
         style={{
-          filter: `drop-shadow(0 0 4px ${selected ? '#c9a86c' : color})`
+          filter: `drop-shadow(0 0 6px ${selected ? '#ff9100' : color})`
         }}
       />
       {/* Main Connection Path */}
@@ -194,8 +194,8 @@ export const PremiumEdge = ({
         className="react-flow__edge-path transition-all duration-300"
         d={edgePath}
         fill="none"
-        stroke={selected ? '#c9a86c' : color}
-        strokeWidth={selected ? 3.5 : 2.5}
+        stroke={selected ? '#ff9100' : color}
+        strokeWidth={selected ? 4.5 : 2.5}
         markerEnd={markerEnd}
         style={style}
       />
@@ -210,7 +210,7 @@ export const PremiumEdge = ({
       />
       {/* Moving Signal Particle / Pulse */}
       {isSimulating && (
-        <circle r="3.5" fill="#ffffff" className="edge-pulse-dot" style={{ filter: `drop-shadow(0 0 3px ${selected ? '#c9a86c' : color})` }}>
+        <circle r={selected ? 4.5 : 3.5} fill="#ffffff" className="edge-pulse-dot" style={{ filter: `drop-shadow(0 0 4px ${selected ? '#ff9100' : color})` }}>
           <animateMotion 
             dur="2s" 
             repeatCount="indefinite" 
@@ -237,13 +237,13 @@ export const PremiumEdge = ({
             <circle
               cx={v.x}
               cy={v.y}
-              r={5.5}
+              r={6.5}
               fill="#ffffff"
-              stroke="#c9a86c"
-              strokeWidth={2}
-              className="transition-all duration-200 group-hover:scale-125 group-hover:fill-[#c9a86c] group-hover:stroke-white pointer-events-none"
+              stroke="#ff9100"
+              strokeWidth={2.5}
+              className="transition-all duration-200 group-hover:scale-125 group-hover:fill-[#ff9100] group-hover:stroke-white pointer-events-none"
               style={{
-                filter: 'drop-shadow(0 0 3px rgba(201,168,108,0.5))'
+                filter: 'drop-shadow(0 0 4px rgba(255,145,0,0.6))'
               }}
             />
           </g>

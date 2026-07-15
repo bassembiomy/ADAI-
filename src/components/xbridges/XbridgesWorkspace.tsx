@@ -19,7 +19,7 @@ import {
   Play, Pause, Square, Save, Trash2, Box, Network, MousePointer2, Settings2, ChevronDown, ChevronRight, Search, Triangle, Layers,
   Activity, Plus, Minus, X, Divide, ChevronUp, MinusCircle, Maximize, Maximize2, Minimize2, Sigma, BarChart, ArrowUp, Grid, RotateCw, RefreshCcw,
   Hash, TrendingUp, Monitor, Download, LogIn, LogOut, ChevronLeft, Zap, Settings, ZapOff, Cpu, Wind, Filter, Eye,
-  GraduationCap, ArrowRightCircle, ArrowLeftCircle, Cloud, CheckCircle2, AlertCircle
+  GraduationCap, ArrowRightCircle, ArrowLeftCircle, Cloud, CheckCircle2, AlertCircle, FileText
 } from 'lucide-react';
 import { XBRIDGES_CATEGORIES, BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 
@@ -63,6 +63,7 @@ const LucideIconMap: Record<string, React.ComponentType<any>> = {
   'arrow-left-circle': ArrowLeftCircle,
   'network': Network,
   'integral': TrendingUp,
+  'file-text': FileText,
 };
 
 const renderLibraryIcon = (iconName: string, size = 14, className?: string) => {
@@ -1511,15 +1512,25 @@ export const XbridgesWorkspace: React.FC<{
 
       const tick = () => {
         if (engineRef.current && !isPausedRef.current) {
-          // Sync SM Variables to Inports (Data Connectivity)
-          nodes.forEach(node => {
-            if (node.data.type === 'Inport' && node.data.params?.smVarId && availableVariables) {
-              const smVar = availableVariables.find(v => v.id === node.data.params.smVarId);
-              if (smVar) {
-                const numericVal = Number(smVar.currentValue);
-                engineRef.current!.setSignalValue(node.id, 'out', numericVal);
-                const block = engineRef.current!['blockMap'].get(node.id);
-                if (block && block.params) block.params.value = numericVal;
+          // Sync UI node parameters and SM Variables to engine block parameters (dynamic tuning)
+          nodesRef.current.forEach(node => {
+            const block = engineRef.current!['blockMap'].get(node.id);
+            if (block) {
+              // 1. Sync parameter tuning from UI properties panel (e.g. carrierType, frequency)
+              if (block.params && node.data.params) {
+                Object.keys(node.data.params).forEach(k => {
+                  block.params[k] = node.data.params[k];
+                });
+              }
+
+              // 2. Sync SM Variables to Inports (Data Connectivity)
+              if (node.data.type === 'Inport' && node.data.params?.smVarId && availableVariables) {
+                const smVar = availableVariables.find(v => v.id === node.data.params.smVarId);
+                if (smVar) {
+                  const numericVal = Number(smVar.currentValue);
+                  engineRef.current!.setSignalValue(node.id, 'out', numericVal);
+                  if (block.params) block.params.value = numericVal;
+                }
               }
             }
           });
@@ -1644,6 +1655,55 @@ export const XbridgesWorkspace: React.FC<{
       style: { stroke: '#4caf50', strokeWidth: 3 } // FR-2.2 Continuous wire
     }, eds));
 
+    // Auto-resize DEMUX outputs on connection if possible
+    if (params.target && params.targetHandle === 'u') {
+      setNodes((nds) => {
+        const targetNode = nds.find(n => n.id === params.target);
+        if (targetNode && targetNode.data?.type === 'DEMUX') {
+          const sourceNode = nds.find(n => n.id === params.source);
+          const sourcePort = sourceNode?.data?.outputs?.find((p: any) => p.id === params.sourceHandle);
+          if (sourcePort) {
+            let vectorLength = 2;
+            if (sourcePort.dimensions && sourcePort.dimensions[0] > 0) {
+              vectorLength = sourcePort.dimensions[0];
+            } else if (Array.isArray(sourcePort.value)) {
+              vectorLength = sourcePort.value.length;
+            } else if (sourceNode?.data?.type === 'MUX') {
+              vectorLength = sourceNode?.data?.inputs?.length || sourceNode?.data?.params?.numInputs || 2;
+            } else if (sourcePort.type === 'vector' || sourcePort.type === 'matrix') {
+              if (Array.isArray(sourcePort.value)) {
+                vectorLength = sourcePort.value.length;
+              }
+            }
+
+            if (vectorLength > 0 && vectorLength !== targetNode.data.params?.numOutputs) {
+              return nds.map(n => {
+                if (n.id === targetNode.id) {
+                  return {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      params: { ...n.data.params, numOutputs: vectorLength },
+                      outputs: Array.from({ length: vectorLength }, (_, i) => ({
+                        id: `out${i+1}`,
+                        name: `y${i+1}`,
+                        type: 'auto' as const,
+                        direction: 'output' as const,
+                        position: 'right' as const,
+                        value: 0
+                      }))
+                    }
+                  };
+                }
+                return n;
+              });
+            }
+          }
+        }
+        return nds;
+      });
+    }
+
     // If simulating, hot-reload the connection in the engine
     if (isSimulating && engineRef.current) {
       engineRef.current['model'].connections.push({
@@ -1652,7 +1712,7 @@ export const XbridgesWorkspace: React.FC<{
       });
       engineRef.current['compiled'] = false; // Force recompile on next step
     }
-  }, [setEdges, isSimulating, saveHistory, edgeType]);
+  }, [setEdges, setNodes, isSimulating, saveHistory, edgeType]);
 
   const onDragStart = (event: React.DragEvent, nodeType: string) => {
     event.dataTransfer.setData('application/reactflow', nodeType);
@@ -1720,6 +1780,8 @@ export const XbridgesWorkspace: React.FC<{
     }
   }, [selectedNodeId]);
 
+
+
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1732,6 +1794,26 @@ export const XbridgesWorkspace: React.FC<{
       if (e.code === 'Space' && !e.ctrlKey) {
         e.preventDefault();
         setIsSimulating(prev => !prev);
+      }
+
+      // Run Simulation (Ctrl + R)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyR') {
+        e.preventDefault();
+        setIsSimulating(true);
+        setIsPaused(false);
+      }
+
+      // Pause Simulation (Ctrl + P)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyP') {
+        e.preventDefault();
+        setIsPaused(true);
+      }
+
+      // Stop Simulation (Ctrl + O)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyO') {
+        e.preventDefault();
+        setIsSimulating(false);
+        setIsPaused(false);
       }
 
       // Deselect (Escape)
@@ -1838,13 +1920,26 @@ export const XbridgesWorkspace: React.FC<{
             newParams.cases !== oldParams.cases ||
             newParams.numCases !== oldParams.numCases ||
             newParams.numSignals !== oldParams.numSignals ||
-            newParams.numOutputs !== oldParams.numOutputs;
+            newParams.numOutputs !== oldParams.numOutputs ||
+            newParams.output_type !== oldParams.output_type ||
+            newParams.wordLength !== oldParams.wordLength ||
+            newParams.fractionLength !== oldParams.fractionLength;
 
           if (hasChanged) {
             // Re-instantiate block definition to get new ports
             const freshDef = BLOCK_LIBRARY[n.data.type](blockId, newParams);
             updatedData.inputs = freshDef.inputs;
             updatedData.outputs = freshDef.outputs;
+          }
+
+          // Sync input port default values with params if they share the same key
+          if (updatedData.inputs) {
+            updatedData.inputs = updatedData.inputs.map((inPort: any) => {
+              if (newParams[inPort.id] !== undefined) {
+                return { ...inPort, value: newParams[inPort.id] };
+              }
+              return inPort;
+            });
           }
 
           if (['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN'].includes(n.data.type)) {
@@ -2769,6 +2864,8 @@ export const XbridgesWorkspace: React.FC<{
               <XbridgesScopeWindow
                 key={scopeId}
                 block={scopeNode.data}
+                nodes={nodes}
+                edges={edges}
                 onUpdate={(newData) => updateBlock(scopeId, { params: { ...scopeNode.data.params, ...newData } })}
                 onClose={() => setOpenScopes(prev => prev.filter(id => id !== scopeId))}
               />

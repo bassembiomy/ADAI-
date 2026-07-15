@@ -2039,21 +2039,25 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     };
   },
 
-  'VectorAdd': (id) => ({
-    id, type: 'VectorAdd', params: {},
-    allowDynamicInputs: true,
-    inputs: [createPort('in1', 'A', 'input'), createPort('in2', 'B', 'input')],
-    outputs: [createPort('out', 'Out', 'output')],
-    icon: 'plus',
-    equation: 'Y = Σ(Ui)',
-    execute: (ins) => {
-      let result = ins[0];
-      for (let i = 1; i < ins.length; i++) {
-        result = VectorUtils.applyElementWise(result, ins[i], 'add');
+  'VectorAdd': (id, params) => {
+    const numInputs = params?.numInputs || 2;
+    return {
+      id, type: 'VectorAdd',
+      params: { numInputs, ...params },
+      allowDynamicInputs: true,
+      inputs: Array.from({ length: numInputs }, (_, i) => createPort(`in${i+1}`, String.fromCharCode(65 + i), 'input')),
+      outputs: [createPort('out', 'Out', 'output')],
+      icon: 'plus',
+      equation: 'Y = Σ(Ui)',
+      execute: (ins) => {
+        let result = ins[0];
+        for (let i = 1; i < ins.length; i++) {
+          result = VectorUtils.applyElementWise(result, ins[i], 'add');
+        }
+        return { outputs: [result] };
       }
-      return { outputs: [result] };
-    }
-  }),
+    };
+  },
 
   'VectorSub': (id) => ({
     id, type: 'VectorSub', params: {},
@@ -2062,21 +2066,25 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     execute: (ins) => ({ outputs: [VectorUtils.applyElementWise(ins[0], ins[1], 'subtract')] })
   }),
 
-  'VectorMul': (id) => ({
-    id, type: 'VectorMul', params: {},
-    allowDynamicInputs: true,
-    inputs: [createPort('in1', 'A', 'input'), createPort('in2', 'B', 'input')],
-    outputs: [createPort('out', 'Out', 'output')],
-    icon: 'activity',
-    equation: 'Y = Π(Ui)',
-    execute: (ins) => {
-      let result = ins[0];
-      for (let i = 1; i < ins.length; i++) {
-        result = VectorUtils.applyElementWise(result, ins[i], 'multiply');
+  'VectorMul': (id, params) => {
+    const numInputs = params?.numInputs || 2;
+    return {
+      id, type: 'VectorMul',
+      params: { numInputs, ...params },
+      allowDynamicInputs: true,
+      inputs: Array.from({ length: numInputs }, (_, i) => createPort(`in${i+1}`, String.fromCharCode(65 + i), 'input')),
+      outputs: [createPort('out', 'Out', 'output')],
+      icon: 'activity',
+      equation: 'Y = Π(Ui)',
+      execute: (ins) => {
+        let result = ins[0];
+        for (let i = 1; i < ins.length; i++) {
+          result = VectorUtils.applyElementWise(result, ins[i], 'multiply');
+        }
+        return { outputs: [result] };
       }
-      return { outputs: [result] };
-    }
-  }),
+    };
+  },
 
   'VectorDiv': (id) => ({
     id, type: 'VectorDiv', params: {},
@@ -2121,33 +2129,37 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     execute: (ins) => ({ outputs: [VectorUtils.mean(ins[0])] })
   }),
   
-  'Max': (id) => ({
-    id, type: 'Max', params: {},
-    allowDynamicInputs: true,
-    inputs: [createPort('in1', 'In1', 'input')],
-    outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins) => {
-        // If single input array, return max of array. If multiple inputs, return element-wise max.
-        if (ins.length === 1) return { outputs: [VectorUtils.max(ins[0])] };
-        
-        const elementWiseMax = (a: any, b: any): any => {
-          if (Array.isArray(a) && Array.isArray(b)) {
-            return a.map((val, i) => elementWiseMax(val, b[i]));
-          } else if (Array.isArray(a)) {
-            return a.map(val => elementWiseMax(val, b));
-          } else if (Array.isArray(b)) {
-            return b.map(val => elementWiseMax(a, val));
+  'Max': (id, params) => {
+    const numInputs = params?.numInputs || 1;
+    return {
+      id, type: 'Max',
+      params: { numInputs, ...params },
+      allowDynamicInputs: true,
+      inputs: Array.from({ length: numInputs }, (_, i) => createPort(`in${i+1}`, `In${i+1}`, 'input')),
+      outputs: [createPort('out', 'Out', 'output')],
+      execute: (ins) => {
+          // If single input array, return max of array. If multiple inputs, return element-wise max.
+          if (ins.length === 1) return { outputs: [VectorUtils.max(ins[0])] };
+          
+          const elementWiseMax = (a: any, b: any): any => {
+            if (Array.isArray(a) && Array.isArray(b)) {
+              return a.map((val, i) => elementWiseMax(val, b[i]));
+            } else if (Array.isArray(a)) {
+              return a.map(val => elementWiseMax(val, b));
+            } else if (Array.isArray(b)) {
+              return b.map(val => elementWiseMax(a, val));
+            }
+            return Math.max(Number(a) || 0, Number(b) || 0);
+          };
+          
+          let result = ins[0];
+          for (let i = 1; i < ins.length; i++) {
+             result = elementWiseMax(result, ins[i]);
           }
-          return Math.max(Number(a) || 0, Number(b) || 0);
-        };
-        
-        let result = ins[0];
-        for (let i = 1; i < ins.length; i++) {
-           result = elementWiseMax(result, ins[i]);
-        }
-        return { outputs: [result] };
-    }
-  }),
+          return { outputs: [result] };
+      }
+    };
+  },
 
   // --- Linear Algebra ---
   'MatrixMul': (id) => ({
@@ -2178,22 +2190,25 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       execute: (ins) => ({ outputs: [VectorUtils.determinant(ins[0])] })
   }),
 
-  'MatrixConcat': (id, params) => ({
-    id, type: 'MatrixConcat',
-    params: { axis: params.axis ?? 0 },
-    allowDynamicInputs: true,
-    inputs: [createPort('in1', 'In1', 'input'), createPort('in2', 'In2', 'input')],
-    outputs: [createPort('out', 'Out', 'output')],
-    execute: (ins, p) => {
-      const axis = Number(p.axis ?? 0);
-      if (ins.length === 0) return { outputs: [[]] };
-      let result = ins[0];
-      for (let i = 1; i < ins.length; i++) {
-        result = VectorUtils.concat(result, ins[i], axis);
+  'MatrixConcat': (id, params) => {
+    const numInputs = params?.numInputs || 2;
+    return {
+      id, type: 'MatrixConcat',
+      params: { axis: params.axis ?? 0, numInputs, ...params },
+      allowDynamicInputs: true,
+      inputs: Array.from({ length: numInputs }, (_, i) => createPort(`in${i+1}`, `In${i+1}`, 'input')),
+      outputs: [createPort('out', 'Out', 'output')],
+      execute: (ins, p) => {
+        const axis = Number(p.axis ?? 0);
+        if (ins.length === 0) return { outputs: [[]] };
+        let result = ins[0];
+        for (let i = 1; i < ins.length; i++) {
+          result = VectorUtils.concat(result, ins[i], axis);
+        }
+        return { outputs: [result] };
       }
-      return { outputs: [result] };
-    }
-  }),
+    };
+  },
 
   'MatrixDiag': (id, params) => ({
     id, type: 'MatrixDiag',
@@ -2394,29 +2409,84 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   // --- PWM Generators ---
   'PWM_GENERATOR': (id, params) => ({
     id, type: 'PWM_GENERATOR', 
-    params: { frequency: params.frequency || 5000, carrierType: params.carrierType || 'triangle' },
-    inputs: [createPort('duty', 'Duty', 'input', 0, 'left', 'control')],
+    params: { 
+      // Duty cycle is NOT a parameter — it comes exclusively from the 'duty' input port,
+      // exactly as in MATLAB Simulink's PWM Generator block.
+      frequency: params.frequency !== undefined ? params.frequency : 50,
+      carrierType: params.carrierType || 'triangle',
+    },
+    inputs: [createPort('duty', 'Duty Cycle (0–1)', 'input', 0.5, 'left', 'control')],
     outputs: [createPort('pwm', 'PWM', 'output', 0, 'right', 'logical')],
+    state: { phase: 0.0, lastTime: -1.0 },
     execute: (ins, p, state, time) => {
-      const freq = Number(p.frequency);
-      const period = 1 / freq;
-      const tRel = time % period;
-      let carrier = 0;
-      
-      if (p.carrierType === 'triangle') {
-        carrier = tRel < period / 2 ? (2 * tRel) / (period / 2) - 1 : 1 - (2 * (tRel - period / 2)) / (period / 2);
-        // Normalize to 0-1
-        carrier = (carrier + 1) / 2;
-      } else { // sawtooth
-        carrier = tRel / period;
-      }
-      
+      const freq = Number(p.frequency) || 50;
       const duty = Math.max(0, Math.min(1, Number(ins[0])));
+      
+      console.log(`[PWM execute] ID: ${id}, carrierType: ${p.carrierType}, freq: ${freq}, time: ${time.toFixed(4)}, duty: ${duty}`);
+
+      let phase = (state && state.phase !== undefined) ? Number(state.phase) : 0;
+
+      // IDEMPOTENCY: only advance phase when this is a new time step.
+      // RK4 calls execute multiple times per step (at t, t+dt/2, t+dt).
+      // We only want to advance phase once per actual solver step (when time > lastTime).
+      const isNewStep = !state || state.lastTime < 0 || time > state.lastTime + 1e-12;
+
+      if (isNewStep) {
+        if (state && state.lastTime >= 0) {
+          const dt = time - state.lastTime;
+          const cycles = dt * freq;
+          const fracCycles = cycles % 1;
+
+          if (fracCycles > 1e-12) {
+            // Normal: advance by fractional part of elapsed cycles
+            phase = (phase + fracCycles) % 1;
+          } else {
+            // dt is an exact integer multiple of the period — use golden ratio step
+            // so consecutive samples land at different phases in [0,1)
+            const PHI = 0.6180339887498949; // (√5−1)/2
+            phase = (phase + PHI) % 1;
+          }
+        } else {
+          // Very first call: seed phase from absolute time
+          phase = (time * freq) % 1;
+        }
+
+        if (state) { state.phase = phase; state.lastTime = time; }
+      }
+      // For repeated calls at same time (RK4 sub-stages): reuse current phase
+
+      // Compute carrier from phase — 5 types matching Simulink PWM Generator
+      let carrier: number;
+      switch (p.carrierType) {
+        case 'sawtooth':
+          // Leading edge: ramps 0→1 over the period
+          carrier = phase;
+          break;
+        case 'inv_sawtooth':
+          // Trailing edge: ramps 1→0 over the period
+          carrier = 1 - phase;
+          break;
+        case 'sine':
+          // Sine wave carrier: sin mapped from [-1,1] to [0,1]
+          carrier = (Math.sin(2 * Math.PI * phase) + 1) / 2;
+          break;
+        case 'square':
+          // Square wave carrier: 50% duty square, creates bang-bang switching
+          carrier = phase < 0.5 ? 0.25 : 0.75;
+          break;
+        case 'triangle':
+        default:
+          // Symmetric triangle: 0→1 (first half), 1→0 (second half)
+          carrier = phase < 0.5 ? 2 * phase : 2 * (1 - phase);
+          break;
+      }
+
       return { outputs: [duty > carrier ? 1 : 0] };
     },
     icon: 'zap',
-    equation: 'PWM = Duty > Carrier(t)'
+    equation: 'PWM = Duty > Carrier(phase)'
   }),
+
 
   'THREE_PHASE_PWM': (id, params) => ({
     id, type: 'THREE_PHASE_PWM',
@@ -2431,21 +2501,31 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       createPort('gb', 'Gb', 'output', 0, 'right', 'logical'),
       createPort('gc', 'Gc', 'output', 0, 'right', 'logical')
     ],
+    state: { phase: 0, lastTime: -1 },
     execute: (ins, p, state, time) => {
       const freq = Number(p.frequency);
-      const period = 1 / freq;
-      const tRel = (time % period) / period; // Sawtooth carrier 0-1
-      
+
+      // Accumulate phase to avoid step-size aliasing (same fix as PWM_GENERATOR)
+      let phase: number;
+      if (state && state.lastTime >= 0) {
+        const dt = time - state.lastTime;
+        phase = ((state.phase + dt * freq) % 1 + 1) % 1;
+      } else {
+        phase = (time * freq) % 1;
+      }
+      if (state) { state.phase = phase; state.lastTime = time; }
+
       let refs = ins.map(Number);
       if (p.method === 'Saddle' || p.method === 'SVPWM') {
         const vOffset = (Math.max(...refs) + Math.min(...refs)) / 2;
         refs = refs.map(v => v - vOffset);
       }
-      
+
       const normalizedRefs = refs.map(v => Math.max(0, Math.min(1, (v + 1) / 2))); // Map -1..1 to 0..1
-      return { outputs: normalizedRefs.map(ref => (ref > tRel ? 1 : 0)) };
+      return { outputs: normalizedRefs.map(ref => (ref > phase ? 1 : 0)) };
     }
   }),
+
 
   'SIX_STEP_COMMUTATION': (id) => ({
     id, type: 'SIX_STEP_COMMUTATION', params: {},
@@ -2640,7 +2720,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'FIELD_ORIENTED_CONTROL': (id, params) => ({
     id, type: 'FIELD_ORIENTED_CONTROL',
-    params: { Kp: params.Kp || 1, Ki: params.Ki || 10 },
+    params: {
+      Kp: params?.Kp !== undefined ? Number(params.Kp) : 1,
+      Ki: params?.Ki !== undefined ? Number(params.Ki) : 10
+    },
     isStateful: true,
     inputs: [
       createPort('id_ref', 'Id*', 'input', 0, 'left', 'control'),
@@ -3371,6 +3454,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   'DEMUX': (id, params) => ({
     id, type: 'DEMUX',
     params: { numOutputs: params.numOutputs || 2 },
+    allowDynamicOutputs: true,
     inputs: [createPort('u', 'u', 'input', 0, 'left', 'vector')],
     outputs: Array.from({ length: params.numOutputs || 2 }, (_, i) => createPort(`out${i+1}`, `y${i+1}`, 'output')),
     execute: (ins) => ({ outputs: Array.isArray(ins[0]) ? ins[0] : [ins[0]] })
@@ -3473,58 +3557,71 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     const wl = Number(params.wordLength) || 16;
     const fl = Number(params.fractionLength) || 8;
 
+    const dataTypeStr = output_type === 'fixed_point' ? `fixed_point (${wl},${fl})` : output_type;
+
+    const applyRounding = (val: number, mode: string): number => {
+      if (mode === 'floor') return Math.floor(val);
+      if (mode === 'ceil') return Math.ceil(val);
+      if (mode === 'round' || mode === 'nearest') return Math.round(val);
+      if (mode === 'convergent') {
+        const d = Math.floor(val);
+        const f = val - d;
+        if (f < 0.5 - 1e-9) return d;
+        if (f > 0.5 + 1e-9) return d + 1;
+        return (d % 2 === 0) ? d : d + 1;
+      }
+      return Math.floor(val);
+    };
+
     return {
       id, type: 'DATA_TYPE_CONVERSION',
       params: { output_type, rounding, overflow, wordLength: wl, fractionLength: fl },
       inputs: [createPort('u', 'u', 'input')],
-      outputs: [createPort('y', 'y', 'output')],
+      outputs: [createPort('y', 'y', 'output', 0, 'right', 'auto', dataTypeStr)],
       execute: (ins, p) => {
-        let u = Number(ins[0]);
+        const u = Number(ins[0] ?? 0);
         let y = u;
 
-        // 1. Rounding
-        if (p.rounding === 'floor') y = Math.floor(u);
-        else if (p.rounding === 'ceil') y = Math.ceil(u);
-        else if (p.rounding === 'round' || p.rounding === 'nearest') y = Math.round(u);
-        else if (p.rounding === 'convergent') {
-            const d = Math.floor(u);
-            const f = u - d;
-            if (f < 0.5) y = d;
-            else if (f > 0.5) y = d + 1;
-            else y = (d % 2 === 0) ? d : d + 1;
-        }
-
-        // 2. Type Simulation & Overflow
         const limits: Record<string, [number, number]> = {
           'int8': [-128, 127],
           'uint8': [0, 255],
           'int16': [-32768, 32767],
           'uint16': [0, 65535],
           'int32': [-2147483648, 2147483647],
-          'uint32': [0, 4294967295],
-          'boolean': [0, 1]
+          'uint32': [0, 4294967295]
         };
 
         if (p.output_type === 'fixed_point') {
-            const scale = Math.pow(2, p.fractionLength);
-            let raw = Math.round(u * scale);
-            const maxRaw = Math.pow(2, p.wordLength - 1) - 1;
-            const minRaw = -Math.pow(2, p.wordLength - 1);
-            
-            if (p.overflow === 'saturate') raw = Math.max(minRaw, Math.min(maxRaw, raw));
-            else if (p.overflow === 'wrap') {
-                const range = maxRaw - minRaw + 1;
-                raw = ((((raw - minRaw) % range) + range) % range) + minRaw;
-            }
-            y = raw / scale;
+          const wlVal = Number(p.wordLength) || 16;
+          const flVal = Number(p.fractionLength) || 8;
+          const scale = Math.pow(2, flVal);
+          let raw = applyRounding(u * scale, p.rounding);
+          const maxRaw = Math.pow(2, wlVal - 1) - 1;
+          const minRaw = -Math.pow(2, wlVal - 1);
+          
+          if (p.overflow === 'saturate') raw = Math.max(minRaw, Math.min(maxRaw, raw));
+          else if (p.overflow === 'wrap') {
+            const range = maxRaw - minRaw + 1;
+            raw = ((((raw - minRaw) % range) + range) % range) + minRaw;
+          }
+          y = raw / scale;
         } else if (limits[p.output_type]) {
-            const [min, max] = limits[p.output_type];
-            if (p.overflow === 'saturate') y = Math.max(min, Math.min(max, y));
-            else if (p.overflow === 'wrap') {
-                const range = max - min + 1;
-                y = ((((Math.floor(y) - min) % range) + range) % range) + min;
-            }
-            if (p.output_type === 'boolean') y = y > 0.5 ? 1 : 0;
+          const [min, max] = limits[p.output_type];
+          const intVal = applyRounding(u, p.rounding);
+          
+          if (p.overflow === 'saturate') y = Math.max(min, Math.min(max, intVal));
+          else if (p.overflow === 'wrap') {
+            const range = max - min + 1;
+            y = ((((intVal - min) % range) + range) % range) + min;
+          } else {
+            y = intVal;
+          }
+        } else if (p.output_type === 'boolean') {
+          y = u !== 0 ? 1 : 0;
+        } else if (p.output_type === 'float32' || p.output_type === 'single') {
+          y = Math.fround(u);
+        } else {
+          y = u;
         }
 
         return { outputs: [y] };
@@ -4384,6 +4481,29 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     }
   }),
 
+  'DISCRETE_IMPULSE': (id, params) => {
+    const amplitude = params.amplitude !== undefined ? Number(params.amplitude) : 1;
+    const delay = params.delay !== undefined ? Math.max(0, Math.round(Number(params.delay))) : 0;
+    const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : 0.1;
+    return {
+      id, type: 'DISCRETE_IMPULSE',
+      params: { amplitude, delay, sampleTime },
+      icon: 'zap',
+      equation: 'y = (n == delay) ? amplitude : 0',
+      description: 'Generates a discrete-time impulse of specified amplitude at a designated sample delay.',
+      inputs: [],
+      outputs: [createPort('out', 'Out', 'output', 0)],
+      execute: (ins, p, state, time) => {
+        const ts = Number(p.sampleTime) || 0.1;
+        const amp = Number(p.amplitude) ?? 1;
+        const d = Math.max(0, Math.round(Number(p.delay) || 0));
+        const currentStep = Math.round(time / ts);
+        const y = (currentStep === d) ? amp : 0;
+        return { outputs: [y] };
+      }
+    };
+  },
+
   'LOW_PASS_FILTER': (id, params) => {
     const fc = Number(params.fc) || 10;
     const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : -1;
@@ -4537,12 +4657,161 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   }),
 
   'EXTENDED_KALMAN_FILTER': (id, params) => {
-    const kf = BLOCK_LIBRARY['KALMAN_FILTER'](id, params);
+    const evaluateSystemFunction = (expr: any, x: number[], u: number[]): number[] => {
+      const scope: Record<string, any> = {};
+      for (let i = 0; i < x.length; i++) {
+        scope[`x${i+1}`] = x[i];
+      }
+      scope['x'] = x;
+      for (let i = 0; i < u.length; i++) {
+        scope[`u${i+1}`] = u[i];
+      }
+      scope['u'] = u;
+
+      if (Array.isArray(expr)) {
+        return expr.map(e => {
+          const val = math.evaluate(String(e), scope);
+          return Number(val) || 0;
+        });
+      }
+      
+      const strExpr = String(expr).trim();
+      
+      try {
+        const res = math.evaluate(strExpr, scope);
+        const parsed = (res && typeof res.toArray === 'function') ? res.toArray() : res;
+        if (Array.isArray(parsed)) {
+          return math.flatten(parsed) as number[];
+        }
+        return [Number(parsed) || 0];
+      } catch (e) {
+        if (strExpr.includes(';') || strExpr.includes('\n')) {
+          const lines = strExpr.split(/[;\n]+/).map(s => s.trim()).filter(Boolean);
+          return lines.map(line => {
+            const val = math.evaluate(line, scope);
+            return Number(val) || 0;
+          });
+        }
+        throw e;
+      }
+    };
+
+    const computeJacobian = (
+      evalFunc: (xVal: number[]) => number[],
+      x0: number[],
+      eps = 1e-6
+    ): math.Matrix => {
+      const n_x = x0.length;
+      const y0 = evalFunc(x0);
+      const n_y = y0.length;
+      const J = math.matrix(math.zeros([n_y, n_x]));
+      
+      for (let j = 0; j < n_x; j++) {
+        const x_plus = [...x0];
+        x_plus[j] += eps;
+        const x_minus = [...x0];
+        x_minus[j] -= eps;
+        
+        const y_plus = evalFunc(x_plus);
+        const y_minus = evalFunc(x_minus);
+        
+        for (let i = 0; i < n_y; i++) {
+          const diff = (y_plus[i] - y_minus[i]) / (2 * eps);
+          J.set([i, j], diff);
+        }
+      }
+      return J;
+    };
+
     return {
-      ...kf,
-      type: 'EXTENDED_KALMAN_FILTER',
-      execute: (ins, p, state, time) => {
-        return kf.execute(ins, p, state, time);
+      id, type: 'EXTENDED_KALMAN_FILTER',
+      params: {
+        f: params.f || ["x1 + 0.01 * x2 + 0.00005 * u1", "x2 + 0.01 * u1"],
+        h: params.h || ["x1"],
+        Q: params.Q || [[0.01, 0], [0, 0.01]],
+        R: params.R || [[0.1]],
+        P0: params.P0 || [[1, 0], [0, 1]],
+        x0: params.x0 || [0, 0]
+      },
+      icon: 'eye',
+      equation: 'x̂(k+1) = f(x̂(k), u(k)) + K(y - h(x̂(k), u(k)))',
+      description: 'An Extended Kalman Filter (EKF) for discrete-time non-linear systems. It estimates the state vector of a non-linear system by computing Jacobians numerically at each step.',
+      isStateful: true,
+      inputs: [
+        createPort('u', 'u', 'input', 0, 'left', 'vector'),
+        createPort('y_meas', 'y_meas', 'input', 0, 'left', 'vector')
+      ],
+      outputs: [
+        createPort('x_hat', 'x_hat', 'output', 0, 'right', 'vector'),
+        createPort('y_hat', 'y_hat', 'output', 0, 'right', 'vector'),
+        createPort('innovation', 'Inn', 'output', 0, 'top', 'vector'),
+        createPort('kg', 'K', 'output', 0, 'top', 'vector')
+      ],
+      state: { x: null, P: null },
+      execute: (ins, p, state) => {
+        const uArr = (Array.isArray(ins[0]) ? math.flatten(ins[0] as any) : [Number(ins[0])]) as number[];
+        const yArr = (Array.isArray(ins[1]) ? math.flatten(ins[1] as any) : [Number(ins[1])]) as number[];
+        
+        const rawX0 = p.x0 !== undefined ? p.x0 : [0, 0];
+        const x0Arr = Array.isArray(rawX0) ? (math.flatten(rawX0) as number[]) : [Number(rawX0)];
+        
+        let x = state.x ? math.matrix(state.x as number[][]) : math.matrix(x0Arr.map(v => [Number(v)]));
+        let P = state.P ? math.matrix(state.P as number[][]) : math.matrix(p.P0 as number[][]);
+        
+        const nx = x.size()[0];
+        const xArr = x.toArray().map((v: any) => Number(Array.isArray(v) ? v[0] : v));
+        
+        // Step 2: Predict state estimate: x_minus = f(x, u)
+        const x_minus_arr = evaluateSystemFunction(p.f, xArr, uArr);
+        const x_minus = math.matrix(x_minus_arr.map(v => [v]));
+        
+        // Step 3: Compute Jacobian A = df/dx at x, u
+        const f_wrap = (xVal: number[]) => evaluateSystemFunction(p.f, xVal, uArr);
+        const A = computeJacobian(f_wrap, xArr);
+        
+        // Step 4: Predict covariance: P_minus = A * P * A_T + Q
+        const Q = math.matrix(p.Q as number[][]);
+        const P_minus = math.add(math.multiply(math.multiply(A, P), math.transpose(A)), Q) as math.Matrix;
+        
+        // Prior measurement estimate for innovation: y_minus = h(x_minus, u)
+        const x_minus_flat = x_minus_arr;
+        const y_minus_arr = evaluateSystemFunction(p.h, x_minus_flat, uArr);
+        const y_minus = math.matrix(y_minus_arr.map(v => [v]));
+        
+        // Step 6: Compute Jacobian C = dh/dx at x_minus, u
+        const h_wrap = (xVal: number[]) => evaluateSystemFunction(p.h, xVal, uArr);
+        const C = computeJacobian(h_wrap, x_minus_flat);
+        
+        // Step 7: Compute innovation covariance: S = C * P_minus * C_T + R
+        const R = math.matrix(p.R as number[][]);
+        const S = math.add(math.multiply(math.multiply(C, P_minus), math.transpose(C)), R) as math.Matrix;
+        
+        // Step 8: Compute Kalman Gain: K = P_minus * C_T * S^-1
+        const K = math.multiply(math.multiply(P_minus, math.transpose(C)), math.inv(S)) as math.Matrix;
+        
+        // Step 9: Update state estimate: x_new = x_minus + K * (y_meas - y_minus)
+        const y = math.matrix(yArr.map(v => [Number(v)]));
+        const innovation = math.subtract(y, y_minus) as math.Matrix;
+        const x_new = math.add(x_minus, math.multiply(K, innovation)) as math.Matrix;
+        
+        // Step 10: Update error covariance: P_new = (I - K * C) * P_minus
+        const I = math.identity(nx) as math.Matrix;
+        const P_new = math.multiply(math.subtract(I, math.multiply(K, C)), P_minus) as math.Matrix;
+
+        // Post/Updated measurement estimate: y_hat = h(x_new, u)
+        const x_new_arr = x_new.toArray().map((v: any) => Number(Array.isArray(v) ? v[0] : v));
+        const y_hat_arr = evaluateSystemFunction(p.h, x_new_arr, uArr);
+        const y_hat = math.matrix(y_hat_arr.map(v => [v]));
+        
+        return {
+          outputs: [
+            x_new.toArray().map((v: any) => Array.isArray(v) ? v[0] : v),
+            y_hat.toArray().map((v: any) => Array.isArray(v) ? v[0] : v),
+            innovation.toArray().map((v: any) => Array.isArray(v) ? v[0] : v),
+            K.toArray().flat()
+          ],
+          nextState: { x: x_new.toArray(), P: P_new.toArray() }
+        };
       }
     };
   },
@@ -4593,11 +4862,12 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'NUMERIC_REPRESENTATION': (id, params) => {
     const mode = params.mode || 'fixed_point';
-    const output_type = params.output_type || 'float64';
+    // Default output_type is mode-aware: float32 for floating-point, 'fixed_point' for fixed-point
+    const output_type = params.output_type || (mode === 'floating_point' ? 'float32' : 'fixed_point');
     const rounding = params.rounding || 'floor';
     const overflow = params.overflow || 'saturate';
-    const wl = Number(params.wordLength) || 16;
-    const fl = Number(params.fractionLength) || 8;
+    const wl = params.wordLength !== undefined ? Number(params.wordLength) : 16;
+    const fl = params.fractionLength !== undefined ? Number(params.fractionLength) : 8;
 
     return {
       id, type: 'NUMERIC_REPRESENTATION',
@@ -4606,36 +4876,117 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       inputs: [createPort('u', 'u', 'input')],
       outputs: [
         createPort('y', 'y', 'output'),
-        createPort('e', 'error', 'output', 0, 'top', 'measurement')
+        createPort('e', 'err', 'output', 0, 'right', 'auto')
       ],
       execute: (ins: any[], p: any) => {
-        let u = Number(ins[0]);
+        let u = Number(ins[0] ?? 0);
         let y = u;
+
+        // ----------------------------------------------------------------
+        // Rounding helper — applies to the integer representation
+        // ----------------------------------------------------------------
+        const applyRounding = (val: number, rm: string): number => {
+          if (rm === 'ceil')       return Math.ceil(val);
+          if (rm === 'round' || rm === 'nearest') return Math.round(val);
+          if (rm === 'convergent') {
+            // Banker's rounding (round half-to-even)
+            const d = Math.floor(val);
+            const f = val - d;
+            if (f < 0.5 - 1e-9) return d;
+            if (f > 0.5 + 1e-9) return d + 1;
+            return (d % 2 === 0) ? d : d + 1;
+          }
+          return Math.floor(val); // 'floor' — default, matches Simulink Floor rounding
+        };
+
+        // ----------------------------------------------------------------
+        // FLOATING-POINT MODE
+        // Casts the input to the specified IEEE float format.
+        // Matches Simulink Data Type Conversion block in floating-point mode.
+        // ----------------------------------------------------------------
         if (p.mode === 'floating_point') {
-            if (p.output_type === 'float32') y = Math.fround(u);
-            else if (p.output_type === 'float16') y = Number(u.toPrecision(4));
+          const ot = p.output_type || 'float32';
+          if (ot === 'float32' || ot === 'single') {
+            // Round to nearest representable float32 value
+            y = Math.fround(u);
+          } else if (ot === 'float16') {
+            // Simulate IEEE 754 half-precision (10-bit mantissa, 5-bit exponent)
+            // float16 max = 65504, resolution ~ 2^(exp-10)
+            if (!isFinite(u) || u === 0) {
+              y = u;
+            } else {
+              const sign = u < 0 ? -1 : 1;
+              const abs = Math.abs(u);
+              const clamped = Math.min(abs, 65504); // float16 max positive
+              const exp = Math.floor(Math.log2(clamped));
+              const step = Math.pow(2, Math.max(exp - 10, -24)); // 10 mantissa bits
+              y = sign * (Math.round(clamped / step) * step);
+            }
+          } else if (ot === 'float64' || ot === 'double') {
+            // Native JS double precision — no quantization loss
+            y = u;
+          } else if (ot === 'boolean') {
+            y = u !== 0 ? 1 : 0;
+          } else {
+            y = u;
+          }
         } else {
-            const scale = Math.pow(2, p.fractionLength);
-            let raw = u * scale;
-            if (p.rounding === 'floor') raw = Math.floor(raw);
-            else if (p.rounding === 'ceil') raw = Math.ceil(raw);
-            else if (p.rounding === 'round') raw = Math.round(raw);
-            else if (p.rounding === 'convergent') {
-                const d = Math.floor(raw);
-                const f = raw - d;
-                if (f < 0.5) raw = d;
-                else if (f > 0.5) raw = d + 1;
-                else raw = (d % 2 === 0) ? d : d + 1;
-            }
-            const maxRaw = Math.pow(2, p.wordLength - 1) - 1;
-            const minRaw = -Math.pow(2, p.wordLength - 1);
-            if (p.overflow === 'saturate') raw = Math.max(minRaw, Math.min(maxRaw, raw));
-            else if (p.overflow === 'wrap') {
-                const range = maxRaw - minRaw + 1;
-                raw = ((((raw - minRaw) % range) + range) % range) + minRaw;
-            }
-            y = raw / scale;
+          // ----------------------------------------------------------------
+          // FIXED-POINT MODE — fi(u, Signed, WordLength, FractionLength)
+          // Matches MATLAB Fixed-Point Designer fi() object semantics.
+          //
+          // Resolution (LSB) = 2^(-FL)
+          // Integer range (signed):   [-2^(WL-1),       2^(WL-1)-1]
+          // Integer range (unsigned): [0,                2^(WL)-1  ]
+          // Real range (signed):      [-2^(WL-FL-1),    2^(WL-FL-1)-2^(-FL)]
+          // Real range (unsigned):    [0,                2^(WL-FL) -2^(-FL)]
+          // ----------------------------------------------------------------
+          const ot = p.output_type || 'fixed_point';
+          let wlVal = Number(p.wordLength ?? 16);
+          let flVal = Number(p.fractionLength ?? 8);
+          let isUnsigned = false;
+
+          // Integer subtypes fix FL=0 (no fractional bits)
+          if (ot === 'int8')    { wlVal = 8;  flVal = 0; isUnsigned = false; }
+          else if (ot === 'uint8')  { wlVal = 8;  flVal = 0; isUnsigned = true;  }
+          else if (ot === 'int16')  { wlVal = 16; flVal = 0; isUnsigned = false; }
+          else if (ot === 'uint16') { wlVal = 16; flVal = 0; isUnsigned = true;  }
+          else if (ot === 'int32')  { wlVal = 32; flVal = 0; isUnsigned = false; }
+          else if (ot === 'uint32') { wlVal = 32; flVal = 0; isUnsigned = true;  }
+          else if (ot === 'boolean'){ wlVal = 1;  flVal = 0; isUnsigned = true;  }
+          // 'fixed_point': uses wordLength and fractionLength from params
+
+          // Step 1: Scale real value to integer domain
+          const scale = Math.pow(2, flVal);
+          let raw = u * scale;
+
+          // Step 2: Round the integer representation
+          raw = applyRounding(raw, p.rounding || 'floor');
+
+          // Step 3: Integer limits based on word length
+          const maxRaw = isUnsigned
+            ?  Math.pow(2, wlVal) - 1           // e.g. uint8: 255
+            :  Math.pow(2, wlVal - 1) - 1;      // e.g. int16: 32767
+          const minRaw = isUnsigned
+            ? 0
+            : -Math.pow(2, wlVal - 1);           // e.g. int16: -32768
+
+          // Step 4: Overflow handling
+          const ovf = p.overflow || 'saturate';
+          if (ovf === 'saturate') {
+            raw = Math.max(minRaw, Math.min(maxRaw, raw));
+          } else if (ovf === 'wrap') {
+            // Two's-complement modular wrap
+            const range = maxRaw - minRaw + 1;
+            raw = ((((raw - minRaw) % range) + range) % range) + minRaw;
+          }
+          // 'none': allow out-of-range (no clipping)
+
+          // Step 5: Convert integer back to real-world fixed-point value
+          y = raw / scale;
         }
+
+        // Quantization error magnitude: |original - quantized|
         const error = Math.abs(u - y);
         return { outputs: [y, error] };
       }
@@ -10313,7 +10664,20 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         };
       }
     };
-  }
+  },
+
+  'Note': (id, params) => ({
+    id,
+    type: 'Note',
+    params: {
+      text: params.text ?? 'Double click or edit properties to write notes here...'
+    },
+    inputs: [],
+    outputs: [],
+    icon: 'file-text',
+    description: 'A text block to write custom notes directly next to the models. Has no simulation ports or reactions.',
+    execute: () => ({ outputs: [] })
+  })
 };
 
 
@@ -10488,6 +10852,7 @@ export const XBRIDGES_CATEGORIES = [
   {
     name: 'Signal Processing & Observers',
     blocks: [
+      { type: 'DISCRETE_IMPULSE', label: 'Discrete Impulse', icon: 'zap' },
       { type: 'LOW_PASS_FILTER', label: 'Low-Pass Filter', icon: 'filter' },
       { type: 'HIGH_PASS_FILTER', label: 'High-Pass Filter', icon: 'filter' },
       { type: 'MOVING_AVERAGE', label: 'Moving Average Filter', icon: 'database' },
@@ -10608,6 +10973,12 @@ export const XBRIDGES_CATEGORIES = [
     name: 'Subsystem Architecture',
     blocks: [
       { type: 'Subsystem', label: 'Subsystem', icon: 'layers' }
+    ]
+  },
+  {
+    name: 'Annotations',
+    blocks: [
+      { type: 'Note', label: 'Note Text Block', icon: 'file-text' }
     ]
   }
 ];

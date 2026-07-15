@@ -45,6 +45,11 @@ export const generateMISRACCode = (chart: {
   const sortedVariables = [...chart.variables].sort((a, b) => a.name.localeCompare(b.name));
   const sortedLayers = [...chart.layers].sort((a, b) => a.id.localeCompare(b.id));
 
+  const isFloatTick = !Number.isInteger(chart.tickMs);
+  const timeType = isFloatTick ? 'float' : 'uint32_t';
+  const timeSuffix = isFloatTick ? 'f' : 'U';
+  const zeroLiteral = isFloatTick ? '0.0f' : '0U';
+
   const stateIndexMap = new Map<string, number>();
   sortedStates.forEach((s, idx) => stateIndexMap.set(s.id, idx));
 
@@ -427,9 +432,9 @@ export const generateMISRACCode = (chart: {
 
   const regionEnumStr = Array.from(new Set(regionEnumMap.values())).map(name => `    ${name},`).join('\n');
 
-  const smConfigH = `${disclaimer}#ifndef SM_CONFIG_H\n#define SM_CONFIG_H\n\n#include <stdint.h>\n#include <stdbool.h>\n\n/* Constant Limits */\n#define SM_NUM_LAYERS ${sortedLayers.length}U\n#define SM_NUM_STATES ${sortedStates.length}U\n#define SM_NUM_PARALLEL_REGIONS ${regions.size}U\n#define SM_GENERATOR_VERSION "3.0"\n\n/* Regions */\ntypedef enum {\n${regionEnumStr}\n    SM_GRP_COUNT\n} SM_Group_t;\n\n/* States */\ntypedef enum {\n    SM_NODE_INVALID = 0U,\n${sortedStates.map(s => `    ${stateEnum(s)},`).join('\n')}\n    SM_NODE_ERROR,\n    SM_NODE_SAFE\n} SM_Node_t;\n\n/* Error Codes */\ntypedef enum {\n    SM_ERR_NONE = 0U,\n    SM_ERR_WATCHDOG,\n    SM_ERR_SAFETY_VIOLATION,\n    SM_ERR_INVALID_STATE,\n    SM_ERR_ROM_INTEGRITY,\n    SM_ERR_RAM_INTEGRITY\n} SM_Error_t;\n\n/* State Indices */\n${sortedStates.map((s, idx) => `#define SM_ST_${sanitize(s.name).toUpperCase()}_IDX ${idx}U`).join('\n')}\n\n/* Layer Indices */\n${sortedLayers.map((l, idx) => `#define SM_LYR_${sanitize(l.id).toUpperCase()}_IDX ${idx}U`).join('\n')}\n\n/* Data Structure */\ntypedef struct {\n${sortedVariables.length > 0 ? sortedVariables.map(v => `    ${getCTimeType(v.type)} ${v.name};`).join('\n') : ''}\n${blockStates.length > 0 ? blockStates.join('\n') + '\n' : ''}    uint32_t state_timer;\n} SM_Data_t;\n\n/* Instance Context Structure */\ntypedef struct {\n    SM_Node_t active_states[SM_NUM_LAYERS];\n    SM_Node_t history_states[SM_NUM_LAYERS];\n    uint32_t state_timers[SM_NUM_STATES];\n    bool state_active[SM_NUM_STATES];\n    SM_Data_t data;\n    SM_Error_t error_status;\n} ADIA_Instance_t;\n\n#define SM_TICK_MS (${chart.tickMs}U)\n\n#endif /* SM_CONFIG_H */`;
+  const smConfigH = `${disclaimer}#ifndef SM_CONFIG_H\n#define SM_CONFIG_H\n\n#include <stdint.h>\n#include <stdbool.h>\n\n/* Constant Limits */\n#define SM_NUM_LAYERS ${sortedLayers.length}U\n#define SM_NUM_STATES ${sortedStates.length}U\n#define SM_NUM_PARALLEL_REGIONS ${regions.size}U\n#define SM_GENERATOR_VERSION "3.0"\n\n/* Regions */\ntypedef enum {\n${regionEnumStr}\n    SM_GRP_COUNT\n} SM_Group_t;\n\n/* States */\ntypedef enum {\n    SM_NODE_INVALID = 0U,\n${sortedStates.map(s => `    ${stateEnum(s)},`).join('\n')}\n    SM_NODE_ERROR,\n    SM_NODE_SAFE\n} SM_Node_t;\n\n/* Error Codes */\ntypedef enum {\n    SM_ERR_NONE = 0U,\n    SM_ERR_WATCHDOG,\n    SM_ERR_SAFETY_VIOLATION,\n    SM_ERR_INVALID_STATE,\n    SM_ERR_ROM_INTEGRITY,\n    SM_ERR_RAM_INTEGRITY\n} SM_Error_t;\n\n/* State Indices */\n${sortedStates.map((s, idx) => `#define SM_ST_${sanitize(s.name).toUpperCase()}_IDX ${idx}U`).join('\n')}\n\n/* Layer Indices */\n${sortedLayers.map((l, idx) => `#define SM_LYR_${sanitize(l.id).toUpperCase()}_IDX ${idx}U`).join('\n')}\n\n/* Data Structure */\ntypedef struct {\n${sortedVariables.length > 0 ? sortedVariables.map(v => `    ${getCTimeType(v.type)} ${v.name};`).join('\n') : ''}\n${blockStates.length > 0 ? blockStates.join('\n') + '\n' : ''}    ${timeType} state_timer;\n} SM_Data_t;\n\n/* Instance Context Structure */\ntypedef struct {\n    SM_Node_t active_states[SM_NUM_LAYERS];\n    SM_Node_t history_states[SM_NUM_LAYERS];\n    ${timeType} state_timers[SM_NUM_STATES];\n    bool state_active[SM_NUM_STATES];\n    SM_Data_t data;\n    SM_Error_t error_status;\n} ADIA_Instance_t;\n\n#define SM_TICK_MS (${chart.tickMs}${timeSuffix})\n\n#endif /* SM_CONFIG_H */`;
 
-  const smCoreH = `${disclaimer}#ifndef SM_CORE_H\n#define SM_CORE_H\n\n#include "sm_config.h"\n\nvoid SM_Init(ADIA_Instance_t* instance);\nvoid SM_Reset(ADIA_Instance_t* instance);\nvoid SM_Step(ADIA_Instance_t* instance, uint32_t delta_ms);\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g);\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance);\n\n/* Deprecated API for direct access */\nstatic inline SM_Data_t* SM_Data_Legacy(ADIA_Instance_t* instance) {\n    return &instance->data;\n}\n\n#endif /* SM_CORE_H */`;
+  const smCoreH = `${disclaimer}#ifndef SM_CORE_H\n#define SM_CORE_H\n\n#include "sm_config.h"\n\nvoid SM_Init(ADIA_Instance_t* instance);\nvoid SM_Reset(ADIA_Instance_t* instance);\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms);\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g);\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance);\n\n/* Deprecated API for direct access */\nstatic inline SM_Data_t* SM_Data_Legacy(ADIA_Instance_t* instance) {\n    return &instance->data;\n}\n\n#endif /* SM_CORE_H */`;
 
   const smSafetyH = `${disclaimer}#ifndef SM_SAFETY_H\n#define SM_SAFETY_H\n\n#include "sm_config.h"\n\nvoid SM_Safety_Check(ADIA_Instance_t* instance);\nvoid SM_Watchdog_Kick(ADIA_Instance_t* instance);\nSM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t* instance);\n\n#endif /* SM_SAFETY_H */`;
 
@@ -437,7 +442,7 @@ export const generateMISRACCode = (chart: {
 
   const smUserLogicH = `${disclaimer}#ifndef SM_USER_LOGIC_H\n#define SM_USER_LOGIC_H\n\n#include "sm_config.h"\n\n/* State Action Prototypes */\n${sortedStates.map(s => {
     const sEnum = stateEnum(s);
-    let protos = `void ${sEnum}_Entry(ADIA_Instance_t* instance);\nvoid ${sEnum}_During(ADIA_Instance_t* instance, uint32_t delta_ms);\nvoid ${sEnum}_Exit(ADIA_Instance_t* instance);`;
+    let protos = `void ${sEnum}_Entry(ADIA_Instance_t* instance);\nvoid ${sEnum}_During(ADIA_Instance_t* instance, ${timeType} delta_ms);\nvoid ${sEnum}_Exit(ADIA_Instance_t* instance);`;
     if (s.isXBridges) {
       protos += `\nvoid ${sEnum}_XBridges_Step(ADIA_Instance_t* instance, float delta_s);`;
     }
@@ -453,7 +458,7 @@ export const generateMISRACCode = (chart: {
     if (s.isXBridges) {
       duringCode += `${duringCode ? '\n    ' : ''}/* Co-Model Step */\n    ${sEnum}_XBridges_Step(instance, ${(chart.tickMs / 1000).toFixed(4)}f);`;
     }
-    funcs += `void ${sEnum}_During(ADIA_Instance_t* instance, uint32_t delta_ms) {\n    /* During: ${s.name} */\n    ${processUserCode(duringCode)}\n}\n\n`;
+    funcs += `void ${sEnum}_During(ADIA_Instance_t* instance, ${timeType} delta_ms) {\n    /* During: ${s.name} */\n    ${processUserCode(duringCode)}\n}\n\n`;
 
     funcs += `void ${sEnum}_Exit(ADIA_Instance_t* instance) {\n    /* Exit: ${s.name} */\n    ${processUserCode(s.exit ? s.exit.replace(/\n/g, '\n    ') : '')}\n}\n`;
 
@@ -572,7 +577,7 @@ export const generateMISRACCode = (chart: {
 
     timerIncrementCode += `    if (instance->state_active[${stateIdx}U]) {\n`;
     timerIncrementCode += `        if (instance->state_timers[${stateIdx}U] + delta_ms < instance->state_timers[${stateIdx}U]) {\n`;
-    timerIncrementCode += `            instance->state_timers[${stateIdx}U] = 4294967295U;\n`;
+    timerIncrementCode += `            instance->state_timers[${stateIdx}U] = ${isFloatTick ? '3.40282347e+38f' : '4294967295U'};\n`;
     timerIncrementCode += `        } else {\n`;
     timerIncrementCode += `            instance->state_timers[${stateIdx}U] += delta_ms;\n`;
     timerIncrementCode += `        }\n`;
@@ -610,7 +615,7 @@ export const generateMISRACCode = (chart: {
 
     smExitStateFunc += `            ${sEnum}_Exit(instance);\n`;
     smExitStateFunc += `            instance->state_active[${stateIdx}U] = false;\n`;
-    smExitStateFunc += `            instance->state_timers[${stateIdx}U] = 0U;\n`;
+    smExitStateFunc += `            instance->state_timers[${stateIdx}U] = ${zeroLiteral};\n`;
 
     const hasHistoryJunction = parentLayer && chart.junctions.some(j => parentLayer.junctionIds.includes(j.id) && (j.type === 'history' || j.type === 'deep-history'));
     if (hasHistoryJunction) {
@@ -638,7 +643,7 @@ export const generateMISRACCode = (chart: {
       smEnterStateFunc += `            instance->active_states[${parentLayerIdx}U] = state;\n`;
     }
     smEnterStateFunc += `            instance->state_active[${stateIdx}U] = true;\n`;
-    smEnterStateFunc += `            instance->state_timers[${stateIdx}U] = 0U;\n`;
+    smEnterStateFunc += `            instance->state_timers[${stateIdx}U] = ${zeroLiteral};\n`;
     smEnterStateFunc += `            ${sEnum}_Entry(instance);\n`;
 
     const childLayers = chart.layers.filter(l => l.parentStateId === s.id);
@@ -738,7 +743,7 @@ export const generateMISRACCode = (chart: {
     const layerStates = l.stateIds.map(sid => sortedStates.find(st => st.id === sid)).filter(Boolean) as StateData[];
     const allParallel = layerStates.length > 0 && layerStates.every(st => st.isParallel);
 
-    layerStepFuncs += `/**\n * @brief Evaluates transitions and executes during actions for layer ${lIdx}.\n * @param instance Pointer to state machine context\n * @param delta_ms Execution tick period in milliseconds\n */\nstatic void SM_Step_Layer_${lIdx}(ADIA_Instance_t* instance, uint32_t delta_ms) {\n`;
+    layerStepFuncs += `/**\n * @brief Evaluates transitions and executes during actions for layer ${lIdx}.\n * @param instance Pointer to state machine context\n * @param delta_ms Execution tick period in milliseconds\n */\nstatic void SM_Step_Layer_${lIdx}(ADIA_Instance_t* instance, ${timeType} delta_ms) {\n`;
 
     const generateTransitions = (
       stateId: string,
@@ -760,7 +765,7 @@ export const generateMISRACCode = (chart: {
         const timerExpr = stateIdx !== undefined ? `instance->state_timers[${stateIdx}U]` : `0U`;
         const ticksVal = tr.afterTicks !== null ? tr.afterTicks : 0;
         const msVal = ticksVal * chart.tickMs;
-        const timerCond = `(${timerExpr} >= ${msVal}U)`;
+        const timerCond = `(${timerExpr} >= ${msVal}${Number.isInteger(msVal) ? 'U' : 'f'})`;
 
         const rawCond = tr.condition || 'true';
         const conditionCheck = processConditionString(rawCond);
@@ -922,17 +927,21 @@ export const generateMISRACCode = (chart: {
   sortedLayers.forEach((l) => {
     const lIdx = layerIndexMap.get(l.id);
     smCoreC += `static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history);\n`;
-    smCoreC += `static void SM_Step_Layer_${lIdx}(ADIA_Instance_t* instance, uint32_t delta_ms);\n`;
+    smCoreC += `static void SM_Step_Layer_${lIdx}(ADIA_Instance_t* instance, ${timeType} delta_ms);\n`;
   });
 
-  smCoreC += `\n/**\n * @brief Returns the active state node of the specified region group.\n * @param instance Pointer to state machine context\n * @param g Region group index\n * @return SM_Node_t The currently active state\n */\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g) {\n    SM_Node_t active = SM_NODE_INVALID;\n    if ((uint32_t)g < SM_NUM_LAYERS) {\n        active = instance->active_states[(uint32_t)g];\n    }\n    return active;\n}\n\n/**\n * @brief Queries the error status of the state machine.\n * @param instance Pointer to state machine context\n * @return SM_Error_t Current error status\n */\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance) {\n    return instance->error_status;\n}\n\n/**\n * @brief Initializes the state machine context and registers default/initial values.\n * @param instance Pointer to state machine context\n */\nvoid SM_Init(ADIA_Instance_t* instance) {\n    uint32_t i;\n    for (i = 0U; i < SM_NUM_LAYERS; i++) {\n        instance->active_states[i] = SM_NODE_INVALID;\n        instance->history_states[i] = SM_NODE_INVALID;\n    }\n    for (i = 0U; i < SM_NUM_STATES; i++) {\n        instance->state_timers[i] = 0U;\n        instance->state_active[i] = false;\n    }\n${sortedVariables.map(v => {
+  smCoreC += `\n/**\n * @brief Returns the active state node of the specified region group.\n * @param instance Pointer to state machine context\n * @param g Region group index\n * @return SM_Node_t The currently active state\n */\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g) {\n    SM_Node_t active = SM_NODE_INVALID;\n    if ((uint32_t)g < SM_NUM_LAYERS) {\n        active = instance->active_states[(uint32_t)g];\n    }\n    return active;\n}\n\n/**\n * @brief Queries the error status of the state machine.\n * @param instance Pointer to state machine context\n * @return SM_Error_t Current error status\n */\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance) {\n    return instance->error_status;\n}\n\n/**\n * @brief Initializes the state machine context and registers default/initial values.\n * @param instance Pointer to state machine context\n */\nvoid SM_Init(ADIA_Instance_t* instance) {\n    uint32_t i;\n    for (i = 0U; i < SM_NUM_LAYERS; i++) {\n        instance->active_states[i] = SM_NODE_INVALID;\n        instance->history_states[i] = SM_NODE_INVALID;\n    }\n    for (i = 0U; i < SM_NUM_STATES; i++) {\n        instance->state_timers[i] = ${zeroLiteral};\n        instance->state_active[i] = false;\n    }\n${sortedVariables.map(v => {
     let initVal = v.initialValue;
     if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type) && /^\d+$/.test(initVal)) initVal += 'U';
     return `    instance->data.${v.name} = ${initVal};`;
-  }).join('\n')}\n${blockStates.length > 0 ? blockStates.map(bs => bs.replace('float ', 'instance->data.').replace(';', ' = 0.0f;')).join('\n') + '\n' : ''}    instance->data.state_timer = 0U;\n    instance->error_status = SM_ERR_NONE;\n    SM_Reset(instance);\n}\n\n/**\n * @brief Resets the state machine, entering the root layer.\n * @param instance Pointer to state machine context\n */\nvoid SM_Reset(ADIA_Instance_t* instance) {\n    uint32_t i;\n    for (i = 0U; i < SM_NUM_LAYERS; i++) {\n        instance->active_states[i] = SM_NODE_INVALID;\n    }\n    instance->error_status = SM_ERR_NONE;\n    SM_Enter_Layer_${rootLayerIdx}(instance, false);\n}\n\n/**\n * @brief Steps the state machine: runs safety checks, increments timers, and processes transitions.\n * @param instance Pointer to state machine context\n * @param delta_ms Execution tick period in milliseconds\n */\nvoid SM_Step(ADIA_Instance_t* instance, uint32_t delta_ms) {\n    SM_Watchdog_Kick(instance);\n    SM_Safety_Check(instance);\n    if (instance->error_status == SM_ERR_NONE) {\n        instance->error_status = SM_Validate_State_Consistency(instance);\n    }\n    if (instance->error_status != SM_ERR_NONE) {\n        if (instance->error_status == SM_ERR_SAFETY_VIOLATION ||\n            instance->error_status == SM_ERR_RAM_INTEGRITY ||\n            instance->error_status == SM_ERR_ROM_INTEGRITY) {\n            uint32_t i;\n            for (i = 0U; i < SM_NUM_LAYERS; i++) {\n                instance->active_states[i] = SM_NODE_SAFE;\n            }\n            return;\n        }\n        uint32_t i;\n        for (i = 0U; i < SM_NUM_LAYERS; i++) {\n            instance->active_states[i] = SM_NODE_ERROR;\n        }\n        return;\n    }\n    if (instance->data.state_timer + delta_ms < instance->data.state_timer) instance->data.state_timer = UINT32_MAX;\n    else instance->data.state_timer += delta_ms;\n\n    /* Increment state timers */\n${timerIncrementCode}\n    /* Step root layer */\n    SM_Step_Layer_${rootLayerIdx}(instance, delta_ms);\n}\n\n/* Helper Functions Implementation */\n${smExitStateFunc}\n${smEnterStateFunc}\n${layerEntryFuncs}\n${layerStepFuncs}`;
+  }).join('\n')}\n${blockStates.length > 0 ? blockStates.map(bs => bs.replace('float ', 'instance->data.').replace(';', ` = ${isFloatTick ? '0.0f' : '0U'};`)).join('\n') + '\n' : ''}    instance->data.state_timer = ${zeroLiteral};\n    instance->error_status = SM_ERR_NONE;\n    SM_Reset(instance);\n}\n\n/**\n * @brief Resets the state machine, entering the root layer.\n * @param instance Pointer to state machine context\n */\nvoid SM_Reset(ADIA_Instance_t* instance) {\n    uint32_t i;\n    for (i = 0U; i < SM_NUM_LAYERS; i++) {\n        instance->active_states[i] = SM_NODE_INVALID;\n    }\n    instance->error_status = SM_ERR_NONE;\n    SM_Enter_Layer_${rootLayerIdx}(instance, false);\n}\n\n/**\n * @brief Steps the state machine: runs safety checks, increments timers, and processes transitions.\n * @param instance Pointer to state machine context\n * @param delta_ms Execution tick period in milliseconds\n */\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms) {\n    SM_Watchdog_Kick(instance);\n    SM_Safety_Check(instance);\n    if (instance->error_status == SM_ERR_NONE) {\n        instance->error_status = SM_Validate_State_Consistency(instance);\n    }\n    if (instance->error_status != SM_ERR_NONE) {\n        if (instance->error_status == SM_ERR_SAFETY_VIOLATION ||\n            instance->error_status == SM_ERR_RAM_INTEGRITY ||\n            instance->error_status == SM_ERR_ROM_INTEGRITY) {\n            uint32_t i;\n            for (i = 0U; i < SM_NUM_LAYERS; i++) {\n                instance->active_states[i] = SM_NODE_SAFE;\n            }\n            return;\n        }\n        uint32_t i;\n        for (i = 0U; i < SM_NUM_LAYERS; i++) {\n            instance->active_states[i] = SM_NODE_ERROR;\n        }\n        return;\n    }\n    if (instance->data.state_timer + delta_ms < instance->data.state_timer) instance->data.state_timer = ${isFloatTick ? '3.40282347e+38f' : 'UINT32_MAX'};\n    else instance->data.state_timer += delta_ms;\n\n    /* Increment state timers */\n${timerIncrementCode}\n    /* Step root layer */\n    SM_Step_Layer_${rootLayerIdx}(instance, delta_ms);\n}\n\n/* Helper Functions Implementation */\n${smExitStateFunc}\n${smEnterStateFunc}\n${layerEntryFuncs}\n${layerStepFuncs}`;
 
   // Replace division-based time scaling with fixed-point math in smCoreC
-  smCoreC = smCoreC.replace(/(?:(?:\(float\)\s*)?delta_ms|\bdelta_ms\b)\s*\/\s*1000(?:\.0f?)?/g, '((delta_ms * 65536U) / 1000U)');
+  if (isFloatTick) {
+    smCoreC = smCoreC.replace(/(?:(?:\(float\)\s*)?delta_ms|\bdelta_ms\b)\s*\/\s*1000(?:\.0f?)?/g, '(delta_ms / 1000.0f)');
+  } else {
+    smCoreC = smCoreC.replace(/(?:(?:\(float\)\s*)?delta_ms|\bdelta_ms\b)\s*\/\s*1000(?:\.0f?)?/g, '((delta_ms * 65536U) / 1000U)');
+  }
 
   sortedVariables.forEach(v => {
     const regex = new RegExp(`(?<!instance->data\\.)\\b${v.name}\\b`, 'g');

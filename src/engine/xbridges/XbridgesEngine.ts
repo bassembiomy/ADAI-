@@ -624,6 +624,27 @@ export class XbridgesEngine {
     // Merge parameters
     block.params = { ...block.params, ...newParams };
 
+    // Sync block outputs and inputs with BLOCK_LIBRARY to handle changes in data type / sizes immediately
+    if (BLOCK_LIBRARY[block.type]) {
+      try {
+        const fresh = BLOCK_LIBRARY[block.type](block.id, block.params);
+        block.outputs = fresh.outputs;
+        block.inputs = fresh.inputs;
+      } catch (e) {
+        console.error(`Failed to refresh ports for block ${blockId}:`, e);
+      }
+    }
+
+    // Sync input port default values with params if they share the same key
+    if (block.inputs) {
+      block.inputs = block.inputs.map(inPort => {
+        if (newParams[inPort.id] !== undefined) {
+          return { ...inPort, value: newParams[inPort.id] };
+        }
+        return inPort;
+      });
+    }
+
     if (needsReseed) {
       // Re-seed state and re-generate parameters (e.g. state-space matrices A, B, C, D) from BLOCK_LIBRARY
       try {

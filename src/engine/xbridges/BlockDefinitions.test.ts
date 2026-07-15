@@ -154,6 +154,22 @@ describe('X-Bridges Learning Models Block Tests', () => {
     expect(res.outputs).toEqual([1, 1, 0]);
   });
 
+  it('TC-MOD-02: PWM_GENERATOR with input execution and different carrier types', () => {
+    const blockDefault = BLOCK_LIBRARY['PWM_GENERATOR']('pwm_default', {});
+    expect(blockDefault.params.frequency).toBe(50);
+    expect(blockDefault.inputs[0].value).toBe(0.5);
+
+    const blockSawtooth = BLOCK_LIBRARY['PWM_GENERATOR']('pwm_sawtooth', { frequency: 5000, carrierType: 'sawtooth' });
+
+    // At t = 0.00014 (70% of period), carrier is 0.7. duty=0.8 > carrier=0.7 => Output should be 1.
+    const res1 = blockSawtooth.execute([0.8], blockSawtooth.params, null, 0.00014);
+    expect(res1.outputs[0]).toBe(1);
+
+    // At t = 0.00018 (90% of period), carrier is 0.9. duty=0.8 < carrier=0.9 => Output should be 0.
+    const res2 = blockSawtooth.execute([0.8], blockSawtooth.params, null, 0.00018);
+    expect(res2.outputs[0]).toBe(0);
+  });
+
   it('TC-MOTOR-01: SENSORLESS_SIX_STEP Commutation Transitions', () => {
     const block = BLOCK_LIBRARY['SENSORLESS_SIX_STEP']('sensorless_test', {});
     let state = block.state;
@@ -1399,6 +1415,228 @@ describe('X-Bridges Learning Models Block Tests', () => {
       const res = dq.execute([12, 5, 0, 0], dq.params, dq.state, 0.1);
       expect(res.outputs[0]).toBeCloseTo(18.461538, 4);
       expect(res.outputs[1]).toBeCloseTo(7.6923, 4);
+    });
+  });
+
+  describe('DISCRETE_IMPULSE Block', () => {
+    it('should generate an impulse at the specified delay', () => {
+      const impulseBlock = BLOCK_LIBRARY['DISCRETE_IMPULSE']('imp', { amplitude: 5, delay: 2, sampleTime: 0.1 });
+      
+      // At t = 0 (step 0), output should be 0 (since delay is 2)
+      const res0 = impulseBlock.execute([], impulseBlock.params, null, 0.0);
+      expect(res0.outputs[0]).toBe(0);
+
+      // At t = 0.1 (step 1), output should be 0
+      const res1 = impulseBlock.execute([], impulseBlock.params, null, 0.1);
+      expect(res1.outputs[0]).toBe(0);
+
+      // At t = 0.2 (step 2), output should be amplitude (5)
+      const res2 = impulseBlock.execute([], impulseBlock.params, null, 0.2);
+      expect(res2.outputs[0]).toBe(5);
+
+      // At t = 0.3 (step 3), output should be 0
+      const res3 = impulseBlock.execute([], impulseBlock.params, null, 0.3);
+      expect(res3.outputs[0]).toBe(0);
+    });
+
+    it('should default amplitude to 1, delay to 0, and sampleTime to 0.1', () => {
+      const impulseDefault = BLOCK_LIBRARY['DISCRETE_IMPULSE']('imp_def', {});
+      expect(impulseDefault.params.amplitude).toBe(1);
+      expect(impulseDefault.params.delay).toBe(0);
+      expect(impulseDefault.params.sampleTime).toBe(0.1);
+
+      // At t = 0, step = 0, which matches delay 0, output should be 1
+      const res0 = impulseDefault.execute([], impulseDefault.params, null, 0.0);
+      expect(res0.outputs[0]).toBe(1);
+
+      // At t = 0.1, step = 1, output should be 0
+      const res1 = impulseDefault.execute([], impulseDefault.params, null, 0.1);
+      expect(res1.outputs[0]).toBe(0);
+    });
+  });
+
+  describe('Extended Kalman Filter (EKF) Block', () => {
+    it('should behave exactly like linear Kalman Filter on linear system equations', () => {
+      const p = {
+        A: [[1, 0.01], [0, 1]],
+        B: [[0.00005], [0.01]],
+        C: [[1, 0]],
+        Q: [[0.01, 0], [0, 0.01]],
+        R: [[0.1]],
+        P0: [[1, 0], [0, 1]]
+      };
+
+      const kf = BLOCK_LIBRARY['KALMAN_FILTER']('kf', p);
+      const ekf = BLOCK_LIBRARY['EXTENDED_KALMAN_FILTER']('ekf', {
+        f: ["x1 + 0.01 * x2 + 0.00005 * u1", "x2 + 0.01 * u1"],
+        h: ["x1"],
+        Q: p.Q,
+        R: p.R,
+        P0: p.P0,
+        x0: [0, 0]
+      });
+
+      let stateKf = kf.state;
+      let stateEkf = ekf.state;
+
+      // Simulate 5 steps with some inputs
+      for (let step = 1; step <= 5; step++) {
+        const u = [Math.sin(step)];
+        const y_meas = [0.5 * step];
+
+        const resKf = kf.execute([u, y_meas], kf.params, stateKf, step * 0.1);
+        const resEkf = ekf.execute([u, y_meas], ekf.params, stateEkf, step * 0.1);
+
+        stateKf = resKf.nextState;
+        stateEkf = resEkf.nextState;
+
+        // Verify outputs are identical
+        const xHatEkf = resEkf.outputs[0] as number[];
+        const xHatKf = resKf.outputs[0] as number[];
+        const yHatEkf = resEkf.outputs[1] as number[];
+        const yHatKf = resKf.outputs[1] as number[];
+        const innEkf = resEkf.outputs[2] as number[];
+        const innKf = resKf.outputs[2] as number[];
+        const kEkf = resEkf.outputs[3] as number[];
+        const kKf = resKf.outputs[3] as number[];
+
+        expect(xHatEkf[0]).toBeCloseTo(xHatKf[0], 4);
+        expect(xHatEkf[1]).toBeCloseTo(xHatKf[1], 4);
+        expect(yHatEkf[0]).toBeCloseTo(yHatKf[0], 4);
+        expect(innEkf[0]).toBeCloseTo(innKf[0], 4);
+        
+        // Kalman Gain flat vector
+        expect(kEkf[0]).toBeCloseTo(kKf[0], 4);
+        expect(kEkf[1]).toBeCloseTo(kKf[1], 4);
+      }
+    });
+
+    it('should successfully estimate states in a non-linear model', () => {
+      // E.g., system: x(k+1) = sin(x(k)) + u(k)
+      // y(k) = x(k)^2
+      const ekf = BLOCK_LIBRARY['EXTENDED_KALMAN_FILTER']('ekf_nonlin', {
+        f: ["sin(x1) + u1"],
+        h: ["x1^2"],
+        Q: [[0.01]],
+        R: [[0.05]],
+        P0: [[0.5]],
+        x0: [0.5]
+      });
+
+      let state = ekf.state;
+      
+      // Step 1: Input u = 0.2, y_meas = 0.36
+      const res = ekf.execute([0.2, 0.36], ekf.params, state, 0.1);
+      
+      // Verify outputs has length 4
+      expect(res.outputs.length).toBe(4);
+      
+      // State estimate x_hat should be a 1-element array
+      const xHat = res.outputs[0] as number[];
+      expect(Array.isArray(xHat)).toBe(true);
+      expect(xHat.length).toBe(1);
+      
+      // P covariance in nextState should be 1x1 matrix
+      expect(res.nextState.P.length).toBe(1);
+      expect(res.nextState.P[0].length).toBe(1);
+      
+      // Verify estimation does not throw and yields reasonable values
+      expect(xHat[0]).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Note Block', () => {
+    it('should initialize with default text and no ports', () => {
+      const noteBlock = BLOCK_LIBRARY['Note']('note1', {});
+      expect(noteBlock.type).toBe('Note');
+      expect(noteBlock.params.text).toBe('Double click or edit properties to write notes here...');
+      expect(noteBlock.inputs.length).toBe(0);
+      expect(noteBlock.outputs.length).toBe(0);
+      expect(noteBlock.execute([], noteBlock.params, null, 0.0).outputs.length).toBe(0);
+    });
+
+    it('should initialize with custom text and retain it', () => {
+      const noteBlock = BLOCK_LIBRARY['Note']('note2', { text: 'My custom simulation note.' });
+      expect(noteBlock.params.text).toBe('My custom simulation note.');
+      expect(noteBlock.execute([], noteBlock.params, null, 1.0).outputs.length).toBe(0);
+    });
+  });
+
+  describe('NUMERIC_REPRESENTATION Block', () => {
+    it('should initialize with default parameters', () => {
+      const block = BLOCK_LIBRARY['NUMERIC_REPRESENTATION']('numrep1', {});
+      expect(block.params.mode).toBe('fixed_point');
+      expect(block.params.output_type).toBe('fixed_point'); // mode-aware default
+      expect(block.params.wordLength).toBe(16);
+      expect(block.params.fractionLength).toBe(8);
+      expect(block.params.rounding).toBe('floor');
+    });
+
+    it('should perform fixed-point quantization with default scale (2^8)', () => {
+      const block = BLOCK_LIBRARY['NUMERIC_REPRESENTATION']('numrep2', {
+        mode: 'fixed_point',
+        rounding: 'floor',
+        fractionLength: 8
+      });
+      const res = block.execute([1.2345], block.params, null, 0);
+      const expectedY = Math.floor(1.2345 * 256) / 256;
+      expect(res.outputs[0]).toBeCloseTo(expectedY, 6);
+      expect(res.outputs[1]).toBeCloseTo(Math.abs(1.2345 - expectedY), 6);
+    });
+
+    it('should respect fractionLength = 0 for integer-like step quantization', () => {
+      const block = BLOCK_LIBRARY['NUMERIC_REPRESENTATION']('numrep3', {
+        mode: 'fixed_point',
+        rounding: 'ceil',
+        fractionLength: 0
+      });
+      const res = block.execute([1.2345], block.params, null, 0);
+      expect(res.outputs[0]).toBe(2);
+      expect(res.outputs[1]).toBeCloseTo(0.7655, 4);
+    });
+
+    it('should dynamically override wordLength/fractionLength when integer output_type is selected', () => {
+      const block = BLOCK_LIBRARY['NUMERIC_REPRESENTATION']('numrep4', {
+        mode: 'fixed_point',
+        output_type: 'int32',
+        rounding: 'round'
+      });
+      const res = block.execute([5.67], block.params, null, 0);
+      expect(res.outputs[0]).toBe(6);
+      expect(res.outputs[1]).toBeCloseTo(0.33, 4);
+    });
+
+    it('should support floating-point mode: float16 simulates IEEE 754 half-precision', () => {
+      const block = BLOCK_LIBRARY['NUMERIC_REPRESENTATION']('numrep5', {
+        mode: 'floating_point',
+        output_type: 'float16'
+      });
+      const res = block.execute([Math.PI], block.params, null, 0);
+      // float16: exp=1, step=2^(1-10)=1/512=0.001953125
+      // round(3.14159/0.001953125)=round(1608.495)=1608 → 1608/512 = 3.140625
+      expect(res.outputs[0]).toBeCloseTo(3.140625, 5);
+      expect(res.outputs[1]).toBeCloseTo(Math.abs(Math.PI - 3.140625), 6);
+    });
+
+    it('should produce different results for floating-point vs fixed-point mode', () => {
+      // float32 mode: Math.fround, very high precision
+      const blockFP = BLOCK_LIBRARY['NUMERIC_REPRESENTATION']('numrep6', {
+        mode: 'floating_point', output_type: 'float32'
+      });
+      const resFP = blockFP.execute([1.2345], blockFP.params, null, 0);
+
+      // fixed-point mode: WL=8, FL=4 → step = 1/16 = 0.0625
+      const blockFX = BLOCK_LIBRARY['NUMERIC_REPRESENTATION']('numrep7', {
+        mode: 'fixed_point', output_type: 'fixed_point', wordLength: 8, fractionLength: 4, rounding: 'floor'
+      });
+      const resFX = blockFX.execute([1.2345], blockFX.params, null, 0);
+      // floor(1.2345 * 16) / 16 = floor(19.752)/16 = 19/16 = 1.1875
+      expect(resFX.outputs[0]).toBeCloseTo(1.1875, 6);
+
+      // float32 output is essentially 1.2345 (no coarse quantization)
+      expect(Math.abs((resFP.outputs[0] as number) - 1.2345)).toBeLessThan(0.001);
+      // The two modes must differ when quantization step is coarse
+      expect(Math.abs((resFP.outputs[0] as number) - (resFX.outputs[0] as number))).toBeGreaterThan(0.04);
     });
   });
 

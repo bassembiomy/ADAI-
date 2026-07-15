@@ -117,15 +117,135 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
 
   const handleAddInput = () => {
     if (!block.allowDynamicInputs) return;
+
+    if (block.type === 'FUZZY_RULE') {
+      const numAntecedents = (block.params.numAntecedents || 2) + 1;
+      const newInputs = [
+        ...Array.from({ length: numAntecedents }, (_, i) => ({
+          id: `ant${i+1}`,
+          name: `μ_ant${i+1}`,
+          type: 'continuous' as const,
+          direction: 'input' as const,
+          value: 0,
+          position: 'left' as const
+        })),
+        {
+          id: 'cons',
+          name: 'Cons',
+          type: 'continuous' as const,
+          direction: 'input' as const,
+          value: 0,
+          position: 'bottom' as const
+        }
+      ];
+      onUpdate(block.id, {
+        params: { ...block.params, numAntecedents },
+        inputs: newInputs
+      });
+      return;
+    }
+
     const inPrefix = 'in';
-    const newId = inPrefix + String(block.inputs.length + 1);
-    const newPort: XPort = { id: newId, name: 'In ' + String(block.inputs.length + 1), type: 'auto', direction: 'input', value: 0 };
-    onUpdate(block.id, { inputs: [...block.inputs, newPort] });
+    const newLength = block.inputs.length + 1;
+    const newId = inPrefix + String(newLength);
+    const newPort: XPort = {
+      id: newId,
+      name: (block.type === 'MUX' ? 'u' : 'In ') + String(newLength),
+      type: 'auto',
+      direction: 'input',
+      value: 0,
+      position: 'left'
+    };
+    onUpdate(block.id, {
+      params: { ...block.params, numInputs: newLength },
+      inputs: [...block.inputs, newPort]
+    });
   };
 
   const handleRemoveInput = (id: string) => {
     if (!block.allowDynamicInputs || block.inputs.length <= 2) return; // Keep at least 2 for dynamic blocks usually
-    onUpdate(block.id, { inputs: block.inputs.filter(i => i.id !== id) });
+
+    if (block.type === 'FUZZY_RULE') {
+      const numAntecedents = Math.max(1, (block.params.numAntecedents || 2) - 1);
+      const newInputs = [
+        ...Array.from({ length: numAntecedents }, (_, i) => ({
+          id: `ant${i+1}`,
+          name: `μ_ant${i+1}`,
+          type: 'continuous' as const,
+          direction: 'input' as const,
+          value: 0,
+          position: 'left' as const
+        })),
+        {
+          id: 'cons',
+          name: 'Cons',
+          type: 'continuous' as const,
+          direction: 'input' as const,
+          value: 0,
+          position: 'bottom' as const
+        }
+      ];
+      onUpdate(block.id, {
+        params: { ...block.params, numAntecedents },
+        inputs: newInputs
+      });
+      return;
+    }
+
+    const filteredInputs = block.inputs.filter(i => i.id !== id);
+    const renamedInputs = filteredInputs.map((port, idx) => {
+      const isMux = block.type === 'MUX';
+      const name = isMux ? `u${idx + 1}` : `In ${idx + 1}`;
+      return {
+        ...port,
+        id: `in${idx + 1}`,
+        name: name,
+        position: 'left' as const
+      };
+    });
+    onUpdate(block.id, {
+      params: { ...block.params, numInputs: renamedInputs.length },
+      inputs: renamedInputs
+    });
+  };
+
+  const handleAddOutput = () => {
+    if (!block.allowDynamicOutputs) return;
+    const outPrefix = 'out';
+    const newLength = block.outputs.length + 1;
+    const newId = outPrefix + String(newLength);
+    const newPort: XPort = {
+      id: newId,
+      name: (block.type === 'DEMUX' ? 'y' : 'Out ') + String(newLength),
+      type: 'auto',
+      direction: 'output',
+      value: 0,
+      position: 'right'
+    };
+    onUpdate(block.id, {
+      params: { ...block.params, numOutputs: newLength },
+      outputs: [...block.outputs, newPort]
+    });
+  };
+
+  const handleRemoveOutput = (id: string) => {
+    if (!block.allowDynamicOutputs || block.outputs.length <= 2) return; // Keep at least 2 for dynamic blocks usually
+
+    const filteredOutputs = block.outputs.filter(o => o.id !== id);
+    const renamedOutputs = filteredOutputs.map((port, idx) => {
+      const isDemux = block.type === 'DEMUX';
+      const name = isDemux ? `y${idx + 1}` : `Out ${idx + 1}`;
+      return {
+        ...port,
+        id: `out${idx + 1}`,
+        name: name,
+        position: 'right' as const
+      };
+    });
+    onUpdate(block.id, {
+      params: { ...block.params, numOutputs: renamedOutputs.length },
+      outputs: renamedOutputs
+    });
   };
 
   const updateArrayParam = (key: string, index: number, newVal: number) => {
@@ -317,7 +437,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
               const newId = inPrefix + String(newNumInputs);
               const newInputs = [
                 ...block.inputs,
-                { id: newId, name: '+In' + String(newNumInputs), type: 'auto' as const, direction: 'input' as const, value: 0 }
+                { id: newId, name: '+In' + String(newNumInputs), type: 'auto' as const, direction: 'input' as const, value: 0, position: 'left' as const }
               ];
               onUpdate(block.id, {
                 params: { ...block.params, numInputs: newNumInputs, signs: newSigns },
@@ -335,7 +455,8 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                 .map((p, i) => ({
                   ...p,
                   id: inPrefix + String(i + 1),
-                  name: newSigns[i] === '-' ? '\u2212In' + String(i + 1) : '+In' + String(i + 1)
+                  name: newSigns[i] === '-' ? '\u2212In' + String(i + 1) : '+In' + String(i + 1),
+                  position: 'left' as const
                 }));
               onUpdate(block.id, {
                 params: { ...block.params, numInputs: newNumInputs, signs: newSigns },
@@ -602,6 +723,10 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
               if (block.type === 'SUM_JUNCTION') {
                 return !['signs', 'numInputs'].includes(key);
               }
+              // PWM_GENERATOR: duty comes from the input port only (like Simulink), never a param
+              if (block.type === 'PWM_GENERATOR') {
+                return key !== 'duty';
+              }
               return true;
             })
             .map(([key, value]) => {
@@ -635,7 +760,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                     {key.replace(/([A-Z])/g, ' $1').trim()}
                   </label>
                   
-                   {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'numCases', 'numSignals', 'bufferSize', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication', 'limitDataPoints', 'showGrid', 'showLegend', 'timeRange', 'diagMode', 'axis'].includes(key) && 
+                   {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'numCases', 'numSignals', 'bufferSize', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication', 'limitDataPoints', 'showGrid', 'showLegend', 'timeRange', 'diagMode', 'axis', 'carrierType'].includes(key) && 
                   (key !== 'type' || block.type === 'WaveformGen' || block.type === 'FUZZY_INFERENCE_SYSTEM') ? (
                     <select
                       value={String(displayValue)}
@@ -647,13 +772,33 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                       }}
                       className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-emerald-400 font-bold rounded focus:border-[#c9a86c] focus:ring-1 focus:ring-[#c9a86c]/50 outline-none transition-all cursor-pointer"
                     >
-                      {key === 'mode' && (
+                      {key === 'mode' && block.type === 'NUMERIC_REPRESENTATION' && (
                         <>
                           <option value="floating_point">Floating-Point</option>
                           <option value="fixed_point">Fixed-Point</option>
                         </>
                       )}
-                      {key === 'output_type' && (
+                      {key === 'output_type' && block.type === 'NUMERIC_REPRESENTATION' && block.params?.mode === 'floating_point' && (
+                        <>
+                          <option value="float32">Single (float32)</option>
+                          <option value="float64">Double (float64)</option>
+                          <option value="float16">Half (float16)</option>
+                          <option value="boolean">Boolean</option>
+                        </>
+                      )}
+                      {key === 'output_type' && block.type === 'NUMERIC_REPRESENTATION' && block.params?.mode !== 'floating_point' && (
+                        <>
+                          <option value="fixed_point">Fixed-Point (WL/FL)</option>
+                          <option value="int8">Int8</option>
+                          <option value="uint8">UInt8</option>
+                          <option value="int16">Int16</option>
+                          <option value="uint16">UInt16</option>
+                          <option value="int32">Int32</option>
+                          <option value="uint32">UInt32</option>
+                          <option value="boolean">Boolean</option>
+                        </>
+                      )}
+                      {key === 'output_type' && block.type !== 'NUMERIC_REPRESENTATION' && (
                         <>
                           <option value="float64">Double (float64)</option>
                           <option value="float32">Single (float32)</option>
@@ -737,7 +882,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                           <option value="discrete">Discrete-Time</option>
                         </>
                       )}
-                      {key === 'mode' && (
+                      {key === 'mode' && (block.type === 'PID_CONTROLLER' || block.type === 'PID_BASIC') && (
                         <>
                           <option value="P">P - Proportional</option>
                           <option value="PI">PI - Prop-Integral</option>
@@ -745,7 +890,25 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                           <option value="PID">PID - Full Control</option>
                         </>
                       )}
-                      {key === 'method' && (
+                      {key === 'mode' && block.type === 'CFD_DEM_SURROGATE_LEARNER' && (
+                        <>
+                          <option value="training">Training</option>
+                          <option value="inference">Inference</option>
+                        </>
+                      )}
+                      {key === 'mode' && block.type === 'CLARKE_TRANSFORM' && (
+                        <>
+                          <option value="amplitude_invariant">Amplitude Invariant</option>
+                          <option value="power_invariant">Power Invariant</option>
+                        </>
+                      )}
+                      {key === 'mode' && block.type === 'FLUX_REFERENCE' && (
+                        <>
+                          <option value="constant">Constant</option>
+                          <option value="field_weakening">Field Weakening</option>
+                        </>
+                      )}
+                      {key === 'method' && block.type !== 'FUZZY_AND' && block.type !== 'FUZZY_OR' && (
                         <>
                           <option value="forward_euler">Forward Euler</option>
                           <option value="backward_euler">Backward Euler</option>
@@ -784,19 +947,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                           <option value="degrees">Degrees</option>
                         </>
                       )}
-                      {key === 'output_type' && (
-                        <>
-                          <option value="float64">Float64</option>
-                          <option value="boolean">Boolean</option>
-                        </>
-                      )}
-                      {key === 'rounding' && (
-                        <>
-                          <option value="floor">Floor</option>
-                          <option value="ceil">Ceil</option>
-                          <option value="nearest">Nearest</option>
-                        </>
-                      )}
+                      {/* Duplicate output_type and rounding blocks removed */}
                       {key === 'type' && block.type === 'WaveformGen' && (
                         <>
                           <option value="Sine">Sine Wave</option>
@@ -857,7 +1008,26 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                           )}
                         </>
                       )}
+                      {key === 'carrierType' && (
+                        <>
+                          <option value="triangle">⟋⟍ Triangle (Symmetric / Centered PWM)</option>
+                          <option value="sawtooth">⟋ Sawtooth (Leading Edge / Naturally Sampled)</option>
+                          <option value="inv_sawtooth">⟍ Inverse Sawtooth (Trailing Edge)</option>
+                          <option value="sine">∿ Sine Wave Carrier</option>
+                          <option value="square">⊓ Square Wave Carrier</option>
+                        </>
+                      )}
                     </select>
+                  ) : key === 'text' ? (
+                    <textarea
+                      value={localInputValues[key] !== undefined ? localInputValues[key] : String(displayValue)}
+                      onChange={(e) => {
+                        setLocalInputValues(prev => ({ ...prev, [key]: e.target.value }));
+                        onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } });
+                      }}
+                      className="w-full h-32 text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-slate-300 rounded focus:border-[#c9a86c] outline-none transition-all resize-y font-sans leading-relaxed"
+                      placeholder="Type notes here..."
+                    />
                   ) : (
                     <input
                       type="text"
@@ -973,7 +1143,14 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
             {(block.inputs || []).length === 0 && <p className="text-xs text-slate-400 italic px-2">No inputs</p>}
           </div>
 
-          <h3 className="text-[10px] font-bold text-slate-455 uppercase tracking-wider mt-4">Output Ports</h3>
+          <div className="flex items-center justify-between mt-4">
+            <h3 className="text-[10px] font-bold text-slate-455 uppercase tracking-wider">Output Ports</h3>
+            {block.allowDynamicOutputs && (
+              <button onClick={handleAddOutput} className="text-[#c9a86c] hover:text-[#b8975a] flex items-center gap-1 text-[10px] font-bold bg-[#c9a86c]/10 px-2 py-1 rounded transition-colors">
+                <Plus size={10} /> Add
+              </button>
+            )}
+          </div>
           <div className="space-y-2">
             {(block.outputs || []).map(port => (
               <div key={port.id} className="bg-[#0a0a0a] border border-[#333] p-2 rounded-lg space-y-1">
@@ -996,6 +1173,11 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                     className="flex-1 text-xs px-2 py-1 border border-[#333] bg-[#1a1a1a] text-[#e0e0e0] rounded focus:border-[#c9a86c] outline-none"
                     placeholder="Port Label"
                   />
+                  {block.allowDynamicOutputs && (block.outputs || []).length > 2 && (
+                    <button onClick={() => handleRemoveOutput(port.id)} className="text-slate-500 hover:text-red-500 p-1 transition-colors">
+                      <Trash2 size={12} />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

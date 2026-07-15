@@ -64,11 +64,13 @@ const MATLAB_WAYPOINTS = [
 
 interface ScopeWindowProps {
   block: any;
+  nodes?: any[];
+  edges?: any[];
   onUpdate?: (data: any) => void;
   onClose: () => void;
 }
 
-export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdate, onClose }) => {
+export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, nodes, edges, onUpdate, onClose }) => {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const isRobotTwin = ['ROBOT_VACUUM_DIGITAL_TWIN', 'ROBOT_VACUUM_DYNAMICS', 'ROBOT_VACUUM_ENVIRONMENT', 'ROBOT_VACUUM_3D_SCENE_VIEW'].includes(block.type);
   const history = block.state?.history || [];
@@ -76,6 +78,67 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
   const timeRange = block.params?.timeRange || 'auto';
   const showGrid = block.params?.showGrid !== false;
   const showLegend = block.params?.showLegend !== false;
+
+  const getSignalInfo = React.useCallback((index: number) => {
+    const targetPortId = `in${index + 1}`;
+    const edge = edges?.find((e: any) => e.target === block.id && e.targetHandle === targetPortId);
+    if (!edge) {
+      return {
+        connected: false,
+        name: `Channel ${index + 1}`,
+        dataType: 'auto',
+        portName: `in${index + 1}`,
+        blockLabel: 'Unconnected',
+        fullName: `Channel ${index + 1}: Unconnected (auto)`
+      };
+    }
+
+    const sourceNode = nodes?.find((n: any) => n.id === edge.source);
+    const sourceBlockLabel = sourceNode ? (sourceNode.data?.label || sourceNode.data?.type || edge.source) : edge.source;
+    
+    const sourcePortObj = sourceNode?.data?.outputs?.find((p: any) => p.id === edge.sourceHandle);
+    const portName = sourcePortObj?.name || edge.sourceHandle || 'out';
+    
+    let baseType = 'auto';
+    if (sourcePortObj?.dataType) {
+      baseType = sourcePortObj.dataType;
+    } else if (sourcePortObj?.type && sourcePortObj.type !== 'auto') {
+      baseType = sourcePortObj.type;
+    }
+
+    let dimensionsStr = '';
+    if (history.length > 0) {
+      const lastSample = history[history.length - 1];
+      const rawVal = lastSample[`y${index + 1}_raw`] !== undefined ? lastSample[`y${index + 1}_raw`] : lastSample[`y${index + 1}`];
+      
+      if (baseType === 'auto') {
+        baseType = typeof rawVal === 'boolean' ? 'boolean' : 'double';
+      }
+
+      if (Array.isArray(rawVal)) {
+        if (rawVal.length > 0 && Array.isArray(rawVal[0])) {
+          dimensionsStr = ` [${rawVal.length}x${rawVal[0].length}]`;
+        } else {
+          dimensionsStr = ` [${rawVal.length}]`;
+        }
+      }
+    } else {
+      if (baseType === 'auto') {
+        baseType = 'double';
+      }
+    }
+
+    const dataType = `${baseType}${dimensionsStr}`;
+
+    return {
+      connected: true,
+      name: `Channel ${index + 1}`,
+      dataType,
+      portName,
+      blockLabel: sourceBlockLabel,
+      fullName: `Channel ${index + 1}: ${sourceBlockLabel}.${portName} (${dataType})`
+    };
+  }, [edges, nodes, block.id, history]);
 
   const displayData = React.useMemo(() => {
     if (timeRange === 'auto' || history.length === 0) return history;
@@ -1793,7 +1856,9 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
                               <p className="text-slate-400 font-mono">Time: {Number(label).toFixed(4)}s</p>
                               <div className="space-y-1">
                                 {payload.map((pld: any, index: number) => {
-                                  const rawVal = pld.payload[`y${index+1}_raw`] !== undefined ? pld.payload[`y${index+1}_raw`] : pld.value;
+                                  const match = pld.dataKey ? String(pld.dataKey).match(/y(\d+)/) : null;
+                                  const chIdx = match ? parseInt(match[1], 10) - 1 : index;
+                                  const rawVal = pld.payload[`y${chIdx+1}_raw`] !== undefined ? pld.payload[`y${chIdx+1}_raw`] : pld.value;
                                   let displayVal = '';
                                   if (Array.isArray(rawVal)) {
                                     displayVal = JSON.stringify(rawVal);
@@ -1818,18 +1883,21 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
                       }}
                     />
                     {showLegend && <Legend iconType="circle" />}
-                    {Array.from({ length: numSignals }, (_, i) => (
-                      <Line 
-                        key={i}
-                        name={`Channel ${i+1}`}
-                        type="monotone" 
-                        dataKey={`y${i+1}`} 
-                        stroke={getSignalColor(i)} 
-                        strokeWidth={2} 
-                        dot={false} 
-                        isAnimationActive={false}
-                      />
-                    ))}
+                    {Array.from({ length: numSignals }, (_, i) => {
+                      const sigInfo = getSignalInfo(i);
+                      return (
+                        <Line 
+                          key={i}
+                          name={sigInfo.fullName}
+                          type="monotone" 
+                          dataKey={`y${i+1}`} 
+                          stroke={getSignalColor(i)} 
+                          strokeWidth={2} 
+                          dot={false} 
+                          isAnimationActive={false}
+                        />
+                      );
+                    })}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -1849,9 +1917,19 @@ export const XbridgesScopeWindow: React.FC<ScopeWindowProps> = ({ block, onUpdat
                     const color = getSignalColor(i);
                     return (
                       <div key={i} className="p-4 rounded-xl bg-[#0a0a0a] border border-[#333] space-y-3 shadow-sm">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full" style={{ background: color }} />
-                          <span className="text-xs font-bold text-[#e0e0e0]">Channel {i+1}</span>
+                        <div className="flex items-start gap-2">
+                          <div className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: color }} />
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-[#e0e0e0]">Channel {i+1}</span>
+                            {(() => {
+                              const sigInfo = getSignalInfo(i);
+                              return (
+                                <span className="text-[10px] text-slate-400 font-mono mt-0.5 break-all">
+                                  {sigInfo.connected ? `${sigInfo.blockLabel}.${sigInfo.portName} (${sigInfo.dataType})` : 'Unconnected (auto)'}
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="col-span-2">

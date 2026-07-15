@@ -35,6 +35,7 @@ export interface XBlock {
   state?: any; // For blocks with memory (integrators, unit delays, flip-flops)
   isStateful?: boolean; // NEW: Indicates if the block breaks algebraic loops
   allowDynamicInputs?: boolean; // Can the user add more inputs? (e.g. Sum, Mul, Concat)
+  allowDynamicOutputs?: boolean; // Can the user add more outputs? (e.g. Demux)
   equation?: string; // For Help Center documentation
   icon?: string; // For Help Center documentation
   description?: string; // For Help Center documentation

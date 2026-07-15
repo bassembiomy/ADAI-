@@ -5,7 +5,7 @@ import {
   Square, Activity, Plus, Minus, X, Divide, ChevronUp, MinusCircle, Maximize, Maximize2,
   Sigma, BarChart, ArrowUp, Grid, RotateCw, RefreshCcw, Hash, TrendingUp, Monitor, Box, Download,
   LogIn, LogOut, ChevronLeft, ChevronRight, Zap, Settings, ZapOff, Cpu, Layers, Wind, Filter, Eye,
-  GraduationCap, ArrowRightCircle, ArrowLeftCircle, Network, FlaskConical
+  GraduationCap, ArrowRightCircle, ArrowLeftCircle, Network, FlaskConical, FileText
 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import { XPort } from '../../engine/xbridges/types';
@@ -51,6 +51,7 @@ const LucideIconMap: Record<string, React.ComponentType<any>> = {
   'arrow-left-circle': ArrowLeftCircle,
   'network': Network,
   'integral': TrendingUp,
+  'file-text': FileText,
 };
 
 // Build mapping of block type to icon name from categories
@@ -1187,8 +1188,8 @@ export const getColor = (type: string) => {
   if (['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR', 'SWITCH', 'IF_ELSE', 'SWITCH_CASE'].includes(type)) return '#6f42c1'; // Logic (Purple)
   if (['BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight'].includes(type)) return '#563d7c'; // Bitwise (Indigo)
   if (['DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Integrator', 'INTEGRATOR_CONTINUOUS', 'INTEGRATOR_DISCRETE', 'PID_CONTROLLER', 'PID_BASIC', 'FUZZY_PID_CONTROLLER'].includes(type)) return '#d73a49'; // Sequential/Control (Red)
-  if (['MPC_CONTROLLER', 'Subsystem', 'DOE_MODEL', 'AC_MOTOR_PID_CONTROL', 'LMS_ADAPTIVE_FILTER', 'NEURAL_NEURON_LEARNING', 'RL_Q_LEARNING_CONTROLLER', 'ROBOT_VACUUM_DIGITAL_TWIN', 'ROBOT_VACUUM_DYNAMICS', 'ROBOT_VACUUM_MOTOR', 'ROBOT_VACUUM_ODOMETRY', 'ROBOT_VACUUM_FUSION', 'ROBOT_VACUUM_SLAM', 'ROBOT_VACUUM_NAV', 'ROBOT_VACUUM_KINEMATICS', 'ROBOT_VACUUM_WHEEL_CONTROL', 'ROBOT_VACUUM_ENVIRONMENT', 'ROBOT_VACUUM_BOUSTROPHEDON_SWEEP', 'ROBOT_VACUUM_ERODE_MASK', 'ROBOT_VACUUM_DOOR_TRACKER', 'ROBOT_VACUUM_DOOR_CROSSING', 'ROBOT_VACUUM_CONTINUOUS_ENERGY', 'ROBOT_VACUUM_TOPOLOGY_RETURN', 'ROBOT_VACUUM_THETA_STAR'].includes(type)) return '#c9a86c'; // MPC/Subsystem/DOE/Learning/Robots (Copper/Gold)
-  if (['WHITE_NOISE', 'BAND_LIMITED_NOISE', 'LOW_PASS_FILTER', 'HIGH_PASS_FILTER', 'MOVING_AVERAGE'].includes(type)) return '#17a2b8'; // Signal Processing (Cyan/Teal)
+  if (['MPC_CONTROLLER', 'Subsystem', 'DOE_MODEL', 'AC_MOTOR_PID_CONTROL', 'LMS_ADAPTIVE_FILTER', 'NEURAL_NEURON_LEARNING', 'RL_Q_LEARNING_CONTROLLER', 'ROBOT_VACUUM_DIGITAL_TWIN', 'ROBOT_VACUUM_DYNAMICS', 'ROBOT_VACUUM_MOTOR', 'ROBOT_VACUUM_ODOMETRY', 'ROBOT_VACUUM_FUSION', 'ROBOT_VACUUM_SLAM', 'ROBOT_VACUUM_NAV', 'ROBOT_VACUUM_KINEMATICS', 'ROBOT_VACUUM_WHEEL_CONTROL', 'ROBOT_VACUUM_ENVIRONMENT', 'ROBOT_VACUUM_BOUSTROPHEDON_SWEEP', 'ROBOT_VACUUM_ERODE_MASK', 'ROBOT_VACUUM_DOOR_TRACKER', 'ROBOT_VACUUM_DOOR_CROSSING', 'ROBOT_VACUUM_CONTINUOUS_ENERGY', 'ROBOT_VACUUM_TOPOLOGY_RETURN', 'ROBOT_VACUUM_THETA_STAR', 'Note'].includes(type)) return '#c9a86c'; // MPC/Subsystem/DOE/Learning/Robots/Note (Copper/Gold)
+  if (['WHITE_NOISE', 'BAND_LIMITED_NOISE', 'LOW_PASS_FILTER', 'HIGH_PASS_FILTER', 'MOVING_AVERAGE', 'DISCRETE_IMPULSE'].includes(type)) return '#17a2b8'; // Signal Processing (Cyan/Teal)
   if (['KALMAN_FILTER', 'EXTENDED_KALMAN_FILTER'].includes(type)) return '#20c997'; // Estimation (Mint)
   if (['THREE_PHASE_INVERTER', 'SINGLE_PHASE_H_BRIDGE'].includes(type)) return '#ef4444'; // Power (Red)
   if (['PWM_GENERATOR', 'THREE_PHASE_PWM', 'SIX_STEP_COMMUTATION', 'SVPWM_GATE_GENERATOR', 'SVPWM_MODULATOR'].includes(type)) return '#3b82f6'; // Control (Blue)
@@ -1341,6 +1342,7 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       case 'BAND_LIMITED_NOISE': return <Wind size={12} />;
       case 'LOW_PASS_FILTER':
       case 'HIGH_PASS_FILTER':
+      case 'DISCRETE_IMPULSE': return <Zap size={12} />;
       case 'MOVING_AVERAGE': return <Filter size={12} />;
       case 'KALMAN_FILTER':
       case 'EXTENDED_KALMAN_FILTER': return <Eye size={12} />;
@@ -1433,8 +1435,8 @@ export const XBlockNode = ({ data, id, selected }: any) => {
             transition: 'all 0.3s ease',
             ...(port.position === 'left' ? { left: isSelected ? -20 : -18, position: 'absolute', top: calcStyle } : {}),
             ...(port.position === 'right' ? { right: isSelected ? -20 : -18, position: 'absolute', top: calcStyle } : {}),
-            ...(port.position === 'top' ? { top: calcStyle, left: calcStyle, position: 'absolute' } : {}),
-            ...(port.position === 'bottom' ? { top: calcStyle, left: calcStyle, position: 'absolute' } : {}),
+            ...(port.position === 'top' ? { top: isSelected ? 2 : 4, left: calcStyle, position: 'absolute' } : {}),
+            ...(port.position === 'bottom' ? { bottom: isSelected ? 2 : 4, left: calcStyle, position: 'absolute' } : {}),
           }}
           onClick={(e) => {
             e.stopPropagation();
@@ -1444,8 +1446,9 @@ export const XBlockNode = ({ data, id, selected }: any) => {
         <span 
           className={`text-[8px] font-mono text-slate-400 uppercase tracking-tighter mx-1.5 transition-opacity duration-200 group-hover:text-slate-200 font-bold`}
           style={{
-            marginTop: port.position === 'top' ? 12 : 0,
-            marginBottom: port.position === 'bottom' ? 12 : 0,
+            marginTop: port.position === 'top' ? 16 : 0,
+            marginBottom: port.position === 'bottom' ? 16 : 0,
+            pointerEvents: 'none',
           }}
         >
           {port.name}
@@ -1457,6 +1460,55 @@ export const XBlockNode = ({ data, id, selected }: any) => {
   const color = getColor(data.type);
 
   const isPulsing = !!data.pulse;
+
+  if (data.type === 'Note') {
+    return (
+      <div 
+        ref={nodeRef}
+        className={`relative rounded-md transition-all duration-500 border-2 p-3 ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[#444]'}`}
+        onMouseDown={(e) => data.onNodeMouseDown && data.onNodeMouseDown(e)}
+        style={{ 
+          background: 'rgba(201, 168, 108, 0.08)',
+          backdropFilter: 'blur(20px)',
+          borderColor: selected ? color : 'rgba(201, 168, 108, 0.3)',
+          minWidth: 150,
+          minHeight: 100,
+          boxShadow: selected 
+            ? `0 12px 24px -8px rgba(0,0,0,0.5), 0 0 16px ${color}33` 
+            : '0 4px 12px -4px rgba(0,0,0,0.4)',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
+        <NodeResizer minWidth={100} minHeight={60} isVisible={selected} lineStyle={{ borderColor: color }} handleStyle={{ background: color, border: 'none', borderRadius: '4px' }} />
+        
+        {/* Simple Note Header */}
+        <div className="flex items-center gap-1.5 pb-2 mb-2 border-b border-[#c9a86c]/20 z-10">
+          <div style={{ color }} className="opacity-70">
+            {getIcon(data.type)}
+          </div>
+          <span className="text-[9px] font-black text-slate-350 uppercase tracking-widest leading-none">
+            {data.label || 'Note'}
+          </span>
+        </div>
+        
+        {/* Note Editor Area */}
+        <div className="flex-1 min-h-0 relative z-10">
+          <textarea
+            className="nodrag nopan nowheel w-full h-full bg-transparent text-slate-200 placeholder-slate-500 border-none outline-none resize-none font-sans text-xs leading-relaxed"
+            value={data.params?.text ?? ''}
+            placeholder="Type your notes here..."
+            onChange={(e) => {
+              data.onUpdate?.({ params: { ...data.params, text: e.target.value } });
+            }}
+          />
+        </div>
+        
+        {selected && <div className="absolute bottom-0 left-0 w-full h-[2px]" style={{ background: `linear-gradient(to right, transparent, ${color}, transparent)` }} />}
+      </div>
+    );
+  }
 
   return (
     <div 

@@ -328,4 +328,44 @@ describe('StateMachineCodeGenerator', () => {
     // Verify after(5) transition checks (5 * 20 = 100ms)
     expect(coreC).toContain('(instance->state_timers[0U] >= 100U)');
   });
+
+  it('should support floating-point/decimal tick rates (e.g. 0.5 ms)', () => {
+    const customStates: StateData[] = [
+      {
+        id: 's1', name: 'State_1', entry: 'counter = 0;', during: '', exit: '',
+        priority: 1, isParallel: false, regionId: 'r1', autostart: true,
+        internalTransitions: 'after(3) / counter = 10;'
+      }
+    ];
+
+    const customLayers: Layer[] = [
+      { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }
+    ];
+
+    const customChart = {
+      tickMs: 0.5,
+      states: customStates,
+      junctions: [] as JunctionData[],
+      transitions: [] as TransitionData[],
+      variables: mockVariables,
+      layers: customLayers,
+      safetyMode: false
+    };
+
+    const result = generateMISRACCode(customChart);
+    expect(result.errors).toHaveLength(0);
+
+    const configH = result.files.find(f => f.name === 'sm_config.h')?.content || '';
+    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
+
+    // Verify tickMs suffix is 'f'
+    expect(configH).toContain('#define SM_TICK_MS (0.5f)');
+    // Verify state timers array is of float type
+    expect(configH).toContain('float state_timers[');
+    expect(configH).toContain('float state_timer;');
+    // Verify SM_Step uses float for delta_ms
+    expect(coreC).toContain('void SM_Step(ADIA_Instance_t* instance, float delta_ms)');
+    // Verify transition condition uses f suffix for 3 * 0.5 = 1.5
+    expect(coreC).toContain('(instance->state_timers[0U] >= 1.5f)');
+  });
 });
