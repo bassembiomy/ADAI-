@@ -9,7 +9,8 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import { XPort } from '../../engine/xbridges/types';
-import { XBRIDGES_CATEGORIES, raycastTwin, ROOM_WALLS, ROOM_CIRCLES, ROOM_BOXES, MATLAB_WALLS, MATLAB_OBSTACLES, polyToString, zpgToString } from '../../engine/xbridges/BlockDefinitions';
+import { XBRIDGES_CATEGORIES, raycastTwin, ROOM_WALLS, ROOM_CIRCLES, ROOM_BOXES, MATLAB_WALLS, MATLAB_OBSTACLES, polyToString, zpgToString, findRoots } from '../../engine/xbridges/BlockDefinitions';
+import { WorkspaceContext } from './context';
 
 // Map icon string names to Lucide icon components
 const LucideIconMap: Record<string, React.ComponentType<any>> = {
@@ -1180,11 +1181,222 @@ const HarmonicAnalyzerCanvas: React.FC<{ state: any }> = ({ state }) => {
   );
 };
 
+const RootLocusCanvas: React.FC<{ params: any }> = ({ params }) => {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const W = canvas.width;
+    const H = canvas.height;
+    
+    const numerator = params?.numerator || [1];
+    const denominator = params?.denominator || [1, 2, 1];
+    const gain = params?.gain !== undefined ? Number(params.gain) : 1;
+    const maxGain = params?.maxGain !== undefined ? Number(params.maxGain) : 100;
+    
+    const olPoles = findRoots(denominator);
+    const olZeros = findRoots(numerator);
+    
+    const gains: number[] = [];
+    for (let i = 0; i <= 50; i++) {
+      gains.push(maxGain * Math.pow(i / 50, 2));
+    }
+    
+    const dCoeffs = [...denominator];
+    const nCoeffs = [...numerator];
+    const maxLength = Math.max(dCoeffs.length, nCoeffs.length);
+    while (dCoeffs.length < maxLength) dCoeffs.unshift(0);
+    while (nCoeffs.length < maxLength) nCoeffs.unshift(0);
+    
+    const n = dCoeffs.length - 1;
+    const trajectories: { re: number; im: number }[][] = Array.from({ length: n }, () => []);
+    
+    let prevRoots = [...olPoles];
+    prevRoots.forEach((r, idx) => {
+      trajectories[idx].push(r);
+    });
+    
+    for (let step = 1; step < gains.length; step++) {
+      const K = gains[step];
+      const closedLoopCoeffs = dCoeffs.map((dVal, idx) => dVal + K * nCoeffs[idx]);
+      const currentRoots = findRoots(closedLoopCoeffs);
+      
+      const matchedIndices = new Set<number>();
+      const nextPrevRoots: typeof currentRoots = [];
+      
+      for (let i = 0; i < prevRoots.length; i++) {
+        const prev = prevRoots[i];
+        let bestDist = Infinity;
+        let bestIdx = -1;
+        
+        for (let j = 0; j < currentRoots.length; j++) {
+          if (matchedIndices.has(j)) continue;
+          const curr = currentRoots[j];
+          const dist = Math.pow(curr.re - prev.re, 2) + Math.pow(curr.im - prev.im, 2);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestIdx = j;
+          }
+        }
+        
+        if (bestIdx !== -1) {
+          matchedIndices.add(bestIdx);
+          const matchedRoot = currentRoots[bestIdx];
+          trajectories[i].push(matchedRoot);
+          nextPrevRoots.push(matchedRoot);
+        } else {
+          trajectories[i].push(prev);
+          nextPrevRoots.push(prev);
+        }
+      }
+      prevRoots = nextPrevRoots;
+    }
+    
+    const currCoeffs = dCoeffs.map((dVal, idx) => dVal + gain * nCoeffs[idx]);
+    const clPoles = findRoots(currCoeffs);
+    
+    let minRe = -4;
+    let maxRe = 1;
+    let minIm = -2.5;
+    let maxIm = 2.5;
+    
+    const allPoints: { re: number; im: number }[] = [];
+    olPoles.forEach(p => allPoints.push(p));
+    olZeros.forEach(z => allPoints.push(z));
+    trajectories.forEach(traj => traj.forEach(pt => allPoints.push(pt)));
+    
+    if (allPoints.length > 0) {
+      const res = allPoints.map(p => p.re);
+      const ims = allPoints.map(p => p.im);
+      minRe = Math.min(...res, -1);
+      maxRe = Math.max(...res, 1);
+      minIm = Math.min(...ims, -1);
+      maxIm = Math.max(...ims, 1);
+      
+      const reSpan = maxRe - minRe;
+      const imSpan = maxIm - minIm;
+      const padRe = reSpan > 0 ? reSpan * 0.15 : 1;
+      const padIm = imSpan > 0 ? imSpan * 0.15 : 1;
+      
+      minRe -= padRe;
+      maxRe += padRe;
+      minIm -= padIm;
+      maxIm += padIm;
+    }
+    
+    const padding = 10;
+    const pxPerUnitX = (W - 2 * padding) / (maxRe - minRe);
+    const pxPerUnitY = (H - 2 * padding) / (maxIm - minIm);
+    const pxPerUnit = Math.min(pxPerUnitX, pxPerUnitY);
+    
+    const centerX = (minRe + maxRe) / 2;
+    const centerY = (minIm + maxIm) / 2;
+    const newReRange = (W - 2 * padding) / pxPerUnit;
+    const newImRange = (H - 2 * padding) / pxPerUnit;
+    
+    const plotMinRe = centerX - newReRange / 2;
+    const plotMaxRe = centerX + newReRange / 2;
+    const plotMinIm = centerY - newImRange / 2;
+    const plotMaxIm = centerY + newImRange / 2;
+    
+    const scaleX = (re: number) => padding + ((re - plotMinRe) / newReRange) * (W - 2 * padding);
+    const scaleY = (im: number) => H - padding - ((im - plotMinIm) / newImRange) * (H - 2 * padding);
+    
+    ctx.fillStyle = '#070d1a';
+    ctx.fillRect(0, 0, W, H);
+    
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
+    ctx.lineWidth = 0.5;
+    ctx.setLineDash([2, 2]);
+    for (let reVal = Math.floor(plotMinRe); reVal <= Math.ceil(plotMaxRe); reVal++) {
+      if (reVal === 0) continue;
+      const px = scaleX(reVal);
+      ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke();
+    }
+    for (let imVal = Math.floor(plotMinIm); imVal <= Math.ceil(plotMaxIm); imVal++) {
+      if (imVal === 0) continue;
+      const py = scaleY(imVal);
+      ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(W, py); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)';
+    ctx.lineWidth = 1;
+    const y0 = scaleY(0);
+    ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
+    const x0 = scaleX(0);
+    ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, H); ctx.stroke();
+    
+    ctx.lineWidth = 1.5;
+    const colors = ['#f43f5e', '#3b82f6', '#10b981', '#a855f7', '#eab308'];
+    trajectories.forEach((traj, trajIdx) => {
+      if (traj.length < 2) return;
+      ctx.strokeStyle = colors[trajIdx % colors.length];
+      ctx.beginPath();
+      ctx.moveTo(scaleX(traj[0].re), scaleY(traj[0].im));
+      for (let i = 1; i < traj.length; i++) {
+        ctx.lineTo(scaleX(traj[i].re), scaleY(traj[i].im));
+      }
+      ctx.stroke();
+    });
+    
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ef4444';
+    olPoles.forEach(p => {
+      const px = scaleX(p.re);
+      const py = scaleY(p.im);
+      const sz = 4;
+      ctx.beginPath();
+      ctx.moveTo(px - sz, py - sz);
+      ctx.lineTo(px + sz, py + sz);
+      ctx.moveTo(px - sz, py + sz);
+      ctx.lineTo(px + sz, py - sz);
+      ctx.stroke();
+    });
+    
+    ctx.strokeStyle = '#3b82f6';
+    olZeros.forEach(z => {
+      const px = scaleX(z.re);
+      const py = scaleY(z.im);
+      const r = 3.5;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, 2 * Math.PI);
+      ctx.stroke();
+    });
+    
+    ctx.fillStyle = '#10b981';
+    ctx.strokeStyle = '#059669';
+    ctx.lineWidth = 1;
+    clPoles.forEach(p => {
+      const px = scaleX(p.re);
+      const py = scaleY(p.im);
+      const r = 3;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+    });
+  }, [params]);
+  
+  return (
+    <canvas 
+      ref={canvasRef} 
+      width={150} 
+      height={100} 
+      className="rounded-lg border border-slate-800 bg-[#070d1a] shadow-inner" 
+    />
+  );
+};
+
 export const getColor = (type: string) => {
   if (['DEM_WASHING_MACHINE_TWIN', 'DEM_DRUM', 'DEM_PARTICLE_SYSTEM', 'DEM_HERTZ_CONTACT', 'DEM_BOND_FABRIC', 'DEM_FLUID_COUPLING', 'CFD_SPH_WATER_SOLVER', 'DEM_CFD_COSIMULATION_INTERFACE', 'FABRIC_HARMONIC_ANALYZER'].includes(type)) return '#0ea5e9'; // DEM & Particles (Sky Blue)
   if (['CFD_DEM_SURROGATE_LEARNER'].includes(type)) return '#c9a86c'; // Gold/Copper
   if (['Constant', 'WaveformGen', 'Clock', 'Step', 'Scope', 'DELAY', 'MUX', 'DEMUX', 'TERMINATOR', 'DATA_TYPE_CONVERSION'].includes(type)) return '#007acc'; // Signal (Blue)
-  if (['SUM_JUNCTION', 'VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow', 'UnaryNeg', 'Abs', 'SumElements', 'Mean', 'Max', 'MatrixMul', 'Transpose', 'Inverse', 'Determinant', 'GAIN', 'PRODUCT', 'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'ASIN', 'ACOS', 'ATAN', 'ACOT', 'ASEC', 'ACOSEC', 'SINH', 'COSH', 'TANH', 'COTH', 'SECH', 'COSECH', 'ASINH', 'ACOSH', 'ATANH', 'ACOTH', 'ASECH', 'ACOSECH', 'TRANSFER_FUNCTION', 'STATE_SPACE', 'ZERO_POLE_GAIN', 'DISCRETE_TRANSFER_FUNCTION', 'MatrixConcat', 'MatrixDiag', 'IdentityMatrix', 'SubMatrix', 'MatrixSolve'].includes(type)) return '#28a745'; // Math (Green)
+  if (['SUM_JUNCTION', 'VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow', 'UnaryNeg', 'Abs', 'SumElements', 'Mean', 'Max', 'MatrixMul', 'Transpose', 'Inverse', 'Determinant', 'GAIN', 'PRODUCT', 'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'ASIN', 'ACOS', 'ATAN', 'ACOT', 'ASEC', 'ACOSEC', 'SINH', 'COSH', 'TANH', 'COTH', 'SECH', 'COSECH', 'ASINH', 'ACOSH', 'ATANH', 'ACOTH', 'ASECH', 'ACOSECH', 'TRANSFER_FUNCTION', 'STATE_SPACE', 'ZERO_POLE_GAIN', 'DISCRETE_TRANSFER_FUNCTION', 'LAPLACE_TRANSFORM', 'MatrixConcat', 'MatrixDiag', 'IdentityMatrix', 'SubMatrix', 'MatrixSolve'].includes(type)) return '#28a745'; // Math (Green)
   if (['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR', 'SWITCH', 'IF_ELSE', 'SWITCH_CASE'].includes(type)) return '#6f42c1'; // Logic (Purple)
   if (['BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight'].includes(type)) return '#563d7c'; // Bitwise (Indigo)
   if (['DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Integrator', 'INTEGRATOR_CONTINUOUS', 'INTEGRATOR_DISCRETE', 'PID_CONTROLLER', 'PID_BASIC', 'FUZZY_PID_CONTROLLER'].includes(type)) return '#d73a49'; // Sequential/Control (Red)
@@ -1199,9 +1411,10 @@ export const getColor = (type: string) => {
   return '#444';
 };
 
-export const XBlockNode = ({ data, id, selected }: any) => {
+export const XBlockNode = React.memo(({ data, selected, id }: any) => {
   const updateNodeInternals = useUpdateNodeInternals();
   const nodeRef = React.useRef<HTMLDivElement>(null);
+  const workspaceContext = React.useContext(WorkspaceContext);
 
   const allPorts = React.useMemo(() => [...(data.inputs || []), ...(data.outputs || [])], [data.inputs, data.outputs]);
 
@@ -1337,7 +1550,8 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       case 'MPC_CONTROLLER': return <Cpu size={12} />;
       case 'TRANSFER_FUNCTION':
       case 'STATE_SPACE':
-      case 'ZERO_POLE_GAIN': return <Activity size={12} />;
+      case 'ZERO_POLE_GAIN':
+      case 'ROOT_LOCUS': return <Activity size={12} />;
       case 'WHITE_NOISE':
       case 'BAND_LIMITED_NOISE': return <Wind size={12} />;
       case 'LOW_PASS_FILTER':
@@ -1459,14 +1673,18 @@ export const XBlockNode = ({ data, id, selected }: any) => {
 
   const color = getColor(data.type);
 
-  const isPulsing = !!data.pulse;
+  const isPulsing = data.pulse || (workspaceContext?.isTargetBlock ? workspaceContext.isTargetBlock(id) : false);
 
   if (data.type === 'Note') {
     return (
       <div 
         ref={nodeRef}
         className={`relative rounded-md transition-all duration-500 border-2 p-3 ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[#444]'}`}
-        onMouseDown={(e) => data.onNodeMouseDown && data.onNodeMouseDown(e)}
+        onContextMenu={(e) => e.preventDefault()}
+        onMouseDown={(e) => {
+          if (workspaceContext?.onNodeMouseDown) workspaceContext.onNodeMouseDown(e, id);
+          else if (data.onNodeMouseDown) data.onNodeMouseDown(e);
+        }}
         style={{ 
           background: 'rgba(201, 168, 108, 0.08)',
           backdropFilter: 'blur(20px)',
@@ -1500,7 +1718,11 @@ export const XBlockNode = ({ data, id, selected }: any) => {
             value={data.params?.text ?? ''}
             placeholder="Type your notes here..."
             onChange={(e) => {
-              data.onUpdate?.({ params: { ...data.params, text: e.target.value } });
+              if (workspaceContext?.updateBlock) {
+                workspaceContext.updateBlock(id, { params: { ...data.params, text: e.target.value } });
+              } else {
+                data.onUpdate?.({ params: { ...data.params, text: e.target.value } });
+              }
             }}
           />
         </div>
@@ -1514,12 +1736,16 @@ export const XBlockNode = ({ data, id, selected }: any) => {
     <div 
       ref={nodeRef}
       className={`relative rounded-md transition-all duration-500 border-2 ${selected ? 'ring-4 ring-orange-500/20 scale-105 z-50' : 'hover:border-[#444]'} ${isPulsing ? 'block-pulse-highlight' : ''}`}
-      onMouseDown={(e) => data.onNodeMouseDown && data.onNodeMouseDown(e)}
+      onContextMenu={(e) => e.preventDefault()}
+      onMouseDown={(e) => {
+        if (workspaceContext?.onNodeMouseDown) workspaceContext.onNodeMouseDown(e, id);
+        else if (data.onNodeMouseDown) data.onNodeMouseDown(e);
+      }}
       style={{ 
         background: 'rgba(26, 26, 26, 0.95)',
         backdropFilter: 'blur(20px)',
         borderColor: selected ? color : '#333333',
-        minWidth: data.type === 'Scope' ? 260 : ['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN'].includes(data.type) ? 170 : 130,
+        minWidth: data.type === 'Scope' ? 260 : ['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN', 'ROOT_LOCUS', 'LAPLACE_TRANSFORM'].includes(data.type) ? 170 : 130,
         boxShadow: selected 
           ? `0 12px 24px -8px rgba(0,0,0,0.5), 0 0 16px ${color}33` 
           : '0 4px 12px -4px rgba(0,0,0,0.4)',
@@ -1554,22 +1780,28 @@ export const XBlockNode = ({ data, id, selected }: any) => {
         
         <div className="flex items-center gap-1 z-10">
 
-          {data.type === 'Scope' && (
+          {['Scope', 'ROOT_LOCUS'].includes(data.type) && (
             <div className="flex bg-[#222] p-0.5 rounded-lg border border-[#333]">
               <button 
-                onClick={(e) => { e.stopPropagation(); data.onOpenScope && data.onOpenScope(id); }}
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  if (workspaceContext?.onOpenScope) workspaceContext.onOpenScope(id);
+                  else if (data.onOpenScope) data.onOpenScope(id); 
+                }}
                 className="p-1.5 hover:bg-[#333] rounded-md transition-all text-blue-400 hover:text-blue-500"
-                title="Full Screen Scope"
+                title={data.type === 'Scope' ? "Full Screen Scope" : "Open Root Locus Plotter"}
               >
                 <Maximize2 size={12} />
               </button>
-              <button 
-                onClick={(e) => { e.stopPropagation(); downloadCSV(); }}
-                className="p-1.5 hover:bg-[#333] rounded-md transition-all text-emerald-400 hover:text-emerald-500"
-                title="Export Data"
-              >
-                <Download size={12} />
-              </button>
+              {data.type === 'Scope' && (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); downloadCSV(); }}
+                  className="p-1.5 hover:bg-[#333] rounded-md transition-all text-emerald-400 hover:text-emerald-500"
+                  title="Export Data"
+                >
+                  <Download size={12} />
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -1696,9 +1928,9 @@ export const XBlockNode = ({ data, id, selected }: any) => {
                  </span>
                </div>
             </div>
-          ) : ['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN'].includes(data.type) ? (
+          ) : ['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN', 'LAPLACE_TRANSFORM'].includes(data.type) ? (
             <div className="flex flex-col items-center select-text">
-               {data.type === 'TRANSFER_FUNCTION' && (
+               {['TRANSFER_FUNCTION', 'LAPLACE_TRANSFORM'].includes(data.type) && (
                  <div className="flex flex-col items-center py-2 px-3 min-w-[120px]">
                    <div className="font-mono text-[11px] text-emerald-400 text-center leading-snug whitespace-nowrap">
                      {polyToString(data.params?.numerator || [1], 's')}
@@ -1735,7 +1967,14 @@ export const XBlockNode = ({ data, id, selected }: any) => {
                  );
                })()}
             </div>
-          ) : (
+          ) : data.type === 'ROOT_LOCUS' ? (
+             <div className="flex flex-col items-center select-none py-1">
+               <RootLocusCanvas params={data.params} />
+               <div className="text-[8px] font-mono text-slate-400 mt-1 uppercase tracking-wider">
+                 Gain K: {(data.params?.gain ?? 1).toFixed(2)}
+               </div>
+             </div>
+           ) : (
             <div className="flex flex-col items-center">
                <div className="p-3 rounded-xl bg-[#222] border border-[#333] mb-2 shadow-inner">
                   <div style={{ color }} className="scale-150 drop-shadow-[0_0_8px_currentColor]">{getIcon(data.type)}</div>
@@ -1835,4 +2074,4 @@ export const XBlockNode = ({ data, id, selected }: any) => {
       {selected && <div className="absolute bottom-0 left-0 w-full h-[2px]" style={{ background: `linear-gradient(to right, transparent, ${color}, transparent)` }} />}
     </div>
   );
-};
+});

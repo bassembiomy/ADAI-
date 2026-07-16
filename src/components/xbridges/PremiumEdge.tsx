@@ -35,7 +35,7 @@ export const PremiumEdge = ({
   selected,
   type
 }: EdgeProps & { type?: string }) => {
-  const { setEdges, screenToFlowPosition } = useReactFlow();
+  const { setEdges, screenToFlowPosition, getNode } = useReactFlow();
   const workspaceContext = useContext(WorkspaceContext);
   
   let edgePath = '';
@@ -48,17 +48,19 @@ export const PremiumEdge = ({
     }
     edgePath += ` L ${targetX} ${targetY}`;
   } else {
-    if (type === 'straight') {
+    // Basic paths depending on type
+    if (type === 'smoothstep') {
+      [edgePath] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+    } else if (type === 'straight') {
       [edgePath] = getStraightPath({ sourceX, sourceY, targetX, targetY });
-    } else if (type === 'smoothstep') {
-      [edgePath] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, borderRadius: 8 });
     } else {
       [edgePath] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
     }
   }
 
-  const color = data?.color || '#4caf50';
-  const isSimulating = data?.isSimulating ?? false;
+  const sourceNode = getNode(id.split('-')[0]) || getNode(id.replace(/^e-?([^-]+)-.*$/, '$1')); // Try to find source node if possible
+  const color = data?.color || (sourceNode && workspaceContext?.getColor ? workspaceContext.getColor(sourceNode.data?.type) : '#4caf50');
+  const isSimulating = data?.isSimulating ?? workspaceContext?.isSimulating ?? false;
 
   const handleEdgeDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();

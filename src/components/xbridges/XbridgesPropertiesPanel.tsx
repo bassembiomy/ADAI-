@@ -11,6 +11,8 @@ interface Props {
   onUpdate: (blockId: string, data: Partial<XBlock>) => void;
   onLaunchDoe?: () => void;
   onClose: () => void;
+  isCollapsed?: boolean;
+  onCollapseToggle?: (collapsed: boolean) => void;
 }
 
 const normalizeNumerals = (val: string) => {
@@ -25,10 +27,33 @@ const normalizeNumerals = (val: string) => {
   return withoutArabic.replace(/[٫]/g, '.').replace(/[،,]/g, '.');
 };
 
-export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVariables, onUpdate, onLaunchDoe, onClose }) => {
+export const XbridgesPropertiesPanel: React.FC<Props> = ({ 
+  block, 
+  availableVariables, 
+  onUpdate, 
+  onLaunchDoe, 
+  onClose,
+  isCollapsed: isCollapsedExternal,
+  onCollapseToggle
+}) => {
   if (!block) return null;
 
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (isCollapsedExternal !== undefined) {
+      setIsCollapsed(isCollapsedExternal);
+    }
+  }, [isCollapsedExternal]);
+
+  const handleToggleCollapse = () => {
+    const next = !isCollapsed;
+    setIsCollapsed(next);
+    if (onCollapseToggle) {
+      onCollapseToggle(next);
+    }
+  };
+
   const [localLabel, setLocalLabel] = useState(block.label || block.type);
   const [localParams, setLocalParams] = useState(JSON.stringify(block.params, null, 2));
   // Local string state for numeric param inputs to allow decimal mid-typing (e.g. "0." → "0.1")
@@ -41,6 +66,9 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
     // Reset local string inputs when switching blocks
     setLocalInputValues({});
     setIsCollapsed(false); // Auto-expand when a new block is selected
+    if (onCollapseToggle) {
+      onCollapseToggle(false);
+    }
   }, [block.id]);
 
   // Keep localInputValues in sync with external param changes (e.g. simulation updates)
@@ -348,7 +376,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
         )}
         <div className={`flex items-center gap-2 ${isCollapsed ? 'flex-col w-full' : ''}`}>
           <button 
-            onClick={() => setIsCollapsed(!isCollapsed)} 
+            onClick={handleToggleCollapse} 
             className="p-1.5 rounded bg-[#222] border border-[#333] text-[#c9a86c] hover:bg-[#c9a86c]/15 transition-all"
             title={isCollapsed ? "Expand Properties" : "Collapse Properties"}
           >
@@ -524,7 +552,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
           })()}
  
           {/* Custom Simulink-style Transfer Function / ZPG Editors */}
-          {['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION'].includes(block.type) && (
+          {['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ROOT_LOCUS', 'LAPLACE_TRANSFORM'].includes(block.type) && (
             <div className="space-y-4">
               {renderEquationPreview()}
  
@@ -609,6 +637,44 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                   className="w-full text-xs font-mono px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-slate-400 rounded outline-none focus:border-[#c9a86c]"
                 />
               </div>
+              
+              {block.type === 'ROOT_LOCUS' && (
+                <div className="space-y-4 pt-2 border-t border-[#222]">
+                  {/* Gain (K) Slider */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-400 block">Feedback Gain (K)</label>
+                    <div className="flex items-center gap-3">
+                      <input 
+                        type="range"
+                        min="0"
+                        max={block.params.maxGain || 100}
+                        step="0.01"
+                        value={block.params.gain !== undefined ? block.params.gain : 1}
+                        onChange={(e) => onUpdate(block.id, { params: { ...block.params, gain: Number(e.target.value) } })}
+                        className="flex-1 accent-[#c9a86c] h-1 bg-[#111] border border-[#333] rounded-lg appearance-none cursor-pointer"
+                      />
+                      <input 
+                        type="number"
+                        step="any"
+                        value={block.params.gain !== undefined ? block.params.gain : 1}
+                        onChange={(e) => onUpdate(block.id, { params: { ...block.params, gain: Number(e.target.value) } })}
+                        className="w-16 text-xs text-center font-mono py-1 border border-[#333] bg-[#0a0a0a] text-emerald-450 font-bold rounded outline-none focus:border-[#c9a86c]"
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Max Gain */}
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Max Gain Sweep Range</label>
+                    <input 
+                      type="number"
+                      value={block.params.maxGain || 100}
+                      onChange={(e) => onUpdate(block.id, { params: { ...block.params, maxGain: Math.max(1, Number(e.target.value)) } })}
+                      className="w-full text-xs font-mono px-2 py-1.5 border border-[#333] bg-[#0a0a0a] text-[#e0e0e0] rounded outline-none focus:border-[#c9a86c]"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
  
@@ -716,8 +782,8 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
 
           {Object.entries(block.params)
             .filter(([key]) => {
-              if (['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN'].includes(block.type)) {
-                return !['A', 'B', 'C', 'D', 'numerator', 'denominator', 'zeros', 'poles', 'gain', 'representation'].includes(key);
+              if (['TRANSFER_FUNCTION', 'DISCRETE_TRANSFER_FUNCTION', 'ZERO_POLE_GAIN', 'ROOT_LOCUS', 'LAPLACE_TRANSFORM'].includes(block.type)) {
+                return !['A', 'B', 'C', 'D', 'numerator', 'denominator', 'zeros', 'poles', 'gain', 'maxGain', 'representation', 'equation', 'lastFactor', 'lastMaxDegree', 'lastMappingType'].includes(key);
               }
               // SUM_JUNCTION: hide signs and numInputs from generic renderer (handled by sign editor above)
               if (block.type === 'SUM_JUNCTION') {
@@ -760,7 +826,7 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                     {key.replace(/([A-Z])/g, ' $1').trim()}
                   </label>
                   
-                   {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'numCases', 'numSignals', 'bufferSize', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication', 'limitDataPoints', 'showGrid', 'showLegend', 'timeRange', 'diagMode', 'axis', 'carrierType'].includes(key) && 
+                   {['representation', 'mode', 'method', 'criteria', 'operation', 'angle_unit', 'output_type', 'rounding', 'overflow', 'type', 'numCases', 'numSignals', 'bufferSize', 'andMethod', 'orMethod', 'defuzzMethod', 'operator', 'implication', 'limitDataPoints', 'showGrid', 'showLegend', 'timeRange', 'diagMode', 'axis', 'carrierType', 'simulationType'].includes(key) && 
                   (key !== 'type' || block.type === 'WaveformGen' || block.type === 'FUZZY_INFERENCE_SYSTEM') ? (
                     <select
                       value={String(displayValue)}
@@ -772,6 +838,12 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({ block, availableVaria
                       }}
                       className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-emerald-400 font-bold rounded focus:border-[#c9a86c] focus:ring-1 focus:ring-[#c9a86c]/50 outline-none transition-all cursor-pointer"
                     >
+                      {key === 'simulationType' && block.type === 'ROOT_LOCUS' && (
+                        <>
+                          <option value="open_loop">Open-Loop G(s)</option>
+                          <option value="closed_loop">Closed-Loop T(s)</option>
+                        </>
+                      )}
                       {key === 'mode' && block.type === 'NUMERIC_REPRESENTATION' && (
                         <>
                           <option value="floating_point">Floating-Point</option>

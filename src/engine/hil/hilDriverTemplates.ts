@@ -571,7 +571,7 @@ void HIL_SendString(const char* str) {
     fflush(stdout);
 }
 `,
-    tickDelay: `/* Sleep for 10ms simulation tick */\n#ifdef _WIN32\n  #include <windows.h>\n  Sleep(10);\n#else\n  #include <unistd.h>\n  usleep(10000);\n#endif`,
+    tickDelay: `/* Sleep for 10ms simulation tick */\n#ifdef _WIN32\n    Sleep(10);\n#else\n    usleep(10000);\n#endif`,
     peripherals: {
       GPIO: {
         init: (pin, name, dir) => `  printf("HIL: GPIO %s on Pin %s configured as %s\\n", "${name}", "${pin}", "${dir}");`,

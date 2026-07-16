@@ -326,6 +326,8 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'STATE_SPACE', label: 'State-Space', icon: 'activity' },
       { type: 'ZERO_POLE_GAIN', label: 'Zero-Pole-Gain', icon: 'activity' },
       { type: 'DISCRETE_TRANSFER_FUNCTION', label: 'Discrete TF', icon: 'activity' },
+      { type: 'ROOT_LOCUS', label: 'Root Locus Plotter', icon: 'activity' },
+      { type: 'LAPLACE_TRANSFORM', label: 'Laplace Transform', icon: 'activity' }
     ]
   },
   {

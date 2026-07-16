@@ -1,5 +1,5 @@
 // src/components/xbridges/XbridgesWorkspace.tsx
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import ReactFlow, {
   addEdge,
   Background,
@@ -21,7 +21,7 @@ import {
   Hash, TrendingUp, Monitor, Download, LogIn, LogOut, ChevronLeft, Zap, Settings, ZapOff, Cpu, Wind, Filter, Eye,
   GraduationCap, ArrowRightCircle, ArrowLeftCircle, Cloud, CheckCircle2, AlertCircle, FileText
 } from 'lucide-react';
-import { XBRIDGES_CATEGORIES, BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
+import { XBRIDGES_CATEGORIES, BLOCK_LIBRARY, getPolynomialCoefficients, trimLeadingZeros } from '../../engine/xbridges/BlockDefinitions';
 
 // Map icon string names to Lucide icon components
 const LucideIconMap: Record<string, React.ComponentType<any>> = {
@@ -78,6 +78,7 @@ import { ModelDiagnostic } from '../../engine/xbridges/types';
 import { XBlockNode, getColor } from './XBlockNode';
 import { XbridgesPropertiesPanel } from './XbridgesPropertiesPanel';
 import { XbridgesScopeWindow } from './XbridgesScopeWindow';
+import { XbridgesRootLocusWindow } from './XbridgesRootLocusWindow';
 import { PremiumEdge } from './PremiumEdge';
 import { PremiumConnectionLine } from './PremiumConnectionLine';
 import { WorkspaceContext } from './context';
@@ -104,7 +105,7 @@ const XBRIDGES_LEARNING_LABS = [
     difficulty: 'Intermediate',
     description: 'Learn how to use the LMS Adaptive Filter to identify the coefficients of an unknown 2-tap signal path. Observe how w1 and w2 converge to 0.8 and 0.4.',
     nodes: [
-      { id: 'input_signal', type: 'WaveformGen', position: { x: 50, y: 150 }, label: 'Input Signal', params: { type: 'Sine', amp: 1, freq: 1, offset: 0 } },
+      { id: 'input_signal', type: 'WaveformGen', position: { x: 50, y: 150 }, label: 'Input Signal', params: { type: 'Sine', amp: 1, freq: 1, offset: 0, phase: 0 } },
       { id: 'true_gain_1', type: 'GAIN', position: { x: 250, y: 50 }, label: 'True Weight w1 (0.8)', params: { gain: 0.8 } },
       { id: 'delay_1', type: 'DELAY', position: { x: 250, y: 250 }, label: 'Unit Delay', params: { delay_length: 1, initial_condition: 0 } },
       { id: 'true_gain_2', type: 'GAIN', position: { x: 400, y: 250 }, label: 'True Weight w2 (0.4)', params: { gain: 0.4 } },
@@ -135,8 +136,8 @@ const XBRIDGES_LEARNING_LABS = [
     difficulty: 'Advanced',
     description: 'Learn how a single neuron online gradient descent block approximates a target relationship. Run the engine to see the output error converge to zero.',
     nodes: [
-      { id: 'input_1', type: 'WaveformGen', position: { x: 50, y: 50 }, label: 'Input x1 (Sine)', params: { type: 'Sine', amp: 1, freq: 0.5, offset: 0 } },
-      { id: 'input_2', type: 'WaveformGen', position: { x: 50, y: 200 }, label: 'Input x2 (Square)', params: { type: 'Square', amp: 1, freq: 0.2, offset: 0 } },
+      { id: 'input_1', type: 'WaveformGen', position: { x: 50, y: 50 }, label: 'Input x1 (Sine)', params: { type: 'Sine', amp: 1, freq: 0.5, offset: 0, phase: 0 } },
+      { id: 'input_2', type: 'WaveformGen', position: { x: 50, y: 200 }, label: 'Input x2 (Square)', params: { type: 'Square', amp: 1, freq: 0.2, offset: 0, phase: 0 } },
       { id: 'target_neuron', type: 'NEURAL_NEURON_LEARNING', position: { x: 300, y: 80 }, label: 'Target System (Fixed)', params: { lr: 0, initW1: 0.7, initW2: -0.5, initBias: 0.2 } },
       { id: 'learning_neuron', type: 'NEURAL_NEURON_LEARNING', position: { x: 300, y: 260 }, label: 'Online Learner', params: { lr: 0.1, initW1: 0.1, initW2: -0.1, initBias: 0.0 } },
       { id: 'scope_compare', type: 'Scope', position: { x: 580, y: 50 }, label: 'Response Comparison', params: { numSignals: 2, bufferSize: 1000 } },
@@ -190,7 +191,7 @@ const XBRIDGES_LEARNING_LABS = [
     difficulty: 'Intermediate',
     description: 'Learn how classical PID controllers regulate dynamic systems. A basic PID controller receives tracking error and drives an Integrator plant to follow a square wave setpoint. Observe reference tracking and control effort in the scopes.',
     nodes: [
-      { id: 'ref_signal', type: 'WaveformGen', position: { x: 50, y: 150 }, label: 'Setpoint Reference', params: { type: 'Square', amp: 1, freq: 0.1, offset: 1 } },
+      { id: 'ref_signal', type: 'WaveformGen', position: { x: 50, y: 150 }, label: 'Setpoint Reference', params: { type: 'Square', amp: 1, freq: 0.1, offset: 1, phase: 0 } },
       { id: 'error_sub', type: 'VectorSub', position: { x: 250, y: 150 }, label: 'Error Calculator' },
       { id: 'pid_controller', type: 'PID_BASIC', position: { x: 420, y: 150 }, label: 'PID Controller', params: { Kp: 2.5, Ki: 1.5, Kd: 0.1, max: 10, min: -10 } },
       { id: 'plant', type: 'Integrator', position: { x: 620, y: 150 }, label: 'Integrator Plant (Env)', params: { initialCondition: 0 } },
@@ -1247,9 +1248,38 @@ export const XbridgesWorkspace: React.FC<{
   onSaveAll?: () => void;
   onLaunchDoe?: () => void;
   initialSelectedNodeId?: string | null;
-}> = ({ initialNodes = [], initialEdges = [], availableVariables = [], tickMs, onBack, onSave, onSaveAll, onLaunchDoe, initialSelectedNodeId }) => {
+  sharedClipboard?: { nodes: any[]; edges: any[]; sourceFileId: string } | null;
+  onClipboardChange?: (clipboard: { nodes: any[]; edges: any[]; sourceFileId: string } | null) => void;
+  fileId?: string;
+  workspaceFiles?: any[];
+  coSimEngine?: any;
+  isSmSimulating?: boolean;
+  simulationTime?: number;
+}> = ({
+  initialNodes = [],
+  initialEdges = [],
+  availableVariables = [],
+  tickMs,
+  onBack,
+  onSave,
+  onSaveAll,
+  onLaunchDoe,
+  initialSelectedNodeId,
+  sharedClipboard,
+  onClipboardChange,
+  fileId,
+  workspaceFiles,
+  coSimEngine,
+  isSmSimulating = false,
+  simulationTime = 0
+}) => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [localClipboard, setLocalClipboard] = useState<{
+    nodes: any[];
+    edges: any[];
+    sourceFileId: string;
+  } | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = React.useRef(isPaused);
@@ -1258,11 +1288,55 @@ export const XbridgesWorkspace: React.FC<{
   }, [isPaused]);
   const [simLimitInput, setSimLimitInput] = useState('');
   const simLimitRef = React.useRef<number | null>(null);
+  const isSpacePressedRef = React.useRef(false);
+  const spaceComboUsedRef = React.useRef(false);
 
   useEffect(() => {
     const val = parseFloat(simLimitInput);
     simLimitRef.current = (!isNaN(val) && val > 0) ? val : null;
   }, [simLimitInput]);
+
+  // Track whether we are the ones who last changed the data (so we don't re-import our own save)
+  const isSavingRef = React.useRef(false);
+  const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialNodesRef = React.useRef(initialNodes);
+  const initialEdgesRef = React.useRef(initialEdges);
+
+  // Debounced save: fire onSave 300ms after changes settle, but never re-import changes we caused
+  useEffect(() => {
+    // Don't start the timer while a copy-drag is in progress; we'll save manually on mouseup
+    if (isDraggingCopyRef.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      if (onSave) {
+        isSavingRef.current = true;
+        onSave(nodes, edges);
+        // Allow inward sync again after two animation frames
+        requestAnimationFrame(() => requestAnimationFrame(() => { isSavingRef.current = false; }));
+      }
+    }, 300);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [nodes, edges, onSave]);
+
+  // Inward sync: only apply when initialNodes/initialEdges change AND we didn't cause the change
+  useEffect(() => {
+    // Skip on first mount (initialNodesRef already holds this value)
+    if (initialNodes === initialNodesRef.current) return;
+    initialNodesRef.current = initialNodes;
+    // If we are currently saving, this change came from our own onSave callback — skip it
+    if (isSavingRef.current) return;
+    setNodes(initialNodes);
+  }, [initialNodes, setNodes]);
+
+  useEffect(() => {
+    if (initialEdges === initialEdgesRef.current) return;
+    initialEdgesRef.current = initialEdges;
+    if (isSavingRef.current) return;
+    setEdges(initialEdges);
+  }, [initialEdges, setEdges]);
+
+
+
 
   const [isLibCollapsed, setIsLibCollapsed] = useState(false);
   const [isPropsCollapsed, setIsPropsCollapsed] = useState(false);
@@ -1400,6 +1474,34 @@ export const XbridgesWorkspace: React.FC<{
   }, [tickMs]);
   const engineRef = React.useRef<XbridgesEngine | null>(null);
   const timeRef = React.useRef(0);
+  const activeSimulating = isSimulating || (!!coSimEngine && isSmSimulating);
+  const activeTime = coSimEngine && isSmSimulating ? simulationTime : timeRef.current;
+
+  // Sync with background co-simulation engine when running via State Machine
+  useEffect(() => {
+    if (!coSimEngine || !isSmSimulating) return;
+
+    let frameId: number;
+    let throttle = 0;
+
+    const sync = () => {
+      throttle++;
+      if (throttle % 4 === 0) {
+        setNodes(nds => nds.map(n => {
+          const engineBlock = coSimEngine['blockMap']?.get(n.id);
+          if (engineBlock && n.type === 'xblock') {
+            return { ...n, data: { ...n.data, state: engineBlock.state } };
+          }
+          return n;
+        }));
+      }
+      frameId = requestAnimationFrame(sync);
+    };
+
+    frameId = requestAnimationFrame(sync);
+    return () => cancelAnimationFrame(frameId);
+  }, [coSimEngine, isSmSimulating, setNodes]);
+
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
 
   // Right-click drag-to-copy state
@@ -1410,9 +1512,11 @@ export const XbridgesWorkspace: React.FC<{
     startNodeX: number;
     startNodeY: number;
   } | null>(null);
+  const isDraggingCopyRef = React.useRef(false);
 
   useEffect(() => {
     if (!rightClickDrag) return;
+    isDraggingCopyRef.current = true;
 
     const handleWindowMouseMove = (e: MouseEvent) => {
       const zoom = reactFlowInstance?.getZoom() || 1;
@@ -1431,7 +1535,14 @@ export const XbridgesWorkspace: React.FC<{
     const handleWindowMouseUp = (e: MouseEvent) => {
       if (e.button === 2) {
         e.preventDefault();
+        isDraggingCopyRef.current = false;
         setRightClickDrag(null);
+        // Fire one save after copy-drag ends
+        if (onSave) {
+          isSavingRef.current = true;
+          onSave(nodesRef.current, edgesRef.current);
+          requestAnimationFrame(() => requestAnimationFrame(() => { isSavingRef.current = false; }));
+        }
       }
     };
 
@@ -1448,7 +1559,7 @@ export const XbridgesWorkspace: React.FC<{
       window.removeEventListener('mouseup', handleWindowMouseUp);
       window.removeEventListener('contextmenu', handleContextMenu);
     };
-  }, [rightClickDrag, reactFlowInstance, setNodes]);
+  }, [rightClickDrag, reactFlowInstance, setNodes, onSave]);
 
   // Select and focus programmatic node from V-Lab
   useEffect(() => {
@@ -1463,6 +1574,55 @@ export const XbridgesWorkspace: React.FC<{
       }
     }
   }, [initialSelectedNodeId, reactFlowInstance, nodes]);
+
+  // Trigger window resize and fitView to handle initial container measurements,
+  // tab transitions, or dimensions rendering as 0 initially.
+  useEffect(() => {
+    const triggerResize = () => {
+      window.dispatchEvent(new Event('resize'));
+    };
+
+    // Staggered resize events to ensure React Flow catches the container's final size
+    triggerResize();
+    const t1 = setTimeout(triggerResize, 50);
+    const t2 = setTimeout(triggerResize, 150);
+    const t3 = setTimeout(triggerResize, 300);
+    const t4 = setTimeout(triggerResize, 600);
+    const t5 = setTimeout(triggerResize, 1200);
+
+    // Fit view after a short delay on initial mount to ensure diagram is visible
+    let t6: NodeJS.Timeout;
+    if (reactFlowInstance) {
+      t6 = setTimeout(() => {
+        reactFlowInstance.fitView();
+      }, 200);
+    }
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+      clearTimeout(t5);
+      if (t6) clearTimeout(t6);
+    };
+  }, [reactFlowInstance]);
+
+  // Use a ResizeObserver on the workspace container to handle resizing of sidebar,
+  // properties panel, or workspace switching in real time.
+  useEffect(() => {
+    const container = document.getElementById('xbridges-workspace-container');
+    if (!container) return;
+
+    const observer = new ResizeObserver(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
     'Sources': true,
     'Continuous': true,
@@ -1589,8 +1749,10 @@ export const XbridgesWorkspace: React.FC<{
     setHistory(prev => [...prev.slice(-19), { nodes, edges }]);
   }, [nodes, edges]);
 
-  const handleNodeMouseDown = useCallback((event: React.MouseEvent, node: Node) => {
+  const handleNodeMouseDown = useCallback((event: React.MouseEvent, nodeId: string) => {
     if (event.button === 2) {
+      const node = nodes.find(n => n.id === nodeId);
+      if (!node) return;
       event.preventDefault();
       event.stopPropagation();
       saveHistory();
@@ -1619,7 +1781,7 @@ export const XbridgesWorkspace: React.FC<{
         startNodeY: node.position.y
       });
     }
-  }, [saveHistory, setNodes, setSelectedNodeId]);
+  }, [nodes, saveHistory, setNodes, setSelectedNodeId]);
 
   // Auto-save on unmount to prevent data loss (FR-Persistence)
   const nodesRef = React.useRef(nodes);
@@ -1638,13 +1800,87 @@ export const XbridgesWorkspace: React.FC<{
     };
   }, []); // Run ONLY on unmount
 
-  // Debounced auto-save for better reliability (FR-Persistence)
+
+  // Synchronize LAPLACE_TRANSFORM parameters with connected DOE_MODEL block
   React.useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (onSave) onSave(nodes, edges);
-    }, 1000);
-    return () => clearTimeout(timeout);
-  }, [nodes, edges, onSave]);
+    let changed = false;
+    const nextNodes = nodes.map(node => {
+      if (node.data?.type === 'LAPLACE_TRANSFORM') {
+        const edge = edges.find(e => {
+          if (e.target !== node.id) return false;
+          if (e.targetHandle === 'doe') return true;
+          if (e.targetHandle === 'u' || e.targetHandle === 'in') {
+            const srcNode = nodes.find(n => n.id === e.source);
+            return srcNode?.data?.type === 'DOE_MODEL';
+          }
+          return false;
+        });
+        if (edge) {
+          const sourceNode = nodes.find(n => n.id === edge.source);
+          if (sourceNode && sourceNode.data?.type === 'DOE_MODEL') {
+            const equationStr = sourceNode.data.params?.equation?.value || sourceNode.data.params?.equation || '';
+            const inputNames = sourceNode.data.params?.inputNames?.value || sourceNode.data.params?.inputNames || ['X1'];
+            const factorName = inputNames[0] || 'X1';
+            const mappingType = node.data.params?.mappingType || 'denominator';
+            const maxDegree = Number(node.data.params?.maxDegree) || 3;
+            
+            if (equationStr && (
+              node.data.params?.equation !== equationStr || 
+              node.data.params?.lastFactor !== factorName || 
+              node.data.params?.lastMaxDegree !== maxDegree || 
+              node.data.params?.lastMappingType !== mappingType
+            )) {
+              const coeffs = getPolynomialCoefficients(equationStr, factorName, inputNames, maxDegree);
+              const poly = trimLeadingZeros([...coeffs].reverse());
+              
+              const newParams = { ...node.data.params };
+              if (mappingType === 'denominator') {
+                newParams.denominator = poly;
+                newParams.numerator = [1];
+              } else {
+                newParams.numerator = poly;
+                newParams.denominator = node.data.params?.defaultDenominator || [1, 1];
+              }
+              newParams.equation = equationStr;
+              newParams.lastFactor = factorName;
+              newParams.lastMaxDegree = maxDegree;
+              newParams.lastMappingType = mappingType;
+              
+              changed = true;
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  params: newParams
+                }
+              };
+            }
+          }
+        } else if (node.data.params?.equation) {
+          // Connection removed, clear parsed equation details so user can manually edit
+          const newParams = { ...node.data.params };
+          delete newParams.equation;
+          delete newParams.lastFactor;
+          delete newParams.lastMaxDegree;
+          delete newParams.lastMappingType;
+          
+          changed = true;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              params: newParams
+            }
+          };
+        }
+      }
+      return node;
+    });
+    
+    if (changed) {
+      setNodes(nextNodes);
+    }
+  }, [nodes, edges]);
 
   const onConnect = useCallback((params: Connection | Edge) => {
     saveHistory();
@@ -1790,10 +2026,24 @@ export const XbridgesWorkspace: React.FC<{
         return;
       }
 
-      // Toggle Simulation (Space)
+      // Track Space press
       if (e.code === 'Space' && !e.ctrlKey) {
         e.preventDefault();
-        setIsSimulating(prev => !prev);
+        isSpacePressedRef.current = true;
+      }
+
+      // Space + C Combo: Collapse/Expand properties and library panels together in xbridges
+      if ((e.key === 'c' || e.key === 'C') && isSpacePressedRef.current) {
+        e.preventDefault();
+        spaceComboUsedRef.current = true;
+        const allXbridgesCollapsed = isLibCollapsed && isPropsCollapsed;
+        if (allXbridgesCollapsed) {
+          setIsLibCollapsed(false);
+          setIsPropsCollapsed(false);
+        } else {
+          setIsLibCollapsed(true);
+          setIsPropsCollapsed(true);
+        }
       }
 
       // Run Simulation (Ctrl + R)
@@ -1874,34 +2124,106 @@ export const XbridgesWorkspace: React.FC<{
 
       // Copy (Ctrl+C or Cmd+C)
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyC') {
-        const nodeToCopy = nodes.find(n => n.id === selectedNodeId);
-        if (nodeToCopy) {
-          setCopiedNode(nodeToCopy);
+        const activeSelectedNodes = nodes.filter(n => n.selected);
+        const copyList = activeSelectedNodes.length > 0
+          ? activeSelectedNodes
+          : nodes.filter(n => n.id === selectedNodeId);
+
+        if (copyList.length > 0) {
+          const copyNodeIds = new Set(copyList.map(n => n.id));
+          const copyEdges = edges.filter(ed => copyNodeIds.has(ed.source) && copyNodeIds.has(ed.target));
+          
+          if (onClipboardChange) {
+            onClipboardChange({
+              nodes: copyList,
+              edges: copyEdges,
+              sourceFileId: fileId || 'unknown'
+            });
+          } else {
+            setLocalClipboard({
+              nodes: copyList,
+              edges: copyEdges,
+              sourceFileId: fileId || 'unknown'
+            });
+          }
         }
       }
 
       // Paste (Ctrl+V or Cmd+V)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV' && copiedNode) {
-        saveHistory();
-        const newNodeId = `${copiedNode.data.type || 'block'}-${Date.now()}`;
-        const newNode: Node = {
-          ...copiedNode,
-          id: newNodeId,
-          position: {
-            x: copiedNode.position.x + 20,
-            y: copiedNode.position.y + 20,
-          },
-          selected: true,
-          data: { ...copiedNode.data, id: newNodeId, selected: true }
-        };
-        setNodes(nds => [...nds.map(n => ({ ...n, selected: false })), newNode]);
-        setSelectedNodeId(newNodeId);
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV') {
+        const clipboardToUse = sharedClipboard !== undefined ? sharedClipboard : localClipboard;
+        if (clipboardToUse && clipboardToUse.nodes.length > 0) {
+          saveHistory();
+
+          const idMap: Record<string, string> = {};
+          
+          const newNodes = clipboardToUse.nodes.map(oldNode => {
+            const newNodeId = `${oldNode.data.type || 'block'}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+            idMap[oldNode.id] = newNodeId;
+            
+            return {
+              ...oldNode,
+              id: newNodeId,
+              position: {
+                x: oldNode.position.x + 40,
+                y: oldNode.position.y + 40,
+              },
+              selected: true,
+              data: {
+                ...oldNode.data,
+                id: newNodeId,
+                selected: true
+              }
+            };
+          });
+
+          const newEdges = clipboardToUse.edges.map(oldEdge => {
+            const newSource = idMap[oldEdge.source];
+            const newTarget = idMap[oldEdge.target];
+            const newEdgeId = `edge-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+            return {
+              ...oldEdge,
+              id: newEdgeId,
+              source: newSource,
+              target: newTarget
+            };
+          });
+
+          setNodes(nds => [
+            ...nds.map(n => ({ ...n, selected: false })),
+            ...newNodes
+          ]);
+          
+          if (newEdges.length > 0) {
+            setEdges(eds => [...eds, ...newEdges]);
+          }
+
+          if (newNodes.length === 1) {
+            setSelectedNodeId(newNodes[0].id);
+          } else {
+            setSelectedNodeId(null);
+          }
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        isSpacePressedRef.current = false;
+        if (!spaceComboUsedRef.current) {
+          setIsSimulating(prev => !prev);
+        }
+        spaceComboUsedRef.current = false;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [nodes, edges, history, selectedNodeId, copiedNode, setNodes, setEdges, setIsSimulating, saveHistory]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [nodes, edges, history, selectedNodeId, sharedClipboard, onClipboardChange, localClipboard, fileId, setNodes, setEdges, setIsSimulating, saveHistory, isLibCollapsed, isPropsCollapsed]);
 
   const updateBlock = (blockId: string, data: any) => {
     setNodes(nds => nds.map(n => {
@@ -2372,14 +2694,15 @@ export const XbridgesWorkspace: React.FC<{
           <div className="flex items-center gap-6">
             <div className="flex items-center bg-[#222] p-1 rounded-2xl border border-[#333] shadow-inner">
               <button
-                onClick={() => setIsSimulating(!isSimulating)}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition-all duration-300 ${isSimulating
+                onClick={() => !coSimEngine && setIsSimulating(!isSimulating)}
+                disabled={!!coSimEngine}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition-all duration-300 ${activeSimulating
                     ? 'bg-rose-500 text-white shadow-[0_0_20px_rgba(244,63,94,0.4)] hover:bg-rose-600 scale-95'
                     : 'bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:bg-emerald-600 hover:scale-105 active:scale-95'
-                  }`}
+                  } ${coSimEngine ? 'opacity-85 cursor-not-allowed' : ''}`}
               >
-                {isSimulating ? <Square size={14} className="fill-current" /> : <Play size={14} className="fill-current" />}
-                {isSimulating ? 'Stop Engine' : 'Run Engine'}
+                {activeSimulating ? <Square size={14} className="fill-current" /> : <Play size={14} className="fill-current" />}
+                {coSimEngine ? 'Co-Simulating' : activeSimulating ? 'Stop Engine' : 'Run Engine'}
               </button>
 
               {isSimulating && (
@@ -2420,7 +2743,7 @@ export const XbridgesWorkspace: React.FC<{
                   <select
                     value={solverType}
                     onChange={e => setSolverType(e.target.value as any)}
-                    disabled={isSimulating}
+                    disabled={activeSimulating}
                     className="bg-[#0a0a0a] border border-[#333] rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-bold text-[#e0e0e0] focus:outline-none focus:border-[#c9a86c]/55 appearance-none cursor-pointer hover:bg-[#222] transition-all disabled:opacity-50"
                   >
                     <option value="rk4">Fixed-Step RK4 (ODE4)</option>
@@ -2462,7 +2785,7 @@ export const XbridgesWorkspace: React.FC<{
                     type="text"
                     value={stepSizeInput}
                     onChange={e => setStepSizeInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}
-                    disabled={!!tickMs}
+                    disabled={!!tickMs || activeSimulating}
                     className={`w-20 bg-[#0a0a0a] border border-[#333] rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-mono font-bold focus:outline-none focus:border-emerald-500 transition-all ${tickMs ? 'text-[#c9a86c] opacity-80 cursor-not-allowed' : 'text-[#e0e0e0] hover:bg-[#222]'}`}
                   />
                 </div>
@@ -2476,7 +2799,7 @@ export const XbridgesWorkspace: React.FC<{
                     type="text"
                     value={simLimitInput}
                     onChange={e => setSimLimitInput(normalizeNumerals(e.target.value).replace(/[^0-9.]/g, ''))}
-                    disabled={isSimulating}
+                    disabled={activeSimulating}
                     placeholder="Unlimited"
                     className="w-20 bg-[#0a0a0a] border border-[#333] rounded-xl pl-7 pr-3 py-1.5 text-[10px] font-mono font-bold text-[#e0e0e0] focus:outline-none focus:border-rose-500 transition-all hover:bg-[#222] disabled:opacity-50"
                   />
@@ -2490,9 +2813,9 @@ export const XbridgesWorkspace: React.FC<{
               <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Engine Status</span>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 bg-[#0a0a0a] px-3 py-1.5 rounded-lg border border-[#333]">
-                  <div className={`w-2 h-2 rounded-full ${isSimulating ? 'bg-emerald-500 shadow-[0_0_10px_#10b981] animate-pulse' : 'bg-[#444]'}`} />
-                  <span className={`text-[10px] font-mono font-bold tabular-nums ${isSimulating ? 'text-emerald-400' : 'text-slate-500'}`}>
-                    {isSimulating ? `T = ${timeRef.current.toFixed(4)}s` : 'IDLE'}
+                  <div className={`w-2 h-2 rounded-full ${activeSimulating ? 'bg-emerald-500 shadow-[0_0_10px_#10b981] animate-pulse' : 'bg-[#444]'}`} />
+                  <span className={`text-[10px] font-mono font-bold tabular-nums ${activeSimulating ? 'text-emerald-400' : 'text-slate-500'}`}>
+                    {activeSimulating ? `T = ${activeTime.toFixed(4)}s` : 'IDLE'}
                   </span>
                 </div>
 
@@ -2576,6 +2899,31 @@ export const XbridgesWorkspace: React.FC<{
                   <Download size={18} />
                 </button>
 
+                {(() => {
+                  const clip = sharedClipboard !== undefined ? sharedClipboard : localClipboard;
+                  if (!clip || clip.nodes.length === 0) return null;
+                  
+                  const srcName = workspaceFiles?.find((f: any) => f.id === clip.sourceFileId)?.name || 'another tab';
+                  const isCurrent = clip.sourceFileId === fileId;
+                  
+                  return (
+                    <div 
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[10px] font-bold shadow-sm transition-all ${
+                        isCurrent 
+                          ? 'bg-[#c9a86c]/10 border-[#c9a86c]/30 text-[#c9a86c]' 
+                          : 'bg-emerald-950/20 border-emerald-800/30 text-emerald-400'
+                      }`}
+                      title={isCurrent ? "Clipboard has items copied from this workspace" : `Clipboard has items copied from "${srcName}"`}
+                    >
+                      <span>📋</span>
+                      <span className="max-w-[150px] truncate">
+                        {clip.nodes.length} block{clip.nodes.length > 1 ? 's' : ''} copied
+                        {!isCurrent && ` (${srcName})`}
+                      </span>
+                    </div>
+                  );
+                })()}
+
                 {onBack && (
                   <button
                     onClick={() => { if (onSave) onSave(nodes, edges); onBack(); }}
@@ -2613,41 +2961,33 @@ export const XbridgesWorkspace: React.FC<{
         </div>
 
         <div className="flex-1 relative flex min-h-0">
-          <div className="flex-1 relative" onContextMenu={(e) => e.preventDefault()}>
-            <WorkspaceContext.Provider value={{ saveHistory }}>
-              <ReactFlow
-              onInit={setReactFlowInstance}
-              nodes={nodes.filter(n => (n.data.parentId || 'root') === currentParentId).map(n => {
+          <div className="flex-1 relative" onContextMenu={(e) => e.preventDefault()} style={{ cursor: rightClickDrag ? 'copy' : undefined }}>
+            {/* Copy-mode indicator badge */}
+            {rightClickDrag && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#c9a86c]/90 backdrop-blur-md shadow-lg text-black text-[10px] font-black uppercase tracking-widest select-none animate-pulse">
+                <span>⊕</span> Copying Block — Release Right Click to Place
+              </div>
+            )}
+            <WorkspaceContext.Provider value={{
+              saveHistory,
+              updateBlock: (id, newData) => updateBlock(id, newData),
+              onOpenScope: (blockId) => setOpenScopes(prev => prev.includes(blockId) ? prev : [...prev, blockId]),
+              onNodeMouseDown: (e, n) => handleNodeMouseDown(e, n),
+              isTargetBlock: (blockId) => {
                 const steps = activeLabId ? XBRIDGES_LEARNING_LAB_STEPS[activeLabId] : null;
                 const currentStep = steps ? steps[currentStepIndex] : null;
-                const isTarget = currentStep && currentStep.targetNodeId === n.id;
-                
-                return {
-                  ...n,
-                  data: {
-                    ...n.data,
-                    pulse: isTarget,
-                    onUpdate: (newData: any) => updateBlock(n.id, newData),
-                    onOpenScope: (blockId: string) => setOpenScopes(prev => prev.includes(blockId) ? prev : [...prev, blockId]),
-                    onNodeMouseDown: (e: React.MouseEvent) => handleNodeMouseDown(e, n)
-                  }
-                };
-              })}
-              edges={edges.filter(e => {
+                return !!(currentStep && currentStep.targetNodeId === blockId);
+              },
+              isSimulating: isSimulating && !isPaused,
+              getColor: getColor
+            }}>
+              <ReactFlow
+              onInit={setReactFlowInstance}
+              nodes={useMemo(() => nodes.filter(n => (n.data.parentId || 'root') === currentParentId), [nodes, currentParentId])}
+              edges={useMemo(() => edges.filter(e => {
                 const sourceNode = nodes.find(n => n.id === e.source);
                 return sourceNode && (sourceNode.data.parentId || 'root') === currentParentId;
-              }).map(e => {
-                const sourceNode = nodes.find(n => n.id === e.source);
-                const color = sourceNode ? getColor(sourceNode.data.type) : '#4caf50';
-                return {
-                  ...e,
-                  data: {
-                    ...e.data,
-                    color,
-                    isSimulating: isSimulating && !isPaused
-                  }
-                };
-              })}
+              }), [edges, nodes, currentParentId])}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
@@ -2854,12 +3194,26 @@ export const XbridgesWorkspace: React.FC<{
               onUpdate={updateBlock}
               onLaunchDoe={onLaunchDoe}
               onClose={() => setSelectedNodeId(null)}
+              isCollapsed={isPropsCollapsed}
+              onCollapseToggle={setIsPropsCollapsed}
             />
           )}
 
           {openScopes.map(scopeId => {
             const scopeNode = nodes.find(n => n.id === scopeId);
             if (!scopeNode) return null;
+            if (scopeNode.data.type === 'ROOT_LOCUS') {
+              return (
+                <XbridgesRootLocusWindow
+                  key={scopeId}
+                  block={scopeNode.data}
+                  nodes={nodes}
+                  edges={edges}
+                  onUpdate={(newData) => updateBlock(scopeId, { params: { ...scopeNode.data.params, ...newData } })}
+                  onClose={() => setOpenScopes(prev => prev.filter(id => id !== scopeId))}
+                />
+              );
+            }
             return (
               <XbridgesScopeWindow
                 key={scopeId}

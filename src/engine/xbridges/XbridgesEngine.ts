@@ -1,6 +1,6 @@
 // src/engine/xbridges/XbridgesEngine.ts
 import { XModel, XBlock, ModelDiagnostic, SolverOptions } from './types';
-import { BLOCK_LIBRARY } from './BlockDefinitions';
+import { BLOCK_LIBRARY, getPolynomialCoefficients, trimLeadingZeros } from './BlockDefinitions';
 import { VectorUtils } from './VectorUtils';
 import * as math from 'mathjs';
 
@@ -21,6 +21,49 @@ export class XbridgesEngine {
 
   constructor(model: XModel) {
     this.model = model;
+
+    // Pre-sync LAPLACE_TRANSFORM blocks from connected DOE_MODEL blocks
+    this.model.blocks.forEach(b => {
+      if (b.type === 'LAPLACE_TRANSFORM') {
+        const conn = this.model.connections.find(c => {
+          const targetId = c.targetBlock || (c as any).target;
+          const targetP = c.targetPort || (c as any).targetHandle;
+          if (targetId !== b.id) return false;
+          if (targetP === 'doe') return true;
+          if (targetP === 'u' || targetP === 'in') {
+            const srcId = c.sourceBlock || (c as any).source;
+            const srcBlock = this.model.blocks.find(sb => sb.id === srcId);
+            return srcBlock?.type === 'DOE_MODEL';
+          }
+          return false;
+        });
+        if (conn) {
+          const sourceId = conn.sourceBlock || (conn as any).source;
+          const sourceBlock = this.model.blocks.find(sb => sb.id === sourceId);
+          if (sourceBlock && sourceBlock.type === 'DOE_MODEL') {
+            const equationStr = sourceBlock.params?.equation?.value || sourceBlock.params?.equation || '';
+            const inputNames = sourceBlock.params?.inputNames?.value || sourceBlock.params?.inputNames || ['X1'];
+            const factorName = inputNames[0] || 'X1';
+            const mappingType = b.params.mappingType || 'denominator';
+            const maxDegree = b.params.maxDegree !== undefined ? Number(b.params.maxDegree) : 3;
+            
+            if (equationStr) {
+              const coeffs = getPolynomialCoefficients(equationStr, factorName, inputNames, maxDegree);
+              const poly = trimLeadingZeros([...coeffs].reverse());
+              if (mappingType === 'denominator') {
+                b.params.denominator = poly;
+                b.params.numerator = [1];
+              } else {
+                b.params.numerator = poly;
+                b.params.denominator = b.params.defaultDenominator || [1, 1];
+              }
+              b.params.equation = equationStr;
+            }
+          }
+        }
+      }
+    });
+
     this.model.blocks.forEach(b => {
       if (!b.execute) {
         const typeKey = Object.keys(BLOCK_LIBRARY).find(k => k.toLowerCase() === b.type.toLowerCase());
@@ -33,6 +76,14 @@ export class XbridgesEngine {
           if (!b.outputs || b.outputs.length === 0) b.outputs = fresh.outputs;
           if (b.state === undefined) b.state = fresh.state;
           if (b.isStateful === undefined) b.isStateful = fresh.isStateful;
+          // Merge computed params (e.g. A, B, C, D matrices from transfer function realization)
+          if (fresh.params) {
+            Object.keys(fresh.params).forEach(k => {
+              if (b.params[k] === undefined) {
+                b.params[k] = fresh.params[k];
+              }
+            });
+          }
         }
       }
       this.blockMap.set(b.id, b);

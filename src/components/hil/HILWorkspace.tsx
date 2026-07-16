@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { 
   ChevronLeft, Cpu, Settings2, FileText, Code2, Play, Terminal, 
-  Database, ShieldCheck, Zap, HardDrive, RefreshCcw, Radio, Sparkles, CheckCircle2
+  Database, ShieldCheck, Zap, HardDrive, RefreshCcw, Radio, Sparkles, CheckCircle2, Trash2
 } from 'lucide-react';
 import { HILDriverPanel } from './HILDriverPanel';
 import { HILSignalMapper } from './HILSignalMapper';
@@ -336,6 +336,62 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
       setConsoleLogs(prev => [
         ...prev,
         `[ERROR] Web browser context detected. Physical flashing requires the Electron desktop application.`
+      ]);
+      setBurnStatus('error');
+    }
+  };
+
+  // Erase Flash / Target Action
+  const handleErase = async () => {
+    if (burnStatus === 'burning') return;
+    setBurnStatus('burning');
+
+    const target = config.target || 'Generic';
+    const tool = programmer;
+    const speed = programmerSpeed;
+
+    if ((window as any).require) {
+      try {
+        const { ipcRenderer } = (window as any).require('electron');
+        setConsoleLogs(prev => [
+          ...prev,
+          `----------------------------------------------------------------------`,
+          `[FLASHER] Starting target chip erase...`,
+          `[FLASHER] Connecting to debug interface [${tool}] Speed: [${speed}]...`
+        ]);
+
+        const eraseRes = await ipcRenderer.invoke('hil-run-erase', {
+          target,
+          programmer: tool,
+          commPort: config.commPort,
+          baudRate: config.baudRate
+        });
+
+        if (eraseRes && eraseRes.success) {
+          setConsoleLogs(prev => [
+            ...prev,
+            `[SYSTEM] TARGET CHIP FLASH SUCCESSFULLY ERASED.`
+          ]);
+          setBurnStatus('idle');
+        } else {
+          setConsoleLogs(prev => [
+            ...prev,
+            `[ERROR] Real programmer erase execution failed: ${eraseRes.error || 'Utility exit code mismatch'}`,
+            `[ERROR] Make sure that your target programmer [${tool}] is connected to the PCB, the COM port is correct, and the programmer command line tool is in the system PATH.`
+          ]);
+          setBurnStatus('error');
+        }
+      } catch (err) {
+        setConsoleLogs(prev => [
+          ...prev,
+          `[ERROR] Erase execution error: ${err instanceof Error ? err.message : String(err)}`
+        ]);
+        setBurnStatus('error');
+      }
+    } else {
+      setConsoleLogs(prev => [
+        ...prev,
+        `[ERROR] Web browser context detected. Physical erasing requires the Electron desktop application.`
       ]);
       setBurnStatus('error');
     }
@@ -783,6 +839,14 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                   >
                     <Zap size={14} className={burnStatus === 'burning' ? 'animate-pulse' : ''} />
                     Flash Target Firmware
+                  </button>
+                  <button
+                    onClick={handleErase}
+                    disabled={burnStatus === 'burning'}
+                    className="flex-1 bg-red-700 hover:bg-red-800 disabled:opacity-40 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <Trash2 size={14} className={burnStatus === 'burning' ? 'animate-pulse' : ''} />
+                    Erase Flash
                   </button>
                   <button
                     onClick={handleDeploy}

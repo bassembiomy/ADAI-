@@ -22,7 +22,7 @@ import { VLabWorkspaceProps } from './VLabWorkspaceTypes';
 import { VLAB_LIBRARY, VLabBlock, VLabPort } from '../../utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../engine/vlab/vlabComponentDefinitions';
 import { VLabPhysicsEngine } from '../../engine/vlab/vlabPhysics';
-import { Settings2, Play, Pause, Square, Send, ChevronLeft, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus, Network, Cloud, Download, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Settings2, Play, Pause, Square, Send, ChevronLeft, ChevronDown, ChevronRight, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus, Network, Cloud, Download, CheckCircle2, AlertCircle, Triangle } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
 
@@ -2266,6 +2266,21 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const [scopeData, setScopeData] = useState<any[]>([]);
   const [openScopes, setOpenScopes] = useState<string[]>([]);
   const [activeSidebarTab, setActiveSidebarTab] = useState<'library' | 'labs'>('library');
+  const [expandedDomains, setExpandedDomains] = useState<Record<string, boolean>>({});
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  const [isLibCollapsed, setIsLibCollapsed] = useState(false);
+  const [isPropsCollapsed, setIsPropsCollapsed] = useState(false);
+
+  const isSpacePressedRef = useRef(false);
+  const spaceComboUsedRef = useRef(false);
+
+  const toggleDomain = (type: string) => {
+    setExpandedDomains(prev => ({ ...prev, [type]: prev[type] === false ? true : false }));
+  };
+
+  const toggleCategory = (catKey: string) => {
+    setExpandedCategories(prev => ({ ...prev, [catKey]: prev[catKey] === false ? true : false }));
+  };
   const [hoveredLabId, setHoveredLabId] = useState<string | null>(null);
   const [isQuickSearchOpen, setIsQuickSearchOpen] = useState(false);
   const [quickSearchPos, setQuickSearchPos] = useState({ x: 0, y: 0 });
@@ -2764,6 +2779,26 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
       if (isInput) return;
 
+      // Track Space press
+      if (e.code === 'Space' && !e.ctrlKey) {
+        e.preventDefault();
+        isSpacePressedRef.current = true;
+      }
+
+      // Space + C Combo: Collapse/Expand properties and library panels together in vlab
+      if ((e.key === 'c' || e.key === 'C') && isSpacePressedRef.current) {
+        e.preventDefault();
+        spaceComboUsedRef.current = true;
+        const allCollapsed = isLibCollapsed && isPropsCollapsed;
+        if (allCollapsed) {
+          setIsLibCollapsed(false);
+          setIsPropsCollapsed(false);
+        } else {
+          setIsLibCollapsed(true);
+          setIsPropsCollapsed(true);
+        }
+      }
+
       // Run Simulation (Ctrl + R)
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyR') {
         e.preventDefault();
@@ -2807,10 +2842,21 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         setEdges(eds => eds.filter(edge => !edge.selected));
       }
 
-      // Ctrl + C (Copy)
+      // Ctrl + C (Copy or Collapse panels)
       if (e.ctrlKey && e.key === 'c') {
         const selectedNodes = nodes.filter(n => n.selected);
-        setClipboard(selectedNodes);
+        if (selectedNodes.length > 0) {
+          setClipboard(selectedNodes);
+        } else {
+          const allCollapsed = isLibCollapsed && isPropsCollapsed;
+          if (allCollapsed) {
+            setIsLibCollapsed(false);
+            setIsPropsCollapsed(false);
+          } else {
+            setIsLibCollapsed(true);
+            setIsPropsCollapsed(true);
+          }
+        }
       }
 
       // Ctrl + V (Paste)
@@ -2834,9 +2880,23 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       }
     };
 
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        isSpacePressedRef.current = false;
+        if (!spaceComboUsedRef.current) {
+          setIsSimulating(prev => !prev);
+        }
+        spaceComboUsedRef.current = false;
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [nodes, edges, clipboard, setNodes, setEdges]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [nodes, edges, clipboard, setNodes, setEdges, isLibCollapsed, isPropsCollapsed, setIsSimulating]);
 
   const filteredLibrary = useMemo(() => {
     if (!searchQuery.trim()) return VLAB_LIBRARY;
@@ -3282,142 +3342,205 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
       <div className="flex flex-1 mt-12 overflow-hidden">
         {/* Left Sidebar: Block Library / Learning Labs */}
-        <div className="w-72 bg-[#0d0d0d] border-r border-[#222] flex flex-col">
-          {/* Sidebar Tab Switcher */}
-          <div className="p-3 border-b border-[#222] flex gap-1">
+        <div className={`${isLibCollapsed ? 'w-12' : 'w-72'} bg-[#0d0d0d] border-r border-[#222] flex flex-col transition-all duration-500 ease-in-out relative group shrink-0`}>
+          {/* Header */}
+          <div className="p-4 border-b border-[#222] flex items-center justify-between overflow-hidden shrink-0">
+            {!isLibCollapsed && (
+              <div className="flex items-center gap-2 text-purple-400">
+                <Layers size={16} className="text-purple-500" />
+                <h3 className="text-xs font-bold uppercase tracking-widest text-white">Library</h3>
+              </div>
+            )}
             <button
-              onClick={() => setActiveSidebarTab('library')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeSidebarTab === 'library'
-                  ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.1)]'
-                  : 'text-gray-500 hover:bg-white/5 border border-transparent'
-                }`}
+              onClick={() => setIsLibCollapsed(!isLibCollapsed)}
+              className={`p-2 rounded-xl bg-[#181818] border border-[#2d2d2d] text-purple-400 hover:bg-purple-500/10 hover:border-purple-500/30 transition-all ${isLibCollapsed ? 'mx-auto' : ''}`}
+              title={isLibCollapsed ? "Expand Library" : "Collapse Library"}
             >
-              <Layers size={14} />
-              Library
-            </button>
-            <button
-              onClick={() => setActiveSidebarTab('labs')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeSidebarTab === 'labs'
-                  ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20 shadow-[0_0_15px_rgba(249,115,22,0.1)]'
-                  : 'text-gray-500 hover:bg-white/5 border border-transparent'
-                }`}
-            >
-              <GraduationCap size={14} />
-              Labs
+              <Triangle size={12} className={`transition-transform duration-500 ${isLibCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
             </button>
           </div>
 
-          {activeSidebarTab === 'library' ? (
+          {!isLibCollapsed && (
             <>
-              <div className="p-4 border-b border-[#222]">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search blocks..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none transition-all"
-                  />
-                </div>
+              {/* Sidebar Tab Switcher */}
+              <div className="p-3 border-b border-[#222] flex gap-1">
+                <button
+                  onClick={() => setActiveSidebarTab('library')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeSidebarTab === 'library'
+                      ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.1)]'
+                      : 'text-gray-500 hover:bg-white/5 border border-transparent'
+                    }`}
+                >
+                  <Layers size={14} />
+                  Library
+                </button>
+                <button
+                  onClick={() => setActiveSidebarTab('labs')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeSidebarTab === 'labs'
+                      ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20 shadow-[0_0_15px_rgba(249,115,22,0.1)]'
+                      : 'text-gray-500 hover:bg-white/5 border border-transparent'
+                    }`}
+                >
+                  <GraduationCap size={14} />
+                  Labs
+                </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
-                {filteredLibrary.map(domain => {
-                  const categories = domain.blocks.reduce((acc, block) => {
-                    const cat = block.category || 'Standard';
-                    if (!acc[cat]) acc[cat] = [];
-                    acc[cat].push(block);
-                    return acc;
-                  }, {} as Record<string, VLabBlock[]>);
+              {activeSidebarTab === 'library' ? (
+                <>
+                  <div className="p-4 border-b border-[#222]">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Search blocks..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
 
-                  return (
-                    <div key={domain.type} className="space-y-4">
-                      <h3 className="text-[12px] font-black text-purple-400 uppercase tracking-[0.2em] mb-1">{domain.type}</h3>
-                      {Object.entries(categories).map(([catName, catBlocks]) => (
-                        <div key={catName} className="space-y-2 pl-2 border-l border-[#222]">
-                          <h4 className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">{catName}</h4>
-                          <div className="grid grid-cols-2 gap-2">
-                            {catBlocks.map(block => (
-                              <div
-                                key={block.id}
-                                draggable
-                                onDragStart={(e) => onDragStart(e, block)}
-                                onClick={() => addBlockToCenter(block)}
-                                className="group bg-[#111] border border-white/5 p-3 rounded-xl cursor-grab active:cursor-grabbing hover:border-purple-500/50 hover:bg-[#151515] transition-all flex flex-col items-center justify-center gap-2 relative overflow-hidden"
-                              >
-                                <div className="w-12 h-12 flex items-center justify-center transform scale-[0.6] group-hover:scale-[0.7] transition-transform origin-center">
-                                  <SymbolRenderer type={block.icon} color={block.color} />
-                                </div>
-                                <span className="text-[10px] text-gray-500 font-bold text-center leading-tight truncate w-full px-1 group-hover:text-gray-200 transition-colors uppercase tracking-tight">
-                                  {block.name}
-                                </span>
-                              </div>
-                            ))}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                    {filteredLibrary.map(domain => {
+                      const categories = domain.blocks.reduce((acc, block) => {
+                        const cat = block.category || 'Standard';
+                        if (!acc[cat]) acc[cat] = [];
+                        acc[cat].push(block);
+                        return acc;
+                      }, {} as Record<string, VLabBlock[]>);
+
+                      const isDomainExpanded = searchQuery.trim() !== '' || expandedDomains[domain.type] !== false;
+
+                      return (
+                        <div key={domain.type} className="flex flex-col space-y-3">
+                          {/* Domain Header Button */}
+                          <button
+                            onClick={() => toggleDomain(domain.type)}
+                            className={`flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
+                              isDomainExpanded 
+                                ? 'bg-purple-500/10 text-purple-400 border-l-2 border-purple-500' 
+                                : 'text-gray-500 hover:bg-white/5 hover:text-gray-200'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-1 h-1 rounded-full ${isDomainExpanded ? 'bg-purple-400' : 'bg-gray-600'}`} />
+                              {domain.type}
+                            </div>
+                            {isDomainExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          </button>
+
+                          {/* Domain Categories and Blocks */}
+                          {isDomainExpanded && (
+                            <div className="flex flex-col gap-4 pl-1 animate-in slide-in-from-top-2 duration-300">
+                              {Object.entries(categories).map(([catName, catBlocks]) => {
+                                const catKey = `${domain.type}_${catName}`;
+                                const isCatExpanded = searchQuery.trim() !== '' || expandedCategories[catKey] !== false;
+
+                                return (
+                                  <div key={catName} className="flex flex-col space-y-2 pl-2 border-l border-[#222]">
+                                    {/* Category Header Button */}
+                                    <button
+                                      onClick={() => toggleCategory(catKey)}
+                                      className="flex items-center justify-between w-full py-1 text-left outline-none group text-gray-500 hover:text-gray-300 transition-colors"
+                                    >
+                                      <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider group-hover:text-gray-400 transition-colors">
+                                        {catName}
+                                      </span>
+                                      <span className="text-gray-600 group-hover:text-gray-400 transition-colors flex items-center justify-center">
+                                        {isCatExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                                      </span>
+                                    </button>
+
+                                    {/* Category Blocks */}
+                                    {isCatExpanded && (
+                                      <div className="grid grid-cols-2 gap-2 animate-in slide-in-from-top-1 duration-200">
+                                        {catBlocks.map(block => (
+                                          <div
+                                            key={block.id}
+                                            draggable
+                                            onDragStart={(e) => onDragStart(e, block)}
+                                            onClick={() => addBlockToCenter(block)}
+                                            className="group bg-[#111] border border-white/5 p-3 rounded-xl cursor-grab active:cursor-grabbing hover:border-purple-500/50 hover:bg-[#151515] transition-all flex flex-col items-center justify-center gap-2 relative overflow-hidden"
+                                          >
+                                            <div className="w-12 h-12 flex items-center justify-center transform scale-[0.6] group-hover:scale-[0.7] transition-transform origin-center">
+                                              <SymbolRenderer type={block.icon} color={block.color} />
+                                            </div>
+                                            <span className="text-[10px] text-gray-500 font-bold text-center leading-tight truncate w-full px-1 group-hover:text-gray-200 transition-colors uppercase tracking-tight">
+                                              {block.name}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                  <div className="mb-6 p-4 bg-orange-500/5 border border-orange-500/10 rounded-2xl">
+                    <h3 className="text-[10px] font-black text-orange-400 uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
+                      <BookOpen size={14} />
+                      Physical Modeling Labs
+                    </h3>
+                    <p className="text-[10px] text-gray-500 leading-relaxed italic">
+                      Select a pre-configured learning model to explore real-world physical phenomena and multi-domain interactions.
+                    </p>
+                  </div>
+
+                  {LEARNING_LABS.map(lab => (
+                    <div
+                      key={lab.id}
+                      onClick={() => loadLabTemplate(lab.id)}
+                      onMouseEnter={() => setHoveredLabId(lab.id)}
+                      onMouseLeave={() => setHoveredLabId(null)}
+                      className="group relative bg-[#111] border border-white/5 rounded-2xl overflow-hidden cursor-pointer hover:border-orange-500/30 transition-all active:scale-95 shadow-xl"
+                    >
+                      {/* Decorative Background Glow */}
+                      <div className={`absolute inset-0 bg-gradient-to-br from-orange-500/10 to-transparent transition-opacity duration-500 ${hoveredLabId === lab.id ? 'opacity-100' : 'opacity-0'}`} />
+
+                      <div className="relative p-5">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="p-2 bg-orange-500/20 rounded-xl border border-orange-500/20">
+                            <FlaskConical size={20} className="text-orange-400" />
+                          </div>
+                          <span className="text-[8px] font-black px-2 py-1 bg-white/5 rounded-full text-gray-400 uppercase tracking-widest border border-white/5">
+                            {lab.difficulty}
+                          </span>
+                        </div>
+
+                        <h4 className="text-xs font-black text-gray-200 uppercase tracking-wider mb-2 group-hover:text-orange-400 transition-colors">
+                          {lab.name}
+                        </h4>
+                        <p className="text-[10px] text-gray-500 leading-relaxed mb-4 line-clamp-2">
+                          {lab.description}
+                        </p>
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-bold text-gray-600 uppercase tracking-tighter">
+                            {lab.category}
+                          </span>
+                          <div className="flex items-center gap-1 text-[10px] font-black text-orange-400 group-hover:translate-x-1 transition-transform">
+                            LOAD LAB <ChevronLeft size={14} className="rotate-180" />
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          ) : (
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-              <div className="mb-6 p-4 bg-orange-500/5 border border-orange-500/10 rounded-2xl">
-                <h3 className="text-[10px] font-black text-orange-400 uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
-                  <BookOpen size={14} />
-                  Physical Modeling Labs
-                </h3>
-                <p className="text-[10px] text-gray-500 leading-relaxed italic">
-                  Select a pre-configured learning model to explore real-world physical phenomena and multi-domain interactions.
-                </p>
-              </div>
-
-              {LEARNING_LABS.map(lab => (
-                <div
-                  key={lab.id}
-                  onClick={() => loadLabTemplate(lab.id)}
-                  onMouseEnter={() => setHoveredLabId(lab.id)}
-                  onMouseLeave={() => setHoveredLabId(null)}
-                  className="group relative bg-[#111] border border-white/5 rounded-2xl overflow-hidden cursor-pointer hover:border-orange-500/30 transition-all active:scale-95 shadow-xl"
-                >
-                  {/* Decorative Background Glow */}
-                  <div className={`absolute inset-0 bg-gradient-to-br from-orange-500/10 to-transparent transition-opacity duration-500 ${hoveredLabId === lab.id ? 'opacity-100' : 'opacity-0'}`} />
-
-                  <div className="relative p-5">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="p-2 bg-orange-500/20 rounded-xl border border-orange-500/20">
-                        <FlaskConical size={20} className="text-orange-400" />
                       </div>
-                      <span className="text-[8px] font-black px-2 py-1 bg-white/5 rounded-full text-gray-400 uppercase tracking-widest border border-white/5">
-                        {lab.difficulty}
-                      </span>
-                    </div>
 
-                    <h4 className="text-xs font-black text-gray-200 uppercase tracking-wider mb-2 group-hover:text-orange-400 transition-colors">
-                      {lab.name}
-                    </h4>
-                    <p className="text-[10px] text-gray-500 leading-relaxed mb-4 line-clamp-2">
-                      {lab.description}
-                    </p>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-[9px] font-bold text-gray-600 uppercase tracking-tighter">
-                        {lab.category}
-                      </span>
-                      <div className="flex items-center gap-1 text-[10px] font-black text-orange-400 group-hover:translate-x-1 transition-transform">
-                        LOAD LAB <ChevronLeft size={14} className="rotate-180" />
+                      {/* Bottom Progress/Status Bar */}
+                      <div className="h-1 w-full bg-white/5 overflow-hidden">
+                        <div className={`h-full bg-orange-500 transition-all duration-700 ${hoveredLabId === lab.id ? 'w-full' : 'w-0'}`} />
                       </div>
                     </div>
-                  </div>
-
-                  {/* Bottom Progress/Status Bar */}
-                  <div className="h-1 w-full bg-white/5 overflow-hidden">
-                    <div className={`h-full bg-orange-500 transition-all duration-700 ${hoveredLabId === lab.id ? 'w-full' : 'w-0'}`} />
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
 
@@ -3559,188 +3682,202 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         </div>
 
         {/* Right Sidebar: Properties & Equations */}
-        <div className="w-80 bg-[#0d0d0d] border-l border-[#222] flex flex-col">
-          {selectedNode ? (
-            <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col min-h-0">
-              {/* Properties Section */}
-              <div className="p-4 border-b border-[#222]">
-                <div className="flex items-center gap-2 mb-4">
-                  <Settings2 size={16} className="text-purple-500" />
-                  <h3 className="text-xs font-bold uppercase tracking-widest">Block Properties</h3>
+        <div className={`${isPropsCollapsed ? 'w-12' : 'w-80'} bg-[#0d0d0d] border-l border-[#222] flex flex-col transition-all duration-500 ease-in-out relative group shrink-0`}>
+          {/* Header */}
+          <div className="p-4 border-b border-[#222] flex items-center justify-between overflow-hidden shrink-0">
+            {!isPropsCollapsed && (
+              <div className="flex items-center gap-2 text-purple-400">
+                <Settings2 size={16} className="text-purple-500" />
+                <h3 className="text-xs font-bold uppercase tracking-widest text-white">Properties</h3>
+              </div>
+            )}
+            <button
+              onClick={() => setIsPropsCollapsed(!isPropsCollapsed)}
+              className={`p-2 rounded-xl bg-[#181818] border border-[#2d2d2d] text-purple-400 hover:bg-purple-500/10 hover:border-purple-500/30 transition-all ${isPropsCollapsed ? 'mx-auto' : ''}`}
+              title={isPropsCollapsed ? "Expand Properties" : "Collapse Properties"}
+            >
+              <Triangle size={12} className={`transition-transform duration-500 ${isPropsCollapsed ? '-rotate-90' : 'rotate-90'}`} fill="currentColor" />
+            </button>
+          </div>
+
+          {!isPropsCollapsed && (
+            selectedNode ? (
+              <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col min-h-0">
+                {/* Properties Section */}
+                <div className="p-4 border-b border-[#222]">
+                  {/* Block Help */}
+                  {selectedBlockDef && (
+                    <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 mb-6">
+                      <div className="flex items-center gap-2 text-purple-400 text-[10px] font-bold uppercase tracking-wider mb-2">
+                        <Info size={12} />
+                        Block Help
+                      </div>
+                      <p className="text-[10px] text-gray-400 leading-relaxed italic">
+                        {selectedBlockDef.description}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    <div className="bg-[#141414] p-3 rounded-xl border border-[#222]">
+                      <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Block ID</span>
+                      <span className="text-xs font-mono text-purple-400">{selectedNode.id}</span>
+                    </div>
+
+                    <div className="space-y-3">
+                      {Object.entries((selectedNode.data as any).params || {}).map(([key, param]: [string, any]) => (
+                        <div key={key}>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="text-[10px] text-gray-400 font-bold uppercase">{param.label || key}</label>
+                            <span className="text-[10px] text-gray-600">{param.unit || ''}</span>
+                          </div>
+                          {['limit_data_points', 'show_grid', 'show_legend'].includes(key) ? (
+                            <select
+                              value={String(param.value ?? 'on')}
+                              onChange={(e) => updateParameter(key, e.target.value)}
+                              className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-[#a855f7] font-bold cursor-pointer"
+                            >
+                              <option value="on">On (Yes)</option>
+                              <option value="off">Off (No)</option>
+                            </select>
+                          ) : key === 'time_range' ? (
+                            <select
+                              value={String(param.value ?? '10')}
+                              onChange={(e) => {
+                                const val = e.target.value === 'auto' ? 'auto' : parseFloat(e.target.value);
+                                updateParameter(key, val);
+                              }}
+                              className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-mono font-bold cursor-pointer"
+                            >
+                              <option value="auto">Auto (Full)</option>
+                              <option value="1">1s</option>
+                              <option value="2">2s</option>
+                              <option value="5">5s</option>
+                              <option value="10">10s</option>
+                              <option value="30">30s</option>
+                              <option value="60">60s</option>
+                              <option value="300">300s</option>
+                            </select>
+                          ) : key === 'numSignals' || key === 'numPorts' ? (
+                            <select
+                              value={String(param.value ?? 1)}
+                              onChange={(e) => updateParameter(key, parseInt(e.target.value))}
+                              className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-bold cursor-pointer"
+                            >
+                              {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                                <option key={n} value={n}>{n} Channels</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type={typeof (param.value ?? 0) === 'number' ? "number" : "text"}
+                              value={param.value ?? ''}
+                              onChange={(e) => {
+                                const val = typeof (param.value ?? 0) === 'number' ? parseFloat(e.target.value) : e.target.value;
+                                updateParameter(key, val);
+                              }}
+                              className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none"
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                {/* Block Help */}
-                {selectedBlockDef && (
-                  <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 mb-6">
-                    <div className="flex items-center gap-2 text-purple-400 text-[10px] font-bold uppercase tracking-wider mb-2">
-                      <Info size={12} />
-                      Block Help
-                    </div>
-                    <p className="text-[10px] text-gray-400 leading-relaxed italic">
-                      {selectedBlockDef.description}
-                    </p>
+                {/* Interface & Ports Section */}
+                <div className="p-4 border-b border-[#222]">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Activity size={16} className="text-emerald-500" />
+                    <h3 className="text-xs font-bold uppercase tracking-widest">Interface & Ports</h3>
                   </div>
-                )}
-
-                <div className="space-y-4">
-                  <div className="bg-[#141414] p-3 rounded-xl border border-[#222]">
-                    <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Block ID</span>
-                    <span className="text-xs font-mono text-purple-400">{selectedNode.id}</span>
-                  </div>
-
-                  <div className="space-y-3">
-                    {Object.entries((selectedNode.data as any).params || {}).map(([key, param]: [string, any]) => (
-                      <div key={key}>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-[10px] text-gray-400 font-bold uppercase">{param.label || key}</label>
-                          <span className="text-[10px] text-gray-600">{param.unit || ''}</span>
+                  
+                  <div className="space-y-2">
+                    {(selectedNode.data as any).ports?.map((port: any) => (
+                      <div key={port.id} className="bg-[#141414] p-2 rounded-lg border border-[#222] flex items-center justify-between group hover:border-emerald-500/30 transition-all">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-1.5 h-1.5 rounded-full ${
+                            port.pos === 'left' ? 'bg-blue-500' :
+                            port.pos === 'right' ? 'bg-emerald-500' :
+                            port.pos === 'top' ? 'bg-amber-500' : 'bg-purple-500'
+                          }`} />
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] font-mono text-emerald-500/70">[{port.id}]</span>
+                              <span className="text-[10px] font-bold text-gray-200 uppercase tracking-tight">
+                                {port.label || 'Unlabeled'}
+                              </span>
+                            </div>
+                            <div className="mt-1">
+                              <span className="text-[8px] px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-gray-500 font-mono uppercase tracking-tighter">
+                                {port.domain || (selectedNode.data as any).domain || 'General'}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        {['limit_data_points', 'show_grid', 'show_legend'].includes(key) ? (
-                          <select
-                            value={String(param.value ?? 'on')}
-                            onChange={(e) => updateParameter(key, e.target.value)}
-                            className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-[#a855f7] font-bold cursor-pointer"
-                          >
-                            <option value="on">On (Yes)</option>
-                            <option value="off">Off (No)</option>
-                          </select>
-                        ) : key === 'time_range' ? (
-                          <select
-                            value={String(param.value ?? '10')}
-                            onChange={(e) => {
-                              const val = e.target.value === 'auto' ? 'auto' : parseFloat(e.target.value);
-                              updateParameter(key, val);
-                            }}
-                            className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-mono font-bold cursor-pointer"
-                          >
-                            <option value="auto">Auto (Full)</option>
-                            <option value="1">1s</option>
-                            <option value="2">2s</option>
-                            <option value="5">5s</option>
-                            <option value="10">10s</option>
-                            <option value="30">30s</option>
-                            <option value="60">60s</option>
-                            <option value="300">300s</option>
-                          </select>
-                        ) : key === 'numSignals' || key === 'numPorts' ? (
-                          <select
-                            value={String(param.value ?? 1)}
-                            onChange={(e) => updateParameter(key, parseInt(e.target.value))}
-                            className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-bold cursor-pointer"
-                          >
-                            {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-                              <option key={n} value={n}>{n} Channels</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            type={typeof (param.value ?? 0) === 'number' ? "number" : "text"}
-                            value={param.value ?? ''}
-                            onChange={(e) => {
-                              const val = typeof (param.value ?? 0) === 'number' ? parseFloat(e.target.value) : e.target.value;
-                              updateParameter(key, val);
-                            }}
-                            className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none"
-                          />
-                        )}
+                        <div className="text-right">
+                           <div className="text-[9px] text-emerald-500/80 font-bold uppercase">
+                             {port.pos === 'left' ? 'Input' : port.pos === 'right' ? 'Output' : 'Control'}
+                           </div>
+                           <div className="text-[8px] text-gray-700">
+                             {port.pos === 'left' ? 'Terminal A' : port.pos === 'right' ? 'Terminal B' : 'Signal Port'}
+                           </div>
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
-              </div>
 
-              {/* Interface & Ports Section */}
-              <div className="p-4 border-b border-[#222]">
-                <div className="flex items-center gap-2 mb-4">
-                  <Activity size={16} className="text-emerald-500" />
-                  <h3 className="text-xs font-bold uppercase tracking-widest">Interface & Ports</h3>
-                </div>
-                
-                <div className="space-y-2">
-                  {(selectedNode.data as any).ports?.map((port: any) => (
-                    <div key={port.id} className="bg-[#141414] p-2 rounded-lg border border-[#222] flex items-center justify-between group hover:border-emerald-500/30 transition-all">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-1.5 h-1.5 rounded-full ${
-                          port.pos === 'left' ? 'bg-blue-500' :
-                          port.pos === 'right' ? 'bg-emerald-500' :
-                          port.pos === 'top' ? 'bg-amber-500' : 'bg-purple-500'
-                        }`} />
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[9px] font-mono text-emerald-500/70">[{port.id}]</span>
-                            <span className="text-[10px] font-bold text-gray-200 uppercase tracking-tight">
-                              {port.label || 'Unlabeled'}
-                            </span>
+                {/* Equations Section */}
+                <div className="p-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Activity size={16} className="text-blue-500" />
+                    <h3 className="text-xs font-bold uppercase tracking-widest">Governing Equations</h3>
+                  </div>
+
+                  <div>
+                    {selectedBlockDef ? (
+                      <div className="space-y-4">
+                        <div className="bg-[#141414] p-4 rounded-xl border border-[#222] flex flex-col items-center justify-center min-h-[100px] text-center">
+                          {(selectedBlockDef.latex || []).map((eq, i) => (
+                            <div key={i} className="text-sm font-serif italic text-purple-300 mb-2 last:mb-0">
+                              {eq}
+                            </div>
+                          ))}
+                          {(!selectedBlockDef.latex || selectedBlockDef.latex.length === 0) && (
+                            <span className="text-[10px] text-gray-600 italic">No latex available</span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-[#1a1a1a] p-3 rounded-lg border border-[#222]">
+                            <span className="text-[9px] text-gray-600 block uppercase font-bold">Across Var</span>
+                            <span className="text-xs text-blue-400">{selectedBlockDef.across}</span>
                           </div>
-                          <div className="mt-1">
-                            <span className="text-[8px] px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-gray-500 font-mono uppercase tracking-tighter">
-                              {port.domain || (selectedNode.data as any).domain || 'General'}
-                            </span>
+                          <div className="bg-[#1a1a1a] p-3 rounded-lg border border-[#222]">
+                            <span className="text-[9px] text-gray-600 block uppercase font-bold">Through Var</span>
+                            <span className="text-xs text-green-400">{selectedBlockDef.through}</span>
                           </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                         <div className="text-[9px] text-emerald-500/80 font-bold uppercase">
-                           {port.pos === 'left' ? 'Input' : port.pos === 'right' ? 'Output' : 'Control'}
-                         </div>
-                         <div className="text-[8px] text-gray-700">
-                           {port.pos === 'left' ? 'Terminal A' : port.pos === 'right' ? 'Terminal B' : 'Signal Port'}
-                         </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-gray-600 text-center px-4 py-8">
+                        <Box size={32} className="mb-2 opacity-20" />
+                        <p className="text-[10px] font-medium italic">No equations defined for this block type.</p>
                       </div>
-                    </div>
-                  ))}
+                    )}
+                  </div>
                 </div>
               </div>
-
-              {/* Equations Section */}
-              <div className="p-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <Activity size={16} className="text-blue-500" />
-                  <h3 className="text-xs font-bold uppercase tracking-widest">Governing Equations</h3>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-gray-600 text-center p-8">
+                <div className="w-16 h-16 rounded-full bg-[#141414] border border-[#222] flex items-center justify-center mb-4">
+                  <Settings2 size={32} className="opacity-20" />
                 </div>
-
-                <div>
-                  {selectedBlockDef ? (
-                    <div className="space-y-4">
-                      <div className="bg-[#141414] p-4 rounded-xl border border-[#222] flex flex-col items-center justify-center min-h-[100px] text-center">
-                        {(selectedBlockDef.latex || []).map((eq, i) => (
-                          <div key={i} className="text-sm font-serif italic text-purple-300 mb-2 last:mb-0">
-                            {eq}
-                          </div>
-                        ))}
-                        {(!selectedBlockDef.latex || selectedBlockDef.latex.length === 0) && (
-                          <span className="text-[10px] text-gray-600 italic">No latex available</span>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="bg-[#1a1a1a] p-3 rounded-lg border border-[#222]">
-                          <span className="text-[9px] text-gray-600 block uppercase font-bold">Across Var</span>
-                          <span className="text-xs text-blue-400">{selectedBlockDef.across}</span>
-                        </div>
-                        <div className="bg-[#1a1a1a] p-3 rounded-lg border border-[#222]">
-                          <span className="text-[9px] text-gray-600 block uppercase font-bold">Through Var</span>
-                          <span className="text-xs text-green-400">{selectedBlockDef.through}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center text-gray-600 text-center px-4 py-8">
-                      <Box size={32} className="mb-2 opacity-20" />
-                      <p className="text-[10px] font-medium italic">No equations defined for this block type.</p>
-                    </div>
-                  )}
-                </div>
+                <h3 className="text-sm font-bold text-gray-400 mb-1">Select a Block</h3>
+                <p className="text-[10px] leading-relaxed">Click on a component in the canvas to view and edit its physical parameters and governing equations.</p>
               </div>
-            </div>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-gray-600 text-center p-8">
-              <div className="w-16 h-16 rounded-full bg-[#141414] border border-[#222] flex items-center justify-center mb-4">
-                <Settings2 size={32} className="opacity-20" />
-              </div>
-              <h3 className="text-sm font-bold text-gray-400 mb-1">Select a Block</h3>
-              <p className="text-[10px] leading-relaxed">Click on a component in the canvas to view and edit its physical parameters and governing equations.</p>
-            </div>
+            )
           )}
         </div>
       </div>

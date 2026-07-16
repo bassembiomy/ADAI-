@@ -83,6 +83,136 @@ export function zpgToString(zeros: number[], poles: number[], gain: number, vari
   };
 }
 
+export class Complex {
+  constructor(public re: number, public im: number) {}
+  add(c: Complex) { return new Complex(this.re + c.re, this.im + c.im); }
+  sub(c: Complex) { return new Complex(this.re - c.re, this.im - c.im); }
+  mul(c: Complex) { return new Complex(this.re * c.re - this.im * c.im, this.re * c.im + this.im * c.re); }
+  div(c: Complex) {
+    const denom = c.re * c.re + c.im * c.im;
+    if (denom === 0) return new Complex(0, 0);
+    return new Complex(
+      (this.re * c.re + this.im * c.im) / denom,
+      (this.im * c.re - this.re * c.im) / denom
+    );
+  }
+  abs() { return Math.sqrt(this.re * this.re + this.im * this.im); }
+}
+
+export function findRoots(coeffs: number[]): { re: number; im: number }[] {
+  let n = coeffs.length - 1;
+  while (n > 0 && Math.abs(coeffs[coeffs.length - 1 - n]) < 1e-12) {
+    n--;
+  }
+  if (n <= 0) return [];
+  
+  const lead = coeffs[coeffs.length - 1 - n];
+  const c: number[] = [];
+  for (let i = 0; i <= n; i++) {
+    c.push(coeffs[coeffs.length - 1 - n + i] / lead);
+  }
+  
+  const roots: Complex[] = [];
+  const initRadius = 1.0;
+  for (let i = 0; i < n; i++) {
+    const angle = (2 * Math.PI * i) / n + 0.5;
+    roots.push(new Complex(initRadius * Math.cos(angle), initRadius * Math.sin(angle)));
+  }
+  
+  const evalPoly = (s: Complex): Complex => {
+    let res = new Complex(1, 0);
+    for (let i = 1; i <= n; i++) {
+      res = res.mul(s).add(new Complex(c[i], 0));
+    }
+    return res;
+  };
+  
+  const maxIterations = 100;
+  const tol = 1e-8;
+  for (let iter = 0; iter < maxIterations; iter++) {
+    let maxDiff = 0;
+    for (let i = 0; i < n; i++) {
+      const s = roots[i];
+      const pVal = evalPoly(s);
+      
+      let denom = new Complex(1, 0);
+      for (let j = 0; j < n; j++) {
+        if (i !== j) {
+          denom = denom.mul(s.sub(roots[j]));
+        }
+      }
+      
+      const diff = pVal.div(denom);
+      roots[i] = roots[i].sub(diff);
+      maxDiff = Math.max(maxDiff, diff.abs());
+    }
+    if (maxDiff < tol) break;
+  }
+  
+  return roots.map(r => {
+    const imVal = Math.abs(r.im) < 1e-6 ? 0 : r.im;
+    const reVal = Math.abs(r.re) < 1e-6 ? 0 : r.re;
+    return { re: reVal, im: imVal };
+  });
+}
+
+export function trimLeadingZeros(arr: number[]): number[] {
+  const firstNonZero = arr.findIndex(x => x !== 0);
+  if (firstNonZero === -1) return [1];
+  return arr.slice(firstNonZero);
+}
+
+export function getPolynomialCoefficients(
+  equationStr: string,
+  factorName: string,
+  allFactors: string[] = [],
+  maxDegree: number = 3
+): number[] {
+  let normalized = equationStr.replace(/·/g, '*')
+                             .replace(/²/g, '^2')
+                             .replace(/³/g, '^3')
+                             .replace(/⁴/g, '^4');
+  if (normalized.includes('=')) {
+    normalized = normalized.split('=')[1].trim();
+  }
+  
+  const points: number[] = [];
+  const values: number[] = [];
+  for (let i = 0; i <= maxDegree; i++) {
+    points.push(i);
+    const scope: Record<string, number> = {};
+    allFactors.forEach(f => {
+      scope[f] = 0;
+    });
+    scope[factorName] = i;
+    
+    try {
+      const val = math.evaluate(normalized, scope);
+      values.push(Number(val) || 0);
+    } catch (e) {
+      values.push(0);
+    }
+  }
+  
+  const V: number[][] = [];
+  for (let i = 0; i <= maxDegree; i++) {
+    const row: number[] = [];
+    for (let j = 0; j <= maxDegree; j++) {
+      row.push(Math.pow(points[i], j));
+    }
+    V.push(row);
+  }
+  
+  try {
+    const coeffs = math.lusolve(V, values) as number[][];
+    const flatCoeffs = coeffs.map(row => Array.isArray(row) ? row[0] : row);
+    return flatCoeffs.map(c => Math.abs(c) < 1e-9 ? 0 : c);
+  } catch (e) {
+    console.error("Vandermonde solve failed:", e);
+    return new Array(maxDegree + 1).fill(0);
+  }
+}
+
 const createPort = (
   id: string,
   name: string,
@@ -1943,18 +2073,23 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       type: params.type || 'Sine', 
       amp: params.amp || 1, 
       freq: params.freq || 1, 
-      offset: params.offset || 0 
+      offset: params.offset || 0,
+      phase: params.phase ?? 0
     },
     inputs: [],
     outputs: [createPort('out', 'Out', 'output', 0)],
+    equation: 'y = amp * sin(2*π*freq*t + phase) + offset',
+    description: 'Generates a periodic wave signal (Sine or Square) with configurable amplitude, frequency, phase shift (in radians), and DC offset.',
     execute: (ins, p, state, time) => {
       let val = 0;
-      const omega = 2 * Math.PI * Number(p.freq) * time;
+      const freq = Number(p.freq);
+      const phase = Number(p.phase ?? 0);
+      const omega = 2 * Math.PI * freq * time;
       const amp = Number(p.amp);
       const offset = Number(p.offset);
       
-      if (p.type === 'Sine') val = amp * Math.sin(omega) + offset;
-      else if (p.type === 'Square') val = amp * Math.sign(Math.sin(omega)) + offset;
+      if (p.type === 'Sine') val = amp * Math.sin(omega + phase) + offset;
+      else if (p.type === 'Square') val = amp * Math.sign(Math.sin(omega + phase)) + offset;
       
       return { outputs: [val] };
     }
@@ -2992,8 +3127,12 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
                   });
                 }
 
+                const cleanEq = eqStr.replace(/·/g, '*')
+                                     .replace(/²/g, '^2')
+                                     .replace(/³/g, '^3')
+                                     .replace(/⁴/g, '^4');
                 try {
-                    const result = math.evaluate(eqStr, scope);
+                    const result = math.evaluate(cleanEq, scope);
                     return { outputs: [Number(result) || 0] };
                 } catch (e) {
                     return { outputs: [cleanIns.reduce((a, b) => a + b, 0)] };
@@ -4227,12 +4366,12 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     const A = Array.from({ length: n }, (_, i) => 
       Array.from({ length: n }, (__, j) => {
         if (i < n - 1) return j === i + 1 ? 1 : 0;
-        return -d[j + 1];
+        return -d[n - j];
       })
     );
     const B = Array.from({ length: n }, (_, i) => [i === n - 1 ? 1 : 0]);
     const b0 = b[0];
-    const C = [Array.from({ length: n }, (_, i) => b[i + 1] - b0 * d[i + 1])];
+    const C = [Array.from({ length: n }, (_, i) => b[n - i] - d[n - i] * b0)];
     const D = [[b0]];
 
     const ss = BLOCK_LIBRARY['STATE_SPACE'](id, { 
@@ -4288,6 +4427,46 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       type: 'ZERO_POLE_GAIN',
       equation: 'H(s) = K * (s-z1)...(s-zm) / (s-p1)...(s-pn)',
       description: 'Models a system in zero-pole-gain form. Converts to transfer function and state-space internally.'
+    };
+  },
+
+  'LAPLACE_TRANSFORM': (id, params) => {
+    const num = params.numerator || [1];
+    const den = params.denominator || [1, 1];
+    const mappingType = params.mappingType || 'denominator';
+    const maxDegree = params.maxDegree !== undefined ? Number(params.maxDegree) : 3;
+    const defaultDenominator = params.defaultDenominator || [1, 1];
+
+    const tf = BLOCK_LIBRARY['TRANSFER_FUNCTION'](id, { 
+      ...params, 
+      numerator: num, 
+      denominator: den 
+    });
+
+    return {
+      ...tf,
+      id,
+      type: 'LAPLACE_TRANSFORM',
+      params: { 
+        ...tf.params, 
+        mappingType, 
+        maxDegree, 
+        defaultDenominator, 
+        equation: params.equation || '' 
+      },
+      icon: 'settings-2',
+      inputs: [
+        createPort('u', 'In', 'input', 0, 'left', 'continuous'),
+        createPort('doe', 'DOE', 'input', null, 'left', 'object')
+      ],
+      outputs: [
+        createPort('y', 'Out', 'output', 0, 'right', 'continuous'),
+        createPort('x', 'State', 'output', 0, 'top', 'vector')
+      ],
+      equation: params.equation 
+        ? `G(s) = ${mappingType === 'numerator' ? 'P(s)' : '1/P(s)'}` 
+        : 'G(s) = 1 / P(s)',
+      description: 'Models a Laplace transform transfer function where the polynomial is dynamically transferred from a Design of Experiments (DOE) block.'
     };
   },
 
@@ -5657,6 +5836,202 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
             lastStateIdx: s,
             lastActionIdx: aIdx,
             hasPrev: 1
+          }
+        };
+      }
+    };
+  },
+
+  'AIR_FRYER_LEARNING_MODEL': (id: string, params: any) => {
+    const K_h = params.K_h !== undefined ? Number(params.K_h) : 2.0;
+    const tau_h = params.tau_h !== undefined ? Number(params.tau_h) : 4.0;
+    const K_f = params.K_f !== undefined ? Number(params.K_f) : 1.0;
+    const tau_f = params.tau_f !== undefined ? Number(params.tau_f) : 2.0;
+    const K_c = params.K_c !== undefined ? Number(params.K_c) : 0.75;
+    const tau_c = params.tau_c !== undefined ? Number(params.tau_c) : 15.0;
+    const theta = params.theta !== undefined ? Number(params.theta) : 1.5;
+    const tau_s = params.tau_s !== undefined ? Number(params.tau_s) : 1.0;
+    const K_evap = params.K_evap !== undefined ? Number(params.K_evap) : 0.05;
+    const K_loss = params.K_loss !== undefined ? Number(params.K_loss) : 0.02;
+    const T_ambient = params.T_ambient !== undefined ? Number(params.T_ambient) : 25.0;
+    const learning_rate = params.learning_rate !== undefined ? Number(params.learning_rate) : 0.01;
+    const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : 0.1;
+
+    return {
+      id, type: 'AIR_FRYER_LEARNING_MODEL',
+      params: {
+        K_h, tau_h, K_f, tau_f, K_c, tau_c, theta, tau_s,
+        K_evap, K_loss, T_ambient, learning_rate, sampleTime
+      },
+      isStateful: true,
+      inputs: [
+        createPort('power', 'Power', 'input', 0, 'left', 'control'),
+        createPort('fan_speed', 'Fan Speed', 'input', 1.0, 'left', 'control'),
+        createPort('measured_temp', 'Measured Temp', 'input', -999.0, 'left', 'control'),
+        createPort('lr', 'Learning Rate', 'input', learning_rate, 'bottom', 'control'),
+        createPort('cavity_dim', 'Cavity Dimensions [W,D,H]', 'input', [0.3, 0.3, 0.2], 'left', 'vector')
+      ],
+      outputs: [
+        createPort('temp_actual', 'Temp Actual', 'output', T_ambient, 'right', 'control'),
+        createPort('estimated_gain', 'Est. Gain (K)', 'output', K_h * K_c, 'right', 'control'),
+        createPort('estimated_tau_c', 'Est. Tau_c', 'output', tau_c, 'right', 'control'),
+        createPort('prediction_error', 'Pred. Error', 'output', 0.0, 'right', 'control'),
+        createPort('temp_pred', 'Temp Pred', 'output', T_ambient, 'right', 'control')
+      ],
+      state: {
+        T_heater: T_ambient,
+        h_c: 0.0,
+        T_chamber: T_ambient,
+        T_sensor: T_ambient,
+        T_pred: T_ambient,
+        buffer_T_chamber: [] as number[],
+        buffer_power: [] as number[],
+        a: Math.exp(-sampleTime / tau_c),
+        b: K_h * K_c * (1 - Math.exp(-sampleTime / tau_c)),
+        p_a: 0.0,
+        p_b: 0.0,
+        lastTime: 0.0,
+        initialized: false
+      },
+      icon: 'graduation-cap',
+      equation: 'G_p(s) = (K_h * K_c * e^{-theta * s}) / ((tau_h*s + 1)(tau_c*s + 1)(tau_s*s + 1))',
+      description: 'Air Fryer simulation model with online parameter estimation (NLMS). Simulates heat actuator dynamics, fan speed convection, moisture evaporation, and sensor delay, while identifying plant gain (K) and chamber time constant (tau_c).',
+      execute: (ins, p, state, time) => {
+        const power = Math.max(0.0, Math.min(100.0, Number(ins[0] ?? 0.0)));
+        const fan_speed = Math.max(0.0, Math.min(1.0, Number(ins[1] ?? 1.0)));
+        
+        let lastTime = state.lastTime !== undefined ? state.lastTime : 0.0;
+        let dt = time - lastTime;
+        if (dt <= 1e-6) {
+          dt = p.sampleTime > 0.0 ? Number(p.sampleTime) : 0.1;
+        }
+
+        const K_h = p.K_h ?? 2.0;
+        const tau_h = p.tau_h ?? 4.0;
+        const K_f = p.K_f ?? 1.0;
+        const tau_f = p.tau_f ?? 2.0;
+        const K_c = p.K_c ?? 0.75;
+        const tau_c = p.tau_c ?? 15.0;
+        const theta = p.theta ?? 1.5;
+        const tau_s = p.tau_s ?? 1.0;
+        const K_evap = p.K_evap ?? 0.05;
+        const K_loss = p.K_loss ?? 0.02;
+        const T_ambient = p.T_ambient ?? 25.0;
+
+        // Cavity dimensions scaling (nominal: W=0.3, D=0.3, H=0.2)
+        let W = 0.3, D = 0.3, H = 0.2;
+        const dims = ins[4];
+        if (Array.isArray(dims) && dims.length >= 3) {
+          let rawW = Number(dims[0]) || 0.3;
+          let rawD = Number(dims[1]) || 0.3;
+          let rawH = Number(dims[2]) || 0.2;
+          if (rawW > 2.0) rawW /= 100.0;
+          if (rawD > 2.0) rawD /= 100.0;
+          if (rawH > 2.0) rawH /= 100.0;
+          W = Math.max(0.05, rawW);
+          D = Math.max(0.05, rawD);
+          H = Math.max(0.05, rawH);
+        } else if (typeof dims === 'number' && dims > 0) {
+          W = D = H = Math.cbrt(dims);
+        }
+
+        const V = W * D * H;
+        const A = 2 * (W * D + W * H + D * H);
+        const B = W * D;
+
+        const V_nom = 0.018;
+        const A_nom = 0.42;
+        const B_nom = 0.09;
+
+        const s_V = V / V_nom;
+        const s_A = A / A_nom;
+        const s_B = B / B_nom;
+
+        // Apply scale factors to thermal parameters
+        const eff_tau_c = tau_c * s_V;
+        const eff_K_loss = K_loss * s_A;
+        const eff_K_evap = K_evap * s_B;
+
+        let T_heater = state.T_heater ?? T_ambient;
+        let h_c = state.h_c ?? 0.0;
+        let T_chamber = state.T_chamber ?? T_ambient;
+        let T_sensor = state.T_sensor ?? T_ambient;
+
+        T_heater += (dt / tau_h) * (T_ambient + K_h * power - T_heater);
+        h_c += (dt / tau_f) * (K_f * fan_speed - h_c);
+
+        const Q_heat = h_c * (T_heater - T_chamber) / eff_tau_c;
+        const Q_loss = eff_K_loss * (T_chamber - T_ambient);
+        const Q_evap = eff_K_evap * Math.max(0.0, T_chamber - 100.0);
+        T_chamber += dt * (Q_heat - Q_loss - Q_evap);
+
+        const delaySteps = Math.max(1, Math.round(theta / dt));
+        let buffer_T_chamber = Array.isArray(state.buffer_T_chamber) ? [...state.buffer_T_chamber] : [];
+        buffer_T_chamber.push(T_chamber);
+        while (buffer_T_chamber.length > delaySteps) {
+          buffer_T_chamber.shift();
+        }
+        const T_delayed = buffer_T_chamber[0] ?? T_ambient;
+
+        T_sensor += (dt / tau_s) * (T_delayed - T_sensor);
+
+        const measured_input = ins[2] !== undefined && !isNaN(Number(ins[2])) ? Number(ins[2]) : -999.0;
+        const measured_temp = (measured_input === -999.0) ? T_sensor : measured_input;
+        const lr = ins[3] !== undefined && !isNaN(Number(ins[3])) ? Number(ins[3]) : (p.learning_rate ?? 0.01);
+
+        let T_pred = state.T_pred ?? T_ambient;
+        let a = state.a;
+        let b = state.b;
+        if (!state.initialized) {
+          a = Math.exp(-dt / eff_tau_c);
+          b = K_h * K_c * (1 - Math.exp(-dt / eff_tau_c));
+        } else {
+          a = state.a ?? Math.exp(-dt / eff_tau_c);
+          b = state.b ?? (K_h * K_c * (1 - Math.exp(-dt / eff_tau_c)));
+        }
+        let p_a = state.p_a ?? 0.0;
+        let p_b = state.p_b ?? 0.0;
+
+        let buffer_power = Array.isArray(state.buffer_power) ? [...state.buffer_power] : [];
+        buffer_power.push(power);
+        while (buffer_power.length > delaySteps) {
+          buffer_power.shift();
+        }
+        const P_delayed = buffer_power[0] ?? 0.0;
+
+        const y_meas = measured_temp - T_ambient;
+        const y_pred = T_pred - T_ambient;
+        const err = y_meas - y_pred;
+
+        p_a = Math.max(-1000.0, Math.min(1000.0, y_pred + a * p_a));
+        p_b = Math.max(-1000.0, Math.min(1000.0, P_delayed + a * p_b));
+
+        const den = 1.0 + p_a * p_a + p_b * p_b;
+        const next_a = Math.max(0.1, Math.min(0.9995, a + (lr / den) * err * p_a));
+        const next_b = Math.max(0.0001, Math.min(10.0, b + (lr / den) * err * p_b));
+
+        const next_y_pred = next_a * y_pred + next_b * P_delayed;
+        const next_T_pred = T_ambient + next_y_pred;
+
+        const estimated_tau_c = -dt / Math.log(next_a);
+        const estimated_gain = next_b / (1.0 - next_a);
+
+        return {
+          outputs: [T_sensor, estimated_gain, estimated_tau_c, err, T_pred],
+          nextState: {
+            T_heater,
+            h_c,
+            T_chamber,
+            T_sensor,
+            T_pred: next_T_pred,
+            buffer_T_chamber,
+            buffer_power,
+            a: next_a,
+            b: next_b,
+            p_a,
+            p_b,
+            lastTime: time,
+            initialized: true
           }
         };
       }
@@ -10666,6 +11041,157 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     };
   },
 
+  'ROOT_LOCUS': (id, params) => {
+    const numerator = params.numerator || [1];
+    const denominator = params.denominator || [1, 2, 1];
+    const gain = params.gain !== undefined ? Number(params.gain) : 1;
+    const maxGain = params.maxGain !== undefined ? Number(params.maxGain) : 100;
+    const simulationType = params.simulationType || 'open_loop';
+    const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : -1;
+    
+    return {
+      id,
+      type: 'ROOT_LOCUS',
+      params: {
+        numerator,
+        denominator,
+        gain,
+        maxGain,
+        simulationType,
+        sampleTime,
+        showGrid: params.showGrid !== false
+      },
+      isStateful: true,
+      icon: 'activity',
+      equation: '1 + K*G(s) = 0',
+      description: 'Plots the root locus of a transfer function. Simulates either the open-loop or closed-loop system response under gain K.',
+      inputs: [createPort('u', 'u', 'input', 0, 'left', 'vector')],
+      outputs: [
+        createPort('y', 'y', 'output', 0, 'right', 'vector')
+      ],
+      state: {
+        x: null,
+        history: [],
+        stepCount: 0
+      },
+      execute: (ins, p, state, time) => {
+        const num = p.numerator || [1];
+        const den = p.denominator || [1, 1];
+        const K = p.gain !== undefined ? Number(p.gain) : 1;
+        const simType = p.simulationType || 'open_loop';
+        
+        let simNum = num.map((val: number) => val * K);
+        let simDen = [...den];
+        
+        if (simType === 'closed_loop') {
+          const nCoeffs = [...num].map((val: number) => val * K);
+          const dCoeffs = [...den];
+          const maxLength = Math.max(nCoeffs.length, dCoeffs.length);
+          while (nCoeffs.length < maxLength) nCoeffs.unshift(0);
+          while (dCoeffs.length < maxLength) dCoeffs.unshift(0);
+          
+          simDen = dCoeffs.map((dVal, idx) => dVal + nCoeffs[idx]);
+        }
+        
+        const n = simDen.length - 1;
+        if (n <= 0) {
+          return { outputs: [ins[0]] };
+        }
+        
+        const a0 = simDen[0] || 1;
+        const d = simDen.map((val: number) => val / a0);
+        const b = simNum.map((val: number) => val / a0);
+        while (b.length <= n) b.unshift(0);
+        
+        const A_mat = Array.from({ length: n }, (_, i) => 
+          Array.from({ length: n }, (__, j) => {
+            if (i < n - 1) return j === i + 1 ? 1 : 0;
+            return -d[j + 1];
+          })
+        );
+        const B_mat = Array.from({ length: n }, (_, i) => [i === n - 1 ? 1 : 0]);
+        const b0 = b[0];
+        const C_mat = [Array.from({ length: n }, (_, i) => b[i + 1] - b0 * d[i + 1])];
+        const D_mat = [[b0]];
+        
+        if (!state.x || state.x.length !== n) {
+          state.x = new Array(n).fill(0);
+        }
+        
+        const u = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
+        const x = state.x as number[];
+        
+        const y = C_mat.map((row: number[]) => {
+          const cx = row.reduce((sum, val, j) => sum + val * (Number(x[j]) || 0), 0);
+          const du = D_mat[0].reduce((sum: number, _: any, j: number) => sum + (Number(D_mat[0][j]) || 0) * (Number(u[j]) || 0), 0);
+          return cx + du;
+        });
+        
+        const sampleTimeVal = p.sampleTime !== undefined ? Number(p.sampleTime) : -1;
+        if (sampleTimeVal > 0) {
+          const nextX = A_mat.map((row: number[], i: number) => {
+            const ax = row.reduce((sum, val, j) => sum + val * (Number(x[j]) || 0), 0);
+            const bu = B_mat[i].reduce((sum: number, val: number, j: number) => sum + val * (Number(u[j]) || 0), 0);
+            return x[i] + sampleTimeVal * (ax + bu);
+          });
+          return { outputs: [y], nextState: { ...state, x: nextX } };
+        }
+        
+        return { outputs: [y] };
+      },
+      evaluateDerivatives: (ins, p, state) => {
+        const num = p.numerator || [1];
+        const den = p.denominator || [1, 1];
+        const K = p.gain !== undefined ? Number(p.gain) : 1;
+        const simType = p.simulationType || 'open_loop';
+        
+        let simNum = num.map((val: number) => val * K);
+        let simDen = [...den];
+        
+        if (simType === 'closed_loop') {
+          const nCoeffs = [...num].map((val: number) => val * K);
+          const dCoeffs = [...den];
+          const maxLength = Math.max(nCoeffs.length, dCoeffs.length);
+          while (nCoeffs.length < maxLength) nCoeffs.unshift(0);
+          while (dCoeffs.length < maxLength) dCoeffs.unshift(0);
+          
+          simDen = dCoeffs.map((dVal, idx) => dVal + nCoeffs[idx]);
+        }
+        
+        const n = simDen.length - 1;
+        if (n <= 0) return { x: [] };
+        
+        const a0 = simDen[0] || 1;
+        const d = simDen.map((val: number) => val / a0);
+        const b = simNum.map((val: number) => val / a0);
+        while (b.length <= n) b.unshift(0);
+        
+        const A_mat = Array.from({ length: n }, (_, i) => 
+          Array.from({ length: n }, (__, j) => {
+            if (i < n - 1) return j === i + 1 ? 1 : 0;
+            return -d[j + 1];
+          })
+        );
+        const B_mat = Array.from({ length: n }, (_, i) => [i === n - 1 ? 1 : 0]);
+        
+        if (!state.x || state.x.length !== n) {
+          state.x = new Array(n).fill(0);
+        }
+        
+        const u = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
+        const x = state.x as number[];
+        
+        const dx = A_mat.map((row: number[], i: number) => {
+          const ax = row.reduce((sum, val, j) => sum + val * (Number(x[j]) || 0), 0);
+          const bu = B_mat[i].reduce((sum: number, val: number, j: number) => sum + val * (Number(u[j]) || 0), 0);
+          return ax + bu;
+        });
+        
+        return { x: dx };
+      }
+    };
+  },
+
   'Note': (id, params) => ({
     id,
     type: 'Note',
@@ -10701,6 +11227,7 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'LMS_ADAPTIVE_FILTER', label: 'LMS Adaptive Filter', icon: 'graduation-cap' },
       { type: 'NEURAL_NEURON_LEARNING', label: 'Neural Neuron Learner', icon: 'graduation-cap' },
       { type: 'RL_Q_LEARNING_CONTROLLER', label: 'RL Q-Learning Agent', icon: 'graduation-cap' },
+      { type: 'AIR_FRYER_LEARNING_MODEL', label: 'Air Fryer Learning Model', icon: 'graduation-cap' },
       { type: 'ROBOT_VACUUM_DIGITAL_TWIN', label: 'Robot Vacuum Twin (Single)', icon: 'graduation-cap' },
       { type: 'ROBOT_VACUUM_DYNAMICS', label: 'Robot Vacuum Dynamics', icon: 'graduation-cap' },
       { type: 'ROBOT_VACUUM_MOTOR', label: 'Robot Vacuum Motor', icon: 'graduation-cap' },
@@ -10778,7 +11305,9 @@ export const XBRIDGES_CATEGORIES = [
       { type: 'INTEGRATOR_CONTINUOUS', label: 'Continuous Integrator', icon: 'integral' },
       { type: 'STATE_SPACE', label: 'State-Space Model', icon: 'settings-2' },
       { type: 'TRANSFER_FUNCTION', label: 'Transfer Function', icon: 'settings-2' },
-      { type: 'ZERO_POLE_GAIN', label: 'Zero-Pole-Gain', icon: 'settings-2' }
+      { type: 'ZERO_POLE_GAIN', label: 'Zero-Pole-Gain', icon: 'settings-2' },
+      { type: 'ROOT_LOCUS', label: 'Root Locus Plotter', icon: 'activity' },
+      { type: 'LAPLACE_TRANSFORM', label: 'Laplace Transform', icon: 'settings-2' }
     ]
   },
   {

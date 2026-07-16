@@ -285,7 +285,7 @@ ${telemetryCompositions || '    len += snprintf(buf + len, sizeof(buf) - (size_t
 #include "hal_drivers.h"
 #include "hil_interface.h"
 ${target.startsWith('Arduino') || target === 'ESP32' ? '#include "Arduino.h"\n' : ''}
-
+${target === 'Generic' ? '#ifdef _WIN32\n#include <windows.h>\n#else\n#include <unistd.h>\n#endif\n' : ''}
 ADIA_Instance_t sm_instance;
 
 int main(void) {

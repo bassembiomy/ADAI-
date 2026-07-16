@@ -3,7 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const ALLOWED_INVOKE_CHANNELS = [
   'import-json', 'save-json', 'save-project-folder',
   'fetch-factory-io-tags', 'sync-factory-io',
-  'hil-save-build-files', 'hil-run-compile', 'hil-run-flash',
+  'hil-save-build-files', 'hil-run-compile', 'hil-run-flash', 'hil-run-erase',
   'hil-list-ports', 'hil-connect', 'hil-disconnect', 'hil-send',
   '3dx-oauth-start', '3dx-refresh-token', '3dx-load-credentials',
   '3dx-save-credentials', '3dx-logout', '3dx-get-workspaces',

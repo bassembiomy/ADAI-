@@ -1,6 +1,6 @@
 /* ============================================================= */
 /*  ADIA HIL (Hardware-in-the-Loop) - AUTO GENERATED CODE       */
-/*  Target MCU: Arduino_Mega (Arduino Mega)                          */
+/*  Target MCU: Generic (Generic C / Linux Platform)                          */
 /*  Baud Rate: 115200                                */
 /*  Do not modify this file manually                             */
 /* ============================================================= */

@@ -21,7 +21,7 @@ import {
   MousePointer2, Upload, FileText, Download,
   Activity, Zap, Database, Cpu, Layout, Maximize2, X,
   LayoutGrid, Rows, Network, Flame, RefreshCcw, Wind, Cloud,
-  Eye, Paperclip
+  Eye, Paperclip, FlaskConical
 } from 'lucide-react';
 import { FactoryIOGateway } from './components/FactoryIOGateway';
 import { ThreeDXGateway } from './components/ThreeDXGateway';
@@ -37,6 +37,7 @@ import { analyzeStateMachine } from './utils/smAnalysisEngine';
 import { HELP_DATA } from './HelpData';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
+import JSZip from 'jszip';
 
 // =============================================================================
 // STATIC UI COMPONENTS (ZERO IMPORT ERRORS - FULLY TYPED)
@@ -199,6 +200,13 @@ interface Point {
 
 type ManagedWindowId = 'hmi' | 'pid' | 'rtm' | 'doe';
 type DiagramMode = 'statemachine' | 'bdd' | 'ibd' | 'requirements' | 'xbridges' | 'vlab' | 'hil' | 'entropy';
+
+interface WorkspaceFile {
+  id: string;
+  name: string;
+  type: string;
+  data: any;
+}
 
 interface ManagedWindowState {
   id: ManagedWindowId;
@@ -1274,18 +1282,28 @@ const CodeGenerationDialog = ({
         </Button>
         {codegenErrors.length === 0 && files.length > 0 && (
           <Button
-            onClick={() => {
-              files.forEach(f => {
+            onClick={async () => {
+              try {
+                const zip = new JSZip();
+                files.forEach(f => {
+                  zip.file(f.name, f.content);
+                });
+                const blob = await zip.generateAsync({ type: 'blob' });
+                const url = URL.createObjectURL(blob);
                 const element = document.createElement('a');
-                element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(f.content));
-                element.setAttribute('download', f.name);
+                element.setAttribute('href', url);
+                element.setAttribute('download', `generated_code_${new Date().getTime()}.zip`);
                 element.style.display = 'none';
                 document.body.appendChild(element);
                 element.click();
                 document.body.removeChild(element);
-              });
-              addError('info', 'Files downloaded successfully');
-              onClose();
+                URL.revokeObjectURL(url);
+                addError('info', 'Code package downloaded successfully as ZIP');
+                onClose();
+              } catch (err) {
+                console.error('Failed to generate ZIP package:', err);
+                addError('error', 'Failed to generate ZIP package.');
+              }
             }}
             className="bg-[#f97316] text-[#0a0a0a] hover:bg-[#ea580c] px-5"
           >
@@ -1426,25 +1444,28 @@ const PidWorkspaceDialog = ({
 
     const c_content = `#include "pid_controller.h"\n\nvoid PID_Init(PID* pid, float Kp, float Ki, float Kd, float Ts){\n    pid->Kp = Kp;\n    pid->Ki = Ki;\n    pid->Kd = Kd;\n    pid->Ts = Ts;\n    pid->e[0] = pid->e[1] = pid->e[2] = 0;\n    pid->u_prev = 0;\n}\n\nfloat PID_Compute(PID* pid, float setpoint, float pv){\n    float e_new = setpoint - pv;\n    float u = pid->u_prev + pid->Kp*(e_new - pid->e[0])\n              + pid->Ki*pid->Ts*e_new\n              + pid->Kd/pid->Ts*(e_new - 2*pid->e[0] + pid->e[1]);\n    pid->u_prev = u;\n    pid->e[2] = pid->e[1];\n    pid->e[1] = pid->e[0];\n    pid->e[0] = e_new;\n    return u;\n}\n\n/*\n// ===== PID instance with tuned values =====\nPID pid_instance;\nPID_Init(&pid_instance, ${Kp.toFixed(4)}f, ${Ki.toFixed(4)}f, ${Kd.toFixed(4)}f, ${Ts.toFixed(4)}f);\n*/`;
 
-    // Download H file
-    const elementH = document.createElement('a');
-    elementH.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(h_content));
-    elementH.setAttribute('download', 'pid_controller.h');
-    elementH.style.display = 'none';
-    document.body.appendChild(elementH);
-    elementH.click();
-    document.body.removeChild(elementH);
-
-    // Download C file
-    const elementC = document.createElement('a');
-    elementC.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(c_content));
-    elementC.setAttribute('download', 'pid_controller.c');
-    elementC.style.display = 'none';
-    document.body.appendChild(elementC);
-    elementC.click();
-    document.body.removeChild(elementC);
-
-    addError('info', 'PID C code exported.');
+    // Download PID files together as a ZIP
+    (async () => {
+      try {
+        const zip = new JSZip();
+        zip.file('pid_controller.h', h_content);
+        zip.file('pid_controller.c', c_content);
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(blob);
+        const element = document.createElement('a');
+        element.setAttribute('href', url);
+        element.setAttribute('download', `pid_controller_code_${new Date().getTime()}.zip`);
+        element.style.display = 'none';
+        document.body.appendChild(element);
+        element.click();
+        document.body.removeChild(element);
+        URL.revokeObjectURL(url);
+        addError('info', 'PID C code exported as ZIP.');
+      } catch (err) {
+        console.error('Failed to generate PID ZIP package:', err);
+        addError('error', 'Failed to generate PID ZIP package.');
+      }
+    })();
   }, [pidKp, pidKi, pidKd, pidData, addError]);
 
   return (
@@ -2692,7 +2713,7 @@ const DoeWorkspace = ({
                     className="h-8 text-[10px] font-black border-purple-500/30 text-purple-400 hover:bg-purple-500 hover:text-white transition-all duration-300"
                     onClick={handleExportToVLab}
                   >
-                    <Box size={12} className="mr-2" /> V-Lab
+                    <FlaskConical size={12} className="mr-2" /> V-Lab
                   </Button>
                 </div>
               </section>
@@ -4273,6 +4294,407 @@ const NewProjectDialog = ({
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+const WorkspaceFileDialog = ({
+  onClose,
+  onCreateFile,
+  onCreateProject,
+  existingFiles,
+  openTabIds,
+  onOpenFile,
+  onDeleteFile,
+  onImportFile
+}: {
+  onClose: () => void;
+  onCreateFile: (name: string, type: string) => void;
+  onCreateProject: (name: string) => void;
+  existingFiles: WorkspaceFile[];
+  openTabIds: string[];
+  onOpenFile: (fileId: string) => void;
+  onDeleteFile: (fileId: string) => void;
+  onImportFile: (name: string, type: string, data: any) => void;
+}) => {
+  const [activeTab, setActiveTab] = useState<'create' | 'manage' | 'import'>('create');
+  const [selectedType, setSelectedType] = useState<string>('xbridges');
+  const [fileName, setFileName] = useState('');
+  const [projectName, setProjectName] = useState('');
+  
+  // For import
+  const [importedJson, setImportedJson] = useState<any>(null);
+  const [detectedType, setDetectedType] = useState<string>('');
+  const [importFileName, setImportFileName] = useState('');
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  const modules = [
+    { id: 'xbridges', name: 'X-Bridges', desc: 'Control block diagram suite', color: '#c9a86c', icon: '🖧' },
+    { id: 'vlab', name: 'V-Lab', desc: '3D physical plant mechanics', color: '#a855f7', icon: <FlaskConical size={18} /> },
+    { id: 'hil', name: 'HIL Config', desc: 'Hardware-in-the-Loop setups', color: '#3b82f6', icon: '⚙' },
+    { id: 'entropy', name: 'ENTROPY OPM', desc: 'Object-Process conceptual modeling', color: '#ec4899', icon: '➿' },
+    { id: 'statemachine', name: 'State Machine', desc: 'Behavioral state logic simulation', color: '#f97316', icon: '⚡' },
+    { id: 'bdd', name: 'SysML BDD', desc: 'Block Definition Diagram layout', color: '#6c9ac6', icon: '🗂' },
+    { id: 'ibd', name: 'SysML IBD', desc: 'Internal Block Diagram port wiring', color: '#6cc9a8', icon: '🖥' },
+    { id: 'requirements', name: 'Requirements', desc: 'SysML Requirements specifications', color: '#e0e0e0', icon: '📋' },
+    { id: 'hmi', name: 'HMI Panel', desc: 'Realtime dashboard gauge interface', color: '#f59e0b', icon: '📊' },
+    { id: 'doe', name: 'DOE (RSM)', desc: 'Design of Experiments analytical suite', color: '#ef4444', icon: '📈' },
+  ];
+
+  const handleCreate = () => {
+    if (selectedType === 'project') {
+      if (projectName.trim()) {
+        onCreateProject(projectName.trim());
+      }
+    } else {
+      const name = fileName.trim() || `Unnamed ${modules.find(m => m.id === selectedType)?.name || selectedType}`;
+      onCreateFile(name, selectedType);
+      onClose();
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setImportFileName(file.name.replace(/\.[^/.]+$/, ""));
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const json = JSON.parse(evt.target?.result as string);
+        setImportedJson(json);
+        
+        // Auto-detect type
+        let type = 'xbridges';
+        if (json.globalXBridgesNodes || json.globalXBridgesEdges) type = 'xbridges';
+        else if (json.vlabNodes || json.vlabEdges) type = 'vlab';
+        else if (json.states || json.junctions || json.transitions) type = 'statemachine';
+        else if (json.entropyNodes || json.entropyEdges) type = 'entropy';
+        else if (json.hmiComponents) type = 'hmi';
+        else if (json.headers || json.activeModel) type = 'doe';
+        else if (json.target || json.clockSpeed) type = 'hil';
+        else if (json.parts || json.connectors) type = 'ibd';
+        else if (json.blocks) {
+          const hasReq = json.blocks.some((b: any) => b.stereotype === 'requirement');
+          type = hasReq ? 'requirements' : 'bdd';
+        }
+        setDetectedType(type);
+      } catch (err) {
+        alert("Failed to parse JSON file.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleImportExecute = () => {
+    if (importedJson && detectedType && importFileName.trim()) {
+      onImportFile(importFileName.trim(), detectedType, importedJson);
+      onClose();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-300" onMouseDown={onClose}>
+      <div className="bg-[#111] border border-[#f97316]/40 rounded-2xl w-[750px] max-h-[85vh] flex flex-col shadow-2xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
+        
+        {/* Header */}
+        <div className="px-6 py-4 bg-gradient-to-r from-[#181818] to-[#111] border-b border-[#222] flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <span className="text-[#f97316] text-xl">📁</span>
+            <h2 className="text-lg font-black uppercase tracking-wider text-[#e0e0e0]">Workspace Asset Manager</h2>
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">✕</button>
+        </div>
+
+        {/* Tab Buttons */}
+        <div className="flex bg-[#0f0f0f] border-b border-[#222] p-1 gap-2 px-6">
+          <button 
+            onClick={() => setActiveTab('create')} 
+            className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'create' ? 'bg-[#f97316]/10 text-[#f97316] border border-[#f97316]/30' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            Create New Asset
+          </button>
+          <button 
+            onClick={() => setActiveTab('manage')} 
+            className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'manage' ? 'bg-[#f97316]/10 text-[#f97316] border border-[#f97316]/30' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            Manage Files ({existingFiles.length})
+          </button>
+          <button 
+            onClick={() => setActiveTab('import')} 
+            className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'import' ? 'bg-[#f97316]/10 text-[#f97316] border border-[#f97316]/30' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            Import Module JSON
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6 min-h-[350px] max-h-[55vh]">
+          {activeTab === 'create' && (
+            <div className="space-y-6">
+              {/* Asset Type Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Project Option */}
+                <div 
+                  onClick={() => setSelectedType('project')}
+                  className={`p-4 rounded-xl border transition-all cursor-pointer flex gap-4 items-start ${selectedType === 'project' ? 'bg-[#f97316]/10 border-[#f97316] shadow-[0_0_15px_rgba(249,115,22,0.15)]' : 'bg-[#181818] border-[#222] hover:border-[#333]'}`}
+                >
+                  <div className="p-2 rounded-lg bg-[#f97316]/20 text-[#f97316] text-xl font-bold">✨</div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold text-white">New ADIA Project</span>
+                    <span className="text-xs text-slate-500 mt-1">Spawn a separate parallel project workspace in a new tab.</span>
+                  </div>
+                </div>
+
+                {/* Separator / Header */}
+                <div className="col-span-2 pt-2 pb-1 border-b border-[#222]">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[#f97316]">Or Add Module Asset To Current Project</span>
+                </div>
+
+                {/* Modules */}
+                {modules.map(m => (
+                  <div 
+                    key={m.id}
+                    onClick={() => setSelectedType(m.id)}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer flex gap-3 items-center ${selectedType === m.id ? 'bg-[#181818] border-l-4 shadow-[0_0_15px_rgba(255,255,255,0.05)]' : 'bg-[#161616] border-[#222] hover:border-[#333]'}`}
+                    style={{ borderLeftColor: selectedType === m.id ? m.color : 'transparent' }}
+                  >
+                    <div className="p-2 rounded-lg text-lg flex items-center justify-center w-8 h-8" style={{ backgroundColor: `${m.color}15`, color: m.color }}>
+                      {m.icon}
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-bold text-white truncate">{m.name}</span>
+                      <span className="text-[10px] text-slate-500 truncate mt-0.5">{m.desc}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Name fields */}
+              <div className="pt-2 border-t border-[#222] space-y-4">
+                {selectedType === 'project' ? (
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 uppercase">Project Name</label>
+                    <Input 
+                      autoFocus
+                      value={projectName}
+                      onChange={e => setProjectName(e.target.value)}
+                      placeholder="e.g. Smart Grids Controller"
+                      className="w-full mt-1.5 bg-[#181818] border-[#222] focus:border-[#f97316] text-[#e0e0e0]"
+                      onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleCreate()}
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 uppercase">Asset File/Tab Name</label>
+                    <Input 
+                      autoFocus
+                      value={fileName}
+                      onChange={e => setFileName(e.target.value)}
+                      placeholder={`e.g. TankSystem (${modules.find(m => m.id === selectedType)?.name || selectedType})`}
+                      className="w-full mt-1.5 bg-[#181818] border-[#222] focus:border-[#f97316] text-[#e0e0e0]"
+                      onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleCreate()}
+                    />
+                  </div>
+                )}
+                
+                <div className="flex justify-end gap-3 pt-2">
+                  <Button onClick={onClose} className="px-5 border border-[#222] bg-transparent text-slate-400 hover:bg-[#181818]">Cancel</Button>
+                  <Button 
+                    onClick={handleCreate} 
+                    disabled={selectedType === 'project' ? !projectName.trim() : false}
+                    className="px-5 bg-[#f97316] text-black hover:bg-[#ea580c] font-bold"
+                  >
+                    {selectedType === 'project' ? 'Create Project' : 'Create Asset File'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'manage' && (
+            <div className="space-y-4">
+              <div className="text-xs text-slate-500 mb-2">Double-click an asset to load it into the active workspace, or manage their states below.</div>
+              <div className="border border-[#222] rounded-xl overflow-hidden bg-[#0a0a0a]">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-[#161616] text-slate-400 font-bold border-b border-[#222]">
+                      <th className="p-3">Asset Name</th>
+                      <th className="p-3">Type</th>
+                      <th className="p-3">Tab Status</th>
+                      <th className="p-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {existingFiles.map((file) => {
+                      const isOpen = openTabIds.includes(file.id);
+                      const modInfo = modules.find(m => m.id === file.type);
+                      return (
+                        <tr key={file.id} className="border-b border-[#181818] hover:bg-[#151515] transition-colors group" onDoubleClick={() => !isOpen && onOpenFile(file.id)}>
+                          <td className="p-3 font-bold text-white truncate max-w-[200px]" title={file.name}>{file.name}</td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ backgroundColor: `${modInfo?.color || '#333'}15`, color: modInfo?.color || '#ccc' }}>
+                              {modInfo?.name || file.type.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            {isOpen ? (
+                              <span className="text-emerald-400 font-medium">● Active Tab</span>
+                            ) : (
+                              <span className="text-slate-500">○ Inactive / Closed</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right space-x-2">
+                            {!isOpen && (
+                              <button 
+                                onClick={() => onOpenFile(file.id)}
+                                className="text-xs text-[#f97316] hover:underline"
+                              >
+                                Open Tab
+                              </button>
+                            )}
+                            {file.id.startsWith('default_') ? (
+                              <span className="text-[10px] text-slate-600 font-bold uppercase select-none">System Default</span>
+                            ) : (
+                              <button 
+                                onClick={() => onDeleteFile(file.id)}
+                                className="text-xs text-red-500 hover:text-red-400 hover:underline"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'import' && (
+            <div className="space-y-5">
+              <div 
+                onClick={() => importInputRef.current?.click()}
+                className="border-2 border-dashed border-[#333] hover:border-[#f97316]/50 rounded-2xl p-10 text-center cursor-pointer transition-all bg-[#0a0a0a]"
+              >
+                <input 
+                  type="file" 
+                  ref={importInputRef} 
+                  onChange={handleFileChange} 
+                  className="hidden" 
+                  accept=".json"
+                />
+                <div className="text-4xl mb-4">📥</div>
+                <h3 className="text-sm font-bold text-white">Click to Select Module JSON File</h3>
+                <p className="text-xs text-slate-500 mt-2">Supports files generated by exporting individual modules (e.g. xbridges.json, vlab.json, etc.)</p>
+              </div>
+
+              {importedJson && (
+                <div className="p-5 bg-[#181818] border border-[#222] rounded-xl space-y-4 animate-in slide-in-from-bottom-2 duration-300">
+                  <div className="flex justify-between items-center border-b border-[#222] pb-3">
+                    <span className="text-xs font-bold text-slate-400 uppercase">Detection Summary</span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded" style={{ backgroundColor: `${modules.find(m => m.id === detectedType)?.color || '#333'}15`, color: modules.find(m => m.id === detectedType)?.color || '#ccc' }}>
+                      {modules.find(m => m.id === detectedType)?.name || detectedType.toUpperCase()} File
+                    </span>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 uppercase">Import Asset Tab Name</label>
+                    <Input 
+                      value={importFileName}
+                      onChange={e => setImportFileName(e.target.value)}
+                      className="w-full mt-1.5 bg-[#111] border-[#222] focus:border-[#f97316] text-white font-mono"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-3 pt-2">
+                    <Button onClick={() => setImportedJson(null)} className="px-5 border border-[#222] bg-transparent text-slate-400 hover:bg-[#111]">Reset</Button>
+                    <Button onClick={handleImportExecute} className="px-5 bg-emerald-600 text-white hover:bg-emerald-700 font-bold">Import Tab</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const WorkspaceTabBar = ({
+  openTabIds,
+  activeFileId,
+  workspaceFiles,
+  onSwitchTab,
+  onCloseTab,
+  onOpenDialog
+}: {
+  openTabIds: string[];
+  activeFileId: string;
+  workspaceFiles: WorkspaceFile[];
+  onSwitchTab: (id: string) => void;
+  onCloseTab: (id: string) => void;
+  onOpenDialog: () => void;
+}) => {
+  const modules = [
+    { id: 'xbridges', name: 'X-Bridges', color: '#c9a86c', icon: '🖧' },
+    { id: 'vlab', name: 'V-Lab', color: '#a855f7', icon: <FlaskConical size={14} className="shrink-0" /> },
+    { id: 'hil', name: 'HIL', color: '#3b82f6', icon: '⚙' },
+    { id: 'entropy', name: 'Entropy OPM', color: '#ec4899', icon: '➿' },
+    { id: 'statemachine', name: 'State Machine', color: '#f97316', icon: '⚡' },
+    { id: 'bdd', name: 'BDD', color: '#6c9ac6', icon: '🗂' },
+    { id: 'ibd', name: 'IBD', color: '#6cc9a8', icon: '🖥' },
+    { id: 'requirements', name: 'Requirements', color: '#e0e0e0', icon: '📋' },
+    { id: 'hmi', name: 'HMI', color: '#f59e0b', icon: '📊' },
+    { id: 'doe', name: 'DOE', color: '#ef4444', icon: '📈' },
+  ];
+
+  return (
+    <div className="h-10 bg-[#121212] border-b border-[#222] flex items-center px-4 shrink-0 justify-between select-none">
+      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-full pt-1">
+        {openTabIds.map((tabId) => {
+          const file = workspaceFiles.find(f => f.id === tabId);
+          if (!file) return null;
+          
+          const isActive = activeFileId === tabId;
+          const modInfo = modules.find(m => m.id === file.type);
+          
+          return (
+            <div 
+              key={tabId}
+              onClick={() => onSwitchTab(tabId)}
+              className={`flex items-center gap-2 px-4 h-full rounded-t-lg text-xs font-bold transition-all duration-200 cursor-pointer border-t-2 shrink-0 ${
+                isActive 
+                  ? 'bg-[#1a1a1a] text-white border-t-[#f97316]' 
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-[#161616] border-t-transparent'
+              }`}
+              style={{
+                boxShadow: isActive ? 'inset 0 1px 1px rgba(255,255,255,0.05)' : 'none'
+              }}
+            >
+              <span style={{ color: modInfo?.color }}>{modInfo?.icon || '📁'}</span>
+              <span className="truncate max-w-[120px]">{file.name}</span>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCloseTab(tabId);
+                }}
+                className="ml-2 w-4 h-4 rounded-full hover:bg-slate-800 hover:text-red-400 flex items-center justify-center text-[8px] text-slate-500 font-normal transition-colors"
+                title="Close Tab"
+              >
+                ✕
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <button 
+        onClick={onOpenDialog}
+        className="ml-4 p-1 rounded hover:bg-[#1c1c1c] text-[#f97316] transition-colors flex items-center justify-center"
+        title="Open Workspace Asset Manager"
+      >
+        <span className="text-lg font-bold">+</span>
+      </button>
     </div>
   );
 };
@@ -6198,108 +6620,7 @@ const ADIA = () => {
     addError('info', `Taguchi Analysis Completed. R² = ${(R2 * 100).toFixed(2)}%`);
   };
 
-  const handleExportToVLab = (block?: any) => {
-    if (!results) {
-      addError('warning', 'Please calculate a model first.');
-      return;
-    }
-    // Prevent React events from being treated as block data
-    const actualBlock = (block && block.nativeEvent) ? null : block;
-    
-    const exportBlock = actualBlock || {
-      name: `${activeModel} Model`,
-      type: 'doe_custom',
-      color: '#c9a86c', // Explicit gold color for DOE
-      params: { 
-        equation: { label: 'Model Equation', value: results.equation || '', unit: '' },
-        modelType: { label: 'Algorithm', value: activeModel, unit: '' }
-      },
-      ports: [
-        ...headers.slice(0, -1).map((h, i) => ({ 
-          id: `in${i + 1}`, label: h, type: 'input', pos: 'left', position: 'left', domain: 'General' 
-        })),
-        { id: 'out', label: headers[headers.length - 1], type: 'output', pos: 'right', position: 'right', domain: 'General' }
-      ]
-    };
-    
-    const newNodeId = `doe_vlab_${Date.now()}`;
-    const newNode = {
-      id: newNodeId,
-      type: 'doe_custom', 
-      position: { x: 400, y: 300 },
-      data: { 
-        ...exportBlock, 
-        id: newNodeId, 
-        label: exportBlock.name,
-        type: 'doe_custom', 
-        ports: exportBlock.ports 
-      }
-    };
-    console.log('[DOE EXPORT DEBUG] Exporting to VLab:', newNode); // Log object directly, no stringify
-    setVlabNodes(prev => [...prev, newNode]);
-    setDiagramMode('vlab');
-    toggleWindow('doe');
-    addError('info', `Exported ${activeModel} model to V-Lab workspace.`);
-  };
 
-  const handleExportToXBridges = () => {
-    if (!results) {
-      addError('warning', 'Please calculate a model first.');
-      return;
-    }
-    const newNodeId = `doe_xb_${Date.now()}`;
-    const blockData = {
-      name: `${activeModel} Model`,
-      label: `${activeModel} Model`,
-      type: 'DOE_MODEL',
-      equation: results.equation || '',
-      modelType: activeModel,
-      inputNames: headers.slice(0, -1),
-      outputName: headers[headers.length - 1],
-      params: { 
-        equation: { label: 'Equation', value: results.equation || '' },
-        inputNames: { label: 'Inputs', value: headers.slice(0, -1) },
-        outputName: { label: 'Output', value: headers[headers.length - 1] },
-        modelType: { label: 'Model', value: activeModel }
-      },
-      inputs: headers.slice(0, -1).map((h, i) => ({ 
-        id: `in${i + 1}`, name: h, type: 'auto', direction: 'input', position: 'left', value: 0 
-      })),
-      outputs: [{ 
-        id: 'out', name: headers[headers.length - 1], type: 'auto', direction: 'output', position: 'right', value: 0 
-      }],
-      // Inject execution logic for simulation
-      execute: (inputs: any[], params: any) => {
-        try {
-          const scope: any = {};
-          const inputNames = params.inputNames.value;
-          inputNames.forEach((name: string, i: number) => {
-            scope[name] = inputs[i] || 0;
-          });
-          // Evaluate using mathjs (available globally as math)
-          const result = math.evaluate(params.equation.value, scope);
-          return { outputs: [result] };
-        } catch (e) {
-          console.error('DOE Model execution error:', e);
-          return { outputs: [0] };
-        }
-      }
-    };
-    
-    const newNode = {
-      id: newNodeId,
-      type: 'xblock',
-      position: { x: 400, y: 300 },
-      data: { ...blockData, id: newNodeId, selected: false }
-    };
-    setGlobalXBridgesNodes(prev => [...prev, newNode]);
-    setDiagramMode('xbridges');
-    toggleWindow('doe');
-    addError('info', `Exported ${activeModel} model to X-Bridges workspace.`);
-  };
-
-  const onExportToVLab = handleExportToVLab;
-  const onExportToXBridges = handleExportToXBridges;
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [mobileTab, setMobileTab] = useState<'hierarchy' | 'variables' | 'canvas' | 'properties'>('canvas');
@@ -6483,6 +6804,7 @@ const ADIA = () => {
   const [showZoomIndicator, setShowZoomIndicator] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
   const isSpacePressed = useRef(false);
+  const spaceComboUsed = useRef(false);
   const lastMousePos = useRef<Point>({ x: 0, y: 0 });
   const midDown = useRef(false);
   const rightDown = useRef(false);
@@ -6516,6 +6838,7 @@ const ADIA = () => {
   // Tab Management State
   const [openTabs, setOpenTabs] = useState<string[]>(['statemachine']);
   const [diagramMode, setDiagramModeState] = useState<DiagramMode>('statemachine' as DiagramMode);
+  const syncTabRef = useRef<(mode: DiagramMode) => void>(() => {});
 
   const setDiagramMode = useCallback((mode: DiagramMode) => {
     setDiagramModeState(mode);
@@ -6523,6 +6846,7 @@ const ADIA = () => {
       if (prev.includes(mode)) return prev;
       return [...prev, mode];
     });
+    syncTabRef.current(mode);
   }, []);
   const [activePropTab, setActivePropTab] = useState<'general' | 'assign'>('general');
 
@@ -6701,6 +7025,599 @@ const ADIA = () => {
   const [factoryIOEnabled, setFactoryIOEnabled] = useState(true);
   const [factoryIOStatus, setFactoryIOStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
 
+  // Multi-File and Tab Management State
+  const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFile[]>([]);
+  const [openTabIds, setOpenTabIds] = useState<string[]>([]);
+  const [activeFileId, setActiveFileId] = useState<string>('');
+  const [showWorkspaceFileDialog, setShowWorkspaceFileDialog] = useState(false);
+  const [sharedClipboard, setSharedClipboard] = useState<{
+    nodes: any[];
+    edges: any[];
+    sourceFileId: string;
+  } | null>(null);
+
+  // Helper to get active state data for a type
+  const getActiveStateData = useCallback((type: string) => {
+    switch (type) {
+      case 'statemachine':
+        return { states, junctions, transitions, layers, variables, view, tickMs };
+      case 'bdd':
+        return { blocks: blocks.filter(b => b.stereotype !== 'requirement'), relationships, customStereotypes };
+      case 'requirements':
+        return { blocks: blocks.filter(b => b.stereotype === 'requirement'), relationships };
+      case 'ibd':
+        return { parts, connectors, interfaceRealizations };
+      case 'xbridges':
+        return { globalXBridgesNodes, globalXBridgesEdges };
+      case 'vlab':
+        return { vlabNodes, vlabEdges };
+      case 'hil':
+        return hilConfig;
+      case 'entropy':
+        return { entropyNodes, entropyEdges };
+      case 'hmi':
+        return { hmiComponents };
+      case 'doe':
+        return { headers, data, activeModel, taguchiConfig, results };
+      default:
+        return null;
+    }
+  }, [
+    states, junctions, transitions, layers, variables, view, tickMs,
+    blocks, relationships, customStereotypes, parts, connectors, interfaceRealizations,
+    globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges, hilConfig,
+    entropyNodes, entropyEdges, hmiComponents, headers, data, activeModel, taguchiConfig, results
+  ]);
+
+  // Helper to save current active file state into workspaceFiles list
+  const saveCurrentFileState = useCallback((filesList: WorkspaceFile[], activeId: string): WorkspaceFile[] => {
+    return filesList.map(f => {
+      if (f.id === activeId) {
+        const liveData = getActiveStateData(f.type);
+        return { ...f, data: liveData };
+      }
+      return f;
+    });
+  }, [getActiveStateData]);
+
+  // Helper to load file state into respective state variables
+  const loadStateForFile = useCallback((file: WorkspaceFile) => {
+    if (!file.data) {
+      switch (file.type) {
+        case 'statemachine':
+          setStates([]); setJunctions([]); setTransitions([]); setLayers([]); setVariables([]);
+          break;
+        case 'bdd':
+          setBlocks(prev => prev.filter(b => b.stereotype === 'requirement'));
+          setRelationships([]);
+          break;
+        case 'requirements':
+          setBlocks(prev => prev.filter(b => b.stereotype !== 'requirement'));
+          setRelationships([]);
+          break;
+        case 'ibd':
+          setParts([]); setConnectors([]); setInterfaceRealizations([]);
+          break;
+        case 'xbridges':
+          setGlobalXBridgesNodes([]); setGlobalXBridgesEdges([]);
+          break;
+        case 'vlab':
+          setVlabNodes([]); setVlabEdges([]);
+          break;
+        case 'hil':
+          setHilConfig({
+            enabled: false,
+            target: 'Generic',
+            clockSpeed: 16,
+            channels: [],
+            mappings: [],
+            commPort: '',
+            baudRate: 115200
+          });
+          break;
+        case 'entropy':
+          setEntropyNodes([]); setEntropyEdges([]);
+          break;
+        case 'hmi':
+          setHmiComponents([]);
+          break;
+        case 'doe':
+          setHeaders([]); setData([]); setActiveModel('RSM'); setTaguchiConfig({ objective: 'larger', targetValue: 10 }); setResults(null);
+          break;
+      }
+      return;
+    }
+
+    const d = file.data;
+    switch (file.type) {
+      case 'statemachine':
+        if (d.states) setStates(d.states);
+        if (d.junctions) setJunctions(d.junctions);
+        if (d.transitions) setTransitions(d.transitions);
+        if (d.layers) setLayers(d.layers);
+        if (d.variables) setVariables(d.variables);
+        if (d.view) setView(d.view);
+        if (d.tickMs) setTickMs(d.tickMs);
+        break;
+      case 'bdd':
+        setBlocks(prev => [
+          ...prev.filter(b => b.stereotype === 'requirement'),
+          ...(d.blocks || [])
+        ]);
+        if (d.relationships) setRelationships(d.relationships);
+        if (d.customStereotypes) setCustomStereotypes(d.customStereotypes);
+        break;
+      case 'requirements':
+        setBlocks(prev => [
+          ...prev.filter(b => b.stereotype !== 'requirement'),
+          ...(d.blocks || [])
+        ]);
+        if (d.relationships) setRelationships(d.relationships);
+        break;
+      case 'ibd':
+        if (d.parts) setParts(d.parts);
+        if (d.connectors) setConnectors(d.connectors);
+        if (d.interfaceRealizations) setInterfaceRealizations(d.interfaceRealizations);
+        break;
+      case 'xbridges':
+        setGlobalXBridgesNodes(d.globalXBridgesNodes || []);
+        setGlobalXBridgesEdges(d.globalXBridgesEdges || []);
+        break;
+      case 'vlab':
+        setVlabNodes(d.vlabNodes || []);
+        setVlabEdges(d.vlabEdges || []);
+        break;
+      case 'hil':
+        setHilConfig(d);
+        break;
+      case 'entropy':
+        setEntropyNodes(d.entropyNodes || []);
+        setEntropyEdges(d.entropyEdges || []);
+        break;
+      case 'hmi':
+        setHmiComponents(d.hmiComponents || []);
+        break;
+      case 'doe':
+        if (d.headers) setHeaders(d.headers);
+        if (d.data) setData(d.data);
+        if (d.activeModel) setActiveModel(d.activeModel);
+        if (d.taguchiConfig) setTaguchiConfig(d.taguchiConfig);
+        if (d.results) setResults(d.results);
+        break;
+    }
+  }, [
+    setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
+    setBlocks, setRelationships, setCustomStereotypes, setParts, setConnectors, setInterfaceRealizations,
+    setGlobalXBridgesNodes, setGlobalXBridgesEdges, setVlabNodes, setVlabEdges, setHilConfig,
+    setEntropyNodes, setEntropyEdges, setHmiComponents, setHeaders, setData, setActiveModel, setTaguchiConfig, setResults
+  ]);
+
+  // Switch active file function
+  const switchActiveFile = useCallback((newFileId: string) => {
+    setWorkspaceFiles(prevFiles => {
+      let updatedFiles = prevFiles;
+      if (activeFileId) {
+        updatedFiles = saveCurrentFileState(prevFiles, activeFileId);
+      }
+      
+      const targetFile = updatedFiles.find(f => f.id === newFileId);
+      if (targetFile) {
+        loadStateForFile(targetFile);
+        setDiagramModeState(targetFile.type as DiagramMode);
+        setActiveFileId(newFileId);
+      }
+      
+      return updatedFiles;
+    });
+  }, [activeFileId, saveCurrentFileState, loadStateForFile]);
+
+  // Create new file function
+  const createNewFile = useCallback((name: string, type: string) => {
+    const newId = `file_${Date.now()}`;
+    const newFile: WorkspaceFile = {
+      id: newId,
+      name: name,
+      type: type,
+      data: null
+    };
+    
+    setWorkspaceFiles(prev => {
+      let updatedFiles = prev;
+      if (activeFileId) {
+        updatedFiles = saveCurrentFileState(prev, activeFileId);
+      }
+      return [...updatedFiles, newFile];
+    });
+    
+    setOpenTabIds(prev => {
+      if (prev.includes(newId)) return prev;
+      return [...prev, newId];
+    });
+    
+    setActiveFileId(newId);
+    setDiagramModeState(type as DiagramMode);
+    loadStateForFile(newFile);
+  }, [activeFileId, saveCurrentFileState, loadStateForFile]);
+
+  // Close tab function
+  const closeTab = useCallback((fileId: string) => {
+    setOpenTabIds(prev => {
+      const next = prev.filter(id => id !== fileId);
+      
+      if (activeFileId === fileId) {
+        if (next.length > 0) {
+          const index = prev.indexOf(fileId);
+          const nextActiveId = next[Math.min(index, next.length - 1)];
+          setTimeout(() => {
+            switchActiveFile(nextActiveId);
+          }, 0);
+        } else {
+          const fallbackId = 'default_sm';
+          setTimeout(() => {
+            setOpenTabIds([fallbackId]);
+            switchActiveFile(fallbackId);
+          }, 0);
+        }
+      }
+      return next;
+    });
+  }, [activeFileId, switchActiveFile]);
+
+  // Open file in tab function
+  const openFileInTab = useCallback((fileId: string) => {
+    setOpenTabIds(prev => {
+      if (prev.includes(fileId)) return prev;
+      return [...prev, fileId];
+    });
+    switchActiveFile(fileId);
+  }, [switchActiveFile]);
+
+  // Sync tab with diagram mode helper
+  const syncTabWithMode = useCallback((mode: DiagramMode) => {
+    // 1. Check if the active file is already of this type
+    const activeFile = workspaceFiles.find(f => f.id === activeFileId);
+    if (activeFile && activeFile.type === mode) {
+      return; // Already active file of this type
+    }
+    
+    // 2. Find if a file of this type is already open in tabs
+    const openTabFile = workspaceFiles.find(f => openTabIds.includes(f.id) && f.type === mode);
+    if (openTabFile) {
+      switchActiveFile(openTabFile.id);
+      return;
+    }
+    
+    // 3. Find if a file of this type exists in workspaceFiles but not open in tabs
+    const existingFile = workspaceFiles.find(f => f.type === mode);
+    if (existingFile) {
+      openFileInTab(existingFile.id);
+      return;
+    }
+    
+    // 4. If no file of this type exists, create a default file of this type
+    const defaultNames: Record<string, string> = {
+      statemachine: 'Main State Machine',
+      bdd: 'Main SysML BDD',
+      requirements: 'Main Requirements',
+      ibd: 'Main SysML IBD',
+      xbridges: 'Main X-Bridges',
+      vlab: 'Main V-Lab',
+      hil: 'Main HIL',
+      entropy: 'Main ENTROPY',
+      hmi: 'Main HMI',
+      doe: 'Main DOE'
+    };
+    const name = defaultNames[mode] || `Main ${mode}`;
+    createNewFile(name, mode);
+  }, [activeFileId, workspaceFiles, openTabIds, switchActiveFile, openFileInTab, createNewFile]);
+
+  // Update the ref so the switcher callback can run it with fresh state
+  useEffect(() => {
+    syncTabRef.current = syncTabWithMode;
+  }, [syncTabWithMode]);
+
+  const handleExportToVLab = (block?: any) => {
+    if (!results) {
+      addError('warning', 'Please calculate a model first.');
+      return;
+    }
+    // Prevent React events from being treated as block data
+    const actualBlock = (block && block.nativeEvent) ? null : block;
+    
+    const exportBlock = actualBlock || {
+      name: `${activeModel} Model`,
+      type: 'doe_custom',
+      color: '#c9a86c', // Explicit gold color for DOE
+      params: { 
+        equation: { label: 'Model Equation', value: results.equation || '', unit: '' },
+        modelType: { label: 'Algorithm', value: activeModel, unit: '' }
+      },
+      ports: [
+        ...headers.slice(0, -1).map((h, i) => ({ 
+          id: `in${i + 1}`, label: h, type: 'input', pos: 'left', position: 'left', domain: 'General' 
+        })),
+        { id: 'out', label: headers[headers.length - 1], type: 'output', pos: 'right', position: 'right', domain: 'General' }
+      ]
+    };
+    
+    const newNodeId = `doe_vlab_${Date.now()}`;
+    const newNode = {
+      id: newNodeId,
+      type: 'doe_custom', 
+      position: { x: 400, y: 300 },
+      data: { 
+        ...exportBlock, 
+        id: newNodeId, 
+        label: exportBlock.name,
+        type: 'doe_custom', 
+        ports: exportBlock.ports 
+      }
+    };
+    console.log('[DOE EXPORT DEBUG] Exporting to VLab:', newNode);
+    
+    const getTargetFileForMode = (mode: DiagramMode) => {
+      const activeFile = workspaceFiles.find(f => f.id === activeFileId);
+      if (activeFile && activeFile.type === mode) {
+        return { id: activeFile.id, isNew: false, name: activeFile.name };
+      }
+      const openTabFile = workspaceFiles.find(f => openTabIds.includes(f.id) && f.type === mode);
+      if (openTabFile) {
+        return { id: openTabFile.id, isNew: false, name: openTabFile.name };
+      }
+      const existingFile = workspaceFiles.find(f => f.type === mode);
+      if (existingFile) {
+        return { id: existingFile.id, isNew: false, name: existingFile.name };
+      }
+      const defaultNames: Record<string, string> = {
+        xbridges: 'Main X-Bridges',
+        vlab: 'Main V-Lab'
+      };
+      const name = defaultNames[mode] || `Main ${mode}`;
+      const newId = `file_${Date.now()}`;
+      return { id: newId, isNew: true, name };
+    };
+    
+    const target = getTargetFileForMode('vlab');
+    
+    if (target.isNew) {
+      const newFile: WorkspaceFile = {
+        id: target.id,
+        name: target.name,
+        type: 'vlab',
+        data: {
+          vlabNodes: [newNode],
+          vlabEdges: []
+        }
+      };
+      
+      setWorkspaceFiles(prev => {
+        let updatedFiles = prev;
+        if (activeFileId) {
+          updatedFiles = saveCurrentFileState(prev, activeFileId);
+        }
+        return [...updatedFiles, newFile];
+      });
+      
+      setOpenTabIds(prev => {
+        if (prev.includes(target.id)) return prev;
+        return [...prev, target.id];
+      });
+      
+      setActiveFileId(target.id);
+      setDiagramModeState('vlab');
+      loadStateForFile(newFile);
+    } else {
+      setWorkspaceFiles(prev => {
+        let updated = prev;
+        if (activeFileId) {
+          updated = saveCurrentFileState(prev, activeFileId);
+        }
+        return updated.map(f => {
+          if (f.id === target.id) {
+            const currentData = f.data || { vlabNodes: [], vlabEdges: [] };
+            const currentNodes = currentData.vlabNodes || [];
+            return {
+              ...f,
+              data: {
+                ...currentData,
+                vlabNodes: [...currentNodes, newNode]
+              }
+            };
+          }
+          return f;
+        });
+      });
+      
+      if (activeFileId === target.id) {
+        setVlabNodes(prev => [...prev, newNode]);
+      }
+      
+      openFileInTab(target.id);
+    }
+    
+    toggleWindow('doe');
+    addError('info', `Exported ${activeModel} model to V-Lab workspace.`);
+  };
+
+  const handleExportToXBridges = () => {
+    if (!results) {
+      addError('warning', 'Please calculate a model first.');
+      return;
+    }
+    const newNodeId = `doe_xb_${Date.now()}`;
+    const blockData = {
+      name: `${activeModel} Model`,
+      label: `${activeModel} Model`,
+      type: 'DOE_MODEL',
+      equation: results.equation || '',
+      modelType: activeModel,
+      inputNames: headers.slice(0, -1),
+      outputName: headers[headers.length - 1],
+      params: { 
+        equation: { label: 'Equation', value: results.equation || '' },
+        inputNames: { label: 'Inputs', value: headers.slice(0, -1) },
+        outputName: { label: 'Output', value: headers[headers.length - 1] },
+        modelType: { label: 'Model', value: activeModel }
+      },
+      inputs: headers.slice(0, -1).map((h, i) => ({ 
+        id: `in${i + 1}`, name: h, type: 'auto', direction: 'input', position: 'left', value: 0 
+      })),
+      outputs: [{ 
+        id: 'out', name: headers[headers.length - 1], type: 'auto', direction: 'output', position: 'right', value: 0 
+      }],
+      // Inject execution logic for simulation
+      execute: (inputs: any[], params: any) => {
+        try {
+          const scope: any = {};
+          const inputNames = params.inputNames.value;
+          inputNames.forEach((name: string, i: number) => {
+            scope[name] = inputs[i] || 0;
+          });
+          // Evaluate using mathjs (available globally as math)
+          const result = math.evaluate(params.equation.value, scope);
+          return { outputs: [result] };
+        } catch (e) {
+          console.error('DOE Model execution error:', e);
+          return { outputs: [0] };
+        }
+      }
+    };
+    
+    const newNode = {
+      id: newNodeId,
+      type: 'xblock',
+      position: { x: 400, y: 300 },
+      data: { ...blockData, id: newNodeId, selected: false }
+    };
+    
+    if (xBridgesStateId) {
+      // 1. If inside a state-specific sub-workspace, append node to that state's xBridgesModel.nodes
+      setStates(prev => prev.map(s => 
+        s.id === xBridgesStateId 
+          ? {
+              ...s,
+              xBridgesModel: {
+                nodes: [...(s.xBridgesModel?.nodes || []), newNode],
+                edges: s.xBridgesModel?.edges || [],
+                mappings: s.xBridgesModel?.mappings || []
+              }
+            }
+          : s
+      ));
+      addError('info', `Exported ${activeModel} model to state sub-workspace.`);
+    } else {
+      // 2. Otherwise, find or create the target xbridges file
+      const getTargetFileForMode = (mode: DiagramMode) => {
+        const activeFile = workspaceFiles.find(f => f.id === activeFileId);
+        if (activeFile && activeFile.type === mode) {
+          return { id: activeFile.id, isNew: false, name: activeFile.name };
+        }
+        const openTabFile = workspaceFiles.find(f => openTabIds.includes(f.id) && f.type === mode);
+        if (openTabFile) {
+          return { id: openTabFile.id, isNew: false, name: openTabFile.name };
+        }
+        const existingFile = workspaceFiles.find(f => f.type === mode);
+        if (existingFile) {
+          return { id: existingFile.id, isNew: false, name: existingFile.name };
+        }
+        const defaultNames: Record<string, string> = {
+          xbridges: 'Main X-Bridges',
+          vlab: 'Main V-Lab'
+        };
+        const name = defaultNames[mode] || `Main ${mode}`;
+        const newId = `file_${Date.now()}`;
+        return { id: newId, isNew: true, name };
+      };
+      
+      const target = getTargetFileForMode('xbridges');
+      
+      if (target.isNew) {
+        const newFile: WorkspaceFile = {
+          id: target.id,
+          name: target.name,
+          type: 'xbridges',
+          data: {
+            globalXBridgesNodes: [...(defaultXBridgesNodes || []), newNode],
+            globalXBridgesEdges: []
+          }
+        };
+        
+        setWorkspaceFiles(prev => {
+          let updatedFiles = prev;
+          if (activeFileId) {
+            updatedFiles = saveCurrentFileState(prev, activeFileId);
+          }
+          return [...updatedFiles, newFile];
+        });
+        
+        setOpenTabIds(prev => {
+          if (prev.includes(target.id)) return prev;
+          return [...prev, target.id];
+        });
+        
+        setActiveFileId(target.id);
+        setDiagramModeState('xbridges');
+        loadStateForFile(newFile);
+      } else {
+        setWorkspaceFiles(prev => {
+          let updated = prev;
+          if (activeFileId) {
+            updated = saveCurrentFileState(prev, activeFileId);
+          }
+          return updated.map(f => {
+            if (f.id === target.id) {
+              const currentData = f.data || { globalXBridgesNodes: [], globalXBridgesEdges: [] };
+              const currentNodes = currentData.globalXBridgesNodes || [];
+              return {
+                ...f,
+                data: {
+                  ...currentData,
+                  globalXBridgesNodes: [...currentNodes, newNode]
+                }
+              };
+            }
+            return f;
+          });
+        });
+        
+        if (activeFileId === target.id) {
+          setGlobalXBridgesNodes(prev => [...prev, newNode]);
+        }
+        
+        openFileInTab(target.id);
+      }
+      addError('info', `Exported ${activeModel} model to X-Bridges workspace.`);
+    }
+    
+    toggleWindow('doe');
+  };
+
+  const onExportToVLab = handleExportToVLab;
+  const onExportToXBridges = handleExportToXBridges;
+
+
+
+  // Initialize workspace files on mount
+  useEffect(() => {
+    if (workspaceFiles.length === 0) {
+      const initialFiles: WorkspaceFile[] = [
+        { id: 'default_sm', name: 'Main State Machine', type: 'statemachine', data: getActiveStateData('statemachine') },
+        { id: 'default_bdd', name: 'Main SysML BDD', type: 'bdd', data: getActiveStateData('bdd') },
+        { id: 'default_requirements', name: 'Main Requirements', type: 'requirements', data: getActiveStateData('requirements') },
+        { id: 'default_ibd', name: 'Main SysML IBD', type: 'ibd', data: getActiveStateData('ibd') },
+        { id: 'default_xbridges', name: 'Main X-Bridges', type: 'xbridges', data: getActiveStateData('xbridges') },
+        { id: 'default_vlab', name: 'Main V-Lab', type: 'vlab', data: getActiveStateData('vlab') },
+        { id: 'default_hil', name: 'Main HIL', type: 'hil', data: getActiveStateData('hil') },
+        { id: 'default_entropy', name: 'Main ENTROPY', type: 'entropy', data: getActiveStateData('entropy') },
+        { id: 'default_hmi', name: 'Main HMI', type: 'hmi', data: getActiveStateData('hmi') },
+        { id: 'default_doe', name: 'Main DOE', type: 'doe', data: getActiveStateData('doe') },
+      ];
+      setWorkspaceFiles(initialFiles);
+      setOpenTabIds(['default_sm', 'default_xbridges', 'default_vlab']);
+      setActiveFileId('default_sm');
+    }
+  }, [workspaceFiles.length, getActiveStateData]);
+
   // 3DEXPERIENCE GATEWAY STATE
   const [show3DXGateway, setShow3DXGateway] = useState(false);
 
@@ -6815,6 +7732,26 @@ const ADIA = () => {
       setIsRunning(false);
     }
   }, [setIsRunning, setErrors, setCurrentError, setShowErrorDialog]);
+
+  // Import file as new tab function
+  const handleImportFile = useCallback((name: string, type: string, fileData: any) => {
+    const newId = `file_${Date.now()}`;
+    const newFile: WorkspaceFile = {
+      id: newId,
+      name: name,
+      type: type,
+      data: fileData
+    };
+    setWorkspaceFiles(prev => [...prev, newFile]);
+    setOpenTabIds(prev => {
+      if (prev.includes(newId)) return prev;
+      return [...prev, newId];
+    });
+    setActiveFileId(newId);
+    setDiagramModeState(type as DiagramMode);
+    loadStateForFile(newFile);
+    addError('info', `Imported ${name} as a new ${type.toUpperCase()} tab.`);
+  }, [loadStateForFile, addError]);
 
   // === Professional Report Generation ===
   const [showReportPreview, setShowReportPreview] = useState(false);
@@ -7057,7 +7994,10 @@ const ADIA = () => {
         doe: { headers, data, activeModel, taguchiConfig, results },
         managedWindows,
         entropyNodes,
-        entropyEdges
+        entropyEdges,
+        workspaceFiles: saveCurrentFileState(workspaceFiles, activeFileId),
+        openTabIds,
+        activeFileId
       };
     }
 
@@ -7116,12 +8056,27 @@ const ADIA = () => {
     hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
     hilConfig,
     headers, data, activeModel, taguchiConfig, results, managedWindows, addError,
-    entropyNodes, entropyEdges, currentProjectName, openTabs
+    entropyNodes, entropyEdges, currentProjectName, openTabs,
+    workspaceFiles, openTabIds, activeFileId, saveCurrentFileState
   ]);
 
   const handleExportProject = useCallback(() => {
     setShowSaveSelectionModal(true);
   }, []);
+
+  const handleXBridgesSave = useCallback((nodes: any[], edges: any[]) => {
+    if (xBridgesStateId) {
+      xBridgesEnginesRef.current.delete(xBridgesStateId);
+      setStates(prev => prev.map(s =>
+        s.id === xBridgesStateId
+          ? { ...s, xBridgesModel: { ...s.xBridgesModel, nodes, edges } }
+          : s
+      ));
+    } else {
+      setGlobalXBridgesNodes(nodes);
+      setGlobalXBridgesEdges(edges);
+    }
+  }, [xBridgesStateId, setGlobalXBridgesNodes, setGlobalXBridgesEdges, setStates]);
 
   const hydrateProject = useCallback((importedData: any) => {
     try {
@@ -7174,6 +8129,146 @@ const ADIA = () => {
       // UI State
       if (importedData.managedWindows) setManagedWindows(importedData.managedWindows);
 
+      // Re-populate workspace files list
+      if (importedData.workspaceFiles && Array.isArray(importedData.workspaceFiles)) {
+        setWorkspaceFiles(importedData.workspaceFiles);
+      } else {
+        // Fallback for older saved projects (or unified projects saved without workspaceFiles):
+        // We construct the default workspace files, but populate their `data` fields with the loaded state.
+        const restoredFiles: WorkspaceFile[] = [
+          {
+            id: 'default_sm',
+            name: 'Main State Machine',
+            type: 'statemachine',
+            data: {
+              states: importedData.states || [],
+              junctions: importedData.junctions || [],
+              transitions: importedData.transitions || [],
+              layers: importedData.layers || [],
+              variables: importedData.variables || [],
+              view: importedData.view || { x: 0, y: 0, zoom: 1 },
+              tickMs: importedData.tickMs || 100
+            }
+          },
+          {
+            id: 'default_bdd',
+            name: 'Main SysML BDD',
+            type: 'bdd',
+            data: {
+              blocks: (importedData.blocks || []).filter((b: any) => b.stereotype !== 'requirement'),
+              relationships: importedData.relationships || [],
+              customStereotypes: importedData.customStereotypes || []
+            }
+          },
+          {
+            id: 'default_requirements',
+            name: 'Main Requirements',
+            type: 'requirements',
+            data: {
+              blocks: (importedData.blocks || []).filter((b: any) => b.stereotype === 'requirement'),
+              relationships: importedData.relationships || []
+            }
+          },
+          {
+            id: 'default_ibd',
+            name: 'Main SysML IBD',
+            type: 'ibd',
+            data: {
+              parts: importedData.parts || [],
+              connectors: importedData.connectors || [],
+              interfaceRealizations: importedData.interfaceRealizations || []
+            }
+          },
+          {
+            id: 'default_xbridges',
+            name: 'Main X-Bridges',
+            type: 'xbridges',
+            data: {
+              globalXBridgesNodes: importedData.globalXBridgesNodes || [],
+              globalXBridgesEdges: importedData.globalXBridgesEdges || []
+            }
+          },
+          {
+            id: 'default_vlab',
+            name: 'Main V-Lab',
+            type: 'vlab',
+            data: {
+              vlabNodes: importedData.vlabNodes || [],
+              vlabEdges: importedData.vlabEdges || []
+            }
+          },
+          {
+            id: 'default_hil',
+            name: 'Main HIL',
+            type: 'hil',
+            data: importedData.hilConfig || {
+              enabled: false,
+              target: 'Generic',
+              clockSpeed: 16,
+              channels: [],
+              mappings: [],
+              commPort: '',
+              baudRate: 115200
+            }
+          },
+          {
+            id: 'default_entropy',
+            name: 'Main ENTROPY',
+            type: 'entropy',
+            data: {
+              entropyNodes: importedData.entropyNodes || [],
+              entropyEdges: importedData.entropyEdges || []
+            }
+          },
+          {
+            id: 'default_hmi',
+            name: 'Main HMI',
+            type: 'hmi',
+            data: {
+              hmiComponents: importedData.hmiComponents || []
+            }
+          },
+          {
+            id: 'default_doe',
+            name: 'Main DOE',
+            type: 'doe',
+            data: importedData.doe ? {
+              headers: importedData.doe.headers || [],
+              data: importedData.doe.data || [],
+              activeModel: importedData.doe.activeModel || 'RSM',
+              taguchiConfig: importedData.doe.taguchiConfig || { objective: 'larger', targetValue: 10 },
+              results: importedData.doe.results || null
+            } : {
+              headers: [],
+              data: [],
+              activeModel: 'RSM',
+              taguchiConfig: { objective: 'larger', targetValue: 10 },
+              results: null
+            }
+          }
+        ];
+        setWorkspaceFiles(restoredFiles);
+      }
+
+      if (importedData.openTabIds && Array.isArray(importedData.openTabIds)) {
+        setOpenTabIds(importedData.openTabIds);
+      } else {
+        setOpenTabIds(['default_sm', 'default_xbridges', 'default_vlab']);
+      }
+
+      if (importedData.activeFileId) {
+        setActiveFileId(importedData.activeFileId);
+        const activeFile = (importedData.workspaceFiles || []).find((f: any) => f.id === importedData.activeFileId);
+        if (activeFile) {
+          setDiagramModeState(activeFile.type as DiagramMode);
+        } else {
+          setDiagramModeState('statemachine');
+        }
+      } else {
+        setActiveFileId('default_sm');
+        setDiagramModeState('statemachine');
+      }
+
       // Reset runtime state
       setIsRunning(false);
       setActiveStates({});
@@ -7200,7 +8295,7 @@ const ADIA = () => {
     setHeaders, setData, setActiveModel, setTaguchiConfig, setResults, setManagedWindows,
     setIsRunning, setActiveStates, setStateTimers, setTraceHistory, setScopeData, setSimulationTime,
     setSelectedIds, setHistory, setHistoryIndex, setCurrentLayerId, setLayerStack, setLayerPath, addError,
-    setCurrentProjectName, setOpenTabs
+    setCurrentProjectName, setOpenTabs, setWorkspaceFiles, setOpenTabIds, setActiveFileId, setDiagramModeState
   ]);
 
   // Computed values
@@ -8056,6 +9151,9 @@ const ADIA = () => {
         }
       }
       executeAction(s.exit, workingContext, `Exit ${s.name}`);
+      if (s.isXBridges) {
+        xBridgesEnginesRef.current.delete(stateId);
+      }
 
       const siblingStates = states.filter(st => (st.parentId || 'root') === layerId);
       const isParallelLayer = siblingStates.length > 0 && siblingStates.every(st => st.isParallel);
@@ -12696,6 +13794,24 @@ const ADIA = () => {
         return;
       }
 
+      // Space + C combo: Collapse/Expand properties, tree, variables, and scope together
+      if ((e.key === 'c' || e.key === 'C') && isSpacePressed.current) {
+        e.preventDefault();
+        spaceComboUsed.current = true;
+        const allCollapsed = isHierarchyCollapsed && isVariablesCollapsed && isPropertiesCollapsed && isScopeCollapsed;
+        if (allCollapsed) {
+          setIsHierarchyCollapsed(false);
+          setIsVariablesCollapsed(false);
+          setIsPropertiesCollapsed(false);
+          setIsScopeCollapsed(false);
+        } else {
+          setIsHierarchyCollapsed(true);
+          setIsVariablesCollapsed(true);
+          setIsPropertiesCollapsed(true);
+          setIsScopeCollapsed(true);
+        }
+      }
+
       // Run Simulation (Ctrl + R)
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyR') {
         e.preventDefault();
@@ -12943,6 +14059,7 @@ const ADIA = () => {
       if (e.code === 'Space') {
         isSpacePressed.current = false;
         document.body.style.cursor = 'default';
+        spaceComboUsed.current = false;
       }
     };
 
@@ -12953,7 +14070,7 @@ const ADIA = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedIds, view, deleteState, deleteJunction, deleteTransition, deleteBlock, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, addToHistory, undo, redo, addError, handleExportProject, diagramMode, startSimulation, pauseSimulation, resetSimulation]);
+  }, [selectedIds, view, deleteState, deleteJunction, deleteTransition, deleteBlock, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, addToHistory, undo, redo, addError, handleExportProject, diagramMode, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
 
   // CODE GENERATION (FULLY FUNCTIONAL WITH USER FEEDBACK)
   const generateCode = useCallback(async () => {
@@ -14148,171 +15265,7 @@ const ADIA = () => {
   const visibleVariables = useMemo(() => variables.filter(v => v.visibleInScope), [variables]);
   const colors = ['#f97316', '#6c9ac6', '#6cc9a8', '#c96c8a', '#9a6cc9', '#c9c46c'];
 
-  if (xBridgesStateId || diagramMode === 'xbridges') {
-    const xState = xBridgesStateId ? states.find(s => s.id === xBridgesStateId) : null;
-    return (
-      <div 
-        className="fixed inset-0 z-50 bg-[#0a0a0a]"
-        style={{
-          zoom: uiZoom,
-          width: `${100 / uiZoom}vw`,
-          height: `${100 / uiZoom}vh`
-        }}
-      >
-        <XbridgesWorkspace
-          initialNodes={xBridgesStateId ? (xState?.xBridgesModel?.nodes || []) : globalXBridgesNodes}
-          initialEdges={xBridgesStateId ? (xState?.xBridgesModel?.edges || []) : globalXBridgesEdges}
-          availableVariables={variables}
-          tickMs={tickMs}
-          onLaunchDoe={() => toggleWindow('doe')}
-          onBack={() => {
-            if (xBridgesStateId) setXBridgesStateId(null);
-            else setDiagramMode('statemachine');
-          }}
-          onSave={(nodes, edges) => {
-            if (xBridgesStateId) {
-               xBridgesEnginesRef.current.delete(xBridgesStateId);
-               setStates(prev => prev.map(s =>
-                 s.id === xBridgesStateId
-                   ? { ...s, xBridgesModel: { ...s.xBridgesModel, nodes, edges } }
-                   : s
-               ));
-            } else {
-               setGlobalXBridgesNodes(nodes);
-               setGlobalXBridgesEdges(edges);
-            }
-          }}
-          onSaveAll={handleExportProject}
-          initialSelectedNodeId={xBridgesSelectedNodeId}
-        />
-      </div>
-    );
-  }
 
-  if (diagramMode === 'vlab') {
-    return (
-      <div 
-        className="fixed inset-0 z-50 bg-[#0a0a0a]"
-        style={{
-          zoom: uiZoom,
-          width: `${100 / uiZoom}vw`,
-          height: `${100 / uiZoom}vh`
-        }}
-      >
-        <VLabWorkspace
-          nodes={vlabNodes}
-          edges={vlabEdges}
-          onNodesChange={(nodes) => setVlabNodes(nodes)}
-          onEdgesChange={(edges) => setVlabEdges(edges)}
-          onResult={(res) => console.log('V-Lab Result:', res)}
-          onSendToDOE={(data) => {
-            // Logic to send V-Lab results to DOE
-            toggleWindow('doe');
-          }}
-          onBack={() => setDiagramMode('statemachine')}
-          initialSelectedNodeId={vlabSelectedNodeId}
-          onNavigateToXbridges={(nodeId) => {
-            const findMatchingNode = (targetNodes: any[], sourceNodeId?: string) => {
-              if (!sourceNodeId) return null;
-              const srcLower = sourceNodeId.toLowerCase();
-              const groups = [
-                ['pid', 'controller', 'ctrl', 'ps_pid_ctrl', 'pid_basic', 'pid_controller'],
-                ['motor', 'plant', 'ac_motor', 'ac_induction_motor', 'induction', 'engine'],
-                ['inverter', 'pwm', 'gate', 'pwm_3ph_2level', 'three_phase_inverter', 'commutation'],
-                ['error', 'subtract', 'sub', 'error_calc', 'error_sub', 'ps_subtract', 'vectorsub'],
-                ['ref', 'constant', 'gen', 'signal', 'ref_speed', 'ref_signal', 'ps_constant', 'waveformgen']
-              ];
-              let match = targetNodes.find(n => n.id === sourceNodeId);
-              if (match) return match;
-              for (const group of groups) {
-                const isSourceInGroup = group.some(keyword => srcLower.includes(keyword));
-                if (isSourceInGroup) {
-                  match = targetNodes.find(n => {
-                    const id = n.id.toLowerCase();
-                    const type = (n.data?.type || n.type || '').toLowerCase();
-                    return group.some(keyword => id.includes(keyword) || type.includes(keyword));
-                  });
-                  if (match) return match;
-                }
-              }
-              const cleanId = srcLower.replace(/_[0-9]+$/, '');
-              return targetNodes.find(n => {
-                const id = n.id.toLowerCase();
-                const type = (n.data?.type || n.type || '').toLowerCase();
-                return id.includes(cleanId) || type.includes(cleanId) || cleanId.includes(id) || cleanId.includes(type);
-              });
-            };
-
-            const targetNodes = xBridgesStateId ? (states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.nodes || []) : globalXBridgesNodes;
-            const targetNode = findMatchingNode(targetNodes, nodeId);
-            if (targetNode) {
-              setXBridgesSelectedNodeId(targetNode.id);
-            } else {
-              setXBridgesSelectedNodeId(null);
-            }
-            setDiagramMode('xbridges');
-            setTimeout(() => setXBridgesSelectedNodeId(null), 1000);
-          }}
-        />
-      </div>
-    );
-  }
-
-  if (diagramMode === 'hil') {
-    return (
-      <div 
-        className="fixed inset-0 z-50 bg-[#0a0a0a]"
-        style={{
-          zoom: uiZoom,
-          width: `${100 / uiZoom}vw`,
-          height: `${100 / uiZoom}vh`
-        }}
-      >
-        <HILWorkspace
-          config={hilConfig}
-          onChangeConfig={setHilConfig}
-          sessionState={hilSessionState}
-          onChangeSessionState={setHilSessionState}
-          variables={variables}
-          states={states}
-          transitions={transitions}
-          junctions={junctions}
-          layers={layers}
-          safetyMode={safetyMode}
-          tickMs={tickMs}
-          onBack={() => setDiagramMode('statemachine')}
-        />
-      </div>
-    );
-  }
-
-  if (diagramMode === 'entropy') {
-    return (
-      <div 
-        className="fixed inset-0 z-50 bg-[#0a0a0a]"
-        style={{
-          zoom: uiZoom,
-          width: `${100 / uiZoom}vw`,
-          height: `${100 / uiZoom}vh`
-        }}
-      >
-        <EntropyWorkspace
-          initialNodes={entropyNodes}
-          initialEdges={entropyEdges}
-          availableVariables={variables}
-          onVariablesChange={setVariables}
-          tickMs={tickMs}
-          onTickMsChange={setTickMs}
-          onBack={() => setDiagramMode('statemachine')}
-          onSave={(nodes, edges) => {
-            setEntropyNodes(nodes);
-            setEntropyEdges(edges);
-          }}
-          onAddError={addError}
-        />
-      </div>
-    );
-  }
 
   return (
     <>
@@ -14368,9 +15321,9 @@ const ADIA = () => {
         <header className="h-14 bg-[#1a1a1a] border-b border-[#222] flex items-center px-4 gap-4 shrink-0 overflow-x-auto no-scrollbar">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setShowNewProjectModal(true)}
+              onClick={() => setShowWorkspaceFileDialog(true)}
               className="p-1 hover:bg-[#2a2a2a] rounded-lg transition-all duration-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316]/50 group"
-              title="Create New Project Screen (Parallel)"
+              title="Create/Open Workspace Asset File"
             >
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="group-hover:scale-110 transition-transform duration-200">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -14420,6 +15373,17 @@ const ADIA = () => {
               ENTROPY OPM
             </button>
           </div>
+
+          <Separator orientation="vertical" className="h-6 bg-[#333]" />
+
+          {/* Sim tick rate control - always visible in the header */}
+          <div className="flex items-center gap-1.5 bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-1.5">
+            <span className="text-xs text-[#888] whitespace-nowrap">Tick Rate:</span>
+            <TickRateInput value={tickMs} onChange={setTickMs} />
+            <span className="text-[10px] text-[#666]">ms</span>
+          </div>
+
+          <Separator orientation="vertical" className="h-6 bg-[#333]" />
 
           {/* SIMULATION CONTROLS - PROMINENT AND FUNCTIONAL */}
           {(diagramMode as DiagramMode) !== 'xbridges' && (diagramMode as DiagramMode) !== 'hil' && (
@@ -14499,12 +15463,6 @@ const ADIA = () => {
                 )}
                 {isAiValidating ? 'Analyzing...' : 'AI Check'}
               </Button>
-
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-[#888] whitespace-nowrap">Tick Rate:</span>
-                <TickRateInput value={tickMs} onChange={setTickMs} />
-                <span className="text-[10px] text-[#666]">ms</span>
-              </div>
             </div>
           )}
 
@@ -14666,247 +15624,303 @@ const ADIA = () => {
           </div>
         </header>
 
-        {/* Tab Bar for Active Modules */}
-        <div className="h-10 bg-[#141414] border-b border-[#222] flex items-center px-4 gap-2 overflow-x-auto shrink-0 select-none no-scrollbar">
-          {openTabs.map((tabId) => {
-            const moduleInfo = ALL_MODULES.find(m => m.id === tabId);
-            if (!moduleInfo) return null;
-            const isActive = diagramMode === tabId;
-            const isAllCollapsed = isHierarchyCollapsed && isVariablesCollapsed && isPropertiesCollapsed;
-            
-            return (
-              <div
-                key={tabId}
-                onClick={() => setDiagramMode(tabId as any)}
-                className={`h-8 flex items-center px-3 gap-3 rounded-t border-t-2 transition-all duration-150 cursor-pointer select-none ${
-                  isActive
-                    ? 'bg-[#1a1a1a] border-[#f97316] text-[#e0e0e0] font-bold shadow'
-                    : 'bg-[#1e1e1e]/40 border-transparent text-[#888] hover:text-[#ccc] hover:bg-[#1e1e1e]/70'
-                }`}
-              >
-                <span className="text-xs tracking-wide">{moduleInfo.label}</span>
-                
-                {/* Maximize / Minimize button (visible when active) */}
-                {isActive && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (isAllCollapsed) {
-                        // Restore sidebars
-                        setIsHierarchyCollapsed(false);
-                        setIsVariablesCollapsed(false);
-                        setIsPropertiesCollapsed(false);
-                      } else {
-                        // Maximize canvas by collapsing sidebars
-                        setIsHierarchyCollapsed(true);
-                        setIsVariablesCollapsed(true);
-                        setIsPropertiesCollapsed(true);
-                      }
-                    }}
-                    className="p-0.5 hover:bg-[#2a2a2a] rounded transition-colors text-[#666] hover:text-[#f97316] focus:outline-none"
-                    title={isAllCollapsed ? "Restore Layout (Minimize)" : "Maximize View"}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      {isAllCollapsed ? (
-                        // Restore / Minimize icon
-                        <path d="M4 14h6v6m10-10h-6V4" />
-                      ) : (
-                        // Maximize icon
-                        <path d="M8 3H5a2 2 0 0 0-2 2v3m18-5h-3a2 2 0 0 0-2 2v3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 0-2 2h-3" />
-                      )}
-                    </svg>
-                  </button>
-                )}
-
-                {/* Close/Exit Tab (always available if there's more than one tab open) */}
-                {openTabs.length > 1 && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const nextTabs = openTabs.filter(t => t !== tabId);
-                      setOpenTabs(nextTabs);
-                      if (isActive) {
-                        setDiagramMode(nextTabs[0] as any);
-                      }
-                    }}
-                    className="p-0.5 hover:bg-[#2a2a2a] rounded transition-colors text-[#666] hover:text-[#ff4d4d] focus:outline-none"
-                    title="Close Tab (Exit)"
-                  >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        {/* Workspace Tab Bar */}
+        <WorkspaceTabBar
+          openTabIds={openTabIds}
+          activeFileId={activeFileId}
+          workspaceFiles={workspaceFiles}
+          onSwitchTab={switchActiveFile}
+          onCloseTab={closeTab}
+          onOpenDialog={() => setShowWorkspaceFileDialog(true)}
+        />
 
         {/* Main Content Area */}
         <div className="flex flex-1 overflow-hidden" onMouseUp={() => setResizingPanel(null)}>
           {/* Left Sidebar - Hierarchy */}
-          <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="bg-[#1a1a1a] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
-            <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
+          {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
+            <aside style={{ width: isMobile ? '100%' : (isHierarchyCollapsed ? '48px' : `${hierarchyWidth}px`), display: isMobile && mobileTab !== 'hierarchy' ? 'none' : 'flex' }} className="bg-[#1a1a1a] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+              <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
+                {!isHierarchyCollapsed && (
+                  <div className="flex items-center overflow-hidden whitespace-nowrap">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="mr-2.5">
+                       <path d="M10 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" />
+                       <path d="M16 17l-3-3 3-3" />
+                       <path d="M13 14H3" />
+                    </svg>
+                    <span className="text-sm font-medium">Hierarchy</span>
+                  </div>
+                )}
+                <button
+                  onClick={() => setIsHierarchyCollapsed(!isHierarchyCollapsed)}
+                  className={`p-1.5 rounded hover:bg-[#222] text-[#f97316] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
+                >
+                  <Triangle size={10} className={`transition-transform duration-300 ${isHierarchyCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
+                </button>
+              </div>
               {!isHierarchyCollapsed && (
-                <div className="flex items-center overflow-hidden whitespace-nowrap">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="mr-2.5">
-                    <path d="M10 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" />
-                    <path d="M16 17l-3-3 3-3" />
-                    <path d="M13 14H3" />
-                  </svg>
-                  <span className="text-sm font-medium">Hierarchy</span>
-                </div>
+                <HierarchyTree
+                  states={states}
+                  layers={layers}
+                  activeStates={activeStates}
+                  currentLayerId={currentLayerId}
+                  onSelect={(id: string) => setSelectedIds([id])}
+                  onDoubleClick={(id: string) => enterLayer(id)}
+                  selectedIds={selectedIds}
+                />
               )}
-              <button
-                onClick={() => setIsHierarchyCollapsed(!isHierarchyCollapsed)}
-                className={`p-1.5 rounded hover:bg-[#222] text-[#f97316] transition-all ${isHierarchyCollapsed ? 'w-full flex justify-center' : ''}`}
-              >
-                <Triangle size={10} className={`transition-transform duration-300 ${isHierarchyCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
-              </button>
-            </div>
-            {!isHierarchyCollapsed && (
-              <HierarchyTree
-                states={states}
-                layers={layers}
-                activeStates={activeStates}
-                currentLayerId={currentLayerId}
-                onSelect={(id: string) => setSelectedIds([id])}
-                onDoubleClick={(id: string) => enterLayer(id)}
-                selectedIds={selectedIds}
-              />
-            )}
-          </aside>
-          {!isMobile && !isHierarchyCollapsed && <Resizer onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
+            </aside>
+          )}
+          {!isMobile && !isHierarchyCollapsed && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'hierarchy')} />}
 
           {/* Left Sidebar - Variables */}
-          <aside style={{ width: isMobile ? '100%' : (isVariablesCollapsed ? '48px' : `${variablesWidth}px`), display: isMobile && mobileTab !== 'variables' ? 'none' : 'flex' }} className="bg-[#1a1a1a] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
-            <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
+          {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
+            <aside style={{ width: isMobile ? '100%' : (isVariablesCollapsed ? '48px' : `${variablesWidth}px`), display: isMobile && mobileTab !== 'variables' ? 'none' : 'flex' }} className="bg-[#1a1a1a] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
+              <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
+                {!isVariablesCollapsed && (
+                  <div className="flex items-center overflow-hidden whitespace-nowrap">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="mr-2.5">
+                      <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5" />
+                      <path d="M3 12h18" />
+                      <path d="M12 12v9" />
+                    </svg>
+                    <span className="text-sm font-medium text-[#e0e0e0]">Variables</span>
+                  </div>
+                )}
+                <button
+                  onClick={() => setIsVariablesCollapsed(!isVariablesCollapsed)}
+                  className={`p-1.5 rounded hover:bg-[#222] text-[#f97316] transition-all ${isVariablesCollapsed ? 'w-full flex justify-center' : ''}`}
+                >
+                  <Triangle size={10} className={`transition-transform duration-300 ${isVariablesCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
+                </button>
+              </div>
+
               {!isVariablesCollapsed && (
-                <div className="flex items-center overflow-hidden whitespace-nowrap">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="mr-2.5">
-                    <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5" />
-                    <path d="M3 12h18" />
-                    <path d="M12 12v9" />
-                  </svg>
-                  <span className="text-sm font-medium text-[#e0e0e0]">Variables</span>
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  <div className="flex-1 overflow-y-auto no-scrollbar">
+                    {/* Compact Create Section */}
+                    <div className="p-3 border-b border-[#222] bg-[#1a1a1a]/50">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-[#f97316] uppercase tracking-wider">New Variable</span>
+                      </div>
+                      <div className="flex gap-1.5 mb-1.5">
+                        <Input
+                          placeholder="Name"
+                          value={newVarName}
+                          onChange={(e) => setNewVarName(e.target.value)}
+                          className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#f97316]/50"
+                        />
+                        <select
+                          value={newVarType}
+                          onChange={(e) => setNewVarType(e.target.value as VariableType)}
+                          className="h-7 w-24 bg-[#0d0d0d] border border-[#333] rounded text-[10px] px-1 text-[#e0e0e0] outline-none"
+                        >
+                          {ALLOWED_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <Input
+                          placeholder="Init Value"
+                          value={newVarValue}
+                          onChange={(e) => setNewVarValue(e.target.value)}
+                          className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#f97316]/50"
+                        />
+                        <Button size="sm" onClick={addVariable} className="h-7 px-3 bg-[#f97316] text-[#0a0a0a] text-[10px] font-bold hover:bg-[#ea580c]">ADD</Button>
+                      </div>
+                    </div>
+
+                    {/* Compact List */}
+                    <div className="py-2">
+                      {variables.map((variable, idx) => {
+                        const color = colors[idx % colors.length];
+                        const typeColors: Record<string, string> = {
+                          'int32': 'text-emerald-400',
+                          'float': 'text-sky-400',
+                          'bool': 'text-amber-400'
+                        };
+
+                        return (
+                          <div key={variable.id} className="group border-b border-[#1a1a1a] last:border-0">
+                            <div className="flex items-center h-8 px-4 hover:bg-[#222] transition-colors">
+                              <div className="flex items-center gap-2 flex-1 overflow-hidden">
+                                <Checkbox
+                                  checked={variable.visibleInScope}
+                                  onCheckedChange={() => toggleVariableVisibility(variable.id)}
+                                  className="w-3.5 h-3.5 border-[#333] data-[state=checked]:bg-[#f97316] data-[state=checked]:border-[#f97316]"
+                                />
+                                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                                <span className="text-xs font-mono text-[#e0e0e0] truncate flex-1" title={variable.name}>{variable.name}</span>
+                                <span className={`text-[9px] font-bold uppercase shrink-0 w-8 text-center ${typeColors[variable.type.toLowerCase()] || 'text-gray-500'}`}>
+                                  {variable.type.substring(0, 3)}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => removeVariable(variable.id)}
+                                className="ml-2 text-[#444] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M18 6L6 18M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+
+                            <div className="px-4 pb-2 pt-0.5 grid grid-cols-2 gap-3 group-hover:bg-[#1a1a1a]/30 transition-colors">
+                              <div className="space-y-0.5">
+                                <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Initial</span>
+                                <Input
+                                  value={variable.initialValue}
+                                  onChange={(e) => updateVariableInitValue(variable.id, e.target.value)}
+                                  disabled={isRunning}
+                                  className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] focus:border-[#f97316]/30 px-1.5"
+                                />
+                              </div>
+                              <div className="space-y-0.5">
+                                <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Current</span>
+                                <Input
+                                  value={String(variable.currentValue)}
+                                  onChange={(e) => updateVariableValue(variable.id, e.target.value)}
+                                  className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] text-emerald-400 focus:border-[#f97316]/30 px-1.5"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {variables.length === 0 && (
+                        <div className="py-10 text-center opacity-30">
+                          <p className="text-[10px] font-bold uppercase tracking-widest">No Signals</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
-              <button
-                onClick={() => setIsVariablesCollapsed(!isVariablesCollapsed)}
-                className={`p-1.5 rounded hover:bg-[#222] text-[#f97316] transition-all ${isVariablesCollapsed ? 'w-full flex justify-center' : ''}`}
-              >
-                <Triangle size={10} className={`transition-transform duration-300 ${isVariablesCollapsed ? 'rotate-90' : '-rotate-90'}`} fill="currentColor" />
-              </button>
-            </div>
-
-            {!isVariablesCollapsed && (
-              <div className="flex-1 flex flex-col overflow-hidden">
-                <div className="flex-1 overflow-y-auto no-scrollbar">
-                  {/* Compact Create Section */}
-                  <div className="p-3 border-b border-[#222] bg-[#1a1a1a]/50">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-bold text-[#f97316] uppercase tracking-wider">New Variable</span>
-                    </div>
-                    <div className="flex gap-1.5 mb-1.5">
-                      <Input
-                        placeholder="Name"
-                        value={newVarName}
-                        onChange={(e) => setNewVarName(e.target.value)}
-                        className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#f97316]/50"
-                      />
-                      <select
-                        value={newVarType}
-                        onChange={(e) => setNewVarType(e.target.value as VariableType)}
-                        className="h-7 w-24 bg-[#0d0d0d] border border-[#333] rounded text-[10px] px-1 text-[#e0e0e0] outline-none"
-                      >
-                        {ALLOWED_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex gap-1.5">
-                      <Input
-                        placeholder="Init Value"
-                        value={newVarValue}
-                        onChange={(e) => setNewVarValue(e.target.value)}
-                        className="h-7 text-[11px] bg-[#0d0d0d] border-[#333] focus:border-[#f97316]/50"
-                      />
-                      <Button size="sm" onClick={addVariable} className="h-7 px-3 bg-[#f97316] text-[#0a0a0a] text-[10px] font-bold hover:bg-[#ea580c]">ADD</Button>
-                    </div>
-                  </div>
-
-                  {/* Compact List */}
-                  <div className="py-2">
-                    {variables.map((variable, idx) => {
-                      const color = colors[idx % colors.length];
-                      const typeColors: Record<string, string> = {
-                        'int32': 'text-emerald-400',
-                        'float': 'text-sky-400',
-                        'bool': 'text-amber-400'
-                      };
-
-                      return (
-                        <div key={variable.id} className="group border-b border-[#1a1a1a] last:border-0">
-                          <div className="flex items-center h-8 px-4 hover:bg-[#222] transition-colors">
-                            <div className="flex items-center gap-2 flex-1 overflow-hidden">
-                              <Checkbox
-                                checked={variable.visibleInScope}
-                                onCheckedChange={() => toggleVariableVisibility(variable.id)}
-                                className="w-3.5 h-3.5 border-[#333] data-[state=checked]:bg-[#f97316] data-[state=checked]:border-[#f97316]"
-                              />
-                              <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                              <span className="text-xs font-mono text-[#e0e0e0] truncate flex-1" title={variable.name}>{variable.name}</span>
-                              <span className={`text-[9px] font-bold uppercase shrink-0 w-8 text-center ${typeColors[variable.type.toLowerCase()] || 'text-gray-500'}`}>
-                                {variable.type.substring(0, 3)}
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => removeVariable(variable.id)}
-                              className="ml-2 text-[#444] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M18 6L6 18M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </div>
-
-                          <div className="px-4 pb-2 pt-0.5 grid grid-cols-2 gap-3 group-hover:bg-[#1a1a1a]/30 transition-colors">
-                            <div className="space-y-0.5">
-                              <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Initial</span>
-                              <Input
-                                value={variable.initialValue}
-                                onChange={(e) => updateVariableInitValue(variable.id, e.target.value)}
-                                disabled={isRunning}
-                                className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] focus:border-[#f97316]/30 px-1.5"
-                              />
-                            </div>
-                            <div className="space-y-0.5">
-                              <span className="text-[8px] font-bold text-[#444] uppercase tracking-tighter">Current</span>
-                              <Input
-                                value={String(variable.currentValue)}
-                                onChange={(e) => updateVariableValue(variable.id, e.target.value)}
-                                className="h-6 text-[10px] font-mono bg-[#0d0d0d] border-[#222] text-emerald-400 focus:border-[#f97316]/30 px-1.5"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-
-                    {variables.length === 0 && (
-                      <div className="py-10 text-center opacity-30">
-                        <p className="text-[10px] font-bold uppercase tracking-widest">No Signals</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </aside>
-          {!isMobile && <Resizer onMouseDown={(e) => handleResizeStart(e, 'variables')} />}
+            </aside>
+          )}
+          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'variables')} />}
 
           {/* Canvas Area */}
           <div style={{ display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="flex-1 flex flex-col min-w-0">
             <main className="flex-1 relative overflow-hidden bg-[#0a0a0a]">
+              {(xBridgesStateId || diagramMode === 'xbridges') && (
+                <XbridgesWorkspace
+                  key={xBridgesStateId || activeFileId}
+                  initialNodes={xBridgesStateId ? (states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.nodes || []) : globalXBridgesNodes}
+                  initialEdges={xBridgesStateId ? (states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.edges || []) : globalXBridgesEdges}
+                  availableVariables={variables}
+                  tickMs={tickMs}
+                  onLaunchDoe={() => toggleWindow('doe')}
+                  onBack={() => {
+                    if (xBridgesStateId) setXBridgesStateId(null);
+                    else setDiagramMode('statemachine');
+                  }}
+                  onSave={handleXBridgesSave}
+                  onSaveAll={handleExportProject}
+                  initialSelectedNodeId={xBridgesSelectedNodeId}
+                  sharedClipboard={sharedClipboard}
+                  onClipboardChange={setSharedClipboard}
+                  fileId={activeFileId}
+                  workspaceFiles={workspaceFiles}
+                  coSimEngine={xBridgesStateId ? xBridgesEnginesRef.current.get(xBridgesStateId) : undefined}
+                  isSmSimulating={isRunning}
+                  simulationTime={simulationTime}
+                />
+              )}
+
+              {diagramMode === 'vlab' && (
+                <VLabWorkspace
+                  nodes={vlabNodes}
+                  edges={vlabEdges}
+                  onNodesChange={(nodes) => setVlabNodes(nodes)}
+                  onEdgesChange={(edges) => setVlabEdges(edges)}
+                  onResult={(res) => console.log('V-Lab Result:', res)}
+                  onSendToDOE={(data) => {
+                    toggleWindow('doe');
+                  }}
+                  onBack={() => setDiagramMode('statemachine')}
+                  initialSelectedNodeId={vlabSelectedNodeId}
+                  onNavigateToXbridges={(nodeId?: string) => {
+                    const findMatchingNode = (targetNodes: any[], sourceNodeId?: string): any => {
+                      if (!sourceNodeId) return null;
+                      const srcLower = sourceNodeId.toLowerCase();
+                      const groups = [
+                        ['pid', 'controller', 'ctrl', 'ps_pid_ctrl', 'pid_basic', 'pid_controller'],
+                        ['motor', 'plant', 'ac_motor', 'ac_induction_motor', 'induction', 'engine'],
+                        ['inverter', 'pwm', 'gate', 'pwm_3ph_2level', 'three_phase_inverter', 'commutation'],
+                        ['error', 'subtract', 'sub', 'error_calc', 'error_sub', 'ps_subtract', 'vectorsub'],
+                        ['ref', 'constant', 'gen', 'signal', 'ref_speed', 'ref_signal', 'ps_constant', 'waveformgen']
+                      ];
+                      let match = targetNodes.find((n: any) => n.id === sourceNodeId);
+                      if (match) return match;
+                      for (const group of groups) {
+                        const isSourceInGroup = group.some(keyword => srcLower.includes(keyword));
+                        if (isSourceInGroup) {
+                          match = targetNodes.find((n: any) => {
+                            const id = n.id.toLowerCase();
+                            const type = (n.data?.type || n.type || '').toLowerCase();
+                            return group.some(keyword => id.includes(keyword) || type.includes(keyword));
+                          });
+                          if (match) return match;
+                        }
+                      }
+                      const cleanId = srcLower.replace(/_[0-9]+$/, '');
+                      return targetNodes.find((n: any) => {
+                        const id = n.id.toLowerCase();
+                        const type = (n.data?.type || n.type || '').toLowerCase();
+                        return id.includes(cleanId) || type.includes(cleanId) || cleanId.includes(id) || cleanId.includes(type);
+                      });
+                    };
+
+                    const targetNodes = xBridgesStateId ? (states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.nodes || []) : globalXBridgesNodes;
+                    const targetNode = findMatchingNode(targetNodes, nodeId);
+                    if (targetNode) {
+                      setXBridgesSelectedNodeId(targetNode.id);
+                    } else {
+                      setXBridgesSelectedNodeId(null);
+                    }
+                    setDiagramMode('xbridges');
+                    setTimeout(() => setXBridgesSelectedNodeId(null), 1000);
+                  }}
+                />
+              )}
+
+              {diagramMode === 'hil' && (
+                <HILWorkspace
+                  config={hilConfig}
+                  onChangeConfig={setHilConfig}
+                  sessionState={hilSessionState}
+                  onChangeSessionState={setHilSessionState}
+                  variables={variables}
+                  states={states}
+                  transitions={transitions}
+                  junctions={junctions}
+                  layers={layers}
+                  safetyMode={safetyMode}
+                  tickMs={tickMs}
+                  onBack={() => setDiagramMode('statemachine')}
+                />
+              )}
+
+              {diagramMode === 'entropy' && (
+                <EntropyWorkspace
+                  initialNodes={entropyNodes}
+                  initialEdges={entropyEdges}
+                  availableVariables={variables}
+                  onVariablesChange={setVariables}
+                  tickMs={tickMs}
+                  onTickMsChange={setTickMs}
+                  onBack={() => setDiagramMode('statemachine')}
+                  onSave={(nodes, edges) => {
+                    setEntropyNodes(nodes);
+                    setEntropyEdges(edges);
+                  }}
+                  onAddError={addError}
+                />
+              )}
+
+              {!xBridgesStateId && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
+                <>
+
               {/* Canvas Toolbar */}
               <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-[#1a1a1a]/95 border border-[#333] rounded-lg px-2.5 py-1.5 text-xs">
                 {/* Layer Breadcrumb */}
@@ -15321,9 +16335,14 @@ const ADIA = () => {
                   Space+Drag: Pan | Ctrl+Wheel: Zoom
                 </span>
               </div>
+
+                </>
+              )}
             </main>
 
-            {/* Bottom Panel */}
+            {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
+              <>
+                {/* Bottom Panel */}
             {!isMobile && !isScopeCollapsed && <Resizer onMouseDown={(e) => handleResizeStart(e, 'scope')} orientation="horizontal" />}
             <div style={{ height: isMobile ? '30%' : (isScopeCollapsed ? '40px' : `${scopeHeight}px`), display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="bg-[#1a1a1a] border-t border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
               <div className="flex items-center justify-between px-4 border-b border-[#222] h-10 shrink-0">
@@ -15495,10 +16514,14 @@ const ADIA = () => {
                 </div>
               )}
             </div>
-          </div>
-          {!isMobile && <Resizer onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
 
-          {/* Right Dock: Properties */}
+              </>
+            )}          </div>
+          {!isMobile && !['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && <Resizer onMouseDown={(e) => handleResizeStart(e, 'properties')} />}
+
+          {!['xbridges', 'vlab', 'hil', 'entropy'].includes(diagramMode) && (
+            <>
+            {/* Right Dock: Properties */}
           <aside style={{ width: isMobile ? '100%' : (isPropertiesCollapsed ? '48px' : `${propertiesWidth}px`), display: isMobile && mobileTab !== 'properties' ? 'none' : 'flex' }} className="bg-[#1a1a1a] border-l border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
             <div className="h-10 flex items-center justify-between px-4 border-b border-[#222]">
               {!isPropertiesCollapsed && (
@@ -16583,6 +17606,8 @@ const ADIA = () => {
               )}
             </div>
           </aside>
+            </>
+          )}
         </div>
 
         {/* Mobile Navigation Bar */}
@@ -16781,15 +17806,24 @@ const ADIA = () => {
           />
         )}
 
-        {/* New Project Dialog */}
-        {showNewProjectModal && (
-          <NewProjectDialog
-            onClose={() => setShowNewProjectModal(false)}
-            onCreate={(name) => {
-              setShowNewProjectModal(false);
+        {/* Workspace File/Project Dialog */}
+        {showWorkspaceFileDialog && (
+          <WorkspaceFileDialog
+            onClose={() => setShowWorkspaceFileDialog(false)}
+            onCreateFile={createNewFile}
+            onCreateProject={(name) => {
+              setShowWorkspaceFileDialog(false);
               const newUrl = `${window.location.origin}${window.location.pathname}?projectName=${encodeURIComponent(name)}`;
               window.open(newUrl, '_blank');
             }}
+            existingFiles={workspaceFiles}
+            openTabIds={openTabIds}
+            onOpenFile={openFileInTab}
+            onDeleteFile={(id) => {
+              setWorkspaceFiles(prev => prev.filter(f => f.id !== id));
+              setOpenTabIds(prev => prev.filter(tid => tid !== id));
+            }}
+            onImportFile={handleImportFile}
           />
         )}
 
