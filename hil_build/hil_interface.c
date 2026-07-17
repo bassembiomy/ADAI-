@@ -1,6 +1,6 @@
 /* ============================================================= */
 /*  ADIA HIL (Hardware-in-the-Loop) - AUTO GENERATED CODE       */
-/*  Target MCU: Generic (Generic C / Linux Platform)                          */
+/*  Target MCU: ESP32 (ESP32 NodeMCU)                          */
 /*  Baud Rate: 115200                                */
 /*  Do not modify this file manually                             */
 /* ============================================================= */
@@ -13,19 +13,14 @@
 #include <string.h>
 #include <stdlib.h>
 
-static float override_val_ch_2 = 0.0f;
-static bool override_active_ch_2 = false;
+static float override_val_ch_1 = 0.0f;
+static bool override_active_ch_1 = false;
 
 void HIL_Sync_Inputs(ADIA_Instance_t* instance) {
     if (override_active_ch_1) {
-        instance->data.x = override_val_ch_1;
+        instance->data.value = override_val_ch_1;
     } else {
-        instance->data.x = HAL_GPIO_Read(PIN_CH_1, "ch_1");
-    }
-    if (override_active_ch_2) {
-        instance->data.y = override_val_ch_2;
-    } else {
-        instance->data.y = HAL_GPIO_Read(PIN_CH_2, "ch_2");
+        instance->data.value = HAL_GPIO_Read(PIN_CH_1, "ch_1");
     }
 }
 
@@ -52,11 +47,11 @@ void HIL_ProcessMessage(const char* msg) {
         char name[64];
         float val = 0.0f;
         if (sscanf(token, "%63[^=]=%f", name, &val) == 2) {
-            if (strcmp(name, "ch_2") == 0) {
-                override_val_ch_2 = val;
-                override_active_ch_2 = true;
-            } else if (strcmp(name, "ch_2_release") == 0) {
-                override_active_ch_2 = false;
+            if (strcmp(name, "ch_1") == 0) {
+                override_val_ch_1 = val;
+                override_active_ch_1 = true;
+            } else if (strcmp(name, "ch_1_release") == 0) {
+                override_active_ch_1 = false;
             }
             else { /* MISRA 15.7 */ }
         }
@@ -68,10 +63,7 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance) {
     int len = 0;
     (void)instance;
     if (len < (int)(sizeof(buf) - 32U)) {
-        len += snprintf(buf + len, sizeof(buf) - (size_t)len, "ch_1=%.4f;", (double)(instance->data.x));
-    }
-    if (len < (int)(sizeof(buf) - 32U)) {
-        len += snprintf(buf + len, sizeof(buf) - (size_t)len, "ch_2=%.4f", (double)(instance->data.y));
+        len += snprintf(buf + len, sizeof(buf) - (size_t)len, "ch_1=%.4f", (double)(instance->data.value));
     }
     
     if (SM_GetError(instance) != SM_ERR_NONE) {

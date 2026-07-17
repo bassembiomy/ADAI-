@@ -290,6 +290,10 @@ public:
     char read() {
         return UDR0;
     }
+    void write(uint8_t val) {
+        while (!(UCSR0A & (1 << UDRE0)));
+        UDR0 = val;
+    }
     void print(const char* str) {
         while (*str) {
             while (!(UCSR0A & (1 << UDRE0)));
@@ -299,6 +303,9 @@ public:
 };
 
 extern SerialImpl Serial;
+extern SerialImpl Serial1;
+extern SerialImpl Serial2;
+extern SerialImpl Serial3;
 #endif
 
 #endif

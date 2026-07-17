@@ -247,12 +247,19 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
             ]);
             setBuildStatus('success');
           } else {
-            // Real compilation failed (e.g. GCC missing)
-            setConsoleLogs(prev => [
-              ...prev,
-              `[ERROR] Native compilation failed: ${compileRes.error || 'Compiler not found or build script error.'}`,
-              `[ERROR] Make sure that the required compiler toolchain for '${target}' is installed and configured in your system's PATH environmental variable.`
-            ]);
+            // Real compilation failed (e.g. GCC missing or exited with error)
+            const isExitError = compileRes && compileRes.exitCode !== undefined;
+            const errMsg = isExitError
+              ? `Compiler exited with code ${compileRes.exitCode}. Please check the console logs above for compilation errors.`
+              : ((compileRes && compileRes.error) || 'Compiler not found or build script error.');
+
+            setConsoleLogs(prev => {
+              const logs = [...prev, `[ERROR] Native compilation failed: ${errMsg}`];
+              if (!isExitError) {
+                logs.push(`[ERROR] Make sure that the required compiler toolchain for '${target}' is installed and configured in your system's PATH environmental variable.`);
+              }
+              return logs;
+            });
             setBuildStatus('error');
           }
         } else {

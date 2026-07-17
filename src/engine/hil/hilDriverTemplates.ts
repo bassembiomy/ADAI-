@@ -27,9 +27,11 @@ export interface MCUTemplate {
 export const hilDriverTemplates: Record<TargetMCU, MCUTemplate> = {
   STM32F4: {
     name: 'STM32F4xx HAL',
-    systemIncludes: `#include "stm32f4xx_hal.h"\n#include <string.h>\n#include <stdio.h>`,
+    systemIncludes: `#include "stm32f4xx_hal.h"\n#include <string.h>`,
     globals: `
 UART_HandleTypeDef huart2;
+UART_HandleTypeDef huart3;
+SPI_HandleTypeDef hspi1;
 ADC_HandleTypeDef hadc1;
 DAC_HandleTypeDef hdac;
 TIM_HandleTypeDef htim1;
@@ -39,7 +41,7 @@ TIM_HandleTypeDef htim1;
 uint8_t rx_buffer[RX_BUF_SIZE];
 uint8_t rx_index = 0;
 
-static uint32_t HAL_ADC_ReadChannel(void) {
+static inline uint32_t HAL_ADC_ReadChannel(void) {
     uint32_t val = 0U;
     HAL_ADC_Start(&hadc1);
     if (HAL_ADC_PollForConversion(&hadc1, 10U) == HAL_OK) {
@@ -47,6 +49,28 @@ static uint32_t HAL_ADC_ReadChannel(void) {
     }
     (void)HAL_ADC_Stop(&hadc1);
     return val;
+}
+
+static inline uint32_t HAL_UART_ReadChannel(void) {
+    uint8_t ch = 0U;
+    (void)HAL_UART_Receive(&huart3, &ch, 1, 10);
+    return ch;
+}
+
+static inline void HAL_UART_WriteChannel(uint32_t val) {
+    uint8_t ch = (uint8_t)val;
+    (void)HAL_UART_Transmit(&huart3, &ch, 1, 10);
+}
+
+static inline uint32_t HAL_SPI_ReadChannel(void) {
+    uint8_t rx = 0U;
+    (void)HAL_SPI_Receive(&hspi1, &rx, 1, 10);
+    return rx;
+}
+
+static inline void HAL_SPI_WriteChannel(uint32_t val) {
+    uint8_t tx = (uint8_t)val;
+    (void)HAL_SPI_Transmit(&hspi1, &tx, 1, 10);
 }
 `,
     systemInit: `
@@ -102,8 +126,9 @@ void HIL_SendString(const char* str) {
     peripherals: {
       GPIO: {
         init: (pin, name, dir) => {
-          const port = pin.charAt(0).toUpperCase();
-          const pinNum = pin.substring(1);
+          const hasP = pin.startsWith('P') || pin.startsWith('p');
+          const port = hasP ? pin.charAt(1).toUpperCase() : pin.charAt(0).toUpperCase();
+          const pinNum = hasP ? pin.substring(2) : pin.substring(1);
           return `
   /* Init GPIO ${name} on P${port}${pinNum} */
   __HAL_RCC_GPIO${port}_CLK_ENABLE();
@@ -115,13 +140,15 @@ void HIL_SendString(const char* str) {
   HAL_GPIO_Init(GPIO${port}, &GPIO_InitStruct_${name});`;
         },
         read: (pin, name) => {
-          const port = pin.charAt(0).toUpperCase();
-          const pinNum = pin.substring(1);
+          const hasP = pin.startsWith('P') || pin.startsWith('p');
+          const port = hasP ? pin.charAt(1).toUpperCase() : pin.charAt(0).toUpperCase();
+          const pinNum = hasP ? pin.substring(2) : pin.substring(1);
           return `HAL_GPIO_ReadPin(GPIO${port}, GPIO_PIN_${pinNum}) == GPIO_PIN_SET`;
         },
         write: (pin, name, valExpr) => {
-          const port = pin.charAt(0).toUpperCase();
-          const pinNum = pin.substring(1);
+          const hasP = pin.startsWith('P') || pin.startsWith('p');
+          const port = hasP ? pin.charAt(1).toUpperCase() : pin.charAt(0).toUpperCase();
+          const pinNum = hasP ? pin.substring(2) : pin.substring(1);
           return `HAL_GPIO_WritePin(GPIO${port}, GPIO_PIN_${pinNum}, (${valExpr}) ? GPIO_PIN_SET : GPIO_PIN_RESET);`;
         }
       },
@@ -191,14 +218,52 @@ void HIL_SendString(const char* str) {
         }
       },
       UART: {
-        init: (pin, name) => `/* Mapped to communication link */`,
-        read: () => `0.0f`,
-        write: () => `/* Use serial protocol for exchange */`
+        init: (pin, name, dir) => `
+  /* USART3 Init for ${name} on pin ${pin} */
+  __HAL_RCC_USART3_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  GPIO_InitTypeDef GPIO_InitStruct_${name} = {0};
+  GPIO_InitStruct_${name}.Pin = GPIO_PIN_10|GPIO_PIN_11;
+  GPIO_InitStruct_${name}.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct_${name}.Pull = GPIO_PULLUP;
+  GPIO_InitStruct_${name}.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  GPIO_InitStruct_${name}.Alternate = GPIO_AF7_USART3;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct_${name});
+  huart3.Instance = USART3;
+  huart3.Init.BaudRate = 115200;
+  huart3.Init.WordLength = UART_WORDLENGTH_8B;
+  huart3.Init.StopBits = UART_STOPBITS_1;
+  huart3.Init.Parity = UART_PARITY_NONE;
+  huart3.Init.Mode = ${dir === 'In' ? 'UART_MODE_RX' : 'UART_MODE_TX'};
+  huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart3.Init.OverSampling = UART_OVERSAMPLING_16;
+  HAL_UART_Init(&huart3);`,
+        read: () => `HAL_UART_ReadChannel()`,
+        write: (pin, name, valExpr) => `HAL_UART_WriteChannel(${valExpr});`
       },
       SPI: {
-        init: () => `/* SPI init code */`,
-        read: () => `0`,
-        write: () => `/* SPI write */`
+        init: (pin, name) => `
+  /* SPI1 Init for ${name} on CS pin ${pin} */
+  __HAL_RCC_SPI1_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  GPIO_InitTypeDef GPIO_InitStruct_${name} = {0};
+  GPIO_InitStruct_${name}.Pin = GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7;
+  GPIO_InitStruct_${name}.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct_${name}.Pull = GPIO_NOPULL;
+  GPIO_InitStruct_${name}.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  GPIO_InitStruct_${name}.Alternate = GPIO_AF5_SPI1;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct_${name});
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
+  HAL_SPI_Init(&hspi1);`,
+        read: () => `HAL_SPI_ReadChannel()`,
+        write: (pin, name, valExpr) => `HAL_SPI_WriteChannel(${valExpr});`
       },
       I2C: {
         init: () => `/* I2C init code */`,
@@ -219,16 +284,18 @@ void HIL_SendString(const char* str) {
   },
   STM32F1: {
     name: 'STM32F1xx HAL',
-    systemIncludes: `#include "stm32f1xx_hal.h"\n#include <string.h>\n#include <stdio.h>`,
+    systemIncludes: `#include "stm32f1xx_hal.h"\n#include <string.h>`,
     globals: `
 UART_HandleTypeDef huart1;
+UART_HandleTypeDef huart2;
+SPI_HandleTypeDef hspi1;
 ADC_HandleTypeDef hadc1;
 
 #define RX_BUF_SIZE 128
 uint8_t rx_buffer[RX_BUF_SIZE];
 uint8_t rx_index = 0;
 
-static uint32_t HAL_ADC_ReadChannel(void) {
+static inline uint32_t HAL_ADC_ReadChannel(void) {
     uint32_t val = 0U;
     HAL_ADC_Start(&hadc1);
     if (HAL_ADC_PollForConversion(&hadc1, 10U) == HAL_OK) {
@@ -236,6 +303,28 @@ static uint32_t HAL_ADC_ReadChannel(void) {
     }
     (void)HAL_ADC_Stop(&hadc1);
     return val;
+}
+
+static inline uint32_t HAL_UART_ReadChannel(void) {
+    uint8_t ch = 0U;
+    (void)HAL_UART_Receive(&huart2, &ch, 1, 10);
+    return ch;
+}
+
+static inline void HAL_UART_WriteChannel(uint32_t val) {
+    uint8_t ch = (uint8_t)val;
+    (void)HAL_UART_Transmit(&huart2, &ch, 1, 10);
+}
+
+static inline uint32_t HAL_SPI_ReadChannel(void) {
+    uint8_t rx = 0U;
+    (void)HAL_SPI_Receive(&hspi1, &rx, 1, 10);
+    return rx;
+}
+
+static inline void HAL_SPI_WriteChannel(uint32_t val) {
+    uint8_t tx = (uint8_t)val;
+    (void)HAL_SPI_Transmit(&hspi1, &tx, 1, 10);
 }
 `,
     systemInit: `
@@ -290,8 +379,9 @@ void HIL_SendString(const char* str) {
     peripherals: {
       GPIO: {
         init: (pin, name, dir) => {
-          const port = pin.charAt(0).toUpperCase();
-          const pinNum = pin.substring(1);
+          const hasP = pin.startsWith('P') || pin.startsWith('p');
+          const port = hasP ? pin.charAt(1).toUpperCase() : pin.charAt(0).toUpperCase();
+          const pinNum = hasP ? pin.substring(2) : pin.substring(1);
           return `
   /* Init GPIO ${name} on P${port}${pinNum} */
   __HAL_RCC_GPIO${port}_CLK_ENABLE();
@@ -302,13 +392,15 @@ void HIL_SendString(const char* str) {
   HAL_GPIO_Init(GPIO${port}, &GPIO_InitStruct_${name});`;
         },
         read: (pin, name) => {
-          const port = pin.charAt(0).toUpperCase();
-          const pinNum = pin.substring(1);
+          const hasP = pin.startsWith('P') || pin.startsWith('p');
+          const port = hasP ? pin.charAt(1).toUpperCase() : pin.charAt(0).toUpperCase();
+          const pinNum = hasP ? pin.substring(2) : pin.substring(1);
           return `HAL_GPIO_ReadPin(GPIO${port}, GPIO_PIN_${pinNum}) == GPIO_PIN_SET`;
         },
         write: (pin, name, valExpr) => {
-          const port = pin.charAt(0).toUpperCase();
-          const pinNum = pin.substring(1);
+          const hasP = pin.startsWith('P') || pin.startsWith('p');
+          const port = hasP ? pin.charAt(1).toUpperCase() : pin.charAt(0).toUpperCase();
+          const pinNum = hasP ? pin.substring(2) : pin.substring(1);
           return `HAL_GPIO_WritePin(GPIO${port}, GPIO_PIN_${pinNum}, (${valExpr}) ? GPIO_PIN_SET : GPIO_PIN_RESET);`;
         }
       },
@@ -341,11 +433,56 @@ void HIL_SendString(const char* str) {
         write: () => `/* PWM write */`
       },
       UART: {
-        init: () => ``,
-        read: () => `0`,
-        write: () => ``
+        init: (pin, name, dir) => `
+  /* USART2 Init for ${name} on pin ${pin} */
+  __HAL_RCC_USART2_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  GPIO_InitTypeDef GPIO_InitStruct_${name} = {0};
+  GPIO_InitStruct_${name}.Pin = GPIO_PIN_2;
+  GPIO_InitStruct_${name}.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct_${name}.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct_${name});
+  GPIO_InitStruct_${name}.Pin = GPIO_PIN_3;
+  GPIO_InitStruct_${name}.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct_${name}.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct_${name});
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = ${dir === 'In' ? 'UART_MODE_RX' : 'UART_MODE_TX'};
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  HAL_UART_Init(&huart2);`,
+        read: () => `HAL_UART_ReadChannel()`,
+        write: (pin, name, valExpr) => `HAL_UART_WriteChannel(${valExpr});`
       },
-      SPI: { init: () => ``, read: () => `0`, write: () => `` },
+      SPI: {
+        init: (pin, name) => `
+  /* SPI1 Init for ${name} on CS pin ${pin} */
+  __HAL_RCC_SPI1_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  GPIO_InitTypeDef GPIO_InitStruct_${name} = {0};
+  GPIO_InitStruct_${name}.Pin = GPIO_PIN_5|GPIO_PIN_7;
+  GPIO_InitStruct_${name}.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct_${name}.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct_${name});
+  GPIO_InitStruct_${name}.Pin = GPIO_PIN_6;
+  GPIO_InitStruct_${name}.Mode = GPIO_MODE_INPUT;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct_${name});
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
+  HAL_SPI_Init(&hspi1);`,
+        read: () => `HAL_SPI_ReadChannel()`,
+        write: (pin, name, valExpr) => `HAL_SPI_WriteChannel(${valExpr});`
+      },
       I2C: { init: () => ``, read: () => `0`, write: () => `` },
       CAN: { init: () => ``, read: () => `0`, write: () => `` },
       Timer: { init: () => ``, read: () => `HAL_GetTick()`, write: () => `` }
@@ -357,6 +494,30 @@ void HIL_SendString(const char* str) {
     globals: `
 /* HIL Buffer */
 String rx_buffer = "";
+
+#include <SoftwareSerial.h>
+SoftwareSerial softSerial(10, 11);
+#include <SPI.h>
+
+#ifdef __cplusplus
+static inline uint32_t HAL_UART_ReadChannel(void) {
+    return softSerial.available() ? (uint32_t)softSerial.read() : 0U;
+}
+static inline void HAL_UART_WriteChannel(uint32_t val) {
+    softSerial.write((uint8_t)val);
+}
+static inline uint32_t HAL_SPI_ReadChannel(int csPin) {
+    digitalWrite(csPin, LOW);
+    uint32_t val = SPI.transfer(0x00);
+    digitalWrite(csPin, HIGH);
+    return val;
+}
+static inline void HAL_SPI_WriteChannel(int csPin, uint32_t val) {
+    digitalWrite(csPin, LOW);
+    SPI.transfer((uint8_t)val);
+    digitalWrite(csPin, HIGH);
+}
+#endif
 `,
     systemInit: `
   init(); // Arduino system init
@@ -403,11 +564,15 @@ void HIL_SendString(const char* str) {
         write: (pin, name, valExpr) => `analogWrite(${pin}, ${valExpr});`
       },
       UART: {
-        init: () => ``,
-        read: () => `0.0f`,
-        write: () => ``
+        init: (pin, name, dir) => `  softSerial.begin(9600);`,
+        read: () => `HAL_UART_ReadChannel()`,
+        write: (pin, name, valExpr) => `HAL_UART_WriteChannel(${valExpr});`
       },
-      SPI: { init: () => ``, read: () => `0`, write: () => `` },
+      SPI: {
+        init: (pin) => `  SPI.begin();\n  pinMode(atoi("${pin}"), OUTPUT);\n  digitalWrite(atoi("${pin}"), HIGH);`,
+        read: (pin) => `HAL_SPI_ReadChannel(atoi("${pin}"))`,
+        write: (pin, name, valExpr) => `HAL_SPI_WriteChannel(atoi("${pin}"), ${valExpr});`
+      },
       I2C: { init: () => ``, read: () => `0`, write: () => `` },
       CAN: { init: () => ``, read: () => `0`, write: () => `` },
       Timer: { init: () => ``, read: () => `millis()`, write: () => `` }
@@ -418,6 +583,28 @@ void HIL_SendString(const char* str) {
     systemIncludes: `#include "Arduino.h"`,
     globals: `
 String rx_buffer = "";
+
+#include <SPI.h>
+
+#ifdef __cplusplus
+static inline uint32_t HAL_UART_ReadChannel(void) {
+    return Serial1.available() ? (uint32_t)Serial1.read() : 0U;
+}
+static inline void HAL_UART_WriteChannel(uint32_t val) {
+    Serial1.write((uint8_t)val);
+}
+static inline uint32_t HAL_SPI_ReadChannel(int csPin) {
+    digitalWrite(csPin, LOW);
+    uint32_t val = SPI.transfer(0x00);
+    digitalWrite(csPin, HIGH);
+    return val;
+}
+static inline void HAL_SPI_WriteChannel(int csPin, uint32_t val) {
+    digitalWrite(csPin, LOW);
+    SPI.transfer((uint8_t)val);
+    digitalWrite(csPin, HIGH);
+}
+#endif
 `,
     systemInit: `
   init();
@@ -464,11 +651,15 @@ void HIL_SendString(const char* str) {
         write: (pin, name, valExpr) => `analogWrite(${pin}, ${valExpr});`
       },
       UART: {
-        init: () => ``,
-        read: () => `0.0f`,
-        write: () => ``
+        init: (pin, name, dir) => `  Serial1.begin(9600);`,
+        read: () => `HAL_UART_ReadChannel()`,
+        write: (pin, name, valExpr) => `HAL_UART_WriteChannel(${valExpr});`
       },
-      SPI: { init: () => ``, read: () => `0`, write: () => `` },
+      SPI: {
+        init: (pin) => `  SPI.begin();\n  pinMode(atoi("${pin}"), OUTPUT);\n  digitalWrite(atoi("${pin}"), HIGH);`,
+        read: (pin) => `HAL_SPI_ReadChannel(atoi("${pin}"))`,
+        write: (pin, name, valExpr) => `HAL_SPI_WriteChannel(atoi("${pin}"), ${valExpr});`
+      },
       I2C: { init: () => ``, read: () => `0`, write: () => `` },
       CAN: { init: () => ``, read: () => `0`, write: () => `` },
       Timer: { init: () => ``, read: () => `millis()`, write: () => `` }
@@ -479,6 +670,28 @@ void HIL_SendString(const char* str) {
     systemIncludes: `#include "Arduino.h"`,
     globals: `
 String rx_buffer = "";
+
+#include <SPI.h>
+
+#ifdef __cplusplus
+static inline uint32_t HAL_UART_ReadChannel(void) {
+    return Serial2.available() ? (uint32_t)Serial2.read() : 0U;
+}
+static inline void HAL_UART_WriteChannel(uint32_t val) {
+    Serial2.write((uint8_t)val);
+}
+static inline uint32_t HAL_SPI_ReadChannel(int csPin) {
+    digitalWrite(csPin, LOW);
+    uint32_t val = SPI.transfer(0x00);
+    digitalWrite(csPin, HIGH);
+    return val;
+}
+static inline void HAL_SPI_WriteChannel(int csPin, uint32_t val) {
+    digitalWrite(csPin, LOW);
+    SPI.transfer((uint8_t)val);
+    digitalWrite(csPin, HIGH);
+}
+#endif
 `,
     systemInit: `
   // ESP32 system init
@@ -525,11 +738,15 @@ void HIL_SendString(const char* str) {
         write: (pin, name, valExpr) => `ledcWrite(0, ${valExpr});`
       },
       UART: {
-        init: () => ``,
-        read: () => `0.0f`,
-        write: () => ``
+        init: (pin, name, dir) => `  Serial2.begin(115200, SERIAL_8N1, 16, 17);`,
+        read: () => `HAL_UART_ReadChannel()`,
+        write: (pin, name, valExpr) => `HAL_UART_WriteChannel(${valExpr});`
       },
-      SPI: { init: () => ``, read: () => `0`, write: () => `` },
+      SPI: {
+        init: (pin) => `  SPI.begin();\n  pinMode(atoi("${pin}"), OUTPUT);\n  digitalWrite(atoi("${pin}"), HIGH);`,
+        read: (pin) => `HAL_SPI_ReadChannel(atoi("${pin}"))`,
+        write: (pin, name, valExpr) => `HAL_SPI_WriteChannel(atoi("${pin}"), ${valExpr});`
+      },
       I2C: { init: () => ``, read: () => `0`, write: () => `` },
       CAN: { init: () => ``, read: () => `0`, write: () => `` },
       Timer: { init: () => ``, read: () => `millis()`, write: () => `` }
@@ -544,6 +761,19 @@ static int simulated_inputs[100] = {0};
 static int simulated_outputs[100] = {0};
 char rx_buffer[256];
 int rx_index = 0;
+
+static inline uint32_t HAL_UART_ReadChannel(void) {
+    return 0U;
+}
+static inline void HAL_UART_WriteChannel(uint32_t val) {
+    printf("HIL: UART Transmit: %u\\n", val);
+}
+static inline uint32_t HAL_SPI_ReadChannel(void) {
+    return 0U;
+}
+static inline void HAL_SPI_WriteChannel(uint32_t val) {
+    printf("HIL: SPI Transmit: %u\\n", val);
+}
 `,
     systemInit: `
   printf("HIL: Generic System Initialized\\n");
@@ -594,11 +824,15 @@ void HIL_SendString(const char* str) {
         write: (pin, name, valExpr) => `simulated_outputs[atoi("${pin}")] = (int)(${valExpr});`
       },
       UART: {
-        init: () => ``,
-        read: () => `0.0f`,
-        write: () => ``
+        init: (pin, name) => `  printf("HIL: UART initialized on Pin %s\\n", "${pin}");`,
+        read: () => `HAL_UART_ReadChannel()`,
+        write: (pin, name, valExpr) => `HAL_UART_WriteChannel(${valExpr});`
       },
-      SPI: { init: () => ``, read: () => `0`, write: () => `` },
+      SPI: {
+        init: (pin, name) => `  printf("HIL: SPI initialized on Pin %s\\n", "${pin}");`,
+        read: () => `HAL_SPI_ReadChannel()`,
+        write: (pin, name, valExpr) => `HAL_SPI_WriteChannel(${valExpr});`
+      },
       I2C: { init: () => ``, read: () => `0`, write: () => `` },
       CAN: { init: () => ``, read: () => `0`, write: () => `` },
       Timer: { init: () => ``, read: () => `0`, write: () => `` }

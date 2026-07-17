@@ -1,37 +1,52 @@
 /* ============================================================= */
 /*  ADIA HIL (Hardware-in-the-Loop) - AUTO GENERATED CODE       */
-/*  Target MCU: Generic (Generic C / Linux Platform)                          */
+/*  Target MCU: ESP32 (ESP32 NodeMCU)                          */
 /*  Baud Rate: 115200                                */
 /*  Do not modify this file manually                             */
 /* ============================================================= */
 
 #include "hal_drivers.h"
 #include "hil_interface.h"
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+#include "Arduino.h"
 
 
-/* Generic software simulations */
-static int simulated_inputs[100] = {0};
-static int simulated_outputs[100] = {0};
-char rx_buffer[256];
-int rx_index = 0;
+String rx_buffer = "";
+
+#include <SPI.h>
+
+#ifdef __cplusplus
+static inline uint32_t HAL_UART_ReadChannel(void) {
+    return Serial2.available() ? (uint32_t)Serial2.read() : 0U;
+}
+static inline void HAL_UART_WriteChannel(uint32_t val) {
+    Serial2.write((uint8_t)val);
+}
+static inline uint32_t HAL_SPI_ReadChannel(int csPin) {
+    digitalWrite(csPin, LOW);
+    uint32_t val = SPI.transfer(0x00);
+    digitalWrite(csPin, HIGH);
+    return val;
+}
+static inline void HAL_SPI_WriteChannel(int csPin, uint32_t val) {
+    digitalWrite(csPin, LOW);
+    SPI.transfer((uint8_t)val);
+    digitalWrite(csPin, HIGH);
+}
+#endif
 
 
 void HAL_Drivers_Init(void) {
-    printf("HIL: Generic System Initialized\n");
-    printf("HIL: Serial link initialized at %d baud\n", 115200);
+    // ESP32 system init
+    Serial.begin(115200);
 
     /* Peripherals Initialization */
-    printf("HIL: GPIO %s on Pin %s configured as %s\n", "ch_1", "PA1", "Out");
-    printf("HIL: GPIO %s on Pin %s configured as %s\n", "ch_2", "PA0", "In");
+    pinMode(PA0, INPUT);
 }
 
 bool HAL_GPIO_Read(const char* pin, const char* name) {
     (void)pin;
-    if (strcmp(name, "ch_2") == 0) {
-        return (simulated_inputs[atoi("PA0")] > 0);
+    if (strcmp(name, "ch_1") == 0) {
+        return digitalRead(PA0) == HIGH;
     }
     else { /* MISRA 15.7 */ }
     return false;
@@ -39,11 +54,7 @@ bool HAL_GPIO_Read(const char* pin, const char* name) {
 
 void HAL_GPIO_Write(const char* pin, const char* name, bool value) {
     (void)pin;
-    if (strcmp(name, "ch_1") == 0) {
-        simulated_outputs[atoi("PA1")] = (value) ? 1 : 0;
-        return;
-    }
-    else { /* MISRA 15.7 */ }
+    /* No channels */
 }
 
 uint32_t HAL_ADC_Read(const char* pin, const char* name) {
@@ -62,22 +73,40 @@ void HAL_PWM_Write(const char* pin, const char* name, uint32_t value) {
     /* No channels */
 }
 
+uint32_t HAL_UART_Read(const char* pin, const char* name) {
+    (void)pin;
+    /* No channels */
+    return 0;
+}
+
+void HAL_UART_Write(const char* pin, const char* name, uint32_t value) {
+    (void)pin;
+    /* No channels */
+}
+
+uint32_t HAL_SPI_Read(const char* pin, const char* name) {
+    (void)pin;
+    /* No channels */
+    return 0;
+}
+
+void HAL_SPI_Write(const char* pin, const char* name, uint32_t value) {
+    (void)pin;
+    /* No channels */
+}
+
 void HIL_SendString(const char* str) {
-    printf("%s", str);
-    fflush(stdout);
+    Serial.print(str);
 }
 
 void HIL_Receive_Poll(void) {
-    /* Stub receive from stdin or simulated file descriptor */
-  int c;
-  while ((c = getchar()) != EOF && c != '\n') {
-      if (rx_index < 255) {
-          rx_buffer[rx_index++] = c;
+    while (Serial.available() > 0) {
+      char c = Serial.read();
+      if (c == '\n') {
+          HIL_ProcessMessage(rx_buffer.c_str());
+          rx_buffer = "";
+      } else {
+          rx_buffer += c;
       }
-  }
-  if (rx_index > 0) {
-      rx_buffer[rx_index] = '\0';
-      HIL_ProcessMessage(rx_buffer);
-      rx_index = 0;
   }
 }

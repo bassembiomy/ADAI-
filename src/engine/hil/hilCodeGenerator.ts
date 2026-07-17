@@ -48,6 +48,10 @@ void HAL_GPIO_Write(const char* pin, const char* name, bool value);
 uint32_t HAL_ADC_Read(const char* pin, const char* name);
 void HAL_DAC_Write(const char* pin, const char* name, uint32_t value);
 void HAL_PWM_Write(const char* pin, const char* name, uint32_t value);
+uint32_t HAL_UART_Read(const char* pin, const char* name);
+void HAL_UART_Write(const char* pin, const char* name, uint32_t value);
+uint32_t HAL_SPI_Read(const char* pin, const char* name);
+void HAL_SPI_Write(const char* pin, const char* name, uint32_t value);
 void HIL_SendString(const char* str);
 void HIL_Receive_Poll(void);
 
@@ -59,6 +63,10 @@ void HIL_Receive_Poll(void);
   const adcChannels = config.channels.filter(ch => ch.peripheral === 'ADC');
   const dacChannels = config.channels.filter(ch => ch.peripheral === 'DAC');
   const pwmChannels = config.channels.filter(ch => ch.peripheral === 'PWM');
+  const uartReadChannels = config.channels.filter(ch => ch.peripheral === 'UART' && ch.direction === 'In');
+  const uartWriteChannels = config.channels.filter(ch => ch.peripheral === 'UART' && ch.direction === 'Out');
+  const spiReadChannels = config.channels.filter(ch => ch.peripheral === 'SPI' && ch.direction === 'In');
+  const spiWriteChannels = config.channels.filter(ch => ch.peripheral === 'SPI' && ch.direction === 'Out');
 
   const halDriversC = `${disclaimer}#include "hal_drivers.h"
 #include "hil_interface.h"
@@ -114,6 +122,36 @@ void HAL_PWM_Write(const char* pin, const char* name, uint32_t value) {
       .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
 }
 
+uint32_t HAL_UART_Read(const char* pin, const char* name) {
+    (void)pin;
+    ${uartReadChannels.length > 0 ? uartReadChannels
+      .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        return ${mcu.peripherals.UART.read(ch.pin, ch.name)};\n    }`)
+      .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
+    return 0;
+}
+
+void HAL_UART_Write(const char* pin, const char* name, uint32_t value) {
+    (void)pin;
+    ${uartWriteChannels.length > 0 ? uartWriteChannels
+      .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        ${mcu.peripherals.UART.write(ch.pin, ch.name, 'value')}\n        return;\n    }`)
+      .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
+}
+
+uint32_t HAL_SPI_Read(const char* pin, const char* name) {
+    (void)pin;
+    ${spiReadChannels.length > 0 ? spiReadChannels
+      .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        return ${mcu.peripherals.SPI.read(ch.pin, ch.name)};\n    }`)
+      .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
+    return 0;
+}
+
+void HAL_SPI_Write(const char* pin, const char* name, uint32_t value) {
+    (void)pin;
+    ${spiWriteChannels.length > 0 ? spiWriteChannels
+      .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        ${mcu.peripherals.SPI.write(ch.pin, ch.name, 'value')}\n        return;\n    }`)
+      .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
+}
+
 ${mcu.serialTransmit.trim()}
 
 void HIL_Receive_Poll(void) {
@@ -154,6 +192,10 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
         readCall = `HAL_GPIO_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}")`;
       } else if (ch.peripheral === 'ADC') {
         readCall = `HAL_ADC_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}")`;
+      } else if (ch.peripheral === 'UART') {
+        readCall = `HAL_UART_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}")`;
+      } else if (ch.peripheral === 'SPI') {
+        readCall = `HAL_SPI_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}")`;
       } else {
         readCall = `0`;
       }
@@ -195,6 +237,10 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
         return `    HAL_DAC_Write(PIN_${ch.name.toUpperCase()}, "${ch.name}", (uint32_t)(${valExpr}));`;
       } else if (ch.peripheral === 'PWM') {
         return `    HAL_PWM_Write(PIN_${ch.name.toUpperCase()}, "${ch.name}", (uint32_t)(${valExpr}));`;
+      } else if (ch.peripheral === 'UART') {
+        return `    HAL_UART_Write(PIN_${ch.name.toUpperCase()}, "${ch.name}", (uint32_t)(${valExpr}));`;
+      } else if (ch.peripheral === 'SPI') {
+        return `    HAL_SPI_Write(PIN_${ch.name.toUpperCase()}, "${ch.name}", (uint32_t)(${valExpr}));`;
       }
       return '';
     })
@@ -213,6 +259,10 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
           valExpr = `HAL_GPIO_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}") ? 1.0f : 0.0f`;
         } else if (ch.peripheral === 'ADC') {
           valExpr = `(float)HAL_ADC_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}")`;
+        } else if (ch.peripheral === 'UART') {
+          valExpr = `(float)HAL_UART_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}")`;
+        } else if (ch.peripheral === 'SPI') {
+          valExpr = `(float)HAL_SPI_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}")`;
         }
       }
       return `    if (len < (int)(sizeof(buf) - 32U)) {\n        len += snprintf(buf + len, sizeof(buf) - (size_t)len, "${ch.name}=%.4f${idx === config.channels.length - 1 ? '' : ';'}", (double)(${valExpr}));\n    }`;
@@ -285,6 +335,7 @@ ${telemetryCompositions || '    len += snprintf(buf + len, sizeof(buf) - (size_t
 #include "hal_drivers.h"
 #include "hil_interface.h"
 ${target.startsWith('Arduino') || target === 'ESP32' ? '#include "Arduino.h"\n' : ''}
+${target.startsWith('STM32') ? `#include "${target === 'STM32F4' ? 'stm32f4xx_hal.h' : 'stm32f1xx_hal.h'}"\n` : ''}
 ${target === 'Generic' ? '#ifdef _WIN32\n#include <windows.h>\n#else\n#include <unistd.h>\n#endif\n' : ''}
 ADIA_Instance_t sm_instance;
 

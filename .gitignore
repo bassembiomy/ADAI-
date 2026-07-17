@@ -5,6 +5,7 @@ dist/
 .gemini/
 out/
 avr-gcc/
+toolchains/
 hil_build/*.elf
 hil_build/*.exe
 hil_build/*.bin

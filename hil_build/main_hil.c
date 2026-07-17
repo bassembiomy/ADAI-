@@ -1,6 +1,6 @@
 /* ============================================================= */
 /*  ADIA HIL (Hardware-in-the-Loop) - AUTO GENERATED CODE       */
-/*  Target MCU: Generic (Generic C / Linux Platform)                          */
+/*  Target MCU: ESP32 (ESP32 NodeMCU)                          */
 /*  Baud Rate: 115200                                */
 /*  Do not modify this file manually                             */
 /* ============================================================= */
@@ -8,12 +8,9 @@
 #include "sm_core.h"
 #include "hal_drivers.h"
 #include "hil_interface.h"
+#include "Arduino.h"
 
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <unistd.h>
-#endif
+
 
 ADIA_Instance_t sm_instance;
 
@@ -42,12 +39,7 @@ int main(void) {
         HIL_SendTelemetry(&sm_instance);
 
         /* Sleep/Delay */
-        /* Sleep for 10ms simulation tick */
-#ifdef _WIN32
-    Sleep(10);
-#else
-    usleep(10000);
-#endif
+        delay(10);
     }
     return 0;
 }

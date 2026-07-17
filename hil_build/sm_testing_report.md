@@ -1,5 +1,5 @@
 # ADIA Code Generation: Testing & Validation Report
-**Timestamp:** 2026-07-16T19:27:22.691Z
+**Timestamp:** 2026-07-17T09:17:35.723Z
 **Compliance Level:** MISRA-C:2012 / IEC 61508 SIL-2
 **Generator Version:** v3.0 ENGINE
 
@@ -9,7 +9,7 @@
 | C99 Syntax | ✅ PASS | All identifiers are sanitized for C99 compliance and limited to 31 characters. |
 | MISRA-C 10.1 | ✅ PASS | No implicit conversions in arithmetic expressions. |
 | MISRA-C 10.3 | ✅ PASS | Essential type assignments are enforced via explicit casts. |
-| MISRA-C 10.4 | ⚠️ WARN | Potential type mismatch in literals. See warnings. |
+| MISRA-C 10.4 | ✅ PASS | All operands match essential types. |
 | MISRA-C 14.4 | ✅ PASS | Boolean contexts in conditions are explicitly checked. Non-bool types compare against 0/0U. |
 | MISRA-C 15.7 | ✅ PASS | All if-else if constructs contain a terminating else clause. |
 
@@ -17,8 +17,8 @@
 - **Total Transitions Validated:** 2
 - **Internal Transitions Covered:** 0
 - **Self-Loop Check:** ✅ No unconditional self-loops detected.
-- **Sink State Check:** ✅ All operational states have exit paths.
-
+- **Sink State Check:** ⚠️ Found 1 sink states (no exit).
+  - State: `Low_Power` (Possible deadlock if not intentional)
 
 ## 3. Driver & Integration Mapping
 The following variables are identified as potential Hardware/Driver interfaces:
@@ -45,45 +45,80 @@ Identify the longest or most complex execution paths ("critical batches") throug
 
 | ID | Name | States Sequence | Complexity |
 |----|------|-----------------|------------|
-| `CP-001` | Critical Path 1: State_1 → State_1_copy | `State_1` → `State_1_copy` | 4 |
+| `CP-001` | Critical Path 1: State_1 → Low_Power | `State_1` → `State_2` → `Low_Power` | 3 |
 
 **Metrics:**
 - Total Unique Paths Enumerated: 1
-- Max Path Length: 2 states
+- Max Path Length: 3 states
 
 ## 6. Corner Case & Behavior Analysis
 Detecting deadlocks, unreachable states, racing transitions, self-loops, and potential logic crashes.
 
 | ID | Category | Severity | Element | Description | Recommendation |
 |----|----------|----------|---------|-------------|----------------|
-| `CC-001` | `missing_action` | 🔵 INFO | `State_1` | State "State_1" has transitions but no entry, during, or exit actions defined. It is a pass-through state with no observable behavior. | Add at least an entry or during action, or document why this state is intentionally passive. |
+| `CC-001` | `deadlock` | 🔴 CRITICAL | `Low_Power` | State "Low_Power" has no outgoing transitions and is not a safe-state. The system will be trapped here permanently. | Add an outgoing transition or mark as a designated safe/terminal state. |
+| `CC-002` | `unguarded` | 🟡 WARNING | `State_1 → State_2` | Transition from "State_1" to "State_2" has no guard condition and no timer — it will fire on the very first tick unconditionally. | Add a guard condition or an "after" timer to control when this transition fires. |
+| `CC-003` | `missing_action` | 🔵 INFO | `State_1` | State "State_1" has transitions but no entry, during, or exit actions defined. It is a pass-through state with no observable behavior. | Add at least an entry or during action, or document why this state is intentionally passive. |
+| `CC-004` | `missing_action` | 🔵 INFO | `State_2` | State "State_2" has transitions but no entry, during, or exit actions defined. It is a pass-through state with no observable behavior. | Add at least an entry or during action, or document why this state is intentionally passive. |
 
 
 **Metrics:**
 - State Reachability: 100.0%
 - Potential Stuck States (Self-Loops): 0
-- Potential Deadlock States: 0
+- Potential Deadlock States: 1
 
 ## 7. Automatically Generated Test Scenario Matrix
 Actionable test scenarios showing exact steps/stimuli sequences required to achieve specific states and verify robust, crash-free execution.
 
-### Scenario: Walk-through: Critical Path 1: State_1 → State_1_copy (`TS-001` - CRITICAL_PATH)
+### Scenario: Walk-through: Critical Path 1: State_1 → Low_Power (`TS-001` - CRITICAL_PATH)
 **Preconditions:**
 - System is powered on and SM_Init() has been called
-- x = 0
-- y = false
+- counter = 0
+- flag = false
+- value = 0.0
 
 **Steps:**
 | Step | Action | Expected Output / State |
 |------|--------|-------------------------|
 | 1 | Call SM_Init() to enter autostart state | System enters state "State_1" |
-| 2 | Set variables to satisfy [x==true], then call SM_Step() | System transitions from "State_1" to "State_1_copy" |
+| 2 | Call SM_Step() — transition fires unconditionally from "State_1" | System transitions from "State_1" to "State_2" |
+| 3 | Call SM_Step() — transition fires unconditionally from "State_2" | System transitions from "State_2" to "Low_Power" |
 
 **Expected Result:**
-System reaches terminal state "State_1_copy" without crashes or assertion failures.
+System reaches terminal state "Low_Power" without crashes or assertion failures.
 
 
-### Scenario: Corner Case: missing action — State_1 (`TS-002` - CORNER_CASE)
+### Scenario: Corner Case: deadlock — Low_Power (`TS-002` - CORNER_CASE)
+**Preconditions:**
+- SM_Init() called
+- System in known good state
+
+**Steps:**
+| Step | Action | Expected Output / State |
+|------|--------|-------------------------|
+| 1 | Navigate the system to state "Low_Power" | System is in state "Low_Power" |
+| 2 | Call SM_Step() repeatedly (100 ticks) | System remains in "Low_Power" — verify no memory corruption or watchdog timeout |
+| 3 | Verify SM_GetActive() returns expected enum | Active state is SM_ST_LOW_POWER |
+
+**Expected Result:**
+System handles the deadlock gracefully with no crash, hang, or undefined behavior.
+
+
+### Scenario: Corner Case: unguarded — State_1 → State_2 (`TS-003` - CORNER_CASE)
+**Preconditions:**
+- SM_Init() called
+- System in known good state
+
+**Steps:**
+| Step | Action | Expected Output / State |
+|------|--------|-------------------------|
+| 1 | Review behavior of "State_1 → State_2" | Confirm behavior matches design intent |
+
+**Expected Result:**
+System handles the unguarded gracefully with no crash, hang, or undefined behavior.
+
+
+### Scenario: Corner Case: missing action — State_1 (`TS-004` - CORNER_CASE)
 **Preconditions:**
 - SM_Init() called
 - System in known good state
@@ -97,17 +132,30 @@ System reaches terminal state "State_1_copy" without crashes or assertion failur
 System handles the missing action gracefully with no crash, hang, or undefined behavior.
 
 
+### Scenario: Corner Case: missing action — State_2 (`TS-005` - CORNER_CASE)
+**Preconditions:**
+- SM_Init() called
+- System in known good state
+
+**Steps:**
+| Step | Action | Expected Output / State |
+|------|--------|-------------------------|
+| 1 | Review behavior of "State_2" | Confirm behavior matches design intent |
+
+**Expected Result:**
+System handles the missing action gracefully with no crash, hang, or undefined behavior.
+
+
 
 ## 8. HIL Driver Mapping Report
-- **Target Microcontroller:** Generic
+- **Target Microcontroller:** ESP32
 - **Baud Rate:** 115200 bps
 - **System Clock:** 16 MHz
 - **Connection Port:** Auto-Detect
 
 | Channel Name | Pin | Peripheral | Direction | Mapped ADIA Variable | Scaling |
 |--------------|-----|------------|-----------|----------------------|---------|
-| `ch_1` | `PA1` | `GPIO` | `Out` | `x` | `1` |
-| `ch_2` | `PA0` | `GPIO` | `In` | `y` | `1` |
+| `ch_1` | `PA0` | `GPIO` | `In` | `value` | `1` |
 
 
 ---

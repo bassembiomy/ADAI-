@@ -130,8 +130,8 @@ describe('HIL Code Generator', () => {
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
     
-    // Default files (8) + HIL files (6) = 14 files
-    expect(result.files).toHaveLength(14);
+    // Default files (9) + HIL files (6) = 15 files
+    expect(result.files).toHaveLength(15);
 
     const testingReport = result.files.find(f => f.name === 'sm_testing_report.md')?.content;
     expect(testingReport).toContain('## 8. HIL Driver Mapping Report');
@@ -215,4 +215,117 @@ describe('HIL Code Generator', () => {
     const driversC = files.find(f => f.name === 'hal_drivers.c')?.content || '';
     expect(driversC).toContain('else { /* MISRA 15.7 */ }');
   });
+
+  it('should generate correct C code for custom mathematical signal conversions', () => {
+    const exprConfig: HILConfig = {
+      ...mockConfig,
+      mappings: [
+        {
+          id: 'm1',
+          adiaVarId: 'sensor_val',
+          channelId: 'ch1',
+          direction: 'read',
+          conversionExpr: 'x * 5.0f / 1023.0f'
+        }
+      ]
+    };
+    const files = generateHALCode(exprConfig, smVariables);
+    const interfaceC = files.find(f => f.name === 'hil_interface.c')?.content || '';
+    expect(interfaceC).toContain('((float)(HAL_ADC_Read(PIN_SENSOR_TEMP, "sensor_temp"))) * 5.0f / 1023.0f');
+  });
+
+  it('should process incoming variable override and release messages correctly', () => {
+    const files = generateHALCode(mockConfig, smVariables);
+    const interfaceC = files.find(f => f.name === 'hil_interface.c')?.content || '';
+    
+    // Check if override input is handled
+    expect(interfaceC).toContain('if (strcmp(name, "sensor_temp") == 0) {');
+    expect(interfaceC).toContain('override_val_sensor_temp = val;');
+    expect(interfaceC).toContain('override_active_sensor_temp = true;');
+    
+    // Check if release of override is handled
+    expect(interfaceC).toContain('} else if (strcmp(name, "sensor_temp_release") == 0) {');
+    expect(interfaceC).toContain('override_active_sensor_temp = false;');
+  });
+
+  it('should include all configured channels in the HIL telemetry packet', () => {
+    const files = generateHALCode(mockConfig, smVariables);
+    const interfaceC = files.find(f => f.name === 'hil_interface.c')?.content || '';
+    expect(interfaceC).toContain('sensor_temp=%.4f');
+    expect(interfaceC).toContain('led_status=%.4f');
+  });
+
+  it('should generate correct UART and SPI driver declarations, implementations and synchronization logic', () => {
+    const uartSpiConfig: HILConfig = {
+      enabled: true,
+      target: 'STM32F4',
+      clockSpeed: 168,
+      commPort: 'COM3',
+      baudRate: 115200,
+      channels: [
+        {
+          id: 'ch_uart',
+          name: 'debug_uart',
+          peripheral: 'UART',
+          pin: 'PC10',
+          direction: 'In',
+          dataType: 'uint8_t',
+          rangeMin: 0,
+          rangeMax: 255,
+          scalingFactor: 1,
+          unit: ''
+        },
+        {
+          id: 'ch_spi',
+          name: 'sensor_spi',
+          peripheral: 'SPI',
+          pin: 'PA4',
+          direction: 'Out',
+          dataType: 'uint8_t',
+          rangeMin: 0,
+          rangeMax: 255,
+          scalingFactor: 1,
+          unit: ''
+        }
+      ],
+      mappings: [
+        {
+          id: 'm_uart',
+          adiaVarId: 'rx_data',
+          channelId: 'ch_uart',
+          direction: 'read'
+        },
+        {
+          id: 'm_spi',
+          adiaVarId: 'tx_data',
+          channelId: 'ch_spi',
+          direction: 'write'
+        }
+      ]
+    };
+
+    const smVars = [
+      { name: 'rx_data', type: 'uint8_t' },
+      { name: 'tx_data', type: 'uint8_t' }
+    ];
+
+    const files = generateHALCode(uartSpiConfig, smVars);
+    expect(files).toHaveLength(6);
+
+    const driversH = files.find(f => f.name === 'hal_drivers.h')?.content || '';
+    expect(driversH).toContain('uint32_t HAL_UART_Read(const char* pin, const char* name);');
+    expect(driversH).toContain('void HAL_UART_Write(const char* pin, const char* name, uint32_t value);');
+    expect(driversH).toContain('uint32_t HAL_SPI_Read(const char* pin, const char* name);');
+    expect(driversH).toContain('void HAL_SPI_Write(const char* pin, const char* name, uint32_t value);');
+
+    const driversC = files.find(f => f.name === 'hal_drivers.c')?.content || '';
+    expect(driversC).toContain('HAL_UART_ReadChannel()');
+    expect(driversC).toContain('HAL_SPI_WriteChannel(');
+
+    const interfaceC = files.find(f => f.name === 'hil_interface.c')?.content || '';
+    expect(interfaceC).toContain('HAL_UART_Read(PIN_DEBUG_UART, "debug_uart")');
+    expect(interfaceC).toContain('HAL_SPI_Write(PIN_SENSOR_SPI, "sensor_spi", (uint32_t)(instance->data.tx_data))');
+  });
 });
+
+

@@ -195,6 +195,7 @@ describe('VLab Physical DAE Engine Tests', () => {
       state = engine.simulateStep(nodes, edges, state, dt);
     }
     
-    expect(state.scopeValues.value).toBeCloseTo(5.0, 3);
+    const val = typeof state.scopeValues === 'object' ? state.scopeValues.value : state.scopeValues;
+    expect(val).toBeCloseTo(5.0, 3);
   });
 });

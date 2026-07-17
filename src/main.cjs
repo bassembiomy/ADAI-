@@ -9,11 +9,295 @@ const { validateString, validateUrl, validateFilename, sanitizeShellArg } = requ
 // Prevent protocol handler registration hijacking
 app.setAsDefaultProtocolClient = () => {};
 
-// Prepend local AVR toolchain to PATH if it exists in the workspace
-const localAvrBin = path.join(__dirname, '../avr-gcc/avr-gcc-15.2.0-x64-windows/bin');
-if (fs.existsSync(localAvrBin)) {
-  process.env.PATH = localAvrBin + path.delimiter + process.env.PATH;
+// Local toolchains config
+const toolchainsDir = app.isPackaged
+  ? path.join(app.getPath('userData'), 'toolchains')
+  : path.join(process.cwd(), 'toolchains');
+
+// Ensure directory exists
+if (!fs.existsSync(toolchainsDir)) {
+  fs.mkdirSync(toolchainsDir, { recursive: true });
 }
+
+// Toolchain specifications for different platforms
+const toolchains = {
+  Generic: {
+    cmd: 'gcc',
+    name: 'Generic C/C++ Compiler (w64devkit)',
+    url: 'https://github.com/skeeto/w64devkit/releases/download/v1.23.0/w64devkit-1.23.0.zip',
+    zipName: 'w64devkit-1.23.0.zip',
+    extractSubdir: 'w64devkit',
+    binPath: path.join(toolchainsDir, 'w64devkit', 'w64devkit', 'bin'),
+    checkFile: 'gcc.exe'
+  },
+  Arduino: {
+    cmd: 'avr-g++',
+    name: 'Arduino AVR Toolchain (avr-gcc)',
+    url: 'https://github.com/lucasg/avr-gcc-build/releases/download/v15.2.0/avr-gcc-15.2.0-x64-windows.zip',
+    zipName: 'avr-gcc-15.2.0-x64-windows.zip',
+    extractSubdir: 'avr-gcc',
+    binPath: path.join(toolchainsDir, 'avr-gcc', 'avr-gcc-15.2.0-x64-windows', 'bin'),
+    checkFile: 'avr-g++.exe'
+  },
+  STM32: {
+    cmd: 'arm-none-eabi-gcc',
+    name: 'STM32 ARM Embedded Toolchain (arm-none-eabi-gcc)',
+    url: 'https://developer.arm.com/-/media/Files/downloads/gnu-rm/10.3-2021.10/gcc-arm-none-eabi-10.3-2021.10-win32.zip',
+    zipName: 'gcc-arm-none-eabi-10.3-2021.10-win32.zip',
+    extractSubdir: 'arm-gcc',
+    binPath: path.join(toolchainsDir, 'arm-gcc', 'gcc-arm-none-eabi-10.3-2021.10', 'bin'),
+    checkFile: 'arm-none-eabi-gcc.exe'
+  }
+};
+
+function isCommandInPath(cmd) {
+  try {
+    const { execSync } = require('child_process');
+    const checkCmd = process.platform === 'win32' ? `where ${cmd}` : `which ${cmd}`;
+    execSync(checkCmd, { stdio: 'ignore' });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function isToolchainLocallyInstalled(key) {
+  const tc = toolchains[key];
+  if (!tc) return false;
+  const execPath = path.join(tc.binPath, process.platform === 'win32' ? tc.checkFile : tc.cmd);
+  return fs.existsSync(execPath);
+}
+
+function configureToolchainPaths() {
+  // Support legacy project workspace path first if it exists
+  const legacyAvrBin = path.join(__dirname, '../avr-gcc/avr-gcc-15.2.0-x64-windows/bin');
+  if (fs.existsSync(legacyAvrBin)) {
+    if (!process.env.PATH.includes(legacyAvrBin)) {
+      process.env.PATH = legacyAvrBin + path.delimiter + process.env.PATH;
+    }
+  }
+
+  // Prepend each locally installed toolchain bin path to process.env.PATH
+  for (const key of Object.keys(toolchains)) {
+    const tc = toolchains[key];
+    const execPath = path.join(tc.binPath, process.platform === 'win32' ? tc.checkFile : tc.cmd);
+    if (fs.existsSync(execPath)) {
+      if (!process.env.PATH.includes(tc.binPath)) {
+        process.env.PATH = tc.binPath + path.delimiter + process.env.PATH;
+      }
+    }
+  }
+}
+
+function broadcastLog(msg) {
+  console.log(msg);
+  const windows = BrowserWindow.getAllWindows();
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('hil-compiler-log-line', msg + '\n');
+    }
+  }
+}
+
+function downloadFile(url, destPath, progressCallback) {
+  return new Promise((resolve, reject) => {
+    let lastProgressTime = Date.now();
+    let fileStream = null;
+
+    const fetchUrl = (targetUrl) => {
+      const client = targetUrl.startsWith('https') ? require('https') : require('http');
+      
+      const req = client.get(targetUrl, (res) => {
+        if ([301, 302, 307, 308].includes(res.statusCode)) {
+          const redirectUrl = res.headers.location;
+          if (!redirectUrl) {
+            reject(new Error('Redirect location header missing'));
+            return;
+          }
+          fetchUrl(redirectUrl);
+          return;
+        }
+
+        if (res.statusCode !== 200) {
+          reject(new Error(`Failed to download: Status Code ${res.statusCode}`));
+          return;
+        }
+
+        // Open write stream only when successful response is received to prevent locking
+        fileStream = fs.createWriteStream(destPath);
+
+        fileStream.on('error', (err) => {
+          reject(err);
+        });
+
+        const totalBytes = parseInt(res.headers['content-length'], 10) || 0;
+        let receivedBytes = 0;
+
+        res.on('data', (chunk) => {
+          receivedBytes += chunk.length;
+          const now = Date.now();
+          if (now - lastProgressTime > 300 || receivedBytes === totalBytes) {
+            lastProgressTime = now;
+            if (progressCallback) {
+              progressCallback(receivedBytes, totalBytes);
+            }
+          }
+        });
+
+        res.pipe(fileStream);
+
+        fileStream.on('finish', () => {
+          fileStream.close();
+          resolve();
+        });
+      });
+
+      req.on('error', (err) => {
+        if (fileStream) {
+          fileStream.close();
+        }
+        fs.unlink(destPath, () => {});
+        reject(err);
+      });
+    };
+
+    fetchUrl(url);
+  });
+}
+
+function extractZip(zipPath, destDir) {
+  return new Promise((resolve, reject) => {
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+    const { exec } = require('child_process');
+    if (process.platform === 'win32') {
+      // Use native Windows tar tool first (about 100x faster and extremely robust)
+      const tarCmd = `tar -xf "${zipPath}" -C "${destDir}"`;
+      exec(tarCmd, (err, stdout, stderr) => {
+        if (!err) {
+          resolve();
+        } else {
+          // Fall back to PowerShell Expand-Archive if tar fails
+          const escapedZip = zipPath.replace(/'/g, "''");
+          const escapedDest = destDir.replace(/'/g, "''");
+          const psCmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path '${escapedZip}' -DestinationPath '${escapedDest}' -Force"`;
+          exec(psCmd, (psErr, psStdout, psStderr) => {
+            if (psErr) {
+              reject(new Error(psStderr || psErr.message));
+            } else {
+              resolve();
+            }
+          });
+        }
+      });
+    } else {
+      const cmd = `unzip -o "${zipPath}" -d "${destDir}"`;
+      exec(cmd, (err, stdout, stderr) => {
+        if (err) {
+          reject(new Error(stderr || err.message));
+        } else {
+          resolve();
+        }
+      });
+    }
+  });
+}
+
+const activeDownloads = new Map();
+
+function downloadAndExtractToolchain(key) {
+  if (activeDownloads.has(key)) {
+    broadcastLog(`[SYSTEM] Toolchain '${key}' download is already in progress. Waiting for it to complete...`);
+    return activeDownloads.get(key);
+  }
+
+  const promise = new Promise(async (resolve, reject) => {
+    const tc = toolchains[key];
+    if (!tc) return reject(new Error(`Invalid toolchain key: ${key}`));
+
+    if (!fs.existsSync(toolchainsDir)) {
+      fs.mkdirSync(toolchainsDir, { recursive: true });
+    }
+
+    const zipPath = path.join(toolchainsDir, tc.zipName);
+    const destDir = path.join(toolchainsDir, tc.extractSubdir);
+
+    try {
+      broadcastLog(`[SYSTEM] Starting installation for ${tc.name}...`);
+      broadcastLog(`[SYSTEM] Downloading archive: ${tc.url}`);
+      
+      await downloadFile(tc.url, zipPath, (received, total) => {
+        const pct = total > 0 ? Math.round((received / total) * 100) : 0;
+        const mbReceived = (received / (1024 * 1024)).toFixed(1);
+        const mbTotal = (total / (1024 * 1024)).toFixed(1);
+        broadcastLog(`[SYSTEM] Download progress for '${key}': ${pct}% (${mbReceived}MB / ${mbTotal}MB)`);
+      });
+
+      broadcastLog(`[SYSTEM] Download completed. Extracting to ${destDir}...`);
+      await extractZip(zipPath, destDir);
+      broadcastLog(`[SYSTEM] Extraction complete.`);
+
+      try {
+        fs.unlinkSync(zipPath);
+      } catch (e) {
+        console.error('Failed to clean up zip file:', e);
+      }
+
+      configureToolchainPaths();
+      broadcastLog(`[SYSTEM] Toolchain '${tc.name}' installed and configured successfully.`);
+      resolve();
+    } catch (err) {
+      broadcastLog(`[ERROR] Toolchain installation for '${key}' failed: ${err.message}`);
+      reject(err);
+    }
+  });
+
+  activeDownloads.set(key, promise);
+  
+  promise.finally(() => {
+    activeDownloads.delete(key);
+  });
+
+  return promise;
+}
+
+function getToolchainKeyForTarget(target) {
+  if (target === 'Generic') return 'Generic';
+  if (target === 'Arduino_Uno' || target === 'Arduino_Mega') return 'Arduino';
+  if (target.startsWith('STM32')) return 'STM32';
+  return null;
+}
+
+function isToolchainAvailable(target) {
+  const key = getToolchainKeyForTarget(target);
+  if (!key) return true;
+  const tc = toolchains[key];
+  if (isCommandInPath(tc.cmd)) return true;
+  if (isToolchainLocallyInstalled(key)) return true;
+  return false;
+}
+
+async function verifyAndPreInstallToolchains() {
+  configureToolchainPaths();
+  
+  for (const key of Object.keys(toolchains)) {
+    const tc = toolchains[key];
+    const inPath = isCommandInPath(tc.cmd);
+    const inLocal = isToolchainLocallyInstalled(key);
+    
+    if (!inPath && !inLocal) {
+      console.log(`[STARTUP] Background installing missing toolchain for '${key}'...`);
+      downloadAndExtractToolchain(key).catch((err) => {
+        console.error(`[STARTUP] Background toolchain install for '${key}' failed:`, err.message);
+      });
+    }
+  }
+}
+
+// Initial path configuration on startup
+configureToolchainPaths();
+
 
 function createWindow() {
   // Enforce TLS 1.2+ minimum for all session requests
@@ -73,7 +357,7 @@ function createWindow() {
     },
     title: "ADIA Engineering Suite",
     backgroundColor: "#181818",
-    // icon: path.join(__dirname, '../icon.png'),
+    icon: path.join(__dirname, '../icon.png'),
   });
 
   // In production, we load the bundled index.html from the dist folder
@@ -142,12 +426,19 @@ function createWindow() {
     });
   });
 
-  if (!app.isPackaged) {
-    win.webContents.openDevTools();
-  }
+  // if (!app.isPackaged) {
+  //   win.webContents.openDevTools();
+  // }
 }
 
-app.whenReady().then(createWindow).catch(err => {
+app.whenReady().then(() => {
+  createWindow();
+  setTimeout(() => {
+    verifyAndPreInstallToolchains().catch(err => {
+      console.error('Failed to preinstall toolchains:', err);
+    });
+  }, 5000);
+}).catch(err => {
   console.error('App failed to start:', err);
 });
 
@@ -355,114 +646,138 @@ ipcMain.handle('hil-run-compile', async (event, { target, optimization, warningL
       return resolve({ success: false, error: 'Build directory not found. Save files first.' });
     }
 
-    let cmd = 'gcc';
-    let args = [];
-    const dbg = debugLevel === 'None' ? [] : [debugLevel || '-g'];
-    const warningFlags = warningLevel ? warningLevel.split(/\s+/) : ['-Wall'];
-    
-    if (target === 'Generic') {
-      args = [
-        optimization || '-O2',
-        ...warningFlags,
-        ...dbg,
-        'hal_drivers.c',
-        'hil_interface.c',
-        'main_hil.c',
-        'sm_core.c',
-        'sm_safety.c',
-        'sm_user_logic.c',
-        '-o',
-        'adia_hil.exe'
-      ];
-    } else if (target === 'Arduino_Uno') {
-      cmd = 'avr-g++';
-      args = [
-        '-mmcu=atmega328p',
-        '-DF_CPU=16000000UL',
-        '-I.',
-        optimization || '-Os',
-        ...warningFlags,
-        ...dbg,
-        'Arduino.cpp',
-        'hal_drivers.c',
-        'hil_interface.c',
-        'main_hil.c',
-        'sm_core.c',
-        'sm_safety.c',
-        'sm_user_logic.c',
-        '-o',
-        'adia_hil.elf'
-      ];
-    } else if (target === 'Arduino_Mega') {
-      cmd = 'avr-g++';
-      args = [
-        '-mmcu=atmega2560',
-        '-DF_CPU=16000000UL',
-        '-I.',
-        optimization || '-Os',
-        ...warningFlags,
-        ...dbg,
-        'Arduino.cpp',
-        'hal_drivers.c',
-        'hil_interface.c',
-        'main_hil.c',
-        'sm_core.c',
-        'sm_safety.c',
-        'sm_user_logic.c',
-        '-o',
-        'adia_hil.elf'
-      ];
-    } else if (target.startsWith('STM32')) {
-      cmd = 'arm-none-eabi-gcc';
-      const cpu = target === 'STM32F4' ? '-mcpu=cortex-m4' : '-mcpu=cortex-m3';
-      args = [
-        cpu,
-        '-mthumb',
-        optimization || '-Os',
-        ...warningFlags,
-        ...dbg,
-        'hal_drivers.c',
-        'hil_interface.c',
-        'main_hil.c',
-        'sm_core.c',
-        'sm_safety.c',
-        'sm_user_logic.c',
-        '-o',
-        'adia_hil.elf'
-      ];
-    } else {
-      return resolve({ success: true, bypassed: true });
-    }
-
-    event.sender.send('hil-compiler-log-line', `> Executing compile command: ${cmd} ${args.join(' ')}\n`);
-    
-    // Sanitize parameters to mitigate command injection
-    const sanitizedArgs = args.map(arg => sanitizeShellArg(String(arg)));
-    const proc = spawn(cmd, sanitizedArgs, { cwd: buildDir, shell: false });
-    
-    proc.stdout.on('data', (data) => {
-      event.sender.send('hil-compiler-log-line', data.toString());
-    });
-    
-    proc.stderr.on('data', (data) => {
-      event.sender.send('hil-compiler-log-line', data.toString());
-    });
-    
-    proc.on('error', (err) => {
-      event.sender.send('hil-compiler-log-line', `[ERROR] Failed to start compiler process: ${err.message}\n`);
-      event.sender.send('hil-compiler-log-line', `[TIP] Make sure '${cmd}' is installed on your system and added to your environmental variables PATH.\n`);
-      resolve({ success: false, error: err.message });
-    });
-    
-    proc.on('close', (code) => {
-      if (code === 0) {
-        event.sender.send('hil-compiler-log-line', `[SUCCESS] Compilation complete. Build binary generated.\n`);
-        resolve({ success: true, binary: target === 'Generic' ? 'adia_hil.exe' : 'adia_hil.elf' });
+    const runCompilation = () => {
+      let cmd = 'gcc';
+      let args = [];
+      const dbg = debugLevel === 'None' ? [] : [debugLevel || '-g'];
+      const warningFlags = warningLevel ? warningLevel.split(/\s+/) : ['-Wall'];
+      
+      if (target === 'Generic') {
+        cmd = 'gcc';
+        args = [
+          optimization || '-O2',
+          ...warningFlags,
+          ...dbg,
+          'hal_drivers.c',
+          'hil_interface.c',
+          'main_hil.c',
+          'sm_core.c',
+          'sm_safety.c',
+          'sm_user_logic.c',
+          '-o',
+          'adia_hil.exe'
+        ];
+      } else if (target === 'Arduino_Uno') {
+        cmd = 'avr-g++';
+        args = [
+          '-mmcu=atmega328p',
+          '-DF_CPU=16000000UL',
+          '-I.',
+          optimization || '-Os',
+          ...warningFlags,
+          ...dbg,
+          'Arduino.cpp',
+          'hal_drivers.c',
+          'hil_interface.c',
+          'main_hil.c',
+          'sm_core.c',
+          'sm_safety.c',
+          'sm_user_logic.c',
+          '-o',
+          'adia_hil.elf'
+        ];
+      } else if (target === 'Arduino_Mega') {
+        cmd = 'avr-g++';
+        args = [
+          '-mmcu=atmega2560',
+          '-DF_CPU=16000000UL',
+          '-I.',
+          optimization || '-Os',
+          ...warningFlags,
+          ...dbg,
+          'Arduino.cpp',
+          'hal_drivers.c',
+          'hil_interface.c',
+          'main_hil.c',
+          'sm_core.c',
+          'sm_safety.c',
+          'sm_user_logic.c',
+          '-o',
+          'adia_hil.elf'
+        ];
+      } else if (target.startsWith('STM32')) {
+        cmd = 'arm-none-eabi-gcc';
+        const cpu = target === 'STM32F4' ? '-mcpu=cortex-m4' : '-mcpu=cortex-m3';
+        args = [
+          cpu,
+          '-mthumb',
+          '--specs=nosys.specs',
+          optimization || '-Os',
+          ...warningFlags,
+          ...dbg,
+          'hal_drivers.c',
+          'hil_interface.c',
+          'main_hil.c',
+          'sm_core.c',
+          'sm_safety.c',
+          'sm_user_logic.c',
+          '-o',
+          'adia_hil.elf'
+        ];
       } else {
-        event.sender.send('hil-compiler-log-line', `[ERROR] Compiler exited with code ${code}.\n`);
-        resolve({ success: false, exitCode: code });
+        return resolve({ success: true, bypassed: true });
       }
-    });
+
+      event.sender.send('hil-compiler-log-line', `> Executing compile command: ${cmd} ${args.join(' ')}\n`);
+      
+      // Sanitize parameters to mitigate command injection
+      const sanitizedArgs = args.map(arg => sanitizeShellArg(String(arg)));
+      const proc = spawn(cmd, sanitizedArgs, { cwd: buildDir, shell: false });
+      
+      proc.stdout.on('data', (data) => {
+        event.sender.send('hil-compiler-log-line', data.toString());
+      });
+      
+      proc.stderr.on('data', (data) => {
+        event.sender.send('hil-compiler-log-line', data.toString());
+      });
+      
+      proc.on('error', (err) => {
+        event.sender.send('hil-compiler-log-line', `[ERROR] Failed to start compiler process: ${err.message}\n`);
+        event.sender.send('hil-compiler-log-line', `[TIP] Make sure '${cmd}' is installed on your system and added to your environmental variables PATH.\n`);
+        resolve({ success: false, error: err.message });
+      });
+      
+      proc.on('close', (code) => {
+        if (code === 0) {
+          event.sender.send('hil-compiler-log-line', `[SUCCESS] Compilation complete. Build binary generated.\n`);
+          resolve({ success: true, binary: target === 'Generic' ? 'adia_hil.exe' : 'adia_hil.elf' });
+        } else {
+          event.sender.send('hil-compiler-log-line', `[ERROR] Compiler exited with code ${code}.\n`);
+          resolve({ success: false, exitCode: code });
+        }
+      });
+    };
+
+    // Check if compiler toolchain is available
+    const tcKey = getToolchainKeyForTarget(target);
+    if (tcKey && !isToolchainAvailable(target)) {
+      event.sender.send('hil-compiler-log-line', `[SYSTEM] Required compiler toolchain for target '${target}' is missing.\n`);
+      event.sender.send('hil-compiler-log-line', `[SYSTEM] Initiating automatic toolchain installation in background...\n`);
+      
+      downloadAndExtractToolchain(tcKey)
+        .then(() => {
+          broadcastLog(`[SYSTEM] Compiler toolchain for '${target}' ready. Resuming compilation.`);
+          runCompilation();
+        })
+        .catch((err) => {
+          event.sender.send('hil-compiler-log-line', `[ERROR] Automatic toolchain installation failed: ${err.message}\n`);
+          resolve({ success: false, error: `Missing toolchain and auto-installation failed: ${err.message}` });
+        });
+    } else {
+      configureToolchainPaths();
+      runCompilation();
+    }
   });
 });
 

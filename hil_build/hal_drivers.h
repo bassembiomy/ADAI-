@@ -1,6 +1,6 @@
 /* ============================================================= */
 /*  ADIA HIL (Hardware-in-the-Loop) - AUTO GENERATED CODE       */
-/*  Target MCU: Generic (Generic C / Linux Platform)                          */
+/*  Target MCU: ESP32 (ESP32 NodeMCU)                          */
 /*  Baud Rate: 115200                                */
 /*  Do not modify this file manually                             */
 /* ============================================================= */
@@ -18,6 +18,10 @@ void HAL_GPIO_Write(const char* pin, const char* name, bool value);
 uint32_t HAL_ADC_Read(const char* pin, const char* name);
 void HAL_DAC_Write(const char* pin, const char* name, uint32_t value);
 void HAL_PWM_Write(const char* pin, const char* name, uint32_t value);
+uint32_t HAL_UART_Read(const char* pin, const char* name);
+void HAL_UART_Write(const char* pin, const char* name, uint32_t value);
+uint32_t HAL_SPI_Read(const char* pin, const char* name);
+void HAL_SPI_Write(const char* pin, const char* name, uint32_t value);
 void HIL_SendString(const char* str);
 void HIL_Receive_Poll(void);
 
