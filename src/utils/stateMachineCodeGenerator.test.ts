@@ -123,7 +123,8 @@ describe('StateMachineCodeGenerator', () => {
             ]
           }
         }
-      ]
+      ],
+      transitions: []
     };
 
     const result = generateMISRACCode(xbChart as any);
@@ -137,8 +138,9 @@ describe('StateMachineCodeGenerator', () => {
     expect(userLogicC).toContain('void SM_ST_IDLE_XBridges_Step(ADIA_Instance_t* instance, float delta_s)');
     expect(userLogicC).toContain('float block1_out0 = 0.0f;');
     expect(userLogicC).toContain('block1_out0 = 5.0000f;');
-    expect(userLogicC).toContain('instance->data.block2_state += block1_out0 * delta_s;');
-    expect(userLogicC).toContain('instance->data.sensor_val = block2_out0;');
+    expect(userLogicC).toContain('instance->data.idle_block2_state += block1_out0 * delta_s;');
+    /* MISRA 10.3: output sync assignment carries an explicit cast */
+    expect(userLogicC).toContain('instance->data.sensor_val = (float)(block2_out0);');
   });
 
   it('should report error if safety mode is enabled but no safe state is defined', () => {
@@ -293,6 +295,7 @@ describe('StateMachineCodeGenerator', () => {
         entry: '', during: '', exit: '',
         isActive: false, color: 'blue', parentId: 'root', children: [],
         priority: 1, isParallel: false, regionId: 'LONG_REGION_NAME_THAT_NEEDS_TRUNCATION', autostart: true,
+        isSafeState: true,
         internalTransitions: 'after(5) / counter = 15;\n[is_active] / counter = 0;'
       }
     ];
@@ -308,7 +311,7 @@ describe('StateMachineCodeGenerator', () => {
       transitions: [] as TransitionData[],
       variables: mockVariables,
       layers: customLayers,
-      safetyMode: false
+      safetyMode: true
     };
 
     const result = generateMISRACCode(customChart);
@@ -319,7 +322,7 @@ describe('StateMachineCodeGenerator', () => {
     const safetyC = result.files.find(f => f.name === 'sm_safety.c')?.content || '';
 
     // Verify MISRA 5.1 Name Truncation
-    expect(configH).toContain('SM_ST_STATEWITHLONGNAMETHATNE'); // Max 28 chars
+    expect(configH).toContain('SM_ST_STATEWITHLONGNAMETHATN'); // Max 28 chars
     expect(configH).toContain('SM_GRP_LONG_REGION_NAME_THAT'); // Max 28 chars
 
     // Verify SM_TICK_MS #define macro
@@ -443,7 +446,7 @@ describe('StateMachineCodeGenerator', () => {
         throw err;
       }
     } else {
-      console.warn('avr-gcc compiler not found, skipping compilation assertion');
+      throw new Error(`avr-gcc compiler not found, compilation test failed. Expected path: ${compilerPath}`);
     }
   });
 
@@ -476,7 +479,10 @@ describe('StateMachineCodeGenerator', () => {
   });
 
   it('should declare all loop variables at top of SM_Init, SM_Reset and SM_Step (MISRA 8.7)', () => {
-    const result = generateMISRACCode(chart);
+    /* Use a safety-mode chart so the watchdog/safety path is exercised in SM_Step */
+    const safeStates = mockStates.map((s, i) => ({ ...s, isSafeState: i === 0 }));
+    const safetyChart = { ...chart, states: safeStates, safetyMode: true };
+    const result = generateMISRACCode(safetyChart);
     expect(result.errors).toHaveLength(0);
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
 
@@ -523,14 +529,19 @@ describe('StateMachineCodeGenerator', () => {
     const result = generateMISRACCode(chart);
     expect(result.errors).toHaveLength(0);
     const safetyC = result.files.find(f => f.name === 'sm_safety.c')?.content || '';
-    /* SM_Safety_Check must declare CRC vars before the first if statement */
+    /* SM_Safety_Check contains no fabricated CRC variables */
     const fnStart = safetyC.indexOf('void SM_Safety_Check(');
     expect(fnStart).toBeGreaterThan(-1);
     const fnBody = safetyC.substring(fnStart);
-    const crcDeclPos = fnBody.indexOf('uint32_t calculated_crc;');
-    const firstIfPos = fnBody.indexOf('if (!');
-    expect(crcDeclPos).toBeGreaterThan(-1);
-    expect(crcDeclPos).toBeLessThan(firstIfPos);
+    expect(fnBody).not.toContain('calculated_crc');
+    /* The RAM March test loop variable is declared at the top of its function */
+    const marchStart = safetyC.indexOf('static bool SM_March_RAM_Test(void) {');
+    expect(marchStart).toBeGreaterThan(-1);
+    const marchBody = safetyC.substring(marchStart);
+    const declPos = marchBody.indexOf('uint32_t i;');
+    const firstLoopPos = marchBody.indexOf('for (');
+    expect(declPos).toBeGreaterThan(-1);
+    expect(declPos).toBeLessThan(firstLoopPos);
     /* SM_Validate_State_Consistency must use sm_iter */
     expect(safetyC).toContain('uint32_t sm_iter;');
     expect(safetyC).toContain('for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++)');
@@ -591,7 +602,8 @@ describe('StateMachineCodeGenerator', () => {
             ]
           }
         }
-      ]
+      ],
+      transitions: []
     };
 
     const result = generateMISRACCode(xbChart as any);
@@ -625,6 +637,8 @@ describe('StateMachineCodeGenerator', () => {
         console.error('X-Bridges compilation failed:', err.stdout?.toString() || err.stderr?.toString() || err.message);
         throw err;
       }
+    } else {
+      throw new Error(`avr-gcc compiler not found, X-Bridges compilation test failed. Expected path: ${compilerPath}`);
     }
   });
 

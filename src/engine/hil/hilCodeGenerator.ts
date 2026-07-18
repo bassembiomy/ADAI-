@@ -1,9 +1,12 @@
 import { HILConfig } from './hilTypes';
 import { hilDriverTemplates } from './hilDriverTemplates';
 
+const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9_]/g, '_');
+
 export function generateHALCode(
   config: HILConfig,
-  smVariables: Array<{ name: string; type: string }>
+  smVariables: Array<{ name: string; type: string }>,
+  warnings?: string[]
 ): Array<{ name: string; content: string }> {
   if (!config || !config.enabled) {
     return [];
@@ -11,6 +14,14 @@ export function generateHALCode(
 
   const target = config.target || 'Generic';
   const mcu = hilDriverTemplates[target] || hilDriverTemplates.Generic;
+
+  /* Surface unsupported-peripheral channels as user-visible diagnostics instead
+   * of silently skipping their driver initialization. */
+  config.channels.forEach(ch => {
+    if (!mcu.peripherals[ch.peripheral]) {
+      warnings?.push(`[HIL] Channel '${ch.name}': peripheral '${ch.peripheral}' is not supported by target '${target}'. Its driver initialization was skipped.`);
+    }
+  });
 
   const disclaimer = `/* ============================================================= */
 /*  ADIA HIL (Hardware-in-the-Loop) - AUTO GENERATED CODE       */
@@ -29,7 +40,7 @@ export function generateHALCode(
 
 /* Channels Pin Mappings */
 ${config.channels
-  .map(ch => `#define PIN_${ch.name.toUpperCase()} "${ch.pin}"`)
+  .map(ch => `#define PIN_${sanitize(ch.name).toUpperCase()} "${ch.pin}"`)
   .join('\n')}
 
 #endif /* HAL_CONFIG_H */`;
@@ -80,7 +91,10 @@ void HAL_Drivers_Init(void) {
 
     /* Peripherals Initialization */
     ${config.channels
-      .map(ch => mcu.peripherals[ch.peripheral].init(ch.pin, ch.name, ch.direction).trim())
+      .map(ch => {
+        const p = mcu.peripherals[ch.peripheral];
+        return p ? p.init(ch.pin, ch.name, ch.direction).trim() : `/* Unsupported peripheral: ${ch.peripheral} */`;
+      })
       .filter(Boolean)
       .join('\n    ')}
 }
@@ -176,7 +190,7 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
   // Define override states for input channels
   const inputChannels = config.channels.filter(ch => ch.direction === 'In');
   const overrideGlobals = inputChannels
-    .map(ch => `static float override_val_${ch.name} = 0.0f;\nstatic bool override_active_${ch.name} = false;`)
+    .map(ch => `static float override_val_${sanitize(ch.name)} = 0.0f;\nstatic bool override_active_${sanitize(ch.name)} = false;`)
     .join('\n');
 
   // Input synchronization logic
@@ -188,14 +202,15 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
       if (!ch || !smVar) return '';
 
       let readCall = '';
+      const pinMacro = `PIN_${sanitize(ch.name).toUpperCase()}`;
       if (ch.peripheral === 'GPIO') {
-        readCall = `HAL_GPIO_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}")`;
+        readCall = `HAL_GPIO_Read(${pinMacro}, "${ch.name}")`;
       } else if (ch.peripheral === 'ADC') {
-        readCall = `HAL_ADC_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}")`;
+        readCall = `HAL_ADC_Read(${pinMacro}, "${ch.name}")`;
       } else if (ch.peripheral === 'UART') {
-        readCall = `HAL_UART_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}")`;
+        readCall = `HAL_UART_Read(${pinMacro}, "${ch.name}")`;
       } else if (ch.peripheral === 'SPI') {
-        readCall = `HAL_SPI_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}")`;
+        readCall = `HAL_SPI_Read(${pinMacro}, "${ch.name}")`;
       } else {
         readCall = `0`;
       }
@@ -209,7 +224,7 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
         expr = m.conversionExpr.replace(/\bx\b/g, `((float)(${readCall}))`);
       }
 
-      return `    if (override_active_${ch.name}) {\n        instance->data.${smVar.name} = override_val_${ch.name};\n    } else {\n        instance->data.${smVar.name} = ${expr};\n    }`;
+      return `    if (override_active_${sanitize(ch.name)}) {\n        instance->data.${smVar.name} = override_val_${sanitize(ch.name)};\n    } else {\n        instance->data.${smVar.name} = ${expr};\n    }`;
     })
     .filter(Boolean)
     .join('\n');
@@ -231,16 +246,17 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
         valExpr = m.conversionExpr.replace(/\bx\b/g, `((float)(${valExpr}))`);
       }
 
+      const pinMacro = `PIN_${sanitize(ch.name).toUpperCase()}`;
       if (ch.peripheral === 'GPIO') {
-        return `    HAL_GPIO_Write(PIN_${ch.name.toUpperCase()}, "${ch.name}", ${valExpr});`;
+        return `    HAL_GPIO_Write(${pinMacro}, "${ch.name}", ${valExpr});`;
       } else if (ch.peripheral === 'DAC') {
-        return `    HAL_DAC_Write(PIN_${ch.name.toUpperCase()}, "${ch.name}", (uint32_t)(${valExpr}));`;
+        return `    HAL_DAC_Write(${pinMacro}, "${ch.name}", (uint32_t)(${valExpr}));`;
       } else if (ch.peripheral === 'PWM') {
-        return `    HAL_PWM_Write(PIN_${ch.name.toUpperCase()}, "${ch.name}", (uint32_t)(${valExpr}));`;
+        return `    HAL_PWM_Write(${pinMacro}, "${ch.name}", (uint32_t)(${valExpr}));`;
       } else if (ch.peripheral === 'UART') {
-        return `    HAL_UART_Write(PIN_${ch.name.toUpperCase()}, "${ch.name}", (uint32_t)(${valExpr}));`;
+        return `    HAL_UART_Write(${pinMacro}, "${ch.name}", (uint32_t)(${valExpr}));`;
       } else if (ch.peripheral === 'SPI') {
-        return `    HAL_SPI_Write(PIN_${ch.name.toUpperCase()}, "${ch.name}", (uint32_t)(${valExpr}));`;
+        return `    HAL_SPI_Write(${pinMacro}, "${ch.name}", (uint32_t)(${valExpr}));`;
       }
       return '';
     })
@@ -255,17 +271,20 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
       if (mapping) {
         valExpr = `instance->data.${mapping.adiaVarId}`;
       } else {
+        const pinMacro = `PIN_${sanitize(ch.name).toUpperCase()}`;
         if (ch.peripheral === 'GPIO') {
-          valExpr = `HAL_GPIO_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}") ? 1.0f : 0.0f`;
+          valExpr = `HAL_GPIO_Read(${pinMacro}, "${ch.name}") ? 1.0f : 0.0f`;
         } else if (ch.peripheral === 'ADC') {
-          valExpr = `(float)HAL_ADC_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}")`;
+          valExpr = `(float)HAL_ADC_Read(${pinMacro}, "${ch.name}")`;
         } else if (ch.peripheral === 'UART') {
-          valExpr = `(float)HAL_UART_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}")`;
+          valExpr = `(float)HAL_UART_Read(${pinMacro}, "${ch.name}")`;
         } else if (ch.peripheral === 'SPI') {
-          valExpr = `(float)HAL_SPI_Read(PIN_${ch.name.toUpperCase()}, "${ch.name}")`;
+          valExpr = `(float)HAL_SPI_Read(${pinMacro}, "${ch.name}")`;
         }
       }
-      return `    if (len < (int)(sizeof(buf) - 32U)) {\n        len += snprintf(buf + len, sizeof(buf) - (size_t)len, "${ch.name}=%.4f${idx === config.channels.length - 1 ? '' : ';'}", (double)(${valExpr}));\n    }`;
+      /* snprintf returns the would-be length; clamp the advance so a truncated
+       * segment can never push len past the buffer (MISRA 21.18 / bounds safety). */
+      return `    if ((len >= 0) && ((size_t)len < (sizeof(buf) - 32U))) {\n        int remaining = (int)(sizeof(buf) - (size_t)len);\n        int written = snprintf(buf + len, (size_t)remaining, "${ch.name}=%.4f${idx === config.channels.length - 1 ? '' : ';'}", (double)(${valExpr}));\n        if (written > 0) { len += (written < remaining) ? written : (remaining - 1); }\n    }`;
     })
     .join('\n');
 
@@ -308,7 +327,7 @@ void HIL_ProcessMessage(const char* msg) {
         if (sscanf(token, "%63[^=]=%f", name, &val) == 2) {
             ${inputChannels.length > 0 ? inputChannels
               .map(
-                ch => `if (strcmp(name, "${ch.name}") == 0) {\n                override_val_${ch.name} = val;\n                override_active_${ch.name} = true;\n            } else if (strcmp(name, "${ch.name}_release") == 0) {\n                override_active_${ch.name} = false;\n            }`
+                ch => `if (strcmp(name, "${ch.name}") == 0) {\n                override_val_${sanitize(ch.name)} = val;\n                override_active_${sanitize(ch.name)} = true;\n            } else if (strcmp(name, "${ch.name}_release") == 0) {\n                override_active_${sanitize(ch.name)} = false;\n            }`
               )
               .join(' else ') + '\n            else { /* MISRA 15.7 */ }' : '/* No input channels */'}
         }
@@ -322,10 +341,16 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance) {
 ${telemetryCompositions || '    len += snprintf(buf + len, sizeof(buf) - (size_t)len, "info=no_channels");'}
     
     if (SM_GetError(instance) != SM_ERR_NONE) {
-        len += snprintf(buf + len, sizeof(buf) - (size_t)len, ";ERROR=%d", (int)SM_GetError(instance));
+        if ((len >= 0) && ((size_t)len < (sizeof(buf) - 32U))) {
+            int remaining = (int)(sizeof(buf) - (size_t)len);
+            int written = snprintf(buf + len, (size_t)remaining, ";ERROR=%d", (int)SM_GetError(instance));
+            if (written > 0) { len += (written < remaining) ? written : (remaining - 1); }
+        }
     }
-    
-    (void)snprintf(buf + len, sizeof(buf) - (size_t)len, "\\n");
+
+    if ((len >= 0) && ((size_t)len < (sizeof(buf) - 2U))) {
+        (void)snprintf(buf + len, sizeof(buf) - (size_t)len, "\\n");
+    }
     HIL_SendString(buf);
 }
 `;
@@ -366,7 +391,6 @@ int main(void) {
         /* Sleep/Delay */
         ${mcu.tickDelay}
     }
-    return 0;
 }
 `;
 

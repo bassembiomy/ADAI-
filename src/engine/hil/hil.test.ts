@@ -115,14 +115,23 @@ describe('HIL Code Generator', () => {
   it('should integrate with stateMachineCodeGenerator generateMISRACCode', () => {
     const chart = {
       tickMs: 10,
-      states: [],
+      states: [
+        {
+          id: 's1', name: 'Monitor', x: 0, y: 0, width: 100, height: 100,
+          entry: '', during: '', exit: '',
+          isActive: false, color: 'blue', parentId: 'root', children: [],
+          priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
+        }
+      ],
       junctions: [],
       transitions: [],
       variables: [
         { id: 'v1', name: 'sensor_val', type: 'float', initialValue: '0.0', currentValue: 0, visibleInScope: true },
         { id: 'v2', name: 'is_active', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true }
       ],
-      layers: [],
+      layers: [
+        { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }
+      ],
       safetyMode: false,
       hilConfig: mockConfig
     };
@@ -130,12 +139,28 @@ describe('HIL Code Generator', () => {
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
     
-    // Default files (9) + HIL files (6) = 15 files
-    expect(result.files).toHaveLength(15);
+    // Default files (9) + HIL files (7) = 16 files
+    expect(result.files).toHaveLength(16);
 
     const testingReport = result.files.find(f => f.name === 'sm_testing_report.md')?.content;
     expect(testingReport).toContain('## 8. HIL Driver Mapping Report');
     expect(testingReport).toContain('Target Microcontroller:** STM32F4');
+  });
+
+  it('should fail generation for an empty chart instead of emitting broken C', () => {
+    const chart = {
+      tickMs: 10,
+      states: [],
+      junctions: [],
+      transitions: [],
+      variables: [],
+      layers: [],
+      safetyMode: false
+    };
+
+    const result = generateMISRACCode(chart as any);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.files).toHaveLength(0);
   });
 
   it('should handle binary frame checksum mismatch and reject it', () => {
@@ -204,7 +229,9 @@ describe('HIL Code Generator', () => {
 
     const interfaceC = files.find(f => f.name === 'hil_interface.c')?.content || '';
     expect(interfaceC).toContain('if (SM_GetError(instance) != SM_ERR_NONE)');
-    expect(interfaceC).toContain('snprintf(buf + len, sizeof(buf) - (size_t)len, ";ERROR=%d"');
+    expect(interfaceC).toContain('snprintf(buf + len, (size_t)remaining, ";ERROR=%d"');
+    /* Telemetry accumulation must clamp the would-be length from snprintf */
+    expect(interfaceC).toContain('len += (written < remaining) ? written : (remaining - 1);');
   });
 
   it('should comply with MISRA rules (no strtok, terminal else for strcmp)', () => {

@@ -5,7 +5,7 @@ import {
 import { analyzeStateMachine } from './smAnalysisEngine';
 import { generateHALCode } from '../engine/hil/hilCodeGenerator';
 
-const VERSION = 'v2.4 ENGINE';
+const VERSION = 'v3.0 ENGINE';
 
 export const getCTimeType = (type: VariableType): string => {
   switch (type) {
@@ -56,18 +56,27 @@ export const generateMISRACCode = (chart: {
   const layerIndexMap = new Map<string, number>();
   sortedLayers.forEach((l, idx) => layerIndexMap.set(l.id, idx));
 
+  /* Hierarchy model: states live in layers; a state's parent state is the
+   * parentStateId of the layer that contains it (Stateflow-style decomposition). */
+  const layerOfState = (stateId: string): Layer | undefined =>
+    sortedLayers.find(l => l.stateIds.includes(stateId));
+
+  const getParentStateId = (stateId: string): string | null => {
+    const layer = layerOfState(stateId);
+    if (layer && layer.parentStateId && layer.parentStateId !== 'root') {
+      return layer.parentStateId;
+    }
+    return null;
+  };
+
   const getAncestors = (stateId: string): string[] => {
     const ancestors: string[] = [];
-    let currentId = stateId;
-    while (currentId) {
-      const s = sortedStates.find(st => st.id === currentId);
-      if (!s) break;
-      if (s.parentId && s.parentId !== 'root') {
-        ancestors.push(s.parentId);
-        currentId = s.parentId;
-      } else {
-        break;
-      }
+    const visited = new Set<string>([stateId]);
+    let currentId = getParentStateId(stateId);
+    while (currentId && !visited.has(currentId)) {
+      ancestors.push(currentId);
+      visited.add(currentId);
+      currentId = getParentStateId(currentId);
     }
     return ancestors;
   };
@@ -90,8 +99,7 @@ export const generateMISRACCode = (chart: {
     let curr: string | null = srcId;
     while (curr && curr !== lca) {
       exitSeq.push(curr);
-      const s = sortedStates.find(st => st.id === curr);
-      curr = s?.parentId && s.parentId !== 'root' ? s.parentId : null;
+      curr = getParentStateId(curr);
     }
     return exitSeq;
   };
@@ -102,16 +110,100 @@ export const generateMISRACCode = (chart: {
     let curr: string | null = dstId;
     while (curr && curr !== lca) {
       entrySeq.unshift(curr);
-      const s = sortedStates.find(st => st.id === curr);
-      curr = s?.parentId && s.parentId !== 'root' ? s.parentId : null;
+      curr = getParentStateId(curr);
     }
     return entrySeq;
   };
 
   const indent = (lvl: number) => '    '.repeat(lvl);
 
+  /* Returns whether entering the given state should apply history restoration
+   * (any child layer of the state saves history). */
+  const stateHasHistoryJunction = (state: StateData): boolean => {
+    const childLayers = chart.layers.filter(l => l.parentStateId === state.id);
+    return childLayers.some(l => layerSavesHistory(l));
+  };
+
+  /* Returns the history type of a layer based on its junctions: 'deep', 'shallow', or 'none'. */
+  const getLayerHistoryType = (layer: Layer): 'deep' | 'shallow' | 'none' => {
+    const histJunctions = chart.junctions.filter(j => layer.junctionIds.includes(j.id) && (j.type === 'history' || j.type === 'deep-history'));
+    if (histJunctions.some(j => j.type === 'deep-history')) return 'deep';
+    if (histJunctions.some(j => j.type === 'history')) return 'shallow';
+    return 'none';
+  };
+
+  /* Ancestor layers of a layer, walking the parentStateId chain upward. */
+  const getAncestorLayers = (layer: Layer): Layer[] => {
+    const result: Layer[] = [];
+    const visited = new Set<string>([layer.id]);
+    let parentStateId = layer.parentStateId;
+    while (parentStateId && parentStateId !== 'root' && !visited.has(parentStateId)) {
+      visited.add(parentStateId);
+      const parentLayer = sortedLayers.find(l => l.stateIds.includes(parentStateId!));
+      if (!parentLayer) break;
+      result.push(parentLayer);
+      parentStateId = parentLayer.parentStateId;
+    }
+    return result;
+  };
+
+  /* A layer must remember its last active child when it has its own history
+   * junction, or when any ancestor layer has a deep-history junction
+   * (deep history restores the whole nested configuration). */
+  const layerSavesHistory = (layer: Layer): boolean => {
+    if (getLayerHistoryType(layer) !== 'none') return true;
+    return getAncestorLayers(layer).some(al => getLayerHistoryType(al) === 'deep');
+  };
+
+  /* True when restoring this layer's remembered child should propagate history
+   * restoration further down (deep chain), false for shallow restore. */
+  const layerRestoresDeep = (layer: Layer): boolean => {
+    if (getLayerHistoryType(layer) === 'deep') return true;
+    if (getLayerHistoryType(layer) === 'shallow') return false;
+    return getAncestorLayers(layer).some(al => getLayerHistoryType(al) === 'deep');
+  };
+
   // Helper to sanitize names
   const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9_]/g, '_');
+
+  // Helper to make text safe for embedding inside C block comments
+  const sanitizeComment = (t: string): string =>
+    t.replace(/\*\//g, '* /').replace(/\/\*/g, '/ *').replace(/[\r\n]+/g, ' ');
+
+  /* Reserved C keywords (C99) + generator-internal identifiers that must not be
+   * used as user variable names (MISRA 21.2 / 5.1 collision avoidance). */
+  const C_RESERVED_IDENTIFIERS = new Set([
+    'auto', 'break', 'case', 'char', 'const', 'continue', 'default', 'do',
+    'double', 'else', 'enum', 'extern', 'float', 'for', 'goto', 'if',
+    'inline', 'int', 'long', 'register', 'restrict', 'return', 'short',
+    'signed', 'sizeof', 'static', 'struct', 'switch', 'typedef', 'union',
+    'unsigned', 'void', 'volatile', 'while', '_Bool', '_Complex', '_Imaginary',
+    'bool', 'true', 'false', 'state_timer', 'delta_ms',
+    'sm_iter', 'use_history'
+  ]);
+
+  const isValidCIdentifier = (name: string): boolean => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name);
+
+  /* Validates a user-supplied initial value against its declared variable type.
+   * Returns a normalized C literal string, or null when invalid. */
+  const validateInitialValue = (v: VariableDef): string | null => {
+    const raw = (v.initialValue ?? '').trim();
+    if (v.type === 'bool') {
+      if (raw === '' || raw === '0' || raw === 'false') return 'false';
+      if (raw === '1' || raw === 'true') return 'true';
+      return null;
+    }
+    const isUnsigned = ['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type);
+    const isFloat = ['float', 'single', 'double'].includes(v.type);
+    if (isFloat) {
+      if (!/^-?(\d+(\.\d+)?|\.\d+)([eE][+-]?\d+)?$/.test(raw)) return null;
+      return raw;
+    }
+    /* Integer types: decimal or hex literal */
+    const intPattern = isUnsigned ? /^(\d+|0[xX][0-9a-fA-F]+)$/ : /^-?(\d+|0[xX][0-9a-fA-F]+)$/;
+    if (!intPattern.test(raw)) return null;
+    return raw;
+  };
 
   // 1. Identify Regions
   const regions = new Set<string>();
@@ -196,15 +288,39 @@ export const generateMISRACCode = (chart: {
     let result = expr;
     if (type) {
       if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(type)) {
-        result = result.replace(/(?<!\.)\b\d+\b(?![.fFuU_xX])/g, '$&U');
+        result = result.replace(/(?<!\.)\b\d+\b(?![.fFuUxXeE])/g, '$&U');
       } else if (['float', 'single'].includes(type)) {
-        result = result.replace(/(?<!\.)\b\d+\.\d+\b(?![fF])/g, '$&f');
-        result = result.replace(/(?<!\.)\b\d+\b(?![.fFuU_xX])/g, '$&.0f');
+        /* Scientific notation first: 1e3 -> 1e3f (valid C float literal) */
+        result = result.replace(/\b\d+(?:\.\d+)?[eE][+-]?\d+\b(?![fF])/g, '$&f');
+        result = result.replace(/(?<!\.)\b\d+\.\d+\b(?![fFeE])/g, '$&f');
+        result = result.replace(/(?<!\.)\b\d+\b(?![.fFuUxXeE])/g, '$&.0f');
       } else if (type === 'double') {
-        result = result.replace(/(?<!\.)\b\d+\b(?![.fFuU_xX])/g, '$&.0');
+        result = result.replace(/(?<!\.)\b\d+\b(?![.fFuUxXeE])/g, '$&.0');
       }
     }
     return result;
+  };
+
+  /* Split an expression on top-level && / || operators only (parenthesis-depth aware),
+   * so grouped expressions like (a && b) == c keep their semantics. */
+  const splitLogicalExpr = (expr: string): string[] => {
+    const parts: string[] = [];
+    let depth = 0;
+    let current = '';
+    for (let i = 0; i < expr.length; i++) {
+      const ch = expr[i];
+      if (ch === '(') depth++;
+      else if (ch === ')') depth = Math.max(0, depth - 1);
+      if (depth === 0 && (expr.startsWith('&&', i) || expr.startsWith('||', i))) {
+        parts.push(current, expr.substring(i, i + 2));
+        current = '';
+        i++;
+      } else {
+        current += ch;
+      }
+    }
+    parts.push(current);
+    return parts;
   };
 
   const processConditionString = (cond: string): string => {
@@ -216,7 +332,7 @@ export const generateMISRACCode = (chart: {
       processed = processed.replace(regex, `instance->data.${v.name}`);
     });
 
-    const parts = processed.split(/(&&|\|\|)/);
+    const parts = splitLogicalExpr(processed);
     const processedParts = parts.map(part => {
       const trimmed = part.trim();
       if (trimmed === '&&' || trimmed === '||') return ` ${trimmed} `;
@@ -286,23 +402,40 @@ export const generateMISRACCode = (chart: {
       processedLine = processedLine.replace(regex, `instance->data.${v.name}`);
     });
 
-    const singleLineElseIfRegex = /^else\s+if\s*\((.*?)\)\s*([^{]+;)$/;
-    const elseIfMatch = processedLine.match(singleLineElseIfRegex);
-    if (elseIfMatch) {
-      const cond = elseIfMatch[1];
-      const stmt = elseIfMatch[2];
-      const processedCond = processConditionString(cond);
-      const processedStmt = processActionLine(stmt).trim();
+    /* Balanced-paren extraction: parses "if (cond) stmt;" / "else if (cond) stmt;"
+     * without breaking on nested parentheses in the condition. */
+    const matchKeywordParenStmt = (line: string, keyword: string): { cond: string; stmt: string } | null => {
+      if (!line.startsWith(keyword)) return null;
+      let pos = keyword.length;
+      while (pos < line.length && /\s/.test(line[pos])) pos++;
+      if (line[pos] !== '(') return null;
+      let depth = 0;
+      const condStart = pos;
+      for (; pos < line.length; pos++) {
+        if (line[pos] === '(') depth++;
+        else if (line[pos] === ')') {
+          depth--;
+          if (depth === 0) break;
+        }
+      }
+      if (depth !== 0) return null;
+      const cond = line.substring(condStart + 1, pos);
+      const stmt = line.substring(pos + 1).trim();
+      if (stmt.startsWith('{') || !stmt.endsWith(';')) return null;
+      return { cond, stmt };
+    };
+
+    const elseIfParsed = matchKeywordParenStmt(processedLine, 'else if');
+    if (elseIfParsed) {
+      const processedCond = processConditionString(elseIfParsed.cond);
+      const processedStmt = processActionLine(elseIfParsed.stmt).trim();
       return `${indentStr}else if (${processedCond}) {\n${indentStr}    ${processedStmt}\n${indentStr}}`;
     }
 
-    const singleLineIfRegex = /^if\s*\((.*?)\)\s*([^{]+;)$/;
-    const ifMatch = processedLine.match(singleLineIfRegex);
-    if (ifMatch) {
-      const cond = ifMatch[1];
-      const stmt = ifMatch[2];
-      const processedCond = processConditionString(cond);
-      const processedStmt = processActionLine(stmt).trim();
+    const ifParsed = matchKeywordParenStmt(processedLine, 'if');
+    if (ifParsed) {
+      const processedCond = processConditionString(ifParsed.cond);
+      const processedStmt = processActionLine(ifParsed.stmt).trim();
       return `${indentStr}if (${processedCond}) {\n${indentStr}    ${processedStmt}\n${indentStr}}`;
     }
 
@@ -411,6 +544,71 @@ export const generateMISRACCode = (chart: {
     });
   });
 
+  /* ---- Structural validation (fail generation instead of emitting broken C) ---- */
+
+  if (chart.states.length === 0) {
+    errors.push({ id: uuidv4(), type: 'error', message: 'Chart has no states. Add at least one state before generating code.', timestamp: new Date(), source: 'Structure Validator' });
+  }
+  if (chart.layers.length === 0) {
+    errors.push({ id: uuidv4(), type: 'error', message: 'Chart has no layers. The model structure is invalid.', timestamp: new Date(), source: 'Structure Validator' });
+  }
+  const hasRootLayer = sortedLayers.some(l => l.id === 'root' || !l.parentStateId || l.parentStateId === 'root');
+  if (chart.layers.length > 0 && !hasRootLayer) {
+    errors.push({ id: uuidv4(), type: 'error', message: 'No root layer found (a layer with no parent state). The model structure is invalid.', timestamp: new Date(), source: 'Structure Validator' });
+  }
+
+  /* Variable identifier validation (MISRA 21.2 / ISO C 6.4.2) */
+  const seenVarNames = new Set<string>();
+  sortedVariables.forEach(v => {
+    if (!isValidCIdentifier(v.name)) {
+      errors.push({ id: uuidv4(), type: 'error', message: `Variable name '${v.name}' is not a valid C identifier.`, timestamp: new Date(), source: 'Identifier Validator', elementId: v.id });
+    } else if (C_RESERVED_IDENTIFIERS.has(v.name)) {
+      errors.push({ id: uuidv4(), type: 'error', message: `Variable name '${v.name}' is a reserved C keyword or generator-internal identifier. Rename it.`, timestamp: new Date(), source: 'Identifier Validator', elementId: v.id });
+    } else if (seenVarNames.has(v.name)) {
+      errors.push({ id: uuidv4(), type: 'error', message: `Duplicate variable name '${v.name}'. Variable names must be unique.`, timestamp: new Date(), source: 'Identifier Validator', elementId: v.id });
+    }
+    seenVarNames.add(v.name);
+
+    if (isValidCIdentifier(v.name) && !C_RESERVED_IDENTIFIERS.has(v.name)) {
+      const normalized = validateInitialValue(v);
+      if (normalized === null) {
+        errors.push({ id: uuidv4(), type: 'error', message: `Invalid initial value '${v.initialValue}' for ${v.type} variable '${v.name}'.`, timestamp: new Date(), source: 'Initial Value Validator', elementId: v.id });
+      }
+    }
+  });
+
+  /* Transition endpoint validation: every source/target must resolve to a state or junction */
+  chart.transitions.forEach(tr => {
+    const srcOk = sortedStates.some(s => s.id === tr.sourceId) || chart.junctions.some(j => j.id === tr.sourceId);
+    const dstOk = sortedStates.some(s => s.id === tr.targetId) || chart.junctions.some(j => j.id === tr.targetId);
+    if (!srcOk || !dstOk) {
+      errors.push({
+        id: uuidv4(), type: 'error',
+        message: `Transition '${tr.id}' has a dangling ${!srcOk ? 'source' : 'target'} endpoint. Reconnect or delete it.`,
+        timestamp: new Date(), source: 'Structure Validator', elementId: tr.id
+      });
+    }
+  });
+
+  /* X-Bridges block support validation */
+  const XB_SUPPORTED_TYPES = new Set([
+    'Constant', 'GAIN', 'VectorAdd', 'VectorSub', 'VectorMul',
+    'Integrator', 'INTEGRATOR_CONTINUOUS', 'DELAY',
+    'DATA_TYPE_CONVERSION', 'NUMERIC_REPRESENTATION'
+  ]);
+  chart.states.forEach(s => {
+    if (s.isXBridges && s.xBridgesModel) {
+      s.xBridgesModel.nodes.forEach(n => {
+        const bType = (n.data as any).type;
+        if (bType === 'MPC_CONTROLLER') {
+          errors.push({ id: uuidv4(), type: 'error', message: `MPC_CONTROLLER block in state '${s.name}' is not supported by the C code generator. Remove it or replace it with supported blocks.`, timestamp: new Date(), source: 'X-Bridges Validator', elementId: s.id });
+        } else if (!XB_SUPPORTED_TYPES.has(bType)) {
+          errors.push({ id: uuidv4(), type: 'error', message: `X-Bridges block type '${bType}' in state '${s.name}' is not supported by the C code generator.`, timestamp: new Date(), source: 'X-Bridges Validator', elementId: s.id });
+        }
+      });
+    }
+  });
+
   if (chart.safetyMode) {
     if (!chart.states.some(s => s.isSafeState)) {
       errors.push({ id: uuidv4(), type: 'error', message: 'Safety Mode Enabled: No Safe State defined. Mark a state as "Safe State".', timestamp: new Date(), source: 'Safety Validator' });
@@ -422,53 +620,36 @@ export const generateMISRACCode = (chart: {
   }
 
   // 3. Generate Files
-  const disclaimer = `/* ============================================================= */\n/* File generated by ADIA Code Generator ${VERSION}              */\n/* Model: ADIA State Machine | ${new Date().toISOString().replace('T', ' ').replace(/\..*/, '')} UTC */\n/* DO NOT EDIT MANUALLY - Changes will be overwritten            */\n/* Compliance: MISRA C:2012 / IEC 60730 Class B / ISO 13849      */\n/* ============================================================= */\n\n`;
+  const disclaimer = `/* ============================================================= */\n/* File generated by ADIA Code Generator ${VERSION}              */\n/* Model: ADIA State Machine | ${new Date().toISOString().replace('T', ' ').replace(/\..*/, '')} UTC */\n/* DO NOT EDIT MANUALLY - Changes will be overwritten            */\n/* Coding guidelines: MISRA C:2012 (advisory) / ISO C99          */\n/* ============================================================= */\n\n`;
 
-  /* Post-processing: validate and normalize generated C code */
+  /* Post-processing: normalize generated C code (no content rewriting). */
   const validateGeneratedCode = (code: string): string => {
     let result = code;
-    /* Fix 5 (MISRA 10.1/10.3): Replace (bool)(1) and (bool)(0) with true/false */
+    /* MISRA 10.1/10.3: Replace (bool)(1) and (bool)(0) with true/false */
     result = result.replace(/\(bool\)\(1\)/g, 'true');
     result = result.replace(/\(bool\)\(0\)/g, 'false');
-    /* Defensive: ensure no stray 4294967295 magic number survives */
+    /* Ensure no stray magic numbers survive */
     result = result.replace(/\b4294967295U?\b/g, 'UINT32_MAX');
-    /* Defensive: ensure no stray float-max magic survives */
     result = result.replace(/3\.40282347e\+38f/g, 'FLT_MAX');
-    /* Clean up extraneous dangling characters from generator output or raw parser artifacts */
-    result = result.replace(/\\lX/g, '');
-    result = result.replace(/\\\?#0/g, '');
-    result = result.replace(/\\X>0\+\*/g, '');
-    result = result.replace(/\\uhEf'/g, '');
-
-    // Robust, simple scanner to ensure comment blocks are balanced.
-    // This replaces the complex loop that could get desynchronized.
-    const parts = result.split(/(\/\*|\*\/)/g);
-    let inComment = false;
-    for (let i = 0; i < parts.length; i++) {
-      if (parts[i] === '/*') {
-        if (inComment) {
-          // Close the previous comment before starting this one
-          parts[i - 1] += ' */';
-        }
-        inComment = true;
-      } else if (parts[i] === '*/') {
-        inComment = false;
-      }
-    }
-    if (inComment) {
-      // Close the final unclosed comment block at the end of the file
-      parts[parts.length - 1] += ' */';
-    }
-    result = parts.join('');
     return result;
   };
 
+  /* X-Bridges stateful block members: prefixed with the owning state's sanitized
+   * name so identical block ids in different states cannot collide (MISRA 5.1). */
+  const xbStateMember = (s: StateData, nodeId: string): string =>
+    `${sanitize(s.name).toLowerCase()}_${sanitize(nodeId)}_state`;
+
   const blockStates: string[] = [];
+  const seenBlockMembers = new Set<string>();
   chart.states.forEach(s => {
     if (s.isXBridges && s.xBridgesModel) {
       s.xBridgesModel.nodes.forEach(n => {
         if (['Integrator', 'INTEGRATOR_CONTINUOUS', 'DELAY'].includes((n.data as any).type)) {
-          blockStates.push(`    float ${sanitize(n.id)}_state;`);
+          const member = xbStateMember(s, n.id);
+          if (!seenBlockMembers.has(member)) {
+            seenBlockMembers.add(member);
+            blockStates.push(`    float ${member};`);
+          }
         }
       });
     }
@@ -502,7 +683,9 @@ export const generateMISRACCode = (chart: {
     });
   });
 
-  const smConfigH = `${disclaimer}#ifndef SM_CONFIG_H\n#define SM_CONFIG_H\n\n#include <stdint.h>\n#include <stdbool.h>\n\n/* Constant Limits */\n#define SM_NUM_LAYERS ${sortedLayers.length}U\n#define SM_NUM_STATES ${sortedStates.length}U\n#define SM_NUM_PARALLEL_REGIONS ${regions.size}U\n#define SM_GENERATOR_VERSION "3.0"\n\n/* Transition Timer Limits (Named constants to prevent magic numbers) */\n${timerConstants.length > 0 ? timerConstants.map(tc => `#define ${tc.macro} (${tc.value})`).join('\n') : '/* No timer transitions */'}\n\n/* Regions */\ntypedef enum {\n${regionEnumStr}\n    SM_GRP_COUNT\n} SM_Group_t;\n\n/* States */\ntypedef enum {\n    SM_NODE_INVALID = 0U,\n${sortedStates.map(s => `    ${stateEnum(s)},`).join('\n')}\n    SM_NODE_ERROR,\n    SM_NODE_SAFE\n} SM_Node_t;\n\n/* Error Codes */\ntypedef enum {\n    SM_ERR_NONE = 0U,\n    SM_ERR_WATCHDOG,\n    SM_ERR_SAFETY_VIOLATION,\n    SM_ERR_INVALID_STATE,\n    SM_ERR_ROM_INTEGRITY,\n    SM_ERR_RAM_INTEGRITY\n} SM_Error_t;\n\n/* State Indices */\n${sortedStates.map((s, idx) => `#define SM_ST_${sanitize(s.name).toUpperCase()}_IDX ${idx}U`).join('\n')}\n\n/* Layer Indices */\n${sortedLayers.map((l, idx) => `#define SM_LYR_${sanitize(l.id).toUpperCase()}_IDX ${idx}U`).join('\n')}\n\n/* Data Structure */\ntypedef struct {\n${sortedVariables.length > 0 ? sortedVariables.map(v => `    ${getCTimeType(v.type)} ${v.name};`).join('\n') : ''}\n${blockStates.length > 0 ? blockStates.join('\n') + '\n' : ''}    ${timeType} state_timer;\n} SM_Data_t;\n\n/* Instance Context Structure */\ntypedef struct {\n    SM_Node_t active_states[SM_NUM_LAYERS];\n    SM_Node_t history_states[SM_NUM_LAYERS];\n    ${timeType} state_timers[SM_NUM_STATES];\n    bool state_active[SM_NUM_STATES];\n    SM_Data_t data;\n    SM_Error_t error_status;\n} ADIA_Instance_t;\n\n#define SM_TICK_MS (${chart.tickMs}${timeSuffix})\n\n#endif /* SM_CONFIG_H */`;
+  const smConfigH = `${disclaimer}#ifndef SM_CONFIG_H\n#define SM_CONFIG_H\n\n#include <stdint.h>\n#include <stdbool.h>\n\n/* Constant Limits */
+#define SM_NUM_LAYERS ${sortedLayers.length > 0 ? sortedLayers.length : 1}U
+#define SM_NUM_STATES ${sortedStates.length > 0 ? sortedStates.length : 1}U\n#define SM_NUM_PARALLEL_REGIONS ${regions.size}U\n#define SM_GENERATOR_VERSION "${VERSION}"\n${chart.safetyMode ? '\n/* Safety Mode */\n#define SM_SAFETY_MODE_ENABLED\n' : ''}\n/* Transition Timer Limits (Named constants to prevent magic numbers) */\n${timerConstants.length > 0 ? timerConstants.map(tc => `#define ${tc.macro} (${tc.value})`).join('\n') : '/* No timer transitions */'}\n\n/* Regions */\ntypedef enum {\n${regionEnumStr}\n    SM_GRP_COUNT\n} SM_Group_t;\n\n/* States */\ntypedef enum {\n    SM_NODE_INVALID = 0U,\n${sortedStates.map(s => `    ${stateEnum(s)},`).join('\n')}\n    SM_NODE_ERROR,\n    SM_NODE_SAFE\n} SM_Node_t;\n\n/* Error Codes */\ntypedef enum {\n    SM_ERR_NONE = 0U,\n    SM_ERR_WATCHDOG,\n    SM_ERR_SAFETY_VIOLATION,\n    SM_ERR_INVALID_STATE,\n    SM_ERR_ROM_INTEGRITY,\n    SM_ERR_RAM_INTEGRITY\n} SM_Error_t;\n\n/* State Indices (derived from unique enum names) */\n${sortedStates.map((s, idx) => `#define ${stateEnum(s)}_IDX ${idx}U`).join('\n')}\n\n/* Layer Indices */\n${sortedLayers.map((l, idx) => `#define SM_LYR_${sanitize(l.id).toUpperCase()}_IDX ${idx}U`).join('\n')}\n\n/* Data Structure */\ntypedef struct {\n${sortedVariables.length > 0 ? sortedVariables.map(v => `    ${getCTimeType(v.type)} ${v.name};`).join('\n') : ''}\n${blockStates.length > 0 ? blockStates.join('\n') + '\n' : ''}    ${timeType} state_timer;\n} SM_Data_t;\n\n/* Instance Context Structure */\ntypedef struct {\n    SM_Node_t active_states[SM_NUM_LAYERS];\n    SM_Node_t history_states[SM_NUM_LAYERS];\n    ${timeType} state_timers[SM_NUM_STATES];\n    bool state_active[SM_NUM_STATES];\n    SM_Data_t data;\n    SM_Error_t error_status;\n} ADIA_Instance_t;\n\n#define SM_TICK_MS (${chart.tickMs}${timeSuffix})\n\n#endif /* SM_CONFIG_H */`;
 
   const smCoreH = `${disclaimer}#ifndef SM_CORE_H\n#define SM_CORE_H\n\n/* System headers */\n#include <stdint.h>\n#include <stdbool.h>\n\n/* Project headers */\n#include "sm_config.h"\n\n/* Public API */\nvoid SM_Init(ADIA_Instance_t* instance);\nvoid SM_Reset(ADIA_Instance_t* instance);\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms);\nvoid SM_Sync_IO(ADIA_Instance_t* instance);\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g);\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance);\n\n/* Legacy API - returns const pointer to data struct (deprecated, use SM_Init/SM_Step) */\nstatic inline const SM_Data_t* SM_Data_Legacy(const ADIA_Instance_t* instance) {\n    return &instance->data;\n}\n\n#endif /* SM_CORE_H */`;
 
@@ -510,7 +693,7 @@ export const generateMISRACCode = (chart: {
 
   /* Fix 7 (MISRA 8.7): All variable declarations hoisted to top of each function.
    * Fix 18.1: Loop in reverse March test rewritten using bounded subtraction to satisfy static analyzers. */
-  const smSafetyC = `${disclaimer}/* System headers */\n#include <stdint.h>\n#include <stdbool.h>\n\n/* Project headers */\n#include "sm_safety.h"\n#include "mcal_dio.h"\n\n#define RAM_TEST_SIZE 16U\nstatic volatile uint32_t ram_test_buf[RAM_TEST_SIZE];\n\n/**\n * @brief Performs a Class B March RAM test on a test buffer.\n * @return bool True if RAM test succeeded, false otherwise\n */\nstatic bool SM_March_RAM_Test(void) {\n    uint32_t i;       /* MISRA 8.7: declared at top of function */\n    bool success = true;\n    for (i = 0U; i < RAM_TEST_SIZE; i++) {\n        ram_test_buf[i] = 0U;\n    }\n    for (i = 0U; i < RAM_TEST_SIZE; i++) {\n        if (ram_test_buf[i] != 0U) {\n            success = false;\n        }\n        ram_test_buf[i] = 1U;\n    }\n    /* Reverse March test: count down explicitly using bounded positive subtraction to satisfy MISRA 18.1 array boundary safety */\n    for (i = 0U; i < RAM_TEST_SIZE; i++) {\n        uint32_t rev_idx = (RAM_TEST_SIZE - 1U) - i;\n        if (ram_test_buf[rev_idx] != 1U) {\n            success = false;\n        }\n        ram_test_buf[rev_idx] = 0U;\n    }\n    return success;\n}\n\n/**\n * @brief Executes safety checks (RAM March test, ROM CRC verification).\n * @param instance Pointer to state machine context\n */\nvoid SM_Safety_Check(ADIA_Instance_t* instance) {\n    /* MISRA 8.7: All variables declared at top of function */\n    uint32_t calculated_crc;\n    uint32_t expected_crc;\n\n    /* Perform RAM integrity check (Class B March test or pattern check) */\n    if (!SM_March_RAM_Test()) {\n        instance->error_status = SM_ERR_RAM_INTEGRITY;\n        return;\n    }\n\n    /* Perform ROM CRC verification (Class B flash check) */\n    calculated_crc = 0x12345678U;\n    expected_crc   = 0x12345678U;\n    if (calculated_crc != expected_crc) {\n        instance->error_status = SM_ERR_ROM_INTEGRITY;\n        return;\n    }\n}\n\n/**\n * @brief Feeds/kicks the hardware watchdog timer.\n * @param instance Pointer to state machine context\n */\nvoid SM_Watchdog_Kick(ADIA_Instance_t* instance) {\n    /* REQ-IEC-B-010: Hardware Watchdog Support */\n    (void)instance;\n    /* Kick/feed physical watchdog via MCAL layer */\n    MCAL_Watchdog_Kick();\n}\n\n/**\n * @brief Validates the active states array consistency.\n * @param instance Pointer to state machine context\n * @return SM_Error_t Validation result error status\n */\nSM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t* instance) {\n    uint32_t sm_iter;   /* MISRA 8.7: declared at top of function */\n    SM_Node_t st;\n    SM_Error_t err = SM_ERR_NONE;\n    for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n        st = instance->active_states[sm_iter];\n        if ((uint32_t)st > (uint32_t)SM_NODE_SAFE) {\n            err = SM_ERR_INVALID_STATE;\n            break;\n        }\n    }\n    return err;\n}`;
+  const smSafetyC = `${disclaimer}/* System headers */\n#include <stdint.h>\n#include <stdbool.h>\n\n/* Project headers */\n#include "sm_safety.h"\n#include "mcal_dio.h"\n\n#define RAM_TEST_SIZE 16U\nstatic volatile uint32_t ram_test_buf[RAM_TEST_SIZE];\n\n/**\n * @brief Performs a Class B March RAM test on a test buffer.\n * @return bool True if RAM test succeeded, false otherwise\n */\nstatic bool SM_March_RAM_Test(void) {\n    uint32_t i;       /* MISRA 8.7: declared at top of function */\n    bool success = true;\n    for (i = 0U; i < RAM_TEST_SIZE; i++) {\n        ram_test_buf[i] = 0U;\n    }\n    for (i = 0U; i < RAM_TEST_SIZE; i++) {\n        if (ram_test_buf[i] != 0U) {\n            success = false;\n        }\n        ram_test_buf[i] = 1U;\n    }\n    /* Reverse March test: count down explicitly using bounded positive subtraction to satisfy MISRA 18.1 array boundary safety */\n    for (i = 0U; i < RAM_TEST_SIZE; i++) {\n        uint32_t rev_idx = (RAM_TEST_SIZE - 1U) - i;\n        if (ram_test_buf[rev_idx] != 1U) {\n            success = false;\n        }\n        ram_test_buf[rev_idx] = 0U;\n    }\n    return success;\n}\n\n/**\n * @brief Executes safety checks (RAM March test; ROM CRC hook documented inline).\n * @param instance Pointer to state machine context\n */\nvoid SM_Safety_Check(ADIA_Instance_t* instance) {\n    /* Perform RAM integrity check (Class B March test) */\n    if (!SM_March_RAM_Test()) {\n        instance->error_status = SM_ERR_RAM_INTEGRITY;\n        return;\n    }\n\n    /* ROM integrity verification is target-specific and intentionally not\n     * fabricated here. To enable it, integrate a CRC32 routine and a\n     * linker-placed reference CRC for your target (IEC 60730 Class B),\n     * then set instance->error_status = SM_ERR_ROM_INTEGRITY on mismatch. */\n}\n\n/**\n * @brief Feeds/kicks the hardware watchdog timer.\n * @param instance Pointer to state machine context\n */\nvoid SM_Watchdog_Kick(ADIA_Instance_t* instance) {\n    /* REQ-IEC-B-010: Hardware Watchdog Support */\n    (void)instance;\n    /* Kick/feed physical watchdog via MCAL layer */\n    MCAL_Watchdog_Kick();\n}\n\n/**\n * @brief Validates the active states array consistency.\n * @param instance Pointer to state machine context\n * @return SM_Error_t Validation result error status\n */\nSM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t* instance) {\n    uint32_t sm_iter;   /* MISRA 8.7: declared at top of function */\n    SM_Node_t st;\n    SM_Error_t err = SM_ERR_NONE;\n    for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n        st = instance->active_states[sm_iter];\n        if ((uint32_t)st > (uint32_t)SM_NODE_SAFE) {\n            err = SM_ERR_INVALID_STATE;\n            break;\n        }\n    }\n    return err;\n}`;
 
   const smUserLogicH = `${disclaimer}#ifndef SM_USER_LOGIC_H\n#define SM_USER_LOGIC_H\n\n#include "sm_config.h"\n\n/* State Action Prototypes */\n${sortedStates.map(s => {
     const sEnum = stateEnum(s);
@@ -524,18 +707,18 @@ export const generateMISRACCode = (chart: {
   const smUserLogicC = `${disclaimer}#include "sm_user_logic.h"\n#include "sm_core.h"\n\n${sortedStates.map(s => {
     const sEnum = stateEnum(s);
     let funcs = '';
-    funcs += `void ${sEnum}_Entry(ADIA_Instance_t* instance) {\n    (void)instance;\n    /* Entry: ${s.name} */\n    ${processUserCode(s.entry ? s.entry.replace(/\n/g, '\n    ') : '')}\n}\n\n`;
+    funcs += `void ${sEnum}_Entry(ADIA_Instance_t* instance) {\n    (void)instance;\n    /* Entry: ${sanitizeComment(s.name)} */\n    ${processUserCode(s.entry ? s.entry.replace(/\n/g, '\n    ') : '')}\n}\n\n`;
 
     let duringCode = s.during ? s.during.replace(/\n/g, '\n    ') : '';
     if (s.isXBridges) {
       duringCode += `${duringCode ? '\n    ' : ''}/* Co-Model Step */\n    ${sEnum}_XBridges_Step(instance, ${(chart.tickMs / 1000).toFixed(4)}f);`;
     }
-    funcs += `void ${sEnum}_During(ADIA_Instance_t* instance, ${timeType} delta_ms) {\n    (void)instance;\n    (void)delta_ms;\n    /* During: ${s.name} */\n    ${processUserCode(duringCode)}\n}\n\n`;
+    funcs += `void ${sEnum}_During(ADIA_Instance_t* instance, ${timeType} delta_ms) {\n    (void)instance;\n    (void)delta_ms;\n    /* During: ${sanitizeComment(s.name)} */\n    ${processUserCode(duringCode)}\n}\n\n`;
 
-    funcs += `void ${sEnum}_Exit(ADIA_Instance_t* instance) {\n    (void)instance;\n    /* Exit: ${s.name} */\n    ${processUserCode(s.exit ? s.exit.replace(/\n/g, '\n    ') : '')}\n}\n`;
+    funcs += `void ${sEnum}_Exit(ADIA_Instance_t* instance) {\n    (void)instance;\n    /* Exit: ${sanitizeComment(s.name)} */\n    ${processUserCode(s.exit ? s.exit.replace(/\n/g, '\n    ') : '')}\n}\n`;
 
     if (s.isXBridges && s.xBridgesModel) {
-      funcs += `\n/* Generated X-Bridges logic for ${s.name} */\n`;
+      funcs += `\n/* Generated X-Bridges logic for ${sanitizeComment(s.name)} */\n`;
       funcs += `void ${sEnum}_XBridges_Step(ADIA_Instance_t* instance, float delta_s) {\n`;
       funcs += `    (void)instance;\n`;
       funcs += `    (void)delta_s;\n`;
@@ -590,7 +773,7 @@ export const generateMISRACCode = (chart: {
         const v = sortedVariables.find((vr: VariableDef) => vr.id === map.smVarId);
         if (v) {
           const portIdx = map.portId.replace(/[^0-9]/g, '') || '0';
-          funcs += `    ${sanitize(map.blockId)}_out${portIdx} = instance->data.${v.name};\n`;
+          funcs += `    ${sanitize(map.blockId)}_out${portIdx} = (float)(instance->data.${v.name});\n`;
         }
       });
 
@@ -606,7 +789,7 @@ export const generateMISRACCode = (chart: {
           return `${Number(inPort.value || 0).toFixed(4)}f`;
         });
 
-        funcs += `    /* Block: ${b.label || b.type} (${id}) */\n`;
+        funcs += `    /* Block: ${sanitizeComment(String(b.label || b.type))} (${id}) */\n`;
         switch (b.type) {
           case 'Constant': funcs += `    ${id}_out0 = ${Number(p.value || 0).toFixed(4)}f;\n`; break;
           case 'GAIN': funcs += `    ${id}_out0 = ${ins[0] || '0.0f'} * ${Number(p.gain || 1).toFixed(4)}f;\n`; break;
@@ -615,12 +798,16 @@ export const generateMISRACCode = (chart: {
           case 'VectorMul': funcs += `    ${id}_out0 = ${ins[0] || '0.0f'} * ${ins[1] || '0.0f'};\n`; break;
           case 'Integrator':
           case 'INTEGRATOR_CONTINUOUS':
-            funcs += `    instance->data.${id}_state += ${ins[0] || '0.0f'} * delta_s;\n`;
-            funcs += `    ${id}_out0 = instance->data.${id}_state;\n`;
+            funcs += `    instance->data.${xbStateMember(s, n.id)} += ${ins[0] || '0.0f'} * delta_s;\n`;
+            funcs += `    ${id}_out0 = instance->data.${xbStateMember(s, n.id)};\n`;
             break;
           case 'DATA_TYPE_CONVERSION':
           case 'NUMERIC_REPRESENTATION':
             funcs += `    ${id}_out0 = (float)${ins[0] || '0.0f'};\n`;
+            break;
+          case 'DELAY':
+            funcs += `    ${id}_out0 = instance->data.${xbStateMember(s, n.id)};\n`;
+            funcs += `    instance->data.${xbStateMember(s, n.id)} = ${ins[0] || '0.0f'};\n`;
             break;
           case 'MPC_CONTROLLER':
             funcs += `    /* MPC Step: Implementation should call a fixed-memory solver */\n`;
@@ -637,7 +824,7 @@ export const generateMISRACCode = (chart: {
         const v = sortedVariables.find((vr: VariableDef) => vr.id === map.smVarId);
         if (v) {
           const portIdx = map.portId.replace(/[^0-9]/g, '') || '0';
-          funcs += `    instance->data.${v.name} = ${sanitize(map.blockId)}_out${portIdx};\n`;
+          funcs += `    instance->data.${v.name} = (${getCTimeType(v.type)})(${sanitize(map.blockId)}_out${portIdx});\n`;
         }
       });
       funcs += `}\n`;
@@ -694,44 +881,99 @@ export const generateMISRACCode = (chart: {
     smExitStateFunc += `            instance->state_active[${stateIdx}U] = false;\n`;
     smExitStateFunc += `            instance->state_timers[${stateIdx}U] = ${zeroLiteral};\n`;
 
-    const hasHistoryJunction = parentLayer && chart.junctions.some(j => parentLayer.junctionIds.includes(j.id) && (j.type === 'history' || j.type === 'deep-history'));
-    if (hasHistoryJunction) {
+    /* Save history for this state's layer when the layer (or a deep-history
+     * ancestor) requires it, so the remembered child can be restored later. */
+    const savesHistory = parentLayer && layerSavesHistory(parentLayer);
+    if (savesHistory) {
       smExitStateFunc += `            instance->history_states[${parentLayerIdx}U] = state;\n`;
     }
 
     if (parentLayer) {
-      smExitStateFunc += `            instance->active_states[${parentLayerIdx}U] = SM_NODE_INVALID;\n`;
+      /* Parallel regions share the layer's active_states slot; do not clear it
+       * while sibling region states are still active. */
+      const plStates = parentLayer.stateIds.map(sid => sortedStates.find(st => st.id === sid)).filter(Boolean) as StateData[];
+      const plAllParallel = plStates.length > 0 && plStates.every(st => st.isParallel);
+      if (!plAllParallel) {
+        smExitStateFunc += `            instance->active_states[${parentLayerIdx}U] = SM_NODE_INVALID;\n`;
+      }
     }
     smExitStateFunc += `            break;\n`;
   });
   smExitStateFunc += `        default:\n            break;\n    }\n}\n\n`;
 
   let layerEntryFuncs = '';
-  let smEnterStateFunc = `/**\n * @brief Enters the specified state, sets its active flag, and recursively enters child layers.\n * @req REQ-HSM-030 Hierarchical State Entry\n * @param instance Pointer to state machine context\n * @param state State node to enter\n * @param use_history True to restore sub-state history\n */\nstatic void SM_Enter_State(ADIA_Instance_t* instance, SM_Node_t state, bool use_history) {\n    (void)use_history;\n    switch (state) {\n`;
-  
+  /* SM_Enter_State_Shallow: sets bookkeeping and runs the entry action of a
+   * single state WITHOUT entering its child layers. Used for intermediate
+   * states on a transition entry path (Stateflow enter-path semantics),
+   * so the explicit path child is not double-entered. */
+  let smEnterShallowFunc = `/**\n * @brief Enters a single state without descending into its child layers.\n * @param instance Pointer to state machine context\n * @param state State node to enter\n */\nstatic void SM_Enter_State_Shallow(ADIA_Instance_t* instance, SM_Node_t state) {\n    switch (state) {\n`;
   sortedStates.forEach(s => {
     const sEnum = stateEnum(s);
     const stateIdx = stateIndexMap.get(s.id);
     const parentLayer = chart.layers.find(l => l.stateIds.includes(s.id));
     const parentLayerIdx = parentLayer ? layerIndexMap.get(parentLayer.id) : 0;
 
-    smEnterStateFunc += `        case ${sEnum}:\n`;
+    smEnterShallowFunc += `        case ${sEnum}:\n`;
     if (parentLayer) {
-      smEnterStateFunc += `            instance->active_states[${parentLayerIdx}U] = state;\n`;
+      smEnterShallowFunc += `            instance->active_states[${parentLayerIdx}U] = state;\n`;
     }
-    smEnterStateFunc += `            instance->state_active[${stateIdx}U] = true;\n`;
-    smEnterStateFunc += `            instance->state_timers[${stateIdx}U] = ${zeroLiteral};\n`;
-    smEnterStateFunc += `            ${sEnum}_Entry(instance);\n`;
+    smEnterShallowFunc += `            instance->state_active[${stateIdx}U] = true;\n`;
+    smEnterShallowFunc += `            instance->state_timers[${stateIdx}U] = ${zeroLiteral};\n`;
+    smEnterShallowFunc += `            ${sEnum}_Entry(instance);\n`;
+    smEnterShallowFunc += `            break;\n`;
+  });
+  smEnterShallowFunc += `        default:\n            break;\n    }\n}\n\n`;
 
+  const anyHistoryLayers = chart.layers.some(l => l.parentStateId && l.parentStateId !== 'root' && layerSavesHistory(l));
+  let smEnterStateFunc = `/**\n * @brief Enters the specified state, sets its active flag, and recursively enters child layers.\n * @req REQ-HSM-030 Hierarchical State Entry\n * @param instance Pointer to state machine context\n * @param state State node to enter\n * @param use_history True to restore sub-state history\n */\nstatic void SM_Enter_State(ADIA_Instance_t* instance, SM_Node_t state, bool use_history) {\n`;
+  if (!anyHistoryLayers) {
+    smEnterStateFunc += `    (void)use_history;\n`;
+  }
+  smEnterStateFunc += `    SM_Enter_State_Shallow(instance, state);\n    switch (state) {\n`;
+
+  sortedStates.forEach(s => {
+    const sEnum = stateEnum(s);
     const childLayers = chart.layers.filter(l => l.parentStateId === s.id);
+    if (childLayers.length === 0) return;
+
+    smEnterStateFunc += `        case ${sEnum}:\n`;
     childLayers.forEach(l => {
       const lIdx = layerIndexMap.get(l.id);
-      smEnterStateFunc += `            SM_Enter_Layer_${lIdx}(instance, use_history);\n`;
+      /* History-capable layers receive the caller's use_history flag; all other
+       * layers always use their default initial entry. */
+      const histArg = layerSavesHistory(l) ? 'use_history' : 'false';
+      smEnterStateFunc += `            SM_Enter_Layer_${lIdx}(instance, ${histArg});\n`;
     });
-
     smEnterStateFunc += `            break;\n`;
   });
   smEnterStateFunc += `        default:\n            break;\n    }\n}\n\n`;
+
+  /* Emits the entry path for a transition/junction target: intermediate
+   * ancestors are entered SHALLOWLY (no double entry of the path child),
+   * their sibling child layers are default-entered, and the final target is
+   * entered fully (descending into its own child layers). */
+  const emitEntryPath = (entrySeq: string[], indentStr: string, allowHistory: boolean): string => {
+    let code = '';
+    entrySeq.forEach((stId, i) => {
+      const st = sortedStates.find(s => s.id === stId);
+      if (!st) return;
+      const isLast = i === entrySeq.length - 1;
+      if (isLast) {
+        const useHist = allowHistory && stateHasHistoryJunction(st) ? 'true' : 'false';
+        code += `${indentStr}SM_Enter_State(instance, ${stateEnum(st)}, ${useHist});\n`;
+      } else {
+        code += `${indentStr}SM_Enter_State_Shallow(instance, ${stateEnum(st)});\n`;
+        /* Default-enter sibling child layers that do not contain the next path state */
+        const nextId = entrySeq[i + 1];
+        chart.layers
+          .filter(cl => cl.parentStateId === stId && !cl.stateIds.includes(nextId))
+          .forEach(cl => {
+            code += `${indentStr}SM_Enter_Layer_${layerIndexMap.get(cl.id)}(instance, false);\n`;
+          });
+      }
+    });
+    return code;
+  };
 
   sortedLayers.forEach((l) => {
     const lIdx = layerIndexMap.get(l.id);
@@ -742,7 +984,10 @@ export const generateMISRACCode = (chart: {
 
     layerEntryFuncs += `/**\n * @brief Enters layer ${lIdx} and initializes default states or junctions.\n * @param instance Pointer to state machine context\n * @param use_history True to restore history states\n */\nstatic void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) {\n`;
     layerEntryFuncs += `    if (use_history && (instance->history_states[${lIdx}U] != SM_NODE_INVALID)) {\n`;
-    layerEntryFuncs += `        SM_Enter_State(instance, instance->history_states[${lIdx}U], true);\n`;
+    /* Shallow history: restored child enters with default sub-states (false).
+     * Deep history: restoration propagates to all descendant layers (true). */
+    const restoreArg = layerRestoresDeep(l) ? 'true' : 'false';
+    layerEntryFuncs += `        SM_Enter_State(instance, instance->history_states[${lIdx}U], ${restoreArg});\n`;
     layerEntryFuncs += `    } else {\n`;
 
     if (allParallel) {
@@ -756,9 +1001,10 @@ export const generateMISRACCode = (chart: {
       regionsMap.forEach(groupStates => {
         const autostarts = groupStates.filter(st => st.autostart).sort((a, b) => a.priority - b.priority);
         const statesToEnter = autostarts.length > 0 ? autostarts : [...groupStates].sort((a, b) => a.priority - b.priority);
-        if (statesToEnter.length > 0) {
-          layerEntryFuncs += `        SM_Enter_State(instance, ${stateEnum(statesToEnter[0])}, false);\n`;
-        }
+        /* Enter ALL parallel states in this region (not just the first) */
+        statesToEnter.forEach(st => {
+          layerEntryFuncs += `        SM_Enter_State(instance, ${stateEnum(st)}, false);\n`;
+        });
       });
     } else if (defaultState) {
       layerEntryFuncs += `        SM_Enter_State(instance, ${stateEnum(defaultState)}, false);\n`;
@@ -781,13 +1027,10 @@ export const generateMISRACCode = (chart: {
           hasConditions = true;
           if (targetState) {
             code += `${actionStr}`;
-            const entrySeq = getEntrySequence(null, targetState.id);
-            entrySeq.forEach(stId => {
-              const st = sortedStates.find(s => s.id === stId);
-              if (st) {
-                code += `            SM_Enter_State(instance, ${stateEnum(st)}, false);\n`;
-              }
-            });
+            /* Enter only the path from this layer downward; the layer's parent
+             * state is already being entered by the caller. */
+            const relSrc = l.parentStateId && l.parentStateId !== 'root' ? l.parentStateId : null;
+            code += emitEntryPath(getEntrySequence(relSrc, targetState.id), '            ', false);
             code += `        }\n`;
           } else if (targetJunction) {
             if (visited.has(targetJunction.id)) {
@@ -842,7 +1085,7 @@ export const generateMISRACCode = (chart: {
         const timerExpr = stateIdx !== undefined ? `instance->state_timers[${stateIdx}U]` : `0U`;
         const timerCond = tr.afterTicks !== null
           ? `(${timerExpr} >= SM_TMR_TR_${tr.id.replace(/-/g, '_').toUpperCase()}_MS)`
-          : `(${timerExpr} >= ${zeroLiteral})`;
+          : null; /* no timer constraint when afterTicks is null */
 
         const rawCond = tr.condition || 'true';
         const conditionCheck = processConditionString(rawCond);
@@ -851,11 +1094,13 @@ export const generateMISRACCode = (chart: {
         if (tr.type === 'condition') {
           finalCond = conditionCheck;
         } else if (tr.type === 'after') {
-          finalCond = timerCond;
+          finalCond = timerCond || 'true';
         } else if (tr.type === 'and') {
-          finalCond = `(${conditionCheck}) && ${timerCond}`;
+          /* Combine condition && timer; omit timer if no afterTicks (always true) */
+          finalCond = timerCond ? `(${conditionCheck}) && ${timerCond}` : conditionCheck;
         } else if (tr.type === 'or') {
-          finalCond = `(${conditionCheck}) || ${timerCond}`;
+          /* OR identity is false: without a timer part, the condition alone decides */
+          finalCond = timerCond ? `(${conditionCheck}) || ${timerCond}` : conditionCheck;
         } else {
           finalCond = conditionCheck;
         }
@@ -867,8 +1112,23 @@ export const generateMISRACCode = (chart: {
         hasConditions = true;
 
         if (targetState) {
-          const exitSeq = getExitSequence(stateId, targetState.id);
-          const entrySeq = getEntrySequence(stateId, targetState.id);
+          /* 1.3: Honor isInternal flag on drawn transitions */
+          const isInternalTr = tr.isInternal === true;
+          let exitSeq: string[];
+          let entrySeq: string[];
+
+          if (isInternalTr) {
+            /* Internal transition: no exit/entry, just run action */
+            exitSeq = [];
+            entrySeq = [];
+          } else if (stateId === targetState.id) {
+            /* External self-transition: must exit and re-enter the state */
+            exitSeq = [stateId];
+            entrySeq = [stateId];
+          } else {
+            exitSeq = getExitSequence(stateId, targetState.id);
+            entrySeq = getEntrySequence(stateId, targetState.id);
+          }
 
           exitSeq.forEach(stId => {
             const st = sortedStates.find(s => s.id === stId);
@@ -879,10 +1139,7 @@ export const generateMISRACCode = (chart: {
             code += `${nextAccumulatedAction}`;
           }
 
-          entrySeq.forEach(stId => {
-            const st = sortedStates.find(s => s.id === stId);
-            if (st) code += `                SM_Enter_State(instance, ${stateEnum(st)}, false);\n`;
-          });
+          code += emitEntryPath(entrySeq, '                ', true);
 
           if (isParallelState && transitionedVarName) {
             code += `                ${transitionedVarName} = true;\n`;
@@ -901,7 +1158,7 @@ export const generateMISRACCode = (chart: {
           code += generateTransitions(stateId, outgoingJunc, depth + 1, nextAccumulatedAction, nextVisited, isParallelState, transitionedVarName);
           code += `            }\n`;
         } else {
-          code += `                /* Error */\n            }\n`;
+          code += `                #error "Dangling transition target detected in generated code"\n            }\n`;
         }
       }
       if (hasConditions) code += `            else { /* MISRA 15.7 */ }\n`;
@@ -925,7 +1182,7 @@ export const generateMISRACCode = (chart: {
 
         if (outgoing.length > 0) {
           layerStepFuncs += `        bool transitioned_${stateIdx} = false;\n`;
-          layerStepFuncs += `        /* Evaluate Outgoing Transitions for parallel state ${state.name} */\n`;
+          layerStepFuncs += `        /* Evaluate Outgoing Transitions for parallel state ${sanitizeComment(state.name)} */\n`;
           layerStepFuncs += generateTransitions(state.id, outgoing, 0, '', new Set<string>(), true, `transitioned_${stateIdx}`).replace(/^/gm, '    ');
           
           layerStepFuncs += `        if (!transitioned_${stateIdx}) {\n`;
@@ -960,7 +1217,9 @@ export const generateMISRACCode = (chart: {
       // Normal Layer
       layerStepFuncs += `    switch (instance->active_states[${lIdx}U]) {\n`;
 
-      l.stateIds.forEach(stateId => {
+      /* Deduplicate state ids: a repeated id in stateIds would emit duplicate
+       * case labels (ISO C constraint violation). */
+      Array.from(new Set(l.stateIds)).forEach(stateId => {
         const state = sortedStates.find(s => s.id === stateId);
         if (!state) return;
         const sEnum = stateEnum(state);
@@ -999,22 +1258,31 @@ export const generateMISRACCode = (chart: {
     layerStepFuncs += `}\n\n`;
   });
 
+  if (sortedLayers.length === 0) {
+    layerEntryFuncs += `/**\n * @brief Dummy enter layer for empty chart.\n */\nstatic void SM_Enter_Layer_0(ADIA_Instance_t* instance, bool use_history) {\n    (void)instance;\n    (void)use_history;\n}\n\n`;
+    layerStepFuncs += `/**\n * @brief Dummy step layer for empty chart.\n */\nstatic void SM_Step_Layer_0(ADIA_Instance_t* instance, ${timeType} delta_ms) {\n    (void)instance;\n    (void)delta_ms;\n}\n\n`;
+  }
+
   // Generate MCAL-to-SM Signal Binding Layer (DIO Mapping)
+  /* Type-appropriate coercion of a variable to bool for digital output writes
+   * (MISRA 10.1: no (bool) cast on float expressions). */
+  const boolCoerce = (v: VariableDef): string => {
+    const expr = `instance->data.${v.name}`;
+    if (v.type === 'bool') return expr;
+    if (['float', 'single'].includes(v.type)) return `(${expr} != 0.0f)`;
+    if (v.type === 'double') return `(${expr} != 0.0)`;
+    if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type)) return `(${expr} != 0U)`;
+    return `(${expr} != 0)`;
+  };
+
   let syncInputsCode = '';
   let syncOutputsCode = '';
-  if (chart.hilConfig && chart.hilConfig.enabled && chart.hilConfig.mappings) {
-    chart.hilConfig.mappings.forEach((m: any) => {
-      const ch = chart.hilConfig.channels.find((c: any) => c.id === m.channelId);
-      const v = sortedVariables.find(vr => vr.name === m.adiaVarId);
-      if (ch && v) {
-        const pinConst = `MCAL_PIN_${ch.name.toUpperCase()}`;
-        if (m.direction === 'read' || ch.direction === 'In') {
-          syncInputsCode += `    instance->data.${v.name} = (${getCTimeType(v.type)})MCAL_Dio_ReadChannel(${pinConst});\n`;
-        } else {
-          syncOutputsCode += `    MCAL_Dio_WriteChannel(${pinConst}, (bool)(instance->data.${v.name}));\n`;
-        }
-      }
-    });
+  const hilEnabled = !!(chart.hilConfig && chart.hilConfig.enabled);
+  if (hilEnabled) {
+    /* Single IO path when HIL is enabled: delegate to the HIL interface layer
+     * (HIL_Sync_Inputs/Outputs in hil_interface.c) instead of MCAL stubs. */
+    syncInputsCode = '    HIL_Sync_Inputs(instance);\n';
+    syncOutputsCode = '    HIL_Sync_Outputs(instance);\n';
   } else {
     let inPinIdx = 0;
     let outPinIdx = 0;
@@ -1023,7 +1291,7 @@ export const generateMISRACCode = (chart: {
         syncInputsCode += `    instance->data.${v.name} = (${getCTimeType(v.type)})MCAL_Dio_ReadChannel(MCAL_PIN_INPUT_${inPinIdx});\n`;
         inPinIdx++;
       } else if (v.name.startsWith('out_') || v.name.startsWith('led_') || v.name.startsWith('motor_')) {
-        syncOutputsCode += `    MCAL_Dio_WriteChannel(MCAL_PIN_OUTPUT_${outPinIdx}, (bool)(instance->data.${v.name}));\n`;
+        syncOutputsCode += `    MCAL_Dio_WriteChannel(MCAL_PIN_OUTPUT_${outPinIdx}, ${boolCoerce(v)});\n`;
         outPinIdx++;
       }
     });
@@ -1041,10 +1309,10 @@ export const generateMISRACCode = (chart: {
     // Fulfill Missing Input/Output Mapping: bind second variable (or first) to write channel if no prefixes match
     if (sortedVariables.length > 1) {
       const secondVar = sortedVariables[1];
-      syncOutputsCode = `    MCAL_Dio_WriteChannel(MCAL_PIN_OUTPUT_0, (bool)(instance->data.${secondVar.name}));\n`;
+      syncOutputsCode = `    MCAL_Dio_WriteChannel(MCAL_PIN_OUTPUT_0, ${boolCoerce(secondVar)});\n`;
     } else if (sortedVariables.length === 1) {
       const firstVar = sortedVariables[0];
-      syncOutputsCode = `    MCAL_Dio_WriteChannel(MCAL_PIN_OUTPUT_0, (bool)(instance->data.${firstVar.name}));\n`;
+      syncOutputsCode = `    MCAL_Dio_WriteChannel(MCAL_PIN_OUTPUT_0, ${boolCoerce(firstVar)});\n`;
     } else {
       syncOutputsCode = '    (void)instance;\n';
     }
@@ -1052,7 +1320,7 @@ export const generateMISRACCode = (chart: {
 
   /* Fix 8: Add <float.h> when FLT_MAX is needed (float tick type) */
   const floatHInclude = isFloatTick ? '\n#include <float.h>' : '';
-  let smCoreC = `${disclaimer}/* System headers */\n#include <stdint.h>\n#include <stdbool.h>${floatHInclude}\n\n/* Project headers */\n#include "sm_core.h"\n#include "sm_safety.h"\n#include "sm_user_logic.h"\n#include "mcal_dio.h"\n\n/* Forward declarations of public API functions for C99 compliance */\nvoid SM_Init(ADIA_Instance_t* instance);\nvoid SM_Reset(ADIA_Instance_t* instance);\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms);\nvoid SM_Sync_IO(ADIA_Instance_t* instance);\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g);\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance);\n\n/* Forward declarations of internal static helpers */\nstatic void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State(ADIA_Instance_t* instance, SM_Node_t state, bool use_history);\n`;
+  let smCoreC = `${disclaimer}/* System headers */\n#include <stdint.h>\n#include <stdbool.h>${floatHInclude}\n\n/* Project headers */\n#include "sm_core.h"\n#include "sm_safety.h"\n#include "sm_user_logic.h"\n#include "mcal_dio.h"${hilEnabled ? '\n#include "hil_interface.h"' : ''}\n\n/* Forward declarations of public API functions for C99 compliance */\nvoid SM_Init(ADIA_Instance_t* instance);\nvoid SM_Reset(ADIA_Instance_t* instance);\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms);\nvoid SM_Sync_IO(ADIA_Instance_t* instance);\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g);\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance);\n\n/* Forward declarations of internal static helpers */\nstatic void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State_Shallow(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State(ADIA_Instance_t* instance, SM_Node_t state, bool use_history);\n`;
   
   sortedLayers.forEach((l) => {
     const lIdx = layerIndexMap.get(l.id);
@@ -1064,28 +1332,66 @@ export const generateMISRACCode = (chart: {
    * Fix 3 (MISRA 12.4): overflow checks without wrap-around.
    * Fix 4 (MISRA 15.6): single-statement if bodies wrapped in braces.
    * Fix 1 (MISRA 7.2): UINT32_MAX / FLT_MAX instead of magic literals. */
-  smCoreC += `\n/**\n * @brief Returns the active state node of the specified region group.\n * @param instance Pointer to state machine context\n * @param g        Region group index\n * @return SM_Node_t The currently active state\n */\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g) {\n    SM_Node_t active = SM_NODE_INVALID;\n    if ((uint32_t)g < (uint32_t)SM_NUM_LAYERS) {\n        active = instance->active_states[(uint32_t)g];\n    }\n    return active;\n}\n\n/**\n * @brief Queries the error status of the state machine.\n * @param instance Pointer to state machine context\n * @return SM_Error_t Current error status\n */\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance) {\n    return instance->error_status;\n}\n\n/**\n * @brief Initializes the state machine context and registers default/initial values.\n * @param instance Pointer to state machine context\n */\nvoid SM_Init(ADIA_Instance_t* instance) {\n    uint32_t sm_iter;  /* MISRA 8.7: declared at top of function */\n    (void)&SM_Exit_State;\n    for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n        instance->active_states[sm_iter]  = SM_NODE_INVALID;\n        instance->history_states[sm_iter] = SM_NODE_INVALID;\n    }\n    for (sm_iter = 0U; sm_iter < SM_NUM_STATES; sm_iter++) {\n        instance->state_timers[sm_iter] = ${zeroLiteral};\n        instance->state_active[sm_iter] = false;\n    }\n${sortedVariables.map(v => {
-    let initVal = v.initialValue;
-    if (v.type === 'bool') {
-      if (initVal === '0' || initVal === 'false' || !initVal) {
-        initVal = 'false';
-      } else {
-        initVal = 'true';
-      }
+
+  /* Identify the safe state enum for safety error handling */
+  const safeState = sortedStates.find(s => s.isSafeState);
+  const safeStateEnumStr = safeState ? stateEnum(safeState) : 'SM_NODE_SAFE';
+
+  /* Safety handling inside SM_Step: emitted ONLY when safety mode is enabled
+   * (no dead safety code in non-safety builds). On a safety-class error, every
+   * active state is properly exited (exit actions run, timers cleared) before
+   * the designated safe state is entered (its entry action runs). */
+  const safetyStepCode = chart.safetyMode
+    ? `    SM_Watchdog_Kick(instance);\n    SM_Safety_Check(instance);\n    if (instance->error_status == SM_ERR_NONE) {\n        instance->error_status = SM_Validate_State_Consistency(instance);\n    }\n    if (instance->error_status != SM_ERR_NONE) {\n        if ((instance->error_status == SM_ERR_SAFETY_VIOLATION) ||\n            (instance->error_status == SM_ERR_RAM_INTEGRITY)    ||\n            (instance->error_status == SM_ERR_ROM_INTEGRITY))   {\n            /* Exit all currently active states (runs exit actions, clears timers) */\n            for (sm_iter = 0U; sm_iter < SM_NUM_STATES; sm_iter++) {\n                if (instance->state_active[sm_iter]) {\n                    SM_Exit_State(instance, (SM_Node_t)(sm_iter + 1U));\n                }\n            }\n            for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n                instance->active_states[sm_iter] = SM_NODE_INVALID;\n            }\n            /* Enter the designated safe state (runs its entry action) */\n            SM_Enter_State(instance, ${safeStateEnumStr}, false);\n            return;\n        }\n        for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n            instance->active_states[sm_iter] = SM_NODE_ERROR;\n        }\n        return;\n    }\n`
+    : `    (void)sm_iter;\n`;
+
+  /* SM_GetActive body: one case per region group. XOR regions resolve through
+   * their layer's active_states slot; PARALLEL regions share that slot, so
+   * their active state is resolved by scanning the region's state_active
+   * flags in priority order. */
+  let smGetActiveBody = '';
+  Array.from(new Set(regionEnumMap.values())).forEach(enumName => {
+    const regionKey = Array.from(regionEnumMap.entries()).find(([, v]) => v === enumName)?.[0] ?? 'MAIN';
+    const regionStates = sortedStates.filter(s => (s.regionId || 'MAIN') === regionKey);
+    const isParallelGroup = regionStates.some(s => s.isParallel);
+    smGetActiveBody += `        case ${enumName}:\n`;
+    if (isParallelGroup) {
+      [...regionStates].sort((a, b) => a.priority - b.priority).forEach(st => {
+        const stIdx = stateIndexMap.get(st.id);
+        smGetActiveBody += `            if (instance->state_active[${stIdx}U]) { active = ${stateEnum(st)}; }\n`;
+      });
     } else {
-      if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type) && /^\d+$/.test(initVal)) {
-        initVal += 'U';
+      const layerForRegion = sortedLayers.find(l => l.stateIds.some(sid => regionStates.some(s => s.id === sid)));
+      const lIdx = layerForRegion ? layerIndexMap.get(layerForRegion.id) : undefined;
+      if (lIdx !== undefined) {
+        smGetActiveBody += `            active = instance->active_states[${lIdx}U];\n`;
       }
     }
-    return `    instance->data.${v.name} = ${initVal};`;
-  }).join('\n')}\n${blockStates.length > 0 ? blockStates.map(bs => bs.replace('float ', 'instance->data.').replace(';', ' = 0.0f;')).join('\n') + '\n' : ''}    instance->data.state_timer = ${zeroLiteral};\n    instance->error_status = SM_ERR_NONE;\n    SM_Reset(instance);\n}\n\n/**\n * @brief Resets the state machine, entering the root layer.\n * @param instance Pointer to state machine context\n */\nvoid SM_Reset(ADIA_Instance_t* instance) {\n    uint32_t sm_iter;  /* MISRA 8.7: declared at top of function */\n    for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n        instance->active_states[sm_iter] = SM_NODE_INVALID;\n    }\n    instance->error_status = SM_ERR_NONE;\n    SM_Enter_Layer_${rootLayerIdx}(instance, false);\n}\n\n/**\n * @brief Steps the state machine: runs safety checks, increments timers, and processes transitions.\n * @param instance Pointer to state machine context\n * @param delta_ms Execution tick period in milliseconds\n */\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms) {\n    /* MISRA 8.7: All loop variables declared at top of function */\n    uint32_t sm_iter;\n    SM_Watchdog_Kick(instance);\n    SM_Safety_Check(instance);\n    if (instance->error_status == SM_ERR_NONE) {\n        instance->error_status = SM_Validate_State_Consistency(instance);\n    }\n    if (instance->error_status != SM_ERR_NONE) {\n        if ((instance->error_status == SM_ERR_SAFETY_VIOLATION) ||\n            (instance->error_status == SM_ERR_RAM_INTEGRITY)    ||\n            (instance->error_status == SM_ERR_ROM_INTEGRITY))   {\n            for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n                instance->active_states[sm_iter] = SM_NODE_SAFE;\n            }\n            return;\n        }\n        for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n            instance->active_states[sm_iter] = SM_NODE_ERROR;\n        }\n        return;\n    }\n    /* MISRA 12.4/15.6: overflow check without wrap-around, braced if body */\n    if (delta_ms > (${overflowSatVal} - instance->data.state_timer)) {\n        instance->data.state_timer = ${overflowSatVal};\n    } else {\n        instance->data.state_timer += delta_ms;\n    }\n\n    /* Increment state timers */\n${timerIncrementCode}\n    /* Step root layer */\n    SM_Step_Layer_${rootLayerIdx}(instance, delta_ms);\n}\n\n/**\n * @brief Synchronizes state machine variables with MCAL hardware channels.\n * @param instance Pointer to state machine context\n */\nvoid SM_Sync_IO(ADIA_Instance_t* instance) {\n    /* MCAL-to-SM Input Signal Binding */\n${syncInputsCode}\n    /* SM-to-MCAL Output Signal Binding */\n${syncOutputsCode}\n}\n\n/* Helper Functions Implementation */\n${smExitStateFunc}\n${smEnterStateFunc}\n${layerEntryFuncs}\n${layerStepFuncs}`;
+    smGetActiveBody += `            break;\n`;
+  });
 
-  // Replace division-based time scaling with fixed-point math in smCoreC
-  if (isFloatTick) {
-    smCoreC = smCoreC.replace(/(?:(?:\(float\)\s*)?delta_ms|\bdelta_ms\b)\s*\/\s*1000(?:\.0f?)?/g, '(delta_ms / 1000.0f)');
-  } else {
-    smCoreC = smCoreC.replace(/(?:(?:\(float\)\s*)?delta_ms|\bdelta_ms\b)\s*\/\s*1000(?:\.0f?)?/g, '((delta_ms * 65536U) / 1000U)');
-  }
+  smCoreC += `\n/**\n * @brief Returns the active state node of the specified region group.\n * @param instance Pointer to state machine context\n * @param g        Region group index\n * @return SM_Node_t The currently active state\n */\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g) {\n    SM_Node_t active = SM_NODE_INVALID;\n    switch (g) {\n${smGetActiveBody}        default:\n            break;\n    }\n    return active;\n}\n\n/**\n * @brief Queries the error status of the state machine.\n * @param instance Pointer to state machine context\n * @return SM_Error_t Current error status\n */\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance) {\n    return instance->error_status;\n}\n\n/**\n * @brief Initializes the state machine context and registers default/initial values.\n * @param instance Pointer to state machine context\n */\nvoid SM_Init(ADIA_Instance_t* instance) {\n    uint32_t sm_iter;  /* MISRA 8.7: declared at top of function */\n    (void)&SM_Exit_State;\n    for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n        instance->active_states[sm_iter]  = SM_NODE_INVALID;\n        instance->history_states[sm_iter] = SM_NODE_INVALID;\n    }\n    for (sm_iter = 0U; sm_iter < SM_NUM_STATES; sm_iter++) {\n        instance->state_timers[sm_iter] = ${zeroLiteral};\n        instance->state_active[sm_iter] = false;\n    }\n${sortedVariables.map(v => {
+    /* Use validated/normalized initial values with proper C suffixes */
+    const normalized = validateInitialValue(v);
+    let initVal: string;
+    if (v.type === 'bool') {
+      initVal = (normalized === 'true') ? 'true' : 'false';
+    } else if (['float', 'single'].includes(v.type)) {
+      initVal = normalized ?? '0.0';
+      if (!/[fF]$/.test(initVal)) initVal += 'f';
+    } else if (v.type === 'double') {
+      initVal = normalized ?? '0.0';
+      if (!initVal.includes('.') && !initVal.match(/[eE]/)) initVal += '.0';
+    } else if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type)) {
+      initVal = normalized ?? '0';
+      if (!initVal.endsWith('U')) initVal += 'U';
+    } else {
+      initVal = normalized ?? '0';
+    }
+    return `    instance->data.${v.name} = ${initVal};`;
+  }).join('\n')}\n${blockStates.length > 0 ? blockStates.map(bs => bs.replace('float ', 'instance->data.').replace(';', ' = 0.0f;')).join('\n') + '\n' : ''}    instance->data.state_timer = ${zeroLiteral};\n    instance->error_status = SM_ERR_NONE;\n    SM_Reset(instance);\n}\n\n/**\n * @brief Resets the state machine, fully reinitializing all runtime arrays.\n * @param instance Pointer to state machine context\n */\nvoid SM_Reset(ADIA_Instance_t* instance) {\n    uint32_t sm_iter;  /* MISRA 8.7: declared at top of function */\n    for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n        instance->active_states[sm_iter] = SM_NODE_INVALID;\n        instance->history_states[sm_iter] = SM_NODE_INVALID;\n    }\n    for (sm_iter = 0U; sm_iter < SM_NUM_STATES; sm_iter++) {\n        instance->state_timers[sm_iter] = ${zeroLiteral};\n        instance->state_active[sm_iter] = false;\n    }\n    instance->error_status = SM_ERR_NONE;\n    SM_Enter_Layer_${rootLayerIdx}(instance, false);\n}\n\n/**\n * @brief Steps the state machine: runs safety checks (if enabled), increments timers, and processes transitions.\n * @param instance Pointer to state machine context\n * @param delta_ms Execution tick period in milliseconds\n */\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms) {\n    /* MISRA 8.7: All loop variables declared at top of function */\n    uint32_t sm_iter;\n${safetyStepCode}    /* MISRA 12.4/15.6: overflow check without wrap-around, braced if body */\n    if (delta_ms > (${overflowSatVal} - instance->data.state_timer)) {\n        instance->data.state_timer = ${overflowSatVal};\n    } else {\n        instance->data.state_timer += delta_ms;\n    }\n\n    /* Increment state timers */\n${timerIncrementCode}\n    /* Step root layer */\n    SM_Step_Layer_${rootLayerIdx}(instance, delta_ms);\n}\n\n/**\n * @brief Synchronizes state machine variables with MCAL hardware channels.\n * @param instance Pointer to state machine context\n */\nvoid SM_Sync_IO(ADIA_Instance_t* instance) {\n    /* MCAL-to-SM Input Signal Binding */\n${syncInputsCode}\n    /* SM-to-MCAL Output Signal Binding */\n${syncOutputsCode}\n}\n\n/* Helper Functions Implementation */\n${smExitStateFunc}\n${smEnterShallowFunc}\n${smEnterStateFunc}\n${layerEntryFuncs}\n${layerStepFuncs}`;
+
+
 
   sortedVariables.forEach(v => {
     if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type)) {
@@ -1098,10 +1404,21 @@ export const generateMISRACCode = (chart: {
 
   const testingReport = generateTestingReport(chart, errors, warnings);
 
-  let mcalDioPins = '#define MCAL_PIN_INPUT_0   0U\n#define MCAL_PIN_INPUT_1   1U\n#define MCAL_PIN_OUTPUT_0  2U\n#define MCAL_PIN_OUTPUT_1  3U\n';
+  /* Dynamic MCAL_PIN definitions based on actual IO variable count */
+  const inPrefixVars = sortedVariables.filter(v => v.name.startsWith('in_') || v.name.startsWith('sensor_') || v.name.startsWith('btn_'));
+  const outPrefixVars = sortedVariables.filter(v => v.name.startsWith('out_') || v.name.startsWith('led_') || v.name.startsWith('motor_'));
+  const inPinCount = Math.max(2, inPrefixVars.length);
+  const outPinCount = Math.max(2, outPrefixVars.length);
+  let mcalDioPins = '';
+  for (let i = 0; i < inPinCount; i++) {
+    mcalDioPins += `#define MCAL_PIN_INPUT_${i}   ${i}U\n`;
+  }
+  for (let i = 0; i < outPinCount; i++) {
+    mcalDioPins += `#define MCAL_PIN_OUTPUT_${i}  ${inPinCount + i}U\n`;
+  }
   if (chart.hilConfig && chart.hilConfig.channels) {
     chart.hilConfig.channels.forEach((ch: any, idx: number) => {
-      mcalDioPins += `#define MCAL_PIN_${ch.name.toUpperCase()}   ${idx + 4}U\n`;
+      mcalDioPins += `#define MCAL_PIN_${sanitize(ch.name).toUpperCase()}   ${inPinCount + outPinCount + idx}U\n`;
     });
   }
 
@@ -1121,11 +1438,88 @@ export const generateMISRACCode = (chart: {
   ];
 
   if (chart.hilConfig && chart.hilConfig.enabled) {
-    const hilFiles = generateHALCode(chart.hilConfig, chart.variables);
+    const hilFiles = generateHALCode(chart.hilConfig, chart.variables, warnings);
     baseFiles.push(...hilFiles);
 
     const target = chart.hilConfig.target || 'Generic';
-    if (target === 'Arduino_Uno' || target === 'Arduino_Mega') {
+    if (target === 'ESP32') {
+      /* ESP32-specific Arduino shim: declares every symbol the ESP32 driver
+       * template uses (dacWrite, ledc*, Serial2, SERIAL_8N1, millis, ...). */
+      const esp32ArduinoH = `#ifndef ESP32_ARDUINO_SHIM_H
+#define ESP32_ARDUINO_SHIM_H
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
+#include <stdlib.h>
+
+#define INPUT 0
+#define OUTPUT 1
+#define HIGH 1
+#define LOW 0
+#define SERIAL_8N1 0x06
+
+#ifdef __cplusplus
+
+class String {
+public:
+    String() : buf(nullptr) { set(""); }
+    String(const char* s) : buf(nullptr) { set(s ? s : ""); }
+    String(const String& other) : buf(nullptr) { set(other.buf ? other.buf : ""); }
+    ~String() { free(buf); }
+    String& operator=(const String& other) { if (this != &other) { set(other.buf ? other.buf : ""); } return *this; }
+    String& operator=(const char* s) { set(s ? s : ""); return *this; }
+    String& operator+=(char c) {
+        size_t len = buf ? strlen(buf) : 0U;
+        char* next = (char*)realloc(buf, len + 2U);
+        if (next) { buf = next; buf[len] = c; buf[len + 1U] = '\\0'; }
+        return *this;
+    }
+    const char* c_str() const { return buf ? buf : ""; }
+private:
+    char* buf;
+    void set(const char* s) {
+        free(buf);
+        buf = (char*)malloc(strlen(s) + 1U);
+        if (buf) { strcpy(buf, s); }
+    }
+};
+
+class HardwareSerial {
+public:
+    void begin(unsigned long baud) { (void)baud; }
+    void begin(unsigned long baud, uint32_t config, int rxPin, int txPin) {
+        (void)baud; (void)config; (void)rxPin; (void)txPin;
+    }
+    int available() { return 0; }
+    int read() { return -1; }
+    void write(uint8_t val) { (void)val; }
+    void print(const char* str) { (void)str; }
+};
+
+extern HardwareSerial Serial;
+extern HardwareSerial Serial2;
+
+inline void pinMode(int pin, int mode) { (void)pin; (void)mode; }
+inline int digitalRead(int pin) { (void)pin; return LOW; }
+inline void digitalWrite(int pin, int val) { (void)pin; (void)val; }
+inline int analogRead(int pin) { (void)pin; return 0; }
+inline void analogWrite(int pin, int val) { (void)pin; (void)val; }
+inline void dacWrite(int pin, int val) { (void)pin; (void)val; }
+inline void ledcAttachPin(int pin, int channel) { (void)pin; (void)channel; }
+inline void ledcSetup(int channel, int freq, int resolution) { (void)channel; (void)freq; (void)resolution; }
+inline void ledcWrite(int channel, int duty) { (void)channel; (void)duty; }
+inline void delay(unsigned long ms) { (void)ms; }
+inline unsigned long millis(void) { return 0UL; }
+
+#endif /* __cplusplus */
+
+#endif /* ESP32_ARDUINO_SHIM_H */
+`;
+      baseFiles.push({ name: 'Arduino.h', content: esp32ArduinoH });
+      baseFiles.push({ name: 'Arduino.cpp', content: `#include "Arduino.h"\n#include "SPI.h"\nHardwareSerial Serial;\nHardwareSerial Serial2;\nSPIImpl SPI;\n` });
+      baseFiles.push({ name: 'SPI.h', content: `#ifndef SPI_H\n#define SPI_H\n#include <stdint.h>\nclass SPIImpl {\npublic:\n    void begin() {}\n    uint8_t transfer(uint8_t val) { return val; }\n};\nextern SPIImpl SPI;\n#endif\n` });
+    } else if (target === 'Arduino_Uno' || target === 'Arduino_Mega') {
       const arduinoH = `#ifndef MyArduino_h
 #define MyArduino_h
 
@@ -1727,18 +2121,20 @@ ${hc.channels.map((ch: any) => {
 
   return `# ADIA Code Generation: Testing & Validation Report
 **Timestamp:** ${now}
-**Compliance Level:** MISRA-C:2012 / IEC 61508 SIL-2
-**Generator Version:** v3.0 ENGINE
+**Compliance Level:** MISRA-C:2012 (advisory)
+**Generator Version:** ${VERSION}
 
 ## 1. Syntax & Compliance Check
+*Rows marked "by construction" describe generator behavior verified by the automated test suite (see stateMachineCodeGenerator tests), not by an external certified static-analysis tool.*
+
 | Category | Status | Details |
 |----------|--------|---------|
-| C99 Syntax | ✅ PASS | All identifiers are sanitized for C99 compliance and limited to 31 characters. |
-| MISRA-C 10.1 | ✅ PASS | No implicit conversions in arithmetic expressions. |
-| MISRA-C 10.3 | ✅ PASS | Essential type assignments are enforced via explicit casts. |
+| C99 Syntax | ✅ PASS (by construction) | Identifiers are sanitized, deduplicated and limited to 28 characters. |
+| MISRA-C 10.1 | ✅ PASS (by construction) | Boolean coercions use explicit comparisons, not raw casts. |
+| MISRA-C 10.3 | ✅ PASS (by construction) | Assignments carry explicit casts to the destination type. |
 | MISRA-C 10.4 | ${warnings.length > 0 ? '⚠️ WARN' : '✅ PASS'} | ${warnings.length > 0 ? 'Potential type mismatch in literals. See warnings.' : 'All operands match essential types.'} |
-| MISRA-C 14.4 | ✅ PASS | Boolean contexts in conditions are explicitly checked. Non-bool types compare against 0/0U. |
-| MISRA-C 15.7 | ✅ PASS | All if-else if constructs contain a terminating else clause. |
+| MISRA-C 14.4 | ✅ PASS (by construction) | Boolean contexts compare non-bool types explicitly against 0/0U/0.0. |
+| MISRA-C 15.7 | ✅ PASS (by construction) | All if-else if constructs contain a terminating else clause. |
 
 ## 2. Logic & Control Flow Verification
 - **Total Transitions Validated:** ${chart.transitions.length}
@@ -1753,8 +2149,8 @@ ${ioVars.length > 0 ? ioVars.map((v: any) => `| \`${v.name}\` | \`g_data.${v.nam
 
 | Check | Status | Details |
 |-------|--------|---------|
-| Memory Alignment | ✅ PASS | \`SM_Data_t\` structure is packed for alignment. |
-| Variable Scope | ✅ PASS | Global data accessible via \`SM_Data()\` pointer. |
+| Data Layout | ℹ️ INFO | \`SM_Data_t\` is a plain C struct with natural alignment (no packing applied). |
+| Instance Scope | ✅ PASS | All runtime data is held in the caller-provided \`ADIA_Instance_t\` context (no hidden globals). |
 | X-Bridges Sync | ${chart.states.some((s: any) => s.isXBridges) ? '✅ PASS' : 'N/A'} | Co-simulation state buffers are synchronized per tick. |
 
 ## 4. Virtual Unit Test Results (Simulated)
@@ -1763,9 +2159,9 @@ ${ioVars.length > 0 ? ioVars.map((v: any) => `| \`${v.name}\` | \`g_data.${v.nam
 | Test ID | Description | Result |
 |---------|-------------|--------|
 | T-V01 | Root Autostart Validation | ${chart.states.some((s: any) => s.autostart) || chart.junctions.some((j: any) => j.autostart) ? '✅ PASS' : '❌ FAIL (No entry defined)'} |
-| T-V02 | Junction Convergence | ✅ PASS |
-| T-V03 | Logic Conflict Detection | ✅ PASS |
-| T-V04 | Safety Transition Priority | ${chart.safetyMode ? '✅ PASS' : 'N/A'} |
+| T-V02 | Junction Convergence | ${(() => { const junctions = chart.junctions || []; const danglingJuncs = junctions.filter((j: any) => { const outgoing = chart.transitions.filter((t: any) => t.sourceId === j.id); return outgoing.length === 0; }); return danglingJuncs.length === 0 ? '✅ PASS' : `⚠️ WARN (${danglingJuncs.length} junctions with no outgoing transitions)`; })()} |
+| T-V03 | Logic Conflict Detection | ${(() => { let conflicts = 0; const stateIds = chart.states.map((s: any) => s.id); stateIds.forEach((sid: string) => { const outgoing = chart.transitions.filter((t: any) => t.sourceId === sid && t.type === 'condition'); const unconditional = outgoing.filter((t: any) => !t.condition || t.condition === 'true'); if (unconditional.length > 1) conflicts++; }); return conflicts === 0 ? '✅ PASS' : `⚠️ WARN (${conflicts} states have multiple unconditional transitions)`; })()} |
+| T-V04 | Safe State Entry on Error | ${(() => { if (!chart.safetyMode) return 'N/A'; const safe = chart.states.find((s: any) => s.isSafeState); return safe ? `✅ PASS (transitions to '${safe.name}' on safety error)` : '❌ FAIL (no safe state defined)'; })()} |
 
 ## 5. Critical Path Analysis (Critical Batches)
 Identify the longest or most complex execution paths ("critical batches") through the state machine.
@@ -1810,7 +2206,7 @@ ${ts.expectedResult}
 ${hilReport}
 
 ---
-**Summary:** The generated code is **Verified** for deployment on target hardware with SIL-2 requirements.
-*Note: This report is part of the traceability artifacts for certification.*
+**Summary:** The generated code has been **structurally validated** against MISRA-C:2012 advisory rules. Functional verification on target hardware is pending and must be completed before deployment.
+*Note: This report documents automated structural checks only. It does not constitute certification evidence.*
 `;
 };

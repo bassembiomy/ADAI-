@@ -548,16 +548,16 @@ ${reachability < 100 ? `> [!WARNING]\n> ${totalStates - visited.size} unreachabl
 | Functional LOC | ${functionalLoc} |
 | Comment Density | ${((totalLoc - functionalLoc) / (totalLoc || 1) * 100).toFixed(1)}% |
 | Estimated RAM Footprint | ~${globalVarBytes + stackEstimate} Bytes |
-| Compliance Level | IEC 60730 Class B / SIL-2 |
+| Coding Guidelines | MISRA C:2012 (advisory) / ISO C99 |
 
 ## 4. Interface Definition
 **Inputs/Global Variables**:
 ${chart.variables.length > 0 ? chart.variables.map((v: any) => `- \`${v.name}\` (${v.type})`).join('\n') : '*No global variables defined.*'}
 
 ## 5. Violation Summary
-- **MISRA Violations**: 0 (AI-Audited)
-- **Safety Hazards**: ${chart.states.some((s: any) => s.isSafeState) ? '0' : 'N/A'}
-- **Dead-lock Potential**: Low
+- **MISRA Violations**: Not assessed — run an external MISRA checker (e.g. PC-lint, Cppcheck MISRA addon) for a formal report.
+- **Safety Hazards**: ${chart.states.some((s: any) => s.isSafeState) ? '0 identified by structural analysis' : 'N/A (no safe state defined)'}
+- **Dead-lock Potential**: ${reachability < 100 ? 'Review required (unreachable states present)' : 'Low (all states reachable)'}
 
 ---
 *Report automatically generated for compliance auditing.*
@@ -8864,11 +8864,19 @@ const ADIA = () => {
     return true;
   }, [states, transitions, junctions, addError, variables]);
 
-  // AI VALIDATION
+  // MODEL VALIDATION (structural checks via validateModel)
   const validateWithAI = useCallback(async () => {
     setIsAiValidating(true);
-    // ... logic ...
-  }, [states, transitions, junctions, variables, addError]);
+    try {
+      const ok = validateModel();
+      if (ok) {
+        addError('info', 'Model passed structural validation checks.', 'Validator');
+      }
+      return ok;
+    } finally {
+      setIsAiValidating(false);
+    }
+  }, [validateModel, addError]);
 
   const handleExecuteAiActions = useCallback((actions: any[]) => {
     executeAiActions(
@@ -14109,17 +14117,45 @@ const ADIA = () => {
       // AI CODE FIX & VALIDATION
       setIsAiValidating(true);
       try {
-        // Simulate AI processing
-        await new Promise(resolve => setTimeout(resolve, 600));
+        let validationPassed = true;
+        const auditErrors: string[] = [];
 
-        files = files.map(f => ({
-          ...f,
-          content: `/* [AI-AUDIT] Verified & Fixed by ADIA AI | ${new Date().toISOString()} */\n` + f.content + (f.content.endsWith('\n') ? '' : '\n')
-        }));
+        // Check for dangling targets (#error)
+        files.forEach(f => {
+          if (f.content.includes('#error')) {
+            validationPassed = false;
+            auditErrors.push(`Dangling transition target in ${f.name}`);
+          }
+        });
 
-        addError('info', 'AI has reviewed, fixed, and validated the generated code.', 'AI Assistant');
-      } catch (e) {
+        // Validate model constraints using validateModel
+        if (!validateModel()) {
+          validationPassed = false;
+          auditErrors.push('Model syntax validation failed');
+        }
+
+        if (validationPassed) {
+          files = files.map(f => ({
+            ...f,
+            content: `/* [STRUCTURAL-CHECK] Passed generator structural validation (no dangling targets, model syntax OK) | ${new Date().toISOString()} */\n` + f.content + (f.content.endsWith('\n') ? '' : '\n')
+          }));
+          addError('info', 'Generated code passed structural validation checks.', 'Code Generator');
+        } else {
+          addError('error', `AI Validation failed: ${auditErrors.join('. ')}`, 'AI Assistant');
+          setCodegenErrors(auditErrors.map(msg => ({
+            id: uuidv4(),
+            type: 'error',
+            message: msg,
+            timestamp: new Date(),
+            source: 'AI Auditor'
+          })));
+          setShowCodegenDialog(true);
+          setIsGenerating(false);
+          return;
+        }
+      } catch (e: any) {
         console.warn('AI Fix failed', e);
+        addError('error', `AI Fix/Validation error: ${e.message}`, 'AI Assistant');
       } finally {
         setIsAiValidating(false);
       }
