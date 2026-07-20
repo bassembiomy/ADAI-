@@ -210,8 +210,11 @@ input[type=range]::-moz-range-thumb {
 }
 
 /* Prevent overlapping source handles from blocking target handles during connection dragging */
+.react-flow--connection-active .react-flow__handle-target {
+  z-index: 10 !important;
+}
 .react-flow--connection-active .react-flow__handle-source {
-  pointer-events: none !important;
+  z-index: 1 !important;
 }
 
 /* Custom premium path and dot animations */

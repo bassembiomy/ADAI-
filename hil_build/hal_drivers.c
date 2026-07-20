@@ -1,11 +1,12 @@
 /* ============================================================= */
 /*  ADIA HIL (Hardware-in-the-Loop) - AUTO GENERATED CODE       */
-/*  Target MCU: ESP32 (ESP32 NodeMCU)                          */
+/*  Target MCU: Arduino_Mega (Arduino Mega)                          */
 /*  Baud Rate: 115200                                */
 /*  Do not modify this file manually                             */
 /* ============================================================= */
 
 #include "hal_drivers.h"
+#include "hal_config.h"
 #include "hil_interface.h"
 #include "Arduino.h"
 
@@ -16,10 +17,10 @@ String rx_buffer = "";
 
 #ifdef __cplusplus
 static inline uint32_t HAL_UART_ReadChannel(void) {
-    return Serial2.available() ? (uint32_t)Serial2.read() : 0U;
+    return Serial1.available() ? (uint32_t)Serial1.read() : 0U;
 }
 static inline void HAL_UART_WriteChannel(uint32_t val) {
-    Serial2.write((uint8_t)val);
+    Serial1.write((uint8_t)val);
 }
 static inline uint32_t HAL_SPI_ReadChannel(int csPin) {
     digitalWrite(csPin, LOW);
@@ -36,8 +37,8 @@ static inline void HAL_SPI_WriteChannel(int csPin, uint32_t val) {
 
 
 void HAL_Drivers_Init(void) {
-    // ESP32 system init
-    Serial.begin(115200);
+    init();
+    Serial.begin(HIL_BAUDRATE);
 
     /* Peripherals Initialization */
     pinMode(PA0, INPUT);
@@ -91,6 +92,17 @@ uint32_t HAL_SPI_Read(const char* pin, const char* name) {
 }
 
 void HAL_SPI_Write(const char* pin, const char* name, uint32_t value) {
+    (void)pin;
+    /* No channels */
+}
+
+uint32_t HAL_I2C_Read(const char* pin, const char* name) {
+    (void)pin;
+    /* No channels */
+    return 0;
+}
+
+void HAL_I2C_Write(const char* pin, const char* name, uint32_t value) {
     (void)pin;
     /* No channels */
 }

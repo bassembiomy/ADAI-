@@ -67,6 +67,10 @@ export class ImplicitSolver {
     // If we finished all iterations and didn't converge below tolerance,
     // throw an error so the physics engine can retry with a smaller step size
     if (minError > 1e-3) {
+      const finalFx = equations(bestX, ctx);
+      console.error('ImplicitSolver Convergence Failure Details:');
+      console.error('Best X:', bestX);
+      console.error('Residuals of Best X:', finalFx.map((v, i) => `${i}: ${v}`));
       throw new Error(`ImplicitSolver did not converge. Final residual error: ${minError}`);
     }
     return bestX;

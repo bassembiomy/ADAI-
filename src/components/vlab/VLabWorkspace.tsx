@@ -14,7 +14,8 @@ import ReactFlow, {
   Handle,
   Position,
   ConnectionLineType,
-  getBezierPath
+  getBezierPath,
+  ConnectionMode
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import * as math from 'mathjs';
@@ -22,7 +23,7 @@ import { VLabWorkspaceProps } from './VLabWorkspaceTypes';
 import { VLAB_LIBRARY, VLabBlock, VLabPort } from '../../utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../engine/vlab/vlabComponentDefinitions';
 import { VLabPhysicsEngine } from '../../engine/vlab/vlabPhysics';
-import { Settings2, Play, Pause, Square, Send, ChevronLeft, ChevronDown, ChevronRight, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus, Network, Cloud, Download, CheckCircle2, AlertCircle, Triangle } from 'lucide-react';
+import { Settings2, Play, Pause, Square, Send, ChevronLeft, ChevronDown, ChevronRight, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus, Network, Cloud, Download, CheckCircle2, AlertCircle, Triangle, Trash2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
 
@@ -1573,6 +1574,92 @@ const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boo
     return acc;
   }, {});
 
+  // Determine fixed symbol dimensions to align port pinning perfectly with block terminals
+  const { width, height } = useMemo(() => {
+    switch (data.type) {
+      case 'ground':
+        return { width: 40, height: 30 };
+      case 'ma_selector':
+        return { width: 40, height: 60 };
+      case 'resistor':
+      case 'capacitor':
+      case 'inductor':
+      case 'diode':
+      case 'memristor':
+      case 'infinite_resistance':
+      case 'ps_to_sim':
+      case 'sim_to_ps':
+        return { width: 60, height: 30 };
+      case 'opamp':
+      case 'switch':
+      case 'variable_resistor':
+      case 'thermal_resistor':
+      case 'upper_heater':
+      case 'gas_pipe':
+      case 'gas_fixed_res':
+      case 'lever':
+      case 'rot_ref':
+      case 'rot_spring':
+      case 'rot_damper':
+      case 'rot_friction':
+      case 'rot_hard_stop':
+      case 'trans_ref':
+      case 'trans_spring':
+      case 'trans_damper':
+      case 'trans_friction':
+      case 'trans_hard_stop':
+      case 'ma_properties':
+      case 'conductive_heat':
+      case 'convective_heat':
+      case 'radiative_heat':
+      case 'ps_gain':
+      case 'ps_integrator':
+      case 'ps_transfer_fcn':
+      case 'ps_rms':
+      case 'ps_pi_ctrl':
+      case 'ps_pid_ctrl':
+      case 'solver_config':
+      case 'scope':
+        return { width: 60, height: 40 };
+      case 'ps_math':
+      case 'ps_lookup_1d':
+      case 'ps_lookup_2d':
+        return { width: 50, height: 50 };
+      case 'ps_add':
+      case 'ps_subtract':
+      case 'ps_product':
+      case 'ps_divide':
+      case 'ps_abs':
+      case 'ps_deadzone':
+      case 'ps_saturation':
+      case 'ps_dead_zone':
+      case 'ps_constant':
+      case 'ps_sine':
+      case 'ps_step':
+      case 'ps_term':
+      case 'conn_label':
+        return { width: 40, height: 40 };
+      case 'ps_demux':
+      case 'ps_demux_3':
+        return { width: 40, height: 60 };
+      case 'microwave_inverter':
+        return { width: 70, height: 50 };
+      case 'pwm_3ph_2level':
+      case 'pwm_3ph_3level':
+      case 'microwave_cavity':
+      case 'lms_adaptive_filter':
+        return { width: 80, height: 60 };
+      case 'im_foc_ctrl':
+      case 'im_scalar_ctrl':
+      case 'washing_basket':
+      case 'neural_neuron_learning':
+      case 'rl_q_learning_controller':
+        return { width: 80, height: 80 };
+      default:
+        return { width: 60, height: 60 };
+    }
+  }, [data.type]);
+
   return (
     <div 
       className={`relative group flex flex-col items-center transition-all ${selected ? 'z-50' : 'z-10'} h-full w-full`}
@@ -1590,60 +1677,56 @@ const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boo
           }`}
         style={{ minWidth: 80, minHeight: 60 }}
       >
+        {/* Inner Symbol & Ports Container with Fixed size */}
+        <div className="relative flex items-center justify-center" style={{ width, height }}>
+          {/* Bidirectional Ports with Offsets */}
+          {Object.entries(portsBySide).map(([side, sidePorts]: [any, any]) => (
+            sidePorts.map((port: any, index: number) => {
+              const totalOnSide = sidePorts.length;
+              const offset = totalOnSide > 1 ? (index - (totalOnSide - 1) / 2) * 20 : 0;
+              const position = side === 'left' ? Position.Left :
+                side === 'right' ? Position.Right :
+                  side === 'top' ? Position.Top : Position.Bottom;
 
-        {/* Bidirectional Ports with Offsets */}
-        {Object.entries(portsBySide).map(([side, sidePorts]: [any, any]) => (
-          sidePorts.map((port: any, index: number) => {
-            const totalOnSide = sidePorts.length;
-            const offset = totalOnSide > 1 ? (index - (totalOnSide - 1) / 2) * 20 : 0;
-            const position = side === 'left' ? Position.Left :
-              side === 'right' ? Position.Right :
-                side === 'top' ? Position.Top : Position.Bottom;
-
-            return (
-              <div
-                key={port.id}
-                className="absolute w-2.5 h-2.5"
-                style={{
-                  top: (side === 'left' || side === 'right') ? `calc(50% + ${offset}px - 5px)` : (side === 'top' ? '-5px' : 'calc(100% - 5px)'),
-                  left: (side === 'top' || side === 'bottom') ? `calc(50% + ${offset}px - 5px)` : (side === 'left' ? '-5px' : 'calc(100% - 5px)')
-                }}
-              >
-                {/* Both target and source handles are styled identically to look like a single square dot */}
-                <Handle
-                  type="target"
-                  position={position}
-                  id={`${id}-${port.id}_t`}
-                  className="!w-full !h-full !border !border-white/50 hover:!scale-125 transition-all rounded-none shadow-lg !absolute !top-0 !left-0"
-                  style={{ backgroundColor: data.color || '#3b82f6' }}
-                />
-                <Handle
-                  type="source"
-                  position={position}
-                  id={`${id}-${port.id}_s`}
-                  className="!w-full !h-full !border !border-white/50 hover:!scale-125 transition-all rounded-none shadow-lg !absolute !top-0 !left-0"
-                  style={{ backgroundColor: data.color || '#3b82f6' }}
-                />
-
-                {/* Port Label */}
+              return (
                 <div
-                  className="absolute text-[8px] font-black text-blue-400/80 select-none pointer-events-none uppercase whitespace-nowrap"
+                  key={port.id}
+                  className="absolute w-2.5 h-2.5"
                   style={{
-                    top: side === 'top' ? -18 : side === 'bottom' ? 18 : 0,
-                    left: side === 'left' ? -20 : side === 'right' ? 20 : 0,
-                    transform: (side === 'left' || side === 'right') ? 'translateY(-50%)' : 'translateX(-50%)'
+                    top: (side === 'left' || side === 'right') ? `calc(50% + ${offset}px - 5px)` : (side === 'top' ? '-5px' : 'calc(100% - 5px)'),
+                    left: (side === 'top' || side === 'bottom') ? `calc(50% + ${offset}px - 5px)` : (side === 'left' ? '-5px' : 'calc(100% - 5px)')
                   }}
                 >
-                  {port.label}
-                </div>
-              </div>
-            );
-          })
-        ))}
+                  {/* A single source handle is used per port. Loose connection mode handles bidirectional linkage. */}
+                  {/* We set transform to none to override default ReactFlow translate styling that misaligns handles. */}
+                  <Handle
+                    type="source"
+                    position={position}
+                    id={`${id}-${port.id}`}
+                    className="!w-full !h-full !border !border-white/50 hover:!scale-125 transition-all rounded-none shadow-lg !absolute !top-0 !left-0"
+                    style={{ transform: 'none', backgroundColor: data.color || '#3b82f6' }}
+                  />
 
-        {/* The SVG Symbol */}
-        <div className="drop-shadow-[0_0_10px_rgba(0,0,0,0.5)]">
-          <SymbolRenderer type={data.type} color={data.color} />
+                  {/* Port Label */}
+                  <div
+                    className="absolute text-[8px] font-black text-blue-400/80 select-none pointer-events-none uppercase whitespace-nowrap"
+                    style={{
+                      top: side === 'top' ? -18 : side === 'bottom' ? 18 : 0,
+                      left: side === 'left' ? -20 : side === 'right' ? 20 : 0,
+                      transform: (side === 'left' || side === 'right') ? 'translateY(-50%)' : 'translateX(-50%)'
+                    }}
+                  >
+                    {port.label}
+                  </div>
+                </div>
+              );
+            })
+          ))}
+
+          {/* The SVG Symbol */}
+          <div className="drop-shadow-[0_0_10px_rgba(0,0,0,0.5)]">
+            <SymbolRenderer type={data.type} color={data.color} />
+          </div>
         </div>
       </div>
 
@@ -1666,6 +1749,7 @@ const VLabEdge = ({
   style = {},
   markerEnd,
   className,
+  selected,
 }: any) => {
   const [edgePath] = getBezierPath({
     sourceX,
@@ -1676,14 +1760,37 @@ const VLabEdge = ({
     targetPosition,
   });
 
+  const finalStyle = selected
+    ? {
+        ...style,
+        stroke: '#ff9100',
+        strokeWidth: 4.5,
+      }
+    : style;
+
   return (
     <>
+      {/* Background thicker glow path when selected */}
+      {selected && (
+        <path
+          id={`${id}-glow`}
+          d={edgePath}
+          fill="none"
+          stroke="#ff9100"
+          strokeWidth={10}
+          strokeOpacity={0.6}
+          className="transition-all duration-300 pointer-events-none"
+          style={{
+            filter: 'drop-shadow(0 0 6px #ff9100)'
+          }}
+        />
+      )}
       <path
         id={id}
-        className={`react-flow__edge-path ${className || ''}`}
+        className={`react-flow__edge-path transition-all duration-300 ${className || ''}`}
         d={edgePath}
         markerEnd={markerEnd}
-        style={style}
+        style={finalStyle}
       />
       {/* Thick invisible interaction path to make clicking/hovering easy */}
       <path
@@ -1748,8 +1855,9 @@ const ScopeView = ({
 }: {
   data: any[], title?: string, isPaused?: boolean, onExpand?: () => void, onAutoScale?: () => void, params?: any
 }) => {
-  const lastPoint = data.length > 0 ? data[data.length - 1] : { value: 0 };
-  const lastVal = lastPoint.value ?? 0;
+  const keys = data.length > 0 ? Object.keys(data[0]).filter(k => k !== 'time') : ['value'];
+  const lastPoint = data.length > 0 ? data[data.length - 1] : {};
+  const lastVal = lastPoint.value !== undefined ? lastPoint.value : (keys.length > 0 ? lastPoint[keys[0]] : 0) ?? 0;
   const [scaleKey, setScaleKey] = useState(0);
   const [zoomLevel, setZoomLevel] = useState(1.0);
 
@@ -1764,9 +1872,6 @@ const ScopeView = ({
     const maxTime = data[data.length - 1].time;
     return data.filter(pt => pt.time >= maxTime - limit);
   }, [data, timeRange]);
-
-  // Find all keys except 'time'
-  const keys = data.length > 0 ? Object.keys(data[0]).filter(k => k !== 'time') : ['value'];
 
   const handleAutoScale = () => {
     setScaleKey(prev => prev + 1);
@@ -2142,14 +2247,106 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const [nodes, setNodes, onLocalNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onLocalEdgesChange] = useEdgesState(initialEdges);
 
-  // Sync with props
+  const [viewPath, setViewPath] = useState<string[]>(['root']);
+  const currentParentId = viewPath[viewPath.length - 1];
+
+  const [isConnecting, setIsConnecting] = useState(false);
+
+  const onConnectStart = useCallback(() => {
+    setIsConnecting(true);
+  }, []);
+
+  const onConnectEnd = useCallback(() => {
+    setIsConnecting(false);
+  }, []);
+
+  const isSavingRef = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialNodesRef = useRef(initialNodes);
+  const initialEdgesRef = useRef(initialEdges);
+
+  // Debounced save: fire onNodesChange and onEdgesChange 300ms after changes settle
   useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      isSavingRef.current = true;
+      if (onNodesChange) onNodesChange(nodes);
+      if (onEdgesChange) onEdgesChange(edges);
+      requestAnimationFrame(() => requestAnimationFrame(() => { isSavingRef.current = false; }));
+    }, 300);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [nodes, edges, onNodesChange, onEdgesChange]);
+
+  // Inward sync: only apply when initialNodes/initialEdges change AND we didn't cause the change
+  useEffect(() => {
+    if (initialNodes === initialNodesRef.current) return;
+    initialNodesRef.current = initialNodes;
+    if (isSavingRef.current) return;
     setNodes(initialNodes);
+    setViewPath(['root']);
   }, [initialNodes, setNodes]);
 
   useEffect(() => {
+    if (initialEdges === initialEdgesRef.current) return;
+    initialEdgesRef.current = initialEdges;
+    if (isSavingRef.current) return;
     setEdges(initialEdges);
   }, [initialEdges, setEdges]);
+
+  // --- Subsystem Port Synchronization ---
+  useEffect(() => {
+    let hasChanges = false;
+    const nextNodes = nodes.map(node => {
+      const type = node.data?.type || node.type || '';
+      if (type === 'subsystem' || type === 'Subsystem') {
+        const childInports = nodes.filter(n => n.data?.parentId === node.id && (n.data?.type === 'inport' || n.data?.type === 'Inport'));
+        const childOutports = nodes.filter(n => n.data?.parentId === node.id && (n.data?.type === 'outport' || n.data?.type === 'Outport'));
+
+        const newPorts = [
+          ...childInports
+            .sort((a, b) => {
+              const aIdx = Number(a.data?.params?.port_index?.value) || 0;
+              const bIdx = Number(b.data?.params?.port_index?.value) || 0;
+              return aIdx - bIdx;
+            })
+            .map(p => ({
+              id: p.id,
+              pos: 'left' as const,
+              label: String(p.data?.params?.name?.value || 'In'),
+              domain: 'physical'
+            })),
+          ...childOutports
+            .sort((a, b) => {
+              const aIdx = Number(a.data?.params?.port_index?.value) || 0;
+              const bIdx = Number(b.data?.params?.port_index?.value) || 0;
+              return aIdx - bIdx;
+            })
+            .map(p => ({
+              id: p.id,
+              pos: 'right' as const,
+              label: String(p.data?.params?.name?.value || 'Out'),
+              domain: 'physical'
+            }))
+        ];
+
+        if (JSON.stringify(newPorts) !== JSON.stringify(node.data?.ports)) {
+          hasChanges = true;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              ports: newPorts
+            }
+          };
+        }
+      }
+      return node;
+    });
+
+    if (hasChanges) {
+      setNodes(nextNodes);
+    }
+  }, [nodes, setNodes]);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -2166,6 +2363,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     const val = parseFloat(vlabLimitInput);
     vlabLimitRef.current = (!isNaN(val) && val > 0) ? val : null;
   }, [vlabLimitInput]);
+
+  const [showConfirmClear, setShowConfirmClear] = useState(false);
 
   // 3DEXPERIENCE Sync State
   const [show3dxSyncModal, setShow3dxSyncModal] = useState(false);
@@ -2883,9 +3082,6 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         isSpacePressedRef.current = false;
-        if (!spaceComboUsedRef.current) {
-          setIsSimulating(prev => !prev);
-        }
         spaceComboUsedRef.current = false;
       }
     };
@@ -2930,7 +3126,11 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       const sDomain = sourcePort?.domain || sourceData.domain;
       const tDomain = targetPort?.domain || targetData.domain;
 
-      const isUniversalBlock = (id: string) => id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator';
+      const isUniversalBlock = (id: string) => 
+        id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator' ||
+        id === 'subsystem' || id === 'Subsystem' ||
+        id === 'inport' || id === 'Inport' ||
+        id === 'outport' || id === 'Outport';
       const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type);
 
       if (sDomain && tDomain && sDomain.toLowerCase() !== tDomain.toLowerCase() && !isRelaxed) {
@@ -2950,8 +3150,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       style: { stroke: '#6c9ac6', strokeWidth: 2 },
     };
     setEdges((eds) => addEdge(edge, eds));
-    onEdgesChange(addEdge(edge, edges));
-  }, [edges, nodes, onEdgesChange, setEdges]);
+  }, [edges, nodes, setEdges]);
 
   useEffect(() => {
     const invalid = new Set<string>();
@@ -2973,7 +3172,11 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       const tDomain = targetPort?.domain || targetData.domain;
 
       // Relaxed validation for scopes and probes to allow easy visualization
-      const isUniversalBlock = (id: string) => id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator';
+      const isUniversalBlock = (id: string) => 
+        id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator' ||
+        id === 'subsystem' || id === 'Subsystem' ||
+        id === 'inport' || id === 'Inport' ||
+        id === 'outport' || id === 'Outport';
       const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type);
 
       if (sDomain && tDomain && sDomain !== tDomain && !isRelaxed) {
@@ -3023,9 +3226,10 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         type: block.id,
         icon: block.icon,
         color: block.color,
-        params: block.params,
-        ports: block.ports,
-        domain: VLAB_LIBRARY.find(d => d.blocks.some(b => b.id === block.id))?.type
+        params: JSON.parse(JSON.stringify(block.params || {})),
+        ports: JSON.parse(JSON.stringify(block.ports || [])),
+        domain: VLAB_LIBRARY.find(d => d.blocks.some(b => b.id === block.id))?.type,
+        parentId: currentParentId
       },
     };
     setNodes((nds) => nds.concat(newNode));
@@ -3060,9 +3264,10 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         type: block.id,
         icon: block.icon,
         color: block.color,
-        params: block.params,
-        ports: block.ports,
-        domain: VLAB_LIBRARY.find(d => d.blocks.some(b => b.id === block.id))?.type
+        params: JSON.parse(JSON.stringify(block.params || {})),
+        ports: JSON.parse(JSON.stringify(block.ports || [])),
+        domain: VLAB_LIBRARY.find(d => d.blocks.some(b => b.id === block.id))?.type,
+        parentId: currentParentId
       },
     };
 
@@ -3078,13 +3283,17 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     }
 
     const reconstructedNodes = reconstructLabNodes(lab.nodes as any);
-    const reconstructedEdges = lab.edges.map(edge => ({
-      ...edge,
-      sourceHandle: `${edge.source}-${edge.sourceHandle}`,
-      targetHandle: `${edge.target}-${edge.targetHandle}`,
-      animated: true,
-      style: { stroke: '#6c9ac6', strokeWidth: 2 }
-    }));
+    const reconstructedEdges = lab.edges.map(edge => {
+      const sourcePort = edge.sourceHandle.replace(/_[st]$/, '');
+      const targetPort = edge.targetHandle.replace(/_[st]$/, '');
+      return {
+        ...edge,
+        sourceHandle: `${edge.source}-${sourcePort}`,
+        targetHandle: `${edge.target}-${targetPort}`,
+        animated: true,
+        style: { stroke: '#6c9ac6', strokeWidth: 2 }
+      };
+    });
 
     setNodes(reconstructedNodes);
     setEdges(reconstructedEdges as any);
@@ -3109,6 +3318,286 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const onNodeDoubleClick = (_: any, node: Node) => {
     if ((node.data as any).type === 'scope') {
       setOpenScopes(prev => prev.includes(node.id) ? prev : [...prev, node.id]);
+    } else if ((node.data as any).type === 'subsystem' || (node.data as any).type === 'Subsystem') {
+      setViewPath(prev => [...prev, node.id]);
+      setSelectedNodeId(null);
+    }
+  };
+
+  const getNodeDimensions = (type: string) => {
+    switch (type) {
+      case 'ground':
+        return { width: 40, height: 30 };
+      case 'ma_selector':
+        return { width: 40, height: 60 };
+      case 'resistor':
+      case 'capacitor':
+      case 'inductor':
+      case 'diode':
+      case 'memristor':
+      case 'infinite_resistance':
+      case 'ps_to_sim':
+      case 'sim_to_ps':
+        return { width: 60, height: 30 };
+      case 'opamp':
+      case 'switch':
+      case 'variable_resistor':
+      case 'thermal_resistor':
+      case 'upper_heater':
+      case 'gas_pipe':
+      case 'gas_fixed_res':
+      case 'lever':
+      case 'rot_ref':
+      case 'rot_spring':
+      case 'rot_damper':
+      case 'rot_friction':
+      case 'rot_hard_stop':
+      case 'trans_ref':
+      case 'trans_spring':
+      case 'trans_damper':
+      case 'trans_friction':
+      case 'trans_hard_stop':
+      case 'ma_properties':
+      case 'conductive_heat':
+      case 'convective_heat':
+      case 'radiative_heat':
+      case 'ps_gain':
+      case 'ps_integrator':
+      case 'ps_transfer_fcn':
+      case 'ps_rms':
+      case 'ps_pi_ctrl':
+      case 'ps_pid_ctrl':
+      case 'solver_config':
+      case 'scope':
+        return { width: 60, height: 40 };
+      case 'ps_math':
+      case 'ps_lookup_1d':
+      case 'ps_lookup_2d':
+        return { width: 50, height: 50 };
+      case 'ps_add':
+      case 'ps_subtract':
+      case 'ps_product':
+      case 'ps_divide':
+      case 'ps_abs':
+      case 'ps_deadzone':
+      case 'ps_saturation':
+      case 'ps_dead_zone':
+      case 'ps_constant':
+      case 'ps_sine':
+      case 'ps_step':
+      case 'ps_term':
+      case 'conn_label':
+        return { width: 40, height: 40 };
+      case 'ps_demux':
+      case 'ps_demux_3':
+        return { width: 40, height: 60 };
+      case 'microwave_inverter':
+        return { width: 70, height: 50 };
+      case 'pwm_3ph_2level':
+      case 'pwm_3ph_3level':
+      case 'microwave_cavity':
+      case 'lms_adaptive_filter':
+        return { width: 80, height: 60 };
+      case 'im_foc_ctrl':
+      case 'im_scalar_ctrl':
+      case 'washing_basket':
+      case 'neural_neuron_learning':
+      case 'rl_q_learning_controller':
+        return { width: 80, height: 80 };
+      default:
+        return { width: 60, height: 60 };
+    }
+  };
+
+  const onNodeDragStop = (_event: any, draggedNode: Node, draggedNodes: Node[]) => {
+    const nodesToMove = draggedNodes && draggedNodes.length > 0 ? draggedNodes : [draggedNode];
+    const draggedNodeIds = new Set(nodesToMove.map(n => n.id));
+    
+    const availableSubsystems = nodes.filter(n => 
+      (n.data?.parentId || 'root') === currentParentId && 
+      (n.data?.type === 'subsystem' || n.data?.type === 'Subsystem') && 
+      !draggedNodeIds.has(n.id)
+    );
+    
+    if (availableSubsystems.length === 0) return;
+
+    let targetSubsystemId: string | null = null;
+    
+    for (const subNode of availableSubsystems) {
+      const subDim = getNodeDimensions(subNode.data?.type || '');
+      const subBox = {
+        x: subNode.position.x,
+        y: subNode.position.y,
+        width: subDim.width,
+        height: subDim.height
+      };
+      
+      const overlaps = nodesToMove.some(dn => {
+        const dnDim = getNodeDimensions(dn.data?.type || dn.type || '');
+        const dnBox = {
+          x: dn.position.x,
+          y: dn.position.y,
+          width: dnDim.width,
+          height: dnDim.height
+        };
+        
+        return (
+          dnBox.x < subBox.x + subBox.width &&
+          dnBox.x + dnBox.width > subBox.x &&
+          dnBox.y < subBox.y + subBox.height &&
+          dnBox.y + dnBox.height > subBox.y
+        );
+      });
+      
+      if (overlaps) {
+        targetSubsystemId = subNode.id;
+        break;
+      }
+    }
+    
+    if (targetSubsystemId) {
+      setHistory(h => [...h, { nodes, edges }].slice(-20));
+      
+      const nextEdges: Edge[] = [];
+      const newInports: Node[] = [];
+      const newOutports: Node[] = [];
+
+      // Count existing inports and outports under the target subsystem
+      const existingInports = nodes.filter(n => n.data?.parentId === targetSubsystemId && (n.data?.type === 'inport' || n.data?.type === 'Inport')).length;
+      const existingOutports = nodes.filter(n => n.data?.parentId === targetSubsystemId && (n.data?.type === 'outport' || n.data?.type === 'Outport')).length;
+
+      let inportsCount = existingInports;
+      let outportsCount = existingOutports;
+
+      edges.forEach(e => {
+        const isSourceDragged = draggedNodeIds.has(e.source);
+        const isTargetDragged = draggedNodeIds.has(e.target);
+
+        if (isSourceDragged && !isTargetDragged) {
+          // Outgoing boundary edge (dragged block -> external block)
+          const sourceNode = nodes.find(n => n.id === e.source);
+          if (sourceNode) {
+            outportsCount++;
+            const outportId = `outport_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+            const portName = `Out${outportsCount}`;
+
+            newOutports.push({
+              id: outportId,
+              type: 'default',
+              position: { x: sourceNode.position.x + 150, y: sourceNode.position.y },
+              data: {
+                label: portName,
+                type: 'outport',
+                icon: 'outport',
+                color: '#4b5563',
+                params: {
+                  name: { value: portName, unit: '', label: 'Port Name' },
+                  port_index: { value: outportsCount, unit: '', label: 'Port Index' },
+                  data_type: { value: 'auto', unit: '', label: 'Data Type' }
+                },
+                ports: [{ id: 'in', pos: 'left', label: 'In' }],
+                parentId: targetSubsystemId!
+              }
+            });
+
+            // Create re-routed edges
+            nextEdges.push({
+              id: `ext_${e.id}`,
+              source: targetSubsystemId!,
+              sourceHandle: `${targetSubsystemId}-${outportId}`,
+              target: e.target,
+              targetHandle: e.targetHandle,
+              style: e.style
+            });
+            nextEdges.push({
+              id: `int_${e.id}`,
+              source: e.source,
+              sourceHandle: e.sourceHandle,
+              target: outportId,
+              targetHandle: `${outportId}-in`,
+              style: e.style
+            });
+          } else {
+            nextEdges.push(e);
+          }
+        } else if (!isSourceDragged && isTargetDragged) {
+          // Incoming boundary edge (external block -> dragged block)
+          const targetNode = nodes.find(n => n.id === e.target);
+          if (targetNode) {
+            inportsCount++;
+            const inportId = `inport_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+            const portName = `In${inportsCount}`;
+
+            newInports.push({
+              id: inportId,
+              type: 'default',
+              position: { x: targetNode.position.x - 150, y: targetNode.position.y },
+              data: {
+                label: portName,
+                type: 'inport',
+                icon: 'inport',
+                color: '#4b5563',
+                params: {
+                  name: { value: portName, unit: '', label: 'Port Name' },
+                  port_index: { value: inportsCount, unit: '', label: 'Port Index' },
+                  data_type: { value: 'auto', unit: '', label: 'Data Type' }
+                },
+                ports: [{ id: 'out', pos: 'right', label: 'Out' }],
+                parentId: targetSubsystemId!
+              }
+            });
+
+            // Create re-routed edges
+            nextEdges.push({
+              id: `ext_${e.id}`,
+              source: e.source,
+              sourceHandle: e.sourceHandle,
+              target: targetSubsystemId!,
+              targetHandle: `${targetSubsystemId}-${inportId}`,
+              style: e.style
+            });
+            nextEdges.push({
+              id: `int_${e.id}`,
+              source: inportId,
+              sourceHandle: `${inportId}-out`,
+              target: e.target,
+              targetHandle: e.targetHandle,
+              style: e.style
+            });
+          } else {
+            nextEdges.push(e);
+          }
+        } else {
+          // Internal edge or completely external edge
+          nextEdges.push(e);
+        }
+      });
+
+      // Update nodes state
+      setNodes(nds => {
+        const updatedNodes = nds.map(n => {
+          if (draggedNodeIds.has(n.id)) {
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                parentId: targetSubsystemId!
+              },
+              selected: false
+            };
+          }
+          return n;
+        });
+        return [...updatedNodes, ...newInports, ...newOutports];
+      });
+
+      // Update edges state
+      setEdges(nextEdges);
+      
+      setSelectedNodeId(null);
+      
+      setStatus({ message: `Moved ${nodesToMove.length} block(s) into Subsystem.`, type: 'success' });
+      setTimeout(() => setStatus(s => s.type === 'success' ? { message: 'System Ready', type: 'idle' } : s), 3000);
     }
   };
 
@@ -3146,9 +3635,17 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           }));
         }
 
+        let updatedLabel = n.data.label;
+        if (paramKey === 'name') {
+          updatedLabel = String(value);
+        }
+
         return {
           ...n,
-          data: updatedData
+          data: {
+            ...updatedData,
+            label: updatedLabel
+          }
         };
       }
       return n;
@@ -3219,9 +3716,10 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         type: data.id,
         icon: data.icon,
         color: data.color,
-        params: data.params,
-        ports: data.ports,
-        domain: VLAB_LIBRARY.find(d => d.blocks.some(b => b.id === data.id))?.type
+        params: JSON.parse(JSON.stringify(data.params || {})),
+        ports: JSON.parse(JSON.stringify(data.ports || [])),
+        domain: VLAB_LIBRARY.find(d => d.blocks.some(b => b.id === data.id))?.type,
+        parentId: currentParentId
       },
     };
 
@@ -3545,38 +4043,69 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         </div>
 
         {/* Center: Flow Canvas */}
-        <div className="flex-1 relative bg-[#0a0a0a]" onDrop={onDrop} onDragOver={onDragOver} onContextMenu={(e) => e.preventDefault()}>
+        <div className={`flex-1 relative bg-[#0a0a0a] ${isConnecting ? 'react-flow--connection-active' : ''}`} onDrop={onDrop} onDragOver={onDragOver} onContextMenu={(e) => e.preventDefault()}>
           <ReactFlow
-            nodes={nodes.map(n => ({
+            nodes={useMemo(() => nodes.filter(n => (n.data.parentId || 'root') === currentParentId).map(n => ({
               ...n,
               data: {
                 ...n.data,
                 onNodeMouseDown: (e: React.MouseEvent) => handleNodeMouseDown(e, n)
               }
-            }))}
-            edges={edges.map(e => ({
+            })), [nodes, currentParentId])}
+            edges={useMemo(() => edges.filter(e => {
+              const sourceNode = nodes.find(n => n.id === e.source);
+              return sourceNode && (sourceNode.data.parentId || 'root') === currentParentId;
+            }).map(e => ({
               ...e,
               className: invalidEdges.has(e.id) ? 'edge-error' : '',
               style: invalidEdges.has(e.id) ? { stroke: '#ff3333', strokeWidth: 3 } : e.style
-            }))}
+            })), [edges, nodes, currentParentId, invalidEdges])}
             onNodesChange={onLocalNodesChange}
             onEdgesChange={onLocalEdgesChange}
             onConnect={onConnect}
+            onConnectStart={onConnectStart}
+            onConnectEnd={onConnectEnd}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
             onNodeDoubleClick={onNodeDoubleClick}
+            onNodeDragStop={onNodeDragStop}
             onInit={setReactFlowInstance}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionLineComponent={VLabConnectionLine}
             connectionLineStyle={{ stroke: '#6c9ac6', strokeWidth: 2 }}
             connectionLineType={ConnectionLineType.Bezier}
+            connectionMode={ConnectionMode.Loose}
             fitView
             snapToGrid
             snapGrid={[10, 10]}
           >
             <Background color="#151515" gap={20} variant={BackgroundVariant.Lines} />
             <Controls className="bg-[#1a1a1a] border-[#333] fill-white" />
+
+            <Panel position="top-left" className="m-0 select-none">
+              <div className="flex items-center gap-1.5 bg-[#0d0d0d]/90 border border-white/5 px-3 py-1.5 rounded-full backdrop-blur-md shadow-2xl">
+                {viewPath.map((pathId, idx) => {
+                  const isLast = idx === viewPath.length - 1;
+                  const label = pathId === 'root' ? 'Root Workspace' : (nodes.find(n => n.id === pathId)?.data?.label || 'Subsystem');
+                  return (
+                    <React.Fragment key={pathId}>
+                      {idx > 0 && <ChevronRight size={12} className="text-gray-600" />}
+                      <button
+                        type="button"
+                        disabled={isLast}
+                        onClick={() => setViewPath(viewPath.slice(0, idx + 1))}
+                        className={`text-[10px] font-black uppercase tracking-widest transition-all ${
+                          isLast ? 'text-purple-400' : 'text-gray-500 hover:text-purple-300'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </Panel>
 
             {/* Quick Search Overlay */}
             {isQuickSearchOpen && (
@@ -3679,6 +4208,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               </div>
             </Panel>
           </ReactFlow>
+
+          <button
+            onClick={() => setShowConfirmClear(true)}
+            className="absolute top-4 right-4 z-50 bg-[#1a1a1a] border border-[#333] text-red-500 hover:bg-red-900/20 px-3 py-1.5 rounded text-xs font-bold shadow-md flex items-center gap-2 cursor-pointer"
+          >
+            <Trash2 size={12} />
+            Clear Canvas
+          </button>
         </div>
 
         {/* Right Sidebar: Properties & Equations */}
@@ -3768,6 +4305,19 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 <option key={n} value={n}>{n} Channels</option>
                               ))}
                             </select>
+                          ) : key === 'data_type' ? (
+                            <select
+                              value={String(param.value ?? 'auto')}
+                              onChange={(e) => updateParameter(key, e.target.value)}
+                              className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-bold cursor-pointer"
+                            >
+                              <option value="auto">Auto (Loose)</option>
+                              <option value="electrical">Electrical</option>
+                              <option value="thermal">Thermal</option>
+                              <option value="rotational">Rotational</option>
+                              <option value="mechanical">Mechanical</option>
+                              <option value="physical">Physical Signal</option>
+                            </select>
                           ) : (
                             <input
                               type={typeof (param.value ?? 0) === 'number' ? "number" : "text"}
@@ -3804,9 +4354,37 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                           <div className="flex flex-col">
                             <div className="flex items-center gap-1.5">
                               <span className="text-[9px] font-mono text-emerald-500/70">[{port.id}]</span>
-                              <span className="text-[10px] font-bold text-gray-200 uppercase tracking-tight">
-                                {port.label || 'Unlabeled'}
-                              </span>
+                              {selectedNode.data.type === 'subsystem' || selectedNode.data.type === 'Subsystem' ? (
+                                <input
+                                  type="text"
+                                  value={port.label || ''}
+                                  onChange={(e) => {
+                                    const portBlockId = port.id;
+                                    const newName = e.target.value;
+                                    setNodes(nds => nds.map(n => {
+                                      if (n.id === portBlockId) {
+                                        return {
+                                          ...n,
+                                          data: {
+                                            ...n.data,
+                                            label: newName,
+                                            params: {
+                                              ...n.data.params,
+                                              name: { ...n.data.params.name, value: newName }
+                                            }
+                                          }
+                                        };
+                                      }
+                                      return n;
+                                    }));
+                                  }}
+                                  className="bg-[#1a1a1a] border border-[#333] text-gray-200 text-xs rounded px-1.5 py-0.5 focus:border-purple-500 outline-none w-28"
+                                />
+                              ) : (
+                                <span className="text-[10px] font-bold text-gray-200 uppercase tracking-tight">
+                                  {port.label || 'Unlabeled'}
+                                </span>
+                              )}
                             </div>
                             <div className="mt-1">
                               <span className="text-[8px] px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-gray-500 font-mono uppercase tracking-tighter">
@@ -4001,6 +4579,54 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {showConfirmClear && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999]" onMouseDown={() => setShowConfirmClear(false)}>
+            <div className="bg-[#1a1a1a] border border-red-900 rounded-lg w-[550px] max-h-[90vh] flex flex-col relative" onMouseDown={e => e.stopPropagation()}>
+              <div className="h-12 flex items-center px-5 border-b border-red-900/50">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" className="mr-3">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <h2 className="text-lg font-bold text-red-400">Clear Canvas</h2>
+              </div>
+
+              <div className="p-5 bg-red-950/25 rounded-lg border border-red-900 m-5">
+                <p className="text-red-300 text-sm whitespace-pre-wrap">Are you sure you want to clear the canvas? This will permanently delete all blocks and connections in your current workspace.</p>
+              </div>
+
+              <div className="h-14 flex items-center justify-end px-5 border-t border-[#222] gap-3">
+                <button
+                  onClick={() => setShowConfirmClear(false)}
+                  className="px-5 py-2 border border-[#333] text-[#a0a0a0] hover:text-[#e0e0e0] rounded bg-transparent text-sm transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setIsSimulating(false);
+                    setIsPaused(false);
+                    isSavingRef.current = true;
+                    setNodes([]);
+                    setEdges([]);
+                    setSelectedNodeId(null);
+                    setScopeData([]);
+                    setHistory([]);
+                    setStatus({ message: 'System Ready', type: 'idle' });
+                    setShowConfirmClear(false);
+                    if (onNodesChange) onNodesChange([]);
+                    if (onEdgesChange) onEdgesChange([]);
+                    requestAnimationFrame(() => requestAnimationFrame(() => { isSavingRef.current = false; }));
+                  }}
+                  className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors cursor-pointer font-bold"
+                >
+                  Clear Canvas
+                </button>
+              </div>
             </div>
           </div>
         )}

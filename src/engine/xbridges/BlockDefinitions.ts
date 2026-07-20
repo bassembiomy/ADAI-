@@ -5414,7 +5414,13 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   'FIELD_WEAKENING': (id: string, params: any) => ({
     id, type: 'FIELD_WEAKENING',
-    params: { v_max: params.v_max || 300, Kp: params.Kp || 0.1, Ki: params.Ki || 1 },
+    params: {
+      v_max: params.v_max || 300,
+      Kp: params.Kp || 0.1,
+      Ki: params.Ki || 1,
+      id_min: params.id_min !== undefined ? params.id_min : (params.min !== undefined ? params.min : -20),
+      id_max: params.id_max !== undefined ? params.id_max : (params.max !== undefined ? params.max : 10)
+    },
     isStateful: true,
     inputs: [
       createPort('v_mag', '|V|', 'input', 0, 'left', 'measurement'),
@@ -5435,7 +5441,18 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       else nextInt = Math.min(0, nextInt + vErr * dt);
       
       const deltaId = p.Kp * (vErr < 0 ? vErr : 0) + p.Ki * nextInt;
-      const idRef = idBase + deltaId;
+      const idRef_unlimited = idBase + deltaId;
+      const idMin = Number(p.id_min);
+      const idMax = Number(p.id_max);
+      const idRef = Math.max(idMin, Math.min(idMax, idRef_unlimited));
+      
+      if (p.Ki !== 0) {
+        if (idRef_unlimited < idMin && vErr < 0) {
+          nextInt = state.integral;
+        } else if (idRef_unlimited > idMax && vErr > 0) {
+          nextInt = state.integral;
+        }
+      }
       
       return { outputs: [idRef], nextState: { integral: nextInt, lastTime: time } };
     }
@@ -9597,7 +9614,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   'FUZZY_DEFUZZIFY': (id, params) => ({
     id, type: 'FUZZY_DEFUZZIFY',
     params: { 
-      method: params.method || 'centroid', 
+      method: params.method || params.defuzzMethod || 'centroid', 
       resolution: params.resolution || 101,
       range_min: params.range_min ?? -1,
       range_max: params.range_max ?? 1
@@ -9618,7 +9635,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       const universe = Array.from({ length: resolution }, (_, i) => rangeMin + i * step);
       
       let crispOutput = 0;
-      const method = p.method || 'centroid';
+      const method = p.method || p.defuzzMethod || 'centroid';
       
       if (method === 'centroid') {
         let numSum = 0, denSum = 0;

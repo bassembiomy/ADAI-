@@ -1,6 +1,6 @@
 /* ============================================================= */
 /*  ADIA HIL (Hardware-in-the-Loop) - AUTO GENERATED CODE       */
-/*  Target MCU: ESP32 (ESP32 NodeMCU)                          */
+/*  Target MCU: Arduino_Mega (Arduino Mega)                          */
 /*  Baud Rate: 115200                                */
 /*  Do not modify this file manually                             */
 /* ============================================================= */

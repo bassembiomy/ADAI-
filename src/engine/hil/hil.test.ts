@@ -346,12 +346,185 @@ describe('HIL Code Generator', () => {
     expect(driversH).toContain('void HAL_SPI_Write(const char* pin, const char* name, uint32_t value);');
 
     const driversC = files.find(f => f.name === 'hal_drivers.c')?.content || '';
-    expect(driversC).toContain('HAL_UART_ReadChannel()');
-    expect(driversC).toContain('HAL_SPI_WriteChannel(');
+    expect(driversC).toContain('HAL_UART_ReadChannel(&huart3)');
+    expect(driversC).toContain('HAL_SPI_WriteChannel(GPIOA, GPIO_PIN_4, value);');
 
     const interfaceC = files.find(f => f.name === 'hil_interface.c')?.content || '';
     expect(interfaceC).toContain('HAL_UART_Read(PIN_DEBUG_UART, "debug_uart")');
     expect(interfaceC).toContain('HAL_SPI_Write(PIN_SENSOR_SPI, "sensor_spi", (uint32_t)(instance->data.tx_data))');
+  });
+
+  it('should generate correct ADC and DAC channel selection logic on STM32F4', () => {
+    const multiChannelConfig: HILConfig = {
+      enabled: true,
+      target: 'STM32F4',
+      clockSpeed: 168,
+      commPort: 'COM3',
+      baudRate: 115200,
+      channels: [
+        {
+          id: 'adc0',
+          name: 'sensor_0',
+          peripheral: 'ADC',
+          pin: 'PA0',
+          direction: 'In',
+          dataType: 'float',
+          rangeMin: 0,
+          rangeMax: 100,
+          scalingFactor: 1.0,
+          unit: ''
+        },
+        {
+          id: 'adc1',
+          name: 'sensor_1',
+          peripheral: 'ADC',
+          pin: 'PA1',
+          direction: 'In',
+          dataType: 'float',
+          rangeMin: 0,
+          rangeMax: 100,
+          scalingFactor: 1.0,
+          unit: ''
+        },
+        {
+          id: 'dac2',
+          name: 'output_dac',
+          peripheral: 'DAC',
+          pin: 'PA5',
+          direction: 'Out',
+          dataType: 'float',
+          rangeMin: 0,
+          rangeMax: 100,
+          scalingFactor: 1.0,
+          unit: ''
+        }
+      ],
+      mappings: [
+        { id: 'm0', adiaVarId: 'var0', channelId: 'adc0', direction: 'read' },
+        { id: 'm1', adiaVarId: 'var1', channelId: 'adc1', direction: 'read' },
+        { id: 'm2', adiaVarId: 'var2', channelId: 'dac2', direction: 'write' }
+      ]
+    };
+
+    const smVars = [
+      { name: 'var0', type: 'float' },
+      { name: 'var1', type: 'float' },
+      { name: 'var2', type: 'float' }
+    ];
+
+    const files = generateHALCode(multiChannelConfig, smVars);
+    const driversC = files.find(f => f.name === 'hal_drivers.c')?.content || '';
+    
+    // Check ADC dynamic reading with GetADCChannel
+    expect(driversC).toContain('return HAL_ADC_ReadChannel(GetADCChannel("PA0"));');
+    expect(driversC).toContain('return HAL_ADC_ReadChannel(GetADCChannel("PA1"));');
+
+    // Check DAC dynamic writing with GetDACChannel
+    expect(driversC).toContain('HAL_DAC_SetValue(&hdac, GetDACChannel("PA5"), DAC_ALIGN_12B_R, (uint32_t)(value));');
+  });
+
+  it('should raise warning when STM32 pin format is configured on Arduino targets', () => {
+    const invalidArduinoConfig: HILConfig = {
+      enabled: true,
+      target: 'Arduino_Uno',
+      clockSpeed: 16,
+      commPort: 'COM3',
+      baudRate: 115200,
+      channels: [
+        {
+          id: 'ch_invalid',
+          name: 'temp_sensor',
+          peripheral: 'GPIO',
+          pin: 'PA0', // STM32 style, invalid on Arduino
+          direction: 'In',
+          dataType: 'bool',
+          rangeMin: 0,
+          rangeMax: 1,
+          scalingFactor: 1,
+          unit: ''
+        }
+      ],
+      mappings: [
+        { id: 'm_inv', adiaVarId: 'var_inv', channelId: 'ch_invalid', direction: 'read' }
+      ]
+    };
+
+    const warnings: string[] = [];
+    generateHALCode(invalidArduinoConfig, [{ name: 'var_inv', type: 'bool' }], warnings);
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain('uses STM32-style port naming which is invalid on Arduino_Uno');
+  });
+
+  it('should output clean C code for Arduino Uno/Mega without C++ String class or atoi CS pin wrappers', () => {
+    const arduinoConfig: HILConfig = {
+      enabled: true,
+      target: 'Arduino_Mega',
+      clockSpeed: 16,
+      commPort: 'COM3',
+      baudRate: 115200,
+      channels: [
+        {
+          id: 'ch_spi',
+          name: 'spi_dev',
+          peripheral: 'SPI',
+          pin: '10',
+          direction: 'Out',
+          dataType: 'uint8_t',
+          rangeMin: 0,
+          rangeMax: 255,
+          scalingFactor: 1,
+          unit: ''
+        }
+      ],
+      mappings: [
+        { id: 'm_spi', adiaVarId: 'spi_val', channelId: 'ch_spi', direction: 'write' }
+      ]
+    };
+
+    const files = generateHALCode(arduinoConfig, [{ name: 'spi_val', type: 'uint8_t' }]);
+    const driversC = files.find(f => f.name === 'hal_drivers.c')?.content || '';
+
+    // Verify String class was replaced by char rx_buffer
+    expect(driversC).not.toContain('String rx_buffer');
+    expect(driversC).toContain('char rx_buffer[RX_BUF_SIZE]');
+
+    // Verify atoi was removed from SPI init/read/write
+    expect(driversC).not.toContain('atoi("10")');
+    expect(driversC).toContain('pinMode(10, OUTPUT)');
+    expect(driversC).toContain('HAL_SPI_WriteChannel(10, value)');
+  });
+
+  it('should map LEDC channels dynamically for ESP32 PWM targets', () => {
+    const espConfig: HILConfig = {
+      enabled: true,
+      target: 'ESP32',
+      clockSpeed: 240,
+      commPort: 'COM3',
+      baudRate: 115200,
+      channels: [
+        {
+          id: 'pwm1',
+          name: 'led_red',
+          peripheral: 'PWM',
+          pin: '2',
+          direction: 'Out',
+          dataType: 'float',
+          rangeMin: 0,
+          rangeMax: 255,
+          scalingFactor: 1,
+          unit: ''
+        }
+      ],
+      mappings: [
+        { id: 'm_pwm', adiaVarId: 'red_val', channelId: 'pwm1', direction: 'write' }
+      ]
+    };
+
+    const files = generateHALCode(espConfig, [{ name: 'red_val', type: 'float' }]);
+    const driversC = files.find(f => f.name === 'hal_drivers.c')?.content || '';
+    
+    expect(driversC).toContain('GetLEDCChannel(atoi("2"))');
+    expect(driversC).toContain('ledcWrite(GetLEDCChannel(atoi("2")), value)');
   });
 });
 

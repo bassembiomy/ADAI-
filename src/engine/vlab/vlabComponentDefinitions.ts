@@ -1391,5 +1391,23 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     ],
     across: 'None', through: 'None',
     description: 'A complete pedagogical model for PID Speed Control of an Induction Motor. It integrates the motor dynamics and the speed regulator into one block for easy analysis of tuning effects.'
+  },
+  subsystem: {
+    equations: [],
+    latex: [],
+    across: 'None', through: 'None',
+    description: 'Hierarchical subsystem block.'
+  },
+  inport: {
+    equations: [],
+    latex: [],
+    across: 'None', through: 'None',
+    description: 'Subsystem input port block.'
+  },
+  outport: {
+    equations: [],
+    latex: [],
+    across: 'None', through: 'None',
+    description: 'Subsystem output port block.'
   }
 };

@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 /* gcc compile + execute cycles can exceed the default 5s test timeout on
  * Windows (AV scans of freshly linked executables); allow generous time. */
 const BEHAVIOR_TIMEOUT = 60000;
-import { generateMISRACCode } from './stateMachineCodeGenerator';
+import { generateMISRACCode, validateInitialValue } from './stateMachineCodeGenerator';
 import { StateData, VariableDef, TransitionData, JunctionData, Layer } from '../types/sm_types';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -148,6 +148,22 @@ describe('Generator validation & trigger coverage', () => {
     expect(coreC).not.toContain('1.0fe3');
   });
 
+  it('validates variable initial values accurately using validateInitialValue', () => {
+    expect(validateInitialValue({ type: 'uint8', initialValue: '255' })).toBe('255');
+    expect(validateInitialValue({ type: 'uint8', initialValue: '-5' })).toBeNull();
+    expect(validateInitialValue({ type: 'uint8', initialValue: 'abc' })).toBeNull();
+
+    expect(validateInitialValue({ type: 'bool', initialValue: 'true' })).toBe('true');
+    expect(validateInitialValue({ type: 'bool', initialValue: '1' })).toBe('true');
+    expect(validateInitialValue({ type: 'bool', initialValue: 'false' })).toBe('false');
+    expect(validateInitialValue({ type: 'bool', initialValue: '0' })).toBe('false');
+    expect(validateInitialValue({ type: 'bool', initialValue: 'abc' })).toBeNull();
+
+    expect(validateInitialValue({ type: 'float', initialValue: '3.14' })).toBe('3.14');
+    expect(validateInitialValue({ type: 'float', initialValue: '1.5f' })).toBe('1.5f');
+    expect(validateInitialValue({ type: 'float', initialValue: 'xyz' })).toBeNull();
+  });
+
   it('emits and/or trigger combinations without invariant timer operands', () => {
     const states = [mkState('s1', 'A', { autostart: true }), mkState('s2', 'B')];
     const transitions = [
@@ -173,7 +189,7 @@ describe('Generator validation & trigger coverage', () => {
     const states = [mkState('s1', 'A', { autostart: true }), mkState('s2', 'B'), mkState('s3', 'C')];
     const transitions = [
       mkTransition('t_hi', 's1', 's3', { condition: 'true', order: 2 }),
-      mkTransition('t_lo', 's1', 's2', { condition: 'true', order: 1 })
+      mkTransition('t_lo', 's1', 's2', { condition: 'flag', order: 1 })
     ];
     const chart = {
       tickMs: 10, states, junctions: [], transitions,

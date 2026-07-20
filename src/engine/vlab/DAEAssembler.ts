@@ -3,6 +3,21 @@ import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { EquationContext, AssembledSystem, PhysicalDomain, ComponentEquation } from './types';
 import { blockEquations } from './vlabEquations';
 
+const SIGNAL_CONTROL_BLOCKS = new Set([
+  'ps_lookup_2d', 'bldc_commutation', 'bldc_current_ctrl', 'bldc_pwm_ctrl',
+  'dcdc_ctrl', 'pfc_rectifier_ctrl', 'cycloconverter_ctrl', 'ps_integrator_gen',
+  'ps_moving_avg', 'ps_sr_flipflop', 'ps_sample_hold', 'ps_smith_predictor',
+  'ps_sine_3phase', 'ps_second_order_filter', 'ps_state_feedback', 'ps_sliding_mode',
+  'ps_stair_gen', 'ps_washout', 'dc_current_ctrl', 'dc_voltage_ctrl',
+  'hysteresis_ctrl_3ph', 'velocity_ctrl', 'im_scalar_ctrl', 'im_dtc_ctrl',
+  'im_curr_ctrl', 'inv_clarke_transform', 'clarke_transform', 'park_transform', 'inv_park_transform',
+  'sym_comp_transform', 'inv_sym_comp_transform', 'quad_decoder', 'resolver_to_digital',
+  'pmsm_curr_ctrl', 'pmsm_ref_gen', 'pmsm_field_weakening', 'pmsm_tq_est',
+  'pwm_3ph_3level', 'pwm_vienna', 'thyristor_6pulse', 'thyristor_12pulse',
+  'ps_simulink_conv', 'simulink_ps_conv', 'vlab_probe', 'conn_label', 'doe_custom',
+  'subsystem', 'Subsystem', 'inport', 'Inport', 'outport', 'Outport'
+]);
+
 class UnionFind {
   parent: Record<string, string> = {};
 
@@ -27,7 +42,11 @@ class UnionFind {
 }
 
 export class DAEAssembler {
-  assemble(nodes: Node[], edges: Edge[]): AssembledSystem {
+  assemble(rawNodes: Node[], rawEdges: Edge[]): AssembledSystem {
+    const { flatNodes, flatEdges } = this.flattenSubsystems(rawNodes, rawEdges);
+    const nodes = flatNodes;
+    const edges = flatEdges;
+
     const uf = new UnionFind();
     
     // 1. Identify all ports on all nodes
@@ -54,12 +73,14 @@ export class DAEAssembler {
     nodes.forEach(node => {
       const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
       const portsSet = new Set<string>();
+      const isSignalCtrl = SIGNAL_CONTROL_BLOCKS.has(type);
       
       // Get ports from library
       const libPorts = getBlockPortsFromLib(type);
       libPorts.forEach(p => {
         portsSet.add(p.id);
-        nodePortDomains.set(`${node.id}_${p.id}`, p.domain);
+        const resolvedDomain = isSignalCtrl ? 'physical' : p.domain;
+        nodePortDomains.set(`${node.id}_${p.id}`, resolvedDomain);
         nodePortPositions.set(`${node.id}_${p.id}`, p.pos);
       });
       
@@ -68,8 +89,9 @@ export class DAEAssembler {
         (node.data as any).ports.forEach((p: any) => {
           if (p && p.id) {
             portsSet.add(p.id);
-            if (p.domain) {
-              nodePortDomains.set(`${node.id}_${p.id}`, p.domain.toLowerCase() as PhysicalDomain);
+            const resolvedDomain = isSignalCtrl ? 'physical' : (p.domain ? p.domain.toLowerCase() as PhysicalDomain : undefined);
+            if (resolvedDomain) {
+              nodePortDomains.set(`${node.id}_${p.id}`, resolvedDomain);
             }
             if (p.pos) {
               nodePortPositions.set(`${node.id}_${p.id}`, p.pos);
@@ -109,10 +131,13 @@ export class DAEAssembler {
           // Guess domain based on type & naming
           const id = portId.toLowerCase();
           let domain: PhysicalDomain = 'electrical';
-          if (['r', 'c', 'w', 't', 'theta'].includes(id)) domain = 'rotational';
-          else if (['h'].includes(id)) domain = 'thermal';
-          else if (id.startsWith('in') || id.startsWith('out') || ['s', 'y', 'u', 'ctrl'].includes(id)) domain = 'physical';
-          else {
+          if (id.includes('in') || id.includes('out') || id.includes('ctrl') || id.includes('ref') || id.includes('sig') || id.includes('val') || ['s', 'y', 'u', 'e', 'g'].includes(id)) {
+            domain = 'physical';
+          } else if (['r', 'c', 'w', 't', 'theta'].includes(id)) {
+            domain = 'rotational';
+          } else if (['h'].includes(id)) {
+            domain = 'thermal';
+          } else {
             // Find parent domain from library
             for (const domainObj of VLAB_LIBRARY) {
               if (domainObj.blocks.some(b => b.id === type)) {
@@ -177,7 +202,18 @@ export class DAEAssembler {
     let varCount = 0;
 
     rootToPorts.forEach((ports, root) => {
-      const domain = nodePortDomains.get(ports[0]) || 'electrical';
+      let domain: PhysicalDomain = 'physical';
+      for (const pKey of ports) {
+        const d = nodePortDomains.get(pKey);
+        if (d && d !== 'physical') {
+          domain = d;
+          break;
+        }
+      }
+      if (domain === 'physical' && ports.length > 0) {
+        domain = nodePortDomains.get(ports[0]) || 'physical';
+      }
+      
       const acrossIndex = varCount++;
       nodeAcrossIndex.set(root, acrossIndex);
       
@@ -211,6 +247,10 @@ export class DAEAssembler {
     const getComponentSpec = (blockId: string, blockType: string, ports: string[]) => {
       const branches: { name: string; ports: { id: string; sign: number }[] }[] = [];
       const states: string[] = [];
+
+      if (['subsystem', 'Subsystem', 'inport', 'Inport', 'outport', 'Outport'].includes(blockType)) {
+        return { branches, states };
+      }
 
       const isPhysicalOutputPort = (portId: string) => {
         if (blockType === 'lms_adaptive_filter' && ['x', 'd', 'lr'].includes(portId)) return false;
@@ -358,7 +398,7 @@ export class DAEAssembler {
         case 'dc_motor':
           branches.push({ name: 'current', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: 1 }] });
-          states.push('theta');
+          states.push('theta', 'omega');
           break;
         case 'ac_motor':
         case 'bldc_motor':
@@ -367,7 +407,7 @@ export class DAEAssembler {
           branches.push({ name: 'ib', ports: [{ id: 'b', sign: -1 }] });
           branches.push({ name: 'ic', ports: [{ id: 'c', sign: -1 }] });
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: 1 }] });
-          states.push('theta');
+          states.push('theta', 'omega');
           break;
         case 'ma_chamber':
           branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }] });
@@ -453,6 +493,9 @@ export class DAEAssembler {
           states.push('temp');
           break;
         case 'washing_basket':
+          branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
+          break;
+        case 'washing_fluid':
           branches.push({ name: 'torque', ports: [{ id: 'r', sign: -1 }] });
           break;
         case 'pwm_3ph_2level':
@@ -695,22 +738,30 @@ export class DAEAssembler {
     });
 
     // Automatically treat unconnected case/reference ports (e.g. c, n, ref) as reference nodes (0 potential/speed)
+    // Also treat any unconnected fluid/gas/thermal ports as reference nodes (open to atmosphere/ambient)
     nodes.forEach(node => {
       const ports = nodePorts.get(node.id) || [];
       ports.forEach(portId => {
         const key = `${node.id}_${portId}`;
         const root = uf.find(key);
         const portsInRoot = rootToPorts.get(root) || [];
-        if (portsInRoot.length === 1 && ['c', 'n', 'ref', 'gnd'].includes(portId.toLowerCase())) {
-          referenceNodeIds.add(root);
+        if (portsInRoot.length === 1) {
+          const domain = nodePortDomains.get(key);
+          if (['c', 'n', 'ref', 'gnd'].includes(portId.toLowerCase()) ||
+              domain === 'fluid' || domain === 'gas' || domain === 'thermal') {
+            referenceNodeIds.add(root);
+          }
         }
       });
     });
 
-    // For each physical node that is NOT a reference node,
+    // KCL excluded node set remains empty so that physical signal nodes are mapped to branch variables for propagation
+    const kclExcludedNodeIds = new Set<string>();
+
+    // For each physical node that is NOT a reference node and NOT KCL-excluded,
     // construct its Kirchhoff through-variable sign maps
     physicalNodes.forEach(pn => {
-      if (referenceNodeIds.has(pn.id)) {
+      if (referenceNodeIds.has(pn.id) || kclExcludedNodeIds.has(pn.id)) {
         return;
       }
       
@@ -768,20 +819,21 @@ export class DAEAssembler {
             const srcKey = `${edge.source}_${srcPort}`;
             
             const srcDomain = nodePortDomains.get(srcKey) || 'electrical';
-            if (srcDomain === 'physical') {
-              const sourceBranchIndices = componentBranchVarIndices.get(edge.source) || [];
-              const sourcePorts = nodePorts.get(edge.source) || [];
-              const sourceNode = nodes.find(n => n.id === edge.source);
-              const sourceType = (sourceNode?.data as any)?.type || sourceNode?.type || (sourceNode?.data as any)?.blockId || '';
-              const sourceSpec = getComponentSpec(edge.source, sourceType, sourcePorts);
-              
-              const matchingBranchIdx = sourceSpec.branches.findIndex(b =>
-                b.name === `signal_${srcPort}` || b.ports.some(p => p.id === srcPort)
-              );
-              if (matchingBranchIdx !== -1 && sourceBranchIndices[matchingBranchIdx] !== undefined) {
-                return sourceBranchIndices[matchingBranchIdx];
-              }
+            // Prefer the source component's explicit signal branch when it exists (e.g. sensors, PS blocks).
+            // This avoids returning the across variable of an uncommitted scope/sink node.
+            const sourceBranchIndices = componentBranchVarIndices.get(edge.source) || [];
+            const sourcePorts = nodePorts.get(edge.source) || [];
+            const sourceNode = nodes.find(n => n.id === edge.source);
+            const sourceType = (sourceNode?.data as any)?.type || sourceNode?.type || (sourceNode?.data as any)?.blockId || '';
+            const sourceSpec = getComponentSpec(edge.source, sourceType, sourcePorts);
+            
+            const matchingBranchIdx = sourceSpec.branches.findIndex(b =>
+              b.name === `signal_${srcPort}`
+            );
+            if (matchingBranchIdx !== -1 && sourceBranchIndices[matchingBranchIdx] !== undefined) {
+              return sourceBranchIndices[matchingBranchIdx];
             }
+            
             const varIdx = portToVarIndex.get(srcKey);
             return varIdx !== undefined ? varIdx : portToVarIndex.get(targetKey)!;
           } else {
@@ -838,8 +890,14 @@ export class DAEAssembler {
         const acrossVarIdx = pn.acrossVarIndex;
         
         if (referenceNodeIds.has(pn.id)) {
-          // Reference node potential = 0
-          res[acrossVarIdx] = x[acrossVarIdx];
+          // Reference node potential/pressure/temperature
+          if (pn.domain === 'fluid' || pn.domain === 'gas') {
+            res[acrossVarIdx] = x[acrossVarIdx] - 101325;
+          } else if (pn.domain === 'thermal') {
+            res[acrossVarIdx] = x[acrossVarIdx] - 293.15;
+          } else {
+            res[acrossVarIdx] = x[acrossVarIdx];
+          }
         } else if (pn.domain === 'physical') {
           // Physical signal node:
           // It is equal to the sum of its connected signal output branch variables.
@@ -880,6 +938,103 @@ export class DAEAssembler {
       kirchhoffNodes,
       components: componentsList,
       scopeOutputs
+    };
+  }
+
+  private flattenSubsystems(nodes: Node[], edges: Edge[]): { flatNodes: Node[]; flatEdges: Edge[] } {
+    let currentNodes = [...nodes];
+    let currentEdges = [...edges];
+    let iterations = 0;
+    const maxIterations = 100;
+
+    while (iterations < maxIterations) {
+      const { nodes: nextNodes, edges: nextEdges, flattenedAny } = this.flattenOneLevel(currentNodes, currentEdges);
+      if (!flattenedAny) {
+        break;
+      }
+      currentNodes = nextNodes;
+      currentEdges = nextEdges;
+      iterations++;
+    }
+
+    return { flatNodes: currentNodes, flatEdges: currentEdges };
+  }
+
+  private flattenOneLevel(nodes: Node[], edges: Edge[]): { nodes: Node[]; edges: Edge[]; flattenedAny: boolean } {
+    const subsystem = nodes.find(n => {
+      const type = n.data?.type || n.type || '';
+      return type === 'subsystem' || type === 'Subsystem';
+    });
+    if (!subsystem) {
+      return { nodes, edges, flattenedAny: false };
+    }
+
+    const subId = subsystem.id;
+    const childInports = nodes.filter(n => n.data?.parentId === subId && (n.data?.type === 'inport' || n.data?.type === 'Inport'));
+    const childOutports = nodes.filter(n => n.data?.parentId === subId && (n.data?.type === 'outport' || n.data?.type === 'Outport'));
+
+    const childInportIds = new Set(childInports.map(n => n.id));
+    const childOutportIds = new Set(childOutports.map(n => n.id));
+
+    let newEdges: Edge[] = [];
+
+    const externalInEdges = edges.filter(e => e.target === subId);
+    const externalOutEdges = edges.filter(e => e.source === subId);
+    const internalInEdges = edges.filter(e => childInportIds.has(e.source));
+    const internalOutEdges = edges.filter(e => childOutportIds.has(e.target));
+    const remainingEdges = edges.filter(e => 
+      e.target !== subId && 
+      e.source !== subId && 
+      !childInportIds.has(e.source) && 
+      !childOutportIds.has(e.target)
+    );
+
+    externalInEdges.forEach(extEdge => {
+      let inportId = extEdge.targetHandle || '';
+      if (inportId.startsWith(subId + '-')) {
+        inportId = inportId.slice(subId.length + 1);
+      }
+      
+      const matchingInternals = internalInEdges.filter(intEdge => intEdge.source === inportId);
+      matchingInternals.forEach(intEdge => {
+        newEdges.push({
+          id: `flat_in_${extEdge.id}_${intEdge.id}`,
+          source: extEdge.source,
+          sourceHandle: extEdge.sourceHandle,
+          target: intEdge.target,
+          targetHandle: intEdge.targetHandle,
+          style: extEdge.style
+        });
+      });
+    });
+
+    externalOutEdges.forEach(extEdge => {
+      let outportId = extEdge.sourceHandle || '';
+      if (outportId.startsWith(subId + '-')) {
+        outportId = outportId.slice(subId.length + 1);
+      }
+
+      const matchingInternals = internalOutEdges.filter(intEdge => intEdge.target === outportId);
+      matchingInternals.forEach(intEdge => {
+        newEdges.push({
+          id: `flat_out_${extEdge.id}_${intEdge.id}`,
+          source: intEdge.source,
+          sourceHandle: intEdge.sourceHandle,
+          target: extEdge.target,
+          targetHandle: extEdge.targetHandle,
+          style: extEdge.style
+        });
+      });
+    });
+
+    newEdges.push(...remainingEdges);
+
+    const nextNodes = nodes.filter(n => n.id !== subId && !childInportIds.has(n.id) && !childOutportIds.has(n.id));
+
+    return {
+      nodes: nextNodes,
+      edges: newEdges,
+      flattenedAny: true
     };
   }
 }

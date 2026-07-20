@@ -209,6 +209,7 @@ interface RawPath {
 const enumeratePaths = (
   startId: string,
   adj: AdjList,
+  tickMs: number,
 ): RawPath[] => {
   const results: RawPath[] = [];
 
@@ -239,7 +240,22 @@ const enumeratePaths = (
       expanded = true;
       visited.add(targetId);
       path.push(targetId);
-      conditions.push(transition.condition || 'true');
+
+      let condStr = transition.condition || 'true';
+      if (transition.afterTicks !== null && transition.afterTicks !== undefined) {
+        const msVal = transition.afterTicks * tickMs;
+        const sVal = msVal / 1000;
+        const timerText = `after(${transition.afterTicks} ticks / ${sVal} s)`;
+        if (transition.type === 'after') {
+          condStr = timerText;
+        } else if (transition.type === 'and') {
+          condStr = `(${transition.condition}) && ${timerText}`;
+        } else if (transition.type === 'or') {
+          condStr = `(${transition.condition}) || ${timerText}`;
+        }
+      }
+
+      conditions.push(condStr);
       dfs(targetId, visited, path, conditions);
       conditions.pop();
       path.pop();
@@ -264,6 +280,7 @@ const computeCriticalPaths = (
   states: StateData[],
   junctions: JunctionData[],
   transitions: TransitionData[],
+  tickMs: number,
 ): CriticalPath[] => {
   const adj = buildAdjacencyList(transitions);
 
@@ -288,7 +305,7 @@ const computeCriticalPaths = (
 
   const rawPaths: RawPath[] = [];
   for (const startId of startIds) {
-    rawPaths.push(...enumeratePaths(startId, adj));
+    rawPaths.push(...enumeratePaths(startId, adj, tickMs));
   }
   if (rawPaths.length === 0) return [];
 
@@ -334,17 +351,26 @@ const detectCornerCases = (
 
   // --- Deadlock states ---
   states.forEach((s) => {
-    const hasOutgoing = transitions.some((t) => t.sourceId === s.id);
-    if (!hasOutgoing && !s.isSafeState) {
+    let hasOutgoing = false;
+    let curr: StateData | undefined = s;
+    while (curr) {
+      if (transitions.some((t) => t.sourceId === curr!.id)) {
+        hasOutgoing = true;
+        break;
+      }
+      curr = curr.parentId ? states.find((p) => p.id === curr!.parentId) : undefined;
+    }
+
+    if (!hasOutgoing && !s.isSafeState && !s.isTerminalState) {
       cases.push({
         id: nextId(),
         category: 'deadlock',
         severity: 'critical',
         elementId: s.id,
         elementName: s.name,
-        description: `State "${s.name}" has no outgoing transitions and is not a safe-state. The system will be trapped here permanently.`,
+        description: `State "${s.name}" and all its ancestors have no outgoing transitions, and it is not marked as a safe-state or terminal state. The system will be trapped here permanently.`,
         recommendation:
-          'Add an outgoing transition or mark as a designated safe/terminal state.',
+          'Add an outgoing transition to this state or one of its parent states, mark it as terminal/safe state, or define it as a safe state.',
       });
     }
   });
@@ -533,11 +559,31 @@ const generateTestScenarios = (
       const cond = cp.transitions[i];
       const fromState = cp.states[i];
       const toState = cp.states[i + 1];
+
+      let actionText = '';
+      if (cond.includes('after(')) {
+        const match = cond.match(/after\(([^)]+)\)/);
+        const timerDetails = match ? match[1] : 'timer expiration';
+        
+        if (cond.startsWith('after(')) {
+          actionText = `Wait for ${timerDetails}, then call SM_Step()`;
+        } else if (cond.includes('&&')) {
+          const guard = cond.split('&&')[0].trim();
+          actionText = `Set variables to satisfy ${guard}, wait for ${timerDetails}, then call SM_Step()`;
+        } else if (cond.includes('||')) {
+          const guard = cond.split('||')[0].trim();
+          actionText = `Set variables to satisfy ${guard} OR wait for ${timerDetails}, then call SM_Step()`;
+        } else {
+          actionText = `Wait for ${timerDetails}, then call SM_Step()`;
+        }
+      } else if (cond === 'true') {
+        actionText = `Call SM_Step() — transition fires unconditionally from "${fromState}"`;
+      } else {
+        actionText = `Set variables to satisfy [${cond}], then call SM_Step()`;
+      }
+
       steps.push({
-        action:
-          cond === 'true'
-            ? `Call SM_Step() — transition fires unconditionally from "${fromState}"`
-            : `Set variables to satisfy [${cond}], then call SM_Step()`,
+        action: actionText,
         expected: `System transitions from "${fromState}" to "${toState}"`,
       });
     }
@@ -738,7 +784,7 @@ export const analyzeStateMachine = (chart: {
   const { states, junctions, transitions, variables, layers = [], tickMs } = chart;
 
   // 1. Critical paths
-  const criticalPaths = computeCriticalPaths(states, junctions, transitions);
+  const criticalPaths = computeCriticalPaths(states, junctions, transitions, tickMs);
 
   // 2. Corner cases
   const cornerCases = detectCornerCases(
@@ -801,7 +847,7 @@ export const analyzeStateMachine = (chart: {
   const rawPaths: RawPath[] = [];
   if (startIds.length > 0) {
     for (const sid of startIds) {
-      rawPaths.push(...enumeratePaths(sid, adj));
+      rawPaths.push(...enumeratePaths(sid, adj, tickMs));
     }
   }
 

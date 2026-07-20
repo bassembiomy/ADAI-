@@ -359,5 +359,96 @@ describe('smAnalysisEngine', () => {
     expect(result.metrics.stateReachability).toBe(100);
     expect(result.cornerCases.filter(c => c.category === 'unreachable')).toHaveLength(0);
   });
+
+  it('should not detect deadlock in nested states when parent state has an outgoing transition', () => {
+    const states: StateData[] = [
+      {
+        id: 's1', name: 'ParentState', x: 0, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'root', children: [],
+        priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
+      },
+      {
+        id: 's2', name: 'NestedState', x: 200, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'green', parentId: 's1', children: [],
+        priority: 2, isParallel: false, regionId: 'MAIN', autostart: true
+      },
+      {
+        id: 's3', name: 'TargetState', x: 400, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'yellow', parentId: 'root', children: [],
+        priority: 3, isParallel: false, regionId: 'MAIN', autostart: false
+      }
+    ];
+
+    const transitions: TransitionData[] = [
+      {
+        id: 't1', sourceId: 's1', targetId: 's3',
+        condition: 'sensor_val > 5', action: '',
+        afterTicks: null, type: 'condition', hasControlPoint: false, order: 1
+      }
+    ];
+
+    const layers: Layer[] = [
+      { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1', 's3'], transitionIds: ['t1'], junctionIds: [] },
+      { id: 'child_layer', name: 'child_layer', parentStateId: 's1', stateIds: ['s2'], transitionIds: [], junctionIds: [] }
+    ];
+
+    const result = analyzeStateMachine({
+      tickMs: 10,
+      states,
+      junctions: [],
+      transitions,
+      variables: mockVariables,
+      layers,
+      safetyMode: false
+    });
+
+    const deadlocks = result.cornerCases.filter(c => c.category === 'deadlock');
+    // NestedState does not have outgoing transitions itself, but ParentState does.
+    // So NestedState should NOT be reported as a deadlock. Only TargetState (s3) has no outgoing transitions.
+    expect(deadlocks).toHaveLength(1);
+    expect(deadlocks[0].elementName).toBe('TargetState');
+  });
+
+  it('should suppress deadlock warning if state is marked isTerminalState', () => {
+    const states: StateData[] = [
+      {
+        id: 's1', name: 'StateA', x: 0, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'root', children: [],
+        priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
+      },
+      {
+        id: 's2', name: 'StateB', x: 200, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'green', parentId: 'root', children: [],
+        priority: 2, isParallel: false, regionId: 'MAIN', autostart: false,
+        isTerminalState: true
+      }
+    ];
+
+    const transitions: TransitionData[] = [
+      {
+        id: 't1', sourceId: 's1', targetId: 's2',
+        condition: 'true', action: '',
+        afterTicks: null, type: 'condition', hasControlPoint: false, order: 1
+      }
+    ];
+
+    const result = analyzeStateMachine({
+      tickMs: 10,
+      states,
+      junctions: [],
+      transitions,
+      variables: mockVariables,
+      layers: mockLayers,
+      safetyMode: false
+    });
+
+    const deadlocks = result.cornerCases.filter(c => c.category === 'deadlock');
+    expect(deadlocks).toHaveLength(0);
+  });
 });
 

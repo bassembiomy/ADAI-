@@ -1534,12 +1534,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'heat_flow_sensor', name: 'Heat Flow Rate Sensor', color: '#f97316', icon: 'heat_sensor', category: 'Sensors',
         params: {},
-        ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 'h', pos: 'top', label: 'H' }]
+        ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 'h', pos: 'top', label: 'H', domain: 'Physical' }]
       },
       {
         id: 'temp_sensor', name: 'Temperature Sensor', color: '#f97316', icon: 'temp_sensor', category: 'Sensors',
         params: {},
-        ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 't', pos: 'top', label: 'T' }]
+        ports: [{ id: 'a', pos: 'left', label: 'A' }, { id: 'b', pos: 'right', label: 'B' }, { id: 't', pos: 'top', label: 'T', domain: 'Physical' }]
       },
 
       // Sources
@@ -1565,7 +1565,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
       {
         id: 'ctrl_temp_src', name: 'Controlled Temperature Source', color: '#f97316', icon: 'ctrl_temp_src', category: 'Sources',
         params: {},
-        ports: [{ id: 'a', pos: 'bottom', label: 'A' }, { id: 'b', pos: 'top', label: 'B' }, { id: 's', pos: 'left', label: 'S' }]
+        ports: [{ id: 'a', pos: 'bottom', label: 'A' }, { id: 'b', pos: 'top', label: 'B' }, { id: 's', pos: 'left', label: 'S', domain: 'Physical' }]
       }
     ]
   },
@@ -1697,6 +1697,32 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         id: 'conn_label', name: 'Connection Label', color: '#4b5563', icon: 'conn_label', category: 'General',
         params: { tag: { value: 'A', unit: '', label: 'Label' } },
         ports: [{ id: 'a', pos: 'left', label: '' }]
+      },
+      {
+        id: 'subsystem', name: 'Subsystem', color: '#c9a86c', icon: 'subsystem', category: 'Subsystems',
+        params: { name: { value: 'Subsystem', unit: '', label: 'Name' } },
+        ports: [],
+        description: 'A block representing a nested subsystem layer containing its own blocks and connections. Connects to parent layers via Inports and Outports.'
+      },
+      {
+        id: 'inport', name: 'Inport', color: '#4b5563', icon: 'inport', category: 'Subsystems',
+        params: {
+          name: { value: 'In1', unit: '', label: 'Port Name' },
+          port_index: { value: 1, unit: '', label: 'Port Index' },
+          data_type: { value: 'auto', unit: '', label: 'Data Type' }
+        },
+        ports: [{ id: 'out', pos: 'right', label: 'Out' }],
+        description: 'An input port for a subsystem. Creates an input handle on the parent subsystem block.'
+      },
+      {
+        id: 'outport', name: 'Outport', color: '#4b5563', icon: 'outport', category: 'Subsystems',
+        params: {
+          name: { value: 'Out1', unit: '', label: 'Port Name' },
+          port_index: { value: 1, unit: '', label: 'Port Index' },
+          data_type: { value: 'auto', unit: '', label: 'Data Type' }
+        },
+        ports: [{ id: 'in', pos: 'left', label: 'In' }],
+        description: 'An output port for a subsystem. Creates an output handle on the parent subsystem block.'
       }
     ]
   },

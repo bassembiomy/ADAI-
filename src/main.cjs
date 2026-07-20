@@ -609,7 +609,37 @@ ipcMain.handle('hil-save-build-files', async (event, { files }) => {
       fs.mkdirSync(buildDir, { recursive: true });
     }
     for (const file of files) {
-      fs.writeFileSync(path.join(buildDir, file.name), file.content, 'utf8');
+      const filePath = path.join(buildDir, file.name);
+      let contentToWrite = file.content;
+
+      // Extract existing USER CODE blocks if file already exists
+      if (fs.existsSync(filePath)) {
+        try {
+          const existingContent = fs.readFileSync(filePath, 'utf8');
+          const userCodeMap = new Map();
+          const regex = /\/\*\s*USER\s*CODE\s*BEGIN\s+(\w+)\s*\*\/(.*?)\/\*\s*USER\s*CODE\s*END\s+\1\s*\*\//gs;
+          let match;
+          while ((match = regex.exec(existingContent)) !== null) {
+            userCodeMap.set(match[1], match[2]);
+          }
+
+          if (userCodeMap.size > 0) {
+            contentToWrite = contentToWrite.replace(
+              /\/\*\s*USER\s*CODE\s*BEGIN\s+(\w+)\s*\*\/(.*?)\/\*\s*USER\s*CODE\s*END\s+\1\s*\*\//gs,
+              (fullMatch, label) => {
+                if (userCodeMap.has(label)) {
+                  return `/* USER CODE BEGIN ${label} */${userCodeMap.get(label)}/* USER CODE END ${label} */`;
+                }
+                return fullMatch;
+              }
+            );
+          }
+        } catch (e) {
+          console.error(`Failed to preserve user code for ${file.name}:`, e);
+        }
+      }
+
+      fs.writeFileSync(filePath, contentToWrite, 'utf8');
     }
     return { success: true, path: buildDir };
   } catch (error) {
@@ -1259,7 +1289,12 @@ const credentialVault = require('./security/credentialVault.cjs');
 const { checkRateLimit } = require('./security/rateLimiter.cjs');
 
 async function storeCreds(creds) {
-  await credentialVault.storeCredentials(creds);
+  const existing = await credentialVault.loadCredentials() || {};
+  const updated = {
+    ...existing,
+    ...creds
+  };
+  await credentialVault.storeCredentials(updated);
 }
 
 async function loadCreds() {
@@ -1267,7 +1302,21 @@ async function loadCreds() {
 }
 
 async function deleteCreds() {
-  await credentialVault.deleteCredentials();
+  const existing = await credentialVault.loadCredentials() || {};
+  const keysToDelete = [
+    'tenantUrl', 'clientId', 'expiresAt', 'userDisplayName', 'userEmail', 'userId', 'accessToken', 'refreshToken'
+  ];
+  for (const k of keysToDelete) {
+    delete existing[k];
+  }
+  const remainingKeys = Object.keys(existing).filter(k => k !== 'apiKeys');
+  const hasRemainingKeys = remainingKeys.length > 0;
+  const hasApiKeys = existing.apiKeys && Object.keys(existing.apiKeys).length > 0;
+  if (!hasRemainingKeys && !hasApiKeys) {
+    await credentialVault.deleteCredentials();
+  } else {
+    await credentialVault.storeCredentials(existing);
+  }
 }
 
 // ── In-memory OAuth / BrowserView state ────────────────────────────────────
@@ -1817,12 +1866,61 @@ ipcMain.handle('3dx-dashboard-close', async () => {
 
 // Secure vault API Key handlers
 ipcMain.handle('store-api-key', async (_, { service, key }) => {
-  await credentialVault.storeCredentials({ _service: service, apiKey: key });
+  const existing = await credentialVault.loadCredentials() || {};
+  if (!existing.apiKeys) {
+    existing.apiKeys = {};
+  }
+  existing.apiKeys[service] = key;
+  await credentialVault.storeCredentials(existing);
   return { success: true };
 });
 
 ipcMain.handle('load-api-key', async (_, { service }) => {
   const creds = await credentialVault.loadCredentials();
-  return creds?._service === service ? creds.apiKey : null;
+  if (creds) {
+    if (creds.apiKeys && creds.apiKeys[service]) {
+      return creds.apiKeys[service];
+    }
+    if (creds._service === service) {
+      return creds.apiKey;
+    }
+  }
+  return null;
 });
+
+ipcMain.handle('openai-chat-completion', async (_, { apiKey, messages, baseUrl, model }) => {
+  try {
+    const cleanBaseUrl = (baseUrl || "https://api.openai.com/v1").trim().replace(/\/+$/, '');
+    const url = `${cleanBaseUrl}/chat/completions`;
+    const selectedModel = model || "gpt-4o-mini";
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: selectedModel,
+        messages: messages,
+        temperature: 0.7,
+        max_tokens: 2048
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return { success: false, error: `OpenAI API Error (${response.status}): ${errText}` };
+    }
+
+    const data = await response.json();
+    if (data.choices && data.choices[0] && data.choices[0].message) {
+      return { success: true, content: data.choices[0].message.content || "" };
+    }
+    return { success: false, error: "Empty or unexpected response from OpenAI API." };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
 

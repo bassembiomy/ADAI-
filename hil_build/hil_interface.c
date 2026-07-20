@@ -1,13 +1,16 @@
 /* ============================================================= */
 /*  ADIA HIL (Hardware-in-the-Loop) - AUTO GENERATED CODE       */
-/*  Target MCU: ESP32 (ESP32 NodeMCU)                          */
+/*  Target MCU: Arduino_Mega (Arduino Mega)                          */
 /*  Baud Rate: 115200                                */
 /*  Do not modify this file manually                             */
 /* ============================================================= */
 
 #include "hil_interface.h"
+#include "hal_config.h"
 #include "hal_drivers.h"
+#ifdef SM_SAFETY_ENABLED
 #include "sm_safety.h"
+#endif
 #include "sm_core.h"
 #include <stdio.h>
 #include <string.h>
@@ -18,13 +21,20 @@ static bool override_active_ch_1 = false;
 
 void HIL_Sync_Inputs(ADIA_Instance_t* instance) {
     if (override_active_ch_1) {
-        instance->data.value = override_val_ch_1;
+        instance->data.counter = override_val_ch_1;
     } else {
-        instance->data.value = HAL_GPIO_Read(PIN_CH_1, "ch_1");
+        instance->data.counter = HAL_GPIO_Read(PIN_CH_1, "ch_1");
     }
 }
 
 void HIL_Sync_Outputs(ADIA_Instance_t* instance) {
+#ifdef SM_SAFETY_ENABLED
+    /* Run safety validation on state consistency before writing outputs */
+    if (SM_Validate_State_Consistency(instance) != SM_ERR_NONE) {
+        instance->error_status = SM_ERR_INVALID_STATE;
+        return;
+    }
+#endif
     (void)instance;
 }
 
@@ -62,14 +72,22 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance) {
     char buf[512];
     int len = 0;
     (void)instance;
-    if (len < (int)(sizeof(buf) - 32U)) {
-        len += snprintf(buf + len, sizeof(buf) - (size_t)len, "ch_1=%.4f", (double)(instance->data.value));
+    if ((len >= 0) && ((size_t)len < (sizeof(buf) - 32U))) {
+        int remaining = (int)(sizeof(buf) - (size_t)len);
+        int written = snprintf(buf + len, (size_t)remaining, "ch_1=%.4f", (double)(instance->data.counter));
+        if (written > 0) { len += (written < remaining) ? written : (remaining - 1); }
     }
     
     if (SM_GetError(instance) != SM_ERR_NONE) {
-        len += snprintf(buf + len, sizeof(buf) - (size_t)len, ";ERROR=%d", (int)SM_GetError(instance));
+        if ((len >= 0) && ((size_t)len < (sizeof(buf) - 32U))) {
+            int remaining = (int)(sizeof(buf) - (size_t)len);
+            int written = snprintf(buf + len, (size_t)remaining, ";ERROR=%d", (int)SM_GetError(instance));
+            if (written > 0) { len += (written < remaining) ? written : (remaining - 1); }
+        }
     }
-    
-    (void)snprintf(buf + len, sizeof(buf) - (size_t)len, "\n");
+
+    if ((len >= 0) && ((size_t)len < (sizeof(buf) - 2U))) {
+        (void)snprintf(buf + len, sizeof(buf) - (size_t)len, "\n");
+    }
     HIL_SendString(buf);
 }

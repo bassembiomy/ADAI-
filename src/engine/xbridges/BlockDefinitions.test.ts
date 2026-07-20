@@ -289,6 +289,55 @@ describe('X-Bridges Learning Models Block Tests', () => {
     expect(resFW.outputs[0] as number).toBeLessThan(resNormal.outputs[0] as number);
   });
 
+  it('TC-MOTOR-02b: FIELD_WEAKENING Saturation and Anti-Windup', () => {
+    const block = BLOCK_LIBRARY['FIELD_WEAKENING']('fw_pi_test', {
+      v_max: 300, Kp: 0.1, Ki: 10, id_min: -20, id_max: 10
+    });
+    
+    let state = { integral: 0, lastTime: 0 };
+    
+    // 1. Voltage below limit (no field weakening)
+    // vMag = 250 (less than v_max = 300). vErr = 50.
+    // id_base = 5. Since vErr > 0, deltaId should be 0 (no P term for vErr > 0, and integral capped at 0).
+    let res = block.execute([250, 5], block.params, state, 0.1);
+    expect(res.outputs[0]).toBe(5); // id_ref = id_base = 5
+    expect(res.nextState.integral).toBe(0);
+    state = res.nextState;
+    
+    // 2. Voltage exceeds limit (field weakening triggers)
+    // vMag = 350 (greater than v_max = 300). vErr = -50.
+    // dt = 0.1s. integral updates: nextInt = 0 + (-50) * 0.1 = -5.
+    // deltaId = Kp * vErr + Ki * nextInt = 0.1 * (-50) + 10 * (-5) = -5 + (-50) = -55.
+    // idRef_unlimited = id_base + deltaId = 5 - 55 = -50.
+    // Since idRef_unlimited (-50) < id_min (-20), it should saturate to id_min (-20).
+    // And anti-windup should kick in, keeping integral at 0 (clamped).
+    res = block.execute([350, 5], block.params, state, 0.2);
+    expect(res.outputs[0]).toBe(-20); // Saturated to id_min
+    expect(res.nextState.integral).toBe(0); // Clamped due to anti-windup
+    state = res.nextState;
+    
+    // Let's do a smaller step that doesn't trigger clamping.
+    // vMag = 310, vErr = -10, dt = 0.1.
+    // nextInt should become 0 + (-10) * 0.1 = -1.
+    // deltaId = 0.1 * (-10) + 10 * (-1) = -1 - 10 = -11.
+    // idRef_unlimited = 5 - 11 = -6.
+    // Since -6 is within [-20, 10], it should not clamp, integral should be updated to -1.
+    res = block.execute([310, 5], block.params, state, 0.3);
+    expect(res.outputs[0]).toBeCloseTo(-6, 5);
+    expect(res.nextState.integral).toBeCloseTo(-1, 5);
+    state = res.nextState;
+
+    // Now make it saturate again to test clamping from the new state.
+    // vMag = 350, vErr = -50, dt = 0.1.
+    // If not clamped: nextInt = -1 + (-50) * 0.1 = -6.
+    // deltaId = 0.1 * (-50) + 10 * (-6) = -5 - 60 = -65.
+    // idRef_unlimited = 5 - 65 = -60. Since -60 < -20, it clamps.
+    // Integrator should remain at -1.
+    res = block.execute([350, 5], block.params, state, 0.4);
+    expect(res.outputs[0]).toBe(-20);
+    expect(res.nextState.integral).toBeCloseTo(-1, 5); // Clamped at previous value (-1)
+  });
+
   it('TC-MOTOR-03: ROTOR_POSITION_ESTIMATOR Back-EMF Observer Convergence', () => {
     const block = BLOCK_LIBRARY['ROTOR_POSITION_ESTIMATOR']('est_test', {
       method: 'Sensorless_SMO', Rs: 0.5, Ls: 0.01, P: 2
@@ -2087,6 +2136,51 @@ describe('X-Bridges Learning Models Block Tests', () => {
       const resShift = squareShift.execute([], squareShift.params, {}, time);
 
       expect(resShift.outputs[0]).toBeCloseTo(1.5 * Math.sign(Math.sin(2 * Math.PI * 2 * time + Math.PI)) + 0.5, 6);
+    });
+  });
+
+  describe('FUZZY_DEFUZZIFY Block Tests', () => {
+    // Aggregated fuzzy membership values across universe range [-1, 1] with 5 samples: [-1, -0.5, 0, 0.5, 1]
+    const aggregatedVector = [0.2, 0.8, 0.8, 0.4, 0.0];
+
+    it('should correctly calculate Centroid (COA) defuzzification', () => {
+      const defuzzBlock = BLOCK_LIBRARY['FUZZY_DEFUZZIFY']('defuzz_1', { method: 'centroid', range_min: -1, range_max: 1 });
+      const res = defuzzBlock.execute([aggregatedVector], defuzzBlock.params, {}, 0);
+      // universe = [-1, -0.5, 0, 0.5, 1]
+      // numSum = -1*0.2 + -0.5*0.8 + 0*0.8 + 0.5*0.4 + 1*0 = -0.2 - 0.4 + 0 + 0.2 + 0 = -0.4
+      // denSum = 0.2 + 0.8 + 0.8 + 0.4 + 0 = 2.2
+      // result = -0.4 / 2.2 = -0.181818...
+      expect(res.outputs[0]).toBeCloseTo(-0.4 / 2.2, 5);
+    });
+
+    it('should correctly calculate Bisector (BOA) defuzzification', () => {
+      const defuzzBlock = BLOCK_LIBRARY['FUZZY_DEFUZZIFY']('defuzz_2', { method: 'bisector', range_min: -1, range_max: 1 });
+      const res = defuzzBlock.execute([aggregatedVector], defuzzBlock.params, {}, 0);
+      // totalArea = 2.2, halfArea = 1.1
+      // cumSum @ -1 (0.2), @ -0.5 (1.0), @ 0 (1.8 >= 1.1) -> universe[2] = 0
+      expect(res.outputs[0]).toBeCloseTo(0, 5);
+    });
+
+    it('should correctly calculate MOM (Mean of Maximum) defuzzification', () => {
+      const defuzzBlock = BLOCK_LIBRARY['FUZZY_DEFUZZIFY']('defuzz_3', { method: 'mom', range_min: -1, range_max: 1 });
+      const res = defuzzBlock.execute([aggregatedVector], defuzzBlock.params, {}, 0);
+      // maxVal = 0.8 at index 1 (x = -0.5) and index 2 (x = 0)
+      // MOM = (-0.5 + 0) / 2 = -0.25
+      expect(res.outputs[0]).toBeCloseTo(-0.25, 5);
+    });
+
+    it('should correctly calculate SOM (Smallest of Maximum) defuzzification', () => {
+      const defuzzBlock = BLOCK_LIBRARY['FUZZY_DEFUZZIFY']('defuzz_4', { method: 'som', range_min: -1, range_max: 1 });
+      const res = defuzzBlock.execute([aggregatedVector], defuzzBlock.params, {}, 0);
+      // maxVal = 0.8 at index 1 (x = -0.5)
+      expect(res.outputs[0]).toBeCloseTo(-0.5, 5);
+    });
+
+    it('should correctly calculate LOM (Largest of Maximum) defuzzification', () => {
+      const defuzzBlock = BLOCK_LIBRARY['FUZZY_DEFUZZIFY']('defuzz_5', { method: 'lom', range_min: -1, range_max: 1 });
+      const res = defuzzBlock.execute([aggregatedVector], defuzzBlock.params, {}, 0);
+      // maxVal = 0.8 at index 2 (x = 0)
+      expect(res.outputs[0]).toBeCloseTo(0, 5);
     });
   });
 

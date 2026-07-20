@@ -5,7 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#if defined(__AVR__) && __has_include(<avr/io.h>)
+#if defined(__AVR__) && __has_include(<avr/io.h>) && !defined(__clang__) && !defined(__clang_analyzer__) && !defined(__INTELLISENSE__)
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>

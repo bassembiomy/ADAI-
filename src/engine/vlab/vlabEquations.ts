@@ -20,6 +20,12 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   ground: () => [],
   delta_ref: () => [],
   open_circuit: () => [],
+  subsystem: () => [],
+  Subsystem: () => [],
+  inport: () => [],
+  Inport: () => [],
+  outport: () => [],
+  Outport: () => [],
   
   resistor: ({ across, branch, params }) => {
     // Vp - Vn - I*R = 0
@@ -531,7 +537,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   // ── COUPLINGS ──────────────────────────────────────────────────────────────
   rotational_electromechanical_converter: ({ across, branch, params }) => {
     // V = Ra*I + Ke*w => (Vp-Vn) - I*Ra - Ke*w = 0
-    // T = Kt*I
+    // T = -Kt*I (power-preserving convention: electrical in = mechanical out)
     const K = params.K || params.motor_constant || 0.05;
     const Ra = params.R || params.resistance || 2.0;
     const V = across[0] - across[1];
@@ -540,13 +546,13 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const T = branch[1];
     return [
       V - I * Ra - K * w,
-      T - K * I
+      T + K * I
     ];
   },
   
   translational_electromechanical_converter: ({ across, branch, params }) => {
     // V = I*R + Bl*v
-    // F = Bl*I
+    // F = -Bl*I
     const Bl = params.Bl || 1.0;
     const R = params.R || 1.0;
     const V = across[0] - across[1];
@@ -555,20 +561,20 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const F = branch[1];
     return [
       V - I * R - Bl * v,
-      F - Bl * I
+      F + Bl * I
     ];
   },
   
   thermal_resistor: ({ across, branch, params }) => {
     // V = I * R => (Vp-Vn) - I*R = 0
-    // Q_heat = -I^2 * R (flows INTO thermal mass, so negative from component perspective)
+    // Q_heat = I^2 * R (flows OUT of the component into the thermal node)
     const R = params.R || params.resistance || params.Rth || 10.0;
     const V = across[0] - across[1];
     const I = branch[0];
     const Q = branch[1];
     return [
       V - I * R,
-      Q + I * I * R
+      Q - I * I * R
     ];
   },
 
@@ -855,8 +861,11 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const J_total = J_basket + (M_clothes + M_unbal) * R * R;
     const B = params.damping || 0.02;
     
-    // Dynamic torque load
-    return [branch[0] - (J_total * dAcross[0] + B * across[0])];
+    // Dynamic torque load and physical output vis signal
+    return [
+      branch[0] - (J_total * dAcross[0] + B * across[0]),
+      branch[1] - across[0]
+    ];
   },
   
   washing_fluid: ({ across, branch, params }) => {
@@ -865,7 +874,10 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const Water = params.water_level || 10;
     const viscosity = 0.05 + (Det * 0.02) + (Water * 0.005);
     const torque = viscosity * across[0] + 0.01 * Math.sign(across[0]) * across[0] * across[0];
-    return [branch[0] - torque];
+    return [
+      branch[0] - torque,
+      branch[1] - torque
+    ];
   },
   
 
@@ -874,6 +886,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     // across[0,1]: electrical terminals p, n
     // across[2]: mechanical speed omega
     // state[0]: rotor angle theta
+    // state[1]: mechanical speed omega (true state)
     const Ra = params.Ra || params.resistance || 2.0;
     const La = params.La || params.inductance || 0.01;
     const Ke = params.Ke || 0.05;
@@ -882,21 +895,21 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const B = params.B || params.damping || 0.001;
     
     const V = across[0] - across[1];
-    const omega = across[2];
-    const domega = dAcross[2];
     const Ia = branch[0];
     const dIa = dBranch[0];
     const torque = branch[1];
     
     return [
-      V - Ia * Ra - La * dIa - Ke * omega,
-      torque - (Kt * Ia - J * domega - B * omega),
-      dState[0] - omega
+      V - Ia * Ra - La * dIa - Ke * state[1],            // branch[0]: current
+      across[2] - state[1],                              // branch[1]: torque (link port across to speed state)
+      dState[0] - state[1],                              // state[0]: theta
+      torque - (Kt * Ia - J * dState[1] - B * state[1])  // state[1]: omega
     ];
   },
 
-  ac_motor: ({ across, dAcross, branch, state, dState, params, ctx }) => {
+  ac_motor: ({ across, branch, state, dState, params, ctx }) => {
     // 3-phase induction motor simplified dq-model
+    // state[0]: theta, state[1]: omega
     const Rs = params.Rs || 0.1;
     const P = params.P || params.pole_pairs || 2;
     const Lm = 0.05;
@@ -908,8 +921,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const Va = across[0] - across[3];
     const Vb = across[1] - across[3];
     const Vc = across[2] - across[3];
-    const omega = across[4];
-    const domega = dAcross[4];
     
     const ia = branch[0];
     const ib = branch[1];
@@ -925,19 +936,21 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const w_sync = ctx.parameters['grid_freq'] !== undefined ? ctx.parameters['grid_freq'] : 314.159;
     
     // Electromagnetic torque is proportional to stator voltage magnitude, slip frequency
-    const slip_speed = w_sync / P - omega;
+    const slip_speed = w_sync / P - state[1];
     const Te = Kt * 0.15 * Vmag * slip_speed;
     
     return [
-      Va - ia * Rs,
-      Vb - ib * Rs,
-      Vc - ic * Rs,
-      torque - (Te - J * domega - B * omega),
-      dState[0] - omega
+      Va - ia * Rs,                                      // branch[0]: ia
+      Vb - ib * Rs,                                      // branch[1]: ib
+      Vc - ic * Rs,                                      // branch[2]: ic
+      across[4] - state[1],                              // branch[3]: torque (link port across to speed state)
+      dState[0] - state[1],                              // state[0]: theta
+      torque - (Te - J * dState[1] - B * state[1])       // state[1]: omega (torque equation)
     ];
   },
 
-  bldc_motor: ({ across, dAcross, branch, state, dState, params, ctx }) => {
+  bldc_motor: ({ across, branch, state, dState, params, ctx }) => {
+    // state[0]: theta, state[1]: omega
     const Rs = params.Rs || 0.2;
     const P = params.P || 4;
     const Ke = params.Ke || 0.1;
@@ -947,8 +960,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const Va = across[0] - across[3];
     const Vb = across[1] - across[3];
     const Vc = across[2] - across[3];
-    const omega = across[4];
-    const domega = dAcross[4];
     
     const ia = branch[0];
     const ib = branch[1];
@@ -963,19 +974,21 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const w_sync = ctx.parameters['grid_freq'] !== undefined ? ctx.parameters['grid_freq'] : 314.159;
     
     // Synchronous torque coupling
-    const slip_speed = w_sync / P - omega;
+    const slip_speed = w_sync / P - state[1];
     const Te = Ke * 0.15 * Vmag * slip_speed;
     
     return [
-      Va - ia * Rs,
-      Vb - ib * Rs,
-      Vc - ic * Rs,
-      torque - (Te - J * domega - B * omega),
-      dState[0] - omega
+      Va - ia * Rs,                                      // branch[0]: ia
+      Vb - ib * Rs,                                      // branch[1]: ib
+      Vc - ic * Rs,                                      // branch[2]: ic
+      across[4] - state[1],                              // branch[3]: torque
+      dState[0] - state[1],                              // state[0]: theta
+      torque - (Te - J * dState[1] - B * state[1])       // state[1]: omega
     ];
   },
 
-  pmsm: ({ across, dAcross, branch, state, dState, params, ctx }) => {
+  pmsm: ({ across, branch, state, dState, params, ctx }) => {
+    // state[0]: theta, state[1]: omega
     const Rs = params.Rs || 0.1;
     const P = params.pole_pairs || 4;
     const Kt = params.Kt || 0.2;
@@ -985,8 +998,6 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const Va = across[0] - across[3];
     const Vb = across[1] - across[3];
     const Vc = across[2] - across[3];
-    const omega = across[4];
-    const domega = dAcross[4];
     
     const ia = branch[0];
     const ib = branch[1];
@@ -1001,15 +1012,16 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const w_sync = ctx.parameters['grid_freq'] !== undefined ? ctx.parameters['grid_freq'] : 314.159;
     
     // Synchronous torque coupling
-    const slip_speed = w_sync / P - omega;
+    const slip_speed = w_sync / P - state[1];
     const Te = Kt * 0.15 * Vmag * slip_speed;
     
     return [
-      Va - ia * Rs,
-      Vb - ib * Rs,
-      Vc - ic * Rs,
-      torque - (Te - J * domega - B * omega),
-      dState[0] - omega
+      Va - ia * Rs,                                      // branch[0]: ia
+      Vb - ib * Rs,                                      // branch[1]: ib
+      Vc - ic * Rs,                                      // branch[2]: ic
+      across[4] - state[1],                              // branch[3]: torque
+      dState[0] - state[1],                              // state[0]: theta
+      torque - (Te - J * dState[1] - B * state[1])       // state[1]: omega
     ];
   },
 
@@ -1115,7 +1127,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const temp = state[0] > 1.0 ? state[0] : T_amb;
     return [
       branch[0] - 0.0,
-      branch[1] - C * dState[0],
+      branch[1] + C * dState[0], /* heat entering chamber = C * dT/dt (branch positive leaving chamber) */
       across[2] - temp
     ];
   },
@@ -1706,7 +1718,534 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       across[0] - across[1],
       branch[1] - branch[0]
     ];
-  }
+  },
+
+  // ── SIMULATION & UTILITIES ──────────────────────────────────────────────────
+  scope: () => [],
+  solver_config: () => [],
+  mech_config: () => [],
+  ps_simulink_conv: ({ across, branch }) => [branch[0] - (across[0] || 0)],
+  simulink_ps_conv: ({ across, branch }) => [branch[0] - (across[0] || 0)],
+  vlab_probe: ({ across, branch }) => [branch[0] - (across[0] || 0)],
+  conn_label: ({ across, branch }) => [branch[0] - (across[0] || 0)],
+  doe_custom: ({ across, branch }) => [branch[0] - (across[0] || 0)],
+
+  ps_demux_3: ({ across, branch }) => {
+    const u = across[0] || 0;
+    return [
+      branch[0] - u,
+      branch[1] - u,
+      branch[2] - u
+    ];
+  },
+
+  // ── MATH & SIGNAL PROCESSING ────────────────────────────────────────────────
+  ps_lookup_2d: ({ across, branch }) => {
+    const x = across[0] || 0;
+    const y = across[1] || 0;
+    return [branch[0] - x * y];
+  },
+
+  ps_integrator_gen: ({ across, branch, state, dState }) => {
+    return [
+      dState[0] - (across[0] || 0),
+      branch[0] - state[0]
+    ];
+  },
+
+  ps_moving_avg: ({ across, branch, state, dState, params }) => {
+    const T = params.T || 0.1;
+    return [
+      dState[0] - ((across[0] || 0) - state[0]) / T,
+      branch[0] - state[0]
+    ];
+  },
+
+  ps_sr_flipflop: ({ across, branch, state, dState }) => {
+    const S = across[0] || 0;
+    const R = across[1] || 0;
+    const Q = state[0] || 0;
+    return [
+      dState[0] - (S * (1 - Q) - R * Q),
+      branch[0] - Q,
+      branch[1] - (1 - Q)
+    ];
+  },
+
+  ps_sample_hold: ({ across, branch, state, dState }) => {
+    const u = across[0] || 0;
+    const trig = across[1] || 0;
+    const holdVal = state[0] || 0;
+    const dHold = trig > 0.5 ? (u - holdVal) * 1e3 : 0.0;
+    return [
+      dState[0] - dHold,
+      branch[0] - holdVal
+    ];
+  },
+
+  ps_smith_predictor: ({ across, branch, state, dState, params }) => {
+    const T = params.delay || 0.1;
+    return [
+      dState[0] - ((across[0] || 0) - state[0]) / T,
+      branch[0] - state[0]
+    ];
+  },
+
+  ps_sine_3phase: ({ branch, params, ctx }) => {
+    const Vpk = params.Vpk || 325;
+    const f = params.f || 50;
+    const w = 2 * Math.PI * f;
+    return [
+      branch[0] - Vpk * Math.sin(w * ctx.time),
+      branch[1] - Vpk * Math.sin(w * ctx.time - 2 * Math.PI / 3),
+      branch[2] - Vpk * Math.sin(w * ctx.time + 2 * Math.PI / 3)
+    ];
+  },
+
+  ps_second_order_filter: ({ across, branch, state, dState, params }) => {
+    const wn = params.wn || 100;
+    const zeta = params.zeta || 0.707;
+    const u = across[0] || 0;
+    return [
+      dState[0] - state[1],
+      dState[1] - (wn * wn * u - 2 * zeta * wn * state[1] - wn * wn * state[0]),
+      branch[0] - state[0]
+    ];
+  },
+
+  ps_state_feedback: ({ across, branch, params }) => {
+    const x = across[0] || 0;
+    const K = params.K || 1.0;
+    return [branch[0] - (-K * x)];
+  },
+
+  ps_sliding_mode: ({ across, branch, params }) => {
+    const s = across[0] || 0;
+    const eta = params.eta || 1.0;
+    const limit = params.boundary_layer || 0.05;
+    const sat = Math.max(-1.0, Math.min(1.0, s / limit));
+    return [branch[0] - (-eta * sat)];
+  },
+
+  ps_stair_gen: ({ branch, params, ctx }) => {
+    const step_time = params.step_time || 1.0;
+    const step_val = params.step_val || 1.0;
+    const steps = Math.floor(ctx.time / step_time);
+    return [branch[0] - (steps * step_val)];
+  },
+
+  ps_washout: ({ across, branch, state, dState, params }) => {
+    const T = params.T || 0.1;
+    const u = across[0] || 0;
+    const y = u - (state[0] || 0);
+    return [
+      dState[0] - y / T,
+      branch[0] - y
+    ];
+  },
+
+  // ── MATH TRANSFORMS ─────────────────────────────────────────────────────────
+  inv_clarke_transform: ({ across, branch }) => {
+    const alpha = across[0] || 0;
+    const beta = across[1] || 0;
+    const zero = across[2] || 0;
+    return [
+      branch[0] - (alpha + zero),
+      branch[1] - (-0.5 * alpha + Math.sqrt(3)/2 * beta + zero),
+      branch[2] - (-0.5 * alpha - Math.sqrt(3)/2 * beta + zero)
+    ];
+  },
+
+  park_transform: ({ across, branch }) => {
+    const a = across[0] || 0;
+    const b = across[1] || 0;
+    const c = across[2] || 0;
+    const theta = across[3] || 0;
+    const cos = Math.cos(theta);
+    const sin = Math.sin(theta);
+    const alpha = (2*a - b - c)/3;
+    const beta = (b - c)/Math.sqrt(3);
+    const zero = (a + b + c)/3;
+    return [
+      branch[0] - (alpha * cos + beta * sin),
+      branch[1] - (-alpha * sin + beta * cos),
+      branch[2] - zero
+    ];
+  },
+
+  inv_park_transform: ({ across, branch }) => {
+    const d = across[0] || 0;
+    const q = across[1] || 0;
+    const zero = across[2] || 0;
+    const theta = across[3] || 0;
+    const cos = Math.cos(theta);
+    const sin = Math.sin(theta);
+    const alpha = d * cos - q * sin;
+    const beta = d * sin + q * cos;
+    return [
+      branch[0] - (alpha + zero),
+      branch[1] - (-0.5 * alpha + Math.sqrt(3)/2 * beta + zero),
+      branch[2] - (-0.5 * alpha - Math.sqrt(3)/2 * beta + zero)
+    ];
+  },
+
+  sym_comp_transform: ({ across, branch }) => {
+    const a = across[0] || 0;
+    const b = across[1] || 0;
+    const c = across[2] || 0;
+    const pos = (a - 0.5*b - 0.5*c)/3;
+    const neg = (a + 0.5*b + 0.5*c)/3;
+    const zero = (a + b + c)/3;
+    return [
+      branch[0] - pos,
+      branch[1] - neg,
+      branch[2] - zero
+    ];
+  },
+
+  inv_sym_comp_transform: ({ across, branch }) => {
+    const pos = across[0] || 0;
+    const neg = across[1] || 0;
+    const zero = across[2] || 0;
+    return [
+      branch[0] - (pos + neg + zero),
+      branch[1] - (-0.5*pos - 0.5*neg + zero),
+      branch[2] - (-0.5*pos - 0.5*neg + zero)
+    ];
+  },
+
+  quad_decoder: ({ across, branch, state, dState }) => {
+    return [
+      dState[0] - 0,
+      branch[0] - (state[0] || 0),
+      branch[1] - 0
+    ];
+  },
+
+  resolver_to_digital: ({ across, branch, state, dState }) => {
+    const s = across[0] || 0;
+    const c = across[1] || 0;
+    const theta = Math.atan2(s, c);
+    return [
+      dState[0] - 0,
+      branch[0] - theta,
+      branch[1] - 0
+    ];
+  },
+
+  // ── BLDC & POWER ELECTRONICS CONTROL ────────────────────────────────────────
+  bldc_commutation: ({ across, branch }) => {
+    const theta = across[0] || 0;
+    const ha = Math.sin(theta) > 0 ? 1 : 0;
+    const hb = Math.sin(theta - 2*Math.PI/3) > 0 ? 1 : 0;
+    const hc = Math.sin(theta + 2*Math.PI/3) > 0 ? 1 : 0;
+    return [
+      branch[0] - ha,
+      branch[1] - hb,
+      branch[2] - hc
+    ];
+  },
+
+  bldc_current_ctrl: ({ across, branch }) => {
+    const error = (across[0] || 0) - (across[1] || 0);
+    return [branch[0] - error * 5.0];
+  },
+
+  bldc_pwm_ctrl: ({ across, branch }) => {
+    const ctrl = across[0] || 0;
+    return [branch[0] - Math.max(0, Math.min(1.0, ctrl))];
+  },
+
+  dcdc_ctrl: ({ across, branch }) => {
+    const error = (across[0] || 0) - (across[1] || 0);
+    return [branch[0] - Math.max(0.01, Math.min(0.99, 0.5 + error * 0.1))];
+  },
+
+  pfc_rectifier_ctrl: ({ across, branch }) => {
+    const V_out = across[0] || 0;
+    const V_ref = across[1] || 0;
+    const I_ac = across[2] || 0;
+    const duty = (V_ref - V_out) * 0.05 + Math.abs(I_ac) * 0.01;
+    return [branch[0] - Math.max(0, Math.min(0.95, duty))];
+  },
+
+  cycloconverter_ctrl: ({ across, branch, ctx }) => {
+    const f_out = across[0] || 10;
+    const w = 2 * Math.PI * f_out;
+    const firing_angle = 45 + 30 * Math.sin(w * ctx.time);
+    return [branch[0] - firing_angle];
+  },
+
+  pwm_3ph_3level: ({ across, branch, ctx }) => {
+    const ctrl = across[0] || 0.5;
+    const w = ctx.parameters['grid_freq'] || 314.159;
+    const ma = 0.5 + 0.4 * ctrl * Math.sin(w * ctx.time);
+    const mb = 0.5 + 0.4 * ctrl * Math.sin(w * ctx.time - 2*Math.PI/3);
+    const mc = 0.5 + 0.4 * ctrl * Math.sin(w * ctx.time + 2*Math.PI/3);
+    return [
+      branch[0] - ma,
+      branch[1] - mb,
+      branch[2] - mc
+    ];
+  },
+
+  pwm_vienna: ({ across, branch }) => {
+    const error = (across[0] || 0) - (across[1] || 0);
+    return [
+      branch[0] - Math.max(0, Math.min(1.0, error * 0.1)),
+      branch[1] - Math.max(0, Math.min(1.0, error * 0.1)),
+      branch[2] - Math.max(0, Math.min(1.0, error * 0.1))
+    ];
+  },
+
+  thyristor_6pulse: ({ across, branch, ctx }) => {
+    const alpha = across[0] || 30;
+    const alpha_rad = alpha * Math.PI / 180;
+    const w = 2 * Math.PI * 50;
+    const t_mod = ctx.time % (1/50);
+    const g1 = t_mod > (alpha_rad / w) ? 1 : 0;
+    return [
+      branch[0] - g1,
+      branch[1] - g1,
+      branch[2] - g1,
+      branch[3] - g1,
+      branch[4] - g1,
+      branch[5] - g1
+    ];
+  },
+
+  thyristor_12pulse: ({ across, branch, ctx }) => {
+    const alpha = across[0] || 30;
+    const alpha_rad = alpha * Math.PI / 180;
+    const w = 2 * Math.PI * 50;
+    const t_mod = ctx.time % (1/50);
+    const g1 = t_mod > (alpha_rad / w) ? 1 : 0;
+    return new Array(12).fill(0).map((_, i) => branch[i] - g1);
+  },
+
+  dc_current_ctrl: ({ across, branch }) => {
+    const error = (across[0] || 0) - (across[1] || 0);
+    return [branch[0] - error * 2.0];
+  },
+
+  dc_voltage_ctrl: ({ across, branch }) => {
+    const error = (across[0] || 0) - (across[1] || 0);
+    return [branch[0] - error * 5.0];
+  },
+
+  hysteresis_ctrl_3ph: ({ across, branch }) => {
+    const error_a = (across[0] || 0) - (across[3] || 0);
+    const error_b = (across[1] || 0) - (across[4] || 0);
+    const error_c = (across[2] || 0) - (across[5] || 0);
+    return [
+      branch[0] - (error_a > 0.05 ? 1.0 : (error_a < -0.05 ? 0.0 : 0.5)),
+      branch[1] - (error_b > 0.05 ? 1.0 : (error_b < -0.05 ? 0.0 : 0.5)),
+      branch[2] - (error_c > 0.05 ? 1.0 : (error_c < -0.05 ? 0.0 : 0.5))
+    ];
+  },
+
+  velocity_ctrl: ({ across, branch }) => {
+    const error = (across[0] || 0) - (across[1] || 0);
+    return [branch[0] - error * 10.0];
+  },
+
+  im_scalar_ctrl: ({ across, branch }) => {
+    const w_ref = across[0] || 1500;
+    const V_mag = Math.max(0.1, Math.min(1.0, Math.abs(w_ref) / 1500));
+    return [
+      branch[0] - V_mag,
+      branch[1] - w_ref
+    ];
+  },
+
+  im_dtc_ctrl: ({ across, branch }) => {
+    const error_tq = (across[0] || 0) - (across[1] || 0);
+    const error_flux = (across[2] || 0) - (across[3] || 0);
+    return [
+      branch[0] - (error_tq > 5 ? 1 : (error_tq < -5 ? -1 : 0)),
+      branch[1] - (error_flux > 0.01 ? 1 : 0)
+    ];
+  },
+
+  im_curr_ctrl: ({ across, branch }) => {
+    const error_d = (across[0] || 0) - (across[1] || 0);
+    const error_q = (across[2] || 0) - (across[3] || 0);
+    return [
+      branch[0] - error_d * 2.0,
+      branch[1] - error_q * 2.0
+    ];
+  },
+
+  pmsm_curr_ctrl: ({ across, branch }) => {
+    const error_d = (across[0] || 0) - (across[1] || 0);
+    const error_q = (across[2] || 0) - (across[3] || 0);
+    return [
+      branch[0] - error_d * 2.0,
+      branch[1] - error_q * 2.0
+    ];
+  },
+
+  pmsm_ref_gen: ({ across, branch }) => {
+    const tq_ref = across[1] || 0;
+    return [
+      branch[0] - 0.0,
+      branch[1] - tq_ref * 0.5
+    ];
+  },
+
+  pmsm_field_weakening: ({ across, branch }) => {
+    const speed = across[0] || 0;
+    const limit = 200;
+    const id_fw = speed > limit ? -(speed - limit) * 0.1 : 0.0;
+    return [branch[0] - id_fw];
+  },
+
+  pmsm_tq_est: ({ across, branch }) => {
+    const iq = across[1] || 0;
+    const Kt = 0.2;
+    return [branch[0] - (Kt * iq)];
+  },
+
+  // ── MECHANICAL & MULTIBODY ──────────────────────────────────────────────────
+  ang_vel_source: ({ across, params }) => {
+    const w = params.w !== undefined ? params.w : 50;
+    return [across[0] - across[1] - w];
+  },
+
+  wheel_axle: ({ across, branch, params }) => {
+    const R = params.radius || params.R || 0.3;
+    const w = across[0] - across[1];
+    const v = across[2] - (across[3] || 0);
+    const T = branch[0];
+    const F = branch[1];
+    return [
+      v - w * R,
+      T + F * R
+    ];
+  },
+
+  rot_multibody_interface: ({ across, branch }) => {
+    return [
+      across[0] - across[1],
+      branch[1] - branch[0]
+    ];
+  },
+
+  trans_multibody_interface: ({ across, branch }) => {
+    return [
+      across[0] - across[1],
+      branch[1] - branch[0]
+    ];
+  },
+
+  belt_properties: () => [],
+  belt_end: ({ branch }) => [branch[0] - 0],
+
+  belt_spool: ({ across, branch, params }) => {
+    const R = params.radius || 0.1;
+    const w = across[0];
+    const v = across[1];
+    return [
+      v - w * R,
+      branch[0] + branch[1] * R
+    ];
+  },
+
+  pulley: ({ across, branch, params }) => {
+    const ratio = params.ratio || 1.0;
+    const w1 = across[0];
+    const w2 = across[1];
+    return [
+      w2 - w1 * ratio,
+      branch[0] + branch[1] * ratio
+    ];
+  },
+
+  angle_constraint: ({ across, branch, params }) => {
+    const limit = params.limit || Math.PI;
+    const theta = across[0];
+    return [branch[0] - (theta > limit ? (theta - limit) * 1e4 : (theta < -limit ? (theta + limit) * 1e4 : 0))];
+  },
+
+  // ── GAS AND MOIST AIR DOMAINS ──────────────────────────────────────────────
+  gas_inf_resistance: ({ branch }) => [branch[0]],
+
+  ma_pipe: ({ across, branch, params }) => {
+    const f = params.resistance || 1.0;
+    const Pa = across[0];
+    const Pb = across[1];
+    return [Pb - Pa - f * branch[0]];
+  },
+
+  ma_separator: ({ across, branch }) => {
+    return [
+      across[0] - across[1],
+      branch[0] - branch[1]
+    ];
+  },
+
+  ma_rot_conv: ({ across, branch, params }) => {
+    const h0 = params.h0 || 5.0;
+    const k = params.k || 0.1;
+    const w = across[0];
+    const Ta = across[1];
+    const Tb = across[2];
+    const Q = branch[0];
+    const h = h0 + k * Math.abs(w);
+    return [Q - h * (Ta - Tb)];
+  },
+
+  ma_trans_conv: ({ across, branch, params }) => {
+    const h0 = params.h0 || 5.0;
+    const k = params.k || 0.1;
+    const v = across[0];
+    const Ta = across[1];
+    const Tb = across[2];
+    const Q = branch[0];
+    const h = h0 + k * Math.abs(v);
+    return [Q - h * (Ta - Tb)];
+  },
+
+  ma_flow_sensor: ({ across, branch }) => {
+    return [
+      across[0] - across[1],
+      branch[1] - branch[0]
+    ];
+  },
+
+  ma_selector: ({ across, branch }) => {
+    return [
+      across[0] - across[1],
+      branch[0] - branch[1]
+    ];
+  },
+
+  ma_moisture_sensor: ({ branch }) => {
+    return [branch[0] - 0.5];
+  },
+
+  ma_pt_sensor: ({ across, branch }) => {
+    return [
+      branch[0] - (across[0] || 101325),
+      branch[1] - (across[1] || 293.15)
+    ];
+  },
+
+  ma_thermo_sensor: ({ branch }) => {
+    return [branch[0] - 1000];
+  },
+
+  ma_moisture_source: ({ branch, params }) => {
+    const S = params.flow || 0.01;
+    return [branch[0] - S];
+  },
+
+  ma_flow_source: ({ branch, params }) => {
+    const S = params.flow || 0.01;
+    return [branch[0] - S];
+  },
+
+  ma_properties: () => []
 };
 
 const rlStateCache = new Map<string, {

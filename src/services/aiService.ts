@@ -211,3 +211,81 @@ export async function fetchLocalModels(baseUrl: string): Promise<string[]> {
   }
 }
 
+// OpenAI / OpenAI-compatible REST Service
+export async function getOpenAiResponse(
+  apiKey: string,
+  history: any[],
+  currentContext: any,
+  baseUrl?: string,
+  model?: string
+): Promise<string> {
+  const messages: any[] = [
+    { role: 'system', content: SYSTEM_PROMPT }
+  ];
+
+  // Map history to OpenAI role structure
+  for (const msg of history.slice(0, -1)) {
+    messages.push({
+      role: msg.role === 'user' ? 'user' : 'assistant',
+      content: msg.content
+    });
+  }
+
+  // Inject current context into the last user prompt
+  const lastUserMsg = history[history.length - 1];
+  const fullPrompt = `Current Project Context:\n${JSON.stringify(currentContext, null, 2)}\n\nUser Request:\n${lastUserMsg.content}`;
+  messages.push({
+    role: 'user',
+    content: fullPrompt
+  });
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const electron = (window as any).require?.('electron');
+    if (electron?.ipcRenderer) {
+      const res = await electron.ipcRenderer.invoke('openai-chat-completion', {
+        apiKey,
+        messages,
+        baseUrl,
+        model
+      });
+      if (res.success) {
+        return res.content;
+      } else {
+        throw new Error(res.error);
+      }
+    } else {
+      // Fallback if not running inside Electron
+      const cleanBaseUrl = (baseUrl || "https://api.openai.com/v1").trim().replace(/\/+$/, '');
+      const url = `${cleanBaseUrl}/chat/completions`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: model || "gpt-4o-mini",
+          messages: messages,
+          temperature: 0.7,
+          max_tokens: 2048
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`OpenAI API Error (${response.status}): ${errText}`);
+      }
+
+      const data = await response.json();
+      if (data.choices && data.choices[0] && data.choices[0].message) {
+        return data.choices[0].message.content || "";
+      }
+      throw new Error("Empty or unexpected response from OpenAI API.");
+    }
+  } catch (err: any) {
+    throw new Error(err.message);
+  }
+}
+
+

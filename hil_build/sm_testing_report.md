@@ -1,17 +1,19 @@
 # ADIA Code Generation: Testing & Validation Report
-**Timestamp:** 2026-07-17T09:17:35.723Z
-**Compliance Level:** MISRA-C:2012 / IEC 61508 SIL-2
+**Timestamp:** 2026-07-18T14:27:18.741Z
+**Compliance Level:** MISRA-C:2012 (advisory)
 **Generator Version:** v3.0 ENGINE
 
 ## 1. Syntax & Compliance Check
+*Rows marked "by construction" describe generator behavior verified by the automated test suite (see stateMachineCodeGenerator tests), not by an external certified static-analysis tool.*
+
 | Category | Status | Details |
 |----------|--------|---------|
-| C99 Syntax | ✅ PASS | All identifiers are sanitized for C99 compliance and limited to 31 characters. |
-| MISRA-C 10.1 | ✅ PASS | No implicit conversions in arithmetic expressions. |
-| MISRA-C 10.3 | ✅ PASS | Essential type assignments are enforced via explicit casts. |
+| C99 Syntax | ✅ PASS (by construction) | Identifiers are sanitized, deduplicated and limited to 28 characters. |
+| MISRA-C 10.1 | ✅ PASS (by construction) | Boolean coercions use explicit comparisons, not raw casts. |
+| MISRA-C 10.3 | ✅ PASS (by construction) | Assignments carry explicit casts to the destination type. |
 | MISRA-C 10.4 | ✅ PASS | All operands match essential types. |
-| MISRA-C 14.4 | ✅ PASS | Boolean contexts in conditions are explicitly checked. Non-bool types compare against 0/0U. |
-| MISRA-C 15.7 | ✅ PASS | All if-else if constructs contain a terminating else clause. |
+| MISRA-C 14.4 | ✅ PASS (by construction) | Boolean contexts compare non-bool types explicitly against 0/0U/0.0. |
+| MISRA-C 15.7 | ✅ PASS (by construction) | All if-else if constructs contain a terminating else clause. |
 
 ## 2. Logic & Control Flow Verification
 - **Total Transitions Validated:** 2
@@ -26,8 +28,8 @@ The following variables are identified as potential Hardware/Driver interfaces:
 
 | Check | Status | Details |
 |-------|--------|---------|
-| Memory Alignment | ✅ PASS | `SM_Data_t` structure is packed for alignment. |
-| Variable Scope | ✅ PASS | Global data accessible via `SM_Data()` pointer. |
+| Data Layout | ℹ️ INFO | `SM_Data_t` is a plain C struct with natural alignment (no packing applied). |
+| Instance Scope | ✅ PASS | All runtime data is held in the caller-provided `ADIA_Instance_t` context (no hidden globals). |
 | X-Bridges Sync | N/A | Co-simulation state buffers are synchronized per tick. |
 
 ## 4. Virtual Unit Test Results (Simulated)
@@ -38,7 +40,7 @@ The following variables are identified as potential Hardware/Driver interfaces:
 | T-V01 | Root Autostart Validation | ✅ PASS |
 | T-V02 | Junction Convergence | ✅ PASS |
 | T-V03 | Logic Conflict Detection | ✅ PASS |
-| T-V04 | Safety Transition Priority | N/A |
+| T-V04 | Safe State Entry on Error | N/A |
 
 ## 5. Critical Path Analysis (Critical Batches)
 Identify the longest or most complex execution paths ("critical batches") through the state machine.
@@ -148,16 +150,16 @@ System handles the missing action gracefully with no crash, hang, or undefined b
 
 
 ## 8. HIL Driver Mapping Report
-- **Target Microcontroller:** ESP32
+- **Target Microcontroller:** Arduino_Mega
 - **Baud Rate:** 115200 bps
 - **System Clock:** 16 MHz
 - **Connection Port:** Auto-Detect
 
 | Channel Name | Pin | Peripheral | Direction | Mapped ADIA Variable | Scaling |
 |--------------|-----|------------|-----------|----------------------|---------|
-| `ch_1` | `PA0` | `GPIO` | `In` | `value` | `1` |
+| `ch_1` | `PA0` | `GPIO` | `In` | `counter` | `1` |
 
 
 ---
-**Summary:** The generated code is **Verified** for deployment on target hardware with SIL-2 requirements.
-*Note: This report is part of the traceability artifacts for certification.*
+**Summary:** The generated code has been **structurally validated** against MISRA-C:2012 advisory rules. Functional verification on target hardware is pending and must be completed before deployment.
+*Note: This report documents automated structural checks only. It does not constitute certification evidence.*

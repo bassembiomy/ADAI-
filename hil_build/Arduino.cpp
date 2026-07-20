@@ -13,3 +13,6 @@ SerialImpl Serial3;
 
 #include "SPI.h"
 SPIImpl SPI;
+
+#include "Wire.h"
+TwoWire Wire;

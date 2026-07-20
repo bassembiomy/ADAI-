@@ -2016,6 +2016,241 @@ export const XbridgesWorkspace: React.FC<{
     }
   }, [selectedNodeId]);
 
+  const getNodeDimensions = (type: string) => {
+    switch (type) {
+      case 'Scope':
+        return { width: 260, height: 180 };
+      case 'Subsystem':
+        return { width: 140, height: 90 };
+      default:
+        return { width: 130, height: 80 };
+    }
+  };
+
+  const onNodeDragStop = useCallback((_event: any, draggedNode: Node, draggedNodes: Node[]) => {
+    const nodesToMove = draggedNodes && draggedNodes.length > 0 ? draggedNodes : [draggedNode];
+    const draggedNodeIds = new Set(nodesToMove.map(n => n.id));
+
+    const availableSubsystems = nodes.filter(n =>
+      (n.data?.parentId || 'root') === currentParentId &&
+      n.data?.type === 'Subsystem' &&
+      !draggedNodeIds.has(n.id)
+    );
+
+    if (availableSubsystems.length === 0) return;
+
+    let targetSubsystemId: string | null = null;
+    for (const subNode of availableSubsystems) {
+      const subDim = getNodeDimensions(subNode.data?.type || '');
+      const subBox = {
+        x: subNode.position.x,
+        y: subNode.position.y,
+        width: subDim.width,
+        height: subDim.height
+      };
+
+      const overlaps = nodesToMove.some(dn => {
+        const dnDim = getNodeDimensions(dn.data?.type || dn.type || '');
+        const dnBox = {
+          x: dn.position.x,
+          y: dn.position.y,
+          width: dnDim.width,
+          height: dnDim.height
+        };
+
+        return (
+          dnBox.x < subBox.x + subBox.width &&
+          dnBox.x + dnBox.width > subBox.x &&
+          dnBox.y < subBox.y + subBox.height &&
+          dnBox.y + dnBox.height > subBox.y
+        );
+      });
+
+      if (overlaps) {
+        targetSubsystemId = subNode.id;
+        break;
+      }
+    }
+
+    if (targetSubsystemId) {
+      saveHistory();
+
+      let nextNodes = [...nodes];
+      let nextEdges = [...edges];
+
+      const existingInports = nodes.filter(n => n.data?.parentId === targetSubsystemId && n.data?.type === 'Inport');
+      const existingOutports = nodes.filter(n => n.data?.parentId === targetSubsystemId && n.data?.type === 'Outport');
+
+      let nextInportIndex = existingInports.length > 0
+        ? Math.max(...existingInports.map(n => n.data?.params?.port_index || 0)) + 1
+        : 1;
+      let nextOutportIndex = existingOutports.length > 0
+        ? Math.max(...existingOutports.map(n => n.data?.params?.port_index || 0)) + 1
+        : 1;
+
+      // Find all edges crossing the boundary
+      const edgesToProcess = edges.filter(e => draggedNodeIds.has(e.source) || draggedNodeIds.has(e.target));
+
+      edgesToProcess.forEach(edge => {
+        const isSourceDragged = draggedNodeIds.has(edge.source);
+        const isTargetDragged = draggedNodeIds.has(edge.target);
+
+        if (isSourceDragged && isTargetDragged) {
+          // Internal edge - keep as is, will move inside automatically
+          return;
+        }
+
+        if (!isSourceDragged && isTargetDragged) {
+          // Incoming Edge: outsideNode -> draggedNode
+          const inportId = `inport-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+          const targetNode = nodes.find(n => n.id === edge.target);
+          const targetPos = targetNode ? targetNode.position : { x: 0, y: 0 };
+
+          const blockDef = BLOCK_LIBRARY['Inport'](inportId, {
+            port_index: nextInportIndex,
+            name: `In${nextInportIndex}`
+          });
+
+          const inportNode: Node = {
+            id: inportId,
+            type: 'xblock',
+            position: { x: targetPos.x - 150, y: targetPos.y },
+            data: {
+              ...blockDef,
+              parentId: targetSubsystemId,
+              selected: false
+            }
+          };
+
+          nextNodes.push(inportNode);
+          nextInportIndex++;
+
+          // Remove original edge
+          nextEdges = nextEdges.filter(e => e.id !== edge.id);
+
+          // Add external edge: outsideNode -> Subsystem (targetHandle: inportId)
+          nextEdges.push({
+            id: `edge-ext-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            source: edge.source,
+            sourceHandle: edge.sourceHandle,
+            target: targetSubsystemId!,
+            targetHandle: inportId,
+            type: edgeType,
+            animated: isSimulating,
+            style: { stroke: '#c9a86c', strokeWidth: 3 }
+          });
+
+          // Add internal edge: Inport -> targetNode
+          nextEdges.push({
+            id: `edge-int-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            source: inportId,
+            sourceHandle: 'out',
+            target: edge.target,
+            targetHandle: edge.targetHandle,
+            type: edgeType,
+            animated: isSimulating,
+            style: { stroke: '#4caf50', strokeWidth: 3 }
+          });
+        }
+
+        if (isSourceDragged && !isTargetDragged) {
+          // Outgoing Edge: draggedNode -> outsideNode
+          const outportId = `outport-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+          const sourceNode = nodes.find(n => n.id === edge.source);
+          const sourcePos = sourceNode ? sourceNode.position : { x: 0, y: 0 };
+
+          const blockDef = BLOCK_LIBRARY['Outport'](outportId, {
+            port_index: nextOutportIndex,
+            name: `Out${nextOutportIndex}`
+          });
+
+          const outportNode: Node = {
+            id: outportId,
+            type: 'xblock',
+            position: { x: sourcePos.x + 150, y: sourcePos.y },
+            data: {
+              ...blockDef,
+              parentId: targetSubsystemId,
+              selected: false
+            }
+          };
+
+          nextNodes.push(outportNode);
+          nextOutportIndex++;
+
+          // Remove original edge
+          nextEdges = nextEdges.filter(e => e.id !== edge.id);
+
+          // Add internal edge: sourceNode -> Outport (targetHandle: in)
+          nextEdges.push({
+            id: `edge-int-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            source: edge.source,
+            sourceHandle: edge.sourceHandle,
+            target: outportId,
+            targetHandle: 'in',
+            type: edgeType,
+            animated: isSimulating,
+            style: { stroke: '#4caf50', strokeWidth: 3 }
+          });
+
+          // Add external edge: Subsystem (sourceHandle: outportId) -> outsideNode
+          nextEdges.push({
+            id: `edge-ext-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            source: targetSubsystemId!,
+            sourceHandle: outportId,
+            target: edge.target,
+            targetHandle: edge.targetHandle,
+            type: edgeType,
+            animated: isSimulating,
+            style: { stroke: '#c9a86c', strokeWidth: 3 }
+          });
+        }
+      });
+
+      // Update parentId of the dragged nodes
+      nextNodes = nextNodes.map(n => {
+        if (draggedNodeIds.has(n.id)) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              parentId: targetSubsystemId!
+            },
+            selected: false
+          };
+        }
+        return n;
+      });
+
+      setNodes(nextNodes);
+      setEdges(nextEdges);
+
+      // Re-compile simulation engine if running
+      if (engineRef.current) {
+        const model = {
+          blocks: nextNodes.map(n => {
+            const d = n.data as any;
+            if (BLOCK_LIBRARY[d.type]) {
+              try {
+                const freshBlock = BLOCK_LIBRARY[d.type](d.id, d.params || {});
+                return { ...freshBlock, id: d.id, state: freshBlock.state, params: { ...d.params, ...freshBlock.params } };
+              } catch (e) {
+                return d;
+              }
+            }
+            return d;
+          }),
+          connections: nextEdges.map(e => ({
+            sourceBlock: e.source, sourcePort: e.sourceHandle!, targetBlock: e.target, targetPort: e.targetHandle!
+          }))
+        };
+        engineRef.current['model'] = model;
+        engineRef.current['blockMap'] = new Map(model.blocks.map(b => [b.id, b]));
+        engineRef.current['compiled'] = false;
+      }
+    }
+  }, [nodes, edges, currentParentId, edgeType, isSimulating, saveHistory, setNodes, setEdges]);
+
 
 
   // Global Keyboard Shortcuts
@@ -2210,9 +2445,6 @@ export const XbridgesWorkspace: React.FC<{
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         isSpacePressedRef.current = false;
-        if (!spaceComboUsedRef.current) {
-          setIsSimulating(prev => !prev);
-        }
         spaceComboUsedRef.current = false;
       }
     };
@@ -2229,6 +2461,11 @@ export const XbridgesWorkspace: React.FC<{
     setNodes(nds => nds.map(n => {
       if (n.id === blockId) {
         const updatedData = { ...n.data, ...data };
+
+        // Sync data.label with data.params.name for Inport/Outport/Subsystem
+        if ((['Inport', 'Outport', 'Subsystem'].includes(n.data.type)) && data.params?.name) {
+          updatedData.label = data.params.name;
+        }
 
         // Handle parameter-driven port changes (e.g., numInputs, bitWidth, cases)
         if (data.params && BLOCK_LIBRARY[n.data.type]) {
@@ -2990,6 +3227,7 @@ export const XbridgesWorkspace: React.FC<{
               }), [edges, nodes, currentParentId])}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
+              onNodeDragStop={onNodeDragStop}
               onConnect={onConnect}
               onDrop={onDrop}
               onDragOver={(e) => e.preventDefault()}

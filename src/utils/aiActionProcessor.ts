@@ -1,4 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
+import { validateInitialValue } from './stateMachineCodeGenerator';
+
 export interface AiAction {
   type: 'CREATE_VARIABLE' | 'CREATE_STATE' | 'CREATE_TRANSITION' | 'CREATE_BLOCK' | 'CONFIGURE_DOE' | 'RUN_MODEL' | 'EXPORT_MODEL';
   name?: string;
@@ -75,11 +77,16 @@ export function executeAiActions(
 
       case 'CREATE_VARIABLE':
         if (action.name && action.varType) {
+          const initVal = action.value || "0";
+          if (validateInitialValue({ type: action.varType as any, initialValue: initVal }) === null) {
+            addError('error', `Invalid initial value '${initVal}' for ${action.varType} variable '${action.name}'.`, 'AI Assistant');
+            break;
+          }
           const newVar = {
             id: uuidv4(),
             name: action.name,
             type: action.varType as any,
-            initialValue: action.value || "0",
+            initialValue: initVal,
             currentValue: action.varType === 'bool' ? (action.value === 'true') : Number(action.value || 0),
             visibleInScope: true
           };

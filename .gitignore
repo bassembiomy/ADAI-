@@ -19,3 +19,7 @@ hil_build/*.o
 adia_secrets.*
 audit.log
 adia_vault.bin
+scratch/
+*.exe
+*.o
+

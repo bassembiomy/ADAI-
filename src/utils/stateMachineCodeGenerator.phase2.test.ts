@@ -219,10 +219,10 @@ describe('StateMachineCodeGenerator Phase 2 & Core Remediation Tests', () => {
 
   it('1.7: should gate safety checks under safetyMode', () => {
     const resultNormal = generateMISRACCode(baseChart);
-    const coreCNormal = resultNormal.files.find(f => f.name === 'sm_core.c')?.content || '';
+    const configNormal = resultNormal.files.find(f => f.name === 'sm_config.h')?.content || '';
     
-    // When safetyMode is false, safety check calls are gated out
-    expect(coreCNormal).not.toContain('SM_Safety_Check(instance);');
+    // When safetyMode is false, SM_SAFETY_ENABLED is not defined
+    expect(configNormal).not.toContain('#define SM_SAFETY_ENABLED');
 
     // Add safe state and enable safetyMode
     const safetyStates: StateData[] = [
@@ -231,9 +231,12 @@ describe('StateMachineCodeGenerator Phase 2 & Core Remediation Tests', () => {
     ];
     const safetyChart = { ...baseChart, states: safetyStates, safetyMode: true };
     const resultSafety = generateMISRACCode(safetyChart);
+    const configSafety = resultSafety.files.find(f => f.name === 'sm_config.h')?.content || '';
     const coreCSafety = resultSafety.files.find(f => f.name === 'sm_core.c')?.content || '';
 
-    // Safety check calls are present when safetyMode is true
+    // SM_SAFETY_ENABLED is defined when safetyMode is true
+    expect(configSafety).toContain('#define SM_SAFETY_ENABLED');
+    // Safety check calls are present in sm_core.c (wrapped by preprocessor guards)
     expect(coreCSafety).toContain('SM_Safety_Check(instance);');
   });
 
@@ -329,5 +332,112 @@ describe('StateMachineCodeGenerator Phase 2 & Core Remediation Tests', () => {
     expect(mcalDioH).toContain('#define MCAL_PIN_INPUT_2');
     expect(mcalDioH).toContain('#define MCAL_PIN_OUTPUT_0');
     expect(mcalDioH).toContain('#define MCAL_PIN_OUTPUT_1');
+  });
+
+  it('should emit user-code preservation placeholder regions in sm_user_logic.c and mcal_dio.h', () => {
+    const result = generateMISRACCode(baseChart);
+    const userLogicC = result.files.find(f => f.name === 'sm_user_logic.c')?.content || '';
+    const mcalDioH = result.files.find(f => f.name === 'mcal_dio.h')?.content || '';
+
+    // USER CODE regions in sm_user_logic.c
+    expect(userLogicC).toContain('/* USER CODE BEGIN Includes */');
+    expect(userLogicC).toContain('/* USER CODE END Includes */');
+
+    // USER CODE regions in mcal_dio.h
+    expect(mcalDioH).toContain('/* USER CODE BEGIN McalDio_Top */');
+    expect(mcalDioH).toContain('/* USER CODE END McalDio_Top */');
+    expect(mcalDioH).toContain('/* USER CODE BEGIN ReadChannel */');
+    expect(mcalDioH).toContain('/* USER CODE END ReadChannel */');
+    expect(mcalDioH).toContain('/* USER CODE BEGIN WriteChannel */');
+    expect(mcalDioH).toContain('/* USER CODE END WriteChannel */');
+    expect(mcalDioH).toContain('/* USER CODE BEGIN Watchdog_Kick */');
+    expect(mcalDioH).toContain('/* USER CODE END Watchdog_Kick */');
+  });
+
+  it('should wire safety checks inside SM_Step behind SM_SAFETY_ENABLED config flag and immediate halt on error', () => {
+    const safetyStates: StateData[] = [
+      { ...baseStates[0] },
+      { ...baseStates[1], isSafeState: true, name: 'Safe' }
+    ];
+    const safetyChart = { ...baseChart, states: safetyStates, safetyMode: true };
+    const result = generateMISRACCode(safetyChart);
+    const configH = result.files.find(f => f.name === 'sm_config.h')?.content || '';
+    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
+
+    // Verify macro definition in sm_config.h
+    expect(configH).toContain('#define SM_SAFETY_ENABLED');
+
+    // Verify SM_Step immediate error halt
+    expect(coreC).toContain('if (instance->error_status != SM_ERR_NONE) {');
+
+    // Verify safety check call sites are wrapped in SM_SAFETY_ENABLED preprocessor guard
+    expect(coreC).toContain('#ifdef SM_SAFETY_ENABLED');
+    expect(coreC).toContain('SM_Safety_Check(instance);');
+  });
+
+  it('should generate unconditional transitions without if (true) scaffold', () => {
+    const customTransitions: TransitionData[] = [
+      {
+        id: 't_unconditional', sourceId: 's1', targetId: 's2',
+        condition: '', action: '', afterTicks: null,
+        type: 'condition', hasControlPoint: false, order: 1
+      }
+    ];
+    const customChart = {
+      ...baseChart,
+      transitions: customTransitions
+    };
+
+    const result = generateMISRACCode(customChart);
+    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
+
+    // Verify it doesn't contain if (true) or else if (true) for S1 -> S2 transition
+    expect(coreC).not.toContain('if (true)');
+    expect(coreC).not.toContain('else if (true)');
+    expect(coreC).toContain('SM_Exit_State(instance, SM_ST_IDLE);');
+  });
+
+  it('should validate delta_ms against SM_TICK_MS inside SM_Step as a timing contract', () => {
+    const result = generateMISRACCode(baseChart);
+    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
+
+    // Verify delta_ms timing contract checks in SM_Step
+    expect(coreC).toContain('if ((delta_ms > SM_TICK_MS) && ((delta_ms - SM_TICK_MS) > SM_TICK_TOLERANCE)) {');
+    expect(coreC).toContain('else if ((delta_ms < SM_TICK_MS) && ((SM_TICK_MS - delta_ms) > SM_TICK_TOLERANCE)) {');
+    expect(coreC).toContain('instance->error_status = SM_ERR_SAFETY_VIOLATION;');
+  });
+
+  it('should respect guards/timers in generated test scenario steps and state tick/timer counts', () => {
+    const customTransitions: TransitionData[] = [
+      {
+        id: 't_timer', sourceId: 's1', targetId: 's2',
+        condition: '', action: '', afterTicks: 50,
+        type: 'after', hasControlPoint: false, order: 1
+      }
+    ];
+    const customChart = {
+      ...baseChart,
+      tickMs: 500,
+      transitions: customTransitions
+    };
+
+    const result = generateMISRACCode(customChart);
+    const report = result.files.find(f => f.name === 'sm_testing_report.md')?.content || '';
+
+    // Verify step shows "Wait for 50 ticks / 25 s"
+    expect(report).toContain('Wait for 50 ticks / 25 s, then call SM_Step()');
+  });
+
+  it('should output honest MISRA compliance check list and run a real 14.3 check', () => {
+    const result = generateMISRACCode(baseChart);
+    const report = result.files.find(f => f.name === 'sm_testing_report.md')?.content || '';
+
+    // Verify 14.3 check exists in the syntax compliance check section
+    expect(report).toContain('| MISRA-C 14.3 |');
+    expect(report).toContain('No invariant controlling expressions (such as `if (true)`) detected');
+    
+    // Check that we only list actually checked rules (no longer claiming 10.1 or 10.3)
+    expect(report).not.toContain('MISRA-C 10.1');
+    expect(report).not.toContain('MISRA-C 10.3');
   });
 });

@@ -23,6 +23,15 @@ export function generateHALCode(
     }
   });
 
+  /* Warning for STM32-style pins on Arduino/ESP32 targets */
+  if (target.startsWith('Arduino') || target === 'ESP32') {
+    config.channels.forEach(ch => {
+      if (/^P[A-L]\d+$/i.test(ch.pin)) {
+        warnings?.push(`[HIL] Channel '${ch.name}': pin '${ch.pin}' uses STM32-style port naming which is invalid on ${target}. Use numeric pins (e.g. '13') or analog pins (e.g. 'A0').`);
+      }
+    });
+  }
+
   const disclaimer = `/* ============================================================= */
 /*  ADIA HIL (Hardware-in-the-Loop) - AUTO GENERATED CODE       */
 /*  Target MCU: ${target} (${mcu.name})                          */
@@ -53,6 +62,33 @@ ${config.channels
 #include <stdbool.h>
 #include "hal_config.h"
 
+#ifdef TARGET_MCU_STM32F4
+#include "stm32f4xx_hal.h"
+extern UART_HandleTypeDef huart1;
+extern UART_HandleTypeDef huart2;
+extern UART_HandleTypeDef huart3;
+extern SPI_HandleTypeDef hspi1;
+extern ADC_HandleTypeDef hadc1;
+extern DAC_HandleTypeDef hdac;
+extern TIM_HandleTypeDef htim1;
+extern I2C_HandleTypeDef hi2c1;
+#elif defined(TARGET_MCU_STM32F1)
+#include "stm32f1xx_hal.h"
+extern UART_HandleTypeDef huart1;
+extern UART_HandleTypeDef huart2;
+extern SPI_HandleTypeDef hspi1;
+extern ADC_HandleTypeDef hadc1;
+extern TIM_HandleTypeDef htim1;
+extern I2C_HandleTypeDef hi2c1;
+#elif defined(TARGET_MCU_ARDUINO_UNO) || defined(TARGET_MCU_ARDUINO_MEGA) || defined(TARGET_MCU_ESP32)
+#include "Arduino.h"
+#include "SPI.h"
+#include "Wire.h"
+extern SPIImpl SPI;
+extern TwoWire Wire;
+static const uint8_t HIL_HIGH_VAL = HIGH;
+#endif
+
 void HAL_Drivers_Init(void);
 bool HAL_GPIO_Read(const char* pin, const char* name);
 void HAL_GPIO_Write(const char* pin, const char* name, bool value);
@@ -63,6 +99,8 @@ uint32_t HAL_UART_Read(const char* pin, const char* name);
 void HAL_UART_Write(const char* pin, const char* name, uint32_t value);
 uint32_t HAL_SPI_Read(const char* pin, const char* name);
 void HAL_SPI_Write(const char* pin, const char* name, uint32_t value);
+uint32_t HAL_I2C_Read(const char* pin, const char* name);
+void HAL_I2C_Write(const char* pin, const char* name, uint32_t value);
 void HIL_SendString(const char* str);
 void HIL_Receive_Poll(void);
 
@@ -78,8 +116,11 @@ void HIL_Receive_Poll(void);
   const uartWriteChannels = config.channels.filter(ch => ch.peripheral === 'UART' && ch.direction === 'Out');
   const spiReadChannels = config.channels.filter(ch => ch.peripheral === 'SPI' && ch.direction === 'In');
   const spiWriteChannels = config.channels.filter(ch => ch.peripheral === 'SPI' && ch.direction === 'Out');
+  const i2cReadChannels = config.channels.filter(ch => ch.peripheral === 'I2C' && ch.direction === 'In');
+  const i2cWriteChannels = config.channels.filter(ch => ch.peripheral === 'I2C' && ch.direction === 'Out');
 
   const halDriversC = `${disclaimer}#include "hal_drivers.h"
+#include "hal_config.h"
 #include "hil_interface.h"
 ${mcu.systemIncludes}
 
@@ -166,6 +207,21 @@ void HAL_SPI_Write(const char* pin, const char* name, uint32_t value) {
       .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
 }
 
+uint32_t HAL_I2C_Read(const char* pin, const char* name) {
+    (void)pin;
+    ${i2cReadChannels.length > 0 ? i2cReadChannels
+      .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        return ${mcu.peripherals.I2C.read(ch.pin, ch.name)};\n    }`)
+      .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
+    return 0;
+}
+
+void HAL_I2C_Write(const char* pin, const char* name, uint32_t value) {
+    (void)pin;
+    ${i2cWriteChannels.length > 0 ? i2cWriteChannels
+      .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        ${mcu.peripherals.I2C.write(ch.pin, ch.name, 'value')}\n        return;\n    }`)
+      .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
+}
+
 ${mcu.serialTransmit.trim()}
 
 void HIL_Receive_Poll(void) {
@@ -211,6 +267,8 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
         readCall = `HAL_UART_Read(${pinMacro}, "${ch.name}")`;
       } else if (ch.peripheral === 'SPI') {
         readCall = `HAL_SPI_Read(${pinMacro}, "${ch.name}")`;
+      } else if (ch.peripheral === 'I2C') {
+        readCall = `HAL_I2C_Read(${pinMacro}, "${ch.name}")`;
       } else {
         readCall = `0`;
       }
@@ -257,6 +315,8 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
         return `    HAL_UART_Write(${pinMacro}, "${ch.name}", (uint32_t)(${valExpr}));`;
       } else if (ch.peripheral === 'SPI') {
         return `    HAL_SPI_Write(${pinMacro}, "${ch.name}", (uint32_t)(${valExpr}));`;
+      } else if (ch.peripheral === 'I2C') {
+        return `    HAL_I2C_Write(${pinMacro}, "${ch.name}", (uint32_t)(${valExpr}));`;
       }
       return '';
     })
@@ -289,8 +349,11 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
     .join('\n');
 
   const hilInterfaceC = `${disclaimer}#include "hil_interface.h"
+#include "hal_config.h"
 #include "hal_drivers.h"
+#ifdef SM_SAFETY_ENABLED
 #include "sm_safety.h"
+#endif
 #include "sm_core.h"
 #include <stdio.h>
 #include <string.h>
@@ -303,6 +366,13 @@ ${inputSyncs || '    (void)instance;'}
 }
 
 void HIL_Sync_Outputs(ADIA_Instance_t* instance) {
+#ifdef SM_SAFETY_ENABLED
+    /* Run safety validation on state consistency before writing outputs */
+    if (SM_Validate_State_Consistency(instance) != SM_ERR_NONE) {
+        instance->error_status = SM_ERR_INVALID_STATE;
+        return;
+    }
+#endif
 ${outputSyncs || '    (void)instance;'}
 }
 

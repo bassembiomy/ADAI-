@@ -150,14 +150,35 @@ typedef enum {
 #define DAC_TRIGGER_NONE 0
 #define DAC_OUTPUTBUFFER_ENABLE 1
 #define DAC_CHANNEL_1 1
+#define DAC_CHANNEL_2 2
 #define DAC_ALIGN_12B_R 12
 
 #define TIM_OCMODE_PWM1 1
 #define TIM_OCPOLARITY_HIGH 1
 #define TIM_OCFAST_DISABLE 0
 #define TIM_CHANNEL_1 1
+#define TIM_CHANNEL_2 2
+#define TIM_CHANNEL_3 3
+#define TIM_CHANNEL_4 4
 #define TIM_COUNTERMODE_UP 1
 #define TIM_CLOCKDIVISION_DIV1 1
+
+#define ADC_CHANNEL_0 0
+#define ADC_CHANNEL_1 1
+#define ADC_CHANNEL_2 2
+#define ADC_CHANNEL_3 3
+#define ADC_CHANNEL_4 4
+#define ADC_CHANNEL_5 5
+#define ADC_CHANNEL_6 6
+#define ADC_CHANNEL_7 7
+#define ADC_CHANNEL_8 8
+#define ADC_CHANNEL_9 9
+#define ADC_CHANNEL_10 10
+#define ADC_CHANNEL_11 11
+#define ADC_CHANNEL_12 12
+#define ADC_CHANNEL_13 13
+#define ADC_CHANNEL_14 14
+#define ADC_CHANNEL_15 15
 
 // GPIO Ports & Peripherals
 #define GPIOA ((void*)0)

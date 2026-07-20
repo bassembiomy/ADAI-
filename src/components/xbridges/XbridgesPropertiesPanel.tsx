@@ -980,7 +980,29 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                           <option value="field_weakening">Field Weakening</option>
                         </>
                       )}
-                      {key === 'method' && block.type !== 'FUZZY_AND' && block.type !== 'FUZZY_OR' && (
+                      {key === 'method' && block.type === 'THREE_PHASE_PWM' && (
+                        <>
+                          <option value="SPWM">Sinusoidal PWM (SPWM)</option>
+                          <option value="Saddle">Saddle Modulation (Third Harmonic Injection)</option>
+                          <option value="SVPWM">Space Vector PWM (SVPWM)</option>
+                        </>
+                      )}
+                      {key === 'method' && block.type === 'ROTOR_POSITION_ESTIMATOR' && (
+                        <>
+                          <option value="Sensorless_SMO">Sliding Mode Observer (SMO)</option>
+                          <option value="Hall_sensor">Hall Effect Sensor Interface</option>
+                        </>
+                      )}
+                      {key === 'method' && block.type === 'FUZZY_DEFUZZIFY' && (
+                        <>
+                          <option value="centroid">Centroid (COA)</option>
+                          <option value="bisector">Bisector (BOA)</option>
+                          <option value="mom">Mean of Maximum (MOM)</option>
+                          <option value="som">Smallest of Maximum (SOM)</option>
+                          <option value="lom">Largest of Maximum (LOM)</option>
+                        </>
+                      )}
+                      {key === 'method' && block.type !== 'FUZZY_AND' && block.type !== 'FUZZY_OR' && block.type !== 'FUZZY_DEFUZZIFY' && block.type !== 'THREE_PHASE_PWM' && block.type !== 'ROTOR_POSITION_ESTIMATOR' && (
                         <>
                           <option value="forward_euler">Forward Euler</option>
                           <option value="backward_euler">Backward Euler</option>

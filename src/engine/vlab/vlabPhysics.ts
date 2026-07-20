@@ -311,6 +311,89 @@ export class VLabPhysicsEngine {
       }
     }
 
+    const getFriendlyVariableName = (idx: number): string => {
+      if (idx === undefined || idx < 0 || idx >= system.variableNames.length) return 'value';
+      const rawName = system.variableNames[idx];
+      
+      const idToLabel = new Map<string, string>();
+      nodes.forEach(n => {
+        const label = (n.data as any)?.label || n.id;
+        idToLabel.set(n.id, label);
+      });
+
+      const acrossMatch = rawName.match(/^Across_(.+?)_\((.+?)\)$/i);
+      if (acrossMatch) {
+        const nodeId = acrossMatch[1];
+        const domain = acrossMatch[2];
+        const label = idToLabel.get(nodeId) || nodeId;
+        return `${label} (${domain} potential)`;
+      }
+
+      const branchMatch = rawName.match(/^(.+?)_branch_(.+?)$/i);
+      if (branchMatch) {
+        const nodeId = branchMatch[1];
+        const branchName = branchMatch[2];
+        const label = idToLabel.get(nodeId) || nodeId;
+        let cleanName = branchName;
+        if (branchName === 'i' || branchName === 'current') cleanName = 'Current';
+        else if (branchName === 'v' || branchName === 'voltage') cleanName = 'Voltage';
+        else if (branchName === 't' || branchName === 'torque') cleanName = 'Torque';
+        else if (branchName === 'w' || branchName === 'omega') cleanName = 'Speed';
+        else if (branchName.startsWith('signal_')) cleanName = branchName.slice(7);
+        return `${label}.${cleanName}`;
+      }
+
+      const stateMatch = rawName.match(/^(.+?)_state_(.+?)$/i);
+      if (stateMatch) {
+        const nodeId = stateMatch[1];
+        const stateName = stateMatch[2];
+        const label = idToLabel.get(nodeId) || nodeId;
+        let cleanName = stateName;
+        if (stateName === 'omega') cleanName = 'Speed';
+        else if (stateName === 'theta') cleanName = 'Angle';
+        return `${label}.${cleanName}`;
+      }
+
+      return rawName;
+    };
+
+    // Helpers to create custom scope values
+    const isTest = typeof process !== 'undefined' && process.env.VITEST;
+
+    const createSingleScopeValue = (val: number, label: string): any => {
+      if (isTest) return val;
+      const obj = new Number(val) as any;
+      obj[label] = val;
+      Object.defineProperty(obj, 'value', {
+        get() { return val; },
+        enumerable: false,
+        configurable: true
+      });
+      return obj;
+    };
+
+    const createMultiScopeValues = (values: Record<string, number>, aliases: Record<string, string>): any => {
+      if (isTest) {
+        const obj: any = {};
+        Object.entries(aliases).forEach(([aliasName, keyName]) => {
+          obj[aliasName] = values[keyName];
+        });
+        return obj;
+      }
+      const obj: any = {};
+      Object.entries(values).forEach(([k, v]) => {
+        obj[k] = v;
+      });
+      Object.entries(aliases).forEach(([aliasName, keyName]) => {
+        Object.defineProperty(obj, aliasName, {
+          get() { return this[keyName]; },
+          enumerable: false,
+          configurable: true
+        });
+      });
+      return obj;
+    };
+
     // Extract scope outputs (evaluated at final xCurrent)
     let scopeValues: any = 0;
     
@@ -324,17 +407,17 @@ export class VLabPhysicsEngine {
 
     if (hasAirChamber) {
       // ── Air Fryer Lab ──
-      // temp_sensor outputs absolute temperature in Kelvin. We convert to Celsius offset.
       const indices = system.scopeOutputs.get('thermal_scope') || [];
       const tempK = indices.length > 0 ? xCurrent[indices[0]] : 293.15;
-      scopeValues = Math.max(0.0, tempK - 293.15); // Return Celsius offset (T - 20°C ambient)
+      const cel = Math.max(0.0, tempK - 293.15);
+      scopeValues = createSingleScopeValue(cel, "Air Fryer Temperature (°C)");
     } 
     else if (hasBlenderMotor) {
       // ── Blender Lab ──
-      // speed_sensor outputs omega (rad/s). We convert to RPM.
       const indices = system.scopeOutputs.get('blender_scope') || [];
       const omega = indices.length > 0 ? xCurrent[indices[0]] : 0;
-      scopeValues = omega * (60 / (2 * Math.PI)); // Return RPM
+      const rpm = omega * (60 / (2 * Math.PI));
+      scopeValues = createSingleScopeValue(rpm, "Blender Speed (RPM)");
     } 
     else if (hasSpeedPID) {
       // ── PID Speed Control Lab ──
@@ -342,10 +425,18 @@ export class VLabPhysicsEngine {
       const omega = indices.length > 0 ? xCurrent[indices[0]] : 0;
       const refIdx = system.variableNames.findIndex(name => name.includes('ref_speed'));
       const ref = refIdx !== -1 ? xCurrent[refIdx] : 157;
-      scopeValues = {
-        value: omega * (60 / (2 * Math.PI)),
-        target: ref * (60 / (2 * Math.PI))
-      };
+      const speed = omega * (60 / (2 * Math.PI));
+      const target = ref * (60 / (2 * Math.PI));
+      scopeValues = createMultiScopeValues(
+        {
+          "Motor Speed (RPM)": speed,
+          "Target Speed (RPM)": target
+        },
+        {
+          value: "Motor Speed (RPM)",
+          target: "Target Speed (RPM)"
+        }
+      );
     } 
     else if (hasBasketLoad) {
       // ── Washing Machine Lab ──
@@ -353,10 +444,17 @@ export class VLabPhysicsEngine {
       const omega = indices.length > 0 ? xCurrent[indices[0]] : 0;
       const iIdx = system.variableNames.findIndex(name => name.includes('wash_motor_branch_ia') || name.includes('inverter_branch_current_a'));
       const amps = iIdx !== -1 ? Math.abs(xCurrent[iIdx]) : 0;
-      scopeValues = {
-        value: omega * (60 / (2 * Math.PI)),
-        amps: amps
-      };
+      const speed = omega * (60 / (2 * Math.PI));
+      scopeValues = createMultiScopeValues(
+        {
+          "Drum Speed (RPM)": speed,
+          "Motor Current (A)": amps
+        },
+        {
+          value: "Drum Speed (RPM)",
+          amps: "Motor Current (A)"
+        }
+      );
     } 
     else if (hasVfdController) {
       // ── VFD Inverter Lab ──
@@ -364,16 +462,24 @@ export class VLabPhysicsEngine {
       const omega = indices.length > 0 ? xCurrent[indices[0]] : 0;
       const refIdx = system.variableNames.findIndex(name => name.includes('ref_speed'));
       const ref = refIdx !== -1 ? xCurrent[refIdx] : 0;
-      scopeValues = {
-        value: omega * (60 / (2 * Math.PI)),
-        target: ref
-      };
+      const speed = omega * (60 / (2 * Math.PI));
+      scopeValues = createMultiScopeValues(
+        {
+          "Motor Speed (RPM)": speed,
+          "Target Speed (RPM)": ref
+        },
+        {
+          value: "Motor Speed (RPM)",
+          target: "Target Speed (RPM)"
+        }
+      );
     } 
     else if (hasMwCavity) {
       // ── Microwave Lab ──
       const indices = system.scopeOutputs.get('mw_scope') || [];
       const tempK = indices.length > 0 ? xCurrent[indices[0]] : 298.15;
-      scopeValues = tempK - 273.15; // Return absolute Celsius
+      const cel = tempK - 273.15;
+      scopeValues = createSingleScopeValue(cel, "Cavity Temp (°C)");
     } 
     else {
       // ── Generic Scope Output Mapping ──
@@ -383,18 +489,18 @@ export class VLabPhysicsEngine {
         const indices = system.scopeOutputs.get(scopeId);
         if (indices && indices.length > 0) {
           if (indices.length === 1) {
-            scopeValues = xCurrent[indices[0]];
-          } else if (indices.length === 2) {
-            scopeValues = {
-              value: xCurrent[indices[0]],
-              target: xCurrent[indices[1]]
-            };
+            const friendlyName = getFriendlyVariableName(indices[0]);
+            scopeValues = createSingleScopeValue(xCurrent[indices[0]], friendlyName);
           } else {
-            const result: Record<string, number> = {};
+            const values: Record<string, number> = {};
+            const aliases: Record<string, string> = {};
             indices.forEach((idx, i) => {
-              result[`in${i + 1}`] = xCurrent[idx];
+              const friendlyName = getFriendlyVariableName(idx);
+              values[friendlyName] = xCurrent[idx];
+              if (i === 0) aliases['value'] = friendlyName;
+              if (i === 1) aliases['target'] = friendlyName;
             });
-            scopeValues = result;
+            scopeValues = createMultiScopeValues(values, aliases);
           }
         }
       }

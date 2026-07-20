@@ -163,6 +163,77 @@ describe('StateMachineCodeGenerator', () => {
     expect(report).toContain('State Reachability:');
   });
 
+  it('should document terminal states and report type-binding violations', () => {
+    const customChart = {
+      ...chart,
+      states: [
+        {
+          ...mockStates[0],
+          isTerminalState: true
+        },
+        mockStates[1]
+      ],
+      hilConfig: {
+        enabled: true,
+        target: 'STM32F4',
+        clockSpeed: 84,
+        commPort: 'COM3',
+        baudRate: 115200,
+        channels: [
+          {
+            id: 'ch1',
+            name: 'DigitalIn',
+            peripheral: 'GPIO',
+            pin: 'PA0',
+            direction: 'In',
+            dataType: 'float',
+            rangeMin: 0,
+            rangeMax: 1,
+            scalingFactor: 1,
+            unit: ''
+          },
+          {
+            id: 'ch2',
+            name: 'AnalogOut',
+            peripheral: 'ADC',
+            pin: 'PA1',
+            direction: 'Out',
+            dataType: 'bool',
+            rangeMin: 0,
+            rangeMax: 5,
+            scalingFactor: 1,
+            unit: ''
+          }
+        ],
+        mappings: [
+          {
+            id: 'm1',
+            channelId: 'ch1',
+            adiaVarId: 'sensor_val', // type is float (implausible for GPIO)
+            direction: 'read'
+          },
+          {
+            id: 'm2',
+            channelId: 'ch2',
+            adiaVarId: 'is_active', // type is bool (implausible for ADC)
+            direction: 'write'
+          }
+        ]
+      }
+    };
+
+    const result = generateMISRACCode(customChart as any);
+    const report = result.files.find(f => f.name === 'sm_testing_report.md')?.content || '';
+
+    // Verify terminal states documentation
+    expect(report).toContain('- **Terminal States:** `Idle` (Terminal/Safe)');
+
+    // Verify type-binding plausibility report
+    expect(report).toContain('### Type-Binding Plausibility Report');
+    expect(report).toContain('Digital GPIO pin is bound to type `float`');
+    expect(report).toContain('Analog/PWM peripheral is bound to `bool` type');
+  });
+
   it('should enforce parenthesization and wrap single statement conditional bodies in braces', () => {
     const customChart = {
       ...chart,

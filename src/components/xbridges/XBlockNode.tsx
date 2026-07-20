@@ -1768,7 +1768,7 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
           </div>
           <div className="flex flex-col">
             <span className="text-[9px] font-black text-slate-200 uppercase tracking-[0.2em] leading-tight">
-              {data.label || data.type}
+              {((data.type === 'Inport' || data.type === 'Outport') ? (data.params?.name || data.label) : data.label) || data.type}
             </span>
             {data.params?.smVarId && (
               <span className="text-[7px] text-[#c9a86c] font-bold uppercase tracking-widest mt-0.5">
