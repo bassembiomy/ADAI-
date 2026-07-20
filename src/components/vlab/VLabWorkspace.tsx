@@ -15,7 +15,8 @@ import ReactFlow, {
   Position,
   ConnectionLineType,
   getBezierPath,
-  ConnectionMode
+  ConnectionMode,
+  useUpdateNodeInternals
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import * as math from 'mathjs';
@@ -1556,8 +1557,27 @@ class NodeErrorBoundary extends React.Component<{ children: React.ReactNode }, {
   }
 }
 
+const getRotatedPosition = (originalPos: Position, rotation: number): Position => {
+  const normRot = ((rotation % 360) + 360) % 360;
+  if (normRot === 0) return originalPos;
+  
+  const posOrder = [Position.Top, Position.Right, Position.Bottom, Position.Left];
+  const origIdx = posOrder.indexOf(originalPos);
+  if (origIdx === -1) return originalPos;
+  
+  const shift = Math.round(normRot / 90);
+  const newIdx = (origIdx + shift) % 4;
+  return posOrder[newIdx];
+};
+
 const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boolean }) => {
   console.log(`VLab Node [${id}]:`, data);
+  const updateNodeInternals = useUpdateNodeInternals();
+  const rotation = data.rotation || 0;
+
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, rotation, updateNodeInternals]);
   
   // Robust port gathering (supports ports array or separate inputs/outputs)
   const rawPorts = data.ports || [
@@ -1678,7 +1698,7 @@ const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boo
         style={{ minWidth: 80, minHeight: 60 }}
       >
         {/* Inner Symbol & Ports Container with Fixed size */}
-        <div className="relative flex items-center justify-center" style={{ width, height }}>
+        <div className="relative flex items-center justify-center" style={{ width, height, transform: `rotate(${rotation}deg)` }}>
           {/* Bidirectional Ports with Offsets */}
           {Object.entries(portsBySide).map(([side, sidePorts]: [any, any]) => (
             sidePorts.map((port: any, index: number) => {
@@ -1687,6 +1707,8 @@ const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boo
               const position = side === 'left' ? Position.Left :
                 side === 'right' ? Position.Right :
                   side === 'top' ? Position.Top : Position.Bottom;
+
+              const rotatedPos = getRotatedPosition(position, rotation);
 
               return (
                 <div
@@ -1701,7 +1723,7 @@ const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boo
                   {/* We set transform to none to override default ReactFlow translate styling that misaligns handles. */}
                   <Handle
                     type="source"
-                    position={position}
+                    position={rotatedPos}
                     id={`${id}-${port.id}`}
                     className="!w-full !h-full !border !border-white/50 hover:!scale-125 transition-all rounded-none shadow-lg !absolute !top-0 !left-0"
                     style={{ transform: 'none', backgroundColor: data.color || '#3b82f6' }}
@@ -1713,7 +1735,7 @@ const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boo
                     style={{
                       top: side === 'top' ? -18 : side === 'bottom' ? 18 : 0,
                       left: side === 'left' ? -20 : side === 'right' ? 20 : 0,
-                      transform: (side === 'left' || side === 'right') ? 'translateY(-50%)' : 'translateX(-50%)'
+                      transform: (side === 'left' || side === 'right') ? `translateY(-50%) rotate(${-rotation}deg)` : `translateX(-50%) rotate(${-rotation}deg)`
                     }}
                   >
                     {port.label}
@@ -2472,6 +2494,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
   const isSpacePressedRef = useRef(false);
   const spaceComboUsedRef = useRef(false);
+  const isRPressedRef = useRef(false);
 
   const toggleDomain = (type: string) => {
     setExpandedDomains(prev => ({ ...prev, [type]: prev[type] === false ? true : false }));
@@ -3018,6 +3041,30 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         setIsPaused(false);
       }
 
+      // Track R press (without modifiers)
+      if ((e.key === 'r' || e.key === 'R' || e.code === 'KeyR') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        isRPressedRef.current = true;
+      }
+
+      // Rotate Selected Node 90 degrees left (R + T)
+      if ((e.key === 't' || e.key === 'T' || e.code === 'KeyT') && isRPressedRef.current) {
+        e.preventDefault();
+        setNodes(nds => nds.map(node => {
+          if (node.selected) {
+            const currentRotation = node.data?.rotation || 0;
+            const newRotation = currentRotation - 90;
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                rotation: newRotation
+              }
+            };
+          }
+          return node;
+        }));
+      }
+
       // Undo (Ctrl + Z)
       if (e.ctrlKey && e.key === 'z') {
         if (history.length > 0) {
@@ -3083,6 +3130,9 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       if (e.code === 'Space') {
         isSpacePressedRef.current = false;
         spaceComboUsedRef.current = false;
+      }
+      if (e.key === 'r' || e.key === 'R' || e.code === 'KeyR') {
+        isRPressedRef.current = false;
       }
     };
 
