@@ -753,5 +753,79 @@ describe('StateMachineCodeGenerator', () => {
       }
     });
   });
+
+  it('should generate correct C code for nested mixed OR and AND decomposition layers', () => {
+    const mixedStates: StateData[] = [
+      {
+        id: 'super', name: 'SuperState', x: 0, y: 0, width: 300, height: 300,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'root', children: [],
+        priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
+      },
+      {
+        id: 'ex_a', name: 'Ex_StateA', x: 10, y: 10, width: 80, height: 80,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'super', children: [],
+        priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
+      },
+      {
+        id: 'ex_b', name: 'Ex_StateB', x: 110, y: 10, width: 80, height: 80,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'super', children: [],
+        priority: 2, isParallel: false, regionId: 'MAIN', autostart: false
+      },
+      {
+        id: 'par_c', name: 'Par_StateC', x: 10, y: 150, width: 80, height: 80,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'super', children: [],
+        priority: 1, isParallel: true, regionId: 'R1', autostart: true
+      },
+      {
+        id: 'par_d', name: 'Par_StateD', x: 110, y: 150, width: 80, height: 80,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'super', children: [],
+        priority: 2, isParallel: true, regionId: 'R2', autostart: true
+      }
+    ];
+
+    const mixedChart = {
+      tickMs: 10,
+      states: mixedStates,
+      junctions: [],
+      transitions: [
+        {
+          id: 't_ex', sourceId: 'ex_a', targetId: 'ex_b', condition: 'cond_trigger', action: '', afterTicks: null,
+          type: 'condition', hasControlPoint: false, order: 1
+        }
+      ],
+      variables: [
+        { id: 'v1', name: 'cond_trigger', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true }
+      ],
+      layers: [
+        { id: 'root', name: 'root', parentStateId: null, stateIds: ['super'], transitionIds: [], junctionIds: [] },
+        { id: 'layer_ex', name: 'Layer_Exclusive', parentStateId: 'super', stateIds: ['ex_a', 'ex_b'], transitionIds: ['t_ex'], junctionIds: [] },
+        { id: 'layer_par', name: 'Layer_Parallel', parentStateId: 'super', stateIds: ['par_c', 'par_d'], transitionIds: [], junctionIds: [] }
+      ],
+      safetyMode: false
+    };
+
+    const result = generateMISRACCode(mixedChart as any);
+    expect(result.errors).toHaveLength(0);
+
+    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
+    
+    // Check that entering SuperState invokes default entries of both Layer_Exclusive (index 0) and Layer_Parallel (index 1)
+    expect(coreC).toContain('SM_Enter_Layer_0(instance, false);');
+    expect(coreC).toContain('SM_Enter_Layer_1(instance, false);');
+    
+    // Check that stepping SuperState steps both layers
+    expect(coreC).toContain('SM_Step_Layer_0(instance, delta_ms);');
+    expect(coreC).toContain('SM_Step_Layer_1(instance, delta_ms);');
+
+    // Check exit of SuperState exits active state in exclusive layer and parallel states in parallel layer
+    expect(coreC).toContain('SM_Exit_State(instance, instance->active_states[');
+    expect(coreC).toContain('SM_Exit_State(instance, SM_ST_PAR_STATEC);');
+    expect(coreC).toContain('SM_Exit_State(instance, SM_ST_PAR_STATED);');
+  });
 });
 
