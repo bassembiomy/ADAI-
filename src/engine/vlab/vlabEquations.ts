@@ -1125,9 +1125,14 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const rho = 1.2, Cp = 1005;
     const C = rho * Cp * V;
     const temp = state[0] > 1.0 ? state[0] : T_amb;
+    
+    // Physical heat loss to the ambient environment (convection/conduction through basket walls)
+    const k_loss = params.k_loss !== undefined ? params.k_loss : 8.5; // W/K, realistic overall heat loss coefficient
+    const heat_loss = k_loss * (temp - T_amb);
+    
     return [
       branch[0] - 0.0,
-      branch[1] + C * dState[0], /* heat entering chamber = C * dT/dt (branch positive leaving chamber) */
+      branch[1] + C * dState[0] + heat_loss, /* heat entering chamber = C * dT/dt + heat_loss (branch positive leaving chamber) */
       across[2] - temp
     ];
   },
