@@ -194,6 +194,31 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
 
     const timestampStr = new Date().toLocaleString();
     
+    // Evaluate the state machine compilation for errors first
+    const genRes = generateMISRACCode({
+      tickMs,
+      states,
+      junctions,
+      transitions,
+      variables,
+      layers,
+      safetyMode,
+      hilConfig: { ...config, enabled: true }
+    });
+
+    if (genRes.errors && genRes.errors.length > 0) {
+      setConsoleLogs([
+        `[SYSTEM] Starting compilation process at ${timestampStr}`,
+        `[SYSTEM] Target Device Architecture: ${target} (${memoryLimits.name})`,
+        `----------------------------------------------------------------------`,
+        ...genRes.errors.map(err => `[ERROR] ${err.source || 'Validator'}: ${err.message}`),
+        `----------------------------------------------------------------------`,
+        `[SYSTEM] Compilation process aborted: State machine has validation errors.`
+      ]);
+      setBuildStatus('error');
+      return;
+    }
+
     setConsoleLogs([
       `[SYSTEM] Starting compilation process at ${timestampStr}`,
       `[SYSTEM] Target Device Architecture: ${target} (${memoryLimits.name})`,
