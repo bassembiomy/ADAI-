@@ -944,6 +944,23 @@ describe('X-Bridges Learning Models Block Tests', () => {
     expect(typeof res.outputs[1]).toBe('number');
   });
 
+  it('should return error diagnostic during compile if FUZZY_SURFACE_VIEWER is unconfigured', () => {
+    const model = {
+      blocks: [
+        { id: 'fsv1', type: 'FUZZY_SURFACE_VIEWER', params: { fisConfig: null } }
+      ],
+      connections: []
+    };
+
+    const engine = new XbridgesEngine(model as any);
+    const diagnostics = engine.compile();
+
+    expect(diagnostics.length).toBe(1);
+    expect(diagnostics[0].code).toBe('MISSING_FIS_CONFIG');
+    expect(diagnostics[0].severity).toBe('error');
+    expect(diagnostics[0].message).toContain("has no FIS configuration linked");
+  });
+
   it('TC-SIM-01: Standalone Integrator Block Test', () => {
     const block = BLOCK_LIBRARY['INTEGRATOR']('int_test', {
       initialCondition: 1.0,

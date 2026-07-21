@@ -209,6 +209,18 @@ export class XbridgesEngine {
     this.flatten();
     this.validateConnections();
     
+    // Validate parameters of Fuzzy Surface Viewer blocks
+    this.flatBlocks.forEach(b => {
+      if (b.type === 'FUZZY_SURFACE_VIEWER' && (!b.params || !b.params.fisConfig)) {
+        this.diagnostics.push({
+          severity: 'error',
+          code: 'MISSING_FIS_CONFIG',
+          message: `Fuzzy Surface Viewer block '${b.label || b.id}' has no FIS configuration linked. Select a valid Fuzzy Inference System block in the properties panel.`,
+          blockIds: [b.id]
+        });
+      }
+    });
+    
     // 1. Build adjacency list for Topological Sort
     const adjList = new Map<string, string[]>();
     const inDegree = new Map<string, number>();
