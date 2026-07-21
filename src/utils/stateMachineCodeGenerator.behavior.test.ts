@@ -678,4 +678,99 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
 ` + HARNESS_EPILOGUE);
     if (out !== 'SKIPPED') expect(out).toContain('RESULT: PASS');
   }, BEHAVIOR_TIMEOUT);
+
+  it('hierarchical states with mixed OR and parallel AND layers behave correctly under simulation', () => {
+    const states = [
+      mkState('parent', 'Parent', { autostart: true }),
+      mkState('target', 'Target'),
+      mkState('ex_a', 'Ex_StateA', { parentId: 'parent', autostart: true, entry: 'log = log + 1U;', exit: 'log = log + 2U;' }),
+      mkState('ex_b', 'Ex_StateB', { parentId: 'parent', entry: 'log = log + 4U;', exit: 'log = log + 8U;' }),
+      mkState('par_c', 'Par_StateC', { parentId: 'parent', isParallel: true, regionId: 'R1', autostart: true, priority: 1, entry: 'log = log + 10U;', exit: 'log = log + 20U;', during: 'log = log + 100U;' }),
+      mkState('par_d', 'Par_StateD', { parentId: 'parent', isParallel: true, regionId: 'R2', autostart: true, priority: 2, entry: 'log = log + 1000U;', exit: 'log = log + 2000U;', during: 'log = log + 10000U;' }),
+      mkState('c_sub_1', 'C_Sub_1', { parentId: 'par_c', autostart: true, entry: 'log = log + 100000U;', exit: 'log = log + 200000U;' }),
+      mkState('c_sub_2', 'C_Sub_2', { parentId: 'par_c', entry: 'log = log + 400000U;', exit: 'log = log + 800000U;' })
+    ];
+
+    const transitions = [
+      mkTransition('t_exit', 'parent', 'target', { condition: 't_exit' }),
+      mkTransition('t_ex', 'ex_a', 'ex_b', { condition: 't_ex' }),
+      mkTransition('t_sub', 'c_sub_1', 'c_sub_2', { condition: 't_sub' })
+    ];
+
+    const varsList = [
+      mkVar('v_log', 'log', 'uint32', '0'),
+      mkVar('v_tex', 't_ex', 'bool', 'false'),
+      mkVar('v_tsub', 't_sub', 'bool', 'false'),
+      mkVar('v_texit', 't_exit', 'bool', 'false')
+    ];
+
+    const chart = {
+      tickMs: 10,
+      states,
+      junctions: [],
+      transitions,
+      variables: varsList,
+      layers: [
+        { id: 'root', name: 'root', parentStateId: null, stateIds: ['parent', 'target'], transitionIds: ['t_exit'], junctionIds: [] },
+        { id: 'layer_ex', name: 'Layer_Exclusive', parentStateId: 'parent', stateIds: ['ex_a', 'ex_b'], transitionIds: ['t_ex'], junctionIds: [] },
+        { id: 'layer_par', name: 'Layer_Parallel', parentStateId: 'parent', stateIds: ['par_c', 'par_d'], transitionIds: [], junctionIds: [] },
+        { id: 'layer_c_sub', name: 'Layer_C_Sub', parentStateId: 'par_c', stateIds: ['c_sub_1', 'c_sub_2'], transitionIds: ['t_sub'], junctionIds: [] }
+      ],
+      safetyMode: false
+    };
+
+    const result = generateMISRACCode(chart as any);
+    expect(result.errors).toHaveLength(0);
+
+    const dir = path.join(__dirname, '../../scratch/behavior_mixed_layers');
+    writeFiles(dir, result.files);
+
+    const harness = HARNESS_PREAMBLE + `
+    SM_Init(&inst);
+    /* Verify dual/all starts in AND decomposition and exclusive start are entered */
+    CHECK(inst.state_active[SM_ST_PARENT_IDX] == true, "Parent active");
+    CHECK(inst.state_active[SM_ST_EX_STATEA_IDX] == true, "Ex_StateA active");
+    CHECK(inst.state_active[SM_ST_PAR_STATEC_IDX] == true, "Par_StateC active");
+    CHECK(inst.state_active[SM_ST_PAR_STATED_IDX] == true, "Par_StateD active");
+    CHECK(inst.state_active[SM_ST_C_SUB_1_IDX] == true, "C_Sub_1 active");
+    /* Log check: Ex_StateA entry (1) + Par_StateC entry (10) + Par_StateD entry (1000) + C_Sub_1 entry (100000) = 101011 */
+    CHECK(inst.data.log == 101011U, "initial entry log matches");
+
+    /* Step with no triggers: runs during actions of parallel states Par_StateC (100) and Par_StateD (10000) */
+    inst.data.log = 0U;
+    SM_Step(&inst, 10U);
+    CHECK(inst.data.log == 10100U, "during actions executed");
+
+    /* Trigger transition in exclusive layer: Ex_StateA -> Ex_StateB */
+    inst.data.t_ex = true;
+    inst.data.log = 0U;
+    SM_Step(&inst, 10U);
+    /* Ex_StateA exit (2) + Ex_StateB entry (4) + during actions (10100) = 10106 */
+    CHECK(inst.data.log == 10106U, "transition in exclusive layer logs correctly");
+    CHECK(inst.state_active[SM_ST_EX_STATEA_IDX] == false, "Ex_StateA inactive");
+    CHECK(inst.state_active[SM_ST_EX_STATEB_IDX] == true, "Ex_StateB active");
+
+    /* Trigger transition in nested exclusive layer inside Par_StateC: C_Sub_1 -> C_Sub_2 */
+    inst.data.t_sub = true;
+    inst.data.log = 0U;
+    SM_Step(&inst, 10U);
+    /* C_Sub_1 exit (200000) + C_Sub_2 entry (400000) + during actions (10100) = 610100 */
+    CHECK(inst.data.log == 610100U, "nested exclusive transition logs correctly");
+    CHECK(inst.state_active[SM_ST_C_SUB_1_IDX] == false, "C_Sub_1 inactive");
+    CHECK(inst.state_active[SM_ST_C_SUB_2_IDX] == true, "C_Sub_2 active");
+
+    /* Exit parent superstate: exits C_Sub_2 (800000) + Par_StateC (20) + Par_StateD (2000) + Ex_StateB (8) = 802028 */
+    inst.data.t_exit = true;
+    inst.data.log = 0U;
+    SM_Step(&inst, 10U);
+    CHECK(inst.data.log == 802028U, "superstate exit logs correctly");
+    CHECK(inst.state_active[SM_ST_PARENT_IDX] == false, "Parent inactive");
+    CHECK(inst.state_active[SM_ST_TARGET_IDX] == true, "Target active");
+    ` + HARNESS_EPILOGUE;
+
+    const out = hostCompileAndRun(dir, harness);
+    if (out !== 'SKIPPED') {
+      expect(out).toContain('RESULT: PASS');
+    }
+  }, BEHAVIOR_TIMEOUT);
 });
