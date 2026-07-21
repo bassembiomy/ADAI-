@@ -8902,13 +8902,28 @@ const ADIA = () => {
       }
     });
 
+    // Run the code generator checks to catch undeclared variables and safety constraints
+    const genRes = generateMISRACCode({
+      tickMs,
+      states,
+      junctions,
+      transitions,
+      variables,
+      layers,
+      safetyMode,
+      hilConfig: { ...hilConfig, enabled: false }
+    });
+    if (genRes.errors && genRes.errors.length > 0) {
+      newErrors.push(...genRes.errors);
+    }
+
     setErrors(prev => {
       const filtered = prev.filter(e => e.source !== 'Validation');
       return [...newErrors, ...filtered];
     });
 
     return newErrors;
-  }, [states, transitions, junctions, variables, layers, hilConfig]);
+  }, [states, transitions, junctions, variables, layers, hilConfig, tickMs, safetyMode]);
 
   const validateModel = useCallback(() => {
     const newErrors = performValidation();
