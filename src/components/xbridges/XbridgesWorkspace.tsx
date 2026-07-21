@@ -1351,6 +1351,12 @@ export const XbridgesWorkspace: React.FC<{
   const [diagnostics, setDiagnostics] = useState<ModelDiagnostic[]>([]);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
 
+  const availableFisBlocks = React.useMemo(() => {
+    return nodes
+      .filter(n => n.data && n.data.type === 'FUZZY_INFERENCE_SYSTEM')
+      .map(n => ({ id: n.id, label: n.data.label || n.id, params: n.data.params }));
+  }, [nodes]);
+
   // Tutorial / Learning Lab State
   const [activeLabId, setActiveLabId] = useState<string | null>(null);
   const [isLabGuideMinimized, setIsLabGuideMinimized] = useState(false);
@@ -1678,6 +1684,13 @@ export const XbridgesWorkspace: React.FC<{
       engineRef.current = new XbridgesEngine(model);
       const compileDiagnostics = engineRef.current.compile();
       setDiagnostics(compileDiagnostics);
+
+      const hasErrors = compileDiagnostics.some(d => d.severity === 'error');
+      if (hasErrors) {
+        setIsSimulating(false);
+        setShowDiagnostics(true);
+        return;
+      }
 
       const tick = () => {
         if (engineRef.current && !isPausedRef.current) {
@@ -3438,6 +3451,7 @@ export const XbridgesWorkspace: React.FC<{
             <XbridgesPropertiesPanel
               block={selectedNode.data as any}
               availableVariables={availableVariables}
+              availableFisBlocks={availableFisBlocks}
               onUpdate={updateBlock}
               onLaunchDoe={onLaunchDoe}
               onClose={() => setSelectedNodeId(null)}

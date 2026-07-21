@@ -8,6 +8,7 @@ import { VectorUtils } from '../../engine/xbridges/VectorUtils';
 interface Props {
   block: XBlock | null;
   availableVariables?: any[];
+  availableFisBlocks?: Array<{ id: string; label: string; params: any }>;
   onUpdate: (blockId: string, data: Partial<XBlock>) => void;
   onLaunchDoe?: () => void;
   onClose: () => void;
@@ -30,6 +31,7 @@ const normalizeNumerals = (val: string) => {
 export const XbridgesPropertiesPanel: React.FC<Props> = ({ 
   block, 
   availableVariables, 
+  availableFisBlocks,
   onUpdate, 
   onLaunchDoe, 
   onClose,
@@ -817,6 +819,24 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                         ))}
                       </select>
                     </div>
+                );
+              }
+
+              if (key === 'fisConfig') {
+                return (
+                  <div key={key}>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Fuzzy Inference System (FIS)</label>
+                    <select
+                      value={typeof displayValue === 'string' ? displayValue : ''}
+                      onChange={(e) => onUpdate(block.id, { params: { ...block.params, [key]: e.target.value } })}
+                      className="w-full text-sm px-2.5 py-1.5 border border-[#333] bg-[#0a0a0a] text-purple-400 font-bold rounded focus:border-[#c9a86c] outline-none transition-all cursor-pointer"
+                    >
+                      <option value="">-- Select FIS Block --</option>
+                      {availableFisBlocks?.map(fis => (
+                        <option key={fis.id} value={fis.id}>{fis.label}</option>
+                      ))}
+                    </select>
+                  </div>
                 );
               }
 
