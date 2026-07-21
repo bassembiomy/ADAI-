@@ -457,6 +457,9 @@ describe('StateMachineCodeGenerator', () => {
       { id: 'v1', name: 'i', type: 'uint8', initialValue: '0', currentValue: 0, visibleInScope: true },
       { id: 'v2', name: 'state', type: 'uint8', initialValue: '0', currentValue: 0, visibleInScope: true },
       { id: 'v3', name: 'instance', type: 'uint8', initialValue: '0', currentValue: 0, visibleInScope: true },
+      { id: 'v4', name: 'is_active', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true },
+      { id: 'v5', name: 'counter', type: 'uint16', initialValue: '0', currentValue: 0, visibleInScope: true },
+      { id: 'v6', name: 'sensor_val', type: 'float', initialValue: '0.0', currentValue: 0.0, visibleInScope: true }
     ];
 
     const customChart = {
@@ -826,6 +829,47 @@ describe('StateMachineCodeGenerator', () => {
     expect(coreC).toContain('SM_Exit_State(instance, instance->active_states[');
     expect(coreC).toContain('SM_Exit_State(instance, SM_ST_PAR_STATEC);');
     expect(coreC).toContain('SM_Exit_State(instance, SM_ST_PAR_STATED);');
+  });
+
+  it('should return error if undeclared variables are referenced in expressions', () => {
+    const invalidChart = {
+      tickMs: 10,
+      states: [
+        {
+          id: 's1', name: 'StateA', x: 0, y: 0, width: 100, height: 100,
+          entry: 'undeclared_var = 10;', during: 'sin(valid_var);', exit: 'if (another_undeclared) { }',
+          isActive: false, color: 'blue', parentId: 'root', children: [],
+          priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
+        }
+      ],
+      junctions: [],
+      transitions: [
+        {
+          id: 'tr1', sourceId: 's1', targetId: 's1', condition: 'undeclared_in_cond > 5', action: 'undeclared_in_act = 20;', afterTicks: null,
+          type: 'condition', hasControlPoint: false, order: 1
+        }
+      ],
+      variables: [
+        { id: 'v1', name: 'valid_var', type: 'uint8', initialValue: '0', currentValue: 0, visibleInScope: true }
+      ],
+      layers: [
+        { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: ['tr1'], junctionIds: [] }
+      ],
+      safetyMode: false
+    };
+
+    const result = generateMISRACCode(invalidChart as any);
+    expect(result.errors.length).toBe(4);
+    
+    const messages = result.errors.map(e => e.message);
+    expect(messages).toContain("Undeclared variable 'undeclared_var' referenced in state 'StateA' entry action. Add it to the variable panel.");
+    expect(messages).toContain("Undeclared variable 'another_undeclared' referenced in state 'StateA' exit action. Add it to the variable panel.");
+    expect(messages).toContain("Undeclared variable 'undeclared_in_cond' referenced in transition from 'StateA' condition. Add it to the variable panel.");
+    expect(messages).toContain("Undeclared variable 'undeclared_in_act' referenced in transition from 'StateA' action. Add it to the variable panel.");
+
+    // Verify that the valid math function 'sin' and the valid variable 'valid_var' did not trigger any errors
+    const hasValidVarError = result.errors.some(e => e.message.includes('valid_var') || e.message.includes('sin'));
+    expect(hasValidVarError).toBe(false);
   });
 });
 

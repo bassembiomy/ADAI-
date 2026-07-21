@@ -492,8 +492,61 @@ export const generateMISRACCode = (chart: {
     return processedLines.join('\n');
   };
 
+  const IGNORED_IDENTIFIERS = new Set([
+    // C Keywords
+    'if', 'else', 'true', 'false', 'void', 'int', 'unsigned', 'signed', 'float', 'double', 'bool', 'char',
+    'return', 'switch', 'case', 'default', 'break', 'continue', 'struct', 'static', 'const', 'sizeof',
+    // C Types
+    'uint8_t', 'uint16_t', 'uint32_t', 'uint64_t', 'int8_t', 'int16_t', 'int32_t', 'int64_t', 'size_t',
+    // System Variables
+    'delta_ms', 'state_timer', 'instance', 'data',
+    // Math Functions & Common Macros
+    'sin', 'cos', 'tan', 'abs', 'sqrt', 'pow', 'exp', 'log', 'floor', 'ceil', 'fmax', 'fmin', 'fabs', 'NULL',
+    // Common Arduino / AVR Registers and Constants
+    'PORTB', 'PORTC', 'PORTD', 'PINB', 'PINC', 'PIND', 'DDRB', 'DDRC', 'DDRD', 'HIGH', 'LOW', 'INPUT', 'OUTPUT',
+    'MCAL_Dio_ReadChannel', 'MCAL_Dio_WriteChannel', 'MCAL_Watchdog_Kick'
+  ]);
+
+  const validateExpressionVariables = (code: string | undefined, location: string, elementId: string) => {
+    if (!code) return;
+    
+    // Remove comments
+    const cleanCode = code
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/\/\/.*/g, ' ');
+
+    // Remove function calls (e.g. funcName(...) -> replaces function name and opening bracket)
+    const withoutFunctions = cleanCode.replace(/\b[A-Za-z_][A-Za-z0-9_]*\s*\(/g, ' ');
+
+    // Extract word tokens matching identifiers
+    const matches = withoutFunctions.matchAll(/\b[A-Za-z_][A-Za-z0-9_]*\b/g);
+    for (const m of matches) {
+      const ident = m[0];
+      if (IGNORED_IDENTIFIERS.has(ident)) {
+        continue;
+      }
+      
+      const isDefined = chart.variables.some(v => v.name === ident);
+      if (!isDefined) {
+        errors.push({
+          id: uuidv4(),
+          type: 'error',
+          message: `Undeclared variable '${ident}' referenced in ${location}. Add it to the variable panel.`,
+          timestamp: new Date(),
+          source: 'Variable Validator',
+          elementId: elementId
+        });
+      }
+    }
+  };
+
   // Validate states
   sortedStates.forEach(state => {
+    validateExpressionVariables(state.entry, `state '${state.name}' entry action`, state.id);
+    validateExpressionVariables(state.during, `state '${state.name}' during action`, state.id);
+    validateExpressionVariables(state.exit, `state '${state.name}' exit action`, state.id);
+    validateExpressionVariables(state.internalTransitions, `state '${state.name}' internal transitions`, state.id);
+
     if (/\+\+|--/.test(state.entry + state.during + state.exit)) {
       warnings.push(`[STATE:${state.name}] Avoid ++/-- for MISRA compliance`);
     }
@@ -505,6 +558,8 @@ export const generateMISRACCode = (chart: {
   // Validate transitions
   chart.transitions.forEach(tr => {
     const srcName = sortedStates.find(s => s.id === tr.sourceId)?.name || chart.junctions.find(j => j.id === tr.sourceId)?.name || 'unknown';
+    validateExpressionVariables(tr.condition, `transition from '${srcName}' condition`, tr.id);
+    validateExpressionVariables(tr.action, `transition from '${srcName}' action`, tr.id);
     if (tr.afterTicks !== null && tr.afterTicks <= 0) {
       errors.push({
         id: uuidv4(),
