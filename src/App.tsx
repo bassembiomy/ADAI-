@@ -9519,12 +9519,21 @@ const ADIA = () => {
               const d = n.data as any;
               if (XBRIDGES_LIBRARY[d.type]) {
                 try {
-                  const freshBlock = XBRIDGES_LIBRARY[d.type](d.id, d.params || {});
+                  let freshParams = { ...d.params };
+                  if (d.type === 'FUZZY_SURFACE_VIEWER' && typeof d.params.fisConfig === 'string') {
+                    const targetNode = state.xBridgesModel.nodes.find(x => x.id === d.params.fisConfig);
+                    if (targetNode && targetNode.data.type === 'FUZZY_INFERENCE_SYSTEM') {
+                      freshParams.fisConfig = targetNode.data.params;
+                    } else {
+                      freshParams.fisConfig = null;
+                    }
+                  }
+                  const freshBlock = XBRIDGES_LIBRARY[d.type](d.id, freshParams || {});
                   return { 
                     ...freshBlock, 
                     id: d.id, 
                     state: d.state || freshBlock.state, 
-                    params: { ...freshBlock.params, ...d.params } 
+                    params: { ...freshBlock.params, ...freshParams } 
                   };
                 } catch (e) {
                   return d;

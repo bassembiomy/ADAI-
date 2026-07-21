@@ -1653,9 +1653,18 @@ export const XbridgesWorkspace: React.FC<{
           // Try to rebuild via BLOCK_LIBRARY to get live execute() function
           if (BLOCK_LIBRARY[d.type]) {
             try {
-              const freshBlock = BLOCK_LIBRARY[d.type](d.id, d.params || {});
+              let freshParams = { ...d.params };
+              if (d.type === 'FUZZY_SURFACE_VIEWER' && typeof d.params.fisConfig === 'string') {
+                const targetNode = nodes.find(x => x.id === d.params.fisConfig);
+                if (targetNode && targetNode.data.type === 'FUZZY_INFERENCE_SYSTEM') {
+                  freshParams.fisConfig = targetNode.data.params;
+                } else {
+                  freshParams.fisConfig = null;
+                }
+              }
+              const freshBlock = BLOCK_LIBRARY[d.type](d.id, freshParams || {});
               // Always start with fresh state on Play - never resume trained/stale state
-              return { ...freshBlock, id: d.id, state: freshBlock.state, params: { ...d.params, ...freshBlock.params } };
+              return { ...freshBlock, id: d.id, state: freshBlock.state, params: { ...freshParams, ...freshBlock.params } };
             } catch (e) {
               return d; // fallback to raw data if rebuild fails
             }
