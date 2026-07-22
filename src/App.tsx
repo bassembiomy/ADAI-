@@ -16708,16 +16708,49 @@ const ADIA = () => {
             </div>
 
             <div className={`flex-1 overflow-y-auto p-4 space-y-4 ${isPropertiesCollapsed ? 'hidden' : 'block'}`}>
-              {selectedState ? (
-                <>
-                  <div>
-                    <Label>State Name</Label>
-                    <Input
-                      value={selectedState.name}
-                      onChange={(e) => updateState(selectedState.id, { name: e.target.value })}
-                      className="mt-1"
-                    />
-                  </div>
+              {selectedState ? (() => {
+                const stateErrors = errors.filter(e => e.elementId === selectedState.id && e.source === 'Validation');
+                const hasEntryError = stateErrors.some(e => e.message.includes('Entry'));
+                const hasDuringError = stateErrors.some(e => e.message.includes('During'));
+                const hasExitError = stateErrors.some(e => e.message.includes('Exit'));
+                const hasInternalError = stateErrors.some(e => e.message.includes('Internal Transition') || e.message.includes('Internal transition'));
+                const hasNameError = stateErrors.some(e => e.message.includes('spaces') || e.message.includes('Duplicate'));
+
+                return (
+                  <>
+                    <div>
+                      <Label>State Name</Label>
+                      <Input
+                        value={selectedState.name}
+                        onChange={(e) => updateState(selectedState.id, { name: e.target.value })}
+                        className={`mt-1 ${hasNameError ? 'border-red-500 ring-red-500 focus-visible:ring-red-500' : ''}`}
+                      />
+                    </div>
+
+                    {stateErrors.map(err => (
+                      <div key={err.id} className={`p-3 rounded-lg border text-xs mb-3 ${err.type === 'error' ? 'bg-red-950/20 border-red-900/50 text-red-300' : 'bg-amber-950/20 border-amber-900/50 text-amber-300'}`}>
+                        <div className="font-semibold flex items-center gap-1.5 mb-1">
+                          {err.type === 'error' ? (
+                            <span className="text-red-400">🔴 Error</span>
+                          ) : (
+                            <span className="text-amber-400">⚠️ Warning</span>
+                          )}
+                        </div>
+                        <p className="mb-2 leading-relaxed whitespace-pre-line">{err.message}</p>
+                        {err.canAutoFix && (
+                          <div className="flex gap-2 mt-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleAutoFix(err)}
+                              className="bg-green-600/15 hover:bg-green-600/30 text-green-300 border-green-600/30 text-[10px] h-7 px-2.5"
+                            >
+                              Auto-Fix
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
 
                   <div>
                     <Label>Priority (lower = higher)</Label>
@@ -17085,7 +17118,8 @@ const ADIA = () => {
                     Delete State
                   </Button>
                 </>
-              ) : selectedJunction ? (
+              );
+            })() : selectedJunction ? (
                 <>
                   <div>
                     <Label>Junction Name</Label>
