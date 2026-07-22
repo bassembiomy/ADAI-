@@ -17,6 +17,7 @@
     "test:vlab": "vitest run src/engine/vlab/vlab_validation.test.ts src/engine/vlab/vlab.test.ts src/engine/vlab/labs_sim.test.ts src/engine/vlab/check_missing_math.test.ts",
     "test:vlab:connected": "vitest run src/engine/vlab/vlab_connected_models.test.ts --reporter=verbose",
     "test:vlab:all-blocks": "vitest run src/engine/vlab/test_all_blocks_scope.test.ts --reporter=dot",
+    "zero-g": "tsx scripts/zero_g_ci.ts",
     "prebuild": "npm audit --audit-level=critical || echo [WARNING] Unfixable audit vulnerabilities detected (tar, tmp, xlsx have no upstream fix). Review before production release."
   },
   "config": {
