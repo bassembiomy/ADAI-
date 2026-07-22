@@ -499,5 +499,43 @@ describe('smAnalysisEngine', () => {
     expect(deadlocks[0].severity).toBe('critical');
     expect(deadlocks[0].recommendation).toContain("Add an outgoing transition from State 'DeadEnd'");
   });
+
+  it('should flag unreachable states and exclude them from test scenarios (REQ-V-02 & REQ-R-01)', () => {
+    const states: StateData[] = [
+      {
+        id: 's1', name: 'Active', x: 0, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'root', children: [],
+        priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
+      },
+      {
+        id: 's2', name: 'Isolated', x: 200, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'red', parentId: 'root', children: [],
+        priority: 2, isParallel: false, regionId: 'MAIN', autostart: false
+      }
+    ];
+
+    const transitions: TransitionData[] = [];
+
+    const result = analyzeStateMachine({
+      tickMs: 10,
+      states,
+      junctions: [],
+      transitions,
+      variables: mockVariables,
+      layers: mockLayers,
+      safetyMode: false
+    });
+
+    const unreachable = result.cornerCases.filter(c => c.category === 'unreachable');
+    expect(unreachable.length).toBe(1);
+    expect(unreachable[0].elementId).toBe('s2');
+
+    const scenariosWithUnreachable = result.testScenarios.filter(ts =>
+      ts.steps.some(step => step.action.includes('Isolated') || step.expected.includes('Isolated'))
+    );
+    expect(scenariosWithUnreachable.length).toBe(0);
+  });
 });
 

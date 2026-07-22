@@ -540,13 +540,22 @@ const generateTestScenarios = (
   variables: VariableDef[],
   criticalPaths: CriticalPath[],
   cornerCases: CornerCase[],
+  layers: Layer[],
 ): TestScenario[] => {
+  const reachableSet = getReachableNodes(states, junctions, transitions, layers);
   const scenarios: TestScenario[] = [];
   let tsId = 0;
   const nextId = () => `TS-${String(++tsId).padStart(3, '0')}`;
 
   // ── A. Critical path walk-throughs ──
   criticalPaths.forEach((cp) => {
+    // REQ-R-01: Exclude paths containing unreachable states
+    const hasUnreachable = cp.states.some(stName => {
+      const st = states.find(s => s.name === stName);
+      return st && !reachableSet.has(st.id);
+    });
+    if (hasUnreachable) return;
+
     const steps: TestStep[] = [];
 
     // Initial step: set up autostart
@@ -607,6 +616,9 @@ const generateTestScenarios = (
 
   // ── B. Corner case boundary tests ──
   cornerCases.forEach((cc) => {
+    // REQ-R-01: Skip scenario generation for unreachable elements
+    if (cc.elementId && states.some(s => s.id === cc.elementId && !reachableSet.has(s.id))) return;
+
     const steps: TestStep[] = [];
 
     switch (cc.category) {
@@ -628,17 +640,8 @@ const generateTestScenarios = (
         break;
 
       case 'unreachable':
-        steps.push(
-          {
-            action: 'Call SM_Init() and verify initial state',
-            expected: 'System starts in autostart state, NOT in the unreachable state',
-          },
-          {
-            action: `Attempt to reach "${cc.elementName}" through all known paths`,
-            expected: `No valid path leads to "${cc.elementName}" — confirm this is intentional`,
-          },
-        );
-        break;
+        // REQ-R-01: Exclude unreachable states from test scenario steps
+        return;
 
       case 'self_loop':
         steps.push(
@@ -804,6 +807,7 @@ export const analyzeStateMachine = (chart: {
     variables,
     criticalPaths,
     cornerCases,
+    layers,
   );
 
   // 4. Metrics
