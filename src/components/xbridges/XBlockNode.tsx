@@ -1,6 +1,8 @@
 // src/components/xbridges/XBlockNode.tsx
 import React from 'react';
 import { Handle, Position, useUpdateNodeInternals, NodeResizer } from 'reactflow';
+import { gsap } from 'gsap';
+import { useGSAP } from '@gsap/react';
 import { 
   Square, Activity, Plus, Minus, X, Divide, ChevronUp, MinusCircle, Maximize, Maximize2,
   Sigma, BarChart, ArrowUp, Grid, RotateCw, RefreshCcw, Hash, TrendingUp, Monitor, Box, Download,
@@ -591,14 +593,126 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
   );
 };
 
+interface SoapBubble {
+  x: number;
+  y: number;
+  r: number;
+  opacity: number;
+}
+
 const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
   const stateRef = React.useRef(state);
+  const bubblesRef = React.useRef<SoapBubble[]>([]);
+
+  // Telemetry refs for GSAP count-ups
+  const rpmRef = React.useRef<HTMLSpanElement>(null);
+  const keRef = React.useRef<HTMLSpanElement>(null);
+  const cleanRef = React.useRef<HTMLSpanElement>(null);
+  const cleanBarRef = React.useRef<HTMLDivElement>(null);
+
+  // local smooth state for 60fps canvas drawing
+  const smoothState = React.useRef({
+    dx: 0,
+    dy: 0,
+    drumAngle: 0,
+    rpm: 45,
+    cleanliness: 0,
+    kineticEnergy: 0,
+  });
 
   React.useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
+  // GSAP tween for smoothing the incoming simulation steps
+  useGSAP(() => {
+    if (!state) return;
+
+    // Calculate live kinetic energy from incoming particle velocities
+    let targetKE = 0;
+    const particles = state.particles || [];
+    if (particles.length > 0) {
+      const mass = state.clothes_weight ? state.clothes_weight / particles.length : 0.1;
+      particles.forEach((p: any) => {
+        targetKE += 0.5 * mass * (p.vx * p.vx + p.vy * p.vy);
+      });
+    }
+
+    const currentRpm = Math.round(state.drum_angle ? (state.drum_angle * 60) / (2 * Math.PI * (performance.now() * 0.001)) : 45);
+
+    // Tween the drawing variables smoothly
+    gsap.to(smoothState.current, {
+      dx: state.dx !== undefined && !isNaN(state.dx) ? state.dx : 0,
+      dy: state.dy !== undefined && !isNaN(state.dy) ? state.dy : 0,
+      drumAngle: state.drum_angle !== undefined && !isNaN(state.drum_angle) ? state.drum_angle : 0,
+      rpm: currentRpm || 45,
+      cleanliness: state.cleanliness !== undefined && !isNaN(state.cleanliness) ? state.cleanliness : 0,
+      kineticEnergy: targetKE,
+      duration: 0.15,
+      ease: 'power1.out',
+      overwrite: 'auto',
+    });
+
+    // Tween the HUD cleanliness display percentage & progress bar width
+    if (cleanRef.current) {
+      gsap.to(cleanRef.current, {
+        innerText: state.cleanliness !== undefined && !isNaN(state.cleanliness) ? state.cleanliness : 0,
+        snap: { innerText: 0.1 },
+        duration: 0.4,
+        ease: 'power2.out',
+        modifiers: {
+          innerText: (val) => `${parseFloat(val).toFixed(1)}%`,
+        },
+      });
+    }
+
+    if (cleanBarRef.current) {
+      const cleanVal = state.cleanliness !== undefined && !isNaN(state.cleanliness) ? state.cleanliness : 0;
+      gsap.to(cleanBarRef.current, {
+        width: `${cleanVal}%`,
+        duration: 0.4,
+        ease: 'power2.out',
+      });
+    }
+
+    // Tween HUD RPM text
+    if (rpmRef.current) {
+      gsap.to(rpmRef.current, {
+        innerText: currentRpm || 45,
+        snap: { innerText: 1 },
+        duration: 0.4,
+        ease: 'power2.out',
+      });
+    }
+
+    // Tween HUD KE text
+    if (keRef.current) {
+      gsap.to(keRef.current, {
+        innerText: targetKE,
+        snap: { innerText: 0.001 },
+        duration: 0.4,
+        ease: 'power2.out',
+        modifiers: {
+          innerText: (val) => `${parseFloat(val).toFixed(3)} J`,
+        },
+      });
+    }
+  }, [state]);
+
+  // Entrance animations for glassmorphic cards
+  useGSAP(() => {
+    gsap.from('.hud-card-wm', {
+      y: 10,
+      opacity: 0,
+      duration: 0.5,
+      stagger: 0.08,
+      ease: 'back.out(1.5)',
+    });
+  }, { scope: containerRef });
+
+  // Bubble spawner and draw execution
   React.useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -608,15 +722,16 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
     let animationFrameId: number;
 
     const draw = () => {
-      const currentState = stateRef.current;
+      const s = smoothState.current;
       const W = canvas.width;
       const H = canvas.height;
       const now = performance.now();
 
-      // Clear with sleek dark blue background (Simcenter style)
+      // Clear with sleek dark blue background
       ctx.fillStyle = '#090d16';
       ctx.fillRect(0, 0, W, H);
 
+      const currentState = stateRef.current;
       if (!currentState || !currentState.initialized) {
         ctx.fillStyle = '#475569';
         ctx.font = '9px monospace';
@@ -630,9 +745,9 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
       const R_d = 0.8;
       const scale = (W - 24) / (2 * R_d);
 
-      // Dynamic vibration offset from suspension model (Sanitized against NaN)
-      const dx_offset = (currentState.dx !== undefined && !isNaN(currentState.dx)) ? currentState.dx * scale * 50 : 0;
-      const dy_offset = (currentState.dy !== undefined && !isNaN(currentState.dy)) ? currentState.dy * scale * 50 : 0;
+      // Dynamic vibration offset from suspension model (Smoothly interpolated)
+      const dx_offset = s.dx * scale * 50;
+      const dy_offset = s.dy * scale * 50;
       const cx = W / 2 + Math.max(-15, Math.min(15, dx_offset));
       const cy = H / 2 - Math.max(-15, Math.min(15, dy_offset));
 
@@ -640,7 +755,7 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
       const toCanvasY = (y: number) => cy - y * scale;
       const toCanvasLength = (l: number) => l * scale;
 
-      const drumAngle = (currentState.drum_angle !== undefined && !isNaN(currentState.drum_angle)) ? currentState.drum_angle : 0;
+      const drumAngle = s.drumAngle;
       const particles = currentState.particles || [];
       const bonds = currentState.bonds || [];
       const numSheets = currentState.num_sheets || 2;
@@ -680,10 +795,44 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
         ctx.closePath();
         ctx.fill();
 
-        // Dynamic detergent foam/bubbles on water surface
+        // Spawn bubbles periodically if rotating
+        if (Math.abs(s.rpm) > 10 && Math.random() < 0.12) {
+          const angle = Math.PI * 0.5 + (Math.random() - 0.5) * 1.0;
+          const bubbleX = cx + toCanvasLength(R_d) * Math.cos(angle) * 0.8;
+          const bubbleY = cy + toCanvasLength(R_d) * Math.sin(angle) * 0.8;
+          const bObj = { x: bubbleX, y: bubbleY, r: 1, opacity: 0.7 };
+          bubblesRef.current.push(bObj);
+          
+          gsap.to(bObj, {
+            y: bubbleY - (Math.random() * 40 + 20),
+            x: bubbleX + (Math.random() - 0.5) * 15,
+            r: Math.random() * 3 + 2,
+            opacity: 0,
+            duration: Math.random() * 1.2 + 0.8,
+            ease: 'power1.out',
+            onComplete: () => {
+              bubblesRef.current = bubblesRef.current.filter(b => b !== bObj);
+            }
+          });
+        }
+
+        // Draw GSAP cosmetic soap bubbles
         ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
         ctx.lineWidth = 0.5;
+        bubblesRef.current.forEach(bubble => {
+          if (Math.pow(bubble.x - cx, 2) + Math.pow(bubble.y - cy, 2) < Math.pow(toCanvasLength(R_d - 0.05), 2)) {
+            ctx.save();
+            ctx.globalAlpha = bubble.opacity;
+            ctx.beginPath();
+            ctx.arc(bubble.x, bubble.y, bubble.r, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+          }
+        });
+
+        // Foam elements on water surface
         for (let x = 10; x < W - 10; x += 15) {
           const sineY = Math.sin((x / W) * Math.PI * 2 + now * 0.003) * 3;
           const foamY = canvasY_water + waveOffset + sineY;
@@ -714,7 +863,7 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
         ctx.restore();
       }
 
-      // Draw SPH fluid particles if present (Sanitized against NaN)
+      // Draw SPH fluid particles if present
       if (fluidParticles.length > 0) {
         ctx.save();
         ctx.fillStyle = 'rgba(14, 165, 233, 0.75)';
@@ -755,14 +904,11 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
       ctx.lineWidth = 1.5;
       for (let i = 0; i < numRibs; i++) {
         const angle = drumAngle + (i * 2 * Math.PI) / numRibs;
-        
         const rx = R_d * Math.cos(angle);
         const ry = R_d * Math.sin(angle);
-        
         const tipLen = 0.15;
         const rtx = (R_d - tipLen) * Math.cos(angle);
         const rty = (R_d - tipLen) * Math.sin(angle);
-
         const baseWidth = 0.08;
         const b1x = R_d * Math.cos(angle - baseWidth);
         const b1y = R_d * Math.sin(angle - baseWidth);
@@ -778,11 +924,9 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
         ctx.stroke();
       }
 
-      // 2b. Draw Central Pulsator Hub (if active)
+      // 2b. Draw Central Pulsator Hub
       if (currentState.has_pulsator) {
         const pRad = toCanvasLength(R_d * 0.22);
-        
-        // Draw pulsator base
         const pGrad = ctx.createRadialGradient(cx, cy, 1, cx, cy, pRad);
         pGrad.addColorStop(0, '#334155');
         pGrad.addColorStop(1, '#1e293b');
@@ -794,7 +938,6 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
         ctx.fill();
         ctx.stroke();
 
-        // Draw 3 pulsator fins
         const numFins = 3;
         const pulsAngle = currentState.pulsator_angle || 0;
         ctx.fillStyle = '#475569';
@@ -805,7 +948,6 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
           const tipLen = pRad * 0.5;
           const ftx = (pRad + tipLen) * Math.cos(theta);
           const fty = (pRad + tipLen) * Math.sin(theta);
-
           const baseWidth = 0.08;
           const fb1x = pRad * Math.cos(theta - baseWidth);
           const fb1y = pRad * Math.sin(theta - baseWidth);
@@ -822,7 +964,7 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
         }
       }
 
-      // 3. Draw Cloth Fabric Meshes (Semi-transparent sheet envelopes)
+      // 3. Draw Cloth Fabric Meshes
       for (let c = 0; c < numSheets; c++) {
         const offset = c * clothSize;
         if (offset + clothSize > particles.length) continue;
@@ -846,7 +988,6 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
               ctx.lineTo(toCanvasX(pC.x), toCanvasY(pC.y));
               ctx.lineTo(toCanvasX(pD.x), toCanvasY(pD.y));
               ctx.closePath();
-              
               const hue = (c * 137.5 + 200) % 360;
               ctx.fillStyle = `hsla(${hue}, 75%, 65%, 0.4)`;
               ctx.fill();
@@ -855,7 +996,7 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
         }
       }
 
-      // 4. Draw Bond Fabric Mesh (Strain Stress-hotspots overlay)
+      // 4. Draw Bond Fabric Mesh
       ctx.lineWidth = 1.8;
       bonds.forEach((bond: any) => {
         const idx1 = bond.i1 !== undefined ? bond.i1 : bond.p1;
@@ -869,10 +1010,8 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
         const y1 = toCanvasY(p1.y);
         const x2 = toCanvasX(p2.x);
         const y2 = toCanvasY(p2.y);
-
         const currentL = Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
         const strain = Math.abs(currentL - L0) / (L0 || 1e-5);
-        
         const t = Math.min(1.0, strain * 4.0); 
         ctx.strokeStyle = `rgba(${Math.floor(40 + t * 215)}, ${Math.floor(200 - t * 150)}, ${Math.floor(100 - t * 50)}, 0.8)`;
 
@@ -890,7 +1029,6 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
         if (!p || isNaN(p.x) || isNaN(p.y)) return;
         const px = toCanvasX(p.x);
         const py = toCanvasY(p.y);
-        
         const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
         const hue = Math.max(0, Math.min(240, 240 - (speed / 1.5) * 240));
         
@@ -940,41 +1078,6 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
       ctx.arc(cx, cy, rimRad * 0.9, Math.PI * 1.25, Math.PI * 1.75);
       ctx.stroke();
 
-      // 7. HUD Telemetry Text
-      ctx.fillStyle = '#0ea5e9';
-      ctx.font = 'bold 7px monospace';
-      ctx.textAlign = 'left';
-      
-      const rpmVal = Math.round((currentState.drum_angle ? (drumAngle * 60) / (2 * Math.PI * (now * 0.001)) : 45)); 
-      ctx.fillText(`RPM: ${rpmVal || 45}`, 8, 14);
-      ctx.fillText(`SHEETS: ${numSheets} (${gridRows}x${gridCols})`, 8, 24);
-      ctx.fillText(`PARTICLES: ${particles.length}`, 8, 34);
-
-      let totalKE = 0;
-      particles.forEach((p: any) => {
-        const mass = (currentState.clothes_weight ? currentState.clothes_weight / particles.length : 0.1);
-        totalKE += 0.5 * mass * (p.vx * p.vx + p.vy * p.vy);
-      });
-      ctx.fillText(`KE: ${totalKE.toFixed(3)} J`, 8, H - 8);
-
-      const cleanVal = currentState.cleanliness ?? 0;
-      const barW = 60;
-      const barH = 4;
-      const barX = W - barW - 8;
-      const barY = H - barH - 8;
-
-      ctx.fillStyle = 'rgba(30, 41, 59, 0.5)';
-      ctx.fillRect(barX, barY, barW, barH);
-      ctx.fillStyle = '#10b981';
-      ctx.fillRect(barX, barY, barW * (cleanVal / 100), barH);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-      ctx.strokeRect(barX, barY, barW, barH);
-      
-      ctx.fillStyle = '#10b981';
-      ctx.font = 'bold 7px monospace';
-      ctx.textAlign = 'right';
-      ctx.fillText(`CLEAN: ${cleanVal.toFixed(1)}%`, W - 8, H - 14);
-
       animationFrameId = requestAnimationFrame(draw);
     };
 
@@ -985,13 +1088,59 @@ const WashingMachineDEMCanvas: React.FC<{ state: any }> = ({ state }) => {
     };
   }, []);
 
+  const particlesCount = state?.particles?.length || 0;
+  const numSheets = state?.num_sheets || 2;
+  const gridRows = state?.grid_rows || 4;
+  const gridCols = state?.grid_cols || 4;
+
   return (
-    <canvas
-      ref={canvasRef}
-      width={190}
-      height={190}
-      className="rounded-lg border border-white/10 shadow-inner bg-[#020617]"
-    />
+    <div ref={containerRef} className="relative w-[190px] h-[190px] group rounded-lg border border-white/10 overflow-hidden bg-[#020617] shadow-inner select-none">
+      {/* 2D Canvas Layer */}
+      <canvas
+        ref={canvasRef}
+        width={190}
+        height={190}
+        className="w-full h-full block"
+      />
+
+      {/* Floating Glassmorphic HUD Overlays */}
+      
+      {/* Top-Left Telemetry Badge */}
+      <div className="hud-card-wm absolute top-1.5 left-1.5 px-2 py-1 rounded bg-slate-950/75 backdrop-blur-md border border-white/10 shadow-lg text-[6.5px] font-mono text-slate-300 pointer-events-none flex flex-col gap-0.5 z-20">
+        <div className="flex gap-1.5 justify-between">
+          <span className="text-slate-400">RPM:</span>
+          <span ref={rpmRef} className="text-sky-400 font-bold drop-shadow-[0_0_4px_rgba(56,189,248,0.2)]">45</span>
+        </div>
+        <div className="flex gap-1.5 justify-between">
+          <span className="text-slate-400">SHEETS:</span>
+          <span className="text-slate-200">{numSheets} ({gridRows}x{gridCols})</span>
+        </div>
+        <div className="flex gap-1.5 justify-between">
+          <span className="text-slate-400">PARTS:</span>
+          <span className="text-slate-200">{particlesCount}</span>
+        </div>
+      </div>
+
+      {/* Bottom-Left Kinetic Energy Badge */}
+      <div className="hud-card-wm absolute bottom-1.5 left-1.5 px-2 py-1 rounded bg-slate-950/75 backdrop-blur-md border border-white/10 shadow-lg text-[6.5px] font-mono text-slate-300 pointer-events-none z-20">
+        <div className="flex gap-1.5 items-center">
+          <span className="text-slate-400">KE:</span>
+          <span ref={keRef} className="text-amber-400 font-bold drop-shadow-[0_0_4px_rgba(245,158,11,0.2)]">0.000 J</span>
+        </div>
+      </div>
+
+      {/* Bottom-Right Cleanliness Bar */}
+      <div className="hud-card-wm absolute bottom-1.5 right-1.5 w-[75px] p-1.5 rounded bg-slate-950/75 backdrop-blur-md border border-white/10 shadow-lg pointer-events-none flex flex-col gap-1 z-20">
+        <div className="flex justify-between items-center text-[6px] font-mono leading-none">
+          <span className="text-slate-400 uppercase tracking-wider">CLEAN</span>
+          <span ref={cleanRef} className="text-emerald-400 font-black drop-shadow-[0_0_4px_rgba(16,185,129,0.3)]">0.0%</span>
+        </div>
+        {/* Progress Bar Container */}
+        <div className="w-full h-1 bg-slate-800/80 rounded overflow-hidden">
+          <div ref={cleanBarRef} className="h-full bg-emerald-500 w-0 shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -1530,7 +1679,6 @@ export const XBlockNode = React.memo(({ data, selected, id }: any) => {
       case 'Inport': return <LogIn size={12} />;
       case 'Outport': return <LogOut size={12} />;
       case 'MUX': return <Layers size={12} />;
-      case 'DEMUX': return <Grid size={12} />;
       case 'DELAY': return <TrendingUp size={12} />;
       case 'AND':
       case 'OR':
