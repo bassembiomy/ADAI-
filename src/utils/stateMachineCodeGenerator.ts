@@ -50,6 +50,20 @@ export const validateInitialValue = (v: { type: VariableType; initialValue?: str
 };
 
 
+const isInputVariable = (v: any): boolean => {
+  if (v.isInput === true || v.direction === 'input') return true;
+  const name = v.name;
+  return name.startsWith('in_') || name.startsWith('sensor_') || name.startsWith('btn_') || name.startsWith('sw_') || name.startsWith('input_') || name.startsWith('button_') ||
+         name.endsWith('_in') || name.endsWith('_sensor') || name.endsWith('_btn') || name.endsWith('_sw') || name.endsWith('_button') || name.endsWith('_input');
+};
+
+const isOutputVariable = (v: any): boolean => {
+  if (v.isOutput === true || v.direction === 'output') return true;
+  const name = v.name;
+  return name.startsWith('out_') || name.startsWith('led_') || name.startsWith('motor_') || name.startsWith('output_') || name.startsWith('actuator_') || name.startsWith('relay_') || name.startsWith('valve_') ||
+         name.endsWith('_out') || name.endsWith('_led') || name.endsWith('_motor') || name.endsWith('_active') || name.endsWith('_output') || name.endsWith('_actuator') || name.endsWith('_relay') || name.endsWith('_valve');
+};
+
 export const generateMISRACCode = (chart: {
   tickMs: number;
   states: StateData[];
@@ -63,6 +77,30 @@ export const generateMISRACCode = (chart: {
   const errors: ErrorItem[] = [];
   const warnings: string[] = [];
 
+  const analysis = analyzeStateMachine({
+    tickMs: chart.tickMs,
+    states: chart.states,
+    junctions: chart.junctions,
+    transitions: chart.transitions,
+    variables: chart.variables,
+    layers: chart.layers,
+    safetyMode: chart.safetyMode
+  });
+
+  const criticalDeadlocks = analysis.cornerCases.filter(c => c.category === 'deadlock' && c.severity === 'critical');
+  if (criticalDeadlocks.length > 0 && ((chart as any).allowDeadlocks === false || ((chart as any).allowDeadlocks !== true && chart.safetyMode))) {
+    criticalDeadlocks.forEach(d => {
+      errors.push({
+        id: d.id,
+        type: 'error',
+        message: `Critical Deadlock: ${d.description} ${d.recommendation}`,
+        timestamp: new Date(),
+        elementId: d.elementId
+      });
+    });
+    return { files: [], errors, warnings };
+  }
+
   // REQ-DET-101: Stable Enumeration Order & REQ-DET-102: Stable Code Layout
   const sortedStates = [...chart.states].sort((a, b) => a.name.localeCompare(b.name));
   const sortedVariables = [...chart.variables].sort((a, b) => a.name.localeCompare(b.name));
@@ -74,7 +112,7 @@ export const generateMISRACCode = (chart: {
   const zeroLiteral = isFloatTick ? '0.0f' : '0U';
 
   const stateIndexMap = new Map<string, number>();
-  sortedStates.forEach((s, idx) => stateIndexMap.set(s.id, idx));
+  sortedStates.forEach((s, idx) => stateIndexMap.set(s.id, idx + 1));
 
   const layerIndexMap = new Map<string, number>();
   sortedLayers.forEach((l, idx) => layerIndexMap.set(l.id, idx));
@@ -191,7 +229,7 @@ export const generateMISRACCode = (chart: {
 
   // Helper to make text safe for embedding inside C block comments
   const sanitizeComment = (t: string): string =>
-    t.replace(/\*\//g, '* /').replace(/\/\*/g, '/ *').replace(/[\r\n]+/g, ' ');
+    t ? t.replace(/\/\*/g, '/ *').replace(/\*\//g, '* /').replace(/[\r\n]+/g, ' ').trim() : '';
 
   /* Reserved C keywords (C99) + generator-internal identifiers that must not be
    * used as user variable names (MISRA 21.2 / 5.1 collision avoidance). */
@@ -257,9 +295,57 @@ export const generateMISRACCode = (chart: {
       let afterTicks: number | null = null;
       let action = '';
 
-      const parts = line.split('/');
-      if (parts.length > 1) action = parts.slice(1).join('/').trim();
-      const triggerPart = parts[0].trim();
+      let bracketDepth = 0;
+      let parenDepth = 0;
+      let braceDepth = 0;
+      let inBlockComment = false;
+      let inLineComment = false;
+      let actionSlashIdx = -1;
+
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        const next = line[i + 1];
+
+        if (inLineComment) {
+          if (ch === '\n') inLineComment = false;
+          continue;
+        }
+        if (inBlockComment) {
+          if (ch === '*' && next === '/') {
+            inBlockComment = false;
+            i++;
+          }
+          continue;
+        }
+        if (ch === '/' && next === '/') {
+          inLineComment = true;
+          i++;
+          continue;
+        }
+        if (ch === '/' && next === '*') {
+          inBlockComment = true;
+          i++;
+          continue;
+        }
+
+        if (ch === '[') bracketDepth++;
+        else if (ch === ']') bracketDepth = Math.max(0, bracketDepth - 1);
+        else if (ch === '(') parenDepth++;
+        else if (ch === ')') parenDepth = Math.max(0, parenDepth - 1);
+        else if (ch === '{') braceDepth++;
+        else if (ch === '}') braceDepth = Math.max(0, braceDepth - 1);
+
+        if (ch === '/' && bracketDepth === 0 && parenDepth === 0 && braceDepth === 0) {
+          actionSlashIdx = i;
+          break;
+        }
+      }
+
+      let triggerPart = line.trim();
+      if (actionSlashIdx !== -1) {
+        triggerPart = line.substring(0, actionSlashIdx).trim();
+        action = line.substring(actionSlashIdx + 1).trim();
+      }
 
       const afterMatch = triggerPart.match(/after\((\d+)\)/);
       const condMatch = triggerPart.match(/\[(.*?)\]/);
@@ -388,6 +474,31 @@ export const generateMISRACCode = (chart: {
     return joined;
   };
 
+  const separateTrailingComment = (line: string): { codePart: string; commentPart: string } => {
+    let inString = false;
+    let strChar = '';
+
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      const next = line[i + 1];
+
+      if (inString) {
+        if (ch === '\\') { i++; continue; }
+        if (ch === strChar) inString = false;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        inString = true;
+        strChar = ch;
+        continue;
+      }
+      if (ch === '/' && (next === '/' || next === '*')) {
+        return { codePart: line.substring(0, i), commentPart: line.substring(i) };
+      }
+    }
+    return { codePart: line, commentPart: '' };
+  };
+
   const processActionLine = (line: string): string => {
     const trimmed = line.trim();
     if (!trimmed) return line;
@@ -396,10 +507,14 @@ export const generateMISRACCode = (chart: {
       return line;
     }
 
-    const indentMatch = line.match(/^(\s*)/);
+    const { codePart, commentPart } = separateTrailingComment(line);
+    const trimmedCode = codePart.trim();
+    if (!trimmedCode) return line;
+
+    const indentMatch = codePart.match(/^(\s*)/);
     const indentStr = indentMatch ? indentMatch[1] : '';
 
-    let processedLine = trimmed;
+    let processedLine = trimmedCode;
     sortedVariables.forEach(v => {
       const regex = new RegExp(`(?<!instance->data\\.)\\b${v.name}\\b`, 'g');
       processedLine = processedLine.replace(regex, `instance->data.${v.name}`);
@@ -407,82 +522,89 @@ export const generateMISRACCode = (chart: {
 
     /* Balanced-paren extraction: parses "if (cond) stmt;" / "else if (cond) stmt;"
      * without breaking on nested parentheses in the condition. */
-    const matchKeywordParenStmt = (line: string, keyword: string): { cond: string; stmt: string } | null => {
-      if (!line.startsWith(keyword)) return null;
+    const matchKeywordParenStmt = (lineStr: string, keyword: string): { cond: string; stmt: string } | null => {
+      if (!lineStr.startsWith(keyword)) return null;
       let pos = keyword.length;
-      while (pos < line.length && /\s/.test(line[pos])) pos++;
-      if (line[pos] !== '(') return null;
+      while (pos < lineStr.length && /\s/.test(lineStr[pos])) pos++;
+      if (lineStr[pos] !== '(') return null;
       let depth = 0;
       const condStart = pos;
-      for (; pos < line.length; pos++) {
-        if (line[pos] === '(') depth++;
-        else if (line[pos] === ')') {
+      for (; pos < lineStr.length; pos++) {
+        if (lineStr[pos] === '(') depth++;
+        else if (lineStr[pos] === ')') {
           depth--;
           if (depth === 0) break;
         }
       }
       if (depth !== 0) return null;
-      const cond = line.substring(condStart + 1, pos);
-      const stmt = line.substring(pos + 1).trim();
+      const cond = lineStr.substring(condStart + 1, pos);
+      const stmt = lineStr.substring(pos + 1).trim();
       if (stmt.startsWith('{') || !stmt.endsWith(';')) return null;
       return { cond, stmt };
     };
 
+    let result = '';
     const elseIfParsed = matchKeywordParenStmt(processedLine, 'else if');
     if (elseIfParsed) {
       const processedCond = processConditionString(elseIfParsed.cond);
       const processedStmt = processActionLine(elseIfParsed.stmt).trim();
-      return `${indentStr}else if (${processedCond}) {\n${indentStr}    ${processedStmt}\n${indentStr}}`;
-    }
-
-    const ifParsed = matchKeywordParenStmt(processedLine, 'if');
-    if (ifParsed) {
-      const processedCond = processConditionString(ifParsed.cond);
-      const processedStmt = processActionLine(ifParsed.stmt).trim();
-      return `${indentStr}if (${processedCond}) {\n${indentStr}    ${processedStmt}\n${indentStr}}`;
-    }
-
-    const singleLineElseRegex = /^else\s+([^{]+;)$/;
-    const elseMatch = processedLine.match(singleLineElseRegex);
-    if (elseMatch) {
-      const stmt = elseMatch[1];
-      const processedStmt = processActionLine(stmt).trim();
-      return `${indentStr}else {\n${indentStr}    ${processedStmt}\n${indentStr}}`;
-    }
-
-    const assignmentRegex = /^instance->data\.([a-zA-Z0-9_]+)\s*([+\-*\/]?=)\s*([^;]+);$/;
-    const assignMatch = processedLine.match(assignmentRegex);
-    if (assignMatch) {
-      const varName = assignMatch[1];
-      const op = assignMatch[2];
-      const expr = assignMatch[3].trim();
-      const v = sortedVariables.find(vr => vr.name === varName);
-      if (v) {
-        const type = getCTimeType(v.type);
-        let processedExpr = processLiteralSuffixes(expr, v.type);
-        if (type === 'bool') {
-          if (processedExpr === '1' || processedExpr === '1U') {
-            processedExpr = 'true';
-          } else if (processedExpr === '0' || processedExpr === '0U') {
-            processedExpr = 'false';
-          }
-          if (op === '=') {
-            return `${indentStr}instance->data.${varName} = ${processedExpr};`;
-          } else {
-            const baseOp = op.charAt(0);
-            return `${indentStr}instance->data.${varName} = (instance->data.${varName} ${baseOp} (${processedExpr}));`;
-          }
-        }
-        if (op === '=') {
-          return `${indentStr}instance->data.${varName} = (${type})(${processedExpr});`;
+      result = `${indentStr}else if (${processedCond}) {\n${indentStr}    ${processedStmt}\n${indentStr}}`;
+    } else {
+      const ifParsed = matchKeywordParenStmt(processedLine, 'if');
+      if (ifParsed) {
+        const processedCond = processConditionString(ifParsed.cond);
+        const processedStmt = processActionLine(ifParsed.stmt).trim();
+        result = `${indentStr}if (${processedCond}) {\n${indentStr}    ${processedStmt}\n${indentStr}}`;
+      } else {
+        const singleLineElseRegex = /^else\s+([^{]+;)$/;
+        const elseMatch = processedLine.match(singleLineElseRegex);
+        if (elseMatch) {
+          const stmt = elseMatch[1];
+          const processedStmt = processActionLine(stmt).trim();
+          result = `${indentStr}else {\n${indentStr}    ${processedStmt}\n${indentStr}}`;
         } else {
-          const baseOp = op.charAt(0);
-          return `${indentStr}instance->data.${varName} = (${type})(instance->data.${varName} ${baseOp} (${processedExpr}));`;
+          const assignmentRegex = /^instance->data\.([a-zA-Z0-9_]+)\s*([+\-*\/]?=)\s*([^;]+);$/;
+          const assignMatch = processedLine.match(assignmentRegex);
+          if (assignMatch) {
+            const varName = assignMatch[1];
+            const op = assignMatch[2];
+            const expr = assignMatch[3].trim();
+            const v = sortedVariables.find(vr => vr.name === varName);
+            if (v) {
+              const type = getCTimeType(v.type);
+              let processedExpr = processLiteralSuffixes(expr, v.type);
+              if (type === 'bool') {
+                if (processedExpr === '1' || processedExpr === '1U') {
+                  processedExpr = 'true';
+                } else if (processedExpr === '0' || processedExpr === '0U') {
+                  processedExpr = 'false';
+                }
+                if (op === '=') {
+                  result = `${indentStr}instance->data.${varName} = ${processedExpr};`;
+                } else {
+                  const baseOp = op.charAt(0);
+                  result = `${indentStr}instance->data.${varName} = (instance->data.${varName} ${baseOp} (${processedExpr}));`;
+                }
+              } else if (op === '=') {
+                result = `${indentStr}instance->data.${varName} = (${type})(${processedExpr});`;
+              } else {
+                const baseOp = op.charAt(0);
+                result = `${indentStr}instance->data.${varName} = (${type})(instance->data.${varName} ${baseOp} (${processedExpr}));`;
+              }
+            } else {
+              result = indentStr + processLiteralSuffixes(processedLine);
+            }
+          } else {
+            result = indentStr + processLiteralSuffixes(processedLine);
+          }
         }
       }
     }
 
-    return indentStr + processLiteralSuffixes(processedLine);
+    if (commentPart) {
+      result += (result ? ' ' : '') + commentPart;
+    }
+    return result;
   };
 
   const processUserCode = (code: string): string => {
@@ -706,7 +828,7 @@ export const generateMISRACCode = (chart: {
           const member = xbStateMember(s, n.id);
           if (!seenBlockMembers.has(member)) {
             seenBlockMembers.add(member);
-            blockStates.push(`    float ${member};`);
+            blockStates.push(`    volatile float ${member};`);
           }
         }
       });
@@ -783,23 +905,23 @@ typedef enum {
 } SM_Error_t;
 
 /* State Indices (derived from unique enum names) */
-${sortedStates.map((s, idx) => `#define ${stateEnum(s)}_IDX ${idx}U`).join('\n')}
+${sortedStates.map((s, idx) => `#define ${stateEnum(s)}_IDX ${(idx + 1)}U`).join('\n')}
 
 /* Layer Indices */
 ${sortedLayers.map((l, idx) => `#define SM_LYR_${sanitize(l.id).toUpperCase()}_IDX ${idx}U`).join('\n')}
 
 /* Data Structure */
 typedef struct {
-${sortedVariables.length > 0 ? sortedVariables.map(v => `    ${getCTimeType(v.type)} ${v.name};`).join('\n') : ''}
-${blockStates.length > 0 ? blockStates.join('\n') + '\n' : ''}    ${timeType} state_timer;
-} SM_Data_t;
+${sortedVariables.length > 0 ? sortedVariables.map(v => `    volatile ${getCTimeType(v.type)} ${v.name};`).join('\n') : ''}
+${blockStates.length > 0 ? blockStates.join('\n') + '\n' : ''}} SM_Data_t;
 
 /* Instance Context Structure */
 typedef struct {
     SM_Node_t active_states[SM_NUM_LAYERS];
     SM_Node_t history_states[SM_NUM_LAYERS];
-    ${timeType} state_timers[SM_NUM_STATES];
-    bool state_active[SM_NUM_STATES];
+    ${timeType} state_timers[SM_NUM_STATES + 1U];
+    bool state_active[SM_NUM_STATES + 1U];
+    ${timeType} state_timer;
     SM_Data_t data;
     SM_Error_t error_status;
 } ADIA_Instance_t;
@@ -809,7 +931,7 @@ typedef struct {
 
 #endif /* SM_CONFIG_H */`;
 
-  const smCoreH = `${disclaimer}#ifndef SM_CORE_H\n#define SM_CORE_H\n\n/* System headers */\n#include <stdint.h>\n#include <stdbool.h>\n#include <stddef.h>\n\n/* Project headers */\n#include "sm_config.h"\n\n/* Public API */\nvoid SM_Init(ADIA_Instance_t* instance);\nvoid SM_Reset(ADIA_Instance_t* instance);\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms);\nvoid SM_Sync_IO(ADIA_Instance_t* instance);\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g);\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance);\n\n/* Legacy API - returns const pointer to data struct (deprecated, use SM_Init/SM_Step) */\nstatic inline const SM_Data_t* SM_Data_Legacy(const ADIA_Instance_t* instance) {\n    if (instance == NULL) {\n        return NULL;\n    }\n    return &instance->data;\n}\n\n#endif /* SM_CORE_H */`;
+  const smCoreH = `${disclaimer}#ifndef SM_CORE_H\n#define SM_CORE_H\n\n/* System headers */\n#include <stdint.h>\n#include <stdbool.h>\n#include <stddef.h>\n\n/* Project headers */\n#include "sm_config.h"\n\n/* Public API */\nvoid SM_Init(ADIA_Instance_t* instance);\nvoid SM_Reset(ADIA_Instance_t* instance);\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms);\nSM_Error_t SM_Sync_IO(ADIA_Instance_t* instance);\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g);\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance);\n\n/* Legacy API - returns const pointer to data struct (deprecated, use SM_Init/SM_Step) */\nstatic inline const SM_Data_t* SM_Data_Legacy(const ADIA_Instance_t* instance) {\n    if (instance == NULL) {\n        return NULL;\n    }\n    return &instance->data;\n}\n\n#endif /* SM_CORE_H */`;
 
   const smSafetyH = `${disclaimer}#ifndef SM_SAFETY_H\n#define SM_SAFETY_H\n\n/* System headers */\n#include <stdint.h>\n#include <stdbool.h>\n\n/* Project headers */\n#include "sm_config.h"\n\n/* Safety API */\nvoid SM_Safety_Check(ADIA_Instance_t* instance);\nvoid SM_Watchdog_Kick(ADIA_Instance_t* instance);\nSM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t* instance);\n\n#endif /* SM_SAFETY_H */`;
 
@@ -1538,40 +1660,25 @@ void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
     let inPinIdx = 0;
     let outPinIdx = 0;
     sortedVariables.forEach(v => {
-      if (v.name.startsWith('in_') || v.name.startsWith('sensor_') || v.name.startsWith('btn_')) {
+      if (isInputVariable(v)) {
         syncInputsCode += `    instance->data.${v.name} = (${getCTimeType(v.type)})MCAL_Dio_ReadChannel(MCAL_PIN_INPUT_${inPinIdx});\n`;
         inPinIdx++;
-      } else if (v.name.startsWith('out_') || v.name.startsWith('led_') || v.name.startsWith('motor_')) {
+      } else if (isOutputVariable(v)) {
         syncOutputsCode += `    MCAL_Dio_WriteChannel(MCAL_PIN_OUTPUT_${outPinIdx}, ${boolCoerce(v)});\n`;
         outPinIdx++;
       }
     });
   }
-  if (!syncInputsCode.trim() || syncInputsCode === '    (void)instance;\n') {
-    // Fulfill Missing Input/Output Mapping: bind first variable to read channel if no prefixes match
-    if (sortedVariables.length > 0) {
-      const firstVar = sortedVariables[0];
-      syncInputsCode = `    instance->data.${firstVar.name} = (${getCTimeType(firstVar.type)})MCAL_Dio_ReadChannel(MCAL_PIN_INPUT_0);\n`;
-    } else {
-      syncInputsCode = '    (void)instance;\n';
-    }
+  if (!syncInputsCode.trim()) {
+    syncInputsCode = '    (void)instance;\n';
   }
-  if (!syncOutputsCode.trim() || syncOutputsCode === '    (void)instance;\n') {
-    // Fulfill Missing Input/Output Mapping: bind second variable (or first) to write channel if no prefixes match
-    if (sortedVariables.length > 1) {
-      const secondVar = sortedVariables[1];
-      syncOutputsCode = `    MCAL_Dio_WriteChannel(MCAL_PIN_OUTPUT_0, ${boolCoerce(secondVar)});\n`;
-    } else if (sortedVariables.length === 1) {
-      const firstVar = sortedVariables[0];
-      syncOutputsCode = `    MCAL_Dio_WriteChannel(MCAL_PIN_OUTPUT_0, ${boolCoerce(firstVar)});\n`;
-    } else {
-      syncOutputsCode = '    (void)instance;\n';
-    }
+  if (!syncOutputsCode.trim()) {
+    syncOutputsCode = '    (void)instance;\n';
   }
 
   /* Fix 8: Add <float.h> when FLT_MAX is needed (float tick type) */
   const floatHInclude = isFloatTick ? '\n#include <float.h>' : '';
-  let smCoreC = `${disclaimer}/* System headers */\n#include <stdint.h>\n#include <stdbool.h>${floatHInclude}\n#include <stddef.h>\n\n#ifndef UINT32_MAX\n#define UINT32_MAX (0xFFFFFFFFU)\n#endif\n\n/* Project headers */\n#include "sm_core.h"\n#ifdef SM_SAFETY_ENABLED\n#include "sm_safety.h"\n#endif\n#include "sm_user_logic.h"\n${hilEnabled ? '#include "hil_interface.h"' : '#include "mcal_dio.h"'}\n\n/* Forward declarations of public API functions for C99 compliance */\nvoid SM_Init(ADIA_Instance_t* instance);\nvoid SM_Reset(ADIA_Instance_t* instance);\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms);\nvoid SM_Sync_IO(ADIA_Instance_t* instance);\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g);\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance);\n\n/* Forward declarations of internal static helpers */\nstatic void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State_Shallow(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State(ADIA_Instance_t* instance, SM_Node_t state, bool use_history);\n`;
+  let smCoreC = `${disclaimer}/* System headers */\n#include <stdint.h>\n#include <stdbool.h>${floatHInclude}\n#include <stddef.h>\n\n#ifndef UINT32_MAX\n#define UINT32_MAX (0xFFFFFFFFU)\n#endif\n\n/* Project headers */\n#include "sm_core.h"\n#ifdef SM_SAFETY_ENABLED\n#include "sm_safety.h"\n#endif\n#include "sm_user_logic.h"\n${hilEnabled ? '#include "hil_interface.h"' : '#include "mcal_dio.h"'}\n\n/* Forward declarations of public API functions for C99 compliance */\nvoid SM_Init(ADIA_Instance_t* instance);\nvoid SM_Reset(ADIA_Instance_t* instance);\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms);\nSM_Error_t SM_Sync_IO(ADIA_Instance_t* instance);\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g);\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance);\n\n/* Forward declarations of internal static helpers */\nstatic void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State_Shallow(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State(ADIA_Instance_t* instance, SM_Node_t state, bool use_history);\n`;
   
   sortedLayers.forEach((l) => {
     const lIdx = layerIndexMap.get(l.id);
@@ -1613,7 +1720,7 @@ void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
     smGetActiveBody += `            break;\n`;
   });
 
-  smCoreC += `\n/**\n * @brief Returns the active state node of the specified region group.\n * @param instance Pointer to state machine context\n * @param g        Region group index\n * @return SM_Node_t The currently active state\n */\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g) {\n    SM_Node_t active = SM_NODE_INVALID;\n    if (instance == NULL) {\n        return active;\n    }\n    switch (g) {\n${smGetActiveBody}        default:\n            break;\n    }\n    return active;\n}\n\n/**\n * @brief Queries the error status of the state machine.\n * @param instance Pointer to state machine context\n * @return SM_Error_t Current error status\n */\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance) {\n    if (instance == NULL) {\n        return SM_ERR_NONE;\n    }\n    return instance->error_status;\n}\n\n/**\n * @brief Initializes the state machine context and registers default/initial values.\n * @param instance Pointer to state machine context\n */\nvoid SM_Init(ADIA_Instance_t* instance) {\n    uint32_t sm_iter;  /* MISRA 8.7: declared at top of function */\n    if (instance == NULL) {\n        return;\n    }\n    /*SM_EXIT_STATE_UNUSED_CAST_PLACEHOLDER*/\n    for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n        instance->active_states[sm_iter]  = SM_NODE_INVALID;\n        instance->history_states[sm_iter] = SM_NODE_INVALID;\n    }\n    for (sm_iter = 0U; sm_iter < SM_NUM_STATES; sm_iter++) {\n        instance->state_timers[sm_iter] = ${zeroLiteral};\n        instance->state_active[sm_iter] = false;\n    }\n${sortedVariables.map(v => {
+  smCoreC += `\n/**\n * @brief Returns the active state node of the specified region group.\n * @param instance Pointer to state machine context\n * @param g        Region group index\n * @return SM_Node_t The currently active state\n */\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g) {\n    SM_Node_t active = SM_NODE_INVALID;\n    if (instance == NULL) {\n        return active;\n    }\n    switch (g) {\n${smGetActiveBody}        default:\n            break;\n    }\n    return active;\n}\n\n/**\n * @brief Queries the error status of the state machine.\n * @param instance Pointer to state machine context\n * @return SM_Error_t Current error status\n */\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance) {\n    if (instance == NULL) {\n        return SM_ERR_NONE;\n    }\n    return instance->error_status;\n}\n\n/**\n * @brief Initializes the state machine context and registers default/initial values.\n * @param instance Pointer to state machine context\n */\nvoid SM_Init(ADIA_Instance_t* instance) {\n    uint32_t sm_iter;  /* MISRA 8.7: declared at top of function */\n    if (instance == NULL) {\n        return;\n    }\n    /*SM_EXIT_STATE_UNUSED_CAST_PLACEHOLDER*/\n    for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n        instance->active_states[sm_iter]  = SM_NODE_INVALID;\n        instance->history_states[sm_iter] = SM_NODE_INVALID;\n    }\n    for (sm_iter = 0U; sm_iter <= SM_NUM_STATES; sm_iter++) {\n        instance->state_timers[sm_iter] = ${zeroLiteral};\n        instance->state_active[sm_iter] = false;\n    }\n${sortedVariables.map(v => {
     /* Use validated/normalized initial values with proper C suffixes */
     const normalized = validateInitialValue(v);
     let initVal: string;
@@ -1621,6 +1728,9 @@ void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
       initVal = (normalized === 'true') ? 'true' : 'false';
     } else if (['float', 'single'].includes(v.type)) {
       initVal = normalized ?? '0.0';
+      if (!initVal.includes('.') && !initVal.match(/[eE]/)) {
+        initVal += '.0';
+      }
       if (!/[fF]$/.test(initVal)) initVal += 'f';
     } else if (v.type === 'double') {
       initVal = normalized ?? '0.0';
@@ -1632,7 +1742,7 @@ void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
       initVal = normalized ?? '0';
     }
     return `    instance->data.${v.name} = ${initVal};`;
-  }).join('\n')}\n${blockStates.length > 0 ? blockStates.map(bs => bs.replace('float ', 'instance->data.').replace(';', ' = 0.0f;')).join('\n') + '\n' : ''}    instance->data.state_timer = ${zeroLiteral};\n    instance->error_status = SM_ERR_NONE;\n    SM_Reset(instance);\n}\n\n/**\n * @brief Resets the state machine, fully reinitializing all runtime arrays.\n * @param instance Pointer to state machine context\n */\nvoid SM_Reset(ADIA_Instance_t* instance) {\n    uint32_t sm_iter;  /* MISRA 8.7: declared at top of function */\n    if (instance == NULL) {\n        return;\n    }\n    for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n        instance->active_states[sm_iter] = SM_NODE_INVALID;\n        instance->history_states[sm_iter] = SM_NODE_INVALID;\n    }\n    for (sm_iter = 0U; sm_iter < SM_NUM_STATES; sm_iter++) {\n        instance->state_timers[sm_iter] = ${zeroLiteral};\n        instance->state_active[sm_iter] = false;\n    }\n    instance->error_status = SM_ERR_NONE;\n    SM_Enter_Layer_${rootLayerIdx}(instance, false);\n}\n\n/**\n * @brief Steps the state machine: runs safety checks (if SM_SAFETY_ENABLED is defined), increments timers, and processes transitions.\n * @param instance Pointer to state machine context\n * @param delta_ms Execution tick period in milliseconds\n */\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms) {\n    uint32_t sm_iter;  /* MISRA 8.7: All loop variables declared at top of function */\n    if (instance == NULL) {\n        return;\n    }\n\n    /* If the state machine has already transitioned to a safe or error state, halt execution immediately */\n#ifdef SM_SAFETY_ENABLED\n    if ((instance->active_states[0U] == SM_NODE_SAFE) || (instance->active_states[0U] == SM_NODE_ERROR)) {\n        return;\n    }\n#else\n    if (instance->active_states[0U] == SM_NODE_ERROR) {\n        return;\n    }\n#endif\n\n    /* If an error was injected/detected but we haven't entered the safe/error state yet, trigger immediate halt/transition */\n    if (instance->error_status != SM_ERR_NONE) {\n#ifdef SM_SAFETY_ENABLED\n        /* Exit all currently active states (runs exit actions, clears timers) */\n        for (sm_iter = 0U; sm_iter < SM_NUM_STATES; sm_iter++) {\n            if (instance->state_active[sm_iter]) {\n                SM_Exit_State(instance, (SM_Node_t)(sm_iter + 1U));\n            }\n        }\n        for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n            if ((instance->error_status == SM_ERR_SAFETY_VIOLATION) ||\n                (instance->error_status == SM_ERR_RAM_INTEGRITY)    ||\n                (instance->error_status == SM_ERR_ROM_INTEGRITY))   {\n                instance->active_states[sm_iter] = SM_NODE_SAFE;\n            } else {\n                instance->active_states[sm_iter] = SM_NODE_ERROR;\n            }\n        }\n        if ((instance->error_status == SM_ERR_SAFETY_VIOLATION) ||\n            (instance->error_status == SM_ERR_RAM_INTEGRITY)    ||\n            (instance->error_status == SM_ERR_ROM_INTEGRITY))   {\n            /* Enter designated safe state */\n            SM_Enter_State(instance, ${safeStateEnumStr}, false);\n        }\n#else\n        for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n            instance->active_states[sm_iter] = SM_NODE_ERROR;\n        }\n#endif\n        return;\n    }\n\n    /* Validate execution time delta against timing contract (SM_TICK_MS) with overflow-safe tolerance check */\n    bool tick_out_of_tolerance = false;\n    if ((delta_ms > SM_TICK_MS) && ((delta_ms - SM_TICK_MS) > SM_TICK_TOLERANCE)) {\n        tick_out_of_tolerance = true;\n    } else if ((delta_ms < SM_TICK_MS) && ((SM_TICK_MS - delta_ms) > SM_TICK_TOLERANCE)) {\n        tick_out_of_tolerance = true;\n    }\n\n    if (tick_out_of_tolerance) {\n        instance->error_status = SM_ERR_SAFETY_VIOLATION;\n#ifdef SM_SAFETY_ENABLED\n        /* Exit all currently active states */\n        for (sm_iter = 0U; sm_iter < SM_NUM_STATES; sm_iter++) {\n            if (instance->state_active[sm_iter]) {\n                SM_Exit_State(instance, (SM_Node_t)(sm_iter + 1U));\n            }\n        }\n        for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n            instance->active_states[sm_iter] = SM_NODE_SAFE;\n        }\n        /* Enter designated safe state */\n        SM_Enter_State(instance, ${safeStateEnumStr}, false);\n#else\n        for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n            instance->active_states[sm_iter] = SM_NODE_ERROR;\n        }\n#endif\n        return;\n    }\n\n#ifdef SM_SAFETY_ENABLED\n    SM_Watchdog_Kick(instance);\n    SM_Safety_Check(instance);\n    if (instance->error_status == SM_ERR_NONE) {\n        instance->error_status = SM_Validate_State_Consistency(instance);\n    }\n    if (instance->error_status != SM_ERR_NONE) {\n        /* Exit all currently active states (runs exit actions, clears timers) */\n        for (sm_iter = 0U; sm_iter < SM_NUM_STATES; sm_iter++) {\n            if (instance->state_active[sm_iter]) {\n                SM_Exit_State(instance, (SM_Node_t)(sm_iter + 1U));\n            }\n        }\n        for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n            if ((instance->error_status == SM_ERR_SAFETY_VIOLATION) ||\n                (instance->error_status == SM_ERR_RAM_INTEGRITY)    ||\n                (instance->error_status == SM_ERR_ROM_INTEGRITY))   {\n                instance->active_states[sm_iter] = SM_NODE_SAFE;\n            } else {\n                instance->active_states[sm_iter] = SM_NODE_ERROR;\n            }\n        }\n        if ((instance->error_status == SM_ERR_SAFETY_VIOLATION) ||\n            (instance->error_status == SM_ERR_RAM_INTEGRITY)    ||\n            (instance->error_status == SM_ERR_ROM_INTEGRITY))   {\n            /* Enter designated safe state */\n            SM_Enter_State(instance, ${safeStateEnumStr}, false);\n        }\n        return;\n    }\n#endif\n\n    /* MISRA 12.4/15.6: overflow check without wrap-around, braced if body */\n    if (delta_ms > (${overflowSatVal} - instance->data.state_timer)) {\n        instance->data.state_timer = ${overflowSatVal};\n    } else {\n        instance->data.state_timer += delta_ms;\n    }\n\n    /* Increment state timers */\n${timerIncrementCode}\n    /* Step root layer */\n    SM_Step_Layer_${rootLayerIdx}(instance, delta_ms);\n}\n\n/**\n * @brief Synchronizes state machine variables with MCAL hardware channels.\n * @param instance Pointer to state machine context\n */\nvoid SM_Sync_IO(ADIA_Instance_t* instance) {\n    if (instance == NULL) {\n        return;\n    }\n    /* MCAL-to-SM Input Signal Binding */\n${syncInputsCode}\n    /* SM-to-MCAL Output Signal Binding */\n${syncOutputsCode}\n}\n\n/* Helper Functions Implementation */\n${smExitStateFunc}\n${smEnterShallowFunc}\n${smEnterStateFunc}\n${layerEntryFuncs}\n${layerStepFuncs}`;
+  }).join('\n')}\n${blockStates.length > 0 ? blockStates.map(bs => bs.replace('volatile float ', 'instance->data.').replace(';', ' = 0.0f;')).join('\n') + '\n' : ''}    instance->state_timer = ${zeroLiteral};\n    instance->error_status = SM_ERR_NONE;\n    SM_Reset(instance);\n}\n\n/**\n * @brief Resets the state machine, fully reinitializing all runtime arrays.\n * @param instance Pointer to state machine context\n */\nvoid SM_Reset(ADIA_Instance_t* instance) {\n    uint32_t sm_iter;  /* MISRA 8.7: declared at top of function */\n    if (instance == NULL) {\n        return;\n    }\n    for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n        instance->active_states[sm_iter] = SM_NODE_INVALID;\n        instance->history_states[sm_iter] = SM_NODE_INVALID;\n    }\n    for (sm_iter = 0U; sm_iter <= SM_NUM_STATES; sm_iter++) {\n        instance->state_timers[sm_iter] = ${zeroLiteral};\n        instance->state_active[sm_iter] = false;\n    }\n    instance->error_status = SM_ERR_NONE;\n    SM_Enter_Layer_${rootLayerIdx}(instance, false);\n}\n\n/**\n * @brief Steps the state machine: runs safety checks (if SM_SAFETY_ENABLED is defined), increments timers, and processes transitions.\n * @param instance Pointer to state machine context\n * @param delta_ms Execution tick period in milliseconds\n */\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms) {\n    uint32_t sm_iter;  /* MISRA 8.7: All loop variables declared at top of function */\n    if (instance == NULL) {\n        return;\n    }\n\n    /* If the state machine has already transitioned to a safe or error state, halt execution immediately */\n#ifdef SM_SAFETY_ENABLED\n    if ((instance->active_states[0U] == SM_NODE_SAFE) || (instance->active_states[0U] == SM_NODE_ERROR)) {\n        return;\n    }\n#else\n    if (instance->active_states[0U] == SM_NODE_ERROR) {\n        return;\n    }\n#endif\n\n    /* If an error was injected/detected but we haven't entered the safe/error state yet, trigger immediate halt/transition */\n    if (instance->error_status != SM_ERR_NONE) {\n#ifdef SM_SAFETY_ENABLED\n        /* Exit all currently active states (runs exit actions, clears timers) */\n        for (sm_iter = 1U; sm_iter <= SM_NUM_STATES; sm_iter++) {\n            if (instance->state_active[sm_iter]) {\n                SM_Exit_State(instance, (SM_Node_t)sm_iter);\n            }\n        }\n        for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n            if ((instance->error_status == SM_ERR_SAFETY_VIOLATION) ||\n                (instance->error_status == SM_ERR_RAM_INTEGRITY)    ||\n                (instance->error_status == SM_ERR_ROM_INTEGRITY))   {\n                instance->active_states[sm_iter] = SM_NODE_SAFE;\n            } else {\n                instance->active_states[sm_iter] = SM_NODE_ERROR;\n            }\n        }\n        if ((instance->error_status == SM_ERR_SAFETY_VIOLATION) ||\n            (instance->error_status == SM_ERR_RAM_INTEGRITY)    ||\n            (instance->error_status == SM_ERR_ROM_INTEGRITY))   {\n            /* Enter designated safe state */\n            SM_Enter_State(instance, ${safeStateEnumStr}, false);\n        }\n#else\n        for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n            instance->active_states[sm_iter] = SM_NODE_ERROR;\n        }\n#endif\n        return;\n    }\n\n    /* Validate execution time delta against timing contract (SM_TICK_MS) with overflow-safe tolerance check */\n    bool tick_out_of_tolerance = false;\n    if ((delta_ms > SM_TICK_MS) && ((delta_ms - SM_TICK_MS) > SM_TICK_TOLERANCE)) {\n        tick_out_of_tolerance = true;\n    } else if ((delta_ms < SM_TICK_MS) && ((SM_TICK_MS - delta_ms) > SM_TICK_TOLERANCE)) {\n        tick_out_of_tolerance = true;\n    }\n\n    if (tick_out_of_tolerance) {\n        instance->error_status = SM_ERR_SAFETY_VIOLATION;\n#ifdef SM_SAFETY_ENABLED\n        /* Exit all currently active states */\n        for (sm_iter = 1U; sm_iter <= SM_NUM_STATES; sm_iter++) {\n            if (instance->state_active[sm_iter]) {\n                SM_Exit_State(instance, (SM_Node_t)sm_iter);\n            }\n        }\n        for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n            instance->active_states[sm_iter] = SM_NODE_SAFE;\n        }\n        /* Enter designated safe state */\n        SM_Enter_State(instance, ${safeStateEnumStr}, false);\n#else\n        for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n            instance->active_states[sm_iter] = SM_NODE_ERROR;\n        }\n#endif\n        return;\n    }\n\n#ifdef SM_SAFETY_ENABLED\n    SM_Watchdog_Kick(instance);\n    SM_Safety_Check(instance);\n    if (instance->error_status == SM_ERR_NONE) {\n        instance->error_status = SM_Validate_State_Consistency(instance);\n    }\n    if (instance->error_status != SM_ERR_NONE) {\n        /* Exit all currently active states (runs exit actions, clears timers) */\n        for (sm_iter = 1U; sm_iter <= SM_NUM_STATES; sm_iter++) {\n            if (instance->state_active[sm_iter]) {\n                SM_Exit_State(instance, (SM_Node_t)sm_iter);\n            }\n        }\n        for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {\n            if ((instance->error_status == SM_ERR_SAFETY_VIOLATION) ||\n                (instance->error_status == SM_ERR_RAM_INTEGRITY)    ||\n                (instance->error_status == SM_ERR_ROM_INTEGRITY))   {\n                instance->active_states[sm_iter] = SM_NODE_SAFE;\n            } else {\n                instance->active_states[sm_iter] = SM_NODE_ERROR;\n            }\n        }\n        if ((instance->error_status == SM_ERR_SAFETY_VIOLATION) ||\n            (instance->error_status == SM_ERR_RAM_INTEGRITY)    ||\n            (instance->error_status == SM_ERR_ROM_INTEGRITY))   {\n            /* Enter designated safe state */\n            SM_Enter_State(instance, ${safeStateEnumStr}, false);\n        }\n        return;\n    }\n#endif\n\n    /* MISRA 12.4/15.6: overflow check without wrap-around, braced if body */\n    if (delta_ms > (${overflowSatVal} - instance->state_timer)) {\n        instance->state_timer = ${overflowSatVal};\n    } else {\n        instance->state_timer += delta_ms;\n    }\n\n    /* Increment state timers */\n${timerIncrementCode}\n    /* Step root layer */\n    SM_Step_Layer_${rootLayerIdx}(instance, delta_ms);\n}\n\n/**\n * @brief Synchronizes state machine variables with MCAL hardware channels.\n * @param instance Pointer to state machine context\n * @return SM_Error_t Sync result error status\n */\nSM_Error_t SM_Sync_IO(ADIA_Instance_t* instance) {\n    if (instance == NULL) {\n        return SM_ERR_NONE;\n    }\n    /* MCAL-to-SM Input Signal Binding */\n${syncInputsCode}\n    /* SM-to-MCAL Output Signal Binding */\n${syncOutputsCode}\n    return SM_ERR_NONE;\n}\n\n/* Helper Functions Implementation */\n${smExitStateFunc}\n${smEnterShallowFunc}\n${smEnterStateFunc}\n${layerEntryFuncs}\n${layerStepFuncs}`;
 
 
 
@@ -1662,8 +1772,8 @@ void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
   const testingReport = generateTestingReport(chart, errors, warnings, smCoreC);
 
   /* Dynamic MCAL_PIN definitions based on actual IO variable count */
-  const inPrefixVars = sortedVariables.filter(v => v.name.startsWith('in_') || v.name.startsWith('sensor_') || v.name.startsWith('btn_'));
-  const outPrefixVars = sortedVariables.filter(v => v.name.startsWith('out_') || v.name.startsWith('led_') || v.name.startsWith('motor_'));
+  const inPrefixVars = sortedVariables.filter(v => isInputVariable(v));
+  const outPrefixVars = sortedVariables.filter(v => isOutputVariable(v));
   const inPinCount = Math.max(2, inPrefixVars.length);
   const outPinCount = Math.max(2, outPrefixVars.length);
   let mcalDioPins = '';

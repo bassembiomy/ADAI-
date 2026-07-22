@@ -304,13 +304,13 @@ describe('StateMachineCodeGenerator', () => {
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
 
     // Verify config.h contains state_active bool array
-    expect(configH).toContain('bool state_active[SM_NUM_STATES];');
+    expect(configH).toContain('bool state_active[SM_NUM_STATES + 1U];');
 
     // Verify sm_core.c uses state_active checks and priority order execution
-    expect(coreC).toContain('instance->state_active[0U] = true;');
     expect(coreC).toContain('instance->state_active[1U] = true;');
-    expect(coreC).toContain('if (instance->state_active[0U]) {');
+    expect(coreC).toContain('instance->state_active[2U] = true;');
     expect(coreC).toContain('if (instance->state_active[1U]) {');
+    expect(coreC).toContain('if (instance->state_active[2U]) {');
   });
 
   it('should generate correct C code for parallel states with internal transitions', () => {
@@ -346,10 +346,10 @@ describe('StateMachineCodeGenerator', () => {
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
 
     // Verify it parses the internal transition and uses local transitioned flag
-    expect(coreC).toContain('bool transitioned_0 = false;');
+    expect(coreC).toContain('bool transitioned_1 = false;');
     expect(coreC).toContain('if ((instance->data.is_active)) {');
     expect(coreC).toContain('instance->data.counter = (uint16_t)(10U);');
-    expect(coreC).toContain('transitioned_0 = true;');
+    expect(coreC).toContain('transitioned_1 = true;');
     
     // Specifically ensure SM_Step_Layer_0 body doesn't contain early return;
     const stepLayerFuncStart = coreC.indexOf('static void SM_Step_Layer_0');
@@ -406,7 +406,7 @@ describe('StateMachineCodeGenerator', () => {
 
     // Verify after(5) transition checks (5 * 20 = 100ms) using named macro
     expect(configH).toContain('#define SM_TMR_TR_INT_S1_0_MS (100U)');
-    expect(coreC).toContain('(instance->state_timers[0U] >= SM_TMR_TR_INT_S1_0_MS)');
+    expect(coreC).toContain('(instance->state_timers[1U] >= SM_TMR_TR_INT_S1_0_MS)');
   });
 
   it('should support floating-point/decimal tick rates (e.g. 0.5 ms)', () => {
@@ -449,7 +449,7 @@ describe('StateMachineCodeGenerator', () => {
     expect(coreC).toContain('void SM_Step(ADIA_Instance_t* instance, float delta_ms)');
     // Verify transition condition uses f suffix for 3 * 0.5 = 1.5 via named macro
     expect(configH).toContain('#define SM_TMR_TR_INT_S1_0_MS (1.5f)');
-    expect(coreC).toContain('(instance->state_timers[0U] >= SM_TMR_TR_INT_S1_0_MS)');
+    expect(coreC).toContain('(instance->state_timers[1U] >= SM_TMR_TR_INT_S1_0_MS)');
   });
 
   it('should not corrupt local variables or parameter names when user defines variables like i, state, instance', () => {
@@ -564,7 +564,7 @@ describe('StateMachineCodeGenerator', () => {
     expect(coreC).toContain('uint32_t sm_iter;');
     /* Verify loops use sm_iter, not the old single-char 'i' */
     expect(coreC).toContain('for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++)');
-    expect(coreC).toContain('for (sm_iter = 0U; sm_iter < SM_NUM_STATES; sm_iter++)');
+    expect(coreC).toContain('for (sm_iter = 0U; sm_iter <= SM_NUM_STATES; sm_iter++)');
 
     /* Bound the search to only the SM_Step function definition body.
      * We look for the function body starting with the open brace '{' to skip the forward declarations.
@@ -594,9 +594,9 @@ describe('StateMachineCodeGenerator', () => {
     expect(result.errors).toHaveLength(0);
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
     /* The state_timer overflow guard must check delta_ms > (UINT32_MAX - state_timer) */
-    expect(coreC).toContain('delta_ms > (UINT32_MAX - instance->data.state_timer)');
+    expect(coreC).toContain('delta_ms > (UINT32_MAX - instance->state_timer)');
     /* Individual timer increment guards must also check delta_ms > (UINT32_MAX - state_timers[i]) */
-    expect(coreC).toContain('delta_ms > (UINT32_MAX - instance->state_timers[0U])');
+    expect(coreC).toContain('delta_ms > (UINT32_MAX - instance->state_timers[1U])');
   });
 
   it('should hoist variable declarations to top of sm_safety.c functions (MISRA 8.7)', () => {
@@ -729,10 +729,10 @@ describe('StateMachineCodeGenerator', () => {
     expect(mcalDioH).toContain('MCAL_Watchdog_Kick');
 
     const coreH = result.files.find(f => f.name === 'sm_core.h')?.content || '';
-    expect(coreH).toContain('void SM_Sync_IO(ADIA_Instance_t* instance);');
+    expect(coreH).toContain('SM_Error_t SM_Sync_IO(ADIA_Instance_t* instance);');
 
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
-    expect(coreC).toContain('void SM_Sync_IO(ADIA_Instance_t* instance) {');
+    expect(coreC).toContain('SM_Error_t SM_Sync_IO(ADIA_Instance_t* instance) {');
     expect(coreC).toContain('MCAL_Dio_ReadChannel');
 
     const safetyC = result.files.find(f => f.name === 'sm_safety.c')?.content || '';
@@ -748,6 +748,20 @@ describe('StateMachineCodeGenerator', () => {
         const openBraces = (f.content.match(/\{/g) || []).length;
         const closeBraces = (f.content.match(/\}/g) || []).length;
         expect(openBraces).toBe(closeBraces);
+
+        // Assert C comments are well-formed and closed
+        let searchIdx = 0;
+        while (true) {
+          const nextStart = f.content.indexOf('/*', searchIdx);
+          if (nextStart === -1) break;
+          const nextEnd = f.content.indexOf('*/', nextStart + 2);
+          expect(nextEnd).toBeGreaterThan(-1); // Verify comment is closed
+          const nestedStart = f.content.indexOf('/*', nextStart + 2);
+          if (nestedStart !== -1 && nestedStart < nextEnd) {
+            throw new Error(`Nested comment detected in ${f.name}`);
+          }
+          searchIdx = nextEnd + 2;
+        }
 
         // Assert file closing directives if it is a header file
         if (f.name.endsWith('.h')) {
@@ -870,6 +884,105 @@ describe('StateMachineCodeGenerator', () => {
     // Verify that the valid math function 'sin' and the valid variable 'valid_var' did not trigger any errors
     const hasValidVarError = result.errors.some(e => e.message.includes('valid_var') || e.message.includes('sin'));
     expect(hasValidVarError).toBe(false);
+  });
+
+  it('should correctly parse internal transitions containing division operators and block comments', () => {
+    const chartWithDivision = {
+      tickMs: 10,
+      states: [
+        {
+          id: 's1', name: 'StateDiv', x: 0, y: 0, width: 100, height: 100,
+          entry: 'val = 10; // set initial value',
+          during: '', exit: '',
+          internalTransitions: '[val / 2 > 1] /* calc */ / result_var = val / 2;',
+          isActive: false, color: 'blue', parentId: 'root', children: [],
+          priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
+        }
+      ],
+      junctions: [],
+      transitions: [],
+      variables: [
+        { id: 'v1', name: 'val', type: 'uint16', initialValue: '10', currentValue: 10, visibleInScope: true },
+        { id: 'v2', name: 'result_var', type: 'uint16', initialValue: '0', currentValue: 0, visibleInScope: true }
+      ],
+      layers: [
+        { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }
+      ],
+      safetyMode: false
+    };
+
+    const result = generateMISRACCode(chartWithDivision as any);
+    expect(result.errors).toHaveLength(0);
+
+    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
+    expect(coreC).toContain('val / 2');
+    expect(coreC).not.toContain('2 > 1] /');
+
+    const userC = result.files.find(f => f.name === 'sm_user_logic.c')?.content || '';
+    expect(userC).toContain('// set initial value');
+  });
+
+  it('should halt code generation on critical deadlocks unless allowDeadlocks is true (REQ-G-03)', () => {
+    const chartDeadlock: any = {
+      tickMs: 10,
+      states: [
+        {
+          id: 's1', name: 'DeadEndState', x: 0, y: 0, width: 100, height: 100,
+          entry: '', during: '', exit: '',
+          isActive: false, color: 'red', parentId: 'root', children: [],
+          priority: 1, isParallel: false, regionId: 'MAIN', autostart: true,
+          isTerminal: false
+        }
+      ],
+      junctions: [],
+      transitions: [],
+      variables: [],
+      layers: [{ id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }],
+      safetyMode: true
+    };
+
+    const result = generateMISRACCode(chartDeadlock);
+    expect(result.errors.some(e => e.message.includes('Critical Deadlock') || e.message.includes('deadlock'))).toBe(true);
+
+    const resultAllowed = generateMISRACCode({ ...chartDeadlock, allowDeadlocks: true });
+    expect(resultAllowed.errors.filter(e => e.message.includes('Critical Deadlock'))).toHaveLength(0);
+  });
+
+  it('should generate default fallback cases in switch statements and active during action checks (REQ-G-03)', () => {
+    const testChart: any = {
+      tickMs: 10,
+      states: [
+        {
+          id: 's1', name: 'State_6_1', x: 0, y: 0, width: 100, height: 100,
+          entry: '', during: '', exit: '',
+          isActive: false, color: 'blue', parentId: 'root', children: [],
+          priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
+        },
+        {
+          id: 's2', name: 'STATE_6_2', x: 200, y: 0, width: 100, height: 100,
+          entry: '', during: 'counter = counter + 1;', exit: '',
+          isActive: false, color: 'green', parentId: 'root', children: [],
+          priority: 2, isParallel: false, regionId: 'MAIN', autostart: false,
+          isTerminal: true
+        }
+      ],
+      junctions: [],
+      transitions: [
+        {
+          id: 't1', sourceId: 's1', targetId: 's2',
+          condition: 'true', action: '',
+          afterTicks: null, type: 'condition', hasControlPoint: false, order: 1
+        }
+      ],
+      variables: [{ id: 'v1', name: 'counter', type: 'int', initialValue: '0', currentValue: 0, visibleInScope: true }],
+      layers: [{ id: 'root', name: 'root', parentStateId: null, stateIds: ['s1', 's2'], transitionIds: ['t1'], junctionIds: [] }],
+      safetyMode: false
+    };
+
+    const result = generateMISRACCode(testChart);
+    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
+    expect(coreC).toContain('default:');
+    expect(coreC).toContain('state_active');
   });
 });
 
