@@ -82,14 +82,202 @@ const WAYPOINTS = [
   { x: 2.5, y: 2.2 }
 ];
 
+interface DustParticle {
+  id: number;
+  x: number;
+  y: number;
+  scale: number;
+  opacity: number;
+  isSucked: boolean;
+}
+
 const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
   const stateRef = React.useRef(state);
+  const dustParticlesRef = React.useRef<DustParticle[]>([]);
+
+  // Telemetry HUD refs
+  const stateTextRef = React.useRef<HTMLSpanElement>(null);
+  const batTextRef = React.useRef<HTMLSpanElement>(null);
+  const batBarRef = React.useRef<HTMLDivElement>(null);
+  const covRef = React.useRef<HTMLSpanElement>(null);
+  const effRef = React.useRef<HTMLSpanElement>(null);
+  const distRef = React.useRef<HTMLSpanElement>(null);
+  const confRef = React.useRef<HTMLSpanElement>(null);
+  const errRef = React.useRef<HTMLSpanElement>(null);
+  const latRef = React.useRef<HTMLSpanElement>(null);
+  const lossRef = React.useRef<HTMLSpanElement>(null);
+
+  // Local Ref representing the smoothly interpolated variables
+  const smoothRobot = React.useRef({
+    x: 0,
+    y: 0,
+    theta: 0,
+    x_est: 0,
+    y_est: 0,
+    theta_est: 0,
+    battery: 100,
+    confidence: 100,
+    coverage: 0,
+    efficiency: 100,
+    distance: 0,
+    latency: 50,
+    loss: 0
+  });
 
   React.useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
+  // Seed cosmetic dust particles on first load
+  React.useEffect(() => {
+    const list: DustParticle[] = [];
+    for (let i = 0; i < 30; i++) {
+      list.push({
+        id: i,
+        x: (Math.random() - 0.5) * 5.0, // Spread across map
+        y: (Math.random() - 0.5) * 5.0,
+        scale: Math.random() * 1.5 + 1.0,
+        opacity: Math.random() * 0.4 + 0.3,
+        isSucked: false
+      });
+    }
+    dustParticlesRef.current = list;
+  }, []);
+
+  // Tween incoming discrete simulation updates to 60fps values
+  useGSAP(() => {
+    if (!state) return;
+    const navStats = state.nav_stats || [0, 100, 0, 100];
+    const commStats = state.comm_stats || [50, 0, 0];
+
+    gsap.to(smoothRobot.current, {
+      x: state.x !== undefined && !isNaN(state.x) ? state.x : 0,
+      y: state.y !== undefined && !isNaN(state.y) ? state.y : 0,
+      theta: state.theta !== undefined && !isNaN(state.theta) ? state.theta : 0,
+      x_est: state.x_est !== undefined && !isNaN(state.x_est) ? state.x_est : 0,
+      y_est: state.y_est !== undefined && !isNaN(state.y_est) ? state.y_est : 0,
+      theta_est: state.theta_est !== undefined && !isNaN(state.theta_est) ? state.theta_est : 0,
+      battery: state.battery_level !== undefined && !isNaN(state.battery_level) ? state.battery_level : 100,
+      confidence: state.confidence !== undefined && !isNaN(state.confidence) ? state.confidence : 100,
+      coverage: navStats[0] !== undefined ? navStats[0] : 0,
+      efficiency: navStats[1] !== undefined ? navStats[1] : 100,
+      distance: navStats[2] !== undefined ? navStats[2] : 0,
+      latency: commStats[0] !== undefined ? commStats[0] : 50,
+      loss: commStats[1] !== undefined ? commStats[1] : 0,
+      duration: 0.15,
+      ease: 'power1.out',
+      overwrite: 'auto'
+    });
+
+    // Tween HUD Numbers
+    if (batTextRef.current) {
+      gsap.to(batTextRef.current, {
+        innerText: state.battery_level !== undefined ? state.battery_level : 100,
+        snap: { innerText: 1 },
+        duration: 0.3,
+        ease: 'power2.out',
+        modifiers: { innerText: (v) => `${parseFloat(v).toFixed(0)}%` }
+      });
+    }
+
+    if (batBarRef.current) {
+      gsap.to(batBarRef.current, {
+        width: `${state.battery_level ?? 100}%`,
+        duration: 0.3,
+        ease: 'power2.out'
+      });
+    }
+
+    if (covRef.current) {
+      gsap.to(covRef.current, {
+        innerText: navStats[0] ?? 0,
+        snap: { innerText: 1 },
+        duration: 0.4,
+        ease: 'power2.out',
+        modifiers: { innerText: (v) => `${parseFloat(v).toFixed(0)}%` }
+      });
+    }
+
+    if (effRef.current) {
+      gsap.to(effRef.current, {
+        innerText: navStats[1] ?? 100,
+        snap: { innerText: 1 },
+        duration: 0.4,
+        ease: 'power2.out',
+        modifiers: { innerText: (v) => `${parseFloat(v).toFixed(0)}%` }
+      });
+    }
+
+    if (distRef.current) {
+      gsap.to(distRef.current, {
+        innerText: navStats[2] ?? 0,
+        snap: { innerText: 0.1 },
+        duration: 0.4,
+        ease: 'power2.out',
+        modifiers: { innerText: (v) => `${parseFloat(v).toFixed(1)}m` }
+      });
+    }
+
+    if (confRef.current) {
+      gsap.to(confRef.current, {
+        innerText: state.confidence ?? 100,
+        snap: { innerText: 1 },
+        duration: 0.4,
+        ease: 'power2.out',
+        modifiers: { innerText: (v) => `${parseFloat(v).toFixed(0)}%` }
+      });
+    }
+
+    if (errRef.current) {
+      const trueX = state.x ?? 0;
+      const trueY = state.y ?? 0;
+      const estX = state.x_est ?? 0;
+      const estY = state.y_est ?? 0;
+      const posErr = Math.sqrt(Math.pow(trueX - estX, 2) + Math.pow(trueY - estY, 2));
+
+      gsap.to(errRef.current, {
+        innerText: posErr,
+        snap: { innerText: 0.01 },
+        duration: 0.4,
+        ease: 'power2.out',
+        modifiers: { innerText: (v) => `${parseFloat(v).toFixed(2)}m` }
+      });
+    }
+
+    if (latRef.current) {
+      gsap.to(latRef.current, {
+        innerText: commStats[0] ?? 50,
+        snap: { innerText: 1 },
+        duration: 0.4,
+        ease: 'power2.out',
+        modifiers: { innerText: (v) => `${parseFloat(v).toFixed(0)}ms` }
+      });
+    }
+
+    if (lossRef.current) {
+      gsap.to(lossRef.current, {
+        innerText: commStats[1] ?? 0,
+        snap: { innerText: 1 },
+        duration: 0.4,
+        ease: 'power2.out',
+        modifiers: { innerText: (v) => `${parseFloat(v).toFixed(0)} pkts` }
+      });
+    }
+  }, [state]);
+
+  // Slide-in animation on mount
+  useGSAP(() => {
+    gsap.from('.hud-card-robot', {
+      x: -25,
+      opacity: 0,
+      duration: 0.6,
+      ease: 'back.out(1.4)'
+    });
+  }, { scope: containerRef });
+
+  // Render loop
   React.useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -99,7 +287,7 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
     let animationFrameId: number;
 
     const draw = () => {
-      const currentState = stateRef.current;
+      const s = smoothRobot.current;
       const W = canvas.width;
       const H = canvas.height;
       const now = performance.now();
@@ -108,6 +296,7 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
       ctx.fillStyle = '#0f172a';
       ctx.fillRect(0, 0, W, H);
 
+      const currentState = stateRef.current;
       if (!currentState) {
         ctx.fillStyle = '#64748b';
         ctx.font = '10px monospace';
@@ -118,19 +307,55 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
         return;
       }
 
-      // Detect if we should use Matlab coordinates range [-6.0, 6.0]
-      const rx_val = currentState.x ?? 0;
-      const ry_val = currentState.y ?? 0;
-      const rx_est_val = currentState.x_est ?? 0;
-      const ry_est_val = currentState.y_est ?? 0;
-      const isMatlabActive = Math.abs(rx_val) > 3.05 || Math.abs(ry_val) > 3.05 || Math.abs(rx_est_val) > 3.05 || Math.abs(ry_est_val) > 3.05;
-
+      // Check if we should use Matlab coordinates range [-6.0, 6.0]
+      const isMatlabActive = Math.abs(currentState.x || 0) > 3.05 || Math.abs(currentState.y || 0) > 3.05;
       const minVal = isMatlabActive ? -6.0 : -3.0;
       const sizeVal = isMatlabActive ? 12.0 : 6.0;
 
       const scaleX = (x: number) => 10 + (x - minVal) / sizeVal * (W - 20);
       const scaleY = (y: number) => H - 10 - (y - minVal) / sizeVal * (H - 20);
       const scaleR = (r: number) => r / sizeVal * (W - 20);
+
+      // Check suction for cosmetic dust particles
+      dustParticlesRef.current.forEach(p => {
+        if (p.isSucked) return;
+        const dist = Math.sqrt(Math.pow(p.x - s.x, 2) + Math.pow(p.y - s.y, 2));
+        if (dist < 0.4) {
+          p.isSucked = true;
+          gsap.to(p, {
+            x: s.x,
+            y: s.y,
+            scale: 0,
+            opacity: 0,
+            duration: 0.25,
+            ease: 'power2.in',
+            onComplete: () => {
+              // Re-spawn in uncleaned area
+              let spawned = false;
+              const grid = currentState.cleanedGrid;
+              if (grid && Array.isArray(grid)) {
+                for (let retry = 0; retry < 10; retry++) {
+                  const r = Math.floor(Math.random() * 30);
+                  const c = Math.floor(Math.random() * 30);
+                  if (grid[r][c] === 0) {
+                    p.x = minVal + (c / 30) * sizeVal;
+                    p.y = minVal + (r / 30) * sizeVal;
+                    spawned = true;
+                    break;
+                  }
+                }
+              }
+              if (!spawned) {
+                p.x = (Math.random() - 0.5) * sizeVal;
+                p.y = (Math.random() - 0.5) * sizeVal;
+              }
+              p.scale = Math.random() * 1.5 + 1.0;
+              p.opacity = Math.random() * 0.4 + 0.3;
+              p.isSucked = false;
+            }
+          });
+        }
+      });
 
       // 1. Draw SLAM occupancy grid
       const grid = currentState.grid;
@@ -146,9 +371,9 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
               } else {
                 ctx.fillStyle = `rgba(51, 65, 85, ${Math.min(0.4, -val / 100)})`;
               }
-              const cx = 10 + c * cellW;
-              const cy = H - 10 - (r + 1) * cellH;
-              ctx.fillRect(cx, cy, cellW, cellH);
+              const cx_cell = 10 + c * cellW;
+              const cy_cell = H - 10 - (r + 1) * cellH;
+              ctx.fillRect(cx_cell, cy_cell, cellW, cellH);
             }
           }
         }
@@ -159,13 +384,13 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
       if (cleanedGrid && Array.isArray(cleanedGrid)) {
         const cellW = (W - 20) / 30;
         const cellH = (H - 20) / 30;
-        ctx.fillStyle = 'rgba(6, 182, 212, 0.16)'; // light cyan/teal
+        ctx.fillStyle = 'rgba(6, 182, 212, 0.16)';
         for (let r = 0; r < 30; r++) {
           for (let c = 0; c < 30; c++) {
             if (cleanedGrid[r][c] === 1) {
-              const cx = 10 + c * cellW;
-              const cy = H - 10 - (r + 1) * cellH;
-              ctx.fillRect(cx, cy, cellW, cellH);
+              const cx_cell = 10 + c * cellW;
+              const cy_cell = H - 10 - (r + 1) * cellH;
+              ctx.fillRect(cx_cell, cy_cell, cellW, cellH);
             }
           }
         }
@@ -186,11 +411,22 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
         ctx.stroke();
       }
 
+      // Draw active dust particles
+      dustParticlesRef.current.forEach(p => {
+        ctx.save();
+        ctx.globalAlpha = p.opacity;
+        ctx.fillStyle = '#857262';
+        ctx.beginPath();
+        ctx.arc(scaleX(p.x), scaleY(p.y), p.scale * 0.7, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.restore();
+      });
+
       const walls = isMatlabActive ? MATLAB_WALLS : ROOM_WALLS;
       const circles = isMatlabActive ? MATLAB_OBSTACLES : ROOM_CIRCLES;
       const boxes = isMatlabActive ? [] : ROOM_BOXES;
 
-      // Draw Multi-room Internal and boundary walls
+      // Draw Multi-room boundaries
       ctx.strokeStyle = '#475569';
       ctx.lineWidth = 2.0;
       walls.forEach(w => {
@@ -200,7 +436,7 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
         ctx.stroke();
       });
 
-      // 2. Draw Obstacles (Holographic / Metallic gradient style with glow)
+      // 2. Draw Obstacles
       const obstacleGlow = 0.04 * Math.sin(now * 0.003);
       circles.forEach((c, idx) => {
         ctx.fillStyle = `rgba(51, 65, 85, ${0.15 + obstacleGlow})`;
@@ -266,7 +502,6 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
       const isCharging = currentState.navState === 9;
       const dockPulseRadius = ((now * 0.05) % 60);
       const dockAlpha = 1 - (dockPulseRadius / 60);
-      
       const dockX = isMatlabActive ? -5.1 : 0.0;
       const dockY = isMatlabActive ? -5.1 : -2.8;
 
@@ -289,8 +524,8 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
 
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 7px sans-serif';
-      ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center';
       ctx.fillText('D', scaleX(dockX), scaleY(dockY));
 
       // Draw active path targets
@@ -298,7 +533,7 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
         ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
         ctx.setLineDash([2, 3]);
         ctx.beginPath();
-        ctx.moveTo(scaleX(currentState.x), scaleY(currentState.y));
+        ctx.moveTo(scaleX(s.x), scaleY(s.y));
         ctx.lineTo(scaleX(currentState.targetX), scaleY(currentState.targetY));
         ctx.stroke();
         ctx.setLineDash([]);
@@ -314,7 +549,7 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
         ctx.fill();
       }
 
-      // Pre-planned lawnmower sweep path WAYPOINTS
+      // Pre-planned sweep path waypoints
       ctx.strokeStyle = 'rgba(59, 130, 246, 0.15)';
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
@@ -326,7 +561,7 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Robot paths: true trail (emerald)
+      // Robot paths: true trail (smoothly drawn via interpolated path coordinates)
       const trail = currentState.trail;
       if (trail && Array.isArray(trail) && trail.length > 1) {
         ctx.strokeStyle = '#10b981';
@@ -357,7 +592,7 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
         ctx.setLineDash([]);
       }
 
-      // 4. LiDAR active scan rays + Time-of-Flight chevron wave pulses + scattering impact ripples
+      // 4. LiDAR active scan rays + ripples
       const ranges = currentState.lidarRanges;
       if (ranges && Array.isArray(ranges)) {
         const numBeams = ranges.length;
@@ -368,12 +603,12 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
         
         const sweepAngle = (now * 0.004) % (2 * Math.PI);
         const ldsMaxRange = 4.0;
-        const sweepDist = raycastTwin(currentState.x, currentState.y, sweepAngle, ldsMaxRange, 0);
-        const sx_hit = currentState.x + sweepDist * Math.cos(sweepAngle);
-        const sy_hit = currentState.y + sweepDist * Math.sin(sweepAngle);
+        const sweepDist = raycastTwin(s.x, s.y, sweepAngle, ldsMaxRange, 0);
+        const sx_hit = s.x + sweepDist * Math.cos(sweepAngle);
+        const sy_hit = s.y + sweepDist * Math.sin(sweepAngle);
 
         const laserGrad = ctx.createLinearGradient(
-          scaleX(currentState.x), scaleY(currentState.y),
+          scaleX(s.x), scaleY(s.y),
           scaleX(sx_hit), scaleY(sy_hit)
         );
         laserGrad.addColorStop(0, 'rgba(249, 115, 22, 0.4)');
@@ -382,7 +617,7 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
         ctx.strokeStyle = laserGrad;
         ctx.lineWidth = 2.5;
         ctx.beginPath();
-        ctx.moveTo(scaleX(currentState.x), scaleY(currentState.y));
+        ctx.moveTo(scaleX(s.x), scaleY(s.y));
         ctx.lineTo(scaleX(sx_hit), scaleY(sy_hit));
         ctx.stroke();
 
@@ -395,23 +630,23 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
         ctx.shadowBlur = 0;
 
         for (let i = 0; i < ranges.length; i++) {
-          const absAngle = currentState.theta + beamAngles[i];
+          const absAngle = s.theta + beamAngles[i];
           const r = ranges[i];
-          const lx = currentState.x + r * Math.cos(absAngle);
-          const ly = currentState.y + r * Math.sin(absAngle);
+          const lx = s.x + r * Math.cos(absAngle);
+          const ly = s.y + r * Math.sin(absAngle);
 
           ctx.strokeStyle = 'rgba(239, 68, 68, 0.25)';
           ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.moveTo(scaleX(currentState.x), scaleY(currentState.y));
+          ctx.moveTo(scaleX(s.x), scaleY(s.y));
           ctx.lineTo(scaleX(lx), scaleY(ly));
           ctx.stroke();
 
           const waveSpeed = 1000;
           const wavePhase = (now % waveSpeed) / waveSpeed;
           const pulseDist = r * wavePhase;
-          const px_wave = currentState.x + pulseDist * Math.cos(absAngle);
-          const py_wave = currentState.y + pulseDist * Math.sin(absAngle);
+          const px_wave = s.x + pulseDist * Math.cos(absAngle);
+          const py_wave = s.y + pulseDist * Math.sin(absAngle);
 
           ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
           ctx.beginPath();
@@ -434,8 +669,8 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
       }
 
       // 5. Sleek True Robot Chassis (Xiaomi style!)
-      const rx = scaleX(currentState.x);
-      const ry = scaleY(currentState.y);
+      const rx = scaleX(s.x);
+      const ry = scaleY(s.y);
       const rr = scaleR(0.15);
 
       ctx.fillStyle = '#1e293b';
@@ -449,17 +684,17 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
       ctx.strokeStyle = '#34d399';
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(rx, ry, rr, -currentState.theta - Math.PI/2, -currentState.theta + Math.PI/2);
+      ctx.arc(rx, ry, rr, -s.theta - Math.PI/2, -s.theta + Math.PI/2);
       ctx.stroke();
 
       const isMoving = trail && trail.length > 1 && 
-        (Math.abs(currentState.x - trail[trail.length - 2][0]) > 0.002 || 
-         Math.abs(currentState.y - trail[trail.length - 2][1]) > 0.002);
+        (Math.abs(s.x - trail[trail.length - 2][0]) > 0.002 || 
+         Math.abs(s.y - trail[trail.length - 2][1]) > 0.002);
       const brushAngle = isMoving ? (now * 0.02) % (2 * Math.PI) : 0;
       
       const drawBrush = (angleOffset: number) => {
-        const brushX = rx + rr * Math.cos(-currentState.theta + angleOffset);
-        const brushY = ry + rr * Math.sin(-currentState.theta + angleOffset);
+        const brushX = rx + rr * Math.cos(-s.theta + angleOffset);
+        const brushY = ry + rr * Math.sin(-s.theta + angleOffset);
         ctx.strokeStyle = '#94a3b8';
         ctx.lineWidth = 1;
         for (let b = 0; b < 3; b++) {
@@ -495,12 +730,12 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(rx, ry);
-      ctx.lineTo(rx + turretRadius * Math.cos(-currentState.theta), ry + turretRadius * Math.sin(-currentState.theta));
+      ctx.lineTo(rx + turretRadius * Math.cos(-s.theta), ry + turretRadius * Math.sin(-s.theta));
       ctx.stroke();
 
-      // 6. Holographic wireframe Estimated Robot chassis
-      const ex = scaleX(currentState.x_est);
-      const ey = scaleY(currentState.y_est);
+      // 6. Holographic wireframe Estimated Robot chassis (EKF localization shadow)
+      const ex = scaleX(s.x_est);
+      const ey = scaleY(s.y_est);
       const er = scaleR(0.13);
       ctx.strokeStyle = '#f59e0b';
       ctx.lineWidth = 1.5;
@@ -513,65 +748,8 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
       ctx.strokeStyle = '#f59e0b';
       ctx.beginPath();
       ctx.moveTo(ex, ey);
-      ctx.lineTo(ex + er * Math.cos(-currentState.theta_est), ey + er * Math.sin(-currentState.theta_est));
+      ctx.lineTo(ex + er * Math.cos(-s.theta_est), ey + er * Math.sin(-s.theta_est));
       ctx.stroke();
-
-      // Charging battery icon overlay
-      if (isCharging) {
-        const bx = rx + 14;
-        const by = ry - 14;
-        ctx.fillStyle = '#10b981';
-        ctx.fillRect(bx, by, 10, 5);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(bx, by, 10, 5);
-        ctx.fillStyle = '#eab308';
-        ctx.font = 'bold 7px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('⚡', bx + 5, by + 3);
-      }
-
-      // 7. Info Panel / Performance Dashboard Overlay
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-      ctx.lineWidth = 1;
-      ctx.fillRect(6, 6, 76, 80);
-      ctx.strokeRect(6, 6, 76, 80);
-
-      ctx.fillStyle = '#38bdf8';
-      ctx.font = 'bold 6px monospace';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-
-      const modes = ['Init', 'Idle', 'Mapping', 'Localize', 'Explore', 'Clean', 'Nav', 'Avoid Obs', 'Docking', 'Charging', 'Resume', 'Stop'];
-      ctx.fillText(`STATE: ${modes[currentState.navState] || 'Idle'}`, 10, 10);
-      
-      const batLvl = currentState.battery_level !== undefined ? currentState.battery_level : 100;
-      ctx.fillStyle = batLvl < 20 ? '#ef4444' : batLvl < 50 ? '#f59e0b' : '#10b981';
-      ctx.fillText(`BAT: ${batLvl.toFixed(0)}% ${isCharging ? '⚡' : ''}`, 10, 18);
-
-      const navStats = currentState.nav_stats || [0, 100, 0, 100];
-      ctx.fillStyle = '#e2e8f0';
-      ctx.fillText(`COV: ${(navStats[0] ?? 0).toFixed(0)}%`, 10, 26);
-      ctx.fillText(`EFF: ${(navStats[1] ?? 100).toFixed(0)}%`, 10, 34);
-      ctx.fillText(`DIST: ${(navStats[2] ?? 0).toFixed(1)}m`, 10, 42);
-
-      const trueX = currentState.x ?? 0;
-      const trueY = currentState.y ?? 0;
-      const estX = currentState.x_est ?? 0;
-      const estY = currentState.y_est ?? 0;
-      const posErr = Math.sqrt(Math.pow(trueX - estX, 2) + Math.pow(trueY - estY, 2));
-      const conf = currentState.confidence !== undefined ? currentState.confidence : 100;
-      ctx.fillStyle = conf < 60 ? '#ef4444' : '#f59e0b';
-      ctx.fillText(`CONF: ${conf.toFixed(0)}%`, 10, 50);
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillText(`ERR: ${posErr.toFixed(2)}m`, 10, 58);
-
-      const commStats = currentState.comm_stats || [50, 0, 0];
-      ctx.fillStyle = '#c084fc';
-      ctx.fillText(`LAT: ${(commStats[0] ?? 50).toFixed(0)}ms`, 10, 66);
-      ctx.fillText(`LOSS: ${(commStats[1] ?? 0)} pkts`, 10, 74);
 
       animationFrameId = requestAnimationFrame(draw);
     };
@@ -583,13 +761,74 @@ const RobotTwinCanvas: React.FC<{ state: any }> = ({ state }) => {
     };
   }, []);
 
+  const navState = state?.navState ?? 1;
+  const isCharging = navState === 9;
+  const modes = ['Init', 'Idle', 'Mapping', 'Localize', 'Explore', 'Clean', 'Nav', 'Avoid Obs', 'Docking', 'Charging', 'Resume', 'Stop'];
+  const modeName = modes[navState] || 'Idle';
+  const confidence = state?.confidence ?? 100;
+  
+  // LED indicator color
+  const ledColor = navState === 9 || navState === 5 ? 'bg-emerald-500 shadow-[0_0_6px_#10b981]' :
+                   navState === 2 || navState === 3 || navState === 4 ? 'bg-sky-500 shadow-[0_0_6px_#0ea5e9]' :
+                   navState === 7 ? 'bg-amber-500 shadow-[0_0_6px_#f59e0b]' :
+                   'bg-rose-500 shadow-[0_0_6px_#f43f5e]';
+
   return (
-    <canvas
-      ref={canvasRef}
-      width={190}
-      height={190}
-      className="rounded-lg border border-white/10 shadow-inner bg-[#020617]"
-    />
+    <div ref={containerRef} className="relative w-[190px] h-[190px] group rounded-lg border border-white/10 overflow-hidden bg-[#020617] shadow-inner select-none">
+      <canvas
+        ref={canvasRef}
+        width={190}
+        height={190}
+        className="w-full h-full block"
+      />
+
+      {/* Floating High-Tech Telemetry Dashboard HUD */}
+      <div className="hud-card-robot absolute top-1.5 left-1.5 w-[84px] p-1.5 rounded bg-slate-950/80 backdrop-blur-md border border-white/10 shadow-2xl text-[5.8px] font-mono text-slate-300 pointer-events-none flex flex-col gap-1 z-20">
+        
+        {/* State LED & Header */}
+        <div className="flex items-center gap-1.5 border-b border-white/5 pb-1">
+          <span className={`w-1.5 h-1.5 rounded-full ${ledColor} animate-pulse`} />
+          <span ref={stateTextRef} className="font-bold text-[6px] tracking-wide text-sky-400 uppercase">{modeName}</span>
+        </div>
+
+        {/* Battery meter */}
+        <div className="flex flex-col gap-0.5">
+          <div className="flex justify-between leading-none text-[5.5px]">
+            <span className="text-slate-400">BATTERY</span>
+            <span ref={batTextRef} className="text-emerald-400 font-bold">100%</span>
+          </div>
+          <div className="w-full h-0.5 bg-slate-800 rounded-sm overflow-hidden">
+            <div ref={batBarRef} className="h-full bg-emerald-500 w-full" />
+          </div>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 gap-x-1 gap-y-0.5 pt-0.5 leading-none">
+          <div className="flex justify-between"><span className="text-slate-400">COV:</span><span ref={covRef} className="text-cyan-400 font-bold">0%</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">EFF:</span><span ref={effRef} className="text-cyan-400">100%</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">DIST:</span><span ref={distRef} className="text-slate-200">0.0m</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">CONF:</span><span ref={confRef} className={confidence < 60 ? 'text-rose-400 font-bold animate-pulse' : 'text-amber-400'}>100%</span></div>
+        </div>
+
+        <div className="border-t border-white/5 my-0.5" />
+
+        {/* EKF + Localization Error */}
+        <div className="flex justify-between leading-none text-[5.5px]">
+          <span className="text-slate-400">EKF ERR:</span>
+          <span ref={errRef} className="text-amber-500 font-bold">0.00m</span>
+        </div>
+
+        {/* Comms Network Stats */}
+        <div className="flex justify-between leading-none text-[5.5px] text-violet-400">
+          <span>LAT:</span>
+          <span ref={latRef} className="font-bold">50ms</span>
+        </div>
+        <div className="flex justify-between leading-none text-[5.5px] text-violet-400">
+          <span>LOSS:</span>
+          <span ref={lossRef}>0 pkts</span>
+        </div>
+      </div>
+    </div>
   );
 };
 
