@@ -984,5 +984,40 @@ describe('StateMachineCodeGenerator', () => {
     expect(coreC).toContain('default:');
     expect(coreC).toContain('state_active');
   });
+
+  it('should correctly generate internal transitions without state exit or entry calls (REQ-G-01 & REQ-G-02)', () => {
+    const chartInternal: any = {
+      tickMs: 10,
+      states: [
+        {
+          id: 's1', name: 'Running', x: 0, y: 0, width: 100, height: 100,
+          entry: 'counter = 1;', during: 'counter = counter + 1;', exit: 'counter = 0;',
+          isActive: false, color: 'blue', parentId: 'root', children: [],
+          priority: 1, isParallel: false, regionId: 'MAIN', autostart: true,
+          isTerminal: true
+        }
+      ],
+      junctions: [],
+      transitions: [
+        {
+          id: 't1', sourceId: 's1', targetId: 's1', type: 'internal',
+          condition: 'in_tick', action: 'counter = counter + 2;',
+          afterTicks: null, hasControlPoint: false, order: 1
+        }
+      ],
+      variables: [
+        { id: 'v1', name: 'in_tick', type: 'bool', initialValue: 'true', currentValue: true, visibleInScope: true, direction: 'input' },
+        { id: 'v2', name: 'counter', type: 'int', initialValue: '0', currentValue: 0, visibleInScope: true }
+      ],
+      layers: [{ id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: ['t1'], junctionIds: [] }],
+      safetyMode: false
+    };
+
+    const result = generateMISRACCode(chartInternal);
+    expect(result.errors).toHaveLength(0);
+    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
+    expect(coreC).toContain('counter = (int32_t)(instance->data.counter + 2)');
+    expect(coreC).not.toContain('SM_Exit_State(instance, SM_ST_RUNNING)');
+  });
 });
 

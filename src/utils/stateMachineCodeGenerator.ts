@@ -692,7 +692,7 @@ export const generateMISRACCode = (chart: {
         elementId: tr.id
       });
     }
-    if (!['condition', 'after', 'and', 'or'].includes(tr.type)) {
+    if (!['condition', 'after', 'and', 'or', 'internal'].includes(tr.type)) {
       errors.push({
         id: uuidv4(),
         type: 'error',
@@ -1475,7 +1475,7 @@ void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
 
         let body = '';
         if (targetState) {
-          const isInternalTr = tr.isInternal === true;
+          const isInternalTr = tr.isInternal === true || tr.type === 'internal';
           let exitSeq: string[];
           let entrySeq: string[];
 
