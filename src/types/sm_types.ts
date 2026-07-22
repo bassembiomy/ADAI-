@@ -79,7 +79,7 @@ export interface TransitionData {
   condition: string;
   action: string;
   afterTicks: number | null;
-  type: 'condition' | 'after' | 'and' | 'or';
+  type: 'condition' | 'after' | 'and' | 'or' | 'internal';
   controlPoint?: Point;
   hasControlPoint: boolean;
   order: number;
