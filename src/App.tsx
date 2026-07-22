@@ -9512,16 +9512,17 @@ const ADIA = () => {
 
       // X-Bridges Co-Simulation
       if (state.isXBridges && state.xBridgesModel) {
+        const xBridgesModel = state.xBridgesModel;
         let engine = xBridgesEnginesRef.current.get(stateId);
         if (!engine) {
           const model = {
-            blocks: state.xBridgesModel.nodes.map(n => {
+            blocks: xBridgesModel.nodes.map(n => {
               const d = n.data as any;
               if (XBRIDGES_LIBRARY[d.type]) {
                 try {
                   let freshParams = { ...d.params };
                   if (d.type === 'FUZZY_SURFACE_VIEWER' && typeof d.params.fisConfig === 'string') {
-                    const targetNode = state.xBridgesModel.nodes.find(x => x.id === d.params.fisConfig);
+                    const targetNode = xBridgesModel.nodes.find(x => x.id === d.params.fisConfig);
                     if (targetNode && targetNode.data.type === 'FUZZY_INFERENCE_SYSTEM') {
                       freshParams.fisConfig = targetNode.data.params;
                     } else {
