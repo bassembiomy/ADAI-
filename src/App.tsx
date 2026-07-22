@@ -16972,7 +16972,7 @@ const ADIA = () => {
                     </select>
                   </div>
 
-                  <div className="space-y-2 p-2 bg-[#1a1a1a] rounded border border-[#333]">
+                  <div className={`space-y-2 p-2 bg-[#1a1a1a] rounded border ${hasInternalError ? 'border-red-500' : 'border-[#333]'}`}>
                     <div className="flex justify-between items-center">
                       <Label className="text-[#f97316]">Internal Transitions</Label>
                       <Button size="sm" className="h-5 text-[10px] px-2" onClick={() => {
@@ -17052,7 +17052,7 @@ const ADIA = () => {
                       value={selectedState.entry}
                       onChange={(e) => updateState(selectedState.id, { entry: e.target.value })}
                       placeholder="/* Entry action */ counter = 0;"
-                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
+                      className={`w-full h-20 min-h-[4rem] bg-[#1a1a1a] border rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 ${hasEntryError ? 'border-red-500 focus:ring-red-500' : 'border-[#333] focus:ring-[#f97316]'}`}
                     />
                   </div>
 
@@ -17062,11 +17062,11 @@ const ADIA = () => {
                       value={selectedState.during}
                       onChange={(e) => updateState(selectedState.id, { during: e.target.value })}
                       placeholder="/* During action */ counter++;"
-                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
+                      className={`w-full h-20 min-h-[4rem] bg-[#1a1a1a] border rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 ${hasDuringError ? 'border-red-500 focus:ring-red-500' : 'border-[#333] focus:ring-[#f97316]'}`}
                     />
                   </div>
 
-                  <div className="space-y-2 p-2 bg-[#1a1a1a] rounded border border-[#333]">
+                  <div className={`space-y-2 p-2 bg-[#1a1a1a] rounded border ${hasInternalError ? 'border-red-500' : 'border-[#333]'}`}>
                     <div className="flex justify-between items-center">
                       <Label className="text-[#f97316]">Internal Transitions</Label>
                       <Button size="sm" className="h-5 text-[10px] px-2" onClick={() => {
@@ -17078,7 +17078,7 @@ const ADIA = () => {
                       value={selectedState.internalTransitions || ''}
                       onChange={(e) => updateState(selectedState.id, { internalTransitions: e.target.value })}
                       placeholder="[condition] / action"
-                      className="w-full h-20 min-h-[4rem] bg-[#0a0a0a] border border-[#333] rounded text-xs font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
+                      className={`w-full h-20 min-h-[4rem] bg-[#0a0a0a] border rounded text-xs font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 ${hasInternalError ? 'border-red-500 focus:ring-red-500' : 'border-[#333] focus:ring-[#f97316]'}`}
                     />
                   </div>
 
@@ -17088,7 +17088,7 @@ const ADIA = () => {
                       value={selectedState.exit}
                       onChange={(e) => updateState(selectedState.id, { exit: e.target.value })}
                       placeholder="/* Exit action */"
-                      className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]"
+                      className={`w-full h-20 min-h-[4rem] bg-[#1a1a1a] border rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 ${hasExitError ? 'border-red-500 focus:ring-red-500' : 'border-[#333] focus:ring-[#f97316]'}`}
                     />
                   </div>
 
