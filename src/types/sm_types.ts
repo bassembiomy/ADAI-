@@ -47,6 +47,7 @@ export interface StateData {
   internalTransitions?: string;
   isSafeState?: boolean;
   isTerminalState?: boolean;
+  isTerminal?: boolean;
   isXBridges?: boolean;
   xBridgesModel?: {
     nodes: any[];

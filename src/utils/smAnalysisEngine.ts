@@ -361,7 +361,7 @@ const detectCornerCases = (
       curr = curr.parentId ? states.find((p) => p.id === curr!.parentId) : undefined;
     }
 
-    if (!hasOutgoing && !s.isSafeState && !s.isTerminalState) {
+    if (!hasOutgoing && !s.isSafeState && !s.isTerminalState && !s.isTerminal) {
       cases.push({
         id: nextId(),
         category: 'deadlock',
@@ -370,7 +370,7 @@ const detectCornerCases = (
         elementName: s.name,
         description: `State "${s.name}" and all its ancestors have no outgoing transitions, and it is not marked as a safe-state or terminal state. The system will be trapped here permanently.`,
         recommendation:
-          'Add an outgoing transition to this state or one of its parent states, mark it as terminal/safe state, or define it as a safe state.',
+          `Add an outgoing transition from State '${s.name}' or mark it as an intentional terminal state in the model.`,
       });
     }
   });

@@ -450,5 +450,54 @@ describe('smAnalysisEngine', () => {
     const deadlocks = result.cornerCases.filter(c => c.category === 'deadlock');
     expect(deadlocks).toHaveLength(0);
   });
+
+  it('should identify non-terminal states with zero outgoing transitions as critical deadlocks (REQ-V-01)', () => {
+    const states: StateData[] = [
+      {
+        id: 's1', name: 'Start', x: 0, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'root', children: [],
+        priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
+      },
+      {
+        id: 's2', name: 'DeadEnd', x: 200, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'red', parentId: 'root', children: [],
+        priority: 2, isParallel: false, regionId: 'MAIN', autostart: false,
+        isTerminal: false
+      },
+      {
+        id: 's3', name: 'FinalState', x: 400, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'green', parentId: 'root', children: [],
+        priority: 3, isParallel: false, regionId: 'MAIN', autostart: false,
+        isTerminal: true
+      }
+    ];
+
+    const transitions: TransitionData[] = [
+      {
+        id: 't1', sourceId: 's1', targetId: 's2',
+        condition: 'x > 0', action: '',
+        afterTicks: null, type: 'condition', hasControlPoint: false, order: 1
+      }
+    ];
+
+    const result = analyzeStateMachine({
+      tickMs: 10,
+      states,
+      junctions: [],
+      transitions,
+      variables: mockVariables,
+      layers: mockLayers,
+      safetyMode: false
+    });
+
+    const deadlocks = result.cornerCases.filter(c => c.category === 'deadlock');
+    expect(deadlocks).toHaveLength(1);
+    expect(deadlocks[0].elementId).toBe('s2');
+    expect(deadlocks[0].severity).toBe('critical');
+    expect(deadlocks[0].recommendation).toContain("Add an outgoing transition from State 'DeadEnd'");
+  });
 });
 
