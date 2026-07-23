@@ -1110,4 +1110,60 @@ describe('StateMachineCodeGenerator', () => {
     const stepLayer0Body = coreC.substring(stepLayer0Start, stepLayer0End);
     expect(stepLayer0Body).not.toContain('SM_Exit_State');
   });
+
+  it('should output clean C comments without stray slashes and enforce pass-by-pointer signatures', () => {
+    const chartWithSlashes = {
+      tickMs: 10,
+      states: [
+        {
+          id: 's1', name: 'Mode / Initial / State', x: 0, y: 0, width: 100, height: 100,
+          entry: 'counter = 1;', during: '', exit: '',
+          isActive: false, color: 'blue', parentId: 'root', children: [],
+          priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
+        }
+      ],
+      junctions: [],
+      transitions: [],
+      variables: [
+        { id: 'v1', name: 'counter', type: 'uint16' as const, initialValue: '0', currentValue: 0, visibleInScope: true }
+      ],
+      layers: [
+        { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }
+      ],
+      safetyMode: false
+    };
+
+    const result = generateMISRACCode(chartWithSlashes as any);
+    expect(result.errors).toHaveLength(0);
+
+    result.files.forEach(file => {
+      // Check disclaimer header line does not contain '/ ISO C99'
+      expect(file.content).not.toContain('(advisory) / ISO C99');
+
+      // Ensure no lines have single slash comments inside C code
+      const lines = file.content.split('\n');
+      lines.forEach(line => {
+        if (line.trim().startsWith('/* Entry:') && line.includes('Mode')) {
+          // Comment line for state name should sanitize slashes into dashes
+          expect(line).not.toContain('Mode / Initial / State');
+          expect(line).toContain('Mode - Initial - State');
+        }
+      });
+    });
+
+    const coreH = result.files.find(f => f.name === 'sm_core.h')?.content || '';
+    const userLogicH = result.files.find(f => f.name === 'sm_user_logic.h')?.content || '';
+
+    // Verify SM_Data_Legacy return type is const SM_Data_t*
+    expect(coreH).toContain('static inline const SM_Data_t* SM_Data_Legacy(const ADIA_Instance_t* instance)');
+
+    // Verify all ADIA_Instance_t parameter signatures in sm_user_logic.h use pass-by-pointer ADIA_Instance_t*
+    const userLogicLines = userLogicH.split('\n');
+    userLogicLines.forEach(line => {
+      if (line.includes('ADIA_Instance_t')) {
+        expect(line).toContain('ADIA_Instance_t*');
+      }
+    });
+  });
 });
+
