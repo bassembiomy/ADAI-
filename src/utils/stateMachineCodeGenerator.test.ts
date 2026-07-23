@@ -1019,5 +1019,95 @@ describe('StateMachineCodeGenerator', () => {
     expect(coreC).toContain('counter = (int32_t)(instance->data.counter + 2)');
     expect(coreC).not.toContain('SM_Exit_State(instance, SM_ST_RUNNING)');
   });
-});
 
+  it('should assign distinct active_states slots per parallel region (multi-region fix)', () => {
+    const states: StateData[] = [
+      {
+        id: 'parent', name: 'SuperState', x: 0, y: 0, width: 300, height: 300,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'gray', parentId: 'root', children: ['s_a', 's_b', 's_c'],
+        priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
+      },
+      {
+        id: 's_a', name: 'RegionA', x: 10, y: 10, width: 80, height: 80,
+        entry: 'counter = 1;', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'parent', children: [],
+        priority: 1, isParallel: true, regionId: 'R_A', autostart: true
+      },
+      {
+        id: 's_b', name: 'RegionB', x: 100, y: 10, width: 80, height: 80,
+        entry: 'counter = 2;', during: '', exit: '',
+        isActive: false, color: 'green', parentId: 'parent', children: [],
+        priority: 2, isParallel: true, regionId: 'R_B', autostart: true
+      },
+      {
+        id: 's_c', name: 'RegionC', x: 200, y: 10, width: 80, height: 80,
+        entry: 'counter = 3;', during: '', exit: '',
+        isActive: false, color: 'red', parentId: 'parent', children: [],
+        priority: 3, isParallel: true, regionId: 'R_C', autostart: true
+      }
+    ];
+
+    const layers: Layer[] = [
+      { id: 'root', name: 'root', parentStateId: null, stateIds: ['parent'], transitionIds: [], junctionIds: [] },
+      { id: 'child_layer', name: 'child', parentStateId: 'parent', stateIds: ['s_a', 's_b', 's_c'], transitionIds: ['t_int'], junctionIds: [] }
+    ];
+
+    const chart = {
+      tickMs: 10,
+      states,
+      junctions: [] as JunctionData[],
+      transitions: [
+        {
+          id: 't_int', sourceId: 's_a', targetId: 's_a', type: 'internal' as const,
+          condition: 'counter', action: 'counter = counter + 10;',
+          afterTicks: null, hasControlPoint: false, order: 1
+        }
+      ] as TransitionData[],
+      variables: [
+        { id: 'v1', name: 'counter', type: 'int' as const, initialValue: '0', currentValue: 0, visibleInScope: true }
+      ] as VariableDef[],
+      layers,
+      safetyMode: false
+    };
+
+    const result = generateMISRACCode(chart);
+    expect(result.errors).toHaveLength(0);
+
+    const configH = result.files.find(f => f.name === 'sm_config.h')?.content || '';
+    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
+
+    // SM_NUM_LAYERS must be >= 4 (root layer slot + 3 region slots)
+    const numLayersMatch = configH.match(/#define SM_NUM_LAYERS (\d+)U/);
+    expect(numLayersMatch).toBeTruthy();
+    const numLayers = parseInt(numLayersMatch![1]);
+    expect(numLayers).toBeGreaterThanOrEqual(4);
+
+    // Extract active_states indices from SM_Enter_State_Shallow for each region state
+    const enterShallowStart = coreC.indexOf('static void SM_Enter_State_Shallow(ADIA_Instance_t* instance, SM_Node_t state) {');
+    const enterShallowEnd = coreC.indexOf('static void SM_Enter_State(ADIA_Instance_t* instance, SM_Node_t state, bool use_history) {', enterShallowStart);
+    const enterShallowBody = coreC.substring(enterShallowStart, enterShallowEnd);
+
+    // Find each state's active_states assignment
+    const regionASlot = enterShallowBody.match(/case SM_ST_REGIONA:[\s\S]*?active_states\[(\d+)U\]/);
+    const regionBSlot = enterShallowBody.match(/case SM_ST_REGIONB:[\s\S]*?active_states\[(\d+)U\]/);
+    const regionCSlot = enterShallowBody.match(/case SM_ST_REGIONC:[\s\S]*?active_states\[(\d+)U\]/);
+
+    expect(regionASlot).toBeTruthy();
+    expect(regionBSlot).toBeTruthy();
+    expect(regionCSlot).toBeTruthy();
+
+    // Each region must have a DISTINCT slot
+    const slotA = regionASlot![1];
+    const slotB = regionBSlot![1];
+    const slotC = regionCSlot![1];
+    const uniqueSlots = new Set([slotA, slotB, slotC]);
+    expect(uniqueSlots.size).toBe(3);
+
+    // Internal transition in parallel state must NOT emit SM_Exit_State inside step function
+    const stepLayer0Start = coreC.indexOf('static void SM_Step_Layer_0(');
+    const stepLayer0End = coreC.indexOf('static void SM_Step_Layer_1(', stepLayer0Start);
+    const stepLayer0Body = coreC.substring(stepLayer0Start, stepLayer0End);
+    expect(stepLayer0Body).not.toContain('SM_Exit_State');
+  });
+});

@@ -117,6 +117,39 @@ export const generateMISRACCode = (chart: {
   const layerIndexMap = new Map<string, number>();
   sortedLayers.forEach((l, idx) => layerIndexMap.set(l.id, idx));
 
+  /* --- Region-expanded active slot mapping ---
+   * For exclusive (OR) layers: one slot per layer (same as layerIndexMap).
+   * For parallel (AND) layers: one slot per distinct regionId, so each
+   * parallel region gets its own independent active_states[] entry. */
+  const stateActiveSlotMap = new Map<string, number>();
+  const layerActiveSlotMap = new Map<string, number>();
+  let totalActiveSlots = 0;
+
+  sortedLayers.forEach(l => {
+    const layerStates = l.stateIds
+      .map(sid => sortedStates.find(s => s.id === sid))
+      .filter(Boolean) as StateData[];
+    const allParallel = layerStates.length > 0 && layerStates.every(st => st.isParallel);
+
+    layerActiveSlotMap.set(l.id, totalActiveSlots);
+
+    if (allParallel) {
+      const regions = new Map<string, StateData[]>();
+      layerStates.forEach(s => {
+        const rId = s.regionId || 'MAIN';
+        if (!regions.has(rId)) regions.set(rId, []);
+        regions.get(rId)!.push(s);
+      });
+      regions.forEach(regionStates => {
+        const slotIdx = totalActiveSlots++;
+        regionStates.forEach(s => stateActiveSlotMap.set(s.id, slotIdx));
+      });
+    } else {
+      const slotIdx = totalActiveSlots++;
+      layerStates.forEach(s => stateActiveSlotMap.set(s.id, slotIdx));
+    }
+  });
+
   /* Hierarchy model: states live in layers; a state's parent state is the
    * parentStateId of the layer that contains it (Stateflow-style decomposition). */
   const layerOfState = (stateId: string): Layer | undefined =>
@@ -874,7 +907,7 @@ export const generateMISRACCode = (chart: {
 #include <stdbool.h>
 
 /* Constant Limits */
-#define SM_NUM_LAYERS ${sortedLayers.length > 0 ? sortedLayers.length : 1}U
+#define SM_NUM_LAYERS ${totalActiveSlots > 0 ? totalActiveSlots : 1}U
 #define SM_NUM_STATES ${sortedStates.length > 0 ? sortedStates.length : 1}U
 #define SM_NUM_PARALLEL_REGIONS ${regions.size}U
 #define SM_GENERATOR_VERSION "${VERSION}"
@@ -1211,18 +1244,26 @@ void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
     timerIncrementCode += `    }\n`;
   });
 
-  let smExitStateFunc = `/**\n * @brief Exits the specified state and recursively exits active sub-states.\n * @req REQ-HSM-040 Hierarchical State Exit\n * @param instance Pointer to state machine context\n * @param state State node to exit\n */\nstatic void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {\n    switch (state) {\n`;
+  let smExitStateFunc = `/**
+ * @brief Exits the specified state and recursively exits active sub-states.
+ * @req REQ-HSM-040 Hierarchical State Exit
+ * @param instance Pointer to state machine context
+ * @param state State node to exit
+ */
+static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {
+    switch (state) {
+`;
   sortedStates.forEach(s => {
     const sEnum = stateEnum(s);
     const stateIdx = stateIndexMap.get(s.id);
     const parentLayer = chart.layers.find(l => l.stateIds.includes(s.id));
-    const parentLayerIdx = parentLayer ? layerIndexMap.get(parentLayer.id) : 0;
+    const stateSlot = stateActiveSlotMap.get(s.id);
 
     smExitStateFunc += `        case ${sEnum}:\n`;
     
     const childLayers = chart.layers.filter(l => l.parentStateId === s.id);
     childLayers.forEach(l => {
-      const lIdx = layerIndexMap.get(l.id);
+      const childSlot = layerActiveSlotMap.get(l.id) ?? 0;
       const layerStates = l.stateIds.map(sid => sortedStates.find(st => st.id === sid)).filter(Boolean) as StateData[];
       const allParallel = layerStates.length > 0 && layerStates.every(st => st.isParallel);
       if (allParallel) {
@@ -1234,8 +1275,8 @@ void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
           smExitStateFunc += `            }\n`;
         });
       } else {
-        smExitStateFunc += `            if (instance->active_states[${lIdx}U] != SM_NODE_INVALID) {\n`;
-        smExitStateFunc += `                SM_Exit_State(instance, instance->active_states[${lIdx}U]);\n`;
+        smExitStateFunc += `            if (instance->active_states[${childSlot}U] != SM_NODE_INVALID) {\n`;
+        smExitStateFunc += `                SM_Exit_State(instance, instance->active_states[${childSlot}U]);\n`;
         smExitStateFunc += `            }\n`;
       }
     });
@@ -1247,18 +1288,12 @@ void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
     /* Save history for this state's layer when the layer (or a deep-history
      * ancestor) requires it, so the remembered child can be restored later. */
     const savesHistory = parentLayer && layerSavesHistory(parentLayer);
-    if (savesHistory) {
-      smExitStateFunc += `            instance->history_states[${parentLayerIdx}U] = state;\n`;
+    if (savesHistory && stateSlot !== undefined) {
+      smExitStateFunc += `            instance->history_states[${stateSlot}U] = state;\n`;
     }
 
-    if (parentLayer) {
-      /* Parallel regions share the layer's active_states slot; do not clear it
-       * while sibling region states are still active. */
-      const plStates = parentLayer.stateIds.map(sid => sortedStates.find(st => st.id === sid)).filter(Boolean) as StateData[];
-      const plAllParallel = plStates.length > 0 && plStates.every(st => st.isParallel);
-      if (!plAllParallel) {
-        smExitStateFunc += `            instance->active_states[${parentLayerIdx}U] = SM_NODE_INVALID;\n`;
-      }
+    if (stateSlot !== undefined) {
+      smExitStateFunc += `            instance->active_states[${stateSlot}U] = SM_NODE_INVALID;\n`;
     }
     smExitStateFunc += `            break;\n`;
   });
@@ -1273,12 +1308,11 @@ void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
   sortedStates.forEach(s => {
     const sEnum = stateEnum(s);
     const stateIdx = stateIndexMap.get(s.id);
-    const parentLayer = chart.layers.find(l => l.stateIds.includes(s.id));
-    const parentLayerIdx = parentLayer ? layerIndexMap.get(parentLayer.id) : 0;
+    const stateSlot = stateActiveSlotMap.get(s.id);
 
     smEnterShallowFunc += `        case ${sEnum}:\n`;
-    if (parentLayer) {
-      smEnterShallowFunc += `            instance->active_states[${parentLayerIdx}U] = state;\n`;
+    if (stateSlot !== undefined) {
+      smEnterShallowFunc += `            instance->active_states[${stateSlot}U] = state;\n`;
     }
     smEnterShallowFunc += `            instance->state_active[${stateIdx}U] = true;\n`;
     smEnterShallowFunc += `            instance->state_timers[${stateIdx}U] = ${zeroLiteral};\n`;
@@ -1345,12 +1379,13 @@ void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
     const defaultState = sortedStates.find(s => l.stateIds.includes(s.id) && s.autostart);
     const defaultJunc = chart.junctions.find(j => l.junctionIds.includes(j.id) && j.autostart);
 
+    const activeSlot = layerActiveSlotMap.get(l.id) ?? 0;
     layerEntryFuncs += `/**\n * @brief Enters layer ${lIdx} and initializes default states or junctions.\n * @param instance Pointer to state machine context\n * @param use_history True to restore history states\n */\nstatic void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) {\n`;
-    layerEntryFuncs += `    if (use_history && (instance->history_states[${lIdx}U] != SM_NODE_INVALID)) {\n`;
+    layerEntryFuncs += `    if (use_history && (instance->history_states[${activeSlot}U] != SM_NODE_INVALID)) {\n`;
     /* Shallow history: restored child enters with default sub-states (false).
      * Deep history: restoration propagates to all descendant layers (true). */
     const restoreArg = layerRestoresDeep(l) ? 'true' : 'false';
-    layerEntryFuncs += `        SM_Enter_State(instance, instance->history_states[${lIdx}U], ${restoreArg});\n`;
+    layerEntryFuncs += `        SM_Enter_State(instance, instance->history_states[${activeSlot}U], ${restoreArg});\n`;
     layerEntryFuncs += `    } else {\n`;
 
     if (allParallel) {
@@ -1588,7 +1623,8 @@ void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
       });
     } else {
       // Normal Layer
-      layerStepFuncs += `    switch (instance->active_states[${lIdx}U]) {\n`;
+      const activeSlot = layerActiveSlotMap.get(l.id) ?? 0;
+      layerStepFuncs += `    switch (instance->active_states[${activeSlot}U]) {\n`;
 
       /* Deduplicate state ids: a repeated id in stateIds would emit duplicate
        * case labels (ISO C constraint violation). */
@@ -1712,9 +1748,9 @@ void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
       });
     } else {
       const layerForRegion = sortedLayers.find(l => l.stateIds.some(sid => regionStates.some(s => s.id === sid)));
-      const lIdx = layerForRegion ? layerIndexMap.get(layerForRegion.id) : undefined;
-      if (lIdx !== undefined) {
-        smGetActiveBody += `            active = instance->active_states[${lIdx}U];\n`;
+      const lSlot = layerForRegion ? layerActiveSlotMap.get(layerForRegion.id) : undefined;
+      if (lSlot !== undefined) {
+        smGetActiveBody += `            active = instance->active_states[${lSlot}U];\n`;
       }
     }
     smGetActiveBody += `            break;\n`;
