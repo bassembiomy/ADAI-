@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { validateString, validateUrl, validateFilename, sanitizeShellArg, validateToolchainKey, validateServiceName, validateRedirectUrl } = require('./security/inputValidator.cjs');
+const asarGuard = require('./security/asarGuard.cjs');
 
 // Allowlist of trusted hosts for toolchain download redirects
 const ALLOWED_DOWNLOAD_HOSTS = [
@@ -452,12 +453,33 @@ function createWindow() {
     });
   });
 
-  // if (!app.isPackaged) {
-  //   win.webContents.openDevTools();
-  // }
+  // Disable DevTools in production builds — unconditionally to prevent source exposure
+  if (app.isPackaged) {
+    win.webContents.on('devtools-opened', () => {
+      win.webContents.closeDevTools();
+    });
+  } else {
+    // Optionally open DevTools in dev: win.webContents.openDevTools();
+  }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // ASAR integrity check must run before creating any window
+  const integrityResult = asarGuard.verifyAsarIntegrity();
+  if (!integrityResult.ok) {
+    // Show error dialog and refuse to start if ASAR has been tampered with
+    const { dialog: electronDialog } = require('electron');
+    await electronDialog.showMessageBox({
+      type: 'error',
+      title: 'Security Error — Application Tampered',
+      message: 'ADIA detected that the application files have been modified after installation.',
+      detail: integrityResult.error + '\n\nPlease reinstall from the official source.',
+      buttons: ['Quit'],
+    });
+    app.quit();
+    return;
+  }
+
   createWindow();
   setTimeout(() => {
     verifyAndPreInstallToolchains().catch(err => {
