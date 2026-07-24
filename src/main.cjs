@@ -336,14 +336,21 @@ function createWindow() {
     // Inject CSP headers
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       const isPackaged = app.isPackaged;
+      const devSources = isPackaged ? '' : ' http://localhost:3000 http://127.0.0.1:3000 ws://localhost:3000 ws://127.0.0.1:3000';
+      const devScriptSources = isPackaged ? '' : " 'unsafe-eval' http://localhost:3000 http://127.0.0.1:3000";
+      // In production, remove 'unsafe-inline' from script-src; style-src keeps it for Tailwind/inline styles
+      const scriptInline = isPackaged ? '' : " 'unsafe-inline'";
       const csp = [
-        "default-src 'self'" + (isPackaged ? "" : " http://localhost:3000 http://127.0.0.1:3000 ws://localhost:3000 ws://127.0.0.1:3000") + ";",
-        "script-src 'self' 'unsafe-inline' " + (isPackaged ? "" : "'unsafe-eval' http://localhost:3000 http://127.0.0.1:3000") + " https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com;",
-        "connect-src 'self' https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com http://127.0.0.1:7410" + (isPackaged ? "" : " http://localhost:3000 ws://localhost:3000 http://127.0.0.1:3000 ws://127.0.0.1:3000") + ";",
-        "img-src 'self' data: https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com" + (isPackaged ? "" : " http://localhost:3000 http://127.0.0.1:3000") + ";",
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com" + (isPackaged ? "" : " http://localhost:3000 http://127.0.0.1:3000") + ";",
-        "font-src 'self' data: https://fonts.gstatic.com" + (isPackaged ? "" : " http://localhost:3000 http://127.0.0.1:3000") + ";",
-        "frame-src 'self' https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com" + (isPackaged ? "" : " http://localhost:3000 http://127.0.0.1:3000") + ";"
+        `default-src 'self'${devSources};`,
+        `script-src 'self'${scriptInline}${devScriptSources} https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com;`,
+        // AI provider origins added — Gemini, OpenAI, n8n (webhook), local LLM
+        `connect-src 'self' https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com http://127.0.0.1:7410 https://generativelanguage.googleapis.com https://api.openai.com${devSources};`,
+        `img-src 'self' data: https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com${isPackaged ? '' : ' http://localhost:3000 http://127.0.0.1:3000'};`,
+        `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com${isPackaged ? '' : ' http://localhost:3000 http://127.0.0.1:3000'};`,
+        `font-src 'self' data: https://fonts.gstatic.com${isPackaged ? '' : ' http://localhost:3000 http://127.0.0.1:3000'};`,
+        `frame-src 'self' https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com${isPackaged ? '' : ' http://localhost:3000 http://127.0.0.1:3000'};`,
+        "object-src 'none';",
+        "base-uri 'self';",
       ].join(' ');
 
       callback({
