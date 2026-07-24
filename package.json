@@ -14,11 +14,21 @@
     "package": "npm run build && electron-forge package",
     "make": "npm run build && electron-forge make",
     "audit:security": "npm audit --audit-level=high",
+    "audit:security:full": "npm audit",
+    "test:security": "node src/security/inputValidator.test.cjs && node src/security/roleSecurity.test.cjs",
     "test:vlab": "vitest run src/engine/vlab/vlab_validation.test.ts src/engine/vlab/vlab.test.ts src/engine/vlab/labs_sim.test.ts src/engine/vlab/check_missing_math.test.ts",
     "test:vlab:connected": "vitest run src/engine/vlab/vlab_connected_models.test.ts --reporter=verbose",
     "test:vlab:all-blocks": "vitest run src/engine/vlab/test_all_blocks_scope.test.ts --reporter=dot",
     "zero-g": "tsx scripts/zero_g_ci.ts",
     "prebuild": "npm audit --audit-level=critical || echo [WARNING] Unfixable audit vulnerabilities detected (tar, tmp, xlsx have no upstream fix). Review before production release."
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "overrides": {
+    "tar": ">=6.2.1",
+    "postcss": ">=8.5.18"
   },
   "config": {
     "forge": "./forge.config.cjs"
@@ -77,7 +87,7 @@
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.18",
-    "electron": "^30.0.1",
+    "electron": "^43.2.0",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.4.5",
