@@ -4,17 +4,31 @@ module.exports = {
     // ASAR integrity checking: embeds file hashes into the package for tamper detection
     asarIntegrity: true,
     icon: './icon.png',
-    // Exclude sensitive runtime-generated files from the packaged ASAR
-    // These should never ship with the distribution
-    ignore: [
-      /^\/\.env$/,
-      /^\/\.env\..*/,
-      /^\/scratch\//,
-      /^\/hil_build\//,
-      /^\/src\/security\/.*\.test\.cjs$/,
-      /adia_vault\.bin$/,
-      /audit\.log/,
-    ],
+    // Anti-Extraction Rule: Exclude all raw source code, build scripts, docs, and scratch directories
+    // Only compiled V8 bytecode (dist-electron/) and minified web application (dist/) are shipped in app.asar
+    ignore: (filePath) => {
+      if (!filePath) return false;
+      // Always include dist, dist-electron, package.json, icon files, and node_modules
+      if (
+        filePath.startsWith('/dist') ||
+        filePath.startsWith('/dist-electron') ||
+        filePath.startsWith('/node_modules') ||
+        filePath === '/package.json' ||
+        filePath.endsWith('.png') ||
+        filePath.endsWith('.ico')
+      ) {
+        return false;
+      }
+      // Exclude raw source code, scripts, docs, test specs, and scratch artifacts
+      const excludePrefixes = [
+        '/src', '/scripts', '/docs', '/.agents', '/.superpowers',
+        '/scratch', '/hil_build', '/toolchains', '/avr-gcc'
+      ];
+      if (excludePrefixes.some((p) => filePath.startsWith(p))) return true;
+      if (filePath.endsWith('.ts') || filePath.endsWith('.md') || filePath.endsWith('.m') || filePath.endsWith('.slx') || filePath.endsWith('.txt') || filePath.endsWith('.cjs')) return true;
+      if (filePath.startsWith('/.') && filePath !== '/.kilo') return true;
+      return false;
+    },
     // Code signing configuration placeholders for enterprise server builds
     ...(process.env.ADIA_SIGN_CERT ? {
       win32metadata: {

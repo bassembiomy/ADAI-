@@ -5,10 +5,11 @@
   "description": "ADIA Stateflow Application",
   "author": "ADIA Team",
   "type": "module",
-  "main": "src/main.cjs",
+  "main": "dist-electron/index.cjs",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build:electron": "node scripts/build_protected_electron.cjs",
+    "build": "tsc && vite build && npm run build:electron",
     "preview": "vite preview",
     "start": "electron-forge start",
     "package": "npm run build && electron-forge package",
@@ -27,8 +28,7 @@
     "npm": ">=10.0.0"
   },
   "overrides": {
-    "tar": ">=6.2.1",
-    "postcss": ">=8.5.18"
+    "tar": ">=6.2.1"
   },
   "config": {
     "forge": "./forge.config.cjs"
@@ -51,6 +51,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tailwindcss/vite": "^4.1.18",
     "@types/dompurify": "^3.0.5",
+    "bytenode": "^1.6.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dompurify": "^3.4.11",
@@ -88,7 +89,9 @@
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.18",
     "electron": "^43.2.0",
-    "postcss": "^8.4.35",
+    "esbuild": "^0.28.1",
+    "javascript-obfuscator": "^5.5.0",
+    "postcss": "^8.5.3",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.4.5",
     "vite": "^7.3.1",
