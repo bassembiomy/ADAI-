@@ -1,7 +1,13 @@
 const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { validateString, validateUrl, validateFilename, sanitizeShellArg } = require('./security/inputValidator.cjs');
+const { validateString, validateUrl, validateFilename, sanitizeShellArg, validateToolchainKey, validateServiceName, validateRedirectUrl } = require('./security/inputValidator.cjs');
+
+// Allowlist of trusted hosts for toolchain download redirects
+const ALLOWED_DOWNLOAD_HOSTS = [
+  'github.com', 'objects.githubusercontent.com', 'releases.githubusercontent.com',
+  'codeload.github.com', 'developer.arm.com', 'lucasg.github.io'
+];
 
 // Disable hardware acceleration if not needed
 // app.disableHardwareAcceleration();
@@ -114,7 +120,13 @@ function downloadFile(url, destPath, progressCallback) {
             reject(new Error('Redirect location header missing'));
             return;
           }
-          fetchUrl(redirectUrl);
+          // Validate redirect URL against trusted hosts to prevent SSRF
+          const safeRedirect = validateRedirectUrl(redirectUrl, ALLOWED_DOWNLOAD_HOSTS);
+          if (!safeRedirect) {
+            reject(new Error(`Blocked redirect to untrusted host: ${redirectUrl}`));
+            return;
+          }
+          fetchUrl(safeRedirect);
           return;
         }
 
@@ -170,36 +182,50 @@ function extractZip(zipPath, destDir) {
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
     }
-    const { exec } = require('child_process');
+    // Use spawn() with array args (NOT exec() with string interpolation) to prevent shell injection
+    const { spawn } = require('child_process');
     if (process.platform === 'win32') {
       // Use native Windows tar tool first (about 100x faster and extremely robust)
-      const tarCmd = `tar -xf "${zipPath}" -C "${destDir}"`;
-      exec(tarCmd, (err, stdout, stderr) => {
-        if (!err) {
+      const tarProc = spawn('tar', ['-xf', zipPath, '-C', destDir], { stdio: 'pipe' });
+      let tarStderr = '';
+      tarProc.stderr.on('data', (d) => { tarStderr += d.toString(); });
+      tarProc.on('close', (code) => {
+        if (code === 0) {
           resolve();
         } else {
           // Fall back to PowerShell Expand-Archive if tar fails
+          // The paths are passed as -Command argument values — spawn prevents shell injection
           const escapedZip = zipPath.replace(/'/g, "''");
           const escapedDest = destDir.replace(/'/g, "''");
-          const psCmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path '${escapedZip}' -DestinationPath '${escapedDest}' -Force"`;
-          exec(psCmd, (psErr, psStdout, psStderr) => {
-            if (psErr) {
-              reject(new Error(psStderr || psErr.message));
-            } else {
+          const psProc = spawn('powershell.exe', [
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+            `Expand-Archive -Path '${escapedZip}' -DestinationPath '${escapedDest}' -Force`
+          ], { stdio: 'pipe' });
+          let psStderr = '';
+          psProc.stderr.on('data', (d) => { psStderr += d.toString(); });
+          psProc.on('close', (psCode) => {
+            if (psCode === 0) {
               resolve();
+            } else {
+              reject(new Error(psStderr || `PowerShell exit code ${psCode}`));
             }
           });
+          psProc.on('error', (err) => reject(new Error(`PowerShell spawn error: ${err.message}`)));
         }
       });
+      tarProc.on('error', (err) => reject(new Error(`tar spawn error: ${err.message}`)));
     } else {
-      const cmd = `unzip -o "${zipPath}" -d "${destDir}"`;
-      exec(cmd, (err, stdout, stderr) => {
-        if (err) {
-          reject(new Error(stderr || err.message));
-        } else {
+      const unzipProc = spawn('unzip', ['-o', zipPath, '-d', destDir], { stdio: 'pipe' });
+      let unzipStderr = '';
+      unzipProc.stderr.on('data', (d) => { unzipStderr += d.toString(); });
+      unzipProc.on('close', (code) => {
+        if (code === 0) {
           resolve();
+        } else {
+          reject(new Error(unzipStderr || `unzip exit code ${code}`));
         }
       });
+      unzipProc.on('error', (err) => reject(new Error(`unzip spawn error: ${err.message}`)));
     }
   });
 }
@@ -609,7 +635,18 @@ ipcMain.handle('hil-save-build-files', async (event, { files }) => {
       fs.mkdirSync(buildDir, { recursive: true });
     }
     for (const file of files) {
-      const filePath = path.join(buildDir, file.name);
+      // Sanitize filename to prevent path traversal attacks
+      const safeFileName = validateFilename(file.name);
+      if (!safeFileName || safeFileName === '_') {
+        console.error('[SECURITY] Blocked invalid filename in hil-save-build-files:', file.name);
+        continue;
+      }
+      const filePath = path.join(buildDir, safeFileName);
+      // Additional path traversal guard: ensure resolved path stays inside buildDir
+      if (!path.resolve(filePath).startsWith(path.resolve(buildDir))) {
+        console.error('[SECURITY] Path traversal attempt blocked:', file.name);
+        continue;
+      }
       let contentToWrite = file.content;
 
       // Extract existing USER CODE blocks if file already exists
@@ -1866,16 +1903,26 @@ ipcMain.handle('3dx-dashboard-close', async () => {
 
 // Secure vault API Key handlers
 ipcMain.handle('store-api-key', async (_, { service, key }) => {
+  // Validate service name against allowlist to prevent key poisoning
+  try { validateServiceName(service); } catch { return { success: false, error: 'Invalid service name' }; }
+  // Validate key is a non-empty string within length limits
+  const safeKey = validateString(key, 512);
+  if (!safeKey) return { success: false, error: 'Invalid or empty API key' };
+
   const existing = await credentialVault.loadCredentials() || {};
   if (!existing.apiKeys) {
     existing.apiKeys = {};
   }
-  existing.apiKeys[service] = key;
+  existing.apiKeys[service] = safeKey;
   await credentialVault.storeCredentials(existing);
+  credentialVault.logAuditEvent('store_api_key', { service });
   return { success: true };
 });
 
 ipcMain.handle('load-api-key', async (_, { service }) => {
+  // Validate service name against allowlist
+  try { validateServiceName(service); } catch { return null; }
+
   const creds = await credentialVault.loadCredentials();
   if (creds) {
     if (creds.apiKeys && creds.apiKeys[service]) {
@@ -1890,6 +1937,13 @@ ipcMain.handle('load-api-key', async (_, { service }) => {
 
 ipcMain.handle('openai-chat-completion', async (_, { apiKey, messages, baseUrl, model }) => {
   try {
+    // Validate baseUrl if provided — must be HTTPS to prevent cleartext credential exposure
+    if (baseUrl) {
+      const safeUrl = validateUrl(baseUrl.trim(), ['https:']);
+      if (!safeUrl) {
+        return { success: false, error: 'Invalid baseUrl: only HTTPS is permitted' };
+      }
+    }
     const cleanBaseUrl = (baseUrl || "https://api.openai.com/v1").trim().replace(/\/+$/, '');
     const url = `${cleanBaseUrl}/chat/completions`;
     const selectedModel = model || "gpt-4o-mini";
