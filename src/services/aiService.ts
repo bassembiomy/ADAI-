@@ -26,6 +26,22 @@ You can return structured commands in your response to modify the project. Use t
 
 const N8N_WEBHOOK_URL = (import.meta as any).env.VITE_N8N_WEBHOOK_URL || "";
 
+/** Masks an API key for safe logging — shows first 4 and last 4 chars only. */
+function maskKey(key: string): string {
+  if (!key || key.length < 10) return '***REDACTED***';
+  return `${key.slice(0, 4)}...${key.slice(-4)}`;
+}
+
+/** Validates Gemini API key format (must start with AIza). */
+function validateGeminiKey(key: string): boolean {
+  return typeof key === 'string' && key.startsWith('AIza') && key.length >= 20;
+}
+
+/** Validates OpenAI API key format (must start with sk-). */
+function validateOpenAiKey(key: string): boolean {
+  return typeof key === 'string' && key.startsWith('sk-') && key.length >= 20;
+}
+
 // New n8n Orchestrator function with automatic fallback and debugging
 export async function getN8nAiResponse(prompt: string, context: any, apiKey?: string, history?: any[]): Promise<string> {
   if (!N8N_WEBHOOK_URL) {
@@ -73,8 +89,14 @@ export async function getN8nAiResponse(prompt: string, context: any, apiKey?: st
 
 // Existing Gemini REST Service (as fallback)
 async function findWorkingModel(apiKey: string): Promise<string> {
+  if (!validateGeminiKey(apiKey)) {
+    throw new Error('Invalid Gemini API key format. Key must start with AIza.');
+  }
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    // Use x-goog-api-key header instead of URL query param to avoid key leaking in server logs
+    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
+      headers: { 'x-goog-api-key': apiKey }
+    });
     if (!res.ok) throw new Error(`ListModels failed: ${res.status}`);
     const data = await res.json();
     const models = (data.models || []) as { name: string; supportedGenerationMethods: string[] }[];
@@ -92,6 +114,9 @@ async function findWorkingModel(apiKey: string): Promise<string> {
 }
 
 export async function getAiResponse(apiKey: string, history: any[], currentContext: any): Promise<string> {
+  if (!validateGeminiKey(apiKey)) {
+    throw new Error('Invalid Gemini API key format. Key must start with AIza.');
+  }
   const modelName = await findWorkingModel(apiKey);
   const userPrompt = history[history.length - 1].content;
   const fullPrompt = `${SYSTEM_PROMPT}\n\nCurrent Project Context:\n${JSON.stringify(currentContext, null, 2)}\n\nUser Request:\n${userPrompt}`;
@@ -101,10 +126,14 @@ export async function getAiResponse(apiKey: string, history: any[], currentConte
   for (const msg of pastMessages) contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] });
   contents.push({ role: 'user', parts: [{ text: fullPrompt }] });
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/${modelName}:generateContent?key=${apiKey}`;
+  // Use x-goog-api-key header instead of URL query param to prevent key leaking in server logs
+  const url = `https://generativelanguage.googleapis.com/v1beta/${modelName}:generateContent`;
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+    },
     body: JSON.stringify({ contents, generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } })
   });
 
