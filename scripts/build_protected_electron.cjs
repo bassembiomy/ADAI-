@@ -101,13 +101,32 @@ async function buildProtectedElectron() {
 
   fs.unlinkSync(obfuscatedPath); // Remove plain obfuscated JS — only binary bytecode remains!
 
-  // Step 4: Create tiny ignition loader index.cjs
+  // Step 4: Create tiny ignition loader index.cjs with resilient fallback for dev mode
   console.log('🔑 [4/5] Creating V8 bytecode ignition loader (index.cjs)...');
   const loaderCode = `// ADIA V8 Bytecode Launcher
 'use strict';
 const bytenode = require('bytenode');
 const path = require('path');
-require(path.join(__dirname, 'main.jsc'));
+const fs = require('fs');
+
+const jscPath = path.join(__dirname, 'main.jsc');
+const srcMainPath = path.join(__dirname, '../src/main.cjs');
+
+try {
+  if (fs.existsSync(jscPath)) {
+    require(jscPath);
+  } else if (fs.existsSync(srcMainPath)) {
+    require(srcMainPath);
+  }
+} catch (err) {
+  const isV8Mismatch = err.code === 'ERR_CACHED_DATA_REJECTED' || (err.message && err.message.includes('cachedDataRejected'));
+  if (isV8Mismatch && fs.existsSync(srcMainPath)) {
+    console.warn('[Bytenode Loader] V8 version mismatch in dev mode — falling back to src/main.cjs...');
+    require(srcMainPath);
+  } else {
+    throw err;
+  }
+}
 `;
   fs.writeFileSync(path.join(DIST_ELECTRON_DIR, 'index.cjs'), loaderCode, 'utf8');
 

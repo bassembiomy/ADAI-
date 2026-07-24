@@ -8,7 +8,7 @@
   "main": "dist-electron/index.cjs",
   "scripts": {
     "dev": "vite",
-    "build:electron": "node scripts/build_protected_electron.cjs",
+    "build:electron": "npx electron scripts/build_protected_electron.cjs",
     "build": "tsc && vite build && npm run build:electron",
     "preview": "vite preview",
     "start": "electron-forge start",
