@@ -629,6 +629,11 @@ async function getRealPorts() {
 }
 
 ipcMain.handle('hil-save-build-files', async (event, { files }) => {
+  // RLS check: at least engineer role required to write HIL build files
+  const role = await getCurrentRole();
+  const perm = checkPermission(role, 'hil', 'saveFiles');
+  if (!perm.allowed) return rlsDenied('hil', 'saveFiles', perm.reason);
+
   try {
     const buildDir = path.join(process.cwd(), 'hil_build');
     if (!fs.existsSync(buildDir)) {
@@ -689,6 +694,11 @@ let activeHilProcess = null;
 
 // HIL Compile IPC handler
 ipcMain.handle('hil-run-compile', async (event, { target, optimization, warningLevel, debugLevel }) => {
+  // RLS check: at least engineer role required to compile firmware
+  const role = await getCurrentRole();
+  const perm = checkPermission(role, 'hil', 'compile');
+  if (!perm.allowed) return rlsDenied('hil', 'compile', perm.reason);
+
   return new Promise((resolve) => {
     const allowedTargets = ['Generic', 'Arduino_Uno', 'Arduino_Mega', 'ESP32', 'STM32F1', 'STM32F4'];
     const allowedOptimizations = ['-O0', '-O1', '-O2', '-O3', '-Os'];
@@ -1324,6 +1334,17 @@ ipcMain.handle('hil-send', async (event, payload) => {
 // ── Credential storage (secure vault fallback + audit logging) ──────────────
 const credentialVault = require('./security/credentialVault.cjs');
 const { checkRateLimit } = require('./security/rateLimiter.cjs');
+const { checkPermission, getEffectiveRole, rlsDenied } = require('./security/roleSecurity.cjs');
+
+/** Returns the effective RLS role based on the current stored credentials. */
+async function getCurrentRole() {
+  try {
+    const creds = await credentialVault.loadCredentials();
+    return getEffectiveRole(creds);
+  } catch {
+    return 'guest';
+  }
+}
 
 async function storeCreds(creds) {
   const existing = await credentialVault.loadCredentials() || {};
@@ -1386,6 +1407,10 @@ ipcMain.handle('3dx-oauth-start', async (event, { tenantUrl, clientId }) => {
   if (!checkRateLimit('3dx-oauth-start')) {
     return { success: false, error: 'Rate limit exceeded. Please wait a moment.' };
   }
+  // RLS check: at least engineer role required to start OAuth
+  const role = await getCurrentRole();
+  const perm = checkPermission(role, 'threeDX', 'oauthStart');
+  if (!perm.allowed) return rlsDenied('threeDX', 'oauthStart', perm.reason);
   
   const validatedTenant = validateUrl(tenantUrl, ['https:', 'http:']);
   if (!validatedTenant || (validatedTenant.startsWith('http:') && !validatedTenant.includes('localhost') && !validatedTenant.includes('127.0.0.1'))) {
@@ -1556,6 +1581,10 @@ ipcMain.handle('3dx-save-credentials', async (_, creds) => {
   if (!checkRateLimit('3dx-save-credentials')) {
     return { success: false, error: 'Rate limit exceeded.' };
   }
+  // RLS check: at least engineer role required
+  const role = await getCurrentRole();
+  const perm = checkPermission(role, 'threeDX', 'saveCredentials');
+  if (!perm.allowed) return rlsDenied('threeDX', 'saveCredentials', perm.reason);
   await storeCreds(creds);
   return { success: true };
 });
