@@ -11714,7 +11714,7 @@ const ADIA = () => {
       if (type === 'ibd') {
         const ctxBlockName = contextBlock ? contextBlock.name : 'System';
         svg += `<rect x="${contextFrame.x}" y="${contextFrame.y}" width="${contextFrame.w}" height="${contextFrame.h}" fill="none" stroke="#666" stroke-width="1.5" stroke-dasharray="4,4" rx="6" />`;
-        svg += `<text x="${contextFrame.x + 10}" y="${contextFrame.y + 20}" fill="#666" font-size="12" font-weight="bold">ibd [Block] ${ctxBlockName}</text>`;
+        svg += `<text x="${contextFrame.x + 10}" y="${contextFrame.y + 20}" fill="#666" font-size="12" font-weight="bold">ibd [Block] ${escapeHtml(ctxBlockName)}</text>`;
 
         if (contextBlock && contextBlock.ports) {
           contextBlock.ports.forEach((p: any) => {
@@ -11729,7 +11729,7 @@ const ADIA = () => {
             else if (side === 'top') { ty -= 6; }
             else if (side === 'bottom') { ty += 10; }
 
-            svg += `<text x="${tx}" y="${ty}" text-anchor="${anchor}" font-size="8" fill="#666">${p.name}</text>`;
+            svg += `<text x="${tx}" y="${ty}" text-anchor="${anchor}" font-size="8" fill="#666">${escapeHtml(p.name)}</text>`;
           });
         }
       }
@@ -11745,14 +11745,14 @@ const ADIA = () => {
             svg += `<circle r="8" fill="#333" stroke="#ff9900" stroke-width="2" />`;
             if (n.type === 'history') svg += `<text x="0" y="4" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">H</text>`;
             if (n.type === 'deep-history') svg += `<text x="0" y="4" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">H*</text>`;
-            svg += `<text x="0" y="-18" text-anchor="middle" fill="#ff9900" font-size="12" font-weight="bold">${n.name}</text>`;
+            svg += `<text x="0" y="-18" text-anchor="middle" fill="#ff9900" font-size="12" font-weight="bold">${escapeHtml(n.name)}</text>`;
             svg += `</g>`;
           } else {
             // State
             svg += `<g transform="translate(${n.displayX}, ${n.displayY})">`;
             svg += `<rect width="${n.width}" height="${n.height}" rx="8" fill="#fcfcfc" stroke="#333" stroke-width="2" />`;
             svg += `<path d="M0 26 h${n.width}" stroke="#ddd" stroke-width="1" />`;
-            svg += `<text x="${n.width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${n.name}</text>`;
+            svg += `<text x="${n.width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${escapeHtml(n.name)}</text>`;
 
             if (n.entry || n.during || n.exit) {
               let yTxt = 36;
@@ -11768,7 +11768,7 @@ const ADIA = () => {
                 svg += `<line x1="-8" y1="-5" x2="${n.width - 8}" y2="-5" stroke="#eee" stroke-width="1" />`;
                 lines.slice(0, 3).forEach((line: string, i: number) => {
                   const txt = line.length > 25 ? line.slice(0, 25) + '...' : line;
-                  const safeTxt = txt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                  const safeTxt = escapeHtml(txt);
                   svg += `<text y="${i * 10}" fill="#888" font-size="9" font-family="monospace">${safeTxt}</text>`;
                 });
                 svg += `</g>`;
@@ -11786,21 +11786,22 @@ const ADIA = () => {
         svg += `<rect width="${n.width}" height="${n.height}" fill="${fill}" stroke="${stroke}" stroke-width="1" rx="4" />`;
 
         if (type === 'req') {
-          svg += `<text x="${n.width / 2}" y="22" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${n.reqId}</text>`;
-          svg += `<text x="${n.width / 2}" y="40" text-anchor="middle" font-size="11" fill="#333" font-family="sans-serif">${n.name.length > 22 ? n.name.substring(0, 20) + '...' : n.name}</text>`;
+          svg += `<text x="${n.width / 2}" y="22" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${escapeHtml(n.reqId)}</text>`;
+          const displayName = n.name.length > 22 ? n.name.substring(0, 20) + '...' : n.name;
+          svg += `<text x="${n.width / 2}" y="40" text-anchor="middle" font-size="11" fill="#333" font-family="sans-serif">${escapeHtml(displayName)}</text>`;
           if (n.description) {
             const desc = n.description.length > 30 ? n.description.substring(0, 28) + '...' : n.description;
-            svg += `<text x="6" y="58" font-size="10" fill="#555" font-family="sans-serif">${desc}</text>`;
+            svg += `<text x="6" y="58" font-size="10" fill="#555" font-family="sans-serif">${escapeHtml(desc)}</text>`;
           }
         } else {
-          svg += `<text x="${n.width / 2}" y="17" text-anchor="middle" font-size="10" fill="#666" font-family="monospace">«${n.stereotype || (type === 'ibd' ? 'part' : 'block')}»</text>`;
-          svg += `<text x="${n.width / 2}" y="34" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${n.name}</text>`;
+          svg += `<text x="${n.width / 2}" y="17" text-anchor="middle" font-size="10" fill="#666" font-family="monospace">«${escapeHtml(n.stereotype || (type === 'ibd' ? 'part' : 'block'))}»</text>`;
+          svg += `<text x="${n.width / 2}" y="34" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${escapeHtml(n.name)}</text>`;
           svg += `<line x1="0" y1="38" x2="${n.width}" y2="38" stroke="#888" stroke-width="0.5" />`;
         }
 
         if (type === 'bdd' && n.properties?.length > 0) {
           n.properties.slice(0, 3).forEach((p: any, i: number) => {
-            svg += `<text x="5" y="${48 + i * 12}" font-size="9" font-family="monospace" fill="#555">${p.name}:${p.type}</text>`;
+            svg += `<text x="5" y="${48 + i * 12}" font-size="9" font-family="monospace" fill="#555">${escapeHtml(p.name)}:${escapeHtml(p.type)}</text>`;
           });
         }
 
@@ -11824,7 +11825,7 @@ const ADIA = () => {
             else if (isTop) { ty -= 6; }
             else if (isBottom) { ty += 10; }
 
-            svg += `<text x="${tx}" y="${ty}" text-anchor="${anchor}" font-size="8" fill="#666">${p.name}</text>`;
+            svg += `<text x="${tx}" y="${ty}" text-anchor="${anchor}" font-size="8" fill="#666">${escapeHtml(p.name)}</text>`;
           });
         }
 
@@ -11958,12 +11959,12 @@ const ADIA = () => {
             const txt = (middleLabel ? middleLabel + ' ' : '') + (e.label || '');
             const txtW = txt.length * 6.5 + 12;
             svg += `<rect x="${midX - txtW / 2}" y="${midY - 9}" width="${txtW}" height="16" fill="#fcfcfc" opacity="0.92" rx="2" />`;
-            svg += `<text x="${midX}" y="${midY + 3}" text-anchor="middle" font-size="11" fill="#000">${txt}</text>`;
+            svg += `<text x="${midX}" y="${midY + 3}" text-anchor="middle" font-size="11" fill="#000">${escapeHtml(txt)}</text>`;
           }
 
           if (type === 'bdd' && (e.sourceMultiplicity || e.targetMultiplicity)) {
-            if (e.sourceMultiplicity) svg += `<text x="${sp.x + (tp.x > sp.x ? 15 : -15)}" y="${sp.y + (tp.y > sp.y ? 15 : -15)}" font-size="10" fill="#000">${e.sourceMultiplicity}</text>`;
-            if (e.targetMultiplicity) svg += `<text x="${tp.x + (sp.x > tp.x ? 15 : -15)}" y="${tp.y + (sp.y > tp.y ? 15 : -15)}" font-size="10" fill="#000">${e.targetMultiplicity}</text>`;
+            if (e.sourceMultiplicity) svg += `<text x="${sp.x + (tp.x > sp.x ? 15 : -15)}" y="${sp.y + (tp.y > sp.y ? 15 : -15)}" font-size="10" fill="#000">${escapeHtml(e.sourceMultiplicity)}</text>`;
+            if (e.targetMultiplicity) svg += `<text x="${tp.x + (sp.x > tp.x ? 15 : -15)}" y="${tp.y + (sp.y > tp.y ? 15 : -15)}" font-size="10" fill="#000">${escapeHtml(e.targetMultiplicity)}</text>`;
           }
         }
       });
@@ -12017,7 +12018,7 @@ const ADIA = () => {
           const btnColor = themeColors[c.color || 'orange'] || themeColors.orange;
           const iconSym = c.icon === 'power' ? '⏻ ' : c.icon === 'play' ? '▶ ' : c.icon === 'light' ? '💡 ' : '';
           svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" rx="4" fill="#222" stroke="${btnColor}" stroke-width="1" />`;
-          svg += `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="${btnColor}" font-size="10">${iconSym}${c.name}</text>`;
+          svg += `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="${btnColor}" font-size="10">${iconSym}${escapeHtml(c.name)}</text>`;
         } else if (c.type === 'lamp') {
           const lampColor = themeColors[c.color || 'green'] || themeColors.green;
           svg += `<circle cx="${cx}" cy="${cy}" r="15" fill="#222" stroke="${lampColor}" stroke-width="2" />`;
@@ -12055,18 +12056,18 @@ const ADIA = () => {
           const titleText = (c.oledTitle || c.name).toUpperCase();
 
           svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#000" stroke="#222" stroke-width="2" rx="6" />`;
-          svg += `<text x="12" y="20" fill="#4d7aaa" font-size="8" font-family="monospace">${titleText}</text>`;
-          svg += `<text x="${c.width - 12}" y="20" text-anchor="end" fill="#3de88a" font-size="8" font-family="monospace" font-weight="bold">${modeText}</text>`;
+          svg += `<text x="12" y="20" fill="#4d7aaa" font-size="8" font-family="monospace">${escapeHtml(titleText)}</text>`;
+          svg += `<text x="${c.width - 12}" y="20" text-anchor="end" fill="#3de88a" font-size="8" font-family="monospace" font-weight="bold">${escapeHtml(modeText)}</text>`;
           svg += `<text x="12" y="45" fill="#4db8ff" font-size="18" font-family="monospace" font-weight="bold">200°C</text>`;
           svg += `<rect x="12" y="55" width="${c.width - 24}" height="3" fill="#111" rx="1" />`;
           svg += `<rect x="12" y="55" width="${(c.width - 24) * 0.4}" height="3" fill="#3de88a" rx="1" />`;
           svg += `<text x="12" y="75" fill="#4db8ff" font-size="10" font-family="monospace">30:00</text>`;
           svg += `<text x="${c.width - 12}" y="75" text-anchor="end" fill="#3de88a" font-size="8" font-family="monospace">HOME</text>`;
-          svg += `<text x="12" y="95" fill="#335577" font-size="7" font-family="monospace">${indicatorsStr}</text>`;
+          svg += `<text x="12" y="95" fill="#335577" font-size="7" font-family="monospace">${escapeHtml(indicatorsStr)}</text>`;
         } else if (c.type === 'mode-icon') {
           svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#1a1a20" stroke="#333" rx="4" />`;
-          svg += `<text x="${cx}" y="${cy - 4}" text-anchor="middle" font-size="14">${c.iconEmoji || '✨'}</text>`;
-          svg += `<text x="${cx}" y="${cy + 12}" text-anchor="middle" font-size="7" fill="#ccc">${c.name}</text>`;
+          svg += `<text x="${cx}" y="${cy - 4}" text-anchor="middle" font-size="14">${escapeHtml(c.iconEmoji || '✨')}</text>`;
+          svg += `<text x="${cx}" y="${cy + 12}" text-anchor="middle" font-size="7" fill="#ccc">${escapeHtml(c.name)}</text>`;
         } else if (c.type === 'encoder') {
           const isHybrid = Array.isArray(c.encoderValues) && c.encoderValues.length > 0;
           const displayVal = isHybrid ? (c.encoderValues?.[0] || '0') : '0';
@@ -12078,7 +12079,7 @@ const ADIA = () => {
           svg += `<text x="${cx - 15}" y="${c.height - 17}" text-anchor="middle" fill="#888" font-size="8">↺</text>`;
           svg += `<rect x="${cx + 5}" y="${c.height - 25}" width="20" height="12" rx="2" fill="#222" stroke="#333" />`;
           svg += `<text x="${cx + 15}" y="${c.height - 17}" text-anchor="middle" fill="#888" font-size="8">↻</text>`;
-          svg += `<text x="${cx}" y="${cy + 25}" text-anchor="middle" fill="#555" font-family="monospace" font-size="7">${displayVal}</text>`;
+          svg += `<text x="${cx}" y="${cy + 25}" text-anchor="middle" fill="#555" font-family="monospace" font-size="7">${escapeHtml(displayVal)}</text>`;
         } else if (c.type === 'mode-selector') {
           svg += `<rect x="4" y="4" width="${c.width - 8}" height="${c.height - 8}" fill="#111" stroke="#222" rx="4" />`;
           svg += `<text x="10" y="16" fill="#555" font-size="7" font-family="sans-serif" font-weight="bold">COOKING MODES</text>`;
@@ -12093,7 +12094,7 @@ const ADIA = () => {
           svg += `<text x="135" y="40" fill="#444" font-size="10">...</text>`;
         }
 
-        svg += `<text x="${cx}" y="${c.height - 4}" text-anchor="middle" font-size="8" fill="#888">${c.name}</text>`;
+        svg += `<text x="${cx}" y="${c.height - 4}" text-anchor="middle" font-size="8" fill="#888">${escapeHtml(c.name)}</text>`;
         svg += `</g>`;
       });
 
