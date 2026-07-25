@@ -94,12 +94,12 @@ describe('StateMachineCodeGenerator', () => {
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
     
     // Check transition from Idle to Active
-    expect(coreC).toContain('if ((instance->data.sensor_val > 10.0f))');
+    expect(coreC).toContain('if (instance->data.sensor_val > 10.0f)');
     expect(coreC).toContain('SM_Enter_State(instance, SM_ST_ACTIVE, false);');
     
     // Check transition from Active to Idle
     // Note: counter is uint16, so 100 should become 100U
-    expect(coreC).toContain('if ((instance->data.counter >= 100U))');
+    expect(coreC).toContain('if (instance->data.counter >= 100U)');
     expect(coreC).toContain('SM_Enter_State(instance, SM_ST_IDLE, false);');
   });
 
@@ -258,16 +258,16 @@ describe('StateMachineCodeGenerator', () => {
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
 
     // Verify bracket wrapping in user entry code
-    expect(userLogicC).toContain('if ((instance->data.sensor_val > 10.0f)) {');
+    expect(userLogicC).toContain('if (instance->data.sensor_val > 10.0f) {');
     expect(userLogicC).toContain('instance->data.counter = (uint16_t)(1U);');
     expect(userLogicC).toContain('else {');
     expect(userLogicC).toContain('instance->data.counter = (uint16_t)(2U);');
 
     // Verify parenthesization in transition condition
-    expect(coreC).toContain('if (((instance->data.sensor_val > 5.0f) && (instance->data.counter < 10U)))');
+    expect(coreC).toContain('if (instance->data.sensor_val > 5.0f && instance->data.counter < 10U)');
 
     // Verify bracket wrapping in transition action
-    expect(coreC).toContain('if ((instance->data.is_active)) {');
+    expect(coreC).toContain('if (instance->data.is_active) {');
     expect(coreC).toContain('instance->data.counter = (uint16_t)(3U);');
   });
 
@@ -347,7 +347,7 @@ describe('StateMachineCodeGenerator', () => {
 
     // Verify it parses the internal transition and uses local transitioned flag
     expect(coreC).toContain('bool transitioned_1 = false;');
-    expect(coreC).toContain('if ((instance->data.is_active)) {');
+    expect(coreC).toContain('if (instance->data.is_active) {');
     expect(coreC).toContain('instance->data.counter = (uint16_t)(10U);');
     expect(coreC).toContain('transitioned_1 = true;');
     
@@ -1165,5 +1165,172 @@ describe('StateMachineCodeGenerator', () => {
       }
     });
   });
+
+  describe('Dead-code elimination', () => {
+    const baseChart = {
+      tickMs: 10,
+      states: [],
+      junctions: [],
+      transitions: [],
+      variables: [],
+      layers: [],
+      safetyMode: false
+    };
+
+    const createState = (id: string, name: string, entry: string, during: string, exit: string) => ({
+      id, name, x: 0, y: 0, width: 100, height: 100,
+      entry, during, exit,
+      isActive: false, color: 'blue', parentId: 'root', children: [],
+      priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
+    });
+
+    it('omits Entry function when state has no entry code', () => {
+      const chart = {
+        ...baseChart,
+        states: [createState('s1', 'State1', '', 'x = 1;', '')],
+        variables: [{ id: 'v1', name: 'x', type: 'int' as const, initialValue: '0', currentValue: 0, visibleInScope: true }],
+        layers: [{ id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }]
+      };
+      const result = generateMISRACCode(chart);
+      expect(result.errors).toHaveLength(0);
+      const logicC = result.files.find(f => f.name === 'sm_user_logic.c')!.content;
+      const logicH = result.files.find(f => f.name === 'sm_user_logic.h')!.content;
+      expect(logicC).not.toContain('SM_ST_STATE1_Entry');
+      expect(logicH).not.toContain('SM_ST_STATE1_Entry');
+    });
+
+    it('omits During function when state has no during code', () => {
+      const chart = {
+        ...baseChart,
+        states: [createState('s1', 'State1', 'x = 0;', '', 'x = 1;')],
+        variables: [{ id: 'v1', name: 'x', type: 'int' as const, initialValue: '0', currentValue: 0, visibleInScope: true }],
+        layers: [{ id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }]
+      };
+      const result = generateMISRACCode(chart);
+      expect(result.errors).toHaveLength(0);
+      const logicC = result.files.find(f => f.name === 'sm_user_logic.c')!.content;
+      const logicH = result.files.find(f => f.name === 'sm_user_logic.h')!.content;
+      expect(logicC).not.toContain('SM_ST_STATE1_During');
+      expect(logicH).not.toContain('SM_ST_STATE1_During');
+    });
+
+    it('omits Exit function when state has no exit code', () => {
+      const chart = {
+        ...baseChart,
+        states: [createState('s1', 'State1', 'x = 0;', 'x = 1;', '')],
+        variables: [{ id: 'v1', name: 'x', type: 'int' as const, initialValue: '0', currentValue: 0, visibleInScope: true }],
+        layers: [{ id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }]
+      };
+      const result = generateMISRACCode(chart);
+      expect(result.errors).toHaveLength(0);
+      const logicC = result.files.find(f => f.name === 'sm_user_logic.c')!.content;
+      const logicH = result.files.find(f => f.name === 'sm_user_logic.h')!.content;
+      expect(logicC).not.toContain('SM_ST_STATE1_Exit');
+      expect(logicH).not.toContain('SM_ST_STATE1_Exit');
+    });
+
+    it('SM_Exit_State does not call Exit when state has no exit code', () => {
+      const chart = {
+        ...baseChart,
+        states: [createState('s1', 'State1', 'x = 0;', 'x = 1;', '')],
+        variables: [{ id: 'v1', name: 'x', type: 'int' as const, initialValue: '0', currentValue: 0, visibleInScope: true }],
+        layers: [{ id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }]
+      };
+      const result = generateMISRACCode(chart);
+      const coreC = result.files.find(f => f.name === 'sm_core.c')!.content;
+      expect(coreC).not.toContain('SM_ST_STATE1_Exit(instance)');
+    });
+
+    it('always emits During for XBridges state even when during text is empty', () => {
+      const chart = {
+        ...baseChart,
+        states: [{
+          ...createState('s1', 'State1', '', '', ''),
+          isXBridges: true,
+          xBridgesModel: { nodes: [], edges: [] }
+        }],
+        variables: [],
+        layers: [{ id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }]
+      };
+      const result = generateMISRACCode(chart);
+      const logicC = result.files.find(f => f.name === 'sm_user_logic.c')!.content;
+      expect(logicC).toContain('SM_ST_STATE1_During');
+      expect(logicC).toContain('SM_ST_STATE1_XBridges_Step');
+    });
+
+    it('emits all three action functions when all slots have code', () => {
+      const chart = {
+        ...baseChart,
+        states: [createState('s1', 'State1', 'x = 0;', 'x = 1;', 'x = 2;')],
+        variables: [{ id: 'v1', name: 'x', type: 'int' as const, initialValue: '0', currentValue: 0, visibleInScope: true }],
+        layers: [{ id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }]
+      };
+      const result = generateMISRACCode(chart);
+      const logicC = result.files.find(f => f.name === 'sm_user_logic.c')!.content;
+      const logicH = result.files.find(f => f.name === 'sm_user_logic.h')!.content;
+      expect(logicC).toContain('SM_ST_STATE1_Entry');
+      expect(logicC).toContain('SM_ST_STATE1_During');
+      expect(logicC).toContain('SM_ST_STATE1_Exit');
+      expect(logicH).toContain('SM_ST_STATE1_Entry');
+      expect(logicH).toContain('SM_ST_STATE1_During');
+      expect(logicH).toContain('SM_ST_STATE1_Exit');
+    });
+
+    it('does not emit SM_NODE_SAFE functions when safety mode is off', () => {
+      const chart = {
+        ...baseChart,
+        states: [createState('s1', 'State1', 'x = 0;', 'x = 1;', '')],
+        variables: [{ id: 'v1', name: 'x', type: 'int' as const, initialValue: '0', currentValue: 0, visibleInScope: true }],
+        layers: [{ id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }]
+      };
+      const result = generateMISRACCode(chart);
+      const logicC = result.files.find(f => f.name === 'sm_user_logic.c')!.content;
+      const logicH = result.files.find(f => f.name === 'sm_user_logic.h')!.content;
+      const coreC = result.files.find(f => f.name === 'sm_core.c')!.content;
+      expect(logicC).not.toContain('SM_NODE_SAFE_Entry');
+      expect(logicC).not.toContain('SM_NODE_SAFE_During');
+      expect(logicC).not.toContain('SM_NODE_SAFE_Exit');
+      expect(logicH).not.toContain('SM_NODE_SAFE_Entry');
+      expect(logicH).not.toContain('SM_NODE_SAFE_During');
+      expect(logicH).not.toContain('SM_NODE_SAFE_Exit');
+      expect(coreC).not.toContain('SM_NODE_SAFE_Entry');
+      expect(coreC).not.toContain('SM_NODE_SAFE_Exit');
+    });
+
+    it('should generate valid C code without syntax errors for statemachine.json topology with sink states', () => {
+      const chartWithSinkStates = {
+        tickMs: 500,
+        safetyMode: false,
+        variables: [
+          { id: 'v1', name: 'x', type: 'int32' as const, initialValue: '0', currentValue: 0, visibleInScope: true },
+          { id: 'v2', name: 'y', type: 'int32' as const, initialValue: '0', currentValue: 0, visibleInScope: true }
+        ],
+        states: [
+          { id: 's1', name: 'State_1', x: 100, y: 120, width: 160, height: 100, entry: '', during: '', exit: '', isActive: false, color: '#c96c8a', parentId: 'root', children: [], priority: 10, isParallel: true, regionId: 'xx', autostart: true },
+          { id: 's2', name: 'State_2', x: 520, y: 140, width: 160, height: 100, entry: '', during: '', exit: '', isActive: false, color: '#6cc9a8', parentId: 'root', children: [], priority: 20, isParallel: true, regionId: 'xx', autostart: false },
+          { id: 's6_1', name: 'State_6_1', x: 520, y: 140, width: 160, height: 100, entry: 'y=1;', during: '', exit: '', isActive: false, color: '#6c9ac6', parentId: 's2', children: [], priority: 10, isParallel: false, regionId: 'xx', autostart: true }
+        ],
+        junctions: [],
+        transitions: [
+          { id: 't1', sourceId: 's1', targetId: 's2', condition: 'x==1', action: '', afterTicks: null, type: 'condition', hasControlPoint: false, order: 0 }
+        ],
+        layers: [
+          { id: 'root', name: 'Root', parentStateId: null, stateIds: ['s1', 's2'], transitionIds: ['t1'], junctionIds: [] }
+        ]
+      };
+
+      const result = generateMISRACCode(chartWithSinkStates);
+      expect(result.files).toHaveLength(9);
+
+      const smCoreH = result.files.find(f => f.name === 'sm_core.h')?.content || '';
+      const smUserLogicC = result.files.find(f => f.name === 'sm_user_logic.c')?.content || '';
+
+      expect(smCoreH).toContain('static inline const SM_Data_t* SM_Data_Legacy');
+      expect(smCoreH).toMatch(/static inline const SM_Data_t\* SM_Data_Legacy[^{]+\{[^}]+\}/);
+      expect(smUserLogicC).toMatch(/void SM_ST_STATE_6_1_Entry[^{]+\{[^}]+\}/);
+    });
+  });
 });
+
+
 
