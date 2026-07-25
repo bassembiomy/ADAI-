@@ -52,17 +52,20 @@ export const validateInitialValue = (v: { type: VariableType; initialValue?: str
 
 const isInputVariable = (v: any): boolean => {
   if (v.isInput === true || v.direction === 'input') return true;
-  const name = v.name;
+  const name = (v.name || '').toLowerCase();
   return name.startsWith('in_') || name.startsWith('sensor_') || name.startsWith('btn_') || name.startsWith('sw_') || name.startsWith('input_') || name.startsWith('button_') ||
-         name.endsWith('_in') || name.endsWith('_sensor') || name.endsWith('_btn') || name.endsWith('_sw') || name.endsWith('_button') || name.endsWith('_input');
+         name.endsWith('_in') || name.endsWith('_sensor') || name.endsWith('_btn') || name.endsWith('_sw') || name.endsWith('_button') || name.endsWith('_input') ||
+         name === 'x' || name === 'in';
 };
 
 const isOutputVariable = (v: any): boolean => {
   if (v.isOutput === true || v.direction === 'output') return true;
-  const name = v.name;
+  const name = (v.name || '').toLowerCase();
   return name.startsWith('out_') || name.startsWith('led_') || name.startsWith('motor_') || name.startsWith('output_') || name.startsWith('actuator_') || name.startsWith('relay_') || name.startsWith('valve_') ||
-         name.endsWith('_out') || name.endsWith('_led') || name.endsWith('_motor') || name.endsWith('_active') || name.endsWith('_output') || name.endsWith('_actuator') || name.endsWith('_relay') || name.endsWith('_valve');
+         name.endsWith('_out') || name.endsWith('_led') || name.endsWith('_motor') || name.endsWith('_active') || name.endsWith('_output') || name.endsWith('_actuator') || name.endsWith('_relay') || name.endsWith('_valve') ||
+         name === 'y' || name === 'out';
 };
+
 
 export const generateMISRACCode = (chart: {
   tickMs: number;
