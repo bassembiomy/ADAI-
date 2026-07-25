@@ -1,0 +1,9 @@
+# Ignore third-party vendor toolchains and build artifacts from SonarQube static analysis
+toolchains/**
+avr-gcc/**
+hil_build/**
+out/**
+dist/**
+dist-electron/**
+scratch/**
+node_modules/**
