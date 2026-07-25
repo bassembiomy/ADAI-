@@ -1312,7 +1312,7 @@ describe('StateMachineCodeGenerator', () => {
         ],
         junctions: [],
         transitions: [
-          { id: 't1', sourceId: 's1', targetId: 's2', condition: 'x==1', action: '', afterTicks: null, type: 'condition', hasControlPoint: false, order: 0 }
+          { id: 't1', sourceId: 's1', targetId: 's2', condition: 'x==1', action: '', afterTicks: null, type: 'condition' as const, hasControlPoint: false, order: 0 }
         ],
         layers: [
           { id: 'root', name: 'Root', parentStateId: null, stateIds: ['s1', 's2'], transitionIds: ['t1'], junctionIds: [] }
@@ -1341,8 +1341,9 @@ describe('StateMachineCodeGenerator', () => {
         ],
         junctions: [],
         transitions: [
-          { id: 't1', sourceId: 's1', targetId: 's2', condition: 'x==1', action: '', afterTicks: null, type: 'condition', hasControlPoint: false, order: 1 }
+          { id: 't1', sourceId: 's1', targetId: 's2', condition: 'x==1', action: '', afterTicks: null, type: 'condition' as const, hasControlPoint: false, order: 1 }
         ],
+
         layers: [
           { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1', 's2'], transitionIds: ['t1'], junctionIds: [] }
         ]
