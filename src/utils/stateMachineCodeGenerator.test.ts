@@ -683,10 +683,11 @@ describe('StateMachineCodeGenerator', () => {
     const result = generateMISRACCode(xbChart as any);
     expect(result.errors).toHaveLength(0);
 
-    const tempDir = path.join(__dirname, '../../scratch/test_compile_xb');
+    const tempDir = path.join(__dirname, `../../scratch/test_compile_xb_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
     }
+
 
     result.files.forEach(f => {
       if (f.name.endsWith('.c') || f.name.endsWith('.h')) {
@@ -993,9 +994,9 @@ describe('StateMachineCodeGenerator', () => {
           id: 's1', name: 'Running', x: 0, y: 0, width: 100, height: 100,
           entry: 'counter = 1;', during: 'counter = counter + 1;', exit: 'counter = 0;',
           isActive: false, color: 'blue', parentId: 'root', children: [],
-          priority: 1, isParallel: false, regionId: 'MAIN', autostart: true,
-          isTerminal: true
+          priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
         }
+
       ],
       junctions: [],
       transitions: [
@@ -1354,8 +1355,29 @@ describe('StateMachineCodeGenerator', () => {
       expect(coreC).toContain('/* Terminal / End State: auto-reset state machine back to root autostart state */');
       expect(coreC).toContain('SM_Reset(instance);');
     });
+
+    it('should pass structural brace balance check for all emitted C and H files', () => {
+      const chart = {
+        tickMs: 100,
+        safetyMode: false,
+        variables: [{ id: 'v1', name: 'x', type: 'int32' as const, initialValue: '0', currentValue: 0, visibleInScope: true }],
+        states: [
+          { id: 's1', name: 'State_1', x: 0, y: 0, width: 100, height: 100, entry: 'x = 1;', during: 'x = x + 1;', exit: '', isActive: false, color: 'blue', parentId: 'root', children: [], priority: 1, isParallel: false, regionId: 'MAIN', autostart: true }
+        ],
+        junctions: [],
+        transitions: [],
+        layers: [
+          { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }
+        ]
+      };
+
+      const result = generateMISRACCode(chart);
+      expect(result.errors.filter(e => e.source === 'Structural Validator')).toHaveLength(0);
+      expect(result.files.length).toBeGreaterThan(0);
+    });
   });
 });
+
 
 
 
