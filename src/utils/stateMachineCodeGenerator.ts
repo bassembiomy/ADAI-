@@ -281,6 +281,15 @@ export const generateMISRACCode = (chart: {
   /** True when the state's exit action has any actual code content */
   const hasExit = (s: StateData): boolean => !!(s.exit && s.exit.trim());
 
+  /** True when the state is designated as a terminal or end state */
+  const isTerminalState = (s: StateData): boolean => {
+    if (!s) return false;
+    if ((s as any).type === 'end' || (s as any).isFinal === true) return true;
+    const lowerName = (s.name || '').trim().toLowerCase();
+    return lowerName === 'end' || lowerName === 'terminal' || lowerName.endsWith('_end') || lowerName.endsWith('_terminal');
+  };
+
+
   /* Safe-state action predicates: only generate SM_NODE_SAFE_* functions when
    * safety mode is enabled AND the corresponding action has real content. */
   const safeState = sortedStates.find(s => s.isSafeState);
@@ -1747,7 +1756,16 @@ static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) 
         const sEnum = stateEnum(state);
 
         layerStepFuncs += `        case ${sEnum}:\n`;
+
+        if (isTerminalState(state)) {
+          layerStepFuncs += `            /* Terminal / End State: auto-reset state machine back to root autostart state */\n`;
+          layerStepFuncs += `            SM_Reset(instance);\n`;
+          layerStepFuncs += `            break;\n`;
+          return;
+        }
+
         layerStepFuncs += `            /* Evaluate Outgoing Transitions */\n`;
+
 
         const internal = parseInternalTransitions(state);
         const outgoing = [

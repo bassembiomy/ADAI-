@@ -1329,8 +1329,33 @@ describe('StateMachineCodeGenerator', () => {
       expect(smCoreH).toMatch(/static inline const SM_Data_t\* SM_Data_Legacy[^{]+\{[^}]+\}/);
       expect(smUserLogicC).toMatch(/void SM_ST_STATE_6_1_Entry[^{]+\{[^}]+\}/);
     });
+
+    it('should auto-reset to root autostart when execution enters a terminal/end state', () => {
+      const chartWithEndState = {
+        tickMs: 100,
+        safetyMode: false,
+        variables: [{ id: 'v1', name: 'x', type: 'int32' as const, initialValue: '0', currentValue: 0, visibleInScope: true }],
+        states: [
+          { id: 's1', name: 'State_1', x: 0, y: 0, width: 100, height: 100, entry: '', during: '', exit: '', isActive: false, color: 'blue', parentId: 'root', children: [], priority: 1, isParallel: false, regionId: 'MAIN', autostart: true },
+          { id: 's2', name: 'State_End', x: 200, y: 0, width: 100, height: 100, entry: '', during: '', exit: '', isActive: false, color: 'red', parentId: 'root', children: [], priority: 2, isParallel: false, regionId: 'MAIN', autostart: false, type: 'end' }
+        ],
+        junctions: [],
+        transitions: [
+          { id: 't1', sourceId: 's1', targetId: 's2', condition: 'x==1', action: '', afterTicks: null, type: 'condition', hasControlPoint: false, order: 1 }
+        ],
+        layers: [
+          { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1', 's2'], transitionIds: ['t1'], junctionIds: [] }
+        ]
+      };
+
+      const result = generateMISRACCode(chartWithEndState);
+      const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
+      expect(coreC).toContain('/* Terminal / End State: auto-reset state machine back to root autostart state */');
+      expect(coreC).toContain('SM_Reset(instance);');
+    });
   });
 });
+
 
 
 
