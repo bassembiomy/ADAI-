@@ -1,4 +1,6 @@
-# Ignore third-party vendor toolchains and build artifacts from SonarQube static analysis
+# Ignore agent worktree cache, third-party vendor toolchains and build artifacts from SonarQube static analysis
+.kilo/**
+.gemini/**
 toolchains/**
 avr-gcc/**
 hil_build/**

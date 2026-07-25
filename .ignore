@@ -1,4 +1,6 @@
 # Universal static analysis ignore file
+.kilo/
+.gemini/
 toolchains/
 avr-gcc/
 hil_build/

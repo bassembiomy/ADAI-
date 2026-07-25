@@ -1,3 +1,5 @@
+.kilo/
+.gemini/
 toolchains/
 avr-gcc/
 hil_build/
