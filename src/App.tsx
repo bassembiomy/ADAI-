@@ -63,6 +63,19 @@ const renderFormattedHelpText = (text: string) => {
   });
 };
 
+// Security Sandbox: Disallows access to sensitive environment globals in user expressions
+const FORBIDDEN_EXPRESSION_GLOBALS = /\b(process|require|window|document|globalThis|electron|fetch|XMLHttpRequest|import|eval|Function|Object\.constructor)\b/;
+
+export function safeCreateFunction(params: string[], body: string): Function {
+  if (FORBIDDEN_EXPRESSION_GLOBALS.test(body)) {
+    throw new Error("Security Violation: Access to restricted global objects (process, require, window, document) is forbidden in expressions.");
+  }
+  // Shadow global objects with undefined parameters to prevent global scope leakage
+  return new Function('window', 'document', 'process', 'require', 'globalThis', ...params, body).bind(
+    null, undefined, undefined, undefined, undefined, undefined
+  );
+}
+
 // =============================================================================
 // STATIC UI COMPONENTS (ZERO IMPORT ERRORS - FULLY TYPED)
 // =============================================================================
@@ -8567,7 +8580,7 @@ const ADIA = () => {
       }
 
       try {
-        new Function('context', `with(context) { ${code} }`);
+        safeCreateFunction(['context'], `with(context) { ${code} }`);
       } catch (e: any) {
         if (e instanceof SyntaxError) {
           let tip = 'Check for mismatched brackets, missing semicolons, or invalid operators.';
@@ -8630,7 +8643,7 @@ const ADIA = () => {
           .replace(/!/g, '!')
           .replace(/==/g, '===')
           .replace(/!=/g, '!==');
-        new Function('context', `with(context) { return (${jsCondition}); }`);
+        safeCreateFunction(['context'], `with(context) { return (${jsCondition}); }`);
       } catch (e: any) {
         if (e instanceof SyntaxError) {
           let tip = 'Conditions must be valid boolean expressions.';
@@ -9007,7 +9020,7 @@ const ADIA = () => {
                 .replace(/!/g, '!')
                 .replace(/==/g, '===')
                 .replace(/!=/g, '!==');
-              const func = new Function('context', `with(context) { return (${jsCondition}); }`);
+              const func = safeCreateFunction(['context'], `with(context) { return (${jsCondition}); }`);
               conditionMet = !!func(context);
             } catch (e) {
               conditionMet = false;
@@ -9026,7 +9039,7 @@ const ADIA = () => {
         if (runActions) {
           pathActions.forEach(act => {
             try {
-              const func = new Function('context', `with(context) { ${act} }`);
+              const func = safeCreateFunction(['context'], `with(context) { ${act} }`);
               func(context);
             } catch (e) { }
           });
@@ -9121,7 +9134,7 @@ const ADIA = () => {
     const executeAction = (code: string, context: any, location: string) => {
       if (!code || !code.trim()) return;
       try {
-        const func = new Function('context', `with(context) { ${code} }`);
+        const func = safeCreateFunction(['context'], `with(context) { ${code} }`);
         func(context);
         variablesChanged = true;
       } catch (e: any) {
@@ -9146,7 +9159,7 @@ const ADIA = () => {
           .replace(/==/g, '===')
           .replace(/!=/g, '!==');
 
-        const func = new Function('context', `with(context) { return (${jsCondition}); }`);
+        const func = safeCreateFunction(['context'], `with(context) { return (${jsCondition}); }`);
         return !!func(context);
       } catch (e: any) {
         let message = `Condition error in ${location}: ${e.message}`;
@@ -9701,7 +9714,7 @@ const ADIA = () => {
       // Run entry actions of initial state to initialize variables
       if (s.entry && s.entry.trim()) {
         try {
-          const func = new Function('context', `with(context) { ${s.entry} }`);
+          const func = safeCreateFunction(['context'], `with(context) { ${s.entry} }`);
           func(initialContext);
         } catch (e: any) {
           addError('error', `Action error in initial entry of ${s.name}: ${e.message}`, 'Simulation');
@@ -13047,7 +13060,7 @@ const ADIA = () => {
               try {
                 const varKeys = Object.keys(varValues);
                 const varVals = varKeys.map(k => varValues[k]);
-                const runner = new Function(...varKeys, code + "; return {" + varKeys.map(k => k + ":" + k).join(",") + "};");
+                const runner = safeCreateFunction(varKeys, code + "; return {" + varKeys.map(k => k + ":" + k).join(",") + "};");
                 const result = runner(...varVals);
                 if (result) {
                   varKeys.forEach(k => {
@@ -13079,7 +13092,7 @@ const ADIA = () => {
                   .replace(/!=/g, "!==");
                 const varKeys = Object.keys(varValues);
                 const varVals = varKeys.map(k => varValues[k]);
-                const evaluator = new Function(...varKeys, "return !!(" + jsCondition + ");");
+                const evaluator = safeCreateFunction(varKeys, "return !!(" + jsCondition + ");");
                 return evaluator(...varVals);
               } catch (e) {
                 console.error("Condition error in " + location + ":", e);
