@@ -1,0 +1,9 @@
+# Universal static analysis ignore file
+toolchains/
+avr-gcc/
+hil_build/
+out/
+dist/
+dist-electron/
+scratch/
+node_modules/
