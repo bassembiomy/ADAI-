@@ -891,6 +891,9 @@ export const generateMISRACCode = (chart: {
     result = result.replace(/\b4294967295U?\b/g, 'UINT32_MAX');
     result = result.replace(/3\.40282347e\+38f/g, 'FLT_MAX');
 
+    /* Guarantee SM_Data_Legacy in sm_core.h always has its closing brace before #endif */
+    result = result.replace(/(static inline const SM_Data_t\* SM_Data_Legacy[^{]+\{[\s\S]*?return &instance->data;)\s*(#endif)/g, '$1\n}\n\n$2');
+
     /* Syntactic Auto-Repair for unclosed braces */
     let depth = 0;
     let inString = false;
@@ -927,12 +930,20 @@ export const generateMISRACCode = (chart: {
         const suffix = result.substring(endifPos);
         result = prefix + '\n' + '}'.repeat(depth) + '\n\n' + suffix;
       } else {
-        result = result.trimEnd() + '\n' + '}'.repeat(depth) + '\n';
+        const commentHeaderPos = result.lastIndexOf('/* Safety fallback state');
+        if (commentHeaderPos !== -1) {
+          const prefix = result.substring(0, commentHeaderPos).trimEnd();
+          const suffix = result.substring(commentHeaderPos);
+          result = prefix + '\n' + '}'.repeat(depth) + '\n\n' + suffix;
+        } else {
+          result = result.trimEnd() + '\n' + '}'.repeat(depth) + '\n';
+        }
       }
     }
 
     return result;
   };
+
 
 
 
