@@ -59,9 +59,10 @@ const toolchains = {
 
 function isCommandInPath(cmd) {
   try {
-    const { execSync } = require('child_process');
-    const checkCmd = process.platform === 'win32' ? `where ${cmd}` : `which ${cmd}`;
-    execSync(checkCmd, { stdio: 'ignore' });
+    const { execFileSync } = require('child_process');
+    const tool = process.platform === 'win32' ? 'where.exe' : 'which';
+    const sanitizedCmd = sanitizeShellArg(cmd);
+    execFileSync(tool, [sanitizedCmd], { stdio: 'ignore' });
     return true;
   } catch (e) {
     return false;
@@ -627,7 +628,7 @@ ipcMain.handle('sync-factory-io', async (event, { actuators }) => {
 // =============================================================================
 // HIL HARDWARE-IN-THE-LOOP IPC HANDLERS
 // =============================================================================
-const { execSync, spawn } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
 let serialPort = null;
 let virtualInterval = null;
 let activePsProcess = null;
@@ -635,7 +636,10 @@ let activePsProcess = null;
 async function getRealPorts() {
   if (process.platform === 'win32') {
     try {
-      const stdout = execSync('[System.IO.Ports.SerialPort]::GetPortNames()', { shell: 'powershell.exe' }).toString();
+      const stdout = execFileSync('powershell.exe', ['-NoProfile', '-Command', '[System.IO.Ports.SerialPort]::GetPortNames()'], {
+        encoding: 'utf8',
+        timeout: 5000
+      }).toString();
       const ports = stdout.split(/[\r\n]+/).map(p => p.trim()).filter(Boolean);
       return Array.from(new Set(ports));
     } catch (e) {
