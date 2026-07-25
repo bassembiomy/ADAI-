@@ -39,6 +39,30 @@ import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
 import JSZip from 'jszip';
 
+// Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
+const escapeHtml = (str: unknown): string => {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+    .replace(/\x60/g, '&#96;');
+};
+
+// Security Helper: Safe React renderer for Help Center bold text without dangerouslySetInnerHTML
+const renderFormattedHelpText = (text: string) => {
+  if (!text) return null;
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <b key={index} className="text-white font-normal">{part.slice(2, -2)}</b>;
+    }
+    return part;
+  });
+};
+
 // =============================================================================
 // STATIC UI COMPONENTS (ZERO IMPORT ERRORS - FULLY TYPED)
 // =============================================================================
@@ -5679,7 +5703,7 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
                             {section.list.map((item, i) => (
                               <div key={i} className="flex items-start gap-3 p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
                                 <div className="w-1.5 h-1.5 rounded-full bg-orange-500 mt-1.5 shrink-0"></div>
-                                <span className="text-sm text-gray-300 font-light" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.replace(/\*\*(.*?)\*\*/g, '<b class="text-white">$1</b>')) }}></span>
+                                <span className="text-sm text-gray-300 font-light">{renderFormattedHelpText(item)}</span>
                               </div>
                             ))}
                           </div>
@@ -6056,26 +6080,7 @@ const GlobalReportPreviewModal = ({
   const [layout, setLayout] = useState<'1-col' | '2-col'>('1-col');
   const previewRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (isOpen && reportData && previewRef.current) {
-      const scripts = previewRef.current.querySelectorAll('script');
-      scripts.forEach(script => {
-        try {
-          const newScript = document.createElement('script');
-          if (script.src) {
-            newScript.src = script.src;
-          } else {
-            newScript.textContent = script.textContent;
-          }
-          document.body.appendChild(newScript);
-          document.body.removeChild(newScript);
-        } catch (e) {
-          console.error("Failed to run preview script:", e);
-        }
-      });
-    }
-  }, [isOpen, reportData, layout]);
-
+  // Safe report modal — scripts inside report previews are stripped by DOMPurify and not executed on main DOM
   if (!isOpen || !reportData) return null;
 
   const exportToWord = async () => {
@@ -11254,9 +11259,9 @@ const ADIA = () => {
         }
     `;
 
-    let html = `<html><head><title>${projectName} Report</title><style>${style}</style></head><body>`;
-    html += `<h1>${projectName}</h1>`;
-    html += `<div class="meta"><strong>Author:</strong> ${author} &bull; <strong>Date:</strong> ${new Date().toLocaleString()} &bull; <strong>Engine:</strong> ${VERSION}</div>`;
+    let html = `<html><head><title>${escapeHtml(projectName)} Report</title><style>${style}</style></head><body>`;
+    html += `<h1>${escapeHtml(projectName)}</h1>`;
+    html += `<div class="meta"><strong>Author:</strong> ${escapeHtml(author)} &bull; <strong>Date:</strong> ${escapeHtml(new Date().toLocaleString())} &bull; <strong>Engine:</strong> ${escapeHtml(VERSION)}</div>`;
 
     // ═══════════════════════════════════════════════════════════════════
     // AUTO-LAYOUT ENGINE FOR REPORT DIAGRAMS
@@ -12192,15 +12197,15 @@ const ADIA = () => {
       html += `<div class="tree">`;
       bddBlocks.forEach(b => {
         html += `<div class="item">
-                <div class="item-header">«${b.stereotype}» ${b.name}</div>`;
+                <div class="item-header">«${escapeHtml(b.stereotype)}» ${escapeHtml(b.name)}</div>`;
         if (b.properties.length > 0) {
           html += `<div class="props"><strong>Properties:</strong><ul>`;
-          b.properties.forEach(p => html += `<li>${p.name}: ${p.type} ${p.defaultValue ? '= ' + p.defaultValue : ''}</li>`);
+          b.properties.forEach(p => html += `<li>${escapeHtml(p.name)}: ${escapeHtml(p.type)} ${p.defaultValue ? '= ' + escapeHtml(p.defaultValue) : ''}</li>`);
           html += `</ul></div>`;
         }
         if (b.ports.length > 0) {
           html += `<div class="props"><strong>Ports:</strong><ul>`;
-          b.ports.forEach(p => html += `<li>${p.name} : ${p.type} (${p.kind})</li>`);
+          b.ports.forEach(p => html += `<li>${escapeHtml(p.name)} : ${escapeHtml(p.type)} (${escapeHtml(p.kind)})</li>`);
           html += `</ul></div>`;
         }
         html += `</div>`;
@@ -12235,14 +12240,14 @@ const ADIA = () => {
 
         if (ctxParts.length > 0) {
           html += `<div class="tree" style="margin-bottom: 30px;">`;
-          html += `<h3>Context: ${ctxName}</h3>`;
+          html += `<h3>Context: ${escapeHtml(ctxName)}</h3>`;
           html += `<div class="diagram-container"><div class="diagram-cell">` + renderDiagramSVG(ctxParts, ctxConns, 'ibd', ctxId) + `</div></div>`;
 
           // Parts list for this context
           html += `<div class="props"><strong>Parts:</strong><ul>`;
           ctxParts.forEach(p => {
             const typeName = blocks.find(b => b.id === p.typeId)?.name || 'Unknown';
-            html += `<li>${p.name} : ${typeName}</li>`;
+            html += `<li>${escapeHtml(p.name)} : ${escapeHtml(typeName)}</li>`;
           });
           html += `</ul></div>`;
 
@@ -12266,7 +12271,7 @@ const ADIA = () => {
               const sDesc = sPart + (sPortName ? `.${sPortName}` : '');
               const tDesc = tPart + (tPortName ? `.${tPortName}` : '');
 
-              html += `<li><span class="tag">Conn</span> ${sDesc} &harr; ${tDesc} ${c.itemFlow ? '(' + c.itemFlow + ')' : ''}</li>`;
+              html += `<li><span class="tag">Conn</span> ${escapeHtml(sDesc)} &harr; ${escapeHtml(tDesc)} ${c.itemFlow ? '(' + escapeHtml(c.itemFlow) + ')' : ''}</li>`;
             });
             html += `</ul></div>`;
           }
@@ -12302,7 +12307,7 @@ const ADIA = () => {
             ...layerJunctions.map(j => ({ ...j, nodeType: 'junction', width: 20, height: 20, x: j.x - 10, y: j.y - 10 }))
           );
 
-          html += `<div class="diagram-cell"><h3>Layer: ${layerName}</h3>`;
+          html += `<div class="diagram-cell"><h3>Layer: ${escapeHtml(layerName)}</h3>`;
           html += renderDiagramSVG(nodes, layerTransitions, 'statemachine');
           html += `</div>`;
         }
@@ -12310,17 +12315,17 @@ const ADIA = () => {
       html += `</div>`;
 
       states.forEach(s => {
-        html += `<div class="item"><div class="item-header">${s.name} <span class="tag">State</span></div>`;
+        html += `<div class="item"><div class="item-header">${escapeHtml(s.name)} <span class="tag">State</span></div>`;
         const outgoing = transitions.filter(t => t.sourceId === s.id);
         const internal = (s.internalTransitions || '').split('\n').filter(l => l.trim());
         if (outgoing.length > 0 || internal.length > 0) {
           html += `<div class="props"><strong>Transitions:</strong><ul>`;
           outgoing.forEach(t => {
             const target = states.find(st => st.id === t.targetId)?.name || junctions.find(j => j.id === t.targetId)?.name || 'Unknown';
-            html += `<li>To <strong>${target}</strong>: [${t.condition || 'true'}]${t.action ? ' / ' + t.action : ''}</li>`;
+            html += `<li>To <strong>${escapeHtml(target)}</strong>: [${escapeHtml(t.condition || 'true')}]${t.action ? ' / ' + escapeHtml(t.action) : ''}</li>`;
           });
           internal.forEach(i => {
-            const safeI = i.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const safeI = escapeHtml(i);
             html += `<li><strong>Internal:</strong> ${safeI}</li>`;
           });
           html += `</ul></div>`;
@@ -12344,10 +12349,10 @@ const ADIA = () => {
                   </tr>`;
         analysis.criticalPaths.forEach(cp => {
           html += `<tr>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-weight: bold; color: #f97316;">${cp.id}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>${cp.name}</strong><br/><small style="color: #666;">${cp.description}</small></td>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-size: 0.95em;">${cp.states.map(s => `<span class="tag">${s}</span>`).join(' &rarr; ')}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; text-align: center;">${cp.complexity}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-weight: bold; color: #f97316;">${escapeHtml(cp.id)}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>${escapeHtml(cp.name)}</strong><br/><small style="color: #666;">${escapeHtml(cp.description)}</small></td>
+                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-size: 0.95em;">${cp.states.map(s => `<span class="tag">${escapeHtml(s)}</span>`).join(' &rarr; ')}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; text-align: center;">${escapeHtml(cp.complexity)}</td>
                   </tr>`;
         });
         html += `</table>`;
@@ -12372,12 +12377,12 @@ const ADIA = () => {
         analysis.cornerCases.forEach(cc => {
           const badgeClass = cc.severity === 'critical' ? 'badge-critical' : cc.severity === 'warning' ? 'badge-warning' : 'badge-info';
           html += `<tr>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-weight: bold;">${cc.id}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-weight: bold;">${cc.category}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;"><span class="badge ${badgeClass}">${cc.severity.toUpperCase()}</span></td>
-                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>${cc.elementName}</strong></td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">${cc.description}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;"><span style="color: #3b82f6; font-weight: 500;">${cc.recommendation}</span></td>
+                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-weight: bold;">${escapeHtml(cc.id)}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; font-weight: bold;">${escapeHtml(cc.category)}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><span class="badge ${badgeClass}">${escapeHtml(cc.severity.toUpperCase())}</span></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>${escapeHtml(cc.elementName)}</strong></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(cc.description)}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><span style="color: #3b82f6; font-weight: 500;">${escapeHtml(cc.recommendation)}</span></td>
                   </tr>`;
         });
         html += `</table>`;
@@ -12393,14 +12398,14 @@ const ADIA = () => {
       analysis.testScenarios.forEach(ts => {
         html += `<div class="item" style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; margin-bottom: 20px; background-color: #fafafa;">
                   <div class="item-header" style="font-size: 1.1em; color: #1e293b; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 10px;">
-                    <span class="tag" style="background-color: #f97316; color: #fff;">${ts.category.toUpperCase()}</span> ${ts.name} <span style="font-family: monospace; font-size: 0.9em; color: #64748b; float: right;">${ts.id}</span>
+                    <span class="tag" style="background-color: #f97316; color: #fff;">${escapeHtml(ts.category.toUpperCase())}</span> ${escapeHtml(ts.name)} <span style="font-family: monospace; font-size: 0.9em; color: #64748b; float: right;">${escapeHtml(ts.id)}</span>
                   </div>`;
         
         if (ts.preconditions.length > 0) {
           html += `<div class="props" style="margin-bottom: 10px;">
                     <strong>Preconditions:</strong>
                     <ul style="margin: 4px 0; padding-left: 20px; font-size: 0.95em;">
-                      ${ts.preconditions.map(p => `<li>${p}</li>`).join('')}
+                      ${ts.preconditions.map(p => `<li>${escapeHtml(p)}</li>`).join('')}
                     </ul>
                   </div>`;
         }
@@ -12415,14 +12420,14 @@ const ADIA = () => {
         ts.steps.forEach((step, index) => {
           html += `<tr>
                     <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold;">${index + 1}</td>
-                    <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${step.action}</td>
-                    <td style="padding: 6px; border: 1px solid #cbd5e1;">${step.expected}</td>
+                    <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${escapeHtml(step.action)}</td>
+                    <td style="padding: 6px; border: 1px solid #cbd5e1;">${escapeHtml(step.expected)}</td>
                   </tr>`;
         });
         html += `</table>`;
 
         html += `<div class="props" style="background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 8px; border-radius: 4px; font-size: 0.9em;">
-                  <strong>Expected Outcome:</strong> ${ts.expectedResult}
+                  <strong>Expected Outcome:</strong> ${escapeHtml(ts.expectedResult)}
                 </div>`;
         html += `</div>`;
       });
@@ -12435,7 +12440,7 @@ const ADIA = () => {
       html += renderHmiSVG(hmiComponents);
       hmiComponents.forEach(c => {
         const boundVariableName = variables.find(v => v.id === c.variableId)?.name || 'Unbound';
-        html += `<div class="item"><div class="item-header">${c.name} <span class="tag">${c.type}</span></div><div class="props">Bound to: <strong>${boundVariableName}</strong></div></div>`;
+        html += `<div class="item"><div class="item-header">${escapeHtml(c.name)} <span class="tag">${escapeHtml(c.type)}</span></div><div class="props">Bound to: <strong>${escapeHtml(boundVariableName)}</strong></div></div>`;
       });
       html += `</div>`;
     }
