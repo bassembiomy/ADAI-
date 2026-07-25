@@ -99,6 +99,12 @@ export const generateMISRACCode = (chart: {
       });
     });
     return { files: [], errors, warnings };
+  } else if (criticalDeadlocks.length > 0) {
+    /* Non-safety mode: surface critical deadlocks as warnings instead of only
+     * in the testing report, so they are visible during code generation. */
+    criticalDeadlocks.forEach(d => {
+      warnings.push(`[DEADLOCK] ${d.description} ${d.recommendation}`);
+    });
   }
 
   // REQ-DET-101: Stable Enumeration Order & REQ-DET-102: Stable Code Layout
@@ -263,6 +269,26 @@ export const generateMISRACCode = (chart: {
   // Helper to make text safe for embedding inside C block comments (prevent nested comments & stray slashes)
   const sanitizeComment = (t: string): string =>
     t ? t.replace(/\/\*/g, '/ *').replace(/\*\//g, '* /').replace(/\//g, '-').replace(/[\r\n]+/g, ' ').trim() : '';
+
+  /** True when the state's entry action has any actual code content */
+  const hasEntry = (s: StateData): boolean => !!(s.entry && s.entry.trim());
+
+  /** True when the state's during action has any actual code content,
+   *  or the state has an XBridges co-model (always generates a during call). */
+  const hasDuring = (s: StateData): boolean =>
+    !!(s.during && s.during.trim()) || !!(s.isXBridges && s.xBridgesModel);
+
+  /** True when the state's exit action has any actual code content */
+  const hasExit = (s: StateData): boolean => !!(s.exit && s.exit.trim());
+
+  /* Safe-state action predicates: only generate SM_NODE_SAFE_* functions when
+   * safety mode is enabled AND the corresponding action has real content. */
+  const safeState = sortedStates.find(s => s.isSafeState);
+  const safetyEnabled = chart.safetyMode;
+  const hasSafeStateEntry = safetyEnabled && !!(safeState?.entry?.trim());
+  const hasSafeStateDuring = safetyEnabled && !!(safeState?.during?.trim());
+  const hasSafeStateExit = safetyEnabled && !!(safeState?.exit?.trim());
+
 
   /* Reserved C keywords (C99) + generator-internal identifiers that must not be
    * used as user variable names (MISRA 21.2 / 5.1 collision avoidance). */
@@ -463,10 +489,9 @@ export const generateMISRACCode = (chart: {
 
       if (/(==|!=|<|>|<=|>=)/.test(subExpr)) {
         if (subExpr.startsWith('(') && subExpr.endsWith(')')) {
-          const inner = subExpr.slice(1, -1).trim();
-          return `(${inner})`;
+          return subExpr.slice(1, -1).trim();
         } else {
-          return `(${subExpr})`;
+          return subExpr;
         }
       }
       if (subExpr.startsWith('(') && subExpr.endsWith(')')) {
@@ -485,25 +510,19 @@ export const generateMISRACCode = (chart: {
       const v = sortedVariables.find(vr => vr.name === cleanExpr);
       if (v && v.type !== 'bool') {
         if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type)) {
-          return isNegated ? `(instance->data.${v.name} == 0U)` : `(instance->data.${v.name} != 0U)`;
+          return isNegated ? `instance->data.${v.name} == 0U` : `instance->data.${v.name} != 0U`;
         } else if (['float', 'single'].includes(v.type)) {
-          return isNegated ? `(instance->data.${v.name} == 0.0f)` : `(instance->data.${v.name} != 0.0f)`;
+          return isNegated ? `instance->data.${v.name} == 0.0f` : `instance->data.${v.name} != 0.0f`;
         } else if (v.type === 'double') {
-          return isNegated ? `(instance->data.${v.name} == 0.0)` : `(instance->data.${v.name} != 0.0)`;
+          return isNegated ? `instance->data.${v.name} == 0.0` : `instance->data.${v.name} != 0.0`;
         } else {
-          return isNegated ? `(instance->data.${v.name} == 0)` : `(instance->data.${v.name} != 0)`;
+          return isNegated ? `instance->data.${v.name} == 0` : `instance->data.${v.name} != 0`;
         }
-      }
-      if (/^[!a-zA-Z0-9_\-\>\.]+$/.test(subExpr)) {
-        return `(${subExpr})`;
       }
       return subExpr;
     });
 
     let joined = processedParts.join('').trim();
-    if (parts.length > 1) {
-      joined = `(${joined})`;
-    }
     return joined;
   };
 
@@ -705,8 +724,22 @@ export const generateMISRACCode = (chart: {
     if (/\+\+|--/.test(state.entry + state.during + state.exit)) {
       warnings.push(`[STATE:${state.name}] Avoid ++/-- for MISRA compliance`);
     }
-    if (/(?<![=!<>])=(?!=)/.test(state.entry + state.during + state.exit)) {
-      warnings.push(`[STATE:${state.name}] Use '==' for comparison, not '='`);
+
+    /* Warn when an entry action assigns a variable that is also used in an
+     * outgoing transition guard: the transition can fire on the next tick,
+     * causing an unintended cascade. */
+    const stateOutgoing = chart.transitions.filter(t => t.sourceId === state.id);
+    if (state.entry && stateOutgoing.length > 0) {
+      sortedVariables.forEach(v => {
+        const assignRegex = new RegExp(`\\b${v.name}\\b\\s*(?<![=!<>])=(?!=)`);
+        if (assignRegex.test(state.entry!)) {
+          stateOutgoing.forEach(tr => {
+            if (new RegExp(`\\b${v.name}\\b`).test(tr.condition || '')) {
+              warnings.push(`[STATE:${state.name}] Entry action assigns '${v.name}' which is used in outgoing transition condition '${tr.condition}'. This can cause an immediate self-triggered transition.`);
+            }
+          });
+        }
+      });
     }
   });
 
@@ -844,8 +877,11 @@ export const generateMISRACCode = (chart: {
     /* Ensure no stray magic numbers survive */
     result = result.replace(/\b4294967295U?\b/g, 'UINT32_MAX');
     result = result.replace(/3\.40282347e\+38f/g, 'FLT_MAX');
+    /* Ensure closing brace before #endif in header guards if preceding function statement */
+    result = result.replace(/(\n\s*return\s+[^;]+;\n)\s*(#endif \/\* SM_CORE_H \*\/)/g, '$1}\n\n$2');
     return result;
   };
+
 
   /* X-Bridges stateful block members: prefixed with the owning state's sanitized
    * name so identical block ids in different states cannot collide (MISRA 5.1). */
@@ -1078,25 +1114,35 @@ SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t* instance) {
 
   const smUserLogicH = `${disclaimer}#ifndef SM_USER_LOGIC_H\n#define SM_USER_LOGIC_H\n\n#include "sm_config.h"\n\n/* State Action Prototypes */\n${sortedStates.map(s => {
     const sEnum = stateEnum(s);
-    let protos = `void ${sEnum}_Entry(ADIA_Instance_t* instance);\nvoid ${sEnum}_During(ADIA_Instance_t* instance, ${timeType} delta_ms);\nvoid ${sEnum}_Exit(ADIA_Instance_t* instance);`;
+    const protos: string[] = [];
+    if (hasEntry(s)) protos.push(`void ${sEnum}_Entry(ADIA_Instance_t* instance);`);
+    if (hasDuring(s)) protos.push(`void ${sEnum}_During(ADIA_Instance_t* instance, ${timeType} delta_ms);`);
+    if (hasExit(s)) protos.push(`void ${sEnum}_Exit(ADIA_Instance_t* instance);`);
     if (s.isXBridges) {
-      protos += `\nvoid ${sEnum}_XBridges_Step(ADIA_Instance_t* instance, float delta_s);`;
+      protos.push(`void ${sEnum}_XBridges_Step(ADIA_Instance_t* instance, float delta_s);`);
     }
-    return protos;
-  }).join('\n')}\n/* Safety fallback state actions */\nvoid SM_NODE_SAFE_Entry(ADIA_Instance_t* instance);\nvoid SM_NODE_SAFE_During(ADIA_Instance_t* instance, ${timeType} delta_ms);\nvoid SM_NODE_SAFE_Exit(ADIA_Instance_t* instance);\n\n#endif /* SM_USER_LOGIC_H */`;
+    return protos.join('\n');
+  }).filter(Boolean).join('\n')}${(hasSafeStateEntry || hasSafeStateDuring || hasSafeStateExit) ? `\n\n/* Safety fallback state actions */\n${hasSafeStateEntry ? 'void SM_NODE_SAFE_Entry(ADIA_Instance_t* instance);' : ''}\n${hasSafeStateDuring ? `void SM_NODE_SAFE_During(ADIA_Instance_t* instance, ${timeType} delta_ms);` : ''}\n${hasSafeStateExit ? 'void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance);' : ''}\n` : '\n\n/* Safety fallback state has no user actions */'}\n\n#endif /* SM_USER_LOGIC_H */`;
 
   const smUserLogicC = `${disclaimer}#include "sm_user_logic.h"\n#include "sm_core.h"\n\n/* USER CODE BEGIN Includes */\n/* USER CODE END Includes */\n\n${sortedStates.map(s => {
     const sEnum = stateEnum(s);
     let funcs = '';
-    funcs += `void ${sEnum}_Entry(ADIA_Instance_t* instance) {\n    (void)instance;\n    /* Entry: ${sanitizeComment(s.name)} */\n    ${processUserCode(s.entry ? s.entry.replace(/\n/g, '\n    ') : '')}\n}\n\n`;
-
-    let duringCode = s.during ? s.during.replace(/\n/g, '\n    ') : '';
-    if (s.isXBridges) {
-      duringCode += `${duringCode ? '\n    ' : ''}/* Co-Model Step */\n    ${sEnum}_XBridges_Step(instance, ${(chart.tickMs / 1000).toFixed(4)}f);`;
+    if (hasEntry(s)) {
+      funcs += `void ${sEnum}_Entry(ADIA_Instance_t* instance) {\n    (void)instance;\n    /* Entry: ${sanitizeComment(s.name)} */\n    ${processUserCode(s.entry ? s.entry.replace(/\n/g, '\n    ') : '')}\n}\n\n`;
     }
-    funcs += `void ${sEnum}_During(ADIA_Instance_t* instance, ${timeType} delta_ms) {\n    (void)instance;\n    (void)delta_ms;\n    /* During: ${sanitizeComment(s.name)} */\n    ${processUserCode(duringCode)}\n}\n\n`;
 
-    funcs += `void ${sEnum}_Exit(ADIA_Instance_t* instance) {\n    (void)instance;\n    /* Exit: ${sanitizeComment(s.name)} */\n    ${processUserCode(s.exit ? s.exit.replace(/\n/g, '\n    ') : '')}\n}\n`;
+    if (hasDuring(s)) {
+      let duringCode = s.during ? s.during.replace(/\n/g, '\n    ') : '';
+      if (s.isXBridges) {
+        duringCode += `${duringCode ? '\n    ' : ''}/* Co-Model Step */\n    ${sEnum}_XBridges_Step(instance, ${(chart.tickMs / 1000).toFixed(4)}f);`;
+      }
+      funcs += `void ${sEnum}_During(ADIA_Instance_t* instance, ${timeType} delta_ms) {\n    (void)instance;\n    (void)delta_ms;\n    /* During: ${sanitizeComment(s.name)} */\n    ${processUserCode(duringCode)}\n}\n\n`;
+    }
+
+    if (hasExit(s)) {
+      funcs += `void ${sEnum}_Exit(ADIA_Instance_t* instance) {\n    (void)instance;\n    /* Exit: ${sanitizeComment(s.name)} */\n    ${processUserCode(s.exit ? s.exit.replace(/\n/g, '\n    ') : '')}\n}\n`;
+    }
+
 
     if (s.isXBridges && s.xBridgesModel) {
       funcs += `\n/* Generated X-Bridges logic for ${sanitizeComment(s.name)} */\n`;
@@ -1213,21 +1259,27 @@ SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t* instance) {
     return funcs;
   }).join('\n')}
 
-void SM_NODE_SAFE_Entry(ADIA_Instance_t* instance) {
+${(hasSafeStateEntry || hasSafeStateDuring || hasSafeStateExit) ? `
+/* Safety fallback state action implementations */
+${hasSafeStateEntry ? `void SM_NODE_SAFE_Entry(ADIA_Instance_t* instance) {
     (void)instance;
     /* Entry: safety fallback state */
+    ${processUserCode(safeState?.entry ? safeState.entry.replace(/\n/g, '\n    ') : '')}
 }
-
-void SM_NODE_SAFE_During(ADIA_Instance_t* instance, ${timeType} delta_ms) {
+` : ''}
+${hasSafeStateDuring ? `void SM_NODE_SAFE_During(ADIA_Instance_t* instance, ${timeType} delta_ms) {
     (void)instance;
     (void)delta_ms;
     /* During: safety fallback state */
+    ${processUserCode(safeState?.during ? safeState.during.replace(/\n/g, '\n    ') : '')}
 }
-
-void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
+` : ''}
+${hasSafeStateExit ? `void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
     (void)instance;
     /* Exit: safety fallback state */
-}`;
+    ${processUserCode(safeState?.exit ? safeState.exit.replace(/\n/g, '\n    ') : '')}
+}` : ''}
+` : '/* Safety fallback state has no user actions */'}`;
 /* Fix 1/3/Unsigned Wrap-around (MISRA 7.2 magic numbers, MISRA 12.4 no wrap-around): Use FLT_MAX / UINT32_MAX. */
   const overflowSatVal = isFloatTick ? 'FLT_MAX' : 'UINT32_MAX';
   let timerIncrementCode = '';
@@ -1281,7 +1333,9 @@ static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {
       }
     });
 
-    smExitStateFunc += `            ${sEnum}_Exit(instance);\n`;
+    if (hasExit(s)) {
+      smExitStateFunc += `            ${sEnum}_Exit(instance);\n`;
+    }
     smExitStateFunc += `            instance->state_active[${stateIdx}U] = false;\n`;
     smExitStateFunc += `            instance->state_timers[${stateIdx}U] = ${zeroLiteral};\n`;
 
@@ -1297,7 +1351,11 @@ static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {
     }
     smExitStateFunc += `            break;\n`;
   });
-  smExitStateFunc += `        case SM_NODE_SAFE:\n            SM_NODE_SAFE_Exit(instance);\n            break;\n        default:\n            break;\n    }\n}\n\n`;
+  if (safetyEnabled) {
+    smExitStateFunc += `        case SM_NODE_SAFE:\n            ${hasSafeStateExit ? 'SM_NODE_SAFE_Exit(instance);\n            ' : '/* No exit action for safe state */\n            '}break;\n        default:\n            break;\n    }\n}\n\n`;
+  } else {
+    smExitStateFunc += `        default:\n            break;\n    }\n}\n\n`;
+  }
 
   let layerEntryFuncs = '';
   /* SM_Enter_State_Shallow: sets bookkeeping and runs the entry action of a
@@ -1316,10 +1374,16 @@ static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {
     }
     smEnterShallowFunc += `            instance->state_active[${stateIdx}U] = true;\n`;
     smEnterShallowFunc += `            instance->state_timers[${stateIdx}U] = ${zeroLiteral};\n`;
-    smEnterShallowFunc += `            ${sEnum}_Entry(instance);\n`;
+    if (hasEntry(s)) {
+      smEnterShallowFunc += `            ${sEnum}_Entry(instance);\n`;
+    }
     smEnterShallowFunc += `            break;\n`;
   });
-  smEnterShallowFunc += `        case SM_NODE_SAFE:\n            instance->active_states[0U] = SM_NODE_SAFE;\n            SM_NODE_SAFE_Entry(instance);\n            break;\n        default:\n            break;\n    }\n}\n\n`;
+  if (safetyEnabled) {
+    smEnterShallowFunc += `        case SM_NODE_SAFE:\n            instance->active_states[0U] = SM_NODE_SAFE;\n            ${hasSafeStateEntry ? 'SM_NODE_SAFE_Entry(instance);\n            ' : '/* No entry action for safe state */\n            '}break;\n        default:\n            break;\n    }\n}\n\n`;
+  } else {
+    smEnterShallowFunc += `        default:\n            break;\n    }\n}\n\n`;
+  }
 
   const anyHistoryLayers = chart.layers.some(l => l.parentStateId && l.parentStateId !== 'root' && layerSavesHistory(l));
   let smEnterStateFunc = `/**\n * @brief Enters the specified state, sets its active flag, and recursively enters child layers.\n * @req REQ-HSM-030 Hierarchical State Entry\n * @param instance Pointer to state machine context\n * @param state State node to enter\n * @param use_history True to restore sub-state history\n */\nstatic void SM_Enter_State(ADIA_Instance_t* instance, SM_Node_t state, bool use_history) {\n`;
@@ -1380,15 +1444,22 @@ static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {
     const defaultJunc = chart.junctions.find(j => l.junctionIds.includes(j.id) && j.autostart);
 
     const activeSlot = layerActiveSlotMap.get(l.id) ?? 0;
-    layerEntryFuncs += `/**\n * @brief Enters layer ${lIdx} and initializes default states or junctions.\n * @param instance Pointer to state machine context\n * @param use_history True to restore history states\n */\nstatic void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) {\n`;
-    layerEntryFuncs += `    if (use_history && (instance->history_states[${activeSlot}U] != SM_NODE_INVALID)) {\n`;
     /* Shallow history: restored child enters with default sub-states (false).
      * Deep history: restoration propagates to all descendant layers (true). */
     const restoreArg = layerRestoresDeep(l) ? 'true' : 'false';
-    layerEntryFuncs += `        SM_Enter_State(instance, instance->history_states[${activeSlot}U], ${restoreArg});\n`;
-    layerEntryFuncs += `    } else {\n`;
+
+    layerEntryFuncs += `/**
+ * @brief Enters layer ${lIdx} and initializes default states or junctions.
+ * @param instance Pointer to state machine context
+ * @param use_history True to restore history states
+ */
+static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) {
+`;
 
     if (allParallel) {
+      /* Parallel (AND) decomposition: every region has its own active/history
+       * slot, so history restoration must be performed per-region rather than
+       * using a single layer slot. */
       const regionsMap = new Map<string, StateData[]>();
       layerStates.forEach(s => {
         const rId = s.regionId || 'MAIN';
@@ -1397,62 +1468,98 @@ static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {
       });
 
       regionsMap.forEach(groupStates => {
+        const regionSlot = stateActiveSlotMap.get(groupStates[0].id) ?? activeSlot;
+        layerEntryFuncs += `    if (use_history && (instance->history_states[${regionSlot}U] != SM_NODE_INVALID)) {
+`;
+        layerEntryFuncs += `        SM_Enter_State(instance, instance->history_states[${regionSlot}U], ${restoreArg});
+`;
+        layerEntryFuncs += `    }
+`;
+        layerEntryFuncs += `    if (!use_history || (instance->history_states[${regionSlot}U] == SM_NODE_INVALID)) {
+`;
         const autostarts = groupStates.filter(st => st.autostart).sort((a, b) => a.priority - b.priority);
         const statesToEnter = autostarts.length > 0 ? autostarts : [...groupStates].sort((a, b) => a.priority - b.priority);
         /* Enter ALL parallel states in this region (not just the first) */
         statesToEnter.forEach(st => {
-          layerEntryFuncs += `        SM_Enter_State(instance, ${stateEnum(st)}, false);\n`;
+          layerEntryFuncs += `        SM_Enter_State(instance, ${stateEnum(st)}, false);
+`;
         });
+        layerEntryFuncs += `    }
+`;
       });
-    } else if (defaultState) {
-      layerEntryFuncs += `        SM_Enter_State(instance, ${stateEnum(defaultState)}, false);\n`;
-    } else if (defaultJunc) {
-      const outgoing = chart.transitions.filter(t => t.sourceId === defaultJunc.id).sort((a, b) => a.order - b.order);
-      const visited = new Set<string>([defaultJunc.id]);
-      
-      const generateJunctionInit = (transitions: TransitionData[]): string => {
-        let code = '';
-        let hasConditions = false;
-        for (let i = 0; i < transitions.length; i++) {
-          const tr = transitions[i];
-          const targetState = sortedStates.find(s => s.id === tr.targetId);
-          const targetJunction = chart.junctions.find(j => j.id === tr.targetId);
-          const rawCond = tr.condition || 'true';
-          const conditionCheck = processConditionString(rawCond);
-          const actionStr = tr.action ? `            /* Action */\n            ${processUserCode(tr.action).replace(/\n/g, '\n            ')}\n` : '';
+      layerEntryFuncs += `}
 
-          code += `        ${i > 0 ? 'else ' : ''}if (${conditionCheck}) {\n`;
-          hasConditions = true;
-          if (targetState) {
-            code += `${actionStr}`;
-            /* Enter only the path from this layer downward; the layer's parent
-             * state is already being entered by the caller. */
-            const relSrc = l.parentStateId && l.parentStateId !== 'root' ? l.parentStateId : null;
-            code += emitEntryPath(getEntrySequence(relSrc, targetState.id), '            ', false);
-            code += `        }\n`;
-          } else if (targetJunction) {
-            if (visited.has(targetJunction.id)) {
-              code += `            /* Loop detected */\n        }\n`;
-              continue;
-            }
-            visited.add(targetJunction.id);
-            const outgoingJunc = chart.transitions.filter(t => t.sourceId === targetJunction.id).sort((a, b) => a.order - b.order);
-            code += generateJunctionInit(outgoingJunc);
-            code += `        }\n`;
-          } else {
-            code += `            /* Error */\n        }\n`;
-          }
-        }
-        if (hasConditions) code += `        else { /* MISRA 15.7 */ }\n`;
-        return code;
-      };
-
-      layerEntryFuncs += generateJunctionInit(outgoing);
+`;
     } else {
-      layerEntryFuncs += `        /* No autostart defined for this layer */\n`;
+      layerEntryFuncs += `    if (use_history && (instance->history_states[${activeSlot}U] != SM_NODE_INVALID)) {
+`;
+      layerEntryFuncs += `        SM_Enter_State(instance, instance->history_states[${activeSlot}U], ${restoreArg});
+`;
+      layerEntryFuncs += `    } else {
+`;
+
+      if (defaultState) {
+        layerEntryFuncs += `        SM_Enter_State(instance, ${stateEnum(defaultState)}, false);
+`;
+      } else if (defaultJunc) {
+        const outgoing = chart.transitions.filter(t => t.sourceId === defaultJunc.id).sort((a, b) => a.order - b.order);
+        const visited = new Set<string>([defaultJunc.id]);
+
+        const generateJunctionInit = (transitions: TransitionData[]): string => {
+          let code = '';
+          let hasConditions = false;
+          for (let i = 0; i < transitions.length; i++) {
+            const tr = transitions[i];
+            const targetState = sortedStates.find(s => s.id === tr.targetId);
+            const targetJunction = chart.junctions.find(j => j.id === tr.targetId);
+            const rawCond = tr.condition || 'true';
+            const conditionCheck = processConditionString(rawCond);
+            const actionStr = tr.action ? `            /* Action */\n            ${processUserCode(tr.action).replace(/\n/g, '\n            ')}\n` : '';
+            code += `        ${i > 0 ? 'else ' : ''}if (${conditionCheck}) {
+`;
+            hasConditions = true;
+            if (targetState) {
+              code += `${actionStr}`;
+              /* Enter only the path from this layer downward; the layer's parent
+               * state is already being entered by the caller. */
+              const relSrc = l.parentStateId && l.parentStateId !== 'root' ? l.parentStateId : null;
+              code += emitEntryPath(getEntrySequence(relSrc, targetState.id), '            ', false);
+              code += `        }
+`;
+            } else if (targetJunction) {
+              if (visited.has(targetJunction.id)) {
+                code += `            /* Loop detected */
+        }
+`;
+                continue;
+              }
+              visited.add(targetJunction.id);
+              const outgoingJunc = chart.transitions.filter(t => t.sourceId === targetJunction.id).sort((a, b) => a.order - b.order);
+              code += generateJunctionInit(outgoingJunc);
+              code += `        }
+`;
+            } else {
+              code += `            /* Error */
+        }
+`;
+            }
+          }
+          if (hasConditions) code += `        else { /* MISRA 15.7 */ }
+`;
+          return code;
+        };
+
+        layerEntryFuncs += generateJunctionInit(outgoing);
+      } else {
+        layerEntryFuncs += `        /* No autostart defined for this layer */
+`;
+      }
+
+      layerEntryFuncs += `    }
+}
+
+`;
     }
-    
-    layerEntryFuncs += `    }\n}\n\n`;
   });
 
   let layerStepFuncs = '';
@@ -1461,7 +1568,7 @@ static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {
     const layerStates = l.stateIds.map(sid => sortedStates.find(st => st.id === sid)).filter(Boolean) as StateData[];
     const allParallel = layerStates.length > 0 && layerStates.every(st => st.isParallel);
 
-    layerStepFuncs += `/**\n * @brief Evaluates transitions and executes during actions for layer ${lIdx}.\n * @param instance Pointer to state machine context\n * @param delta_ms Execution tick period in milliseconds\n */\nstatic void SM_Step_Layer_${lIdx}(ADIA_Instance_t* instance, ${timeType} delta_ms) {\n`;
+    layerStepFuncs += `/**\n * @brief Evaluates transitions and executes during actions for layer ${lIdx}.\n * @param instance Pointer to state machine context\n * @param delta_ms Execution tick period in milliseconds\n */\nstatic void SM_Step_Layer_${lIdx}(ADIA_Instance_t* instance, ${timeType} delta_ms) {\n    (void)delta_ms;\n`;
 
     const generateTransitions = (
       stateId: string,
@@ -1588,30 +1695,36 @@ static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {
           ...internal
         ].sort((a, b) => a.order - b.order);
 
+        const childLayers = chart.layers.filter(cl => cl.parentStateId === state.id);
+        const hasChildLayers = childLayers.length > 0;
+
         if (outgoing.length > 0) {
           layerStepFuncs += `        bool transitioned_${stateIdx} = false;\n`;
           layerStepFuncs += `        /* Evaluate Outgoing Transitions for parallel state ${sanitizeComment(state.name)} */\n`;
           layerStepFuncs += generateTransitions(state.id, outgoing, 0, '', new Set<string>(), true, `transitioned_${stateIdx}`).replace(/^/gm, '    ');
-          
-          layerStepFuncs += `        if (!transitioned_${stateIdx}) {\n`;
-          layerStepFuncs += `            /* Run During Actions */\n`;
-          layerStepFuncs += `            ${sEnum}_During(instance, delta_ms);\n`;
 
-          const childLayers = chart.layers.filter(cl => cl.parentStateId === state.id);
-          if (childLayers.length > 0) {
-            layerStepFuncs += `            /* Step Child Layers */\n`;
-            childLayers.forEach(cl => {
-              const clIdx = layerIndexMap.get(cl.id);
-              layerStepFuncs += `            SM_Step_Layer_${clIdx}(instance, delta_ms);\n`;
-            });
+          if (hasDuring(state) || hasChildLayers) {
+            layerStepFuncs += `        if (!transitioned_${stateIdx}) {\n`;
+            if (hasDuring(state)) {
+              layerStepFuncs += `            /* Run During Actions */\n`;
+              layerStepFuncs += `            ${sEnum}_During(instance, delta_ms);\n`;
+            }
+            if (hasChildLayers) {
+              layerStepFuncs += `            /* Step Child Layers */\n`;
+              childLayers.forEach(cl => {
+                const clIdx = layerIndexMap.get(cl.id);
+                layerStepFuncs += `            SM_Step_Layer_${clIdx}(instance, delta_ms);\n`;
+              });
+            }
+            layerStepFuncs += `        }\n`;
           }
-          layerStepFuncs += `        }\n`;
         } else {
-          layerStepFuncs += `        /* Run During Actions */\n`;
-          layerStepFuncs += `        ${sEnum}_During(instance, delta_ms);\n`;
+          if (hasDuring(state)) {
+            layerStepFuncs += `        /* Run During Actions */\n`;
+            layerStepFuncs += `        ${sEnum}_During(instance, delta_ms);\n`;
+          }
 
-          const childLayers = chart.layers.filter(cl => cl.parentStateId === state.id);
-          if (childLayers.length > 0) {
+          if (hasChildLayers) {
             layerStepFuncs += `        /* Step Child Layers */\n`;
             childLayers.forEach(cl => {
               const clIdx = layerIndexMap.get(cl.id);
@@ -1646,8 +1759,10 @@ static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {
           layerStepFuncs += generateTransitions(stateId, outgoing, 0, '', new Set<string>());
         }
 
-        layerStepFuncs += `            /* Run During Actions */\n`;
-        layerStepFuncs += `            ${sEnum}_During(instance, delta_ms);\n`;
+        if (hasDuring(state)) {
+          layerStepFuncs += `            /* Run During Actions */\n`;
+          layerStepFuncs += `            ${sEnum}_During(instance, delta_ms);\n`;
+        }
 
         const childLayers = chart.layers.filter(cl => cl.parentStateId === stateId);
         if (childLayers.length > 0) {
@@ -1706,15 +1821,15 @@ static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {
     });
   }
   if (!syncInputsCode.trim()) {
-    syncInputsCode = '    (void)instance;\n';
+    syncInputsCode = '    /* No input variables detected: map physical channels to instance->data here, or tag/name variables as inputs to auto-generate this code. */\n    (void)instance;\n    (void)&MCAL_Dio_ReadChannel;\n';
   }
   if (!syncOutputsCode.trim()) {
-    syncOutputsCode = '    (void)instance;\n';
+    syncOutputsCode = '    /* No output variables detected: map instance->data to physical channels here, or tag/name variables as outputs to auto-generate this code. */\n    (void)instance;\n    (void)&MCAL_Dio_WriteChannel;\n';
   }
 
   /* Fix 8: Add <float.h> when FLT_MAX is needed (float tick type) */
   const floatHInclude = isFloatTick ? '\n#include <float.h>' : '';
-  let smCoreC = `${disclaimer}/* System headers */\n#include <stdint.h>\n#include <stdbool.h>${floatHInclude}\n#include <stddef.h>\n\n#ifndef UINT32_MAX\n#define UINT32_MAX (0xFFFFFFFFU)\n#endif\n\n/* Project headers */\n#include "sm_core.h"\n#ifdef SM_SAFETY_ENABLED\n#include "sm_safety.h"\n#endif\n#include "sm_user_logic.h"\n${hilEnabled ? '#include "hil_interface.h"' : '#include "mcal_dio.h"'}\n\n/* Forward declarations of public API functions for C99 compliance */\nvoid SM_Init(ADIA_Instance_t* instance);\nvoid SM_Reset(ADIA_Instance_t* instance);\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms);\nSM_Error_t SM_Sync_IO(ADIA_Instance_t* instance);\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g);\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance);\n\n/* Forward declarations of internal static helpers */\nstatic void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State_Shallow(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State(ADIA_Instance_t* instance, SM_Node_t state, bool use_history);\n`;
+  let smCoreC = `${disclaimer}/* System headers */\n#include <stdint.h>\n#include <stdbool.h>${floatHInclude}\n#include <stddef.h>\n\n#ifndef UINT32_MAX\n#define UINT32_MAX (0xFFFFFFFFU)\n#endif\n\n/* Project headers */\n#include "sm_core.h"\n#include "sm_safety.h"\n#include "sm_user_logic.h"\n${hilEnabled ? '#include "hil_interface.h"' : '#include "mcal_dio.h"'}\n\n/* Forward declarations of public API functions for C99 compliance */\nvoid SM_Init(ADIA_Instance_t* instance);\nvoid SM_Reset(ADIA_Instance_t* instance);\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms);\nSM_Error_t SM_Sync_IO(ADIA_Instance_t* instance);\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g);\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance);\n\n/* Forward declarations of internal static helpers */\nstatic void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State_Shallow(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State(ADIA_Instance_t* instance, SM_Node_t state, bool use_history);\n`;
   
   sortedLayers.forEach((l) => {
     const lIdx = layerIndexMap.get(l.id);
@@ -1728,7 +1843,6 @@ static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {
    * Fix 1 (MISRA 7.2): UINT32_MAX / FLT_MAX instead of magic literals. */
 
   /* Identify the safe state enum for safety error handling */
-  const safeState = sortedStates.find(s => s.isSafeState);
   const safeStateEnumStr = safeState ? stateEnum(safeState) : 'SM_NODE_SAFE';
 
   /* SM_GetActive body: one case per region group. XOR regions resolve through
@@ -1825,7 +1939,7 @@ static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {
     });
   }
 
-  const mcalDioH = `${disclaimer}#ifndef MCAL_DIO_H\n#define MCAL_DIO_H\n\n#include <stdint.h>\n#include <stdbool.h>\n\n/* USER CODE BEGIN McalDio_Top */\n/* USER CODE END McalDio_Top */\n\n/* Microcontroller Abstraction Layer (MCAL) DIO Port/Pin Definition Stub */\n${mcalDioPins}\n\n/**\n * @brief Reads the state of a physical Digital Input channel.\n * @param channel Channel pin index\n * @return bool Pin level state (true/false)\n */\nstatic inline bool MCAL_Dio_ReadChannel(uint32_t channel) {\n    (void)channel;\n    /* USER CODE BEGIN ReadChannel */\n    return false; /* Default stub/simulation value */\n    /* USER CODE END ReadChannel */\n}\n\n/**\n * @brief Writes the state of a physical Digital Output channel.\n * @param channel Channel pin index\n * @param level   Pin level state to write\n */\nstatic inline void MCAL_Dio_WriteChannel(uint32_t channel, bool level) {\n    (void)channel;\n    (void)level;\n    /* USER CODE BEGIN WriteChannel */\n    /* USER CODE END WriteChannel */\n}\n\n/**\n * @brief Feeds/Kicks the physical hardware watchdog timer.\n */\nstatic inline void MCAL_Watchdog_Kick(void) {\n    /* USER CODE BEGIN Watchdog_Kick */\n    /* USER CODE END Watchdog_Kick */\n}\n\n#endif /* MCAL_DIO_H */`;
+  const mcalDioH = `${disclaimer}#ifndef MCAL_DIO_H\n#define MCAL_DIO_H\n\n#include <stdint.h>\n#include <stdbool.h>\n\n/* USER CODE BEGIN McalDio_Top */\n/* USER CODE END McalDio_Top */\n\n/* Microcontroller Abstraction Layer (MCAL) DIO Port/Pin Definition Stub */\n${mcalDioPins}\n\n/**\n * @brief Reads the state of a physical Digital Input channel.\n * @param channel Channel pin index\n * @return bool Pin level state (true/false)\n */\nstatic inline bool MCAL_Dio_ReadChannel(uint32_t channel) {\n    (void)channel;\n    /* USER CODE BEGIN ReadChannel */\n    return false; /* Default stub/simulation value */\n    /* USER CODE END ReadChannel */\n}\n\n/**\n * @brief Writes the state of a physical Digital Output channel.\n * @param channel Channel pin index\n * @param level   Pin level state to write\n */\nstatic inline void MCAL_Dio_WriteChannel(uint32_t channel, bool level) {\n    (void)channel;\n    (void)level;\n    /* USER CODE BEGIN WriteChannel */\n    /* USER CODE END WriteChannel */\n}\n\n/**\n * @brief Feeds/Kicks the physical hardware watchdog timer.\n */\nstatic inline void MCAL_Watchdog_Kick(void) {\n    /* WARNING: If the MCU has a hardware watchdog enabled, implement the\n     * kick/refresh logic between the USER CODE markers below. Leaving this\n     * stub empty will cause a watchdog reset on hardware that expects it. */\n    /* USER CODE BEGIN Watchdog_Kick */\n    /* USER CODE END Watchdog_Kick */\n}\n\n#endif /* MCAL_DIO_H */`;
 
   /* Fix 10: Apply post-generation validation pass to all generated C/H files */
   const baseFiles = [
@@ -1920,7 +2034,7 @@ inline unsigned long millis(void) { return 0UL; }
 #endif /* ESP32_ARDUINO_SHIM_H */
 `;
       baseFiles.push({ name: 'Arduino.h', content: esp32ArduinoH });
-      baseFiles.push({ name: 'Arduino.cpp', content: `#include "Arduino.h"\n#include "SPI.h"\n#include "Wire.h"\nHardwareSerial Serial;\nHardwareSerial Serial2;\nSPIImpl SPI;\nTwoWire Wire;\n` });
+      baseFiles.push({ name: 'Arduino.cpp', content: `#include "Arduino.h"\n#include "SPI.h"\n#include "Wire.h"\nHardwareSerial Serial;\nHardwareSerial Serial2;\nSPIImpl SPI;\nTwoWire Wire;\n\n/* Bare-metal compile helper: define ADIA_BARE_ARDUINO_MAIN when building\n * without the Arduino core (e.g. host/CI verification). On real Arduino\n * builds the core provides its own main(). */\n#ifdef ADIA_BARE_ARDUINO_MAIN\nextern void setup(void);\nextern void loop(void);\nint main(void) {\n    setup();\n    while (1) { loop(); }\n    return 0;\n}\n#endif\n` });
       baseFiles.push({ name: 'SPI.h', content: `#ifndef SPI_H\n#define SPI_H\n#include <stdint.h>\nclass SPIImpl {\npublic:\n    void begin() {}\n    uint8_t transfer(uint8_t val) { return val; }\n};\nextern SPIImpl SPI;\n#endif\n` });
       baseFiles.push({ name: 'Wire.h', content: `#ifndef WIRE_H\n#define WIRE_H\n#include <stdint.h>\nclass TwoWire {\npublic:\n    void begin() {}\n    void beginTransmission(uint8_t addr) { (void)addr; }\n    uint8_t endTransmission() { return 0; }\n    uint8_t write(uint8_t val) { (void)val; return 1; }\n    uint8_t requestFrom(uint8_t addr, uint8_t qty) { (void)addr; (void)qty; return qty; }\n    int available() { return 0; }\n    int read() { return -1; }\n};\nextern TwoWire Wire;\n#endif\n` });
     } else if (target === 'Arduino_Uno' || target === 'Arduino_Mega') {
@@ -2246,7 +2360,7 @@ extern SerialImpl Serial3;
 #endif
 
 #endif`;
-      const arduinoCpp = `#include "Arduino.h"\n#if !defined(__AVR__) || !__has_include(<avr/io.h>)\nuint8_t DDRA = 0, PORTA = 0, PINA = 0;\nuint8_t DDRB = 0, PORTB = 0, PINB = 0;\nuint8_t DDRC = 0, PORTC = 0, PINC = 0;\nuint8_t DDRD = 0, PORTD = 0, PIND = 0;\nuint8_t UBRR0H = 0, UBRR0L = 0, UCSR0B = 0, UCSR0C = 0, UCSR0A = 0, UDR0 = 0;\n#endif\nSerialImpl Serial;\nSerialImpl Serial1;\nSerialImpl Serial2;\nSerialImpl Serial3;\n\n#include "SPI.h"\nSPIImpl SPI;\n\n#include "Wire.h"\nTwoWire Wire;\n`;
+      const arduinoCpp = `#include "Arduino.h"\n#if !defined(__AVR__) || !__has_include(<avr/io.h>)\nuint8_t DDRA = 0, PORTA = 0, PINA = 0;\nuint8_t DDRB = 0, PORTB = 0, PINB = 0;\nuint8_t DDRC = 0, PORTC = 0, PINC = 0;\nuint8_t DDRD = 0, PORTD = 0, PIND = 0;\nuint8_t UBRR0H = 0, UBRR0L = 0, UCSR0B = 0, UCSR0C = 0, UCSR0A = 0, UDR0 = 0;\n#endif\nSerialImpl Serial;\nSerialImpl Serial1;\nSerialImpl Serial2;\nSerialImpl Serial3;\n\n#include "SPI.h"\nSPIImpl SPI;\n\n#include "Wire.h"\nTwoWire Wire;\n\n/* Bare-metal compile helper: define ADIA_BARE_ARDUINO_MAIN when building\n * without the Arduino core (e.g. host/CI verification). On real Arduino\n * builds the core provides its own main(). */\n#ifdef ADIA_BARE_ARDUINO_MAIN\nextern void setup(void);\nextern void loop(void);\nint main(void) {\n    setup();\n    while (1) { loop(); }\n    return 0;\n}\n#endif\n`;
       baseFiles.push({ name: 'Arduino.h', content: arduinoH });
       baseFiles.push({ name: 'Arduino.cpp', content: arduinoCpp });
       baseFiles.push({ name: 'SPI.h', content: `#ifndef SPI_H\n#define SPI_H\n#include <stdint.h>\nclass SPIImpl {\npublic:\n    void begin() {}\n    uint8_t transfer(uint8_t val) { return val; }\n};\nextern SPIImpl SPI;\n#endif\n` });
