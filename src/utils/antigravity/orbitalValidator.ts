@@ -5,7 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { generateMockMcalHeader } from './mcalMockGen';
 
 export async function runOrbitalValidation(files: Record<string, string>): Promise<{
@@ -32,7 +32,8 @@ export async function runOrbitalValidation(files: Record<string, string>): Promi
     // 3. Detect host GCC
     let gccAvailable = false;
     try {
-      execSync('gcc --version', { stdio: 'ignore' });
+      const gccCmd = process.platform === 'win32' ? 'gcc.exe' : 'gcc';
+      execFileSync(gccCmd, ['--version'], { stdio: 'ignore' });
       gccAvailable = true;
     } catch {
       gccAvailable = false;
@@ -43,8 +44,9 @@ export async function runOrbitalValidation(files: Record<string, string>): Promi
       if (cFiles.length === 0) return { success: true, errors: [], tierUsed: 'GCC' };
 
       try {
-        const cmd = `gcc -fsyntax-only -I"${tempDir}" ${cFiles.map(f => `"${f}"`).join(' ')}`;
-        execSync(cmd, { encoding: 'utf8', stdio: 'pipe' });
+        const gccCmd = process.platform === 'win32' ? 'gcc.exe' : 'gcc';
+        const args = ['-fsyntax-only', `-I${tempDir}`, ...cFiles];
+        execFileSync(gccCmd, args, { encoding: 'utf8', stdio: 'pipe' });
         return { success: true, errors: [], tierUsed: 'GCC' };
       } catch (err: any) {
         const stderr = (err.stderr || err.stdout || err.message || '').toString();
