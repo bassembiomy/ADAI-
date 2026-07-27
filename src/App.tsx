@@ -32,6 +32,7 @@ import { IntroStandbyOverlay } from './components/IntroStandbyOverlay';
 import { 
   VariableType, VariableDef, StateData, JunctionData, TransitionData, Layer, ErrorItem 
 } from './types/sm_types';
+import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineClipboardData } from './utils/stateMachineClipboard';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
 import { analyzeStateMachine } from './utils/smAnalysisEngine';
 import { HELP_DATA } from './HelpData';
@@ -7731,16 +7732,7 @@ const ADIA = () => {
   }, []);
 
   // Clipboard state
-  const [clipboard, setClipboard] = useState<{
-    states: StateData[],
-    junctions: JunctionData[],
-    transitions: TransitionData[],
-    blocks: BlockData[],
-    relationships: RelationshipData[],
-    parts: PartData[],
-    connectors: ConnectorData[],
-    interfaceRealizations: InterfaceRealizationData[],
-  } | null>(null);
+  const [clipboard, setClipboard] = useState<StateMachineClipboardData | null>(null);
 
   // Resizing state
   const [isResizing, setIsResizing] = useState(false);
@@ -9196,7 +9188,7 @@ const ADIA = () => {
       // Check for sub-layer AutoStart
       const childLayer = layers.find(l => l.parentStateId === s.id);
       if (childLayer) {
-        const childStates = states.filter(st => st.parentId === s.id);
+        const childStates = states.filter(st => childLayer.stateIds.includes(st.id));
         const allParallel = childStates.length > 0 && childStates.every(st => st.isParallel);
         if (allParallel) {
           const regionsMap = new Map<string, StateData[]>();
@@ -9239,7 +9231,7 @@ const ADIA = () => {
 
       const childLayer = layers.find(l => l.parentStateId === s.id);
       if (childLayer) {
-        const childStates = states.filter(st => st.parentId === s.id);
+        const childStates = states.filter(st => childLayer.stateIds.includes(st.id));
         const allParallel = childStates.length > 0 && childStates.every(st => st.isParallel);
         if (allParallel) {
           childStates.forEach(child => {
@@ -9723,7 +9715,7 @@ const ADIA = () => {
 
       const childLayer = layers.find(l => l.parentStateId === s.id);
       if (childLayer) {
-        const childStates = states.filter(st => st.parentId === s.id);
+        const childStates = states.filter(st => childLayer.stateIds.includes(st.id));
         const allParallel = childStates.length > 0 && childStates.every(st => st.isParallel);
         if (allParallel) {
           const regionsMap = new Map<string, StateData[]>();
@@ -13117,7 +13109,7 @@ const ADIA = () => {
               
               const childLayer = PROJECT_DATA.layers.find(l => l.parentStateId === s.id);
               if (childLayer) {
-                const childStates = PROJECT_DATA.states.filter(st => st.parentId === s.id);
+                const childStates = PROJECT_DATA.states.filter(st => childLayer.stateIds.includes(st.id));
                 const allParallel = childStates.length > 0 && childStates.every(st => st.isParallel);
                 if (allParallel) {
                   const autostartParallelStates = childStates.filter(st => st.autostart).sort((a, b) => a.priority - b.priority);
@@ -13154,7 +13146,7 @@ const ADIA = () => {
               
               const childLayer = PROJECT_DATA.layers.find(l => l.parentStateId === s.id);
               if (childLayer) {
-                const childStates = PROJECT_DATA.states.filter(st => st.parentId === s.id);
+                const childStates = PROJECT_DATA.states.filter(st => childLayer.stateIds.includes(st.id));
                 const allParallel = childStates.length > 0 && childStates.every(st => st.isParallel);
                 if (allParallel) {
                   childStates.forEach(child => {
@@ -13987,141 +13979,69 @@ const ADIA = () => {
       if (e.ctrlKey) {
         if (e.key === 'c' || e.key === 'C') {
           // Copy
-          const selectedStates = states.filter(s => selectedIds.includes(s.id));
-          const selectedJunctions = junctions.filter(j => selectedIds.includes(j.id));
-          const selectedTransitions = transitions.filter(t => selectedIds.includes(t.id));
-          const selectedBlocks = blocks.filter(b => selectedIds.includes(b.id));
-          const selectedRelationships = relationships.filter(r => selectedIds.includes(r.id));
-          const selectedParts = parts.filter(p => selectedIds.includes(p.id));
-          const selectedConnectors = connectors.filter(c => selectedIds.includes(c.id));
-          const selectedInterfaceRealizations = interfaceRealizations.filter(ir => selectedIds.includes(ir.id));
-
-          setClipboard({
-            states: selectedStates,
-            junctions: selectedJunctions,
-            transitions: selectedTransitions,
-            blocks: selectedBlocks,
-            relationships: selectedRelationships,
-            parts: selectedParts,
-            connectors: selectedConnectors,
-            interfaceRealizations: selectedInterfaceRealizations,
-          });
+          const clipData = createStateMachineClipboard(
+            selectedIds,
+            states,
+            junctions,
+            transitions,
+            layers,
+            blocks,
+            relationships,
+            parts,
+            connectors,
+            interfaceRealizations
+          );
+          setClipboard(clipData);
           addError('info', `Copied ${selectedIds.length} items`);
         }
         if (e.key === 'v' || e.key === 'V') {
           // Paste
           if (clipboard) {
             addToHistory();
-            const idMap = new Map<string, string>();
+            const result = pasteStateMachineClipboard(
+              clipboard,
+              currentLayerId,
+              states,
+              junctions,
+              transitions,
+              layers,
+              blocks,
+              relationships,
+              parts,
+              connectors,
+              interfaceRealizations
+            );
 
-            // State Machine
-            const newStates = clipboard.states.map(s => {
-              const newId = uuidv4();
-              idMap.set(s.id, newId);
-              return { ...s, id: newId, x: s.x + 20, y: s.y + 20, name: `${s.name}_copy` };
-            });
-            const newJunctions = clipboard.junctions.map(j => {
-              const newId = uuidv4();
-              idMap.set(j.id, newId);
-              return { ...j, id: newId, x: j.x + 20, y: j.y + 20, name: `${j.name}_copy` };
-            });
-            const newTransitions = clipboard.transitions.map(t => ({
-              ...t,
-              id: uuidv4(),
-              sourceId: idMap.get(t.sourceId) || t.sourceId,
-              targetId: idMap.get(t.targetId) || t.targetId
-            })).filter(t => (idMap.has(t.sourceId) || states.some(s => s.id === t.sourceId) || junctions.some(j => j.id === t.sourceId)) && (idMap.has(t.targetId) || states.some(s => s.id === t.targetId) || junctions.some(j => j.id === t.targetId)));
+            setStates(prev => [...prev, ...result.newStates]);
+            setJunctions(prev => [...prev, ...result.newJunctions]);
+            setTransitions(prev => [...prev, ...result.newTransitions]);
+            setLayers(result.updatedLayers);
+            setBlocks(prev => [...prev, ...result.newBlocks]);
+            setRelationships(prev => [...prev, ...result.newRelationships]);
+            setParts(prev => [...prev, ...result.newParts]);
+            setConnectors(prev => [...prev, ...result.newConnectors]);
+            setInterfaceRealizations(prev => [...prev, ...result.newInterfaceRealizations]);
 
-            // BDD/Requirements
-            const newBlocks = (clipboard.blocks || []).map((b: BlockData) => {
-              const newId = uuidv4();
-              idMap.set(b.id, newId);
-              const updatedBlock = { ...b, id: newId, x: b.x + 20, y: b.y + 20, name: `${b.name}_copy` };
-              // Paste requirement blocks into the current layer
-              if (b.stereotype === 'requirement') updatedBlock.layerId = currentLayerId;
-              return updatedBlock;
-            });
-            const newRelationships = (clipboard.relationships || []).map(r => ({
-              ...r,
-              id: uuidv4(),
-              sourceId: idMap.get(r.sourceId) || r.sourceId,
-              targetId: idMap.get(r.targetId) || r.targetId
-            })).filter(r => (idMap.has(r.sourceId) || blocks.some(b => b.id === r.sourceId)) && (idMap.has(r.targetId) || blocks.some(b => b.id === r.targetId)));
-
-            // IBD
-            const newParts = (clipboard.parts || []).map(p => {
-              const newId = uuidv4();
-              idMap.set(p.id, newId);
-              return { ...p, id: newId, x: p.x + 20, y: p.y + 20, name: `${p.name}_copy` };
-            });
-            const newConnectors = (clipboard.connectors || []).map(c => ({
-              ...c,
-              id: uuidv4(),
-              sourcePartId: idMap.get(c.sourcePartId) || c.sourcePartId,
-              targetPartId: idMap.get(c.targetPartId) || c.targetPartId
-            })).filter(c => (idMap.has(c.sourcePartId) || parts.some(p => p.id === c.sourcePartId)) && (idMap.has(c.targetPartId) || parts.some(p => p.id === c.targetPartId)));
-
-            // Interface Realizations
-            const newInterfaceRealizations = (clipboard.interfaceRealizations || []).map(ir => ({
-              ...ir,
-              id: uuidv4(),
-              partId: idMap.get(ir.partId) || ir.partId,
-              interfaceId: idMap.get(ir.interfaceId) || ir.interfaceId,
-            })).filter(ir => (idMap.has(ir.partId) || parts.some(p => p.id === ir.partId)) && (idMap.has(ir.interfaceId) || blocks.some(b => b.id === ir.interfaceId)));
-
-            setStates(prev => [...prev, ...newStates]);
-            setJunctions(prev => [...prev, ...newJunctions]);
-            setTransitions(prev => [...prev, ...newTransitions]);
-            setBlocks(prev => [...prev, ...newBlocks]);
-            setRelationships(prev => [...prev, ...newRelationships]);
-            setParts(prev => [...prev, ...newParts]);
-            setConnectors(prev => [...prev, ...newConnectors]);
-            setInterfaceRealizations(prev => [...prev, ...newInterfaceRealizations]);
-
-            // Add to current layer
-            setLayers(prev => prev.map(l => l.id === currentLayerId ? {
-              ...l,
-              stateIds: [...l.stateIds, ...newStates.map(s => s.id)],
-              junctionIds: [...l.junctionIds, ...newJunctions.map(j => j.id)],
-              transitionIds: [...l.transitionIds, ...newTransitions.map(t => t.id)]
-            } : l));
-
-            setSelectedIds([
-              ...newStates.map(s => s.id),
-              ...newJunctions.map(j => j.id),
-              ...newTransitions.map(t => t.id),
-              ...newBlocks.map(b => b.id),
-              ...newRelationships.map(r => r.id),
-              ...newParts.map(p => p.id),
-              ...newConnectors.map(c => c.id),
-              ...newInterfaceRealizations.map(ir => ir.id)
-            ]);
+            setSelectedIds(result.pastedTopLevelIds);
             addError('info', 'Pasted items');
           }
         }
         if (e.key === 'x' || e.key === 'X') {
           // Cut
           addToHistory();
-          // Copy logic
-          const selectedStates = states.filter(s => selectedIds.includes(s.id));
-          const selectedJunctions = junctions.filter(j => selectedIds.includes(j.id));
-          const selectedTransitions = transitions.filter(t => selectedIds.includes(t.id));
-          const selectedBlocks = blocks.filter(b => selectedIds.includes(b.id));
-          const selectedRelationships = relationships.filter(r => selectedIds.includes(r.id));
-          const selectedParts = parts.filter(p => selectedIds.includes(p.id));
-          const selectedConnectors = connectors.filter(c => selectedIds.includes(c.id));
-          const selectedInterfaceRealizations = interfaceRealizations.filter(ir => selectedIds.includes(ir.id));
-
-          setClipboard({
-            states: selectedStates,
-            junctions: selectedJunctions,
-            transitions: selectedTransitions,
-            blocks: selectedBlocks,
-            relationships: selectedRelationships,
-            parts: selectedParts,
-            connectors: selectedConnectors,
-            interfaceRealizations: selectedInterfaceRealizations,
-          });
+          const clipData = createStateMachineClipboard(
+            selectedIds,
+            states,
+            junctions,
+            transitions,
+            layers,
+            blocks,
+            relationships,
+            parts,
+            connectors,
+            interfaceRealizations
+          );
+          setClipboard(clipData);
           // Delete logic
           selectedIds.forEach(id => {
             if (states.some(s => s.id === id)) deleteState(id);
