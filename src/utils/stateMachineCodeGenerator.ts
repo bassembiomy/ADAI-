@@ -67,8 +67,9 @@ const isOutputVariable = (v: any): boolean => {
 };
 
 
-export const generateMISRACCode = (chart: {
-  tickMs: number;
+export const generateMISRACCode = (
+  chart: {
+    tickMs: number;
   states: StateData[];
   junctions: JunctionData[];
   transitions: TransitionData[];
@@ -76,7 +77,9 @@ export const generateMISRACCode = (chart: {
   layers: Layer[];
   safetyMode: boolean;
   hilConfig?: any;
-}): { files: { name: string; content: string }[]; errors: ErrorItem[]; warnings: string[] } => {
+},
+  options: { includeTestShims?: boolean } = {}
+): { files: { name: string; content: string }[]; errors: ErrorItem[]; warnings: string[] } => {
   const errors: ErrorItem[] = [];
   const warnings: string[] = [];
 
@@ -970,6 +973,7 @@ export const generateMISRACCode = (chart: {
 
   const rootLayer = sortedLayers.find(l => l.id === 'root' || !l.parentStateId || l.parentStateId === 'root');
   const rootLayerIdx = rootLayer ? layerIndexMap.get(rootLayer.id) : 0;
+  const rootActiveSlot = rootLayer ? (layerActiveSlotMap.get(rootLayer.id) ?? 0) : 0;
 
   const regionEnumStr = Array.from(new Set(regionEnumMap.values())).map(name => `    ${name},`).join('\n');
 
@@ -1444,7 +1448,7 @@ static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {
     smEnterShallowFunc += `            break;\n`;
   });
   if (safetyEnabled) {
-    smEnterShallowFunc += `        case SM_NODE_SAFE:\n            instance->active_states[0U] = SM_NODE_SAFE;\n            ${hasSafeStateEntry ? 'SM_NODE_SAFE_Entry(instance);\n            ' : '/* No entry action for safe state */\n            '}break;\n        default:\n            break;\n    }\n}\n\n`;
+    smEnterShallowFunc += `        case SM_NODE_SAFE:\n            instance->active_states[${rootActiveSlot}U] = SM_NODE_SAFE;\n            ${hasSafeStateEntry ? 'SM_NODE_SAFE_Entry(instance);\n            ' : '/* No entry action for safe state */\n            '}break;\n        default:\n            break;\n    }\n}\n\n`;
   } else {
     smEnterShallowFunc += `        default:\n            break;\n    }\n}\n\n`;
   }
@@ -1934,7 +1938,9 @@ static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) 
         smGetActiveBody += `            if (instance->state_active[${stIdx}U]) { active = ${stateEnum(st)}; }\n`;
       });
     } else {
-      const layerForRegion = sortedLayers.find(l => l.stateIds.some(sid => regionStates.some(s => s.id === sid)));
+      const layerForRegion = (regionKey === 'MAIN' && rootLayer)
+        ? rootLayer
+        : sortedLayers.find(l => l.stateIds.some(sid => regionStates.some(s => s.id === sid)));
       const lSlot = layerForRegion ? layerActiveSlotMap.get(layerForRegion.id) : undefined;
       if (lSlot !== undefined) {
         smGetActiveBody += `            active = instance->active_states[${lSlot}U];\n`;
@@ -2032,6 +2038,11 @@ static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) 
     baseFiles.push(...hilFiles);
 
     const target = chart.hilConfig.target || 'Generic';
+    const pushTestShim = (name: string, content: string) => {
+      if (options.includeTestShims) {
+        baseFiles.push({ name, content });
+      }
+    };
     if (target === 'ESP32') {
       /* ESP32-specific Arduino shim: declares every symbol the ESP32 driver
        * template uses (dacWrite, ledc*, Serial2, SERIAL_8N1, millis, ...). */
@@ -2106,10 +2117,10 @@ inline unsigned long millis(void) { return 0UL; }
 
 #endif /* ESP32_ARDUINO_SHIM_H */
 `;
-      baseFiles.push({ name: 'Arduino.h', content: esp32ArduinoH });
-      baseFiles.push({ name: 'Arduino.cpp', content: `#include "Arduino.h"\n#include "SPI.h"\n#include "Wire.h"\nHardwareSerial Serial;\nHardwareSerial Serial2;\nSPIImpl SPI;\nTwoWire Wire;\n\n/* Bare-metal compile helper: define ADIA_BARE_ARDUINO_MAIN when building\n * without the Arduino core (e.g. host/CI verification). On real Arduino\n * builds the core provides its own main(). */\n#ifdef ADIA_BARE_ARDUINO_MAIN\nextern void setup(void);\nextern void loop(void);\nint main(void) {\n    setup();\n    while (1) { loop(); }\n    return 0;\n}\n#endif\n` });
-      baseFiles.push({ name: 'SPI.h', content: `#ifndef SPI_H\n#define SPI_H\n#include <stdint.h>\nclass SPIImpl {\npublic:\n    void begin() {}\n    uint8_t transfer(uint8_t val) { return val; }\n};\nextern SPIImpl SPI;\n#endif\n` });
-      baseFiles.push({ name: 'Wire.h', content: `#ifndef WIRE_H\n#define WIRE_H\n#include <stdint.h>\nclass TwoWire {\npublic:\n    void begin() {}\n    void beginTransmission(uint8_t addr) { (void)addr; }\n    uint8_t endTransmission() { return 0; }\n    uint8_t write(uint8_t val) { (void)val; return 1; }\n    uint8_t requestFrom(uint8_t addr, uint8_t qty) { (void)addr; (void)qty; return qty; }\n    int available() { return 0; }\n    int read() { return -1; }\n};\nextern TwoWire Wire;\n#endif\n` });
+      pushTestShim('Arduino.h', esp32ArduinoH);
+      pushTestShim('Arduino.cpp', `#include "Arduino.h"\n#include "SPI.h"\n#include "Wire.h"\nHardwareSerial Serial;\nHardwareSerial Serial2;\nSPIImpl SPI;\nTwoWire Wire;\n\n/* Bare-metal compile helper: define ADIA_BARE_ARDUINO_MAIN when building\n * without the Arduino core (e.g. host/CI verification). On real Arduino\n * builds the core provides its own main(). */\n#ifdef ADIA_BARE_ARDUINO_MAIN\nextern void setup(void);\nextern void loop(void);\nint main(void) {\n    setup();\n    while (1) { loop(); }\n    return 0;\n}\n#endif\n`);
+      pushTestShim('SPI.h', `#ifndef SPI_H\n#define SPI_H\n#include <stdint.h>\nclass SPIImpl {\npublic:\n    void begin() {}\n    uint8_t transfer(uint8_t val) { return val; }\n};\nextern SPIImpl SPI;\n#endif\n`);
+      pushTestShim('Wire.h', `#ifndef WIRE_H\n#define WIRE_H\n#include <stdint.h>\nclass TwoWire {\npublic:\n    void begin() {}\n    void beginTransmission(uint8_t addr) { (void)addr; }\n    uint8_t endTransmission() { return 0; }\n    uint8_t write(uint8_t val) { (void)val; return 1; }\n    uint8_t requestFrom(uint8_t addr, uint8_t qty) { (void)addr; (void)qty; return qty; }\n    int available() { return 0; }\n    int read() { return -1; }\n};\nextern TwoWire Wire;\n#endif\n`);
     } else if (target === 'Arduino_Uno' || target === 'Arduino_Mega') {
       const arduinoH = `#ifndef MyArduino_h
 #define MyArduino_h
@@ -2434,11 +2445,11 @@ extern SerialImpl Serial3;
 
 #endif`;
       const arduinoCpp = `#include "Arduino.h"\n#if !defined(__AVR__) || !__has_include(<avr/io.h>)\nuint8_t DDRA = 0, PORTA = 0, PINA = 0;\nuint8_t DDRB = 0, PORTB = 0, PINB = 0;\nuint8_t DDRC = 0, PORTC = 0, PINC = 0;\nuint8_t DDRD = 0, PORTD = 0, PIND = 0;\nuint8_t UBRR0H = 0, UBRR0L = 0, UCSR0B = 0, UCSR0C = 0, UCSR0A = 0, UDR0 = 0;\n#endif\nSerialImpl Serial;\nSerialImpl Serial1;\nSerialImpl Serial2;\nSerialImpl Serial3;\n\n#include "SPI.h"\nSPIImpl SPI;\n\n#include "Wire.h"\nTwoWire Wire;\n\n/* Bare-metal compile helper: define ADIA_BARE_ARDUINO_MAIN when building\n * without the Arduino core (e.g. host/CI verification). On real Arduino\n * builds the core provides its own main(). */\n#ifdef ADIA_BARE_ARDUINO_MAIN\nextern void setup(void);\nextern void loop(void);\nint main(void) {\n    setup();\n    while (1) { loop(); }\n    return 0;\n}\n#endif\n`;
-      baseFiles.push({ name: 'Arduino.h', content: arduinoH });
-      baseFiles.push({ name: 'Arduino.cpp', content: arduinoCpp });
-      baseFiles.push({ name: 'SPI.h', content: `#ifndef SPI_H\n#define SPI_H\n#include <stdint.h>\nclass SPIImpl {\npublic:\n    void begin() {}\n    uint8_t transfer(uint8_t val) { return val; }\n};\nextern SPIImpl SPI;\n#endif\n` });
-      baseFiles.push({ name: 'Wire.h', content: `#ifndef WIRE_H\n#define WIRE_H\n#include <stdint.h>\nclass TwoWire {\npublic:\n    void begin() {}\n    void beginTransmission(uint8_t addr) { (void)addr; }\n    uint8_t endTransmission() { return 0; }\n    uint8_t write(uint8_t val) { (void)val; return 1; }\n    uint8_t requestFrom(uint8_t addr, uint8_t qty) { (void)addr; (void)qty; return qty; }\n    int available() { return 0; }\n    int read() { return -1; }\n};\nextern TwoWire Wire;\n#endif\n` });
-      baseFiles.push({ name: 'SoftwareSerial.h', content: `#ifndef SoftwareSerial_H\n#define SoftwareSerial_H\n#include <stdint.h>\nclass SoftwareSerial {\npublic:\n    SoftwareSerial(int rx, int tx) { (void)rx; (void)tx; }\n    void begin(long speed) { (void)speed; }\n    int available() { return 0; }\n    int read() { return -1; }\n    void write(uint8_t val) { (void)val; }\n};\n#endif\n` });
+      pushTestShim('Arduino.h', arduinoH);
+      pushTestShim('Arduino.cpp', arduinoCpp);
+      pushTestShim('SPI.h', `#ifndef SPI_H\n#define SPI_H\n#include <stdint.h>\nclass SPIImpl {\npublic:\n    void begin() {}\n    uint8_t transfer(uint8_t val) { return val; }\n};\nextern SPIImpl SPI;\n#endif\n`);
+      pushTestShim('Wire.h', `#ifndef WIRE_H\n#define WIRE_H\n#include <stdint.h>\nclass TwoWire {\npublic:\n    void begin() {}\n    void beginTransmission(uint8_t addr) { (void)addr; }\n    uint8_t endTransmission() { return 0; }\n    uint8_t write(uint8_t val) { (void)val; return 1; }\n    uint8_t requestFrom(uint8_t addr, uint8_t qty) { (void)addr; (void)qty; return qty; }\n    int available() { return 0; }\n    int read() { return -1; }\n};\nextern TwoWire Wire;\n#endif\n`);
+      pushTestShim('SoftwareSerial.h', `#ifndef SoftwareSerial_H\n#define SoftwareSerial_H\n#include <stdint.h>\nclass SoftwareSerial {\npublic:\n    SoftwareSerial(int rx, int tx) { (void)rx; (void)tx; }\n    void begin(long speed) { (void)speed; }\n    int available() { return 0; }\n    int read() { return -1; }\n    void write(uint8_t val) { (void)val; }\n};\n#endif\n`);
     } else if (target === 'STM32F4' || target === 'STM32F1') {
       const stm32H = `#ifndef STM32_MOCK_HAL_H
 #define STM32_MOCK_HAL_H
@@ -2730,7 +2741,7 @@ static inline void HAL_Delay(uint32_t Delay) { (void)Delay; }
 static inline uint32_t HAL_GetTick(void) { return 0; }
 
 #endif\n`;
-      baseFiles.push({ name: target === 'STM32F4' ? 'stm32f4xx_hal.h' : 'stm32f1xx_hal.h', content: stm32H });
+      pushTestShim(target === 'STM32F4' ? 'stm32f4xx_hal.h' : 'stm32f1xx_hal.h', stm32H);
     }
   }
 

@@ -742,6 +742,10 @@ describe('StateMachineCodeGenerator', () => {
     /* Array boundary safety (MISRA 18.1): reverse March loop mapped safely */
     expect(safetyC).toContain('rev_idx = (RAM_TEST_SIZE - 1U) - i;');
 
+    /* Verify SM_Reset resets state_timer */
+    expect(coreC).toContain('instance->state_timer = 0U;');
+
+
     /* SRS Bracket Balancing & File Completeness Verification */
     result.files.forEach(f => {
       if (f.name.endsWith('.h') || f.name.endsWith('.c')) {
