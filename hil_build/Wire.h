@@ -1,8 +1,6 @@
 #ifndef WIRE_H
 #define WIRE_H
-
 #include <stdint.h>
-
 class TwoWire {
 public:
     void begin() {}
@@ -13,7 +11,5 @@ public:
     int available() { return 0; }
     int read() { return -1; }
 };
-
 extern TwoWire Wire;
-
-#endif /* WIRE_H */
+#endif

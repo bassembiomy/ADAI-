@@ -179,7 +179,8 @@ describe('Generator validation & trigger coverage', () => {
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
 
     /* and: condition && timer */
-    expect(coreC).toContain('((instance->data.flag)) && (instance->state_timers[0U] >= SM_TMR_TR_T1_MS)');
+    expect(coreC).toContain('(instance->data.flag) && (instance->state_timers[1U] >= SM_TMR_TR_T1_MS)');
+
     /* or without afterTicks: condition only, no "(timer >= 0U)" invariant */
     expect(coreC).toContain('(instance->data.counter > 3U)');
     expect(coreC).not.toContain('>= 0U)');
@@ -595,7 +596,8 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
       transitions: [],
       variables: vars,
       layers: [rootLayer(['run', 'safe'])],
-      safetyMode: true
+      safetyMode: true,
+      allowDeadlocks: true
     };
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);

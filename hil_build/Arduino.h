@@ -113,6 +113,17 @@ extern uint8_t UBRR0H, UBRR0L, UCSR0B, UCSR0C, UCSR0A, UDR0;
 #define PL7 7
 #endif
 
+#ifndef A0
+#define A0 14
+#define A1 15
+#define A2 16
+#define A3 17
+#define A4 18
+#define A5 19
+#define A6 20
+#define A7 21
+#endif
+
 #define INPUT 0
 #define OUTPUT 1
 #define HIGH 1

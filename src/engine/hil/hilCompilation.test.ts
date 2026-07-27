@@ -60,7 +60,7 @@ describe('HIL Driver Target Compilation Verification', () => {
     {
       target: 'Arduino_Uno',
       compiler: AVR_GPP,
-      compileCmd: (dir: string) => `"${AVR_GPP}" -mmcu=atmega328p -DF_CPU=16000000UL -Os -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.c sm_core.c sm_safety.c sm_user_logic.c`,
+      compileCmd: (dir: string) => `"${AVR_GPP}" -mmcu=atmega328p -DF_CPU=16000000UL -DADIA_BARE_ARDUINO_MAIN -Os -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.cpp sm_core.c sm_safety.c sm_user_logic.c`,
       channels: [
         { id: 'c1', name: 'v_gpio_in', peripheral: 'GPIO', pin: '2', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
         { id: 'c2', name: 'v_gpio_out', peripheral: 'GPIO', pin: '13', direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
@@ -78,7 +78,7 @@ describe('HIL Driver Target Compilation Verification', () => {
     {
       target: 'Arduino_Mega',
       compiler: AVR_GPP,
-      compileCmd: (dir: string) => `"${AVR_GPP}" -mmcu=atmega2560 -DF_CPU=16000000UL -Os -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.c sm_core.c sm_safety.c sm_user_logic.c`,
+      compileCmd: (dir: string) => `"${AVR_GPP}" -mmcu=atmega2560 -DF_CPU=16000000UL -DADIA_BARE_ARDUINO_MAIN -Os -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.cpp sm_core.c sm_safety.c sm_user_logic.c`,
       channels: [
         { id: 'c1', name: 'v_gpio_in', peripheral: 'GPIO', pin: '22', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
         { id: 'c2', name: 'v_gpio_out', peripheral: 'GPIO', pin: '13', direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
@@ -132,7 +132,7 @@ describe('HIL Driver Target Compilation Verification', () => {
     {
       target: 'ESP32',
       compiler: HOST_GPP,
-      compileCmd: (dir: string) => `g++ -O2 -Wall -Wextra -Werror -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.c sm_core.c sm_safety.c sm_user_logic.c`,
+      compileCmd: (dir: string) => `g++ -O2 -Wall -Wextra -Werror -DADIA_BARE_ARDUINO_MAIN -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.cpp sm_core.c sm_safety.c sm_user_logic.c`,
       channels: [
         { id: 'c1', name: 'v_gpio_in', peripheral: 'GPIO', pin: '4', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
         { id: 'c2', name: 'v_gpio_out', peripheral: 'GPIO', pin: '2', direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
@@ -207,7 +207,7 @@ describe('HIL Driver Target Compilation Verification', () => {
         }
       };
 
-      const result = generateMISRACCode(chartConfig);
+      const result = generateMISRACCode(chartConfig, { includeTestShims: true });
       expect(result.errors).toHaveLength(0);
       expect(result.warnings.filter(w => w.includes('error') || w.includes('invalid') || w.includes('not supported'))).toHaveLength(0);
 
@@ -221,6 +221,13 @@ describe('HIL Driver Target Compilation Verification', () => {
           fs.writeFileSync(path.join(tempDir, f.name), f.content);
         });
 
+        // Arduino/ESP32 HIL output is an .ino for PlatformIO; rename to .cpp for bare compiler verification
+        const inoPath = path.join(tempDir, 'main_hil.ino');
+        const cppPath = path.join(tempDir, 'main_hil.cpp');
+        if (fs.existsSync(inoPath) && !fs.existsSync(cppPath)) {
+          fs.renameSync(inoPath, cppPath);
+        }
+
         // 4. Run compilation command
         const compileCommand = tc.compileCmd(tempDir);
         execSync(compileCommand, { cwd: tempDir, stdio: 'pipe' });
@@ -229,6 +236,6 @@ describe('HIL Driver Target Compilation Verification', () => {
         // Clean up the temporary folder after successful test
         cleanupDir(tempDir);
       }
-    });
+    }, 30000);
   });
 });

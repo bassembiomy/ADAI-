@@ -143,6 +143,7 @@ describe('Debug Blender Mixer', () => {
     });
     
     const ctx = {
+      states: x0,
       dt: 0.05,
       time: 0.05,
       prevStates: x0,
@@ -150,7 +151,7 @@ describe('Debug Blender Mixer', () => {
       order: 1,
       parameters: {}
     };
-    const res = system.residuals(x0, ctx);
+    const res = (system as any).residuals(x0, ctx);
     console.log("Initial Residuals for x0 (ambient):");
     system.variableNames.forEach((name, idx) => {
       console.log(`  ${name}: val=${x0[idx]}, res=${res[idx]}`);

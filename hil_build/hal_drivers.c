@@ -9,9 +9,13 @@
 #include "hal_config.h"
 #include "hil_interface.h"
 #include "Arduino.h"
+#include <Wire.h>
 
 
-String rx_buffer = "";
+/* HIL Buffer */
+#define RX_BUF_SIZE 128
+char rx_buffer[RX_BUF_SIZE];
+uint8_t rx_index = 0;
 
 #include <SPI.h>
 
@@ -42,12 +46,16 @@ void HAL_Drivers_Init(void) {
 
     /* Peripherals Initialization */
     pinMode(PA0, INPUT);
+    pinMode(PA1, INPUT);
 }
 
 bool HAL_GPIO_Read(const char* pin, const char* name) {
     (void)pin;
     if (strcmp(name, "ch_1") == 0) {
         return digitalRead(PA0) == HIGH;
+    }
+    if (strcmp(name, "ch_2") == 0) {
+        return digitalRead(PA1) == HIGH;
     }
     else { /* MISRA 15.7 */ }
     return false;
@@ -114,11 +122,16 @@ void HIL_SendString(const char* str) {
 void HIL_Receive_Poll(void) {
     while (Serial.available() > 0) {
       char c = Serial.read();
-      if (c == '\n') {
-          HIL_ProcessMessage(rx_buffer.c_str());
-          rx_buffer = "";
+      if (rx_index < RX_BUF_SIZE - 1) {
+          if (c == '\n') {
+              rx_buffer[rx_index] = '\0';
+              HIL_ProcessMessage(rx_buffer);
+              rx_index = 0;
+          } else {
+              rx_buffer[rx_index++] = c;
+          }
       } else {
-          rx_buffer += c;
+          rx_index = 0;
       }
   }
 }

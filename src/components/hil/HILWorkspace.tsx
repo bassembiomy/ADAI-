@@ -574,6 +574,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
             <div className="col-span-4 h-full overflow-hidden">
               <HILDriverPanel
                 channels={config.channels}
+                target={config.target}
                 onChange={(channels) => onChangeConfig({ ...config, channels })}
               />
             </div>

@@ -498,18 +498,20 @@ static void SM_Step_Layer_0(ADIA_Instance_t* instance, uint32_t delta_ms) {
     (void)delta_ms;
     switch (instance->active_states[0U]) {
         case SM_ST_A:
+            bool transitioned_1 = false;
             /* Evaluate Outgoing Transitions */
             if ((instance->state_timers[1U] >= SM_TMR_TR_T1_MS)) {
                 SM_Exit_State(instance, SM_ST_A);
                 SM_Enter_State(instance, SM_ST_B, false);
-                return;
+                transitioned_1 = true;
             }
             else { /* MISRA 15.7 */ }
-            /* Run During Actions */
-            SM_ST_A_During(instance, delta_ms);
+            if (!transitioned_1) {
+                /* Run During Actions */
+                SM_ST_A_During(instance, delta_ms);
+            }
             break;
         case SM_ST_B:
-            /* Evaluate Outgoing Transitions */
             /* Run During Actions */
             SM_ST_B_During(instance, delta_ms);
             break;
@@ -565,7 +567,7 @@ SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t* instance);
 #include "mcal_dio.h"
 
 #ifdef SM_SAFETY_ENABLED
-static const SM_Node_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {
+static const SM_Node_t SM_State_Parent_Map[] = {
     SM_NODE_INVALID /* SM_NODE_INVALID */,
     SM_NODE_INVALID /* SM_ST_A */,
     SM_NODE_INVALID /* SM_ST_B */

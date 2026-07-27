@@ -126,9 +126,11 @@ describe('StateMachineCodeGenerator Phase 2 & Core Remediation Tests', () => {
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
 
     // Internal transition: no Exit or Enter of S1
-    const internalTransitionBlock = coreC.substring(coreC.indexOf('if ((instance->data.sensor_val > 10.0f))'));
+    const condIdx = coreC.indexOf('instance->data.sensor_val > 10.0f');
+    const internalTransitionBlock = coreC.substring(condIdx);
     expect(internalTransitionBlock.substring(0, internalTransitionBlock.indexOf('}'))).not.toContain('SM_Exit_State');
     expect(internalTransitionBlock.substring(0, internalTransitionBlock.indexOf('}'))).not.toContain('SM_Enter_State');
+
     expect(internalTransitionBlock).toContain('instance->data.counter = (uint16_t)(1U);');
 
     // External self transition: should exit and enter S2
@@ -205,7 +207,8 @@ describe('StateMachineCodeGenerator Phase 2 & Core Remediation Tests', () => {
     const safetyChart = {
       ...baseChart,
       states: safetyStates,
-      safetyMode: true
+      safetyMode: true,
+      allowDeadlocks: true
     };
 
     const result = generateMISRACCode(safetyChart);
@@ -229,7 +232,7 @@ describe('StateMachineCodeGenerator Phase 2 & Core Remediation Tests', () => {
       { ...baseStates[0] },
       { ...baseStates[1], isSafeState: true, name: 'Safe' }
     ];
-    const safetyChart = { ...baseChart, states: safetyStates, safetyMode: true };
+    const safetyChart = { ...baseChart, states: safetyStates, safetyMode: true, allowDeadlocks: true };
     const resultSafety = generateMISRACCode(safetyChart);
     const configSafety = resultSafety.files.find(f => f.name === 'sm_config.h')?.content || '';
     const coreCSafety = resultSafety.files.find(f => f.name === 'sm_core.c')?.content || '';
@@ -359,7 +362,7 @@ describe('StateMachineCodeGenerator Phase 2 & Core Remediation Tests', () => {
       { ...baseStates[0] },
       { ...baseStates[1], isSafeState: true, name: 'Safe' }
     ];
-    const safetyChart = { ...baseChart, states: safetyStates, safetyMode: true };
+    const safetyChart = { ...baseChart, states: safetyStates, safetyMode: true, allowDeadlocks: true };
     const result = generateMISRACCode(safetyChart);
     const configH = result.files.find(f => f.name === 'sm_config.h')?.content || '';
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';

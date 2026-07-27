@@ -1735,7 +1735,7 @@ static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) 
 
           body += emitEntryPath(entrySeq, '                ', true);
 
-          if (isParallelState && transitionedVarName) {
+          if (transitionedVarName) {
             body += `                ${transitionedVarName} = true;\n`;
           } else if (!isInternalTr) {
             body += `                return;\n`;
@@ -1809,6 +1809,8 @@ static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) 
               });
             }
             layerStepFuncs += `        }\n`;
+          } else {
+            layerStepFuncs += `        (void)transitioned_${stateIdx};\n`;
           }
         } else {
           if (hasDuring(state)) {
@@ -1837,6 +1839,7 @@ static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) 
         const state = sortedStates.find(s => s.id === stateId);
         if (!state) return;
         const sEnum = stateEnum(state);
+        const stateIdx = stateIndexMap.get(state.id);
 
         layerStepFuncs += `        case ${sEnum}:\n`;
 
@@ -1847,31 +1850,50 @@ static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) 
           return;
         }
 
-        layerStepFuncs += `            /* Evaluate Outgoing Transitions */\n`;
-
-
         const internal = parseInternalTransitions(state);
         const outgoing = [
           ...chart.transitions.filter(t => t.sourceId === stateId),
           ...internal
         ].sort((a, b) => a.order - b.order);
 
-        if (outgoing.length > 0) {
-          layerStepFuncs += generateTransitions(stateId, outgoing, 0, '', new Set<string>());
-        }
-
-        if (hasDuring(state)) {
-          layerStepFuncs += `            /* Run During Actions */\n`;
-          layerStepFuncs += `            ${sEnum}_During(instance, delta_ms);\n`;
-        }
-
         const childLayers = chart.layers.filter(cl => cl.parentStateId === stateId);
-        if (childLayers.length > 0) {
-          layerStepFuncs += `            /* Step Child Layers */\n`;
-          childLayers.forEach(cl => {
-            const clIdx = layerIndexMap.get(cl.id);
-            layerStepFuncs += `            SM_Step_Layer_${clIdx}(instance, delta_ms);\n`;
-          });
+        const hasChildLayers = childLayers.length > 0;
+
+        if (outgoing.length > 0) {
+          layerStepFuncs += `            bool transitioned_${stateIdx} = false;\n`;
+          layerStepFuncs += `            /* Evaluate Outgoing Transitions */\n`;
+          layerStepFuncs += generateTransitions(stateId, outgoing, 0, '', new Set<string>(), false, `transitioned_${stateIdx}`);
+
+          if (hasDuring(state) || hasChildLayers) {
+            layerStepFuncs += `            if (!transitioned_${stateIdx}) {\n`;
+            if (hasDuring(state)) {
+              layerStepFuncs += `                /* Run During Actions */\n`;
+              layerStepFuncs += `                ${sEnum}_During(instance, delta_ms);\n`;
+            }
+            if (hasChildLayers) {
+              layerStepFuncs += `                /* Step Child Layers */\n`;
+              childLayers.forEach(cl => {
+                const clIdx = layerIndexMap.get(cl.id);
+                layerStepFuncs += `                SM_Step_Layer_${clIdx}(instance, delta_ms);\n`;
+              });
+            }
+            layerStepFuncs += `            }\n`;
+          } else {
+            layerStepFuncs += `            (void)transitioned_${stateIdx};\n`;
+          }
+        } else {
+          if (hasDuring(state)) {
+            layerStepFuncs += `            /* Run During Actions */\n`;
+            layerStepFuncs += `            ${sEnum}_During(instance, delta_ms);\n`;
+          }
+
+          if (hasChildLayers) {
+            layerStepFuncs += `            /* Step Child Layers */\n`;
+            childLayers.forEach(cl => {
+              const clIdx = layerIndexMap.get(cl.id);
+              layerStepFuncs += `            SM_Step_Layer_${clIdx}(instance, delta_ms);\n`;
+            });
+          }
         }
 
         layerStepFuncs += `            break;\n`;

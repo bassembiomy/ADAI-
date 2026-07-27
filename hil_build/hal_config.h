@@ -14,5 +14,6 @@
 
 /* Channels Pin Mappings */
 #define PIN_CH_1 "PA0"
+#define PIN_CH_2 "PA1"
 
 #endif /* HAL_CONFIG_H */

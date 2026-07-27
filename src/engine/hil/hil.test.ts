@@ -92,7 +92,8 @@ describe('HIL Code Generator', () => {
 
   it('should generate all HIL driver files for STM32F4', () => {
     const files = generateHALCode(mockConfig, smVariables);
-    expect(files).toHaveLength(6);
+    expect(files).toHaveLength(8);
+
 
     const names = files.map(f => f.name);
     expect(names).toContain('hal_config.h');
@@ -101,6 +102,7 @@ describe('HIL Code Generator', () => {
     expect(names).toContain('hil_interface.h');
     expect(names).toContain('hil_interface.c');
     expect(names).toContain('main_hil.c');
+    expect(names).toContain('platformio.ini');
 
     const configH = files.find(f => f.name === 'hal_config.h')?.content;
     expect(configH).toContain('#define TARGET_MCU_STM32F4');
@@ -112,39 +114,51 @@ describe('HIL Code Generator', () => {
     expect(interfaceC).toContain('HAL_GPIO_Write(PIN_LED_STATUS');
   });
 
-  it('should integrate with stateMachineCodeGenerator generateMISRACCode', () => {
-    const chart = {
-      tickMs: 10,
-      states: [
-        {
-          id: 's1', name: 'Monitor', x: 0, y: 0, width: 100, height: 100,
-          entry: '', during: '', exit: '',
-          isActive: false, color: 'blue', parentId: 'root', children: [],
-          priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
-        }
-      ],
-      junctions: [],
-      transitions: [],
-      variables: [
-        { id: 'v1', name: 'sensor_val', type: 'float', initialValue: '0.0', currentValue: 0, visibleInScope: true },
-        { id: 'v2', name: 'is_active', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true }
-      ],
-      layers: [
-        { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }
-      ],
-      safetyMode: false,
-      hilConfig: mockConfig
-    };
+  const chart = {
+    tickMs: 10,
+    states: [
+      {
+        id: 's1', name: 'Monitor', x: 0, y: 0, width: 100, height: 100,
+        entry: '', during: '', exit: '',
+        isActive: false, color: 'blue', parentId: 'root', children: [],
+        priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
+      }
+    ],
+    junctions: [],
+    transitions: [],
+    variables: [
+      { id: 'v1', name: 'sensor_val', type: 'float', initialValue: '0.0', currentValue: 0, visibleInScope: true },
+      { id: 'v2', name: 'is_active', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true }
+    ],
+    layers: [
+      { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }
+    ],
+    safetyMode: false,
+    hilConfig: mockConfig
+  };
 
+  it('should integrate with stateMachineCodeGenerator generateMISRACCode', () => {
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
-    
-    // Default files (9) + HIL files (7) = 16 files
-    expect(result.files).toHaveLength(16);
+
+    // Default files (10) + HIL files (8) = 17 files (test shims excluded by default)
+    expect(result.files).toHaveLength(17);
+    const names = result.files.map(f => f.name);
+    expect(names).not.toContain('stm32f4xx_hal.h');
 
     const testingReport = result.files.find(f => f.name === 'sm_testing_report.md')?.content;
     expect(testingReport).toContain('## 8. HIL Driver Mapping Report');
     expect(testingReport).toContain('Target Microcontroller:** STM32F4');
+  });
+
+  it('should include target test shims when includeTestShims is true', () => {
+    const result = generateMISRACCode(chart as any, { includeTestShims: true });
+    expect(result.errors).toHaveLength(0);
+
+    // Default files (10) + HIL files (8) + STM32 shim (1) = 18 files
+    expect(result.files).toHaveLength(18);
+    const names = result.files.map(f => f.name);
+    expect(names).toContain('stm32f4xx_hal.h');
   });
 
   it('should fail generation for an empty chart instead of emitting broken C', () => {
@@ -204,7 +218,7 @@ describe('HIL Code Generator', () => {
     // STM32F1
     const f1Config = { ...mockConfig, target: 'STM32F1' as const };
     const f1Files = generateHALCode(f1Config, smVariables);
-    expect(f1Files).toHaveLength(6);
+    expect(f1Files).toHaveLength(8);
     const f1DriversC = f1Files.find(f => f.name === 'hal_drivers.c')?.content || '';
     expect(f1DriversC).toContain('#include "stm32f1xx_hal.h"');
     expect(f1DriversC).toContain('HAL_UART_Receive(&huart1');
@@ -212,15 +226,17 @@ describe('HIL Code Generator', () => {
     // ESP32
     const espConfig = { ...mockConfig, target: 'ESP32' as const };
     const espFiles = generateHALCode(espConfig, smVariables);
-    expect(espFiles).toHaveLength(6);
+    expect(espFiles).toHaveLength(8);
 
     // Arduino_Uno
     const unoConfig = { ...mockConfig, target: 'Arduino_Uno' as const };
     const unoFiles = generateHALCode(unoConfig, smVariables);
-    expect(unoFiles).toHaveLength(6);
-    const mainUno = unoFiles.find(f => f.name === 'main_hil.c')?.content || '';
+    expect(unoFiles).toHaveLength(8);
+
+    const mainUno = unoFiles.find(f => f.name.startsWith('main_hil'))?.content || '';
     expect(mainUno).toContain('#include "Arduino.h"');
   });
+
 
   it('should enforce SM_TICK_MS tick rate and SM_GetError telemetry reporting', () => {
     const files = generateHALCode(mockConfig, smVariables);
@@ -337,7 +353,8 @@ describe('HIL Code Generator', () => {
     ];
 
     const files = generateHALCode(uartSpiConfig, smVars);
-    expect(files).toHaveLength(6);
+    expect(files).toHaveLength(8);
+
 
     const driversH = files.find(f => f.name === 'hal_drivers.h')?.content || '';
     expect(driversH).toContain('uint32_t HAL_UART_Read(const char* pin, const char* name);');
