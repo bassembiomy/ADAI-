@@ -754,6 +754,10 @@ describe('StateMachineCodeGenerator', () => {
     /* Verify layer step handlers for internal transitions do not short-circuit */
     expect(coreC).not.toMatch(/if\s*\([^)]+\)\s*\{\s*instance->data\.[^;]+;\s*return;\s*\}/);
 
+    /* Verify SM_State_Parent_Map in sm_safety.c */
+    expect(safetyC).toContain('SM_State_Parent_Map');
+
+
 
 
 

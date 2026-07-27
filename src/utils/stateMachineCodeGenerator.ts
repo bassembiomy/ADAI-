@@ -1072,6 +1072,17 @@ typedef struct {
 
   const smSafetyH = `${disclaimer}#ifndef SM_SAFETY_H\n#define SM_SAFETY_H\n\n/* System headers */\n#include <stdint.h>\n#include <stdbool.h>\n\n/* Project headers */\n#include "sm_config.h"\n\n/* Safety API */\nvoid SM_Safety_Check(ADIA_Instance_t* instance);\nvoid SM_Watchdog_Kick(ADIA_Instance_t* instance);\nSM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t* instance);\n\n#endif /* SM_SAFETY_H */`;
 
+  const parentMapEntries: string[] = ['    SM_NODE_INVALID /* SM_NODE_INVALID */'];
+  sortedStates.forEach(st => {
+    const parentState = st.parentId ? sortedStates.find(p => p.id === st.parentId) : undefined;
+    const parentEnumStr = parentState ? stateEnum(parentState) : 'SM_NODE_INVALID';
+    parentMapEntries.push(`    ${parentEnumStr} /* ${stateEnum(st)} */`);
+  });
+  if (safeState) {
+    parentMapEntries.push(`    SM_NODE_INVALID /* ${stateEnum(safeState)} */`);
+  }
+  const parentMapCode = `#ifdef SM_SAFETY_ENABLED\nstatic const SM_Node_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {\n${parentMapEntries.join(',\n')}\n};\n#endif\n`;
+
   /* Fix 7 (MISRA 8.7): All variable declarations hoisted to top of each function.
    * Fix 18.1: Loop in reverse March test rewritten using bounded subtraction to satisfy static analyzers. */
   const smSafetyC = `${disclaimer}/* System headers */
@@ -1083,6 +1094,7 @@ typedef struct {
 #include "sm_safety.h"
 #include "mcal_dio.h"
 
+${parentMapCode}
 #ifdef SM_SAFETY_ENABLED
 #define RAM_TEST_SIZE 16U
 static volatile uint32_t ram_test_buf[RAM_TEST_SIZE];
@@ -1155,7 +1167,7 @@ void SM_Watchdog_Kick(ADIA_Instance_t* instance) {
 }
 
 /**
- * @brief Validates the active states array consistency.
+ * @brief Validates the active states array consistency and parentage integrity.
  * @param instance Pointer to state machine context
  * @return SM_Error_t Validation result error status
  */
@@ -1166,12 +1178,24 @@ SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t* instance) {
 #ifdef SM_SAFETY_ENABLED
     uint32_t sm_iter;   /* MISRA 8.7: declared at top of function */
     SM_Node_t st;
+    SM_Node_t parent;
     SM_Error_t err = SM_ERR_NONE;
     for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {
         st = instance->active_states[sm_iter];
         if ((uint32_t)st > (uint32_t)SM_NODE_SAFE) {
             err = SM_ERR_INVALID_STATE;
             break;
+        }
+    }
+    if (err == SM_ERR_NONE) {
+        for (sm_iter = 1U; sm_iter <= SM_NUM_STATES; sm_iter++) {
+            if (instance->state_active[sm_iter]) {
+                parent = SM_State_Parent_Map[sm_iter];
+                if ((parent != SM_NODE_INVALID) && (!instance->state_active[(uint32_t)parent])) {
+                    err = SM_ERR_INVALID_STATE;
+                    break;
+                }
+            }
         }
     }
     return err;
