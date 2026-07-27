@@ -1906,7 +1906,7 @@ static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) 
 
   /* Fix 8: Add <float.h> when FLT_MAX is needed (float tick type) */
   const floatHInclude = isFloatTick ? '\n#include <float.h>' : '';
-  let smCoreC = `${disclaimer}/* System headers */\n#include <stdint.h>\n#include <stdbool.h>${floatHInclude}\n#include <stddef.h>\n\n#ifndef UINT32_MAX\n#define UINT32_MAX (0xFFFFFFFFU)\n#endif\n\n/* Project headers */\n#include "sm_core.h"\n#include "sm_safety.h"\n#include "sm_user_logic.h"\n${hilEnabled ? '#include "hil_interface.h"' : '#include "mcal_dio.h"'}\n\n/* Forward declarations of public API functions for C99 compliance */\nvoid SM_Init(ADIA_Instance_t* instance);\nvoid SM_Reset(ADIA_Instance_t* instance);\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms);\nSM_Error_t SM_Sync_IO(ADIA_Instance_t* instance);\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g);\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance);\n\n/* Forward declarations of internal static helpers */\nstatic void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State_Shallow(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State(ADIA_Instance_t* instance, SM_Node_t state, bool use_history);\n`;
+  let smCoreC = `${disclaimer}/* System headers */\n#include <stdint.h>\n#include <stdbool.h>${floatHInclude}\n#include <stddef.h>\n\n#ifndef UINT32_MAX\n#define UINT32_MAX (0xFFFFFFFFU)\n#endif\n\n/* Project headers */\n#include "sm_core.h"\n#include "sm_safety.h"\n#include "sm_user_logic.h"\n${hilEnabled ? '#include "hil_interface.h"' : '#include "mcal_dio.h"'}\n\n/* Forward declarations of public API functions for C99 compliance */\nvoid SM_Init(ADIA_Instance_t* instance);\nvoid SM_Reset(ADIA_Instance_t* instance);\nvoid SM_Step(ADIA_Instance_t* instance, ${timeType} delta_ms);\nSM_Error_t SM_Sync_IO(ADIA_Instance_t* instance);\nSM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g);\nSM_Error_t SM_GetError(const ADIA_Instance_t* instance);\n\n/* Forward declarations of internal static helpers */\nstatic void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State_Shallow(ADIA_Instance_t* instance, SM_Node_t state);\nstatic void SM_Enter_State(ADIA_Instance_t* instance, SM_Node_t state, bool use_history);\nstatic void SM_ReadInputs(ADIA_Instance_t* instance);\nstatic void SM_WriteOutputs(ADIA_Instance_t* instance);\n`;
   
   sortedLayers.forEach((l) => {
     const lIdx = layerIndexMap.get(l.id);
@@ -1975,9 +1975,16 @@ static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) 
 
 
 
-  // Check if SM_Exit_State is actually used in transition logic or safety checks.
-  // We count the occurrences of "SM_Exit_State" in the generated helper functions, step functions, etc.
-  // If it's only declared/defined but not called, we add the (void) cast to avoid unused-function warnings.
+  // Transform SM_Sync_IO body to use static SM_ReadInputs and SM_WriteOutputs helpers
+  smCoreC = smCoreC.replace(
+    'SM_Error_t SM_Sync_IO(ADIA_Instance_t* instance) {',
+    'static void SM_ReadInputs(ADIA_Instance_t* instance) {\n' + syncInputsCode + '}\n\nstatic void SM_WriteOutputs(ADIA_Instance_t* instance) {\n' + syncOutputsCode + '}\n\nSM_Error_t SM_Sync_IO(ADIA_Instance_t* instance) {'
+  );
+  smCoreC = smCoreC.replace(
+    /\/\* MCAL-to-SM Input Signal Binding \*\/[\s\S]*?return SM_ERR_NONE;/,
+    'SM_ReadInputs(instance);\n    SM_WriteOutputs(instance);\n    return SM_ERR_NONE;'
+  );
+
   let compiledCodeCheck = smCoreC;
   if (!chart.safetyMode) {
     compiledCodeCheck = smCoreC.replace(/#ifdef SM_SAFETY_ENABLED[\s\S]*?#endif/g, '');
@@ -1988,6 +1995,7 @@ static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) 
     '    /*SM_EXIT_STATE_UNUSED_CAST_PLACEHOLDER*/\n',
     isExitStateUsed ? '' : '    (void)&SM_Exit_State;\n'
   );
+
 
   sortedVariables.forEach(v => {
     if (['uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(v.type)) {

@@ -745,6 +745,13 @@ describe('StateMachineCodeGenerator', () => {
     /* Verify SM_Reset resets state_timer */
     expect(coreC).toContain('instance->state_timer = 0U;');
 
+    /* Verify SM_ReadInputs and SM_WriteOutputs static helpers */
+    expect(coreC).toContain('static void SM_ReadInputs(ADIA_Instance_t* instance)');
+    expect(coreC).toContain('static void SM_WriteOutputs(ADIA_Instance_t* instance)');
+    expect(coreC).toContain('SM_ReadInputs(instance);');
+    expect(coreC).toContain('SM_WriteOutputs(instance);');
+
+
 
     /* SRS Bracket Balancing & File Completeness Verification */
     result.files.forEach(f => {
