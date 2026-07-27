@@ -13933,6 +13933,26 @@ const ADIA = () => {
         }
       }
 
+      // Shift + C: Toggle Connect Mode
+      if (e.shiftKey && (e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey && !e.altKey && !isSpacePressed.current) {
+        e.preventDefault();
+        if (diagramMode === 'ibd') {
+          setIsCreatingConnector(prev => {
+            const next = !prev;
+            if (!next) setConnectorSource(null);
+            addError('info', next ? 'Connect mode activated' : 'Connect mode canceled');
+            return next;
+          });
+        } else {
+          setIsCreatingTransition(prev => {
+            const next = !prev;
+            if (!next) setTransitionSourceId(null);
+            addError('info', next ? 'Connect mode activated' : 'Connect mode canceled');
+            return next;
+          });
+        }
+      }
+
       // Run Simulation (Ctrl + R)
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyR') {
         e.preventDefault();
