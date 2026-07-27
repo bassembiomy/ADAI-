@@ -30,7 +30,18 @@ export function createStateMachineClipboard(
 ): StateMachineClipboardData {
   const topLevelStates = states.filter(s => selectedIds.includes(s.id));
   const topLevelJunctions = junctions.filter(j => selectedIds.includes(j.id));
-  const topLevelTransitions = transitions.filter(t => selectedIds.includes(t.id));
+  
+  const selectedNodeIds = new Set([
+    ...topLevelStates.map(s => s.id),
+    ...topLevelJunctions.map(j => j.id)
+  ]);
+
+  // Include transitions explicitly selected or connecting two selected nodes
+  const topLevelTransitionsMap = new Map<string, TransitionData>();
+  transitions.filter(t => selectedIds.includes(t.id)).forEach(t => topLevelTransitionsMap.set(t.id, t));
+  transitions.filter(t => selectedNodeIds.has(t.sourceId) && selectedNodeIds.has(t.targetId)).forEach(t => topLevelTransitionsMap.set(t.id, t));
+
+  const topLevelTransitions = Array.from(topLevelTransitionsMap.values());
   const selectedBlocks = blocks.filter(b => selectedIds.includes(b.id));
   const selectedRelationships = relationships.filter(r => selectedIds.includes(r.id));
   const selectedParts = parts.filter(p => selectedIds.includes(p.id));
@@ -152,6 +163,11 @@ export function pasteStateMachineClipboard(
     };
   });
 
+  const pastedNodeIds = new Set([
+    ...newStates.map(s => s.id),
+    ...newJunctions.map(j => j.id),
+  ]);
+
   const newTransitions: TransitionData[] = clipboard.transitions.map(t => {
     const newId = uuidv4();
     const newSourceId = idMap.get(t.sourceId) || t.sourceId;
@@ -165,9 +181,11 @@ export function pasteStateMachineClipboard(
       targetId: newTargetId,
     };
   }).filter(t =>
-    (idMap.has(t.sourceId) || existingStates.some(s => s.id === t.sourceId) || existingJunctions.some(j => j.id === t.sourceId)) &&
-    (idMap.has(t.targetId) || existingStates.some(s => s.id === t.targetId) || existingJunctions.some(j => j.id === t.targetId))
+    (pastedNodeIds.has(t.sourceId) || existingStates.some(s => s.id === t.sourceId) || existingJunctions.some(j => j.id === t.sourceId)) &&
+    (pastedNodeIds.has(t.targetId) || existingStates.some(s => s.id === t.targetId) || existingJunctions.some(j => j.id === t.targetId))
   );
+
+  const createdTransitionIdSet = new Set(newTransitions.map(t => t.id));
 
   // Cloned child layers
   const clonedLayers: Layer[] = clipboard.layers.map(l => {
@@ -178,9 +196,9 @@ export function pasteStateMachineClipboard(
       ...l,
       id: newLayerId,
       parentStateId: newParentStateId,
-      stateIds: l.stateIds.map(sid => idMap.get(sid) || sid),
-      junctionIds: l.junctionIds.map(jid => idMap.get(jid) || jid),
-      transitionIds: l.transitionIds.map(tid => idMap.get(tid) || tid),
+      stateIds: l.stateIds.map(sid => idMap.get(sid) || sid).filter(Boolean),
+      junctionIds: l.junctionIds.map(jid => idMap.get(jid) || jid).filter(Boolean),
+      transitionIds: l.transitionIds.map(tid => idMap.get(tid) || tid).filter(tid => createdTransitionIdSet.has(tid)),
     };
   });
 
@@ -219,9 +237,11 @@ export function pasteStateMachineClipboard(
   })).filter(ir => (idMap.has(ir.partId) || existingParts.some(p => p.id === ir.partId)) && (idMap.has(ir.interfaceId) || existingBlocks.some(b => b.id === ir.interfaceId)));
 
   // Register top-level items in current active layer
-  const topLevelPastedStateIds = clipboard.topLevelStateIds.map(id => idMap.get(id)!);
-  const topLevelPastedJunctionIds = clipboard.topLevelJunctionIds.map(id => idMap.get(id)!);
-  const topLevelPastedTransitionIds = clipboard.topLevelTransitionIds.map(id => idMap.get(id)!);
+  const topLevelPastedStateIds = clipboard.topLevelStateIds.map(id => idMap.get(id)!).filter(Boolean);
+  const topLevelPastedJunctionIds = clipboard.topLevelJunctionIds.map(id => idMap.get(id)!).filter(Boolean);
+  const topLevelPastedTransitionIds = clipboard.topLevelTransitionIds
+    .map(id => idMap.get(id)!)
+    .filter(id => id && createdTransitionIdSet.has(id));
 
   const updatedLayers = existingLayers.map(l => l.id === currentLayerId ? {
     ...l,

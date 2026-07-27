@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createStateMachineClipboard, pasteStateMachineClipboard } from './stateMachineClipboard';
-import { StateData, JunctionData, TransitionData, Layer } from '../types';
+import { StateData, JunctionData, TransitionData, Layer } from '../types/sm_types';
 
 describe('stateMachineClipboard', () => {
   it('should recursively copy composite state sub-layers and paste into target layer with updated parentId', () => {
@@ -41,5 +41,47 @@ describe('stateMachineClipboard', () => {
     const pastedSubState = result.newStates.find(s => s.name === 'Sub_1_copy');
     expect(pastedSubState).toBeDefined();
     expect(pastedSubState?.parentId).not.toBe('l_child'); // Should point to cloned child layer ID
+  });
+
+  it('should automatically include transitions between selected states/junctions when copying and pasting', () => {
+    const rootLayer: Layer = { id: 'root', name: 'Root', parentStateId: null, stateIds: ['s1', 's2'], transitionIds: ['t1'], junctionIds: [] };
+    const s1 = { id: 's1', name: 'State_1', x: 100, y: 100, parentId: 'root' } as StateData;
+    const s2 = { id: 's2', name: 'State_2', x: 300, y: 100, parentId: 'root' } as StateData;
+    const t1 = { id: 't1', sourceId: 's1', targetId: 's2', condition: 'x > 0', action: '' } as TransitionData;
+
+    // Select only state IDs ['s1', 's2'] (not explicitly 't1')
+    const clipboard = createStateMachineClipboard(
+      ['s1', 's2'],
+      [s1, s2],
+      [],
+      [t1],
+      [rootLayer],
+      [], [], [], [], []
+    );
+
+    expect(clipboard.transitions).toHaveLength(1);
+    expect(clipboard.transitions[0].id).toBe('t1');
+
+    const result = pasteStateMachineClipboard(
+      clipboard,
+      'root',
+      [s1, s2],
+      [],
+      [t1],
+      [rootLayer],
+      [], [], [], [], []
+    );
+
+    expect(result.newTransitions).toHaveLength(1);
+    const newTrans = result.newTransitions[0];
+    expect(newTrans.id).not.toBe('t1');
+
+    const newS1 = result.newStates.find(s => s.name === 'State_1_copy')!;
+    const newS2 = result.newStates.find(s => s.name === 'State_2_copy')!;
+    expect(newTrans.sourceId).toBe(newS1.id);
+    expect(newTrans.targetId).toBe(newS2.id);
+
+    const updatedRootLayer = result.updatedLayers.find(l => l.id === 'root')!;
+    expect(updatedRootLayer.transitionIds).toContain(newTrans.id);
   });
 });
