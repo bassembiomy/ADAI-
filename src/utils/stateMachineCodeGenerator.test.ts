@@ -751,6 +751,10 @@ describe('StateMachineCodeGenerator', () => {
     expect(coreC).toContain('SM_ReadInputs(instance);');
     expect(coreC).toContain('SM_WriteOutputs(instance);');
 
+    /* Verify layer step handlers for internal transitions do not short-circuit */
+    expect(coreC).not.toMatch(/if\s*\([^)]+\)\s*\{\s*instance->data\.[^;]+;\s*return;\s*\}/);
+
+
 
 
     /* SRS Bracket Balancing & File Completeness Verification */

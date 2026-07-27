@@ -1713,7 +1713,7 @@ static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) 
 
           if (isParallelState && transitionedVarName) {
             body += `                ${transitionedVarName} = true;\n`;
-          } else {
+          } else if (!isInternalTr) {
             body += `                return;\n`;
           }
         } else if (targetJunction) {
