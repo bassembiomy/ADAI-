@@ -757,6 +757,10 @@ describe('StateMachineCodeGenerator', () => {
     /* Verify SM_State_Parent_Map in sm_safety.c */
     expect(safetyC).toContain('SM_State_Parent_Map');
 
+    /* Verify MCAL_CUSTOM_DIO preprocessor guards in mcal_dio.h */
+    expect(mcalDioH).toContain('#ifndef MCAL_CUSTOM_DIO');
+
+
 
 
 

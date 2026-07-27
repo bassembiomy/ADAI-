@@ -138,9 +138,7 @@ static inline const SM_Data_t* SM_Data_Legacy(const ADIA_Instance_t* instance) {
 
 /* Project headers */
 #include "sm_core.h"
-#ifdef SM_SAFETY_ENABLED
 #include "sm_safety.h"
-#endif
 #include "sm_user_logic.h"
 #include "mcal_dio.h"
 
@@ -156,6 +154,8 @@ SM_Error_t SM_GetError(const ADIA_Instance_t* instance);
 static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state);
 static void SM_Enter_State_Shallow(ADIA_Instance_t* instance, SM_Node_t state);
 static void SM_Enter_State(ADIA_Instance_t* instance, SM_Node_t state, bool use_history);
+static void SM_ReadInputs(ADIA_Instance_t* instance);
+static void SM_WriteOutputs(ADIA_Instance_t* instance);
 static void SM_Enter_Layer_0(ADIA_Instance_t* instance, bool use_history);
 static void SM_Step_Layer_0(ADIA_Instance_t* instance, uint32_t delta_ms);
 
@@ -386,16 +386,24 @@ void SM_Step(ADIA_Instance_t* instance, uint32_t delta_ms) {
  * @param instance Pointer to state machine context
  * @return SM_Error_t Sync result error status
  */
+static void SM_ReadInputs(ADIA_Instance_t* instance) {
+    /* No input variables detected: map physical channels to instance->data here, or tag/name variables as inputs to auto-generate this code. */
+    (void)instance;
+    (void)&MCAL_Dio_ReadChannel;
+}
+
+static void SM_WriteOutputs(ADIA_Instance_t* instance) {
+    /* No output variables detected: map instance->data to physical channels here, or tag/name variables as outputs to auto-generate this code. */
+    (void)instance;
+    (void)&MCAL_Dio_WriteChannel;
+}
+
 SM_Error_t SM_Sync_IO(ADIA_Instance_t* instance) {
     if (instance == NULL) {
         return SM_ERR_NONE;
     }
-    /* MCAL-to-SM Input Signal Binding */
-    (void)instance;
-
-    /* SM-to-MCAL Output Signal Binding */
-    (void)instance;
-
+    SM_ReadInputs(instance);
+    SM_WriteOutputs(instance);
     return SM_ERR_NONE;
 }
 
@@ -415,13 +423,9 @@ static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {
             instance->active_states[0U] = SM_NODE_INVALID;
             break;
         case SM_ST_B:
-            SM_ST_B_Exit(instance);
             instance->state_active[2U] = false;
             instance->state_timers[2U] = 0U;
             instance->active_states[0U] = SM_NODE_INVALID;
-            break;
-        case SM_NODE_SAFE:
-            SM_NODE_SAFE_Exit(instance);
             break;
         default:
             break;
@@ -447,10 +451,6 @@ static void SM_Enter_State_Shallow(ADIA_Instance_t* instance, SM_Node_t state) {
             instance->state_active[2U] = true;
             instance->state_timers[2U] = 0U;
             SM_ST_B_Entry(instance);
-            break;
-        case SM_NODE_SAFE:
-            instance->active_states[0U] = SM_NODE_SAFE;
-            SM_NODE_SAFE_Entry(instance);
             break;
         default:
             break;
@@ -495,6 +495,7 @@ static void SM_Enter_Layer_0(ADIA_Instance_t* instance, bool use_history) {
  * @param delta_ms Execution tick period in milliseconds
  */
 static void SM_Step_Layer_0(ADIA_Instance_t* instance, uint32_t delta_ms) {
+    (void)delta_ms;
     switch (instance->active_states[0U]) {
         case SM_ST_A:
             /* Evaluate Outgoing Transitions */
@@ -562,6 +563,14 @@ SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t* instance);
 /* Project headers */
 #include "sm_safety.h"
 #include "mcal_dio.h"
+
+#ifdef SM_SAFETY_ENABLED
+static const SM_Node_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {
+    SM_NODE_INVALID /* SM_NODE_INVALID */,
+    SM_NODE_INVALID /* SM_ST_A */,
+    SM_NODE_INVALID /* SM_ST_B */
+};
+#endif
 
 #ifdef SM_SAFETY_ENABLED
 #define RAM_TEST_SIZE 16U
@@ -635,7 +644,7 @@ void SM_Watchdog_Kick(ADIA_Instance_t* instance) {
 }
 
 /**
- * @brief Validates the active states array consistency.
+ * @brief Validates the active states array consistency and parentage integrity.
  * @param instance Pointer to state machine context
  * @return SM_Error_t Validation result error status
  */
@@ -646,12 +655,24 @@ SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t* instance) {
 #ifdef SM_SAFETY_ENABLED
     uint32_t sm_iter;   /* MISRA 8.7: declared at top of function */
     SM_Node_t st;
+    SM_Node_t parent;
     SM_Error_t err = SM_ERR_NONE;
     for (sm_iter = 0U; sm_iter < SM_NUM_LAYERS; sm_iter++) {
         st = instance->active_states[sm_iter];
         if ((uint32_t)st > (uint32_t)SM_NODE_SAFE) {
             err = SM_ERR_INVALID_STATE;
             break;
+        }
+    }
+    if (err == SM_ERR_NONE) {
+        for (sm_iter = 1U; sm_iter <= SM_NUM_STATES; sm_iter++) {
+            if (instance->state_active[sm_iter]) {
+                parent = SM_State_Parent_Map[sm_iter];
+                if ((parent != SM_NODE_INVALID) && (!instance->state_active[(uint32_t)parent])) {
+                    err = SM_ERR_INVALID_STATE;
+                    break;
+                }
+            }
         }
     }
     return err;
@@ -680,11 +701,8 @@ void SM_ST_A_During(ADIA_Instance_t* instance, uint32_t delta_ms);
 void SM_ST_A_Exit(ADIA_Instance_t* instance);
 void SM_ST_B_Entry(ADIA_Instance_t* instance);
 void SM_ST_B_During(ADIA_Instance_t* instance, uint32_t delta_ms);
-void SM_ST_B_Exit(ADIA_Instance_t* instance);
-/* Safety fallback state actions */
-void SM_NODE_SAFE_Entry(ADIA_Instance_t* instance);
-void SM_NODE_SAFE_During(ADIA_Instance_t* instance, uint32_t delta_ms);
-void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance);
+
+/* Safety fallback state has no user actions */
 
 #endif /* SM_USER_LOGIC_H */",
     "name": "sm_user_logic.h",
@@ -735,28 +753,9 @@ void SM_ST_B_During(ADIA_Instance_t* instance, uint32_t delta_ms) {
     instance->data.log = (uint32_t)(instance->data.log + 2U);
 }
 
-void SM_ST_B_Exit(ADIA_Instance_t* instance) {
-    (void)instance;
-    /* Exit: B */
-    
-}
 
 
-void SM_NODE_SAFE_Entry(ADIA_Instance_t* instance) {
-    (void)instance;
-    /* Entry: safety fallback state */
-}
-
-void SM_NODE_SAFE_During(ADIA_Instance_t* instance, uint32_t delta_ms) {
-    (void)instance;
-    (void)delta_ms;
-    /* During: safety fallback state */
-}
-
-void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
-    (void)instance;
-    /* Exit: safety fallback state */
-}",
+/* Safety fallback state has no user actions */",
     "name": "sm_user_logic.c",
   },
   {
@@ -783,6 +782,7 @@ void SM_NODE_SAFE_Exit(ADIA_Instance_t* instance) {
 #define MCAL_PIN_OUTPUT_1  3U
 
 
+#ifndef MCAL_CUSTOM_DIO
 /**
  * @brief Reads the state of a physical Digital Input channel.
  * @param channel Channel pin index
@@ -811,9 +811,13 @@ static inline void MCAL_Dio_WriteChannel(uint32_t channel, bool level) {
  * @brief Feeds/Kicks the physical hardware watchdog timer.
  */
 static inline void MCAL_Watchdog_Kick(void) {
+    /* WARNING: If the MCU has a hardware watchdog enabled, implement the
+     * kick/refresh logic between the USER CODE markers below. Leaving this
+     * stub empty will cause a watchdog reset on hardware that expects it. */
     /* USER CODE BEGIN Watchdog_Kick */
     /* USER CODE END Watchdog_Kick */
 }
+#endif /* MCAL_CUSTOM_DIO */
 
 #endif /* MCAL_DIO_H */",
     "name": "mcal_dio.h",
