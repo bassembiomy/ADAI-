@@ -6705,6 +6705,7 @@ const ADIA = () => {
   const [isVariablesCollapsed, setIsVariablesCollapsed] = useState(false);
   const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState(false);
   const [isScopeCollapsed, setIsScopeCollapsed] = useState(false);
+  const [isScopeDetached, setIsScopeDetached] = useState(false);
 
   const updateManagedWindow = useCallback((id: ManagedWindowId, updates: Partial<Omit<ManagedWindowState, 'id' | 'title'>>) => {
     setManagedWindows(prev => ({
@@ -16450,10 +16451,14 @@ const ADIA = () => {
                 {/* Bottom Panel */}
             {!isMobile && !isScopeCollapsed && <Resizer onMouseDown={(e) => handleResizeStart(e, 'scope')} orientation="horizontal" />}
             <div style={{ height: isMobile ? '30%' : (isScopeCollapsed ? '40px' : `${scopeHeight}px`), display: isMobile && mobileTab !== 'canvas' ? 'none' : 'flex' }} className="bg-[#1a1a1a] border-t border-[#222] flex flex-col shrink-0 transition-all duration-300 overflow-hidden">
-              <div className="flex items-center justify-between px-4 border-b border-[#222] h-10 shrink-0">
+              <div
+                onDoubleClick={() => setIsScopeDetached(!isScopeDetached)}
+                title="Double-click header to expand/dock Scope window"
+                className="flex items-center justify-between px-4 border-b border-[#222] h-10 shrink-0 select-none cursor-pointer"
+              >
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setIsScopeCollapsed(!isScopeCollapsed)}
+                    onClick={(e) => { e.stopPropagation(); setIsScopeCollapsed(!isScopeCollapsed); }}
                     className="p-1 hover:bg-[#222] rounded text-[#f97316] transition-colors"
                   >
                     <Triangle size={10} className={`transition-transform duration-300 ${isScopeCollapsed ? 'rotate-0' : 'rotate-180'}`} fill="currentColor" />
@@ -16462,9 +16467,10 @@ const ADIA = () => {
                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                   </svg>
                   <span className="font-medium">Scope</span>
+                  <span className="text-[10px] text-[#666] ml-2 hidden sm:inline">(Double-click to detach/dock)</span>
                 </div>
                 {!isScopeCollapsed && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     {/* Variable Selector */}
                     <div className="relative group">
                       <Button variant="ghost" size="sm" className="text-[#a0a0a0] hover:text-[#e0e0e0] px-2.5 py-1">
@@ -16535,12 +16541,25 @@ const ADIA = () => {
                       </svg>
                       Clear
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setIsScopeDetached(!isScopeDetached)}
+                      className="h-6 w-6 text-[#a0a0a0] hover:text-[#f97316]"
+                      title={isScopeDetached ? "Dock Scope" : "Detach Scope into window"}
+                    >
+                      <Maximize2 size={13} />
+                    </Button>
                   </div>
                 )}
               </div>
 
               {!isScopeCollapsed && (
-                <div className="flex-1 p-3">
+                <div
+                  onDoubleClick={() => setIsScopeDetached(!isScopeDetached)}
+                  className="flex-1 p-3 overflow-x-auto overflow-y-hidden cursor-pointer select-none"
+                  title="Double-click to expand into detached window"
+                >
                   {visibleVariables.length === 0 ? (
                     <div className="flex items-center justify-center h-full text-[#666]">
                       <div className="text-center">
@@ -16561,8 +16580,8 @@ const ADIA = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="w-full h-full overflow-hidden">
-                      <div className="h-full flex pb-3 gap-2">
+                    <div className="w-full h-full overflow-x-auto overflow-y-hidden">
+                      <div className="h-full flex pb-2 gap-3 min-w-max">
                         {visibleVariables.map((variable, index) => {
                           const color = colors[index % colors.length];
                           const values = scopeData.map(dp => dp[variable.name] ?? 0);
@@ -16590,7 +16609,7 @@ const ADIA = () => {
                           }).join(' ');
 
                           return (
-                            <div key={variable.id} className="flex-1 min-w-[150px] relative h-full bg-[#1a1a1a] rounded border border-[#333] overflow-hidden">
+                            <div key={variable.id} className="w-[240px] shrink-0 relative h-full bg-[#1a1a1a] rounded border border-[#333] overflow-hidden">
                               <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0">
                                 <polyline
                                   points={points}
@@ -18233,6 +18252,110 @@ const ADIA = () => {
             setShow3DXGateway(false);
           }}
         />
+
+        {/* ── Detached Scope Floating Overlay Window ────────────────────────────── */}
+        {isScopeDetached && (
+          <div className="fixed inset-4 sm:inset-10 z-50 bg-[#121212]/95 border border-[#333] rounded-xl shadow-2xl flex flex-col backdrop-blur-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div
+              onDoubleClick={() => setIsScopeDetached(false)}
+              className="h-12 px-5 border-b border-[#222] flex items-center justify-between bg-[#1a1a1a] shrink-0 cursor-pointer select-none"
+              title="Double-click header to dock back to bottom panel"
+            >
+              <div className="flex items-center gap-2.5">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+                <span className="font-semibold text-sm text-[#e0e0e0]">Scope — Detached Visualization</span>
+                <span className="text-xs text-[#666] bg-[#222] px-2.5 py-0.5 rounded-full ml-2">Double-click header to dock back</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={exportScopeCSV}
+                  className="text-[#a0a0a0] hover:text-[#e0e0e0] px-2.5 py-1 text-xs"
+                >
+                  Export CSV
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearScope}
+                  className="text-[#a0a0a0] hover:text-[#e0e0e0] px-2.5 py-1 text-xs"
+                >
+                  Clear
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsScopeDetached(false)}
+                  className="h-7 w-7 text-[#a0a0a0] hover:text-[#f97316]"
+                  title="Dock back to bottom panel"
+                >
+                  <X size={16} />
+                </Button>
+              </div>
+            </div>
+            <div className="flex-1 p-5 overflow-x-auto overflow-y-auto">
+              {visibleVariables.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-[#666]">
+                  <p className="text-sm font-medium">No variables selected for scope</p>
+                </div>
+              ) : scopeData.length < 2 ? (
+                <div className="flex items-center justify-center h-full text-[#666]">
+                  <p className="text-sm font-medium">Start simulation to see scope data</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 h-full">
+                  {visibleVariables.map((variable, index) => {
+                    const color = colors[index % colors.length];
+                    const values = scopeData.map(dp => dp[variable.name] ?? 0);
+                    let minVal = Math.min(...values);
+                    let maxVal = Math.max(...values);
+                    if (minVal === maxVal) { minVal -= 1; maxVal += 1; }
+                    const range = maxVal - minVal;
+                    const padding = range * 0.1;
+                    const effectiveMin = minVal - padding;
+                    const effectiveMax = maxVal + padding;
+                    const effectiveRange = effectiveMax - effectiveMin;
+
+                    const points = values.map((v, i) => {
+                      const x = (i / (values.length - 1)) * 100;
+                      const y = 100 - ((v - effectiveMin) / effectiveRange) * 100;
+                      return `${x},${y}`;
+                    }).join(' ');
+
+                    return (
+                      <div key={variable.id} className="h-64 bg-[#1a1a1a] rounded-lg border border-[#333] p-3 flex flex-col relative overflow-hidden">
+                        <div className="flex justify-between items-center mb-2 z-10">
+                          <span className="text-xs font-bold px-2 py-0.5 rounded bg-[#000]/60" style={{ color }}>
+                            {variable.name}
+                          </span>
+                          <span className="text-xs font-mono text-[#e0e0e0] px-2 py-0.5 rounded bg-[#000]/60">
+                            {values[values.length - 1]?.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex-1 relative">
+                          <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0">
+                            <polyline
+                              points={points}
+                              fill="none"
+                              stroke={color}
+                              strokeWidth="2"
+                              vectorEffect="non-scaling-stroke"
+                              strokeLinejoin="round"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
