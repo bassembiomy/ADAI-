@@ -13953,6 +13953,16 @@ const ADIA = () => {
         }
       }
 
+      // Shift + X: Create X-Bridges block at viewport center
+      if (e.shiftKey && (e.key === 'x' || e.key === 'X') && !e.ctrlKey && !e.metaKey && !e.altKey && !isSpacePressed.current) {
+        e.preventDefault();
+        const canvasW = canvasRef.current?.clientWidth || 800;
+        const canvasH = canvasRef.current?.clientHeight || 600;
+        const worldX = ((canvasW / 2) / uiZoom - view.offsetX) / view.scale;
+        const worldY = ((canvasH / 2) / uiZoom - view.offsetY) / view.scale;
+        createXBridgesState(worldX, worldY);
+      }
+
       // Run Simulation (Ctrl + R)
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyR') {
         e.preventDefault();
