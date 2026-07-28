@@ -10,6 +10,42 @@ interface HILSignalMapperProps {
   onChange: (mappings: HILMapping[]) => void;
 }
 
+export const parseSafeValueForChannel = (
+  rawValue: string,
+  channel: DriverChannel,
+): { value?: number | boolean; error: string | null } => {
+  const normalized = rawValue.trim().toLowerCase();
+  if (channel.dataType === 'bool') {
+    if (!['true', 'false', '1', '0'].includes(normalized)) {
+      return {
+        error: 'Use true, false, 1, or 0 for a boolean safe value.',
+      };
+    }
+    return { value: normalized === 'true' || normalized === '1', error: null };
+  }
+
+  if (normalized.length === 0) {
+    return { error: 'Safe value must be a finite number.' };
+  }
+  const numericValue = Number(normalized);
+  if (!Number.isFinite(numericValue)) {
+    return { error: 'Safe value must be a finite number.' };
+  }
+  if (
+    channel.dataType !== 'float'
+    && channel.dataType !== 'double'
+    && !Number.isInteger(numericValue)
+  ) {
+    return { error: `Safe value for ${channel.dataType} must be a whole number.` };
+  }
+  if (numericValue < channel.rangeMin || numericValue > channel.rangeMax) {
+    return {
+      error: `Safe value must be between ${channel.rangeMin} and ${channel.rangeMax}.`,
+    };
+  }
+  return { value: numericValue, error: null };
+};
+
 export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
   channels,
   mappings,
@@ -21,6 +57,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
   const [direction, setDirection] = useState<'read' | 'write'>('read');
   const [conversionExpr, setConversionExpr] = useState('');
   const [safeValue, setSafeValue] = useState('0');
+  const [safeValueError, setSafeValueError] = useState<string | null>(null);
 
   const addMapping = () => {
     if (!selectedVar || !selectedChannel) return;
@@ -31,18 +68,25 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
     );
     if (duplicate) return;
 
-    const variable = availableVariables.find(item => item.name === selectedVar);
+    let parsedSafeValue: number | boolean | undefined;
+    if (direction === 'write') {
+      const channel = channels.find(item => item.id === selectedChannel);
+      if (!channel) return;
+      const parsed = parseSafeValueForChannel(safeValue, channel);
+      if (parsed.error !== null) {
+        setSafeValueError(parsed.error);
+        return;
+      }
+      parsedSafeValue = parsed.value;
+    }
+    setSafeValueError(null);
     const newMap: HILMapping = {
       id: uuidv4(),
       adiaVarId: selectedVar,
       channelId: selectedChannel,
       direction,
       conversionExpr: conversionExpr.trim() || undefined,
-      safeValue: direction === 'write'
-        ? (variable?.type === 'bool'
-          ? (safeValue === 'true' || safeValue === '1')
-          : Number(safeValue || '0'))
-        : undefined,
+      safeValue: parsedSafeValue,
     };
 
     onChange([...mappings, newMap]);
@@ -93,6 +137,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
               value={selectedChannel}
               onChange={(e) => {
                 setSelectedChannel(e.target.value);
+                setSafeValueError(null);
                 const ch = channels.find(c => c.id === e.target.value);
                 if (ch) {
                   // Pre-align direction if channel dictates it
@@ -117,7 +162,10 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
             <label className="block text-[10px] text-[#888] font-medium mb-1">Direction</label>
             <select
               value={direction}
-              onChange={(e) => setDirection(e.target.value as 'read' | 'write')}
+              onChange={(e) => {
+                setDirection(e.target.value as 'read' | 'write');
+                setSafeValueError(null);
+              }}
               className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
             >
               <option value="read">HW &rarr; ADIA (Input)</option>
@@ -149,9 +197,10 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
                 type="text"
                 placeholder="0 / false"
                 value={safeValue}
-                onChange={(e) => setSafeValue(e.target.value)}
+                onChange={(e) => { setSafeValue(e.target.value); setSafeValueError(null); }}
                 className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white placeholder-gray-700 focus:outline-none focus:border-[#f97316]"
               />
+              {safeValueError && <p className="mt-1 text-[10px] text-red-400">{safeValueError}</p>}
             </div>
           )}
 

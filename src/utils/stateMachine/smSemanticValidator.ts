@@ -784,16 +784,25 @@ const validateMappings = (
         mapping.id,
       ));
     }
-    if (
-      mapping.safeValue !== undefined
-      && typeof mapping.safeValue !== 'boolean'
-      && !Number.isFinite(mapping.safeValue)
-    ) {
-      diagnostics.push(diagnostic(
-        'IO_MAPPING_SAFE_VALUE_INVALID',
-        `Mapping '${mapping.id}' has a non-finite safe output value.`,
-        mapping.id,
-      ));
+    if (mapping.safeValue !== undefined && channel) {
+      const isBooleanChannel = channel.dataType === 'bool';
+      const isIntegerChannel = channel.dataType !== 'bool'
+        && channel.dataType !== 'float'
+        && channel.dataType !== 'double';
+      const typeValid = isBooleanChannel
+        ? typeof mapping.safeValue === 'boolean'
+        : typeof mapping.safeValue === 'number'
+          && Number.isFinite(mapping.safeValue)
+          && (!isIntegerChannel || Number.isInteger(mapping.safeValue))
+          && mapping.safeValue >= channel.rangeMin
+          && mapping.safeValue <= channel.rangeMax;
+      if (!typeValid) {
+        diagnostics.push(diagnostic(
+          'IO_MAPPING_SAFE_VALUE_INVALID',
+          `Mapping '${mapping.id}' has a safe value incompatible with channel '${channel.id}'.`,
+          mapping.id,
+        ));
+      }
     }
   }
   return diagnostics;

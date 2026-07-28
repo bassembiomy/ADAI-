@@ -542,6 +542,73 @@ void loop(void) {
 
   const mainFileName = target.startsWith('Arduino') || target === 'ESP32' ? 'main_hil.ino' : 'main_hil.c';
 
+  const mcalChannelIds = [...new Set(config.mappings.map((mapping) => mapping.channelId))]
+    .sort((left, right) => left.localeCompare(right));
+  const mcalChannelIndex = (channelId: string): number => mcalChannelIds.indexOf(channelId);
+  const halRead = (channel: typeof config.channels[number]): string => {
+    const pin = `PIN_${sanitize(channel.name).toUpperCase()}`;
+    const calls: Record<string, string> = {
+      GPIO: `HAL_GPIO_Read(${pin}, "${channel.name}")`,
+      ADC: `HAL_ADC_Read(${pin}, "${channel.name}")`,
+      UART: `HAL_UART_Read(${pin}, "${channel.name}")`,
+      SPI: `HAL_SPI_Read(${pin}, "${channel.name}")`,
+      I2C: `HAL_I2C_Read(${pin}, "${channel.name}")`,
+    };
+    return calls[channel.peripheral] ?? '0U';
+  };
+  const halWrite = (channel: typeof config.channels[number], value: string): string => {
+    const pin = `PIN_${sanitize(channel.name).toUpperCase()}`;
+    if (channel.peripheral === 'GPIO') return `HAL_GPIO_Write(${pin}, "${channel.name}", (bool)(${value}));`;
+    if (channel.peripheral === 'DAC') return `HAL_DAC_Write(${pin}, "${channel.name}", (uint32_t)(${value}));`;
+    if (channel.peripheral === 'PWM') return `HAL_PWM_Write(${pin}, "${channel.name}", (uint32_t)(${value}));`;
+    if (channel.peripheral === 'UART') return `HAL_UART_Write(${pin}, "${channel.name}", (uint32_t)(${value}));`;
+    if (channel.peripheral === 'SPI') return `HAL_SPI_Write(${pin}, "${channel.name}", (uint32_t)(${value}));`;
+    if (channel.peripheral === 'I2C') return `HAL_I2C_Write(${pin}, "${channel.name}", (uint32_t)(${value}));`;
+    return '(void)value;';
+  };
+  const mappedInputs = config.mappings
+    .filter((mapping) => mapping.direction === 'read')
+    .map((mapping) => ({ mapping, channel: config.channels.find((channel) => channel.id === mapping.channelId) }))
+    .filter((item): item is { mapping: typeof config.mappings[number]; channel: typeof config.channels[number] } => item.channel !== undefined);
+  const mappedOutputs = config.mappings
+    .filter((mapping) => mapping.direction === 'write')
+    .map((mapping) => ({ mapping, channel: config.channels.find((channel) => channel.id === mapping.channelId) }))
+    .filter((item): item is { mapping: typeof config.mappings[number]; channel: typeof config.channels[number] } => item.channel !== undefined);
+  const mcalHilC = `${disclaimer}#include "mcal_dio.h"
+#include "hal_drivers.h"
+
+bool MCAL_Dio_ReadChannel(uint32_t channel) {
+    switch (channel) {
+${mappedInputs.map(({ mapping, channel }) => `    case ${mcalChannelIndex(mapping.channelId)}U: return (bool)(${halRead(channel)});`).join('\n')}
+    default: return false;
+    }
+}
+
+double MCAL_ReadChannelValue(uint32_t channel) {
+    switch (channel) {
+${mappedInputs.map(({ mapping, channel }) => `    case ${mcalChannelIndex(mapping.channelId)}U: return (double)(${halRead(channel)});`).join('\n')}
+    default: return 0.0;
+    }
+}
+
+void MCAL_Dio_WriteChannel(uint32_t channel, bool level) {
+    switch (channel) {
+${mappedOutputs.map(({ mapping, channel }) => `    case ${mcalChannelIndex(mapping.channelId)}U: ${halWrite(channel, 'level')} break;`).join('\n')}
+    default: break;
+    }
+}
+
+void MCAL_WriteChannelValue(uint32_t channel, double value) {
+    switch (channel) {
+${mappedOutputs.map(({ mapping, channel }) => `    case ${mcalChannelIndex(mapping.channelId)}U: ${halWrite(channel, 'value')} break;`).join('\n')}
+    default: break;
+    }
+}
+
+void MCAL_ApplySafeOutputs(void) { }
+void MCAL_Watchdog_Kick(void) { }
+`;
+
   // README explaining the entry point and HAL integration per target
   const readmeHil = `# ADIA HIL Generated Project
 
@@ -564,6 +631,7 @@ This project is configured for PlatformIO (see \`platformio.ini\`). Open the fol
     { name: 'hal_drivers.c', content: halDriversC },
     { name: 'hil_interface.h', content: hilInterfaceH },
     { name: 'hil_interface.c', content: hilInterfaceC },
+    { name: 'mcal_dio_hil.c', content: mcalHilC },
     { name: mainFileName, content: mainHilC },
     { name: 'platformio.ini', content: platformioIni },
     { name: 'README_HIL.md', content: readmeHil },

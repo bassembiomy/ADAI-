@@ -562,7 +562,7 @@ int main(void) {
       }],
     };
     const core = renderCoreSource(build(model));
-    expect(core).toContain('MCAL_Dio_ReadChannel(MCAL_CH_ADC_0)');
+    expect(core).toContain('MCAL_ReadChannelValue(MCAL_CH_ADC_0)');
     expect(core).toContain('* 2.0');
     expect(core).toContain('instance->data.total > 1');
     expect(core).toContain('MCAL_Dio_WriteChannel(MCAL_CH_GPIO_0');
@@ -690,5 +690,52 @@ int main(void) {
 `,
     );
     expect(output.trim()).toBe('1 0');
+  });
+
+  it('calls MCAL safe-output handling for a safety fault without output mappings', () => {
+    const model = flatOrFixture();
+    model.safetyMode = true;
+    model.states[0].isSafeState = true;
+    const output = compileAndRun(
+      build(model),
+      `#include "sm_core.h"
+#include <stdio.h>
+static unsigned safe_outputs_applied = 0U;
+void MCAL_ApplySafeOutputs(void) { ++safe_outputs_applied; }
+int main(void) { ADIA_Instance_t inst; (void)SM_Init(&inst); inst.error_status = SM_ERR_SAFETY_VIOLATION; (void)SM_Step(&inst, SM_TICK_MS); printf("%u\\n", safe_outputs_applied); return 0; }
+`,
+    );
+    expect(output.trim()).toBe('1');
+  });
+
+  it('emits typed non-DIO safe values without boolean coercion', () => {
+    const model = flatOrFixture();
+    model.hilConfig = {
+      enabled: true, target: 'Generic', clockSpeed: 1, commPort: '', baudRate: 115200,
+      channels: [{ id: 'pwm', name: 'PWM', peripheral: 'PWM', pin: '0', direction: 'Out', dataType: 'uint16_t', rangeMin: 0, rangeMax: 255, scalingFactor: 1, unit: '' }],
+      mappings: [{ id: 'pwm_write', adiaVarId: 'total', channelId: 'pwm', direction: 'write', safeValue: 128 }],
+    };
+    const safe = generatedFile(build(model), 'sm_safety.c');
+    expect(safe).toContain('MCAL_WriteChannelValue(MCAL_CH_PWM, 128);');
+    expect(safe).not.toContain('MCAL_Dio_WriteChannel(MCAL_CH_PWM');
+  });
+
+  it('rejects safe values incompatible with the mapped channel type', () => {
+    const model = mappedOutputFixture();
+    model.hilConfig!.mappings[0].safeValue = 2;
+    const result = buildSemanticModel(model);
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: 'IO_MAPPING_SAFE_VALUE_INVALID', severity: 'error',
+    }));
+
+    const numericModel = flatOrFixture();
+    numericModel.hilConfig = {
+      enabled: true, target: 'Generic', clockSpeed: 1, commPort: '', baudRate: 115200,
+      channels: [{ id: 'pwm', name: 'PWM', peripheral: 'PWM', pin: '0', direction: 'Out', dataType: 'uint16_t', rangeMin: 0, rangeMax: 255, scalingFactor: 1, unit: '' }],
+      mappings: [{ id: 'pwm_write', adiaVarId: 'total', channelId: 'pwm', direction: 'write', safeValue: 1.5 }],
+    };
+    expect(buildSemanticModel(numericModel).diagnostics).toContainEqual(expect.objectContaining({
+      code: 'IO_MAPPING_SAFE_VALUE_INVALID', severity: 'error',
+    }));
   });
 });

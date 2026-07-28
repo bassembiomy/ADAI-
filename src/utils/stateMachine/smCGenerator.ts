@@ -864,7 +864,7 @@ export const renderSafetyHeader = (): string => lines(
 export const renderSafetySource = (ir: SemanticModel): string => lines(
   '#include <stddef.h>',
   '#include "sm_safety.h"',
-  ir.ioMappings.some((mapping) => mapping.direction === 'write')
+  (ir.safetyMode || ir.ioMappings.some((mapping) => mapping.direction === 'write'))
     ? '#include "mcal_dio.h"'
     : null,
   '',
@@ -882,8 +882,10 @@ export const renderSafetySource = (ir: SemanticModel): string => lines(
   ir.ioMappings.filter((mapping) => mapping.direction === 'write').length === 0
     ? null
     : ir.ioMappings.filter((mapping) => mapping.direction === 'write').map((mapping) =>
-      `    MCAL_Dio_WriteChannel(${channelMacro(mapping.channelId)}, (bool)(${mapping.safeValue === null ? 'false' : mapping.safeValue ? 'true' : 'false'}));`).join('\n'),
-  ir.ioMappings.some((mapping) => mapping.direction === 'write')
+      mapping.channelDataType === 'bool'
+        ? `    MCAL_Dio_WriteChannel(${channelMacro(mapping.channelId)}, ${mapping.safeValue === true ? 'true' : 'false'});`
+        : `    MCAL_WriteChannelValue(${channelMacro(mapping.channelId)}, ${mapping.safeValue === null ? '0.0' : Number(mapping.safeValue).toString()});`).join('\n'),
+  (ir.safetyMode || ir.ioMappings.some((mapping) => mapping.direction === 'write'))
     ? '    MCAL_ApplySafeOutputs();'
     : null,
   '}',
@@ -910,6 +912,8 @@ export const renderMcalHeader = (
     '',
     'bool MCAL_Dio_ReadChannel(uint32_t channel);',
     'void MCAL_Dio_WriteChannel(uint32_t channel, bool level);',
+    'double MCAL_ReadChannelValue(uint32_t channel);',
+    'void MCAL_WriteChannelValue(uint32_t channel, double value);',
     'void MCAL_ApplySafeOutputs(void);',
     'void MCAL_Watchdog_Kick(void);',
     '',
@@ -930,6 +934,18 @@ export const renderMcalTestStubs = (): string => lines(
   '{',
   '    (void)channel;',
   '    (void)level;',
+  '}',
+  '',
+  'double MCAL_ReadChannelValue(uint32_t channel)',
+  '{',
+  '    (void)channel;',
+  '    return 0.0;',
+  '}',
+  '',
+  'void MCAL_WriteChannelValue(uint32_t channel, double value)',
+  '{',
+  '    (void)channel;',
+  '    (void)value;',
   '}',
   '',
   'void MCAL_ApplySafeOutputs(void)',
@@ -966,7 +982,9 @@ export const renderCoreSource = (ir: SemanticModel): string => {
   const readMappings = ir.ioMappings.filter((mapping) =>
     mapping.direction === 'read').map((mapping) => {
     const variable = ir.variables[mapping.variableId];
-    const rawRead = `MCAL_Dio_ReadChannel(${channelMacro(mapping.channelId)})`;
+    const rawRead = mapping.channelDataType === 'bool'
+      ? `MCAL_Dio_ReadChannel(${channelMacro(mapping.channelId)})`
+      : `MCAL_ReadChannelValue(${channelMacro(mapping.channelId)})`;
     const value = mapping.conversionExpression === null
       ? rawRead
       : renderCExpression(
@@ -989,7 +1007,9 @@ export const renderCoreSource = (ir: SemanticModel): string => {
         'bool',
         (node) => node.name === 'x' ? rawValue : undefined,
       );
-    return `    MCAL_Dio_WriteChannel(${channelMacro(mapping.channelId)}, (bool)(${value}));`;
+    return mapping.channelDataType === 'bool'
+      ? `    MCAL_Dio_WriteChannel(${channelMacro(mapping.channelId)}, (bool)(${value}));`
+      : `    MCAL_WriteChannelValue(${channelMacro(mapping.channelId)}, (double)(${value}));`;
   });
   const faultEntry = ir.safetyMode && ir.safeStateId !== null
     ? lines(

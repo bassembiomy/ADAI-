@@ -519,11 +519,15 @@ export const buildSemanticModel = (
     variableIdByReference.set(variable.id, variable.id);
     variableIdByReference.set(variable.name, variable.id);
   }
+  const channelById = new Map(
+    (model.hilConfig?.channels ?? []).map((channel) => [channel.id, channel]),
+  );
   const ioMappings: SemanticIOMapping[] = (model.hilConfig?.mappings ?? [])
     .map((mapping) => ({
       id: mapping.id,
       variableId: variableIdByReference.get(mapping.adiaVarId)!,
       channelId: mapping.channelId,
+      channelDataType: channelById.get(mapping.channelId)?.dataType ?? 'bool',
       direction: mapping.direction,
       conversionExpression: mapping.conversionExpr?.trim()
         ? parseCondition(mapping.conversionExpr, new Set(['x']))

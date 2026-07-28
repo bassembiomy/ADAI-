@@ -92,7 +92,7 @@ describe('HIL Code Generator', () => {
 
   it('should generate all HIL driver files for STM32F4', () => {
     const files = generateHALCode(mockConfig, smVariables);
-    expect(files).toHaveLength(8);
+    expect(files).toHaveLength(9);
 
 
     const names = files.map(f => f.name);
@@ -141,10 +141,11 @@ describe('HIL Code Generator', () => {
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
 
-    // Default files (10) + HIL files (8) = 17 files (test shims excluded by default)
-    expect(result.files).toHaveLength(17);
+    // Default files (9) + HIL files (9, including the MCAL-to-HAL bridge) = 18 files
+    expect(result.files).toHaveLength(18);
     const names = result.files.map(f => f.name);
     expect(names).not.toContain('stm32f4xx_hal.h');
+    expect(names).toContain('mcal_dio_hil.c');
 
     const testingReport = result.files.find(f => f.name === 'sm_testing_report.md')?.content;
     expect(testingReport).toContain('## 8. HIL Driver Mapping Report');
@@ -218,7 +219,7 @@ describe('HIL Code Generator', () => {
     // STM32F1
     const f1Config = { ...mockConfig, target: 'STM32F1' as const };
     const f1Files = generateHALCode(f1Config, smVariables);
-    expect(f1Files).toHaveLength(8);
+    expect(f1Files).toHaveLength(9);
     const f1DriversC = f1Files.find(f => f.name === 'hal_drivers.c')?.content || '';
     expect(f1DriversC).toContain('#include "stm32f1xx_hal.h"');
     expect(f1DriversC).toContain('HAL_UART_Receive(&huart1');
@@ -226,12 +227,12 @@ describe('HIL Code Generator', () => {
     // ESP32
     const espConfig = { ...mockConfig, target: 'ESP32' as const };
     const espFiles = generateHALCode(espConfig, smVariables);
-    expect(espFiles).toHaveLength(8);
+    expect(espFiles).toHaveLength(9);
 
     // Arduino_Uno
     const unoConfig = { ...mockConfig, target: 'Arduino_Uno' as const };
     const unoFiles = generateHALCode(unoConfig, smVariables);
-    expect(unoFiles).toHaveLength(8);
+    expect(unoFiles).toHaveLength(9);
 
     const mainUno = unoFiles.find(f => f.name.startsWith('main_hil'))?.content || '';
     expect(mainUno).toContain('#include "Arduino.h"');
@@ -357,7 +358,7 @@ describe('HIL Code Generator', () => {
     ];
 
     const files = generateHALCode(uartSpiConfig, smVars);
-    expect(files).toHaveLength(8);
+    expect(files).toHaveLength(9);
 
 
     const driversH = files.find(f => f.name === 'hal_drivers.h')?.content || '';

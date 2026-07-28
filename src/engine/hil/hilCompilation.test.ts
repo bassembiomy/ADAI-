@@ -56,11 +56,60 @@ describe('HIL Driver Target Compilation Verification', () => {
     { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1'], transitionIds: [], junctionIds: [] }
   ];
 
+  it('links mapped ADC input through Read → Step → Write to PWM output', () => {
+    const result = generateMISRACCode({
+      tickMs: 10,
+      states: [{ ...mockStates[0], during: 'v_pwm = v_adc;' }],
+      junctions: [],
+      transitions: [],
+      variables: mockVariables,
+      layers: mockLayers,
+      safetyMode: false,
+      hilConfig: {
+        enabled: true,
+        target: 'Generic',
+        clockSpeed: 1,
+        commPort: '',
+        baudRate: 115200,
+        channels: [
+          { id: 'adc', name: 'adc', peripheral: 'ADC', pin: 'A0', direction: 'In', dataType: 'uint16', rangeMin: 0, rangeMax: 1023, scalingFactor: 1, unit: '' },
+          { id: 'pwm', name: 'pwm', peripheral: 'PWM', pin: 'P0', direction: 'Out', dataType: 'uint16', rangeMin: 0, rangeMax: 255, scalingFactor: 1, unit: '' },
+        ],
+        mappings: [
+          { id: 'adc_read', adiaVarId: 'v_adc', channelId: 'adc', direction: 'read' },
+          { id: 'pwm_write', adiaVarId: 'v_pwm', channelId: 'pwm', direction: 'write', safeValue: 128 },
+        ],
+      },
+    } as any);
+    expect(result.errors).toHaveLength(0);
+    expect(result.files.some((file) => file.name === 'mcal_dio_hil.c')).toBe(true);
+
+    const tempDir = path.join(__dirname, '../../../scratch/test_hil_mcal_runtime');
+    cleanupDir(tempDir);
+    ensureDir(tempDir);
+    try {
+      for (const file of result.files) {
+        fs.writeFileSync(path.join(tempDir, file.name), file.content);
+      }
+      fs.writeFileSync(path.join(tempDir, 'harness.c'), `#include "sm_core.h"
+#include <stdio.h>
+static unsigned pwm_value = 0U;
+uint32_t HAL_ADC_Read(const char* pin, const char* name) { (void)pin; (void)name; return 321U; }
+void HAL_PWM_Write(const char* pin, const char* name, uint32_t value) { (void)pin; (void)name; pwm_value = value; }
+int main(void) { ADIA_Instance_t inst; (void)SM_Init(&inst); (void)SM_ReadInputs(&inst); (void)SM_Step(&inst, SM_TICK_MS); (void)SM_WriteOutputs(&inst); printf("%u %u\\n", (unsigned)inst.data.v_adc, pwm_value); return 0; }
+`);
+      execSync('gcc -std=c99 -Wall -Wextra -Werror -I. sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c harness.c -o harness.exe', { cwd: tempDir, stdio: 'pipe' });
+      expect(execSync('.\\harness.exe', { cwd: tempDir, encoding: 'utf8' }).trim()).toBe('321 321');
+    } finally {
+      cleanupDir(tempDir);
+    }
+  });
+
   const targets = [
     {
       target: 'Arduino_Uno',
       compiler: AVR_GPP,
-      compileCmd: (dir: string) => `"${AVR_GPP}" -mmcu=atmega328p -DF_CPU=16000000UL -DADIA_BARE_ARDUINO_MAIN -Os -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.cpp sm_core.c sm_safety.c sm_user_logic.c mcal_dio_test_stubs.c`,
+      compileCmd: (dir: string) => `"${AVR_GPP}" -mmcu=atmega328p -DF_CPU=16000000UL -DADIA_BARE_ARDUINO_MAIN -Os -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.cpp sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c`,
       channels: [
         { id: 'c1', name: 'v_gpio_in', peripheral: 'GPIO', pin: '2', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
         { id: 'c2', name: 'v_gpio_out', peripheral: 'GPIO', pin: '13', direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
@@ -78,7 +127,7 @@ describe('HIL Driver Target Compilation Verification', () => {
     {
       target: 'Arduino_Mega',
       compiler: AVR_GPP,
-      compileCmd: (dir: string) => `"${AVR_GPP}" -mmcu=atmega2560 -DF_CPU=16000000UL -DADIA_BARE_ARDUINO_MAIN -Os -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.cpp sm_core.c sm_safety.c sm_user_logic.c mcal_dio_test_stubs.c`,
+      compileCmd: (dir: string) => `"${AVR_GPP}" -mmcu=atmega2560 -DF_CPU=16000000UL -DADIA_BARE_ARDUINO_MAIN -Os -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.cpp sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c`,
       channels: [
         { id: 'c1', name: 'v_gpio_in', peripheral: 'GPIO', pin: '22', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
         { id: 'c2', name: 'v_gpio_out', peripheral: 'GPIO', pin: '13', direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
@@ -96,7 +145,7 @@ describe('HIL Driver Target Compilation Verification', () => {
     {
       target: 'STM32F4',
       compiler: ARM_GCC,
-      compileCmd: (dir: string) => `"${ARM_GCC}" -mcpu=cortex-m4 -mthumb --specs=nosys.specs -Os -I. -c hal_drivers.c hil_interface.c main_hil.c sm_core.c sm_safety.c sm_user_logic.c mcal_dio_test_stubs.c`,
+      compileCmd: (dir: string) => `"${ARM_GCC}" -mcpu=cortex-m4 -mthumb --specs=nosys.specs -Os -I. -c hal_drivers.c hil_interface.c main_hil.c sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c`,
       channels: [
         { id: 'c1', name: 'v_gpio_in', peripheral: 'GPIO', pin: 'PA0', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
         { id: 'c2', name: 'v_gpio_out', peripheral: 'GPIO', pin: 'PD12', direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
@@ -114,7 +163,7 @@ describe('HIL Driver Target Compilation Verification', () => {
     {
       target: 'STM32F1',
       compiler: ARM_GCC,
-      compileCmd: (dir: string) => `"${ARM_GCC}" -mcpu=cortex-m3 -mthumb --specs=nosys.specs -Os -I. -c hal_drivers.c hil_interface.c main_hil.c sm_core.c sm_safety.c sm_user_logic.c mcal_dio_test_stubs.c`,
+      compileCmd: (dir: string) => `"${ARM_GCC}" -mcpu=cortex-m3 -mthumb --specs=nosys.specs -Os -I. -c hal_drivers.c hil_interface.c main_hil.c sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c`,
       channels: [
         { id: 'c1', name: 'v_gpio_in', peripheral: 'GPIO', pin: 'PA0', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
         { id: 'c2', name: 'v_gpio_out', peripheral: 'GPIO', pin: 'PC13', direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
@@ -132,7 +181,7 @@ describe('HIL Driver Target Compilation Verification', () => {
     {
       target: 'ESP32',
       compiler: HOST_GPP,
-      compileCmd: (dir: string) => `g++ -O2 -Wall -Wextra -Werror -DADIA_BARE_ARDUINO_MAIN -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.cpp sm_core.c sm_safety.c sm_user_logic.c mcal_dio_test_stubs.c`,
+      compileCmd: (dir: string) => `g++ -O2 -Wall -Wextra -Werror -DADIA_BARE_ARDUINO_MAIN -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.cpp sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c`,
       channels: [
         { id: 'c1', name: 'v_gpio_in', peripheral: 'GPIO', pin: '4', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
         { id: 'c2', name: 'v_gpio_out', peripheral: 'GPIO', pin: '2', direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
@@ -150,7 +199,7 @@ describe('HIL Driver Target Compilation Verification', () => {
     {
       target: 'Generic',
       compiler: HOST_GCC,
-      compileCmd: (dir: string) => `gcc -std=c99 -O2 -Wall -Wextra -Werror -I. -c hal_drivers.c hil_interface.c main_hil.c sm_core.c sm_safety.c sm_user_logic.c mcal_dio_test_stubs.c`,
+      compileCmd: (dir: string) => `gcc -std=c99 -O2 -Wall -Wextra -Werror -I. -c hal_drivers.c hil_interface.c main_hil.c sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c`,
       channels: [
         { id: 'c1', name: 'v_gpio_in', peripheral: 'GPIO', pin: 'PA0', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
         { id: 'c2', name: 'v_gpio_out', peripheral: 'GPIO', pin: 'PD12', direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
