@@ -16,6 +16,7 @@ import {
   readMappedOutputs,
   resetAppSimulationSession,
   SemanticModelError,
+  setSessionVariableValue,
   shouldReportAppOperationError,
   traceFrameToAppUpdate,
 } from './smAppAdapter';
@@ -285,5 +286,16 @@ describe('state-machine application adapter', () => {
       resetOperation,
       new Error('stale model build'),
     )).toBe(false);
+  });
+
+  it('allows updating runtime variable values directly during simulation', () => {
+    const session = createAppSimulationSession(flatOrFixture());
+    expect(session.runtime.data.total).toBe(0);
+
+    setSessionVariableValue(session, 'total', 42);
+    expect(session.runtime.data.total).toBe(42);
+
+    setSessionVariableValue(session, 'go', true);
+    expect(session.runtime.data.go).toBe(true);
   });
 });

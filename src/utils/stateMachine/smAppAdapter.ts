@@ -336,6 +336,17 @@ export const createAppSimulationSession = (
   };
 };
 
+export const setSessionVariableValue = (
+  session: AppSimulationSession,
+  variableIdOrName: string,
+  value: AppSimulationValue,
+): void => {
+  const variable = session.ir.variables[variableIdOrName]
+    ?? Object.values(session.ir.variables).find((v) => v.name === variableIdOrName);
+  if (!variable) return;
+  session.runtime.data[variable.id] = coerceVariableValue(variable, value);
+};
+
 export const applyMappedInputs = (
   session: AppSimulationSession,
   inputValues: Readonly<Record<string, AppSimulationValue>>,

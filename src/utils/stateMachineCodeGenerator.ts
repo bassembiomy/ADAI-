@@ -1492,7 +1492,21 @@ static void SM_Exit_State(ADIA_Instance_t* instance, SM_Node_t state) {
   if (!anyHistoryLayers) {
     smEnterStateFunc += `    (void)use_history;\n`;
   }
-  smEnterStateFunc += `    SM_Enter_State_Shallow(instance, state);\n    switch (state) {\n`;
+  const terminalStateIds = sortedStates.filter(s => isTerminalState(s)).map(s => stateEnum(s));
+  smEnterStateFunc = `/**
+ * @brief Returns true if the given state is a terminal/end state.
+ * @param state State node to query
+ * @return bool True when the state is terminal
+ */
+static bool SM_Is_Terminal_State(SM_Node_t state) {
+    switch (state) {
+${terminalStateIds.length > 0 ? terminalStateIds.map(e => `        case ${e}:\n`).join('') : ''}        default:
+            return false;
+    }
+}
+
+` + smEnterStateFunc;
+  smEnterStateFunc += `    SM_Enter_State_Shallow(instance, state);\n    if (SM_Is_Terminal_State(state)) {\n        /* Terminal / End State: auto-reset state machine back to root autostart state */\n        SM_Reset(instance);\n        return;\n    }\n    switch (state) {\n`;
 
   sortedStates.forEach(s => {
     const sEnum = stateEnum(s);
@@ -1852,13 +1866,6 @@ static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) 
         const stateIdx = stateIndexMap.get(state.id);
 
         layerStepFuncs += `        case ${sEnum}:\n`;
-
-        if (isTerminalState(state)) {
-          layerStepFuncs += `            /* Terminal / End State: auto-reset state machine back to root autostart state */\n`;
-          layerStepFuncs += `            SM_Reset(instance);\n`;
-          layerStepFuncs += `            break;\n`;
-          return;
-        }
 
         const internal = parseInternalTransitions(state);
         const outgoing = [

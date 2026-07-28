@@ -44,6 +44,7 @@ import {
   createSimulationModelKey,
   readMappedOutputs,
   resetAppSimulationSession,
+  setSessionVariableValue,
   shouldReportAppOperationError,
   traceFrameToAppUpdate,
   type AppSimulationSession,
@@ -8303,10 +8304,17 @@ const ADIA = () => {
     addError('info', `Removed variable: ${varName}`);
   }, [variables, addError]);
 
-  const updateVariableValue = useCallback((id: string, value: string) => {
-    setVariables(prev => prev.map(v =>
-      v.id === id ? { ...v, currentValue: parseValue(v.type, value) } : v
-    ));
+  const updateVariableValue = useCallback((idOrName: string, value: string) => {
+    setVariables(prev => prev.map(v => {
+      if (v.id === idOrName || v.name === idOrName) {
+        const parsed = parseValue(v.type, value);
+        if (simulationSessionRef.current) {
+          setSessionVariableValue(simulationSessionRef.current, v.id, parsed);
+        }
+        return { ...v, currentValue: parsed };
+      }
+      return v;
+    }));
   }, []);
 
   const updateVariableInitValue = useCallback((id: string, value: string) => {
