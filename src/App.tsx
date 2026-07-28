@@ -44,6 +44,7 @@ import {
   createSimulationModelKey,
   readMappedOutputs,
   resetAppSimulationSession,
+  shouldReportAppOperationError,
   traceFrameToAppUpdate,
   type AppSimulationSession,
   type AppSimulationValue,
@@ -9345,9 +9346,7 @@ const ADIA = () => {
       }
       return true;
     } catch (error: any) {
-      const outputCommitFailed = String(error?.message || error)
-        .startsWith('Factory I/O output commit failed:');
-      if (lifecycle.isCurrent(operation) || outputCommitFailed) {
+      if (shouldReportAppOperationError(lifecycle, operation, error)) {
         setIsRunning(false);
         lifecycle.invalidate();
         addError('error', error.message || String(error), 'Simulation');
@@ -9437,7 +9436,8 @@ const ADIA = () => {
         'Simulation'
       );
     } catch (error: any) {
-      if (lifecycle.isCurrent(operation)) {
+      if (shouldReportAppOperationError(lifecycle, operation, error)) {
+        lifecycle.invalidate();
         simulationSessionRef.current = null;
         addError('error', error.message || String(error), 'Simulation');
       }

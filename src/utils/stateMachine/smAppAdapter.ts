@@ -304,6 +304,15 @@ export const commitAppOutputRequest = async (
   }
 };
 
+export const shouldReportAppOperationError = (
+  lifecycle: AppSimulationLifecycle,
+  operation: AppSimulationOperation,
+  error: unknown,
+): boolean =>
+  lifecycle.isCurrent(operation)
+  || String(error instanceof Error ? error.message : error)
+    .startsWith('Factory I/O output commit failed:');
+
 export const createAppSimulationSession = (
   model: StateMachineModelV4 | LegacyStateMachineModel,
   mappings?: readonly AppIOMapping[],

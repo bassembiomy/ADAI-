@@ -16,6 +16,7 @@ import {
   readMappedOutputs,
   resetAppSimulationSession,
   SemanticModelError,
+  shouldReportAppOperationError,
   traceFrameToAppUpdate,
 } from './smAppAdapter';
 
@@ -265,5 +266,22 @@ describe('state-machine application adapter', () => {
   ])('propagates $name from output commitment', async ({ send, message }) => {
     await expect(commitAppOutputRequest(send))
       .rejects.toThrow(`Factory I/O output commit failed: ${message}`);
+  });
+
+  it('reports output commitment failure after a reset operation becomes stale', () => {
+    const lifecycle = createAppSimulationLifecycle();
+    const resetOperation = lifecycle.begin()!;
+    lifecycle.invalidate();
+
+    expect(shouldReportAppOperationError(
+      lifecycle,
+      resetOperation,
+      new Error('Factory I/O output commit failed: PLC disconnected'),
+    )).toBe(true);
+    expect(shouldReportAppOperationError(
+      lifecycle,
+      resetOperation,
+      new Error('stale model build'),
+    )).toBe(false);
   });
 });
