@@ -50,6 +50,7 @@ import {
   type AppSimulationValue,
 } from './utils/stateMachine/smAppAdapter';
 import { stepRuntime } from './utils/stateMachine/smInterpreter';
+import { serializeInlineScriptJson } from './utils/stateMachine/smInlineScriptSerialization';
 import { migrateStateMachineModel } from './utils/stateMachine/smModelMigration';
 import type { SemanticTraceFrame } from './utils/stateMachine/smTrace';
 import { STATE_MACHINE_RUNTIME_BUNDLE } from './generated/stateMachineRuntimeBundle';
@@ -12610,11 +12611,11 @@ const ADIA = () => {
           ${STATE_MACHINE_RUNTIME_BUNDLE}
           (function() {
             const PROJECT_DATA = {
-              model: ${JSON.stringify(standaloneMigration.model)},
-              modelDiagnostics: ${JSON.stringify(standaloneMigration.diagnostics)},
-              variables: ${JSON.stringify(serializedVariables)},
-              states: ${JSON.stringify(serializedStates)},
-              hmiComponents: ${JSON.stringify(serializedHmiComponents)},
+              model: ${serializeInlineScriptJson(standaloneMigration.model)},
+              modelDiagnostics: ${serializeInlineScriptJson(standaloneMigration.diagnostics)},
+              variables: ${serializeInlineScriptJson(serializedVariables)},
+              states: ${serializeInlineScriptJson(serializedStates)},
+              hmiComponents: ${serializeInlineScriptJson(serializedHmiComponents)},
               tickMs: ${tickMs}
             };
 
