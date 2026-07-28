@@ -40,6 +40,7 @@ export interface StateData {
   parentId: string | null;
   children: string[];
   priority: number;
+  /** @deprecated Migration-only legacy decomposition metadata. */
   isParallel: boolean;
   regionId: string | null;
   autostart: boolean;
