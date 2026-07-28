@@ -108,12 +108,36 @@ const topmostExitStateIds = (
       exits.has(ancestorId)));
 };
 
+const renderCStringLiteral = (value: string): string => {
+  const escaped = Array.from(value).map((character) => {
+    if (character === '\\') return '\\\\';
+    if (character === '"') return '\\"';
+    if (character === '\n') return '\\n';
+    if (character === '\r') return '\\r';
+    if (character === '\t') return '\\t';
+    const code = character.charCodeAt(0);
+    return code < 32 || code === 127
+      ? `\\${code.toString(8).padStart(3, '0')}`
+      : character;
+  }).join('');
+  return `"${escaped}"`;
+};
+
 const renderActions = (
   ir: SemanticModel,
   actions: SemanticState['entryActions'],
+  traceLabel: string,
   indent = '    ',
-): string => actions.map((action) =>
-  `${indent}${renderCAction(action, ir.variables)}`).join('\n');
+): string => lines(
+  actions.map((action) =>
+    `${indent}${renderCAction(action, ir.variables)}`).join('\n'),
+  actions.length === 0
+    ? null
+    : `${indent}SM_TraceAction(instance, ${renderCStringLiteral(traceLabel)});`,
+).trimEnd();
+
+const stateActionLabel = (state: SemanticState): string =>
+  state.enumName.startsWith('SM_ST_') ? state.enumName.slice(6) : state.enumName;
 
 const renderTransitionEnabled = (
   ir: SemanticModel,
@@ -323,7 +347,12 @@ const renderDefaultJunction = (
       `(${renderTransitionEnabled(ir, transition, transition.sourceStateId)})`)
       .join(' && ');
     const actionCode = transitions.map((transition) =>
-      renderActions(ir, transition.actions, `${indent}    `))
+      renderActions(
+        ir,
+        transition.actions,
+        `transition:${transition.id}`,
+        `${indent}    `,
+      ))
       .filter(Boolean)
       .join('\n');
     const destination = transitions[transitions.length - 1];
@@ -537,6 +566,7 @@ const renderCommitRoute = (
     const actionCode = renderActions(
       ir,
       ir.transitions[transitionId].actions,
+      `transition:${transitionId}`,
       indent,
     );
     if (actionCode) statements.push(actionCode);
@@ -763,6 +793,13 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '',
     'typedef uint32_t SM_Group_t;',
     '',
+    '#ifdef SM_TRACE_ENABLED',
+    'typedef struct {',
+    '    const char *action;',
+    '} SM_TraceEvent_t;',
+    'typedef void (*SM_TraceSink_t)(const SM_TraceEvent_t *event);',
+    '#endif',
+    '',
     'typedef struct {',
     variables.length === 0
       ? '    uint8_t reserved;'
@@ -779,6 +816,9 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '    bool deep_history[SM_NUM_LAYERS][SM_NUM_STATES + 1U];',
     '    SM_Error_t error_status;',
     '    bool fault_latched;',
+    '#ifdef SM_TRACE_ENABLED',
+    '    SM_TraceSink_t trace_sink;',
+    '#endif',
     '} ADIA_Instance_t;',
     '',
     '#endif /* SM_CONFIG_H */',
@@ -799,6 +839,12 @@ export const renderCoreHeader = (): string => lines(
   'SM_Error_t SM_Sync_IO(ADIA_Instance_t *instance);',
   'SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t group);',
   'SM_Error_t SM_GetError(const ADIA_Instance_t *instance);',
+  '#ifdef SM_TRACE_ENABLED',
+  'void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink);',
+  'void SM_TraceAction(ADIA_Instance_t *instance, const char *action);',
+  '#else',
+  '#define SM_TraceAction(instance, action) ((void)0)',
+  '#endif',
   '',
   '#endif /* SM_CORE_H */',
 );
@@ -819,6 +865,7 @@ export const renderUserLogicHeader = (ir: SemanticModel): string => lines(
 );
 
 export const renderUserLogicSource = (ir: SemanticModel): string => lines(
+  '#include "sm_core.h"',
   '#include "sm_user_logic.h"',
   '',
   ...orderedStates(ir).flatMap((state) => [
@@ -827,7 +874,11 @@ export const renderUserLogicSource = (ir: SemanticModel): string => lines(
       '{',
       state.entryActions.length === 0
         ? '    (void)instance;'
-        : renderActions(ir, state.entryActions),
+        : renderActions(
+          ir,
+          state.entryActions,
+          `entry:${stateActionLabel(state)}`,
+        ),
       '}',
     ),
     lines(
@@ -835,7 +886,11 @@ export const renderUserLogicSource = (ir: SemanticModel): string => lines(
       '{',
       state.duringActions.length === 0
         ? '    (void)instance;'
-        : renderActions(ir, state.duringActions),
+        : renderActions(
+          ir,
+          state.duringActions,
+          `during:${stateActionLabel(state)}`,
+        ),
       '}',
     ),
     lines(
@@ -843,7 +898,11 @@ export const renderUserLogicSource = (ir: SemanticModel): string => lines(
       '{',
       state.exitActions.length === 0
         ? '    (void)instance;'
-        : renderActions(ir, state.exitActions),
+        : renderActions(
+          ir,
+          state.exitActions,
+          `exit:${stateActionLabel(state)}`,
+        ),
       '}',
     ),
   ]),
@@ -1056,6 +1115,23 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '#include "sm_safety.h"',
     '#include "sm_user_logic.h"',
     '#include "mcal_dio.h"',
+    '',
+    '#ifdef SM_TRACE_ENABLED',
+    'void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink)',
+    '{',
+    '    if (instance != NULL) {',
+    '        instance->trace_sink = sink;',
+    '    }',
+    '}',
+    '',
+    'void SM_TraceAction(ADIA_Instance_t *instance, const char *action)',
+    '{',
+    '    if ((instance != NULL) && (instance->trace_sink != NULL)) {',
+    '        const SM_TraceEvent_t event = { action };',
+    '        instance->trace_sink(&event);',
+    '    }',
+    '}',
+    '#endif',
     '',
     ...forwardDeclarations,
     '',

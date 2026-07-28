@@ -10,7 +10,10 @@ import type {
 import type { SemanticTraceFrame } from './smTrace';
 
 export interface SemanticRuntimeError {
-  code: 'INVALID_ELAPSED_MS' | 'RUNTIME_EVALUATION_ERROR';
+  code:
+    | 'INVALID_ELAPSED_MS'
+    | 'RUNTIME_EVALUATION_ERROR'
+    | 'SAFETY_VIOLATION';
   message: string;
 }
 
@@ -104,7 +107,7 @@ const evaluateExpression = (
   }
 };
 
-const coerceRuntimeValue = (
+export const coerceSemanticValue = (
   value: number | boolean,
   type: VariableType,
 ): number | boolean => {
@@ -162,7 +165,7 @@ const runActions = (
     if (target === undefined) {
       throw new Error(`action target '${action.target}' is absent from semantic IR`);
     }
-    context.runtime.data[action.target] = coerceRuntimeValue(
+    context.runtime.data[action.target] = coerceSemanticValue(
       value,
       target.type,
     );
@@ -814,6 +817,11 @@ const createTraceFrame = (
     data: Object.freeze(data),
     stateTimersMs: Object.freeze(stateTimersMs),
     history: Object.freeze(history),
+    mappedOutputs: Object.freeze({}),
+    ioEffects: Object.freeze({
+      safeOutputsApplied: 0,
+      watchdogKicks: 0,
+    }),
     error: errorText(runtime.error),
   }) as SemanticTraceFrame;
 };
@@ -915,5 +923,29 @@ export const resetRuntime = (
   } catch (error) {
     latchEvaluationError(runtime, error);
   }
+  return createTraceFrame(context, 0);
+};
+
+export const faultRuntime = (
+  runtime: SemanticRuntime,
+): SemanticTraceFrame => {
+  const context: StepContext = { runtime, actions: [] };
+  try {
+    exitLayerConfiguration(context, runtime.ir.rootLayerId);
+    const safeStateId = runtime.ir.safeStateId;
+    if (runtime.ir.safetyMode && safeStateId !== null) {
+      enterStatePath(context, [
+        ...[...runtime.ir.states[safeStateId].ancestorStateIds].reverse(),
+        safeStateId,
+      ]);
+    }
+  } catch (error) {
+    latchEvaluationError(runtime, error);
+    return createTraceFrame(context, 0);
+  }
+  runtime.error = {
+    code: 'SAFETY_VIOLATION',
+    message: 'safety violation',
+  };
   return createTraceFrame(context, 0);
 };

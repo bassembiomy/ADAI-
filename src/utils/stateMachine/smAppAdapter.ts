@@ -1,5 +1,6 @@
 import type { ExpressionNode } from './smExpressions';
 import {
+  coerceSemanticValue,
   createRuntime,
   initializeRuntime,
   resetRuntime,
@@ -142,8 +143,7 @@ const evaluateConversion = (
 const coerceVariableValue = (
   variable: SemanticVariable,
   value: AppSimulationValue,
-): AppSimulationValue =>
-  variable.type === 'bool' ? Boolean(value) : Number(value);
+): AppSimulationValue => coerceSemanticValue(value, variable.type);
 
 const semanticMappings = (ir: SemanticModel): AppIOMapping[] =>
   ir.ioMappings.map((mapping: SemanticIOMapping) => ({

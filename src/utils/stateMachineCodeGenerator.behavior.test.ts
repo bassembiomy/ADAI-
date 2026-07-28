@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import { createGeneratedCodeTestWorkspace } from './generatedCodeTestWorkspace';
+import { compileAndRunCProgram } from './stateMachine/smCHarness';
 
 const generatedCodeWorkspaces: ReturnType<typeof createGeneratedCodeTestWorkspace>[] = [];
 
@@ -72,24 +73,23 @@ const avrCompile = (dir: string) => {
  * runs it. Returns the harness stdout. Skips (warn) only when no host gcc
  * exists on the machine. */
 const hostCompileAndRun = (dir: string, harnessC: string): string => {
-  let gcc = 'gcc';
-  try {
-    execSync('gcc --version', { stdio: 'pipe' });
-  } catch {
+  const output = compileAndRunCProgram({
+    directory: dir,
+    harnessSource: harnessC,
+    allowMissingCompiler: true,
+    executableName: 'harness',
+  });
+  if (output === null) {
     console.warn('host gcc not found, skipping behavioral test');
     return 'SKIPPED';
   }
-  fs.writeFileSync(path.join(dir, 'harness.c'), harnessC);
-  const exe = path.join(dir, process.platform === 'win32' ? 'harness.exe' : 'harness');
-  execSync(
-    `${gcc} -std=c99 -Wall -Wextra -Werror -I. sm_core.c sm_safety.c sm_user_logic.c harness.c -o "${exe}"`,
-    { cwd: dir, stdio: 'pipe' }
-  );
-  return execSync(`"${exe}"`, { cwd: dir, stdio: 'pipe' }).toString();
+  return output;
 };
 
 const HARNESS_PREAMBLE = `#include "sm_core.h"
 #include <stdio.h>
+
+void MCAL_ApplySafeOutputs(void) {}
 
 static int failures = 0;
 #define CHECK(cond, msg) do { \\

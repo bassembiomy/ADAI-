@@ -30,6 +30,8 @@ const frameFixture = (
   data: {},
   stateTimersMs: {},
   history: {},
+  mappedOutputs: {},
+  ioEffects: { safeOutputsApplied: 0, watchdogKicks: 0 },
   error: null,
   ...overrides,
 });

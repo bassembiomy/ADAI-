@@ -115,7 +115,7 @@ describe('typed C expression renderer', () => {
   });
 });
 
-describe('structured C99 renderer', () => {
+describe('structured C99 renderer', { timeout: 60_000 }, () => {
   it('never generates terminal-driven SM_Reset calls', () => {
     const core = renderCoreSource(build(parallelHistoryFixture('parallel-terminal')));
     expect(core).not.toMatch(/SM_Is_Terminal_State[\s\S]*SM_Reset/);

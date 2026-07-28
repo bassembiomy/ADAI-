@@ -578,3 +578,229 @@ export const historyFixture = (
     safetyMode: false,
   };
 };
+
+export type DifferentialFixtureName =
+  | 'flat-priority'
+  | 'nested-cross-boundary'
+  | 'external-self'
+  | 'internal-action'
+  | 'inner-descendant'
+  | 'inner-history'
+  | 'parallel-independent'
+  | 'parallel-parent-exit'
+  | 'shallow-history'
+  | 'deep-history-and'
+  | 'junction-backtracking'
+  | 'temporal-exact-boundary'
+  | 'terminal-or'
+  | 'terminal-and-sibling'
+  | 'reset'
+  | 'safe-output-fault';
+
+export type DifferentialScenarioStep =
+  | {
+      kind: 'step';
+      elapsedMs?: number;
+      inputs?: Readonly<Record<string, number | boolean>>;
+    }
+  | { kind: 'reset' }
+  | { kind: 'fault' };
+
+export interface DifferentialFixture {
+  name: DifferentialFixtureName;
+  model: StateMachineModelV4;
+  steps: readonly DifferentialScenarioStep[];
+}
+
+const historySteps = (): DifferentialScenarioStep[] => [
+  { kind: 'step', inputs: { select_a: true } },
+  { kind: 'step', inputs: { select_a: false, advance_nested: true } },
+  { kind: 'step', inputs: { advance_nested: false, advance_left: true } },
+  { kind: 'step', inputs: { advance_left: false, advance_right: true } },
+  { kind: 'step', inputs: { advance_right: false, leave: true } },
+  { kind: 'step', inputs: { leave: false, go: true } },
+];
+
+const terminalOrFixture = (): StateMachineModelV4 => {
+  const model = flatOrFixture();
+  model.states[0].isTerminalState = true;
+  model.states[0].during = 'total = total + 100;';
+  model.transitions = [];
+  model.layers[0].transitionIds = [];
+  return model;
+};
+
+const withMotorOutput = (
+  model: StateMachineModelV4,
+): StateMachineModelV4 => {
+  model.variables.push({
+    id: 'output_enable',
+    name: 'output_enable',
+    type: 'bool',
+    initialValue: 'false',
+    currentValue: false,
+    visibleInScope: true,
+  });
+  model.hilConfig = {
+    enabled: true,
+    target: 'Generic',
+    clockSpeed: 1,
+    commPort: '',
+    baudRate: 115200,
+    channels: [{
+      id: 'motor',
+      name: 'Motor',
+      peripheral: 'GPIO',
+      pin: '0',
+      direction: 'Out',
+      dataType: 'bool',
+      rangeMin: 0,
+      rangeMax: 1,
+      scalingFactor: 1,
+      unit: '',
+    }],
+    mappings: [{
+      id: 'write_motor',
+      adiaVarId: 'output_enable',
+      channelId: 'motor',
+      direction: 'write',
+      safeValue: false,
+    }],
+  };
+  return model;
+};
+
+const safeOutputFaultFixture = (): StateMachineModelV4 => {
+  const model = withMotorOutput(flatOrFixture());
+  model.safetyMode = true;
+  model.states[0].id = 'run';
+  model.states[0].name = 'Run';
+  model.states[0].exit = 'total = total + 1;';
+  model.states[1].id = 'safe';
+  model.states[1].name = 'Safe';
+  model.states[1].isSafeState = true;
+  model.states[1].entry = 'total = total + 10;';
+  model.transitions = [];
+  model.layers[0].stateIds = ['run', 'safe'];
+  model.layers[0].transitionIds = [];
+  return model;
+};
+
+const innerHistoryFixture = (): StateMachineModelV4 => {
+  const model = historyFixture('shallow');
+  model.transitions.push(
+    transition('inner_restore_history', 'workspace', 'shallow_history', {
+      condition: 'go',
+      type: 'internal',
+      isInternal: true,
+    }),
+  );
+  return model;
+};
+
+export const semanticFixture = (
+  name: DifferentialFixtureName,
+): DifferentialFixture => {
+  switch (name) {
+    case 'flat-priority':
+      return {
+        name,
+        model: interpreterFixture('transition-priority'),
+        steps: [{ kind: 'step' }],
+      };
+    case 'nested-cross-boundary':
+      return {
+        name,
+        model: interpreterFixture('ancestor-destination'),
+        steps: [{ kind: 'step', inputs: { go: true } }],
+      };
+    case 'external-self':
+      return {
+        name,
+        model: interpreterFixture('external-self'),
+        steps: [{ kind: 'step', inputs: { go: true } }],
+      };
+    case 'internal-action':
+      return {
+        name,
+        model: interpreterFixture('internal-action'),
+        steps: [{ kind: 'step', inputs: { go: true } }],
+      };
+    case 'inner-descendant':
+      return {
+        name,
+        model: interpreterFixture('outer-during-inner'),
+        steps: [{ kind: 'step', inputs: { inner: true } }],
+      };
+    case 'inner-history':
+      return {
+        name,
+        model: innerHistoryFixture(),
+        steps: [
+          { kind: 'step', inputs: { select_a: true } },
+          { kind: 'step', inputs: { select_a: false, go: true } },
+        ],
+      };
+    case 'shallow-history':
+      return { name, model: historyFixture('shallow'), steps: historySteps() };
+    case 'parallel-independent':
+      return {
+        name,
+        model: parallelHistoryFixture('parallel-order'),
+        steps: [{ kind: 'step' }, { kind: 'step' }],
+      };
+    case 'parallel-parent-exit':
+      return {
+        name,
+        model: parallelHistoryFixture('parallel-parent-exit'),
+        steps: [{ kind: 'step', inputs: { leave: true } }],
+      };
+    case 'deep-history-and':
+      return { name, model: historyFixture('deep'), steps: historySteps() };
+    case 'junction-backtracking':
+      return {
+        name,
+        model: interpreterFixture('atomic-junction'),
+        steps: [{ kind: 'step', inputs: { go: true } }],
+      };
+    case 'temporal-exact-boundary':
+      return {
+        name,
+        model: parallelHistoryFixture('timing-boundary'),
+        steps: [{ kind: 'step' }, { kind: 'step' }, { kind: 'step' }],
+      };
+    case 'terminal-or':
+      return {
+        name,
+        model: terminalOrFixture(),
+        steps: [{ kind: 'step' }, { kind: 'step' }],
+      };
+    case 'terminal-and-sibling':
+      return {
+        name,
+        model: parallelHistoryFixture('parallel-terminal'),
+        steps: [{ kind: 'step' }, { kind: 'step' }],
+      };
+    case 'reset':
+      return {
+        name,
+        model: withMotorOutput(interpreterFixture('reset')),
+        steps: [
+          {
+            kind: 'step',
+            inputs: { total: 7, go: true, output_enable: true },
+          },
+          { kind: 'reset' },
+        ],
+      };
+    case 'safe-output-fault':
+      return {
+        name,
+        model: safeOutputFaultFixture(),
+        steps: [
+          { kind: 'step', inputs: { output_enable: true } },
+          { kind: 'fault' },
+        ],
+      };
+  }
+};

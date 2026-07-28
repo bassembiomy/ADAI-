@@ -1,5 +1,6 @@
 import {
   createRuntime,
+  coerceSemanticValue,
   initializeRuntime,
   resetRuntime,
   stepRuntime,
@@ -19,9 +20,7 @@ export const applyInputs = (
         (candidate) => candidate.name === reference,
       );
     if (!variable) continue;
-    runtime.data[variable.id] = variable.type === 'bool'
-      ? Boolean(input)
-      : Number(input);
+    runtime.data[variable.id] = coerceSemanticValue(input, variable.type);
   }
 };
 
