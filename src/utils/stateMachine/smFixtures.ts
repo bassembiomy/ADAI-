@@ -312,3 +312,269 @@ export const interpreterFixture = (
       return model;
   }
 };
+
+export type ParallelHistoryFixtureName =
+  | 'parallel-order'
+  | 'parallel-parent-exit'
+  | 'parallel-terminal'
+  | 'timing-boundary';
+
+const taskFourVariables = (): VariableDef[] => [
+  ...variables(),
+  {
+    id: 'leave',
+    name: 'leave',
+    type: 'bool',
+    initialValue: 'false',
+    currentValue: false,
+    visibleInScope: true,
+  },
+];
+
+const parallelShell = (): StateMachineModelV4 => ({
+  schemaVersion: CURRENT_SM_SCHEMA_VERSION,
+  tickMs: 10,
+  states: [
+    state('PARENT', {
+      name: 'ParallelParent',
+      autostart: true,
+      entry: '',
+      exit: 'total = total + 1;',
+    }),
+    state('OUTSIDE', {
+      name: 'Outside',
+      priority: 2,
+      entry: 'total = total + 1;',
+    }),
+    state('R1', {
+      name: 'R1',
+      parentId: 'PARENT',
+      priority: 1,
+      during: 'total = total + 1;',
+      exit: 'total = total + 1;',
+    }),
+    state('R2', {
+      name: 'R2',
+      parentId: 'PARENT',
+      priority: 2,
+      during: 'total = total + 1;',
+      exit: 'total = total + 1;',
+    }),
+    state('R3', {
+      name: 'R3',
+      parentId: 'PARENT',
+      priority: 3,
+      during: 'total = total + 1;',
+      exit: 'total = total + 1;',
+    }),
+  ],
+  junctions: [],
+  transitions: [],
+  variables: taskFourVariables(),
+  layers: [
+    layer('root', null, 'OR', ['PARENT', 'OUTSIDE']),
+    layer('parallel_regions', 'PARENT', 'AND', ['R1', 'R2', 'R3']),
+  ],
+  safetyMode: false,
+});
+
+export const parallelHistoryFixture = (
+  name: ParallelHistoryFixtureName,
+): StateMachineModelV4 => {
+  if (name === 'timing-boundary') {
+    return {
+      schemaVersion: CURRENT_SM_SCHEMA_VERSION,
+      tickMs: 10,
+      states: [
+        state('TIMED', { autostart: true }),
+        state('DONE', { priority: 2 }),
+      ],
+      junctions: [],
+      transitions: [
+        transition('after_three', 'TIMED', 'DONE', {
+          type: 'after',
+          afterTicks: 3,
+        }),
+      ],
+      variables: variables(),
+      layers: [layer('root', null, 'OR', ['TIMED', 'DONE'], ['after_three'])],
+      safetyMode: false,
+    };
+  }
+
+  const model = parallelShell();
+  if (name === 'parallel-parent-exit') {
+    model.transitions.push(
+      transition('leave_parent', 'R1', 'OUTSIDE', { condition: 'leave' }),
+    );
+    model.layers.find((item) => item.id === 'parallel_regions')!
+      .transitionIds.push('leave_parent');
+    return model;
+  }
+
+  if (name === 'parallel-terminal') {
+    const terminal = model.states.find((item) => item.id === 'R1')!;
+    terminal.id = 'TERMINAL_CHILD';
+    terminal.name = 'terminal_child';
+    terminal.isTerminalState = true;
+    terminal.during = 'total = total + 100;';
+    const worker = model.states.find((item) => item.id === 'R2')!;
+    worker.id = 'WORKER';
+    worker.name = 'worker';
+    model.states = model.states.filter((item) => item.id !== 'R3');
+    model.layers.find((item) => item.id === 'parallel_regions')!.stateIds = [
+      'TERMINAL_CHILD',
+      'WORKER',
+    ];
+  }
+  return model;
+};
+
+export type HistoryFixtureKind = 'shallow' | 'deep';
+
+const historyVariables = (): VariableDef[] => [
+  ...variables(),
+  ...['select_a', 'advance_nested', 'advance_left', 'advance_right', 'leave']
+    .map((id): VariableDef => ({
+      id,
+      name: id,
+      type: 'bool',
+      initialValue: 'false',
+      currentValue: false,
+      visibleInScope: true,
+    })),
+];
+
+export const historyFixture = (
+  kind: HistoryFixtureKind,
+): StateMachineModelV4 => {
+  const historyId = `${kind}_history`;
+  const transitions = [
+    transition('select_a', 'parent_b', 'parent_a', {
+      condition: 'select_a',
+    }),
+    transition('advance_nested', 'nested_default', 'nested_previous', {
+      condition: 'advance_nested',
+    }),
+    transition('advance_left', 'parallel_left_default', 'parallel_left_previous', {
+      condition: 'advance_left',
+    }),
+    transition(
+      'advance_right',
+      'parallel_right_default',
+      'parallel_right_previous',
+      { condition: 'advance_right' },
+    ),
+    transition('leave_workspace', 'workspace', 'outside', {
+      condition: 'leave',
+    }),
+    transition('restore_workspace', 'outside', historyId, {
+      condition: 'go',
+    }),
+  ];
+
+  return {
+    schemaVersion: CURRENT_SM_SCHEMA_VERSION,
+    tickMs: 10,
+    states: [
+      state('workspace', { autostart: true }),
+      state('outside', { priority: 2 }),
+      state('parent_a', { parentId: 'workspace', priority: 1 }),
+      state('parent_b', {
+        parentId: 'workspace',
+        priority: 2,
+        autostart: true,
+      }),
+      state('nested_default', {
+        parentId: 'parent_a',
+        autostart: true,
+      }),
+      state('nested_previous', {
+        parentId: 'parent_a',
+        priority: 2,
+      }),
+      state('parallel_left', {
+        parentId: 'parent_a',
+        priority: 1,
+      }),
+      state('parallel_right', {
+        parentId: 'parent_a',
+        priority: 2,
+      }),
+      state('parallel_left_default', {
+        parentId: 'parallel_left',
+        autostart: true,
+      }),
+      state('parallel_left_previous', {
+        parentId: 'parallel_left',
+        priority: 2,
+      }),
+      state('parallel_right_default', {
+        parentId: 'parallel_right',
+        autostart: true,
+      }),
+      state('parallel_right_previous', {
+        parentId: 'parallel_right',
+        priority: 2,
+      }),
+    ],
+    junctions: [{
+      id: historyId,
+      x: 0,
+      y: 0,
+      name: historyId,
+      color: '#000000',
+      parentId: 'workspace',
+      type: kind === 'deep' ? 'deep-history' : 'history',
+    }],
+    transitions,
+    variables: historyVariables(),
+    layers: [
+      layer(
+        'root',
+        null,
+        'OR',
+        ['workspace', 'outside'],
+        ['leave_workspace', 'restore_workspace'],
+      ),
+      {
+        ...layer(
+          'workspace_children',
+          'workspace',
+          'OR',
+          ['parent_a', 'parent_b'],
+          ['select_a'],
+        ),
+        junctionIds: [historyId],
+      },
+      layer(
+        'nested_choice',
+        'parent_a',
+        'OR',
+        ['nested_default', 'nested_previous'],
+        ['advance_nested'],
+      ),
+      layer(
+        'parallel_regions',
+        'parent_a',
+        'AND',
+        ['parallel_left', 'parallel_right'],
+      ),
+      layer(
+        'parallel_left_choice',
+        'parallel_left',
+        'OR',
+        ['parallel_left_default', 'parallel_left_previous'],
+        ['advance_left'],
+      ),
+      layer(
+        'parallel_right_choice',
+        'parallel_right',
+        'OR',
+        ['parallel_right_default', 'parallel_right_previous'],
+        ['advance_right'],
+      ),
+    ],
+    safetyMode: false,
+  };
+};

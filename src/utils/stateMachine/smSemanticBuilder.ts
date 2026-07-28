@@ -274,6 +274,12 @@ export const buildSemanticModel = (
   const transitionById = new Map(
     model.transitions.map((transition) => [transition.id, transition]),
   );
+  const layerIdByJunctionId = new Map<string, string>();
+  for (const layer of model.layers) {
+    for (const junctionId of layer.junctionIds) {
+      layerIdByJunctionId.set(junctionId, layer.id);
+    }
+  }
   const transitionOrder = [...model.transitions].sort((left, right) =>
     left.order - right.order || left.id.localeCompare(right.id));
 
@@ -434,13 +440,24 @@ export const buildSemanticModel = (
       destinationJunction?.type === 'history'
       || destinationJunction?.type === 'deep-history'
     ) {
+      const ownerLayerId = layerIdByJunctionId.get(destinationJunction.id);
+      const ownerStateId = ownerLayerId === undefined
+        ? null
+        : layers[ownerLayerId]?.parentStateId ?? null;
+      const routePaths = ownerStateId === null
+        ? { exitStateIds: [], entryStateIds: [] }
+        : transitionPaths(
+          rootTransition.sourceStateId,
+          ownerStateId,
+          rootTransition.kind,
+          hierarchy.parentByStateId,
+        );
       return [{
         transitionIds,
         destinationKind: 'history',
         destinationStateId: null,
         destinationJunctionId: destinationJunction.id,
-        exitStateIds: [],
-        entryStateIds: [],
+        ...routePaths,
       }];
     }
     if (visitedJunctions.has(transition.destinationStateId)) return [];
@@ -470,18 +487,12 @@ export const buildSemanticModel = (
     }
   }
 
-  const junctionLayer = new Map<string, string>();
-  for (const layer of model.layers) {
-    for (const junctionId of layer.junctionIds) {
-      junctionLayer.set(junctionId, layer.id);
-    }
-  }
   const junctions: Record<string, SemanticJunction> = {};
   for (const junction of [...model.junctions].sort((left, right) =>
     left.id.localeCompare(right.id))) {
     junctions[junction.id] = {
       id: junction.id,
-      layerId: junctionLayer.get(junction.id)!,
+      layerId: layerIdByJunctionId.get(junction.id)!,
       kind: junction.type ?? 'junction',
       outgoingTransitionIds: [...(transitionsBySource[junction.id] ?? [])],
     };

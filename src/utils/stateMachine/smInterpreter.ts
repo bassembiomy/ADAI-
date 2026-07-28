@@ -20,6 +20,7 @@ export interface SemanticRuntime {
   stateActive: boolean[];
   stateTimersMs: number[];
   historySlots: Array<string | null>;
+  deepHistory: Record<string, string[]>;
   error: SemanticRuntimeError | null;
   traceSequence: number;
 }
@@ -133,6 +134,9 @@ const clearConfiguration = (runtime: SemanticRuntime): void => {
   runtime.stateTimersMs.fill(0);
 };
 
+const saturatingAdd = (value: number, delta: number): number =>
+  Math.min(Number.MAX_SAFE_INTEGER, value + delta);
+
 const markStateEntered = (
   context: StepContext,
   stateId: string,
@@ -150,26 +154,77 @@ const markStateEntered = (
   );
 };
 
+const collectActiveStateConfiguration = (
+  runtime: SemanticRuntime,
+  stateId: string,
+  stateIds: string[],
+): void => {
+  const state = runtime.ir.states[stateId];
+  if (!runtime.stateActive[state.activityIndex]) return;
+  stateIds.push(stateId);
+  for (const childLayerId of state.childLayerIds) {
+    for (const childId of runtime.ir.layers[childLayerId].children) {
+      collectActiveStateConfiguration(runtime, childId, stateIds);
+    }
+  }
+};
+
+const snapshotDescendantConfiguration = (
+  runtime: SemanticRuntime,
+  layerId: string,
+): string[] => {
+  const stateIds: string[] = [];
+  for (const childId of runtime.ir.layers[layerId].children) {
+    collectActiveStateConfiguration(runtime, childId, stateIds);
+  }
+  return stateIds;
+};
+
+const recordLayerHistory = (
+  runtime: SemanticRuntime,
+  layerId: string,
+): void => {
+  const layer = runtime.ir.layers[layerId];
+  if (layer.activeSlot !== null) {
+    runtime.historySlots[layer.activeSlot] =
+      runtime.activeSlots[layer.activeSlot];
+  }
+  runtime.deepHistory[layerId] =
+    snapshotDescendantConfiguration(runtime, layerId);
+};
+
+function exitLayerConfiguration(
+  context: StepContext,
+  layerId: string,
+  recordHistory = true,
+): void {
+  const { runtime } = context;
+  const layer = runtime.ir.layers[layerId];
+  if (recordHistory) recordLayerHistory(runtime, layerId);
+  if (layer.decomposition === 'OR') {
+    const childId = layer.activeSlot === null
+      ? null
+      : runtime.activeSlots[layer.activeSlot];
+    if (childId !== null) exitState(context, childId, false);
+    return;
+  }
+  for (const childId of [...layer.children].reverse()) {
+    exitState(context, childId, false);
+  }
+}
+
 const exitState = (
   context: StepContext,
   stateId: string,
+  recordContainingLayer = true,
 ): void => {
   const { runtime } = context;
   const state = runtime.ir.states[stateId];
   if (!state || !runtime.stateActive[state.activityIndex]) return;
+  if (recordContainingLayer) recordLayerHistory(runtime, state.layerId);
 
   for (const childLayerId of [...state.childLayerIds].reverse()) {
-    const childLayer = runtime.ir.layers[childLayerId];
-    if (childLayer.decomposition === 'OR') {
-      const childId = childLayer.activeSlot === null
-        ? null
-        : runtime.activeSlots[childLayer.activeSlot];
-      if (childId !== null) exitState(context, childId);
-    } else {
-      throw new Error(
-        `AND layer '${childLayer.id}' requires the parallel interpreter extension`,
-      );
-    }
+    exitLayerConfiguration(context, childLayerId);
   }
 
   runActions(
@@ -304,9 +359,8 @@ const enterLayerDefault = (
 ): void => {
   const layer = context.runtime.ir.layers[layerId];
   if (layer.decomposition === 'AND') {
-    throw new Error(
-      `AND layer '${layer.id}' requires the parallel interpreter extension`,
-    );
+    for (const childId of layer.children) enterStateDeep(context, childId);
+    return;
   }
   if (layer.defaultEntryId === null) return;
   if (layer.defaultEntryKind === 'state') {
@@ -335,8 +389,10 @@ const enterLayerDefault = (
 const enterChildLayers = (
   context: StepContext,
   stateId: string,
+  excludedLayerId: string | null = null,
 ): void => {
   for (const childLayerId of context.runtime.ir.states[stateId].childLayerIds) {
+    if (childLayerId === excludedLayerId) continue;
     enterLayerDefault(context, childLayerId);
   }
 };
@@ -349,13 +405,164 @@ function enterStateDeep(
   enterChildLayers(context, stateId);
 }
 
+const enterStateAlongPath = (
+  context: StepContext,
+  stateIds: readonly string[],
+  index: number,
+  excludedFinalLayerId: string | null,
+): void => {
+  const stateId = stateIds[index];
+  markStateEntered(context, stateId);
+  const nextStateId = stateIds[index + 1];
+  if (nextStateId === undefined) {
+    enterChildLayers(context, stateId, excludedFinalLayerId);
+    return;
+  }
+
+  const selectedLayerId = context.runtime.ir.states[nextStateId].layerId;
+  for (const childLayerId of context.runtime.ir.states[stateId].childLayerIds) {
+    if (childLayerId === selectedLayerId) {
+      enterLayerAlongPath(
+        context,
+        childLayerId,
+        stateIds,
+        index + 1,
+        excludedFinalLayerId,
+      );
+    } else {
+      enterLayerDefault(context, childLayerId);
+    }
+  }
+};
+
+const enterLayerAlongPath = (
+  context: StepContext,
+  layerId: string,
+  stateIds: readonly string[],
+  index: number,
+  excludedFinalLayerId: string | null,
+): void => {
+  const layer = context.runtime.ir.layers[layerId];
+  const selectedStateId = stateIds[index];
+  if (layer.decomposition === 'OR') {
+    enterStateAlongPath(
+      context,
+      stateIds,
+      index,
+      excludedFinalLayerId,
+    );
+    return;
+  }
+
+  for (const childId of layer.children) {
+    if (childId === selectedStateId) {
+      enterStateAlongPath(
+        context,
+        stateIds,
+        index,
+        excludedFinalLayerId,
+      );
+    } else {
+      enterStateDeep(context, childId);
+    }
+  }
+};
+
 const enterStatePath = (
   context: StepContext,
   stateIds: readonly string[],
+  excludedFinalLayerId: string | null = null,
 ): void => {
-  for (const stateId of stateIds) markStateEntered(context, stateId);
-  const destinationId = stateIds[stateIds.length - 1];
-  if (destinationId !== undefined) enterChildLayers(context, destinationId);
+  const firstStateId = stateIds[0];
+  if (firstStateId === undefined) return;
+  enterLayerAlongPath(
+    context,
+    context.runtime.ir.states[firstStateId].layerId,
+    stateIds,
+    0,
+    excludedFinalLayerId,
+  );
+};
+
+const restoreStateFromSnapshot = (
+  context: StepContext,
+  stateId: string,
+  snapshot: ReadonlySet<string>,
+): void => {
+  markStateEntered(context, stateId);
+  const state = context.runtime.ir.states[stateId];
+  for (const childLayerId of state.childLayerIds) {
+    const childLayer = context.runtime.ir.layers[childLayerId];
+    const hasSavedChild = childLayer.children.some((childId) =>
+      snapshot.has(childId));
+    if (!hasSavedChild) {
+      enterLayerDefault(context, childLayerId);
+      continue;
+    }
+    if (childLayer.decomposition === 'OR') {
+      const childId = childLayer.children.find((id) => snapshot.has(id));
+      if (childId !== undefined) {
+        restoreStateFromSnapshot(context, childId, snapshot);
+      }
+      continue;
+    }
+    for (const childId of childLayer.children) {
+      if (snapshot.has(childId)) {
+        restoreStateFromSnapshot(context, childId, snapshot);
+      } else {
+        enterStateDeep(context, childId);
+      }
+    }
+  }
+};
+
+const restoreLayerHistory = (
+  context: StepContext,
+  layerId: string,
+  deep: boolean,
+  savedShallowStateId: string | null,
+  savedDeepStateIds: readonly string[] | null,
+): void => {
+  const layer = context.runtime.ir.layers[layerId];
+  if (deep && savedDeepStateIds !== null && savedDeepStateIds.length > 0) {
+    const snapshot = new Set(savedDeepStateIds);
+    if (layer.decomposition === 'OR') {
+      const stateId = layer.children.find((id) => snapshot.has(id));
+      if (stateId !== undefined) {
+        restoreStateFromSnapshot(context, stateId, snapshot);
+        return;
+      }
+    } else {
+      for (const childId of layer.children) {
+        if (snapshot.has(childId)) {
+          restoreStateFromSnapshot(context, childId, snapshot);
+        } else {
+          enterStateDeep(context, childId);
+        }
+      }
+      return;
+    }
+  }
+  if (
+    !deep
+    && layer.decomposition === 'OR'
+    && savedShallowStateId !== null
+    && layer.children.includes(savedShallowStateId)
+  ) {
+    enterStateDeep(context, savedShallowStateId);
+    return;
+  }
+  enterLayerDefault(context, layerId);
+};
+
+const topmostExitStateIds = (
+  ir: SemanticModel,
+  stateIds: readonly string[],
+): string[] => {
+  const exits = new Set(stateIds);
+  return stateIds.filter((stateId) =>
+    !ir.states[stateId].ancestorStateIds.some((ancestorId) =>
+      exits.has(ancestorId)));
 };
 
 const commitTransition = (
@@ -363,8 +570,28 @@ const commitTransition = (
   selected: SelectedTransition,
 ): void => {
   const { transition, route } = selected;
+  const historyJunction = route.destinationJunctionId === null
+    ? null
+    : context.runtime.ir.junctions[route.destinationJunctionId];
+  const historyLayer = historyJunction === null
+    ? null
+    : context.runtime.ir.layers[historyJunction.layerId];
+  const savedShallowStateId = historyLayer?.activeSlot === null
+    || historyLayer?.activeSlot === undefined
+    ? null
+    : context.runtime.historySlots[historyLayer.activeSlot];
+  const savedDeepStateIds = historyLayer === null
+    ? null
+    : [...(context.runtime.deepHistory[historyLayer.id] ?? [])];
   if (transition.kind !== 'internal-action') {
-    for (const stateId of route.exitStateIds) exitState(context, stateId);
+    for (
+      const stateId of topmostExitStateIds(
+        context.runtime.ir,
+        route.exitStateIds,
+      )
+    ) {
+      exitState(context, stateId);
+    }
     exitConflictingConfiguration(context, route.entryStateIds);
   }
   for (const transitionId of route.transitionIds) {
@@ -376,8 +603,26 @@ const commitTransition = (
     );
   }
   if (transition.kind !== 'internal-action') {
-    if (route.destinationKind !== 'state') {
-      throw new Error('history destinations are not available in the OR interpreter');
+    if (
+      route.destinationKind === 'history'
+      && historyJunction !== null
+      && historyLayer !== null
+    ) {
+      enterStatePath(context, route.entryStateIds, historyLayer.id);
+      const ownerStateId = historyLayer.parentStateId;
+      if (ownerStateId !== null) {
+        if (route.entryStateIds.length === 0) {
+          exitLayerConfiguration(context, historyLayer.id, false);
+        }
+      }
+      restoreLayerHistory(
+        context,
+        historyLayer.id,
+        historyJunction.kind === 'deep-history',
+        savedShallowStateId,
+        savedDeepStateIds,
+      );
+      return;
     }
     if (route.entryStateIds.length > 0) {
       enterStatePath(context, route.entryStateIds);
@@ -395,6 +640,7 @@ const executeState = (
   stateId: string,
 ): boolean => {
   const state = context.runtime.ir.states[stateId];
+  if (state.terminal) return false;
 
   const outer = selectTransitionPath(context, stateId, 'outer');
   if (outer !== null) {
@@ -414,10 +660,12 @@ const executeState = (
     return true;
   }
 
+  let transitioned = false;
   for (const layerId of state.childLayerIds) {
-    if (executeLayer(context, layerId)) return true;
+    transitioned = executeLayer(context, layerId) || transitioned;
+    if (!context.runtime.stateActive[state.activityIndex]) break;
   }
-  return false;
+  return transitioned;
 };
 
 function executeLayer(
@@ -432,9 +680,21 @@ function executeLayer(
       ? false
       : executeState(context, activeStateId);
   }
-  throw new Error(
-    `AND layer '${layer.id}' requires the parallel interpreter extension`,
-  );
+  let transitioned = false;
+  for (const childId of layer.children) {
+    const child = context.runtime.ir.states[childId];
+    if (!context.runtime.stateActive[child.activityIndex]) continue;
+    transitioned = executeState(context, childId) || transitioned;
+    if (
+      layer.parentStateId !== null
+      && !context.runtime.stateActive[
+        context.runtime.ir.states[layer.parentStateId].activityIndex
+      ]
+    ) {
+      break;
+    }
+  }
+  return transitioned;
 }
 
 const incrementActiveTimers = (
@@ -443,9 +703,9 @@ const incrementActiveTimers = (
 ): void => {
   for (const state of orderedStates(runtime.ir)) {
     if (!runtime.stateActive[state.activityIndex]) continue;
-    runtime.stateTimersMs[state.activityIndex] = Math.min(
-      Number.MAX_SAFE_INTEGER,
-      runtime.stateTimersMs[state.activityIndex] + elapsedMs,
+    runtime.stateTimersMs[state.activityIndex] = saturatingAdd(
+      runtime.stateTimersMs[state.activityIndex],
+      elapsedMs,
     );
   }
 };
@@ -474,6 +734,10 @@ const createTraceFrame = (
   for (const layer of orderedLayers(runtime.ir)) {
     if (layer.activeSlot !== null) {
       history[layer.id] = runtime.historySlots[layer.activeSlot];
+    }
+    const deepSnapshot = runtime.deepHistory[layer.id];
+    if (deepSnapshot !== undefined) {
+      history[`${layer.id}:deep`] = JSON.stringify(deepSnapshot);
     }
   }
 
@@ -511,6 +775,7 @@ export const createRuntime = (ir: SemanticModel): SemanticRuntime => {
     stateActive: Array.from({ length: stateCount }, () => false),
     stateTimersMs: Array.from({ length: stateCount }, () => 0),
     historySlots: Array.from({ length: ir.activeSlotCount }, () => null),
+    deepHistory: {},
     error: null,
     traceSequence: 0,
   };
@@ -524,6 +789,7 @@ export const initializeRuntime = (
   restoreDataDefaults(runtime);
   clearConfiguration(runtime);
   runtime.historySlots.fill(null);
+  runtime.deepHistory = {};
   runtime.error = null;
   runtime.traceSequence = 0;
   const context: StepContext = { runtime, actions: [] };
@@ -568,9 +834,7 @@ export const resetRuntime = (
       const rootStateId = runtime.activeSlots[rootLayer.activeSlot];
       if (rootStateId !== null) exitState(context, rootStateId);
     } else {
-      for (const stateId of [...rootLayer.children].reverse()) {
-        exitState(context, stateId);
-      }
+      exitLayerConfiguration(context, rootLayer.id);
     }
   } catch {
     // Reset must still restore a complete default configuration.
@@ -579,6 +843,7 @@ export const resetRuntime = (
   restoreDataDefaults(runtime);
   clearConfiguration(runtime);
   runtime.historySlots.fill(null);
+  runtime.deepHistory = {};
   runtime.error = null;
   try {
     enterLayerDefault(context, runtime.ir.rootLayerId);
