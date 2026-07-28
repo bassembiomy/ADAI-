@@ -128,14 +128,14 @@ describe('Golden-file & behavior trace regression tests', () => {
     /* Initialize trace harness */
     SM_Init(&inst);
     /* Initial state A entered: log entry action runs and sets it to 100 */
-    CHECK(inst.state_active[SM_ST_A_IDX] == true, "init: A active");
+    CHECK(inst.state_active[SM_ST_S1_IDX] == true, "init: A active");
     CHECK(inst.data.log == 100U, "init: A entry action set log to 100");
 
     /* Tick 1 (10ms): A still active. Timer increments, transitions are evaluated.
      * Timer is 10 ms (1 tick) which is < 20 ms (2 ticks), so t1 does not fire.
      * Since no transition fires, during action of A runs (log + 1) => 101 */
     SM_Step(&inst, 10U);
-    CHECK(inst.state_active[SM_ST_A_IDX] == true, "tick 1: A still active");
+    CHECK(inst.state_active[SM_ST_S1_IDX] == true, "tick 1: A still active");
     CHECK(inst.data.log == 101U, "tick 1: A during action updated log to 101");
 
     /* Tick 2 (10ms): A evaluates transitions. Timer increments to 20 ms (2 ticks).
@@ -144,13 +144,13 @@ describe('Golden-file & behavior trace regression tests', () => {
      * Enter B (log = 200) => 200
      * No during actions of either state run in the same step. */
     SM_Step(&inst, 10U);
-    CHECK(inst.state_active[SM_ST_B_IDX] == true, "tick 2: B active");
+    CHECK(inst.state_active[SM_ST_S2_IDX] == true, "tick 2: B active");
     CHECK(inst.data.log == 200U, "tick 2: B entry action runs and sets log to 200");
 
     /* Tick 3 (10ms): B active. No transitions out of B.
      * During action of B runs (log + 2) => 202 */
     SM_Step(&inst, 10U);
-    CHECK(inst.state_active[SM_ST_B_IDX] == true, "tick 3: B still active");
+    CHECK(inst.state_active[SM_ST_S2_IDX] == true, "tick 3: B still active");
     CHECK(inst.data.log == 202U, "tick 3: B during action updated log to 202");
 ` + HARNESS_EPILOGUE);
 

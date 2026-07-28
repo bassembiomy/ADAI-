@@ -535,6 +535,9 @@ export const buildSemanticModel = (
     diagnostics,
     ir: freezeSemanticModel({
       tickMs: model.tickMs,
+      safetyMode: model.safetyMode,
+      safeStateId: model.states.find((state) => state.isSafeState === true)?.id
+        ?? null,
       rootLayerId: hierarchy.rootLayerId,
       states,
       layers,

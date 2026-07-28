@@ -4,6 +4,13 @@ import {
 } from '../types/sm_types';
 import { analyzeStateMachine } from './smAnalysisEngine';
 import { generateHALCode } from '../engine/hil/hilCodeGenerator';
+import { generateCArtifacts } from './stateMachine/smCGenerator';
+import { migrateStateMachineModel } from './stateMachine/smModelMigration';
+import { buildSemanticModel } from './stateMachine/smSemanticBuilder';
+import type {
+  LegacyStateMachineModel,
+  ModelDiagnostic,
+} from './stateMachine/smModel';
 
 const VERSION = 'v3.0 ENGINE';
 
@@ -67,7 +74,7 @@ const isOutputVariable = (v: any): boolean => {
 };
 
 
-export const generateMISRACCode = (
+const generateLegacyMISRACCode = (
   chart: {
     tickMs: number;
   states: StateData[];
@@ -3037,3 +3044,66 @@ ${hilReport}
 *Note: This report documents automated structural checks only. It does not constitute certification evidence.*
 `;
 };
+
+const diagnosticToLegacyError = (
+  diagnostic: ModelDiagnostic,
+): ErrorItem => ({
+  id: diagnostic.code,
+  type: diagnostic.severity,
+  message: diagnostic.message,
+  timestamp: new Date(),
+  source: 'state-machine-semantic-model',
+  elementId: diagnostic.elementId,
+});
+
+/**
+ * Compatibility facade for existing application callers.
+ *
+ * The legacy implementation remains above solely as reconciliation context
+ * while callers migrate. Runtime artifacts are rendered only from the
+ * validated immutable semantic model.
+ */
+export const generateMISRACCode = (
+  chart: Omit<LegacyStateMachineModel, 'hilConfig'> & { hilConfig?: any },
+  options: { includeTestShims?: boolean } = {},
+): { files: { name: string; content: string }[]; errors: ErrorItem[]; warnings: string[] } => {
+  if (
+    chart.safetyMode === true
+    && !chart.states.some((state) => state.isSafeState === true)
+  ) {
+    return {
+      files: [],
+      errors: [{
+        id: 'SAFE_STATE_REQUIRED',
+        type: 'error',
+        message: 'No Safe State defined while safety mode is enabled.',
+        timestamp: new Date(),
+        source: 'state-machine-semantic-model',
+      }],
+      warnings: [],
+    };
+  }
+
+  const migrated = migrateStateMachineModel(chart as LegacyStateMachineModel);
+  const built = buildSemanticModel(migrated.model);
+  const diagnostics = [...migrated.diagnostics, ...built.diagnostics];
+  const errors = diagnostics
+    .filter((item) => item.severity === 'error')
+    .map(diagnosticToLegacyError);
+  const warnings = diagnostics
+    .filter((item) => item.severity === 'warning')
+    .map((item) => `[${item.code}] ${item.message}`);
+
+  if (built.ir === undefined || errors.length > 0) {
+    return { files: [], errors, warnings };
+  }
+
+  const rendered = generateCArtifacts(built.ir, options);
+  return {
+    files: rendered.files,
+    errors: [...errors, ...rendered.errors],
+    warnings: [...warnings, ...rendered.warnings],
+  };
+};
+
+void generateLegacyMISRACCode;

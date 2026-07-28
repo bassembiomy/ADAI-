@@ -112,7 +112,7 @@ const validateIdentifierNamespaces = (
       if (owner !== undefined && owner !== variable.id) {
         diagnostics.push(diagnostic(
           'SYMBOL_ALIAS_COLLISION',
-          `Symbol '${alias}' ambiguously refers to variables '${owner}' and '${variable.id}'.`,
+          `Duplicate symbol '${alias}' ambiguously refers to variables '${owner}' and '${variable.id}'.`,
           variable.id,
         ));
       }
@@ -138,10 +138,28 @@ const validateIdentifierNamespaces = (
   for (const variable of model.variables) {
     const cName = toCIdentifier(variable.name);
     register(`DATA_${cName}`, variable.id);
-    if (C_KEYWORDS.has(cName)) {
+    const runtimeReserved = new Set([
+      'active_states',
+      'data',
+      'deep_history',
+      'error_status',
+      'history_states',
+      'instance',
+      'state_active',
+      'state_timer',
+      'state_timers',
+    ]);
+    if (C_KEYWORDS.has(cName) || runtimeReserved.has(cName)) {
       diagnostics.push(diagnostic(
         'C_IDENTIFIER_RESERVED',
-        `Variable '${variable.id}' normalizes to reserved C keyword '${cName}'.`,
+        `Variable '${variable.id}' normalizes to reserved C identifier '${cName}'.`,
+        variable.id,
+      ));
+    }
+    if (cName !== variable.name) {
+      diagnostics.push(diagnostic(
+        'C_IDENTIFIER_INVALID',
+        `Variable '${variable.id}' has invalid C identifier '${variable.name}'.`,
         variable.id,
       ));
     }
@@ -876,13 +894,13 @@ const validateInitialValues = (
   const diagnostics: ModelDiagnostic[] = [];
   for (const variable of model.variables) {
     const source = variable.initialValue.trim();
-    const valid = variable.type === 'bool'
+    const valid = source.length > 0 && (variable.type === 'bool'
       ? ['true', 'false', '0', '1'].includes(source.toLowerCase())
-      : Number.isFinite(Number(source.replace(/[uUlLfF]+$/, '')));
+      : Number.isFinite(Number(source.replace(/[uUlLfF]+$/, ''))));
     if (!valid) {
       diagnostics.push(diagnostic(
         'VARIABLE_INITIAL_VALUE_INVALID',
-        `Variable '${variable.id}' has invalid initial value '${variable.initialValue}'.`,
+        `Invalid initial value '${variable.initialValue}' for variable '${variable.id}'.`,
         variable.id,
       ));
     }

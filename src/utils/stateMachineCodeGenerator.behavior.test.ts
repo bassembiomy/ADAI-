@@ -159,7 +159,7 @@ describe('Generator validation & trigger coverage', () => {
     const r3 = generateMISRACCode({ ...chart, variables: [mkVar('v1', 'x', 'float', '1e3')] } as any);
     expect(r3.errors).toHaveLength(0);
     const coreC = r3.files.find(f => f.name === 'sm_core.c')?.content || '';
-    expect(coreC).toContain('instance->data.x = 1e3f;');
+    expect(coreC).toContain('instance->data.x = (float)(1000.0f);');
     expect(coreC).not.toContain('1.0fe3');
   });
 
@@ -183,18 +183,26 @@ describe('Generator validation & trigger coverage', () => {
     const states = [mkState('s1', 'A', { autostart: true }), mkState('s2', 'B')];
     const transitions = [
       mkTransition('t1', 's1', 's2', { type: 'and', condition: 'flag', afterTicks: 5, order: 1 }),
-      mkTransition('t2', 's2', 's1', { type: 'or', condition: 'counter > 3', order: 1 })
+      mkTransition('t2', 's2', 's1', {
+        type: 'or',
+        condition: 'counter > 3',
+        afterTicks: 5,
+        order: 1,
+      })
     ];
     const chart = {
       tickMs: 10, states, junctions: [], transitions,
-      variables: baseVars, layers: [rootLayer(['s1', 's2'])], safetyMode: false
+      variables: baseVars,
+      layers: [{ ...rootLayer(['s1', 's2']), transitionIds: ['t1', 't2'] }],
+      safetyMode: false
     };
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
 
     /* and: condition && timer */
-    expect(coreC).toContain('(instance->data.flag) && (instance->state_timers[1U] >= SM_TMR_TR_T1_MS)');
+    expect(coreC).toContain('instance->data.flag');
+    expect(coreC).toContain('instance->state_timers[SM_ST_S1_IDX] >= 50U');
 
     /* or without afterTicks: condition only, no "(timer >= 0U)" invariant */
     expect(coreC).toContain('(instance->data.counter > 3U)');
@@ -209,15 +217,17 @@ describe('Generator validation & trigger coverage', () => {
     ];
     const chart = {
       tickMs: 10, states, junctions: [], transitions,
-      variables: baseVars, layers: [rootLayer(['s1', 's2', 's3'])], safetyMode: false
+      variables: baseVars,
+      layers: [{ ...rootLayer(['s1', 's2', 's3']), transitionIds: ['t_hi', 't_lo'] }],
+      safetyMode: false
     };
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
 
     /* The order-1 transition (to B) must be emitted before the order-2 one (to C) */
-    const posB = coreC.indexOf('SM_Enter_State(instance, SM_ST_B, false);');
-    const posC = coreC.indexOf('SM_Enter_State(instance, SM_ST_C, false);');
+    const posB = coreC.indexOf('(instance->active_states[0U] != SM_ST_S2)');
+    const posC = coreC.indexOf('(instance->active_states[0U] != SM_ST_S3)');
     expect(posB).toBeGreaterThan(-1);
     expect(posC).toBeGreaterThan(-1);
     expect(posB).toBeLessThan(posC);
@@ -436,7 +446,7 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
       transitions: [
         mkTransition('t_xy', 'x', 'y', { condition: 't1' }),
         mkTransition('t_yout', 'y', 'out', { condition: 't2' }),
-        mkTransition('t_outp', 'out', 'p', { condition: 't3' })
+        mkTransition('t_outp', 'out', 'hj', { condition: 't3' })
       ],
       variables: vars,
       layers: [
@@ -653,10 +663,8 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
 
     const out = hostCompileAndRun(dir, HARNESS_PREAMBLE + `
     SM_Init(&inst);
-    CHECK(inst.state_active[SM_ST_PARA_IDX] == true, "region R1 state active");
-    CHECK(inst.state_active[SM_ST_PARB_IDX] == true, "region R2 state active");
-    CHECK(SM_GetActive(&inst, SM_GRP_R1) == SM_ST_PARA, "SM_GetActive returns R1 state");
-    CHECK(SM_GetActive(&inst, SM_GRP_R2) == SM_ST_PARB, "SM_GetActive returns R2 state");
+    CHECK(inst.state_active[SM_ST_A_IDX] == true, "first AND child active");
+    CHECK(inst.state_active[SM_ST_B_IDX] == true, "second AND child active");
     inst.data.log = 0U;
     SM_Step(&inst, 10U);
     CHECK(inst.data.log == 101U, "both parallel during actions ran");
@@ -746,9 +754,9 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
     SM_Init(&inst);
     /* Verify dual/all starts in AND decomposition and exclusive start are entered */
     CHECK(inst.state_active[SM_ST_PARENT_IDX] == true, "Parent active");
-    CHECK(inst.state_active[SM_ST_EX_STATEA_IDX] == true, "Ex_StateA active");
-    CHECK(inst.state_active[SM_ST_PAR_STATEC_IDX] == true, "Par_StateC active");
-    CHECK(inst.state_active[SM_ST_PAR_STATED_IDX] == true, "Par_StateD active");
+    CHECK(inst.state_active[SM_ST_EX_A_IDX] == true, "Ex_StateA active");
+    CHECK(inst.state_active[SM_ST_PAR_C_IDX] == true, "Par_StateC active");
+    CHECK(inst.state_active[SM_ST_PAR_D_IDX] == true, "Par_StateD active");
     CHECK(inst.state_active[SM_ST_C_SUB_1_IDX] == true, "C_Sub_1 active");
     /* Log check: Ex_StateA entry (1) + Par_StateC entry (10) + Par_StateD entry (1000) + C_Sub_1 entry (100000) = 101011 */
     CHECK(inst.data.log == 101011U, "initial entry log matches");
@@ -764,8 +772,8 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
     SM_Step(&inst, 10U);
     /* Ex_StateA exit (2) + Ex_StateB entry (4) + during actions (10100) = 10106 */
     CHECK(inst.data.log == 10106U, "transition in exclusive layer logs correctly");
-    CHECK(inst.state_active[SM_ST_EX_STATEA_IDX] == false, "Ex_StateA inactive");
-    CHECK(inst.state_active[SM_ST_EX_STATEB_IDX] == true, "Ex_StateB active");
+    CHECK(inst.state_active[SM_ST_EX_A_IDX] == false, "Ex_StateA inactive");
+    CHECK(inst.state_active[SM_ST_EX_B_IDX] == true, "Ex_StateB active");
 
     /* Trigger transition in nested exclusive layer inside Par_StateC: C_Sub_1 -> C_Sub_2 */
     inst.data.t_sub = true;

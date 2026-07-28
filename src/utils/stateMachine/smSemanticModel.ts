@@ -85,6 +85,8 @@ export interface SemanticJunction {
 
 export interface SemanticModel {
   tickMs: number;
+  safetyMode: boolean;
+  safeStateId: string | null;
   rootLayerId: string;
   states: Record<string, SemanticState>;
   layers: Record<string, SemanticLayer>;

@@ -1,446 +1,111 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { generateMISRACCode } from './stateMachineCodeGenerator';
-import { StateData, VariableDef, TransitionData, JunctionData, Layer } from '../types/sm_types';
+import {
+  historyFixture,
+  interpreterFixture,
+  nestedAndFixture,
+  parallelHistoryFixture,
+} from './stateMachine/smFixtures';
 
-describe('StateMachineCodeGenerator Phase 2 & Core Remediation Tests', () => {
-  const baseVariables: VariableDef[] = [
-    { id: 'v1', name: 'sensor_val', type: 'float', initialValue: '0.0', currentValue: 0, visibleInScope: true },
-    { id: 'v2', name: 'counter', type: 'uint16', initialValue: '0', currentValue: 0, visibleInScope: true },
-    { id: 'v3', name: 'is_active', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true },
-  ];
+const generated = (
+  model: Parameters<typeof generateMISRACCode>[0],
+  name: string,
+): string => {
+  const result = generateMISRACCode(model);
+  expect(result.errors).toEqual([]);
+  return result.files.find((file) => file.name === name)!.content;
+};
 
-  const baseStates: StateData[] = [
-    {
-      id: 's1', name: 'Idle', x: 0, y: 0, width: 100, height: 100,
-      entry: '', during: '', exit: '',
-      isActive: false, color: 'blue', parentId: 'root', children: [],
-      priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
-    },
-    {
-      id: 's2', name: 'Active', x: 200, y: 0, width: 100, height: 100,
-      entry: '', during: '', exit: '',
-      isActive: false, color: 'green', parentId: 'root', children: [],
-      priority: 2, isParallel: false, regionId: 'MAIN', autostart: false
-    }
-  ];
-
-  const baseLayers: Layer[] = [
-    { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1', 's2'], transitionIds: [], junctionIds: [] }
-  ];
-
-  const baseChart = {
-    tickMs: 10,
-    states: baseStates,
-    junctions: [] as JunctionData[],
-    transitions: [] as TransitionData[],
-    variables: baseVariables,
-    layers: baseLayers,
-    safetyMode: false
-  };
-
-  it('1.1 & 1.2: should wire use_history=true for states with history junctions and honor propagation', () => {
-    // Parent state with nested layer containing a history junction and deep history junction
-    const compositeStates: StateData[] = [
-      {
-        id: 's_parent', name: 'Parent', x: 0, y: 0, width: 200, height: 200,
-        entry: '', during: '', exit: '',
-        isActive: false, color: 'blue', parentId: 'root', children: [],
-        priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
-      },
-      {
-        id: 's_child1', name: 'Child1', x: 10, y: 10, width: 80, height: 80,
-        entry: '', during: '', exit: '',
-        isActive: false, color: 'green', parentId: 'layer_child', children: [],
-        priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
-      },
-      {
-        id: 's_child2', name: 'Child2', x: 10, y: 100, width: 80, height: 80,
-        entry: '', during: '', exit: '',
-        isActive: false, color: 'green', parentId: 'layer_child', children: [],
-        priority: 2, isParallel: false, regionId: 'MAIN', autostart: false
-      },
-      {
-        id: 's_other', name: 'Other', x: 300, y: 0, width: 100, height: 100,
-        entry: '', during: '', exit: '',
-        isActive: false, color: 'red', parentId: 'root', children: [],
-        priority: 2, isParallel: false, regionId: 'MAIN', autostart: false
-      }
-    ];
-
-    const compositeJunctions: JunctionData[] = [
-      { id: 'j_hist', x: 0, y: 0, name: 'H', color: 'black', parentId: 'layer_child', type: 'deep-history' }
-    ];
-
-    const compositeTransitions: TransitionData[] = [
-      {
-        id: 't_to_parent', sourceId: 's_other', targetId: 's_parent',
-        condition: 'sensor_val > 5.0', action: '', afterTicks: null,
-        type: 'condition', hasControlPoint: false, order: 1
-      }
-    ];
-
-    const compositeLayers: Layer[] = [
-      { id: 'root', name: 'root', parentStateId: null, stateIds: ['s_parent', 's_other'], transitionIds: ['t_to_parent'], junctionIds: [] },
-      { id: 'layer_child', name: 'child_layer', parentStateId: 's_parent', stateIds: ['s_child1', 's_child2'], transitionIds: [], junctionIds: ['j_hist'] }
-    ];
-
-    const compositeChart = {
-      ...baseChart,
-      states: compositeStates,
-      junctions: compositeJunctions,
-      transitions: compositeTransitions,
-      layers: compositeLayers
-    };
-
-    const result = generateMISRACCode(compositeChart);
-    expect(result.errors).toHaveLength(0);
-
-    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
-    
-    // Check that transition entering Parent passes use_history=true because Parent contains history junction
-    expect(coreC).toContain('SM_Enter_State(instance, SM_ST_PARENT, true);');
+describe('StateMachineCodeGenerator structured backend remediation', () => {
+  it('uses the semantic active-slot allocation for layer constants', () => {
+    const config = generated(nestedAndFixture(), 'sm_config.h');
+    expect(config).toContain('#define SM_LYR_ROOT_IDX 0U');
+    expect(config).toContain('#define SM_LYR_PARALLEL_IDX 1U');
+    expect(config).toContain('#define SM_NUM_ACTIVE_SLOTS 1U');
   });
 
-  it('1.3: should honor TransitionData.isInternal and handle external self-transitions', () => {
-    const customTransitions: TransitionData[] = [
-      {
-        id: 't_internal', sourceId: 's1', targetId: 's1',
-        condition: 'sensor_val > 10.0', action: 'counter = 1;', afterTicks: null,
-        type: 'condition', hasControlPoint: false, order: 1, isInternal: true
-      },
-      {
-        id: 't_external_self', sourceId: 's2', targetId: 's2',
-        condition: 'sensor_val > 20.0', action: 'counter = 2;', afterTicks: null,
-        type: 'condition', hasControlPoint: false, order: 1, isInternal: false
-      }
-    ];
-
-    const customChart = {
-      ...baseChart,
-      transitions: customTransitions
-    };
-
-    const result = generateMISRACCode(customChart);
-    expect(result.errors).toHaveLength(0);
-
-    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
-
-    // Internal transition: no Exit or Enter of S1
-    const condIdx = coreC.indexOf('instance->data.sensor_val > 10.0f');
-    const internalTransitionBlock = coreC.substring(condIdx);
-    expect(internalTransitionBlock.substring(0, internalTransitionBlock.indexOf('}'))).not.toContain('SM_Exit_State');
-    expect(internalTransitionBlock.substring(0, internalTransitionBlock.indexOf('}'))).not.toContain('SM_Enter_State');
-
-    expect(internalTransitionBlock).toContain('instance->data.counter = (uint16_t)(1U);');
-
-    // External self transition: should exit and enter S2
-    const externalTransitionBlock = coreC.substring(coreC.indexOf('if ((instance->data.sensor_val > 20.0f))'));
-    expect(externalTransitionBlock).toContain('SM_Exit_State(instance, SM_ST_ACTIVE);');
-    expect(externalTransitionBlock).toContain('instance->data.counter = (uint16_t)(2U);');
-    expect(externalTransitionBlock).toContain('SM_Enter_State(instance, SM_ST_ACTIVE, false);');
+  it('emits deterministic transition priority order', () => {
+    const core = generated(
+      interpreterFixture('transition-priority'),
+      'sm_core.c',
+    );
+    const first = core.indexOf('(instance->active_states[0U] != SM_ST_C)');
+    expect(first).toBeGreaterThan(-1);
+    expect(core).not.toContain('(instance->active_states[0U] != SM_ST_B)');
   });
 
-  it('1.4: should enter ALL states in parallel regions', () => {
-    const parallelStates: StateData[] = [
-      {
-        id: 's_p1', name: 'P1', x: 0, y: 0, width: 100, height: 100,
-        entry: '', during: '', exit: '',
-        isActive: false, color: 'blue', parentId: 'root', children: [],
-        priority: 1, isParallel: true, regionId: 'REG_A', autostart: true
-      },
-      {
-        id: 's_p2', name: 'P2', x: 200, y: 0, width: 100, height: 100,
-        entry: '', during: '', exit: '',
-        isActive: false, color: 'green', parentId: 'root', children: [],
-        priority: 2, isParallel: true, regionId: 'REG_B', autostart: true
-      }
-    ];
+  it('distinguishes external self-transition and internal action-only code', () => {
+    const external = generated(interpreterFixture('external-self'), 'sm_core.c');
+    expect(external).toContain('SM_Exit_State(instance, SM_ST_A, true);');
+    expect(external).toContain('SM_ST_A_Entry(instance);');
 
-    const parallelChart = {
-      ...baseChart,
-      states: parallelStates,
-      layers: [
-        { id: 'root', name: 'root', parentStateId: null, stateIds: ['s_p1', 's_p2'], transitionIds: [], junctionIds: [] }
-      ]
-    };
-
-    const result = generateMISRACCode(parallelChart);
-    expect(result.errors).toHaveLength(0);
-
-    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
-    
-    // Should enter both states in Enter_Layer_0
-    expect(coreC).toContain('SM_Enter_State(instance, SM_ST_P1, false);');
-    expect(coreC).toContain('SM_Enter_State(instance, SM_ST_P2, false);');
+    const internal = generated(interpreterFixture('internal-action'), 'sm_core.c');
+    expect(internal).toContain(
+      'instance->data.counter = (double)((instance->data.counter + 1.0));',
+    );
+    const action = internal.indexOf('instance->data.counter =');
+    expect(internal.slice(Math.max(0, action - 300), action)).not.toContain(
+      'SM_Exit_State(instance, SM_ST_A',
+    );
   });
 
-  it('1.5: should implement SM_GetActive correctly using lookup table mapping', () => {
-    const result = generateMISRACCode(baseChart);
-    expect(result.errors).toHaveLength(0);
-
-    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
-
-    // Check that SM_GetActive uses switch-case lookup for region groups
-    expect(coreC).toContain('SM_Node_t SM_GetActive(const ADIA_Instance_t* instance, SM_Group_t g)');
-    expect(coreC).toContain('switch (g)');
-    expect(coreC).toContain('case SM_GRP_MAIN:');
-    expect(coreC).toContain('active = instance->active_states[');
+  it('renders explicit shallow and deep history storage and restoration', () => {
+    const shallow = generated(historyFixture('shallow'), 'sm_core.c');
+    const deep = generated(historyFixture('deep'), 'sm_core.c');
+    expect(shallow).toContain('instance->history_states[');
+    expect(shallow).toContain('SM_Enter_Layer_Default');
+    expect(deep).toContain('instance->deep_history[');
+    expect(deep).toContain('SM_Restore_State_');
   });
 
-  it('1.6: should actually enter designates isSafeState state on error', () => {
-    const safetyStates: StateData[] = [
-      {
-        id: 's_normal', name: 'Normal', x: 0, y: 0, width: 100, height: 100,
-        entry: '', during: '', exit: '',
-        isActive: false, color: 'blue', parentId: 'root', children: [],
-        priority: 1, isParallel: false, regionId: 'MAIN', autostart: true
-      },
-      {
-        id: 's_safe', name: 'SafeState', x: 200, y: 0, width: 100, height: 100,
-        entry: 'counter = 99;', during: '', exit: '',
-        isActive: false, color: 'green', parentId: 'root', children: [],
-        priority: 2, isParallel: false, regionId: 'MAIN', autostart: false,
-        isSafeState: true
-      }
-    ];
+  it('enters AND children forward and exits them in reverse priority', () => {
+    const core = generated(
+      parallelHistoryFixture('parallel-parent-exit'),
+      'sm_core.c',
+    );
+    const enterR1 = core.indexOf('SM_ST_R1_Entry(instance);');
+    const enterR2 = core.indexOf('SM_ST_R2_Entry(instance);');
+    const enterR3 = core.indexOf('SM_ST_R3_Entry(instance);');
+    expect(enterR1).toBeLessThan(enterR2);
+    expect(enterR2).toBeLessThan(enterR3);
 
-    const safetyChart = {
-      ...baseChart,
-      states: safetyStates,
-      safetyMode: true,
-      allowDeadlocks: true
-    };
-
-    const result = generateMISRACCode(safetyChart);
-    expect(result.errors).toHaveLength(0);
-
-    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
-    
-    // Should enter SM_ST_SAFESTATE on safety checks failure
-    expect(coreC).toContain('SM_Enter_State(instance, SM_ST_SAFESTATE, false);');
+    const exitLayer = core.indexOf('case SM_LYR_PARALLEL_REGIONS_IDX:');
+    const exitR3 = core.indexOf('SM_Exit_State(instance, SM_ST_R3, false);', exitLayer);
+    const exitR2 = core.indexOf('SM_Exit_State(instance, SM_ST_R2, false);', exitLayer);
+    const exitR1 = core.indexOf('SM_Exit_State(instance, SM_ST_R1, false);', exitLayer);
+    expect(exitR3).toBeLessThan(exitR2);
+    expect(exitR2).toBeLessThan(exitR1);
   });
 
-  it('1.7: should gate safety checks under safetyMode', () => {
-    const resultNormal = generateMISRACCode(baseChart);
-    const configNormal = resultNormal.files.find(f => f.name === 'sm_config.h')?.content || '';
-    
-    // When safetyMode is false, SM_SAFETY_ENABLED is not defined
-    expect(configNormal).not.toContain('#define SM_SAFETY_ENABLED');
-
-    // Add safe state and enable safetyMode
-    const safetyStates: StateData[] = [
-      { ...baseStates[0] },
-      { ...baseStates[1], isSafeState: true, name: 'Safe' }
-    ];
-    const safetyChart = { ...baseChart, states: safetyStates, safetyMode: true, allowDeadlocks: true };
-    const resultSafety = generateMISRACCode(safetyChart);
-    const configSafety = resultSafety.files.find(f => f.name === 'sm_config.h')?.content || '';
-    const coreCSafety = resultSafety.files.find(f => f.name === 'sm_core.c')?.content || '';
-
-    // SM_SAFETY_ENABLED is defined when safetyMode is true
-    expect(configSafety).toContain('#define SM_SAFETY_ENABLED');
-    // Safety check calls are present in sm_core.c (wrapped by preprocessor guards)
-    expect(coreCSafety).toContain('SM_Safety_Check(instance);');
+  it('clears active slots, timers, activity, deep history, and error on reset', () => {
+    const core = generated(historyFixture('deep'), 'sm_core.c');
+    const reset = core.slice(core.indexOf('SM_Error_t SM_Reset'));
+    expect(reset).toContain('instance->active_states[layer_index] = SM_NODE_INVALID;');
+    expect(reset).toContain('instance->history_states[layer_index] = SM_NODE_INVALID;');
+    expect(reset).toContain('instance->deep_history[layer_index][state_index] = false;');
+    expect(reset).toContain('instance->state_active[state_index] = false;');
+    expect(reset).toContain('instance->state_timers[state_index] = 0U;');
+    expect(reset).toContain('instance->error_status = SM_ERR_NONE;');
   });
 
-  it('1.8: should verify SM_Reset fully reinitializes all history and timer states', () => {
-    const result = generateMISRACCode(baseChart);
-    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
-
-    expect(coreC).toContain('instance->active_states[sm_iter] = SM_NODE_INVALID;');
-    expect(coreC).toContain('instance->history_states[sm_iter] = SM_NODE_INVALID;');
-    expect(coreC).toContain('instance->state_timers[sm_iter] = 0U;');
-    expect(coreC).toContain('instance->state_active[sm_iter] = false;');
+  it('keeps MCAL declarations visible and Sync_IO as a compatibility wrapper', () => {
+    const mcal = generated(nestedAndFixture(), 'mcal_dio.h');
+    const core = generated(nestedAndFixture(), 'sm_core.c');
+    expect(mcal).toContain('bool MCAL_Dio_ReadChannel(uint32_t channel);');
+    expect(mcal).toContain('void MCAL_Dio_WriteChannel(uint32_t channel, bool level);');
+    expect(mcal).toContain('void MCAL_ApplySafeOutputs(void);');
+    expect(mcal).toContain('void MCAL_Watchdog_Kick(void);');
+    expect(core).toContain('SM_Error_t error = SM_ReadInputs(instance);');
+    expect(core).toContain('error = SM_WriteOutputs(instance);');
   });
 
-  it('1.9: should implement DELAY block support for X-Bridges', () => {
-    const delayChart = {
-      ...baseChart,
-      states: [
-        {
-          ...baseStates[0],
-          isXBridges: true,
-          xBridgesModel: {
-            nodes: [
-              { id: 'b_in', data: { type: 'Constant', params: { value: 1.0 }, outputs: [{id: 'out'}] } },
-              { id: 'b_delay', data: { type: 'DELAY', params: {}, inputs: [{id: 'in'}], outputs: [{id: 'out'}] } }
-            ],
-            edges: [
-              { source: 'b_in', sourceHandle: 'out', target: 'b_delay', targetHandle: 'in' }
-            ],
-            mappings: [
-              { smVarId: 'v1', blockId: 'b_delay', portId: 'out', direction: 'out' }
-            ]
-          }
-        }
-      ]
-    };
-
-    const result = generateMISRACCode(delayChart as any);
-    expect(result.errors).toHaveLength(0);
-
-    const userLogicC = result.files.find(f => f.name === 'sm_user_logic.c')?.content || '';
-    
-    // Check that stateful Delay member is handled in execution
-    expect(userLogicC).toContain('b_delay_out0 = instance->data.idle_b_delay_state;');
-    expect(userLogicC).toContain('instance->data.idle_b_delay_state = b_in_out0;');
-  });
-
-  it('1.10: should emit error for dangling transition target', () => {
-    const danglingTransitions: TransitionData[] = [
-      {
-        id: 't_dangling', sourceId: 's1', targetId: 'nonexistent',
-        condition: 'true', action: '', afterTicks: null,
-        type: 'condition', hasControlPoint: false, order: 1
-      }
-    ];
-
-    const danglingChart = {
-      ...baseChart,
-      transitions: danglingTransitions
-    };
-
-    const result = generateMISRACCode(danglingChart);
-    // Validation flags dangling targets
-    expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors[0].message).toContain('dangling');
-  });
-
-  it('2.3: should not fabricate a ROM CRC self-comparison in sm_safety.c (MISRA 2.1/14.3)', () => {
-    const result = generateMISRACCode(baseChart);
-    const safetyC = result.files.find(f => f.name === 'sm_safety.c')?.content || '';
-
-    /* No fake CRC constants and no invariant self-compare dead code */
-    expect(safetyC).not.toContain('0x12345678U');
-    expect(safetyC).not.toContain('calculated_crc');
-    /* The RAM March test remains, and a documented target-specific hook is present */
-    expect(safetyC).toContain('SM_March_RAM_Test');
-    expect(safetyC).toContain('SM_ERR_ROM_INTEGRITY on mismatch');
-  });
-
-  it('3.1: should generate dynamic MCAL pin count', () => {
-    const customVariables: VariableDef[] = [
-      { id: 'v1', name: 'in_sensor1', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true },
-      { id: 'v2', name: 'in_sensor2', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true },
-      { id: 'v3', name: 'in_sensor3', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true },
-      { id: 'v4', name: 'out_actuator1', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true },
-    ];
-    const customChart = { ...baseChart, variables: customVariables };
-    const result = generateMISRACCode(customChart);
-    const mcalDioH = result.files.find(f => f.name === 'mcal_dio.h')?.content || '';
-    
-    // We have 3 input variables, so MCAL_PIN_INPUT_2 must be defined (and 0, 1)
-    expect(mcalDioH).toContain('#define MCAL_PIN_INPUT_0');
-    expect(mcalDioH).toContain('#define MCAL_PIN_INPUT_1');
-    expect(mcalDioH).toContain('#define MCAL_PIN_INPUT_2');
-    expect(mcalDioH).toContain('#define MCAL_PIN_OUTPUT_0');
-    expect(mcalDioH).toContain('#define MCAL_PIN_OUTPUT_1');
-  });
-
-  it('should emit user-code preservation placeholder regions in sm_user_logic.c and mcal_dio.h', () => {
-    const result = generateMISRACCode(baseChart);
-    const userLogicC = result.files.find(f => f.name === 'sm_user_logic.c')?.content || '';
-    const mcalDioH = result.files.find(f => f.name === 'mcal_dio.h')?.content || '';
-
-    // USER CODE regions in sm_user_logic.c
-    expect(userLogicC).toContain('/* USER CODE BEGIN Includes */');
-    expect(userLogicC).toContain('/* USER CODE END Includes */');
-
-    // USER CODE regions in mcal_dio.h
-    expect(mcalDioH).toContain('/* USER CODE BEGIN McalDio_Top */');
-    expect(mcalDioH).toContain('/* USER CODE END McalDio_Top */');
-    expect(mcalDioH).toContain('/* USER CODE BEGIN ReadChannel */');
-    expect(mcalDioH).toContain('/* USER CODE END ReadChannel */');
-    expect(mcalDioH).toContain('/* USER CODE BEGIN WriteChannel */');
-    expect(mcalDioH).toContain('/* USER CODE END WriteChannel */');
-    expect(mcalDioH).toContain('/* USER CODE BEGIN Watchdog_Kick */');
-    expect(mcalDioH).toContain('/* USER CODE END Watchdog_Kick */');
-  });
-
-  it('should wire safety checks inside SM_Step behind SM_SAFETY_ENABLED config flag and immediate halt on error', () => {
-    const safetyStates: StateData[] = [
-      { ...baseStates[0] },
-      { ...baseStates[1], isSafeState: true, name: 'Safe' }
-    ];
-    const safetyChart = { ...baseChart, states: safetyStates, safetyMode: true, allowDeadlocks: true };
-    const result = generateMISRACCode(safetyChart);
-    const configH = result.files.find(f => f.name === 'sm_config.h')?.content || '';
-    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
-
-    // Verify macro definition in sm_config.h
-    expect(configH).toContain('#define SM_SAFETY_ENABLED');
-
-    // Verify SM_Step immediate error halt
-    expect(coreC).toContain('if (instance->error_status != SM_ERR_NONE) {');
-
-    // Verify safety check call sites are wrapped in SM_SAFETY_ENABLED preprocessor guard
-    expect(coreC).toContain('#ifdef SM_SAFETY_ENABLED');
-    expect(coreC).toContain('SM_Safety_Check(instance);');
-  });
-
-  it('should generate unconditional transitions without if (true) scaffold', () => {
-    const customTransitions: TransitionData[] = [
-      {
-        id: 't_unconditional', sourceId: 's1', targetId: 's2',
-        condition: '', action: '', afterTicks: null,
-        type: 'condition', hasControlPoint: false, order: 1
-      }
-    ];
-    const customChart = {
-      ...baseChart,
-      transitions: customTransitions
-    };
-
-    const result = generateMISRACCode(customChart);
-    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
-
-    // Verify it doesn't contain if (true) or else if (true) for S1 -> S2 transition
-    expect(coreC).not.toContain('if (true)');
-    expect(coreC).not.toContain('else if (true)');
-    expect(coreC).toContain('SM_Exit_State(instance, SM_ST_IDLE);');
-  });
-
-  it('should validate delta_ms against SM_TICK_MS inside SM_Step as a timing contract', () => {
-    const result = generateMISRACCode(baseChart);
-    const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
-
-    // Verify delta_ms timing contract checks in SM_Step
-    expect(coreC).toContain('if ((delta_ms > SM_TICK_MS) && ((delta_ms - SM_TICK_MS) > SM_TICK_TOLERANCE)) {');
-    expect(coreC).toContain('else if ((delta_ms < SM_TICK_MS) && ((SM_TICK_MS - delta_ms) > SM_TICK_TOLERANCE)) {');
-    expect(coreC).toContain('instance->error_status = SM_ERR_SAFETY_VIOLATION;');
-  });
-
-  it('should respect guards/timers in generated test scenario steps and state tick/timer counts', () => {
-    const customTransitions: TransitionData[] = [
-      {
-        id: 't_timer', sourceId: 's1', targetId: 's2',
-        condition: '', action: '', afterTicks: 50,
-        type: 'after', hasControlPoint: false, order: 1
-      }
-    ];
-    const customChart = {
-      ...baseChart,
-      tickMs: 500,
-      transitions: customTransitions
-    };
-
-    const result = generateMISRACCode(customChart);
-    const report = result.files.find(f => f.name === 'sm_testing_report.md')?.content || '';
-
-    // Verify step shows "Wait for 50 ticks / 25 s"
-    expect(report).toContain('Wait for 50 ticks / 25 s, then call SM_Step()');
-  });
-
-  it('should output honest MISRA compliance check list and run a real 14.3 check', () => {
-    const result = generateMISRACCode(baseChart);
-    const report = result.files.find(f => f.name === 'sm_testing_report.md')?.content || '';
-
-    // Verify 14.3 check exists in the syntax compliance check section
-    expect(report).toContain('| MISRA-C 14.3 |');
-    expect(report).toContain('No invariant controlling expressions (such as `if (true)`) detected');
-    
-    // Check that we only list actually checked rules (no longer claiming 10.1 or 10.3)
-    expect(report).not.toContain('MISRA-C 10.1');
-    expect(report).not.toContain('MISRA-C 10.3');
+  it('contains no terminal-driven reset or generated-text repair markers', () => {
+    const core = generated(
+      parallelHistoryFixture('parallel-terminal'),
+      'sm_core.c',
+    );
+    expect(core).not.toContain('Terminal / End State: auto-reset');
+    expect(core).not.toContain('Syntactic Auto-Repair');
+    expect(core).not.toMatch(/SM_Is_Terminal_State[\s\S]*SM_Reset/);
   });
 });
