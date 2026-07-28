@@ -18,6 +18,13 @@ import {
   VariableDef,
   Layer,
 } from '../types/sm_types';
+import { buildSemanticModel } from './stateMachine/smSemanticBuilder';
+import { migrateStateMachineModel } from './stateMachine/smModelMigration';
+import type {
+  LegacyStateMachineModel,
+  ModelDiagnostic,
+} from './stateMachine/smModel';
+import type { SemanticModel } from './stateMachine/smSemanticModel';
 
 // ─── Exported types ──────────────────────────────────────────────────────────
 
@@ -85,6 +92,21 @@ export interface SMAnalysisResult {
     stateReachability: number;
     branchCoverage: number;
   };
+  diagnostics: ModelDiagnostic[];
+  semantic: {
+    tickMs: number;
+    stateCount: number;
+    transitionCount: number;
+    junctionCount: number;
+    variableCount: number;
+    layerCount: number;
+    activeSlotCount: number;
+    reachableStateIds: string[];
+    unreachableStateIds: string[];
+    terminalStateIds: string[];
+    orLayerIds: string[];
+    andLayerIds: string[];
+  };
 }
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
@@ -143,6 +165,22 @@ const getReachableNodes = (
     if (reachable.has(cur)) continue;
     reachable.add(cur);
 
+    const stateObj = states.find(s => s.id === cur);
+    if (stateObj?.isTerminalState === true || stateObj?.isTerminal === true) {
+      continue;
+    }
+
+    const junctionObj = junctions.find((junction) => junction.id === cur);
+    if (
+      junctionObj
+      && (junctionObj.type === 'history' || junctionObj.type === 'deep-history')
+      && junctionObj.parentId
+      && junctionObj.parentId !== 'root'
+    ) {
+      if (!reachable.has(junctionObj.parentId)) queue.push(junctionObj.parentId);
+      continue;
+    }
+
     // Follow transitions
     transitions
       .filter((t) => t.sourceId === cur)
@@ -151,7 +189,6 @@ const getReachableNodes = (
       });
 
     // Enter child layers implicitly
-    const stateObj = states.find(s => s.id === cur);
     if (stateObj) {
       const childLayers = layers.filter(l => l.parentStateId === stateObj.id);
       childLayers.forEach(cl => {
@@ -159,19 +196,9 @@ const getReachableNodes = (
         const allParallel = layerStates.length > 0 && layerStates.every(s => s.isParallel);
 
         if (allParallel) {
-          const regionsMap = new Map<string, StateData[]>();
-          layerStates.forEach(s => {
-            const rId = s.regionId || 'MAIN';
-            if (!regionsMap.has(rId)) regionsMap.set(rId, []);
-            regionsMap.get(rId)!.push(s);
-          });
-          regionsMap.forEach(groupStates => {
-            const autostartsInGroup = groupStates.filter(st => st.autostart);
-            const statesToEnter = autostartsInGroup.length > 0 ? autostartsInGroup : groupStates;
-            if (statesToEnter.length > 0 && !reachable.has(statesToEnter[0].id)) {
-              queue.push(statesToEnter[0].id);
-            }
-          });
+          for (const parallelState of layerStates) {
+            if (!reachable.has(parallelState.id)) queue.push(parallelState.id);
+          }
         } else {
           const defaultState = layerStates.find(s => s.autostart);
           if (defaultState) {
@@ -575,20 +602,24 @@ const generateTestScenarios = (
         const timerDetails = match ? match[1] : 'timer expiration';
         
         if (cond.startsWith('after(')) {
-          actionText = `Wait for ${timerDetails}, then call SM_Step()`;
+          const ticks = timerDetails.match(/^(\d+)\s+ticks?/)?.[1] ?? 'the required number of';
+          actionText = `Call SM_Step(&instance, SM_TICK_MS) ${ticks} times`;
         } else if (cond.includes('&&')) {
           const guard = cond.split('&&')[0].trim();
-          actionText = `Set variables to satisfy ${guard}, wait for ${timerDetails}, then call SM_Step()`;
+          const ticks = timerDetails.match(/^(\d+)\s+ticks?/)?.[1] ?? 'the required number of';
+          actionText = `Set variables to satisfy ${guard}, then call SM_Step(&instance, SM_TICK_MS) ${ticks} times`;
         } else if (cond.includes('||')) {
           const guard = cond.split('||')[0].trim();
-          actionText = `Set variables to satisfy ${guard} OR wait for ${timerDetails}, then call SM_Step()`;
+          const ticks = timerDetails.match(/^(\d+)\s+ticks?/)?.[1] ?? 'the required number of';
+          actionText = `Set variables to satisfy ${guard} before one SM_Step(&instance, SM_TICK_MS), OR call SM_Step(&instance, SM_TICK_MS) ${ticks} times`;
         } else {
-          actionText = `Wait for ${timerDetails}, then call SM_Step()`;
+          const ticks = timerDetails.match(/^(\d+)\s+ticks?/)?.[1] ?? 'the required number of';
+          actionText = `Call SM_Step(&instance, SM_TICK_MS) ${ticks} times`;
         }
       } else if (cond === 'true') {
-        actionText = `Call SM_Step() — transition fires unconditionally from "${fromState}"`;
+        actionText = `Call SM_Step(&instance, SM_TICK_MS) — transition fires unconditionally from "${fromState}"`;
       } else {
-        actionText = `Set variables to satisfy [${cond}], then call SM_Step()`;
+        actionText = `Set variables to satisfy [${cond}], then call SM_Step(&instance, SM_TICK_MS)`;
       }
 
       steps.push({
@@ -629,7 +660,7 @@ const generateTestScenarios = (
             expected: `System is in state "${cc.elementName}"`,
           },
           {
-            action: 'Call SM_Step() repeatedly (100 ticks)',
+            action: 'Call SM_Step(&instance, SM_TICK_MS) repeatedly (100 ticks)',
             expected: `System remains in "${cc.elementName}" — verify no memory corruption or watchdog timeout`,
           },
           {
@@ -650,7 +681,7 @@ const generateTestScenarios = (
             expected: `System is in "${cc.elementName}"`,
           },
           {
-            action: 'Call SM_Step() 1000 times rapidly',
+            action: 'Call SM_Step(&instance, SM_TICK_MS) 1000 times',
             expected:
               'No stack overflow, no memory leak, state_timer behaves correctly',
           },
@@ -664,7 +695,7 @@ const generateTestScenarios = (
             expected: 'System is in the source state',
           },
           {
-            action: 'Call SM_Step() and observe which transition fires',
+            action: 'Call SM_Step(&instance, SM_TICK_MS) and observe which transition fires',
             expected:
               'The transition with the highest priority fires deterministically',
           },
@@ -729,7 +760,7 @@ const generateTestScenarios = (
             expected: `Condition [${cond}] evaluates to true`,
           },
           {
-            action: 'Call SM_Step()',
+            action: 'Call SM_Step(&instance, SM_TICK_MS)',
             expected: `System transitions through junction "${j.name}" to "${targetName}"`,
           },
         ],
@@ -753,20 +784,20 @@ const generateTestScenarios = (
       ],
       steps: [
         {
-          action: 'Inject SM_ERR_SAFETY_VIOLATION via SM_Safety_Check()',
-          expected: 'SM_GetError() returns SM_ERR_SAFETY_VIOLATION',
+          action: 'Call SM_Step(&instance, SM_TICK_MS + 1U) in the host integration harness to induce a timing fault',
+          expected: `SM_GetError(&instance) returns SM_ERR_TIMING and safe state "${safeStates[0].name}" becomes active`,
         },
         {
-          action: 'Call SM_Step()',
-          expected: 'System transitions to SM_NODE_ERROR state',
+          action: 'Observe the mapped MCAL outputs immediately after the failed step',
+          expected: 'Configured safe output values are committed and instance.fault_latched is true',
         },
         {
-          action: 'Verify no further state transitions occur',
-          expected: 'Active state remains SM_NODE_ERROR until reset',
+          action: 'Call SM_Reset(&instance) after recording the fault evidence',
+          expected: 'The chart returns to its modeled default configuration and restored outputs are committed',
         },
       ],
       expectedResult:
-        'Safety mechanism correctly halts the state machine on error.',
+        `The fault is latched, safe outputs are committed, and modeled safe state "${safeStates[0].name}" is active until explicit reset.`,
     });
   }
 
@@ -775,7 +806,7 @@ const generateTestScenarios = (
 
 // ─── Main entry point ────────────────────────────────────────────────────────
 
-export const analyzeStateMachine = (chart: {
+const analyzeProjectedModel = (chart: {
   tickMs: number;
   states: StateData[];
   junctions: JunctionData[];
@@ -869,5 +900,199 @@ export const analyzeStateMachine = (chart: {
           ? (coveredTransitionIds.size / transitions.length) * 100
           : 0,
     },
+    diagnostics: [],
+    semantic: {
+      tickMs,
+      stateCount: states.length,
+      transitionCount: transitions.length,
+      junctionCount: junctions.length,
+      variableCount: variables.length,
+      layerCount: layers.length,
+      activeSlotCount: 0,
+      reachableStateIds: states
+        .filter((state) => reachableForMetrics.has(state.id))
+        .map((state) => state.id),
+      unreachableStateIds: states
+        .filter((state) => !reachableForMetrics.has(state.id))
+        .map((state) => state.id),
+      terminalStateIds: states
+        .filter((state) => state.isTerminalState === true || state.isTerminal === true)
+        .map((state) => state.id),
+      orLayerIds: [],
+      andLayerIds: [],
+    },
+  };
+};
+
+const projectSemanticModel = (ir: SemanticModel): {
+  tickMs: number;
+  states: StateData[];
+  junctions: JunctionData[];
+  transitions: TransitionData[];
+  variables: VariableDef[];
+  layers: Layer[];
+  safetyMode: boolean;
+} => {
+  const states = Object.values(ir.states)
+    .sort((left, right) => left.activityIndex - right.activityIndex)
+    .map((state): StateData => {
+      const layer = ir.layers[state.layerId];
+      return {
+        id: state.id,
+        name: state.name,
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        entry: state.entrySource,
+        during: state.duringSource,
+        exit: state.exitSource,
+        isActive: false,
+        color: '',
+        parentId: state.parentStateId,
+        children: [...state.childLayerIds],
+        priority: state.priority,
+        isParallel: layer.decomposition === 'AND',
+        regionId: state.layerId,
+        autostart: layer.decomposition === 'AND'
+          || (
+            layer.defaultEntryKind === 'state'
+            && layer.defaultEntryId === state.id
+          ),
+        isSafeState: ir.safeStateId === state.id,
+        isTerminalState: state.terminal,
+      };
+    });
+
+  const junctions = Object.values(ir.junctions).map((junction): JunctionData => {
+    const layer = ir.layers[junction.layerId];
+    return {
+      id: junction.id,
+      x: 0,
+      y: 0,
+      name: junction.id,
+      color: '',
+      parentId: layer.parentStateId,
+      type: junction.kind,
+      autostart: layer.defaultEntryKind === 'junction'
+        && layer.defaultEntryId === junction.id,
+    };
+  });
+
+  const transitions = Object.values(ir.transitions)
+    .filter((transition) =>
+      transition.kind !== 'internal-action'
+      && ir.states[transition.sourceStateId]?.terminal !== true)
+    .map((transition): TransitionData => ({
+      id: transition.id,
+      sourceId: transition.sourceStateId,
+      targetId: transition.destinationStateId,
+      condition: transition.guardSource,
+      action: transition.actionSource,
+      afterTicks: transition.afterTicks,
+      type: transition.triggerMode,
+      hasControlPoint: false,
+      order: transition.priority,
+      isInternal: transition.kind === 'inner',
+    }));
+
+  const variables = Object.values(ir.variables).map((variable): VariableDef => ({
+    id: variable.id,
+    name: variable.name,
+    type: variable.type,
+    initialValue: String(variable.initialValue),
+    currentValue: variable.initialValue,
+    visibleInScope: true,
+  }));
+
+  const layers = Object.values(ir.layers).map((layer): Layer => ({
+    id: layer.id,
+    name: layer.name,
+    parentStateId: layer.parentStateId,
+    stateIds: [...layer.children],
+    transitionIds: [...layer.transitionIds],
+    junctionIds: [...layer.junctionIds],
+  }));
+
+  return {
+    tickMs: ir.tickMs,
+    states,
+    junctions,
+    transitions,
+    variables,
+    layers,
+    safetyMode: ir.safetyMode,
+  };
+};
+
+const diagnosticsOnlyAnalysis = (
+  diagnostics: ModelDiagnostic[],
+): SMAnalysisResult => ({
+  criticalPaths: [],
+  cornerCases: [],
+  testScenarios: [],
+  metrics: {
+    totalPaths: 0,
+    maxPathLength: 0,
+    stateReachability: 0,
+    branchCoverage: 0,
+  },
+  diagnostics,
+  semantic: {
+    tickMs: 0,
+    stateCount: 0,
+    transitionCount: 0,
+    junctionCount: 0,
+    variableCount: 0,
+    layerCount: 0,
+    activeSlotCount: 0,
+    reachableStateIds: [],
+    unreachableStateIds: [],
+    terminalStateIds: [],
+    orLayerIds: [],
+    andLayerIds: [],
+  },
+});
+
+export const analyzeSemanticModel = (ir: SemanticModel): SMAnalysisResult => {
+  const analysis = analyzeProjectedModel(projectSemanticModel(ir));
+  return {
+    ...analysis,
+    semantic: {
+      ...analysis.semantic,
+      tickMs: ir.tickMs,
+      stateCount: Object.keys(ir.states).length,
+      transitionCount: Object.values(ir.transitions)
+        .filter((transition) => transition.kind !== 'internal-action').length,
+      junctionCount: Object.keys(ir.junctions).length,
+      variableCount: Object.keys(ir.variables).length,
+      layerCount: Object.keys(ir.layers).length,
+      activeSlotCount: ir.activeSlotCount,
+      terminalStateIds: Object.values(ir.states)
+        .filter((state) => state.terminal)
+        .sort((left, right) => left.activityIndex - right.activityIndex)
+        .map((state) => state.id),
+      orLayerIds: Object.values(ir.layers)
+        .filter((layer) => layer.decomposition === 'OR')
+        .map((layer) => layer.id)
+        .sort(),
+      andLayerIds: Object.values(ir.layers)
+        .filter((layer) => layer.decomposition === 'AND')
+        .map((layer) => layer.id)
+        .sort(),
+    },
+  };
+};
+
+export const analyzeStateMachine = (
+  chart: LegacyStateMachineModel,
+): SMAnalysisResult => {
+  const migrated = migrateStateMachineModel(chart);
+  const built = buildSemanticModel(migrated.model);
+  const diagnostics = [...migrated.diagnostics, ...built.diagnostics];
+  if (built.ir === undefined) return diagnosticsOnlyAnalysis(diagnostics);
+  return {
+    ...analyzeSemanticModel(built.ir),
+    diagnostics,
   };
 };

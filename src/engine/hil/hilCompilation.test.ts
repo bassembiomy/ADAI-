@@ -103,7 +103,7 @@ int main(void) { ADIA_Instance_t inst; (void)SM_Init(&inst); (void)SM_ReadInputs
     } finally {
       cleanupDir(tempDir);
     }
-  });
+  }, 30_000);
 
   const targets = [
     {

@@ -141,11 +141,18 @@ describe('HIL Code Generator', () => {
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
 
-    // Default files (9) + HIL files (9, including the MCAL-to-HAL bridge) = 18 files
-    expect(result.files).toHaveLength(18);
+    // Default files (10, including both reports)
+    // + HIL files (9, including the MCAL-to-HAL bridge) = 19 files.
+    expect(result.files).toHaveLength(19);
     const names = result.files.map(f => f.name);
     expect(names).not.toContain('stm32f4xx_hal.h');
     expect(names).toContain('mcal_dio_hil.c');
+    const measuredSourceCount = result.files.filter((file) =>
+      /\.(?:c|h|cpp|ino)$/i.test(file.name)).length;
+    const staticReport = result.files.find(
+      (file) => file.name === 'static_metrics_report.md',
+    )?.content;
+    expect(staticReport).toContain(`| Files measured | ${measuredSourceCount} |`);
 
     const testingReport = result.files.find(f => f.name === 'sm_testing_report.md')?.content;
     expect(testingReport).toContain('## 8. HIL Driver Mapping Report');
@@ -156,10 +163,13 @@ describe('HIL Code Generator', () => {
     const result = generateMISRACCode(chart as any, { includeTestShims: true });
     expect(result.errors).toHaveLength(0);
 
-    // Default files (10, including MCAL test stubs) + HIL files (8) + STM32 shim (1) = 19 files
-    expect(result.files).toHaveLength(19);
+    // Default files (10 after excluding the generic MCAL stub)
+    // + HIL files (9) + STM32 shim (1) = 20 files.
+    expect(result.files).toHaveLength(20);
     const names = result.files.map(f => f.name);
     expect(names).toContain('stm32f4xx_hal.h');
+    expect(names).toContain('mcal_dio_hil.c');
+    expect(names).not.toContain('mcal_dio_test_stubs.c');
   });
 
   it('should fail generation for an empty chart instead of emitting broken C', () => {

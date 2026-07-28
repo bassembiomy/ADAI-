@@ -251,6 +251,10 @@ export const buildSemanticModel = (
     const parentStateId = hierarchy.parentByStateId.get(state.id) ?? null;
     states[state.id] = {
       id: state.id,
+      name: state.name,
+      entrySource: state.entry,
+      duringSource: state.during,
+      exitSource: state.exit,
       enumName: `SM_ST_${toCIdentifier(state.id).toUpperCase()}`,
       parentStateId,
       layerId: containingLayer.id,
@@ -360,6 +364,8 @@ export const buildSemanticModel = (
 
     transitions[transition.id] = {
       id: transition.id,
+      guardSource: transition.condition,
+      actionSource: transition.action,
       sourceStateId: transition.sourceId,
       destinationStateId: transition.targetId,
       kind,
@@ -388,6 +394,8 @@ export const buildSemanticModel = (
       const id = `$internal_${state.id}_${index}`;
       transitions[id] = {
         id,
+        guardSource: '',
+        actionSource: '',
         sourceStateId: state.id,
         destinationStateId: state.id,
         kind: 'internal-action',

@@ -4,6 +4,10 @@ import type { ModelDiagnostic, StateDecomposition } from './smModel';
 
 export interface SemanticState {
   id: string;
+  name: string;
+  entrySource: string;
+  duringSource: string;
+  exitSource: string;
   enumName: string;
   parentStateId: string | null;
   layerId: string;
@@ -35,6 +39,8 @@ export interface SemanticLayer {
 
 export interface SemanticTransition {
   id: string;
+  guardSource: string;
+  actionSource: string;
   sourceStateId: string;
   destinationStateId: string;
   kind: 'outer' | 'inner' | 'internal-action' | 'external-self';

@@ -1,4 +1,5 @@
 import type { ErrorItem } from '../../types/sm_types';
+import { analyzeSemanticModel } from '../smAnalysisEngine';
 import { toCIdentifier } from './smExpressions';
 import {
   renderCAction,
@@ -13,9 +14,14 @@ import type {
   SemanticTransition,
   SemanticTransitionRoute,
 } from './smSemanticModel';
+import {
+  renderStaticMetricsReport,
+  renderTestingReport as renderSemanticTestingReport,
+} from './smReports';
 
 export interface CGeneratorOptions {
   includeTestShims?: boolean;
+  reportSourceFiles?: readonly GeneratedCFile[];
 }
 
 export interface GeneratedCFile {
@@ -920,35 +926,175 @@ export const renderSafetyHeader = (): string => lines(
   '#endif /* SM_SAFETY_H */',
 );
 
-export const renderSafetySource = (ir: SemanticModel): string => lines(
-  '#include <stddef.h>',
-  '#include "sm_safety.h"',
-  (ir.safetyMode || ir.ioMappings.some((mapping) => mapping.direction === 'write'))
-    ? '#include "mcal_dio.h"'
-    : null,
-  '',
-  'SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)',
-  '{',
-  '    if (instance == NULL) {',
-  '        return SM_ERR_NULL_INSTANCE;',
-  '    }',
-  '    return SM_ERR_NONE;',
-  '}',
-  '',
-  'void SM_ApplySafeOutputs(ADIA_Instance_t *instance)',
-  '{',
-  '    (void)instance;',
-  ir.ioMappings.filter((mapping) => mapping.direction === 'write').length === 0
-    ? null
-    : ir.ioMappings.filter((mapping) => mapping.direction === 'write').map((mapping) =>
-      mapping.channelDataType === 'bool'
-        ? `    MCAL_Dio_WriteChannel(${channelMacro(mapping.channelId)}, ${mapping.safeValue === true ? 'true' : 'false'});`
-        : `    MCAL_WriteChannelValue(${channelMacro(mapping.channelId)}, ${mapping.safeValue === null ? '0.0' : Number(mapping.safeValue).toString()});`).join('\n'),
-  (ir.safetyMode || ir.ioMappings.some((mapping) => mapping.direction === 'write'))
-    ? '    MCAL_ApplySafeOutputs();'
-    : null,
-  '}',
-);
+export const renderSafetySource = (ir: SemanticModel): string => {
+  const states = orderedStates(ir);
+  const layers = orderedLayers(ir);
+  const mappedOutputs = ir.ioMappings.filter(
+    (mapping) => mapping.direction === 'write',
+  );
+  const directChildCases = layers.map((layer) => lines(
+    `        case ${layerMacro(layer)}:`,
+    '            switch (state) {',
+    ...layer.children.map((stateId) =>
+      `                case ${stateNode(ir, stateId)}: return true;`),
+    '                default: return false;',
+    '            }',
+  ).trimEnd());
+  const descendantCases = layers.map((layer) => lines(
+    `        case ${layerMacro(layer)}:`,
+    '            switch (state) {',
+    ...descendantsOfLayer(ir, layer.id).map((state) =>
+      `                case ${stateNode(ir, state.id)}: return true;`),
+    '                default: return false;',
+    '            }',
+  ).trimEnd());
+  return lines(
+    '#include <stddef.h>',
+    '#include "sm_safety.h"',
+    (ir.safetyMode || mappedOutputs.length > 0)
+      ? '#include "mcal_dio.h"'
+      : null,
+    '',
+    'static const SM_Node_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {',
+    '    [0] = SM_NODE_INVALID,',
+    ...states.map((state) =>
+      `    [${stateIndex(ir, state.id)}] = ${state.parentStateId === null ? 'SM_NODE_INVALID' : stateNode(ir, state.parentStateId)},`),
+    '};',
+    '',
+    'static const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U] = {',
+    '    [0] = -1,',
+    ...states.map((state) =>
+      `    [${stateIndex(ir, state.id)}] = ${state.activeSlot},`),
+    '};',
+    '',
+    'static const SM_Node_t SM_Layer_Parent_Map[SM_NUM_LAYERS] = {',
+    ...layers.map((layer) =>
+      `    [${layerMacro(layer)}] = ${layer.parentStateId === null ? 'SM_NODE_INVALID' : stateNode(ir, layer.parentStateId)},`),
+    '};',
+    '',
+    'static const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS] = {',
+    ...layers.map((layer) =>
+      `    [${layerMacro(layer)}] = ${layer.activeSlot ?? -1},`),
+    '};',
+    '',
+    'static bool SM_Is_Direct_Layer_Child(uint32_t layer_index, SM_Node_t state)',
+    '{',
+    '    switch (layer_index) {',
+    ...directChildCases,
+    '        default: return false;',
+    '    }',
+    '}',
+    '',
+    'static bool SM_Is_Layer_Descendant(uint32_t layer_index, SM_Node_t state)',
+    '{',
+    '    switch (layer_index) {',
+    ...descendantCases,
+    '        default: return false;',
+    '    }',
+    '}',
+    '',
+    'SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)',
+    '{',
+    '    uint32_t layer_index;',
+    '    uint32_t state_index;',
+    ir.activeSlotCount > 0 ? '    uint32_t slot_index;' : null,
+    '    SM_Node_t active_node;',
+    '    SM_Node_t history_node;',
+    '    int32_t active_slot;',
+    '    SM_Node_t parent;',
+    '    bool container_active;',
+    '    if (instance == NULL) {',
+    '        return SM_ERR_NULL_INSTANCE;',
+    '    }',
+    '    for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {',
+    '        if (instance->state_active[state_index]) {',
+    '            parent = SM_State_Parent_Map[state_index];',
+    '            if ((parent != SM_NODE_INVALID)',
+    '                && (!instance->state_active[(uint32_t)parent])) {',
+    '                return SM_ERR_CONFIGURATION;',
+    '            }',
+    '            active_slot = SM_State_Active_Slot_Map[state_index];',
+    '            if ((active_slot >= 0)',
+    '                && (instance->active_states[(uint32_t)active_slot]',
+    '                    != (SM_Node_t)state_index)) {',
+    '                return SM_ERR_CONFIGURATION;',
+    '            }',
+    '        }',
+    '    }',
+    '    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {',
+    '        parent = SM_Layer_Parent_Map[layer_index];',
+    '        container_active = (parent == SM_NODE_INVALID)',
+    '            || instance->state_active[(uint32_t)parent];',
+    '        active_slot = SM_Layer_Active_Slot_Map[layer_index];',
+    '        if (container_active) {',
+    '            if (active_slot >= 0) {',
+    '                active_node = instance->active_states[(uint32_t)active_slot];',
+    '                if ((active_node == SM_NODE_INVALID)',
+    '                    || ((uint32_t)active_node > SM_NUM_STATES)',
+    '                    || (!SM_Is_Direct_Layer_Child(layer_index, active_node))',
+    '                    || (!instance->state_active[(uint32_t)active_node])) {',
+    '                    return SM_ERR_CONFIGURATION;',
+    '                }',
+    '            } else {',
+    '                for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {',
+    '                    if (SM_Is_Direct_Layer_Child(layer_index, (SM_Node_t)state_index)',
+    '                        && (!instance->state_active[state_index])) {',
+    '                        return SM_ERR_CONFIGURATION;',
+    '                    }',
+    '                }',
+    '            }',
+    '        } else if ((active_slot >= 0)',
+    '            && (instance->active_states[(uint32_t)active_slot] != SM_NODE_INVALID)) {',
+    '            return SM_ERR_CONFIGURATION;',
+    '        }',
+    '        if (active_slot >= 0) {',
+    '            history_node = instance->history_states[(uint32_t)active_slot];',
+    '            if ((history_node != SM_NODE_INVALID)',
+    '                && (((uint32_t)history_node > SM_NUM_STATES)',
+    '                    || (!SM_Is_Direct_Layer_Child(layer_index, history_node)))) {',
+    '                return SM_ERR_CONFIGURATION;',
+    '            }',
+    '        }',
+    '        for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {',
+    '            if (instance->deep_history[layer_index][state_index]',
+    '                && (!SM_Is_Layer_Descendant(layer_index, (SM_Node_t)state_index))) {',
+    '                return SM_ERR_CONFIGURATION;',
+    '            }',
+    '        }',
+    '    }',
+    ir.activeSlotCount > 0
+      ? lines(
+        '    for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {',
+        '        active_node = instance->active_states[slot_index];',
+        '        if (active_node != SM_NODE_INVALID) {',
+        '            if (((uint32_t)active_node > SM_NUM_STATES)',
+        '                || (!instance->state_active[(uint32_t)active_node])',
+        '                || (SM_State_Active_Slot_Map[(uint32_t)active_node]',
+        '                    != (int32_t)slot_index)) {',
+        '                return SM_ERR_CONFIGURATION;',
+        '            }',
+        '        }',
+        '    }',
+      ).trimEnd()
+      : null,
+    '    return SM_ERR_NONE;',
+    '}',
+    '',
+    'void SM_ApplySafeOutputs(ADIA_Instance_t *instance)',
+    '{',
+    '    (void)instance;',
+    mappedOutputs.length === 0
+      ? null
+      : mappedOutputs.map((mapping) =>
+        mapping.channelDataType === 'bool'
+          ? `    MCAL_Dio_WriteChannel(${channelMacro(mapping.channelId)}, ${mapping.safeValue === true ? 'true' : 'false'});`
+          : `    MCAL_WriteChannelValue(${channelMacro(mapping.channelId)}, ${mapping.safeValue === null ? '0.0' : Number(mapping.safeValue).toString()});`).join('\n'),
+    (ir.safetyMode || mappedOutputs.length > 0)
+      ? '    MCAL_ApplySafeOutputs();'
+      : null,
+    '}',
+  );
+};
 
 const channelMacro = (channelId: string): string =>
   `MCAL_CH_${toCIdentifier(channelId).toUpperCase()}`;
@@ -1315,34 +1461,14 @@ export const renderCoreSource = (ir: SemanticModel): string => {
   );
 };
 
-export const renderTestingReport = (ir: SemanticModel): string => lines(
-  '# ADIA State Machine Generated-C Verification Report',
-  '',
-  '## Structural validation',
-  '',
-  `- States: ${Object.keys(ir.states).length}`,
-  `- Layers: ${Object.keys(ir.layers).length}`,
-  `- Active configuration slots: ${ir.activeSlotCount}`,
-  '',
-  '## Semantic validation',
-  '',
-  '- Rendering consumed an immutable, validated SemanticModel.',
-  '- Terminal states are quiescent and do not trigger implicit reset.',
-  '- Runtime order is outer transition, during action, inner transition, then active children.',
-  '',
-  '## Verification status',
-  '',
-  '- Host compilation: pending external build gate.',
-  '- Host runtime: pending external differential harness.',
-  '- Embedded compilation: pending configured target toolchain.',
-  '- Formal MISRA compliance and safety certification are not claimed.',
-);
+export const renderTestingReport = (ir: SemanticModel): string =>
+  renderSemanticTestingReport(analyzeSemanticModel(ir));
 
 export const generateCArtifacts = (
   ir: SemanticModel,
   options: CGeneratorOptions = {},
-): CGeneratorResult => ({
-  files: [
+): CGeneratorResult => {
+  const implementationFiles: GeneratedCFile[] = [
     { name: 'sm_config.h', content: renderConfigHeader(ir) },
     { name: 'sm_core.h', content: renderCoreHeader() },
     { name: 'sm_core.c', content: renderCoreSource(ir) },
@@ -1354,8 +1480,25 @@ export const generateCArtifacts = (
     ...(options.includeTestShims
       ? [{ name: 'mcal_dio_test_stubs.c', content: renderMcalTestStubs() }]
       : []),
-    { name: 'sm_testing_report.md', content: renderTestingReport(ir) },
-  ],
-  errors: [],
-  warnings: [],
-});
+  ];
+  const analysis = analyzeSemanticModel(ir);
+  const measuredSourceFiles = [
+    ...implementationFiles,
+    ...(options.reportSourceFiles ?? []),
+  ].filter((file) => /\.(?:c|h|cpp|ino)$/i.test(file.name));
+  return {
+    files: [
+      ...implementationFiles,
+      {
+        name: 'sm_testing_report.md',
+        content: renderSemanticTestingReport(analysis),
+      },
+      {
+        name: 'static_metrics_report.md',
+        content: renderStaticMetricsReport(analysis, measuredSourceFiles),
+      },
+    ],
+    errors: [],
+    warnings: [],
+  };
+};

@@ -33,6 +33,13 @@ typedef enum {
 
 typedef uint32_t SM_Group_t;
 
+#ifdef SM_TRACE_ENABLED
+typedef struct {
+    const char *action;
+} SM_TraceEvent_t;
+typedef void (*SM_TraceSink_t)(const SM_TraceEvent_t *event);
+#endif
+
 typedef struct {
     uint32_t log;
     bool t1;
@@ -47,6 +54,10 @@ typedef struct {
     uint32_t state_timers[SM_NUM_STATES + 1U];
     bool deep_history[SM_NUM_LAYERS][SM_NUM_STATES + 1U];
     SM_Error_t error_status;
+    bool fault_latched;
+#ifdef SM_TRACE_ENABLED
+    SM_TraceSink_t trace_sink;
+#endif
 } ADIA_Instance_t;
 
 #endif /* SM_CONFIG_H */
@@ -67,6 +78,12 @@ SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance);
 SM_Error_t SM_Sync_IO(ADIA_Instance_t *instance);
 SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t group);
 SM_Error_t SM_GetError(const ADIA_Instance_t *instance);
+#ifdef SM_TRACE_ENABLED
+void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink);
+void SM_TraceAction(ADIA_Instance_t *instance, const char *action);
+#else
+#define SM_TraceAction(instance, action) ((void)0)
+#endif
 
 #endif /* SM_CORE_H */
 ",
@@ -80,6 +97,23 @@ SM_Error_t SM_GetError(const ADIA_Instance_t *instance);
 #include "sm_user_logic.h"
 #include "mcal_dio.h"
 
+#ifdef SM_TRACE_ENABLED
+void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink)
+{
+    if (instance != NULL) {
+        instance->trace_sink = sink;
+    }
+}
+
+void SM_TraceAction(ADIA_Instance_t *instance, const char *action)
+{
+    if ((instance != NULL) && (instance->trace_sink != NULL)) {
+        const SM_TraceEvent_t event = { action };
+        instance->trace_sink(&event);
+    }
+}
+#endif
+
 static void SM_Enter_Layer_Default_0(ADIA_Instance_t *instance);
 static void SM_Exit_Layer_No_History_0(ADIA_Instance_t *instance);
 static bool SM_Execute_Layer_0(ADIA_Instance_t *instance);
@@ -92,6 +126,9 @@ static bool SM_Execute_State_2(ADIA_Instance_t *instance);
 static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer);
 static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer);
 static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer);
+static void SM_Exit_All(ADIA_Instance_t *instance);
+static void SM_Enter_Safe_State(ADIA_Instance_t *instance);
+static void SM_Enter_Fault(ADIA_Instance_t *instance);
 
 static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer)
 {
@@ -235,6 +272,26 @@ static bool SM_Execute_State_2(ADIA_Instance_t *instance)
     return false;
 }
 
+static void SM_Exit_All(ADIA_Instance_t *instance)
+{
+    SM_Exit_Layer(instance, SM_LYR_ROOT_IDX);
+}
+
+static void SM_Enter_Safe_State(ADIA_Instance_t *instance)
+{
+    (void)instance;
+}
+
+static void SM_Enter_Fault(ADIA_Instance_t *instance)
+{
+    if (!instance->fault_latched) {
+        SM_Exit_All(instance);
+        SM_Enter_Safe_State(instance);
+        SM_ApplySafeOutputs(instance);
+        instance->fault_latched = true;
+    }
+}
+
 SM_Error_t SM_Init(ADIA_Instance_t *instance)
 {
     uint32_t layer_index;
@@ -264,6 +321,7 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
         instance->state_timers[state_index] = 0U;
     }
     instance->error_status = SM_ERR_NONE;
+    instance->fault_latched = false;
     SM_Enter_Layer_Default_0(instance);
     return SM_ERR_NONE;
 }
@@ -293,8 +351,9 @@ SM_Error_t SM_Reset(ADIA_Instance_t *instance)
         instance->state_timers[state_index] = 0U;
     }
     instance->error_status = SM_ERR_NONE;
+    instance->fault_latched = false;
     SM_Enter_Layer_Default_0(instance);
-    return SM_ERR_NONE;
+    return SM_WriteOutputs(instance);
 }
 
 SM_Error_t SM_ReadInputs(ADIA_Instance_t *instance)
@@ -313,10 +372,17 @@ SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)
         return SM_ERR_NULL_INSTANCE;
     }
     if (instance->error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
         return instance->error_status;
     }
     if (delta_ms != SM_TICK_MS) {
         instance->error_status = SM_ERR_TIMING;
+        SM_Enter_Fault(instance);
+        return instance->error_status;
+    }
+    instance->error_status = SM_Validate_State_Consistency(instance);
+    if (instance->error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
         return instance->error_status;
     }
     for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
@@ -329,6 +395,9 @@ SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)
         }
     }
     (void)SM_Execute_Layer_0(instance);
+    if (instance->error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+    }
     return instance->error_status;
 }
 
@@ -336,6 +405,15 @@ SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance)
 {
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
+    }
+    if (instance->error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+        return instance->error_status;
+    }
+    instance->error_status = SM_Validate_State_Consistency(instance);
+    if (instance->error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+        return instance->error_status;
     }
     (void)instance;
     return SM_ERR_NONE;
@@ -382,10 +460,131 @@ void SM_ApplySafeOutputs(ADIA_Instance_t *instance);
     "content": "#include <stddef.h>
 #include "sm_safety.h"
 
+static const SM_Node_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {
+    [0] = SM_NODE_INVALID,
+    [SM_ST_S1_IDX] = SM_NODE_INVALID,
+    [SM_ST_S2_IDX] = SM_NODE_INVALID,
+};
+
+static const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U] = {
+    [0] = -1,
+    [SM_ST_S1_IDX] = 0,
+    [SM_ST_S2_IDX] = 0,
+};
+
+static const SM_Node_t SM_Layer_Parent_Map[SM_NUM_LAYERS] = {
+    [SM_LYR_ROOT_IDX] = SM_NODE_INVALID,
+};
+
+static const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS] = {
+    [SM_LYR_ROOT_IDX] = 0,
+};
+
+static bool SM_Is_Direct_Layer_Child(uint32_t layer_index, SM_Node_t state)
+{
+    switch (layer_index) {
+        case SM_LYR_ROOT_IDX:
+            switch (state) {
+                case SM_ST_S1: return true;
+                case SM_ST_S2: return true;
+                default: return false;
+            }
+        default: return false;
+    }
+}
+
+static bool SM_Is_Layer_Descendant(uint32_t layer_index, SM_Node_t state)
+{
+    switch (layer_index) {
+        case SM_LYR_ROOT_IDX:
+            switch (state) {
+                case SM_ST_S1: return true;
+                case SM_ST_S2: return true;
+                default: return false;
+            }
+        default: return false;
+    }
+}
+
 SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)
 {
+    uint32_t layer_index;
+    uint32_t state_index;
+    uint32_t slot_index;
+    SM_Node_t active_node;
+    SM_Node_t history_node;
+    int32_t active_slot;
+    SM_Node_t parent;
+    bool container_active;
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
+    }
+    for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
+        if (instance->state_active[state_index]) {
+            parent = SM_State_Parent_Map[state_index];
+            if ((parent != SM_NODE_INVALID)
+                && (!instance->state_active[(uint32_t)parent])) {
+                return SM_ERR_CONFIGURATION;
+            }
+            active_slot = SM_State_Active_Slot_Map[state_index];
+            if ((active_slot >= 0)
+                && (instance->active_states[(uint32_t)active_slot]
+                    != (SM_Node_t)state_index)) {
+                return SM_ERR_CONFIGURATION;
+            }
+        }
+    }
+    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
+        parent = SM_Layer_Parent_Map[layer_index];
+        container_active = (parent == SM_NODE_INVALID)
+            || instance->state_active[(uint32_t)parent];
+        active_slot = SM_Layer_Active_Slot_Map[layer_index];
+        if (container_active) {
+            if (active_slot >= 0) {
+                active_node = instance->active_states[(uint32_t)active_slot];
+                if ((active_node == SM_NODE_INVALID)
+                    || ((uint32_t)active_node > SM_NUM_STATES)
+                    || (!SM_Is_Direct_Layer_Child(layer_index, active_node))
+                    || (!instance->state_active[(uint32_t)active_node])) {
+                    return SM_ERR_CONFIGURATION;
+                }
+            } else {
+                for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
+                    if (SM_Is_Direct_Layer_Child(layer_index, (SM_Node_t)state_index)
+                        && (!instance->state_active[state_index])) {
+                        return SM_ERR_CONFIGURATION;
+                    }
+                }
+            }
+        } else if ((active_slot >= 0)
+            && (instance->active_states[(uint32_t)active_slot] != SM_NODE_INVALID)) {
+            return SM_ERR_CONFIGURATION;
+        }
+        if (active_slot >= 0) {
+            history_node = instance->history_states[(uint32_t)active_slot];
+            if ((history_node != SM_NODE_INVALID)
+                && (((uint32_t)history_node > SM_NUM_STATES)
+                    || (!SM_Is_Direct_Layer_Child(layer_index, history_node)))) {
+                return SM_ERR_CONFIGURATION;
+            }
+        }
+        for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
+            if (instance->deep_history[layer_index][state_index]
+                && (!SM_Is_Layer_Descendant(layer_index, (SM_Node_t)state_index))) {
+                return SM_ERR_CONFIGURATION;
+            }
+        }
+    }
+    for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {
+        active_node = instance->active_states[slot_index];
+        if (active_node != SM_NODE_INVALID) {
+            if (((uint32_t)active_node > SM_NUM_STATES)
+                || (!instance->state_active[(uint32_t)active_node])
+                || (SM_State_Active_Slot_Map[(uint32_t)active_node]
+                    != (int32_t)slot_index)) {
+                return SM_ERR_CONFIGURATION;
+            }
+        }
     }
     return SM_ERR_NONE;
 }
@@ -415,31 +614,37 @@ void SM_ST_S2_Exit(ADIA_Instance_t *instance);
     "name": "sm_user_logic.h",
   },
   {
-    "content": "#include "sm_user_logic.h"
+    "content": "#include "sm_core.h"
+#include "sm_user_logic.h"
 
 void SM_ST_S1_Entry(ADIA_Instance_t *instance)
 {
     instance->data.log = (uint32_t)(100U);
+    SM_TraceAction(instance, "entry:S1");
 }
 
 void SM_ST_S1_During(ADIA_Instance_t *instance)
 {
     instance->data.log = (uint32_t)((instance->data.log + 1U));
+    SM_TraceAction(instance, "during:S1");
 }
 
 void SM_ST_S1_Exit(ADIA_Instance_t *instance)
 {
     instance->data.log = (uint32_t)((instance->data.log + 5U));
+    SM_TraceAction(instance, "exit:S1");
 }
 
 void SM_ST_S2_Entry(ADIA_Instance_t *instance)
 {
     instance->data.log = (uint32_t)(200U);
+    SM_TraceAction(instance, "entry:S2");
 }
 
 void SM_ST_S2_During(ADIA_Instance_t *instance)
 {
     instance->data.log = (uint32_t)((instance->data.log + 2U));
+    SM_TraceAction(instance, "during:S2");
 }
 
 void SM_ST_S2_Exit(ADIA_Instance_t *instance)
@@ -460,6 +665,8 @@ void SM_ST_S2_Exit(ADIA_Instance_t *instance)
 
 bool MCAL_Dio_ReadChannel(uint32_t channel);
 void MCAL_Dio_WriteChannel(uint32_t channel, bool level);
+double MCAL_ReadChannelValue(uint32_t channel);
+void MCAL_WriteChannelValue(uint32_t channel, double value);
 void MCAL_ApplySafeOutputs(void);
 void MCAL_Watchdog_Kick(void);
 
@@ -472,24 +679,80 @@ void MCAL_Watchdog_Kick(void);
 
 ## Structural validation
 
+- Structural model validation: PASS
 - States: 2
-- Layers: 1
+- Layers: 1 (1 OR, 0 AND)
 - Active configuration slots: 1
+- State reachability: 100.0%
+- Reachable state IDs: s1, s2
+- Unreachable state IDs: None
+- Terminal state IDs: None
 
 ## Semantic validation
 
-- Rendering consumed an immutable, validated SemanticModel.
+- Semantic IR validation: PASS
+- Rendering consumed one immutable, validated semantic model.
+- OR layers maintain one active child; AND layers maintain one active child per region.
 - Terminal states are quiescent and do not trigger implicit reset.
+- Shallow history restores the direct child; deep history restores the recorded descendant configuration.
 - Runtime order is outer transition, during action, inner transition, then active children.
 
-## Verification status
+## Verification evidence
 
-- Host compilation: pending external build gate.
-- Host runtime: pending external differential harness.
-- Embedded compilation: pending configured target toolchain.
-- Formal MISRA compliance and safety certification are not claimed.
+- Structural validation: PASS
+- Semantic validation: PASS
+- Host compilation: NOT RUN
+- Host runtime: NOT RUN
+- Differential trace: NOT RUN
+- Embedded compilation: NOT RUN
+- Target hardware: PENDING
+- Formal MISRA compliance and safety certification: NOT CLAIMED
+
+Evidence labels describe only the checks actually recorded for this generated package. A PASS at one level does not imply a PASS at any other level.
 ",
     "name": "sm_testing_report.md",
+  },
+  {
+    "content": "# ADIA State Machine Static Metrics Report
+
+## Validated semantic model
+
+| Metric | Value |
+|---|---:|
+| States | 2 |
+| Transitions | 1 |
+| Junctions | 0 |
+| Variables | 3 |
+| Layers | 1 |
+| OR layers | 1 |
+| AND layers | 0 |
+| Active configuration slots | 1 |
+| Fixed step | 10 ms |
+
+## Shared behavioral analysis
+
+- State reachability: 100.0%
+- Reachable state IDs: s1, s2
+- Unreachable state IDs: None
+- Terminal state IDs: None
+- Enumerated paths: 1
+- Maximum path length: 2
+- Structural branch coverage estimate: 0.0%
+- Potential deadlocks: 1
+- Potential unconditional self-loops: 0
+
+## Generated source metrics
+
+| Metric | Value |
+|---|---:|
+| Files measured | 8 |
+| Total lines | 648 |
+| Functional lines | 577 |
+| Comment/blank density | 11.0% |
+
+These are structural metrics derived from the same validated semantic analysis used by the testing report. They are not formal MISRA, safety-certification, embedded-timing, or target-hardware evidence.
+",
+    "name": "static_metrics_report.md",
   },
 ]
 `;

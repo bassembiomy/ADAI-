@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { analyzeStateMachine } from './smAnalysisEngine';
 import { StateData, VariableDef, TransitionData, JunctionData, Layer } from '../types/sm_types';
+import { flatOrFixture } from './stateMachine/smFixtures';
 
 describe('smAnalysisEngine', () => {
   const mockVariables: VariableDef[] = [
@@ -11,6 +12,84 @@ describe('smAnalysisEngine', () => {
   const mockLayers: Layer[] = [
     { id: 'root', name: 'root', parentStateId: null, stateIds: ['s1', 's2', 's3'], transitionIds: ['t1', 't2'], junctionIds: [] }
   ];
+
+  it('validates and analyzes a legacy chart through the semantic model', () => {
+    const result = analyzeStateMachine({
+      tickMs: 10,
+      states: [
+        {
+          id: 'start', name: 'Start', x: 0, y: 0, width: 100, height: 100,
+          entry: '', during: '', exit: '',
+          isActive: false, color: 'blue', parentId: 'root', children: [],
+          priority: 1, isParallel: false, regionId: 'MAIN', autostart: true,
+        },
+        {
+          id: 'unused', name: 'Unused', x: 0, y: 0, width: 100, height: 100,
+          entry: '', during: '', exit: '',
+          isActive: false, color: 'blue', parentId: 'root', children: [],
+          priority: 2, isParallel: false, regionId: 'MAIN', autostart: false,
+          isTerminalState: true,
+        },
+      ],
+      junctions: [],
+      transitions: [],
+      variables: [],
+      layers: [{
+        id: 'root',
+        name: 'root',
+        parentStateId: null,
+        stateIds: ['start', 'unused'],
+        transitionIds: [],
+        junctionIds: [],
+      }],
+      safetyMode: false,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.semantic.reachableStateIds).toEqual(['start']);
+    expect(result.semantic.unreachableStateIds).toEqual(['unused']);
+    expect(result.semantic.terminalStateIds).toEqual(['unused']);
+    expect(result.metrics.stateReachability).toBe(50);
+  });
+
+  it('retains semantic state action sources without false missing-action findings', () => {
+    const model = flatOrFixture();
+    model.states[0].entry = 'total = total + 1;';
+
+    const result = analyzeStateMachine(model);
+
+    expect(result.cornerCases).not.toContainEqual(expect.objectContaining({
+      category: 'missing_action',
+      elementId: 'a',
+    }));
+  });
+
+  it('describes temporal and safety scenarios with the generated public API', () => {
+    const model = flatOrFixture();
+    model.transitions[0].type = 'after';
+    model.transitions[0].afterTicks = 3;
+    model.safetyMode = true;
+    model.states[1].isSafeState = true;
+
+    const result = analyzeStateMachine(model);
+    const temporal = result.testScenarios.find(
+      (scenario) => scenario.category === 'critical_path',
+    );
+    const safety = result.testScenarios.find(
+      (scenario) => scenario.category === 'safety',
+    );
+
+    expect(temporal?.steps.some((step) =>
+      step.action.includes('SM_Step(&instance, SM_TICK_MS) 3 times'))).toBe(true);
+    expect(temporal?.steps.map((step) => step.action).join(' ')).not.toContain('Wait for');
+    expect(safety?.steps.map((step) => step.action).join(' ')).toContain(
+      'SM_Step(&instance, SM_TICK_MS + 1U)',
+    );
+    expect(safety?.steps.map((step) => step.expected).join(' ')).toContain('B');
+    expect(safety?.steps.map((step) => step.expected).join(' ')).not.toContain(
+      'SM_NODE_ERROR',
+    );
+  });
 
   it('should identify critical paths correctly', () => {
     // Linear path s1 -> s2 -> s3
@@ -55,7 +134,7 @@ describe('smAnalysisEngine', () => {
       junctions: [],
       transitions,
       variables: mockVariables,
-      layers: mockLayers,
+      layers: [{ ...mockLayers[0], stateIds: states.map((state) => state.id), transitionIds: transitions.map((transition) => transition.id) }],
       safetyMode: false
     });
 
@@ -97,7 +176,7 @@ describe('smAnalysisEngine', () => {
       junctions: [],
       transitions,
       variables: mockVariables,
-      layers: mockLayers,
+      layers: [{ ...mockLayers[0], stateIds: states.map((state) => state.id), transitionIds: transitions.map((transition) => transition.id) }],
       safetyMode: false
     });
 
@@ -145,7 +224,7 @@ describe('smAnalysisEngine', () => {
       junctions: [],
       transitions,
       variables: mockVariables,
-      layers: mockLayers,
+      layers: [{ ...mockLayers[0], stateIds: states.map((state) => state.id), transitionIds: transitions.map((transition) => transition.id) }],
       safetyMode: false
     });
 
@@ -179,7 +258,7 @@ describe('smAnalysisEngine', () => {
       junctions: [],
       transitions,
       variables: mockVariables,
-      layers: mockLayers,
+      layers: [{ ...mockLayers[0], stateIds: states.map((state) => state.id), transitionIds: transitions.map((transition) => transition.id) }],
       safetyMode: false
     });
 
@@ -231,7 +310,7 @@ describe('smAnalysisEngine', () => {
       junctions: [],
       transitions,
       variables: mockVariables,
-      layers: mockLayers,
+      layers: [{ ...mockLayers[0], stateIds: states.map((state) => state.id), transitionIds: transitions.map((transition) => transition.id) }],
       safetyMode: false
     });
 
@@ -275,7 +354,7 @@ describe('smAnalysisEngine', () => {
       junctions: [],
       transitions,
       variables: mockVariables,
-      layers: mockLayers,
+      layers: [{ ...mockLayers[0], stateIds: states.map((state) => state.id), transitionIds: transitions.map((transition) => transition.id) }],
       safetyMode: true
     });
 
@@ -315,7 +394,7 @@ describe('smAnalysisEngine', () => {
       junctions: [],
       transitions: [],
       variables: mockVariables,
-      layers: mockLayers,
+      layers: [{ ...mockLayers[0], stateIds: states.map((state) => state.id), transitionIds: [] }],
       safetyMode: false
     });
 
@@ -443,7 +522,7 @@ describe('smAnalysisEngine', () => {
       junctions: [],
       transitions,
       variables: mockVariables,
-      layers: mockLayers,
+      layers: [{ ...mockLayers[0], stateIds: states.map((state) => state.id), transitionIds: transitions.map((transition) => transition.id) }],
       safetyMode: false
     });
 
@@ -478,7 +557,7 @@ describe('smAnalysisEngine', () => {
     const transitions: TransitionData[] = [
       {
         id: 't1', sourceId: 's1', targetId: 's2',
-        condition: 'x > 0', action: '',
+        condition: 'sensor_val > 0', action: '',
         afterTicks: null, type: 'condition', hasControlPoint: false, order: 1
       }
     ];
@@ -489,7 +568,7 @@ describe('smAnalysisEngine', () => {
       junctions: [],
       transitions,
       variables: mockVariables,
-      layers: mockLayers,
+      layers: [{ ...mockLayers[0], stateIds: states.map((state) => state.id), transitionIds: transitions.map((transition) => transition.id) }],
       safetyMode: false
     });
 
@@ -524,7 +603,7 @@ describe('smAnalysisEngine', () => {
       junctions: [],
       transitions,
       variables: mockVariables,
-      layers: mockLayers,
+      layers: [{ ...mockLayers[0], stateIds: states.map((state) => state.id), transitionIds: transitions.map((transition) => transition.id) }],
       safetyMode: false
     });
 
@@ -538,4 +617,3 @@ describe('smAnalysisEngine', () => {
     expect(scenariosWithUnreachable.length).toBe(0);
   });
 });
-

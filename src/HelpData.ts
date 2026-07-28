@@ -493,14 +493,22 @@ export const HELP_DATA: Record<string, {
     related: ["getting-started", "reporting"]
   },
   "code-generation": {
-    title: "C-Code Generation (MISRA)",
+    title: "Embedded C Code Generation",
     category: "Software Engineering",
-    description: "Export verified designs to production-ready embedded C code.",
-    content: "Generate MISRA-C:2012 compliant code from Stateflow and X-Bridges models.",
+    description: "Export validated state-machine designs to deterministic C99 for MCU integration.",
+    content: "ADIA generates C99 from one validated semantic model. Generated reports identify exactly which structural, semantic, host, differential, embedded, and target-hardware checks were run; they do not claim MISRA compliance or safety certification.",
     sections: [
       {
-        title: "Compliance Patterns",
-        body: "Strict adherence to safety standards, including deterministic execution and memory safety."
+        title: "Model Migration & Semantic Validation",
+        body: "Older project schemas are migrated before analysis, simulation, or code generation. Migration warnings describe deterministic compatibility choices; ambiguous OR/AND decomposition, invalid hierarchy, unsupported expressions, and other errors block generation instead of being guessed."
+      },
+      {
+        title: "Runtime Integration Contract",
+        body: "Integrate the generated lifecycle in the fixed scheduler order `SM_ReadInputs(&instance)` -> `SM_Step(&instance, delta_ms)` -> `SM_WriteOutputs(&instance)`. Only variables explicitly connected in the HIL Signal Mapper are read from or written to MCAL channels."
+      },
+      {
+        title: "Verification Evidence Labels",
+        body: "Structural PASS means the model and generated structure passed automated checks. Semantic PASS means generation consumed validated IR. Host compilation/runtime and differential PASS apply only when those gates were run. Embedded compilation NOT RUN and Target hardware PENDING mean those activities still belong to the MCU integration and validation team."
       }
     ],
     related: ["getting-started", "industrial-automation"]
@@ -582,7 +590,7 @@ export const HELP_DATA: Record<string, {
       },
       {
         title: "Hierarchical & Parallel States",
-        body: "ADIA supports complex state topologies to simplify control flows:",
+        body: "Every layer has explicit decomposition. OR layers keep exactly one active child; AND layers activate and schedule every orthogonal region in deterministic order:",
         list: [
           "**Hierarchical (Nested) States**: A parent state can enclose sub-states. Entering a parent state enters its autostart sub-state. If an outer transition fires, all child states exit recursively.",
           "**Parallel (Orthogonal) States**: Multiple states can be active simultaneously in different regions, allowing parallel execution of concurrent tasks."
@@ -596,6 +604,10 @@ export const HELP_DATA: Record<string, {
           "**Shallow History Junction (H)**: Remembers the last active child state at its current hierarchical level when the parent state is exited, resuming it upon re-entry.",
           "**Deep History Junction (H*)**: Recursively remembers and restores the active states at all descendant levels of the hierarchy."
         ]
+      },
+      {
+        title: "Terminal State Semantics",
+        body: "A terminal state is quiescent: after entry it remains active, does not execute `during` or internal transitions, and never resets the chart implicitly. In an AND layer, a terminal region remains quiescent while sibling regions continue. Call `SM_Reset` explicitly when the application requires a new run."
       },
       {
         title: "State Machine Variables",
@@ -665,6 +677,10 @@ export const HELP_DATA: Record<string, {
         ]
       },
       {
+        title: "Generated MCU Scheduler",
+        body: "The generated MCU contract is explicit and matches simulation boundaries: call `SM_ReadInputs`, then `SM_Step`, then `SM_WriteOutputs`. Do not call the combined synchronization helper around `SM_Step`, because outputs must be committed only after the step succeeds."
+      },
+      {
         title: "Safe States & Error Catching",
         body: "If a runtime error occurs during action evaluation (such as a variable reference error or mathematical division by zero), the simulator immediately logs an error message. If a state has the `isSafeState` flag enabled, the simulation automatically redirects to this state to halt the process safely."
       },
@@ -674,7 +690,7 @@ export const HELP_DATA: Record<string, {
       },
       {
         title: "Hardware-in-the-Loop (HIL) Binding",
-        body: "Variables in the state machine can be mapped directly to HIL hardware pins using the HIL Signal Mapper. When mapped, state machine outputs write directly to microcontrollers, and input variables read physical sensor pins in real-time."
+        body: "Variables reach hardware only through explicit HIL Signal Mapper entries. Names such as `sensor_x`, `x`, or `led_out` do not create implicit driver access. Read mappings sample physical inputs before the step; write mappings commit outputs after a successful step."
       }
     ],
     related: ["state-machine-fundamentals", "state-machine-transitions", "learning-labs"]
@@ -768,7 +784,7 @@ export const HELP_DATA: Record<string, {
       },
       {
         title: "Mapping Signals to Variables",
-        body: "Use the **Signal Mapper** to create bindings between your defined Driver Channels and State Machine Variables. A mapping operates in one of two directions:",
+        body: "Use the **Signal Mapper** to create explicit bindings between defined Driver Channels and State Machine Variables. Unmapped variables remain internal model data, regardless of their names. A mapping operates in one of two directions:",
         list: [
           "**Read Binding (Hardware -> SM)**: The physical MCU reads a pin (e.g., ADC sensor) and automatically writes the value to a State Machine input variable before the step ticks.",
           "**Write Binding (SM -> Hardware)**: The State Machine writes a value to an output variable, which the MCU automatically translates to a physical pin output (e.g., PWM signal)."
@@ -810,8 +826,8 @@ export const HELP_DATA: Record<string, {
   "hil-code-generation": {
     title: "Embedded C Driver Generation",
     category: "Hardware-in-the-Loop (HIL)",
-    description: "Export and deploy MISRA-compliant HIL C driver code to run the state machine directly on target microcontrollers.",
-    content: "ADIA automatically generates production-ready, MISRA-C:2012 compliant driver code based on your HIL configuration and state machine models.",
+    description: "Export and deploy deterministic HIL C99 integration code to run the state machine directly on target microcontrollers.",
+    content: "ADIA generates deterministic C99 and target integration scaffolding from validated HIL mappings. The output is intended for embedded-engineer review and target-toolchain validation; no MISRA or safety-certification claim is implied.",
     sections: [
       {
         title: "Generated File Structure",
@@ -826,7 +842,7 @@ export const HELP_DATA: Record<string, {
       {
         title: "The HIL Main Loop Protocol",
         body: "The generated `main_hil.c` runs a deterministic scheduling loop:",
-        code: "void main(void) {\n    HAL_Drivers_Init();\n    SM_Init(&sm_instance);\n    while(1) {\n        HIL_Receive_Poll();      // Read serial overrides/faults\n        HIL_Sync_Inputs(&sm_instance); // Read hardware pins & apply scaling\n        SM_Step(&sm_instance, 10);     // Tick the State Machine\n        HIL_Sync_Outputs(&sm_instance); // Write SM outputs to physical pins\n        HIL_SendTelemetry(&sm_instance); // Send telemetry packet to PC\n        HAL_Delay_Ms(10);               // Enforce tick interval\n    }\n}"
+        code: "void main(void) {\n    HAL_Drivers_Init();\n    SM_Init(&sm_instance);\n    while (1) {\n        HIL_Receive_Poll();\n        if (SM_ReadInputs(&sm_instance) == SM_ERR_NONE) {\n            if (SM_Step(&sm_instance, 10U) == SM_ERR_NONE) {\n                (void)SM_WriteOutputs(&sm_instance);\n            }\n        }\n        HIL_SendTelemetry(&sm_instance);\n        HAL_Delay_Ms(10U);\n    }\n}"
       },
       {
         title: "Deployment Workflow",

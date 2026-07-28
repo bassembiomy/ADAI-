@@ -22,6 +22,7 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
       'sm_user_logic.c',
       'mcal_dio.h',
       'sm_testing_report.md',
+      'static_metrics_report.md',
     ]);
   });
 
@@ -81,10 +82,11 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
     const result = generateMISRACCode(flatOrFixture(), {
       includeTestShims: true,
     });
-    const mcal = result.files.find((file) => file.name === 'mcal_dio.h')!.content;
-    expect(mcal).toContain('#ifdef MCAL_TEST_STUBS');
-    expect(mcal).toContain('MCAL_Test_ReadChannel');
-    expect(mcal).toContain('MCAL_Test_WriteChannel');
+    const stubs = result.files.find(
+      (file) => file.name === 'mcal_dio_test_stubs.c',
+    )!.content;
+    expect(stubs).toContain('bool MCAL_Dio_ReadChannel');
+    expect(stubs).toContain('void MCAL_Dio_WriteChannel');
   });
 
   it('generates typed data fields and AST-rendered actions', () => {
@@ -115,7 +117,33 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
     )!.content;
     expect(report).toContain('## Structural validation');
     expect(report).toContain('## Semantic validation');
-    expect(report).toContain('Host compilation: pending external build gate');
-    expect(report).toContain('Formal MISRA compliance and safety certification are not claimed');
+    expect(report).toContain('Host compilation: NOT RUN');
+    expect(report).toContain('Target hardware: PENDING');
+    expect(report).toContain('Formal MISRA compliance and safety certification: NOT CLAIMED');
+    expect(report).not.toMatch(/MISRA[- ]C(?:\:2012)? compliant/i);
+  });
+
+  it('renders testing and static reports from one semantic reachability result', () => {
+    const chart = flatOrFixture();
+    chart.states.push({
+      ...chart.states[1],
+      id: 'unreachable',
+      name: 'Unreachable',
+      priority: 3,
+    });
+    chart.layers[0].stateIds.push('unreachable');
+
+    const result = generateMISRACCode(chart);
+    const testing = result.files.find(
+      (file) => file.name === 'sm_testing_report.md',
+    )!.content;
+    const metrics = result.files.find(
+      (file) => file.name === 'static_metrics_report.md',
+    )!.content;
+
+    expect(testing).toContain('State reachability: 66.7%');
+    expect(metrics).toContain('State reachability: 66.7%');
+    expect(testing).toContain('Unreachable state IDs: unreachable');
+    expect(metrics).toContain('Unreachable state IDs: unreachable');
   });
 });

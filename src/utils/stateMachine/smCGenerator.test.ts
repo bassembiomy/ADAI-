@@ -18,6 +18,7 @@ import {
   generateCArtifacts,
   renderConfigHeader,
   renderCoreSource,
+  renderSafetySource,
 } from './smCGenerator';
 import { renderCExpression } from './smCExpressions';
 
@@ -132,6 +133,93 @@ describe('structured C99 renderer', { timeout: 60_000 }, () => {
     );
   });
 
+  it('renders consistency maps from the actual semantic hierarchy and slots', () => {
+    const safety = renderSafetySource(build(nestedAndFixture()));
+
+    expect(safety).toContain(
+      'static const SM_Node_t SM_State_Parent_Map[SM_NUM_STATES + 1U]',
+    );
+    expect(safety).toContain(
+      '[SM_ST_REGION_A_IDX] = SM_ST_PARALLEL',
+    );
+    expect(safety).toContain(
+      '[SM_ST_REGION_B_IDX] = SM_ST_PARALLEL',
+    );
+    expect(safety).toContain(
+      '[SM_ST_PARALLEL_IDX] = 0',
+    );
+    expect(safety).toContain(
+      '[SM_ST_REGION_A_IDX] = -1',
+    );
+    expect(safety).toContain(
+      'return SM_ERR_CONFIGURATION;',
+    );
+  });
+
+  it('rejects missing active children in OR and AND containers', () => {
+    const orIr = build(flatOrFixture());
+    const orSlot = orIr.layers.root.activeSlot!;
+    const orOutput = compileAndRun(
+      orIr,
+      `#include "sm_core.h"
+#include "sm_safety.h"
+#include <stdio.h>
+int main(void) {
+    ADIA_Instance_t inst;
+    (void)SM_Init(&inst);
+    inst.state_active[SM_ST_A_IDX] = false;
+    inst.active_states[${orSlot}U] = SM_NODE_INVALID;
+    printf("%u\\n", SM_Validate_State_Consistency(&inst) == SM_ERR_CONFIGURATION ? 1U : 0U);
+    return 0;
+}
+`,
+    );
+    expect(orOutput.trim()).toBe('1');
+
+    const andIr = build(nestedAndFixture());
+    const andOutput = compileAndRun(
+      andIr,
+      `#include "sm_core.h"
+#include "sm_safety.h"
+#include <stdio.h>
+int main(void) {
+    ADIA_Instance_t inst;
+    (void)SM_Init(&inst);
+    inst.state_active[SM_ST_REGION_B_IDX] = false;
+    printf("%u\\n", SM_Validate_State_Consistency(&inst) == SM_ERR_CONFIGURATION ? 1U : 0U);
+    return 0;
+}
+`,
+    );
+    expect(andOutput.trim()).toBe('1');
+  });
+
+  it('rejects shallow and deep history outside the owning layer', () => {
+    const ir = build(historyFixture('deep'));
+    const historySlot = ir.layers.workspace_children.activeSlot!;
+    const output = compileAndRun(
+      ir,
+      `#include "sm_core.h"
+#include "sm_safety.h"
+#include <stdio.h>
+int main(void) {
+    ADIA_Instance_t inst;
+    unsigned shallow_invalid;
+    unsigned deep_invalid;
+    (void)SM_Init(&inst);
+    inst.history_states[${historySlot}U] = SM_ST_OUTSIDE;
+    shallow_invalid = SM_Validate_State_Consistency(&inst) == SM_ERR_CONFIGURATION ? 1U : 0U;
+    (void)SM_Init(&inst);
+    inst.deep_history[SM_LYR_WORKSPACE_CHILDREN_IDX][SM_ST_OUTSIDE_IDX] = true;
+    deep_invalid = SM_Validate_State_Consistency(&inst) == SM_ERR_CONFIGURATION ? 1U : 0U;
+    printf("%u %u\\n", shallow_invalid, deep_invalid);
+    return 0;
+}
+`,
+    );
+    expect(output.trim()).toBe('1 1');
+  });
+
   it('does not require post-generation brace or regex repair', () => {
     const source = readFileSync(
       'src/utils/stateMachine/smCGenerator.ts',
@@ -156,6 +244,7 @@ describe('structured C99 renderer', { timeout: 60_000 }, () => {
       'sm_user_logic.c',
       'mcal_dio.h',
       'sm_testing_report.md',
+      'static_metrics_report.md',
     ]);
     expect(JSON.stringify(ir)).toBe(before);
   });

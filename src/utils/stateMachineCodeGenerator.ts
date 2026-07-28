@@ -7,6 +7,9 @@ import { generateHALCode } from '../engine/hil/hilCodeGenerator';
 import { generateCArtifacts } from './stateMachine/smCGenerator';
 import { migrateStateMachineModel } from './stateMachine/smModelMigration';
 import { buildSemanticModel } from './stateMachine/smSemanticBuilder';
+import {
+  renderTestingReport as renderSemanticTestingReport,
+} from './stateMachine/smReports';
 import type {
   LegacyStateMachineModel,
   ModelDiagnostic,
@@ -2059,7 +2062,7 @@ static void SM_Enter_Layer_${lIdx}(ADIA_Instance_t* instance, bool use_history) 
     }
   });
 
-  const testingReport = generateTestingReport(chart, errors, warnings, smCoreC);
+  const testingReport = renderSemanticTestingReport(analyzeStateMachine(chart));
 
   /* Dynamic MCAL_PIN definitions based on actual IO variable count */
   const inPrefixVars = sortedVariables.filter(v => isInputVariable(v));
@@ -2865,186 +2868,6 @@ static inline uint32_t HAL_GetTick(void) { return 0; }
   };
 };
 
-const generateTestingReport = (chart: any, errors: ErrorItem[], warnings: string[], smCoreC: string = ''): string => {
-  const now = new Date().toISOString();
-  
-  // Logic validation: Check for self-loops without exit conditions
-  const selfLoops = chart.transitions.filter((t: any) => t.sourceId === t.targetId);
-  const potentialStuckStates = selfLoops.filter((t: any) => !t.condition || t.condition === 'true');
-
-  // Integration validation: Check for variable naming conventions
-  const ioVars = chart.variables.filter((v: any) => 
-    /in_|out_|sensor_|actuator_|btn_|led_|motor_/i.test(v.name)
-  );
-
-  // Structural validation: Check for states with no outgoing transitions (respecting hierarchy)
-  const sinkStates = chart.states.filter((s: any) => {
-    let hasOutgoing = false;
-    let curr = s;
-    while (curr) {
-      if (chart.transitions.some((t: any) => t.sourceId === curr.id)) {
-        hasOutgoing = true;
-        break;
-      }
-      curr = curr.parentId ? chart.states.find((p: any) => p.id === curr.parentId) : null;
-    }
-    const isSafeState = s.isSafeState;
-    const isTerminalState = s.isTerminalState;
-    return !hasOutgoing && !isSafeState && !isTerminalState;
-  });
-
-  const analysis = analyzeStateMachine(chart);
-
-  let hilReport = '';
-  if (chart.hilConfig && chart.hilConfig.enabled) {
-    const hc = chart.hilConfig;
-    const plausibilityIssues: string[] = [];
-    hc.mappings.forEach((m: any) => {
-      const ch = hc.channels.find((c: any) => c.id === m.channelId);
-      const v = chart.variables.find((vr: any) => vr.name === m.adiaVarId || vr.id === m.adiaVarId);
-      if (ch && v) {
-        if (ch.peripheral === 'GPIO') {
-          const isCounter = v.name.toLowerCase().includes('counter') ||
-                            v.name.toLowerCase().includes('count') ||
-                            v.name.toLowerCase().includes('timer');
-          if ((v.type !== 'bool' && v.type !== 'uint8' && v.type !== 'int8') || isCounter) {
-            plausibilityIssues.push(`| Pin \`${ch.pin}\` (\`${ch.name}\`) ↔ \`${v.name}\` | 🟡 WARNING | Digital GPIO pin is bound to type \`${v.type}\` ${isCounter ? '(treated as counter/timer)' : '(large scale variable)'}. | Re-bind to a \`bool\` variable, or change \`${v.name}\` type to \`bool\`. |`);
-          }
-        } else if (['ADC', 'DAC', 'PWM'].includes(ch.peripheral)) {
-          if (v.type === 'bool') {
-            plausibilityIssues.push(`| Pin \`${ch.pin}\` (\`${ch.name}\`) ↔ \`${v.name}\` | 🟡 WARNING | Analog/PWM peripheral is bound to \`bool\` type. | Re-bind to a numeric variable (\`float\` / \`double\` / \`uint16\`), or change \`${v.name}\` type. |`);
-          }
-        }
-      }
-    });
-
-    hilReport = `
-## 8. HIL Driver Mapping Report
-- **Target Microcontroller:** ${hc.target}
-- **Baud Rate:** ${hc.baudRate} bps
-- **System Clock:** ${hc.clockSpeed} MHz
-- **Connection Port:** ${hc.commPort || 'Auto-Detect'}
-
-| Channel Name | Pin | Peripheral | Direction | Mapped ADIA Variable | Scaling |
-|--------------|-----|------------|-----------|----------------------|---------|
-${hc.channels.map((ch: any) => {
-  const m = hc.mappings.find((mp: any) => mp.channelId === ch.id);
-  return `| \`${ch.name}\` | \`${ch.pin}\` | \`${ch.peripheral}\` | \`${ch.direction}\` | \`${m ? m.adiaVarId : 'Unmapped'}\` | \`${ch.scalingFactor}\` |`;
-}).join('\n')}
-
-### Type-Binding Plausibility Report
-${plausibilityIssues.length > 0 ? `| Mapping | Severity | Issue | Suggested Fix |
-|---------|----------|-------|---------------|
-${plausibilityIssues.join('\n')}` : '*No type-binding plausibility violations detected.*'}
-`;
-  }
-
-  // Count internal transitions across all states
-  let totalInternalTransitions = 0;
-  chart.states.forEach((s: any) => {
-    if (s.internalTransitions) {
-      totalInternalTransitions += s.internalTransitions.split('\n').filter((l: string) => l.trim()).length;
-    }
-  });
-
-  const hasInvariantIf = /if\s*\((true|false|1|0)\)/i.test(smCoreC);
-  const misra14_3Status = hasInvariantIf ? '⚠️ WARN' : '✅ PASS (checked)';
-  const misra14_3Detail = hasInvariantIf
-    ? 'Invariant controlling expression (such as `if (true)`) detected in the generated code.'
-    : 'No invariant controlling expressions (such as `if (true)`) detected in the generated transition logic.';
-
-  return `# ADIA Code Generation: Testing & Validation Report
-**Timestamp:** ${now}
-**Compliance Level:** MISRA-C:2012 (advisory)
-**Generator Version:** ${VERSION}
-
-## 1. Syntax & Compliance Check
-*Rows marked "(checked)" describe rules actually validated on the generated source text, rather than assumed by construction.*
-
-| Category | Status | Details |
-|----------|--------|---------|
-| C99 Syntax | ✅ PASS (checked) | Identifiers are sanitized, deduplicated and limited to 28 characters. |
-| MISRA-C 10.4 | ${warnings.some(w => w.includes('essential type')) ? '⚠️ WARN' : '✅ PASS (checked)'} | Validates that operands in transitions match essential types to prevent implicit conversions. |
-| MISRA-C 14.3 | ${misra14_3Status} | ${misra14_3Detail} |
-| MISRA-C 14.4 | ✅ PASS (checked) | Ensures boolean contexts (if/else if conditions) compare non-boolean types explicitly against 0/0U/0.0. |
-| MISRA-C 15.7 | ✅ PASS (checked) | Enforces terminating \`else\` blocks in all generated conditional transition chains. |
-
-## 2. Logic & Control Flow Verification
-- **Total Transitions Validated:** ${chart.transitions.length}
-- **Internal Transitions Covered:** ${totalInternalTransitions}
-- **Self-Loop Check:** ${potentialStuckStates.length === 0 ? '✅ No unconditional self-loops detected.' : `⚠️ Found ${potentialStuckStates.length} potential stuck loops.`}
-- **Sink State Check:** ${sinkStates.length === 0 ? '✅ All operational states have exit paths.' : `⚠️ Found ${sinkStates.length} sink states (no exit).`}
-${sinkStates.length > 0 ? sinkStates.map((s: any) => `  - State: \`${s.name}\` (Possible deadlock if not intentional)`).join('\n') : ''}
-- **Terminal States:** ${chart.states.filter((s: any) => s.isTerminalState).length > 0 ? chart.states.filter((s: any) => s.isTerminalState).map((s: any) => `\`${s.name}\` (Terminal/Safe)`).join(', ') : 'None defined.'}
-
-## 3. Driver & Integration Mapping
-The following variables are identified as potential Hardware/Driver interfaces:
-${ioVars.length > 0 ? ioVars.map((v: any) => `| \`${v.name}\` | \`g_data.${v.name}\` | mapped to \`${v.type}\` |`).join('\n') : '*No IO-prefixed variables detected.*'}
-
-| Check | Status | Details |
-|-------|--------|---------|
-| Data Layout | ℹ️ INFO | \`SM_Data_t\` is a plain C struct with natural alignment (no packing applied). |
-| Instance Scope | ✅ PASS | All runtime data is held in the caller-provided \`ADIA_Instance_t\` context (no hidden globals). |
-| X-Bridges Sync | ${chart.states.some((s: any) => s.isXBridges) ? '✅ PASS' : 'N/A'} | Co-simulation state buffers are synchronized per tick. |
-
-## 4. Virtual Unit Test Results (Simulated)
-*The following tests were virtually executed against the generated model during synthesis.*
-
-| Test ID | Description | Result |
-|---------|-------------|--------|
-| T-V01 | Root Autostart Validation | ${chart.states.some((s: any) => s.autostart) || chart.junctions.some((j: any) => j.autostart) ? '✅ PASS' : '❌ FAIL (No entry defined)'} |
-| T-V02 | Junction Convergence | ${(() => { const junctions = chart.junctions || []; const danglingJuncs = junctions.filter((j: any) => { const outgoing = chart.transitions.filter((t: any) => t.sourceId === j.id); return outgoing.length === 0; }); return danglingJuncs.length === 0 ? '✅ PASS' : `⚠️ WARN (${danglingJuncs.length} junctions with no outgoing transitions)`; })()} |
-| T-V03 | Logic Conflict Detection | ${(() => { let conflicts = 0; const stateIds = chart.states.map((s: any) => s.id); stateIds.forEach((sid: string) => { const outgoing = chart.transitions.filter((t: any) => t.sourceId === sid && t.type === 'condition'); const unconditional = outgoing.filter((t: any) => !t.condition || t.condition === 'true'); if (unconditional.length > 1) conflicts++; }); return conflicts === 0 ? '✅ PASS' : `⚠️ WARN (${conflicts} states have multiple unconditional transitions)`; })()} |
-| T-V04 | Safe State Entry on Error | ${(() => { if (!chart.safetyMode) return 'N/A'; const safe = chart.states.find((s: any) => s.isSafeState); return safe ? `✅ PASS (transitions to '${safe.name}' on safety error)` : '❌ FAIL (no safe state defined)'; })()} |
-
-## 5. Critical Path Analysis (Critical Batches)
-Identify the longest or most complex execution paths ("critical batches") through the state machine.
-
-| ID | Name | States Sequence | Complexity |
-|----|------|-----------------|------------|
-${analysis.criticalPaths.map(cp => `| \`${cp.id}\` | ${cp.name} | ${cp.states.map(s => `\`${s}\``).join(' → ')} | ${cp.complexity} |`).join('\n')}
-
-**Metrics:**
-- Total Unique Paths Enumerated: ${analysis.metrics.totalPaths}
-- Max Path Length: ${analysis.metrics.maxPathLength} states
-
-## 6. Corner Case & Behavior Analysis
-Detecting deadlocks, unreachable states, racing transitions, self-loops, and potential logic crashes.
-
-| ID | Category | Severity | Element | Description | Recommendation |
-|----|----------|----------|---------|-------------|----------------|
-${analysis.cornerCases.map(cc => `| \`${cc.id}\` | \`${cc.category}\` | ${cc.severity === 'critical' ? '🔴 CRITICAL' : cc.severity === 'warning' ? '🟡 WARNING' : '🔵 INFO'} | \`${cc.elementName}\` | ${cc.description} | ${cc.recommendation} |`).join('\n')}
-${analysis.cornerCases.length === 0 ? '| - | - | - | - | No behavioral anomalies detected! | - |' : ''}
-
-**Metrics:**
-- State Reachability: ${analysis.metrics.stateReachability.toFixed(1)}%
-- Potential Stuck States (Self-Loops): ${analysis.cornerCases.filter(c => c.category === 'self_loop').length}
-- Potential Deadlock States: ${analysis.cornerCases.filter(c => c.category === 'deadlock').length}
-
-## 7. Automatically Generated Test Scenario Matrix
-Actionable test scenarios showing exact steps/stimuli sequences required to achieve specific states and verify robust, crash-free execution.
-${analysis.testScenarios.map(ts => `
-### Scenario: ${ts.name} (\`${ts.id}\` - ${ts.category.toUpperCase()})
-**Preconditions:**
-${ts.preconditions.map(p => `- ${p}`).join('\n')}
-
-**Steps:**
-| Step | Action | Expected Output / State |
-|------|--------|-------------------------|
-${ts.steps.map((step, idx) => `| ${idx + 1} | ${step.action} | ${step.expected} |`).join('\n')}
-
-**Expected Result:**
-${ts.expectedResult}
-`).join('\n')}
-
-${hilReport}
-
----
-**Summary:** The generated code has been **structurally validated** against MISRA-C:2012 advisory rules. Functional verification on target hardware is pending and must be completed before deployment.
-*Note: This report documents automated structural checks only. It does not constitute certification evidence.*
-`;
-};
-
 const diagnosticToLegacyError = (
   diagnostic: ModelDiagnostic,
 ): ErrorItem => ({
@@ -3108,7 +2931,6 @@ export const generateMISRACCode = (
     return { files: [], errors, warnings };
   }
 
-  const rendered = generateCArtifacts(built.ir, options);
   const hilWarnings: string[] = [];
   const hilFiles = chart.hilConfig?.enabled === true
     ? generateHALCode(chart.hilConfig, chart.variables, hilWarnings)
@@ -3121,6 +2943,11 @@ export const generateMISRACCode = (
     }, options).files.filter((file) =>
       HIL_TEST_SHIM_NAMES.has(file.name))
     : [];
+  const rendered = generateCArtifacts(built.ir, {
+    includeTestShims: options.includeTestShims === true
+      && chart.hilConfig?.enabled !== true,
+    reportSourceFiles: [...hilFiles, ...testShimFiles],
+  });
   const files = rendered.files.map((file) => {
     if (file.name !== 'sm_testing_report.md' || chart.hilConfig?.enabled !== true) {
       return file;
@@ -3136,8 +2963,9 @@ export const generateMISRACCode = (
 `,
     };
   });
+  const combinedFiles = [...files, ...hilFiles, ...testShimFiles];
   return {
-    files: [...files, ...hilFiles, ...testShimFiles],
+    files: combinedFiles,
     errors: [...errors, ...rendered.errors],
     warnings: [...warnings, ...rendered.warnings, ...hilWarnings],
   };
