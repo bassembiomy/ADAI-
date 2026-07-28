@@ -467,21 +467,33 @@ export const parseInternalTransition = (
   if (afterMatch) {
     unparsedTrigger = unparsedTrigger.replace(afterMatch[0], '');
   }
-  if (unparsedTrigger.replace(/&&|\|\||\s/g, '') !== '') {
-    throw new SyntaxError(`invalid internal-transition trigger '${trigger}'`);
-  }
-  if (trigger.includes('&&') && trigger.includes('||')) {
-    throw new SyntaxError(`invalid internal-transition trigger '${trigger}'`);
-  }
   const hasCondition = openBracket >= 0;
   const hasTemporal = afterMatch !== null;
+  const connector = unparsedTrigger.trim();
+  if (
+    hasCondition
+    && hasTemporal
+    && connector !== '&&'
+    && connector !== '||'
+  ) {
+    throw new SyntaxError(
+      `invalid internal-transition trigger '${trigger}': expected exactly one '&&' or '||'`,
+    );
+  }
+  if ((!hasCondition || !hasTemporal) && connector !== '') {
+    throw new SyntaxError(`invalid internal-transition trigger '${trigger}'`);
+  }
+  const afterTicks = afterMatch ? Number(afterMatch[1]) : null;
+  if (afterTicks !== null && afterTicks <= 0) {
+    throw new SyntaxError('after(...) requires a positive integer threshold');
+  }
   const triggerMode = hasCondition && hasTemporal
-    ? trigger.includes('||') ? 'or' : 'and'
+    ? connector === '||' ? 'or' : 'and'
     : hasTemporal ? 'after' : 'condition';
   return {
     guard: parseCondition(condition, declaredSymbols),
     actions: parseActions(actionSource, declaredSymbols),
-    afterTicks: afterMatch ? Number(afterMatch[1]) : null,
+    afterTicks,
     triggerMode,
   };
 };

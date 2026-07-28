@@ -529,6 +529,67 @@ describe('buildSemanticModel', () => {
     });
   });
 
+  it('normalizes an indirect internal decision-to-history route', () => {
+    const fixture = nestedAndFixture();
+    const childLayer = fixture.layers.find((layer) => layer.id === 'parallel')!;
+    childLayer.junctionIds.push('decision', 'history_target');
+    fixture.junctions.push(
+      {
+        id: 'decision',
+        x: 0,
+        y: 0,
+        name: 'Decision',
+        color: '#000',
+        parentId: 'parallel',
+      },
+      {
+        id: 'history_target',
+        x: 0,
+        y: 0,
+        name: 'H',
+        color: '#000',
+        parentId: 'parallel',
+        type: 'history',
+      },
+    );
+    fixture.transitions.push(
+      {
+        id: 't_inner_decision',
+        sourceId: 'parallel',
+        targetId: 'decision',
+        condition: '',
+        action: '',
+        afterTicks: null,
+        type: 'internal',
+        isInternal: true,
+        hasControlPoint: false,
+        order: 1,
+      },
+      {
+        id: 't_decision_history',
+        sourceId: 'decision',
+        targetId: 'history_target',
+        condition: '',
+        action: '',
+        afterTicks: null,
+        type: 'condition',
+        hasControlPoint: false,
+        order: 1,
+      },
+    );
+
+    const result = buildSemanticModel(fixture);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir!.transitions.t_inner_decision.routes).toEqual([{
+      transitionIds: ['t_inner_decision', 't_decision_history'],
+      destinationKind: 'history',
+      destinationStateId: null,
+      destinationJunctionId: 'history_target',
+      exitStateIds: [],
+      entryStateIds: [],
+    }]);
+  });
+
   it('accepts UI-schema history ownership by parent state ID', () => {
     const fixture = nestedAndFixture();
     const childLayer = fixture.layers.find((layer) => layer.id === 'parallel')!;
@@ -565,6 +626,14 @@ describe('buildSemanticModel', () => {
       fixture.transitions[0].afterTicks = null;
       expect(diagnosticCodes(fixture)).toContain('TEMPORAL_THRESHOLD_REQUIRED');
     }
+  });
+
+  it('rejects a zero explicit temporal threshold', () => {
+    const fixture = flatOrFixture();
+    fixture.transitions[0].type = 'after';
+    fixture.transitions[0].afterTicks = 0;
+
+    expect(diagnosticCodes(fixture)).toContain('TEMPORAL_THRESHOLD_INVALID');
   });
 
   it('canonicalizes action targets and expression variables to stable IDs', () => {

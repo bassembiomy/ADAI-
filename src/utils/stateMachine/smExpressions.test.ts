@@ -106,4 +106,22 @@ describe('semantic expressions', () => {
       'after(2) && || [enabled] / ratio = 1;',
     )).toThrow(/invalid internal-transition trigger/);
   });
+
+  it('requires exactly one connector between condition and temporal clauses', () => {
+    expect(() => parseInternalTransition(
+      'after(2) [enabled] / ratio = 1;',
+    )).toThrow(/exactly one '&&' or '\|\|'/);
+    expect(() => parseInternalTransition(
+      'after(2) && && [enabled] / ratio = 1;',
+    )).toThrow(/exactly one '&&' or '\|\|'/);
+    expect(() => parseInternalTransition(
+      '[enabled] || || after(2) / ratio = 1;',
+    )).toThrow(/exactly one '&&' or '\|\|'/);
+  });
+
+  it('rejects a zero textual temporal threshold', () => {
+    expect(() => parseInternalTransition(
+      'after(0) / ratio = 1;',
+    )).toThrow(/positive integer/);
+  });
 });

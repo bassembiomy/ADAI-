@@ -414,6 +414,31 @@ const validateTransitionPaths = (
     return reachable;
   };
 
+  const reachableHistoryJunctionIds = (
+    id: string,
+    path: ReadonlySet<string>,
+  ): Set<string> => {
+    const junction = junctionsById.get(id);
+    if (junction?.type === 'history' || junction?.type === 'deep-history') {
+      return new Set([id]);
+    }
+    if (!junctionIds.has(id) || path.has(id)) return new Set();
+    const nextPath = new Set(path);
+    nextPath.add(id);
+    const reachable = new Set<string>();
+    for (const transition of outgoing.get(id) ?? []) {
+      for (
+        const historyId of reachableHistoryJunctionIds(
+          transition.targetId,
+          nextPath,
+        )
+      ) {
+        reachable.add(historyId);
+      }
+    }
+    return reachable;
+  };
+
   const cycleState = new Map<string, 'visiting' | 'visited'>();
   const cyclicJunctions = new Set<string>();
   const visitJunction = (junctionId: string, path: string[]): void => {
@@ -468,7 +493,7 @@ const validateTransitionPaths = (
       transition.afterTicks !== null
       && (
         !Number.isInteger(transition.afterTicks)
-        || transition.afterTicks < 0
+        || transition.afterTicks <= 0
       )
     ) {
       diagnostics.push(diagnostic(
@@ -492,6 +517,9 @@ const validateTransitionPaths = (
     const reachableInternalDestinations = junctionIds.has(transition.targetId)
       ? reachableStateIds(transition.targetId, new Set())
       : new Set<string>();
+    const reachableInternalHistories = junctionIds.has(transition.targetId)
+      ? reachableHistoryJunctionIds(transition.targetId, new Set())
+      : new Set<string>();
     const targetJunction = junctionsById.get(transition.targetId);
     const historyOwnerLayer = targetJunction
       ? model.layers.find((layer) => layer.junctionIds.includes(targetJunction.id))
@@ -505,13 +533,30 @@ const validateTransitionPaths = (
         historyOwnerLayer.parentStateId === transition.sourceId
         || isDescendant(historyOwnerLayer.parentStateId, transition.sourceId)
       );
+    const historiesStayWithinSource = [...reachableInternalHistories].every(
+      (historyId) => {
+        const ownerLayer = model.layers.find((layer) =>
+          layer.junctionIds.includes(historyId));
+        const ownerStateId = ownerLayer?.parentStateId;
+        return ownerStateId !== null
+          && ownerStateId !== undefined
+          && (
+            ownerStateId === transition.sourceId
+            || isDescendant(ownerStateId, transition.sourceId)
+          );
+      },
+    );
     const validInternalJunctionTarget = junctionIds.has(transition.targetId)
       && (
         validHistoryTarget
         || (
-          reachableInternalDestinations.size > 0
+          (
+            reachableInternalDestinations.size > 0
+            || reachableInternalHistories.size > 0
+          )
           && [...reachableInternalDestinations].every((stateId) =>
             isDescendant(stateId, transition.sourceId))
+          && historiesStayWithinSource
         )
       );
     if (
