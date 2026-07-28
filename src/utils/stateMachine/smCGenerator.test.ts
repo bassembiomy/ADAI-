@@ -151,6 +151,47 @@ describe('structured C99 renderer', () => {
     }
   });
 
+  it('compiles a model with no data variables as strict C99', () => {
+    const model = flatOrFixture();
+    model.variables = [];
+    model.states = model.states.map((state) => ({
+      ...state,
+      entry: '',
+      during: '',
+      exit: '',
+    }));
+    model.transitions = [];
+    model.layers[0].transitionIds = [];
+
+    const workspace = createGeneratedCodeTestWorkspace('structured-empty-data');
+    try {
+      const result = generateCArtifacts(build(model));
+      for (const file of result.files) {
+        if (file.name.endsWith('.c') || file.name.endsWith('.h')) {
+          writeFileSync(join(workspace.directory, file.name), file.content);
+        }
+      }
+      execFileSync(
+        'gcc',
+        [
+          '-std=c99',
+          '-pedantic-errors',
+          '-Wall',
+          '-Wextra',
+          '-Werror',
+          '-I.',
+          '-c',
+          'sm_core.c',
+          'sm_safety.c',
+          'sm_user_logic.c',
+        ],
+        { cwd: workspace.directory, stdio: 'pipe' },
+      );
+    } finally {
+      workspace.cleanup();
+    }
+  });
+
   it('uses migration and semantic construction in the compatibility facade', () => {
     const chart = parallelHistoryFixture('parallel-terminal');
     const before = JSON.stringify(chart);
@@ -161,6 +202,118 @@ describe('structured C99 renderer', () => {
     expect(core).not.toContain('Terminal / End State: auto-reset');
     expect(core).not.toMatch(/SM_Is_Terminal_State[\s\S]*SM_Reset/);
     expect(JSON.stringify(chart)).toBe(before);
+  });
+
+  it('rejects fractional tick periods instead of emitting invalid C tokens', () => {
+    const chart = flatOrFixture();
+    chart.tickMs = 0.5;
+
+    const result = generateMISRACCode(chart);
+
+    expect(result.files).toEqual([]);
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      id: 'TICK_MS_UNSUPPORTED',
+    }));
+  });
+
+  it('backtracks across default-junction branches before committing entry', () => {
+    const model = flatOrFixture();
+    model.states = model.states.map((state) => ({
+      ...state,
+      autostart: false,
+      entry: '',
+      during: '',
+      exit: '',
+    }));
+    model.variables = [];
+    model.junctions = [
+      {
+        id: 'default_junction',
+        name: 'default_junction',
+        x: 0,
+        y: 0,
+        color: '#000000',
+        parentId: null,
+        type: 'junction',
+        autostart: true,
+      },
+      {
+        id: 'dead_branch',
+        name: 'dead_branch',
+        x: 0,
+        y: 0,
+        color: '#000000',
+        parentId: null,
+        type: 'junction',
+        autostart: false,
+      },
+    ];
+    model.transitions = [
+      {
+        id: 'try_dead',
+        sourceId: 'default_junction',
+        targetId: 'dead_branch',
+        condition: '',
+        action: '',
+        afterTicks: null,
+        type: 'condition',
+        hasControlPoint: false,
+        order: 1,
+      },
+      {
+        id: 'dead_guard',
+        sourceId: 'dead_branch',
+        targetId: 'a',
+        condition: 'false',
+        action: '',
+        afterTicks: null,
+        type: 'condition',
+        hasControlPoint: false,
+        order: 1,
+      },
+      {
+        id: 'fallback',
+        sourceId: 'default_junction',
+        targetId: 'b',
+        condition: '',
+        action: '',
+        afterTicks: null,
+        type: 'condition',
+        hasControlPoint: false,
+        order: 2,
+      },
+    ];
+    model.layers[0].junctionIds = ['default_junction', 'dead_branch'];
+    model.layers[0].transitionIds = ['try_dead', 'dead_guard', 'fallback'];
+
+    const output = compileAndRun(
+      build(model),
+      `#include "sm_core.h"
+#include <stdio.h>
+int main(void) {
+    ADIA_Instance_t instance;
+    (void)SM_Init(&instance);
+    printf("%d %d\\n",
+        instance.state_active[SM_ST_A_IDX],
+        instance.state_active[SM_ST_B_IDX]);
+    return 0;
+}
+`,
+    );
+
+    expect(output.trim()).toBe('0 1');
+  });
+
+  it('initializes storage directly without exiting an uninitialized chart', () => {
+    const source = renderCoreSource(build(interpreterFixture('reset')));
+    const init = source.slice(
+      source.indexOf('SM_Error_t SM_Init'),
+      source.indexOf('SM_Error_t SM_Reset'),
+    );
+
+    expect(init).not.toContain('return SM_Reset(instance);');
+    expect(init).not.toContain('SM_Exit_Layer(instance');
+    expect(init).toContain('instance->state_active[state_index] = false;');
   });
 
   it('matches LCA exit, transition-action, and entry ordering', () => {

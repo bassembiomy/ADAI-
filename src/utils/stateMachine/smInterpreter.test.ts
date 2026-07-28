@@ -193,4 +193,20 @@ describe('runtime lifecycle and canonical traces', () => {
     expect(Object.isFrozen(frame.stateTimersMs)).toBe(true);
     expect(Object.isFrozen(frame.history)).toBe(true);
   });
+
+  it('coerces assignments to the declared data type like generated C', () => {
+    const model = interpreterFixture('reset');
+    const counter = model.variables.find((variable) => variable.id === 'counter')!;
+    counter.type = 'int32';
+    const active = model.states.find((state) => state.id === 'a')!;
+    active.during = 'counter = 1.9;';
+    const built = buildSemanticModel(model);
+    expect(built.diagnostics).toEqual([]);
+    const runtime = createRuntime(built.ir!);
+    initializeRuntime(runtime);
+
+    const frame = stepRuntime(runtime, 10);
+
+    expect(frame.data.counter).toBe(1);
+  });
 });

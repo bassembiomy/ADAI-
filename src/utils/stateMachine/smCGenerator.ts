@@ -286,40 +286,51 @@ const renderRestoreStateBody = (
   );
 };
 
-const renderDefaultJunction = (
+const collectDefaultJunctionPaths = (
   ir: SemanticModel,
-  index: RenderIndex,
   junctionId: string,
   visited = new Set<string>(),
-  indent = '    ',
-): string => {
-  if (visited.has(junctionId)) return `${indent}/* validated junction cycle */`;
+): string[][] => {
+  if (visited.has(junctionId)) return [];
   const nextVisited = new Set(visited);
   nextVisited.add(junctionId);
   const transitions = [...(ir.transitionsBySource[junctionId] ?? [])]
     .map((id) => ir.transitions[id])
     .sort((left, right) =>
       left.priority - right.priority || left.id.localeCompare(right.id));
-  return transitions.map((transition, transitionIndex) => {
-    const condition = renderTransitionEnabled(
+  return transitions.flatMap((transition) => {
+    if (transition.destinationKind === 'state') return [[transition.id]];
+    const destination = ir.junctions[transition.destinationStateId];
+    if (destination?.kind !== 'junction') return [];
+    return collectDefaultJunctionPaths(
       ir,
-      transition,
-      transition.sourceStateId,
-    );
-    const actionCode = renderActions(ir, transition.actions, `${indent}    `);
-    const destinationCode = transition.destinationKind === 'state'
-      ? `${indent}    ${stateFunction(index, 'SM_Enter_Deep', transition.destinationStateId)}(instance);`
-      : renderDefaultJunction(
-        ir,
-        index,
-        transition.destinationStateId,
-        nextVisited,
-        `${indent}    `,
-      );
+      transition.destinationStateId,
+      nextVisited,
+    ).map((suffix) => [transition.id, ...suffix]);
+  });
+};
+
+const renderDefaultJunction = (
+  ir: SemanticModel,
+  index: RenderIndex,
+  junctionId: string,
+  indent = '    ',
+): string => {
+  const paths = collectDefaultJunctionPaths(ir, junctionId);
+  return paths.map((transitionIds, pathIndex) => {
+    const transitions = transitionIds.map((id) => ir.transitions[id]);
+    const condition = transitions.map((transition) =>
+      `(${renderTransitionEnabled(ir, transition, transition.sourceStateId)})`)
+      .join(' && ');
+    const actionCode = transitions.map((transition) =>
+      renderActions(ir, transition.actions, `${indent}    `))
+      .filter(Boolean)
+      .join('\n');
+    const destination = transitions[transitions.length - 1];
     return lines(
-      `${indent}${transitionIndex === 0 ? 'if' : 'else if'} (${condition}) {`,
+      `${indent}${pathIndex === 0 ? 'if' : 'else if'} (${condition}) {`,
       actionCode || null,
-      destinationCode,
+      `${indent}    ${stateFunction(index, 'SM_Enter_Deep', destination.destinationStateId)}(instance);`,
       `${indent}}`,
     ).trimEnd();
   }).join(' ');
@@ -753,8 +764,10 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     'typedef uint32_t SM_Group_t;',
     '',
     'typedef struct {',
-    ...variables.map((variable) =>
-      `    ${renderCType(variable.type)} ${variable.cName};`),
+    variables.length === 0
+      ? '    uint8_t reserved;'
+      : variables.map((variable) =>
+        `    ${renderCType(variable.type)} ${variable.cName};`).join('\n'),
     '} SM_Data_t;',
     '',
     'typedef struct {',
@@ -994,6 +1007,8 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '',
     'SM_Error_t SM_Init(ADIA_Instance_t *instance)',
     '{',
+    '    uint32_t layer_index;',
+    '    uint32_t state_index;',
     '    if (instance == NULL) {',
     '        return SM_ERR_NULL_INSTANCE;',
     '    }',
@@ -1007,7 +1022,26 @@ export const renderCoreSource = (ir: SemanticModel): string => {
       .sort((left, right) => left.id.localeCompare(right.id))
       .map((variable) =>
         `    instance->data.${variable.cName} = (${renderCType(variable.type)})(${renderCInitialValue(variable)});`),
-    '    return SM_Reset(instance);',
+    ir.activeSlotCount > 0
+      ? lines(
+        '    for (layer_index = 0U; layer_index < SM_NUM_ACTIVE_SLOTS; ++layer_index) {',
+        '        instance->active_states[layer_index] = SM_NODE_INVALID;',
+        '        instance->history_states[layer_index] = SM_NODE_INVALID;',
+        '    }',
+      ).trimEnd()
+      : null,
+    '    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {',
+    '        for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {',
+    '            instance->deep_history[layer_index][state_index] = false;',
+    '        }',
+    '    }',
+    '    for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {',
+    '        instance->state_active[state_index] = false;',
+    '        instance->state_timers[state_index] = 0U;',
+    '    }',
+    '    instance->error_status = SM_ERR_NONE;',
+    `    ${layerFunction(index, 'SM_Enter_Layer_Default', rootLayer.id)}(instance);`,
+    '    return SM_ERR_NONE;',
     '}',
     '',
     'SM_Error_t SM_Reset(ADIA_Instance_t *instance)',

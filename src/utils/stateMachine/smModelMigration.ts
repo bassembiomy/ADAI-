@@ -21,6 +21,17 @@ export const migrateStateMachineModel = (
 
   const diagnostics: ModelDiagnostic[] = [];
   const statesById = new Map(clonedInput.states.map((state) => [state.id, state]));
+  const hilConfig = clonedInput.hilConfig === undefined
+    ? undefined
+    : {
+      ...clonedInput.hilConfig,
+      mappings: clonedInput.hilConfig.mappings.map((mapping, index) => ({
+        ...mapping,
+        id: typeof mapping.id === 'string' && mapping.id.trim().length > 0
+          ? mapping.id
+          : `$io_${mapping.channelId}_${mapping.adiaVarId}_${mapping.direction}_${index}`,
+      })),
+    };
   const layers = clonedInput.layers.map((layer) => {
     const childFlags = layer.stateIds
       .map((id) => statesById.get(id))
@@ -49,6 +60,7 @@ export const migrateStateMachineModel = (
       ...clonedInput,
       schemaVersion: CURRENT_SM_SCHEMA_VERSION,
       safetyMode: clonedInput.safetyMode ?? false,
+      hilConfig,
       layers,
     } as StateMachineModelV4,
     diagnostics,

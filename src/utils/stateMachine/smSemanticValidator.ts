@@ -908,6 +908,23 @@ const validateInitialValues = (
   return diagnostics;
 };
 
+const validateTickPeriod = (
+  model: StateMachineModelV4,
+): ModelDiagnostic[] => {
+  if (
+    Number.isFinite(model.tickMs)
+    && Number.isInteger(model.tickMs)
+    && model.tickMs > 0
+    && model.tickMs <= 0xFFFF_FFFF
+  ) {
+    return [];
+  }
+  return [diagnostic(
+    'TICK_MS_UNSUPPORTED',
+    `Tick period '${model.tickMs}' must be a positive integer number of milliseconds no greater than UINT32_MAX.`,
+  )];
+};
+
 export const validateModelStructure = (
   model: StateMachineModelV4,
 ): ModelDiagnostic[] => {
@@ -918,6 +935,7 @@ export const validateModelStructure = (
     ...duplicateIds(model.transitions, 'TRANSITION'),
     ...duplicateIds(model.variables, 'VARIABLE'),
     ...validateIdentifierNamespaces(model),
+    ...validateTickPeriod(model),
   ];
   const { stateLayers, junctionLayers } = buildMembership(model);
   diagnostics.push(

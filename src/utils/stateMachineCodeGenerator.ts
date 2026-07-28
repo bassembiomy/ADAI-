@@ -3056,6 +3056,16 @@ const diagnosticToLegacyError = (
   elementId: diagnostic.elementId,
 });
 
+const HIL_TEST_SHIM_NAMES = new Set([
+  'Arduino.h',
+  'Arduino.cpp',
+  'SPI.h',
+  'Wire.h',
+  'SoftwareSerial.h',
+  'stm32f4xx_hal.h',
+  'stm32f1xx_hal.h',
+]);
+
 /**
  * Compatibility facade for existing application callers.
  *
@@ -3099,10 +3109,37 @@ export const generateMISRACCode = (
   }
 
   const rendered = generateCArtifacts(built.ir, options);
+  const hilWarnings: string[] = [];
+  const hilFiles = chart.hilConfig?.enabled === true
+    ? generateHALCode(chart.hilConfig, chart.variables, hilWarnings)
+    : [];
+  const testShimFiles = chart.hilConfig?.enabled === true
+    && options.includeTestShims === true
+    ? generateLegacyMISRACCode({
+      ...chart,
+      safetyMode: chart.safetyMode ?? false,
+    }, options).files.filter((file) =>
+      HIL_TEST_SHIM_NAMES.has(file.name))
+    : [];
+  const files = rendered.files.map((file) => {
+    if (file.name !== 'sm_testing_report.md' || chart.hilConfig?.enabled !== true) {
+      return file;
+    }
+    return {
+      ...file,
+      content: `${file.content.trimEnd()}
+
+## 8. HIL Driver Mapping Report
+
+- **Target Microcontroller:** ${chart.hilConfig.target ?? 'Generic'}
+- Explicit mappings: ${chart.hilConfig.mappings?.length ?? 0}
+`,
+    };
+  });
   return {
-    files: rendered.files,
+    files: [...files, ...hilFiles, ...testShimFiles],
     errors: [...errors, ...rendered.errors],
-    warnings: [...warnings, ...rendered.warnings],
+    warnings: [...warnings, ...rendered.warnings, ...hilWarnings],
   };
 };
 

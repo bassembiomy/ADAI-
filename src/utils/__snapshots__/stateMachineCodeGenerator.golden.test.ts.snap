@@ -237,6 +237,8 @@ static bool SM_Execute_State_2(ADIA_Instance_t *instance)
 
 SM_Error_t SM_Init(ADIA_Instance_t *instance)
 {
+    uint32_t layer_index;
+    uint32_t state_index;
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
     }
@@ -248,7 +250,22 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     instance->data.log = (uint32_t)(0U);
     instance->data.t1 = (bool)(false);
     instance->data.t2 = (bool)(false);
-    return SM_Reset(instance);
+    for (layer_index = 0U; layer_index < SM_NUM_ACTIVE_SLOTS; ++layer_index) {
+        instance->active_states[layer_index] = SM_NODE_INVALID;
+        instance->history_states[layer_index] = SM_NODE_INVALID;
+    }
+    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
+        for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
+            instance->deep_history[layer_index][state_index] = false;
+        }
+    }
+    for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
+        instance->state_active[state_index] = false;
+        instance->state_timers[state_index] = 0U;
+    }
+    instance->error_status = SM_ERR_NONE;
+    SM_Enter_Layer_Default_0(instance);
+    return SM_ERR_NONE;
 }
 
 SM_Error_t SM_Reset(ADIA_Instance_t *instance)
