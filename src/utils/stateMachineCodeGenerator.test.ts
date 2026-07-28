@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import { generateMISRACCode } from './stateMachineCodeGenerator';
+import { createGeneratedCodeTestWorkspace } from './generatedCodeTestWorkspace';
 import { StateData, VariableDef, TransitionData, JunctionData, Layer } from '../types/sm_types';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -7,6 +8,18 @@ import { execSync } from 'child_process';
 
 
 describe('StateMachineCodeGenerator', () => {
+  let generatedCodeWorkspace: ReturnType<typeof createGeneratedCodeTestWorkspace> | undefined;
+
+  const generatedCodeTestDirectory = (label: string): string => {
+    generatedCodeWorkspace = createGeneratedCodeTestWorkspace(label);
+    return generatedCodeWorkspace.directory;
+  };
+
+  afterEach(() => {
+    generatedCodeWorkspace?.cleanup();
+    generatedCodeWorkspace = undefined;
+  });
+
   const mockVariables: VariableDef[] = [
     { id: 'v1', name: 'sensor_val', type: 'float', initialValue: '0.0', currentValue: 0, visibleInScope: true },
     { id: 'v2', name: 'counter', type: 'uint16', initialValue: '0', currentValue: 0, visibleInScope: true },
@@ -490,10 +503,7 @@ describe('StateMachineCodeGenerator', () => {
     const result = generateMISRACCode(chart);
     expect(result.errors).toHaveLength(0);
 
-    const tempDir = path.join(__dirname, '../../scratch/test_compile');
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
+    const tempDir = generatedCodeTestDirectory('avr');
 
     // Write all files
     result.files.forEach(f => {
@@ -683,10 +693,7 @@ describe('StateMachineCodeGenerator', () => {
     const result = generateMISRACCode(xbChart as any);
     expect(result.errors).toHaveLength(0);
 
-    const tempDir = path.join(__dirname, `../../scratch/test_compile_xb_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
+    const tempDir = generatedCodeTestDirectory('xbridges');
 
 
     result.files.forEach(f => {

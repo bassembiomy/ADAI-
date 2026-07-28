@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import { generateMISRACCode } from './stateMachineCodeGenerator';
+import { createGeneratedCodeTestWorkspace } from './generatedCodeTestWorkspace';
 import { StateData, VariableDef, TransitionData, JunctionData, Layer } from '../types/sm_types';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -68,6 +69,18 @@ const HARNESS_EPILOGUE = `    if (failures > 0) { printf("RESULT: FAIL (%d)\\n",
 `;
 
 describe('Golden-file & behavior trace regression tests', () => {
+  let generatedCodeWorkspace: ReturnType<typeof createGeneratedCodeTestWorkspace> | undefined;
+
+  const generatedCodeTestDirectory = (label: string): string => {
+    generatedCodeWorkspace = createGeneratedCodeTestWorkspace(label);
+    return generatedCodeWorkspace.directory;
+  };
+
+  afterEach(() => {
+    generatedCodeWorkspace?.cleanup();
+    generatedCodeWorkspace = undefined;
+  });
+
   const vars = [
     mkVar('v1', 'log', 'uint32', '0'),
     mkVar('v2', 't1', 'bool', 'false'),
@@ -108,7 +121,7 @@ describe('Golden-file & behavior trace regression tests', () => {
     const result = generateMISRACCode(regressionChart as any);
     expect(result.errors).toHaveLength(0);
 
-    const dir = path.join(__dirname, '../../scratch/regression_trace');
+    const dir = generatedCodeTestDirectory('regression-trace');
     writeFiles(dir, result.files);
 
     const out = hostCompileAndRun(dir, HARNESS_PREAMBLE + `

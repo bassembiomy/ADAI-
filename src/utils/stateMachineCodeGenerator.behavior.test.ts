@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 
 /* gcc compile + execute cycles can exceed the default 5s test timeout on
  * Windows (AV scans of freshly linked executables); allow generous time. */
@@ -8,6 +8,19 @@ import { StateData, VariableDef, TransitionData, JunctionData, Layer } from '../
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
+import { createGeneratedCodeTestWorkspace } from './generatedCodeTestWorkspace';
+
+let generatedCodeWorkspace: ReturnType<typeof createGeneratedCodeTestWorkspace> | undefined;
+
+const generatedCodeTestDirectory = (label: string): string => {
+  generatedCodeWorkspace = createGeneratedCodeTestWorkspace(label);
+  return generatedCodeWorkspace.directory;
+};
+
+afterEach(() => {
+  generatedCodeWorkspace?.cleanup();
+  generatedCodeWorkspace = undefined;
+});
 
 /* ------------------------------------------------------------------ */
 /* Shared chart builders                                               */
@@ -245,7 +258,7 @@ describe('avr-gcc compile gates for advanced charts', () => {
   it('compiles a nested-hierarchy chart with avr-gcc -Wall -Wextra -Werror', () => {
     const result = generateMISRACCode(hierarchyChart() as any);
     expect(result.errors).toHaveLength(0);
-    const dir = path.join(__dirname, '../../scratch/test_compile_hierarchy');
+    const dir = generatedCodeTestDirectory('compile-hierarchy');
     writeFiles(dir, result.files);
     avrCompile(dir);
   });
@@ -281,7 +294,7 @@ describe('avr-gcc compile gates for advanced charts', () => {
     for (const histType of ['history', 'deep-history'] as const) {
       const result = generateMISRACCode(historyChart(histType) as any);
       expect(result.errors).toHaveLength(0);
-      const dir = path.join(__dirname, `../../scratch/test_compile_${histType}`);
+      const dir = generatedCodeTestDirectory(`compile-${histType}`);
       writeFiles(dir, result.files);
       avrCompile(dir);
     }
@@ -302,7 +315,7 @@ describe('avr-gcc compile gates for advanced charts', () => {
     };
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
-    const dir = path.join(__dirname, '../../scratch/test_compile_parallel');
+    const dir = generatedCodeTestDirectory('compile-parallel');
     writeFiles(dir, result.files);
     avrCompile(dir);
   });
@@ -335,7 +348,7 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
     };
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
-    const dir = path.join(__dirname, '../../scratch/behavior_order');
+    const dir = generatedCodeTestDirectory('behavior-order');
     writeFiles(dir, result.files);
 
     const out = hostCompileAndRun(dir, HARNESS_PREAMBLE + `
@@ -374,7 +387,7 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
     };
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
-    const dir = path.join(__dirname, '../../scratch/behavior_hierarchy');
+    const dir = generatedCodeTestDirectory('behavior-hierarchy');
     writeFiles(dir, result.files);
 
     const out = hostCompileAndRun(dir, HARNESS_PREAMBLE + `
@@ -436,7 +449,7 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
     {
       const result = generateMISRACCode(buildChart('history') as any);
       expect(result.errors).toHaveLength(0);
-      const dir = path.join(__dirname, '../../scratch/behavior_hist_shallow');
+      const dir = generatedCodeTestDirectory('behavior-hist-shallow');
       writeFiles(dir, result.files);
       const out = hostCompileAndRun(dir, HARNESS_PREAMBLE + `
     SM_Init(&inst);
@@ -456,7 +469,7 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
     {
       const result = generateMISRACCode(buildChart('deep-history') as any);
       expect(result.errors).toHaveLength(0);
-      const dir = path.join(__dirname, '../../scratch/behavior_hist_deep');
+      const dir = generatedCodeTestDirectory('behavior-hist-deep');
       writeFiles(dir, result.files);
       const out = hostCompileAndRun(dir, HARNESS_PREAMBLE + `
     SM_Init(&inst);
@@ -493,7 +506,7 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
     };
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
-    const dir = path.join(__dirname, '../../scratch/behavior_selftrans');
+    const dir = generatedCodeTestDirectory('behavior-selftrans');
     writeFiles(dir, result.files);
 
     const out = hostCompileAndRun(dir, HARNESS_PREAMBLE + `
@@ -539,7 +552,7 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
     };
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
-    const dir = path.join(__dirname, '../../scratch/behavior_after');
+    const dir = generatedCodeTestDirectory('behavior-after');
     writeFiles(dir, result.files);
 
     const out = hostCompileAndRun(dir, HARNESS_PREAMBLE + `
@@ -573,7 +586,7 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
     };
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
-    const dir = path.join(__dirname, '../../scratch/behavior_priority');
+    const dir = generatedCodeTestDirectory('behavior-priority');
     writeFiles(dir, result.files);
 
     const out = hostCompileAndRun(dir, HARNESS_PREAMBLE + `
@@ -601,7 +614,7 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
     };
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
-    const dir = path.join(__dirname, '../../scratch/behavior_safety');
+    const dir = generatedCodeTestDirectory('behavior-safety');
     writeFiles(dir, result.files);
 
     const out = hostCompileAndRun(dir, HARNESS_PREAMBLE + `
@@ -633,7 +646,7 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
     };
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
-    const dir = path.join(__dirname, '../../scratch/behavior_parallel');
+    const dir = generatedCodeTestDirectory('behavior-parallel');
     writeFiles(dir, result.files);
 
     const out = hostCompileAndRun(dir, HARNESS_PREAMBLE + `
@@ -664,7 +677,7 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
     };
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
-    const dir = path.join(__dirname, '../../scratch/behavior_reset');
+    const dir = generatedCodeTestDirectory('behavior-reset');
     writeFiles(dir, result.files);
 
     const out = hostCompileAndRun(dir, HARNESS_PREAMBLE + `
@@ -724,7 +737,7 @@ describe('Generated code behaves like Stateflow/Embedded Coder output (host gcc 
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
 
-    const dir = path.join(__dirname, '../../scratch/behavior_mixed_layers');
+    const dir = generatedCodeTestDirectory('behavior-mixed-layers');
     writeFiles(dir, result.files);
 
     const harness = HARNESS_PREAMBLE + `

@@ -15,8 +15,10 @@ import {
   validateTR07,
   runValidationPipeline
 } from '../../scripts/validate_generated_code';
+import { createGeneratedCodeTestWorkspace } from './generatedCodeTestWorkspace';
 
-const TEMP_TEST_DIR = path.join(__dirname, '../../scratch/test_validator_output');
+let TEMP_TEST_DIR: string;
+let generatedCodeWorkspace: ReturnType<typeof createGeneratedCodeTestWorkspace> | undefined;
 
 const mockModel = {
   states: [
@@ -32,15 +34,13 @@ const mockModel = {
 
 describe('ADIA C-Code Validator Pipeline', () => {
   beforeEach(() => {
-    if (!fs.existsSync(TEMP_TEST_DIR)) {
-      fs.mkdirSync(TEMP_TEST_DIR, { recursive: true });
-    }
+    generatedCodeWorkspace = createGeneratedCodeTestWorkspace('validator');
+    TEMP_TEST_DIR = generatedCodeWorkspace.directory;
   });
 
   afterEach(() => {
-    if (fs.existsSync(TEMP_TEST_DIR)) {
-      fs.rmSync(TEMP_TEST_DIR, { recursive: true, force: true });
-    }
+    generatedCodeWorkspace?.cleanup();
+    generatedCodeWorkspace = undefined;
   });
 
   it('should parse C enums, structs, macros, and signatures correctly', () => {
