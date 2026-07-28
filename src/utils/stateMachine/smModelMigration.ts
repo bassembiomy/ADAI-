@@ -10,16 +10,18 @@ import {
 export const migrateStateMachineModel = (
   input: LegacyStateMachineModel,
 ): MigrationResult => {
-  if (input.schemaVersion === CURRENT_SM_SCHEMA_VERSION) {
+  const clonedInput = structuredClone(input);
+
+  if (clonedInput.schemaVersion === CURRENT_SM_SCHEMA_VERSION) {
     return {
-      model: structuredClone(input) as StateMachineModelV4,
+      model: clonedInput as StateMachineModelV4,
       diagnostics: [],
     };
   }
 
   const diagnostics: ModelDiagnostic[] = [];
-  const statesById = new Map(input.states.map((state) => [state.id, state]));
-  const layers = input.layers.map((layer) => {
+  const statesById = new Map(clonedInput.states.map((state) => [state.id, state]));
+  const layers = clonedInput.layers.map((layer) => {
     const childFlags = layer.stateIds
       .map((id) => statesById.get(id))
       .filter((state): state is StateData => state !== undefined)
@@ -44,8 +46,9 @@ export const migrateStateMachineModel = (
 
   return {
     model: {
-      ...structuredClone(input),
+      ...clonedInput,
       schemaVersion: CURRENT_SM_SCHEMA_VERSION,
+      safetyMode: clonedInput.safetyMode ?? false,
       layers,
     } as StateMachineModelV4,
     diagnostics,
