@@ -20,6 +20,7 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
   const [selectedChannel, setSelectedChannel] = useState('');
   const [direction, setDirection] = useState<'read' | 'write'>('read');
   const [conversionExpr, setConversionExpr] = useState('');
+  const [safeValue, setSafeValue] = useState('0');
 
   const addMapping = () => {
     if (!selectedVar || !selectedChannel) return;
@@ -30,18 +31,25 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
     );
     if (duplicate) return;
 
+    const variable = availableVariables.find(item => item.name === selectedVar);
     const newMap: HILMapping = {
       id: uuidv4(),
       adiaVarId: selectedVar,
       channelId: selectedChannel,
       direction,
-      conversionExpr: conversionExpr.trim() || undefined
+      conversionExpr: conversionExpr.trim() || undefined,
+      safeValue: direction === 'write'
+        ? (variable?.type === 'bool'
+          ? (safeValue === 'true' || safeValue === '1')
+          : Number(safeValue || '0'))
+        : undefined,
     };
 
     onChange([...mappings, newMap]);
     setSelectedVar('');
     setSelectedChannel('');
     setConversionExpr('');
+    setSafeValue('0');
   };
 
   const removeMapping = (id: string) => {
@@ -134,6 +142,19 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
             />
           </div>
 
+          {direction === 'write' && (
+            <div className="w-24">
+              <label className="block text-[10px] text-[#888] font-medium mb-1">Safe Value</label>
+              <input
+                type="text"
+                placeholder="0 / false"
+                value={safeValue}
+                onChange={(e) => setSafeValue(e.target.value)}
+                className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded px-2 py-1 text-xs text-white placeholder-gray-700 focus:outline-none focus:border-[#f97316]"
+              />
+            </div>
+          )}
+
           <button
             onClick={addMapping}
             disabled={!selectedVar || !selectedChannel}
@@ -174,6 +195,11 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
                     {map.conversionExpr && (
                       <span className="bg-[#242424] text-[#aaa] font-mono text-[10px] px-2 py-0.5 rounded border border-[#333]">
                         {map.conversionExpr}
+                      </span>
+                    )}
+                    {map.direction === 'write' && map.safeValue !== undefined && (
+                      <span className="bg-[#242424] text-[#aaa] font-mono text-[10px] px-2 py-0.5 rounded border border-[#333]">
+                        safe: {String(map.safeValue)}
                       </span>
                     )}
                     <button

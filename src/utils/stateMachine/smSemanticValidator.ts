@@ -776,6 +776,25 @@ const validateMappings = (
         ));
       }
     }
+
+    if (mapping.safeValue !== undefined && mapping.direction !== 'write') {
+      diagnostics.push(diagnostic(
+        'IO_MAPPING_SAFE_VALUE_DIRECTION_INVALID',
+        `Mapping '${mapping.id}' supplies a safe value but is not an output mapping.`,
+        mapping.id,
+      ));
+    }
+    if (
+      mapping.safeValue !== undefined
+      && typeof mapping.safeValue !== 'boolean'
+      && !Number.isFinite(mapping.safeValue)
+    ) {
+      diagnostics.push(diagnostic(
+        'IO_MAPPING_SAFE_VALUE_INVALID',
+        `Mapping '${mapping.id}' has a non-finite safe output value.`,
+        mapping.id,
+      ));
+    }
   }
   return diagnostics;
 };

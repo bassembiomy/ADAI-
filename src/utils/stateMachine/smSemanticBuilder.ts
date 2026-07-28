@@ -528,6 +528,7 @@ export const buildSemanticModel = (
       conversionExpression: mapping.conversionExpr?.trim()
         ? parseCondition(mapping.conversionExpr, new Set(['x']))
         : null,
+      safeValue: mapping.safeValue ?? null,
     }))
     .sort((left, right) => left.id.localeCompare(right.id));
 

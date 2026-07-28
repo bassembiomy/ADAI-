@@ -74,6 +74,7 @@ export interface SemanticIOMapping {
   channelId: string;
   direction: 'read' | 'write';
   conversionExpression: ExpressionNode | null;
+  safeValue: number | boolean | null;
 }
 
 export interface SemanticJunction {

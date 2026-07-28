@@ -155,8 +155,8 @@ describe('HIL Code Generator', () => {
     const result = generateMISRACCode(chart as any, { includeTestShims: true });
     expect(result.errors).toHaveLength(0);
 
-    // Default files (10) + HIL files (8) + STM32 shim (1) = 18 files
-    expect(result.files).toHaveLength(18);
+    // Default files (10, including MCAL test stubs) + HIL files (8) + STM32 shim (1) = 19 files
+    expect(result.files).toHaveLength(19);
     const names = result.files.map(f => f.name);
     expect(names).toContain('stm32f4xx_hal.h');
   });
@@ -238,10 +238,14 @@ describe('HIL Code Generator', () => {
   });
 
 
-  it('should enforce SM_TICK_MS tick rate and SM_GetError telemetry reporting', () => {
+  it('should schedule HIL as explicit Read → Step → Write and report errors', () => {
     const files = generateHALCode(mockConfig, smVariables);
     const mainHil = files.find(f => f.name === 'main_hil.c')?.content || '';
-    expect(mainHil).toContain('SM_Step(&sm_instance, SM_TICK_MS);');
+    expect(mainHil).toContain('(void)SM_ReadInputs(&sm_instance);');
+    expect(mainHil).toContain('(void)SM_Step(&sm_instance, SM_TICK_MS);');
+    expect(mainHil).toContain('(void)SM_WriteOutputs(&sm_instance);');
+    expect(mainHil).not.toContain('HIL_Sync_Inputs(&sm_instance);');
+    expect(mainHil).not.toContain('HIL_Sync_Outputs(&sm_instance);');
 
     const interfaceC = files.find(f => f.name === 'hil_interface.c')?.content || '';
     expect(interfaceC).toContain('if (SM_GetError(instance) != SM_ERR_NONE)');
@@ -544,5 +548,3 @@ describe('HIL Code Generator', () => {
     expect(driversC).toContain('ledcWrite(GetLEDCChannel(atoi("2")), value)');
   });
 });
-
-

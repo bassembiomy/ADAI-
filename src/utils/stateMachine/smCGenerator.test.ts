@@ -28,6 +28,45 @@ const build = (model: ReturnType<typeof flatOrFixture>) => {
   return result.ir!;
 };
 
+const generatedFile = (
+  ir: SemanticModel,
+  name: string,
+  options: Parameters<typeof generateCArtifacts>[1] = {},
+): string => {
+  const file = generateCArtifacts(ir, options).files.find((item) => item.name === name);
+  expect(file, `expected generated file '${name}'`).toBeDefined();
+  return file!.content;
+};
+
+const mappedOutputFixture = () => {
+  const model = flatOrFixture();
+  model.variables.push({
+    id: 'output_enable',
+    name: 'output_enable',
+    type: 'bool',
+    initialValue: 'false',
+    currentValue: false,
+    visibleInScope: true,
+  });
+  model.hilConfig = {
+    enabled: true,
+    target: 'Generic',
+    clockSpeed: 1,
+    commPort: '',
+    baudRate: 115200,
+    channels: [{
+      id: 'motor', name: 'Motor', peripheral: 'GPIO', pin: '0',
+      direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1,
+      scalingFactor: 1, unit: '',
+    }],
+    mappings: [{
+      id: 'write_motor', adiaVarId: 'output_enable', channelId: 'motor',
+      direction: 'write', safeValue: false,
+    }],
+  };
+  return model;
+};
+
 const compileAndRun = (ir: SemanticModel, harness: string): string => {
   const workspace = createGeneratedCodeTestWorkspace('structured-behavior');
   try {
@@ -528,5 +567,128 @@ int main(void) {
     expect(core).toContain('instance->data.total > 1');
     expect(core).toContain('MCAL_Dio_WriteChannel(MCAL_CH_GPIO_0');
     expect(core).not.toContain('instance->data.x');
+  });
+
+  it('maps only explicitly configured variables', () => {
+    const model = mappedOutputFixture();
+    model.variables.push({
+      id: 'x', name: 'x', type: 'bool', initialValue: 'false',
+      currentValue: false, visibleInScope: true,
+    }, {
+      id: 'y', name: 'y', type: 'bool', initialValue: 'false',
+      currentValue: false, visibleInScope: true,
+    });
+    const core = generatedFile(build(model), 'sm_core.c');
+
+    expect(core).not.toContain('instance->data.x = MCAL');
+    expect(core).not.toContain('instance->data.y = MCAL');
+    expect(core).toContain('MCAL_Dio_WriteChannel(MCAL_CH_MOTOR');
+  });
+
+  it('retains MCAL declarations in custom mode and emits separate test stubs', () => {
+    const ir = build(mappedOutputFixture());
+    const header = generatedFile(ir, 'mcal_dio.h');
+    expect(header).toContain('bool MCAL_Dio_ReadChannel(uint32_t channel);');
+    expect(header).toContain('void MCAL_Dio_WriteChannel(uint32_t channel, bool level);');
+    expect(header).not.toMatch(/#ifndef MCAL_CUSTOM_DIO[\s\S]*bool MCAL_Dio_ReadChannel\(uint32_t channel\);/);
+
+    const stubs = generatedFile(ir, 'mcal_dio_test_stubs.c', { includeTestShims: true });
+    expect(stubs).toContain('bool MCAL_Dio_ReadChannel(uint32_t channel)');
+    expect(stubs).toContain('void MCAL_Dio_WriteChannel(uint32_t channel, bool level)');
+    expect(stubs).toContain('void MCAL_ApplySafeOutputs(void)');
+
+    const workspace = createGeneratedCodeTestWorkspace('custom-mcal-contract');
+    try {
+      for (const file of generateCArtifacts(ir).files) {
+        if (file.name.endsWith('.c') || file.name.endsWith('.h')) {
+          writeFileSync(join(workspace.directory, file.name), file.content);
+        }
+      }
+      expect(() => execFileSync('gcc', [
+        '-std=c99', '-DMCAL_CUSTOM_DIO', '-pedantic-errors', '-Wall',
+        '-Wextra', '-Werror', '-I.', '-c', 'sm_core.c', 'sm_safety.c',
+        'sm_user_logic.c',
+      ], { cwd: workspace.directory, stdio: 'pipe' })).not.toThrow();
+    } finally {
+      workspace.cleanup();
+    }
+  });
+
+  it('restores output defaults and commits them during reset', () => {
+    const output = compileAndRun(
+      build(mappedOutputFixture()),
+      `#include "sm_core.h"
+#include <stdio.h>
+static bool last_output_level = true;
+bool MCAL_Dio_ReadChannel(uint32_t channel) { (void)channel; return false; }
+void MCAL_Dio_WriteChannel(uint32_t channel, bool level) { (void)channel; last_output_level = level; }
+void MCAL_ApplySafeOutputs(void) {}
+void MCAL_Watchdog_Kick(void) {}
+int main(void) {
+    ADIA_Instance_t inst;
+    (void)SM_Init(&inst);
+    inst.data.output_enable = true;
+    (void)SM_WriteOutputs(&inst);
+    (void)SM_Reset(&inst);
+    printf("%d %d\\n", inst.data.output_enable, last_output_level);
+    return 0;
+}
+`,
+    );
+    expect(output.trim()).toBe('0 0');
+  });
+
+  it('commits safe outputs immediately and latches a fault', () => {
+    const model = mappedOutputFixture();
+    model.safetyMode = true;
+    model.states[0].isSafeState = true;
+    const output = compileAndRun(
+      build(model),
+      `#include "sm_core.h"
+#include <stdio.h>
+static unsigned safe_outputs_applied = 0U;
+bool MCAL_Dio_ReadChannel(uint32_t channel) { (void)channel; return false; }
+void MCAL_Dio_WriteChannel(uint32_t channel, bool level) { (void)channel; (void)level; }
+void MCAL_ApplySafeOutputs(void) { ++safe_outputs_applied; }
+void MCAL_Watchdog_Kick(void) {}
+int main(void) {
+    ADIA_Instance_t inst;
+    (void)SM_Init(&inst);
+    inst.data.output_enable = true;
+    inst.error_status = SM_ERR_SAFETY_VIOLATION;
+    (void)SM_Step(&inst, SM_TICK_MS);
+    printf("%u %d\\n", safe_outputs_applied, inst.fault_latched);
+    return 0;
+}
+`,
+    );
+    expect(output.trim()).toBe('1 1');
+  });
+
+  it('does not kick the watchdog after a failed output commit', () => {
+    const model = mappedOutputFixture();
+    model.safetyMode = true;
+    model.states[0].isSafeState = true;
+    const output = compileAndRun(
+      build(model),
+      `#include "sm_core.h"
+#include <stdio.h>
+static unsigned safe_outputs_applied = 0U;
+static unsigned watchdog_kicks = 0U;
+bool MCAL_Dio_ReadChannel(uint32_t channel) { (void)channel; return false; }
+void MCAL_Dio_WriteChannel(uint32_t channel, bool level) { (void)channel; (void)level; }
+void MCAL_ApplySafeOutputs(void) { ++safe_outputs_applied; }
+void MCAL_Watchdog_Kick(void) { ++watchdog_kicks; }
+int main(void) {
+    ADIA_Instance_t inst;
+    (void)SM_Init(&inst);
+    inst.error_status = SM_ERR_SAFETY_VIOLATION;
+    (void)SM_WriteOutputs(&inst);
+    printf("%u %u\\n", safe_outputs_applied, watchdog_kicks);
+    return 0;
+}
+`,
+    );
+    expect(output.trim()).toBe('1 0');
   });
 });

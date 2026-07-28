@@ -321,6 +321,33 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
     .filter(Boolean)
     .join('\n');
 
+  const safeOutputSyncs = config.mappings
+    .filter(m => m.direction === 'write')
+    .map(m => {
+      const ch = config.channels.find(c => c.id === m.channelId);
+      if (!ch) return '';
+      const safeValue = typeof m.safeValue === 'boolean'
+        ? (m.safeValue ? '1' : '0')
+        : String(m.safeValue ?? 0);
+      const pinMacro = `PIN_${sanitize(ch.name).toUpperCase()}`;
+      if (ch.peripheral === 'GPIO') {
+        return `        HAL_GPIO_Write(${pinMacro}, "${ch.name}", ${safeValue});`;
+      } else if (ch.peripheral === 'DAC') {
+        return `        HAL_DAC_Write(${pinMacro}, "${ch.name}", (uint32_t)(${safeValue}));`;
+      } else if (ch.peripheral === 'PWM') {
+        return `        HAL_PWM_Write(${pinMacro}, "${ch.name}", (uint32_t)(${safeValue}));`;
+      } else if (ch.peripheral === 'UART') {
+        return `        HAL_UART_Write(${pinMacro}, "${ch.name}", (uint32_t)(${safeValue}));`;
+      } else if (ch.peripheral === 'SPI') {
+        return `        HAL_SPI_Write(${pinMacro}, "${ch.name}", (uint32_t)(${safeValue}));`;
+      } else if (ch.peripheral === 'I2C') {
+        return `        HAL_I2C_Write(${pinMacro}, "${ch.name}", (uint32_t)(${safeValue}));`;
+      }
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n');
+
   // Telemetry output composed of all channels
   const telemetryCompositions = config.channels
     .map((ch, idx) => {
@@ -368,6 +395,7 @@ void HIL_Sync_Outputs(ADIA_Instance_t* instance) {
     /* Run safety validation on state consistency before writing outputs */
     if (SM_Validate_State_Consistency(instance) != SM_ERR_NONE) {
         instance->error_status = SM_ERR_INVALID_STATE;
+${safeOutputSyncs || '        (void)instance;'}
         return;
     }
 #endif
@@ -445,14 +473,14 @@ void loop(void) {
     /* Check for override inputs from dashboard */
     HIL_Receive_Poll();
 
-    /* Synchronize hardware inputs to State Machine */
-    HIL_Sync_Inputs(&sm_instance);
+    /* Read explicitly mapped hardware inputs into the State Machine */
+    (void)SM_ReadInputs(&sm_instance);
 
     /* Tick the State Machine */
-    SM_Step(&sm_instance, SM_TICK_MS);
+    (void)SM_Step(&sm_instance, SM_TICK_MS);
 
-    /* Synchronize State Machine outputs to hardware */
-    HIL_Sync_Outputs(&sm_instance);
+    /* Commit explicitly mapped State Machine outputs */
+    (void)SM_WriteOutputs(&sm_instance);
 
     /* Send back telemetry */
     HIL_SendTelemetry(&sm_instance);
@@ -473,14 +501,14 @@ void loop(void) {
         /* Check for override inputs from dashboard */
         HIL_Receive_Poll();
 
-        /* Synchronize hardware inputs to State Machine */
-        HIL_Sync_Inputs(&sm_instance);
+        /* Read explicitly mapped hardware inputs into the State Machine */
+        (void)SM_ReadInputs(&sm_instance);
 
         /* Tick the State Machine */
-        SM_Step(&sm_instance, SM_TICK_MS);
+        (void)SM_Step(&sm_instance, SM_TICK_MS);
 
-        /* Synchronize State Machine outputs to hardware */
-        HIL_Sync_Outputs(&sm_instance);
+        /* Commit explicitly mapped State Machine outputs */
+        (void)SM_WriteOutputs(&sm_instance);
 
         /* Send back telemetry */
         HIL_SendTelemetry(&sm_instance);

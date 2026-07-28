@@ -21,6 +21,8 @@ export interface HILMapping {
   channelId: string; // The ID of the DriverChannel
   direction: 'read' | 'write'; // read: hardware -> ADIA (input to SM), write: ADIA -> hardware (output from SM)
   conversionExpr?: string | null; // Optional mathjs/js expression for signal conversion (e.g. "x * 2.0")
+  /** Value driven to an output channel when a safety fault is latched. */
+  safeValue?: number | boolean;
 }
 
 export interface HILConfig {

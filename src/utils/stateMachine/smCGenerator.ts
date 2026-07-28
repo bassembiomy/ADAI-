@@ -778,6 +778,7 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '    uint32_t state_timers[SM_NUM_STATES + 1U];',
     '    bool deep_history[SM_NUM_LAYERS][SM_NUM_STATES + 1U];',
     '    SM_Error_t error_status;',
+    '    bool fault_latched;',
     '} ADIA_Instance_t;',
     '',
     '#endif /* SM_CONFIG_H */',
@@ -878,6 +879,10 @@ export const renderSafetySource = (ir: SemanticModel): string => lines(
   'void SM_ApplySafeOutputs(ADIA_Instance_t *instance)',
   '{',
   '    (void)instance;',
+  ir.ioMappings.filter((mapping) => mapping.direction === 'write').length === 0
+    ? null
+    : ir.ioMappings.filter((mapping) => mapping.direction === 'write').map((mapping) =>
+      `    MCAL_Dio_WriteChannel(${channelMacro(mapping.channelId)}, (bool)(${mapping.safeValue === null ? 'false' : mapping.safeValue ? 'true' : 'false'}));`).join('\n'),
   ir.ioMappings.some((mapping) => mapping.direction === 'write')
     ? '    MCAL_ApplySafeOutputs();'
     : null,
@@ -907,19 +912,34 @@ export const renderMcalHeader = (
     'void MCAL_Dio_WriteChannel(uint32_t channel, bool level);',
     'void MCAL_ApplySafeOutputs(void);',
     'void MCAL_Watchdog_Kick(void);',
-    options.includeTestShims
-      ? lines(
-        '',
-        '#ifdef MCAL_TEST_STUBS',
-        'static inline bool MCAL_Test_ReadChannel(uint32_t channel) { (void)channel; return false; }',
-        'static inline void MCAL_Test_WriteChannel(uint32_t channel, bool level) { (void)channel; (void)level; }',
-        '#endif',
-      ).trimEnd()
-      : null,
     '',
     '#endif /* MCAL_DIO_H */',
   );
 };
+
+export const renderMcalTestStubs = (): string => lines(
+  '#include "mcal_dio.h"',
+  '',
+  'bool MCAL_Dio_ReadChannel(uint32_t channel)',
+  '{',
+  '    (void)channel;',
+  '    return false;',
+  '}',
+  '',
+  'void MCAL_Dio_WriteChannel(uint32_t channel, bool level)',
+  '{',
+  '    (void)channel;',
+  '    (void)level;',
+  '}',
+  '',
+  'void MCAL_ApplySafeOutputs(void)',
+  '{',
+  '}',
+  '',
+  'void MCAL_Watchdog_Kick(void)',
+  '{',
+  '}',
+);
 
 export const renderCoreSource = (ir: SemanticModel): string => {
   const index = buildIndex(ir);
@@ -939,6 +959,9 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     'static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer);',
     'static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer);',
     'static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer);',
+    'static void SM_Exit_All(ADIA_Instance_t *instance);',
+    'static void SM_Enter_Safe_State(ADIA_Instance_t *instance);',
+    'static void SM_Enter_Fault(ADIA_Instance_t *instance);',
   ];
   const readMappings = ir.ioMappings.filter((mapping) =>
     mapping.direction === 'read').map((mapping) => {
@@ -970,8 +993,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
   });
   const faultEntry = ir.safetyMode && ir.safeStateId !== null
     ? lines(
-      `        if (!instance->state_active[${stateIndex(ir, ir.safeStateId)}]) {`,
-      `            SM_Exit_Layer(instance, ${layerMacro(rootLayer)});`,
+      `    if (!instance->state_active[${stateIndex(ir, ir.safeStateId)}]) {`,
       renderEnterStateAlongPath(
         ir,
         index,
@@ -981,12 +1003,32 @@ export const renderCoreSource = (ir: SemanticModel): string => {
         ],
         0,
         null,
-        '            ',
+        '        ',
       ),
-      '        }',
-      '        SM_ApplySafeOutputs(instance);',
+      '    }',
     ).trimEnd()
     : '';
+  const faultHelpers = lines(
+    'static void SM_Exit_All(ADIA_Instance_t *instance)',
+    '{',
+    `    SM_Exit_Layer(instance, ${layerMacro(rootLayer)});`,
+    '}',
+    '',
+    'static void SM_Enter_Safe_State(ADIA_Instance_t *instance)',
+    '{',
+    faultEntry || '    (void)instance;',
+    '}',
+    '',
+    'static void SM_Enter_Fault(ADIA_Instance_t *instance)',
+    '{',
+    '    if (!instance->fault_latched) {',
+    '        SM_Exit_All(instance);',
+    '        SM_Enter_Safe_State(instance);',
+    '        SM_ApplySafeOutputs(instance);',
+    '        instance->fault_latched = true;',
+    '    }',
+    '}',
+  ).trimEnd();
   return lines(
     '#include <limits.h>',
     '#include <stddef.h>',
@@ -1004,6 +1046,8 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     renderEnterFunctions(ir, index).trimEnd(),
     '',
     renderExecuteFunctions(ir, index).trimEnd(),
+    '',
+    faultHelpers,
     '',
     'SM_Error_t SM_Init(ADIA_Instance_t *instance)',
     '{',
@@ -1040,6 +1084,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '        instance->state_timers[state_index] = 0U;',
     '    }',
     '    instance->error_status = SM_ERR_NONE;',
+    '    instance->fault_latched = false;',
     `    ${layerFunction(index, 'SM_Enter_Layer_Default', rootLayer.id)}(instance);`,
     '    return SM_ERR_NONE;',
     '}',
@@ -1074,8 +1119,9 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '        instance->state_timers[state_index] = 0U;',
     '    }',
     '    instance->error_status = SM_ERR_NONE;',
+    '    instance->fault_latched = false;',
     `    ${layerFunction(index, 'SM_Enter_Layer_Default', rootLayer.id)}(instance);`,
-    '    return SM_ERR_NONE;',
+    '    return SM_WriteOutputs(instance);',
     '}',
     '',
     'SM_Error_t SM_ReadInputs(ADIA_Instance_t *instance)',
@@ -1094,12 +1140,17 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '        return SM_ERR_NULL_INSTANCE;',
     '    }',
     '    if (instance->error_status != SM_ERR_NONE) {',
-    faultEntry || null,
+    '        SM_Enter_Fault(instance);',
     '        return instance->error_status;',
     '    }',
     '    if (delta_ms != SM_TICK_MS) {',
     '        instance->error_status = SM_ERR_TIMING;',
-    faultEntry || null,
+    '        SM_Enter_Fault(instance);',
+    '        return instance->error_status;',
+    '    }',
+    '    instance->error_status = SM_Validate_State_Consistency(instance);',
+    '    if (instance->error_status != SM_ERR_NONE) {',
+    '        SM_Enter_Fault(instance);',
     '        return instance->error_status;',
     '    }',
     '    for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {',
@@ -1112,6 +1163,9 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '        }',
     '    }',
     `    (void)${layerFunction(index, 'SM_Execute_Layer', rootLayer.id)}(instance);`,
+    '    if (instance->error_status != SM_ERR_NONE) {',
+    '        SM_Enter_Fault(instance);',
+    '    }',
     '    return instance->error_status;',
     '}',
     '',
@@ -1119,6 +1173,15 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '{',
     '    if (instance == NULL) {',
     '        return SM_ERR_NULL_INSTANCE;',
+    '    }',
+    '    if (instance->error_status != SM_ERR_NONE) {',
+    '        SM_Enter_Fault(instance);',
+    '        return instance->error_status;',
+    '    }',
+    '    instance->error_status = SM_Validate_State_Consistency(instance);',
+    '    if (instance->error_status != SM_ERR_NONE) {',
+    '        SM_Enter_Fault(instance);',
+    '        return instance->error_status;',
     '    }',
     writeMappings.length === 0 ? '    (void)instance;' : writeMappings.join('\n'),
     ir.ioMappings.length > 0 ? '    MCAL_Watchdog_Kick();' : null,
@@ -1192,6 +1255,9 @@ export const generateCArtifacts = (
     { name: 'sm_user_logic.h', content: renderUserLogicHeader(ir) },
     { name: 'sm_user_logic.c', content: renderUserLogicSource(ir) },
     { name: 'mcal_dio.h', content: renderMcalHeader(ir, options) },
+    ...(options.includeTestShims
+      ? [{ name: 'mcal_dio_test_stubs.c', content: renderMcalTestStubs() }]
+      : []),
     { name: 'sm_testing_report.md', content: renderTestingReport(ir) },
   ],
   errors: [],
