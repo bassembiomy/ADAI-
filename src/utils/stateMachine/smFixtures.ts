@@ -98,6 +98,15 @@ const variables = (): VariableDef[] => [
   },
 ];
 
+const counterVariable = (): VariableDef => ({
+  id: 'counter',
+  name: 'counter',
+  type: 'double',
+  initialValue: '0',
+  currentValue: 0,
+  visibleInScope: true,
+});
+
 export const flatOrFixture = (): StateMachineModelV4 => ({
   schemaVersion: CURRENT_SM_SCHEMA_VERSION,
   tickMs: 10,
@@ -131,3 +140,175 @@ export const nestedAndFixture = (): StateMachineModelV4 => ({
   ],
   safetyMode: false,
 });
+
+export type InterpreterFixtureName =
+  | 'exit-action-entry'
+  | 'outer-during-inner'
+  | 'ancestor-destination'
+  | 'transition-priority'
+  | 'external-self'
+  | 'internal-action'
+  | 'atomic-junction'
+  | 'reset';
+
+export const interpreterFixture = (
+  name: InterpreterFixtureName,
+): StateMachineModelV4 => {
+  const model = flatOrFixture();
+  model.variables.push(counterVariable());
+
+  switch (name) {
+    case 'exit-action-entry':
+      model.states[0].exit = 'counter = counter + 1;';
+      model.states[1].entry = 'counter = counter + 100;';
+      model.transitions[0].action = 'counter = counter + 10;';
+      return model;
+
+    case 'outer-during-inner':
+      model.variables.push(
+        {
+          id: 'outer',
+          name: 'outer',
+          type: 'bool',
+          initialValue: 'false',
+          currentValue: false,
+          visibleInScope: true,
+        },
+        {
+          id: 'inner',
+          name: 'inner',
+          type: 'bool',
+          initialValue: 'false',
+          currentValue: false,
+          visibleInScope: true,
+        },
+      );
+      model.states[0].during = 'counter = counter + 1;';
+      model.states.push(
+        state('a1', { name: 'A1', parentId: 'a', autostart: true }),
+        state('a2', { name: 'A2', parentId: 'a', priority: 2 }),
+      );
+      model.layers.push(
+        layer('a_children', 'a', 'OR', ['a1', 'a2'], ['inner_a']),
+      );
+      model.transitions[0].condition = 'outer';
+      model.transitions.push(
+        transition('inner_a', 'a', 'a2', {
+          condition: 'inner',
+          action: 'counter = counter + 10;',
+          type: 'internal',
+          isInternal: true,
+        }),
+      );
+      return model;
+
+    case 'ancestor-destination':
+      model.states.push(
+        state('a1', {
+          name: 'A1',
+          parentId: 'a',
+          autostart: true,
+          entry: 'counter = counter + 1;',
+          exit: 'counter = counter + 10;',
+        }),
+      );
+      model.layers.push(
+        layer('a_children', 'a', 'OR', ['a1'], ['to_ancestor']),
+      );
+      model.transitions = [
+        transition('to_ancestor', 'a1', 'a', {
+          condition: 'go',
+          action: 'counter = counter + 100;',
+        }),
+      ];
+      model.layers[0].transitionIds = [];
+      return model;
+
+    case 'transition-priority':
+      model.states.push(state('c', { name: 'C', priority: 3 }));
+      model.layers[0].stateIds.push('c');
+      model.transitions[0].order = 2;
+      model.transitions[0].condition = 'true';
+      model.transitions.push(
+        transition('t_ac', 'a', 'c', {
+          condition: 'true',
+          order: 1,
+        }),
+      );
+      model.layers[0].transitionIds.push('t_ac');
+      return model;
+
+    case 'external-self':
+      model.states[0].entry = 'counter = counter + 10;';
+      model.states[0].exit = 'counter = counter + 1;';
+      model.transitions[0] = transition('external_a', 'a', 'a', {
+        condition: 'go',
+      });
+      model.layers[0].transitionIds = ['external_a'];
+      return model;
+
+    case 'internal-action':
+      model.transitions[0] = transition('internal_a', 'a', 'a', {
+        condition: 'go',
+        action: 'counter = counter + 1;',
+        type: 'internal',
+        isInternal: true,
+      });
+      model.layers[0].transitionIds = ['internal_a'];
+      return model;
+
+    case 'atomic-junction':
+      model.states.push(state('c', { name: 'C', priority: 3 }));
+      model.layers[0].stateIds.push('c');
+      model.junctions.push(
+        {
+          id: 'decision',
+          x: 0,
+          y: 0,
+          name: 'Decision',
+          color: '#000000',
+          parentId: 'root',
+        },
+        {
+          id: 'dead_end',
+          x: 0,
+          y: 0,
+          name: 'Dead end',
+          color: '#000000',
+          parentId: 'root',
+        },
+      );
+      model.layers[0].junctionIds.push('decision', 'dead_end');
+      model.transitions = [
+        transition('to_decision', 'a', 'decision', {
+          condition: 'go',
+          action: 'counter = counter + 1;',
+        }),
+        transition('rejected_branch', 'decision', 'dead_end', {
+          condition: 'true',
+          action: 'counter = counter + 100;',
+          order: 1,
+        }),
+        transition('dead_end_rejects', 'dead_end', 'c', {
+          condition: 'false',
+          order: 1,
+        }),
+        transition('selected_branch', 'decision', 'b', {
+          condition: 'true',
+          action: 'counter = counter + 10;',
+          order: 2,
+        }),
+      ];
+      model.layers[0].transitionIds = model.transitions.map(
+        (item) => item.id,
+      );
+      return model;
+
+    case 'reset':
+      model.states[0].entry = 'ratio = 2;';
+      model.states[0].exit = 'ratio = 1;';
+      model.transitions = [];
+      model.layers[0].transitionIds = [];
+      return model;
+  }
+};
