@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { createGeneratedCodeTestWorkspace } from './generatedCodeTestWorkspace';
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return { ...actual, rmSync: vi.fn(actual.rmSync) };
+});
 
 describe('createGeneratedCodeTestWorkspace', () => {
   it('creates unique generated-code directories under the operating-system temp directory and cleans them up', () => {
@@ -25,17 +30,32 @@ describe('createGeneratedCodeTestWorkspace', () => {
     expect(fs.existsSync(second.directory)).toBe(false);
   });
 
-  it('preserves a test failure while cleaning up the generated-code directory', () => {
+  it('preserves an original compiler failure when cleanup fails', () => {
     const workspace = createGeneratedCodeTestWorkspace('failure');
-    const testFailure = new Error('compiler failed');
+    const compilerFailure = new Error('compiler failed');
+    const cleanupFailure = new Error('workspace is locked');
+    const rmSyncMock = vi.mocked(fs.rmSync);
+    rmSyncMock.mockImplementationOnce(() => {
+      throw cleanupFailure;
+    });
 
-    expect(() => {
-      try {
-        throw testFailure;
-      } finally {
-        workspace.cleanup();
-      }
-    }).toThrow(testFailure);
-    expect(fs.existsSync(workspace.directory)).toBe(false);
+    try {
+      expect(() => {
+        try {
+          throw compilerFailure;
+        } finally {
+          workspace.cleanup();
+        }
+      }).toThrow(compilerFailure);
+      expect(rmSyncMock).toHaveBeenCalledWith(workspace.directory, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100
+      });
+    } finally {
+      fs.rmSync(workspace.directory, { recursive: true, force: true });
+      rmSyncMock.mockClear();
+    }
   });
 });

@@ -10,16 +10,18 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { createGeneratedCodeTestWorkspace } from './generatedCodeTestWorkspace';
 
-let generatedCodeWorkspace: ReturnType<typeof createGeneratedCodeTestWorkspace> | undefined;
+const generatedCodeWorkspaces: ReturnType<typeof createGeneratedCodeTestWorkspace>[] = [];
 
 const generatedCodeTestDirectory = (label: string): string => {
-  generatedCodeWorkspace = createGeneratedCodeTestWorkspace(label);
-  return generatedCodeWorkspace.directory;
+  const workspace = createGeneratedCodeTestWorkspace(label);
+  generatedCodeWorkspaces.push(workspace);
+  return workspace.directory;
 };
 
 afterEach(() => {
-  generatedCodeWorkspace?.cleanup();
-  generatedCodeWorkspace = undefined;
+  for (const workspace of generatedCodeWorkspaces.splice(0)) {
+    workspace.cleanup();
+  }
 });
 
 /* ------------------------------------------------------------------ */
