@@ -1,0 +1,378 @@
+import { describe, expect, it } from 'vitest';
+import type { StateMachineModelV4 } from './smModel';
+import { buildSemanticModel } from './smSemanticBuilder';
+import { flatOrFixture, nestedAndFixture } from './smFixtures';
+
+const diagnosticCodes = (model: StateMachineModelV4): string[] =>
+  buildSemanticModel(model).diagnostics.map((item) => item.code);
+
+describe('buildSemanticModel', () => {
+  it('precomputes hierarchy, slots, and transition LCA paths', () => {
+    const result = buildSemanticModel(flatOrFixture());
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir).toBeDefined();
+    expect(result.ir!.layers.root.decomposition).toBe('OR');
+    expect(result.ir!.layers.root.defaultEntryId).toBe('a');
+    expect(result.ir!.layers.root.defaultEntryKind).toBe('state');
+    expect(result.ir!.states.a.activeSlot).toBe(0);
+    expect(result.ir!.states.a.depth).toBe(0);
+    expect(result.ir!.transitions.t_ab.exitStateIds).toEqual(['a']);
+    expect(result.ir!.transitions.t_ab.entryStateIds).toEqual(['b']);
+  });
+
+  it('assigns deterministic hierarchy and AND execution order', () => {
+    const fixture = nestedAndFixture();
+    fixture.states.reverse();
+    fixture.layers.reverse();
+    const result = buildSemanticModel(fixture);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir).toBeDefined();
+    expect(result.ir!.rootLayerId).toBe('root');
+    expect(result.ir!.layers.parallel.children).toEqual(['region_a', 'region_b']);
+    expect(result.ir!.states.region_a.activityIndex).toBeLessThan(
+      result.ir!.states.region_b.activityIndex,
+    );
+  });
+
+  it('retains trigger combination mode and normalizes temporal thresholds', () => {
+    const fixture = flatOrFixture();
+    fixture.transitions.push(
+      {
+        ...fixture.transitions[0],
+        id: 't_after',
+        type: 'after',
+        afterTicks: 2,
+        order: 2,
+      },
+      {
+        ...fixture.transitions[0],
+        id: 't_and',
+        type: 'and',
+        afterTicks: 3,
+        order: 3,
+      },
+      {
+        ...fixture.transitions[0],
+        id: 't_or',
+        type: 'or',
+        afterTicks: 4,
+        order: 4,
+      },
+    );
+
+    const result = buildSemanticModel(fixture);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir!.transitions.t_ab.triggerMode).toBe('condition');
+    expect(result.ir!.transitions.t_after).toMatchObject({
+      triggerMode: 'after',
+      temporalThresholdMs: 20,
+    });
+    expect(result.ir!.transitions.t_and.triggerMode).toBe('and');
+    expect(result.ir!.transitions.t_or.triggerMode).toBe('or');
+  });
+
+  it('deep-freezes the completed semantic model', () => {
+    const result = buildSemanticModel(flatOrFixture());
+    expect(result.ir).toBeDefined();
+
+    expect(Object.isFrozen(result.ir)).toBe(true);
+    expect(Object.isFrozen(result.ir!.states)).toBe(true);
+    expect(Object.isFrozen(result.ir!.transitions.t_ab.exitStateIds)).toBe(true);
+  });
+
+  it('normalizes an internal transition to a descendant as inner', () => {
+    const fixture = nestedAndFixture();
+    fixture.transitions.push({
+      id: 't_inner',
+      sourceId: 'parallel',
+      targetId: 'region_a',
+      condition: '',
+      action: '',
+      afterTicks: null,
+      type: 'internal',
+      isInternal: true,
+      hasControlPoint: false,
+      order: 1,
+    });
+
+    const result = buildSemanticModel(fixture);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir!.transitions.t_inner).toMatchObject({
+      kind: 'inner',
+      exitStateIds: [],
+      entryStateIds: ['region_a'],
+    });
+  });
+
+  it('converts textual internal transitions into typed semantic transitions', () => {
+    const fixture = flatOrFixture();
+    fixture.states[0].internalTransitions =
+      '[total / count > 1] / ratio = total / count;';
+
+    const result = buildSemanticModel(fixture);
+    expect(result.diagnostics).toEqual([]);
+    const transitionId = result.ir!.states.a.internalTransitionIds[0];
+    expect(result.ir!.transitions[transitionId]).toMatchObject({
+      sourceStateId: 'a',
+      destinationStateId: 'a',
+      kind: 'internal-action',
+      guard: { kind: 'binary', operator: '>' },
+      actions: [
+        expect.objectContaining({ kind: 'assign', target: 'ratio' }),
+      ],
+    });
+    expect(result.ir!.transitionsBySource.a).toContain(transitionId);
+  });
+
+  it('rejects undeclared symbols in textual internal transitions', () => {
+    const fixture = flatOrFixture();
+    fixture.states[0].internalTransitions = '[missing] / ratio = 1;';
+
+    expect(diagnosticCodes(fixture)).toContain('INTERNAL_TRANSITION_INVALID');
+  });
+
+  it('rejects an internal transition outside its source hierarchy', () => {
+    const fixture = nestedAndFixture();
+    fixture.states.push({
+      ...fixture.states[0],
+      id: 'outside',
+      name: 'Outside',
+      autostart: false,
+      priority: 2,
+    });
+    fixture.layers.find((layer) => layer.id === 'root')!.stateIds.push('outside');
+    fixture.transitions.push({
+      id: 't_invalid_inner',
+      sourceId: 'parallel',
+      targetId: 'outside',
+      condition: '',
+      action: '',
+      afterTicks: null,
+      type: 'internal',
+      isInternal: true,
+      hasControlPoint: false,
+      order: 1,
+    });
+
+    expect(diagnosticCodes(fixture)).toContain('INNER_DESTINATION_INVALID');
+  });
+
+  it('rejects an OR layer without exactly one default path', () => {
+    const fixture = flatOrFixture();
+    fixture.states.forEach((state) => { state.autostart = false; });
+
+    expect(diagnosticCodes(fixture)).toContain('OR_DEFAULT_PATH_REQUIRED');
+  });
+
+  it('rejects duplicate state membership', () => {
+    const fixture = flatOrFixture();
+    fixture.layers.push({
+      id: 'duplicate',
+      name: 'Duplicate',
+      parentStateId: null,
+      decomposition: 'OR',
+      stateIds: ['a'],
+      transitionIds: [],
+      junctionIds: [],
+    });
+
+    expect(diagnosticCodes(fixture)).toContain('STATE_DUPLICATE_MEMBERSHIP');
+  });
+
+  it('rejects cyclic parent ownership', () => {
+    const fixture = flatOrFixture();
+    fixture.layers[0].parentStateId = 'a';
+
+    expect(diagnosticCodes(fixture)).toContain('PARENT_HIERARCHY_CYCLE');
+  });
+
+  it('rejects duplicate AND priorities', () => {
+    const fixture = nestedAndFixture();
+    fixture.states.find((state) => state.id === 'region_b')!.priority = 1;
+
+    expect(diagnosticCodes(fixture)).toContain('AND_PRIORITY_DUPLICATE');
+  });
+
+  it('rejects a transition path with a dangling target', () => {
+    const fixture = flatOrFixture();
+    fixture.transitions[0].targetId = 'missing';
+
+    expect(diagnosticCodes(fixture)).toContain('TRANSITION_PATH_DANGLING');
+  });
+
+  it('rejects history owned by the root layer', () => {
+    const fixture = flatOrFixture();
+    fixture.junctions.push({
+      id: 'history',
+      x: 0,
+      y: 0,
+      name: 'H',
+      color: '#000',
+      parentId: 'root',
+      type: 'history',
+    });
+    fixture.layers[0].junctionIds.push('history');
+
+    expect(diagnosticCodes(fixture)).toContain('HISTORY_OWNERSHIP_INVALID');
+  });
+
+  it('rejects duplicate or direction-incompatible I/O mappings', () => {
+    const fixture = flatOrFixture();
+    fixture.hilConfig = {
+      enabled: true,
+      target: 'Generic',
+      clockSpeed: 1,
+      commPort: '',
+      baudRate: 115200,
+      channels: [{
+        id: 'out',
+        name: 'Output',
+        peripheral: 'GPIO',
+        pin: '0',
+        direction: 'Out',
+        dataType: 'float',
+        rangeMin: 0,
+        rangeMax: 1,
+        scalingFactor: 1,
+        unit: '',
+      }],
+      mappings: [
+        { id: 'm1', adiaVarId: 'go', channelId: 'out', direction: 'read' },
+        { id: 'm2', adiaVarId: 'go', channelId: 'out', direction: 'read' },
+      ],
+    };
+
+    expect(diagnosticCodes(fixture)).toEqual(expect.arrayContaining([
+      'IO_MAPPING_DIRECTION_INVALID',
+      'IO_MAPPING_DUPLICATE',
+    ]));
+  });
+
+  it('resolves existing name-based I/O mappings to stable variable IDs', () => {
+    const fixture = flatOrFixture();
+    fixture.variables.find((variable) => variable.name === 'go')!.id = 'var_go';
+    fixture.hilConfig = {
+      enabled: true,
+      target: 'Generic',
+      clockSpeed: 1,
+      commPort: '',
+      baudRate: 115200,
+      channels: [{
+        id: 'input',
+        name: 'Input',
+        peripheral: 'GPIO',
+        pin: '0',
+        direction: 'In',
+        dataType: 'bool',
+        rangeMin: 0,
+        rangeMax: 1,
+        scalingFactor: 1,
+        unit: '',
+      }],
+      mappings: [
+        { id: 'm1', adiaVarId: 'go', channelId: 'input', direction: 'read' },
+      ],
+    };
+
+    const result = buildSemanticModel(fixture);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir!.ioMappings[0].variableId).toBe('var_go');
+  });
+
+  it('reports undeclared action symbols as diagnostics', () => {
+    const fixture = flatOrFixture();
+    fixture.states[0].entry = 'missing = 1;';
+
+    expect(diagnosticCodes(fixture)).toContain('ACTION_SYMBOL_INVALID');
+  });
+
+  it('rejects malformed initial values and expression type mismatches', () => {
+    const fixture = flatOrFixture();
+    fixture.variables.find((variable) => variable.name === 'count')!.initialValue = 'oops';
+    fixture.states[0].entry = 'go = 2;';
+    fixture.transitions[0].condition = 'count + 1';
+
+    expect(diagnosticCodes(fixture)).toEqual(expect.arrayContaining([
+      'VARIABLE_INITIAL_VALUE_INVALID',
+      'ACTION_TYPE_INVALID',
+      'GUARD_TYPE_INVALID',
+    ]));
+  });
+
+  it('rejects IDs ambiguous across endpoint and generated-C namespaces', () => {
+    const fixture = flatOrFixture();
+    fixture.junctions.push({
+      id: 'a',
+      x: 0,
+      y: 0,
+      name: 'J',
+      color: '#000',
+      parentId: 'root',
+    });
+    fixture.layers[0].junctionIds.push('a');
+    fixture.states[1].id = 'A';
+    fixture.layers[0].stateIds[1] = 'A';
+    fixture.transitions[0].targetId = 'A';
+
+    expect(diagnosticCodes(fixture)).toEqual(expect.arrayContaining([
+      'ENDPOINT_ID_COLLISION',
+      'C_IDENTIFIER_COLLISION',
+    ]));
+  });
+
+  it('rejects cyclic junction graphs even when one branch reaches a state', () => {
+    const fixture = flatOrFixture();
+    fixture.junctions.push(
+      { id: 'j1', x: 0, y: 0, name: 'J1', color: '#000', parentId: 'root' },
+      { id: 'j2', x: 0, y: 0, name: 'J2', color: '#000', parentId: 'root' },
+    );
+    fixture.layers[0].junctionIds.push('j1', 'j2');
+    const base = fixture.transitions[0];
+    fixture.transitions = [
+      { ...base, id: 'to_j1', targetId: 'j1' },
+      { ...base, id: 'j1_j2', sourceId: 'j1', targetId: 'j2' },
+      { ...base, id: 'j2_j1', sourceId: 'j2', targetId: 'j1' },
+      { ...base, id: 'j2_b', sourceId: 'j2', targetId: 'b' },
+    ];
+
+    expect(diagnosticCodes(fixture)).toContain('JUNCTION_PATH_CYCLE');
+  });
+
+  it('rejects a default junction with no outgoing path', () => {
+    const fixture = flatOrFixture();
+    fixture.states[0].autostart = false;
+    fixture.junctions.push({
+      id: 'default',
+      x: 0,
+      y: 0,
+      name: 'Default',
+      color: '#000',
+      parentId: 'root',
+      autostart: true,
+    });
+    fixture.layers[0].junctionIds.push('default');
+
+    expect(diagnosticCodes(fixture)).toContain('OR_DEFAULT_PATH_DANGLING');
+  });
+
+  it('rejects synthesized internal-transition ID collisions', () => {
+    const fixture = flatOrFixture();
+    fixture.states[0].internalTransitions = '[go] / ratio = 1;';
+    fixture.transitions[0].id = '$internal_a_0';
+    fixture.layers[0].transitionIds = ['$internal_a_0'];
+
+    expect(diagnosticCodes(fixture)).toContain(
+      'INTERNAL_TRANSITION_ID_COLLISION',
+    );
+  });
+
+  it('rejects ambiguous variable ID and name aliases', () => {
+    const fixture = flatOrFixture();
+    fixture.variables[0].id = 'var_go';
+    fixture.variables[1].id = 'go';
+
+    expect(diagnosticCodes(fixture)).toContain('SYMBOL_ALIAS_COLLISION');
+  });
+});
