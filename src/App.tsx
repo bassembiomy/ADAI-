@@ -50,7 +50,9 @@ import {
   type AppSimulationValue,
 } from './utils/stateMachine/smAppAdapter';
 import { stepRuntime } from './utils/stateMachine/smInterpreter';
+import { migrateStateMachineModel } from './utils/stateMachine/smModelMigration';
 import type { SemanticTraceFrame } from './utils/stateMachine/smTrace';
+import { STATE_MACHINE_RUNTIME_BUNDLE } from './generated/stateMachineRuntimeBundle';
 import { analyzeStateMachine } from './utils/smAnalysisEngine';
 import { HELP_DATA } from './HelpData';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
@@ -12134,7 +12136,17 @@ const ADIA = () => {
       const width = Math.max(100, maxX - minX + padding * 2);
       const height = Math.max(100, maxY - minY + padding * 2);
 
-      // Serialize data for JS engine
+      const standaloneMigration = migrateStateMachineModel({
+        tickMs,
+        states,
+        junctions,
+        transitions,
+        variables,
+        layers,
+        safetyMode,
+      });
+
+      // Serialize presentation data separately from the authoritative model.
       const serializedVariables = variables.map(v => ({
         id: v.id,
         name: v.name,
@@ -12146,39 +12158,7 @@ const ADIA = () => {
       const serializedStates = states.map(s => ({
         id: s.id,
         name: s.name,
-        parentId: s.parentId,
-        entry: s.entry || '',
-        during: s.during || '',
-        exit: s.exit || '',
-        autostart: !!s.autostart,
-        internalTransitions: s.internalTransitions || '',
-        isXBridges: !!s.isXBridges
-      }));
-
-      const serializedTransitions = transitions.map(t => ({
-        id: t.id,
-        sourceId: t.sourceId,
-        targetId: t.targetId,
-        condition: t.condition || '',
-        action: t.action || '',
-        afterTicks: t.afterTicks,
-        type: t.type || 'condition',
-        order: t.order || 1
-      }));
-
-      const serializedJunctions = junctions.map(j => ({
-        id: j.id,
-        name: j.name,
-        parentId: j.parentId
-      }));
-
-      const serializedLayers = layers.map(l => ({
-        id: l.id,
-        name: l.name || '',
-        parentStateId: l.parentStateId,
-        stateIds: l.stateIds || [],
-        junctionIds: l.junctionIds || [],
-        transitionIds: l.transitionIds || []
+        parentId: s.parentId
       }));
 
       const serializedHmiComponents = hmiComponents.map(c => ({
@@ -12627,13 +12607,13 @@ const ADIA = () => {
         </div>
 
         <script>
+          ${STATE_MACHINE_RUNTIME_BUNDLE}
           (function() {
             const PROJECT_DATA = {
+              model: ${JSON.stringify(standaloneMigration.model)},
+              modelDiagnostics: ${JSON.stringify(standaloneMigration.diagnostics)},
               variables: ${JSON.stringify(serializedVariables)},
               states: ${JSON.stringify(serializedStates)},
-              transitions: ${JSON.stringify(serializedTransitions)},
-              junctions: ${JSON.stringify(serializedJunctions)},
-              layers: ${JSON.stringify(serializedLayers)},
               hmiComponents: ${JSON.stringify(serializedHmiComponents)},
               tickMs: ${tickMs}
             };
@@ -12642,7 +12622,7 @@ const ADIA = () => {
             let varTypes = {};
             let activeStates = {};
             let stateTimers = {};
-            let lastActiveStates = {};
+            let semanticRuntime = null;
             let simRunning = true;
             let simInterval = null;
             let stepCount = 0;
@@ -12701,7 +12681,7 @@ const ADIA = () => {
 
             function updateVariableById(id, value) {
               const v = PROJECT_DATA.variables.find(x => x.id === id);
-              if (!v) return;
+              if (!v || !semanticRuntime) return;
               let val = value;
               if (varTypes[v.name] === "bool") {
                 val = value === "true" || value === true || value === "1" || value === 1;
@@ -12710,139 +12690,14 @@ const ADIA = () => {
               }
               const oldVal = varValues[v.name];
               if (oldVal !== val) {
-                varValues[v.name] = val;
+                window.ADIAStateMachineRuntime.applyInputs(
+                  semanticRuntime,
+                  { [v.id]: val }
+                );
+                varValues[v.name] = semanticRuntime.data[v.id];
                 logEvent("Variable Change", v.name + ": " + oldVal + " → " + val);
                 updateUi();
               }
-            }
-
-            function executeAction(code, location) {
-              if (!code || !code.trim()) return;
-              try {
-                const varKeys = Object.keys(varValues);
-                const varVals = varKeys.map(k => varValues[k]);
-                const runner = safeCreateFunction(varKeys, code + "; return {" + varKeys.map(k => k + ":" + k).join(",") + "};");
-                const result = runner(...varVals);
-                if (result) {
-                  varKeys.forEach(k => {
-                    if (result[k] !== undefined) {
-                      if (varTypes[k] === "bool") {
-                        varValues[k] = !!result[k];
-                      } else if (varTypes[k] === "int" || varTypes[k] === "float") {
-                        varValues[k] = Number(result[k]) || 0;
-                      } else {
-                        varValues[k] = result[k];
-                      }
-                    }
-                  });
-                }
-              } catch (e) {
-                console.error("Action error in " + location + ":", e);
-                logEvent("Action Error", location + ": " + e.message);
-              }
-            }
-
-            function evaluateCondition(condition, location) {
-              if (condition === "true" || condition === "") return true;
-              try {
-                let jsCondition = condition
-                  .replace(/&&/g, "&&")
-                  .replace(/\\|\\|/g, "||")
-                  .replace(/!/g, "!")
-                  .replace(/==/g, "===")
-                  .replace(/!=/g, "!==");
-                const varKeys = Object.keys(varValues);
-                const varVals = varKeys.map(k => varValues[k]);
-                const evaluator = safeCreateFunction(varKeys, "return !!(" + jsCondition + ");");
-                return evaluator(...varVals);
-              } catch (e) {
-                console.error("Condition error in " + location + ":", e);
-                return false;
-              }
-            }
-
-            function enterState(stateId, activeMap, fromHistory = false) {
-              const s = PROJECT_DATA.states.find(st => st.id === stateId);
-              if (!s) return;
-              const layerId = s.parentId || "root";
-              const siblingStates = PROJECT_DATA.states.filter(st => (st.parentId || "root") === layerId);
-              const isParallelLayer = siblingStates.length > 0 && siblingStates.every(st => st.isParallel);
-
-              if (isParallelLayer) {
-                activeMap[layerId + "_" + s.id] = s.id;
-              } else {
-                activeMap[layerId] = s.id;
-              }
-              stateTimers[s.id] = 0;
-              executeAction(s.entry, "Entry " + s.name);
-              
-              const childLayer = PROJECT_DATA.layers.find(l => l.parentStateId === s.id);
-              if (childLayer) {
-                const childStates = PROJECT_DATA.states.filter(st => childLayer.stateIds.includes(st.id));
-                const allParallel = childStates.length > 0 && childStates.every(st => st.isParallel);
-                if (allParallel) {
-                  const autostartParallelStates = childStates.filter(st => st.autostart).sort((a, b) => a.priority - b.priority);
-                  const statesToEnter = autostartParallelStates.length > 0 ? autostartParallelStates : childStates.sort((a, b) => a.priority - b.priority);
-                  statesToEnter.forEach(child => {
-                    enterState(child.id, activeMap, fromHistory ? "deep" : false);
-                  });
-                } else {
-                  let childToEnterId;
-                  if (fromHistory === "deep") {
-                    childToEnterId = lastActiveStates[childLayer.id];
-                  }
-                  if (childToEnterId) {
-                    enterState(childToEnterId, activeMap, "deep");
-                  } else {
-                    const targetId = resolveAutoStart(childLayer.id);
-                    if (targetId) enterState(targetId, activeMap, false);
-                  }
-                }
-              }
-            }
-
-            function resolveAutoStart(layerId) {
-              const layerStates = PROJECT_DATA.states.filter(s => s.parentId === layerId);
-              const autostarts = layerStates.filter(s => s.autostart);
-              return autostarts.length > 0 ? autostarts[0].id : (layerStates.length > 0 ? layerStates[0].id : null);
-            }
-
-            function exitState(stateId, activeMap) {
-              const s = PROJECT_DATA.states.find(st => st.id === stateId);
-              if (!s) return;
-              const layerId = s.parentId || "root";
-              lastActiveStates[layerId] = s.id;
-              
-              const childLayer = PROJECT_DATA.layers.find(l => l.parentStateId === s.id);
-              if (childLayer) {
-                const childStates = PROJECT_DATA.states.filter(st => childLayer.stateIds.includes(st.id));
-                const allParallel = childStates.length > 0 && childStates.every(st => st.isParallel);
-                if (allParallel) {
-                  childStates.forEach(child => {
-                    const activeKey = childLayer.id + "_" + child.id;
-                    if (activeMap[activeKey]) {
-                      exitState(child.id, activeMap);
-                    }
-                  });
-                } else {
-                  const activeChildId = activeMap[childLayer.id];
-                  if (activeChildId) exitState(activeChildId, activeMap);
-                  delete activeMap[childLayer.id];
-                }
-              }
-              executeAction(s.exit, "Exit " + s.name);
-
-              const siblingStates = PROJECT_DATA.states.filter(st => (st.parentId || "root") === layerId);
-              const isParallelLayer = siblingStates.length > 0 && siblingStates.every(st => st.isParallel);
-              if (isParallelLayer) {
-                delete activeMap[layerId + "_" + s.id];
-              } else {
-                delete activeMap[layerId];
-              }
-            }
-
-            function getNode(id) {
-              return PROJECT_DATA.states.find(s => s.id === id) || PROJECT_DATA.junctions.find(j => j.id === id);
             }
 
             function beepBuzzer() {
@@ -12864,205 +12719,66 @@ const ADIA = () => {
               } catch (e) {}
             }
 
-            function stepSimulation() {
-              simTime += (PROJECT_DATA.tickMs || 100) / 1000;
-              stepCount++;
-              
-              Object.values(activeStates).forEach(stateId => {
-                if (stateId) {
-                  stateTimers[stateId] = (stateTimers[stateId] || 0) + 1;
-                }
+            function applySemanticFrame(frame) {
+              const nextActiveStates = {};
+              frame.activeStateIds.forEach(stateId => {
+                const state = semanticRuntime.ir.states[stateId];
+                const layer = semanticRuntime.ir.layers[state.layerId];
+                const key = layer.decomposition === "AND"
+                  ? layer.id + "_" + stateId
+                  : layer.id;
+                nextActiveStates[key] = stateId;
               });
-
-              const nextActiveStates = { ...activeStates };
-              let transitionFired = false;
-              const sortedRegions = Object.keys(activeStates).sort((a, b) => {
-                const stateA = PROJECT_DATA.states.find(s => s.id === activeStates[a]);
-                const stateB = PROJECT_DATA.states.find(s => s.id === activeStates[b]);
-                const priorityA = stateA ? stateA.priority : 0;
-                const priorityB = stateB ? stateB.priority : 0;
-                return priorityA - priorityB;
-              });
-
-              for (const region of sortedRegions) {
-                const currentStateId = activeStates[region];
-                if (!nextActiveStates[region]) continue;
-                const currentState = PROJECT_DATA.states.find(s => s.id === currentStateId);
-                if (!currentState) continue;
-
-                const potentialTransitions = PROJECT_DATA.transitions
-                  .filter(t => t.sourceId === currentStateId)
-                  .sort((a, b) => a.order - b.order);
-
-                if (currentState.internalTransitions) {
-                  const internalLines = currentState.internalTransitions.split("\\n").filter(l => l.trim());
-                  internalLines.forEach((line, idx) => {
-                    let type = "condition";
-                    let condition = "true";
-                    let afterTicks = null;
-                    let action = "";
-                    const parts = line.split("/");
-                    if (parts.length > 1) action = parts.slice(1).join("/").trim();
-                    const triggerPart = parts[0].trim();
-                    const afterMatch = triggerPart.match(/after\\((\\d+)\\)/);
-                    const condMatch = triggerPart.match(/\\[(.*?)\\]/);
-                    if (afterMatch) {
-                      type = "after";
-                      afterTicks = parseInt(afterMatch[1]);
-                    }
-                    if (condMatch) condition = condMatch[1];
-
-                    potentialTransitions.push({
-                      id: "INT_" + currentState.id + "_" + idx,
-                      sourceId: currentState.id,
-                      targetId: currentState.id,
-                      condition,
-                      action,
-                      type,
-                      afterTicks,
-                      order: 1000 + idx,
-                      isInternal: true
-                    });
-                  });
-                }
-
-                for (const transition of potentialTransitions) {
-                  const currentTicks = stateTimers[currentStateId] || 0;
-                  const conditionMet = evaluateCondition(transition.condition, "Transition from " + currentState.name);
-                  const timerMet = transition.afterTicks !== null && currentTicks >= transition.afterTicks;
-
-                  let shouldFire = false;
-                  if (transition.type === "condition") shouldFire = conditionMet;
-                  else if (transition.type === "after") shouldFire = timerMet;
-                  else if (transition.type === "and") shouldFire = conditionMet && timerMet;
-                  else if (transition.type === "or") shouldFire = conditionMet || timerMet;
-
-                  if (shouldFire) {
-                    let currentTr = transition;
-                    let targetNode = getNode(currentTr.targetId);
-                    let pathActions = [currentTr.action];
-                    let isLocalPath = !!transition.isInternal;
-                    const visited = new Set();
-                    let pathTerminatedAtJunction = false;
-
-                    while (targetNode && !PROJECT_DATA.states.find(s => s.id === targetNode.id)) {
-                      if (visited.has(targetNode.id)) {
-                        pathActions.forEach(act => executeAction(act, "Action Path"));
-                        transitionFired = true;
-                        logEvent("Action Path", "Cycle ended at " + targetNode.name);
-                        break;
-                      }
-                      visited.add(targetNode.id);
-                      const currentNode = targetNode;
-                      const junctionTransitions = PROJECT_DATA.transitions
-                        .filter(t => t.sourceId === currentNode.id)
-                        .sort((a, b) => a.order - b.order);
-
-                      let foundNext = false;
-                      for (const jTr of junctionTransitions) {
-                        if (evaluateCondition(jTr.condition, "Junction " + currentNode.name)) {
-                          currentTr = jTr;
-                          targetNode = getNode(jTr.targetId);
-                          pathActions.push(jTr.action);
-                          foundNext = true;
-                          break;
-                        }
-                      }
-                      if (!foundNext) {
-                        pathActions.forEach(act => executeAction(act, "Action Path"));
-                        transitionFired = true;
-                        logEvent("Action Path", "Ended at junction " + currentNode.name);
-                        targetNode = null;
-                        pathTerminatedAtJunction = true;
-                        break;
-                      }
-                    }
-
-                    if (pathTerminatedAtJunction || transitionFired) {
-                      break;
-                    }
-
-                    if (targetNode) {
-                      const targetState = targetNode;
-                      if (isLocalPath) {
-                        pathActions.forEach(act => executeAction(act, "Local Action"));
-                        if (targetState.id !== currentState.id) {
-                          nextActiveStates[region] = targetState.id;
-                          stateTimers[targetState.id] = 0;
-                        }
-                      } else {
-                        const srcId = currentState.id;
-                        const dstId = targetState.id;
-
-                        const getAncestors = (id) => {
-                          const ancestors = [];
-                          let currId = id;
-                          while (currId) {
-                            const st = PROJECT_DATA.states.find(s => s.id === currId);
-                            if (!st) break;
-                            if (st.parentId && st.parentId !== 'root') {
-                              ancestors.push(st.parentId);
-                              currId = st.parentId;
-                            } else {
-                              break;
-                            }
-                          }
-                          return ancestors;
-                        };
-
-                        const findLCA = (id1, id2) => {
-                          if (!id1 || !id2) return null;
-                          const anc1 = [id1, ...getAncestors(id1)];
-                          const anc2 = [id2, ...getAncestors(id2)];
-                          for (const a1 of anc1) {
-                            if (anc2.includes(a1)) return a1;
-                          }
-                          return null;
-                        };
-
-                        const lca = findLCA(srcId, dstId);
-
-                        const exitSeq = [];
-                        let curr = srcId;
-                        while (curr && curr !== lca) {
-                          exitSeq.push(curr);
-                          const st = PROJECT_DATA.states.find(s => s.id === curr);
-                          curr = st?.parentId && st.parentId !== 'root' ? st.parentId : null;
-                        }
-
-                        const entrySeq = [];
-                        curr = dstId;
-                        while (curr && curr !== lca) {
-                          entrySeq.unshift(curr);
-                          const st = PROJECT_DATA.states.find(s => s.id === curr);
-                          curr = st?.parentId && st.parentId !== 'root' ? st.parentId : null;
-                        }
-
-                        exitSeq.forEach(sid => exitState(sid, nextActiveStates));
-                        pathActions.forEach(act => executeAction(act, "Transition Action"));
-                        entrySeq.forEach(sid => enterState(sid, nextActiveStates));
-                      }
-                      transitionFired = true;
-                      logEvent("Transition", currentState.name + " → " + targetState.name);
-                      break;
-                    }
-                  }
-                }
-              }
-
-              const sortedDuringStates = Object.values(nextActiveStates)
-                .map(sid => PROJECT_DATA.states.find(s => s.id === sid))
-                .filter(s => !!s)
-                .sort((a, b) => a.priority - b.priority);
-
-              sortedDuringStates.forEach(state => {
-                if (state.during) {
-                  executeAction(state.during, "During " + state.name);
-                }
-              });
-
               activeStates = nextActiveStates;
+              stateTimers = { ...frame.stateTimersMs };
+              stepCount = frame.sequence;
+
+              PROJECT_DATA.variables.forEach(v => {
+                varValues[v.name] = frame.data[v.id];
+              });
+
+              frame.actions
+                .filter(action => action.startsWith("transition:"))
+                .forEach(action => {
+                  const transitionId = action.slice("transition:".length);
+                  const transition = semanticRuntime.ir.transitions[transitionId];
+                  if (!transition) {
+                    logEvent("Transition", transitionId);
+                    return;
+                  }
+                  const sourceState = PROJECT_DATA.states.find(
+                    state => state.id === transition.sourceStateId
+                  );
+                  const destinationState = PROJECT_DATA.states.find(
+                    state => state.id === transition.destinationStateId
+                  );
+                  logEvent(
+                    "Transition",
+                    (sourceState ? sourceState.name : transition.sourceStateId)
+                      + " → "
+                      + (
+                        destinationState
+                          ? destinationState.name
+                          : transition.destinationStateId
+                      )
+                  );
+                });
+            }
+
+            function stepSimulation() {
+              if (!semanticRuntime) return;
+              const elapsedMs = PROJECT_DATA.tickMs || 100;
+              const frame = window.ADIAStateMachineRuntime.stepRuntime(
+                semanticRuntime,
+                elapsedMs
+              );
+              simTime += elapsedMs / 1000;
+              applySemanticFrame(frame);
               updateUi();
+              if (frame.error) {
+                simRunning = false;
+                logEvent("Runtime Error", frame.error);
+              }
             }
 
             function updateDashboard() {
@@ -13070,11 +12786,14 @@ const ADIA = () => {
               if (!db) return;
               db.textContent = "";
 
-              PROJECT_DATA.layers.forEach(layer => {
+              PROJECT_DATA.model.layers.forEach(layer => {
                 const layerName = layer.name || (layer.id === "root" ? "Root Region" : "Region");
-                const activeStateId = activeStates[layer.id];
-                const activeState = PROJECT_DATA.states.find(s => s.id === activeStateId);
-                const stateName = activeState ? activeState.name : "—";
+                const activeStateIds = Object.entries(activeStates)
+                  .filter(([key]) => key === layer.id || key.startsWith(layer.id + "_"))
+                  .map(([, stateId]) => stateId);
+                const stateName = activeStateIds
+                  .map(stateId => PROJECT_DATA.states.find(s => s.id === stateId)?.name || stateId)
+                  .join(", ") || "—";
                 const cell = document.createElement("div");
                 cell.style.background = "#1a1a20";
                 cell.style.border = "1px solid #2a2a36";
@@ -13339,40 +13058,46 @@ const ADIA = () => {
 
             function initializeSimulation() {
               PROJECT_DATA.variables.forEach(v => {
-                let val = v.defaultValue;
-                if (v.type === "bool") {
-                  val = val === "true" || val === true || val === "1";
-                } else if (v.type === "int" || v.type === "float") {
-                  val = Number(val) || 0;
-                }
-                varValues[v.name] = val;
                 varTypes[v.name] = v.type;
               });
 
-              const rootStates = PROJECT_DATA.states.filter(s => s.parentId === "root" || !s.parentId);
-              const rootParallel = rootStates.length > 0 && rootStates.every(s => s.isParallel);
-              if (rootParallel) {
-                const regionsMap = {};
-                rootStates.forEach(rs => {
-                  const rId = rs.regionId || "MAIN";
-                  if (!regionsMap[rId]) regionsMap[rId] = [];
-                  regionsMap[rId].push(rs);
-                });
-
-                Object.values(regionsMap).forEach(groupStates => {
-                  const autostarts = groupStates.filter(st => st.autostart).sort((a, b) => a.priority - b.priority);
-                  const statesToEnter = autostarts.length > 0 ? autostarts : [...groupStates].sort((a, b) => a.priority - b.priority);
-                  if (statesToEnter.length > 0) {
-                    enterState(statesToEnter[0].id, activeStates);
-                  }
-                });
-              } else {
-                const autostarts = rootStates.filter(s => s.autostart);
-                if (autostarts.length > 0) {
-                  autostarts.forEach(s => enterState(s.id, activeStates));
-                } else if (rootStates.length > 0) {
-                  enterState(rootStates[0].id, activeStates);
+              try {
+                const migrationErrors = PROJECT_DATA.modelDiagnostics.filter(
+                  diagnostic => diagnostic.severity === "error"
+                );
+                if (migrationErrors.length > 0) {
+                  throw new Error(
+                    migrationErrors
+                      .map(diagnostic => diagnostic.code + ": " + diagnostic.message)
+                      .join("; ")
+                  );
                 }
+                const built = window.ADIAStateMachineRuntime.buildSemanticModel(
+                  PROJECT_DATA.model
+                );
+                if (!built.ir) {
+                  throw new Error(
+                    built.diagnostics
+                      .map(diagnostic => diagnostic.code + ": " + diagnostic.message)
+                      .join("; ")
+                  );
+                }
+                semanticRuntime = window.ADIAStateMachineRuntime.createRuntime(
+                  built.ir
+                );
+                applySemanticFrame(
+                  window.ADIAStateMachineRuntime.initializeRuntime(
+                    semanticRuntime
+                  )
+                );
+              } catch (error) {
+                simRunning = false;
+                logEvent(
+                  "Init Error",
+                  error instanceof Error ? error.message : String(error)
+                );
+                updateUi();
+                return;
               }
 
               const intervalTime = Math.max(100, PROJECT_DATA.tickMs || 100);
@@ -13409,46 +13134,11 @@ const ADIA = () => {
                 logEvent("Sim Step", "Manual tick step executed");
               },
               reset() {
-                PROJECT_DATA.variables.forEach(v => {
-                  let val = v.defaultValue;
-                  if (v.type === "bool") {
-                    val = val === "true" || val === true || val === "1";
-                  } else if (v.type === "int" || v.type === "float") {
-                    val = Number(val) || 0;
-                  }
-                  varValues[v.name] = val;
-                });
-                activeStates = {};
-                stateTimers = {};
-                lastActiveStates = {};
+                if (!semanticRuntime) return;
                 simTime = 0;
-                stepCount = 0;
-                
-                const rootStates = PROJECT_DATA.states.filter(s => s.parentId === "root" || !s.parentId);
-                const rootParallel = rootStates.length > 0 && rootStates.every(s => s.isParallel);
-                if (rootParallel) {
-                  const regionsMap = {};
-                  rootStates.forEach(rs => {
-                    const rId = rs.regionId || "MAIN";
-                    if (!regionsMap[rId]) regionsMap[rId] = [];
-                    regionsMap[rId].push(rs);
-                  });
-
-                  Object.values(regionsMap).forEach(groupStates => {
-                    const autostarts = groupStates.filter(st => st.autostart).sort((a, b) => a.priority - b.priority);
-                    const statesToEnter = autostarts.length > 0 ? autostarts : [...groupStates].sort((a, b) => a.priority - b.priority);
-                    if (statesToEnter.length > 0) {
-                      enterState(statesToEnter[0].id, activeStates);
-                    }
-                  });
-                } else {
-                  const autostarts = rootStates.filter(s => s.autostart);
-                  if (autostarts.length > 0) {
-                    autostarts.forEach(s => enterState(s.id, activeStates));
-                  } else if (rootStates.length > 0) {
-                    enterState(rootStates[0].id, activeStates);
-                  }
-                }
+                applySemanticFrame(
+                  window.ADIAStateMachineRuntime.resetRuntime(semanticRuntime)
+                );
                 updateUi();
                 logEvent("Sim Reset", "All states and variables reset to default");
               },

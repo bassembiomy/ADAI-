@@ -1,0 +1,43 @@
+import {
+  createRuntime,
+  initializeRuntime,
+  resetRuntime,
+  stepRuntime,
+  type SemanticRuntime,
+} from './smInterpreter';
+import { buildSemanticModel } from './smSemanticBuilder';
+
+export type StandaloneInputValue = number | boolean;
+
+export const applyInputs = (
+  runtime: SemanticRuntime,
+  inputs: Readonly<Record<string, StandaloneInputValue>>,
+): void => {
+  for (const [reference, input] of Object.entries(inputs)) {
+    const variable = runtime.ir.variables[reference]
+      ?? Object.values(runtime.ir.variables).find(
+        (candidate) => candidate.name === reference,
+      );
+    if (!variable) continue;
+    runtime.data[variable.id] = variable.type === 'bool'
+      ? Boolean(input)
+      : Number(input);
+  }
+};
+
+export {
+  buildSemanticModel,
+  createRuntime,
+  initializeRuntime,
+  resetRuntime,
+  stepRuntime,
+};
+
+export const ADIAStateMachineRuntime = Object.freeze({
+  buildSemanticModel,
+  createRuntime,
+  initializeRuntime,
+  applyInputs,
+  stepRuntime,
+  resetRuntime,
+});

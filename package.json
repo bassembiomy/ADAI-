@@ -8,6 +8,7 @@
   "main": "dist-electron/index.cjs",
   "scripts": {
     "dev": "vite",
+    "build:sm-runtime": "tsx scripts/build_state_machine_runtime.ts",
     "build:electron": "npx electron scripts/build_protected_electron.cjs",
     "build": "tsc && vite build && npm run build:electron",
     "preview": "vite preview",
@@ -21,7 +22,8 @@
     "test:vlab:connected": "vitest run src/engine/vlab/vlab_connected_models.test.ts --reporter=verbose",
     "test:vlab:all-blocks": "vitest run src/engine/vlab/test_all_blocks_scope.test.ts --reporter=dot",
     "zero-g": "tsx scripts/zero_g_ci.ts",
-    "prebuild": "npm audit --audit-level=critical || echo [WARNING] Unfixable audit vulnerabilities detected (tar, tmp, xlsx have no upstream fix). Review before production release."
+    "audit:prebuild": "npm audit --audit-level=critical || echo [WARNING] Unfixable audit vulnerabilities detected (tar, tmp, xlsx have no upstream fix). Review before production release.",
+    "prebuild": "npm run build:sm-runtime && npm run audit:prebuild"
   },
   "engines": {
     "node": ">=20.0.0",
@@ -93,6 +95,7 @@
     "javascript-obfuscator": "^5.5.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.19",
+    "tsx": "^4.20.6",
     "typescript": "^5.4.5",
     "vite": "^7.3.1",
     "vitest": "^4.1.5"
