@@ -48,6 +48,16 @@ export interface SemanticTransition {
   actions: ActionNode[];
   exitStateIds: string[];
   entryStateIds: string[];
+  routes: SemanticTransitionRoute[];
+}
+
+export interface SemanticTransitionRoute {
+  transitionIds: string[];
+  destinationKind: 'state' | 'history';
+  destinationStateId: string | null;
+  destinationJunctionId: string | null;
+  exitStateIds: string[];
+  entryStateIds: string[];
 }
 
 export interface SemanticVariable {

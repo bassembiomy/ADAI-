@@ -36,11 +36,17 @@ export interface ParsedInternalTransition {
   guard: ExpressionNode;
   actions: ActionNode[];
   afterTicks: number | null;
+  triggerMode: 'condition' | 'after' | 'and' | 'or';
+}
+
+export interface SymbolReference {
+  id: string;
+  cName: string;
 }
 
 export type SymbolDeclarations =
   | ReadonlySet<string>
-  | ReadonlyMap<string, string>;
+  | ReadonlyMap<string, string | SymbolReference>;
 
 type TokenKind = 'identifier' | 'number' | 'operator' | 'punctuation' | 'eof';
 
@@ -196,8 +202,9 @@ class Parser {
   }
 
   parseStatement(): ActionNode {
-    const target = this.consume('identifier').value;
-    this.assertDeclared(target);
+    const targetToken = this.consume('identifier').value;
+    this.assertDeclared(targetToken);
+    const target = this.resolveSymbol(targetToken).id;
     const assignment = this.consume('operator');
 
     if (assignment.value === '++' || assignment.value === '--') {
@@ -207,7 +214,7 @@ class Parser {
         value: {
           kind: 'binary',
           operator: assignment.value === '++' ? '+' : '-',
-          left: this.variable(target),
+          left: this.variable(targetToken),
           right: { kind: 'literal', value: 1 },
         },
       };
@@ -225,7 +232,7 @@ class Parser {
       : {
         kind: 'binary' as const,
         operator: assignment.value[0] as BinaryOperator,
-        left: this.variable(target),
+        left: this.variable(targetToken),
         right: parsedValue,
       };
     return { kind: 'assign', target, value };
@@ -305,16 +312,30 @@ class Parser {
 
   private variable(name: string): ExpressionNode {
     const resolver = this.declaredSymbols as
-      | ReadonlyMap<string, string>
+      | ReadonlyMap<string, string | SymbolReference>
       | undefined;
-    const canonicalName = typeof resolver?.get === 'function'
+    const resolution = typeof resolver?.get === 'function'
       ? resolver.get(name)
       : undefined;
+    const symbol = typeof resolution === 'string'
+      ? { id: name, cName: resolution }
+      : resolution ?? { id: name, cName: name };
     return {
       kind: 'variable',
-      name,
-      cName: toCIdentifier(canonicalName ?? name),
+      name: symbol.id,
+      cName: toCIdentifier(symbol.cName),
     };
+  }
+
+  private resolveSymbol(name: string): SymbolReference {
+    const resolver = this.declaredSymbols as
+      | ReadonlyMap<string, string | SymbolReference>
+      | undefined;
+    const resolution = typeof resolver?.get === 'function'
+      ? resolver.get(name)
+      : undefined;
+    if (typeof resolution === 'string') return { id: name, cName: resolution };
+    return resolution ?? { id: name, cName: name };
   }
 
   private assertDeclared(name: string): void {
@@ -449,10 +470,19 @@ export const parseInternalTransition = (
   if (unparsedTrigger.replace(/&&|\|\||\s/g, '') !== '') {
     throw new SyntaxError(`invalid internal-transition trigger '${trigger}'`);
   }
+  if (trigger.includes('&&') && trigger.includes('||')) {
+    throw new SyntaxError(`invalid internal-transition trigger '${trigger}'`);
+  }
+  const hasCondition = openBracket >= 0;
+  const hasTemporal = afterMatch !== null;
+  const triggerMode = hasCondition && hasTemporal
+    ? trigger.includes('||') ? 'or' : 'and'
+    : hasTemporal ? 'after' : 'condition';
   return {
     guard: parseCondition(condition, declaredSymbols),
     actions: parseActions(actionSource, declaredSymbols),
     afterTicks: afterMatch ? Number(afterMatch[1]) : null,
+    triggerMode,
   };
 };
 

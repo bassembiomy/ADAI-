@@ -93,4 +93,17 @@ describe('semantic expressions', () => {
       /invalid internal-transition trigger/,
     );
   });
+
+  it('preserves textual temporal conjunction versus disjunction', () => {
+    expect(parseInternalTransition('after(2) && [enabled] / ratio = 1;'))
+      .toMatchObject({ triggerMode: 'and', afterTicks: 2 });
+    expect(parseInternalTransition('after(2) || [enabled] / ratio = 1;'))
+      .toMatchObject({ triggerMode: 'or', afterTicks: 2 });
+  });
+
+  it('rejects mixed temporal conjunction and disjunction operators', () => {
+    expect(() => parseInternalTransition(
+      'after(2) && || [enabled] / ratio = 1;',
+    )).toThrow(/invalid internal-transition trigger/);
+  });
 });

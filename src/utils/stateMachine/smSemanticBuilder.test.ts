@@ -375,4 +375,307 @@ describe('buildSemanticModel', () => {
 
     expect(diagnosticCodes(fixture)).toContain('SYMBOL_ALIAS_COLLISION');
   });
+
+  it('keeps an explicit ancestor-to-descendant transition external', () => {
+    const fixture = nestedAndFixture();
+    fixture.transitions.push({
+      id: 't_external_descendant',
+      sourceId: 'parallel',
+      targetId: 'region_a',
+      condition: '',
+      action: '',
+      afterTicks: null,
+      type: 'condition',
+      hasControlPoint: false,
+      order: 1,
+    });
+
+    const result = buildSemanticModel(fixture);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir!.transitions.t_external_descendant).toMatchObject({
+      kind: 'outer',
+      exitStateIds: ['parallel'],
+      entryStateIds: ['parallel', 'region_a'],
+    });
+  });
+
+  it('precomputes complete state-junction-state route LCA paths', () => {
+    const fixture = flatOrFixture();
+    fixture.junctions.push({
+      id: 'decision',
+      x: 0,
+      y: 0,
+      name: 'Decision',
+      color: '#000',
+      parentId: 'root',
+    });
+    fixture.layers[0].junctionIds.push('decision');
+    fixture.transitions[0].targetId = 'decision';
+    fixture.transitions.push({
+      ...fixture.transitions[0],
+      id: 'decision_b',
+      sourceId: 'decision',
+      targetId: 'b',
+      condition: '',
+      action: '',
+      order: 2,
+    });
+
+    const result = buildSemanticModel(fixture);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir!.transitions.t_ab.routes).toEqual([
+      expect.objectContaining({
+        transitionIds: ['t_ab', 'decision_b'],
+        destinationStateId: 'b',
+        exitStateIds: ['a'],
+        entryStateIds: ['b'],
+      }),
+    ]);
+    expect(result.ir!.transitions.t_ab.exitStateIds).toEqual(['a']);
+    expect(result.ir!.transitions.t_ab.entryStateIds).toEqual(['b']);
+  });
+
+  it('normalizes an internal state-junction-descendant route as inner', () => {
+    const fixture = nestedAndFixture();
+    const childLayer = fixture.layers.find((layer) => layer.id === 'parallel')!;
+    childLayer.junctionIds.push('inner_decision');
+    fixture.junctions.push({
+      id: 'inner_decision',
+      x: 0,
+      y: 0,
+      name: 'Inner decision',
+      color: '#000',
+      parentId: 'parallel',
+    });
+    fixture.transitions.push(
+      {
+        id: 't_inner_junction',
+        sourceId: 'parallel',
+        targetId: 'inner_decision',
+        condition: '',
+        action: '',
+        afterTicks: null,
+        type: 'internal',
+        isInternal: true,
+        hasControlPoint: false,
+        order: 1,
+      },
+      {
+        id: 't_inner_destination',
+        sourceId: 'inner_decision',
+        targetId: 'region_a',
+        condition: '',
+        action: '',
+        afterTicks: null,
+        type: 'condition',
+        hasControlPoint: false,
+        order: 1,
+      },
+    );
+
+    const result = buildSemanticModel(fixture);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir!.transitions.t_inner_junction).toMatchObject({
+      kind: 'inner',
+      exitStateIds: [],
+      entryStateIds: ['region_a'],
+      routes: [
+        expect.objectContaining({
+          transitionIds: ['t_inner_junction', 't_inner_destination'],
+          destinationStateId: 'region_a',
+        }),
+      ],
+    });
+  });
+
+  it('normalizes an internal history-junction route without a state guess', () => {
+    const fixture = nestedAndFixture();
+    const childLayer = fixture.layers.find((layer) => layer.id === 'parallel')!;
+    childLayer.junctionIds.push('history_target');
+    fixture.junctions.push({
+      id: 'history_target',
+      x: 0,
+      y: 0,
+      name: 'H',
+      color: '#000',
+      parentId: 'parallel',
+      type: 'history',
+    });
+    fixture.transitions.push({
+      id: 't_inner_history',
+      sourceId: 'parallel',
+      targetId: 'history_target',
+      condition: '',
+      action: '',
+      afterTicks: null,
+      type: 'internal',
+      isInternal: true,
+      hasControlPoint: false,
+      order: 1,
+    });
+
+    const result = buildSemanticModel(fixture);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir!.transitions.t_inner_history).toMatchObject({
+      kind: 'inner',
+      routes: [{
+        transitionIds: ['t_inner_history'],
+        destinationKind: 'history',
+        destinationStateId: null,
+        destinationJunctionId: 'history_target',
+        exitStateIds: [],
+        entryStateIds: [],
+      }],
+    });
+  });
+
+  it('accepts UI-schema history ownership by parent state ID', () => {
+    const fixture = nestedAndFixture();
+    const childLayer = fixture.layers.find((layer) => layer.id === 'parallel')!;
+    childLayer.id = 'parallel_layer';
+    childLayer.name = 'Parallel layer';
+    childLayer.decomposition = 'OR';
+    fixture.states.find((state) => state.id === 'region_a')!.autostart = true;
+    childLayer.junctionIds.push('history');
+    fixture.junctions.push({
+      id: 'history',
+      x: 0,
+      y: 0,
+      name: 'H',
+      color: '#000',
+      parentId: 'parallel',
+      type: 'history',
+    });
+
+    expect(diagnosticCodes(fixture)).not.toContain('HISTORY_OWNERSHIP_INVALID');
+  });
+
+  it('rejects negative explicit temporal thresholds', () => {
+    const fixture = flatOrFixture();
+    fixture.transitions[0].type = 'after';
+    fixture.transitions[0].afterTicks = -1;
+
+    expect(diagnosticCodes(fixture)).toContain('TEMPORAL_THRESHOLD_INVALID');
+  });
+
+  it('requires thresholds for explicit temporal trigger modes', () => {
+    for (const type of ['after', 'and', 'or'] as const) {
+      const fixture = flatOrFixture();
+      fixture.transitions[0].type = type;
+      fixture.transitions[0].afterTicks = null;
+      expect(diagnosticCodes(fixture)).toContain('TEMPORAL_THRESHOLD_REQUIRED');
+    }
+  });
+
+  it('canonicalizes action targets and expression variables to stable IDs', () => {
+    const fixture = flatOrFixture();
+    fixture.variables[0].id = 'var_go';
+    fixture.states[0].entry = 'go = false;';
+
+    const result = buildSemanticModel(fixture);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir!.states.a.entryActions[0].target).toBe('var_go');
+    expect(result.ir!.transitions.t_ab.guard).toMatchObject({
+      kind: 'variable',
+      name: 'var_go',
+      cName: 'go',
+    });
+  });
+
+  it('rejects a default junction route escaping its OR container subtree', () => {
+    const fixture = flatOrFixture();
+    const template = fixture.states[1];
+    fixture.states.push(
+      { ...template, id: 'c', name: 'C', autostart: false, priority: 1 },
+      { ...template, id: 'd', name: 'D', autostart: false, priority: 2 },
+    );
+    fixture.junctions.push({
+      id: 'child_default',
+      x: 0,
+      y: 0,
+      name: 'Child Default',
+      color: '#000',
+      parentId: 'a',
+      autostart: true,
+    });
+    fixture.layers.push({
+      id: 'a_children',
+      name: 'A children',
+      parentStateId: 'a',
+      decomposition: 'OR',
+      stateIds: ['c', 'd'],
+      transitionIds: ['child_default_b'],
+      junctionIds: ['child_default'],
+    });
+    fixture.transitions.push({
+      ...fixture.transitions[0],
+      id: 'child_default_b',
+      sourceId: 'child_default',
+      targetId: 'b',
+      condition: '',
+      action: '',
+      order: 2,
+    });
+
+    expect(diagnosticCodes(fixture)).toContain(
+      'OR_DEFAULT_PATH_ESCAPES_CONTAINER',
+    );
+  });
+
+  it('rejects conversion output type mismatches and duplicate mapping IDs', () => {
+    const fixture = flatOrFixture();
+    fixture.hilConfig = {
+      enabled: true,
+      target: 'Generic',
+      clockSpeed: 1,
+      commPort: '',
+      baudRate: 115200,
+      channels: [
+        {
+          id: 'numeric_in',
+          name: 'Numeric input',
+          peripheral: 'ADC',
+          pin: '0',
+          direction: 'In',
+          dataType: 'float',
+          rangeMin: 0,
+          rangeMax: 1,
+          scalingFactor: 1,
+          unit: '',
+        },
+        {
+          id: 'bool_in',
+          name: 'Bool input',
+          peripheral: 'GPIO',
+          pin: '1',
+          direction: 'In',
+          dataType: 'bool',
+          rangeMin: 0,
+          rangeMax: 1,
+          scalingFactor: 1,
+          unit: '',
+        },
+      ],
+      mappings: [
+        {
+          id: 'duplicate',
+          adiaVarId: 'go',
+          channelId: 'numeric_in',
+          direction: 'read',
+          conversionExpr: 'x + 1',
+        },
+        {
+          id: 'duplicate',
+          adiaVarId: 'total',
+          channelId: 'bool_in',
+          direction: 'read',
+        },
+      ],
+    };
+
+    expect(diagnosticCodes(fixture)).toEqual(expect.arrayContaining([
+      'IO_MAPPING_CONVERSION_TYPE_INVALID',
+      'IO_MAPPING_ID_DUPLICATE',
+    ]));
+  });
 });

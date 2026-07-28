@@ -28,6 +28,39 @@ const diagnostic = (
   severity: 'error',
 });
 
+type SemanticValueType = 'boolean' | 'number';
+
+const inferExpressionType = (
+  expression: ExpressionNode,
+  symbolTypes: ReadonlyMap<string, SemanticValueType>,
+): SemanticValueType | null => {
+  if (expression.kind === 'literal') {
+    return typeof expression.value === 'boolean' ? 'boolean' : 'number';
+  }
+  if (expression.kind === 'variable') {
+    return symbolTypes.get(expression.name) ?? null;
+  }
+  if (expression.kind === 'unary') {
+    const operand = inferExpressionType(expression.operand, symbolTypes);
+    if (expression.operator === '!') {
+      return operand === 'boolean' ? 'boolean' : null;
+    }
+    return operand === 'number' ? 'number' : null;
+  }
+  const left = inferExpressionType(expression.left, symbolTypes);
+  const right = inferExpressionType(expression.right, symbolTypes);
+  if (['+', '-', '*', '/', '%'].includes(expression.operator)) {
+    return left === 'number' && right === 'number' ? 'number' : null;
+  }
+  if (['<', '<=', '>', '>='].includes(expression.operator)) {
+    return left === 'number' && right === 'number' ? 'boolean' : null;
+  }
+  if (expression.operator === '&&' || expression.operator === '||') {
+    return left === 'boolean' && right === 'boolean' ? 'boolean' : null;
+  }
+  return left !== null && left === right ? 'boolean' : null;
+};
+
 const duplicateIds = <T extends { id: string }>(
   values: readonly T[],
   kind: string,
@@ -334,6 +367,9 @@ const validateTransitionPaths = (
   const diagnostics: ModelDiagnostic[] = [];
   const stateIds = new Set(model.states.map((state) => state.id));
   const junctionIds = new Set(model.junctions.map((junction) => junction.id));
+  const junctionsById = new Map(
+    model.junctions.map((junction) => [junction.id, junction]),
+  );
   const knownIds = new Set([...stateIds, ...junctionIds]);
   const parentByStateId = new Map<string, string | null>();
   for (const layer of model.layers) {
@@ -350,11 +386,32 @@ const validateTransitionPaths = (
 
   const reachesState = (id: string, path: ReadonlySet<string>): boolean => {
     if (stateIds.has(id)) return true;
+    const junction = junctionsById.get(id);
+    if (junction?.type === 'history' || junction?.type === 'deep-history') {
+      return true;
+    }
     if (!junctionIds.has(id) || path.has(id)) return false;
     const nextPath = new Set(path);
     nextPath.add(id);
     return (outgoing.get(id) ?? []).some((item) =>
       reachesState(item.targetId, nextPath));
+  };
+
+  const reachableStateIds = (
+    id: string,
+    path: ReadonlySet<string>,
+  ): Set<string> => {
+    if (stateIds.has(id)) return new Set([id]);
+    if (!junctionIds.has(id) || path.has(id)) return new Set();
+    const nextPath = new Set(path);
+    nextPath.add(id);
+    const reachable = new Set<string>();
+    for (const transition of outgoing.get(id) ?? []) {
+      for (const stateId of reachableStateIds(transition.targetId, nextPath)) {
+        reachable.add(stateId);
+      }
+    }
+    return reachable;
   };
 
   const cycleState = new Map<string, 'visiting' | 'visited'>();
@@ -396,6 +453,31 @@ const validateTransitionPaths = (
 
   for (const transition of model.transitions) {
     if (
+      (transition.type === 'after'
+        || transition.type === 'and'
+        || transition.type === 'or')
+      && transition.afterTicks === null
+    ) {
+      diagnostics.push(diagnostic(
+        'TEMPORAL_THRESHOLD_REQUIRED',
+        `Transition '${transition.id}' requires afterTicks for '${transition.type}' mode.`,
+        transition.id,
+      ));
+    }
+    if (
+      transition.afterTicks !== null
+      && (
+        !Number.isInteger(transition.afterTicks)
+        || transition.afterTicks < 0
+      )
+    ) {
+      diagnostics.push(diagnostic(
+        'TEMPORAL_THRESHOLD_INVALID',
+        `Transition '${transition.id}' has invalid afterTicks '${transition.afterTicks}'.`,
+        transition.id,
+      ));
+    }
+    if (
       !knownIds.has(transition.sourceId)
       || !knownIds.has(transition.targetId)
       || !reachesState(transition.targetId, new Set())
@@ -407,14 +489,44 @@ const validateTransitionPaths = (
       ));
     }
     const isInternal = transition.isInternal === true || transition.type === 'internal';
+    const reachableInternalDestinations = junctionIds.has(transition.targetId)
+      ? reachableStateIds(transition.targetId, new Set())
+      : new Set<string>();
+    const targetJunction = junctionsById.get(transition.targetId);
+    const historyOwnerLayer = targetJunction
+      ? model.layers.find((layer) => layer.junctionIds.includes(targetJunction.id))
+      : undefined;
+    const validHistoryTarget = (
+      targetJunction?.type === 'history'
+      || targetJunction?.type === 'deep-history'
+    ) && historyOwnerLayer?.parentStateId !== null
+      && historyOwnerLayer?.parentStateId !== undefined
+      && (
+        historyOwnerLayer.parentStateId === transition.sourceId
+        || isDescendant(historyOwnerLayer.parentStateId, transition.sourceId)
+      );
+    const validInternalJunctionTarget = junctionIds.has(transition.targetId)
+      && (
+        validHistoryTarget
+        || (
+          reachableInternalDestinations.size > 0
+          && [...reachableInternalDestinations].every((stateId) =>
+            isDescendant(stateId, transition.sourceId))
+        )
+      );
     if (
       isInternal
       && (
         !stateIds.has(transition.sourceId)
-        || !stateIds.has(transition.targetId)
         || (
-          transition.sourceId !== transition.targetId
-          && !isDescendant(transition.targetId, transition.sourceId)
+          !validInternalJunctionTarget
+          && (
+            !stateIds.has(transition.targetId)
+            || (
+              transition.sourceId !== transition.targetId
+              && !isDescendant(transition.targetId, transition.sourceId)
+            )
+          )
         )
       )
     ) {
@@ -425,6 +537,25 @@ const validateTransitionPaths = (
       ));
     }
   }
+  const childLayersByParent = new Map<string, StateMachineLayerV4[]>();
+  for (const layer of model.layers) {
+    if (layer.parentStateId === null) continue;
+    const childLayers = childLayersByParent.get(layer.parentStateId) ?? [];
+    childLayers.push(layer);
+    childLayersByParent.set(layer.parentStateId, childLayers);
+  }
+  const collectStateSubtree = (
+    stateId: string,
+    collected: Set<string>,
+  ): void => {
+    if (collected.has(stateId)) return;
+    collected.add(stateId);
+    for (const childLayer of childLayersByParent.get(stateId) ?? []) {
+      for (const childStateId of childLayer.stateIds) {
+        collectStateSubtree(childStateId, collected);
+      }
+    }
+  };
   for (const layer of model.layers) {
     if (layer.decomposition !== 'OR') continue;
     const defaultJunction = layer.junctionIds
@@ -439,6 +570,20 @@ const validateTransitionPaths = (
         `Default junction '${defaultJunction.id}' does not reach a state.`,
         defaultJunction.id,
       ));
+    }
+    if (defaultJunction) {
+      const allowedStates = new Set<string>();
+      for (const stateId of layer.stateIds) {
+        collectStateSubtree(stateId, allowedStates);
+      }
+      const destinations = reachableStateIds(defaultJunction.id, new Set());
+      if ([...destinations].some((stateId) => !allowedStates.has(stateId))) {
+        diagnostics.push(diagnostic(
+          'OR_DEFAULT_PATH_ESCAPES_CONTAINER',
+          `Default junction '${defaultJunction.id}' leaves OR layer '${layer.id}'.`,
+          defaultJunction.id,
+        ));
+      }
     }
   }
   return diagnostics;
@@ -458,7 +603,10 @@ const validateHistory = (
     if (
       !owner
       || owner.parentStateId === null
-      || junction.parentId !== owner.id
+      || (
+        junction.parentId !== owner.id
+        && junction.parentId !== owner.parentStateId
+      )
     ) {
       diagnostics.push(diagnostic(
         'HISTORY_OWNERSHIP_INVALID',
@@ -484,8 +632,20 @@ const validateMappings = (
     model.hilConfig.channels.map((channel) => [channel.id, channel]),
   );
   const mappingKeys = new Set<string>();
+  const mappingIds = new Set<string>();
+  const variablesById = new Map(
+    model.variables.map((variable) => [variable.id, variable]),
+  );
 
   for (const mapping of model.hilConfig.mappings) {
+    if (mappingIds.has(mapping.id)) {
+      diagnostics.push(diagnostic(
+        'IO_MAPPING_ID_DUPLICATE',
+        `I/O mapping ID '${mapping.id}' is duplicated.`,
+        mapping.id,
+      ));
+    }
+    mappingIds.add(mapping.id);
     const variableId = variables.get(mapping.adiaVarId);
     const key = `${variableId ?? mapping.adiaVarId}:${mapping.direction}`;
     if (mappingKeys.has(key)) {
@@ -518,7 +678,33 @@ const validateMappings = (
 
     if (mapping.conversionExpr?.trim()) {
       try {
-        parseCondition(mapping.conversionExpr, new Set(['x']));
+        const conversion = parseCondition(
+          mapping.conversionExpr,
+          new Set(['x']),
+        );
+        const variable = variablesById.get(variableId);
+        const variableType: SemanticValueType =
+          variable?.type === 'bool' ? 'boolean' : 'number';
+        const channelType: SemanticValueType =
+          channel.dataType === 'bool' ? 'boolean' : 'number';
+        const sourceType = mapping.direction === 'read'
+          ? channelType
+          : variableType;
+        const targetType = mapping.direction === 'read'
+          ? variableType
+          : channelType;
+        if (
+          inferExpressionType(
+            conversion,
+            new Map([['x', sourceType]]),
+          ) !== targetType
+        ) {
+          diagnostics.push(diagnostic(
+            'IO_MAPPING_CONVERSION_TYPE_INVALID',
+            `Mapping '${mapping.id}' conversion output type is incompatible.`,
+            mapping.id,
+          ));
+        }
       } catch (error) {
         diagnostics.push(diagnostic(
           'IO_MAPPING_CONVERSION_INVALID',
@@ -536,7 +722,7 @@ const validateExpressions = (
 ): ModelDiagnostic[] => {
   const diagnostics: ModelDiagnostic[] = [];
   const symbols = new Set<string>();
-  const symbolTypes = new Map<string, 'boolean' | 'number'>();
+  const symbolTypes = new Map<string, SemanticValueType>();
   for (const variable of model.variables) {
     symbols.add(variable.id);
     symbols.add(variable.name);
@@ -545,38 +731,11 @@ const validateExpressions = (
     symbolTypes.set(variable.name, type);
   }
 
-  const expressionType = (
-    expression: ExpressionNode,
-  ): 'boolean' | 'number' | null => {
-    if (expression.kind === 'literal') {
-      return typeof expression.value === 'boolean' ? 'boolean' : 'number';
-    }
-    if (expression.kind === 'variable') {
-      return symbolTypes.get(expression.name) ?? null;
-    }
-    if (expression.kind === 'unary') {
-      const operand = expressionType(expression.operand);
-      if (expression.operator === '!') return operand === 'boolean' ? 'boolean' : null;
-      return operand === 'number' ? 'number' : null;
-    }
-    const left = expressionType(expression.left);
-    const right = expressionType(expression.right);
-    if (['+', '-', '*', '/', '%'].includes(expression.operator)) {
-      return left === 'number' && right === 'number' ? 'number' : null;
-    }
-    if (['<', '<=', '>', '>='].includes(expression.operator)) {
-      return left === 'number' && right === 'number' ? 'boolean' : null;
-    }
-    if (expression.operator === '&&' || expression.operator === '||') {
-      return left === 'boolean' && right === 'boolean' ? 'boolean' : null;
-    }
-    return left !== null && left === right ? 'boolean' : null;
-  };
-
   const actionsHaveValidTypes = (actions: readonly ActionNode[]): boolean =>
     actions.every((action) => {
       const targetType = symbolTypes.get(action.target);
-      return targetType !== undefined && expressionType(action.value) === targetType;
+      return targetType !== undefined
+        && inferExpressionType(action.value, symbolTypes) === targetType;
     });
 
   const validateAction = (source: string, elementId: string): void => {
@@ -606,7 +765,7 @@ const validateExpressions = (
       const parsed = parseInternalTransitions(state.internalTransitions ?? '', symbols);
       if (
         parsed.some((transition) =>
-          expressionType(transition.guard) !== 'boolean'
+          inferExpressionType(transition.guard, symbolTypes) !== 'boolean'
           || !actionsHaveValidTypes(transition.actions))
       ) {
         diagnostics.push(diagnostic(
@@ -648,7 +807,7 @@ const validateExpressions = (
     validateAction(transition.action, transition.id);
     try {
       const guard = parseCondition(transition.condition, symbols);
-      if (expressionType(guard) !== 'boolean') {
+      if (inferExpressionType(guard, symbolTypes) !== 'boolean') {
         diagnostics.push(diagnostic(
           'GUARD_TYPE_INVALID',
           `Guard on '${transition.id}' must be boolean.`,

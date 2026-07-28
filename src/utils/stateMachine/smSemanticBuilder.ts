@@ -152,6 +152,15 @@ const transitionPaths = (
   const targetAncestors = ancestorsFromSelf(targetId, parentByStateId);
   const targetSet = new Set(targetAncestors);
   const lca = sourceAncestors.find((id) => targetSet.has(id)) ?? null;
+  if (kind === 'outer' && lca === sourceId) {
+    const descendants = targetAncestors
+      .slice(0, targetAncestors.indexOf(sourceId))
+      .reverse();
+    return {
+      exitStateIds: [sourceId],
+      entryStateIds: [sourceId, ...descendants],
+    };
+  }
   const exitStateIds = sourceAncestors.slice(
     0,
     lca === null ? sourceAncestors.length : sourceAncestors.indexOf(lca),
@@ -173,8 +182,10 @@ const classifyTransition = (
   parentByStateId: ReadonlyMap<string, string | null>,
 ): SemanticTransition['kind'] => {
   if (isInternal && sourceId === targetId) return 'internal-action';
+  if (isInternal && isDescendant(targetId, sourceId, parentByStateId)) {
+    return 'inner';
+  }
   if (sourceId === targetId) return 'external-self';
-  if (isDescendant(targetId, sourceId, parentByStateId)) return 'inner';
   return 'outer';
 };
 
@@ -225,11 +236,12 @@ export const buildSemanticModel = (
   const activityIndexByStateId = new Map(
     hierarchy.orderedStateIds.map((id, index) => [id, index]),
   );
-  const symbols = new Map<string, string>();
+  const symbols = new Map<string, { id: string; cName: string }>();
   for (const variable of model.variables) {
     const cName = toCIdentifier(variable.name);
-    symbols.set(variable.id, cName);
-    symbols.set(variable.name, cName);
+    const symbol = { id: variable.id, cName };
+    symbols.set(variable.id, symbol);
+    symbols.set(variable.name, symbol);
   }
 
   const states: Record<string, SemanticState> = {};
@@ -328,6 +340,8 @@ export const buildSemanticModel = (
         isInternal,
         hierarchy.parentByStateId,
       )
+      : sourceIsState && isInternal
+        ? 'inner'
       : 'outer';
     const paths = sourceIsState && destinationIsState
       ? transitionPaths(
@@ -354,6 +368,7 @@ export const buildSemanticModel = (
       guard: parseCondition(transition.condition, symbols),
       actions: parseActions(transition.action, symbols),
       ...paths,
+      routes: [],
     };
     transitionsBySource[transition.sourceId].push(transition.id);
   }
@@ -371,11 +386,7 @@ export const buildSemanticModel = (
         destinationStateId: state.id,
         kind: 'internal-action',
         priority: 1000 + index,
-        triggerMode: internal.afterTicks === null
-          ? 'condition'
-          : internal.guard.kind === 'literal' && internal.guard.value === true
-            ? 'after'
-            : 'and',
+        triggerMode: internal.triggerMode,
         afterTicks: internal.afterTicks,
         temporalThresholdMs: internal.afterTicks === null
           ? null
@@ -386,10 +397,77 @@ export const buildSemanticModel = (
         actions: internal.actions,
         exitStateIds: [],
         entryStateIds: [],
+        routes: [],
       };
       transitionsBySource[state.id].push(id);
       states[state.id].internalTransitionIds.push(id);
     });
+  }
+
+  const collectCompleteRoutes = (
+    rootTransition: SemanticTransition,
+    transitionId: string,
+    path: string[],
+    visitedJunctions: ReadonlySet<string>,
+  ): SemanticTransition['routes'] => {
+    const transition = transitions[transitionId];
+    const transitionIds = [...path, transitionId];
+    if (transition.destinationKind === 'state') {
+      const routePaths = transitionPaths(
+        rootTransition.sourceStateId,
+        transition.destinationStateId,
+        rootTransition.kind,
+        hierarchy.parentByStateId,
+      );
+      return [{
+        transitionIds,
+        destinationKind: 'state',
+        destinationStateId: transition.destinationStateId,
+        destinationJunctionId: null,
+        ...routePaths,
+      }];
+    }
+    const destinationJunction = model.junctions.find(
+      (junction) => junction.id === transition.destinationStateId,
+    );
+    if (
+      destinationJunction?.type === 'history'
+      || destinationJunction?.type === 'deep-history'
+    ) {
+      return [{
+        transitionIds,
+        destinationKind: 'history',
+        destinationStateId: null,
+        destinationJunctionId: destinationJunction.id,
+        exitStateIds: [],
+        entryStateIds: [],
+      }];
+    }
+    if (visitedJunctions.has(transition.destinationStateId)) return [];
+    const nextVisited = new Set(visitedJunctions);
+    nextVisited.add(transition.destinationStateId);
+    return (transitionsBySource[transition.destinationStateId] ?? [])
+      .flatMap((nextTransitionId) =>
+        collectCompleteRoutes(
+          rootTransition,
+          nextTransitionId,
+          transitionIds,
+          nextVisited,
+        ));
+  };
+
+  for (const transition of Object.values(transitions)) {
+    if (transition.sourceKind !== 'state') continue;
+    transition.routes = collectCompleteRoutes(
+      transition,
+      transition.id,
+      [],
+      new Set(),
+    );
+    if (transition.destinationKind === 'junction' && transition.routes.length === 1) {
+      transition.exitStateIds = [...transition.routes[0].exitStateIds];
+      transition.entryStateIds = [...transition.routes[0].entryStateIds];
+    }
   }
 
   const junctionLayer = new Map<string, string>();
