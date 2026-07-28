@@ -34,6 +34,17 @@ import {
 } from './types/sm_types';
 import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineClipboardData } from './utils/stateMachineClipboard';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
+import {
+  applyMappedInputs,
+  createAppSimulationSession,
+  createFactoryIOMappings,
+  readMappedOutputs,
+  traceFrameToAppUpdate,
+  type AppSimulationSession,
+  type AppSimulationValue,
+} from './utils/stateMachine/smAppAdapter';
+import { resetRuntime, stepRuntime } from './utils/stateMachine/smInterpreter';
+import type { SemanticTraceFrame } from './utils/stateMachine/smTrace';
 import { analyzeStateMachine } from './utils/smAnalysisEngine';
 import { HELP_DATA } from './HelpData';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
@@ -6852,10 +6863,10 @@ const ADIA = () => {
 
   // Simulation state
   const [activeStates, setActiveStates] = useState<Record<string, string>>({});
-  const [lastActiveStates, setLastActiveStates] = useState<Record<string, string>>({});
   const [stateTimers, setStateTimers] = useState<Record<string, number>>({});
   const [traceHistory, setTraceHistory] = useState<Array<{ time: number; event: string; group: string; state: string; transition: string; transitionId?: string }>>([]);
   const [firedTransitions, setFiredTransitions] = useState<Record<string, number>>({});
+  const simulationSessionRef = useRef<AppSimulationSession | null>(null);
 
   // Code generation state
   const [showCodegenDialog, setShowCodegenDialog] = useState(false);
@@ -8424,7 +8435,6 @@ const ADIA = () => {
       ...v,
       currentValue: parseValue(v.type, v.initialValue)
     })));
-    setLastActiveStates({});
     setStateTimers({});
     setSimulationTime(0);
     setScopeData([]);
@@ -8981,806 +8991,334 @@ const ADIA = () => {
     );
   }, [states, variables, junctions, layers, currentLayerId, addError, setStates, setVariables, setTransitions, setBlocks, setFactors, setHeaders, setActiveModel, calculateRSM, calculateGMDH, calculateTaguchi, handleExportToXBridges, handleExportToVLab]);
 
-  const resolveAutoStart = useCallback((layerId: string, context: any, runActions: boolean = true): string | undefined => {
-    const layer = layers.find(l => l.id === layerId);
-    if (!layer) return undefined;
+  const createSimulationSession = useCallback((): AppSimulationSession => (
+    createAppSimulationSession({
+      tickMs,
+      states,
+      junctions,
+      transitions,
+      variables,
+      layers,
+      safetyMode,
+      hilConfig
+    }, factoryIOEnabled ? createFactoryIOMappings(factoryIOMapping) : [])
+  ), [
+    tickMs, states, junctions, transitions, variables, layers,
+    safetyMode, hilConfig, factoryIOEnabled, factoryIOMapping
+  ]);
 
-    const autoState = states.find(s => layer.stateIds.includes(s.id) && s.autostart);
-    if (autoState) return autoState.id;
-
-    const autoJunc = junctions.find(j => layer.junctionIds.includes(j.id) && j.autostart);
-    if (autoJunc) {
-      let currentNode: JunctionData | StateData | undefined = autoJunc;
-      const visited = new Set<string>();
-      let pathActions: string[] = [];
-
-      while (currentNode && !states.find(s => s.id === currentNode!.id)) {
-        if (visited.has(currentNode.id)) break; // Cycle
-        visited.add(currentNode.id);
-
-        const outgoing = transitions
-          .filter(t => t.sourceId === currentNode!.id)
-          .sort((a, b) => a.order - b.order);
-
-        let found = false;
-        for (const tr of outgoing) {
-          let conditionMet = true;
-          if (tr.condition && tr.condition !== 'true') {
-            try {
-              let jsCondition = tr.condition
-                .replace(/&&/g, '&&')
-                .replace(/\|\|/g, '||')
-                .replace(/!/g, '!')
-                .replace(/==/g, '===')
-                .replace(/!=/g, '!==');
-              const func = safeCreateFunction(['context'], `with(context) { return (${jsCondition}); }`);
-              conditionMet = !!func(context);
-            } catch (e) {
-              conditionMet = false;
-            }
-          }
-          if (conditionMet) {
-            if (runActions && tr.action) pathActions.push(tr.action);
-            currentNode = states.find(s => s.id === tr.targetId) || junctions.find(j => j.id === tr.targetId);
-            found = true;
-            break;
-          }
-        }
-        if (!found) break; // Dead end
-      }
-      if (currentNode && states.find(s => s.id === currentNode!.id)) {
-        if (runActions) {
-          pathActions.forEach(act => {
-            try {
-              const func = safeCreateFunction(['context'], `with(context) { ${act} }`);
-              func(context);
-            } catch (e) { }
-          });
-        }
-        return currentNode.id;
-      }
-    }
-    return undefined;
-  }, [layers, states, junctions, transitions]);
-
-  // FACTORY I/O SYNC LOGIC
-  const syncFactoryIO = useCallback(async (currentVars: VariableDef[]) => {
-    if (!factoryIOEnabled || !(window as any).require) return currentVars;
+  const readFactoryInputs = useCallback(async (): Promise<Record<string, AppSimulationValue>> => {
+    if (!factoryIOEnabled || !(window as any).require) return {};
 
     try {
       const { ipcRenderer } = (window as any).require('electron');
-      
-      // 1. Prepare Actuator data to send
-      const actuatorsToSend = factoryIOMapping
-        .filter(m => m.type === 'actuator')
-        .map(m => {
-          const v = currentVars.find(cv => cv.id === m.adiaVarId);
-          let val = v ? v.currentValue : 0;
-          if (v && v.type === 'bool') {
-            val = Boolean(val);
-          }
-          return { id: m.factoryTagId, value: val };
-        });
-
-      // 2. Sync with Backend
-      const tags = await ipcRenderer.invoke('sync-factory-io', { actuators: actuatorsToSend });
-
-      if (tags && !tags.error) {
-        setFactoryIOStatus('connected');
-        // 3. Update ADIA variables from Sensors
-        const nextVars = [...currentVars];
-        let changed = false;
-
-        factoryIOMapping
-          .filter(m => m.type === 'sensor')
-          .forEach(m => {
-            const tag = (tags as any[]).find(t => t.id === m.factoryTagId);
-            if (tag) {
-              const varIdx = nextVars.findIndex(v => v.id === m.adiaVarId);
-              if (varIdx !== -1 && nextVars[varIdx].currentValue !== tag.value) {
-                nextVars[varIdx] = { ...nextVars[varIdx], currentValue: tag.value };
-                changed = true;
-              }
-            }
-          });
-
-        if (changed) setVariables(nextVars);
-        return nextVars;
-      } else {
+      const tags = await ipcRenderer.invoke('sync-factory-io', { actuators: [] });
+      if (!Array.isArray(tags)) {
         setFactoryIOStatus('error');
+        return {};
       }
-    } catch (e) {
+
+      const inputs: Record<string, AppSimulationValue> = {};
+      for (const mapping of factoryIOMapping) {
+        if (mapping.type !== 'sensor') continue;
+        const tag = tags.find((item: any) => String(item.id) === String(mapping.factoryTagId));
+        if (!tag) continue;
+        inputs[String(mapping.factoryTagId)] = typeof tag.value === 'boolean'
+          ? tag.value
+          : Number(tag.value);
+      }
+      setFactoryIOStatus('connected');
+      return inputs;
+    } catch {
       setFactoryIOStatus('error');
+      return {};
     }
-    return currentVars;
   }, [factoryIOEnabled, factoryIOMapping]);
 
-  // SIMULATION (FULLY FUNCTIONAL)
-  const simulationStep = useCallback(async () => {
-    // 0. Factory I/O Pre-sync (Read Sensors)
-    let currentVars = [...variables];
-    if (factoryIOEnabled) {
-      currentVars = await syncFactoryIO(currentVars);
+  const writeFactoryOutputs = useCallback(async (
+    outputValues: Readonly<Record<string, AppSimulationValue>>
+  ): Promise<void> => {
+    if (!factoryIOEnabled || !(window as any).require) return;
+
+    try {
+      const { ipcRenderer } = (window as any).require('electron');
+      const actuators = factoryIOMapping
+        .filter(mapping => mapping.type === 'actuator')
+        .map(mapping => ({
+          id: mapping.factoryTagId,
+          value: outputValues[String(mapping.factoryTagId)]
+        }))
+        .filter(item => item.value !== undefined);
+      const result = await ipcRenderer.invoke('sync-factory-io', { actuators });
+      setFactoryIOStatus(result?.error ? 'error' : 'connected');
+    } catch {
+      setFactoryIOStatus('error');
     }
+  }, [factoryIOEnabled, factoryIOMapping]);
 
-    // 1. Advance time
-    const newTime = simulationTime + tickMs / 1000;
-    setSimulationTime(newTime);
+  const applySimulationFrameToReact = useCallback((
+    session: AppSimulationSession,
+    frame: SemanticTraceFrame,
+    timeSeconds: number,
+    sampleScope: boolean
+  ) => {
+    const update = traceFrameToAppUpdate(frame, session.ir);
+    const activeIds = new Set(Object.values(update.activeStates));
 
-    // 2. Create working context from current variables
-    const workingContext = currentVars.reduce((acc, v) => {
-      acc[v.name] = v.currentValue;
-      return acc;
-    }, {} as Record<string, any>);
-
-    // 3. Update state timers
-    const nextStateTimers = { ...stateTimers };
-    Object.values(activeStates).forEach(stateId => {
-      if (!stateId) return;
-      nextStateTimers[stateId] = (nextStateTimers[stateId] || 0) + 1;
-    });
-
-    let variablesChanged = false;
-    const newActiveStates = { ...activeStates };
-    const stepFiredTransitions: Record<string, number> = {};
-    // Helper to execute code
-    const executeAction = (code: string, context: any, location: string) => {
-      if (!code || !code.trim()) return;
-      try {
-        const func = safeCreateFunction(['context'], `with(context) { ${code} }`);
-        func(context);
-        variablesChanged = true;
-      } catch (e: any) {
-        let message = `Action error in ${location}: ${e.message}`;
-        if (e instanceof ReferenceError) {
-          message += `\n\nTip: Make sure all variables used in actions are defined in the 'Variables' workspace. Variable names are case-sensitive.`;
-        } else if (e instanceof SyntaxError) {
-          message += `\n\nTip: Check for syntax errors in your action code, like mismatched brackets or invalid statements.`;
-        }
-        addError('error', message, 'Simulation');
+    setVariables(prev => prev.map(variable => {
+      if (!Object.prototype.hasOwnProperty.call(update.variableValues, variable.id)) {
+        return variable;
       }
-    };
-
-    // Helper to evaluate condition
-    const evaluateCondition = (condition: string, context: any, location: string): boolean => {
-      if (condition === 'true' || condition === '') return true;
-      try {
-        let jsCondition = condition
-          .replace(/&&/g, '&&')
-          .replace(/\|\|/g, '||')
-          .replace(/!/g, '!')
-          .replace(/==/g, '===')
-          .replace(/!=/g, '!==');
-
-        const func = safeCreateFunction(['context'], `with(context) { return (${jsCondition}); }`);
-        return !!func(context);
-      } catch (e: any) {
-        let message = `Condition error in ${location}: ${e.message}`;
-        if (e instanceof ReferenceError) {
-          message += `\n\nTip: Make sure all variables used in conditions are defined in the 'Variables' workspace. Variable names are case-sensitive.`;
-        } else if (e instanceof SyntaxError) {
-          message += `\n\nTip: Check for syntax errors in your condition, like mismatched parentheses or invalid operators. Use '==' for comparison.`;
-        }
-        addError('error', message, 'Simulation');
-        return false;
-      }
-    };
-
-    // Helper to get node data
-    const getNode = (id: string) => states.find(s => s.id === id) || junctions.find(j => j.id === id);
-
-    // REQ-HSM-030: Recursive entry
-    const enterState = (stateId: string, activeMap: Record<string, string>, fromHistory: 'deep' | 'shallow' | false = false) => {
-      const s = states.find(st => st.id === stateId);
-      if (!s) return;
-
-      const layerId = s.parentId || 'root';
-      const siblingStates = states.filter(st => (st.parentId || 'root') === layerId);
-      const isParallelLayer = siblingStates.length > 0 && siblingStates.every(st => st.isParallel);
-
-      if (isParallelLayer) {
-        activeMap[layerId + '_' + s.id] = s.id;
-      } else {
-        activeMap[layerId] = s.id;
-      }
-      nextStateTimers[s.id] = 0;
-      executeAction(s.entry, workingContext, `Entry ${s.name}`);
-
-      // Check for sub-layer AutoStart
-      const childLayer = layers.find(l => l.parentStateId === s.id);
-      if (childLayer) {
-        const childStates = states.filter(st => childLayer.stateIds.includes(st.id));
-        const allParallel = childStates.length > 0 && childStates.every(st => st.isParallel);
-        if (allParallel) {
-          const regionsMap = new Map<string, StateData[]>();
-          childStates.forEach(cs => {
-            const rId = cs.regionId || 'MAIN';
-            if (!regionsMap.has(rId)) regionsMap.set(rId, []);
-            regionsMap.get(rId)!.push(cs);
-          });
-
-          regionsMap.forEach(groupStates => {
-            const autostarts = groupStates.filter(st => st.autostart).sort((a, b) => a.priority - b.priority);
-            const statesToEnter = autostarts.length > 0 ? autostarts : [...groupStates].sort((a, b) => a.priority - b.priority);
-            if (statesToEnter.length > 0) {
-              enterState(statesToEnter[0].id, activeMap, fromHistory ? 'deep' : false);
-            }
-          });
-        } else {
-          let childToEnterId: string | undefined;
-          if (fromHistory === 'deep') {
-            childToEnterId = lastActiveStates[childLayer.id];
-          }
-
-          if (childToEnterId) {
-            enterState(childToEnterId, activeMap, 'deep');
-          } else {
-            const targetId = resolveAutoStart(childLayer.id, workingContext, true);
-            if (targetId) enterState(targetId, activeMap, false);
-          }
-        }
-      }
-    };
-
-    // Recursive exit
-    const exitState = (stateId: string, activeMap: Record<string, string>) => {
-      const s = states.find(st => st.id === stateId);
-      if (!s) return;
-
-      const layerId = s.parentId || 'root';
-      setLastActiveStates(prev => ({ ...prev, [layerId]: s.id }));
-
-      const childLayer = layers.find(l => l.parentStateId === s.id);
-      if (childLayer) {
-        const childStates = states.filter(st => childLayer.stateIds.includes(st.id));
-        const allParallel = childStates.length > 0 && childStates.every(st => st.isParallel);
-        if (allParallel) {
-          childStates.forEach(child => {
-            const activeKey = childLayer.id + '_' + child.id;
-            if (activeMap[activeKey]) {
-              exitState(child.id, activeMap);
-            }
-          });
-        } else {
-          const activeChildId = activeMap[childLayer.id];
-          if (activeChildId) exitState(activeChildId, activeMap);
-          delete activeMap[childLayer.id];
-        }
-      }
-      executeAction(s.exit, workingContext, `Exit ${s.name}`);
-      if (s.isXBridges) {
-        xBridgesEnginesRef.current.delete(stateId);
-      }
-
-      const siblingStates = states.filter(st => (st.parentId || 'root') === layerId);
-      const isParallelLayer = siblingStates.length > 0 && siblingStates.every(st => st.isParallel);
-      if (isParallelLayer) {
-        delete activeMap[layerId + '_' + s.id];
-      } else {
-        delete activeMap[layerId];
-      }
-    };
-
-    // 4. Process Transitions (Per Region)
-    const regions = Object.keys(activeStates);
-
-    // Failsafe: If no states active, try autostart
-    if (regions.length === 0) {
-      const rootStates = states.filter(s => !s.parentId || s.parentId === 'root');
-      const rootParallel = rootStates.length > 0 && rootStates.every(s => s.isParallel);
-      if (rootParallel) {
-        const autostartParallelStates = rootStates.filter(s => s.autostart).sort((a, b) => a.priority - b.priority);
-        const statesToEnter = autostartParallelStates.length > 0 ? autostartParallelStates : rootStates.sort((a, b) => a.priority - b.priority);
-        statesToEnter.forEach(s => enterState(s.id, newActiveStates));
-      } else {
-        const autoStarts = states.filter(s => s.autostart && (!s.parentId || s.parentId === 'root'));
-        if (autoStarts.length > 0) {
-          autoStarts.forEach(s => enterState(s.id, newActiveStates));
-        } else if (states.length > 0) {
-          const roots = states.filter(s => !s.parentId || s.parentId === 'root');
-          if (roots.length > 0) enterState(roots[0].id, newActiveStates);
-        }
-      }
-    }
-
-    // Iterate regions to handle transitions (priority sorted)
-    const sortedRegions = Object.keys(newActiveStates).sort((a, b) => {
-      const stateA = states.find(s => s.id === newActiveStates[a]);
-      const stateB = states.find(s => s.id === newActiveStates[b]);
-      const priorityA = stateA ? stateA.priority : 0;
-      const priorityB = stateB ? stateB.priority : 0;
-      return priorityA - priorityB;
-    });
-    const firedRegions = new Set<string>();
-    let transitionFired = false;
-    for (const region of sortedRegions) {
-      const currentStateId = newActiveStates[region];
-
-      const currentState = states.find(s => s.id === currentStateId);
-
-      if (!currentState) continue;
-
-      // Find potential transitions from current state
-      const potentialTransitions = transitions
-        .filter(t => t.sourceId === currentStateId)
-        .sort((a, b) => a.order - b.order);
-
-      // Add internal transitions to potential list (Lower priority than external to allow exit)
-      if (currentState.internalTransitions) {
-        const internalLines = currentState.internalTransitions.split('\n').filter(l => l.trim());
-        internalLines.forEach((line, idx) => {
-          let type: any = 'condition';
-          let condition = 'true';
-          let afterTicks: number | null = null;
-          let action = '';
-          const parts = line.split('/');
-          if (parts.length > 1) action = parts.slice(1).join('/').trim();
-          const triggerPart = parts[0].trim();
-          const afterMatch = triggerPart.match(/after\((\d+)\)/);
-          const condMatch = triggerPart.match(/\[(.*?)\]/);
-          if (triggerPart.includes('&&')) type = 'and';
-          else if (triggerPart.includes('||')) type = 'or';
-          else if (afterMatch) type = 'after';
-          if (afterMatch) afterTicks = parseInt(afterMatch[1]);
-          if (condMatch) condition = condMatch[1];
-
-          potentialTransitions.push({
-            id: `INT_${currentState.id}_${idx}`, sourceId: currentState.id, targetId: currentState.id,
-            condition, action, type, afterTicks, hasControlPoint: false, order: 1000 + idx, isInternal: true
-          } as any);
-        });
-      }
-
-      for (const transition of potentialTransitions) {
-        // Check triggers
-        const currentTicks = nextStateTimers[currentStateId] || 0;
-        const conditionMet = evaluateCondition(transition.condition, workingContext, `Transition from ${currentState.name}`);
-        const timerMet = transition.afterTicks !== null && currentTicks >= transition.afterTicks;
-
-        let shouldFire = false;
-        switch (transition.type) {
-          case 'condition': shouldFire = conditionMet; break;
-          case 'after': shouldFire = timerMet; break;
-          case 'and': shouldFire = conditionMet && timerMet; break;
-          case 'or': shouldFire = conditionMet || timerMet; break;
-        }
-
-        if (shouldFire) {
-          firedRegions.add(region);
-          // Traverse path (handle junctions)
-          let currentTr = transition;
-          let targetNode = getNode(currentTr.targetId);
-          let pathActions = [currentTr.action];
-          let isValidPath = true;
-          let isLocalPath = !!transition.isInternal || (transition as any).id?.startsWith('INT_');
-          const visited = new Set<string>();
-          let pathTerminatedAtJunction = false;
-          while (targetNode && !states.find(s => s.id === (targetNode as StateData | JunctionData).id)) {
-            if (targetNode && visited.has(targetNode.id)) {
-              // Cycle
-              // Dead end junction. Execute actions on the path and terminate the step for this region.
-              pathActions.forEach(act => executeAction(act, workingContext, 'Action Path'));
-              transitionFired = true;
-              setTraceHistory(prev => [...prev, {
-                time: newTime,
-                event: 'Action Path',
-                group: region,
-                state: currentState.name,
-                transition: `Ended at ${targetNode!.name}`,
-                transitionId: transition.id
-              }].slice(-200));
-              break;
-            }
-            visited.add(targetNode.id);
-
-            const currentNode = targetNode as JunctionData;
-
-            // Find outgoing from junction
-            const junctionTransitions = transitions
-              .filter(t => t.sourceId === currentNode.id)
-              .sort((a, b) => a.order - b.order);
-
-            let foundNext = false;
-            for (const jTr of junctionTransitions) {
-              if (evaluateCondition(jTr.condition, workingContext, `Junction '${currentNode.name}'`)) {
-                currentTr = jTr;
-                targetNode = getNode(jTr.targetId);
-                pathActions.push(jTr.action);
-                foundNext = true;
-
-                break;
-              }
-            }
-
-            if (!foundNext) {
-              pathActions.forEach(act => executeAction(act, workingContext, 'Action Path'));
-              transitionFired = true;
-              stepFiredTransitions[transition.id] = Date.now();
-
-              setTraceHistory(prev => [...prev, {
-                time: newTime,
-                event: 'Action Path',
-                group: region,
-                state: currentState.name,
-                transition: `Ended at ${currentNode.name}`,
-                transitionId: transition.id
-              }].slice(-200));
-
-              targetNode = undefined;
-              pathTerminatedAtJunction = true;
-              break;
-            }
-          }
-
-          if (pathTerminatedAtJunction) {
-            break;
-          } else if (transitionFired) {
-            break;
-          } else if (isValidPath && targetNode) {
-
-            const targetState = targetNode as StateData;
-
-            if (isLocalPath) {
-              pathActions.forEach(act => executeAction(act, workingContext, 'Local Transition Action'));
-              if (targetState.id !== currentState.id) {
-                newActiveStates[region] = targetState.id;
-                nextStateTimers[targetState.id] = 0;
-              }
-            } else {
-              const srcId = currentState.id;
-              const dstId = targetState.id;
-
-              const getAncestors = (id: string): string[] => {
-                const ancestors: string[] = [];
-                let currId = id;
-                while (currId) {
-                  const st = states.find(s => s.id === currId);
-                  if (!st) break;
-                  if (st.parentId && st.parentId !== 'root') {
-                    ancestors.push(st.parentId);
-                    currId = st.parentId;
-                  } else {
-                    break;
-                  }
-                }
-                return ancestors;
-              };
-
-              const findLCA = (id1: string | null, id2: string | null): string | null => {
-                if (!id1 || !id2) return null;
-                const anc1 = [id1, ...getAncestors(id1)];
-                const anc2 = [id2, ...getAncestors(id2)];
-                for (const a1 of anc1) {
-                  if (anc2.includes(a1)) return a1;
-                }
-                return null;
-              };
-
-              const lca = findLCA(srcId, dstId);
-
-              // Calculate exit sequence (from srcId up to LCA)
-              const exitSeq: string[] = [];
-              let curr: string | null = srcId;
-              while (curr && curr !== lca) {
-                exitSeq.push(curr);
-                const st = states.find(s => s.id === curr);
-                curr = st?.parentId && st.parentId !== 'root' ? st.parentId : null;
-              }
-
-              // Calculate entry sequence (from LCA down to dstId)
-              const entrySeq: string[] = [];
-              curr = dstId;
-              while (curr && curr !== lca) {
-                entrySeq.unshift(curr);
-                const st = states.find(s => s.id === curr);
-                curr = st?.parentId && st.parentId !== 'root' ? st.parentId : null;
-              }
-
-              // Exit states in sequence
-              exitSeq.forEach(sid => exitState(sid, newActiveStates));
-
-              // Run actions
-              pathActions.forEach(act => executeAction(act, workingContext, 'Transition Action'));
-
-              // Enter states in sequence
-              entrySeq.forEach(sid => enterState(sid, newActiveStates));
-            }
-
-            transitionFired = true;
-
-
-            setTraceHistory(prev => [...prev, {
-              time: newTime,
-              event: 'Transition',
-              group: region,
-              state: targetState.name,
-              transition: `${currentState.name} -> ${targetState.name}`,
-              transitionId: transition.id
-            }].slice(-200));
-
-
-          } else if (isValidPath && !targetNode) {
-            break;
-          }
-        }
-      }
-    }
-
-    // 5. Process During Actions & X-Bridges Sub-Models
-    const sortedDuringStates = Object.keys(newActiveStates)
-      .filter(region => !firedRegions.has(region))
-      .map(region => states.find(s => s.id === newActiveStates[region]))
-      .filter((s): s is StateData => !!s)
-      .sort((a, b) => a.priority - b.priority);
-
-    sortedDuringStates.forEach(state => {
-      const stateId = state.id;
-
-      // Regular During Action
-      if (state.during) {
-        executeAction(state.during, workingContext, `During ${state.name}`);
-      }
-
-      // X-Bridges Co-Simulation
-      if (state.isXBridges && state.xBridgesModel) {
-        const xBridgesModel = state.xBridgesModel;
-        let engine = xBridgesEnginesRef.current.get(stateId);
-        if (!engine) {
-          const model = {
-            blocks: xBridgesModel.nodes.map(n => {
-              const d = n.data as any;
-              if (XBRIDGES_LIBRARY[d.type]) {
-                try {
-                  let freshParams = { ...d.params };
-                  if (d.type === 'FUZZY_SURFACE_VIEWER' && typeof d.params.fisConfig === 'string') {
-                    const targetNode = xBridgesModel.nodes.find(x => x.id === d.params.fisConfig);
-                    if (targetNode && targetNode.data.type === 'FUZZY_INFERENCE_SYSTEM') {
-                      freshParams.fisConfig = targetNode.data.params;
-                    } else {
-                      freshParams.fisConfig = null;
-                    }
-                  }
-                  const freshBlock = XBRIDGES_LIBRARY[d.type](d.id, freshParams || {});
-                  return { 
-                    ...freshBlock, 
-                    id: d.id, 
-                    state: d.state || freshBlock.state, 
-                    params: { ...freshBlock.params, ...freshParams } 
-                  };
-                } catch (e) {
-                  return d;
-                }
-              }
-              return d;
-            }),
-            connections: state.xBridgesModel.edges.map(e => ({
-              sourceBlock: e.source, sourcePort: e.sourceHandle!, targetBlock: e.target, targetPort: e.targetHandle!
-            }))
-          };
-          engine = new XbridgesEngine(model);
-          try {
-            engine.compile();
-            xBridgesEnginesRef.current.set(stateId, engine);
-          } catch (err: any) {
-            addError('error', `Failed to compile X-Bridges sub-model in state ${state.name}: ${err.message}`, 'Simulation');
-          }
-        }
-
-        if (engine) {
-          // Sync SM -> Block
-          // 1. Explicit mappings
-          if (state.xBridgesModel.mappings) {
-            state.xBridgesModel.mappings.forEach(map => {
-              if (map.direction === 'in' && map.smVarId && map.blockId && map.portId) {
-                const smVar = variables.find(v => v.id === map.smVarId);
-                if (smVar) {
-                  const val = smVar.name in workingContext ? workingContext[smVar.name] : smVar.currentValue;
-                  const numericVal = Number(val);
-                  engine!.setSignalValue(map.blockId, map.portId, numericVal);
-                  const block = engine!['blockMap'].get(map.blockId);
-                  if (block && block.params) block.params.value = numericVal;
-                }
-              }
-            });
-          }
-          // 2. Direct block parameters (Inports)
-          state.xBridgesModel.nodes.forEach(node => {
-            if (node.data.type === 'Inport' && node.data.params.smVarId) {
-              const smVar = variables.find(v => v.id === node.data.params.smVarId);
-              if (smVar) {
-                const val = smVar.name in workingContext ? workingContext[smVar.name] : smVar.currentValue;
-                const numericVal = Number(val);
-                engine!.setSignalValue(node.id, 'out', numericVal);
-                const block = engine!['blockMap'].get(node.id);
-                if (block && block.params) block.params.value = numericVal;
-              }
-            }
-          });
-
-          // Step X-Bridges
-          try {
-            Solvers.stepRK4(engine, simulationTime, tickMs / 1000);
-          } catch (err: any) {
-            addError('error', `X-Bridges simulation error in state ${state.name}: ${err.message}`, 'Simulation');
-          }
-
-          // Sync Block -> SM
-          // 1. Explicit mappings
-          if (state.xBridgesModel.mappings) {
-            state.xBridgesModel.mappings.forEach(map => {
-              if (map.direction === 'out' && map.smVarId && map.blockId && map.portId) {
-                const smVar = variables.find(v => v.id === map.smVarId);
-                if (smVar) {
-                  const blockVal = engine!.getSignalValue(map.blockId, map.portId);
-                  workingContext[smVar.name] = blockVal;
-                  variablesChanged = true;
-                }
-              }
-            });
-          }
-          // 2. Direct block parameters (Outports)
-          state.xBridgesModel.nodes.forEach(node => {
-            if (node.data.type === 'Outport' && node.data.params.smVarId) {
-              const smVar = variables.find(v => v.id === node.data.params.smVarId);
-              if (smVar) {
-                const val = engine!.getSignalValue(node.id, 'in');
-                if (val !== undefined) {
-                  workingContext[smVar.name] = val;
-                  variablesChanged = true;
-                }
-              }
-            }
-          });
-        }
-      }
-    });
-
-    // 6. Update React State
-    if (variablesChanged) {
-      setVariables(prev => prev.map(v => {
-        if (v.name in workingContext && workingContext[v.name] !== v.currentValue) {
-          return { ...v, currentValue: workingContext[v.name] };
-        }
-        return v;
-      }));
-    }
-
-    setActiveStates(newActiveStates);
-    setStateTimers(nextStateTimers);
-    setFiredTransitions(stepFiredTransitions);
-
-    // Update visual active state
-    setStates(prev => prev.map(s => ({
-      ...s,
-      isActive: Object.values(newActiveStates).includes(s.id)
+      const currentValue = update.variableValues[variable.id];
+      return currentValue === variable.currentValue
+        ? variable
+        : { ...variable, currentValue };
+    }));
+    setActiveStates({ ...update.activeStates });
+    setStateTimers({ ...update.stateTimers });
+    setFiredTransitions({ ...update.firedTransitions });
+    setStates(prev => prev.map(state => ({
+      ...state,
+      isActive: activeIds.has(state.id)
     })));
 
-    // 7. Scope Sampling
-    if (!sampleOnTransitionOnly || transitionFired) {
-      const dataPoint: ScopeDataPoint = { time: newTime };
-      variables.forEach(v => {
-        if (v.visibleInScope) {
-          const val = v.name in workingContext ? workingContext[v.name] : v.currentValue;
-          dataPoint[v.name] = typeof val === 'boolean' ? (val ? 1 : 0) : Number(val);
-        }
-      });
-      setScopeData(prev => {
-        const newData = [...prev, dataPoint];
-        return newData.length > SCOPE_MAX_POINTS ? newData.slice(-SCOPE_MAX_POINTS) : newData;
-      });
+    if (update.traceEvents.length > 0) {
+      setTraceHistory(prev => [
+        ...prev,
+        ...update.traceEvents.map(event => {
+          const transition = session.ir.transitions[event.transitionId];
+          const source = transition
+            ? states.find(state => state.id === transition.sourceStateId)
+            : undefined;
+          const target = transition
+            ? states.find(state => state.id === transition.destinationStateId)
+            : undefined;
+          return {
+            ...event,
+            time: timeSeconds,
+            state: target?.name || event.state,
+            transition: source && target
+              ? source.name + ' -> ' + target.name
+              : event.transition
+          };
+        })
+      ].slice(-200));
     }
 
-    // 8. Factory I/O Post-sync (Write Actuators)
-    // REMOVED: Combined into the start of the next tick for efficiency
-  }, [states, junctions, transitions, variables, activeStates, stateTimers, simulationTime, tickMs, sampleOnTransitionOnly, addError, layers, resolveAutoStart, factoryIOEnabled, syncFactoryIO]);
+    if (sampleScope && (!sampleOnTransitionOnly || update.traceEvents.length > 0)) {
+      const dataPoint: ScopeDataPoint = { time: timeSeconds };
+      variables.forEach(variable => {
+        if (!variable.visibleInScope) return;
+        const value = update.variableValues[variable.id] ?? variable.currentValue;
+        dataPoint[variable.name] = typeof value === 'boolean'
+          ? (value ? 1 : 0)
+          : Number(value);
+      });
+      setScopeData(prev => {
+        const next = [...prev, dataPoint];
+        return next.length > SCOPE_MAX_POINTS
+          ? next.slice(-SCOPE_MAX_POINTS)
+          : next;
+      });
+    }
+  }, [sampleOnTransitionOnly, states, variables]);
 
+  const stepActiveXBridgesModels = useCallback((
+    session: AppSimulationSession,
+    activeStateIds: readonly string[],
+    timeSeconds: number
+  ) => {
+    const activeIds = new Set(activeStateIds);
+    for (const stateId of xBridgesEnginesRef.current.keys()) {
+      if (!activeIds.has(stateId)) xBridgesEnginesRef.current.delete(stateId);
+    }
+
+    const activeXBridgesStates = activeStateIds
+      .map(stateId => states.find(state => state.id === stateId))
+      .filter((state): state is StateData => !!state?.isXBridges && !!state.xBridgesModel)
+      .sort((left, right) => left.priority - right.priority);
+
+    activeXBridgesStates.forEach(state => {
+      const xBridgesModel = state.xBridgesModel!;
+      let engine = xBridgesEnginesRef.current.get(state.id);
+      if (!engine) {
+        const model = {
+          blocks: xBridgesModel.nodes.map(node => {
+            const data = node.data as any;
+            if (!XBRIDGES_LIBRARY[data.type]) return data;
+            try {
+              const params = { ...data.params };
+              if (
+                data.type === 'FUZZY_SURFACE_VIEWER'
+                && typeof data.params.fisConfig === 'string'
+              ) {
+                const targetNode = xBridgesModel.nodes.find(
+                  candidate => candidate.id === data.params.fisConfig
+                );
+                params.fisConfig = targetNode?.data.type === 'FUZZY_INFERENCE_SYSTEM'
+                  ? targetNode.data.params
+                  : null;
+              }
+              const freshBlock = XBRIDGES_LIBRARY[data.type](data.id, params);
+              return {
+                ...freshBlock,
+                id: data.id,
+                state: data.state || freshBlock.state,
+                params: { ...freshBlock.params, ...params }
+              };
+            } catch {
+              return data;
+            }
+          }),
+          connections: xBridgesModel.edges.map(edge => ({
+            sourceBlock: edge.source,
+            sourcePort: edge.sourceHandle!,
+            targetBlock: edge.target,
+            targetPort: edge.targetHandle!
+          }))
+        };
+        engine = new XbridgesEngine(model);
+        try {
+          engine.compile();
+          xBridgesEnginesRef.current.set(state.id, engine);
+        } catch (error: any) {
+          addError(
+            'error',
+            'Failed to compile X-Bridges sub-model in state '
+              + state.name + ': ' + error.message,
+            'Simulation'
+          );
+          return;
+        }
+      }
+
+      const setInput = (
+        variableId: string,
+        blockId: string,
+        portId: string
+      ) => {
+        const variable = variables.find(item => item.id === variableId);
+        if (!variable) return;
+        const value = Number(session.runtime.data[variable.id]);
+        engine!.setSignalValue(blockId, portId, value);
+        const block = engine!['blockMap'].get(blockId);
+        if (block?.params) block.params.value = value;
+      };
+
+      xBridgesModel.mappings?.forEach(mapping => {
+        if (mapping.direction === 'in') {
+          setInput(mapping.smVarId, mapping.blockId, mapping.portId);
+        }
+      });
+      xBridgesModel.nodes.forEach(node => {
+        if (node.data.type === 'Inport' && node.data.params.smVarId) {
+          setInput(node.data.params.smVarId, node.id, 'out');
+        }
+      });
+
+      try {
+        Solvers.stepRK4(engine, timeSeconds, tickMs / 1000);
+      } catch (error: any) {
+        addError(
+          'error',
+          'X-Bridges simulation error in state '
+            + state.name + ': ' + error.message,
+          'Simulation'
+        );
+      }
+
+      const setOutput = (
+        variableId: string,
+        blockId: string,
+        portId: string
+      ) => {
+        const variable = variables.find(item => item.id === variableId);
+        if (!variable) return;
+        const value = engine!.getSignalValue(blockId, portId);
+        if (value !== undefined) session.runtime.data[variable.id] = value;
+      };
+
+      xBridgesModel.mappings?.forEach(mapping => {
+        if (mapping.direction === 'out') {
+          setOutput(mapping.smVarId, mapping.blockId, mapping.portId);
+        }
+      });
+      xBridgesModel.nodes.forEach(node => {
+        if (node.data.type === 'Outport' && node.data.params.smVarId) {
+          setOutput(node.data.params.smVarId, node.id, 'in');
+        }
+      });
+    });
+  }, [addError, states, tickMs, variables]);
+
+  // SIMULATION: shared semantic interpreter with explicit read/step/write I/O.
+  const simulationStep = useCallback(async () => {
+    let session = simulationSessionRef.current;
+    if (!session) {
+      try {
+        session = createSimulationSession();
+        simulationSessionRef.current = session;
+        applySimulationFrameToReact(
+          session,
+          session.initialFrame,
+          simulationTime,
+          false
+        );
+      } catch (error: any) {
+        addError('error', error.message || String(error), 'Simulation');
+        return;
+      }
+    }
+
+    const inputValues = await readFactoryInputs();
+    applyMappedInputs(session, inputValues);
+    const frame = stepRuntime(session.runtime, tickMs);
+    const newTime = simulationTime + tickMs / 1000;
+    stepActiveXBridgesModels(session, frame.activeStateIds, newTime);
+    const uiFrame: SemanticTraceFrame = Object.freeze({
+      ...frame,
+      data: Object.freeze({ ...session.runtime.data })
+    });
+    setSimulationTime(newTime);
+    applySimulationFrameToReact(session, uiFrame, newTime, true);
+    await writeFactoryOutputs(readMappedOutputs(session));
+
+    if (frame.error) {
+      setIsRunning(false);
+      addError('error', frame.error, 'Simulation');
+    }
+  }, [
+    addError, applySimulationFrameToReact, createSimulationSession,
+    readFactoryInputs, simulationTime, stepActiveXBridgesModels, tickMs,
+    writeFactoryOutputs
+  ]);
 
   const startSimulation = useCallback(() => {
     if (!validateModel()) return;
 
-    resetVariables();
-    const initialContext = variables.reduce((acc, v) => {
-      acc[v.name] = v.currentValue;
-      return acc;
-    }, {} as Record<string, any>);
-
-    // Initialize active states
-    const newActive: Record<string, string> = {};
-    const initialTimers: Record<string, number> = {};
-
-    // Helper to recursively activate states and their nested autostart children
-    const activateState = (stateId: string) => {
-      const s = states.find(st => st.id === stateId);
-      if (!s) return;
-
-      const layerId = s.parentId || 'root';
-      const siblingStates = states.filter(st => (st.parentId || 'root') === layerId);
-      const isParallelLayer = siblingStates.length > 0 && siblingStates.every(st => st.isParallel);
-
-      if (isParallelLayer) {
-        newActive[layerId + '_' + s.id] = s.id;
-      } else {
-        newActive[layerId] = s.id;
+    try {
+      const session = createSimulationSession();
+      simulationSessionRef.current = session;
+      setSimulationTime(0);
+      setScopeData([]);
+      setTraceHistory([]);
+      setFiredTransitions({});
+      xBridgesEnginesRef.current.clear();
+      applySimulationFrameToReact(session, session.initialFrame, 0, false);
+      if (session.initialFrame.error) {
+        addError('error', session.initialFrame.error, 'Simulation');
+        return;
       }
-      initialTimers[s.id] = 0;
-
-      // Run entry actions of initial state to initialize variables
-      if (s.entry && s.entry.trim()) {
-        try {
-          const func = safeCreateFunction(['context'], `with(context) { ${s.entry} }`);
-          func(initialContext);
-        } catch (e: any) {
-          addError('error', `Action error in initial entry of ${s.name}: ${e.message}`, 'Simulation');
-        }
-      }
-
-      const childLayer = layers.find(l => l.parentStateId === s.id);
-      if (childLayer) {
-        const childStates = states.filter(st => childLayer.stateIds.includes(st.id));
-        const allParallel = childStates.length > 0 && childStates.every(st => st.isParallel);
-        if (allParallel) {
-          const regionsMap = new Map<string, StateData[]>();
-          childStates.forEach(cs => {
-            const rId = cs.regionId || 'MAIN';
-            if (!regionsMap.has(rId)) regionsMap.set(rId, []);
-            regionsMap.get(rId)!.push(cs);
-          });
-
-          regionsMap.forEach(groupStates => {
-            const autostarts = groupStates.filter(st => st.autostart).sort((a, b) => a.priority - b.priority);
-            const statesToEnter = autostarts.length > 0 ? autostarts : [...groupStates].sort((a, b) => a.priority - b.priority);
-            if (statesToEnter.length > 0) {
-              activateState(statesToEnter[0].id);
-            }
-          });
-        } else {
-          const targetId = resolveAutoStart(childLayer.id, initialContext, true);
-          if (targetId) activateState(targetId);
-        }
-      }
-    };
-
-    const rootStates = states.filter(s => !s.parentId || s.parentId === 'root');
-    const rootParallel = rootStates.length > 0 && rootStates.every(s => s.isParallel);
-    if (rootParallel) {
-      const regionsMap = new Map<string, StateData[]>();
-      rootStates.forEach(rs => {
-        const rId = rs.regionId || 'MAIN';
-        if (!regionsMap.has(rId)) regionsMap.set(rId, []);
-        regionsMap.get(rId)!.push(rs);
-      });
-
-      regionsMap.forEach(groupStates => {
-        const autostarts = groupStates.filter(st => st.autostart).sort((a, b) => a.priority - b.priority);
-        const statesToEnter = autostarts.length > 0 ? autostarts : [...groupStates].sort((a, b) => a.priority - b.priority);
-        if (statesToEnter.length > 0) {
-          activateState(statesToEnter[0].id);
-        }
-      });
-    } else {
-      const rootTargetId = resolveAutoStart('root', initialContext, true);
-      if (rootTargetId) {
-        activateState(rootTargetId);
-      } else if (states.length > 0) {
-        const roots = states.filter(s => s.parentId === 'root');
-        if (roots.length > 0) activateState(roots[0].id);
-      }
+      setIsRunning(true);
+      addError('info', 'Simulation started');
+    } catch (error: any) {
+      simulationSessionRef.current = null;
+      addError('error', error.message || String(error), 'Simulation');
     }
-
-    setVariables(prev => prev.map(v => {
-      if (v.name in initialContext && initialContext[v.name] !== v.currentValue) {
-        return { ...v, currentValue: initialContext[v.name] };
-      }
-      return v;
-    }));
-
-    setActiveStates(newActive);
-    setStateTimers(initialTimers);
-    setStates(prev => prev.map(s => ({ ...s, isActive: Object.values(newActive).includes(s.id) })));
-
-    setIsRunning(true);
-    addError('info', 'Simulation started');
-  }, [resetVariables, addError, states, validateModel, layers, resolveAutoStart, variables]);
+  }, [
+    addError, applySimulationFrameToReact, createSimulationSession,
+    validateModel
+  ]);
 
   const pauseSimulation = useCallback(() => {
     setIsRunning(false);
@@ -9789,22 +9327,35 @@ const ADIA = () => {
 
   const resetSimulation = useCallback(() => {
     setIsRunning(false);
-    resetVariables();
-    setLastActiveStates({});
-    setStates(prev => prev.map(s => ({ ...s, isActive: false })));
-    setActiveStates({});
-    setStateTimers({});
-    setTraceHistory([]);
-    setFiredTransitions({});
-    xBridgesEnginesRef.current.clear();
-    addError('info', 'Simulation reset');
-  }, [resetVariables, addError]);
+
+    try {
+      const session = simulationSessionRef.current ?? createSimulationSession();
+      simulationSessionRef.current = session;
+      const frame = resetRuntime(session.runtime);
+      setSimulationTime(0);
+      setScopeData([]);
+      setTraceHistory([]);
+      setFiredTransitions({});
+      xBridgesEnginesRef.current.clear();
+      applySimulationFrameToReact(session, frame, 0, false);
+      addError(
+        frame.error ? 'error' : 'info',
+        frame.error || 'Simulation reset',
+        'Simulation'
+      );
+    } catch (error: any) {
+      simulationSessionRef.current = null;
+      addError('error', error.message || String(error), 'Simulation');
+    }
+  }, [
+    addError, applySimulationFrameToReact, createSimulationSession
+  ]);
 
   const stepSimulation = useCallback(() => {
     if (isRunning) {
       setIsRunning(false);
     }
-    simulationStep();
+    void simulationStep();
     addError('info', 'Simulation step');
   }, [isRunning, simulationStep, addError]);
 
