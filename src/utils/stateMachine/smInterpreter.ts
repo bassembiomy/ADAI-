@@ -454,6 +454,20 @@ const enterLayerAlongPath = (
     return;
   }
 
+  const hasActiveSibling = layer.children.some((childId) => {
+    const child = context.runtime.ir.states[childId];
+    return context.runtime.stateActive[child.activityIndex];
+  });
+  if (hasActiveSibling) {
+    enterStateAlongPath(
+      context,
+      stateIds,
+      index,
+      excludedFinalLayerId,
+    );
+    return;
+  }
+
   for (const childId of layer.children) {
     if (childId === selectedStateId) {
       enterStateAlongPath(
@@ -576,13 +590,6 @@ const commitTransition = (
   const historyLayer = historyJunction === null
     ? null
     : context.runtime.ir.layers[historyJunction.layerId];
-  const savedShallowStateId = historyLayer?.activeSlot === null
-    || historyLayer?.activeSlot === undefined
-    ? null
-    : context.runtime.historySlots[historyLayer.activeSlot];
-  const savedDeepStateIds = historyLayer === null
-    ? null
-    : [...(context.runtime.deepHistory[historyLayer.id] ?? [])];
   if (transition.kind !== 'internal-action') {
     for (
       const stateId of topmostExitStateIds(
@@ -594,6 +601,13 @@ const commitTransition = (
     }
     exitConflictingConfiguration(context, route.entryStateIds);
   }
+  const savedShallowStateId = historyLayer?.activeSlot === null
+    || historyLayer?.activeSlot === undefined
+    ? null
+    : context.runtime.historySlots[historyLayer.activeSlot];
+  const savedDeepStateIds = historyLayer === null
+    ? null
+    : [...(context.runtime.deepHistory[historyLayer.id] ?? [])];
   for (const transitionId of route.transitionIds) {
     const pathTransition = context.runtime.ir.transitions[transitionId];
     runActions(

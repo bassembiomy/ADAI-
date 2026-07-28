@@ -125,6 +125,50 @@ describe('parallel AND execution and terminal semantics', () => {
     expect(frame.actions).toEqual(['during:R1', 'during:R2', 'during:R3']);
   });
 
+  it('re-enters only the local AND child on an external self-transition', () => {
+    const fixture = parallelHistoryFixture('parallel-order');
+    for (const stateId of ['R1', 'R2', 'R3']) {
+      fixture.states.find((state) => state.id === stateId)!.entry =
+        'total = total + 1;';
+    }
+    fixture.transitions.push({
+      id: 'self_r1',
+      sourceId: 'R1',
+      targetId: 'R1',
+      condition: 'go',
+      action: '',
+      afterTicks: null,
+      type: 'condition',
+      hasControlPoint: false,
+      order: 1,
+    });
+    fixture.layers.find((layer) => layer.id === 'parallel_regions')!
+      .transitionIds.push('self_r1');
+    const result = buildSemanticModel(fixture);
+    expect(result.diagnostics).toEqual([]);
+    if (!result.ir) throw new Error('parallel self-transition fixture did not build');
+    const runtime = createRuntime(result.ir);
+    initializeRuntime(runtime);
+    runtime.stateTimersMs[result.ir.states.R2.activityIndex] = 20;
+    runtime.stateTimersMs[result.ir.states.R3.activityIndex] = 30;
+    runtime.data.go = true;
+
+    const frame = stepRuntime(runtime, 10);
+
+    expect(frame.actions).toEqual([
+      'exit:R1',
+      'entry:R1',
+      'during:R2',
+      'during:R3',
+    ]);
+    expect(frame.activeStateIds).toEqual(['PARENT', 'R1', 'R2', 'R3']);
+    expect(frame.stateTimersMs).toMatchObject({
+      R1: 0,
+      R2: 30,
+      R3: 40,
+    });
+  });
+
   it('continues into a later AND layer after a local child-layer transition', () => {
     const fixture = historyFixture('shallow');
     fixture.states.find((state) => state.id === 'parallel_left')!.during =
@@ -181,6 +225,64 @@ describe('parallel AND execution and terminal semantics', () => {
 });
 
 describe('shallow and deep history', () => {
+  it.each(['shallow', 'deep'] as const)(
+    'uses the current orderly exit snapshot for external owner-to-own %s history',
+    (kind) => {
+      const fixture = historyFixture(kind);
+      fixture.transitions = fixture.transitions.filter(
+        (transition) => transition.id !== 'leave_workspace',
+      );
+      const root = fixture.layers.find((layer) => layer.id === 'root')!;
+      root.transitionIds = root.transitionIds.filter(
+        (transitionId) => transitionId !== 'leave_workspace',
+      );
+      const historyId = `${kind}_history`;
+      fixture.transitions.push({
+        id: 'owner_to_history',
+        sourceId: 'workspace',
+        targetId: historyId,
+        condition: 'leave',
+        action: '',
+        afterTicks: null,
+        type: 'condition',
+        hasControlPoint: false,
+        order: 1,
+      });
+      root.transitionIds.push('owner_to_history');
+      const result = buildSemanticModel(fixture);
+      expect(result.diagnostics).toEqual([]);
+      if (!result.ir) throw new Error(`${kind} owner-history fixture did not build`);
+      const runtime = createRuntime(result.ir);
+      initializeRuntime(runtime);
+      for (
+        const signal of [
+          'select_a',
+          'advance_nested',
+          'advance_left',
+          'advance_right',
+        ]
+      ) {
+        runtime.data[signal] = true;
+        stepRuntime(runtime, 10);
+        runtime.data[signal] = false;
+      }
+      runtime.data.leave = true;
+
+      stepRuntime(runtime, 10);
+
+      expect(active(runtime, 'parent_a')).toBe(true);
+      expect(active(runtime, 'parent_b')).toBe(false);
+      if (kind === 'shallow') {
+        expect(active(runtime, 'nested_default')).toBe(true);
+        expect(active(runtime, 'nested_previous')).toBe(false);
+      } else {
+        expect(active(runtime, 'nested_previous')).toBe(true);
+        expect(active(runtime, 'parallel_left_previous')).toBe(true);
+        expect(active(runtime, 'parallel_right_previous')).toBe(true);
+      }
+    },
+  );
+
   it.each(['shallow', 'deep'] as const)(
     'falls back to the default entry when %s history has no snapshot',
     (kind) => {
