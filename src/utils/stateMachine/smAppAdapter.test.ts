@@ -7,9 +7,13 @@ import {
 } from './smFixtures';
 import {
   applyMappedInputs,
+  createAppSimulationLifecycle,
   createAppSimulationSession,
   createFactoryIOMappings,
+  createSimulationModelKey,
   readMappedOutputs,
+  resetAppSimulationSession,
+  SemanticModelError,
   traceFrameToAppUpdate,
 } from './smAppAdapter';
 
@@ -125,5 +129,99 @@ describe('state-machine application adapter', () => {
         (event) => event.transitionId === 'TERMINAL_RESET',
       ),
     ).toBe(false);
+  });
+
+  it('commits reset-time mapped outputs from restored runtime defaults', async () => {
+    const session = createAppSimulationSession(
+      flatOrFixture(),
+      createFactoryIOMappings([{
+        adiaVarId: 'total',
+        factoryTagId: 'motor-output',
+        type: 'actuator',
+      }]),
+    );
+    session.runtime.data.total = 99;
+    const committed: Array<Readonly<Record<string, number | boolean>>> = [];
+
+    const frame = await resetAppSimulationSession(
+      session,
+      async (outputs) => {
+        committed.push(outputs);
+      },
+    );
+
+    expect(frame.data.total).toBe(0);
+    expect(committed).toEqual([{ 'motor-output': 0 }]);
+  });
+
+  it('serializes operations until an invalidated operation actually finishes', async () => {
+    const lifecycle = createAppSimulationLifecycle();
+    const initialGeneration = lifecycle.currentGeneration();
+    const first = lifecycle.begin();
+
+    expect(first).not.toBeNull();
+    expect(lifecycle.begin()).toBeNull();
+
+    lifecycle.invalidate();
+    expect(lifecycle.isGenerationCurrent(initialGeneration)).toBe(false);
+    expect(lifecycle.isCurrent(first!)).toBe(false);
+    expect(lifecycle.begin()).toBeNull();
+
+    const idle = lifecycle.whenIdle();
+    lifecycle.finish(first!);
+    await idle;
+    const second = lifecycle.begin();
+    expect(second).not.toBeNull();
+    expect(lifecycle.isCurrent(second!)).toBe(true);
+    lifecycle.finish(second!);
+    expect(lifecycle.begin()).not.toBeNull();
+  });
+
+  it('keys semantic model identity without runtime-only React values', () => {
+    const model = flatOrFixture();
+    const first = createSimulationModelKey(model, []);
+    model.states[0].isActive = true;
+    model.variables[0].currentValue = true;
+
+    expect(createSimulationModelKey(model, [])).toBe(first);
+
+    model.transitions[0].condition = 'false';
+    expect(createSimulationModelKey(model, [])).not.toBe(first);
+  });
+
+  it.each([
+    {
+      name: 'duplicate channel IDs',
+      mappings: [
+        { variableId: 'go', channelId: 'shared', direction: 'read' as const },
+        { variableId: 'total', channelId: 'shared', direction: 'write' as const },
+      ],
+      code: 'APP_IO_CHANNEL_DUPLICATE',
+    },
+    {
+      name: 'duplicate reads for one variable',
+      mappings: [
+        { variableId: 'go', channelId: 'sensor-a', direction: 'read' as const },
+        { variableId: 'go', channelId: 'sensor-b', direction: 'read' as const },
+      ],
+      code: 'APP_IO_VARIABLE_DIRECTION_DUPLICATE',
+    },
+    {
+      name: 'conflicting read and write directions for one variable',
+      mappings: [
+        { variableId: 'go', channelId: 'sensor', direction: 'read' as const },
+        { variableId: 'go', channelId: 'actuator', direction: 'write' as const },
+      ],
+      code: 'APP_IO_VARIABLE_DIRECTION_CONFLICT',
+    },
+  ])('rejects $name', ({ mappings, code }) => {
+    expect(() => createAppSimulationSession(flatOrFixture(), mappings))
+      .toThrowError(SemanticModelError);
+    try {
+      createAppSimulationSession(flatOrFixture(), mappings);
+    } catch (error) {
+      expect((error as SemanticModelError).diagnostics)
+        .toEqual(expect.arrayContaining([expect.objectContaining({ code })]));
+    }
   });
 });

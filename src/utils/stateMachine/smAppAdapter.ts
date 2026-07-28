@@ -2,6 +2,7 @@ import type { ExpressionNode } from './smExpressions';
 import {
   createRuntime,
   initializeRuntime,
+  resetRuntime,
   type SemanticRuntime,
 } from './smInterpreter';
 import type {
@@ -38,6 +39,21 @@ export interface AppSimulationSession {
   runtime: SemanticRuntime;
   initialFrame: SemanticTraceFrame;
   ioMappings: readonly AppIOMapping[];
+}
+
+export interface AppSimulationOperation {
+  readonly generation: number;
+  readonly id: number;
+}
+
+export interface AppSimulationLifecycle {
+  begin(): AppSimulationOperation | null;
+  finish(operation: AppSimulationOperation): void;
+  invalidate(): void;
+  isCurrent(operation: AppSimulationOperation): boolean;
+  currentGeneration(): number;
+  isGenerationCurrent(generation: number): boolean;
+  whenIdle(): Promise<void>;
 }
 
 export interface AppTraceEvent {
@@ -158,8 +174,99 @@ const normalizeMappings = (
     }
     return Object.freeze({ ...mapping, variableId });
   });
+  const diagnostics: ModelDiagnostic[] = [];
+  const channelOwners = new Map<string, AppIOMapping>();
+  const variableDirections = new Map<string, Set<'read' | 'write'>>();
+  for (const mapping of normalized) {
+    const channelOwner = channelOwners.get(mapping.channelId);
+    if (channelOwner) {
+      diagnostics.push({
+        code: 'APP_IO_CHANNEL_DUPLICATE',
+        message: `Channel '${mapping.channelId}' is mapped more than once.`,
+        elementId: mapping.channelId,
+        severity: 'error',
+      });
+    } else {
+      channelOwners.set(mapping.channelId, mapping);
+    }
+
+    const directions = variableDirections.get(mapping.variableId)
+      ?? new Set<'read' | 'write'>();
+    if (directions.has(mapping.direction)) {
+      diagnostics.push({
+        code: 'APP_IO_VARIABLE_DIRECTION_DUPLICATE',
+        message: `Variable '${mapping.variableId}' has more than one '${mapping.direction}' mapping.`,
+        elementId: mapping.variableId,
+        severity: 'error',
+      });
+    }
+    const opposite = mapping.direction === 'read' ? 'write' : 'read';
+    if (directions.has(opposite)) {
+      diagnostics.push({
+        code: 'APP_IO_VARIABLE_DIRECTION_CONFLICT',
+        message: `Variable '${mapping.variableId}' cannot be mapped for both read and write.`,
+        elementId: mapping.variableId,
+        severity: 'error',
+      });
+    }
+    directions.add(mapping.direction);
+    variableDirections.set(mapping.variableId, directions);
+  }
+  if (diagnostics.length > 0) throw new SemanticModelError(diagnostics);
   return Object.freeze(normalized);
 };
+
+export const createAppSimulationLifecycle = (): AppSimulationLifecycle => {
+  let generation = 0;
+  let nextId = 0;
+  let activeOperation: AppSimulationOperation | null = null;
+  let idleResolvers: Array<() => void> = [];
+
+  return {
+    begin: () => {
+      if (activeOperation !== null) return null;
+      activeOperation = Object.freeze({ generation, id: nextId++ });
+      return activeOperation;
+    },
+    finish: (operation) => {
+      if (
+        activeOperation?.generation === operation.generation
+        && activeOperation.id === operation.id
+      ) {
+        activeOperation = null;
+        const resolvers = idleResolvers;
+        idleResolvers = [];
+        resolvers.forEach(resolve => resolve());
+      }
+    },
+    invalidate: () => {
+      generation += 1;
+    },
+    isCurrent: (operation) =>
+      operation.generation === generation
+      && activeOperation?.generation === operation.generation
+      && activeOperation.id === operation.id,
+    currentGeneration: () => generation,
+    isGenerationCurrent: (candidate) => candidate === generation,
+    whenIdle: () => activeOperation === null
+      ? Promise.resolve()
+      : new Promise<void>(resolve => {
+        idleResolvers.push(resolve);
+      }),
+  };
+};
+
+export const createSimulationModelKey = (
+  model: StateMachineModelV4 | LegacyStateMachineModel,
+  mappings: readonly AppIOMapping[],
+): string => JSON.stringify({
+  ...model,
+  states: model.states.map(({ isActive: _isActive, ...state }) => state),
+  variables: model.variables.map(
+    ({ currentValue: _currentValue, ...variable }) => variable,
+  ),
+  mappings,
+});
 
 export const createFactoryIOMappings = (
   mappings: readonly FactoryIOMapping[],
@@ -228,6 +335,17 @@ export const readMappedOutputs = (
     );
   }
   return freezeRecord(outputs);
+};
+
+export const resetAppSimulationSession = async (
+  session: AppSimulationSession,
+  commitOutputs: (
+    outputs: Readonly<Record<string, AppSimulationValue>>,
+  ) => Promise<void>,
+): Promise<SemanticTraceFrame> => {
+  const frame = resetRuntime(session.runtime);
+  await commitOutputs(readMappedOutputs(session));
+  return frame;
 };
 
 export const traceFrameToAppUpdate = (

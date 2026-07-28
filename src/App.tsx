@@ -36,14 +36,17 @@ import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineCl
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
 import {
   applyMappedInputs,
+  createAppSimulationLifecycle,
   createAppSimulationSession,
   createFactoryIOMappings,
+  createSimulationModelKey,
   readMappedOutputs,
+  resetAppSimulationSession,
   traceFrameToAppUpdate,
   type AppSimulationSession,
   type AppSimulationValue,
 } from './utils/stateMachine/smAppAdapter';
-import { resetRuntime, stepRuntime } from './utils/stateMachine/smInterpreter';
+import { stepRuntime } from './utils/stateMachine/smInterpreter';
 import type { SemanticTraceFrame } from './utils/stateMachine/smTrace';
 import { analyzeStateMachine } from './utils/smAnalysisEngine';
 import { HELP_DATA } from './HelpData';
@@ -6867,6 +6870,7 @@ const ADIA = () => {
   const [traceHistory, setTraceHistory] = useState<Array<{ time: number; event: string; group: string; state: string; transition: string; transitionId?: string }>>([]);
   const [firedTransitions, setFiredTransitions] = useState<Record<string, number>>({});
   const simulationSessionRef = useRef<AppSimulationSession | null>(null);
+  const simulationLifecycleRef = useRef(createAppSimulationLifecycle());
 
   // Code generation state
   const [showCodegenDialog, setShowCodegenDialog] = useState(false);
@@ -8991,6 +8995,38 @@ const ADIA = () => {
     );
   }, [states, variables, junctions, layers, currentLayerId, addError, setStates, setVariables, setTransitions, setBlocks, setFactors, setHeaders, setActiveModel, calculateRSM, calculateGMDH, calculateTaguchi, handleExportToXBridges, handleExportToVLab]);
 
+  const simulationIOMappings = useMemo(
+    () => factoryIOEnabled ? createFactoryIOMappings(factoryIOMapping) : [],
+    [factoryIOEnabled, factoryIOMapping]
+  );
+  const simulationModelKey = useMemo(() => createSimulationModelKey({
+    tickMs,
+    states,
+    junctions,
+    transitions,
+    variables,
+    layers,
+    safetyMode,
+    hilConfig
+  }, simulationIOMappings), [
+    tickMs, states, junctions, transitions, variables, layers,
+    safetyMode, hilConfig, simulationIOMappings
+  ]);
+  const previousSimulationModelKeyRef = useRef(simulationModelKey);
+  useEffect(() => {
+    if (previousSimulationModelKeyRef.current === simulationModelKey) return;
+    previousSimulationModelKeyRef.current = simulationModelKey;
+    simulationLifecycleRef.current.invalidate();
+    simulationSessionRef.current = null;
+    setIsRunning(false);
+    setActiveStates({});
+    setStateTimers({});
+    setFiredTransitions({});
+    setStates(prev => prev.map(state =>
+      state.isActive ? { ...state, isActive: false } : state
+    ));
+  }, [simulationModelKey]);
+
   const createSimulationSession = useCallback((): AppSimulationSession => (
     createAppSimulationSession({
       tickMs,
@@ -9001,10 +9037,10 @@ const ADIA = () => {
       layers,
       safetyMode,
       hilConfig
-    }, factoryIOEnabled ? createFactoryIOMappings(factoryIOMapping) : [])
+    }, simulationIOMappings)
   ), [
     tickMs, states, junctions, transitions, variables, layers,
-    safetyMode, hilConfig, factoryIOEnabled, factoryIOMapping
+    safetyMode, hilConfig, simulationIOMappings
   ]);
 
   const readFactoryInputs = useCallback(async (): Promise<Record<string, AppSimulationValue>> => {
@@ -9253,9 +9289,13 @@ const ADIA = () => {
 
   // SIMULATION: shared semantic interpreter with explicit read/step/write I/O.
   const simulationStep = useCallback(async () => {
-    let session = simulationSessionRef.current;
-    if (!session) {
-      try {
+    const lifecycle = simulationLifecycleRef.current;
+    const operation = lifecycle.begin();
+    if (!operation) return false;
+
+    try {
+      let session = simulationSessionRef.current;
+      if (!session) {
         session = createSimulationSession();
         simulationSessionRef.current = session;
         applySimulationFrameToReact(
@@ -9264,28 +9304,40 @@ const ADIA = () => {
           simulationTime,
           false
         );
-      } catch (error: any) {
-        addError('error', error.message || String(error), 'Simulation');
-        return;
       }
-    }
 
-    const inputValues = await readFactoryInputs();
-    applyMappedInputs(session, inputValues);
-    const frame = stepRuntime(session.runtime, tickMs);
-    const newTime = simulationTime + tickMs / 1000;
-    stepActiveXBridgesModels(session, frame.activeStateIds, newTime);
-    const uiFrame: SemanticTraceFrame = Object.freeze({
-      ...frame,
-      data: Object.freeze({ ...session.runtime.data })
-    });
-    setSimulationTime(newTime);
-    applySimulationFrameToReact(session, uiFrame, newTime, true);
-    await writeFactoryOutputs(readMappedOutputs(session));
+      const inputValues = await readFactoryInputs();
+      if (!lifecycle.isCurrent(operation)) return false;
 
-    if (frame.error) {
-      setIsRunning(false);
-      addError('error', frame.error, 'Simulation');
+      applyMappedInputs(session, inputValues);
+      const frame = stepRuntime(session.runtime, tickMs);
+      const newTime = simulationTime + tickMs / 1000;
+      stepActiveXBridgesModels(session, frame.activeStateIds, newTime);
+      const uiFrame: SemanticTraceFrame = Object.freeze({
+        ...frame,
+        data: Object.freeze({ ...session.runtime.data })
+      });
+      if (!lifecycle.isCurrent(operation)) return false;
+
+      await writeFactoryOutputs(readMappedOutputs(session));
+      if (!lifecycle.isCurrent(operation)) return false;
+
+      setSimulationTime(newTime);
+      applySimulationFrameToReact(session, uiFrame, newTime, true);
+      if (frame.error) {
+        setIsRunning(false);
+        lifecycle.invalidate();
+        addError('error', frame.error, 'Simulation');
+        return false;
+      }
+      return true;
+    } catch (error: any) {
+      if (lifecycle.isCurrent(operation)) {
+        addError('error', error.message || String(error), 'Simulation');
+      }
+      return false;
+    } finally {
+      lifecycle.finish(operation);
     }
   }, [
     addError, applySimulationFrameToReact, createSimulationSession,
@@ -9293,8 +9345,14 @@ const ADIA = () => {
     writeFactoryOutputs
   ]);
 
-  const startSimulation = useCallback(() => {
+  const startSimulation = useCallback(async () => {
     if (!validateModel()) return;
+
+    const lifecycle = simulationLifecycleRef.current;
+    lifecycle.invalidate();
+    const generation = lifecycle.currentGeneration();
+    await lifecycle.whenIdle();
+    if (!lifecycle.isGenerationCurrent(generation)) return;
 
     try {
       const session = createSimulationSession();
@@ -9321,17 +9379,35 @@ const ADIA = () => {
   ]);
 
   const pauseSimulation = useCallback(() => {
+    simulationLifecycleRef.current.invalidate();
     setIsRunning(false);
     addError('info', 'Simulation paused');
   }, [addError]);
 
-  const resetSimulation = useCallback(() => {
+  const resetSimulation = useCallback(async () => {
     setIsRunning(false);
+    const lifecycle = simulationLifecycleRef.current;
+    lifecycle.invalidate();
+    const generation = lifecycle.currentGeneration();
+    await lifecycle.whenIdle();
+    if (!lifecycle.isGenerationCurrent(generation)) return;
+
+    const operation = lifecycle.begin();
+    if (!operation) return;
 
     try {
       const session = simulationSessionRef.current ?? createSimulationSession();
       simulationSessionRef.current = session;
-      const frame = resetRuntime(session.runtime);
+      const frame = await resetAppSimulationSession(
+        session,
+        async outputs => {
+          if (lifecycle.isCurrent(operation)) {
+            await writeFactoryOutputs(outputs);
+          }
+        }
+      );
+      if (!lifecycle.isCurrent(operation)) return;
+
       setSimulationTime(0);
       setScopeData([]);
       setTraceHistory([]);
@@ -9344,19 +9420,30 @@ const ADIA = () => {
         'Simulation'
       );
     } catch (error: any) {
-      simulationSessionRef.current = null;
-      addError('error', error.message || String(error), 'Simulation');
+      if (lifecycle.isCurrent(operation)) {
+        simulationSessionRef.current = null;
+        addError('error', error.message || String(error), 'Simulation');
+      }
+    } finally {
+      lifecycle.finish(operation);
     }
   }, [
-    addError, applySimulationFrameToReact, createSimulationSession
+    addError, applySimulationFrameToReact, createSimulationSession,
+    writeFactoryOutputs
   ]);
 
-  const stepSimulation = useCallback(() => {
+  const stepSimulation = useCallback(async () => {
     if (isRunning) {
       setIsRunning(false);
     }
-    void simulationStep();
-    addError('info', 'Simulation step');
+    const lifecycle = simulationLifecycleRef.current;
+    lifecycle.invalidate();
+    const generation = lifecycle.currentGeneration();
+    await lifecycle.whenIdle();
+    if (!lifecycle.isGenerationCurrent(generation)) return;
+
+    const completed = await simulationStep();
+    if (completed) addError('info', 'Simulation step');
   }, [isRunning, simulationStep, addError]);
 
   const simStepRef = useRef(simulationStep);
@@ -9380,10 +9467,22 @@ const ADIA = () => {
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+    const loopGeneration = simulationLifecycleRef.current.currentGeneration();
 
     const runLoop = async () => {
-      if (isRunning) {
-        await simStepRef.current();
+      if (
+        !cancelled
+        && simulationLifecycleRef.current.isGenerationCurrent(loopGeneration)
+      ) {
+        const completed = await simStepRef.current();
+        if (
+          !completed
+          || cancelled
+          || !simulationLifecycleRef.current.isGenerationCurrent(loopGeneration)
+        ) {
+          return;
+        }
         timer = setTimeout(runLoop, tickMs);
       }
     };
@@ -9393,6 +9492,7 @@ const ADIA = () => {
     }
 
     return () => {
+      cancelled = true;
       if (timer) clearTimeout(timer);
     };
   }, [isRunning, tickMs]);
