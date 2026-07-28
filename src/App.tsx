@@ -36,6 +36,8 @@ import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineCl
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
 import {
   applyMappedInputs,
+  applyAppFrameAndCommitOutputs,
+  commitAppOutputRequest,
   createAppSimulationLifecycle,
   createAppSimulationSession,
   createFactoryIOMappings,
@@ -9022,6 +9024,10 @@ const ADIA = () => {
     setActiveStates({});
     setStateTimers({});
     setFiredTransitions({});
+    setSimulationTime(0);
+    setTraceHistory([]);
+    setScopeData([]);
+    xBridgesEnginesRef.current.clear();
     setStates(prev => prev.map(state =>
       state.isActive ? { ...state, isActive: false } : state
     ));
@@ -9085,10 +9091,13 @@ const ADIA = () => {
           value: outputValues[String(mapping.factoryTagId)]
         }))
         .filter(item => item.value !== undefined);
-      const result = await ipcRenderer.invoke('sync-factory-io', { actuators });
-      setFactoryIOStatus(result?.error ? 'error' : 'connected');
-    } catch {
+      await commitAppOutputRequest(
+        () => ipcRenderer.invoke('sync-factory-io', { actuators })
+      );
+      setFactoryIOStatus('connected');
+    } catch (error) {
       setFactoryIOStatus('error');
+      throw error;
     }
   }, [factoryIOEnabled, factoryIOMapping]);
 
@@ -9319,11 +9328,15 @@ const ADIA = () => {
       });
       if (!lifecycle.isCurrent(operation)) return false;
 
-      await writeFactoryOutputs(readMappedOutputs(session));
+      await applyAppFrameAndCommitOutputs(
+        () => {
+          setSimulationTime(newTime);
+          applySimulationFrameToReact(session, uiFrame, newTime, true);
+        },
+        () => writeFactoryOutputs(readMappedOutputs(session))
+      );
       if (!lifecycle.isCurrent(operation)) return false;
 
-      setSimulationTime(newTime);
-      applySimulationFrameToReact(session, uiFrame, newTime, true);
       if (frame.error) {
         setIsRunning(false);
         lifecycle.invalidate();
@@ -9332,7 +9345,11 @@ const ADIA = () => {
       }
       return true;
     } catch (error: any) {
-      if (lifecycle.isCurrent(operation)) {
+      const outputCommitFailed = String(error?.message || error)
+        .startsWith('Factory I/O output commit failed:');
+      if (lifecycle.isCurrent(operation) || outputCommitFailed) {
+        setIsRunning(false);
+        lifecycle.invalidate();
         addError('error', error.message || String(error), 'Simulation');
       }
       return false;

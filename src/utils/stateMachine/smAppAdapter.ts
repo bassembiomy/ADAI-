@@ -277,6 +277,33 @@ export const createFactoryIOMappings = (
     direction: mapping.type === 'sensor' ? 'read' : 'write',
   }));
 
+export const applyAppFrameAndCommitOutputs = async (
+  applyFrame: () => void,
+  commitOutputs: () => Promise<void>,
+): Promise<void> => {
+  applyFrame();
+  await commitOutputs();
+};
+
+export const commitAppOutputRequest = async (
+  send: () => Promise<unknown>,
+): Promise<void> => {
+  try {
+    const result = await send();
+    if (
+      result !== null
+      && typeof result === 'object'
+      && 'error' in result
+      && (result as { error?: unknown }).error
+    ) {
+      throw new Error(String((result as { error: unknown }).error));
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Factory I/O output commit failed: ${message}`);
+  }
+};
+
 export const createAppSimulationSession = (
   model: StateMachineModelV4 | LegacyStateMachineModel,
   mappings?: readonly AppIOMapping[],

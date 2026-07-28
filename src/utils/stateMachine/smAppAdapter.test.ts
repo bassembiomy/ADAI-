@@ -7,6 +7,8 @@ import {
 } from './smFixtures';
 import {
   applyMappedInputs,
+  applyAppFrameAndCommitOutputs,
+  commitAppOutputRequest,
   createAppSimulationLifecycle,
   createAppSimulationSession,
   createFactoryIOMappings,
@@ -223,5 +225,45 @@ describe('state-machine application adapter', () => {
       expect((error as SemanticModelError).diagnostics)
         .toEqual(expect.arrayContaining([expect.objectContaining({ code })]));
     }
+  });
+
+  it('projects the advanced frame before awaiting output commitment', async () => {
+    const events: string[] = [];
+    let rejectOutput!: (reason: Error) => void;
+    const outputPending = new Promise<void>((_resolve, reject) => {
+      rejectOutput = reject;
+    });
+
+    const operation = applyAppFrameAndCommitOutputs(
+      () => {
+        events.push('ui');
+      },
+      async () => {
+        events.push('output');
+        await outputPending;
+      },
+    );
+
+    expect(events).toEqual(['ui', 'output']);
+    rejectOutput(new Error('physical output failed'));
+    await expect(operation).rejects.toThrow('physical output failed');
+  });
+
+  it.each([
+    {
+      name: 'backend error responses',
+      send: async () => ({ error: 'PLC disconnected' }),
+      message: 'PLC disconnected',
+    },
+    {
+      name: 'thrown IPC failures',
+      send: async () => {
+        throw new Error('IPC channel closed');
+      },
+      message: 'IPC channel closed',
+    },
+  ])('propagates $name from output commitment', async ({ send, message }) => {
+    await expect(commitAppOutputRequest(send))
+      .rejects.toThrow(`Factory I/O output commit failed: ${message}`);
   });
 });
