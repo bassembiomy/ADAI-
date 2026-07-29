@@ -226,8 +226,8 @@ describe('Generator validation & trigger coverage', () => {
     const coreC = result.files.find(f => f.name === 'sm_core.c')?.content || '';
 
     /* The order-1 transition (to B) must be emitted before the order-2 one (to C) */
-    const posB = coreC.indexOf('(instance->active_states[0U] != SM_ST_S2)');
-    const posC = coreC.indexOf('(instance->active_states[0U] != SM_ST_S3)');
+    const posB = coreC.indexOf('instance->active_states[0U] = SM_ST_S2;');
+    const posC = coreC.indexOf('instance->active_states[0U] = SM_ST_S3;');
     expect(posB).toBeGreaterThan(-1);
     expect(posC).toBeGreaterThan(-1);
     expect(posB).toBeLessThan(posC);

@@ -29,9 +29,12 @@ describe('StateMachineCodeGenerator structured backend remediation', () => {
       interpreterFixture('transition-priority'),
       'sm_core.c',
     );
-    const first = core.indexOf('(instance->active_states[0U] != SM_ST_C)');
-    expect(first).toBeGreaterThan(-1);
-    expect(core).not.toContain('(instance->active_states[0U] != SM_ST_B)');
+    const fnStart = core.indexOf('static bool SM_Execute_State_1(ADIA_Instance_t *instance)\n{');
+    expect(fnStart).toBeGreaterThan(-1);
+    const fnEnd = core.indexOf('\n}\n\nstatic bool SM_Execute_State_2', fnStart);
+    const body = core.slice(fnStart, fnEnd);
+    expect(body).toContain('instance->active_states[0U] = SM_ST_C;');
+    expect(body).not.toContain('instance->active_states[0U] = SM_ST_B;');
   });
 
   it('distinguishes external self-transition and internal action-only code', () => {

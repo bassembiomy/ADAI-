@@ -21,7 +21,7 @@ import {
   MousePointer2, Upload, FileText, Download,
   Activity, Zap, Database, Cpu, Layout, Maximize2, X,
   LayoutGrid, Rows, Network, Flame, RefreshCcw, Wind, Cloud,
-  Eye, Paperclip, FlaskConical
+  Eye, Paperclip, FlaskConical, AlertTriangle
 } from 'lucide-react';
 import { FactoryIOGateway } from './components/FactoryIOGateway';
 import { ThreeDXGateway } from './components/ThreeDXGateway';
@@ -33,6 +33,7 @@ import {
   VariableType, VariableDef, StateData, JunctionData, TransitionData, Layer, ErrorItem 
 } from './types/sm_types';
 import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineClipboardData } from './utils/stateMachineClipboard';
+import { pruneStateHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
 import {
   applyMappedInputs,
@@ -6643,6 +6644,12 @@ const ADIA = () => {
   const [currentLayerId, setCurrentLayerId] = useState('root');
   const [layerStack, setLayerStack] = useState<string[]>([]);
   const [layerPath, setLayerPath] = useState(['Root']);
+  const [deleteConfirmState, setDeleteConfirmState] = useState<{
+    id: string;
+    name: string;
+    parts: string;
+    hasChildren: boolean;
+  } | null>(null);
 
   const [states, setStates] = useState<StateData[]>([
     {
@@ -9563,40 +9570,48 @@ const ADIA = () => {
     const state = states.find(s => s.id === id);
     if (!state) return;
 
-    // Check for children (descendants)
-    const getDescendants = (parentId: string): string[] => {
-      const children = states.filter(s => s.parentId === parentId);
-      let descendants = children.map(c => c.id);
-      children.forEach(c => {
-        descendants = [...descendants, ...getDescendants(c.id)];
-      });
-      return descendants;
-    };
+    const { stateCount, layerCount } = countDescendants(id, states, layers);
+    const hasChildren = stateCount > 0 || layerCount > 0;
 
-    const descendants = getDescendants(id);
-
-    if (descendants.length > 0) {
-      if (!window.confirm(`State '${state.name}' contains ${descendants.length} descendant(s). Deleting it will remove all children. Continue?`)) {
-        return;
-      }
+    let parts = '';
+    if (hasChildren) {
+      const stateMsg = stateCount > 0 ? `${stateCount} child state(s)` : '';
+      const layerMsg = layerCount > 0 ? `${layerCount} sub-layer(s)` : '';
+      parts = [stateMsg, layerMsg].filter(Boolean).join(' and ');
     }
 
-    const idsToDelete = [id, ...descendants];
-
-    setTransitions(prev => prev.filter(t => !idsToDelete.includes(t.sourceId) && !idsToDelete.includes(t.targetId)));
-
-    setLayers(prev => {
-      const remaining = prev.filter(l => l.parentStateId === null || !idsToDelete.includes(l.parentStateId));
-      return remaining.map(l => ({
-        ...l,
-        stateIds: l.stateIds.filter(sid => !idsToDelete.includes(sid))
-      }));
+    setDeleteConfirmState({
+      id,
+      name: state.name,
+      parts,
+      hasChildren
     });
+  }, [states, layers]);
 
-    setStates(prev => prev.filter(s => !idsToDelete.includes(s.id)));
-    setSelectedIds(prev => prev.filter(sid => !idsToDelete.includes(sid)));
+  const executeDeleteState = useCallback((id: string) => {
+    const state = states.find(s => s.id === id);
+    setDeleteConfirmState(null);
+    if (!state) return;
+
+    addToHistory();
+
+    const result = pruneStateHierarchy(
+      id,
+      { states, layers, junctions, transitions },
+      { currentLayerId, layerStack, layerPath }
+    );
+
+    setStates(result.states);
+    setLayers(result.layers);
+    setJunctions(result.junctions);
+    setTransitions(result.transitions);
+    setCurrentLayerId(result.navigation.currentLayerId);
+    setLayerStack(result.navigation.layerStack);
+    setLayerPath(result.navigation.layerPath);
+    setSelectedIds(prev => prev.filter(sid => !result.deletedStateIds.includes(sid) && !result.deletedJunctionIds.includes(sid)));
+
     addError('info', `Deleted state: ${state.name}`);
-  }, [states, addError]);
+  }, [states, layers, junctions, transitions, currentLayerId, layerStack, layerPath, addError, addToHistory]);
 
   const createXBridgesState = useCallback((x: number, y: number) => {
     addToHistory();
@@ -17335,6 +17350,61 @@ const ADIA = () => {
             }}
             onImportFile={handleImportFile}
           />
+        )}
+
+        {/* Delete State Confirmation Modal */}
+        {deleteConfirmState && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-150" onMouseDown={() => setDeleteConfirmState(null)}>
+            <div className="bg-[#1a1a1a] border border-[#f97316]/60 rounded-xl w-[480px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative" onMouseDown={e => e.stopPropagation()}>
+              <div className="h-14 flex items-center px-6 border-b border-[#2a2a2a] bg-[#141414]">
+                <Trash2 className="w-5 h-5 text-[#f97316] mr-3 shrink-0" />
+                <h2 className="text-base font-bold text-[#e0e0e0]">Confirm Delete State</h2>
+                <button
+                  onClick={() => setDeleteConfirmState(null)}
+                  className="ml-auto text-[#888] hover:text-[#fff] p-1 rounded transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {deleteConfirmState.hasChildren ? (
+                  <>
+                    <p className="text-sm text-[#cccccc] leading-relaxed">
+                      State <span className="font-semibold text-[#f97316]">{deleteConfirmState.name}</span> contains <span className="font-semibold text-[#f97316]">{deleteConfirmState.parts}</span>.
+                    </p>
+                    <div className="p-3.5 bg-[#2a1a14] rounded-lg border border-[#f97316]/30 flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-[#f97316] shrink-0 mt-0.5" />
+                      <p className="text-xs text-[#e8b595] leading-relaxed">
+                        Deleting this state will permanently remove all of its child states, sub-layers, junctions, and transitions from both the workspace canvas and tree hierarchy.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-[#cccccc]">
+                    Are you sure you want to delete state <span className="font-semibold text-[#f97316]">{deleteConfirmState.name}</span> from the workspace and state tree?
+                  </p>
+                )}
+              </div>
+
+              <div className="h-16 flex items-center justify-end px-6 border-t border-[#2a2a2a] bg-[#141414] gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setDeleteConfirmState(null)}
+                  className="border-[#333] text-[#a0a0a0] hover:bg-[#252525] hover:text-white px-5 text-xs h-9"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => executeDeleteState(deleteConfirmState.id)}
+                  className="bg-red-600 hover:bg-red-700 text-white px-5 text-xs h-9 font-medium shadow-md flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete State
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Save Selection Dialog */}

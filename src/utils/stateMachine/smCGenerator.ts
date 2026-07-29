@@ -552,14 +552,26 @@ const renderCommitRoute = (
 ): string => {
   const statements: string[] = [];
   if (transition.kind !== 'internal-action') {
+    const exitedActiveSlots = new Set<number>();
     for (const stateId of topmostExitStateIds(ir, route.exitStateIds)) {
       statements.push(
         `${indent}SM_Exit_State(instance, ${stateNode(ir, stateId)}, true);`,
       );
+      const exitedState = ir.states[stateId];
+      if (exitedState.activeSlot >= 0) {
+        exitedActiveSlots.add(exitedState.activeSlot);
+      }
+      for (const childLayerId of exitedState.childLayerIds) {
+        const childLayer = ir.layers[childLayerId];
+        if (childLayer.activeSlot !== null) {
+          exitedActiveSlots.add(childLayer.activeSlot);
+        }
+      }
     }
     for (const stateId of route.entryStateIds) {
       const state = ir.states[stateId];
       if (state.activeSlot < 0) continue;
+      if (exitedActiveSlots.has(state.activeSlot)) continue;
       statements.push(lines(
         `${indent}if ((instance->active_states[${state.activeSlot}U] != SM_NODE_INVALID) &&`,
         `${indent}    (instance->active_states[${state.activeSlot}U] != ${stateNode(ir, stateId)})) {`,
@@ -775,6 +787,7 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '#include <stdint.h>',
     '',
     `#define SM_TICK_MS ${ir.tickMs}U`,
+    '#define SM_TICK_TOLERANCE_MS ((SM_TICK_MS / 10U) > 0U ? (SM_TICK_MS / 10U) : 1U)',
     `#define SM_NUM_STATES ${states.length}U`,
     `#define SM_NUM_LAYERS ${layers.length}U`,
     `#define SM_NUM_ACTIVE_SLOTS ${ir.activeSlotCount}U`,
@@ -1385,7 +1398,13 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '        SM_Enter_Fault(instance);',
     '        return instance->error_status;',
     '    }',
-    '    if (delta_ms != SM_TICK_MS) {',
+    '    uint32_t tick_delta;',
+    '    if (delta_ms >= SM_TICK_MS) {',
+    '        tick_delta = delta_ms - SM_TICK_MS;',
+    '    } else {',
+    '        tick_delta = SM_TICK_MS - delta_ms;',
+    '    }',
+    '    if (tick_delta > SM_TICK_TOLERANCE_MS) {',
     '        instance->error_status = SM_ERR_TIMING;',
     '        SM_Enter_Fault(instance);',
     '        return instance->error_status;',

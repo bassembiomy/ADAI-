@@ -727,6 +727,22 @@ int main(void) {
     expect(output.trim()).toBe('0 0');
   });
 
+  it('returns to the autostart state and resets variables after SM_Reset', () => {
+    const output = compileAndRun(
+      build(flatOrFixture()),
+      `#include "sm_core.h"\n#include <stdio.h>\nbool MCAL_Dio_ReadChannel(uint32_t channel) { (void)channel; return false; }\nvoid MCAL_Dio_WriteChannel(uint32_t channel, bool level) { (void)channel; (void)level; }\nvoid MCAL_ApplySafeOutputs(void) {}\nvoid MCAL_Watchdog_Kick(void) {}\nint main(void) {\n    ADIA_Instance_t inst;\n    (void)SM_Init(&inst);\n    inst.data.go = true;\n    (void)SM_Step(&inst, SM_TICK_MS);\n    printf("%d %d\\n", inst.data.go, SM_GetActive(&inst, 0U) == SM_ST_B);\n    (void)SM_Reset(&inst);\n    printf("%d %d\\n", inst.data.go, SM_GetActive(&inst, 0U) == SM_ST_A);\n    return 0;\n}\n`,
+    );
+    expect(output.trim().replace(/\r/g, '')).toBe('1 1\n0 1');
+  });
+
+  it('tolerates small jitter around SM_TICK_MS without a timing fault', () => {
+    const output = compileAndRun(
+      build(flatOrFixture()),
+      `#include "sm_core.h"\n#include <stdio.h>\nbool MCAL_Dio_ReadChannel(uint32_t channel) { (void)channel; return false; }\nvoid MCAL_Dio_WriteChannel(uint32_t channel, bool level) { (void)channel; (void)level; }\nvoid MCAL_ApplySafeOutputs(void) {}\nvoid MCAL_Watchdog_Kick(void) {}\nint main(void) {\n    ADIA_Instance_t inst;\n    (void)SM_Init(&inst);\n    (void)SM_Step(&inst, SM_TICK_MS + 1U);\n    printf("%d\\n", SM_GetError(&inst) == SM_ERR_NONE);\n    (void)SM_Step(&inst, SM_TICK_MS - 1U);\n    printf("%d\\n", SM_GetError(&inst) == SM_ERR_NONE);\n    (void)SM_Step(&inst, SM_TICK_MS + 5U);\n    printf("%d\\n", SM_GetError(&inst) == SM_ERR_TIMING);\n    return 0;\n}\n`,
+    );
+    expect(output.trim().replace(/\r/g, '')).toBe('1\n1\n1');
+  });
+
   it('commits safe outputs immediately and latches a fault', () => {
     const model = mappedOutputFixture();
     model.safetyMode = true;

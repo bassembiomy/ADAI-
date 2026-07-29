@@ -10,6 +10,7 @@ exports[`Golden-file & behavior trace regression tests > should match golden tem
 #include <stdint.h>
 
 #define SM_TICK_MS 10U
+#define SM_TICK_TOLERANCE_MS ((SM_TICK_MS / 10U) > 0U ? (SM_TICK_MS / 10U) : 1U)
 #define SM_NUM_STATES 2U
 #define SM_NUM_LAYERS 1U
 #define SM_NUM_ACTIVE_SLOTS 1U
@@ -252,10 +253,6 @@ static bool SM_Execute_State_1(ADIA_Instance_t *instance)
 {
     if (((instance->state_timers[SM_ST_S1_IDX] >= 20U))) {
         SM_Exit_State(instance, SM_ST_S1, true);
-        if ((instance->active_states[0U] != SM_NODE_INVALID) &&
-            (instance->active_states[0U] != SM_ST_S2)) {
-            SM_Exit_State(instance, instance->active_states[0U], true);
-        }
         instance->state_active[SM_ST_S2_IDX] = true;
         instance->state_timers[SM_ST_S2_IDX] = 0U;
         instance->active_states[0U] = SM_ST_S2;
@@ -375,7 +372,13 @@ SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)
         SM_Enter_Fault(instance);
         return instance->error_status;
     }
-    if (delta_ms != SM_TICK_MS) {
+    uint32_t tick_delta;
+    if (delta_ms >= SM_TICK_MS) {
+        tick_delta = delta_ms - SM_TICK_MS;
+    } else {
+        tick_delta = SM_TICK_MS - delta_ms;
+    }
+    if (tick_delta > SM_TICK_TOLERANCE_MS) {
         instance->error_status = SM_ERR_TIMING;
         SM_Enter_Fault(instance);
         return instance->error_status;
@@ -746,9 +749,9 @@ Evidence labels describe only the checks actually recorded for this generated pa
 | Metric | Value |
 |---|---:|
 | Files measured | 8 |
-| Total lines | 648 |
-| Functional lines | 577 |
-| Comment/blank density | 11.0% |
+| Total lines | 651 |
+| Functional lines | 580 |
+| Comment/blank density | 10.9% |
 
 These are structural metrics derived from the same validated semantic analysis used by the testing report. They are not formal MISRA, safety-certification, embedded-timing, or target-hardware evidence.
 ",
