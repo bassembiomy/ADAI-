@@ -10,9 +10,9 @@ describe('smStatePruner', () => {
   const s2: StateData = { id: 's2', name: 'State_2', x: 200, y: 0, width: 100, height: 100, entry: '', during: '', exit: '', isActive: false, color: '#fff', parentId: 'root', children: [], priority: 20, isParallel: false, regionId: null, autostart: false, historyType: 'none', internalTransitions: '' };
   const s1_sub1: StateData = { id: 's1_sub1', name: 'Sub_1', x: 10, y: 10, width: 80, height: 80, entry: '', during: '', exit: '', isActive: false, color: '#fff', parentId: 'l_child', children: [], priority: 10, isParallel: false, regionId: null, autostart: false, historyType: 'none', internalTransitions: '' };
 
-  const j1: JunctionData = { id: 'j1', x: 50, y: 50, type: 'junction', autostart: false, parentId: 'l_child' };
-  const t1: TransitionData = { id: 't1', sourceId: 's1', targetId: 's2', event: '', condition: '', action: '', afterTicks: null, type: 'condition', hasControlPoint: false, order: 1 };
-  const t2: TransitionData = { id: 't2', sourceId: 'j1', targetId: 's1_sub1', event: '', condition: '', action: '', afterTicks: null, type: 'condition', hasControlPoint: false, order: 1 };
+  const j1: JunctionData = { id: 'j1', name: 'J1', color: '#fff', x: 50, y: 50, type: 'junction', autostart: false, parentId: 'l_child' };
+  const t1: TransitionData = { id: 't1', sourceId: 's1', targetId: 's2', condition: '', action: '', afterTicks: null, type: 'condition', hasControlPoint: false, order: 1 };
+  const t2: TransitionData = { id: 't2', sourceId: 'j1', targetId: 's1_sub1', condition: '', action: '', afterTicks: null, type: 'condition', hasControlPoint: false, order: 1 };
 
   it('correctly counts descendant states and sub-layers', () => {
     const counts = countDescendants('s1', [s1, s2, s1_sub1], [rootLayer, childLayer]);
