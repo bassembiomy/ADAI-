@@ -35,13 +35,16 @@ export interface XBConversionPolicy {
   readonly rounding: XBRoundingMode;
   readonly overflow: XBOverflowMode;
   readonly supportsFloat16?: boolean;
+  readonly supportsFloat64?: boolean;
 }
+
+export type XBNumericFault = 'overflow' | 'non-finite' | 'unsupported-float';
 
 export interface XBConversionResult {
   readonly value: number | boolean;
   readonly storedInteger: number | null;
   readonly quantizationError: number;
-  readonly fault: 'overflow' | 'non-finite' | 'unsupported-float' | null;
+  readonly fault: XBNumericFault | null;
 }
 
 export type XBShape =
@@ -56,6 +59,11 @@ export type XBShape =
 export interface XBTypedValue {
   readonly shape: XBShape;
   readonly values: readonly (number | boolean)[];
+  readonly faults: readonly {
+    readonly index: number;
+    readonly fault: XBNumericFault;
+  }[];
+  readonly fault: XBNumericFault | null;
 }
 
 type XBScalar = number | boolean;
@@ -118,83 +126,109 @@ const positiveModulo = (value: number, modulus: number): number => {
   return remainder < 0 ? remainder + modulus : remainder;
 };
 
-const float16BitsToNumber = (bits: number): number => {
-  const sign = (bits & 0x8000) === 0 ? 1 : -1;
-  const exponent = (bits >>> 10) & 0x1f;
-  const fraction = bits & 0x03ff;
-
-  if (exponent === 0) {
-    return fraction === 0
-      ? sign < 0 ? -0 : 0
-      : sign * fraction * 2 ** -24;
-  }
-  if (exponent === 0x1f) {
-    return fraction === 0 ? sign * Number.POSITIVE_INFINITY : Number.NaN;
-  }
-  return sign * (1 + fraction / 1024) * 2 ** (exponent - 15);
+const roundPositiveTiesToEven = (value: number): number => {
+  const lower = Math.floor(value);
+  const fraction = value - lower;
+  if (fraction < 0.5) return lower;
+  if (fraction > 0.5) return lower + 1;
+  return lower % 2 === 0 ? lower : lower + 1;
 };
 
-const float32Buffer = new ArrayBuffer(4);
-const float32View = new DataView(float32Buffer);
+const convertFloat16 = (value: number): number => {
+  if (value === 0) return value;
 
-const numberToFloat16Bits = (value: number): number => {
-  float32View.setFloat32(0, value, false);
-  const bits = float32View.getUint32(0, false);
-  const sign = (bits >>> 16) & 0x8000;
-  const exponent = (bits >>> 23) & 0xff;
-  let fraction = bits & 0x7fffff;
+  const sign = value < 0 ? -1 : 1;
+  const magnitude = Math.abs(value);
+  const minimumNormal = 2 ** -14;
+  const exponent = magnitude < minimumNormal
+    ? -14
+    : Math.floor(Math.log2(magnitude));
+  const step = magnitude < minimumNormal
+    ? 2 ** -24
+    : 2 ** (exponent - 10);
+  const roundedMagnitude = roundPositiveTiesToEven(magnitude / step) * step;
 
-  if (exponent === 0xff) {
-    return sign | (fraction === 0 ? 0x7c00 : 0x7e00);
-  }
-
-  let halfExponent = exponent - 127 + 15;
-  if (halfExponent >= 0x1f) return sign | 0x7c00;
-
-  if (halfExponent <= 0) {
-    if (halfExponent < -10) return sign;
-    fraction |= 0x800000;
-    const shift = 14 - halfExponent;
-    let halfFraction = fraction >>> shift;
-    const remainder = fraction & (2 ** shift - 1);
-    const halfway = 2 ** (shift - 1);
-    if (remainder > halfway || (remainder === halfway && (halfFraction & 1) !== 0)) {
-      halfFraction += 1;
-    }
-    return sign | halfFraction;
-  }
-
-  let halfFraction = fraction >>> 13;
-  const remainder = fraction & 0x1fff;
-  if (remainder > 0x1000 || (remainder === 0x1000 && (halfFraction & 1) !== 0)) {
-    halfFraction += 1;
-    if (halfFraction === 0x400) {
-      halfFraction = 0;
-      halfExponent += 1;
-      if (halfExponent >= 0x1f) return sign | 0x7c00;
-    }
-  }
-
-  return sign | (halfExponent << 10) | halfFraction;
+  return roundedMagnitude >= 65536
+    ? sign * Number.POSITIVE_INFINITY
+    : sign * roundedMagnitude;
 };
-
-const convertFloat16 = (value: number): number =>
-  float16BitsToNumber(numberToFloat16Bits(value));
 
 const getFloatPrecision = (
   destination: Exclude<XBNumericType, XBFixedType | XBBooleanType>,
 ): 'float16' | 'float32' | 'float64' =>
   destination.kind === 'float' ? destination.precision : destination.kind;
 
+const ROUNDING_MODES: readonly XBRoundingMode[] = [
+  'floor',
+  'ceiling',
+  'zero',
+  'nearest',
+  'round',
+  'convergent',
+  'simplest',
+];
+
+const OVERFLOW_MODES: readonly XBOverflowMode[] = ['saturate', 'wrap', 'error'];
+
+const validateConversionPolicy = (policy: XBConversionPolicy): void => {
+  if (!ROUNDING_MODES.includes(policy.rounding)) {
+    throw new RangeError(`Unsupported rounding mode: ${String(policy.rounding)}.`);
+  }
+  if (!OVERFLOW_MODES.includes(policy.overflow)) {
+    throw new RangeError(`Unsupported overflow mode: ${String(policy.overflow)}.`);
+  }
+};
+
+const validateNumericType = (destination: XBNumericType): void => {
+  if (typeof destination !== 'object' || destination === null) {
+    throw new TypeError('Unsupported numeric type.');
+  }
+
+  if (destination.kind === 'fixed') {
+    assertFixedType(destination);
+    return;
+  }
+  if (destination.kind === 'boolean'
+    || destination.kind === 'float16'
+    || destination.kind === 'float32'
+    || destination.kind === 'float64') {
+    return;
+  }
+  if (destination.kind === 'float') {
+    if (!['float16', 'float32', 'float64'].includes(destination.precision)) {
+      throw new RangeError(`Unsupported float precision: ${String(destination.precision)}.`);
+    }
+    return;
+  }
+
+  throw new RangeError(`Unsupported numeric type: ${String((destination as any).kind)}.`);
+};
+
 export const xbConvertScalar = (
   value: number,
   destination: XBNumericType,
   policy: XBConversionPolicy,
 ): XBConversionResult => {
+  validateConversionPolicy(policy);
+  validateNumericType(destination);
+
   if (policy.rounding === 'simplest') {
     throw new Error(
       'Resolve "simplest" rounding to either "floor" or "zero" before numeric execution.',
     );
+  }
+
+  const precision = destination.kind !== 'fixed' && destination.kind !== 'boolean'
+    ? getFloatPrecision(destination)
+    : null;
+  if ((precision === 'float16' && policy.supportsFloat16 !== true)
+    || (precision === 'float64' && policy.supportsFloat64 !== true)) {
+    return {
+      value,
+      storedInteger: null,
+      quantizationError: 0,
+      fault: 'unsupported-float',
+    };
   }
 
   if (!Number.isFinite(value)) {
@@ -217,16 +251,6 @@ export const xbConvertScalar = (
   }
 
   if (destination.kind !== 'fixed') {
-    const precision = getFloatPrecision(destination);
-    if (precision === 'float16' && policy.supportsFloat16 !== true) {
-      return {
-        value,
-        storedInteger: null,
-        quantizationError: 0,
-        fault: 'unsupported-float',
-      };
-    }
-
     const converted = precision === 'float16'
       ? convertFloat16(value)
       : precision === 'float32'
@@ -240,7 +264,6 @@ export const xbConvertScalar = (
     };
   }
 
-  assertFixedType(destination);
   const scale = 2 ** destination.fractionLength;
   const scaled = value * scale;
   const minimum = destination.signed ? -(2 ** (destination.wordLength - 1)) : 0;
@@ -299,13 +322,6 @@ const assertPositiveDimension = (name: string, value: number): void => {
   }
 };
 
-const unwrapConvertedScalar = (
-  converted: XBScalar | XBConversionResult,
-): XBScalar => {
-  if (typeof converted === 'object') return converted.value;
-  return converted;
-};
-
 export const xbMapValue = (
   value: XBShapedInput,
   shape: XBShape,
@@ -347,9 +363,24 @@ export const xbMapValue = (
     sourceValues = flattened;
   }
 
+  const values: XBScalar[] = [];
+  const faults: Array<{ index: number; fault: XBNumericFault }> = [];
+  sourceValues.forEach((entry, index) => {
+    const converted = convert(entry, index);
+    if (typeof converted === 'object') {
+      values.push(converted.value);
+      if (converted.fault !== null) {
+        faults.push({ index, fault: converted.fault });
+      }
+    } else {
+      values.push(converted);
+    }
+  });
+
   return {
     shape,
-    values: sourceValues.map((entry, index) =>
-      unwrapConvertedScalar(convert(entry, index))),
+    values,
+    faults,
+    fault: faults[0]?.fault ?? null,
   };
 };

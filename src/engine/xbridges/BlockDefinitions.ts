@@ -3695,21 +3695,76 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
 
   // --- Signal Management ---
   'DATA_TYPE_CONVERSION': (id, params) => {
-    const output_type = params.output_type || 'float64';
-    const rounding = params.rounding || 'floor';
-    const overflow = params.overflow || 'saturate';
+    const output_type = params.output_type !== undefined ? String(params.output_type) : 'float32';
+    const rounding = params.rounding !== undefined ? String(params.rounding) : 'floor';
+    const overflow = params.overflow !== undefined ? String(params.overflow) : 'saturate';
     const wl = params.wordLength !== undefined ? Number(params.wordLength) : 16;
     const fl = params.fractionLength !== undefined ? Number(params.fractionLength) : 8;
+    const supportsFloat16 = params.supportsFloat16 === true;
+    const supportsFloat64 = params.supportsFloat64 === true;
 
     const dataTypeStr = output_type === 'fixed_point' ? `fixed_point (${wl},${fl})` : output_type;
 
     return {
       id, type: 'DATA_TYPE_CONVERSION',
-      params: { output_type, rounding, overflow, wordLength: wl, fractionLength: fl },
+      params: {
+        output_type,
+        rounding,
+        overflow,
+        wordLength: wl,
+        fractionLength: fl,
+        supportsFloat16,
+        supportsFloat64,
+      },
       inputs: [createPort('u', 'u', 'input')],
       outputs: [createPort('y', 'y', 'output', 0, 'right', 'auto', dataTypeStr)],
       execute: (ins, p) => {
-        const outputType = String(p.output_type || 'float64');
+        const outputType = String(p.output_type);
+        const supportedOutputTypes = [
+          'fixed_point',
+          'int8',
+          'uint8',
+          'int16',
+          'uint16',
+          'int32',
+          'uint32',
+          'boolean',
+          'float16',
+          'float32',
+          'float64',
+          'single',
+          'double',
+        ];
+        if (!supportedOutputTypes.includes(outputType)) {
+          return {
+            outputs: [0],
+            error: `Unsupported output type: ${outputType}.`,
+          };
+        }
+
+        const roundingMode = p.rounding === 'ceil' ? 'ceiling' : p.rounding;
+        const supportedRoundingModes = [
+          'floor',
+          'ceiling',
+          'zero',
+          'nearest',
+          'round',
+          'convergent',
+          'simplest',
+        ];
+        if (!supportedRoundingModes.includes(roundingMode)) {
+          return {
+            outputs: [0],
+            error: `Unsupported rounding mode: ${String(p.rounding)}.`,
+          };
+        }
+        if (!['saturate', 'wrap', 'error'].includes(p.overflow)) {
+          return {
+            outputs: [0],
+            error: `Unsupported overflow mode: ${String(p.overflow)}.`,
+          };
+        }
+
         const integerType = /^(u?)int(8|16|32)$/.exec(outputType);
         let destination: XBNumericType;
 
@@ -3741,20 +3796,23 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         }
 
         const policy: XBConversionPolicy = {
-          rounding: p.rounding === 'ceil'
-            ? 'ceiling'
-            : p.rounding === 'simplest'
-              ? 'floor'
-              : p.rounding,
-          overflow: p.overflow === 'wrap'
-            ? 'wrap'
-            : p.overflow === 'error'
-              ? 'error'
-              : 'saturate',
-          supportsFloat16: true,
+          rounding: roundingMode === 'simplest' ? 'floor' : roundingMode,
+          overflow: p.overflow,
+          supportsFloat16: p.supportsFloat16 === true,
+          supportsFloat64: p.supportsFloat64 === true,
         };
-        const result = xbConvertScalar(Number(ins[0] ?? 0), destination, policy);
-        return { outputs: [result.value] };
+        try {
+          const result = xbConvertScalar(Number(ins[0] ?? 0), destination, policy);
+          return {
+            outputs: [result.value],
+            error: result.fault ?? undefined,
+          };
+        } catch (error) {
+          return {
+            outputs: [0],
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
       }
     };
   },
@@ -5031,17 +5089,30 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
   },
 
   'NUMERIC_REPRESENTATION': (id, params) => {
-    const mode = params.mode || 'fixed_point';
+    const mode = params.mode !== undefined ? String(params.mode) : 'fixed_point';
     // Default output_type is mode-aware: float32 for floating-point, 'fixed_point' for fixed-point
-    const output_type = params.output_type || (mode === 'floating_point' ? 'float32' : 'fixed_point');
-    const rounding = params.rounding || 'floor';
-    const overflow = params.overflow || 'saturate';
+    const output_type = params.output_type !== undefined
+      ? String(params.output_type)
+      : mode === 'floating_point' ? 'float32' : 'fixed_point';
+    const rounding = params.rounding !== undefined ? String(params.rounding) : 'floor';
+    const overflow = params.overflow !== undefined ? String(params.overflow) : 'saturate';
     const wl = params.wordLength !== undefined ? Number(params.wordLength) : 16;
     const fl = params.fractionLength !== undefined ? Number(params.fractionLength) : 8;
+    const supportsFloat16 = params.supportsFloat16 === true;
+    const supportsFloat64 = params.supportsFloat64 === true;
 
     return {
       id, type: 'NUMERIC_REPRESENTATION',
-      params: { mode, output_type, rounding, overflow, wordLength: wl, fractionLength: fl },
+      params: {
+        mode,
+        output_type,
+        rounding,
+        overflow,
+        wordLength: wl,
+        fractionLength: fl,
+        supportsFloat16,
+        supportsFloat64,
+      },
       isStateful: false,
       inputs: [createPort('u', 'u', 'input')],
       outputs: [
@@ -5049,8 +5120,65 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         createPort('e', 'err', 'output', 0, 'right', 'auto')
       ],
       execute: (ins: any[], p: any) => {
-        const outputType = String(p.output_type
-          || (p.mode === 'floating_point' ? 'float32' : 'fixed_point'));
+        if (!['fixed_point', 'floating_point'].includes(p.mode)) {
+          return {
+            outputs: [0, 0],
+            error: `Unsupported representation mode: ${String(p.mode)}.`,
+          };
+        }
+
+        const outputType = String(p.output_type);
+        const fixedOutputTypes = [
+          'fixed_point',
+          'int8',
+          'uint8',
+          'int16',
+          'uint16',
+          'int32',
+          'uint32',
+          'boolean',
+        ];
+        const floatingOutputTypes = [
+          'float16',
+          'float32',
+          'float64',
+          'single',
+          'double',
+          'boolean',
+        ];
+        const supportedOutputTypes = p.mode === 'floating_point'
+          ? floatingOutputTypes
+          : fixedOutputTypes;
+        if (!supportedOutputTypes.includes(outputType)) {
+          return {
+            outputs: [0, 0],
+            error: `Unsupported output type for ${p.mode}: ${outputType}.`,
+          };
+        }
+
+        const roundingMode = p.rounding === 'ceil' ? 'ceiling' : p.rounding;
+        const supportedRoundingModes = [
+          'floor',
+          'ceiling',
+          'zero',
+          'nearest',
+          'round',
+          'convergent',
+          'simplest',
+        ];
+        if (!supportedRoundingModes.includes(roundingMode)) {
+          return {
+            outputs: [0, 0],
+            error: `Unsupported rounding mode: ${String(p.rounding)}.`,
+          };
+        }
+        if (!['saturate', 'wrap', 'error'].includes(p.overflow)) {
+          return {
+            outputs: [0, 0],
+            error: `Unsupported overflow mode: ${String(p.overflow)}.`,
+          };
+        }
+
         const integerType = /^(u?)int(8|16|32)$/.exec(outputType);
         let destination: XBNumericType;
 
@@ -5082,21 +5210,23 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         }
 
         const policy: XBConversionPolicy = {
-          rounding: p.rounding === 'ceil'
-            ? 'ceiling'
-            : p.rounding === 'simplest'
-              ? 'floor'
-              : p.rounding,
-          overflow: p.overflow === 'wrap'
-            ? 'wrap'
-            : p.overflow === 'error'
-              ? 'error'
-              : 'saturate',
-          // The host workspace uses the kernel's bounded IEEE-754 software helper.
-          supportsFloat16: true,
+          rounding: roundingMode === 'simplest' ? 'floor' : roundingMode,
+          overflow: p.overflow,
+          supportsFloat16: p.supportsFloat16 === true,
+          supportsFloat64: p.supportsFloat64 === true,
         };
-        const result = xbConvertScalar(Number(ins[0] ?? 0), destination, policy);
-        return { outputs: [result.value, result.quantizationError] };
+        try {
+          const result = xbConvertScalar(Number(ins[0] ?? 0), destination, policy);
+          return {
+            outputs: [result.value, result.quantizationError],
+            error: result.fault ?? undefined,
+          };
+        } catch (error) {
+          return {
+            outputs: [0, 0],
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
       }
     };
   },

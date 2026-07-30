@@ -1830,7 +1830,8 @@ describe('X-Bridges Learning Models Block Tests', () => {
     it('should support floating-point mode: float16 simulates IEEE 754 half-precision', () => {
       const block = BLOCK_LIBRARY['NUMERIC_REPRESENTATION']('numrep5', {
         mode: 'floating_point',
-        output_type: 'float16'
+        output_type: 'float16',
+        supportsFloat16: true
       });
       const res = block.execute([Math.PI], block.params, null, 0);
       // float16: exp=1, step=2^(1-10)=1/512=0.001953125
@@ -1858,9 +1859,57 @@ describe('X-Bridges Learning Models Block Tests', () => {
       expect(Math.abs((resFP.outputs[0] as number) - 1.2345)).toBeLessThan(0.001);
       // The two modes must differ when quantization step is coarse
     });
+
+    it('should surface unsupported float capability faults', () => {
+      const block = BLOCK_LIBRARY['NUMERIC_REPRESENTATION']('numrep_float64_fault', {
+        mode: 'floating_point',
+        output_type: 'float64'
+      });
+
+      const res = block.execute([Math.PI], block.params, null, 0);
+
+      expect(res.error).toBe('unsupported-float');
+    });
+
+    it('should surface fixed overflow-as-error faults', () => {
+      const block = BLOCK_LIBRARY['NUMERIC_REPRESENTATION']('numrep_overflow_fault', {
+        mode: 'fixed_point',
+        output_type: 'int8',
+        overflow: 'error'
+      });
+
+      const res = block.execute([128], block.params, null, 0);
+
+      expect(res.outputs[0]).toBe(127);
+      expect(res.error).toBe('overflow');
+    });
+
+    it.each([
+      [{ mode: 'quantum', output_type: 'float32' }, /representation mode/i],
+      [{ mode: 'floating_point', output_type: 'decimal128' }, /output type/i],
+      [{ rounding: 'sideways' }, /rounding mode/i],
+      [{ overflow: 'ignore' }, /overflow mode/i],
+    ])('should reject malformed representation parameters %#', (params, message) => {
+      const block = BLOCK_LIBRARY['NUMERIC_REPRESENTATION']('numrep_invalid', params);
+      const res = block.execute([1], block.params, null, 0);
+
+      expect(res.error).toMatch(message);
+      expect(res.outputs).toEqual([0, 0]);
+    });
   });
 
   describe('DATA_TYPE_CONVERSION Block', () => {
+    it('should default to float32', () => {
+      const block = BLOCK_LIBRARY['DATA_TYPE_CONVERSION']('convert_default', {});
+      const value = 1 + 2 ** -24;
+
+      const res = block.execute([value], block.params, null, 0);
+
+      expect(block.params.output_type).toBe('float32');
+      expect(res.outputs[0]).toBe(Math.fround(value));
+      expect(res.error).toBeUndefined();
+    });
+
     it('should use the shared negative-tie rounding semantics', () => {
       const block = BLOCK_LIBRARY['DATA_TYPE_CONVERSION']('convert_round_tie', {
         output_type: 'int8',
@@ -1871,6 +1920,35 @@ describe('X-Bridges Learning Models Block Tests', () => {
       const res = block.execute([-1.5], block.params, null, 0);
 
       expect(res.outputs[0]).toBe(-2);
+    });
+
+    it('should use explicit target capabilities and surface unsupported faults', () => {
+      const unsupported = BLOCK_LIBRARY['DATA_TYPE_CONVERSION']('convert_float16_off', {
+        output_type: 'float16'
+      });
+      const supported = BLOCK_LIBRARY['DATA_TYPE_CONVERSION']('convert_float16_on', {
+        output_type: 'float16',
+        supportsFloat16: true
+      });
+
+      const unsupportedResult = unsupported.execute([Math.PI], unsupported.params, null, 0);
+      const supportedResult = supported.execute([Math.PI], supported.params, null, 0);
+
+      expect(unsupportedResult.error).toBe('unsupported-float');
+      expect(supportedResult.outputs[0]).toBe(3.140625);
+      expect(supportedResult.error).toBeUndefined();
+    });
+
+    it.each([
+      [{ output_type: 'decimal128' }, /output type/i],
+      [{ rounding: 'sideways' }, /rounding mode/i],
+      [{ overflow: 'ignore' }, /overflow mode/i],
+    ])('should reject malformed conversion parameters %#', (params, message) => {
+      const block = BLOCK_LIBRARY['DATA_TYPE_CONVERSION']('convert_invalid', params);
+      const res = block.execute([1], block.params, null, 0);
+
+      expect(res.error).toMatch(message);
+      expect(res.outputs).toEqual([0]);
     });
   });
 
