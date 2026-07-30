@@ -3,6 +3,11 @@ import { XBlock, XPort } from './types';
 import { VectorUtils } from './VectorUtils';
 import * as math from 'mathjs';
 import { MpcSolver } from './MpcSolver';
+import {
+  xbConvertScalar,
+  type XBConversionPolicy,
+  type XBNumericType,
+} from '../../utils/stateMachine/xbNumeric';
 
 export function polyToString(coeffs: number[], variable = 's'): string {
   if (!coeffs || coeffs.length === 0) return '0';
@@ -3693,24 +3698,10 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     const output_type = params.output_type || 'float64';
     const rounding = params.rounding || 'floor';
     const overflow = params.overflow || 'saturate';
-    const wl = Number(params.wordLength) || 16;
-    const fl = Number(params.fractionLength) || 8;
+    const wl = params.wordLength !== undefined ? Number(params.wordLength) : 16;
+    const fl = params.fractionLength !== undefined ? Number(params.fractionLength) : 8;
 
     const dataTypeStr = output_type === 'fixed_point' ? `fixed_point (${wl},${fl})` : output_type;
-
-    const applyRounding = (val: number, mode: string): number => {
-      if (mode === 'floor') return Math.floor(val);
-      if (mode === 'ceil') return Math.ceil(val);
-      if (mode === 'round' || mode === 'nearest') return Math.round(val);
-      if (mode === 'convergent') {
-        const d = Math.floor(val);
-        const f = val - d;
-        if (f < 0.5 - 1e-9) return d;
-        if (f > 0.5 + 1e-9) return d + 1;
-        return (d % 2 === 0) ? d : d + 1;
-      }
-      return Math.floor(val);
-    };
 
     return {
       id, type: 'DATA_TYPE_CONVERSION',
@@ -3718,52 +3709,52 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       inputs: [createPort('u', 'u', 'input')],
       outputs: [createPort('y', 'y', 'output', 0, 'right', 'auto', dataTypeStr)],
       execute: (ins, p) => {
-        const u = Number(ins[0] ?? 0);
-        let y = u;
+        const outputType = String(p.output_type || 'float64');
+        const integerType = /^(u?)int(8|16|32)$/.exec(outputType);
+        let destination: XBNumericType;
 
-        const limits: Record<string, [number, number]> = {
-          'int8': [-128, 127],
-          'uint8': [0, 255],
-          'int16': [-32768, 32767],
-          'uint16': [0, 65535],
-          'int32': [-2147483648, 2147483647],
-          'uint32': [0, 4294967295]
-        };
-
-        if (p.output_type === 'fixed_point') {
-          const wlVal = Number(p.wordLength) || 16;
-          const flVal = Number(p.fractionLength) || 8;
-          const scale = Math.pow(2, flVal);
-          let raw = applyRounding(u * scale, p.rounding);
-          const maxRaw = Math.pow(2, wlVal - 1) - 1;
-          const minRaw = -Math.pow(2, wlVal - 1);
-          
-          if (p.overflow === 'saturate') raw = Math.max(minRaw, Math.min(maxRaw, raw));
-          else if (p.overflow === 'wrap') {
-            const range = maxRaw - minRaw + 1;
-            raw = ((((raw - minRaw) % range) + range) % range) + minRaw;
-          }
-          y = raw / scale;
-        } else if (limits[p.output_type]) {
-          const [min, max] = limits[p.output_type];
-          const intVal = applyRounding(u, p.rounding);
-          
-          if (p.overflow === 'saturate') y = Math.max(min, Math.min(max, intVal));
-          else if (p.overflow === 'wrap') {
-            const range = max - min + 1;
-            y = ((((intVal - min) % range) + range) % range) + min;
-          } else {
-            y = intVal;
-          }
-        } else if (p.output_type === 'boolean') {
-          y = u !== 0 ? 1 : 0;
-        } else if (p.output_type === 'float32' || p.output_type === 'single') {
-          y = Math.fround(u);
+        if (outputType === 'fixed_point') {
+          destination = {
+            kind: 'fixed',
+            signed: true,
+            wordLength: Number(p.wordLength),
+            fractionLength: Number(p.fractionLength),
+          };
+        } else if (integerType) {
+          destination = {
+            kind: 'fixed',
+            signed: integerType[1] !== 'u',
+            wordLength: Number(integerType[2]),
+            fractionLength: 0,
+          };
+        } else if (outputType === 'boolean') {
+          destination = { kind: 'boolean' };
         } else {
-          y = u;
+          destination = {
+            kind: 'float',
+            precision: outputType === 'float16'
+              ? 'float16'
+              : outputType === 'float32' || outputType === 'single'
+                ? 'float32'
+                : 'float64',
+          };
         }
 
-        return { outputs: [y] };
+        const policy: XBConversionPolicy = {
+          rounding: p.rounding === 'ceil'
+            ? 'ceiling'
+            : p.rounding === 'simplest'
+              ? 'floor'
+              : p.rounding,
+          overflow: p.overflow === 'wrap'
+            ? 'wrap'
+            : p.overflow === 'error'
+              ? 'error'
+              : 'saturate',
+          supportsFloat16: true,
+        };
+        const result = xbConvertScalar(Number(ins[0] ?? 0), destination, policy);
+        return { outputs: [result.value] };
       }
     };
   },
@@ -5058,116 +5049,54 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
         createPort('e', 'err', 'output', 0, 'right', 'auto')
       ],
       execute: (ins: any[], p: any) => {
-        let u = Number(ins[0] ?? 0);
-        let y = u;
+        const outputType = String(p.output_type
+          || (p.mode === 'floating_point' ? 'float32' : 'fixed_point'));
+        const integerType = /^(u?)int(8|16|32)$/.exec(outputType);
+        let destination: XBNumericType;
 
-        // ----------------------------------------------------------------
-        // Rounding helper — applies to the integer representation
-        // ----------------------------------------------------------------
-        const applyRounding = (val: number, rm: string): number => {
-          if (rm === 'ceil')       return Math.ceil(val);
-          if (rm === 'round' || rm === 'nearest') return Math.round(val);
-          if (rm === 'convergent') {
-            // Banker's rounding (round half-to-even)
-            const d = Math.floor(val);
-            const f = val - d;
-            if (f < 0.5 - 1e-9) return d;
-            if (f > 0.5 + 1e-9) return d + 1;
-            return (d % 2 === 0) ? d : d + 1;
-          }
-          return Math.floor(val); // 'floor' — default, matches Simulink Floor rounding
-        };
-
-        // ----------------------------------------------------------------
-        // FLOATING-POINT MODE
-        // Casts the input to the specified IEEE float format.
-        // Matches Simulink Data Type Conversion block in floating-point mode.
-        // ----------------------------------------------------------------
-        if (p.mode === 'floating_point') {
-          const ot = p.output_type || 'float32';
-          if (ot === 'float32' || ot === 'single') {
-            // Round to nearest representable float32 value
-            y = Math.fround(u);
-          } else if (ot === 'float16') {
-            // Simulate IEEE 754 half-precision (10-bit mantissa, 5-bit exponent)
-            // float16 max = 65504, resolution ~ 2^(exp-10)
-            if (!isFinite(u) || u === 0) {
-              y = u;
-            } else {
-              const sign = u < 0 ? -1 : 1;
-              const abs = Math.abs(u);
-              const clamped = Math.min(abs, 65504); // float16 max positive
-              const exp = Math.floor(Math.log2(clamped));
-              const step = Math.pow(2, Math.max(exp - 10, -24)); // 10 mantissa bits
-              y = sign * (Math.round(clamped / step) * step);
-            }
-          } else if (ot === 'float64' || ot === 'double') {
-            // Native JS double precision — no quantization loss
-            y = u;
-          } else if (ot === 'boolean') {
-            y = u !== 0 ? 1 : 0;
-          } else {
-            y = u;
-          }
+        if (outputType === 'boolean') {
+          destination = { kind: 'boolean' };
+        } else if (p.mode === 'floating_point') {
+          destination = {
+            kind: 'float',
+            precision: outputType === 'float16'
+              ? 'float16'
+              : outputType === 'float64' || outputType === 'double'
+                ? 'float64'
+                : 'float32',
+          };
+        } else if (integerType) {
+          destination = {
+            kind: 'fixed',
+            signed: integerType[1] !== 'u',
+            wordLength: Number(integerType[2]),
+            fractionLength: 0,
+          };
         } else {
-          // ----------------------------------------------------------------
-          // FIXED-POINT MODE — fi(u, Signed, WordLength, FractionLength)
-          // Matches MATLAB Fixed-Point Designer fi() object semantics.
-          //
-          // Resolution (LSB) = 2^(-FL)
-          // Integer range (signed):   [-2^(WL-1),       2^(WL-1)-1]
-          // Integer range (unsigned): [0,                2^(WL)-1  ]
-          // Real range (signed):      [-2^(WL-FL-1),    2^(WL-FL-1)-2^(-FL)]
-          // Real range (unsigned):    [0,                2^(WL-FL) -2^(-FL)]
-          // ----------------------------------------------------------------
-          const ot = p.output_type || 'fixed_point';
-          let wlVal = Number(p.wordLength ?? 16);
-          let flVal = Number(p.fractionLength ?? 8);
-          let isUnsigned = false;
-
-          // Integer subtypes fix FL=0 (no fractional bits)
-          if (ot === 'int8')    { wlVal = 8;  flVal = 0; isUnsigned = false; }
-          else if (ot === 'uint8')  { wlVal = 8;  flVal = 0; isUnsigned = true;  }
-          else if (ot === 'int16')  { wlVal = 16; flVal = 0; isUnsigned = false; }
-          else if (ot === 'uint16') { wlVal = 16; flVal = 0; isUnsigned = true;  }
-          else if (ot === 'int32')  { wlVal = 32; flVal = 0; isUnsigned = false; }
-          else if (ot === 'uint32') { wlVal = 32; flVal = 0; isUnsigned = true;  }
-          else if (ot === 'boolean'){ wlVal = 1;  flVal = 0; isUnsigned = true;  }
-          // 'fixed_point': uses wordLength and fractionLength from params
-
-          // Step 1: Scale real value to integer domain
-          const scale = Math.pow(2, flVal);
-          let raw = u * scale;
-
-          // Step 2: Round the integer representation
-          raw = applyRounding(raw, p.rounding || 'floor');
-
-          // Step 3: Integer limits based on word length
-          const maxRaw = isUnsigned
-            ?  Math.pow(2, wlVal) - 1           // e.g. uint8: 255
-            :  Math.pow(2, wlVal - 1) - 1;      // e.g. int16: 32767
-          const minRaw = isUnsigned
-            ? 0
-            : -Math.pow(2, wlVal - 1);           // e.g. int16: -32768
-
-          // Step 4: Overflow handling
-          const ovf = p.overflow || 'saturate';
-          if (ovf === 'saturate') {
-            raw = Math.max(minRaw, Math.min(maxRaw, raw));
-          } else if (ovf === 'wrap') {
-            // Two's-complement modular wrap
-            const range = maxRaw - minRaw + 1;
-            raw = ((((raw - minRaw) % range) + range) % range) + minRaw;
-          }
-          // 'none': allow out-of-range (no clipping)
-
-          // Step 5: Convert integer back to real-world fixed-point value
-          y = raw / scale;
+          destination = {
+            kind: 'fixed',
+            signed: true,
+            wordLength: Number(p.wordLength),
+            fractionLength: Number(p.fractionLength),
+          };
         }
 
-        // Quantization error magnitude: |original - quantized|
-        const error = Math.abs(u - y);
-        return { outputs: [y, error] };
+        const policy: XBConversionPolicy = {
+          rounding: p.rounding === 'ceil'
+            ? 'ceiling'
+            : p.rounding === 'simplest'
+              ? 'floor'
+              : p.rounding,
+          overflow: p.overflow === 'wrap'
+            ? 'wrap'
+            : p.overflow === 'error'
+              ? 'error'
+              : 'saturate',
+          // The host workspace uses the kernel's bounded IEEE-754 software helper.
+          supportsFloat16: true,
+        };
+        const result = xbConvertScalar(Number(ins[0] ?? 0), destination, policy);
+        return { outputs: [result.value, result.quantizationError] };
       }
     };
   },

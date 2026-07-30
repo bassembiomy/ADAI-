@@ -1814,6 +1814,19 @@ describe('X-Bridges Learning Models Block Tests', () => {
       expect(res.outputs[1]).toBeCloseTo(0.33, 4);
     });
 
+    it('should use round-to-nearest with ties away from zero', () => {
+      const block = BLOCK_LIBRARY['NUMERIC_REPRESENTATION']('numrep_round_tie', {
+        mode: 'fixed_point',
+        output_type: 'int8',
+        rounding: 'round'
+      });
+
+      const res = block.execute([-1.5], block.params, null, 0);
+
+      expect(res.outputs[0]).toBe(-2);
+      expect(res.outputs[1]).toBe(0.5);
+    });
+
     it('should support floating-point mode: float16 simulates IEEE 754 half-precision', () => {
       const block = BLOCK_LIBRARY['NUMERIC_REPRESENTATION']('numrep5', {
         mode: 'floating_point',
@@ -1844,6 +1857,20 @@ describe('X-Bridges Learning Models Block Tests', () => {
       // float32 output is essentially 1.2345 (no coarse quantization)
       expect(Math.abs((resFP.outputs[0] as number) - 1.2345)).toBeLessThan(0.001);
       // The two modes must differ when quantization step is coarse
+    });
+  });
+
+  describe('DATA_TYPE_CONVERSION Block', () => {
+    it('should use the shared negative-tie rounding semantics', () => {
+      const block = BLOCK_LIBRARY['DATA_TYPE_CONVERSION']('convert_round_tie', {
+        output_type: 'int8',
+        rounding: 'round',
+        overflow: 'saturate'
+      });
+
+      const res = block.execute([-1.5], block.params, null, 0);
+
+      expect(res.outputs[0]).toBe(-2);
     });
   });
 
