@@ -18,4 +18,8 @@ describe('getXBBlockCapability', () => {
   it('does not assume unknown block types are codegen capable', () => {
     expect(getXBBlockCapability('UNKNOWN_BLOCK')).toBeNull();
   });
+
+  it.each(['constructor', 'toString'])('treats inherited name %s as unknown', (type) => {
+    expect(getXBBlockCapability(type)).toBeNull();
+  });
 });

@@ -7449,8 +7449,8 @@ const ADIA = () => {
               ...s,
               xBridgesModel: {
                 nodes: [...(s.xBridgesModel?.nodes || []), newNode],
-                edges: s.xBridgesModel?.edges || [],
-                mappings: s.xBridgesModel?.mappings || []
+                edges: Array.from(s.xBridgesModel?.edges || []),
+                mappings: Array.from(s.xBridgesModel?.mappings || [])
               }
             }
           : s
@@ -15216,8 +15216,8 @@ const ADIA = () => {
               {(xBridgesStateId || diagramMode === 'xbridges') && (
                 <XbridgesWorkspace
                   key={xBridgesStateId || activeFileId}
-                  initialNodes={xBridgesStateId ? (states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.nodes || []) : globalXBridgesNodes}
-                  initialEdges={xBridgesStateId ? (states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.edges || []) : globalXBridgesEdges}
+                  initialNodes={xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.nodes || []) : globalXBridgesNodes}
+                  initialEdges={xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.edges || []) : globalXBridgesEdges}
                   availableVariables={variables}
                   tickMs={tickMs}
                   onLaunchDoe={() => toggleWindow('doe')}
@@ -15282,7 +15282,7 @@ const ADIA = () => {
                       });
                     };
 
-                    const targetNodes = xBridgesStateId ? (states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.nodes || []) : globalXBridgesNodes;
+                    const targetNodes = xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.nodes || []) : globalXBridgesNodes;
                     const targetNode = findMatchingNode(targetNodes, nodeId);
                     if (targetNode) {
                       setXBridgesSelectedNodeId(targetNode.id);
@@ -16091,8 +16091,8 @@ const ADIA = () => {
                             const currentMappings = selectedState.xBridgesModel?.mappings || [];
                             updateState(selectedState.id, {
                               xBridgesModel: {
-                                nodes: selectedState.xBridgesModel?.nodes || [],
-                                edges: selectedState.xBridgesModel?.edges || [],
+                                nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
+                                edges: Array.from(selectedState.xBridgesModel?.edges || []),
                                 mappings: [...currentMappings, { smVarId: '', blockId: '', portId: '', direction: 'in' }]
                               }
                             });
@@ -16112,8 +16112,8 @@ const ADIA = () => {
                                     newMaps[idx] = { ...map, smVarId: e.target.value };
                                     updateState(selectedState.id, {
                                       xBridgesModel: {
-                                        nodes: selectedState.xBridgesModel?.nodes || [],
-                                        edges: selectedState.xBridgesModel?.edges || [],
+                                        nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
+                                        edges: Array.from(selectedState.xBridgesModel?.edges || []),
                                         mappings: newMaps
                                       }
                                     });
@@ -16133,8 +16133,8 @@ const ADIA = () => {
                                     newMaps[idx] = { ...map, direction: e.target.value as any };
                                     updateState(selectedState.id, {
                                       xBridgesModel: {
-                                        nodes: selectedState.xBridgesModel?.nodes || [],
-                                        edges: selectedState.xBridgesModel?.edges || [],
+                                        nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
+                                        edges: Array.from(selectedState.xBridgesModel?.edges || []),
                                         mappings: newMaps
                                       }
                                     });
@@ -16156,8 +16156,8 @@ const ADIA = () => {
                                     newMaps[idx] = { ...map, blockId: e.target.value };
                                     updateState(selectedState.id, {
                                       xBridgesModel: {
-                                        nodes: selectedState.xBridgesModel?.nodes || [],
-                                        edges: selectedState.xBridgesModel?.edges || [],
+                                        nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
+                                        edges: Array.from(selectedState.xBridgesModel?.edges || []),
                                         mappings: newMaps
                                       }
                                     });
@@ -16175,8 +16175,8 @@ const ADIA = () => {
                                     newMaps[idx] = { ...map, portId: e.target.value };
                                     updateState(selectedState.id, {
                                       xBridgesModel: {
-                                        nodes: selectedState.xBridgesModel?.nodes || [],
-                                        edges: selectedState.xBridgesModel?.edges || [],
+                                        nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
+                                        edges: Array.from(selectedState.xBridgesModel?.edges || []),
                                         mappings: newMaps
                                       }
                                     });
@@ -16192,8 +16192,8 @@ const ADIA = () => {
                                 const newMaps = selectedState.xBridgesModel!.mappings!.filter((_, i) => i !== idx);
                                 updateState(selectedState.id, {
                                   xBridgesModel: {
-                                    nodes: selectedState.xBridgesModel?.nodes || [],
-                                    edges: selectedState.xBridgesModel?.edges || [],
+                                    nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
+                                    edges: Array.from(selectedState.xBridgesModel?.edges || []),
                                     mappings: newMaps
                                   }
                                 });

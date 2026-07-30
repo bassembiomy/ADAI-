@@ -172,4 +172,8 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
 
 export const getXBBlockCapability = (
   type: string,
-): XBBlockCapability | null => XB_CAPABILITIES[type] ?? null;
+): XBBlockCapability | null => (
+  Object.prototype.hasOwnProperty.call(XB_CAPABILITIES, type)
+    ? XB_CAPABILITIES[type]
+    : null
+);
