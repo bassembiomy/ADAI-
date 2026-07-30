@@ -330,6 +330,15 @@ export const buildSemanticModel = (
 
   const stateIds = new Set(model.states.map((state) => state.id));
   const junctionIds = new Set(model.junctions.map((junction) => junction.id));
+  const historyJunctionByOwnerStateId = new Map(
+    model.junctions
+      .filter((junction) =>
+        junction.type === 'history' || junction.type === 'deep-history')
+      .map((junction) => {
+        const layerId = layerIdByJunctionId.get(junction.id)!;
+        return [layers[layerId].parentStateId!, junction] as const;
+      }),
+  );
   const transitions: Record<string, SemanticTransition> = {};
   const transitionsBySource: Record<string, string[]> = {};
   for (const stateId of hierarchy.orderedStateIds) {
@@ -427,6 +436,9 @@ export const buildSemanticModel = (
     const transition = transitions[transitionId];
     const transitionIds = [...path, transitionId];
     if (transition.destinationKind === 'state') {
+      const ownedHistory = historyJunctionByOwnerStateId.get(
+        transition.destinationStateId,
+      );
       const routePaths = transitionPaths(
         rootTransition.sourceStateId,
         transition.destinationStateId,
@@ -435,9 +447,9 @@ export const buildSemanticModel = (
       );
       return [{
         transitionIds,
-        destinationKind: 'state',
+        destinationKind: ownedHistory === undefined ? 'state' : 'history',
         destinationStateId: transition.destinationStateId,
-        destinationJunctionId: null,
+        destinationJunctionId: ownedHistory?.id ?? null,
         ...routePaths,
       }];
     }

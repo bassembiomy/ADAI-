@@ -2,8 +2,7 @@
 
 ## Document Status
 
-**Status:** Approved for implementation; the corrections described below are
-not yet fully implemented.
+**Status:** Implemented and verified on 2026-07-30.
 
 **Scope:** Generic state-machine semantic analysis, generated C99 runtime,
 safety validation, initialization, and generated verification reports.
@@ -17,7 +16,8 @@ history, and deterministic initialization.
 The generator must:
 
 1. Produce generated C behavior that matches application simulation.
-2. Restore shallow and deep history only through explicit graph transitions.
+2. Restore shallow and deep history on reentry to the containing state, while
+   also supporting explicit transitions to the history junction.
 3. Avoid false safety faults when leaf states have empty child-layer metadata.
 4. Initialize caller-owned runtime storage before entry or trace actions.
 5. Clearly distinguish static analysis from executed runtime verification.
@@ -424,12 +424,26 @@ not executed.
 | Test file | Coverage |
 |---|---|
 | `smSemanticBuilder.test.ts` | History connectivity and empty-layer allocation |
-| `smRuntimeCorrections.test.ts` | Real compiled-C history, leaf-state, and initialization behavior |
-| `smCGenerator.test.ts` | Existing strict consistency and C99 checks |
+| `smCGenerator.test.ts` | Real compiled-C history, leaf-state, initialization, strict consistency, and C99 behavior |
+| `smModelMigration.test.ts` | Safe repair of legacy history-parent metadata |
+| `smInterpreter.test.ts` | Simulator handling of empty-layer history observations |
 | `smReports.test.ts` | Execution mode and reachability wording |
 | `smDifferential.test.ts` | Simulator/generated-C frame parity |
 | `smStandaloneRuntime.test.ts` | Standalone runtime behavior |
 | `src/engine/hil/*.test.ts` | Driver integration and HIL compilation |
+
+## Verification Record
+
+The implemented generator was verified on 2026-07-30 with:
+
+- 240/240 state-machine generator, interpreter, report, strict-C, and
+  differential tests passing.
+- 30/30 HIL and driver-integration tests passing.
+- TypeScript compilation passing with `npx tsc --noEmit`.
+- The supplied `statemachine-history.json` migrated with no semantic
+  diagnostics and matched generated C for all 8 executed frames.
+- The final supplied-model frame restored `State_6` under `State_1` with
+  `SM_ERR_NONE`.
 
 ## Final Acceptance Criteria
 

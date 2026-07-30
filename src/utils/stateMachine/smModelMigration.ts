@@ -7,14 +7,55 @@ import {
   type StateMachineModelV4,
 } from './smModel';
 
+const repairHistoryJunctions = (
+  junctions: StateMachineModelV4['junctions'] = [],
+  layers: StateMachineModelV4['layers'] = [],
+): {
+  junctions: StateMachineModelV4['junctions'];
+  layers: StateMachineModelV4['layers'];
+} => {
+  const updatedJunctions = junctions.map((junction) => ({ ...junction }));
+  const updatedLayers = layers.map((layer) => ({
+    ...layer,
+    junctionIds: [...(layer.junctionIds ?? [])],
+  }));
+
+  for (const junction of updatedJunctions) {
+    if (junction.type !== 'history' && junction.type !== 'deep-history') {
+      continue;
+    }
+
+    const owningLayers = updatedLayers.filter((layer) =>
+      layer.junctionIds.includes(junction.id));
+    const owner = owningLayers.length === 1 ? owningLayers[0] : undefined;
+    if (owner && owner.parentStateId !== null) {
+      const isValidParent = junction.parentId === owner.id
+        || junction.parentId === owner.parentStateId;
+      if (!isValidParent) {
+        junction.parentId = owner.parentStateId;
+      }
+    }
+  }
+
+  return { junctions: updatedJunctions, layers: updatedLayers };
+};
+
 export const migrateStateMachineModel = (
   input: LegacyStateMachineModel,
 ): MigrationResult => {
   const clonedInput = structuredClone(input);
 
   if (clonedInput.schemaVersion === CURRENT_SM_SCHEMA_VERSION) {
+    const repaired = repairHistoryJunctions(
+      (clonedInput as StateMachineModelV4).junctions,
+      (clonedInput as StateMachineModelV4).layers,
+    );
     return {
-      model: clonedInput as StateMachineModelV4,
+      model: {
+        ...(clonedInput as StateMachineModelV4),
+        junctions: repaired.junctions,
+        layers: repaired.layers,
+      },
       diagnostics: [],
     };
   }
@@ -55,13 +96,19 @@ export const migrateStateMachineModel = (
     };
   });
 
+  const repaired = repairHistoryJunctions(
+    clonedInput.junctions as StateMachineModelV4['junctions'],
+    layers as StateMachineModelV4['layers'],
+  );
+
   return {
     model: {
       ...clonedInput,
       schemaVersion: CURRENT_SM_SCHEMA_VERSION,
       safetyMode: clonedInput.safetyMode ?? false,
       hilConfig,
-      layers,
+      layers: repaired.layers,
+      junctions: repaired.junctions,
     } as StateMachineModelV4,
     diagnostics,
   };

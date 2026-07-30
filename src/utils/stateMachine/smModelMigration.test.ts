@@ -138,4 +138,129 @@ describe('migrateStateMachineModel', () => {
     expect(input.layers[0].stateIds).toEqual(['a']);
     expect(result.model.layers[0].transitionIds).toEqual([]);
   });
+
+  it('repairs history junction parentId when pointing to a child state in a non-root layer', () => {
+    const input = {
+      schemaVersion: 4,
+      tickMs: 500,
+      states: [
+        { id: 's1', name: 'State_1', parentId: 'root' },
+        { id: 's2', name: 'State_2', parentId: 'root' },
+        { id: 's3', name: 'State_3', parentId: 'layer_s2' },
+      ],
+      junctions: [
+        {
+          id: 'hj1',
+          type: 'history',
+          parentId: 's3', // Misassigned to child state s3 instead of container state s2 or layer_s2
+        },
+      ],
+      layers: [
+        { id: 'root', parentStateId: null, stateIds: ['s1', 's2'], transitionIds: [], junctionIds: [] },
+        { id: 'layer_s2', parentStateId: 's2', stateIds: ['s3'], transitionIds: [], junctionIds: ['hj1'] },
+      ],
+      transitions: [],
+      variables: [],
+    } as any;
+
+    const result = migrateStateMachineModel(input);
+    const historyJunction = result.model.junctions.find((j: any) => j.id === 'hj1');
+    expect(historyJunction?.parentId).toBe('s2');
+  });
+
+  it('does not guess a history owner when layer membership is ambiguous', () => {
+    const input = {
+      schemaVersion: 4,
+      tickMs: 10,
+      states: [
+        { id: 'owner_a', name: 'Owner A', parentId: 'root' },
+        { id: 'owner_b', name: 'Owner B', parentId: 'root' },
+        { id: 'child_a', name: 'Child A', parentId: 'layer_a' },
+        { id: 'child_b', name: 'Child B', parentId: 'layer_b' },
+      ],
+      junctions: [{
+        id: 'history',
+        type: 'history',
+        parentId: 'child_a',
+      }],
+      layers: [
+        {
+          id: 'root',
+          parentStateId: null,
+          stateIds: ['owner_a', 'owner_b'],
+          transitionIds: [],
+          junctionIds: [],
+        },
+        {
+          id: 'layer_a',
+          parentStateId: 'owner_a',
+          stateIds: ['child_a'],
+          transitionIds: [],
+          junctionIds: ['history'],
+        },
+        {
+          id: 'layer_b',
+          parentStateId: 'owner_b',
+          stateIds: ['child_b'],
+          transitionIds: [],
+          junctionIds: ['history'],
+        },
+      ],
+      transitions: [],
+      variables: [],
+    } as any;
+
+    const result = migrateStateMachineModel(input);
+
+    expect(result.model.junctions[0].parentId).toBe('child_a');
+    expect(result.model.layers[1].junctionIds).toEqual(['history']);
+    expect(result.model.layers[2].junctionIds).toEqual(['history']);
+  });
+
+  it('successfully repairs statemachine.json fixture and passes model validation', () => {
+    const input = {
+      schemaVersion: 4,
+      tickMs: 500,
+      states: [
+        { id: 's1', name: 'State_1', parentId: 'root', children: [], priority: 10, isParallel: false, autostart: true },
+        { id: '367ccc9c-444c-4da0-9cd7-b86d9c4f83ba', name: 'State_2', parentId: 'root', children: [], priority: 20, isParallel: false, autostart: false },
+        { id: '9aa3de7c-1c3b-4e19-816c-67c4900df26b', name: 'State_3', parentId: 'b1d66949-ecf8-474b-b35f-6ef94fc68c75', children: [], priority: 10, isParallel: false, autostart: true },
+      ],
+      junctions: [
+        {
+          id: '45007fbf-07cd-40f2-bcc6-f9bc4a144e7e',
+          name: 'H',
+          parentId: '9aa3de7c-1c3b-4e19-816c-67c4900df26b', // Misassigned to State_3 instead of State_2 or layer b1d66949
+          type: 'history',
+          autostart: false,
+        },
+      ],
+      layers: [
+        {
+          id: 'root',
+          name: 'Root',
+          parentStateId: null,
+          stateIds: ['s1', '367ccc9c-444c-4da0-9cd7-b86d9c4f83ba'],
+          transitionIds: [],
+          junctionIds: [],
+          decomposition: 'OR',
+        },
+        {
+          id: 'b1d66949-ecf8-474b-b35f-6ef94fc68c75',
+          name: 'State_2',
+          parentStateId: '367ccc9c-444c-4da0-9cd7-b86d9c4f83ba',
+          stateIds: ['9aa3de7c-1c3b-4e19-816c-67c4900df26b'],
+          transitionIds: [],
+          junctionIds: ['45007fbf-07cd-40f2-bcc6-f9bc4a144e7e'],
+          decomposition: 'OR',
+        },
+      ],
+      transitions: [],
+      variables: [],
+    } as any;
+
+    const result = migrateStateMachineModel(input);
+    const historyJunction = result.model.junctions.find((j: any) => j.id === '45007fbf-07cd-40f2-bcc6-f9bc4a144e7e');
+    expect(historyJunction?.parentId).toBe('367ccc9c-444c-4da0-9cd7-b86d9c4f83ba');
+  });
 });

@@ -657,6 +657,7 @@ const validateHistory = (
   junctionLayers: ReadonlyMap<string, StateMachineLayerV4[]>,
 ): ModelDiagnostic[] => {
   const diagnostics: ModelDiagnostic[] = [];
+  const historyIdsByOwnerState = new Map<string, string[]>();
   for (const junction of model.junctions) {
     if (junction.type !== 'history' && junction.type !== 'deep-history') {
       continue;
@@ -676,15 +677,19 @@ const validateHistory = (
         `History junction '${junction.id}' must belong to one non-root layer.`,
         junction.id,
       ));
+    } else {
+      const ownerHistoryIds = historyIdsByOwnerState.get(owner.parentStateId)
+        ?? [];
+      ownerHistoryIds.push(junction.id);
+      historyIdsByOwnerState.set(owner.parentStateId, ownerHistoryIds);
     }
-    const hasIncoming = model.transitions.some(
-      (transition) => transition.targetId === junction.id,
-    );
-    if (!hasIncoming) {
+  }
+  for (const [ownerStateId, historyIds] of historyIdsByOwnerState) {
+    if (historyIds.length > 1) {
       diagnostics.push(diagnostic(
-        'HISTORY_JUNCTION_UNWIRED',
-        `History junction '${junction.id}' has no incoming transitions.`,
-        junction.id,
+        'HISTORY_OWNER_AMBIGUOUS',
+        `State '${ownerStateId}' has multiple history junctions (${historyIds.join(', ')}).`,
+        ownerStateId,
       ));
     }
   }

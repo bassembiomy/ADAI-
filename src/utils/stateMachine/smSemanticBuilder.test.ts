@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { StateMachineModelV4 } from './smModel';
 import { buildSemanticModel } from './smSemanticBuilder';
-import { flatOrFixture, nestedAndFixture } from './smFixtures';
+import {
+  flatOrFixture,
+  historyFixture,
+  nestedAndFixture,
+} from './smFixtures';
 
 const diagnosticCodes = (model: StateMachineModelV4): string[] =>
   buildSemanticModel(model).diagnostics.map((item) => item.code);
@@ -34,6 +38,27 @@ describe('buildSemanticModel', () => {
     expect(result.ir!.states.region_a.activityIndex).toBeLessThan(
       result.ir!.states.region_b.activityIndex,
     );
+  });
+
+  it('does not allocate an active slot to an empty OR child layer', () => {
+    const model = flatOrFixture();
+    model.layers.push({
+      ...model.layers[0],
+      id: 'empty_b_children',
+      name: 'empty_b_children',
+      parentStateId: 'b',
+      stateIds: [],
+      transitionIds: [],
+      junctionIds: [],
+      decomposition: 'OR',
+    });
+
+    const result = buildSemanticModel(model);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir).toBeDefined();
+    expect(result.ir!.layers.empty_b_children.activeSlot).toBeNull();
+    expect(result.ir!.activeSlotCount).toBe(1);
   });
 
   it('retains trigger combination mode and normalizes temporal thresholds', () => {
@@ -216,6 +241,20 @@ describe('buildSemanticModel', () => {
     fixture.layers[0].junctionIds.push('history');
 
     expect(diagnosticCodes(fixture)).toContain('HISTORY_OWNERSHIP_INVALID');
+  });
+
+  it('rejects multiple history semantics for the same containing state', () => {
+    const fixture = historyFixture('shallow');
+    fixture.junctions.push({
+      ...fixture.junctions[0],
+      id: 'deep_history',
+      name: 'H*',
+      type: 'deep-history',
+    });
+    fixture.layers.find((layer) => layer.id === 'workspace_children')!
+      .junctionIds.push('deep_history');
+
+    expect(diagnosticCodes(fixture)).toContain('HISTORY_OWNER_AMBIGUOUS');
   });
 
   it('rejects duplicate or direction-incompatible I/O mappings', () => {
@@ -589,6 +628,30 @@ describe('buildSemanticModel', () => {
       entryStateIds: [],
     }]);
   });
+
+  it.each(['shallow', 'deep'] as const)(
+    'normalizes reentry to a state containing %s history',
+    (kind) => {
+      const model = historyFixture(kind);
+      const historyId = `${kind}_history`;
+      const restore = model.transitions.find(
+        (transition) => transition.id === 'restore_workspace',
+      )!;
+      restore.targetId = 'workspace';
+
+      const result = buildSemanticModel(model);
+
+      expect(result.diagnostics).not.toContainEqual(expect.objectContaining({
+        code: 'HISTORY_JUNCTION_UNWIRED',
+      }));
+      expect(result.ir).toBeDefined();
+      expect(result.ir!.transitions.restore_workspace.routes[0]).toMatchObject({
+        destinationKind: 'history',
+        destinationStateId: 'workspace',
+        destinationJunctionId: historyId,
+      });
+    },
+  );
 
   it('accepts UI-schema history ownership by parent state ID', () => {
     const fixture = nestedAndFixture();

@@ -218,7 +218,11 @@ export const runInterpreterTrace = (
     safeOutputsApplied: 0,
     watchdogKicks: 0,
   };
-  const frames = [observeFrame(initializeRuntime(runtime), observation)];
+  const initialized = initializeRuntime(runtime);
+  const frames = [observeFrame({
+    ...initialized,
+    actions: [],
+  }, observation)];
   for (const operation of fixture.steps) {
     resetEffects(observation);
     if (operation.kind === 'reset') {
@@ -562,10 +566,10 @@ const renderHarness = (
     '    SM_Error_t step_error = SM_ERR_NONE;',
     '    (void)step_error;',
     '    (void)node_id;',
-    '    SM_SetTraceSink(&instance, trace_sink);',
     '    action_count = 0U;',
     '    action_overflow = false;',
     '    (void)SM_Init(&instance);',
+    '    SM_SetTraceSink(&instance, trace_sink);',
     '    print_frame(&instance, sequence++, 0U);',
     renderScenarioOperations(ir, steps),
     '    return action_overflow ? 2 : 0;',

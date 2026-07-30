@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { interpreterFixture, type InterpreterFixtureName } from './smFixtures';
+import {
+  flatOrFixture,
+  interpreterFixture,
+  type InterpreterFixtureName,
+} from './smFixtures';
 import {
   createRuntime,
   initializeRuntime,
@@ -22,6 +26,40 @@ const initializedFixture = (name: InterpreterFixtureName) => {
 };
 
 describe('Stateflow-referenced OR execution', () => {
+  it('omits empty layers from executable history observations', () => {
+    const model = flatOrFixture();
+    model.layers.push({
+      ...model.layers[0],
+      id: 'empty_b_children',
+      name: 'empty_b_children',
+      parentStateId: 'b',
+      stateIds: [],
+      transitionIds: [],
+      junctionIds: [],
+      decomposition: 'OR',
+    });
+    model.transitions.push({
+      ...model.transitions[0],
+      id: 't_ba',
+      sourceId: 'b',
+      targetId: 'a',
+      condition: 'go == false',
+      order: 1,
+    });
+    model.layers[0].transitionIds.push('t_ba');
+    const built = buildSemanticModel(model);
+    expect(built.diagnostics).toEqual([]);
+    const runtime = createRuntime(built.ir!);
+    initializeRuntime(runtime);
+    runtime.data.go = true;
+    stepRuntime(runtime, 10);
+    runtime.data.go = false;
+
+    const frame = stepRuntime(runtime, 10);
+
+    expect(frame.history).not.toHaveProperty('empty_b_children:deep');
+  });
+
   it('runs exit, transition action, and entry in order', () => {
     const runtime = initializedFixture('exit-action-entry');
     runtime.data.go = true;

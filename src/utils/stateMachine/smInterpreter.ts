@@ -804,7 +804,7 @@ const createTraceFrame = (
       history[layer.id] = runtime.historySlots[layer.activeSlot];
     }
     const deepSnapshot = runtime.deepHistory[layer.id];
-    if (deepSnapshot !== undefined) {
+    if (layer.children.length > 0 && deepSnapshot !== undefined) {
       history[`${layer.id}:deep`] = JSON.stringify(deepSnapshot);
     }
   }

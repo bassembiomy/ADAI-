@@ -147,7 +147,9 @@ static reachability percentage is described as runtime proof.
 
 ## Error Handling
 
-- Unwired history produces a semantic error and no generated package.
+- A history junction does not require an incoming transition to its own UUID.
+  Invalid or ambiguous ownership produces a semantic error and no generated
+  package.
 - Existing history ownership errors remain separate diagnostics.
 - Null `SM_Init()` calls continue to return `SM_ERR_NULL_INSTANCE` without
   calling `memset`.

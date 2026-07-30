@@ -235,7 +235,8 @@ describe('TypeScript-versus-generated-C differential gate', () => {
       ...template,
       id: `parallel_${index}`,
       name: `Parallel ${index}`,
-      entry: 'total = total + 1;',
+      entry: '',
+      during: 'total = total + 1;',
       autostart: false,
       priority: index + 1,
     }));
@@ -249,11 +250,11 @@ describe('TypeScript-versus-generated-C differential gate', () => {
     const fixture = {
       name: 'parallel-independent' as const,
       model,
-      steps: [],
+      steps: [{ kind: 'step' as const }],
     };
     const expected = runInterpreterTrace(fixture);
 
-    expect(expected[0].actions).toHaveLength(140);
+    expect(expected[1].actions).toHaveLength(140);
     expect(
       compareSemanticTraces(expected, compileAndRunCTrace(fixture)),
     ).toBeNull();
