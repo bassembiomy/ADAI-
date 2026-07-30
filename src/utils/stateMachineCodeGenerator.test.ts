@@ -141,7 +141,7 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
       (file) => file.name === 'static_metrics_report.md',
     )!.content;
 
-    expect(testing).toContain('State reachability: 66.7%');
+    expect(testing).toContain('Static AST reachability: 66.7%');
     expect(metrics).toContain('State reachability: 66.7%');
     expect(testing).toContain('Unreachable state IDs: unreachable');
     expect(metrics).toContain('Unreachable state IDs: unreachable');
