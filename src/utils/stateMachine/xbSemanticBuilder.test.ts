@@ -142,12 +142,42 @@ describe('buildXBSemanticModel', () => {
         wordLength: 16,
         fractionLength: 8,
       },
-      rounding: 'zero',
+      rounding: 'floor',
       overflow: 'wrap',
       mode: 'real-world-value',
     });
     expect(Object.isFrozen(ir)).toBe(true);
     expect(Object.isFrozen(ir.operations.quantize.parameters)).toBe(true);
+  });
+
+  it('applies conversion typing only to the designated data output', () => {
+    const xbModel = model({
+      nodes: [
+        node(
+          'quantize',
+          'NUMERIC_REPRESENTATION',
+          [port('u', 'input')],
+          [
+            port('y', 'output', { dataType: 'float32' }),
+            port('e', 'output', { dataType: 'float32' }),
+          ],
+          {
+            outputType: {
+              kind: 'fixed',
+              signed: true,
+              wordLength: 16,
+              fractionLength: 8,
+            },
+            rounding: 'floor',
+            overflow: 'saturate',
+          },
+        ),
+      ],
+    });
+
+    const signals = build(xbModel).ir!.signals;
+    expect(signals['quantize:y'].numericType.kind).toBe('fixed');
+    expect(signals['quantize:e'].numericType).toEqual({ kind: 'float32' });
   });
 
   it('breaks ready-node ties by stable ID regardless of persisted order', () => {
@@ -195,6 +225,34 @@ describe('buildXBSemanticModel', () => {
     expect(signal.layout).toBe('row-major');
     expect(signal.numericType).toEqual(fixedMatrix);
     expect(signal.storage).toBe('stored-integer');
+  });
+
+  it('canonicalizes omitted port shape as scalar instead of propagating input shape', () => {
+    const omittedShapeOutput = {
+      id: 'y',
+      direction: 'output',
+      dataType: 'float32',
+    } as ReturnType<typeof port>;
+    const vector = {
+      shape: 'vector',
+      dimensions: [3],
+    } as const;
+    const xbModel = model({
+      nodes: [
+        node('source', 'Constant', [], [port('y', 'output', vector)]),
+        node(
+          'gain',
+          'GAIN',
+          [port('u', 'input', vector)],
+          [omittedShapeOutput],
+        ),
+      ],
+      edges: [edge('source-to-gain', 'source', 'y', 'gain', 'u')],
+    });
+
+    expect(build(xbModel).ir?.signals['gain:y'].shape).toEqual({
+      kind: 'scalar',
+    });
   });
 
   it('accepts feedback across a stateful output boundary', () => {
@@ -321,6 +379,153 @@ describe('buildXBSemanticModel', () => {
     expect(Object.values(ir.operations.delay.schedule).filter(
       (value) => typeof value === 'number',
     ).every(Number.isInteger)).toBe(true);
+  });
+
+  it('interprets port sampleRate metadata as hertz', () => {
+    const xbModel = model({
+      nodes: [
+        node(
+          'delay',
+          'UNIT_DELAY',
+          [port('u', 'input', { sampleRate: 100 })],
+          [port('y', 'output')],
+        ),
+      ],
+    });
+
+    expect(build(xbModel).ir?.operations.delay.schedule.periodSubsteps).toBe(5);
+  });
+
+  it.each([0, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects invalid port sampleRate %s',
+    (sampleRate) => {
+      const xbModel = model({
+        nodes: [
+          node(
+            'delay',
+            'UNIT_DELAY',
+            [port('u', 'input', { sampleRate })],
+            [port('y', 'output')],
+          ),
+        ],
+      });
+
+      const result = build(xbModel);
+      expect(result.ir).toBeUndefined();
+      expect(result.diagnostics.map((item) => item.code)).toContain(
+        'XB_SAMPLE_TIME_INVALID',
+      );
+    },
+  );
+
+  it('uses documented conversion defaults when policy fields are omitted', () => {
+    const xbModel = model({
+      nodes: [
+        node(
+          'convert',
+          'DATA_TYPE_CONVERSION',
+          [port('u', 'input')],
+          [port('y', 'output')],
+          { output_type: 'int16' },
+        ),
+      ],
+    });
+
+    expect(build(xbModel).ir?.operations.convert.conversion).toEqual({
+      destinationType: {
+        kind: 'fixed',
+        signed: true,
+        wordLength: 16,
+        fractionLength: 0,
+      },
+      rounding: 'floor',
+      overflow: 'saturate',
+      mode: 'real-world-value',
+    });
+  });
+
+  it.each([
+    ['rounding', 'sideway'],
+    ['rounding', null],
+    ['overflow', 'clip'],
+    ['overflow', null],
+  ] as const)('rejects unknown explicit conversion %s', (key, value) => {
+    const xbModel = model({
+      nodes: [
+        node(
+          'convert',
+          'DATA_TYPE_CONVERSION',
+          [port('u', 'input')],
+          [port('y', 'output')],
+          {
+            output_type: 'int16',
+            [key]: value,
+          },
+        ),
+      ],
+    });
+
+    const result = build(xbModel);
+    expect(result.ir).toBeUndefined();
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'XB_CONVERSION_POLICY_INVALID',
+        elementId: 'convert',
+      }),
+    ]);
+  });
+
+  it('preserves exact shaped state-slot initial values', () => {
+    const vector = {
+      shape: 'vector',
+      dimensions: [2],
+    } as const;
+    const xbModel = model({
+      nodes: [
+        node(
+          'delay',
+          'UNIT_DELAY',
+          [port('u', 'input', vector)],
+          [port('y', 'output', vector)],
+          { initialValue: [1, 2] },
+        ),
+      ],
+    });
+
+    expect(
+      build(xbModel).ir?.operations.delay.state?.slots[0].initialValues,
+    ).toEqual([1, 2]);
+  });
+
+  it.each([
+    ['undersized', [1]],
+    ['oversized', [1, 2, 3]],
+    ['wrong-type', [1, true]],
+  ] as const)('rejects %s shaped state initial values', (_name, initialValue) => {
+    const vector = {
+      shape: 'vector',
+      dimensions: [2],
+    } as const;
+    const xbModel = model({
+      nodes: [
+        node(
+          'delay',
+          'UNIT_DELAY',
+          [port('u', 'input', vector)],
+          [port('y', 'output', vector)],
+          { initialValue },
+        ),
+      ],
+    });
+
+    const result = build(xbModel);
+    expect(result.ir).toBeUndefined();
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'XB_STATE_INITIAL_VALUE_INVALID',
+        elementId: 'delay',
+      }),
+    ]);
   });
 
   it.each([

@@ -241,18 +241,18 @@ const conversionOutputType = (node: XBNodeV1): XBNumericType | null => {
 
 const canonicalRounding = (
   value: unknown,
-): Exclude<XBRoundingMode, 'simplest'> => {
+): Exclude<XBRoundingMode, 'simplest'> | null => {
+  if (value === undefined) return 'floor';
   switch (typeof value === 'string' ? value.toLowerCase() : value) {
     case 'floor':
       return 'floor';
     case 'ceil':
     case 'ceiling':
       return 'ceiling';
-    case 'truncate':
-    case 'trunc':
     case 'zero':
-    case 'simplest':
       return 'zero';
+    case 'simplest':
+      return 'floor';
     case 'nearest':
       return 'nearest';
     case 'round':
@@ -260,19 +260,37 @@ const canonicalRounding = (
     case 'convergent':
       return 'convergent';
     default:
-      return 'zero';
+      return null;
   }
 };
 
-const canonicalOverflow = (value: unknown): XBOverflowMode => {
-  if (typeof value !== 'string') return 'saturate';
+const canonicalOverflow = (value: unknown): XBOverflowMode | null => {
+  if (value === undefined) return 'saturate';
+  if (typeof value !== 'string') return null;
   const normalized = value.toLowerCase();
-  if (normalized === 'wrap' || normalized === 'error') return normalized;
-  return 'saturate';
+  if (normalized === 'saturate'
+    || normalized === 'wrap'
+    || normalized === 'error') {
+    return normalized;
+  }
+  return null;
+};
+
+const firstPresentParameter = (
+  parameters: UnknownRecord,
+  keys: readonly string[],
+): unknown => {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(parameters, key)) {
+      return parameters[key];
+    }
+  }
+  return undefined;
 };
 
 const conversionForNode = (
   node: XBNodeV1,
+  diagnostics: ModelDiagnostic[],
 ): XBSemanticConversion | null => {
   const destinationType = conversionOutputType(node);
   if (destinationType === null) return null;
@@ -281,18 +299,32 @@ const conversionForNode = (
   const reinterpret = parameters.reinterpretStoredInteger === true
     || rawMode === 'reinterpret'
     || rawMode === 'stored-integer-reinterpretation';
+  const rounding = canonicalRounding(
+    firstPresentParameter(parameters, [
+      'rounding',
+      'roundingMode',
+      'rounding_method',
+    ]),
+  );
+  const overflow = canonicalOverflow(
+    firstPresentParameter(parameters, [
+      'overflow',
+      'overflowMode',
+      'overflow_method',
+    ]),
+  );
+  if (rounding === null || overflow === null) {
+    diagnostics.push(diagnostic(
+      'XB_CONVERSION_POLICY_INVALID',
+      `Block '${node.id}' has an unsupported explicit conversion policy.`,
+      node.id,
+    ));
+    return null;
+  }
   return {
     destinationType,
-    rounding: canonicalRounding(
-      parameters.rounding
-      ?? parameters.roundingMode
-      ?? parameters.rounding_method,
-    ),
-    overflow: canonicalOverflow(
-      parameters.overflow
-      ?? parameters.overflowMode
-      ?? parameters.overflow_method,
-    ),
+    rounding,
+    overflow,
     mode: reinterpret
       ? 'stored-integer-reinterpretation'
       : 'real-world-value',
@@ -318,6 +350,9 @@ const shapeFromPort = (port: UnknownRecord): XBShape | null => {
     if (dimensions.length === 2) {
       return { kind: 'matrix', rows: dimensions[0], columns: dimensions[1] };
     }
+  }
+  if (port.shape === undefined && dimensions === null) {
+    return { kind: 'scalar' };
   }
   return null;
 };
@@ -359,29 +394,39 @@ const portsForNode = (node: XBNodeV1): readonly PortDescriptor[] => {
     || compareStable(left.direction, right.direction));
 };
 
-const sampleTimesIn = (
+interface SamplePeriodSource {
+  readonly kind: 'seconds' | 'hertz';
+  readonly value: number;
+}
+
+const samplePeriodsIn = (
   value: unknown,
-  destination: number[],
+  destination: SamplePeriodSource[],
   seen = new Set<unknown>(),
 ): void => {
   if (value === null || typeof value !== 'object' || seen.has(value)) return;
   seen.add(value);
   if (Array.isArray(value)) {
-    value.forEach((entry) => sampleTimesIn(entry, destination, seen));
+    value.forEach((entry) => samplePeriodsIn(entry, destination, seen));
     return;
   }
   const record = value as UnknownRecord;
-  for (const key of ['sampleTime', 'sample_time', 'sampleRate']) {
-    if (typeof record[key] === 'number') destination.push(record[key] as number);
+  for (const key of ['sampleTime', 'sample_time']) {
+    if (typeof record[key] === 'number') {
+      destination.push({ kind: 'seconds', value: record[key] as number });
+    }
+  }
+  if (typeof record.sampleRate === 'number') {
+    destination.push({ kind: 'hertz', value: record.sampleRate });
   }
   for (const key of Object.keys(record).sort(compareStable)) {
-    sampleTimesIn(record[key], destination, seen);
+    samplePeriodsIn(record[key], destination, seen);
   }
 };
 
-const sampleTimeForNode = (node: XBNodeV1): number | null => {
-  const values: number[] = [];
-  sampleTimesIn(node.parameters, values);
+const samplePeriodForNode = (node: XBNodeV1): SamplePeriodSource | null => {
+  const values: SamplePeriodSource[] = [];
+  samplePeriodsIn(node.parameters, values);
   return values[0] ?? null;
 };
 
@@ -394,13 +439,22 @@ const scheduleForNode = (
   stateful: boolean,
   diagnostics: ModelDiagnostic[],
 ): XBSemanticSchedule => {
-  const sampleTime = sampleTimeForNode(node);
+  const samplePeriodSource = samplePeriodForNode(node);
   let periodSubsteps = 1;
-  if (sampleTime !== null) {
-    const sample = rationalFromFiniteNumber(sampleTime);
-    const ratio = sample === null
+  if (samplePeriodSource !== null) {
+    const persistedValue = rationalFromFiniteNumber(samplePeriodSource.value);
+    const samplePeriod = persistedValue === null
+      || persistedValue.numerator <= 0n
       ? null
-      : exactPositiveIntegerRatio(sample, solverStep);
+      : samplePeriodSource.kind === 'hertz'
+        ? {
+          numerator: persistedValue.denominator,
+          denominator: persistedValue.numerator,
+        }
+        : persistedValue;
+    const ratio = samplePeriod === null
+      ? null
+      : exactPositiveIntegerRatio(samplePeriod, solverStep);
     if (ratio === null) {
       diagnostics.push(diagnostic(
         'XB_SAMPLE_TIME_INVALID',
@@ -411,7 +465,7 @@ const scheduleForNode = (
       periodSubsteps = ratio;
     }
   }
-  const zeroOrderHold = sampleTime !== null
+  const zeroOrderHold = samplePeriodSource !== null
     || (stateful && isDiscreteStatefulType(node.type));
   return {
     periodSubsteps,
@@ -504,45 +558,62 @@ const targetSupportsType = (
 const flattenInitialValue = (
   value: unknown,
   destination: Array<number | boolean>,
-): void => {
+): boolean => {
   if (Array.isArray(value)) {
-    value.forEach((entry) => flattenInitialValue(entry, destination));
-    return;
+    return value.every((entry) => flattenInitialValue(entry, destination));
   }
   if (typeof value === 'boolean') {
     destination.push(value);
-    return;
+    return true;
   }
   if (typeof value === 'number' && Number.isFinite(value)) {
     destination.push(value);
+    return true;
   }
+  return false;
 };
 
 const initialValuesForSignal = (
   node: XBNodeV1,
   signal: XBSemanticSignal,
+  diagnostics: ModelDiagnostic[],
 ): readonly (number | boolean)[] => {
   const parameters = node.parameters as UnknownRecord;
-  const source = parameters.initialValue
-    ?? parameters.initialCondition
-    ?? parameters.initial_state
-    ?? parameters.initial;
-  const values: Array<number | boolean> = [];
-  flattenInitialValue(source, values);
   const defaultValue = signal.numericType.kind === 'boolean' ? false : 0;
-  if (values.length === 0) {
+  const source = firstPresentParameter(parameters, [
+    'initialValue',
+    'initialCondition',
+    'initial_state',
+    'initial',
+  ]);
+  if (source === undefined) {
     return Array.from({ length: signal.elementCount }, () => defaultValue);
   }
-  if (values.length === 1 && signal.elementCount > 1) {
-    return Array.from({ length: signal.elementCount }, () => values[0]);
+
+  const values: Array<number | boolean> = [];
+  const structurallyValid = flattenInitialValue(source, values);
+  const expectsBoolean = signal.numericType.kind === 'boolean';
+  const typesValid = values.every((value) =>
+    expectsBoolean ? typeof value === 'boolean' : typeof value === 'number');
+  if (!structurallyValid
+    || values.length !== signal.elementCount
+    || !typesValid) {
+    diagnostics.push(diagnostic(
+      'XB_STATE_INITIAL_VALUE_INVALID',
+      `Block '${node.id}' initial state for '${signal.id}' must contain exactly `
+        + `${signal.elementCount} ${expectsBoolean ? 'boolean' : 'numeric'} value(s).`,
+      node.id,
+    ));
+    return Array.from({ length: signal.elementCount }, () => defaultValue);
   }
-  return values.slice(0, signal.elementCount);
+  return values;
 };
 
 const stateBoundaryForNode = (
   node: XBNodeV1,
   outputSignalIds: readonly string[],
   signals: Readonly<Record<string, XBSemanticSignal>>,
+  diagnostics: ModelDiagnostic[],
 ): XBSemanticStateBoundary => ({
   outputPhase: 'read-before-update',
   updatePhase: 'after-direct-feedthrough',
@@ -553,7 +624,7 @@ const stateBoundaryForNode = (
       signalId,
       numericType: signal.numericType,
       shape: signal.shape,
-      initialValues: initialValuesForSignal(node, signal),
+      initialValues: initialValuesForSignal(node, signal, diagnostics),
     };
   }),
 });
@@ -629,6 +700,21 @@ export const buildXBSemanticModel = (
 
   const resolvingTypes = new Set<string>();
   const resolvedTypes = new Map<string, XBNumericType>();
+  const isConvertedDataOutput = (
+    node: XBNodeV1,
+    port: PortDescriptor | undefined,
+  ): boolean => {
+    if (port?.direction !== 'output'
+      || (node.type !== 'DATA_TYPE_CONVERSION'
+        && node.type !== 'NUMERIC_REPRESENTATION')) {
+      return false;
+    }
+    const outputPorts = (portsByNode.get(node.id) ?? []).filter(
+      (candidate) => candidate.direction === 'output',
+    );
+    return port.id === 'y'
+      || (outputPorts.length === 1 && outputPorts[0].id === port.id);
+  };
   const resolveNumericType = (signalId: string): XBNumericType => {
     const cached = resolvedTypes.get(signalId);
     if (cached !== undefined) return cached;
@@ -639,7 +725,7 @@ export const buildXBSemanticModel = (
     const nodeId = signalId.slice(0, separator);
     const port = portBySignalId.get(signalId);
     const node = nodeById.get(nodeId);
-    let resolved = port?.direction === 'output' && node !== undefined
+    let resolved = node !== undefined && isConvertedDataOutput(node, port)
       ? conversionOutputType(node)
       : null;
     resolved ??= port?.numericType ?? null;
@@ -754,9 +840,9 @@ export const buildXBSemanticModel = (
       parameters: cloneParameters(node.parameters),
       directFeedthrough: capability.directFeedthrough,
       stateful,
-      conversion: conversionForNode(node),
+      conversion: conversionForNode(node, diagnostics),
       state: stateful
-        ? stateBoundaryForNode(node, outputSignalIds, signals)
+        ? stateBoundaryForNode(node, outputSignalIds, signals, diagnostics)
         : null,
       schedule: scheduleForNode(node, solverStep!, stateful, diagnostics),
     };
