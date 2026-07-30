@@ -25,7 +25,7 @@ The generator must:
 
 ---
 
-## Correction 1: History Junction Linkage
+## Correction 1: Stateflow-Compatible History Entry
 
 ### Observed Problem
 
@@ -44,35 +44,48 @@ unused-function casts inside `SM_Init()`:
 (void)SM_Restore_State_2;
 ```
 
-No executable transition reaches them because the model's history junction has
-no incoming transition.
+The model has a valid transition from `State_2` to the containing state
+`State_1`, but the generator enters `State_1` through its default child instead
+of applying the history feature contained by `State_1`.
 
 ### Root Cause
 
-The current structured generator already supports history destinations when
-the semantic graph contains a transition to the history junction. The reviewed
-package contains an unwired history junction, but semantic validation does not
-reject it. This makes valid restore functions appear as dead code.
+The generator currently restores history only when a transition directly
+targets the history-junction UUID. That is incomplete for Stateflow-compatible
+semantics. A history junction belongs to a containing state and records that
+state's active substate. When a transition reenters the containing state, the
+state must use its history configuration automatically. Directly targeting the
+history junction remains valid for explicit inner-transition behavior, but it
+is not required for ordinary reentry.
 
 ### Required Generator Corrections
 
-#### REQ-GEN-HIS-001: Executable History Binding
+#### REQ-GEN-HIS-001: Containing-State History Binding
 
-For every normalized transition route:
+When a transition targets a state that owns a shallow or deep history junction,
+semantic normalization must mark the destination as history-aware:
 
 ```ts
-destinationKind === 'history'
-destinationJunctionId !== null
+transition.targetId === historyOwnerState.id
+historyOwnerState.childLayerIds contains historyJunction.layerId
 ```
 
-the C emitter must:
+The semantic route must retain both:
 
-1. Resolve the history junction's owning layer.
-2. Exit the current configuration while recording history.
-3. Enter the required owner-state path.
-4. Restore the recorded child configuration.
-5. Use shallow restoration for `$H$`.
-6. Use recursive descendant restoration for `$H^*$`.
+```ts
+destinationStateId: historyOwnerState.id
+destinationKind: 'history'
+destinationJunctionId: historyJunction.id
+```
+
+The C emitter must then:
+
+1. Exit the current configuration while recording history.
+2. Enter the containing state.
+3. Restore the recorded child configuration.
+4. Use shallow restoration for `$H$`.
+5. Use recursive descendant restoration for `$H^*$`.
+6. Use the layer's normal default entry if no history has been recorded yet.
 
 The generic restoration path must use the runtime-recorded child. It must not
 hard-code a compile-time child or parent as though the saved configuration were
@@ -97,35 +110,44 @@ if (instance->history_states[HISTORY_SLOT] == SM_ST_CHILD_A) {
 Deep history must restore the recorded descendant configuration through the
 existing `SM_Restore_State_*()` helpers.
 
-#### REQ-GEN-HIS-002: Unwired History Validation
+#### REQ-GEN-HIS-002: Stateflow-Compatible Linkage Validation
 
-For every `history` or `deep-history` junction, semantic validation must find
-at least one transition with:
+The generator must not require:
 
 ```ts
 transition.targetId === historyJunction.id
 ```
 
-Otherwise generation must stop with:
+as a condition for using history. A history junction is linked when its
+containing state is a valid transition destination. Explicit transitions to the
+junction are also supported.
 
-```text
-HISTORY_INCOMING_TRANSITION_MISSING
+`HISTORY_JUNCTION_UNWIRED` must therefore be removed as a blocking diagnostic.
+Validation must instead enforce unambiguous ownership: the junction must belong
+to exactly one non-root child layer whose `parentStateId` is the containing
+state. A completely unreachable containing state can use the existing
+unreachable-state analysis rather than a history-specific generation error.
+
+For the supplied JSON:
+
+```json
+{
+  "id": "trans-3",
+  "sourceId": "state-2",
+  "targetId": "state-1",
+  "condition": "x == 3"
+}
 ```
 
-Suggested diagnostic:
-
-```text
-History junction '<id>' requires at least one incoming transition.
-```
-
-The generator must not silently create a transition or guess the intended
-history owner.
+is already the correct Stateflow-style transition. The history junction's
+`parentId` must be repaired from the child `State_6` UUID to `"state-1"`.
 
 ### Verification
 
-- Unwired shallow history: generation error.
-- Unwired deep history: generation error.
-- Direct transition to shallow history: accepted and restored.
+- Transition to a containing state with shallow history: restored.
+- Transition to a containing state with deep history: restored.
+- First entry with no recorded history: default child entered.
+- Direct transition to shallow/deep history: accepted and restored.
 - Decision-junction route to history: accepted and restored.
 - Shallow history: restores only the direct child.
 - Deep history: restores all recorded nested OR and AND regions.
@@ -389,7 +411,8 @@ not executed.
 
 | Generator component | Source file | Correction |
 |---|---|---|
-| Semantic history validation | `src/utils/stateMachine/smSemanticValidator.ts` | Reject unwired history junctions |
+| Semantic history validation | `src/utils/stateMachine/smSemanticValidator.ts` | Validate ownership without requiring a direct incoming edge |
+| Semantic transition builder | `src/utils/stateMachine/smSemanticBuilder.ts` | Convert entry to a history-owning state into a history-aware route |
 | Semantic slot allocation | `src/utils/stateMachine/smSemanticBuilder.ts` | Do not allocate empty OR-layer slots |
 | Generated C safety template | `src/utils/stateMachine/smCGenerator.ts` | Emit child-presence metadata and guard empty layers |
 | Generated C initialization template | `src/utils/stateMachine/smCGenerator.ts` | Emit `memset` before state entry |
@@ -412,8 +435,8 @@ not executed.
 
 The correction is complete only when:
 
-1. Unwired history junctions stop generation with a diagnostic.
-2. Wired shallow/deep history restores correctly in compiled C.
+1. Reentry to a history-owning state restores history without directly targeting the junction UUID.
+2. Explicit shallow/deep history targets also restore correctly in compiled C.
 3. `State_2` remains active across the next tick without a configuration
    fault.
 4. Empty OR layers consume no active slot.
@@ -429,4 +452,3 @@ The correction is complete only when:
 Do not patch delivered `sm_core.c`, `sm_safety.c`, or
 `sm_testing_report.md` manually. Correct the semantic engine and templates,
 then regenerate the application package.
-

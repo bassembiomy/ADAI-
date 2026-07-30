@@ -10,8 +10,10 @@ while preserving simulator/generated-C behavioral parity.
 
 This change covers:
 
-- `REQ-GEN-HIS-001`: history transition targets execute history restoration.
-- `REQ-GEN-HIS-002`: unwired history junctions are code-generation errors.
+- `REQ-GEN-HIS-001`: reentry to a state containing history restores its prior
+  substate configuration.
+- `REQ-GEN-HIS-002`: history ownership is validated without requiring a
+  transition to target the junction UUID directly.
 - `REQ-GEN-SAF-001`: active empty child layers do not cause configuration
   faults.
 - `REQ-GEN-SAF-002`: empty child layers consume no active-state slot.
@@ -28,12 +30,12 @@ user as a semantic diagnostic.
 
 ## Current Findings
 
-The structured generator already normalizes a transition whose final
+The structured generator already normalizes an explicit transition whose final
 destination is a shallow or deep history junction and emits layer restoration
-through `renderRestoreLayer()`. Runtime differential fixtures confirm that
-properly wired shallow and deep history transitions restore recorded state.
-The supplied generated package has no incoming transition to its history
-junction, leaving the otherwise valid restore helpers unreachable.
+through `renderRestoreLayer()`. It does not yet apply history when a transition
+targets the containing state. Stateflow treats history as a feature of that
+state: on first activation the default child is entered, while later
+reactivation resumes the recorded substate configuration.
 
 The supplied model also contains an empty OR child layer owned by leaf
 `State_2`. The semantic allocator gives that empty layer an active slot.
@@ -51,12 +53,13 @@ single, prominent validation-mode result.
 
 ### 1. History graph validation and execution
 
-`smSemanticValidator.ts` will require every `history` or `deep-history`
-junction to have at least one incoming transition whose `targetId` equals the
-junction ID. Missing linkage produces the error diagnostic
-`HISTORY_INCOMING_TRANSITION_MISSING`.
+`smSemanticValidator.ts` will validate that every `history` or `deep-history`
+junction belongs to exactly one non-root child layer and that the layer's
+parent state is its unambiguous owner. It will not require an incoming
+transition whose `targetId` equals the junction ID.
 
-The existing semantic route representation remains authoritative:
+The semantic builder will use the existing route representation both for an
+explicit junction destination and for reentry to a state that owns history:
 
 - `destinationKind: 'history'`
 - `destinationJunctionId: <junction ID>`
@@ -72,8 +75,8 @@ it avoids incorrectly restoring a compile-time parent when the recorded child
 is a runtime value.
 
 Tests will inspect emitted C and execute real compiled shallow/deep history
-models. A model containing an unwired history junction must fail before C files
-are returned.
+models. They will cover containing-state reentry, explicit history targets,
+first-entry default fallback, and ownership errors.
 
 ### 2. Empty-layer slot allocation and runtime validation
 
@@ -169,8 +172,10 @@ Tests are added before production changes and must fail for the expected
 missing behavior.
 
 1. Semantic validator:
-   - Reject shallow and deep history junctions without incoming transitions.
-   - Accept direct and decision-chain incoming history transitions.
+   - Accept reentry through a containing state without targeting the history
+     UUID.
+   - Accept explicit and decision-chain history targets.
+   - Reject ambiguous or invalid history ownership.
 
 2. Semantic builder:
    - Allocate no active slot for an empty OR child layer.

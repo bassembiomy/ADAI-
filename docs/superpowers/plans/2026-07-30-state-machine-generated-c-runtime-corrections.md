@@ -2,6 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **SUPERSEDED HISTORY TASK — DO NOT EXECUTE TASK 1:** The original Task 1
+> required a transition to target the history-junction UUID directly. Official
+> Stateflow semantics instead apply contained history when a transition
+> reenters the owning state. Use
+> `docs/STATE_MACHINE_CODE_GENERATION_CORRECTIONS.md` as the authoritative
+> correction and regenerate Task 1 before implementation. Tasks 2–5 remain
+> applicable.
+
 **Goal:** Make history linkage, empty-layer validation, instance initialization, and generated verification reports safe and behaviorally accurate in the generic semantic C generator.
 
 **Architecture:** Validate history connectivity before semantic IR construction, allocate active slots only to non-empty OR layers, and retain generated-C consistency checks as defense in depth. Initialize the complete caller-owned instance before entry actions, and derive report validation mode solely from recorded evidence.
@@ -25,7 +33,7 @@ follows:
 
 | Review finding | Requirement | Plan task | Generator-level correction |
 |---|---|---:|---|
-| History restore helpers exist but are unreachable | `REQ-GEN-HIS-001`, `REQ-GEN-HIS-002` | 1 | Reject history junctions without incoming edges and compile/execute shallow and deep history routes. Keep runtime recorded-child restoration; do not hard-code a compile-time parent when the saved child is dynamic. |
+| History restore helpers exist but are unreachable | `REQ-GEN-HIS-001`, `REQ-GEN-HIS-002` | Replacement Task 1 required | Treat history as a feature of its owning state: reentry to the state restores the runtime-recorded child, first entry uses the default child, and explicit junction targets remain supported. |
 | Empty child layer owned by `State_2` faults | `REQ-GEN-SAF-001`, `REQ-GEN-SAF-002` | 2 | Allocate no slot to an empty OR layer and emit constant `SM_Layer_Has_Children` metadata. This is deterministic O(1) validation and avoids the review patch's repeated runtime scan across every state. |
 | `SM_Init()` leaves extension fields vulnerable | `REQ-GEN-INIT-001` | 3 | Emit `<string.h>` and clear the complete instance immediately after the null guard, then assign semantic non-zero/sentinel defaults before entry. |
 | Static reachability appears beside unexecuted host gates | `REQ-GEN-REP-001`, `REQ-GEN-REP-002` | 4 | Display `Execution mode: STATIC_ANALYSIS_ONLY`, separate Static AST reachability from Dynamic executable reachability, and derive stronger modes only from recorded evidence. |
