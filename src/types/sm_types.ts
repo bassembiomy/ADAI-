@@ -1,3 +1,4 @@
+import type { XBLegacyXBridgesModel } from '../utils/stateMachine/xbModel';
 
 export type VariableType = 'bool' | 'int' | 'uint' | 'int8' | 'uint8' | 'int16' | 'uint16' | 'int32' | 'uint32' | 'int64' | 'uint64' | 'float' | 'single' | 'double';
 
@@ -50,16 +51,7 @@ export interface StateData {
   isTerminalState?: boolean;
   isTerminal?: boolean;
   isXBridges?: boolean;
-  xBridgesModel?: {
-    nodes: any[];
-    edges: any[];
-    mappings?: {
-      smVarId: string;
-      blockId: string;
-      portId: string;
-      direction: 'in' | 'out';
-    }[];
-  };
+  xBridgesModel?: XBLegacyXBridgesModel;
 }
 
 export interface JunctionData {

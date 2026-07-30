@@ -1,4 +1,5 @@
 import type { HILConfig } from '../../engine/hil/hilTypes';
+export type { XBPersistedModelV1 } from './xbModel';
 import type {
   JunctionData,
   Layer,
