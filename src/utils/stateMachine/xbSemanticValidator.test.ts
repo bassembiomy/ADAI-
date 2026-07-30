@@ -220,6 +220,37 @@ describe('validateXBModel', () => {
     }))).toContain('XB_DIMENSION_DYNAMIC');
   });
 
+  it('rejects an explicitly dynamic port shape', () => {
+    expect(codes(model({
+      nodes: [node('dynamic', 'GAIN', {
+        inputs: [port('u', 'input', {
+          shape: 'dynamic',
+        })],
+      })],
+    }))).toContain('XB_DIMENSION_DYNAMIC');
+  });
+
+  it('rejects an unknown explicit port shape', () => {
+    expect(codes(model({
+      nodes: [node('unknown-shape', 'GAIN', {
+        inputs: [port('u', 'input', {
+          shape: 'tensor',
+        })],
+      })],
+    }))).toContain('XB_DIMENSION_DYNAMIC');
+  });
+
+  it('rejects dimensions supplied for an explicitly scalar port', () => {
+    expect(codes(model({
+      nodes: [node('scalar-dimensions', 'GAIN', {
+        inputs: [port('u', 'input', {
+          shape: 'scalar',
+          dimensions: [8],
+        })],
+      })],
+    }))).toContain('XB_DIMENSION_DYNAMIC');
+  });
+
   it('rejects invalid fixed-point formats', () => {
     const nestedFormatCodes = codes(model({
       nodes: [node('fixed', 'NUMERIC_REPRESENTATION', {

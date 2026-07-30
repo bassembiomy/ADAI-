@@ -78,13 +78,24 @@ const parsePortCollection = (
 
     const explicitShape = value.shape;
     const rawDimensions = value.dimensions;
+    const explicitShapeInvalid = explicitShape !== undefined
+      && explicitShape !== 'scalar'
+      && explicitShape !== 'vector'
+      && explicitShape !== 'matrix';
     let shape: PortShape;
     let dimensions: readonly number[];
     if (explicitShape === 'scalar') {
       shape = 'scalar';
-      dimensions = [];
+      dimensions = Array.isArray(rawDimensions)
+        ? rawDimensions.filter((entry): entry is number => typeof entry === 'number')
+        : [];
     } else if (explicitShape === 'vector' || explicitShape === 'matrix') {
       shape = explicitShape;
+      dimensions = Array.isArray(rawDimensions)
+        ? rawDimensions.filter((entry): entry is number => typeof entry === 'number')
+        : [];
+    } else if (explicitShapeInvalid) {
+      shape = 'scalar';
       dimensions = Array.isArray(rawDimensions)
         ? rawDimensions.filter((entry): entry is number => typeof entry === 'number')
         : [];
@@ -103,7 +114,8 @@ const parsePortCollection = (
     }
 
     const expectedDimensionCount = shape === 'scalar' ? 0 : shape === 'vector' ? 1 : 2;
-    const dimensionsInvalid = (rawDimensions !== undefined && !Array.isArray(rawDimensions))
+    const dimensionsInvalid = explicitShapeInvalid
+      || (rawDimensions !== undefined && !Array.isArray(rawDimensions))
       || (Array.isArray(rawDimensions)
         && rawDimensions.some((entry) =>
           typeof entry !== 'number'
