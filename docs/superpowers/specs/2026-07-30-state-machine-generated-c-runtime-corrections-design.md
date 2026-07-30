@@ -131,16 +131,16 @@ The testing report will use separate fields:
 - `Dynamic executable reachability`: evidence status from host execution or
   differential traces; it is `NOT RUN` when no executable evidence exists.
 
-The report summary mode is derived from recorded evidence:
+The report execution mode is derived from recorded evidence:
 
 - `VALIDATION_FAILED` if any recorded evidence category explicitly fails.
 - `DYNAMIC_EXECUTION_VERIFIED` only when host compilation and host runtime both
   pass.
 - `STATIC_ANALYSIS_ONLY` otherwise.
 
-The generated package defaults to `STATIC_ANALYSIS_ONLY` because code
-generation itself does not execute the host binary. No static reachability
-percentage is described as runtime proof.
+The generated package displays `Execution mode: STATIC_ANALYSIS_ONLY` by
+default because code generation itself does not execute the host binary. No
+static reachability percentage is described as runtime proof.
 
 ## Error Handling
 

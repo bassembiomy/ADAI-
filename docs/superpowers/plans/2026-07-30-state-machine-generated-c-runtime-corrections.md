@@ -18,6 +18,23 @@
 - Preserve all unrelated dirty-worktree changes and stage only task-owned hunks.
 - Generated C must compile with `gcc -std=c99 -pedantic-errors -Wall -Wextra -Werror`.
 
+## Architectural Review Addendum
+
+The review of package `generated_code_1785409396761` is incorporated as
+follows:
+
+| Review finding | Requirement | Plan task | Generator-level correction |
+|---|---|---:|---|
+| History restore helpers exist but are unreachable | `REQ-GEN-HIS-001`, `REQ-GEN-HIS-002` | 1 | Reject history junctions without incoming edges and compile/execute shallow and deep history routes. Keep runtime recorded-child restoration; do not hard-code a compile-time parent when the saved child is dynamic. |
+| Empty child layer owned by `State_2` faults | `REQ-GEN-SAF-001`, `REQ-GEN-SAF-002` | 2 | Allocate no slot to an empty OR layer and emit constant `SM_Layer_Has_Children` metadata. This is deterministic O(1) validation and avoids the review patch's repeated runtime scan across every state. |
+| `SM_Init()` leaves extension fields vulnerable | `REQ-GEN-INIT-001` | 3 | Emit `<string.h>` and clear the complete instance immediately after the null guard, then assign semantic non-zero/sentinel defaults before entry. |
+| Static reachability appears beside unexecuted host gates | `REQ-GEN-REP-001`, `REQ-GEN-REP-002` | 4 | Display `Execution mode: STATIC_ANALYSIS_ONLY`, separate Static AST reachability from Dynamic executable reachability, and derive stronger modes only from recorded evidence. |
+
+The direct C snippets in the review are treated as expected generated output,
+not as files to patch manually. All corrections are made in the TypeScript
+semantic analyzer and C/report templates so every future generated package
+receives the fix.
+
 ---
 
 ### Task 1: Reject Unwired History Junctions
@@ -550,7 +567,7 @@ Add:
 it('labels the default package as static analysis only', () => {
   const rendered = renderTestingReport(analyzedUnreachableFixture());
 
-  expect(rendered).toContain('Validation mode: STATIC_ANALYSIS_ONLY');
+  expect(rendered).toContain('Execution mode: STATIC_ANALYSIS_ONLY');
   expect(rendered).toContain('Static AST reachability: 66.7%');
   expect(rendered).toContain('Dynamic executable reachability: NOT RUN');
 });
@@ -566,7 +583,7 @@ it('reports dynamic verification only after host compile and runtime pass', () =
     targetHardware: 'pending',
   });
 
-  expect(rendered).toContain('Validation mode: DYNAMIC_EXECUTION_VERIFIED');
+  expect(rendered).toContain('Execution mode: DYNAMIC_EXECUTION_VERIFIED');
   expect(rendered).toContain('Dynamic executable reachability: PASS');
 });
 
@@ -581,7 +598,7 @@ it('reports a failed mode when any recorded evidence fails', () => {
     targetHardware: 'pending',
   });
 
-  expect(rendered).toContain('Validation mode: VALIDATION_FAILED');
+  expect(rendered).toContain('Execution mode: VALIDATION_FAILED');
 });
 ```
 
@@ -633,7 +650,7 @@ At the top of `renderTestingReport()` output add:
 ```md
 ## Summary
 
-- Validation mode: ${validationMode(report.evidence)}
+- Execution mode: ${validationMode(report.evidence)}
 - Static AST reachability: ${section.reachabilityPercent.toFixed(1)}%
 - Dynamic executable reachability: ${dynamicReachabilityLabel(report.evidence)}
 ```
