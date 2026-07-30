@@ -107,7 +107,7 @@ describe('semantic state-machine reports', () => {
       embeddedCompile: 'not-run',
       targetHardware: 'pending',
     });
-    expect(failedReport).toContain('Validation mode: VALIDATION_FAILED');
+    expect(failedReport).toContain('Execution mode: VALIDATION_FAILED');
     expect(failedReport).toContain('Dynamic executable reachability: FAIL');
 
     const verifiedReport = renderTestingReport(analyzedUnreachableFixture(), {
@@ -119,11 +119,11 @@ describe('semantic state-machine reports', () => {
       embeddedCompile: 'not-run',
       targetHardware: 'pending',
     });
-    expect(verifiedReport).toContain('Validation mode: DYNAMIC_EXECUTION_VERIFIED');
+    expect(verifiedReport).toContain('Execution mode: DYNAMIC_EXECUTION_VERIFIED');
     expect(verifiedReport).toContain('Dynamic executable reachability: PASS');
 
     const staticReport = renderTestingReport(analyzedUnreachableFixture());
-    expect(staticReport).toContain('Validation mode: STATIC_ANALYSIS_ONLY');
+    expect(staticReport).toContain('Execution mode: STATIC_ANALYSIS_ONLY');
     expect(staticReport).toContain('Dynamic executable reachability: NOT RUN');
   });
 });

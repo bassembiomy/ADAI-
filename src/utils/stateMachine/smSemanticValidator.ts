@@ -677,6 +677,16 @@ const validateHistory = (
         junction.id,
       ));
     }
+    const hasIncoming = model.transitions.some(
+      (transition) => transition.targetId === junction.id,
+    );
+    if (!hasIncoming) {
+      diagnostics.push(diagnostic(
+        'HISTORY_JUNCTION_UNWIRED',
+        `History junction '${junction.id}' has no incoming transitions.`,
+        junction.id,
+      ));
+    }
   }
   return diagnostics;
 };

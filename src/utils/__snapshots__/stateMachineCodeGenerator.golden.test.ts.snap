@@ -93,6 +93,7 @@ void SM_TraceAction(ADIA_Instance_t *instance, const char *action);
   {
     "content": "#include <limits.h>
 #include <stddef.h>
+#include <string.h>
 #include "sm_core.h"
 #include "sm_safety.h"
 #include "sm_user_logic.h"
@@ -296,6 +297,13 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
     }
+#ifdef SM_TRACE_ENABLED
+    SM_TraceSink_t trace_sink = instance->trace_sink;
+#endif
+    (void)memset(instance, 0, sizeof(*instance));
+#ifdef SM_TRACE_ENABLED
+    instance->trace_sink = trace_sink;
+#endif
     (void)SM_Exit_Layer_No_History_0;
     (void)SM_Enter_Deep_1;
     (void)SM_Restore_State_1;
@@ -319,9 +327,6 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     }
     instance->error_status = SM_ERR_NONE;
     instance->fault_latched = false;
-#ifdef SM_TRACE_ENABLED
-    instance->trace_sink = NULL;
-#endif
     SM_Enter_Layer_Default_0(instance);
     return SM_ERR_NONE;
 }
@@ -486,6 +491,10 @@ static const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS] = {
     [SM_LYR_ROOT_IDX] = 0,
 };
 
+static const bool SM_Layer_Has_Children_Map[SM_NUM_LAYERS] = {
+    [SM_LYR_ROOT_IDX] = true,
+};
+
 static bool SM_Is_Direct_Layer_Child(uint32_t layer_index, SM_Node_t state)
 {
     switch (layer_index) {
@@ -554,7 +563,7 @@ SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)
                     || (!instance->state_active[(uint32_t)active_node])) {
                     return SM_ERR_CONFIGURATION;
                 }
-            } else {
+            } else if (SM_Layer_Has_Children_Map[layer_index]) {
                 for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
                     if (SM_Is_Direct_Layer_Child(layer_index, (SM_Node_t)state_index)
                         && (!instance->state_active[state_index])) {
@@ -685,7 +694,7 @@ void MCAL_Watchdog_Kick(void);
 
 ## Summary
 
-- Validation mode: STATIC_ANALYSIS_ONLY
+- Execution mode: STATIC_ANALYSIS_ONLY
 - Static AST reachability: 100.0%
 - Dynamic executable reachability: NOT RUN
 
@@ -758,8 +767,8 @@ Evidence labels describe only the checks actually recorded for this generated pa
 | Metric | Value |
 |---|---:|
 | Files measured | 8 |
-| Total lines | 654 |
-| Functional lines | 583 |
+| Total lines | 663 |
+| Functional lines | 591 |
 | Comment/blank density | 10.9% |
 
 These are structural metrics derived from the same validated semantic analysis used by the testing report. They are not formal MISRA, safety-certification, embedded-timing, or target-hardware evidence.

@@ -66,14 +66,16 @@ const evidenceLabel = (status: VerificationEvidenceStatus): string =>
 const idsOrNone = (ids: readonly string[]): string =>
   ids.length > 0 ? ids.join(', ') : 'None';
 
-export type ValidationMode =
+export type ExecutionMode =
   | 'VALIDATION_FAILED'
   | 'DYNAMIC_EXECUTION_VERIFIED'
   | 'STATIC_ANALYSIS_ONLY';
 
-const validationMode = (
+export type ValidationMode = ExecutionMode;
+
+const executionMode = (
   evidence: VerificationEvidence,
-): ValidationMode => {
+): ExecutionMode => {
   if (Object.values(evidence).includes('fail')) {
     return 'VALIDATION_FAILED';
   }
@@ -102,7 +104,7 @@ export const renderTestingReport = (
 
 ## Summary
 
-- Validation mode: ${validationMode(report.evidence)}
+- Execution mode: ${executionMode(report.evidence)}
 - Static AST reachability: ${section.reachabilityPercent.toFixed(1)}%
 - Dynamic executable reachability: ${dynamicReachabilityLabel(report.evidence)}
 

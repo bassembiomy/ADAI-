@@ -291,7 +291,7 @@ describe('avr-gcc compile gates for advanced charts', () => {
     transitions: [
       mkTransition('t_xy', 'x', 'y', { condition: 't1' }),
       mkTransition('t_yout', 'y', 'out', { condition: 't2' }),
-      mkTransition('t_outp', 'out', 'p', { condition: 't3' })
+      mkTransition('t_outp', 'out', 'hj', { condition: 't3' })
     ],
     variables: vars,
     layers: [

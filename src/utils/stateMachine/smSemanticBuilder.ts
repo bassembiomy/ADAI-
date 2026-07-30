@@ -99,7 +99,7 @@ const allocateActiveSlots = (
   let nextSlot = 0;
   for (const layerId of hierarchy.orderedLayerIds) {
     const layer = hierarchy.layerById.get(layerId)!;
-    if (layer.decomposition === 'OR') {
+    if (layer.decomposition === 'OR' && layer.stateIds.length > 0) {
       slots.set(layerId, nextSlot);
       nextSlot += 1;
     } else {

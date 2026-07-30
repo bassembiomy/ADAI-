@@ -990,6 +990,11 @@ export const renderSafetySource = (ir: SemanticModel): string => {
       `    [${layerMacro(layer)}] = ${layer.activeSlot ?? -1},`),
     '};',
     '',
+    'static const bool SM_Layer_Has_Children_Map[SM_NUM_LAYERS] = {',
+    ...layers.map((layer) =>
+      `    [${layerMacro(layer)}] = ${layer.children.length > 0 ? 'true' : 'false'},`),
+    '};',
+    '',
     'static bool SM_Is_Direct_Layer_Child(uint32_t layer_index, SM_Node_t state)',
     '{',
     '    switch (layer_index) {',
@@ -1048,7 +1053,7 @@ export const renderSafetySource = (ir: SemanticModel): string => {
     '                    || (!instance->state_active[(uint32_t)active_node])) {',
     '                    return SM_ERR_CONFIGURATION;',
     '                }',
-    '            } else {',
+    '            } else if (SM_Layer_Has_Children_Map[layer_index]) {',
     '                for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {',
     '                    if (SM_Is_Direct_Layer_Child(layer_index, (SM_Node_t)state_index)',
     '                        && (!instance->state_active[state_index])) {',
@@ -1270,6 +1275,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
   return lines(
     '#include <limits.h>',
     '#include <stddef.h>',
+    '#include <string.h>',
     '#include "sm_core.h"',
     '#include "sm_safety.h"',
     '#include "sm_user_logic.h"',
@@ -1311,6 +1317,13 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '    if (instance == NULL) {',
     '        return SM_ERR_NULL_INSTANCE;',
     '    }',
+    '#ifdef SM_TRACE_ENABLED',
+    '    SM_TraceSink_t trace_sink = instance->trace_sink;',
+    '#endif',
+    '    (void)memset(instance, 0, sizeof(*instance));',
+    '#ifdef SM_TRACE_ENABLED',
+    '    instance->trace_sink = trace_sink;',
+    '#endif',
     ...orderedLayers(ir).map((layer) =>
       `    (void)${layerFunction(index, 'SM_Exit_Layer_No_History', layer.id)};`),
     ...states.flatMap((state) => [
