@@ -396,6 +396,84 @@ describe('buildXBSemanticModel', () => {
     expect(build(xbModel).ir?.operations.delay.schedule.periodSubsteps).toBe(5);
   });
 
+  it('rejects a later non-divisible timing annotation', () => {
+    const xbModel = model({
+      nodes: [
+        node(
+          'delay',
+          'UNIT_DELAY',
+          [port('u', 'input', { sampleRate: 3 })],
+          [port('y', 'output')],
+          { sampleTime: 0.01 },
+        ),
+      ],
+    });
+
+    const result = build(xbModel);
+    expect(result.ir).toBeUndefined();
+    expect(result.diagnostics.map((item) => item.code)).toContain(
+      'XB_SAMPLE_TIME_INVALID',
+    );
+  });
+
+  it('rejects conflicting valid timing annotations', () => {
+    const xbModel = model({
+      nodes: [
+        node(
+          'delay',
+          'UNIT_DELAY',
+          [port('u', 'input', { sampleRate: 50 })],
+          [port('y', 'output')],
+          { sampleTime: 0.01 },
+        ),
+      ],
+    });
+
+    const result = build(xbModel);
+    expect(result.ir).toBeUndefined();
+    expect(result.diagnostics.map((item) => item.code)).toContain(
+      'XB_SAMPLE_TIME_INVALID',
+    );
+  });
+
+  it('accepts consistent duplicate timing annotations', () => {
+    const xbModel = model({
+      nodes: [
+        node(
+          'delay',
+          'UNIT_DELAY',
+          [port('u', 'input', { sampleRate: 100 })],
+          [port('y', 'output')],
+          { sampleTime: 0.01 },
+        ),
+      ],
+    });
+
+    const result = build(xbModel);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir?.operations.delay.schedule.periodSubsteps).toBe(5);
+  });
+
+  it('rejects any invalid timing annotation after a valid one', () => {
+    const xbModel = model({
+      nodes: [
+        node(
+          'delay',
+          'UNIT_DELAY',
+          [port('u', 'input', { sampleRate: 0 })],
+          [port('y', 'output')],
+          { sampleTime: 0.01 },
+        ),
+      ],
+    });
+
+    const result = build(xbModel);
+    expect(result.ir).toBeUndefined();
+    expect(result.diagnostics.map((item) => item.code)).toContain(
+      'XB_SAMPLE_TIME_INVALID',
+    );
+  });
+
   it.each([0, Number.NaN, Number.POSITIVE_INFINITY])(
     'rejects invalid port sampleRate %s',
     (sampleRate) => {
@@ -474,6 +552,39 @@ describe('buildXBSemanticModel', () => {
       }),
     ]);
   });
+
+  it.each([
+    ['DATA_TYPE_CONVERSION', undefined],
+    ['DATA_TYPE_CONVERSION', 'float128'],
+    ['NUMERIC_REPRESENTATION', undefined],
+    ['NUMERIC_REPRESENTATION', 'float128'],
+  ] as const)(
+    'rejects %s destination type %s instead of inferring from y',
+    (type, outputType) => {
+      const parameters: Record<string, XBParameterValue> = {};
+      if (outputType !== undefined) parameters.output_type = outputType;
+      const xbModel = model({
+        nodes: [
+          node(
+            'convert',
+            type,
+            [port('u', 'input')],
+            [port('y', 'output', { dataType: 'float64' })],
+            parameters,
+          ),
+        ],
+      });
+
+      const result = build(xbModel);
+      expect(result.ir).toBeUndefined();
+      expect(result.diagnostics).toEqual([
+        expect.objectContaining({
+          code: 'XB_CONVERSION_DESTINATION_INVALID',
+          elementId: 'convert',
+        }),
+      ]);
+    },
+  );
 
   it('preserves exact shaped state-slot initial values', () => {
     const vector = {

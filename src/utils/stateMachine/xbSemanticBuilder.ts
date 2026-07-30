@@ -292,8 +292,18 @@ const conversionForNode = (
   node: XBNodeV1,
   diagnostics: ModelDiagnostic[],
 ): XBSemanticConversion | null => {
+  const isConversion = node.type === 'DATA_TYPE_CONVERSION'
+    || node.type === 'NUMERIC_REPRESENTATION';
+  if (!isConversion) return null;
   const destinationType = conversionOutputType(node);
-  if (destinationType === null) return null;
+  if (destinationType === null) {
+    diagnostics.push(diagnostic(
+      'XB_CONVERSION_DESTINATION_INVALID',
+      `Block '${node.id}' requires an explicit supported conversion destination type.`,
+      node.id,
+    ));
+    return null;
+  }
   const parameters = node.parameters as UnknownRecord;
   const rawMode = parameters.conversionMode ?? parameters.mode;
   const reinterpret = parameters.reinterpretStoredInteger === true
@@ -396,7 +406,7 @@ const portsForNode = (node: XBNodeV1): readonly PortDescriptor[] => {
 
 interface SamplePeriodSource {
   readonly kind: 'seconds' | 'hertz';
-  readonly value: number;
+  readonly value: unknown;
 }
 
 const samplePeriodsIn = (
@@ -412,11 +422,11 @@ const samplePeriodsIn = (
   }
   const record = value as UnknownRecord;
   for (const key of ['sampleTime', 'sample_time']) {
-    if (typeof record[key] === 'number') {
-      destination.push({ kind: 'seconds', value: record[key] as number });
+    if (Object.prototype.hasOwnProperty.call(record, key)) {
+      destination.push({ kind: 'seconds', value: record[key] });
     }
   }
-  if (typeof record.sampleRate === 'number') {
+  if (Object.prototype.hasOwnProperty.call(record, 'sampleRate')) {
     destination.push({ kind: 'hertz', value: record.sampleRate });
   }
   for (const key of Object.keys(record).sort(compareStable)) {
@@ -424,10 +434,12 @@ const samplePeriodsIn = (
   }
 };
 
-const samplePeriodForNode = (node: XBNodeV1): SamplePeriodSource | null => {
+const samplePeriodsForNode = (
+  node: XBNodeV1,
+): readonly SamplePeriodSource[] => {
   const values: SamplePeriodSource[] = [];
   samplePeriodsIn(node.parameters, values);
-  return values[0] ?? null;
+  return values;
 };
 
 const isDiscreteStatefulType = (type: string): boolean =>
@@ -439,10 +451,14 @@ const scheduleForNode = (
   stateful: boolean,
   diagnostics: ModelDiagnostic[],
 ): XBSemanticSchedule => {
-  const samplePeriodSource = samplePeriodForNode(node);
+  const samplePeriodSources = samplePeriodsForNode(node);
   let periodSubsteps = 1;
-  if (samplePeriodSource !== null) {
-    const persistedValue = rationalFromFiniteNumber(samplePeriodSource.value);
+  let canonicalPeriod: Rational | null = null;
+  let timingInvalid = false;
+  for (const samplePeriodSource of samplePeriodSources) {
+    const persistedValue = typeof samplePeriodSource.value === 'number'
+      ? rationalFromFiniteNumber(samplePeriodSource.value)
+      : null;
     const samplePeriod = persistedValue === null
       || persistedValue.numerator <= 0n
       ? null
@@ -455,17 +471,25 @@ const scheduleForNode = (
     const ratio = samplePeriod === null
       ? null
       : exactPositiveIntegerRatio(samplePeriod, solverStep);
-    if (ratio === null) {
-      diagnostics.push(diagnostic(
-        'XB_SAMPLE_TIME_INVALID',
-        `Block '${node.id}' has a sample time outside the fixed-step schedule.`,
-        node.id,
-      ));
-    } else {
-      periodSubsteps = ratio;
+    const conflicts = canonicalPeriod !== null
+      && samplePeriod !== null
+      && canonicalPeriod.numerator * samplePeriod.denominator
+        !== samplePeriod.numerator * canonicalPeriod.denominator;
+    if (ratio === null || conflicts) {
+      timingInvalid = true;
+      continue;
     }
+    canonicalPeriod ??= samplePeriod;
+    periodSubsteps = ratio;
   }
-  const zeroOrderHold = samplePeriodSource !== null
+  if (timingInvalid) {
+    diagnostics.push(diagnostic(
+      'XB_SAMPLE_TIME_INVALID',
+      `Block '${node.id}' has invalid, conflicting, or non-divisible timing annotations.`,
+      node.id,
+    ));
+  }
+  const zeroOrderHold = samplePeriodSources.length > 0
     || (stateful && isDiscreteStatefulType(node.type));
   return {
     periodSubsteps,
