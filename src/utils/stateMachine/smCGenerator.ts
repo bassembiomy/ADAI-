@@ -1270,7 +1270,6 @@ export const renderCoreSource = (ir: SemanticModel): string => {
   return lines(
     '#include <limits.h>',
     '#include <stddef.h>',
-    '#include <string.h>',
     '#include "sm_core.h"',
     '#include "sm_safety.h"',
     '#include "sm_user_logic.h"',
@@ -1312,13 +1311,6 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '    if (instance == NULL) {',
     '        return SM_ERR_NULL_INSTANCE;',
     '    }',
-    '#ifdef SM_TRACE_ENABLED',
-    '    SM_TraceSink_t trace_sink = instance->trace_sink;',
-    '#endif',
-    '    (void)memset(instance, 0, sizeof(*instance));',
-    '#ifdef SM_TRACE_ENABLED',
-    '    instance->trace_sink = trace_sink;',
-    '#endif',
     ...orderedLayers(ir).map((layer) =>
       `    (void)${layerFunction(index, 'SM_Exit_Layer_No_History', layer.id)};`),
     ...states.flatMap((state) => [

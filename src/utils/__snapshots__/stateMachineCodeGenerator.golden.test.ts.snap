@@ -93,7 +93,6 @@ void SM_TraceAction(ADIA_Instance_t *instance, const char *action);
   {
     "content": "#include <limits.h>
 #include <stddef.h>
-#include <string.h>
 #include "sm_core.h"
 #include "sm_safety.h"
 #include "sm_user_logic.h"
@@ -297,13 +296,6 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
     }
-#ifdef SM_TRACE_ENABLED
-    SM_TraceSink_t trace_sink = instance->trace_sink;
-#endif
-    (void)memset(instance, 0, sizeof(*instance));
-#ifdef SM_TRACE_ENABLED
-    instance->trace_sink = trace_sink;
-#endif
     (void)SM_Exit_Layer_No_History_0;
     (void)SM_Enter_Deep_1;
     (void)SM_Restore_State_1;
@@ -327,6 +319,9 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     }
     instance->error_status = SM_ERR_NONE;
     instance->fault_latched = false;
+#ifdef SM_TRACE_ENABLED
+    instance->trace_sink = NULL;
+#endif
     SM_Enter_Layer_Default_0(instance);
     return SM_ERR_NONE;
 }
@@ -763,9 +758,9 @@ Evidence labels describe only the checks actually recorded for this generated pa
 | Metric | Value |
 |---|---:|
 | Files measured | 8 |
-| Total lines | 659 |
-| Functional lines | 588 |
-| Comment/blank density | 10.8% |
+| Total lines | 654 |
+| Functional lines | 583 |
+| Comment/blank density | 10.9% |
 
 These are structural metrics derived from the same validated semantic analysis used by the testing report. They are not formal MISRA, safety-certification, embedded-timing, or target-hardware evidence.
 ",
