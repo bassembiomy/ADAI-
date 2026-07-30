@@ -6,6 +6,36 @@ import {
   type ModelDiagnostic,
   type StateMachineModelV4,
 } from './smModel';
+import { adaptXBModel } from './xbModelAdapter';
+
+const normalizeEmbeddedXBModels = (
+  states: StateData[],
+): {
+  states: StateData[];
+  diagnostics: ModelDiagnostic[];
+} => {
+  const diagnostics: ModelDiagnostic[] = [];
+  const normalizedStates = states.map((state) => {
+    if (state.xBridgesModel === undefined) return state;
+
+    const adapted = adaptXBModel(state.xBridgesModel);
+    if (adapted.model !== null) {
+      return {
+        ...state,
+        xBridgesModel: adapted.model,
+      };
+    }
+
+    diagnostics.push(...adapted.diagnostics.map((entry) => ({
+      ...entry,
+      elementId: state.id,
+      message: `State '${state.id}': ${entry.message}`,
+    })));
+    const { xBridgesModel: _invalidModel, ...stateWithoutXBModel } = state;
+    return stateWithoutXBModel as StateData;
+  });
+  return { states: normalizedStates, diagnostics };
+};
 
 const repairHistoryJunctions = (
   junctions: StateMachineModelV4['junctions'] = [],
@@ -43,7 +73,11 @@ const repairHistoryJunctions = (
 export const migrateStateMachineModel = (
   input: LegacyStateMachineModel,
 ): MigrationResult => {
-  const clonedInput = structuredClone(input);
+  const normalizedXB = normalizeEmbeddedXBModels(input.states);
+  const clonedInput = structuredClone({
+    ...input,
+    states: normalizedXB.states,
+  });
 
   if (clonedInput.schemaVersion === CURRENT_SM_SCHEMA_VERSION) {
     const repaired = repairHistoryJunctions(
@@ -53,14 +87,15 @@ export const migrateStateMachineModel = (
     return {
       model: {
         ...(clonedInput as StateMachineModelV4),
+        states: clonedInput.states,
         junctions: repaired.junctions,
         layers: repaired.layers,
       },
-      diagnostics: [],
+      diagnostics: normalizedXB.diagnostics,
     };
   }
 
-  const diagnostics: ModelDiagnostic[] = [];
+  const diagnostics: ModelDiagnostic[] = [...normalizedXB.diagnostics];
   const statesById = new Map(clonedInput.states.map((state) => [state.id, state]));
   const hilConfig = clonedInput.hilConfig === undefined
     ? undefined
@@ -106,6 +141,7 @@ export const migrateStateMachineModel = (
       ...clonedInput,
       schemaVersion: CURRENT_SM_SCHEMA_VERSION,
       safetyMode: clonedInput.safetyMode ?? false,
+      states: clonedInput.states,
       hilConfig,
       layers: repaired.layers,
       junctions: repaired.junctions,

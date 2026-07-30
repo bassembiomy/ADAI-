@@ -139,6 +139,37 @@ describe('migrateStateMachineModel', () => {
     expect(result.model.layers[0].transitionIds).toEqual([]);
   });
 
+  it('deep-isolates migrated state arrays from the input', () => {
+    const input = {
+      schemaVersion: 4,
+      tickMs: 10,
+      safetyMode: false,
+      states: [{
+        id: 'parent',
+        parentId: 'root',
+        children: ['child'],
+        isParallel: false,
+        priority: 1,
+      }],
+      layers: [{
+        id: 'root',
+        parentStateId: null,
+        stateIds: ['parent'],
+        transitionIds: [],
+        junctionIds: [],
+        decomposition: 'OR',
+      }],
+      junctions: [],
+      transitions: [],
+      variables: [],
+    } as any;
+
+    const result = migrateStateMachineModel(input);
+    result.model.states[0].children.push('result-only');
+
+    expect(input.states[0].children).toEqual(['child']);
+  });
+
   it('repairs history junction parentId when pointing to a child state in a non-root layer', () => {
     const input = {
       schemaVersion: 4,
@@ -262,5 +293,93 @@ describe('migrateStateMachineModel', () => {
     const result = migrateStateMachineModel(input);
     const historyJunction = result.model.junctions.find((j: any) => j.id === '45007fbf-07cd-40f2-bcc6-f9bc4a144e7e');
     expect(historyJunction?.parentId).toBe('367ccc9c-444c-4da0-9cd7-b86d9c4f83ba');
+  });
+
+  it.each([3, 4])(
+    'normalizes embedded legacy X-Bridges models while migrating schema V%s',
+    (schemaVersion) => {
+      const result = migrateStateMachineModel({
+        schemaVersion,
+        tickMs: 10,
+        safetyMode: false,
+        states: [{
+          id: 'xb-state',
+          parentId: 'root',
+          isParallel: false,
+          priority: 1,
+          isXBridges: true,
+          xBridgesModel: {
+            nodes: [{
+              id: 'react-id',
+              type: 'xblock',
+              data: {
+                id: 'stale-data-id',
+                type: 'Constant',
+                params: { value: 5 },
+                inputs: [],
+                outputs: [{ id: 'out', direction: 'output', type: 'continuous' }],
+                execute: () => ({ outputs: [5] }),
+              },
+            }],
+            edges: [],
+          },
+        }],
+        layers: [{
+          id: 'root',
+          parentStateId: null,
+          stateIds: ['xb-state'],
+          transitionIds: [],
+          junctionIds: [],
+          ...(schemaVersion === 4 ? { decomposition: 'OR' } : {}),
+        }],
+        junctions: [],
+        transitions: [],
+        variables: [],
+      } as any);
+
+      expect(result.diagnostics).toEqual([]);
+      expect(result.model.states[0].xBridgesModel).toMatchObject({
+        schemaVersion: 1,
+        nodes: [{ id: 'react-id', type: 'Constant' }],
+        mappings: [],
+        policy: { memory: 'reset', numericFault: 'escalate' },
+      });
+    },
+  );
+
+  it('fails closed when an embedded X-Bridges model cannot be normalized', () => {
+    const result = migrateStateMachineModel({
+      schemaVersion: 4,
+      tickMs: 10,
+      safetyMode: false,
+      states: [{
+        id: 'xb-state',
+        parentId: 'root',
+        isParallel: false,
+        priority: 1,
+        isXBridges: true,
+        xBridgesModel: {
+          nodes: [{ id: 'missing-type', data: { params: {} } }],
+          edges: [],
+        },
+      }],
+      layers: [{
+        id: 'root',
+        parentStateId: null,
+        stateIds: ['xb-state'],
+        transitionIds: [],
+        junctionIds: [],
+        decomposition: 'OR',
+      }],
+      junctions: [],
+      transitions: [],
+      variables: [],
+    } as any);
+
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: 'XB_MODEL_INVALID',
+      elementId: 'xb-state',
+    }));
+    expect(result.model.states[0].xBridgesModel).toBeUndefined();
   });
 });
