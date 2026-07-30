@@ -66,6 +66,32 @@ const evidenceLabel = (status: VerificationEvidenceStatus): string =>
 const idsOrNone = (ids: readonly string[]): string =>
   ids.length > 0 ? ids.join(', ') : 'None';
 
+export type ValidationMode =
+  | 'VALIDATION_FAILED'
+  | 'DYNAMIC_EXECUTION_VERIFIED'
+  | 'STATIC_ANALYSIS_ONLY';
+
+const validationMode = (
+  evidence: VerificationEvidence,
+): ValidationMode => {
+  if (Object.values(evidence).includes('fail')) {
+    return 'VALIDATION_FAILED';
+  }
+  if (evidence.hostCompile === 'pass' && evidence.hostRuntime === 'pass') {
+    return 'DYNAMIC_EXECUTION_VERIFIED';
+  }
+  return 'STATIC_ANALYSIS_ONLY';
+};
+
+const dynamicReachabilityLabel = (
+  evidence: VerificationEvidence,
+): string =>
+  evidence.hostCompile === 'fail' || evidence.hostRuntime === 'fail'
+    ? 'FAIL'
+    : evidence.hostCompile === 'pass' && evidence.hostRuntime === 'pass'
+      ? 'PASS'
+      : 'NOT RUN';
+
 export const renderTestingReport = (
   analysis: SMAnalysisResult,
   evidence: VerificationEvidence = DEFAULT_VERIFICATION_EVIDENCE,
@@ -74,13 +100,19 @@ export const renderTestingReport = (
   const section = report.testing;
   return `# ADIA State Machine Generated-C Verification Report
 
+## Summary
+
+- Validation mode: ${validationMode(report.evidence)}
+- Static AST reachability: ${section.reachabilityPercent.toFixed(1)}%
+- Dynamic executable reachability: ${dynamicReachabilityLabel(report.evidence)}
+
 ## Structural validation
 
 - Structural model validation: ${evidenceLabel(report.evidence.structural)}
 - States: ${analysis.semantic.stateCount}
 - Layers: ${analysis.semantic.layerCount} (${analysis.semantic.orLayerIds.length} OR, ${analysis.semantic.andLayerIds.length} AND)
 - Active configuration slots: ${analysis.semantic.activeSlotCount}
-- State reachability: ${section.reachabilityPercent.toFixed(1)}%
+- Static AST reachability: ${section.reachabilityPercent.toFixed(1)}%
 - Reachable state IDs: ${idsOrNone(section.reachableStateIds)}
 - Unreachable state IDs: ${idsOrNone(section.unreachableStateIds)}
 - Terminal state IDs: ${idsOrNone(section.terminalStateIds)}

@@ -96,4 +96,34 @@ describe('semantic state-machine reports', () => {
     expect(analysis.semantic.unreachableStateIds).toEqual(['b']);
     expect(analysis.criticalPaths.flatMap((path) => path.states)).not.toContain('B');
   });
+
+  it('distinguishes static and dynamic reachability in testing reports', () => {
+    const failedReport = renderTestingReport(analyzedUnreachableFixture(), {
+      structural: 'pass',
+      semantic: 'pass',
+      hostCompile: 'fail',
+      hostRuntime: 'not-run',
+      differential: 'not-run',
+      embeddedCompile: 'not-run',
+      targetHardware: 'pending',
+    });
+    expect(failedReport).toContain('Validation mode: VALIDATION_FAILED');
+    expect(failedReport).toContain('Dynamic executable reachability: FAIL');
+
+    const verifiedReport = renderTestingReport(analyzedUnreachableFixture(), {
+      structural: 'pass',
+      semantic: 'pass',
+      hostCompile: 'pass',
+      hostRuntime: 'pass',
+      differential: 'pass',
+      embeddedCompile: 'not-run',
+      targetHardware: 'pending',
+    });
+    expect(verifiedReport).toContain('Validation mode: DYNAMIC_EXECUTION_VERIFIED');
+    expect(verifiedReport).toContain('Dynamic executable reachability: PASS');
+
+    const staticReport = renderTestingReport(analyzedUnreachableFixture());
+    expect(staticReport).toContain('Validation mode: STATIC_ANALYSIS_ONLY');
+    expect(staticReport).toContain('Dynamic executable reachability: NOT RUN');
+  });
 });

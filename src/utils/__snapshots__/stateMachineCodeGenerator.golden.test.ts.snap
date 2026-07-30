@@ -319,6 +319,9 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     }
     instance->error_status = SM_ERR_NONE;
     instance->fault_latched = false;
+#ifdef SM_TRACE_ENABLED
+    instance->trace_sink = NULL;
+#endif
     SM_Enter_Layer_Default_0(instance);
     return SM_ERR_NONE;
 }
@@ -680,13 +683,19 @@ void MCAL_Watchdog_Kick(void);
   {
     "content": "# ADIA State Machine Generated-C Verification Report
 
+## Summary
+
+- Validation mode: STATIC_ANALYSIS_ONLY
+- Static AST reachability: 100.0%
+- Dynamic executable reachability: NOT RUN
+
 ## Structural validation
 
 - Structural model validation: PASS
 - States: 2
 - Layers: 1 (1 OR, 0 AND)
 - Active configuration slots: 1
-- State reachability: 100.0%
+- Static AST reachability: 100.0%
 - Reachable state IDs: s1, s2
 - Unreachable state IDs: None
 - Terminal state IDs: None
@@ -749,8 +758,8 @@ Evidence labels describe only the checks actually recorded for this generated pa
 | Metric | Value |
 |---|---:|
 | Files measured | 8 |
-| Total lines | 651 |
-| Functional lines | 580 |
+| Total lines | 654 |
+| Functional lines | 583 |
 | Comment/blank density | 10.9% |
 
 These are structural metrics derived from the same validated semantic analysis used by the testing report. They are not formal MISRA, safety-certification, embedded-timing, or target-hardware evidence.
