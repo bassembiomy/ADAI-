@@ -1,0 +1,355 @@
+import { describe, expect, it } from 'vitest';
+import type { SemanticVariable } from './smSemanticModel';
+import type {
+  XBNodeV1,
+  XBParameterValue,
+  XBPersistedModelV1,
+  XBTargetCapabilities,
+} from './xbModel';
+import { buildXBSemanticModel } from './xbSemanticBuilder';
+
+const target: XBTargetCapabilities = {
+  supportsFloat16: false,
+  supportsFloat32: true,
+  supportsFloat64: true,
+  supportsMathLibrary: true,
+  maxVectorLength: 16,
+  maxMatrixDimension: 8,
+};
+
+const variables: Readonly<Record<string, SemanticVariable>> = {
+  command: {
+    id: 'command',
+    name: 'command',
+    cName: 'command',
+    type: 'float',
+    initialValue: 0,
+  },
+};
+
+const port = (
+  id: string,
+  direction: 'input' | 'output',
+  extra: Record<string, XBParameterValue> = {},
+) => ({
+  id,
+  direction,
+  shape: 'scalar',
+  dataType: 'float32',
+  ...extra,
+});
+
+const node = (
+  id: string,
+  type: string,
+  inputs: readonly ReturnType<typeof port>[],
+  outputs: readonly ReturnType<typeof port>[],
+  parameters: Record<string, XBParameterValue> = {},
+): XBNodeV1 => ({
+  id,
+  type,
+  parameters: {
+    inputs,
+    outputs,
+    ...parameters,
+  },
+});
+
+const edge = (
+  id: string,
+  sourceNodeId: string,
+  sourcePortId: string,
+  targetNodeId: string,
+  targetPortId: string,
+) => ({
+  id,
+  sourceNodeId,
+  sourcePortId,
+  targetNodeId,
+  targetPortId,
+});
+
+const model = (
+  overrides: Partial<XBPersistedModelV1> = {},
+): XBPersistedModelV1 => ({
+  schemaVersion: 1,
+  nodes: [],
+  edges: [],
+  mappings: [],
+  solver: { kind: 'euler', stepSeconds: 0.002 },
+  policy: { memory: 'reset', numericFault: 'escalate' },
+  ...overrides,
+});
+
+const build = (
+  xbModel: XBPersistedModelV1,
+  baseTickMs = 10,
+) => buildXBSemanticModel({
+  stateId: 'controller',
+  model: xbModel,
+  variables,
+  target,
+  baseTickMs,
+});
+
+describe('buildXBSemanticModel', () => {
+  it('orders operations by dependencies and stable node IDs and propagates conversion types', () => {
+    const xbModel = model({
+      nodes: [
+        node('out', 'Outport', [port('u', 'input')], []),
+        node(
+          'quantize',
+          'NUMERIC_REPRESENTATION',
+          [port('u', 'input')],
+          [port('y', 'output')],
+          {
+            outputType: {
+              kind: 'fixed',
+              signed: true,
+              wordLength: 16,
+              fractionLength: 8,
+            },
+            rounding: 'simplest',
+            overflow: 'wrap',
+          },
+        ),
+        node('gain', 'GAIN', [port('u', 'input')], [port('y', 'output')]),
+        node('constant', 'Constant', [], [port('y', 'output')], { value: 2 }),
+      ],
+      edges: [
+        edge('gain-to-quantize', 'gain', 'y', 'quantize', 'u'),
+        edge('quantize-to-out', 'quantize', 'y', 'out', 'u'),
+        edge('constant-to-gain', 'constant', 'y', 'gain', 'u'),
+      ],
+    });
+
+    const result = build(xbModel);
+    expect(result.diagnostics).toEqual([]);
+    const ir = result.ir!;
+
+    expect(ir.executionOrder).toEqual(['constant', 'gain', 'quantize', 'out']);
+    expect(ir.signals['quantize:y'].numericType).toEqual({
+      kind: 'fixed',
+      signed: true,
+      wordLength: 16,
+      fractionLength: 8,
+    });
+    expect(ir.signals['quantize:y'].storage).toBe('stored-integer');
+    expect(ir.operations.quantize.conversion).toEqual({
+      destinationType: {
+        kind: 'fixed',
+        signed: true,
+        wordLength: 16,
+        fractionLength: 8,
+      },
+      rounding: 'zero',
+      overflow: 'wrap',
+      mode: 'real-world-value',
+    });
+    expect(Object.isFrozen(ir)).toBe(true);
+    expect(Object.isFrozen(ir.operations.quantize.parameters)).toBe(true);
+  });
+
+  it('breaks ready-node ties by stable ID regardless of persisted order', () => {
+    const nodes = [
+      node('z-source', 'Constant', [], [port('y', 'output')]),
+      node('a-source', 'Constant', [], [port('y', 'output')]),
+      node('m-source', 'Constant', [], [port('y', 'output')]),
+    ];
+
+    expect(build(model({ nodes })).ir?.executionOrder).toEqual([
+      'a-source',
+      'm-source',
+      'z-source',
+    ]);
+    expect(build(model({ nodes: [...nodes].reverse() })).ir?.executionOrder).toEqual([
+      'a-source',
+      'm-source',
+      'z-source',
+    ]);
+  });
+
+  it('preserves fixed row-major matrix signal metadata', () => {
+    const fixedMatrix = {
+      kind: 'fixed',
+      signed: false,
+      wordLength: 12,
+      fractionLength: 3,
+    } as const;
+    const xbModel = model({
+      nodes: [
+        node('matrix', 'Constant', [], [
+          port('y', 'output', {
+            shape: 'matrix',
+            dimensions: [2, 3],
+            numericType: fixedMatrix,
+          }),
+        ]),
+      ],
+    });
+
+    const signal = build(xbModel).ir!.signals['matrix:y'];
+    expect(signal.shape).toEqual({ kind: 'matrix', rows: 2, columns: 3 });
+    expect(signal.dimensions).toEqual([2, 3]);
+    expect(signal.elementCount).toBe(6);
+    expect(signal.layout).toBe('row-major');
+    expect(signal.numericType).toEqual(fixedMatrix);
+    expect(signal.storage).toBe('stored-integer');
+  });
+
+  it('accepts feedback across a stateful output boundary', () => {
+    const xbModel = model({
+      nodes: [
+        node('gain', 'GAIN', [port('u', 'input')], [port('y', 'output')]),
+        node(
+          'delay',
+          'UNIT_DELAY',
+          [port('u', 'input')],
+          [port('y', 'output')],
+          { sampleTime: 0.01, initialValue: 0 },
+        ),
+      ],
+      edges: [
+        edge('delay-to-gain', 'delay', 'y', 'gain', 'u'),
+        edge('gain-to-delay', 'gain', 'y', 'delay', 'u'),
+      ],
+    });
+
+    const result = build(xbModel);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir?.executionOrder).toEqual(['delay', 'gain']);
+    expect(result.ir?.operations.delay.stateful).toBe(true);
+    expect(result.ir?.operations.delay.state).toEqual({
+      outputPhase: 'read-before-update',
+      updatePhase: 'after-direct-feedthrough',
+      slots: [{
+        id: 'delay:y$state',
+        signalId: 'delay:y',
+        numericType: { kind: 'float32' },
+        shape: { kind: 'scalar' },
+        initialValues: [0],
+      }],
+    });
+  });
+
+  it('rejects a pure direct-feedthrough algebraic loop', () => {
+    const xbModel = model({
+      nodes: [
+        node('b', 'GAIN', [port('u', 'input')], [port('y', 'output')]),
+        node('a', 'GAIN', [port('u', 'input')], [port('y', 'output')]),
+      ],
+      edges: [
+        edge('a-to-b', 'a', 'y', 'b', 'u'),
+        edge('b-to-a', 'b', 'y', 'a', 'u'),
+      ],
+    });
+
+    const result = build(xbModel);
+    expect(result.ir).toBeUndefined();
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'XB_ALGEBRAIC_LOOP_UNSUPPORTED',
+        severity: 'error',
+      }),
+    ]);
+  });
+
+  it('rejects multiply-driven shaped inputs independent of edge order', () => {
+    const vectorPort = (
+      id: string,
+      direction: 'input' | 'output',
+    ) => port(id, direction, {
+      shape: 'vector',
+      dimensions: [2],
+    });
+    const nodes = [
+      node('a', 'Constant', [], [vectorPort('y', 'output')]),
+      node('b', 'Constant', [], [vectorPort('y', 'output')]),
+      node('sum', 'VectorAdd', [vectorPort('u', 'input')], [
+        vectorPort('y', 'output'),
+      ]),
+    ];
+    const edges = [
+      edge('a-to-sum', 'a', 'y', 'sum', 'u'),
+      edge('b-to-sum', 'b', 'y', 'sum', 'u'),
+    ];
+
+    for (const candidateEdges of [edges, [...edges].reverse()]) {
+      const result = build(model({ nodes, edges: candidateEdges }));
+      expect(result.ir).toBeUndefined();
+      expect(result.diagnostics).toEqual([
+        expect.objectContaining({
+          code: 'XB_PORT_DANGLING',
+          elementId: 'sum',
+        }),
+      ]);
+    }
+  });
+
+  it.each([
+    ['euler' as const, 5],
+    ['rk4' as const, 5],
+  ])('builds an exact integer %s solver schedule', (kind, substepsPerTick) => {
+    const xbModel = model({
+      solver: { kind, stepSeconds: 0.002 },
+      nodes: [
+        node(
+          'delay',
+          'UNIT_DELAY',
+          [port('u', 'input')],
+          [port('y', 'output')],
+          { sampleTime: 0.02 },
+        ),
+      ],
+      mappings: [{
+        smVarId: 'command',
+        blockId: 'delay',
+        portId: 'u',
+        direction: 'in',
+      }],
+    });
+
+    const ir = build(xbModel).ir!;
+    expect(ir.solver).toEqual({ kind, substepsPerTick });
+    expect(ir.operations.delay.schedule).toEqual({
+      periodSubsteps: 10,
+      offsetSubsteps: 0,
+      initialCounter: 0,
+      counterIncrement: 1,
+      hold: 'zero-order',
+    });
+    expect(Object.values(ir.operations.delay.schedule).filter(
+      (value) => typeof value === 'number',
+    ).every(Number.isInteger)).toBe(true);
+  });
+
+  it.each([
+    ['a solver step that does not divide the base tick', 0.003, 10],
+    ['a sample time that does not divide into solver substeps', 0.002, 10],
+  ])('rejects %s', (_name, stepSeconds, baseTickMs) => {
+    const xbModel = model({
+      solver: { kind: 'euler', stepSeconds },
+      nodes: [
+        node(
+          'delay',
+          'UNIT_DELAY',
+          [port('u', 'input')],
+          [port('y', 'output')],
+          { sampleTime: stepSeconds === 0.002 ? 0.003 : 0.006 },
+        ),
+      ],
+      mappings: [{
+        smVarId: 'command',
+        blockId: 'delay',
+        portId: 'u',
+        direction: 'in',
+      }],
+    });
+
+    const result = build(xbModel, baseTickMs);
+    expect(result.ir).toBeUndefined();
+    expect(result.diagnostics.map((item) => item.code)).toContain(
+      'XB_SAMPLE_TIME_INVALID',
+    );
+  });
+});
