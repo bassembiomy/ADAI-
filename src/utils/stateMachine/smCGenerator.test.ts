@@ -194,6 +194,41 @@ int main(void) {
     expect(andOutput.trim()).toBe('1');
   });
 
+  it('keeps a leaf state with an empty child layer fault-free', () => {
+    const model = flatOrFixture();
+    model.layers.push({
+      ...model.layers[0],
+      id: 'empty_b_children',
+      name: 'empty_b_children',
+      parentStateId: 'b',
+      stateIds: [],
+      transitionIds: [],
+      junctionIds: [],
+      decomposition: 'OR',
+    });
+    const output = compileAndRun(
+      build(model),
+      `#include "sm_core.h"
+#include <stdio.h>
+int main(void) {
+    ADIA_Instance_t instance;
+    (void)SM_Init(&instance);
+    instance.data.go = true;
+    (void)SM_Step(&instance, SM_TICK_MS);
+    instance.data.go = false;
+    (void)SM_Step(&instance, SM_TICK_MS);
+    printf("%u %u %u\\n",
+        instance.state_active[SM_ST_B_IDX] ? 1U : 0U,
+        SM_GetError(&instance) == SM_ERR_NONE ? 1U : 0U,
+        instance.fault_latched ? 1U : 0U);
+    return 0;
+}
+`,
+    );
+
+    expect(output.trim()).toBe('1 1 0');
+  });
+
   it('rejects shallow and deep history outside the owning layer', () => {
     const ir = build(historyFixture('deep'));
     const historySlot = ir.layers.workspace_children.activeSlot!;
@@ -441,6 +476,10 @@ int main(void) {
 
     expect(init).not.toContain('return SM_Reset(instance);');
     expect(init).not.toContain('SM_Exit_Layer(instance');
+    expect(init).not.toContain('trace_sink = instance->trace_sink');
+    expect(init.indexOf('(void)memset(instance, 0, sizeof(*instance));')).toBeLessThan(
+      init.indexOf('instance->data.'),
+    );
     expect(init).toContain('instance->state_active[state_index] = false;');
   });
 
@@ -883,8 +922,47 @@ int main(void) {
     expect(output.trim()).toBe('1 1 1 1 1');
   });
 
+  it.each(['shallow', 'deep'] as const)(
+    'restores %s history when reentering the containing state',
+    (kind) => {
+      const model = historyFixture(kind);
+      model.transitions.find(
+        (transition) => transition.id === 'restore_workspace',
+      )!.targetId = 'workspace';
+      const ir = build(model);
+      const output = compileAndRun(
+        ir,
+        `#include "sm_core.h"
+#include <stdio.h>
+int main(void) {
+    ADIA_Instance_t instance;
+    (void)SM_Init(&instance);
+    instance.data.select_a = true;
+    (void)SM_Step(&instance, SM_TICK_MS);
+    instance.data.select_a = false;
+    instance.data.advance_nested = true;
+    (void)SM_Step(&instance, SM_TICK_MS);
+    instance.data.advance_nested = false;
+    instance.data.leave = true;
+    (void)SM_Step(&instance, SM_TICK_MS);
+    instance.data.leave = false;
+    instance.data.go = true;
+    (void)SM_Step(&instance, SM_TICK_MS);
+    printf("%u %u\\n",
+        instance.state_active[SM_ST_PARENT_A_IDX] ? 1U : 0U,
+        instance.state_active[SM_ST_NESTED_PREVIOUS_IDX] ? 1U : 0U);
+    return 0;
+}
+`,
+      );
+      expect(output.trim()).toBe(
+        kind === 'shallow' ? '1 0' : '1 1',
+      );
+    },
+  );
+
   it('does not crash with SM_TRACE_ENABLED on a stack-allocated instance', () => {
-    const ir = build(flatOrFixture());
+    const ir = build(interpreterFixture('outer-during-inner'));
     const workspace = createGeneratedCodeTestWorkspace('trace-safety');
     try {
       for (const file of generateCArtifacts(ir).files) {
@@ -896,12 +974,30 @@ int main(void) {
         join(workspace.directory, 'harness.c'),
         `#include "sm_core.h"
 #include <stdio.h>
+#include <string.h>
+
+/* REQ-ENG-TRC-001 verification: post-init sink captures actions */
+static int sink_called = 0;
+static void test_sink(const SM_TraceEvent_t *event) {
+    if (event != NULL && event->action != NULL) {
+        sink_called = 1;
+    }
+}
+
 int main(void) {
     ADIA_Instance_t inst;
-    /* Do NOT call SM_SetTraceSink — trace_sink must be safely NULL */
+    /* Fill entire instance with 0xA5 garbage */
+    (void)memset(&inst, 0xA5, sizeof(inst));
+    /* REQ-ENG-INIT-001: SM_Init must NOT read trace_sink before memset */
     (void)SM_Init(&inst);
+    /* Verify no crash and no fault after init on garbage memory */
+    printf("%d ", inst.error_status == SM_ERR_NONE ? 1 : 0);
+    /* REQ-ENG-TRC-001: register sink AFTER SM_Init */
+    SM_SetTraceSink(&inst, test_sink);
+    /* Trigger a step to produce during-actions that reach the sink */
     (void)SM_Step(&inst, SM_TICK_MS);
-    printf("%d\\n", inst.error_status == SM_ERR_NONE ? 1 : 0);
+    /* Verify the sink was called with at least one action */
+    printf("%d\\n", sink_called);
     return 0;
 }
 `,
@@ -930,7 +1026,8 @@ int main(void) {
         cwd: workspace.directory,
         encoding: 'utf8',
       });
-      expect(result.trim()).toBe('1');
+      /* "1 1" = no crash after init on garbage + sink received actions post-init */
+      expect(result.trim()).toBe('1 1');
     } finally {
       workspace.cleanup();
     }

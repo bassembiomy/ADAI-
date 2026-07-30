@@ -297,12 +297,9 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
     }
-#ifdef SM_TRACE_ENABLED
-    SM_TraceSink_t trace_sink = instance->trace_sink;
-#endif
     (void)memset(instance, 0, sizeof(*instance));
 #ifdef SM_TRACE_ENABLED
-    instance->trace_sink = trace_sink;
+    instance->trace_sink = NULL;
 #endif
     (void)SM_Exit_Layer_No_History_0;
     (void)SM_Enter_Deep_1;
@@ -767,8 +764,8 @@ Evidence labels describe only the checks actually recorded for this generated pa
 | Metric | Value |
 |---|---:|
 | Files measured | 8 |
-| Total lines | 663 |
-| Functional lines | 591 |
+| Total lines | 660 |
+| Functional lines | 588 |
 | Comment/blank density | 10.9% |
 
 These are structural metrics derived from the same validated semantic analysis used by the testing report. They are not formal MISRA, safety-certification, embedded-timing, or target-hardware evidence.
