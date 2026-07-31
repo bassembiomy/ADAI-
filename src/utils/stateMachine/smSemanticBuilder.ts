@@ -16,7 +16,12 @@ import type {
   SemanticTransition,
   SemanticVariable,
 } from './smSemanticModel';
-import { validateModelStructure } from './smSemanticValidator';
+import { adaptXBModel } from './xbModelAdapter';
+import { buildXBSemanticModel } from './xbSemanticBuilder';
+import {
+  STATE_MACHINE_XB_TARGET_CAPABILITIES,
+  validateModelStructure,
+} from './smSemanticValidator';
 
 interface HierarchyIndex {
   rootLayerId: string;
@@ -272,6 +277,7 @@ export const buildSemanticModel = (
       entryActions: parseActions(state.entry, symbols),
       duringActions: parseActions(state.during, symbols),
       exitActions: parseActions(state.exit, symbols),
+      xBridges: null,
     };
   }
 
@@ -532,6 +538,36 @@ export const buildSemanticModel = (
         variable.currentValue,
       ),
     };
+  }
+
+  for (const stateId of hierarchy.orderedStateIds) {
+    const sourceState = hierarchy.stateById.get(stateId)!;
+    if (sourceState.isXBridges !== true) continue;
+    const adapted = adaptXBModel(sourceState.xBridgesModel);
+    if (adapted.model === null) {
+      diagnostics.push(...adapted.diagnostics.map((item) => ({
+        ...item,
+        message: `State '${stateId}': ${item.message}`,
+        elementId: item.elementId ?? stateId,
+      })));
+      continue;
+    }
+    const result = buildXBSemanticModel({
+      stateId,
+      model: adapted.model,
+      variables,
+      target: STATE_MACHINE_XB_TARGET_CAPABILITIES,
+      baseTickMs: model.tickMs,
+    });
+    diagnostics.push(...result.diagnostics.map((item) => ({
+      ...item,
+      message: `State '${stateId}': ${item.message}`,
+      elementId: item.elementId ?? stateId,
+    })));
+    states[stateId].xBridges = result.ir ?? null;
+  }
+  if (diagnostics.some((item) => item.severity === 'error')) {
+    return { diagnostics };
   }
 
   const variableIdByReference = new Map<string, string>();

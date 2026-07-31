@@ -1,6 +1,7 @@
 import type { VariableType } from '../../types/sm_types';
 import type { ActionNode, ExpressionNode } from './smExpressions';
 import type { ModelDiagnostic, StateDecomposition } from './smModel';
+import type { XBSemanticModel } from './xbSemanticModel';
 
 export interface SemanticState {
   id: string;
@@ -22,6 +23,7 @@ export interface SemanticState {
   entryActions: ActionNode[];
   duringActions: ActionNode[];
   exitActions: ActionNode[];
+  xBridges: XBSemanticModel | null;
 }
 
 export interface SemanticLayer {

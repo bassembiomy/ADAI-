@@ -123,6 +123,36 @@ export const flatOrFixture = (): StateMachineModelV4 => ({
   safetyMode: false,
 });
 
+export const hybridXBridgesFixture = (): StateMachineModelV4 => ({
+  schemaVersion: CURRENT_SM_SCHEMA_VERSION,
+  tickMs: 10,
+  states: [
+    state('ordinary', {
+      name: 'Ordinary',
+      autostart: true,
+      priority: 1,
+    }),
+    state('controller', {
+      name: 'Controller',
+      priority: 2,
+      isXBridges: true,
+      xBridgesModel: {
+        schemaVersion: 1,
+        nodes: [],
+        edges: [],
+        mappings: [],
+        solver: { kind: 'euler', stepSeconds: 0.002 },
+        policy: { memory: 'reset', numericFault: 'escalate' },
+      },
+    }),
+  ],
+  junctions: [],
+  transitions: [],
+  variables: variables(),
+  layers: [layer('root', null, 'OR', ['ordinary', 'controller'])],
+  safetyMode: false,
+});
+
 export const nestedAndFixture = (): StateMachineModelV4 => ({
   schemaVersion: CURRENT_SM_SCHEMA_VERSION,
   tickMs: 10,

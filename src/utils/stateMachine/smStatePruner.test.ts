@@ -41,4 +41,58 @@ describe('smStatePruner', () => {
     expect(result.navigation.layerStack).toEqual(['root']);
     expect(result.navigation.layerPath).toEqual(['Root']);
   });
+
+  it('removes only the pruned state X-Bridges model without mutating a retained one', () => {
+    const deletedState: StateData = {
+      ...s1,
+      isXBridges: true,
+      xBridgesModel: {
+        schemaVersion: 1,
+        nodes: [],
+        edges: [],
+        mappings: [{
+          smVarId: 'deleted_variable',
+          blockId: 'deleted_block',
+          portId: 'u',
+          direction: 'in',
+        }],
+        solver: { kind: 'euler', stepSeconds: 0.01 },
+        policy: { memory: 'reset', numericFault: 'escalate' },
+      },
+    };
+    const retainedState: StateData = {
+      ...s2,
+      isXBridges: true,
+      xBridgesModel: {
+        schemaVersion: 1,
+        nodes: [],
+        edges: [],
+        mappings: [{
+          smVarId: 'retained_variable',
+          blockId: 'retained_block',
+          portId: 'y',
+          direction: 'out',
+        }],
+        solver: { kind: 'euler', stepSeconds: 0.01 },
+        policy: { memory: 'retain', numericFault: 'signal-only' },
+      },
+    };
+    const retainedSnapshot = structuredClone(retainedState);
+
+    const result = pruneStateHierarchy('s1', {
+      states: [deletedState, retainedState],
+      layers: [rootLayer],
+      junctions: [],
+      transitions: [t1],
+    }, {
+      currentLayerId: 'root',
+      layerStack: ['root'],
+      layerPath: ['Root'],
+    });
+
+    expect(result.states.map((state) => state.id)).toEqual(['s2']);
+    expect(result.states[0]).toEqual(retainedSnapshot);
+    expect(retainedState).toEqual(retainedSnapshot);
+    expect(result.states).not.toContain(deletedState);
+  });
 });

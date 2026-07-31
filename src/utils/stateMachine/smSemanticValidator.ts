@@ -16,6 +16,10 @@ import type {
   StateMachineLayerV4,
   StateMachineModelV4,
 } from './smModel';
+import type { SemanticVariable } from './smSemanticModel';
+import type { XBTargetCapabilities } from './xbModel';
+import { adaptXBModel } from './xbModelAdapter';
+import { validateXBModel } from './xbSemanticValidator';
 
 const diagnostic = (
   code: string,
@@ -27,6 +31,62 @@ const diagnostic = (
   elementId,
   severity: 'error',
 });
+
+export const STATE_MACHINE_XB_TARGET_CAPABILITIES:
+Readonly<XBTargetCapabilities> = Object.freeze({
+  supportsFloat16: false,
+  supportsFloat32: true,
+  supportsFloat64: false,
+  supportsMathLibrary: true,
+  maxVectorLength: 16,
+  maxMatrixDimension: 8,
+});
+
+const prefixXBDiagnostic = (
+  stateId: string,
+  item: ModelDiagnostic,
+): ModelDiagnostic => ({
+  ...item,
+  message: `State '${stateId}': ${item.message}`,
+  elementId: item.elementId ?? stateId,
+});
+
+const validateXBridges = (
+  model: StateMachineModelV4,
+): ModelDiagnostic[] => {
+  const variables: Record<string, SemanticVariable> = Object.fromEntries(
+    model.variables.map((variable) => [
+      variable.id,
+      {
+        id: variable.id,
+        name: variable.name,
+        cName: toCIdentifier(variable.name),
+        type: variable.type,
+        initialValue: variable.currentValue,
+      },
+    ]),
+  );
+  const diagnostics: ModelDiagnostic[] = [];
+
+  for (const state of model.states) {
+    if (state.isXBridges !== true) continue;
+    const adapted = adaptXBModel(state.xBridgesModel);
+    diagnostics.push(
+      ...adapted.diagnostics.map((item) =>
+        prefixXBDiagnostic(state.id, item)),
+    );
+    if (adapted.model === null) continue;
+    diagnostics.push(
+      ...validateXBModel(
+        adapted.model,
+        variables,
+        STATE_MACHINE_XB_TARGET_CAPABILITIES,
+      ).map((item) => prefixXBDiagnostic(state.id, item)),
+    );
+  }
+
+  return diagnostics;
+};
 
 type SemanticValueType = 'boolean' | 'number';
 
@@ -990,6 +1050,7 @@ export const validateModelStructure = (
     ...validateMappings(model),
     ...validateExpressions(model),
     ...validateInitialValues(model),
+    ...validateXBridges(model),
   );
   return diagnostics;
 };

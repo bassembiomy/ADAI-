@@ -4,6 +4,7 @@ import { buildSemanticModel } from './smSemanticBuilder';
 import {
   flatOrFixture,
   historyFixture,
+  hybridXBridgesFixture,
   nestedAndFixture,
 } from './smFixtures';
 
@@ -106,6 +107,108 @@ describe('buildSemanticModel', () => {
     expect(Object.isFrozen(result.ir!.states)).toBe(true);
     expect(Object.isFrozen(result.ir!.transitions.t_ab.exitStateIds)).toBe(true);
   });
+
+  it('attaches the frozen X-Bridges semantic model only to its owning state', () => {
+    const result = buildSemanticModel(hybridXBridgesFixture());
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir).toBeDefined();
+    expect(result.ir!.states.ordinary.xBridges).toBeNull();
+    expect(result.ir!.states.controller.xBridges).toMatchObject({
+      stateId: 'controller',
+      executionOrder: [],
+      solver: {
+        kind: 'euler',
+        substepsPerTick: 5,
+      },
+    });
+    expect(Object.isFrozen(result.ir!.states.controller.xBridges)).toBe(true);
+    expect(Object.isFrozen(result.ir!.states.controller.xBridges!.solver)).toBe(
+      true,
+    );
+  });
+
+  it('adapts legacy X-Bridges UI nodes without retaining executable closures', () => {
+    const fixture = hybridXBridgesFixture();
+    fixture.states.find((state) => state.id === 'controller')!.xBridgesModel = {
+      nodes: [{
+        id: 'constant',
+        type: 'xblock',
+        data: {
+          type: 'Constant',
+          params: { value: 2 },
+          inputs: [],
+          outputs: [{
+            id: 'y',
+            direction: 'output',
+            shape: 'scalar',
+            dataType: 'float32',
+          }],
+          execute: () => ({ outputs: [2] }),
+        },
+      }],
+      edges: [],
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.002 },
+      policy: { memory: 'reset', numericFault: 'escalate' },
+    };
+
+    const result = buildSemanticModel(fixture);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir!.states.controller.xBridges!.executionOrder).toEqual([
+      'constant',
+    ]);
+    expect(result.ir!.states.controller.xBridges!.operations.constant.parameters)
+      .not.toHaveProperty('execute');
+    expect(JSON.stringify(result.ir!.states.controller.xBridges)).not.toContain(
+      'execute',
+    );
+  });
+
+  it.each([
+    [
+      'missing model',
+      undefined,
+      'XB_MODEL_INVALID',
+    ],
+    [
+      'unsupported block',
+      {
+        schemaVersion: 1,
+        nodes: [{
+          id: 'host_only',
+          type: 'NOT_REGISTERED',
+          parameters: {
+            inputs: [],
+            outputs: [],
+          },
+        }],
+        edges: [],
+        mappings: [],
+        solver: { kind: 'euler', stepSeconds: 0.002 },
+        policy: { memory: 'reset', numericFault: 'escalate' },
+      },
+      'XB_BLOCK_NOT_CODEGEN_CAPABLE',
+    ],
+  ])(
+    'prefixes the owning state on %s X-Bridges diagnostics',
+    (_caseName, xBridgesModel, expectedCode) => {
+      const fixture = hybridXBridgesFixture();
+      fixture.states.find((state) => state.id === 'controller')!.xBridgesModel =
+        xBridgesModel as any;
+
+      const result = buildSemanticModel(fixture);
+      const diagnostic = result.diagnostics.find(
+        (item) => item.code === expectedCode,
+      );
+
+      expect(result.ir).toBeUndefined();
+      expect(diagnostic).toBeDefined();
+      expect(diagnostic!.code).toBe(expectedCode);
+      expect(diagnostic!.message).toContain('controller');
+    },
+  );
 
   it('normalizes an internal transition to a descendant as inner', () => {
     const fixture = nestedAndFixture();
