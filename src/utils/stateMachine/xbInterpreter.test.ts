@@ -37,6 +37,30 @@ const signal = (
   };
 };
 
+const shapedSignal = (
+  id: string,
+  direction: 'input' | 'output',
+  shape: XBSemanticSignal['shape'],
+  sourceSignalId: string | null = null,
+): XBSemanticSignal => {
+  const dimensions = shape.kind === 'scalar'
+    ? []
+    : shape.kind === 'vector'
+      ? [shape.length]
+      : [shape.rows, shape.columns];
+  return {
+    ...signal(id, direction, sourceSignalId),
+    shape,
+    dimensions,
+    elementCount: dimensions.length === 0 ? 1 : dimensions.reduce((a, b) => a * b, 1),
+    layout: shape.kind === 'matrix'
+      ? 'row-major'
+      : shape.kind === 'vector'
+        ? 'contiguous'
+        : 'scalar',
+  };
+};
+
 const operation = (
   id: string,
   type: string,
@@ -92,6 +116,136 @@ const model = (
 });
 
 describe('X-Bridges interpreter', () => {
+  it('updates saturated PID, transfer-function, and bounded state-space state deterministically', () => {
+    const stateful = (id: string, type: string, parameters: XBSemanticOperation['parameters'], initialValues: number[]) => operation(
+      id, type, [`${id}:u`, `${id}:feedback`], [`${id}:y`], parameters, initialValues,
+    );
+    const ir = model('retain', {
+      pid: stateful('pid', 'PID_BASIC', { Kp: 10, Ki: 0, min: -2, max: 2, sampleTime: 0.1 }, [0]),
+      tf: stateful('tf', 'DISCRETE_TRANSFER_FUNCTION', { A: [[0.5]], B: [[1]] }, [0]),
+      ss: stateful('ss', 'STATE_SPACE', { A: [[0.5]], B: [[2]] }, [0]),
+    }, {
+      'pid:u': signal('pid:u', 'input'), 'pid:feedback': signal('pid:feedback', 'input'), 'pid:y': signal('pid:y', 'output'),
+      'tf:u': signal('tf:u', 'input'), 'tf:feedback': signal('tf:feedback', 'input'), 'tf:y': signal('tf:y', 'output'),
+      'ss:u': signal('ss:u', 'input'), 'ss:feedback': signal('ss:feedback', 'input'), 'ss:y': signal('ss:y', 'output'),
+    }, ['pid', 'tf', 'ss']);
+    const runtime = createXBRuntime(ir);
+    runtime.signals['pid:u'] = [1]; runtime.signals['tf:u'] = [1]; runtime.signals['ss:u'] = [1];
+
+    stepXBState(runtime, {});
+
+    expect(runtime.stateSlots['pid:y$state']).toEqual([2]);
+    expect(runtime.stateSlots['tf:y$state']).toEqual([1]);
+    expect(runtime.stateSlots['ss:y$state']).toEqual([2]);
+  });
+
+  it('evaluates Clarke, Park, and inverse transforms against known references', () => {
+    const ir = model('retain', {
+      clarke: operation('clarke', 'CLARKE_TRANSFORM', ['clarke:ia', 'clarke:ib', 'clarke:ic'], ['clarke:alpha', 'clarke:beta']),
+      park: operation('park', 'PARK_TRANSFORM', ['park:alpha', 'park:beta', 'park:theta'], ['park:d', 'park:q']),
+      inversePark: operation('inversePark', 'INVERSE_PARK', ['inversePark:d', 'inversePark:q', 'inversePark:theta'], ['inversePark:alpha', 'inversePark:beta']),
+      inverseClarke: operation('inverseClarke', 'INVERSE_CLARKE', ['inverseClarke:alpha', 'inverseClarke:beta'], ['inverseClarke:a', 'inverseClarke:b', 'inverseClarke:c']),
+    }, Object.fromEntries([
+      ...['clarke:ia', 'clarke:ib', 'clarke:ic', 'clarke:alpha', 'clarke:beta', 'park:alpha', 'park:beta', 'park:theta', 'park:d', 'park:q', 'inversePark:d', 'inversePark:q', 'inversePark:theta', 'inversePark:alpha', 'inversePark:beta', 'inverseClarke:alpha', 'inverseClarke:beta', 'inverseClarke:a', 'inverseClarke:b', 'inverseClarke:c']
+        .map((id) => [id, signal(id, 'output')] as const),
+    ]), ['clarke', 'park', 'inversePark', 'inverseClarke']);
+    const runtime = createXBRuntime(ir);
+    Object.assign(runtime.signals, {
+      'clarke:ia': [1], 'clarke:ib': [-0.5], 'clarke:ic': [-0.5],
+      'park:alpha': [1], 'park:beta': [0], 'park:theta': [Math.PI / 2],
+      'inversePark:d': [0], 'inversePark:q': [-1], 'inversePark:theta': [Math.PI / 2],
+      'inverseClarke:alpha': [1], 'inverseClarke:beta': [0],
+    });
+
+    stepXBState(runtime, {});
+
+    expect(runtime.signals['clarke:alpha'][0]).toBeCloseTo(1, 12);
+    expect(runtime.signals['clarke:beta'][0]).toBeCloseTo(0, 12);
+    expect(runtime.signals['park:d'][0]).toBeCloseTo(0, 12);
+    expect(runtime.signals['park:q'][0]).toBeCloseTo(-1, 12);
+    expect(runtime.signals['inversePark:alpha'][0]).toBeCloseTo(1, 12);
+    expect(runtime.signals['inversePark:beta'][0]).toBeCloseTo(0, 12);
+    expect(runtime.signals['inverseClarke:a'][0]).toBeCloseTo(1, 12);
+    expect(runtime.signals['inverseClarke:b'][0]).toBeCloseTo(-0.5, 12);
+    expect(runtime.signals['inverseClarke:c'][0]).toBeCloseTo(-0.5, 12);
+  });
+  it('evaluates elementwise vectors in their contiguous element order', () => {
+    const ir = model('retain', {
+      left: operation('left', 'Constant', [], ['left:y'], { value: [1, 2, 3] }),
+      right: operation('right', 'Constant', [], ['right:y'], { value: [4, 5, 6] }),
+      add: operation('add', 'VectorAdd', ['add:a', 'add:b'], ['add:y']),
+    }, {
+      'left:y': shapedSignal('left:y', 'output', { kind: 'vector', length: 3 }),
+      'right:y': shapedSignal('right:y', 'output', { kind: 'vector', length: 3 }),
+      'add:a': shapedSignal('add:a', 'input', { kind: 'vector', length: 3 }, 'left:y'),
+      'add:b': shapedSignal('add:b', 'input', { kind: 'vector', length: 3 }, 'right:y'),
+      'add:y': shapedSignal('add:y', 'output', { kind: 'vector', length: 3 }),
+    }, ['left', 'right', 'add']);
+    const runtime = createXBRuntime(ir);
+
+    stepXBState(runtime, {});
+
+    expect(runtime.signals['add:y']).toEqual([5, 7, 9]);
+  });
+
+  it('evaluates row-major matrix multiply, transpose, concat, diagonal, and submatrix', () => {
+    const ir = model('retain', {
+      a: operation('a', 'Constant', [], ['a:y'], { value: [1, 2, 3, 4, 5, 6] }),
+      b: operation('b', 'Constant', [], ['b:y'], { value: [7, 8, 9, 10, 11, 12] }),
+      mul: operation('mul', 'MatrixMul', ['mul:a', 'mul:b'], ['mul:y']),
+      transpose: operation('transpose', 'Transpose', ['transpose:u'], ['transpose:y']),
+      concat: operation('concat', 'MatrixConcat', ['concat:a', 'concat:b'], ['concat:y'], { axis: 1 }),
+      diag: operation('diag', 'MatrixDiag', ['diag:u'], ['diag:y']),
+      sub: operation('sub', 'SubMatrix', ['sub:u'], ['sub:y'], { rowStart: 0, rowEnd: 0, colStart: 1, colEnd: 2 }),
+    }, {
+      'a:y': shapedSignal('a:y', 'output', { kind: 'matrix', rows: 2, columns: 3 }),
+      'b:y': shapedSignal('b:y', 'output', { kind: 'matrix', rows: 3, columns: 2 }),
+      'mul:a': shapedSignal('mul:a', 'input', { kind: 'matrix', rows: 2, columns: 3 }, 'a:y'),
+      'mul:b': shapedSignal('mul:b', 'input', { kind: 'matrix', rows: 3, columns: 2 }, 'b:y'),
+      'mul:y': shapedSignal('mul:y', 'output', { kind: 'matrix', rows: 2, columns: 2 }),
+      'transpose:u': shapedSignal('transpose:u', 'input', { kind: 'matrix', rows: 2, columns: 2 }, 'mul:y'),
+      'transpose:y': shapedSignal('transpose:y', 'output', { kind: 'matrix', rows: 2, columns: 2 }),
+      'concat:a': shapedSignal('concat:a', 'input', { kind: 'matrix', rows: 2, columns: 2 }, 'mul:y'),
+      'concat:b': shapedSignal('concat:b', 'input', { kind: 'matrix', rows: 2, columns: 2 }, 'transpose:y'),
+      'concat:y': shapedSignal('concat:y', 'output', { kind: 'matrix', rows: 2, columns: 4 }),
+      'diag:u': shapedSignal('diag:u', 'input', { kind: 'vector', length: 3 }),
+      'diag:y': shapedSignal('diag:y', 'output', { kind: 'matrix', rows: 3, columns: 3 }),
+      'sub:u': shapedSignal('sub:u', 'input', { kind: 'matrix', rows: 2, columns: 4 }, 'concat:y'),
+      'sub:y': shapedSignal('sub:y', 'output', { kind: 'matrix', rows: 1, columns: 2 }),
+    }, ['a', 'b', 'mul', 'transpose', 'concat', 'diag', 'sub']);
+    const runtime = createXBRuntime(ir);
+    runtime.signals['diag:u'] = [2, 3, 4];
+
+    stepXBState(runtime, {});
+
+    expect(runtime.signals['mul:y']).toEqual([58, 64, 139, 154]);
+    expect(runtime.signals['transpose:y']).toEqual([58, 139, 64, 154]);
+    expect(runtime.signals['concat:y']).toEqual([58, 64, 58, 139, 139, 154, 64, 154]);
+    expect(runtime.signals['diag:y']).toEqual([2, 0, 0, 0, 3, 0, 0, 0, 4]);
+    expect(runtime.signals['sub:y']).toEqual([64, 58]);
+  });
+
+  it('solves a bounded linear system and returns zero for a deterministic pivot failure', () => {
+    const makeRuntime = (matrix: number[]) => createXBRuntime(model('retain', {
+      a: operation('a', 'Constant', [], ['a:y'], { value: matrix }),
+      b: operation('b', 'Constant', [], ['b:y'], { value: [5, 5] }),
+      solve: operation('solve', 'MatrixSolve', ['solve:a', 'solve:b'], ['solve:y'], { maxDimension: 4 }),
+    }, {
+      'a:y': shapedSignal('a:y', 'output', { kind: 'matrix', rows: 2, columns: 2 }),
+      'b:y': shapedSignal('b:y', 'output', { kind: 'matrix', rows: 2, columns: 1 }),
+      'solve:a': shapedSignal('solve:a', 'input', { kind: 'matrix', rows: 2, columns: 2 }, 'a:y'),
+      'solve:b': shapedSignal('solve:b', 'input', { kind: 'matrix', rows: 2, columns: 1 }, 'b:y'),
+      'solve:y': shapedSignal('solve:y', 'output', { kind: 'matrix', rows: 2, columns: 1 }),
+    }, ['a', 'b', 'solve']));
+    const solved = makeRuntime([2, 1, 1, 3]);
+    const singular = makeRuntime([1, 2, 2, 4]);
+
+    stepXBState(solved, {});
+    stepXBState(singular, {});
+
+    expect(solved.signals['solve:y']).toEqual([2, 1]);
+    expect(singular.signals['solve:y']).toEqual([0, 0]);
+  });
   it('uses five integer solver substeps per tick and holds a 20 ms delay between samples', () => {
     const delay = {
       ...operation(

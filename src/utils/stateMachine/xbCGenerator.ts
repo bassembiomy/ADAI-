@@ -366,6 +366,20 @@ const scalarParameter = (
   return fallback;
 };
 
+const matrixParameterValue = (
+  operation: XBSemanticOperation,
+  name: string,
+  row: number,
+  column: number,
+  fallback: number,
+): number => {
+  const value = operation.parameters[name];
+  if (Array.isArray(value) && Array.isArray(value[row]) && typeof value[row][column] === 'number') {
+    return value[row][column] as number;
+  }
+  return fallback;
+};
+
 const cNumber = (value: number | boolean): string => {
   if (typeof value === 'boolean') return value ? '1.0' : '0.0';
   if (!Number.isFinite(value)) {
@@ -391,6 +405,109 @@ const requireScalarSignal = (
     );
   }
   return signal;
+};
+
+const requireSignal = (
+  state: SemanticState,
+  signalId: string,
+): XBSemanticSignal => {
+  const signal = state.xBridges!.signals[signalId];
+  if (signal === undefined) {
+    throw new Error(`X-Bridges signal '${signalId}' is absent from semantic IR`);
+  }
+  return signal;
+};
+
+const signalElementStorageExpression = (
+  state: SemanticState,
+  signalId: string,
+  layout: XBStateLayout,
+  member: string,
+  index: string,
+): { signal: XBSemanticSignal; expression: string } => {
+  const requested = requireSignal(state, signalId);
+  const sourceId = requested.sourceSignalId ?? requested.id;
+  const source = requireSignal(state, sourceId);
+  const field = layout.signalFields.get(sourceId);
+  if (field === undefined) {
+    throw new Error(`X-Bridges signal '${sourceId}' lacks generated storage`);
+  }
+  return {
+    signal: source,
+    expression: `(((${numericCType(source.numericType)} *)&(instance->${member}.${field}))[${index}])`,
+  };
+};
+
+const signalElementRealExpression = (
+  state: SemanticState,
+  signalId: string,
+  layout: XBStateLayout,
+  member: string,
+  index: string,
+): string => {
+  const storage = signalElementStorageExpression(state, signalId, layout, member, index);
+  if (storage.signal.numericType.kind === 'fixed') {
+    const validity = layout.fixedValidityFields.get(storage.signal.id);
+    const real = layout.fixedRealFields.get(storage.signal.id);
+    if (validity === undefined || real === undefined) {
+      throw new Error(`X-Bridges fixed signal '${storage.signal.id}' lacks sidecar storage`);
+    }
+    return `(((((bool *)&(instance->${member}.${validity}))[${index}])) ? ldexp((double)(${storage.expression}), ${-storage.signal.numericType.fractionLength}) : (((double *)&(instance->${member}.${real}))[${index}]))`;
+  }
+  if (storage.signal.numericType.kind === 'boolean') return `((${storage.expression}) ? 1.0 : 0.0)`;
+  return `(double)(${storage.expression})`;
+};
+
+const renderSignalElementWrite = (
+  state: SemanticState,
+  operation: XBSemanticOperation,
+  operationIndex: number,
+  outputIndex: number,
+  signalId: string,
+  index: string,
+  expression: string,
+  layout: XBStateLayout,
+  member: string,
+): readonly string[] => {
+  const signal = requireSignal(state, signalId);
+  const destination = signalElementStorageExpression(state, signalId, layout, member, index).expression;
+  const resultName = `xb_result_${operationIndex}_${outputIndex}`;
+  const valueName = `xb_value_${operationIndex}_${outputIndex}`;
+  const faultLines = state.xBridges!.policy.numericFault === 'escalate'
+    ? ['            instance->error_status = SM_ERR_XBRIDGES_NUMERIC;']
+    : [];
+  if (signal.numericType.kind === 'boolean') return [
+    `        const double ${valueName} = (double)(${expression});`,
+    `        ${destination} = SM_XB_Truth(${valueName});`,
+    `        if (!isfinite(${valueName})) {`, ...faultLines, '        }',
+  ];
+  const precision = signal.numericType.kind === 'float' ? signal.numericType.precision : signal.numericType.kind;
+  if (precision === 'float32') return [
+    `        const double ${valueName} = (double)(${expression});`,
+    `        if (!isfinite(${valueName})) {`, `            ${destination} = (float)${valueName};`,
+    ...faultLines, `        } else if (fabs(${valueName}) > (double)FLT_MAX) {`,
+    `            ${destination} = ${valueName} < 0.0 ? -HUGE_VALF : HUGE_VALF;`, ...faultLines,
+    '        } else {', `            ${destination} = (float)${valueName};`, '        }',
+  ];
+  if (precision === 'float64') return [
+    `        const double ${valueName} = (double)(${expression});`, `        ${destination} = ${valueName};`,
+    `        if (!isfinite(${valueName})) {`, ...faultLines, '        }',
+  ];
+  if (signal.numericType.kind === 'fixed') {
+    const validity = layout.fixedValidityFields.get(signal.id);
+    const real = layout.fixedRealFields.get(signal.id);
+    if (validity === undefined || real === undefined) throw new Error(`X-Bridges fixed signal '${signal.id}' lacks sidecar storage`);
+    return [
+      `        const SM_XB_NumericResult_t ${resultName} = ${defaultConversionCall(expression, signal.numericType)};`,
+      `        ${destination} = (${numericCType(signal.numericType)})${resultName}.stored_integer;`,
+      `        (((bool *)&(instance->${member}.${validity}))[${index}]) = ${resultName}.has_stored_integer;`,
+      `        (((double *)&(instance->${member}.${real}))[${index}]) = ${resultName}.real_value;`,
+      ...(state.xBridges!.policy.numericFault === 'escalate' ? [
+        `        if (${resultName}.fault != SM_XB_FAULT_NONE) {`, '            instance->error_status = SM_ERR_XBRIDGES_NUMERIC;', '        }',
+      ] : []),
+    ];
+  }
+  return [];
 };
 
 const signalStorageExpression = (
@@ -664,6 +781,209 @@ const emitNegate = emitSingleOutput((inputs) =>
 const emitAbsolute = emitSingleOutput((inputs) =>
   `fabs(${inputs[0] ?? '0.0'})`);
 
+const emitElementwise = (
+  expression: (inputs: readonly string[]) => string,
+): OperationEmitter => (state, operation, operationIndex, layout, member) => {
+  const outputId = operation.outputSignalIds[0];
+  if (outputId === undefined) return [];
+  const output = requireSignal(state, outputId);
+  if (output.shape.kind === 'scalar') return emitSingleOutput(expression)(state, operation, operationIndex, layout, member);
+  const count = output.elementCount;
+  for (const inputId of operation.inputSignalIds) {
+    const input = requireSignal(state, inputId);
+    if (input.elementCount !== 1 && input.elementCount !== count) {
+      throw new Error(`X-Bridges '${operation.id}' elementwise input '${inputId}' has incompatible static size`);
+    }
+  }
+  const inputs = operation.inputSignalIds.map((inputId) => {
+    const input = requireSignal(state, inputId);
+    return signalElementRealExpression(state, inputId, layout, member,
+      input.elementCount === 1 ? '0U' : 'xb_i');
+  });
+  return [
+    '    {',
+    `        for (uint32_t xb_i = 0U; xb_i < ${count}U; ++xb_i) {`,
+    ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId,
+      'xb_i', expression(inputs), layout, member),
+    '        }',
+    '    }',
+  ];
+};
+
+const emitVectorElementwiseSum: OperationEmitter = (...args) =>
+  emitElementwise((inputs) => reduceExpression(inputs, '+', '0.0'))(...args);
+const emitVectorElementwiseProduct: OperationEmitter = (...args) =>
+  emitElementwise((inputs) => reduceExpression(inputs, '*', '1.0'))(...args);
+const emitVectorElementwiseSubtract: OperationEmitter = (...args) =>
+  emitElementwise((inputs) => `((${inputs[0] ?? '0.0'}) - (${inputs[1] ?? '0.0'}))`)(...args);
+const emitVectorElementwiseDivide: OperationEmitter = (...args) =>
+  emitElementwise((inputs) => `((${inputs[0] ?? '0.0'}) / (${inputs[1] ?? '1.0'}))`)(...args);
+const emitVectorElementwisePower: OperationEmitter = (...args) =>
+  emitElementwise((inputs) => `pow((${inputs[0] ?? '0.0'}), (${inputs[1] ?? '0.0'}))`)(...args);
+
+const matrixSignal = (
+  state: SemanticState,
+  signalId: string,
+): Extract<XBShape, { kind: 'matrix' }> => {
+  const shape = requireSignal(state, signalId).shape;
+  if (shape.kind !== 'matrix') throw new Error(`X-Bridges '${signalId}' must be a matrix`);
+  return shape;
+};
+
+const emitMatrixMultiply: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const [leftId, rightId] = operation.inputSignalIds;
+  const outputId = operation.outputSignalIds[0];
+  if (leftId === undefined || rightId === undefined || outputId === undefined) return [];
+  const left = matrixSignal(state, leftId);
+  const right = matrixSignal(state, rightId);
+  const output = matrixSignal(state, outputId);
+  if (left.columns !== right.rows || output.rows !== left.rows || output.columns !== right.columns) {
+    throw new Error(`X-Bridges MatrixMul '${operation.id}' has incompatible static shapes`);
+  }
+  const leftValue = signalElementRealExpression(state, leftId, layout, member, `xb_row * ${left.columns}U + xb_k`);
+  const rightValue = signalElementRealExpression(state, rightId, layout, member, `xb_k * ${right.columns}U + xb_column`);
+  return [
+    '    {', `        for (uint32_t xb_row = 0U; xb_row < ${left.rows}U; ++xb_row) {`,
+    `            for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) {`,
+    '                double xb_total = 0.0;',
+    `                for (uint32_t xb_k = 0U; xb_k < ${left.columns}U; ++xb_k) {`,
+    `                    xb_total += (${leftValue}) * (${rightValue});`, '                }',
+    ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId,
+      `xb_row * ${right.columns}U + xb_column`, 'xb_total', layout, member).map((line) => `    ${line}`),
+    '            }', '        }', '    }',
+  ];
+};
+
+const emitTranspose: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputId = operation.inputSignalIds[0]; const outputId = operation.outputSignalIds[0];
+  if (inputId === undefined || outputId === undefined) return [];
+  const input = matrixSignal(state, inputId); const output = matrixSignal(state, outputId);
+  if (output.rows !== input.columns || output.columns !== input.rows) throw new Error(`X-Bridges Transpose '${operation.id}' has incompatible static shapes`);
+  return ['    {', `        for (uint32_t xb_row = 0U; xb_row < ${input.rows}U; ++xb_row) {`,
+    `            for (uint32_t xb_column = 0U; xb_column < ${input.columns}U; ++xb_column) {`,
+    ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId,
+      `xb_column * ${output.columns}U + xb_row`, signalElementRealExpression(state, inputId, layout, member, `xb_row * ${input.columns}U + xb_column`), layout, member).map((line) => `    ${line}`),
+    '            }', '        }', '    }'];
+};
+
+const emitMatrixDiag: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputId = operation.inputSignalIds[0]; const outputId = operation.outputSignalIds[0];
+  if (inputId === undefined || outputId === undefined) return [];
+  const input = requireSignal(state, inputId); const output = matrixSignal(state, outputId);
+  if (input.shape.kind !== 'vector' || output.rows !== input.shape.length || output.columns !== input.shape.length) throw new Error(`X-Bridges MatrixDiag '${operation.id}' requires vector to N-by-N static shapes`);
+  return ['    {', `        for (uint32_t xb_row = 0U; xb_row < ${output.rows}U; ++xb_row) {`,
+    `            for (uint32_t xb_column = 0U; xb_column < ${output.columns}U; ++xb_column) {`,
+    ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId,
+      `xb_row * ${output.columns}U + xb_column`,
+      `(xb_row == xb_column ? ${signalElementRealExpression(state, inputId, layout, member, 'xb_row')} : 0.0)`, layout, member).map((line) => `    ${line}`),
+    '            }', '        }', '    }'];
+};
+
+const emitSubMatrix: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputId = operation.inputSignalIds[0]; const outputId = operation.outputSignalIds[0];
+  if (inputId === undefined || outputId === undefined) return [];
+  const input = matrixSignal(state, inputId); const output = matrixSignal(state, outputId);
+  const rowStart = Number(scalarParameter(operation, ['rowStart'], 0));
+  const rowEnd = Number(scalarParameter(operation, ['rowEnd'], input.rows - 1));
+  const colStart = Number(scalarParameter(operation, ['colStart'], 0));
+  const colEnd = Number(scalarParameter(operation, ['colEnd'], input.columns - 1));
+  if (rowStart < 0 || colStart < 0 || rowEnd >= input.rows || colEnd >= input.columns || rowEnd - rowStart + 1 !== output.rows || colEnd - colStart + 1 !== output.columns) throw new Error(`X-Bridges SubMatrix '${operation.id}' has invalid static bounds`);
+  return ['    {', `        for (uint32_t xb_row = 0U; xb_row < ${output.rows}U; ++xb_row) {`,
+    `            for (uint32_t xb_column = 0U; xb_column < ${output.columns}U; ++xb_column) {`,
+    ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId,
+      `xb_row * ${output.columns}U + xb_column`, signalElementRealExpression(state, inputId, layout, member, `(${rowStart}U + xb_row) * ${input.columns}U + ${colStart}U + xb_column`), layout, member).map((line) => `    ${line}`),
+    '            }', '        }', '    }'];
+};
+
+const emitMatrixConcat: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const outputId = operation.outputSignalIds[0];
+  if (outputId === undefined || operation.inputSignalIds.length === 0) return [];
+  const output = matrixSignal(state, outputId);
+  const axis = Number(scalarParameter(operation, ['axis'], 0));
+  const inputs = operation.inputSignalIds.map((id) => ({ id, shape: matrixSignal(state, id) }));
+  const pieces: string[] = ['    {'];
+  if (axis === 1) {
+    if (inputs.some(({ shape }) => shape.rows !== output.rows)
+      || inputs.reduce((total, { shape }) => total + shape.columns, 0) !== output.columns) throw new Error(`X-Bridges MatrixConcat '${operation.id}' has incompatible horizontal static shapes`);
+    pieces.push(`        for (uint32_t xb_row = 0U; xb_row < ${output.rows}U; ++xb_row) {`);
+    let offset = 0;
+    for (const { id, shape } of inputs) {
+      pieces.push(`            for (uint32_t xb_column = 0U; xb_column < ${shape.columns}U; ++xb_column) {`,
+        ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId,
+          `xb_row * ${output.columns}U + ${offset}U + xb_column`, signalElementRealExpression(state, id, layout, member, `xb_row * ${shape.columns}U + xb_column`), layout, member).map((line) => `    ${line}`),
+        '            }');
+      offset += shape.columns;
+    }
+    pieces.push('        }');
+  } else {
+    if (inputs.some(({ shape }) => shape.columns !== output.columns)
+      || inputs.reduce((total, { shape }) => total + shape.rows, 0) !== output.rows) throw new Error(`X-Bridges MatrixConcat '${operation.id}' has incompatible vertical static shapes`);
+    let offset = 0;
+    for (const { id, shape } of inputs) {
+      pieces.push(`        for (uint32_t xb_row = 0U; xb_row < ${shape.rows}U; ++xb_row) {`,
+        `            for (uint32_t xb_column = 0U; xb_column < ${output.columns}U; ++xb_column) {`,
+        ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId,
+          `(${offset}U + xb_row) * ${output.columns}U + xb_column`, signalElementRealExpression(state, id, layout, member, `xb_row * ${output.columns}U + xb_column`), layout, member).map((line) => `    ${line}`),
+        '            }', '        }');
+      offset += shape.rows;
+    }
+  }
+  pieces.push('    }');
+  return pieces;
+};
+
+const emitMatrixSolve: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const [matrixId, rightId] = operation.inputSignalIds; const outputId = operation.outputSignalIds[0];
+  if (matrixId === undefined || rightId === undefined || outputId === undefined) return [];
+  const matrix = matrixSignal(state, matrixId); const right = matrixSignal(state, rightId); const output = matrixSignal(state, outputId);
+  const configuredMaximum = Number(scalarParameter(operation, ['maxDimension', 'maximumDimension'], 8));
+  if (!Number.isSafeInteger(configuredMaximum) || configuredMaximum < 1 || configuredMaximum > 8 || matrix.rows !== matrix.columns || right.rows !== matrix.rows || output.rows !== matrix.rows || output.columns !== right.columns || matrix.rows > configuredMaximum || right.columns > configuredMaximum) throw new Error(`X-Bridges MatrixSolve '${operation.id}' exceeds static solve bounds`);
+  const matrixValue = signalElementRealExpression(state, matrixId, layout, member, `xb_row * ${matrix.columns}U + xb_column`);
+  const rightValue = signalElementRealExpression(state, rightId, layout, member, `xb_row * ${right.columns}U + xb_column`);
+  const outputValue = signalElementRealExpression(state, outputId, layout, member, `xb_row * ${output.columns}U + xb_column`);
+  return ['    {', '        double xb_solve_a[SM_XB_MAX_SOLVE_DIMENSION * SM_XB_MAX_SOLVE_DIMENSION];', '        double xb_solve_b[SM_XB_MAX_SOLVE_DIMENSION * SM_XB_MAX_SOLVE_DIMENSION];', '        bool xb_pivot_failed = false;',
+    `        for (uint32_t xb_row = 0U; xb_row < ${matrix.rows}U; ++xb_row) {`,
+    `            for (uint32_t xb_column = 0U; xb_column < ${matrix.columns}U; ++xb_column) xb_solve_a[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = ${matrixValue};`,
+    `            for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) xb_solve_b[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = ${rightValue};`, '        }',
+    `        for (uint32_t xb_pivot = 0U; xb_pivot < ${matrix.rows}U; ++xb_pivot) {`, '            uint32_t xb_selected = xb_pivot;',
+    `            for (uint32_t xb_row = xb_pivot + 1U; xb_row < ${matrix.rows}U; ++xb_row) if (fabs(xb_solve_a[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_pivot]) > fabs(xb_solve_a[xb_selected * SM_XB_MAX_SOLVE_DIMENSION + xb_pivot])) xb_selected = xb_row;`,
+    '            if (fabs(xb_solve_a[xb_selected * SM_XB_MAX_SOLVE_DIMENSION + xb_pivot]) <= 1.0e-12) { xb_pivot_failed = true; break; }',
+    '            if (xb_selected != xb_pivot) {',
+    `                for (uint32_t xb_column = 0U; xb_column < ${matrix.columns}U; ++xb_column) { double xb_swap = xb_solve_a[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; xb_solve_a[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = xb_solve_a[xb_selected * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; xb_solve_a[xb_selected * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = xb_swap; }`,
+    `                for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) { double xb_swap = xb_solve_b[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; xb_solve_b[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = xb_solve_b[xb_selected * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; xb_solve_b[xb_selected * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = xb_swap; }`, '            }',
+    `            for (uint32_t xb_row = xb_pivot + 1U; xb_row < ${matrix.rows}U; ++xb_row) {`, '                const double xb_factor = xb_solve_a[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_pivot] / xb_solve_a[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_pivot];', '                xb_solve_a[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_pivot] = 0.0;',
+    `                for (uint32_t xb_column = xb_pivot + 1U; xb_column < ${matrix.columns}U; ++xb_column) xb_solve_a[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column] -= xb_factor * xb_solve_a[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_column];`,
+    `                for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) xb_solve_b[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column] -= xb_factor * xb_solve_b[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_column];`, '            }', '        }',
+    '        if (!xb_pivot_failed) {',
+    `            for (int32_t xb_row = ${matrix.rows - 1}; xb_row >= 0; --xb_row) for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) { double xb_value = xb_solve_b[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; for (uint32_t xb_k = (uint32_t)xb_row + 1U; xb_k < ${matrix.rows}U; ++xb_k) xb_value -= xb_solve_a[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_k] * xb_solve_b[xb_k * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; xb_solve_b[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = xb_value / xb_solve_a[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + (uint32_t)xb_row]; }`, '        }',
+    `        for (uint32_t xb_row = 0U; xb_row < ${output.rows}U; ++xb_row) for (uint32_t xb_column = 0U; xb_column < ${output.columns}U; ++xb_column) {`,
+    ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId, `xb_row * ${output.columns}U + xb_column`, `(xb_pivot_failed ? 0.0 : xb_solve_b[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column])`, layout, member).map((line) => `    ${line}`), '        }', '    }'];
+};
+
+const emitClarke: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputs = inputExpressions(state, operation, layout, member);
+  const ia = inputs[0] ?? '0.0'; const ib = inputs[1] ?? '0.0'; const ic = inputs[2] ?? '0.0';
+  const powerInvariant = operation.parameters.mode === 'power_invariant';
+  const alpha = powerInvariant ? `(sqrt(2.0 / 3.0) * ((${ia}) - 0.5 * (${ib}) - 0.5 * (${ic})))` : ia;
+  const beta = powerInvariant ? `(sqrt(2.0 / 3.0) * sqrt(3.0) * ((${ib}) - (${ic})) / 2.0)` : `(((${ia}) + 2.0 * (${ib})) / sqrt(3.0))`;
+  return operation.outputSignalIds.flatMap((id, index) => renderSignalWrite(state, operation, operationIndex, index, id, index === 0 ? alpha : beta, layout, member));
+};
+const emitPark: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputs = inputExpressions(state, operation, layout, member); const alpha = inputs[0] ?? '0.0'; const beta = inputs[1] ?? '0.0'; const theta = inputs[2] ?? '0.0';
+  const values = [`((${alpha}) * cos(${theta}) + (${beta}) * sin(${theta}))`, `(-(${alpha}) * sin(${theta}) + (${beta}) * cos(${theta}))`];
+  return operation.outputSignalIds.flatMap((id, index) => renderSignalWrite(state, operation, operationIndex, index, id, values[index] ?? '0.0', layout, member));
+};
+const emitInversePark: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputs = inputExpressions(state, operation, layout, member); const d = inputs[0] ?? '0.0'; const q = inputs[1] ?? '0.0'; const theta = inputs[2] ?? '0.0';
+  const values = [`((${d}) * cos(${theta}) - (${q}) * sin(${theta}))`, `((${d}) * sin(${theta}) + (${q}) * cos(${theta}))`];
+  return operation.outputSignalIds.flatMap((id, index) => renderSignalWrite(state, operation, operationIndex, index, id, values[index] ?? '0.0', layout, member));
+};
+const emitInverseClarke: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputs = inputExpressions(state, operation, layout, member); const alpha = inputs[0] ?? '0.0'; const beta = inputs[1] ?? '0.0';
+  const values = [alpha, `(-0.5 * (${alpha}) + sqrt(3.0) * (${beta}) / 2.0)`, `(-0.5 * (${alpha}) - sqrt(3.0) * (${beta}) / 2.0)`];
+  return operation.outputSignalIds.flatMap((id, index) => renderSignalWrite(state, operation, operationIndex, index, id, values[index] ?? '0.0', layout, member));
+};
+
 const emitAnd = emitSingleOutput((inputs) =>
   reduceExpression(
     inputs.map((input) => `SM_XB_Truth(${input})`),
@@ -866,13 +1186,23 @@ const OPERATION_EMITTERS: Readonly<Record<string, OperationEmitter>> = {
   SUM_JUNCTION: emitSumJunction,
   GAIN: emitGain,
   PRODUCT: emitProduct,
-  VectorAdd: emitVectorAdd,
-  VectorSub: emitSubtract,
-  VectorMul: emitVectorMultiply,
-  VectorDiv: emitDivide,
-  VectorPow: emitPower,
+  VectorAdd: emitVectorElementwiseSum,
+  VectorSub: emitVectorElementwiseSubtract,
+  VectorMul: emitVectorElementwiseProduct,
+  VectorDiv: emitVectorElementwiseDivide,
+  VectorPow: emitVectorElementwisePower,
   UnaryNeg: emitNegate,
   Abs: emitAbsolute,
+  MatrixMul: emitMatrixMultiply,
+  Transpose: emitTranspose,
+  MatrixConcat: emitMatrixConcat,
+  MatrixDiag: emitMatrixDiag,
+  SubMatrix: emitSubMatrix,
+  MatrixSolve: emitMatrixSolve,
+  CLARKE_TRANSFORM: emitClarke,
+  PARK_TRANSFORM: emitPark,
+  INVERSE_PARK: emitInversePark,
+  INVERSE_CLARKE: emitInverseClarke,
   AND: emitAnd,
   OR: emitOr,
   NOT: emitNot,
@@ -1018,6 +1348,41 @@ const stateSlotRealExpression = (
       : `(double)(${field})`;
 };
 
+const stateSlotElementRealExpression = (
+  slot: XBSemanticStateSlot,
+  layout: XBStateLayout,
+  member: string,
+  index: string,
+): string => {
+  const field = `(((${numericCType(slot.numericType)} *)&(instance->${member}.${stateSlotField(slot, layout)}))[${index}])`;
+  return slot.numericType.kind === 'fixed'
+    ? `ldexp((double)(${field}), ${-slot.numericType.fractionLength})`
+    : slot.numericType.kind === 'boolean'
+      ? `((${field}) ? 1.0 : 0.0)`
+      : `(double)(${field})`;
+};
+
+const renderStateSlotElementAssignment = (
+  state: SemanticState,
+  slot: XBSemanticStateSlot,
+  index: string,
+  expression: string,
+  layout: XBStateLayout,
+  member: string,
+  name: string,
+): string[] => {
+  const field = `(((${numericCType(slot.numericType)} *)&(instance->${member}.${stateSlotField(slot, layout)}))[${index}])`;
+  if (slot.numericType.kind !== 'fixed') return [`    ${field} = (${numericCType(slot.numericType)})(${expression});`];
+  const result = `xb_state_${toCIdentifier(name)}`;
+  return [
+    `    const SM_XB_NumericResult_t ${result} = ${defaultConversionCall(expression, slot.numericType)};`,
+    `    ${field} = (${numericCType(slot.numericType)})${result}.stored_integer;`,
+    ...(state.xBridges!.policy.numericFault === 'escalate' ? [
+      `    if (${result}.fault != SM_XB_FAULT_NONE) {`, '        instance->error_status = SM_ERR_XBRIDGES_NUMERIC;', '    }',
+    ] : []),
+  ];
+};
+
 const renderStateSlotAssignment = (
   state: SemanticState,
   slot: XBSemanticStateSlot,
@@ -1051,7 +1416,35 @@ const renderStateOutputs = (
   layout: XBStateLayout,
   member: string,
   expressions: readonly string[] | null = null,
-): string[] => (operation.state?.slots ?? []).flatMap((slot, slotIndex) =>
+): string[] => {
+  if (operation.type === 'STATE_SPACE') {
+    const xSlot = (operation.state?.slots ?? []).find((slot) =>
+      state.xBridges!.signals[slot.signalId]?.portId === 'x');
+    const ySignalId = operation.outputSignalIds.find((signalId) =>
+      state.xBridges!.signals[signalId]?.portId === 'y');
+    if (xSlot !== undefined && ySignalId !== undefined) {
+      const y = requireSignal(state, ySignalId);
+      const inputId = operation.inputSignalIds[0];
+      const c = (row: number, column: number) => cNumber(matrixParameterValue(operation, 'C', row, column, 0));
+      const d = (row: number, column: number) => cNumber(matrixParameterValue(operation, 'D', row, column, 0));
+      const terms = Array.from({ length: y.elementCount }, (_, row) => {
+        const stateTerms = Array.from({ length: xSlot.initialValues.length }, (_, column) =>
+          `(${c(row, column)}) * ${stateSlotElementRealExpression(xSlot, layout, member, `${column}U`)}`);
+        const inputSignal = inputId === undefined ? null : requireSignal(state, inputId);
+        const inputTerms = inputSignal === null ? [] : Array.from({ length: inputSignal.elementCount }, (_, column) =>
+          `(${d(row, column)}) * ${signalElementRealExpression(state, inputId!, layout, member, `${column}U`)}`);
+        return renderSignalElementWrite(state, operation, operationIndex, row, ySignalId, `${row}U`,
+          [...stateTerms, ...inputTerms].join(' + ') || '0.0', layout, member);
+      }).flat();
+      const xSignalId = operation.outputSignalIds.find((signalId) =>
+        state.xBridges!.signals[signalId]?.portId === 'x');
+      const xLines = xSignalId === undefined ? [] : Array.from({ length: xSlot.initialValues.length }, (_, index) =>
+        renderSignalElementWrite(state, operation, operationIndex, y.elementCount + index, xSignalId, `${index}U`,
+          stateSlotElementRealExpression(xSlot, layout, member, `${index}U`), layout, member)).flat();
+      return [...terms, ...xLines];
+    }
+  }
+  return (operation.state?.slots ?? []).flatMap((slot, slotIndex) =>
   renderSignalWrite(
     state,
     operation,
@@ -1063,6 +1456,7 @@ const renderStateOutputs = (
     layout,
     member,
   ));
+};
 
 const renderDirectEvaluation = (
   state: SemanticState,
@@ -1118,9 +1512,46 @@ const renderDiscreteStateUpdates = (
   if (counter === undefined) {
     throw new Error(`X-Bridges operation '${operation.id}' lacks a schedule counter`);
   }
-  const input = operation.inputSignalIds[0] === undefined
+  const input = operation.type === 'STATE_SPACE' || operation.inputSignalIds[0] === undefined
     ? '0.0'
     : signalRealExpression(state, operation.inputSignalIds[0], layout, member);
+  if (operation.type === 'STATE_SPACE') {
+    const xSlot = (operation.state?.slots ?? []).find((slot) =>
+      state.xBridges!.signals[slot.signalId]?.portId === 'x');
+    const inputId = operation.inputSignalIds[0];
+    if (xSlot === undefined || inputId === undefined) {
+      throw new Error(`X-Bridges STATE_SPACE '${operation.id}' requires x state and input signals`);
+    }
+    const inputSignal = requireSignal(state, inputId);
+    const dimension = xSlot.initialValues.length;
+    if (dimension === 0 || dimension > 8 || inputSignal.elementCount > 8) {
+      throw new Error(`X-Bridges STATE_SPACE '${operation.id}' exceeds static dimension bound 8`);
+    }
+    const coefficientByRow = (name: string, column: number): string =>
+      Array.from({ length: dimension }, (_, row) =>
+        `(xb_row == ${row}U ? ${cNumber(matrixParameterValue(operation, name, row, column, 0))}`)
+        .join(' : ') + ' : 0.0' + ')'.repeat(dimension);
+    // Matrix coefficients are emitted directly from validated, finite parameters;
+    // loop bounds remain literal dimensions from the semantic IR.
+    const updateLines: string[] = [
+      '    {',
+      `        double xb_state_space_next[${dimension}U];`,
+      `        for (uint32_t xb_row = 0U; xb_row < ${dimension}U; ++xb_row) {`,
+      '            double xb_sum = 0.0;',
+    ];
+    for (let column = 0; column < dimension; column++) {
+      updateLines.push(`            xb_sum += (${coefficientByRow('A', column)}) * ${stateSlotElementRealExpression(xSlot, layout, member, `${column}U`)};`);
+    }
+    for (let column = 0; column < inputSignal.elementCount; column++) {
+      updateLines.push(`            xb_sum += (${coefficientByRow('B', column)}) * ${signalElementRealExpression(state, inputId, layout, member, `${column}U`)};`);
+    }
+    updateLines.push('            xb_state_space_next[xb_row] = xb_sum;', '        }',
+      `        for (uint32_t xb_row = 0U; xb_row < ${dimension}U; ++xb_row) {`,
+      ...renderStateSlotElementAssignment(state, xSlot, 'xb_row', 'xb_state_space_next[xb_row]', layout, member, `${operation.id}_state_space_update`).map((line) => `    ${line}`),
+      '        }', '    }');
+    if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return updateLines;
+    return [`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...updateLines.map((line) => `    ${line}`), '    }'];
+  }
   const updates = (operation.state?.slots ?? []).flatMap((slot, slotIndex) => {
     switch (operation.type) {
       case 'DELAY':
@@ -1138,6 +1569,40 @@ const renderDiscreteStateUpdates = (
           member,
           `${operation.id}_${slotIndex}_update`,
         );
+      case 'PID_BASIC':
+      case 'PID_CONTROLLER': {
+        const feedbackId = operation.inputSignalIds[1];
+        const feedback = feedbackId === undefined
+          ? '0.0'
+          : signalRealExpression(state, feedbackId, layout, member);
+        const error = `((${input}) - (${feedback}))`;
+        const proportional = cNumber(scalarParameter(operation, ['Kp', 'kp'], 1));
+        const integral = cNumber(scalarParameter(operation, ['Ki', 'ki'], 0));
+        const step = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], 1));
+        const minimum = cNumber(scalarParameter(operation, ['min', 'minimum'], -100));
+        const maximum = cNumber(scalarParameter(operation, ['max', 'maximum'], 100));
+        return renderStateSlotAssignment(
+          state,
+          slot,
+          `fmax(${minimum}, fmin(${maximum}, (${proportional}) * ${error} + ${stateSlotRealExpression(slot, layout, member)} + (${integral}) * ${error} * (${step})))`,
+          layout,
+          member,
+          `${operation.id}_${slotIndex}_update`,
+        );
+      }
+      case 'DISCRETE_TRANSFER_FUNCTION':
+      case 'STATE_SPACE': {
+        const a = cNumber(matrixParameterValue(operation, 'A', 0, 0, 0));
+        const b = cNumber(matrixParameterValue(operation, 'B', 0, 0, 1));
+        return renderStateSlotAssignment(
+          state,
+          slot,
+          `((${a}) * ${stateSlotRealExpression(slot, layout, member)} + (${b}) * (${input}))`,
+          layout,
+          member,
+          `${operation.id}_${slotIndex}_update`,
+        );
+      }
       default:
         throw new Error(
           `X-Bridges stateful operation '${operation.id}' has unsupported type '${operation.type}'`,
@@ -1348,19 +1813,19 @@ const renderStateLifecycle = (
       );
     }
     for (const slot of operation.state?.slots ?? []) {
-      if (slot.initialValues.length !== 1) {
-        throw new Error(
-          `X-Bridges Task 9 emitter requires scalar state slot '${slot.id}'`,
-        );
+      if (slot.shape.kind === 'scalar') {
+        initLines.push(...renderStateSlotAssignment(
+          state, slot, cNumber(slot.initialValues[0]), layout, member,
+          `initial_${operation.id}_${slot.id}`,
+        ));
+      } else {
+        slot.initialValues.forEach((value, index) => initLines.push(
+          ...renderStateSlotElementAssignment(
+            state, slot, `${index}U`, cNumber(value), layout, member,
+            `initial_${operation.id}_${slot.id}_${index}`,
+          ),
+        ));
       }
-      initLines.push(...renderStateSlotAssignment(
-        state,
-        slot,
-        cNumber(slot.initialValues[0]),
-        layout,
-        member,
-        `initial_${operation.id}_${slot.id}`,
-      ));
     }
   }
   const stepLines: string[] = [];
@@ -1438,6 +1903,10 @@ const renderStateLifecycle = (
 
 export const renderXBLifecycleSource = (ir: SemanticModel): string =>
   lines(
+    orderedXBStates(ir).some((state) => state.xBridges!.executionOrder.some((operationId) =>
+      state.xBridges!.operations[operationId]?.type === 'MatrixSolve'))
+      ? '#define SM_XB_MAX_SOLVE_DIMENSION 8U\n'
+      : null,
     orderedXBStates(ir).some((state) =>
       state.xBridges!.executionOrder.some((operationId) =>
         BITWISE_OPERATION_TYPES.has(

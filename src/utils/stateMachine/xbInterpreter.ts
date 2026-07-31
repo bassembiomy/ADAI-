@@ -233,6 +233,102 @@ const binary = (
     evaluate(Number(value), Number(rightValues[index])));
 };
 
+const shapeFor = (
+  runtime: XBRuntime,
+  signalId: string,
+) => runtime.ir.signals[signalId]?.shape;
+
+const matrixShape = (
+  runtime: XBRuntime,
+  signalId: string,
+): { rows: number; columns: number } => {
+  const shape = shapeFor(runtime, signalId);
+  if (shape?.kind !== 'matrix') {
+    throw new Error(`X-Bridges '${signalId}' must be a matrix signal`);
+  }
+  return shape;
+};
+
+const vectorShape = (
+  runtime: XBRuntime,
+  signalId: string,
+): { length: number } => {
+  const shape = shapeFor(runtime, signalId);
+  if (shape?.kind !== 'vector') {
+    throw new Error(`X-Bridges '${signalId}' must be a vector signal`);
+  }
+  return shape;
+};
+
+const boundedSolve = (
+  matrix: readonly XBScalar[],
+  right: readonly XBScalar[],
+  dimension: number,
+  rightColumns: number,
+  maximumDimension: number,
+): XBScalar[] => {
+  if (dimension > maximumDimension || rightColumns > maximumDimension) {
+    throw new Error(
+      `X-Bridges MatrixSolve dimension ${dimension} exceeds configured maximum ${maximumDimension}`,
+    );
+  }
+  const a = matrix.map(Number);
+  const b = right.map(Number);
+  const solution = Array.from({ length: dimension * rightColumns }, () => 0);
+  for (let pivot = 0; pivot < dimension; pivot++) {
+    let selected = pivot;
+    for (let row = pivot + 1; row < dimension; row++) {
+      if (Math.abs(a[row * dimension + pivot]) > Math.abs(a[selected * dimension + pivot])) {
+        selected = row;
+      }
+    }
+    if (Math.abs(a[selected * dimension + pivot]) <= 1e-12) return solution;
+    if (selected !== pivot) {
+      for (let column = 0; column < dimension; column++) {
+        [a[pivot * dimension + column], a[selected * dimension + column]] =
+          [a[selected * dimension + column], a[pivot * dimension + column]];
+      }
+      for (let column = 0; column < rightColumns; column++) {
+        [b[pivot * rightColumns + column], b[selected * rightColumns + column]] =
+          [b[selected * rightColumns + column], b[pivot * rightColumns + column]];
+      }
+    }
+    for (let row = pivot + 1; row < dimension; row++) {
+      const factor = a[row * dimension + pivot] / a[pivot * dimension + pivot];
+      a[row * dimension + pivot] = 0;
+      for (let column = pivot + 1; column < dimension; column++) {
+        a[row * dimension + column] -= factor * a[pivot * dimension + column];
+      }
+      for (let column = 0; column < rightColumns; column++) {
+        b[row * rightColumns + column] -= factor * b[pivot * rightColumns + column];
+      }
+    }
+  }
+  for (let row = dimension - 1; row >= 0; row--) {
+    for (let column = 0; column < rightColumns; column++) {
+      let value = b[row * rightColumns + column];
+      for (let k = row + 1; k < dimension; k++) {
+        value -= a[row * dimension + k] * Number(solution[k * rightColumns + column]);
+      }
+      solution[row * rightColumns + column] = value / a[row * dimension + row];
+    }
+  }
+  return solution;
+};
+
+const matrixParameter = (
+  operation: XBSemanticOperation,
+  name: string,
+  fallback: readonly (readonly number[])[],
+): readonly (readonly number[])[] => {
+  const value = operation.parameters[name];
+  if (Array.isArray(value) && value.every((row) =>
+    Array.isArray(row) && row.every((entry) => typeof entry === 'number'))) {
+    return value as readonly (readonly number[])[];
+  }
+  return fallback;
+};
+
 const evaluateDirectOperation = (
   runtime: XBRuntime,
   operation: XBSemanticOperation,
@@ -287,6 +383,152 @@ const evaluateDirectOperation = (
       return [unary(inputs[0] ?? [0], (value) => -value)];
     case 'Abs':
       return [unary(inputs[0] ?? [0], Math.abs)];
+    case 'MatrixMul': {
+      const leftId = operation.inputSignalIds[0];
+      const rightId = operation.inputSignalIds[1];
+      const outputId = operation.outputSignalIds[0];
+      if (leftId === undefined || rightId === undefined || outputId === undefined) return [[0]];
+      const leftShape = matrixShape(runtime, leftId);
+      const rightShape = matrixShape(runtime, rightId);
+      const outputShape = matrixShape(runtime, outputId);
+      if (leftShape.columns !== rightShape.rows
+        || outputShape.rows !== leftShape.rows
+        || outputShape.columns !== rightShape.columns) {
+        throw new Error(`X-Bridges MatrixMul '${operation.id}' has incompatible static shapes`);
+      }
+      return [Array.from({ length: outputShape.rows * outputShape.columns }, (_, index) => {
+        const row = Math.floor(index / outputShape.columns);
+        const column = index % outputShape.columns;
+        let total = 0;
+        for (let k = 0; k < leftShape.columns; k++) {
+          total += Number(inputs[0][row * leftShape.columns + k])
+            * Number(inputs[1][k * rightShape.columns + column]);
+        }
+        return total;
+      })];
+    }
+    case 'Transpose': {
+      const inputId = operation.inputSignalIds[0];
+      const outputId = operation.outputSignalIds[0];
+      if (inputId === undefined || outputId === undefined) return [[0]];
+      const inputShape = matrixShape(runtime, inputId);
+      const outputShape = matrixShape(runtime, outputId);
+      if (outputShape.rows !== inputShape.columns || outputShape.columns !== inputShape.rows) {
+        throw new Error(`X-Bridges Transpose '${operation.id}' has incompatible static shapes`);
+      }
+      return [Array.from({ length: outputShape.rows * outputShape.columns }, (_, index) =>
+        inputs[0][(index % outputShape.columns) * inputShape.columns
+          + Math.floor(index / outputShape.columns)])];
+    }
+    case 'MatrixConcat': {
+      const outputId = operation.outputSignalIds[0];
+      if (outputId === undefined) return [[0]];
+      const axis = Number(parameter(operation, ['axis'], 0));
+      const shapes = operation.inputSignalIds.map((id) => matrixShape(runtime, id));
+      const outputShape = matrixShape(runtime, outputId);
+      if (axis === 1) {
+        if (shapes.some((shape) => shape.rows !== outputShape.rows)
+          || shapes.reduce((sum, shape) => sum + shape.columns, 0) !== outputShape.columns) {
+          throw new Error(`X-Bridges MatrixConcat '${operation.id}' has incompatible horizontal shapes`);
+        }
+        return [Array.from({ length: outputShape.rows * outputShape.columns }, (_, index) => {
+          const row = Math.floor(index / outputShape.columns);
+          let column = index % outputShape.columns;
+          for (let inputIndex = 0; inputIndex < shapes.length; inputIndex++) {
+            if (column < shapes[inputIndex].columns) return inputs[inputIndex][row * shapes[inputIndex].columns + column];
+            column -= shapes[inputIndex].columns;
+          }
+          return 0;
+        })];
+      }
+      if (shapes.some((shape) => shape.columns !== outputShape.columns)
+        || shapes.reduce((sum, shape) => sum + shape.rows, 0) !== outputShape.rows) {
+        throw new Error(`X-Bridges MatrixConcat '${operation.id}' has incompatible vertical shapes`);
+      }
+      return [Array.from({ length: outputShape.rows * outputShape.columns }, (_, index) => {
+        let row = Math.floor(index / outputShape.columns);
+        const column = index % outputShape.columns;
+        for (let inputIndex = 0; inputIndex < shapes.length; inputIndex++) {
+          if (row < shapes[inputIndex].rows) return inputs[inputIndex][row * outputShape.columns + column];
+          row -= shapes[inputIndex].rows;
+        }
+        return 0;
+      })];
+    }
+    case 'MatrixDiag': {
+      const inputId = operation.inputSignalIds[0];
+      const outputId = operation.outputSignalIds[0];
+      if (inputId === undefined || outputId === undefined) return [[0]];
+      const inputShape = vectorShape(runtime, inputId);
+      const outputShape = matrixShape(runtime, outputId);
+      if (outputShape.rows !== inputShape.length || outputShape.columns !== inputShape.length) {
+        throw new Error(`X-Bridges MatrixDiag '${operation.id}' requires an N-by-N output`);
+      }
+      return [Array.from({ length: inputShape.length * inputShape.length }, (_, index) =>
+        Math.floor(index / inputShape.length) === index % inputShape.length
+          ? inputs[0][index % inputShape.length]
+          : 0)];
+    }
+    case 'SubMatrix': {
+      const inputId = operation.inputSignalIds[0];
+      const outputId = operation.outputSignalIds[0];
+      if (inputId === undefined || outputId === undefined) return [[0]];
+      const inputShape = matrixShape(runtime, inputId);
+      const outputShape = matrixShape(runtime, outputId);
+      const rowStart = Number(parameter(operation, ['rowStart'], 0));
+      const rowEnd = Number(parameter(operation, ['rowEnd'], inputShape.rows - 1));
+      const colStart = Number(parameter(operation, ['colStart'], 0));
+      const colEnd = Number(parameter(operation, ['colEnd'], inputShape.columns - 1));
+      if (rowEnd - rowStart + 1 !== outputShape.rows || colEnd - colStart + 1 !== outputShape.columns
+        || rowStart < 0 || colStart < 0 || rowEnd >= inputShape.rows || colEnd >= inputShape.columns) {
+        throw new Error(`X-Bridges SubMatrix '${operation.id}' has invalid static bounds`);
+      }
+      return [Array.from({ length: outputShape.rows * outputShape.columns }, (_, index) =>
+        inputs[0][(rowStart + Math.floor(index / outputShape.columns)) * inputShape.columns
+          + colStart + (index % outputShape.columns)])];
+    }
+    case 'MatrixSolve': {
+      const matrixId = operation.inputSignalIds[0];
+      const rightId = operation.inputSignalIds[1];
+      const outputId = operation.outputSignalIds[0];
+      if (matrixId === undefined || rightId === undefined || outputId === undefined) return [[0]];
+      const matrix = matrixShape(runtime, matrixId);
+      const right = matrixShape(runtime, rightId);
+      const output = matrixShape(runtime, outputId);
+      if (matrix.rows !== matrix.columns || right.rows !== matrix.rows
+        || output.rows !== matrix.rows || output.columns !== right.columns) {
+        throw new Error(`X-Bridges MatrixSolve '${operation.id}' has incompatible static shapes`);
+      }
+      return [boundedSolve(inputs[0], inputs[1], matrix.rows, right.columns,
+        Number(parameter(operation, ['maxDimension', 'maximumDimension'], 8)))];
+    }
+    case 'CLARKE_TRANSFORM': {
+      const ia = Number(inputs[0]?.[0] ?? 0);
+      const ib = Number(inputs[1]?.[0] ?? 0);
+      const ic = Number(inputs[2]?.[0] ?? 0);
+      if (operation.parameters.mode === 'power_invariant') {
+        const scale = Math.sqrt(2 / 3);
+        return [[scale * (ia - 0.5 * ib - 0.5 * ic)], [scale * Math.sqrt(3) * (ib - ic) / 2]];
+      }
+      return [[ia], [(ia + 2 * ib) / Math.sqrt(3)]];
+    }
+    case 'PARK_TRANSFORM': {
+      const alpha = Number(inputs[0]?.[0] ?? 0);
+      const beta = Number(inputs[1]?.[0] ?? 0);
+      const theta = Number(inputs[2]?.[0] ?? 0);
+      return [[alpha * Math.cos(theta) + beta * Math.sin(theta)], [-alpha * Math.sin(theta) + beta * Math.cos(theta)]];
+    }
+    case 'INVERSE_PARK': {
+      const d = Number(inputs[0]?.[0] ?? 0);
+      const q = Number(inputs[1]?.[0] ?? 0);
+      const theta = Number(inputs[2]?.[0] ?? 0);
+      return [[d * Math.cos(theta) - q * Math.sin(theta)], [d * Math.sin(theta) + q * Math.cos(theta)]];
+    }
+    case 'INVERSE_CLARKE': {
+      const alpha = Number(inputs[0]?.[0] ?? 0);
+      const beta = Number(inputs[1]?.[0] ?? 0);
+      return [[alpha], [-0.5 * alpha + Math.sqrt(3) * beta / 2], [-0.5 * alpha - Math.sqrt(3) * beta / 2]];
+    }
     case 'AND':
       return [[inputs.every((input) => input.every(Boolean))]];
     case 'OR':
@@ -376,7 +618,25 @@ const writeStateOutputs = (
   operation: XBSemanticOperation,
   faults: XBNumericFault[],
 ): void => {
-  for (const slot of operation.state?.slots ?? []) {
+  if (operation.type === 'STATE_SPACE') {
+    const xSlot = (operation.state?.slots ?? []).find((slot) =>
+      runtime.ir.signals[slot.signalId]?.portId === 'x');
+    const ySlot = (operation.state?.slots ?? []).find((slot) =>
+      runtime.ir.signals[slot.signalId]?.portId === 'y');
+    if (xSlot !== undefined && ySlot !== undefined) {
+      const x = runtime.stateSlots[xSlot.id] ?? xSlot.initialValues;
+      const input = signalValues(runtime, operation.inputSignalIds[0] ?? '');
+      const c = matrixParameter(operation, 'C', [[]]);
+      const d = matrixParameter(operation, 'D', [[]]);
+      const y = Array.from({ length: ySlot.initialValues.length }, (_, row) =>
+        x.reduce<number>((total, value, column) => total + (c[row]?.[column] ?? 0) * Number(value), 0)
+        + input.reduce<number>((total, value, column) => total + (d[row]?.[column] ?? 0) * Number(value), 0));
+      writeSignal(runtime, ySlot.signalId, y, faults);
+      writeSignal(runtime, xSlot.signalId, x, faults);
+      return;
+    }
+  }
+  for (const [slotIndex, slot] of (operation.state?.slots ?? []).entries()) {
     writeSignal(
       runtime,
       slot.signalId,
@@ -414,7 +674,7 @@ const statefulUpdate = (
 ): Record<string, XBScalar[]> => {
   const input = signalValues(runtime, operation.inputSignalIds[0]);
   const updates: Record<string, XBScalar[]> = {};
-  for (const slot of operation.state?.slots ?? []) {
+  for (const [slotIndex, slot] of (operation.state?.slots ?? []).entries()) {
     const previous = runtime.stateSlots[slot.id] ?? [...slot.initialValues];
     const values = broadcast(input, previous.length, operation.id);
     switch (operation.type) {
@@ -432,6 +692,48 @@ const statefulUpdate = (
             faults,
           ));
         break;
+      case 'PID_BASIC':
+      case 'PID_CONTROLLER': {
+        const reference = Number(signalValues(runtime, operation.inputSignalIds[0] ?? '')[0] ?? 0);
+        const feedback = Number(signalValues(runtime, operation.inputSignalIds[1] ?? '')[0] ?? 0);
+        const error = reference - feedback;
+        const proportional = Number(parameter(operation, ['Kp', 'kp'], 1)) * error;
+        const integral = Number(previous[0] ?? 0)
+          + Number(parameter(operation, ['Ki', 'ki'], 0)) * error
+            * Number(parameter(operation, ['sampleTime', 'dt'], 1));
+        const lower = Number(parameter(operation, ['min', 'minimum'], -100));
+        const upper = Number(parameter(operation, ['max', 'maximum'], 100));
+        const output = Math.max(lower, Math.min(upper, proportional + integral));
+        updates[slot.id] = Array.from({ length: previous.length }, () =>
+          convertValue(slotIndex === 0 ? output : error, slot.numericType, faults));
+        break;
+      }
+      case 'DISCRETE_TRANSFER_FUNCTION': {
+        const a = matrixParameter(operation, 'A', [[0]]);
+        const b = matrixParameter(operation, 'B', [[1]]);
+        const state = previous.map(Number);
+        const inputValues = signalValues(runtime, operation.inputSignalIds[0] ?? '').map(Number);
+        updates[slot.id] = state.map((_, row) => convertValue(
+          state.reduce((sum, value, column) => sum + (a[row]?.[column] ?? 0) * value, 0)
+            + inputValues.reduce((sum, value, column) => sum + (b[row]?.[column] ?? 0) * value, 0),
+          slot.numericType,
+          faults,
+        ));
+        break;
+      }
+      case 'STATE_SPACE': {
+        const a = matrixParameter(operation, 'A', [[0]]);
+        const b = matrixParameter(operation, 'B', [[1]]);
+        const state = previous.map(Number);
+        const inputValues = signalValues(runtime, operation.inputSignalIds[0] ?? '').map(Number);
+        updates[slot.id] = state.map((_, row) => convertValue(
+          state.reduce((sum, value, column) => sum + (a[row]?.[column] ?? 0) * value, 0)
+            + inputValues.reduce((sum, value, column) => sum + (b[row]?.[column] ?? 0) * value, 0),
+          slot.numericType,
+          faults,
+        ));
+        break;
+      }
       default:
         throw new Error(
           `X-Bridges stateful operation '${operation.id}' has unsupported `

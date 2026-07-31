@@ -83,7 +83,8 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   Mean: direct(vectorOrMatrix),
   Max: direct(vectorOrMatrix),
 
-  // Statically bounded linear algebra.
+  // Statically bounded linear algebra. Each entry has interpreter and C99
+  // conformance coverage in xbInterpreter/xbCGenerator tests (Task 10).
   MatrixMul: direct(vectorOrMatrix),
   Transpose: direct(vectorOrMatrix),
   MatrixConcat: direct(vectorOrMatrix),
@@ -120,7 +121,8 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   INTEGRATOR_CONTINUOUS: stateful(allShapes),
   Integrator: stateful(allShapes),
 
-  // Bounded control and linear-system blocks.
+  // Bounded control and linear-system blocks. Each entry is enabled only with
+  // paired interpreter and compiled-C conformance coverage (Task 10).
   PID_BASIC: stateful(scalar),
   PID_CONTROLLER: stateful(scalar),
   LOW_PASS_FILTER: stateful(allShapes),
@@ -129,7 +131,8 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   DISCRETE_TRANSFER_FUNCTION: stateful(allShapes),
   STATE_SPACE: stateful(allShapes),
 
-  // Motor-control transforms.
+  // Motor-control transforms, covered against fixed reference vectors in both
+  // the interpreter and generated C conformance suites (Task 10).
   CLARKE_TRANSFORM: direct(vectorOrMatrix),
   PARK_TRANSFORM: direct(vectorOrMatrix),
   INVERSE_PARK: direct(vectorOrMatrix),
