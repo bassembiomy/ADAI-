@@ -9,6 +9,7 @@ import { buildSemanticModel } from './smSemanticBuilder';
 import {
   flatOrFixture,
   historyFixture,
+  hybridXBridgesFixture,
   interpreterFixture,
   nestedAndFixture,
   parallelHistoryFixture,
@@ -282,6 +283,57 @@ int main(void) {
       'static_metrics_report.md',
     ]);
     expect(JSON.stringify(ir)).toBe(before);
+  });
+
+  it('adds X-Bridges artifacts and static instance storage only when IR is owned', () => {
+    const ordinary = build(flatOrFixture());
+    expect(generateCArtifacts(ordinary).files.map((file) => file.name))
+      .not.toContain('sm_xbridges.h');
+    expect(renderConfigHeader(ordinary)).not.toContain('sm_xbridges.h');
+
+    const hybrid = build(hybridXBridgesFixture());
+    expect(generateCArtifacts(hybrid).files.map((file) => file.name)).toEqual([
+      'sm_config.h',
+      'sm_core.h',
+      'sm_core.c',
+      'sm_safety.h',
+      'sm_safety.c',
+      'sm_user_logic.h',
+      'sm_user_logic.c',
+      'mcal_dio.h',
+      'sm_xbridges.h',
+      'sm_xbridges.c',
+      'sm_testing_report.md',
+      'static_metrics_report.md',
+    ]);
+    expect(renderConfigHeader(hybrid)).toContain('#include "sm_xbridges.h"');
+    expect(renderConfigHeader(hybrid)).toContain(
+      'SM_XB_CONTROLLER_t xb_controller;',
+    );
+
+    const workspace = createGeneratedCodeTestWorkspace('structured-xbridges-c99');
+    try {
+      for (const file of generateCArtifacts(hybrid).files) {
+        if (file.name.endsWith('.c') || file.name.endsWith('.h')) {
+          writeFileSync(join(workspace.directory, file.name), file.content);
+        }
+      }
+      execFileSync('gcc', [
+        '-std=c99',
+        '-pedantic-errors',
+        '-Wall',
+        '-Wextra',
+        '-Werror',
+        '-I.',
+        '-c',
+        'sm_core.c',
+        'sm_safety.c',
+        'sm_user_logic.c',
+        'sm_xbridges.c',
+      ], { cwd: workspace.directory, stdio: 'pipe' });
+    } finally {
+      workspace.cleanup();
+    }
   });
 
   it('compiles generated artifacts as strict C99 without repair', () => {

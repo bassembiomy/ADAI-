@@ -15,6 +15,11 @@ import type {
   SemanticTransitionRoute,
 } from './smSemanticModel';
 import {
+  renderXBHeader,
+  renderXBInstanceMembers,
+  renderXBSource,
+} from './xbCGenerator';
+import {
   renderStaticMetricsReport,
   renderTestingReport as renderSemanticTestingReport,
 } from './smReports';
@@ -786,6 +791,9 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '',
     '#include <stdbool.h>',
     '#include <stdint.h>',
+    orderedStates(ir).some((state) => state.xBridges !== null)
+      ? '#include "sm_xbridges.h"'
+      : false,
     '',
     `#define SM_TICK_MS ${ir.tickMs}U`,
     '#define SM_TICK_TOLERANCE_MS ((SM_TICK_MS / 10U) > 0U ? (SM_TICK_MS / 10U) : 1U)',
@@ -829,6 +837,7 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '',
     'typedef struct {',
     '    SM_Data_t data;',
+    ...renderXBInstanceMembers(ir).map((member) => `    ${member}`),
     '    SM_Node_t active_states[(SM_NUM_ACTIVE_SLOTS > 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];',
     '    SM_Node_t history_states[(SM_NUM_ACTIVE_SLOTS > 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];',
     '    bool state_active[SM_NUM_STATES + 1U];',
@@ -1507,6 +1516,12 @@ export const generateCArtifacts = (
     { name: 'sm_user_logic.h', content: renderUserLogicHeader(ir) },
     { name: 'sm_user_logic.c', content: renderUserLogicSource(ir) },
     { name: 'mcal_dio.h', content: renderMcalHeader(ir, options) },
+    ...(orderedStates(ir).some((state) => state.xBridges !== null)
+      ? [
+          { name: 'sm_xbridges.h', content: renderXBHeader(ir) },
+          { name: 'sm_xbridges.c', content: renderXBSource(ir) },
+        ]
+      : []),
     ...(options.includeTestShims
       ? [{ name: 'mcal_dio_test_stubs.c', content: renderMcalTestStubs() }]
       : []),
