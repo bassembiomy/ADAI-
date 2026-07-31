@@ -1,0 +1,174 @@
+import { describe, expect, it } from 'vitest';
+import {
+  createXBBoundaryMapping,
+  listXBBoundaryTargets,
+  pruneXBBoundaryMappings,
+  reconcileXBBoundaryMappings,
+  syncXBBoundaryNodeMetadata,
+} from './xbBoundaryMappings';
+
+const nodes = [
+  {
+    id: 'input', type: 'xblock',
+    data: {
+      type: 'Inport', params: { smVarId: 'x' },
+      inputs: [{ id: 'in', direction: 'input' }],
+      outputs: [{ id: 'out', direction: 'output' }],
+    },
+  },
+  {
+    id: 'output', type: 'xblock',
+    data: {
+      type: 'Outport', params: { smVarId: 'x' },
+      inputs: [{ id: 'in', direction: 'input' }],
+      outputs: [{ id: 'out', direction: 'output' }],
+    },
+  },
+];
+
+const nodesWithStaleIds = [
+  {
+    id: 'input', type: 'xblock',
+    data: {
+      type: 'Inport', params: { smVarId: 'stale-in' },
+      inputs: [{ id: 'in', direction: 'input' }],
+      outputs: [{ id: 'out', direction: 'output' }],
+    },
+  },
+  {
+    id: 'output', type: 'xblock',
+    data: {
+      type: 'Outport', params: { smVarId: 'stale-out' },
+      inputs: [{ id: 'in', direction: 'input' }],
+      outputs: [{ id: 'out', direction: 'output' }],
+    },
+  },
+];
+
+const canonicalNodes = [
+  {
+    id: 'input', type: 'Inport', label: 'Setpoint',
+    parameters: {
+      smVarId: 'x',
+      inputs: [{ id: 'in', direction: 'input' }],
+      outputs: [{ id: 'out', direction: 'output' }],
+    },
+  },
+  {
+    id: 'output', type: 'Outport',
+    parameters: {
+      smVarId: 'y',
+      inputs: [{ id: 'in', direction: 'input' }],
+      outputs: [{ id: 'out', direction: 'output' }],
+    },
+  },
+];
+
+const canonical = [
+  { smVarId: 'x', blockId: 'input', portId: 'in', direction: 'in' as const },
+  { smVarId: 'x', blockId: 'output', portId: 'out', direction: 'out' as const },
+];
+
+describe('listXBBoundaryTargets', () => {
+  it('resolves boundary ports from legacy React Flow nodes', () => {
+    expect(listXBBoundaryTargets(nodes, 'in')).toEqual([
+      { blockId: 'input', portId: 'in', direction: 'in', label: 'input' },
+    ]);
+    expect(listXBBoundaryTargets(nodes, 'out')).toEqual([
+      { blockId: 'output', portId: 'out', direction: 'out', label: 'output' },
+    ]);
+  });
+
+  it('resolves boundary ports from canonical XBNodeV1 nodes, sorted deterministically', () => {
+    expect(listXBBoundaryTargets(canonicalNodes, 'in')).toEqual([
+      { blockId: 'input', portId: 'in', direction: 'in', label: 'Setpoint' },
+    ]);
+    expect(listXBBoundaryTargets(canonicalNodes, 'out')).toEqual([
+      { blockId: 'output', portId: 'out', direction: 'out', label: 'output' },
+    ]);
+  });
+
+  it('rejects wrong-direction ports and non-boundary blocks', () => {
+    const mixed = [
+      ...nodes,
+      {
+        id: 'gain', type: 'xblock',
+        data: {
+          type: 'GAIN', params: {},
+          inputs: [{ id: 'u', direction: 'input' }],
+          outputs: [{ id: 'y', direction: 'output' }],
+        },
+      },
+    ];
+    expect(listXBBoundaryTargets(mixed, 'in')).toEqual([
+      { blockId: 'input', portId: 'in', direction: 'in', label: 'input' },
+    ]);
+    expect(listXBBoundaryTargets(mixed, 'out')).toEqual([
+      { blockId: 'output', portId: 'out', direction: 'out', label: 'output' },
+    ]);
+  });
+});
+
+describe('createXBBoundaryMapping', () => {
+  it('builds a canonical mapping record from a resolved target', () => {
+    expect(createXBBoundaryMapping('x', listXBBoundaryTargets(nodes, 'in')[0]))
+      .toEqual({ smVarId: 'x', blockId: 'input', portId: 'in', direction: 'in' });
+  });
+});
+
+describe('syncXBBoundaryNodeMetadata', () => {
+  it('overwrites stale legacy params.smVarId with the canonical variable ID', () => {
+    expect(syncXBBoundaryNodeMetadata(nodesWithStaleIds, canonical))
+      .toMatchObject([
+        { data: { params: { smVarId: 'x' } } },
+        { data: { params: { smVarId: 'x' } } },
+      ]);
+  });
+
+  it('mirrors into canonical parameters.smVarId without mutating the input', () => {
+    const synced = syncXBBoundaryNodeMetadata(
+      canonicalNodes,
+      [{ smVarId: 'z', blockId: 'input', portId: 'in', direction: 'in' as const }],
+    );
+    expect(synced[0]).toMatchObject({ parameters: { smVarId: 'z' } });
+    expect(canonicalNodes[0].parameters.smVarId).toBe('x');
+  });
+});
+
+describe('reconcileXBBoundaryMappings', () => {
+  it('derives complete mappings from valid node metadata', () => {
+    expect(reconcileXBBoundaryMappings(nodes, [], new Set(['x']))).toEqual(canonical);
+  });
+
+  it('preserves already-complete canonical mappings', () => {
+    expect(reconcileXBBoundaryMappings(nodes, canonical, new Set(['other'])))
+      .toEqual(canonical);
+  });
+
+  it('does not import variables that do not exist', () => {
+    expect(reconcileXBBoundaryMappings(nodes, [], new Set(['other']))).toEqual([]);
+  });
+
+  it('never guesses among multiple compatible ports on one boundary block', () => {
+    const ambiguous = [
+      {
+        id: 'input', type: 'xblock',
+        data: {
+          type: 'Inport', params: { smVarId: 'x' },
+          inputs: [
+            { id: 'a', direction: 'input' },
+            { id: 'b', direction: 'input' },
+          ],
+          outputs: [],
+        },
+      },
+    ];
+    expect(reconcileXBBoundaryMappings(ambiguous, [], new Set(['x']))).toEqual([]);
+  });
+});
+
+describe('pruneXBBoundaryMappings', () => {
+  it('drops mappings whose boundary block was deleted', () => {
+    expect(pruneXBBoundaryMappings(canonical, [nodes[0]])).toEqual([canonical[0]]);
+  });
+});
