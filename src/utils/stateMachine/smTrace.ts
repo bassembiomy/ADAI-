@@ -20,6 +20,9 @@ export interface TraceDifference {
   actual: SemanticTraceFrame | undefined;
 }
 
+export const xBridgesTraceAction = (stateLabel: string): string =>
+  `xbridges:${stateLabel}`;
+
 const framesEqual = (
   left: SemanticTraceFrame | undefined,
   right: SemanticTraceFrame | undefined,

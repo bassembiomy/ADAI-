@@ -8,6 +8,14 @@ import type {
   SemanticTransitionRoute,
 } from './smSemanticModel';
 import type { SemanticTraceFrame } from './smTrace';
+import { xBridgesTraceAction } from './smTrace';
+import {
+  createXBRuntime,
+  enterXBState,
+  resetXBState,
+  stepXBState,
+  type XBRuntime,
+} from './xbInterpreter';
 
 export interface SemanticRuntimeError {
   code:
@@ -25,6 +33,7 @@ export interface SemanticRuntime {
   stateTimersMs: number[];
   historySlots: Array<string | null>;
   deepHistory: Record<string, string[]>;
+  xBridgesByStateId: Record<string, XBRuntime>;
   error: SemanticRuntimeError | null;
   traceSequence: number;
 }
@@ -201,6 +210,8 @@ const markStateEntered = (
   if (state.activeSlot >= 0) {
     context.runtime.activeSlots[state.activeSlot] = state.id;
   }
+  const xBridges = context.runtime.xBridgesByStateId[stateId];
+  if (xBridges !== undefined) enterXBState(xBridges);
   runActions(
     context,
     state.entryActions,
@@ -722,6 +733,20 @@ const executeState = (
     `during:${stateActionLabel(state)}`,
   );
 
+  const xBridges = context.runtime.xBridgesByStateId[stateId];
+  if (xBridges !== undefined) {
+    const faults = stepXBState(xBridges, context.runtime.data);
+    if (
+      faults.length > 0
+      && xBridges.ir.policy.numericFault === 'escalate'
+    ) {
+      throw new Error(
+        `X-Bridges state '${state.id}' numeric fault: ${faults.join(', ')}`,
+      );
+    }
+    context.actions.push(xBridgesTraceAction(stateActionLabel(state)));
+  }
+
   const inner = selectTransitionPath(context, stateId, 'inner');
   if (inner !== null) {
     commitTransition(context, inner);
@@ -749,7 +774,12 @@ function executeLayer(
       : executeState(context, activeStateId);
   }
   let transitioned = false;
-  for (const childId of layer.children) {
+  const orderedChildIds = [...layer.children].sort((leftId, rightId) => {
+    const left = context.runtime.ir.states[leftId];
+    const right = context.runtime.ir.states[rightId];
+    return left.priority - right.priority || left.id.localeCompare(right.id);
+  });
+  for (const childId of orderedChildIds) {
     const child = context.runtime.ir.states[childId];
     if (!context.runtime.stateActive[child.activityIndex]) continue;
     transitioned = executeState(context, childId) || transitioned;
@@ -849,6 +879,11 @@ export const createRuntime = (ir: SemanticModel): SemanticRuntime => {
     stateTimersMs: Array.from({ length: stateCount }, () => 0),
     historySlots: Array.from({ length: ir.activeSlotCount }, () => null),
     deepHistory: {},
+    xBridgesByStateId: Object.fromEntries(
+      orderedStates(ir)
+        .filter((state) => state.xBridges !== null)
+        .map((state) => [state.id, createXBRuntime(state.xBridges!)]),
+    ),
     error: null,
     traceSequence: 0,
   };
@@ -863,6 +898,9 @@ export const initializeRuntime = (
   clearConfiguration(runtime);
   runtime.historySlots.fill(null);
   runtime.deepHistory = {};
+  for (const xBridges of Object.values(runtime.xBridgesByStateId)) {
+    resetXBState(xBridges);
+  }
   runtime.error = null;
   runtime.traceSequence = 0;
   const context: StepContext = { runtime, actions: [] };
@@ -917,6 +955,9 @@ export const resetRuntime = (
   clearConfiguration(runtime);
   runtime.historySlots.fill(null);
   runtime.deepHistory = {};
+  for (const xBridges of Object.values(runtime.xBridgesByStateId)) {
+    resetXBState(xBridges);
+  }
   runtime.error = null;
   try {
     enterLayerDefault(context, runtime.ir.rootLayerId);
