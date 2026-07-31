@@ -368,7 +368,11 @@ describe('buildXBSemanticModel', () => {
     });
 
     const ir = build(xbModel).ir!;
-    expect(ir.solver).toEqual({ kind, substepsPerTick });
+    expect(ir.solver).toEqual({
+      kind,
+      stepSeconds: 0.002,
+      substepsPerTick,
+    });
     expect(ir.operations.delay.schedule).toEqual({
       periodSubsteps: 10,
       offsetSubsteps: 0,

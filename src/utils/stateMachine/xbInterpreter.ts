@@ -371,6 +371,42 @@ const executeConversionOperation = (
   }
 };
 
+const writeStateOutputs = (
+  runtime: XBRuntime,
+  operation: XBSemanticOperation,
+  faults: XBNumericFault[],
+): void => {
+  for (const slot of operation.state?.slots ?? []) {
+    writeSignal(
+      runtime,
+      slot.signalId,
+      runtime.stateSlots[slot.id] ?? slot.initialValues,
+      faults,
+    );
+  }
+};
+
+const scheduledThisSubstep = (
+  runtime: XBRuntime,
+  operation: XBSemanticOperation,
+): boolean => operation.schedule.hold === 'none'
+  || runtime.scheduleCounters[operation.id] === 0;
+
+const advanceSchedule = (
+  runtime: XBRuntime,
+  operation: XBSemanticOperation,
+): void => {
+  const period = operation.schedule.periodSubsteps;
+  if (period <= 1) {
+    runtime.scheduleCounters[operation.id] = 0;
+    return;
+  }
+  const previous = runtime.scheduleCounters[operation.id] ?? 0;
+  runtime.scheduleCounters[operation.id] = (
+    previous + operation.schedule.counterIncrement
+  ) % period;
+};
+
 const statefulUpdate = (
   runtime: XBRuntime,
   operation: XBSemanticOperation,
@@ -389,8 +425,6 @@ const statefulUpdate = (
           convertValue(value, slot.numericType, faults));
         break;
       case 'INTEGRATOR_DISCRETE':
-      case 'INTEGRATOR_CONTINUOUS':
-      case 'Integrator':
         updates[slot.id] = previous.map((value, index) =>
           convertValue(
             Number(value) + Number(values[index]),
@@ -408,12 +442,11 @@ const statefulUpdate = (
   return updates;
 };
 
-const executeOperations = (
+const executeDirectOperations = (
   runtime: XBRuntime,
   faults: XBNumericFault[],
+  forceEvaluation = false,
 ): void => {
-  const pendingState: Record<string, XBScalar[]> = {};
-  const statefulOperations: XBSemanticOperation[] = [];
   for (const operationId of runtime.ir.executionOrder) {
     const operation = runtime.ir.operations[operationId];
     if (operation === undefined) {
@@ -421,18 +454,8 @@ const executeOperations = (
         `X-Bridges execution order references missing operation '${operationId}'`,
       );
     }
-    if (operation.stateful) {
-      for (const slot of operation.state?.slots ?? []) {
-        writeSignal(
-          runtime,
-          slot.signalId,
-          runtime.stateSlots[slot.id] ?? slot.initialValues,
-          faults,
-        );
-      }
-      statefulOperations.push(operation);
-      continue;
-    }
+    if (operation.stateful) continue;
+    if (!forceEvaluation && !scheduledThisSubstep(runtime, operation)) continue;
     if (
       operation.type === 'DATA_TYPE_CONVERSION'
       || operation.type === 'NUMERIC_REPRESENTATION'
@@ -452,11 +475,132 @@ const executeOperations = (
       );
     });
   }
+};
+
+interface ContinuousSlot {
+  readonly operation: XBSemanticOperation;
+  readonly slotId: string;
+  readonly signalId: string;
+  readonly numericType: XBNumericType;
+  readonly base: readonly XBScalar[];
+}
+
+const continuousSlots = (runtime: XBRuntime): ContinuousSlot[] => {
+  const slots: ContinuousSlot[] = [];
+  for (const operationId of runtime.ir.executionOrder) {
+    const operation = runtime.ir.operations[operationId];
+    if (
+      operation?.type !== 'INTEGRATOR_CONTINUOUS'
+      && operation?.type !== 'Integrator'
+    ) continue;
+    for (const slot of operation.state?.slots ?? []) {
+      slots.push({
+        operation,
+        slotId: slot.id,
+        signalId: slot.signalId,
+        numericType: slot.numericType,
+        base: runtime.stateSlots[slot.id] ?? slot.initialValues,
+      });
+    }
+  }
+  return slots;
+};
+
+const continuousDerivatives = (
+  runtime: XBRuntime,
+  slots: readonly ContinuousSlot[],
+): XBScalar[][] => slots.map(({ operation, base }) => broadcast(
+  signalValues(runtime, operation.inputSignalIds[0]),
+  base.length,
+  operation.id,
+).map(Number));
+
+const writeContinuousStage = (
+  runtime: XBRuntime,
+  slots: readonly ContinuousSlot[],
+  derivatives: readonly (readonly XBScalar[])[],
+  scale: number,
+  faults: XBNumericFault[],
+): void => {
+  slots.forEach((slot, index) => {
+    const values = slot.base.map((value, valueIndex) =>
+      Number(value) + scale * Number(derivatives[index][valueIndex]));
+    writeSignal(runtime, slot.signalId, values, faults);
+  });
+};
+
+const updateContinuousState = (
+  runtime: XBRuntime,
+  faults: XBNumericFault[],
+): void => {
+  const slots = continuousSlots(runtime);
+  if (slots.length === 0) return;
+  const step = runtime.ir.solver.stepSeconds;
+  const k1 = continuousDerivatives(runtime, slots);
+  if (runtime.ir.solver.kind === 'euler') {
+    writeContinuousStage(runtime, slots, k1, step, faults);
+  } else {
+    writeContinuousStage(runtime, slots, k1, step / 2, faults);
+    executeDirectOperations(runtime, faults, true);
+    const k2 = continuousDerivatives(runtime, slots);
+    writeContinuousStage(runtime, slots, k2, step / 2, faults);
+    executeDirectOperations(runtime, faults, true);
+    const k3 = continuousDerivatives(runtime, slots);
+    writeContinuousStage(runtime, slots, k3, step, faults);
+    executeDirectOperations(runtime, faults, true);
+    const k4 = continuousDerivatives(runtime, slots);
+    slots.forEach((slot, index) => {
+      runtime.stateSlots[slot.slotId] = slot.base.map((value, valueIndex) =>
+        convertValue(
+          Number(value) + step * (
+            Number(k1[index][valueIndex])
+            + 2 * Number(k2[index][valueIndex])
+            + 2 * Number(k3[index][valueIndex])
+            + Number(k4[index][valueIndex])
+          ) / 6,
+          slot.numericType,
+          faults,
+        ));
+    });
+    return;
+  }
+  slots.forEach((slot) => {
+    runtime.stateSlots[slot.slotId] = signalValues(runtime, slot.signalId)
+      .map((value) => convertValue(value, slot.numericType, faults));
+  });
+};
+
+const executeSolverSubstep = (
+  runtime: XBRuntime,
+  faults: XBNumericFault[],
+): void => {
+  const statefulOperations: XBSemanticOperation[] = [];
+  for (const operationId of runtime.ir.executionOrder) {
+    const operation = runtime.ir.operations[operationId];
+    if (operation === undefined) throw new Error(
+      `X-Bridges execution order references missing operation '${operationId}'`,
+    );
+    if (!operation.stateful) continue;
+    writeStateOutputs(runtime, operation, faults);
+    statefulOperations.push(operation);
+  }
+  executeDirectOperations(runtime, faults);
+  const pendingState: Record<string, XBScalar[]> = {};
   for (const operation of statefulOperations) {
+    if (!scheduledThisSubstep(runtime, operation)) continue;
+    if (
+      operation.type === 'INTEGRATOR_CONTINUOUS'
+      || operation.type === 'Integrator'
+    ) continue;
     Object.assign(pendingState, statefulUpdate(runtime, operation, faults));
   }
   for (const [slotId, values] of Object.entries(pendingState)) {
     runtime.stateSlots[slotId] = values;
+  }
+  updateContinuousState(runtime, faults);
+  for (const operation of runtime.ir.executionOrder
+    .map((operationId) => runtime.ir.operations[operationId])) {
+    if (operation !== undefined) advanceSchedule(runtime, operation);
   }
 };
 
@@ -480,7 +624,9 @@ export const stepXBState = (
     );
   }
 
-  executeOperations(runtime, faults);
+  for (let substep = 0; substep < runtime.ir.solver.substepsPerTick; substep++) {
+    executeSolverSubstep(runtime, faults);
+  }
 
   for (const mapping of runtime.ir.mappings) {
     if (mapping.direction !== 'out') continue;

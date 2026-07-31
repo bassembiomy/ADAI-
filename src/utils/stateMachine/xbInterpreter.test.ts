@@ -87,11 +87,127 @@ const model = (
   operations,
   signals,
   mappings,
-  solver: { kind: 'euler', substepsPerTick: 1 },
+  solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
   policy: { memory, numericFault: 'escalate' },
 });
 
 describe('X-Bridges interpreter', () => {
+  it('uses five integer solver substeps per tick and holds a 20 ms delay between samples', () => {
+    const delay = {
+      ...operation(
+        'delay',
+        'DELAY',
+        ['delay:u'],
+        ['delay:y'],
+        {},
+        [0],
+      ),
+      schedule: {
+        periodSubsteps: 10,
+        offsetSubsteps: 0,
+        initialCounter: 0,
+        counterIncrement: 1,
+        hold: 'zero-order' as const,
+      },
+    } satisfies XBSemanticOperation;
+    const ir = {
+      ...model(
+        'retain',
+        { delay },
+        {
+          'delay:u': signal('delay:u', 'input'),
+          'delay:y': signal('delay:y', 'output'),
+        },
+        ['delay'],
+        [{
+          variableId: 'u', signalId: 'delay:u', blockId: 'delay',
+          portId: 'u', direction: 'in', numericType: float32,
+        }, {
+          variableId: 'y', signalId: 'delay:y', blockId: 'delay',
+          portId: 'y', direction: 'out', numericType: float32,
+        }],
+      ),
+      solver: { kind: 'euler' as const, stepSeconds: 0.002, substepsPerTick: 5 },
+    } as XBSemanticModel;
+    const runtime = createXBRuntime(ir);
+    const first = { u: 1, y: -1 };
+    const second = { u: 2, y: -1 };
+
+    stepXBState(runtime, first);
+    expect(first.y).toBe(1);
+    expect(runtime.stateSlots['delay:y$state']).toEqual([1]);
+    expect(runtime.scheduleCounters.delay).toBe(5);
+
+    stepXBState(runtime, second);
+    expect(second.y).toBe(1);
+    expect(runtime.stateSlots['delay:y$state']).toEqual([1]);
+    expect(runtime.scheduleCounters.delay).toBe(0);
+
+    const third = { u: 3, y: -1 };
+    stepXBState(runtime, third);
+    expect(third.y).toBe(3);
+    expect(runtime.stateSlots['delay:y$state']).toEqual([3]);
+  });
+
+  it.each(['euler', 'rk4'] as const)(
+    'integrates dx/dt = -x + u with fixed-step %s',
+    (kind) => {
+      const integrator = {
+        ...operation(
+          'integrator',
+          'INTEGRATOR_CONTINUOUS',
+          ['integrator:u'],
+          ['integrator:y'],
+          {},
+          [0],
+        ),
+      } satisfies XBSemanticOperation;
+      const ir = {
+        ...model(
+          'retain',
+          {
+            integrator,
+            negative: operation(
+              'negative', 'GAIN', ['negative:u'], ['negative:y'], { gain: -1 },
+            ),
+            derivative: operation(
+              'derivative', 'Sum', ['derivative:a', 'derivative:b'], ['derivative:y'],
+            ),
+          },
+          {
+            'integrator:u': signal('integrator:u', 'input', 'derivative:y'),
+            'integrator:y': signal('integrator:y', 'output'),
+            'negative:u': signal('negative:u', 'input', 'integrator:y'),
+            'negative:y': signal('negative:y', 'output'),
+            'derivative:a': signal('derivative:a', 'input', 'negative:y'),
+            'derivative:b': signal('derivative:b', 'input', 'input:y'),
+            'derivative:y': signal('derivative:y', 'output'),
+            'input:y': signal('input:y', 'input'),
+          },
+          ['integrator', 'negative', 'derivative'],
+          [{
+            variableId: 'u', signalId: 'input:y', blockId: 'input',
+            portId: 'y', direction: 'in', numericType: float32,
+          }, {
+            variableId: 'x', signalId: 'integrator:y', blockId: 'integrator',
+            portId: 'y', direction: 'out', numericType: float32,
+          }],
+        ),
+        solver: { kind, substepsPerTick: 5, stepSeconds: 0.002 },
+      } as XBSemanticModel;
+      const runtime = createXBRuntime(ir);
+      const data = { u: 1, x: 0 };
+
+      for (let tick = 0; tick < 5; tick++) stepXBState(runtime, data);
+
+      const exact = 1 - Math.exp(-0.05);
+      expect(runtime.stateSlots['integrator:y$state'][0]).toBeCloseTo(
+        exact,
+        kind === 'rk4' ? 6 : 4,
+      );
+    },
+  );
+
   it('executes mappings in, semantic operations, then mappings out', () => {
     const ir = model(
       'reset',

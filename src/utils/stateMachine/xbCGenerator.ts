@@ -2,6 +2,7 @@ import { toCIdentifier } from './smExpressions';
 import type { SemanticModel, SemanticState } from './smSemanticModel';
 import { STATE_MACHINE_XB_TARGET_CAPABILITIES } from './smSemanticValidator';
 import type {
+  XBSemanticModel,
   XBSemanticOperation,
   XBSemanticSignal,
   XBSemanticStateSlot,
@@ -993,6 +994,267 @@ static int32_t SM_XB_ShiftRight32(double value, double amount)
     return SM_XB_BitcastU32ToI32(shifted);
 }`;
 
+const stateSlotField = (
+  slot: XBSemanticStateSlot,
+  layout: XBStateLayout,
+): string => {
+  const field = layout.slotFields.get(slot.id);
+  if (field === undefined) {
+    throw new Error(`X-Bridges state slot '${slot.id}' lacks generated storage`);
+  }
+  return field;
+};
+
+const renderStateOutputs = (
+  state: SemanticState,
+  operation: XBSemanticOperation,
+  operationIndex: number,
+  layout: XBStateLayout,
+  member: string,
+  expressions: readonly string[] | null = null,
+): string[] => (operation.state?.slots ?? []).flatMap((slot, slotIndex) =>
+  renderSignalWrite(
+    state,
+    operation,
+    operationIndex,
+    slotIndex,
+    slot.signalId,
+    expressions?.[slotIndex]
+      ?? `instance->${member}.${stateSlotField(slot, layout)}`,
+    layout,
+    member,
+  ));
+
+const renderDirectEvaluation = (
+  state: SemanticState,
+  xb: XBSemanticModel,
+  layout: XBStateLayout,
+  member: string,
+  forceEvaluation = false,
+): string[] => xb.executionOrder.flatMap((operationId, operationIndex) => {
+  const operation = xb.operations[operationId];
+  if (operation === undefined) {
+    throw new Error(
+      `X-Bridges execution order references missing operation '${operationId}'`,
+    );
+  }
+  if (operation.stateful) return [];
+  const emitted = operationEmitter(operation)(
+    state,
+    operation,
+    operationIndex,
+    layout,
+    member,
+  );
+  if (
+    forceEvaluation
+    || operation.schedule.hold === 'none'
+    || operation.schedule.periodSubsteps <= 1
+  ) return [...emitted];
+  const counter = layout.counterFields.get(operation.id);
+  if (counter === undefined) {
+    throw new Error(`X-Bridges operation '${operation.id}' lacks a schedule counter`);
+  }
+  return [
+    `    if (instance->${member}.${counter} == UINT32_C(0)) {`,
+    ...emitted.map((line) => `    ${line}`),
+    '    }',
+  ];
+});
+
+const renderDiscreteStateUpdates = (
+  state: SemanticState,
+  xb: XBSemanticModel,
+  layout: XBStateLayout,
+  member: string,
+): string[] => xb.executionOrder.flatMap((operationId) => {
+  const operation = xb.operations[operationId];
+  if (
+    operation === undefined
+    || !operation.stateful
+    || operation.type === 'INTEGRATOR_CONTINUOUS'
+    || operation.type === 'Integrator'
+  ) return [];
+  const counter = layout.counterFields.get(operation.id);
+  if (counter === undefined) {
+    throw new Error(`X-Bridges operation '${operation.id}' lacks a schedule counter`);
+  }
+  const input = operation.inputSignalIds[0] === undefined
+    ? '0.0'
+    : signalRealExpression(state, operation.inputSignalIds[0], layout, member);
+  const updates = (operation.state?.slots ?? []).map((slot) => {
+    const field = stateSlotField(slot, layout);
+    const type = numericCType(slot.numericType);
+    switch (operation.type) {
+      case 'DELAY':
+      case 'UNIT_DELAY':
+      case 'MEMORY':
+        return `        instance->${member}.${field} = (${type})(${input});`;
+      case 'INTEGRATOR_DISCRETE':
+        return `        instance->${member}.${field} = (${type})((double)(instance->${member}.${field}) + (${input}));`;
+      default:
+        throw new Error(
+          `X-Bridges stateful operation '${operation.id}' has unsupported type '${operation.type}'`,
+        );
+    }
+  });
+  if (updates.length === 0) return [];
+  if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) {
+    return updates.map((line) => line.slice(4));
+  }
+  return [
+    `    if (instance->${member}.${counter} == UINT32_C(0)) {`,
+    ...updates,
+    '    }',
+  ];
+});
+
+interface ContinuousOperationSlot {
+  readonly operation: XBSemanticOperation;
+  readonly operationIndex: number;
+  readonly slot: XBSemanticStateSlot;
+  readonly slotIndex: number;
+}
+
+const continuousOperationSlots = (
+  xb: XBSemanticModel,
+): ContinuousOperationSlot[] => xb.executionOrder.flatMap((operationId, operationIndex) => {
+  const operation = xb.operations[operationId];
+  if (
+    operation === undefined
+    || (operation.type !== 'INTEGRATOR_CONTINUOUS' && operation.type !== 'Integrator')
+  ) return [];
+  return (operation.state?.slots ?? []).map((slot, slotIndex) => ({
+    operation,
+    operationIndex,
+    slot,
+    slotIndex,
+  }));
+});
+
+const rkName = (
+  prefix: string,
+  entry: ContinuousOperationSlot,
+): string => `${prefix}_${entry.operationIndex}_${entry.slotIndex}`;
+
+const renderContinuousStateUpdates = (
+  state: SemanticState,
+  xb: XBSemanticModel,
+  layout: XBStateLayout,
+  member: string,
+): string[] => {
+  const slots = continuousOperationSlots(xb);
+  if (slots.length === 0) return [];
+  const step = cNumber(xb.solver.stepSeconds);
+  const baseLines = slots.map((entry) =>
+    `    const double ${rkName('xb_rk_base', entry)} = (double)(instance->${member}.${stateSlotField(entry.slot, layout)});`);
+  const derivative = (entry: ContinuousOperationSlot): string => {
+    const input = entry.operation.inputSignalIds[0];
+    return input === undefined
+      ? '0.0'
+      : signalRealExpression(state, input, layout, member);
+  };
+  if (xb.solver.kind === 'euler') {
+    const nextLines = slots.map((entry) =>
+      `    const double ${rkName('xb_euler_next', entry)} = ${rkName('xb_rk_base', entry)} + ${step} * (${derivative(entry)});`);
+    const assignLines = slots.map((entry) =>
+      `    instance->${member}.${stateSlotField(entry.slot, layout)} = (${numericCType(entry.slot.numericType)})${rkName('xb_euler_next', entry)};`);
+    return [
+      ...baseLines,
+      ...nextLines,
+      ...assignLines,
+      '    {',
+      ...slots.flatMap((entry) => renderStateOutputs(
+        state,
+        entry.operation,
+        entry.operationIndex,
+        layout,
+        member,
+        [rkName('xb_euler_next', entry)],
+      ).map((line) => `    ${line}`)),
+      '    }',
+    ];
+  }
+  const stage = (
+    label: 'k2' | 'k3' | 'k4',
+    previous: 'k1' | 'k2' | 'k3',
+    scale: string,
+  ): string[] => [
+    '    {',
+    ...slots.flatMap((entry) => renderStateOutputs(
+      state,
+      entry.operation,
+      entry.operationIndex,
+      layout,
+      member,
+      [`${rkName('xb_rk_base', entry)} + ${scale} * ${rkName(`xb_rk_${previous}`, entry)}`],
+    ).map((line) => `    ${line}`)),
+    ...renderDirectEvaluation(state, xb, layout, member, true)
+      .map((line) => `    ${line}`),
+    ...slots.map((entry) =>
+      `    ${rkName(`xb_rk_${label}`, entry)} = ${derivative(entry)};`),
+    '    }',
+  ];
+  const k1 = slots.map((entry) =>
+    `    const double ${rkName('xb_rk_k1', entry)} = ${derivative(entry)};`);
+  const laterStages = slots.flatMap((entry) => [
+    `    double ${rkName('xb_rk_k2', entry)};`,
+    `    double ${rkName('xb_rk_k3', entry)};`,
+    `    double ${rkName('xb_rk_k4', entry)};`,
+  ]);
+  const final = slots.map((entry) =>
+    `    instance->${member}.${stateSlotField(entry.slot, layout)} = (${numericCType(entry.slot.numericType)})(${rkName('xb_rk_base', entry)} + ${step} * (${rkName('xb_rk_k1', entry)} + 2.0 * ${rkName('xb_rk_k2', entry)} + 2.0 * ${rkName('xb_rk_k3', entry)} + ${rkName('xb_rk_k4', entry)}) / 6.0);`);
+  return [
+    ...baseLines,
+    ...k1,
+    ...laterStages,
+    ...stage('k2', 'k1', `${step} * 0.5`),
+    ...stage('k3', 'k2', `${step} * 0.5`),
+    ...stage('k4', 'k3', step),
+    ...final,
+  ];
+};
+
+const renderScheduleAdvances = (
+  xb: XBSemanticModel,
+  layout: XBStateLayout,
+  member: string,
+): string[] => xb.executionOrder.flatMap((operationId) => {
+  const operation = xb.operations[operationId];
+  if (operation === undefined) return [];
+  const counter = layout.counterFields.get(operation.id);
+  if (counter === undefined || operation.schedule.periodSubsteps <= 1) {
+    return counter === undefined ? [] : [`    instance->${member}.${counter} = UINT32_C(0);`];
+  }
+  return [
+    `    instance->${member}.${counter} += ${operation.schedule.counterIncrement}U;`,
+    `    if (instance->${member}.${counter} >= ${operation.schedule.periodSubsteps}U) {`,
+    `        instance->${member}.${counter} -= ${operation.schedule.periodSubsteps}U;`,
+    '    }',
+  ];
+});
+
+const renderSolverSubstep = (
+  state: SemanticState,
+  xb: XBSemanticModel,
+  layout: XBStateLayout,
+  member: string,
+): string[] => [
+  '    {',
+  ...xb.executionOrder.flatMap((operationId, operationIndex) => {
+    const operation = xb.operations[operationId];
+    return operation?.stateful
+      ? renderStateOutputs(state, operation, operationIndex, layout, member)
+        .map((line) => `    ${line}`)
+      : [];
+  }),
+  ...renderDirectEvaluation(state, xb, layout, member).map((line) => `    ${line}`),
+  ...renderDiscreteStateUpdates(state, xb, layout, member).map((line) => `    ${line}`),
+  ...renderContinuousStateUpdates(state, xb, layout, member).map((line) => `    ${line}`),
+  ...renderScheduleAdvances(xb, layout, member).map((line) => `    ${line}`),
+  '    }',
+];
+
 const renderStateLifecycle = (
   ir: SemanticModel,
   state: SemanticState,
@@ -1014,6 +1276,16 @@ const renderStateLifecycle = (
     if (counter !== undefined && operation.schedule.initialCounter !== 0) {
       initLines.push(
         `    instance->${member}.${counter} = ${operation.schedule.initialCounter}U;`,
+      );
+    }
+    for (const slot of operation.state?.slots ?? []) {
+      if (slot.initialValues.length !== 1) {
+        throw new Error(
+          `X-Bridges Task 9 emitter requires scalar state slot '${slot.id}'`,
+        );
+      }
+      initLines.push(
+        `    instance->${member}.${stateSlotField(slot, layout)} = (${numericCType(slot.numericType)})${cNumber(slot.initialValues[0])};`,
       );
     }
   }
@@ -1055,23 +1327,9 @@ const renderStateLifecycle = (
       member,
     ));
   }
-  xb.executionOrder.forEach((operationId, operationIndex) => {
-    const operation = xb.operations[operationId];
-    if (operation === undefined) {
-      throw new Error(
-        `X-Bridges execution order references missing operation '${operationId}'`,
-      );
-    }
-    stepLines.push(
-      ...operationEmitter(operation)(
-        state,
-        operation,
-        operationIndex,
-        layout,
-        member,
-      ),
-    );
-  });
+  for (let substep = 0; substep < xb.solver.substepsPerTick; substep++) {
+    stepLines.push(...renderSolverSubstep(state, xb, layout, member));
+  }
   for (const mapping of xb.mappings) {
     if (mapping.direction !== 'out') continue;
     const variable = ir.variables[mapping.variableId];

@@ -115,7 +115,7 @@ const xbModel = (): XBSemanticModel => ({
     ),
   },
   mappings: [],
-  solver: { kind: 'euler', substepsPerTick: 1 },
+  solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
   policy: { memory: 'reset', numericFault: 'escalate' },
 });
 
@@ -194,6 +194,97 @@ const scalarOperation = (
   outputSignalIds,
   parameters,
 });
+
+const statefulOperation = (
+  id: string,
+  type: string,
+  inputSignalIds: readonly string[],
+  outputSignalIds: readonly string[],
+  initialValue: number,
+): XBSemanticOperation => ({
+  ...scalarOperation(id, type, inputSignalIds, outputSignalIds),
+  directFeedthrough: false,
+  stateful: true,
+  state: {
+    outputPhase: 'read-before-update',
+    updatePhase: 'after-direct-feedthrough',
+    slots: outputSignalIds.map((signalId) => ({
+      id: `${signalId}$state`,
+      signalId,
+      numericType: { kind: 'float64' } as const,
+      shape: scalar,
+      initialValues: [initialValue],
+    })),
+  },
+  schedule: {
+    periodSubsteps: 1,
+    offsetSubsteps: 0,
+    initialCounter: 0,
+    counterIncrement: 1,
+    hold: 'none',
+  },
+});
+
+const continuousSolverModel = (
+  kind: 'euler' | 'rk4',
+): SemanticModel => {
+  const ir = semanticModel();
+  const float64 = { kind: 'float64' } as const;
+  const integrator = statefulOperation(
+    'integrator', 'INTEGRATOR_CONTINUOUS', ['integrator:u'], ['integrator:y'], 0,
+  );
+  const delay = {
+    ...statefulOperation('delay', 'DELAY', ['delay:u'], ['delay:y'], 0),
+    schedule: {
+      periodSubsteps: 10,
+      offsetSubsteps: 0,
+      initialCounter: 0,
+      counterIncrement: 1,
+      hold: 'zero-order' as const,
+    },
+  } satisfies XBSemanticOperation;
+  const negative = scalarOperation(
+    'negative', 'GAIN', ['negative:u'], ['negative:y'], { gain: -1 },
+  );
+  const derivative = scalarOperation(
+    'derivative', 'Sum', ['derivative:a', 'derivative:b'], ['derivative:y'],
+  );
+  ir.variables = {
+    u: { id: 'u', name: 'u', cName: 'u', type: 'double', initialValue: 0 },
+    x: { id: 'x', name: 'x', cName: 'x', type: 'double', initialValue: 0 },
+    d: { id: 'd', name: 'd', cName: 'd', type: 'double', initialValue: 0 },
+  };
+  ir.states.controller.xBridges = {
+    stateId: 'controller',
+    executionOrder: ['delay', 'integrator', 'negative', 'derivative'],
+    operations: { delay, integrator, negative, derivative },
+    signals: {
+      'input:y': signal('input:y', float64),
+      'delay:u': scalarInputSignal('delay:u', 'input:y', float64),
+      'delay:y': signal('delay:y', float64),
+      'integrator:u': scalarInputSignal('integrator:u', 'derivative:y', float64),
+      'integrator:y': signal('integrator:y', float64),
+      'negative:u': scalarInputSignal('negative:u', 'integrator:y', float64),
+      'negative:y': signal('negative:y', float64),
+      'derivative:a': scalarInputSignal('derivative:a', 'negative:y', float64),
+      'derivative:b': scalarInputSignal('derivative:b', 'input:y', float64),
+      'derivative:y': signal('derivative:y', float64),
+    },
+    mappings: [{
+      variableId: 'u', signalId: 'input:y', blockId: 'input', portId: 'y',
+      direction: 'in', numericType: float64,
+    }, {
+      variableId: 'x', signalId: 'integrator:y', blockId: 'integrator', portId: 'y',
+      direction: 'out', numericType: float64,
+    }, {
+      variableId: 'd', signalId: 'delay:y', blockId: 'delay', portId: 'y',
+      direction: 'out', numericType: float64,
+    }],
+    solver: { kind, stepSeconds: 0.002, substepsPerTick: 5 },
+    policy: { memory: 'reset', numericFault: 'escalate' },
+  };
+  return ir;
+};
 
 const combinationalSemanticModel = (): SemanticModel => {
   const ir = semanticModel();
@@ -432,7 +523,7 @@ const combinationalSemanticModel = (): SemanticModel => {
         numericType: float32,
       },
     ],
-    solver: { kind: 'euler', substepsPerTick: 1 },
+    solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
     policy: { memory: 'reset', numericFault: 'escalate' },
   };
   return ir;
@@ -545,7 +636,7 @@ const signalOnlyNonFiniteModel = (): SemanticModel => {
         numericType: booleanType,
       },
     ],
-    solver: { kind: 'euler', substepsPerTick: 1 },
+    solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
     policy: { memory: 'reset', numericFault: 'signal-only' },
   };
   return ir;
@@ -645,7 +736,7 @@ const truthSemanticModel = (): SemanticModel => {
         numericType: booleanType,
       })),
     ],
-    solver: { kind: 'euler', substepsPerTick: 1 },
+    solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
     policy: { memory: 'reset', numericFault: 'signal-only' },
   };
   return ir;
@@ -713,7 +804,7 @@ const booleanConversionModel = (
         numericType: float64,
       },
     ],
-    solver: { kind: 'euler', substepsPerTick: 1 },
+    solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
     policy: { memory: 'reset', numericFault: 'signal-only' },
   };
   return ir;
@@ -809,7 +900,7 @@ const reinterpretationParityModel = (): SemanticModel => {
         numericType: float64,
       },
     ],
-    solver: { kind: 'euler', substepsPerTick: 1 },
+    solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
     policy: { memory: 'reset', numericFault: 'signal-only' },
   };
   return ir;
@@ -1604,6 +1695,64 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
       workspace.cleanup();
     }
   });
+});
+
+describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
+  it.each(['euler', 'rk4'] as const)(
+    'matches interpreter ticks for dx/dt = -x + u using %s',
+    (kind) => {
+      const ir = continuousSolverModel(kind);
+      const runtime = createXBRuntime(ir.states.controller.xBridges!);
+      const expected = Array.from({ length: 5 }, () => {
+        const data: Record<string, number | boolean> = { u: 1, x: 0, d: 0 };
+        stepXBState(runtime, data);
+        return [Number(data.x), Number(data.d)];
+      });
+      const workspace = createGeneratedCodeTestWorkspace(`xb-${kind}-solver-c99`);
+
+      try {
+        for (const file of generateCArtifacts(ir, { includeTestShims: true }).files) {
+          writeFileSync(join(workspace.directory, file.name), file.content);
+        }
+        writeFileSync(join(workspace.directory, 'harness.c'), [
+          '#include "sm_core.h"',
+          '#include <stdio.h>',
+          '',
+          'int main(void)',
+          '{',
+          '    ADIA_Instance_t instance;',
+          '    if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+          '    for (unsigned tick = 0U; tick < 5U; ++tick) {',
+          '        instance.data.u = 1.0;',
+          '        if (SM_Step(&instance, SM_TICK_MS) != SM_ERR_NONE) return 2;',
+          '        (void)printf("%.17g,%.17g\\n", instance.data.x, instance.data.d);',
+          '    }',
+          '    return 0;',
+          '}',
+          '',
+        ].join('\n'));
+        const executable = join(workspace.directory, `xb_${kind}_solver.exe`);
+        execFileSync('gcc', [
+          '-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.',
+          'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c',
+          'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable,
+        ], { cwd: workspace.directory, stdio: 'pipe' });
+        const actual = execFileSync(executable, [], {
+          cwd: workspace.directory,
+          encoding: 'utf8',
+        }).trim().split(/\r?\n/).map((line) => line.split(',').map(Number));
+
+        expect(actual).toHaveLength(expected.length);
+        actual.forEach((values, index) => {
+          values.forEach((value, valueIndex) => {
+            expect(value).toBeCloseTo(expected[index][valueIndex], 12);
+          });
+        });
+      } finally {
+        workspace.cleanup();
+      }
+    },
+  );
 });
 
 describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {

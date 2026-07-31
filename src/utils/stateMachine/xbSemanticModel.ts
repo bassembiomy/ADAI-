@@ -88,6 +88,8 @@ export interface XBSemanticModel {
   readonly mappings: readonly XBSemanticMapping[];
   readonly solver: {
     readonly kind: 'euler' | 'rk4';
+    /** Canonical fixed solver interval, validated against the base tick. */
+    readonly stepSeconds: number;
     readonly substepsPerTick: number;
   };
   readonly policy: XBStatePolicy;

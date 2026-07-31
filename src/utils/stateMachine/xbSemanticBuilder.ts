@@ -901,6 +901,7 @@ export const buildXBSemanticModel = (
       mappings,
       solver: {
         kind: input.model.solver.kind,
+        stepSeconds: input.model.solver.stepSeconds,
         substepsPerTick,
       },
       policy: {
