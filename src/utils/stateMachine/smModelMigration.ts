@@ -7,18 +7,31 @@ import {
   type StateMachineModelV4,
 } from './smModel';
 import { adaptXBModel } from './xbModelAdapter';
+import { repairLegacyXBBoundaryMappings } from './xbBoundaryMappings';
 
 const normalizeEmbeddedXBModels = (
   states: StateData[],
+  variables: LegacyStateMachineModel['variables'],
 ): {
   states: StateData[];
   diagnostics: ModelDiagnostic[];
 } => {
   const diagnostics: ModelDiagnostic[] = [];
+  const validVariableIds = new Set(variables.map((variable) => variable.id));
   const normalizedStates = states.map((state) => {
     if (state.xBridgesModel === undefined) return state;
 
-    const adapted = adaptXBModel(state.xBridgesModel);
+    const repaired = repairLegacyXBBoundaryMappings(
+      state.xBridgesModel,
+      validVariableIds,
+    );
+    diagnostics.push(...repaired.diagnostics.map((entry) => ({
+      ...entry,
+      elementId: state.id,
+      message: `State '${state.id}': ${entry.message}`,
+    })));
+
+    const adapted = adaptXBModel(repaired.model);
     if (adapted.model !== null) {
       return {
         ...state,
@@ -73,7 +86,7 @@ const repairHistoryJunctions = (
 export const migrateStateMachineModel = (
   input: LegacyStateMachineModel,
 ): MigrationResult => {
-  const normalizedXB = normalizeEmbeddedXBModels(input.states);
+  const normalizedXB = normalizeEmbeddedXBModels(input.states, input.variables);
   const clonedInput = structuredClone({
     ...input,
     states: normalizedXB.states,

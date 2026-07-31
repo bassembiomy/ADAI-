@@ -1,4 +1,5 @@
 import type { XBMappingV1 } from './xbModel';
+import type { ModelDiagnostic } from './smModel';
 
 /** A resolved Inport/Outport port that a state-machine variable may bind to. */
 export interface XBBoundaryTarget {
@@ -9,6 +10,11 @@ export interface XBBoundaryTarget {
 }
 
 type UnknownRecord = Record<string, unknown>;
+
+export interface XBLegacyBoundaryRepairResult {
+  readonly model: unknown;
+  readonly diagnostics: readonly ModelDiagnostic[];
+}
 
 const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -197,4 +203,67 @@ export const pruneXBBoundaryMappings = (
     if (id !== null) blockIds.add(id);
   }
   return mappings.filter((mapping) => blockIds.has(mapping.blockId));
+};
+
+/**
+ * Restores legacy mappings that retained a variable and direction but lost
+ * their boundary target. A target is inferred only when exactly one matching
+ * Inport or Outport port exists; anything ambiguous remains untouched so the
+ * model adapter can fail closed.
+ */
+export const repairLegacyXBBoundaryMappings = (
+  input: unknown,
+  validVariableIds: ReadonlySet<string>,
+): XBLegacyBoundaryRepairResult => {
+  if (!isRecord(input) || !Array.isArray(input.nodes) || !Array.isArray(input.mappings)) {
+    return { model: input, diagnostics: [] };
+  }
+
+  const diagnostics: ModelDiagnostic[] = [];
+  const targetsByDirection = {
+    in: listXBBoundaryTargets(input.nodes, 'in'),
+    out: listXBBoundaryTargets(input.nodes, 'out'),
+  };
+  const mappings = input.mappings.map((mapping, index) => {
+    if (!isRecord(mapping)) return mapping;
+
+    const smVarId = nonEmptyString(mapping.smVarId);
+    const direction = mapping.direction;
+    const blockId = nonEmptyString(mapping.blockId);
+    const portId = nonEmptyString(mapping.portId);
+    if (smVarId === null
+      || (direction !== 'in' && direction !== 'out')
+      || blockId !== null
+      || portId !== null) {
+      return mapping;
+    }
+
+    if (!validVariableIds.has(smVarId)) {
+      diagnostics.push({
+        code: 'XB_MODEL_INVALID',
+        message: `Mapping at index ${index} references unknown state-machine variable '${smVarId}'.`,
+        severity: 'error',
+      });
+      return mapping;
+    }
+
+    const candidates = targetsByDirection[direction];
+    if (candidates.length !== 1) {
+      const boundaryType = direction === 'in' ? 'input' : 'output';
+      const blockType = direction === 'in' ? 'Inport' : 'Outport';
+      diagnostics.push({
+        code: 'XB_MODEL_INVALID',
+        message: `Mapping at index ${index} cannot infer an ${boundaryType} boundary because ${candidates.length} compatible ${blockType} ports exist.`,
+        severity: 'error',
+      });
+      return mapping;
+    }
+
+    return createXBBoundaryMapping(smVarId, candidates[0]);
+  });
+
+  return {
+    model: { ...input, mappings },
+    diagnostics,
+  };
 };

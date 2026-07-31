@@ -382,4 +382,57 @@ describe('migrateStateMachineModel', () => {
     }));
     expect(result.model.states[0].xBridgesModel).toBeUndefined();
   });
+
+  it('repairs deterministic blank legacy X-Bridges boundary mappings before adaptation', () => {
+    const result = migrateStateMachineModel({
+      schemaVersion: 4,
+      tickMs: 10,
+      safetyMode: false,
+      states: [{
+        id: 'xb-state',
+        parentId: 'root',
+        isParallel: false,
+        priority: 1,
+        isXBridges: true,
+        xBridgesModel: {
+          nodes: [
+            {
+              id: 'input', type: 'xblock',
+              data: {
+                type: 'Inport', params: { smVarId: 'stale' },
+                inputs: [{ id: 'in', direction: 'input' }],
+                outputs: [{ id: 'out', direction: 'output' }],
+              },
+            },
+            {
+              id: 'output', type: 'xblock',
+              data: {
+                type: 'Outport', params: { smVarId: 'stale' },
+                inputs: [{ id: 'in', direction: 'input' }],
+                outputs: [{ id: 'out', direction: 'output' }],
+              },
+            },
+          ],
+          edges: [],
+          mappings: [
+            { smVarId: 'x', blockId: '', portId: '', direction: 'in' },
+            { smVarId: 'x', blockId: '', portId: '', direction: 'out' },
+          ],
+        },
+      }],
+      layers: [{
+        id: 'root', parentStateId: null, stateIds: ['xb-state'],
+        transitionIds: [], junctionIds: [], decomposition: 'OR',
+      }],
+      junctions: [],
+      transitions: [],
+      variables: [{ id: 'x', name: 'x', type: 'number', initialValue: '0' }],
+    } as any);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.model.states[0].xBridgesModel?.mappings).toEqual([
+      { smVarId: 'x', blockId: 'input', portId: 'in', direction: 'in' },
+      { smVarId: 'x', blockId: 'output', portId: 'out', direction: 'out' },
+    ]);
+  });
 });

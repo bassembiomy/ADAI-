@@ -4,6 +4,7 @@ import {
   listXBBoundaryTargets,
   pruneXBBoundaryMappings,
   reconcileXBBoundaryMappings,
+  repairLegacyXBBoundaryMappings,
   syncXBBoundaryNodeMetadata,
 } from './xbBoundaryMappings';
 
@@ -170,5 +171,62 @@ describe('reconcileXBBoundaryMappings', () => {
 describe('pruneXBBoundaryMappings', () => {
   it('drops mappings whose boundary block was deleted', () => {
     expect(pruneXBBoundaryMappings(canonical, [nodes[0]])).toEqual([canonical[0]]);
+  });
+});
+
+describe('repairLegacyXBBoundaryMappings', () => {
+  const legacyModel = {
+    nodes,
+    edges: [],
+    mappings: [
+      { smVarId: 'x', blockId: '', portId: '', direction: 'in' as const },
+      { smVarId: 'x', blockId: '', portId: '', direction: 'out' as const },
+    ],
+  };
+
+  it('repairs blank legacy targets while preserving canonical mappings over stale node metadata', () => {
+    const repaired = repairLegacyXBBoundaryMappings({
+      ...legacyModel,
+      mappings: [
+        { smVarId: 'x', blockId: 'input', portId: 'in', direction: 'in' as const },
+        legacyModel.mappings[1],
+      ],
+    }, new Set(['x']));
+
+    expect(repaired.diagnostics).toEqual([]);
+    expect(repaired.model).toMatchObject({
+      mappings: [
+        { smVarId: 'x', blockId: 'input', portId: 'in', direction: 'in' },
+        { smVarId: 'x', blockId: 'output', portId: 'out', direction: 'out' },
+      ],
+    });
+  });
+
+  it('fails closed when multiple compatible input boundaries make a blank target ambiguous', () => {
+    const repaired = repairLegacyXBBoundaryMappings({
+      ...legacyModel,
+      nodes: [...nodes, { ...nodes[0], id: 'input-2' }],
+    }, new Set(['x']));
+
+    expect(repaired.model).toMatchObject({
+      mappings: [
+        legacyModel.mappings[0],
+        { smVarId: 'x', blockId: 'output', portId: 'out', direction: 'out' },
+      ],
+    });
+    expect(repaired.diagnostics).toContainEqual(expect.objectContaining({
+      message: 'Mapping at index 0 cannot infer an input boundary because 2 compatible Inport ports exist.',
+    }));
+  });
+
+  it('rejects a blank target that references an unknown state-machine variable', () => {
+    const repaired = repairLegacyXBBoundaryMappings(legacyModel, new Set());
+
+    expect(repaired.model).toMatchObject({
+      mappings: legacyModel.mappings,
+    });
+    expect(repaired.diagnostics).toContainEqual(expect.objectContaining({
+      message: "Mapping at index 0 references unknown state-machine variable 'x'.",
+    }));
   });
 });
