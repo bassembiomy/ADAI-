@@ -746,6 +746,7 @@ const emitConversion: OperationEmitter = (
     );
   }
   let input = signalRealExpression(state, inputSignalId, layout, member);
+  let reinterpretationSidecars: { validity: string; real: string } | null = null;
   if (conversion.mode === 'stored-integer-reinterpretation') {
     const storage = signalStorageExpression(
       state,
@@ -758,6 +759,11 @@ const emitConversion: OperationEmitter = (
         `X-Bridges conversion operation '${operation.id}' requires stored-integer input metadata`,
       );
     }
+    reinterpretationSidecars = fixedSignalSidecarExpressions(
+      storage.signal,
+      layout,
+      member,
+    );
     input = conversion.destinationType.kind === 'fixed'
       ? `ldexp((double)(${storage.expression}), ${-conversion.destinationType.fractionLength})`
       : `(double)(${storage.expression})`;
@@ -772,6 +778,22 @@ const emitConversion: OperationEmitter = (
     );
   }
   const call = renderConversionCall(operation).replace(/\bvalue\b/g, input);
+  const resultLines = reinterpretationSidecars === null
+    ? [`    const SM_XB_NumericResult_t ${resultName} = ${call};`]
+    : [
+        `    SM_XB_NumericResult_t ${resultName};`,
+        `    if (${reinterpretationSidecars.validity}) {`,
+        `        ${resultName} = ${call};`,
+        '    } else {',
+        `        ${resultName}.real_value = ${reinterpretationSidecars.real};`,
+        `        ${resultName}.stored_integer = INT64_C(0);`,
+        `        ${resultName}.quantization_error = 0.0;`,
+        `        ${resultName}.fault = isfinite(${reinterpretationSidecars.real})`,
+        '            ? SM_XB_FAULT_OVERFLOW',
+        '            : SM_XB_FAULT_NON_FINITE;',
+        `        ${resultName}.has_stored_integer = false;`,
+        '    }',
+      ];
   const dataWriteLines = dataSignal.numericType.kind === 'fixed'
     ? (() => {
         const sidecars = fixedSignalSidecarExpressions(
@@ -789,7 +811,7 @@ const emitConversion: OperationEmitter = (
         `    instance->${member}.${dataField} = (${numericCType(dataSignal.numericType)})${resultName}.${convertedStorageMember(dataSignal.numericType)};`,
       ];
   const linesOut: string[] = [
-    `    const SM_XB_NumericResult_t ${resultName} = ${call};`,
+    ...resultLines,
     ...dataWriteLines,
     `    instance->${member}.${errorField} = ${resultName}.fault != SM_XB_FAULT_NONE;`,
   ];
@@ -1240,15 +1262,15 @@ SM_XB_NumericResult_t SM_XB_ConvertFixed(
 SM_XB_NumericResult_t SM_XB_ConvertBoolean(double value)
 {
     SM_XB_NumericResult_t result = SM_XB_DefaultResult(value);
-    const bool converted = SM_XB_Truth(value);
-    result.stored_integer = converted ? INT64_C(1) : INT64_C(0);
-    result.real_value = (double)result.stored_integer;
-    result.has_stored_integer = true;
     if (!isfinite(value)) {
+        result.real_value = 0.0;
         result.fault = SM_XB_FAULT_NON_FINITE;
         return result;
     }
+    result.stored_integer = SM_XB_Truth(value) ? INT64_C(1) : INT64_C(0);
+    result.real_value = (double)result.stored_integer;
     result.quantization_error = fabs(value - result.real_value);
+    result.has_stored_integer = true;
     return result;
 }
 

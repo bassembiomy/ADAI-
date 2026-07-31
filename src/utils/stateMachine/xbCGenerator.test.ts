@@ -651,6 +651,170 @@ const truthSemanticModel = (): SemanticModel => {
   return ir;
 };
 
+const booleanConversionModel = (
+  type: 'DATA_TYPE_CONVERSION' | 'NUMERIC_REPRESENTATION',
+): SemanticModel => {
+  const ir = semanticModel();
+  const float64 = { kind: 'float64' } as const;
+  const booleanType = { kind: 'boolean' } as const;
+  const convert = scalarOperation(
+    'convert',
+    type,
+    ['convert:u'],
+    ['convert:y', 'convert:e'],
+    {},
+    {
+      destinationType: booleanType,
+      rounding: 'floor',
+      overflow: 'saturate',
+      mode: 'real-world-value',
+    },
+  );
+  ir.variables = {
+    u: { id: 'u', name: 'u', cName: 'u', type: 'double', initialValue: 0 },
+    y: { id: 'y', name: 'y', cName: 'y', type: 'bool', initialValue: false },
+    e: { id: 'e', name: 'e', cName: 'e', type: 'double', initialValue: 0 },
+  };
+  ir.states.controller.xBridges = {
+    stateId: 'controller',
+    executionOrder: ['convert'],
+    operations: { convert },
+    signals: {
+      'convert:u': {
+        ...signal('convert:u', float64),
+        direction: 'input',
+      },
+      'convert:y': signal('convert:y', booleanType),
+      'convert:e': signal('convert:e', float64),
+    },
+    mappings: [
+      {
+        variableId: 'u',
+        signalId: 'convert:u',
+        blockId: 'convert',
+        portId: 'u',
+        direction: 'in',
+        numericType: float64,
+      },
+      {
+        variableId: 'y',
+        signalId: 'convert:y',
+        blockId: 'convert',
+        portId: 'y',
+        direction: 'out',
+        numericType: booleanType,
+      },
+      {
+        variableId: 'e',
+        signalId: 'convert:e',
+        blockId: 'convert',
+        portId: 'e',
+        direction: 'out',
+        numericType: float64,
+      },
+    ],
+    solver: { kind: 'euler', substepsPerTick: 1 },
+    policy: { memory: 'reset', numericFault: 'signal-only' },
+  };
+  return ir;
+};
+
+const reinterpretationParityModel = (): SemanticModel => {
+  const ir = semanticModel();
+  const float64 = { kind: 'float64' } as const;
+  const fixedQ4 = {
+    kind: 'fixed',
+    signed: true,
+    wordLength: 8,
+    fractionLength: 4,
+  } as const;
+  const fixedQ2 = {
+    kind: 'fixed',
+    signed: true,
+    wordLength: 8,
+    fractionLength: 2,
+  } as const;
+  const quantize = scalarOperation(
+    'quantize',
+    'NUMERIC_REPRESENTATION',
+    ['quantize:u'],
+    ['quantize:y'],
+    {},
+    {
+      destinationType: fixedQ4,
+      rounding: 'floor',
+      overflow: 'saturate',
+      mode: 'real-world-value',
+    },
+  );
+  const reinterpret = scalarOperation(
+    'reinterpret',
+    'DATA_TYPE_CONVERSION',
+    ['reinterpret:u'],
+    ['reinterpret:y', 'reinterpret:e'],
+    {},
+    {
+      destinationType: fixedQ2,
+      rounding: 'floor',
+      overflow: 'saturate',
+      mode: 'stored-integer-reinterpretation',
+    },
+  );
+  ir.variables = {
+    u: { id: 'u', name: 'u', cName: 'u', type: 'double', initialValue: 0 },
+    y: { id: 'y', name: 'y', cName: 'y', type: 'double', initialValue: 0 },
+    e: { id: 'e', name: 'e', cName: 'e', type: 'double', initialValue: 0 },
+  };
+  ir.states.controller.xBridges = {
+    stateId: 'controller',
+    executionOrder: ['quantize', 'reinterpret'],
+    operations: { quantize, reinterpret },
+    signals: {
+      'quantize:u': {
+        ...signal('quantize:u', float64),
+        direction: 'input',
+      },
+      'quantize:y': signal('quantize:y', fixedQ4),
+      'reinterpret:u': scalarInputSignal(
+        'reinterpret:u',
+        'quantize:y',
+        fixedQ4,
+      ),
+      'reinterpret:y': signal('reinterpret:y', fixedQ2),
+      'reinterpret:e': signal('reinterpret:e', float64),
+    },
+    mappings: [
+      {
+        variableId: 'u',
+        signalId: 'quantize:u',
+        blockId: 'quantize',
+        portId: 'u',
+        direction: 'in',
+        numericType: float64,
+      },
+      {
+        variableId: 'y',
+        signalId: 'reinterpret:y',
+        blockId: 'reinterpret',
+        portId: 'y',
+        direction: 'out',
+        numericType: float64,
+      },
+      {
+        variableId: 'e',
+        signalId: 'reinterpret:e',
+        blockId: 'reinterpret',
+        portId: 'e',
+        direction: 'out',
+        numericType: float64,
+      },
+    ],
+    solver: { kind: 'euler', substepsPerTick: 1 },
+    policy: { memory: 'reset', numericFault: 'signal-only' },
+  };
+  return ir;
+};
+
 describe('X-Bridges C99 static storage', () => {
   it('renders exact scalar, vector, matrix, and explicit fault storage', () => {
     const header = renderXBHeader(semanticModel());
@@ -900,12 +1064,248 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
         encoding: 'utf8',
       }).trim().split(/\r?\n/)).toEqual([
         '0,0,1,1,1,0,0',
-        '1,1,0,0,0,1,1',
-        '1,1,0,0,0,1,1',
+        '1,1,0,0,0,1,0',
+        '1,1,0,0,0,1,0',
         '0,0,1,1,1,0,0',
         '0,0,1,1,1,0,0',
         '1,1,0,0,0,1,1',
       ]);
+    } finally {
+      workspace.cleanup();
+    }
+  });
+
+  it.each([
+    'DATA_TYPE_CONVERSION',
+    'NUMERIC_REPRESENTATION',
+  ] as const)('matches interpreter Boolean conversion semantics for %s', (type) => {
+    const ir = booleanConversionModel(type);
+    const workspace = createGeneratedCodeTestWorkspace(
+      `xb-boolean-${type.toLowerCase()}-c99`,
+    );
+    const inputs = [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      0,
+      -0,
+      2,
+    ];
+    const runtime = createXBRuntime(ir.states.controller.xBridges!);
+    const expected = inputs.map((u) => {
+      const data: Record<string, number | boolean> = { u, y: true, e: -1 };
+      const faults = stepXBState(runtime, data);
+      return { data, faults };
+    });
+
+    try {
+      for (const file of generateCArtifacts(ir, { includeTestShims: true }).files) {
+        writeFileSync(join(workspace.directory, file.name), file.content);
+      }
+      writeFileSync(
+        join(workspace.directory, 'harness.c'),
+        [
+          '#include "sm_core.h"',
+          '#include <math.h>',
+          '#include <stdio.h>',
+          '',
+          'static int run_case(ADIA_Instance_t *instance, double value)',
+          '{',
+          '    const SM_XB_NumericResult_t result =',
+          '        SM_XB_CONTROLLER_CONVERT_Convert(value);',
+          '    instance->data.u = value;',
+          '    if (SM_Step(instance, SM_TICK_MS) != SM_ERR_NONE) return 1;',
+          '    (void)printf("%u,%.17g,%u,%u,%u\\n",',
+          '        instance->data.y ? 1U : 0U,',
+          '        instance->data.e,',
+          '        instance->xb_controller.convert_error ? 1U : 0U,',
+          '        result.has_stored_integer ? 1U : 0U,',
+          '        (unsigned)result.fault);',
+          '    return 0;',
+          '}',
+          '',
+          'int main(void)',
+          '{',
+          '    ADIA_Instance_t instance;',
+          '    if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+          '    if (run_case(&instance, NAN) != 0) return 2;',
+          '    if (run_case(&instance, INFINITY) != 0) return 3;',
+          '    if (run_case(&instance, -INFINITY) != 0) return 4;',
+          '    if (run_case(&instance, 0.0) != 0) return 5;',
+          '    if (run_case(&instance, -0.0) != 0) return 6;',
+          '    if (run_case(&instance, 2.0) != 0) return 7;',
+          '    return 0;',
+          '}',
+          '',
+        ].join('\n'),
+      );
+      const executable = join(
+        workspace.directory,
+        `xb_boolean_${type.toLowerCase()}.exe`,
+      );
+      execFileSync('gcc', [
+        '-std=c99',
+        '-pedantic-errors',
+        '-Wall',
+        '-Wextra',
+        '-Werror',
+        '-I.',
+        'sm_core.c',
+        'sm_safety.c',
+        'sm_user_logic.c',
+        'sm_xbridges.c',
+        'mcal_dio_test_stubs.c',
+        'harness.c',
+        '-lm',
+        '-o',
+        executable,
+      ], { cwd: workspace.directory, stdio: 'pipe' });
+      const rows = execFileSync(executable, [], {
+        cwd: workspace.directory,
+        encoding: 'utf8',
+      }).trim().split(/\r?\n/).map((line) => line.split(',').map(Number));
+
+      expected.forEach(({ data, faults }, index) => {
+        const nonFinite = !Number.isFinite(inputs[index]);
+        expect(rows[index][0]).toBe(data.y ? 1 : 0);
+        expect(rows[index][1]).toBe(Number(data.e));
+        expect(rows[index][2]).toBe(nonFinite ? 1 : 0);
+        expect(rows[index][3]).toBe(nonFinite ? 0 : 1);
+        expect(rows[index][4] === 0).toBe(!nonFinite);
+        expect(faults.includes('non-finite')).toBe(nonFinite);
+      });
+    } finally {
+      workspace.cleanup();
+    }
+  });
+
+  it('rejects missing stored metadata like the interpreter and preserves finite raw bits', () => {
+    const ir = reinterpretationParityModel();
+    const workspace = createGeneratedCodeTestWorkspace(
+      'xb-reinterpret-validity-c99',
+    );
+    const inputs = [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      1.5,
+    ];
+    const interpreter = inputs.map((u) => {
+      const runtime = createXBRuntime(ir.states.controller.xBridges!);
+      const data: Record<string, number | boolean> = { u, y: 0, e: -1 };
+      try {
+        const faults = stepXBState(runtime, data);
+        return {
+          rejected: false,
+          data,
+          faults,
+          stored: runtime.storedIntegers['reinterpret:y'][0],
+        };
+      } catch (error) {
+        return {
+          rejected: true,
+          message: error instanceof Error ? error.message : String(error),
+          data,
+          faults: [] as string[],
+          stored: null,
+        };
+      }
+    });
+    const classify = (value: number): number => Number.isNaN(value)
+      ? 2
+      : value === Number.POSITIVE_INFINITY
+        ? 1
+        : value === Number.NEGATIVE_INFINITY
+          ? -1
+          : 0;
+
+    try {
+      for (const file of generateCArtifacts(ir, { includeTestShims: true }).files) {
+        writeFileSync(join(workspace.directory, file.name), file.content);
+      }
+      writeFileSync(
+        join(workspace.directory, 'harness.c'),
+        [
+          '#include "sm_core.h"',
+          '#include <math.h>',
+          '#include <stdio.h>',
+          '',
+          'static int classify(double value)',
+          '{',
+          '    if (isnan(value)) return 2;',
+          '    if (isinf(value)) return signbit(value) ? -1 : 1;',
+          '    return 0;',
+          '}',
+          '',
+          'static int run_case(ADIA_Instance_t *instance, double value)',
+          '{',
+          '    instance->data.u = value;',
+          '    if (SM_Step(instance, SM_TICK_MS) != SM_ERR_NONE) return 1;',
+          '    (void)printf("%d,%.17g,%.17g,%u,%u,%d\\n",',
+          '        classify(instance->data.y),',
+          '        instance->data.y,',
+          '        instance->data.e,',
+          '        instance->xb_controller.reinterpret_error ? 1U : 0U,',
+          '        instance->xb_controller.reinterpret_y_has_stored_integer',
+          '            ? 1U : 0U,',
+          '        (int)instance->xb_controller.reinterpret_y);',
+          '    return 0;',
+          '}',
+          '',
+          'int main(void)',
+          '{',
+          '    ADIA_Instance_t instance;',
+          '    if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+          '    if (run_case(&instance, NAN) != 0) return 2;',
+          '    if (run_case(&instance, INFINITY) != 0) return 3;',
+          '    if (run_case(&instance, -INFINITY) != 0) return 4;',
+          '    if (run_case(&instance, 1.5) != 0) return 5;',
+          '    return 0;',
+          '}',
+          '',
+        ].join('\n'),
+      );
+      const executable = join(workspace.directory, 'xb_reinterpret_validity.exe');
+      execFileSync('gcc', [
+        '-std=c99',
+        '-pedantic-errors',
+        '-Wall',
+        '-Wextra',
+        '-Werror',
+        '-I.',
+        'sm_core.c',
+        'sm_safety.c',
+        'sm_user_logic.c',
+        'sm_xbridges.c',
+        'mcal_dio_test_stubs.c',
+        'harness.c',
+        '-lm',
+        '-o',
+        executable,
+      ], { cwd: workspace.directory, stdio: 'pipe' });
+      const rows = execFileSync(executable, [], {
+        cwd: workspace.directory,
+        encoding: 'utf8',
+      }).trim().split(/\r?\n/).map((line) => line.split(','));
+
+      interpreter.forEach((result, index) => {
+        if (result.rejected) {
+          expect(result.message).toContain('requires stored-integer input metadata');
+          expect(Number(rows[index][0])).toBe(classify(inputs[index]));
+          expect(Number(rows[index][2])).toBe(0);
+          expect(Number(rows[index][3])).toBe(1);
+          expect(Number(rows[index][4])).toBe(0);
+        } else {
+          expect(result.faults).toEqual([]);
+          expect(Number(rows[index][0])).toBe(0);
+          expect(Number(rows[index][1])).toBe(Number(result.data.y));
+          expect(Number(rows[index][2])).toBe(Number(result.data.e));
+          expect(Number(rows[index][3])).toBe(0);
+          expect(Number(rows[index][4])).toBe(1);
+          expect(Number(rows[index][5])).toBe(result.stored);
+          expect(Number(rows[index][5])).toBe(24);
+        }
+      });
     } finally {
       workspace.cleanup();
     }
