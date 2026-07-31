@@ -41,7 +41,8 @@ export interface SemanticReport {
 export interface XBridgesReport {
   stateCount: number;
   blockCount: number;
-  staticMemoryBytes: number;
+  estimatedStaticMemoryLowerBoundBytes: number;
+  memoryEstimateAccuracy: 'lower-bound-excludes-padding';
   solvers: Array<{
     stateId: string;
     kind: 'euler' | 'rk4';
@@ -118,7 +119,8 @@ const buildXBridgesReport = (ir?: SemanticModel): XBridgesReport => {
   return {
     stateCount: states.length,
     blockCount,
-    staticMemoryBytes,
+    estimatedStaticMemoryLowerBoundBytes: staticMemoryBytes,
+    memoryEstimateAccuracy: 'lower-bound-excludes-padding',
     solvers: states.map((state) => ({
       stateId: state.id,
       kind: state.xBridges!.solver.kind,
@@ -179,6 +181,18 @@ const dynamicReachabilityLabel = (
       ? 'PASS'
       : 'NOT RUN';
 
+const compiledXBridgesEvidence = (
+  evidence: VerificationEvidence,
+): VerificationEvidenceStatus => {
+  const required = [
+    evidence.hostCompile,
+    evidence.hostRuntime,
+    evidence.differential,
+  ];
+  if (required.includes('fail')) return 'fail';
+  return required.every((status) => status === 'pass') ? 'pass' : 'not-run';
+};
+
 export const renderTestingReport = (
   analysis: SMAnalysisResult,
   evidence: VerificationEvidence = DEFAULT_VERIFICATION_EVIDENCE,
@@ -222,7 +236,7 @@ export const renderTestingReport = (
 - Host compilation: ${evidenceLabel(report.evidence.hostCompile)}
 - Host runtime: ${evidenceLabel(report.evidence.hostRuntime)}
 - Differential trace: ${evidenceLabel(report.evidence.differential)}
-- Compiled X-Bridges execution: ${evidenceLabel(report.evidence.differential)}
+- Compiled X-Bridges execution: ${evidenceLabel(compiledXBridgesEvidence(report.evidence))}
 - Embedded compilation: ${evidenceLabel(report.evidence.embeddedCompile)}
 - Target hardware: ${evidenceLabel(report.evidence.targetHardware)}
 - Formal MISRA compliance and safety certification: NOT CLAIMED
@@ -233,7 +247,7 @@ Evidence labels describe only the checks actually recorded for this generated pa
 
 - X-Bridges states: ${xb.stateCount}
 - X-Bridges blocks: ${xb.blockCount}
-- X-Bridges static memory bytes: ${xb.staticMemoryBytes}
+- Estimated X-Bridges static memory lower bound: ${xb.estimatedStaticMemoryLowerBoundBytes} bytes (${xb.memoryEstimateAccuracy}; excludes target ABI padding and linker allocation)
 - Solver: ${xb.solvers.length === 0 ? 'None' : xb.solvers.map((solver) => `${solver.stateId}: ${solver.kind}, ${solver.stepSeconds} s, ${solver.substepsPerTick} substeps/tick`).join('; ')}
 - Numeric types: ${idsOrNone(xb.numericTypes)}
 - Required target capabilities: ${idsOrNone(xb.capabilityDependencies)}
@@ -308,7 +322,7 @@ export const renderStaticMetricsReport = (
 
 - X-Bridges states: ${xb.stateCount}
 - X-Bridges blocks: ${xb.blockCount}
-- X-Bridges static memory bytes: ${xb.staticMemoryBytes}
+- Estimated X-Bridges static memory lower bound: ${xb.estimatedStaticMemoryLowerBoundBytes} bytes (${xb.memoryEstimateAccuracy}; excludes target ABI padding and linker allocation)
 - Solver: ${xb.solvers.length === 0 ? 'None' : xb.solvers.map((solver) => `${solver.stateId}: ${solver.kind}, ${solver.stepSeconds} s, ${solver.substepsPerTick} substeps/tick`).join('; ')}
 - Numeric types: ${idsOrNone(xb.numericTypes)}
 - Required target capabilities: ${idsOrNone(xb.capabilityDependencies)}

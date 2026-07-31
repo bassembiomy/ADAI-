@@ -2220,7 +2220,7 @@ const renderStateLifecycle = (
   const initLines: string[] = [
     `    (void)memset(&instance->${member}, 0, sizeof(instance->${member}));`,
   ];
-  for (const operationId of xb.executionOrder) {
+  for (const [operationIndex, operationId] of xb.executionOrder.entries()) {
     const operation = xb.operations[operationId];
     if (operation === undefined) {
       throw new Error(
@@ -2237,13 +2237,13 @@ const renderStateLifecycle = (
       if (slot.shape.kind === 'scalar') {
         initLines.push(...renderStateSlotAssignment(
           state, slot, cNumber(slot.initialValues[0]), layout, member,
-          `initial_${operation.id}_${slot.id}`,
+          `initial_${operationIndex}_${operation.id}_${slot.id}`,
         ));
       } else {
         slot.initialValues.forEach((value, index) => initLines.push(
           ...renderStateSlotElementAssignment(
             state, slot, `${index}U`, cNumber(value), layout, member,
-            `initial_${operation.id}_${slot.id}_${index}`,
+            `initial_${operationIndex}_${operation.id}_${slot.id}_${index}`,
           ),
         ));
       }

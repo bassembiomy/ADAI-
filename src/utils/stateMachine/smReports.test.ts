@@ -170,7 +170,9 @@ describe('semantic state-machine reports', () => {
       numericTypes: ['float32'],
       capabilityDependencies: ['math-library'],
     });
-    expect(report.xBridges.staticMemoryBytes).toBeGreaterThan(0);
+    expect(report.xBridges.estimatedStaticMemoryLowerBoundBytes).toBeGreaterThan(0);
+    expect(report.xBridges.memoryEstimateAccuracy)
+      .toBe('lower-bound-excludes-padding');
     expect(report.xBridges.unsupportedCapabilities).toContain(
       'LMS_ADAPTIVE_FILTER: Online learning is not in the embedded-safe set.',
     );
@@ -186,9 +188,25 @@ describe('semantic state-machine reports', () => {
     expect(testing).toContain('Compiled X-Bridges execution: NOT RUN');
 
     const metrics = renderStaticMetricsReport(analysis, [], built.ir);
-    expect(metrics).toContain('X-Bridges static memory bytes:');
+    expect(metrics).toContain('Estimated X-Bridges static memory lower bound:');
+    expect(metrics).toContain('excludes target ABI padding and linker allocation');
     expect(metrics).toContain('Solver: controller: rk4, 0.002 s, 5 substeps/tick');
     expect(metrics).toContain('Numeric types: float32');
     expect(metrics).toContain('Unsupported embedded capabilities:');
+  });
+
+  it('does not claim compiled X-Bridges execution from differential evidence alone', () => {
+    const evidence = {
+      ...DEFAULT_VERIFICATION_EVIDENCE,
+      differential: 'pass' as const,
+      hostCompile: 'not-run' as const,
+      hostRuntime: 'not-run' as const,
+    };
+
+    const rendered = renderTestingReport(analyzedUnreachableFixture(), evidence);
+
+    expect(rendered).toContain('Execution mode: STATIC_ANALYSIS_ONLY');
+    expect(rendered).toContain('Differential trace: PASS');
+    expect(rendered).toContain('Compiled X-Bridges execution: NOT RUN');
   });
 });

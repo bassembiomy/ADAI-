@@ -97,6 +97,14 @@ const orderedStates = (ir: SemanticModel): SemanticState[] =>
       left.activityIndex - right.activityIndex || left.id.localeCompare(right.id),
   );
 
+const compareCanonicalIds = (left: string, right: string): number =>
+  left < right ? -1 : left > right ? 1 : 0;
+
+const orderedXBTraceStates = (ir: SemanticModel): SemanticState[] =>
+  Object.values(ir.states)
+    .filter((state) => state.xBridges !== null)
+    .sort((left, right) => compareCanonicalIds(left.id, right.id));
+
 const orderedLayers = (ir: SemanticModel): SemanticLayer[] =>
   Object.values(ir.layers).sort((left, right) => {
     const leftSlot = left.activeSlot ?? Number.MAX_SAFE_INTEGER;
@@ -178,6 +186,7 @@ const xbTraceLayout = (state: SemanticState): XBTraceLayout => {
 
 const xbStateMembers = (ir: SemanticModel): Map<string, string> => {
   const names = new Set<string>();
+  // Member allocation must mirror xbCGenerator's activity-order ABI layout.
   return new Map(orderedStates(ir).filter((state) => state.xBridges !== null)
     .map((state) => {
       const preferred = `xb_${toCIdentifier(state.id).toLowerCase()}`;
@@ -527,7 +536,7 @@ const xbValuePrints = (
 ]);
 
 const renderXBridgesTrace = (ir: SemanticModel): string[] => {
-  const states = orderedStates(ir).filter((state) => state.xBridges !== null);
+  const states = orderedXBTraceStates(ir);
   const members = xbStateMembers(ir);
   let signalIndex = 0;
   let slotIndex = 0;
@@ -539,7 +548,7 @@ const renderXBridgesTrace = (ir: SemanticModel): string[] => {
     const member = members.get(state.id)!;
     const layout = xbTraceLayout(state);
     for (const signal of Object.values(xb.signals).sort((left, right) =>
-      left.id.localeCompare(right.id))) {
+      compareCanonicalIds(left.id, right.id))) {
       const expressions = signal.numericType.kind === 'fixed'
         ? xbFlatExpressions(
             member,
@@ -563,10 +572,11 @@ const renderXBridgesTrace = (ir: SemanticModel): string[] => {
         ...xbValuePrints(expressions, signal.numericType.kind === 'boolean'),
       );
     }
-    for (const operationId of xb.executionOrder) {
+    for (const operationId of [...xb.executionOrder]
+      .sort(compareCanonicalIds)) {
       const operation = xb.operations[operationId];
       for (const slot of [...(operation.state?.slots ?? [])].sort((left, right) =>
-        left.role.localeCompare(right.role))) {
+        compareCanonicalIds(left.role, right.role))) {
         let expressions = xbFlatExpressions(
           member,
           layout.slotFields.get(slot.id)!,
@@ -696,19 +706,26 @@ const renderFramePrinter = (ir: SemanticModel): string => {
       '    }',
     ];
   });
-  const faultPrints = orderedStates(ir).flatMap((state) => state.xBridges === null
-    ? []
-    : state.xBridges.executionOrder.flatMap((operationId, index) => {
-        const operation = state.xBridges!.operations[operationId];
-        if (operation === undefined || operation.outputSignalIds.length === 0) return [];
-        const member = `xb_${toCIdentifier(state.id).toLowerCase()}`;
-        const field = `${toCIdentifier(operation.id)}_error`;
-        return [
-          ...(index === 0 ? [] : ['    printf(";");']),
-          `    print_token(${cString(`${state.id}/${operation.id}`)});`,
-          `    printf(":b:%d", instance->${member}.${field} ? 1 : 0);`,
-        ];
-      }));
+  const xbMembers = xbStateMembers(ir);
+  const faultItems = orderedXBTraceStates(ir).flatMap((state) => {
+    const layout = xbTraceLayout(state);
+    return [...state.xBridges!.executionOrder]
+      .sort(compareCanonicalIds)
+      .flatMap((operationId) => {
+        const field = layout.errorFields.get(operationId);
+        return field === undefined ? [] : [{
+          stateId: state.id,
+          operationId,
+          member: xbMembers.get(state.id)!,
+          field,
+        }];
+      });
+  });
+  const faultPrints = faultItems.flatMap((item, index) => [
+    ...(index === 0 ? [] : ['    printf(";");']),
+    `    print_token(${cString(`${item.stateId}/${item.operationId}`)});`,
+    `    printf(":b:%d", instance->${item.member}.${item.field} ? 1 : 0);`,
+  ]);
   return [
     'static void print_frame(const ADIA_Instance_t *instance, unsigned sequence, unsigned elapsed_ms)',
     '{',
@@ -740,7 +757,7 @@ const renderFramePrinter = (ir: SemanticModel): string => {
   ].join('\n');
 };
 
-const renderHarness = (
+export const renderDifferentialHarness = (
   ir: SemanticModel,
   steps: readonly DifferentialScenarioStep[],
 ): string => {
@@ -751,6 +768,7 @@ const renderHarness = (
   );
   return [
     '#include "sm_core.h"',
+    '#include <locale.h>',
     '#include <math.h>',
     '#include <stdio.h>',
     '',
@@ -783,6 +801,7 @@ const renderHarness = (
     '    SM_Error_t step_error = SM_ERR_NONE;',
     '    (void)step_error;',
     '    (void)node_id;',
+    '    (void)setlocale(LC_NUMERIC, "C");',
     '    action_count = 0U;',
     '    action_overflow = false;',
     '    (void)SM_Init(&instance);',
@@ -965,7 +984,7 @@ export const compileAndRunCTrace = (
     }
     const output = compileAndRunCProgram({
       directory: workspace.directory,
-      harnessSource: renderHarness(ir, fixture.steps),
+      harnessSource: renderDifferentialHarness(ir, fixture.steps),
       defines: ['SM_TRACE_ENABLED'],
     });
     if (output === null) throw new Error('host gcc is required');

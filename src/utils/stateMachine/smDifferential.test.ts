@@ -18,6 +18,7 @@ import {
 } from './smFixtures';
 import {
   compileAndRunCTrace,
+  renderDifferentialHarness,
   runInterpreterTrace,
 } from './smCHarness';
 import {
@@ -133,6 +134,15 @@ describe('generated trace instrumentation contract', () => {
     expect(renderCoreSource(quotedBuild.ir)).toContain(
       'SM_TraceAction(instance, "transition:quoted\\"id");',
     );
+  });
+
+  it('forces the C numeric locale before emitting trace numbers', () => {
+    const harness = renderDifferentialHarness(ir, []);
+
+    expect(harness).toContain('#include <locale.h>');
+    expect(harness).toContain('(void)setlocale(LC_NUMERIC, "C");');
+    expect(harness.indexOf('(void)setlocale(LC_NUMERIC, "C");'))
+      .toBeLessThan(harness.indexOf('(void)SM_Init(&instance);'));
   });
 });
 
@@ -359,6 +369,100 @@ const statefulOverflowFixture = (
   return model;
 };
 
+const traceConstant = (
+  id: string,
+  value: number | number[],
+  shape: 'scalar' | 'vector' | 'matrix',
+  dimensions: readonly number[],
+) => ({
+  id,
+  type: 'Constant',
+  parameters: {
+    value,
+    inputs: [],
+    outputs: [xbPort('y', 'output', shape, dimensions, 'float32')],
+  },
+});
+
+const shapedTraceFixture = (): StateMachineModelV4 => {
+  const model = hybridXBridgesFixture();
+  model.states[0].autostart = false;
+  const controller = model.states.find((state) => state.id === 'controller')!;
+  controller.autostart = true;
+  controller.xBridgesModel = {
+    schemaVersion: 1,
+    nodes: [
+      traceConstant('vector', [1.25, -2.5], 'vector', [2]),
+      traceConstant('matrix', [1, 2, 3, 4], 'matrix', [2, 2]),
+    ],
+    edges: [], mappings: [],
+    solver: { kind: 'euler', stepSeconds: 0.002 },
+    policy: { memory: 'reset', numericFault: 'signal-only' },
+  };
+  return model;
+};
+
+const collisionAndOrderingFixture = (): StateMachineModelV4 => {
+  const model = hybridXBridgesFixture();
+  const template = model.states.find((state) => state.id === 'controller')!;
+  const makeState = (id: string, nodes: any[], edges: any[]) => ({
+    ...template,
+    id,
+    name: id,
+    autostart: false,
+    xBridgesModel: {
+      schemaVersion: 1 as const,
+      nodes,
+      edges,
+      mappings: [],
+      solver: { kind: 'euler' as const, stepSeconds: 0.002 },
+      policy: { memory: 'reset' as const, numericFault: 'signal-only' as const },
+    },
+  });
+  const scalar = (id: string, direction: 'input' | 'output') =>
+    xbPort(id, direction, 'scalar', [], 'float32');
+  const source = traceConstant('z_source', 3, 'scalar', []);
+  const zDelay = {
+    id: 'z-delay', type: 'UNIT_DELAY', parameters: {
+      initialValue: 1,
+      inputs: [scalar('u', 'input')], outputs: [scalar('y', 'output')],
+    },
+  };
+  const aDelay = {
+    id: 'a_delay', type: 'UNIT_DELAY', parameters: {
+      initialValue: 2,
+      inputs: [scalar('u', 'input')], outputs: [scalar('y', 'output')],
+    },
+  };
+  const first = makeState('z-controller', [source, zDelay, aDelay], [
+    { id: 'source-z', sourceNodeId: 'z_source', sourcePortId: 'y', targetNodeId: 'z-delay', targetPortId: 'u' },
+    { id: 'z-a', sourceNodeId: 'z-delay', sourcePortId: 'y', targetNodeId: 'a_delay', targetPortId: 'u' },
+  ]);
+  const collisionDelay = {
+    id: 'z_delay', type: 'UNIT_DELAY', parameters: {
+      initialValue: 4,
+      inputs: [scalar('u', 'input')], outputs: [scalar('y', 'output')],
+    },
+  };
+  first.xBridgesModel!.nodes = [source, zDelay, collisionDelay, aDelay];
+  first.xBridgesModel!.edges = [
+    { id: 'source-z', sourceNodeId: 'z_source', sourcePortId: 'y', targetNodeId: 'z-delay', targetPortId: 'u' },
+    { id: 'z-collision', sourceNodeId: 'z-delay', sourcePortId: 'y', targetNodeId: 'z_delay', targetPortId: 'u' },
+    { id: 'collision-a', sourceNodeId: 'z_delay', sourcePortId: 'y', targetNodeId: 'a_delay', targetPortId: 'u' },
+  ];
+  first.priority = 1;
+  const second = makeState('a-controller', [
+    traceConstant('only-source', 9, 'scalar', []),
+  ], []);
+  second.priority = 2;
+  model.states = [first, second];
+  model.layers[0].decomposition = 'AND';
+  model.layers[0].stateIds = ['z-controller', 'a-controller'];
+  model.layers[0].transitionIds = [];
+  model.transitions = [];
+  return model;
+};
+
 describe('X-Bridges numeric fault recovery and escalation', () => {
   it.each([
     'division-by-zero',
@@ -435,6 +539,45 @@ describe('X-Bridges numeric fault recovery and escalation', () => {
 });
 
 describe('TypeScript-versus-generated-C differential gate', () => {
+  it('round-trips vector and matrix trace values through compiled C', () => {
+    const fixture = {
+      name: 'flat-priority' as const,
+      model: shapedTraceFixture(),
+      steps: [{ kind: 'step' as const }],
+    };
+    const expected = runInterpreterTrace(fixture);
+    const actual = compileAndRunCTrace(fixture);
+
+    expect(actual.at(-1)?.xBridges.controller.signals).toMatchObject({
+      'matrix:y': [[1, 2], [3, 4]],
+      'vector:y': [1.25, -2.5],
+    });
+    expect(compareSemanticTraces(expected, actual)).toBeNull();
+  }, 60_000);
+
+  it('uses collision-safe C fields and lexicographic canonical ordering', () => {
+    const fixture = {
+      name: 'parallel-independent' as const,
+      model: collisionAndOrderingFixture(),
+      steps: [{ kind: 'step' as const }],
+    };
+    const expected = runInterpreterTrace(fixture);
+    const actual = compileAndRunCTrace(fixture);
+    const frame = actual.at(-1)!;
+
+    expect(Object.keys(frame.xBridges)).toEqual(['a-controller', 'z-controller']);
+    expect(Object.keys(frame.xBridges['z-controller'].signals)).toEqual(
+      [...Object.keys(frame.xBridges['z-controller'].signals)].sort(),
+    );
+    expect(Object.keys(frame.xBridges['z-controller'].blockState)).toEqual([
+      'a_delay', 'z-delay', 'z_delay',
+    ]);
+    expect(frame.xBridgesFaults).toHaveProperty('z-controller/z-delay');
+    expect(frame.xBridgesFaults).toHaveProperty('z-controller/z_delay');
+    expect(frame.xBridgesFaults).toHaveProperty('a-controller/only-source');
+    expect(compareSemanticTraces(expected, actual)).toBeNull();
+  }, 60_000);
+
   it('captures deterministic X-Bridges values and state in both traces', () => {
     const model = statefulOverflowFixture('signal-only');
     const fixture = {

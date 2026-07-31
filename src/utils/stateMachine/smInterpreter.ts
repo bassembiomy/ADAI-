@@ -815,6 +815,9 @@ const incrementActiveTimers = (
 const errorText = (error: SemanticRuntimeError | null): string | null =>
   error === null ? null : `${error.code}: ${error.message}`;
 
+const compareTraceIds = (left: string, right: string): number =>
+  left < right ? -1 : left > right ? 1 : 0;
+
 const shapedTraceValue = (
   values: readonly (number | boolean)[],
   shape: { kind: 'scalar' } | { kind: 'vector'; length: number }
@@ -855,12 +858,12 @@ const createTraceFrame = (
   }
   const xBridges = Object.fromEntries(
     Object.keys(runtime.xBridgesByStateId)
-      .sort((left, right) => left.localeCompare(right))
+      .sort(compareTraceIds)
       .map((stateId) => {
         const xbRuntime = runtime.xBridgesByStateId[stateId];
         const signals = Object.fromEntries(
           Object.keys(xbRuntime.ir.signals)
-            .sort((left, right) => left.localeCompare(right))
+            .sort(compareTraceIds)
             .map((signalId) => [
               signalId,
               shapedTraceValue(
@@ -870,13 +873,15 @@ const createTraceFrame = (
             ]),
         );
         const blockState: Record<string, Record<string, XBridgesTraceValue>> = {};
-        for (const operationId of xbRuntime.ir.executionOrder) {
+        const operationIds = [...xbRuntime.ir.executionOrder]
+          .sort(compareTraceIds);
+        for (const operationId of operationIds) {
           const operation = xbRuntime.ir.operations[operationId];
           const slots = operation.state?.slots ?? [];
           if (slots.length === 0) continue;
           blockState[operationId] = Object.fromEntries(
             [...slots]
-              .sort((left, right) => left.role.localeCompare(right.role))
+              .sort((left, right) => compareTraceIds(left.role, right.role))
               .map((slot) => [
                 slot.role,
                 shapedTraceValue(xbRuntime.stateSlots[slot.id], slot.shape),
@@ -886,7 +891,7 @@ const createTraceFrame = (
         return [stateId, {
           signals,
           blockState,
-          faults: xbRuntime.ir.executionOrder.filter((operationId) =>
+          faults: operationIds.filter((operationId) =>
             xbRuntime.operationFaults[operationId]?.active === true),
         }];
       }),
