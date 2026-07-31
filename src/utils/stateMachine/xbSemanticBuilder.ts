@@ -914,6 +914,13 @@ export const buildXBSemanticModel = (
         ? stateBoundaryForNode(node, outputSignalIds, signals, diagnostics)
         : null,
       schedule: scheduleForNode(node, solverStep!, stateful, diagnostics),
+      numericFault: {
+        fallback: stateful ? 'previous-value' : 'zero',
+        errorSignalId: outputSignalIds.find((signalId) => {
+          const portId = signals[signalId]?.portId;
+          return portId === 'error' || portId === 'e';
+        }) ?? null,
+      },
     };
   }
 

@@ -20,6 +20,12 @@ import {
   compileAndRunCTrace,
   runInterpreterTrace,
 } from './smCHarness';
+import {
+  createRuntime,
+  initializeRuntime,
+  stepRuntime,
+} from './smInterpreter';
+import type { StateMachineModelV4 } from './smModel';
 
 const frame = (
   sequence: number,
@@ -124,6 +130,285 @@ const fixtureMatrix: readonly DifferentialFixtureName[] = [
   'reset',
   'safe-output-fault',
 ];
+
+type NumericFaultCase =
+  | 'division-by-zero'
+  | 'fixed-overflow'
+  | 'non-finite-float'
+  | 'solve-pivot-failure';
+
+const xbPort = (
+  id: string,
+  direction: 'input' | 'output',
+  shape: 'scalar' | 'vector' | 'matrix',
+  dimensions: readonly number[],
+  dataType: string,
+) => ({ id, direction, shape, dimensions, dataType });
+
+const numericFaultFixture = (
+  faultCase: NumericFaultCase,
+  numericFault: 'signal-only' | 'escalate',
+): StateMachineModelV4 => {
+  const model = hybridXBridgesFixture();
+  const ordinary = model.states.find((state) => state.id === 'ordinary')!;
+  const controller = model.states.find((state) => state.id === 'controller')!;
+  ordinary.autostart = false;
+  controller.autostart = true;
+  model.safetyMode = true;
+  model.variables.push({
+    id: 'output_enable', name: 'output_enable', type: 'bool',
+    initialValue: 'true', currentValue: true, visibleInScope: true,
+  });
+  model.hilConfig = {
+    enabled: true, target: 'Generic', clockSpeed: 1, commPort: '', baudRate: 115200,
+    channels: [{
+      id: 'motor', name: 'Motor', peripheral: 'GPIO', pin: '0',
+      direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1,
+      scalingFactor: 1, unit: '',
+    }],
+    mappings: [{
+      id: 'write_motor', adiaVarId: 'output_enable', channelId: 'motor',
+      direction: 'write', safeValue: false,
+    }],
+  };
+  const scalar64 = (id: string, direction: 'input' | 'output') =>
+    xbPort(id, direction, 'scalar', [], 'float32');
+  const vector64 = (id: string, direction: 'input' | 'output') =>
+    xbPort(id, direction, 'vector', [1], 'float32');
+  const matrix64 = (id: string, direction: 'input' | 'output', rows: number, columns: number) =>
+    xbPort(id, direction, 'matrix', [rows, columns], 'float32');
+  const constant = (id: string, value: number | number[], output: ReturnType<typeof scalar64>) => ({
+    id, type: 'Constant', parameters: { value, inputs: [], outputs: [output] },
+  });
+  const terminator = (input: ReturnType<typeof scalar64>) => ({
+    id: 'sink', type: 'TERMINATOR', parameters: { inputs: [input], outputs: [] },
+  });
+  let nodes: any[];
+  let edges: any[];
+  let operationId: string;
+  switch (faultCase) {
+    case 'division-by-zero':
+      operationId = 'divide';
+      nodes = [
+        constant('numerator', [1], vector64('out', 'output')),
+        constant('denominator', [0], vector64('out', 'output')),
+        {
+          id: operationId, type: 'VectorDiv', parameters: {
+            inputs: [vector64('a', 'input'), vector64('b', 'input')],
+            outputs: [vector64('y', 'output')],
+          },
+        },
+        terminator(vector64('u', 'input')),
+      ];
+      edges = [
+        { id: 'numerator_to_divide', sourceNodeId: 'numerator', sourcePortId: 'out', targetNodeId: operationId, targetPortId: 'a' },
+        { id: 'denominator_to_divide', sourceNodeId: 'denominator', sourcePortId: 'out', targetNodeId: operationId, targetPortId: 'b' },
+        { id: 'divide_to_sink', sourceNodeId: operationId, sourcePortId: 'y', targetNodeId: 'sink', targetPortId: 'u' },
+      ];
+      break;
+    case 'fixed-overflow':
+      operationId = 'convert';
+      nodes = [
+        constant('source', 128, scalar64('out', 'output')),
+        {
+          id: operationId, type: 'DATA_TYPE_CONVERSION', parameters: {
+            output_type: 'int8', rounding: 'zero', overflow: 'error',
+            inputs: [scalar64('u', 'input')],
+            outputs: [xbPort('y', 'output', 'scalar', [], 'int8')],
+          },
+        },
+        terminator(xbPort('u', 'input', 'scalar', [], 'int8')),
+      ];
+      edges = [
+        { id: 'source_to_convert', sourceNodeId: 'source', sourcePortId: 'out', targetNodeId: operationId, targetPortId: 'u' },
+        { id: 'convert_to_sink', sourceNodeId: operationId, sourcePortId: 'y', targetNodeId: 'sink', targetPortId: 'u' },
+      ];
+      break;
+    case 'non-finite-float':
+      operationId = 'gain';
+      nodes = [
+        constant('source', 1e20, scalar64('out', 'output')),
+        {
+          id: operationId, type: 'GAIN', parameters: {
+            gain: 1e20,
+            inputs: [scalar64('u', 'input')],
+            outputs: [xbPort('y', 'output', 'scalar', [], 'float32')],
+          },
+        },
+        terminator(scalar64('u', 'input')),
+      ];
+      edges = [
+        { id: 'source_to_gain', sourceNodeId: 'source', sourcePortId: 'out', targetNodeId: operationId, targetPortId: 'u' },
+        { id: 'gain_to_sink', sourceNodeId: operationId, sourcePortId: 'y', targetNodeId: 'sink', targetPortId: 'u' },
+      ];
+      break;
+    case 'solve-pivot-failure':
+      operationId = 'solve';
+      nodes = [
+        constant('matrix', [1, 2, 2, 4], matrix64('out', 'output', 2, 2)),
+        constant('right', [3, 6], matrix64('out', 'output', 2, 1)),
+        {
+          id: operationId, type: 'MatrixSolve', parameters: {
+            maxDimension: 4,
+            inputs: [matrix64('a', 'input', 2, 2), matrix64('b', 'input', 2, 1)],
+            outputs: [matrix64('y', 'output', 2, 1)],
+          },
+        },
+        terminator(matrix64('u', 'input', 2, 1)),
+      ];
+      edges = [
+        { id: 'matrix_to_solve', sourceNodeId: 'matrix', sourcePortId: 'out', targetNodeId: operationId, targetPortId: 'a' },
+        { id: 'right_to_solve', sourceNodeId: 'right', sourcePortId: 'out', targetNodeId: operationId, targetPortId: 'b' },
+        { id: 'solve_to_sink', sourceNodeId: operationId, sourcePortId: 'y', targetNodeId: 'sink', targetPortId: 'u' },
+      ];
+      break;
+  }
+  controller.xBridgesModel = {
+    schemaVersion: 1, nodes, edges, mappings: [],
+    solver: { kind: 'euler', stepSeconds: 0.002 },
+    policy: { memory: 'reset', numericFault },
+  };
+  return model;
+};
+
+const runNumericFault = (
+  faultCase: NumericFaultCase,
+  policy: 'signal-only' | 'escalate',
+) => {
+  const model = numericFaultFixture(faultCase, policy);
+  const built = buildSemanticModel(model);
+  if (built.ir === undefined) throw new Error(`numeric fixture failed to build: ${built.diagnostics.map((diagnostic) => `${diagnostic.code}:${diagnostic.message}`).join(', ')}`);
+  const runtime = createRuntime(built.ir);
+  initializeRuntime(runtime);
+  stepRuntime(runtime, built.ir.tickMs);
+  const frame = runInterpreterTrace({
+    name: 'flat-priority', model, steps: [{ kind: 'step' }],
+  }).at(-1)!;
+  const xBridges = runtime.xBridgesByStateId.controller as typeof runtime.xBridgesByStateId.controller & {
+    operationFaults?: Record<string, { active: boolean }>;
+  };
+  const operationId = {
+    'division-by-zero': 'divide',
+    'fixed-overflow': 'convert',
+    'non-finite-float': 'gain',
+    'solve-pivot-failure': 'solve',
+  }[faultCase];
+  return {
+    frame,
+    runtime,
+    errorOutput: xBridges.operationFaults?.[operationId]?.active ?? false,
+  };
+};
+
+const statefulOverflowFixture = (
+  numericFault: 'signal-only' | 'escalate',
+): StateMachineModelV4 => {
+  const model = hybridXBridgesFixture();
+  const ordinary = model.states.find((state) => state.id === 'ordinary')!;
+  const controller = model.states.find((state) => state.id === 'controller')!;
+  ordinary.autostart = false;
+  controller.autostart = true;
+  model.variables.push({
+    id: 'delay_y', name: 'delay_y', type: 'int', initialValue: '7',
+    currentValue: 7, visibleInScope: true,
+  });
+  controller.xBridgesModel = {
+    schemaVersion: 1,
+    nodes: [
+      { id: 'source', type: 'Constant', parameters: {
+        value: 128, inputs: [], outputs: [xbPort('out', 'output', 'scalar', [], 'float32')],
+      } },
+      { id: 'delay', type: 'UNIT_DELAY', parameters: {
+        initialValue: 7, overflow: 'error',
+        inputs: [xbPort('u', 'input', 'scalar', [], 'float32')],
+        outputs: [xbPort('y', 'output', 'scalar', [], 'int8')],
+      } },
+    ],
+    edges: [{
+      id: 'source-to-delay', sourceNodeId: 'source', sourcePortId: 'out',
+      targetNodeId: 'delay', targetPortId: 'u',
+    }],
+    mappings: [{ smVarId: 'delay_y', blockId: 'delay', portId: 'y', direction: 'out' }],
+    solver: { kind: 'euler', stepSeconds: 0.002 },
+    policy: { memory: 'reset', numericFault },
+  };
+  return model;
+};
+
+describe('X-Bridges numeric fault recovery and escalation', () => {
+  it.each([
+    'division-by-zero',
+    'fixed-overflow',
+    'non-finite-float',
+    'solve-pivot-failure',
+  ] as const)('%s signals a recoverable numeric fault without a runtime error', (faultCase) => {
+    const signalOnly = runNumericFault(faultCase, 'signal-only');
+
+    expect(signalOnly.errorOutput).toBe(true);
+    expect(signalOnly.runtime.error).toBeNull();
+    expect(signalOnly.frame.error).toBeNull();
+  });
+
+  it.each([
+    'division-by-zero',
+    'fixed-overflow',
+    'non-finite-float',
+    'solve-pivot-failure',
+  ] as const)('%s latches XBRIDGES_NUMERIC and follows the safety output path', (faultCase) => {
+    const escalated = runNumericFault(faultCase, 'escalate');
+
+    expect(escalated.errorOutput).toBe(true);
+    expect(escalated.runtime.error?.code).toBe('XBRIDGES_NUMERIC');
+    expect(escalated.frame.ioEffects).toEqual({
+      safeOutputsApplied: 1,
+      watchdogKicks: 0,
+    });
+  });
+
+  it.each([
+    'division-by-zero',
+    'fixed-overflow',
+    'non-finite-float',
+    'solve-pivot-failure',
+  ] as const)('%s preserves the numeric-fault contract in generated C for both policies', (faultCase) => {
+    for (const policy of ['signal-only', 'escalate'] as const) {
+      const fixture = {
+        name: 'flat-priority' as const,
+        model: numericFaultFixture(faultCase, policy),
+        steps: [{ kind: 'step' as const }],
+      };
+      const expected = runInterpreterTrace(fixture);
+      const actual = compileAndRunCTrace(fixture);
+
+      const operationId = {
+        'division-by-zero': 'divide',
+        'fixed-overflow': 'convert',
+        'non-finite-float': 'gain',
+        'solve-pivot-failure': 'solve',
+      }[faultCase];
+      expect(actual.at(-1)?.xBridgesFaults[`controller/${operationId}`]).toBe(true);
+      expect(compareSemanticTraces(expected, actual), policy).toBeNull();
+    }
+  }, 60_000);
+
+  it.each(['signal-only', 'escalate'] as const)(
+    'retains the previous fixed UNIT_DELAY state transactionally on %s overflow in TypeScript and C',
+    (policy) => {
+      const fixture = {
+        name: 'flat-priority' as const,
+        model: statefulOverflowFixture(policy),
+        steps: [{ kind: 'step' as const }],
+      };
+      const expected = runInterpreterTrace(fixture);
+      const actual = compileAndRunCTrace(fixture);
+
+      expect(expected.at(-1)?.data.delay_y).toBe(7);
+      expect(actual.at(-1)?.xBridgesFaults['controller/delay']).toBe(true);
+      expect(compareSemanticTraces(expected, actual)).toBeNull();
+    },
+    60_000,
+  );
+});
 
 describe('TypeScript-versus-generated-C differential gate', () => {
   it.each(fixtureMatrix)(

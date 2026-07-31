@@ -21,7 +21,8 @@ export interface SemanticRuntimeError {
   code:
     | 'INVALID_ELAPSED_MS'
     | 'RUNTIME_EVALUATION_ERROR'
-    | 'SAFETY_VIOLATION';
+    | 'SAFETY_VIOLATION'
+    | 'XBRIDGES_NUMERIC';
   message: string;
 }
 
@@ -719,6 +720,7 @@ const executeState = (
   stateId: string,
 ): boolean => {
   const state = context.runtime.ir.states[stateId];
+  if (context.runtime.error !== null) return false;
   if (state.terminal) return false;
 
   const outer = selectTransitionPath(context, stateId, 'outer');
@@ -740,9 +742,11 @@ const executeState = (
       faults.length > 0
       && xBridges.ir.policy.numericFault === 'escalate'
     ) {
-      throw new Error(
-        `X-Bridges state '${state.id}' numeric fault: ${faults.join(', ')}`,
-      );
+      context.runtime.error = {
+        code: 'XBRIDGES_NUMERIC',
+        message: 'X-Bridges numeric fault',
+      };
+      return false;
     }
     context.actions.push(xBridgesTraceAction(stateActionLabel(state)));
   }
@@ -866,6 +870,17 @@ const latchEvaluationError = (
   };
 };
 
+const enterFaultConfiguration = (context: StepContext): void => {
+  exitLayerConfiguration(context, context.runtime.ir.rootLayerId);
+  const safeStateId = context.runtime.ir.safeStateId;
+  if (context.runtime.ir.safetyMode && safeStateId !== null) {
+    enterStatePath(context, [
+      ...[...context.runtime.ir.states[safeStateId].ancestorStateIds].reverse(),
+      safeStateId,
+    ]);
+  }
+};
+
 export const createRuntime = (ir: SemanticModel): SemanticRuntime => {
   const stateCount = orderedStates(ir).reduce(
     (count, state) => Math.max(count, state.activityIndex + 1),
@@ -929,6 +944,9 @@ export const stepRuntime = (
   try {
     incrementActiveTimers(runtime, elapsedMs);
     executeLayer(context, runtime.ir.rootLayerId);
+    if ((runtime.error as SemanticRuntimeError | null)?.code === 'XBRIDGES_NUMERIC') {
+      enterFaultConfiguration(context);
+    }
   } catch (error) {
     latchEvaluationError(runtime, error);
   }
@@ -972,14 +990,7 @@ export const faultRuntime = (
 ): SemanticTraceFrame => {
   const context: StepContext = { runtime, actions: [] };
   try {
-    exitLayerConfiguration(context, runtime.ir.rootLayerId);
-    const safeStateId = runtime.ir.safeStateId;
-    if (runtime.ir.safetyMode && safeStateId !== null) {
-      enterStatePath(context, [
-        ...[...runtime.ir.states[safeStateId].ancestorStateIds].reverse(),
-        safeStateId,
-      ]);
-    }
+    enterFaultConfiguration(context);
   } catch (error) {
     latchEvaluationError(runtime, error);
     return createTraceFrame(context, 0);

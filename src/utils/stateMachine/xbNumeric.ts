@@ -38,7 +38,12 @@ export interface XBConversionPolicy {
   readonly supportsFloat64?: boolean;
 }
 
-export type XBNumericFault = 'overflow' | 'non-finite' | 'unsupported-float';
+export type XBNumericFault =
+  | 'overflow'
+  | 'non-finite'
+  | 'unsupported-float'
+  | 'division-by-zero'
+  | 'solve-pivot-failure';
 
 export interface XBConversionResult {
   readonly value: number | boolean;

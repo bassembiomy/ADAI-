@@ -60,6 +60,13 @@ export interface XBSemanticStateBoundary {
   readonly slots: readonly XBSemanticStateSlot[];
 }
 
+/** Recoverable numeric-fault behavior resolved at the semantic boundary. */
+export interface XBNumericFaultContract {
+  readonly fallback: 'zero' | 'previous-value';
+  /** Existing model-owned error/e output when the block declares one. */
+  readonly errorSignalId: string | null;
+}
+
 /** A generic operation description interpreted or rendered by later stages. */
 export interface XBSemanticOperation {
   readonly id: string;
@@ -72,6 +79,8 @@ export interface XBSemanticOperation {
   readonly conversion: XBSemanticConversion | null;
   readonly state: XBSemanticStateBoundary | null;
   readonly schedule: XBSemanticSchedule;
+  /** Present on every builder-produced operation; optional for legacy IR fixtures. */
+  readonly numericFault?: XBNumericFaultContract;
 }
 
 export interface XBSemanticMapping {

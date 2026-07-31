@@ -17,6 +17,8 @@ export interface XBRuntime {
   storedIntegers: Record<string, Array<number | null>>;
   stateSlots: Record<string, XBScalar[]>;
   scheduleCounters: Record<string, number>;
+  operationFaults: Record<string, { active: boolean; fault: XBNumericFault | null }>;
+  numericFaults: Array<{ operationId: string; fault: XBNumericFault }>;
 }
 
 const defaultValue = (type: XBNumericType): XBScalar =>
@@ -60,9 +62,11 @@ const convertScalar = (
   operation: XBSemanticOperation | null = null,
 ): XBConversionResult => {
   const conversion = operation?.conversion;
+  const configuredOverflow = operation?.parameters.overflow;
   const result = xbConvertScalar(Number(value), type, {
     rounding: conversion?.rounding ?? 'floor',
-    overflow: conversion?.overflow ?? 'saturate',
+    overflow: conversion?.overflow
+      ?? (configuredOverflow === 'error' ? 'error' : 'saturate'),
     supportsFloat16: true,
     supportsFloat64: true,
   });
@@ -111,6 +115,10 @@ const resetStorage = (runtime: XBRuntime): void => {
   }
   runtime.stateSlots = stateSlots;
   runtime.scheduleCounters = scheduleCounters;
+  runtime.operationFaults = Object.fromEntries(runtime.ir.executionOrder.map((id) => [
+    id, { active: false, fault: null },
+  ]));
+  runtime.numericFaults = [];
 };
 
 export const createXBRuntime = (ir: XBSemanticModel): XBRuntime => {
@@ -120,6 +128,8 @@ export const createXBRuntime = (ir: XBSemanticModel): XBRuntime => {
     storedIntegers: {},
     stateSlots: {},
     scheduleCounters: {},
+    operationFaults: {},
+    numericFaults: [],
   };
   resetStorage(runtime);
   return runtime;
@@ -199,6 +209,80 @@ const writeSignal = (
   runtime.signals[signalId] = results.map((result) => result.value);
   runtime.storedIntegers[signalId] = results.map((result) =>
     result.storedInteger);
+};
+
+const recordOperationFault = (
+  runtime: XBRuntime,
+  operation: XBSemanticOperation,
+  fault: XBNumericFault,
+): void => {
+  const current = runtime.operationFaults[operation.id];
+  if (current?.active) return;
+  runtime.operationFaults[operation.id] = { active: true, fault };
+  runtime.numericFaults.push({ operationId: operation.id, fault });
+  const contract = operation.numericFault ?? {
+    fallback: operation.stateful ? 'previous-value' as const : 'zero' as const,
+    errorSignalId: operation.outputSignalIds.find((signalId) => {
+      const portId = runtime.ir.signals[signalId]?.portId;
+      return portId === 'error' || portId === 'e';
+    }) ?? null,
+  };
+  for (const signalId of operation.outputSignalIds) {
+    const signal = runtime.ir.signals[signalId];
+    if (signal === undefined) continue;
+    if (signalId === contract.errorSignalId) {
+      runtime.signals[signalId] = Array.from({ length: signal.elementCount }, () => true);
+      runtime.storedIntegers[signalId] = Array.from({ length: signal.elementCount }, () => 1);
+      continue;
+    }
+    if (contract.fallback === 'previous-value') continue;
+    runtime.signals[signalId] = Array.from(
+      { length: signal.elementCount },
+      () => defaultValue(signal.numericType),
+    );
+    runtime.storedIntegers[signalId] = Array.from(
+      { length: signal.elementCount },
+      () => signal.numericType.kind === 'fixed' ? 0 : null,
+    );
+  }
+};
+
+const hasSolvePivotFailure = (
+  matrix: readonly XBScalar[],
+  dimension: number,
+): boolean => {
+  const values = matrix.map(Number);
+  for (let pivot = 0; pivot < dimension; pivot++) {
+    let selected = pivot;
+    for (let row = pivot + 1; row < dimension; row++) {
+      if (Math.abs(values[row * dimension + pivot]) > Math.abs(values[selected * dimension + pivot])) selected = row;
+    }
+    if (Math.abs(values[selected * dimension + pivot]) <= 1e-12) return true;
+    if (selected !== pivot) for (let column = 0; column < dimension; column++) {
+      [values[pivot * dimension + column], values[selected * dimension + column]] =
+        [values[selected * dimension + column], values[pivot * dimension + column]];
+    }
+    for (let row = pivot + 1; row < dimension; row++) {
+      const factor = values[row * dimension + pivot] / values[pivot * dimension + pivot];
+      for (let column = pivot + 1; column < dimension; column++) {
+        values[row * dimension + column] -= factor * values[pivot * dimension + column];
+      }
+    }
+  }
+  return false;
+};
+
+const intrinsicOperationFault = (
+  runtime: XBRuntime,
+  operation: XBSemanticOperation,
+): XBNumericFault | null => {
+  const inputs = operation.inputSignalIds.map((id) => signalValues(runtime, id));
+  if (operation.type === 'VectorDiv' && inputs[1]?.some((value) => Number(value) === 0)) return 'division-by-zero';
+  if (operation.type === 'MatrixSolve') {
+    const shape = shapeFor(runtime, operation.inputSignalIds[0] ?? '');
+    if (shape?.kind === 'matrix' && hasSolvePivotFailure(inputs[0] ?? [], shape.rows)) return 'solve-pivot-failure';
+  }
+  return null;
 };
 
 const writeConversionResults = (
@@ -559,6 +643,7 @@ const executeConversionOperation = (
   operation: XBSemanticOperation,
   faults: XBNumericFault[],
 ): void => {
+  const faultStart = faults.length;
   const conversion = operation.conversion;
   if (conversion === null) {
     throw new Error(
@@ -613,6 +698,8 @@ const executeConversionOperation = (
     if (outputSignalId === dataOutputId) continue;
     writeSignal(runtime, outputSignalId, errors, faults);
   }
+  const fault = faults[faultStart];
+  if (fault !== undefined) recordOperationFault(runtime, operation, fault);
 };
 
 const stateSlotForRole = (
@@ -756,7 +843,7 @@ const statefulUpdate = (
       i_state: values.iState, d_state: values.dState, last_e: values.lastE,
     })) {
       const slot = stateSlotForRole(operation, role);
-      if (slot !== undefined) updates[slot.id] = [convertValue(value, slot.numericType, faults)];
+      if (slot !== undefined) updates[slot.id] = [convertValue(value, slot.numericType, faults, operation)];
     }
     return updates;
   }
@@ -771,8 +858,7 @@ const statefulUpdate = (
       [xSlot.id]: state.map((_, row) => convertValue(
         state.reduce((sum, value, column) => sum + (a[row]?.[column] ?? 0) * value, 0)
           + inputValues.reduce((sum, value, column) => sum + (b[row]?.[column] ?? 0) * value, 0),
-        xSlot.numericType,
-        faults,
+        xSlot.numericType, faults, operation,
       )),
     };
   }
@@ -786,14 +872,14 @@ const statefulUpdate = (
       case 'UNIT_DELAY':
       case 'MEMORY':
         updates[slot.id] = values.map((value) =>
-          convertValue(value, slot.numericType, faults));
+          convertValue(value, slot.numericType, faults, operation));
         break;
       case 'INTEGRATOR_DISCRETE':
         updates[slot.id] = previous.map((value, index) =>
           convertValue(
             Number(value) + Number(values[index]),
             slot.numericType,
-            faults,
+            faults, operation,
           ));
         break;
       case 'PID_CONTROLLER': {
@@ -808,7 +894,7 @@ const statefulUpdate = (
         const upper = Number(parameter(operation, ['max', 'maximum'], 100));
         const output = Math.max(lower, Math.min(upper, proportional + integral));
         updates[slot.id] = Array.from({ length: previous.length }, () =>
-          convertValue(slotIndex === 0 ? output : error, slot.numericType, faults));
+          convertValue(slotIndex === 0 ? output : error, slot.numericType, faults, operation));
         break;
       }
       default:
@@ -842,7 +928,7 @@ const executeDirectOperations = (
       executeConversionOperation(runtime, operation, faults);
       continue;
     }
-
+    const faultStart = faults.length;
     const outputs = evaluateDirectOperation(runtime, operation);
     operation.outputSignalIds.forEach((signalId, index) => {
       writeSignal(
@@ -853,6 +939,10 @@ const executeDirectOperations = (
         operation,
       );
     });
+    const intrinsicFault = intrinsicOperationFault(runtime, operation);
+    if (intrinsicFault !== null && faults[faultStart] === undefined) faults.push(intrinsicFault);
+    const fault = intrinsicFault ?? faults[faultStart];
+    if (fault !== undefined) recordOperationFault(runtime, operation, fault);
   }
 };
 
@@ -983,7 +1073,14 @@ const executeSolverSubstep = (
       operation.type === 'INTEGRATOR_CONTINUOUS'
       || operation.type === 'Integrator'
     ) continue;
-    Object.assign(pendingState, statefulUpdate(runtime, operation, faults));
+    const faultStart = faults.length;
+    const updates = statefulUpdate(runtime, operation, faults);
+    const fault = faults[faultStart];
+    if (fault !== undefined) {
+      recordOperationFault(runtime, operation, fault);
+      continue;
+    }
+    Object.assign(pendingState, updates);
   }
   for (const [slotId, values] of Object.entries(pendingState)) {
     runtime.stateSlots[slotId] = values;
@@ -1000,6 +1097,10 @@ export const stepXBState = (
   data: Record<string, number | boolean>,
 ): XBNumericFault[] => {
   const faults: XBNumericFault[] = [];
+  runtime.numericFaults = [];
+  for (const operationId of runtime.ir.executionOrder) {
+    runtime.operationFaults[operationId] = { active: false, fault: null };
+  }
   for (const mapping of runtime.ir.mappings) {
     if (mapping.direction !== 'in') continue;
     if (!Object.prototype.hasOwnProperty.call(data, mapping.variableId)) {

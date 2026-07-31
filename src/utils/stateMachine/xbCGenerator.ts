@@ -59,6 +59,17 @@ const stateSlotFieldName = (slot: XBSemanticStateSlot): string =>
 const operationErrorFieldName = (operation: XBSemanticOperation): string =>
   `${toCIdentifier(operation.id)}_error`;
 
+const numericFaultContract = (
+  state: SemanticState,
+  operation: XBSemanticOperation,
+) => operation.numericFault ?? {
+  fallback: operation.stateful ? 'previous-value' as const : 'zero' as const,
+  errorSignalId: operation.outputSignalIds.find((signalId) => {
+    const portId = state.xBridges!.signals[signalId]?.portId;
+    return portId === 'error' || portId === 'e';
+  }) ?? null,
+};
+
 interface XBStateLayout {
   readonly declarations: readonly string[];
   readonly signalFields: ReadonlyMap<string, string>;
@@ -130,7 +141,7 @@ const stateLayout = (state: SemanticState): XBStateLayout => {
     );
     counterFields.set(operation.id, counterName);
     declarations.push(`    uint32_t ${counterName};`);
-    if (operation.conversion !== null) {
+    if (operation.outputSignalIds.length > 0) {
       const errorName = allocateName(
         operationErrorFieldName(operation),
         'fault',
@@ -473,25 +484,30 @@ const renderSignalElementWrite = (
   const destination = signalElementStorageExpression(state, signalId, layout, member, index).expression;
   const resultName = `xb_result_${operationIndex}_${outputIndex}`;
   const valueName = `xb_value_${operationIndex}_${outputIndex}`;
-  const faultLines = state.xBridges!.policy.numericFault === 'escalate'
-    ? ['            instance->error_status = SM_ERR_XBRIDGES_NUMERIC;']
-    : [];
+  const errorField = layout.errorFields.get(operation.id);
+  const faultLines = [
+    ...(errorField === undefined ? [] : [`            instance->${member}.${errorField} = true;`]),
+    ...(state.xBridges!.policy.numericFault === 'escalate'
+      ? ['            instance->error_status = SM_ERR_XBRIDGES_NUMERIC;']
+      : []),
+  ];
   if (signal.numericType.kind === 'boolean') return [
     `        const double ${valueName} = (double)(${expression});`,
     `        ${destination} = SM_XB_Truth(${valueName});`,
-    `        if (!isfinite(${valueName})) {`, ...faultLines, '        }',
+    `        if (!isfinite(${valueName})) {`, `            ${destination} = false;`, ...faultLines, '        }',
   ];
   const precision = signal.numericType.kind === 'float' ? signal.numericType.precision : signal.numericType.kind;
   if (precision === 'float32') return [
     `        const double ${valueName} = (double)(${expression});`,
-    `        if (!isfinite(${valueName})) {`, `            ${destination} = (float)${valueName};`,
+    `        if (!isfinite(${valueName})) {`, `            ${destination} = 0.0F;`,
     ...faultLines, `        } else if (fabs(${valueName}) > (double)FLT_MAX) {`,
-    `            ${destination} = ${valueName} < 0.0 ? -HUGE_VALF : HUGE_VALF;`, ...faultLines,
+    `            ${destination} = 0.0F;`, ...faultLines,
     '        } else {', `            ${destination} = (float)${valueName};`, '        }',
   ];
   if (precision === 'float64') return [
-    `        const double ${valueName} = (double)(${expression});`, `        ${destination} = ${valueName};`,
-    `        if (!isfinite(${valueName})) {`, ...faultLines, '        }',
+    `        const double ${valueName} = (double)(${expression});`,
+    `        if (!isfinite(${valueName})) {`, `            ${destination} = 0.0;`, ...faultLines,
+    `        } else {`, `            ${destination} = ${valueName};`, '        }',
   ];
   if (signal.numericType.kind === 'fixed') {
     const validity = layout.fixedValidityFields.get(signal.id);
@@ -499,12 +515,16 @@ const renderSignalElementWrite = (
     if (validity === undefined || real === undefined) throw new Error(`X-Bridges fixed signal '${signal.id}' lacks sidecar storage`);
     return [
       `        const SM_XB_NumericResult_t ${resultName} = ${defaultConversionCall(expression, signal.numericType)};`,
-      `        ${destination} = (${numericCType(signal.numericType)})${resultName}.stored_integer;`,
-      `        (((bool *)&(instance->${member}.${validity}))[${index}]) = ${resultName}.has_stored_integer;`,
-      `        (((double *)&(instance->${member}.${real}))[${index}]) = ${resultName}.real_value;`,
-      ...(state.xBridges!.policy.numericFault === 'escalate' ? [
-        `        if (${resultName}.fault != SM_XB_FAULT_NONE) {`, '            instance->error_status = SM_ERR_XBRIDGES_NUMERIC;', '        }',
-      ] : []),
+      `        if (${resultName}.fault != SM_XB_FAULT_NONE) {`,
+      `            ${destination} = (${numericCType(signal.numericType)})0;`,
+      `            (((bool *)&(instance->${member}.${validity}))[${index}]) = false;`,
+      `            (((double *)&(instance->${member}.${real}))[${index}]) = 0.0;`,
+      ...faultLines,
+      '        } else {',
+      `            ${destination} = (${numericCType(signal.numericType)})${resultName}.stored_integer;`,
+      `            (((bool *)&(instance->${member}.${validity}))[${index}]) = ${resultName}.has_stored_integer;`,
+      `            (((double *)&(instance->${member}.${real}))[${index}]) = ${resultName}.real_value;`,
+      '        }',
     ];
   }
   return [];
@@ -569,6 +589,7 @@ const signalRealExpression = (
 const defaultConversionCall = (
   expression: string,
   type: XBNumericType,
+  operation: XBSemanticOperation | null = null,
 ): string => {
   if (type.kind === 'fixed') {
     return [
@@ -578,7 +599,9 @@ const defaultConversionCall = (
       `${type.wordLength}U, `,
       `${type.fractionLength}, `,
       'SM_XB_ROUND_FLOOR, ',
-      'SM_XB_OVERFLOW_SATURATE)',
+      operation?.parameters.overflow === 'error'
+        ? 'SM_XB_OVERFLOW_ERROR)'
+        : 'SM_XB_OVERFLOW_SATURATE)',
     ].join('');
   }
   if (type.kind === 'boolean') return `SM_XB_ConvertBoolean(${expression})`;
@@ -610,14 +633,19 @@ const renderSignalWrite = (
   }
   const resultName = `xb_result_${operationIndex}_${outputIndex}`;
   const valueName = `xb_value_${operationIndex}_${outputIndex}`;
-  const faultLines = state.xBridges!.policy.numericFault === 'escalate'
-    ? ['        instance->error_status = SM_ERR_XBRIDGES_NUMERIC;']
-    : [];
+  const errorField = layout.errorFields.get(operation.id);
+  const faultLines = [
+    ...(errorField === undefined ? [] : [`        instance->${member}.${errorField} = true;`]),
+    ...(state.xBridges!.policy.numericFault === 'escalate'
+      ? ['        instance->error_status = SM_ERR_XBRIDGES_NUMERIC;']
+      : []),
+  ];
   if (signal.numericType.kind === 'boolean') {
     return [
       `    const double ${valueName} = (double)(${expression});`,
       `    instance->${member}.${field} = SM_XB_Truth(${valueName});`,
       `    if (!isfinite(${valueName})) {`,
+      `        instance->${member}.${field} = false;`,
       ...faultLines,
       '    }',
     ];
@@ -629,10 +657,10 @@ const renderSignalWrite = (
     return [
       `    const double ${valueName} = (double)(${expression});`,
       `    if (!isfinite(${valueName})) {`,
-      `        instance->${member}.${field} = (float)${valueName};`,
+      `        instance->${member}.${field} = 0.0F;`,
       ...faultLines,
       `    } else if (fabs(${valueName}) > (double)FLT_MAX) {`,
-      `        instance->${member}.${field} = ${valueName} < 0.0 ? -HUGE_VALF : HUGE_VALF;`,
+      `        instance->${member}.${field} = 0.0F;`,
       ...faultLines,
       '    } else {',
       `        instance->${member}.${field} = (float)${valueName};`,
@@ -642,26 +670,26 @@ const renderSignalWrite = (
   if (precision === 'float64') {
     return [
       `    const double ${valueName} = (double)(${expression});`,
-      `    instance->${member}.${field} = ${valueName};`,
       `    if (!isfinite(${valueName})) {`,
+      `        instance->${member}.${field} = 0.0;`,
       ...faultLines,
-      '    }',
+      `    } else {`, `        instance->${member}.${field} = ${valueName};`, '    }',
     ];
   }
   if (signal.numericType.kind === 'fixed') {
     const sidecars = fixedSignalSidecarExpressions(signal, layout, member);
     return [
       `    const SM_XB_NumericResult_t ${resultName} = ${defaultConversionCall(expression, signal.numericType)};`,
-      `    instance->${member}.${field} = (${numericCType(signal.numericType)})${resultName}.stored_integer;`,
-      `    ${sidecars.validity} = ${resultName}.has_stored_integer;`,
-      `    ${sidecars.real} = ${resultName}.real_value;`,
-      ...(state.xBridges!.policy.numericFault === 'escalate'
-        ? [
-            `    if (${resultName}.fault != SM_XB_FAULT_NONE) {`,
-            '        instance->error_status = SM_ERR_XBRIDGES_NUMERIC;',
-            '    }',
-          ]
-        : []),
+      `    if (${resultName}.fault != SM_XB_FAULT_NONE) {`,
+      `        instance->${member}.${field} = (${numericCType(signal.numericType)})0;`,
+      `        ${sidecars.validity} = false;`,
+      `        ${sidecars.real} = 0.0;`,
+      ...faultLines,
+      '    } else {',
+      `        instance->${member}.${field} = (${numericCType(signal.numericType)})${resultName}.stored_integer;`,
+      `        ${sidecars.validity} = ${resultName}.has_stored_integer;`,
+      `        ${sidecars.real} = ${resultName}.real_value;`,
+      '    }',
     ];
   }
   return [
@@ -714,8 +742,41 @@ const reduceExpression = (
   ? identity
   : `(${inputs.map((input) => `(${input})`).join(` ${operator} `)})`;
 
-const emitConstant = emitSingleOutput((_inputs, operation) =>
-  cNumber(scalarParameter(operation, ['value', 'Value', 'constant'], 0)));
+const constantValues = (value: unknown): number[] => Array.isArray(value)
+  ? value.flatMap((item) => constantValues(item))
+  : typeof value === 'number' || typeof value === 'boolean'
+    ? [Number(value)]
+    : [];
+
+const emitConstant: OperationEmitter = (
+  state,
+  operation,
+  operationIndex,
+  layout,
+  member,
+) => {
+  const outputId = operation.outputSignalIds[0];
+  if (outputId === undefined) return [];
+  const output = requireSignal(state, outputId);
+  const values = constantValues(
+    operation.parameters.value
+      ?? operation.parameters.Value
+      ?? operation.parameters.constant,
+  );
+  const source = values.length === 0 ? [0] : values;
+  return Array.from({ length: output.elementCount }, (_, index) =>
+    renderSignalElementWrite(
+      state,
+      operation,
+      operationIndex,
+      index,
+      outputId,
+      `${index}U`,
+      cNumber(source[index] ?? source[0]!),
+      layout,
+      member,
+    )).flat();
+};
 
 const emitInport: OperationEmitter = () => [];
 const emitOutport: OperationEmitter = () => [];
@@ -941,6 +1002,13 @@ const emitMatrixSolve: OperationEmitter = (state, operation, operationIndex, lay
   const matrixValue = signalElementRealExpression(state, matrixId, layout, member, `xb_row * ${matrix.columns}U + xb_column`);
   const rightValue = signalElementRealExpression(state, rightId, layout, member, `xb_row * ${right.columns}U + xb_column`);
   const outputValue = signalElementRealExpression(state, outputId, layout, member, `xb_row * ${output.columns}U + xb_column`);
+  const errorField = layout.errorFields.get(operation.id);
+  const pivotFault = [
+    ...(errorField === undefined ? [] : [`            instance->${member}.${errorField} = true;`]),
+    ...(state.xBridges!.policy.numericFault === 'escalate'
+      ? ['            instance->error_status = SM_ERR_XBRIDGES_NUMERIC;']
+      : []),
+  ];
   return ['    {', '        double xb_solve_a[SM_XB_MAX_SOLVE_DIMENSION * SM_XB_MAX_SOLVE_DIMENSION];', '        double xb_solve_b[SM_XB_MAX_SOLVE_DIMENSION * SM_XB_MAX_SOLVE_DIMENSION];', '        bool xb_pivot_failed = false;',
     `        for (uint32_t xb_row = 0U; xb_row < ${matrix.rows}U; ++xb_row) {`,
     `            for (uint32_t xb_column = 0U; xb_column < ${matrix.columns}U; ++xb_column) xb_solve_a[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = ${matrixValue};`,
@@ -954,7 +1022,7 @@ const emitMatrixSolve: OperationEmitter = (state, operation, operationIndex, lay
     `            for (uint32_t xb_row = xb_pivot + 1U; xb_row < ${matrix.rows}U; ++xb_row) {`, '                const double xb_factor = xb_solve_a[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_pivot] / xb_solve_a[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_pivot];', '                xb_solve_a[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_pivot] = 0.0;',
     `                for (uint32_t xb_column = xb_pivot + 1U; xb_column < ${matrix.columns}U; ++xb_column) xb_solve_a[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column] -= xb_factor * xb_solve_a[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_column];`,
     `                for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) xb_solve_b[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column] -= xb_factor * xb_solve_b[xb_pivot * SM_XB_MAX_SOLVE_DIMENSION + xb_column];`, '            }', '        }',
-    '        if (!xb_pivot_failed) {',
+    '        if (xb_pivot_failed) {', ...pivotFault, '        } else {',
     `            for (int32_t xb_row = ${matrix.rows - 1}; xb_row >= 0; --xb_row) for (uint32_t xb_column = 0U; xb_column < ${right.columns}U; ++xb_column) { double xb_value = xb_solve_b[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; for (uint32_t xb_k = (uint32_t)xb_row + 1U; xb_k < ${matrix.rows}U; ++xb_k) xb_value -= xb_solve_a[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_k] * xb_solve_b[xb_k * SM_XB_MAX_SOLVE_DIMENSION + xb_column]; xb_solve_b[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column] = xb_value / xb_solve_a[(uint32_t)xb_row * SM_XB_MAX_SOLVE_DIMENSION + (uint32_t)xb_row]; }`, '        }',
     `        for (uint32_t xb_row = 0U; xb_row < ${output.rows}U; ++xb_row) for (uint32_t xb_column = 0U; xb_column < ${output.columns}U; ++xb_column) {`,
     ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId, `xb_row * ${output.columns}U + xb_column`, `(xb_pivot_failed ? 0.0 : xb_solve_b[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column])`, layout, member).map((line) => `    ${line}`), '        }', '    }'];
@@ -1123,13 +1191,19 @@ const emitConversion: OperationEmitter = (
           member,
         );
         return [
-          `    instance->${member}.${dataField} = (${numericCType(dataSignal.numericType)})${resultName}.stored_integer;`,
-          `    ${sidecars.validity} = ${resultName}.has_stored_integer;`,
-          `    ${sidecars.real} = ${resultName}.real_value;`,
+          `    if (${resultName}.fault != SM_XB_FAULT_NONE) {`,
+          `        instance->${member}.${dataField} = (${numericCType(dataSignal.numericType)})0;`,
+          `        ${sidecars.validity} = false;`,
+          `        ${sidecars.real} = 0.0;`,
+          '    } else {',
+          `        instance->${member}.${dataField} = (${numericCType(dataSignal.numericType)})${resultName}.stored_integer;`,
+          `        ${sidecars.validity} = ${resultName}.has_stored_integer;`,
+          `        ${sidecars.real} = ${resultName}.real_value;`,
+          '    }',
         ];
       })()
     : [
-        `    instance->${member}.${dataField} = (${numericCType(dataSignal.numericType)})${resultName}.${convertedStorageMember(dataSignal.numericType)};`,
+        `    instance->${member}.${dataField} = ${resultName}.fault == SM_XB_FAULT_NONE ? (${numericCType(dataSignal.numericType)})${resultName}.${convertedStorageMember(dataSignal.numericType)} : (${numericCType(dataSignal.numericType)})0;`,
       ];
   const linesOut: string[] = [
     ...resultLines,
@@ -1370,16 +1444,29 @@ const renderStateSlotElementAssignment = (
   layout: XBStateLayout,
   member: string,
   name: string,
+  errorField: string | undefined = undefined,
+  operation: XBSemanticOperation | null = null,
 ): string[] => {
   const field = `(((${numericCType(slot.numericType)} *)&(instance->${member}.${stateSlotField(slot, layout)}))[${index}])`;
-  if (slot.numericType.kind !== 'fixed') return [`    ${field} = (${numericCType(slot.numericType)})(${expression});`];
+  const faultLines = [
+    ...(errorField === undefined ? [] : [`        instance->${member}.${errorField} = true;`]),
+    ...(state.xBridges!.policy.numericFault === 'escalate'
+      ? ['        instance->error_status = SM_ERR_XBRIDGES_NUMERIC;']
+      : []),
+  ];
+  if (slot.numericType.kind !== 'fixed') {
+    const value = `xb_state_${toCIdentifier(name)}_value`;
+    return [
+      `    const double ${value} = (double)(${expression});`,
+      `    if (!isfinite(${value})) {`, ...faultLines, '    } else {',
+      `        ${field} = (${numericCType(slot.numericType)})${value};`, '    }',
+    ];
+  }
   const result = `xb_state_${toCIdentifier(name)}`;
   return [
-    `    const SM_XB_NumericResult_t ${result} = ${defaultConversionCall(expression, slot.numericType)};`,
-    `    ${field} = (${numericCType(slot.numericType)})${result}.stored_integer;`,
-    ...(state.xBridges!.policy.numericFault === 'escalate' ? [
-      `    if (${result}.fault != SM_XB_FAULT_NONE) {`, '        instance->error_status = SM_ERR_XBRIDGES_NUMERIC;', '    }',
-    ] : []),
+    `    const SM_XB_NumericResult_t ${result} = ${defaultConversionCall(expression, slot.numericType, operation)};`,
+    `    if (${result}.fault != SM_XB_FAULT_NONE) {`, ...faultLines, '    } else {',
+    `        ${field} = (${numericCType(slot.numericType)})${result}.stored_integer;`, '    }',
   ];
 };
 
@@ -1390,22 +1477,29 @@ const renderStateSlotAssignment = (
   layout: XBStateLayout,
   member: string,
   name: string,
+  errorField: string | undefined = undefined,
+  operation: XBSemanticOperation | null = null,
 ): string[] => {
   const field = `instance->${member}.${stateSlotField(slot, layout)}`;
+  const faultLines = [
+    ...(errorField === undefined ? [] : [`        instance->${member}.${errorField} = true;`]),
+    ...(state.xBridges!.policy.numericFault === 'escalate'
+      ? ['        instance->error_status = SM_ERR_XBRIDGES_NUMERIC;']
+      : []),
+  ];
   if (slot.numericType.kind !== 'fixed') {
-    return [`    ${field} = (${numericCType(slot.numericType)})(${expression});`];
+    const value = `xb_state_${toCIdentifier(name)}_value`;
+    return [
+      `    const double ${value} = (double)(${expression});`,
+      `    if (!isfinite(${value})) {`, ...faultLines, '    } else {',
+      `        ${field} = (${numericCType(slot.numericType)})${value};`, '    }',
+    ];
   }
   const result = `xb_state_${toCIdentifier(name)}`;
   return [
-    `    const SM_XB_NumericResult_t ${result} = ${defaultConversionCall(expression, slot.numericType)};`,
-    `    ${field} = (${numericCType(slot.numericType)})${result}.stored_integer;`,
-    ...(state.xBridges!.policy.numericFault === 'escalate'
-      ? [
-          `    if (${result}.fault != SM_XB_FAULT_NONE) {`,
-          '        instance->error_status = SM_ERR_XBRIDGES_NUMERIC;',
-          '    }',
-        ]
-      : []),
+    `    const SM_XB_NumericResult_t ${result} = ${defaultConversionCall(expression, slot.numericType, operation)};`,
+    `    if (${result}.fault != SM_XB_FAULT_NONE) {`, ...faultLines, '    } else {',
+    `        ${field} = (${numericCType(slot.numericType)})${result}.stored_integer;`, '    }',
   ];
 };
 
@@ -1558,13 +1652,24 @@ const renderDirectEvaluation = (
     );
   }
   if (operation.stateful) return [];
-  const emitted = operationEmitter(operation)(
+  const errorField = layout.errorFields.get(operation.id);
+  const errorSignalId = numericFaultContract(state, operation).errorSignalId;
+  const errorSignalDestination = errorSignalId === null
+    ? undefined
+    : signalStorageExpression(state, errorSignalId, layout, member).expression;
+  const emitted = [
+    ...(errorField === undefined ? [] : [`    instance->${member}.${errorField} = false;`]),
+    ...operationEmitter(operation)(
     state,
     operation,
     operationIndex,
     layout,
     member,
-  );
+  ),
+    ...(errorField === undefined || errorSignalDestination === undefined
+      ? []
+      : [`    ${errorSignalDestination} = instance->${member}.${errorField};`]),
+  ];
   if (
     forceEvaluation
     || operation.schedule.hold === 'none'
@@ -1632,7 +1737,7 @@ const renderDiscreteStateUpdates = (
     }
     updateLines.push('            xb_state_space_next[xb_row] = xb_sum;', '        }',
       `        for (uint32_t xb_row = 0U; xb_row < ${dimension}U; ++xb_row) {`,
-      ...renderStateSlotElementAssignment(state, xSlot, 'xb_row', 'xb_state_space_next[xb_row]', layout, member, `${operation.id}_state_space_update`).map((line) => `    ${line}`),
+      ...renderStateSlotElementAssignment(state, xSlot, 'xb_row', 'xb_state_space_next[xb_row]', layout, member, `${operation.id}_state_space_update`, layout.errorFields.get(operation.id), operation).map((line) => `    ${line}`),
       '        }', '    }');
     if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return updateLines;
     return [`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...updateLines.map((line) => `    ${line}`), '    }'];
@@ -1646,9 +1751,9 @@ const renderDiscreteStateUpdates = (
     }
     const identifier = toCIdentifier(operation.id);
     const updates = [
-      ...renderStateSlotAssignment(state, iSlot, `xb_pid_${identifier}_i`, layout, member, `${operation.id}_i_state_update`),
-      ...renderStateSlotAssignment(state, dSlot, `xb_pid_${identifier}_d`, layout, member, `${operation.id}_d_state_update`),
-      ...renderStateSlotAssignment(state, lastESlot, `xb_pid_${identifier}_last_e`, layout, member, `${operation.id}_last_e_state_update`),
+      ...renderStateSlotAssignment(state, iSlot, `xb_pid_${identifier}_i`, layout, member, `${operation.id}_i_state_update`, layout.errorFields.get(operation.id), operation),
+      ...renderStateSlotAssignment(state, dSlot, `xb_pid_${identifier}_d`, layout, member, `${operation.id}_d_state_update`, layout.errorFields.get(operation.id), operation),
+      ...renderStateSlotAssignment(state, lastESlot, `xb_pid_${identifier}_last_e`, layout, member, `${operation.id}_last_e_state_update`, layout.errorFields.get(operation.id), operation),
     ];
     const block = ['    {', ...renderPIDComputation(state, operation, layout, member),
       ...updates.map((line) => `    ${line}`), '    }'];
@@ -1661,7 +1766,7 @@ const renderDiscreteStateUpdates = (
       case 'UNIT_DELAY':
       case 'MEMORY':
         return renderStateSlotAssignment(
-          state, slot, input, layout, member, `${operation.id}_${slotIndex}_update`,
+          state, slot, input, layout, member, `${operation.id}_${slotIndex}_update`, layout.errorFields.get(operation.id), operation,
         );
       case 'INTEGRATOR_DISCRETE':
         return renderStateSlotAssignment(
@@ -1671,6 +1776,7 @@ const renderDiscreteStateUpdates = (
           layout,
           member,
           `${operation.id}_${slotIndex}_update`,
+          layout.errorFields.get(operation.id), operation,
         );
       case 'PID_CONTROLLER': {
         const feedbackId = operation.inputSignalIds[1];
@@ -1690,6 +1796,7 @@ const renderDiscreteStateUpdates = (
           layout,
           member,
           `${operation.id}_${slotIndex}_update`,
+          layout.errorFields.get(operation.id), operation,
         );
       }
       default:
@@ -1760,6 +1867,7 @@ const renderContinuousStateUpdates = (
     const assignLines = slots.flatMap((entry) => renderStateSlotAssignment(
       state, entry.slot, rkName('xb_euler_next', entry), layout, member,
       `euler_${entry.operationIndex}_${entry.slotIndex}`,
+      layout.errorFields.get(entry.operation.id),
     ));
     return [
       ...baseLines,
@@ -1811,6 +1919,7 @@ const renderContinuousStateUpdates = (
   const final = slots.flatMap((entry) => renderStateSlotAssignment(
     state, entry.slot, finalExpression(entry), layout, member,
     `rk4_${entry.operationIndex}_${entry.slotIndex}`,
+    layout.errorFields.get(entry.operation.id),
   ));
   const refresh = [
     '    {',
@@ -1864,6 +1973,7 @@ const renderSolverSubstep = (
   member: string,
 ): string[] => [
   '    {',
+  '        (void)instance;',
   ...xb.executionOrder.flatMap((operationId, operationIndex) => {
     const operation = xb.operations[operationId];
     if (!operation?.stateful) return [];

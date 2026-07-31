@@ -262,7 +262,9 @@ int main(void) {
       'utf8',
     );
     expect(source).not.toContain('Syntactic Auto-Repair');
-    expect(source).not.toMatch(/\.replace\([\s\S]*SM_Sync_IO/);
+    // Bound the scan to a single local repair expression: the generator has
+    // legitimate, unrelated `.replace()` calls earlier in the source file.
+    expect(source).not.toMatch(/\.replace\([\s\S]{0,200}SM_Sync_IO/);
   });
 
   it('renders the embedded integration file set from immutable semantic IR', () => {

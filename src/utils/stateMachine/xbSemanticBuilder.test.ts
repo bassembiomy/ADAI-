@@ -94,6 +94,30 @@ const build = (
 });
 
 describe('buildXBSemanticModel', () => {
+  it('declares a numeric fault fallback and optional error signal for every operation', () => {
+    const result = build(model({
+      nodes: [
+        node('gain', 'GAIN', [port('u', 'input')], [
+          port('y', 'output'),
+          port('error', 'output', { dataType: 'boolean' }),
+        ]),
+        node('delay', 'UNIT_DELAY', [port('u', 'input')], [port('y', 'output')]),
+      ],
+      edges: [edge('gain-to-delay', 'gain', 'y', 'delay', 'u')],
+      mappings: [{
+        smVarId: 'command', blockId: 'gain', portId: 'u', direction: 'in',
+      }],
+    }));
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir!.operations.gain.numericFault).toEqual({
+      fallback: 'zero', errorSignalId: 'gain:error',
+    });
+    expect(result.ir!.operations.delay.numericFault).toEqual({
+      fallback: 'previous-value', errorSignalId: null,
+    });
+  });
+
   it('keeps public PID and discrete-transfer-function state separate from outputs', () => {
     const pid = BLOCK_LIBRARY.PID_BASIC('pid', {
       Kp: 2,

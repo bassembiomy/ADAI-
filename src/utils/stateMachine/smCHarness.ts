@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process';
-import { writeFileSync } from 'fs';
+import { existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { createGeneratedCodeTestWorkspace } from '../generatedCodeTestWorkspace';
 import {
@@ -67,8 +67,12 @@ export const compileAndRunCProgram = (
     'sm_core.c',
     'sm_safety.c',
     'sm_user_logic.c',
+    ...(existsSync(join(options.directory, 'sm_xbridges.c'))
+      ? ['sm_xbridges.c']
+      : []),
     ...(options.additionalSources ?? []),
     harnessName,
+    '-lm',
     '-o',
     executable,
   ], { cwd: options.directory, stdio: 'pipe' });
@@ -243,6 +247,7 @@ export const runInterpreterTrace = (
       operation.elapsedMs ?? runtime.ir.tickMs,
     );
     if (frame.error === null) commitMappedOutputs(ir, runtime.data, observation);
+    else if (runtime.error?.code === 'XBRIDGES_NUMERIC') commitSafeOutputs(ir, observation);
     frames.push(observeFrame(frame, observation));
   }
   return frames;
@@ -496,6 +501,19 @@ const renderFramePrinter = (ir: SemanticModel): string => {
       '    }',
     ];
   });
+  const faultPrints = orderedStates(ir).flatMap((state) => state.xBridges === null
+    ? []
+    : state.xBridges.executionOrder.flatMap((operationId, index) => {
+        const operation = state.xBridges!.operations[operationId];
+        if (operation === undefined || operation.outputSignalIds.length === 0) return [];
+        const member = `xb_${toCIdentifier(state.id).toLowerCase()}`;
+        const field = `${toCIdentifier(operation.id)}_error`;
+        return [
+          ...(index === 0 ? [] : ['    printf(";");']),
+          `    print_token(${cString(`${state.id}/${operation.id}`)});`,
+          `    printf(":b:%d", instance->${member}.${field} ? 1 : 0);`,
+        ];
+      }));
   return [
     'static void print_frame(const ADIA_Instance_t *instance, unsigned sequence, unsigned elapsed_ms)',
     '{',
@@ -518,6 +536,8 @@ const renderFramePrinter = (ir: SemanticModel): string => {
     ...historyPrints,
     '    printf("|outputs=");',
     ...outputPrints,
+    '    printf("|faults=");',
+    ...faultPrints,
     '    printf("|effects=%u,%u", safe_outputs_applied, watchdog_kicks);',
     '    printf("|error=%u\\n", (unsigned)instance->error_status);',
     '}',
@@ -596,9 +616,13 @@ const parseMap = (
   return result;
 };
 
-const parseFrame = (line: string): SemanticTraceFrame => {
+export interface CTraceFrame extends SemanticTraceFrame {
+  readonly xBridgesFaults: Readonly<Record<string, boolean>>;
+}
+
+const parseFrame = (line: string): CTraceFrame => {
   const segments = line.split('|');
-  if (segments.length !== 11 || segments[0] !== 'FRAME') {
+  if (segments.length !== 12 || segments[0] !== 'FRAME') {
     throw new Error(`invalid C trace line: ${line}`);
   }
   const fields = Object.fromEntries(
@@ -650,6 +674,10 @@ const parseFrame = (line: string): SemanticTraceFrame => {
       fields.outputs,
       (value, kind) => kind === 'b' ? value === '1' : Number(value),
     ) as Record<string, number | boolean>,
+    xBridgesFaults: parseMap(
+      fields.faults,
+      (value, kind) => kind === 'b' ? value === '1' : Number(value),
+    ) as Record<string, boolean>,
     ioEffects: {
       safeOutputsApplied: Number(fields.effects.split(',')[0]),
       watchdogKicks: Number(fields.effects.split(',')[1]),
@@ -658,13 +686,15 @@ const parseFrame = (line: string): SemanticTraceFrame => {
       ? null
       : fields.error === '4'
         ? 'SAFETY_VIOLATION: safety violation'
+        : fields.error === '5'
+          ? 'XBRIDGES_NUMERIC: X-Bridges numeric fault'
         : `C_ERROR_${fields.error}`,
   };
 };
 
 export const compileAndRunCTrace = (
   fixture: DifferentialFixture,
-): SemanticTraceFrame[] => {
+): CTraceFrame[] => {
   const ir = buildFixtureIr(fixture);
   const workspace = createGeneratedCodeTestWorkspace(
     `differential-${fixture.name}`,
