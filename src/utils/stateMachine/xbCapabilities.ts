@@ -27,11 +27,12 @@ export interface XBBlockCapability {
 export const XB_INTERPRETER_CONFORMANCE_CASE_IDS = [
   'T10-INT-VECTOR-ELEMENTWISE', 'T10-INT-MATRIX-OPS', 'T10-INT-PID-BASIC',
   'T10-INT-DISCRETE-REALIZATION', 'T10-INT-TRANSFORMS',
+  'T14-INT-CORE-DIRECT', 'T14-INT-STATEFUL',
 ] as const;
 
 export const XB_C_CONFORMANCE_CASE_IDS = [
   'T10-C99-VECTOR-MATRIX', 'T10-C99-PID-BASIC', 'T10-C99-DISCRETE-REALIZATION',
-  'T10-C99-TRANSFORMS',
+  'T10-C99-TRANSFORMS', 'T14-C99-CORE-DIRECT', 'T14-C99-STATEFUL',
 ] as const;
 
 type XBCodegenCapability = Omit<XBBlockCapability, 'codegen'> & {
@@ -50,8 +51,8 @@ const vectorOrMatrix: readonly XBSignalShape[] = ['vector', 'matrix'];
 const direct = (
   shapes: readonly XBSignalShape[] = allShapes,
   requiredTargetCapabilities?: readonly XBTargetRequirement[],
-  interpreterConformanceCaseIds?: readonly string[],
-  cConformanceCaseIds?: readonly string[],
+  interpreterConformanceCaseIds: readonly string[] = ['T14-INT-CORE-DIRECT'],
+  cConformanceCaseIds: readonly string[] = ['T14-C99-CORE-DIRECT'],
   directionalShapes: Pick<XBBlockCapability, 'inputShapes' | 'outputShapes'> = {},
 ): XBCodegenCapability => ({
   codegen: true,
@@ -66,8 +67,8 @@ const direct = (
 const stateful = (
   shapes: readonly XBSignalShape[] = allShapes,
   requiredTargetCapabilities?: readonly XBTargetRequirement[],
-  interpreterConformanceCaseIds?: readonly string[],
-  cConformanceCaseIds?: readonly string[],
+  interpreterConformanceCaseIds: readonly string[] = ['T14-INT-STATEFUL'],
+  cConformanceCaseIds: readonly string[] = ['T14-C99-STATEFUL'],
   directionalShapes: Pick<XBBlockCapability, 'inputShapes' | 'outputShapes'> = {},
 ): XBCodegenCapability => ({
   codegen: true,
@@ -85,6 +86,83 @@ const hostOnly = (reason: string): XBHostOnlyCapability => ({
   shapes: allShapes,
   reason,
 });
+
+const hostOnlySet = (
+  types: readonly string[],
+  reason: string,
+): Record<string, XBHostOnlyCapability> => Object.fromEntries(
+  types.map((type) => [type, hostOnly(reason)]),
+);
+
+const UNCLASSIFIED_HOST_ONLY = hostOnlySet([
+  'DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Clock', 'WaveformGen',
+  'Inverse', 'Determinant', 'Subsystem', 'PWM_GENERATOR', 'THREE_PHASE_PWM',
+  'SIX_STEP_COMMUTATION', 'SENSORLESS_SIX_STEP', 'THREE_PHASE_INVERTER',
+  'SINGLE_PHASE_H_BRIDGE', 'VOLTAGE_REFERENCE_GENERATOR',
+  'FIELD_ORIENTED_CONTROL', 'CURRENT_CONTROLLER_DQ', 'DOE_MODEL',
+  'SPEED_CONTROLLER', 'FLUX_REFERENCE', 'ROTOR_POSITION_ESTIMATOR',
+  'SVPWM_CORE', 'SECTOR_SELECTOR', 'SWITCHING_TIME_CALCULATOR',
+  'SVPWM_GATE_GENERATOR', 'ZERO_SEQUENCE_INJECTION', 'SVPWM_MODULATOR',
+  'IF_ELSE', 'SWITCH_CASE', 'INTEGRATOR', 'DERIVATIVE', 'TRANSFER_FUNCTION',
+  'ZERO_POLE_GAIN', 'LAPLACE_TRANSFORM', 'WHITE_NOISE',
+  'BAND_LIMITED_NOISE', 'DISCRETE_IMPULSE', 'KALMAN_FILTER',
+  'EXTENDED_KALMAN_FILTER', 'MPC_CONTROLLER', 'DOE_MODULE',
+  'AC_INDUCTION_MOTOR', 'IM_SCALAR_CONTROL', 'IM_FOC_CONTROL',
+  'IM_FLUX_OBSERVER', 'VF_SLIP_COMP', 'FIELD_WEAKENING', 'MTPA_CONTROLLER',
+  'MTPA_FW_MANAGER', 'AC_MOTOR_PID_CONTROL', 'NEURAL_NEURON_LEARNING',
+  'RL_Q_LEARNING_CONTROLLER', 'AIR_FRYER_LEARNING_MODEL',
+  'ROBOT_VACUUM_BATTERY', 'ROBOT_VACUUM_COMM',
+  'ROBOT_VACUUM_BOUSTROPHEDON_SWEEP', 'ROBOT_VACUUM_ERODE_MASK',
+  'ROBOT_VACUUM_DOOR_TRACKER', 'ROBOT_VACUUM_DOOR_CROSSING',
+  'ROBOT_VACUUM_CONTINUOUS_ENERGY', 'ROBOT_VACUUM_TOPOLOGY_RETURN',
+  'ROBOT_VACUUM_THETA_STAR', 'ROBOT_VACUUM_DIGITAL_TWIN',
+  'ROBOT_VACUUM_MOTOR', 'ROBOT_VACUUM_DYNAMICS',
+  'ROBOT_VACUUM_ENVIRONMENT', 'ROBOT_VACUUM_ODOMETRY',
+  'ROBOT_VACUUM_FUSION', 'ROBOT_VACUUM_SLAM', 'ROBOT_VACUUM_NAV',
+  'ROBOT_VACUUM_KINEMATICS', 'ROBOT_VACUUM_WHEEL_CONTROL',
+  'ROBOT_VACUUM_ENCODER', 'ROBOT_VACUUM_LIDAR',
+  'ROBOT_VACUUM_LOCALIZATION', 'ROBOT_VACUUM_MAPPING',
+  'ROBOT_VACUUM_COVERAGE', 'ROBOT_VACUUM_GLOBAL_PLANNER',
+  'ROBOT_VACUUM_OBSTACLE_AVOIDANCE', 'ROBOT_VACUUM_MOTION_CONTROLLER',
+  'ROBOT_VACUUM_MOTOR_COMMAND', 'ROBOT_VACUUM_VISUALIZATION',
+  'ROBOT_VACUUM_LIDAR_SENSOR', 'ROBOT_VACUUM_ODOMETRY_SENSOR',
+  'ROBOT_VACUUM_CLIFF_IR', 'ROBOT_VACUUM_DUSTBIN_SENSOR',
+  'ROBOT_VACUUM_MOTOR_CURRENT', 'ROBOT_VACUUM_SENSOR_FUSION_EKF',
+  'ROBOT_VACUUM_ROOM_SEGMENTATION', 'ROBOT_VACUUM_SEMANTIC_MAP',
+  'ROBOT_VACUUM_COVERAGE_PLANNER', 'ROBOT_VACUUM_ROOM_SCHEDULER',
+  'ROBOT_VACUUM_BATTERY_MONITOR', 'ROBOT_VACUUM_GOAL_MANAGER',
+  'ROBOT_VACUUM_3D_VIZ_COLORS', 'ROBOT_VACUUM_WAYPOINT_GEN',
+  'ROBOT_VACUUM_COLLISION_AVOID', 'ROBOT_VACUUM_SURFACE_ADAPTER',
+  'ROBOT_VACUUM_CLIFF_HALT', 'ROBOT_VACUUM_VELOCITY_PID',
+  'ROBOT_VACUUM_MODE_SUPERVISOR', 'ROBOT_VACUUM_BUMPER_SENSOR',
+  'ROBOT_VACUUM_SIDE_BRUSH', 'ROBOT_VACUUM_SUCTION_PWM',
+  'ROBOT_VACUUM_TERRAIN_MODEL', 'ROBOT_VACUUM_COLLISION_MESH',
+  'ROBOT_VACUUM_DOCK_BEACON', 'ROBOT_VACUUM_CAPACITY_THRESHOLD',
+  'ROBOT_VACUUM_HALT_ALERT', 'ROBOT_VACUUM_DOCK_DETECT',
+  'ROBOT_VACUUM_RESUME_SCHEDULER', 'ROBOT_VACUUM_3D_SCENE_VIEW',
+  'ROBOT_VACUUM_FURNITURE_MESH', 'ROBOT_VACUUM_DIRT_DENSITY',
+  'ROBOT_VACUUM_ROOM_ZONE_COLORS', 'ROBOT_VACUUM_COVERAGE_HEATMAP',
+  'ROBOT_VACUUM_DOCK_ICON', 'ROBOT_VACUUM_BATTERY_HUD',
+  'ROBOT_VACUUM_DUSTBIN_HUD', 'FUZZY_MF_TRIMF', 'FUZZY_MF_TRAPMF',
+  'FUZZY_MF_GAUSSMF', 'FUZZY_MF_SIGMF', 'FUZZY_AND', 'FUZZY_OR',
+  'FUZZY_NOT', 'FUZZY_RULE', 'FUZZY_INFERENCE_SYSTEM',
+  'FUZZY_DEFUZZIFY', 'FUZZY_PID_CONTROLLER', 'FUZZY_SURFACE_VIEWER',
+  'DEM_WASHING_MACHINE_TWIN', 'DEM_DRUM', 'DEM_PARTICLE_SYSTEM',
+  'DEM_HERTZ_CONTACT', 'DEM_BOND_FABRIC', 'DEM_FLUID_COUPLING',
+  'CFD_SPH_WATER_SOLVER', 'DEM_CFD_COSIMULATION_INTERFACE',
+  'FABRIC_HARMONIC_ANALYZER', 'CFD_DEM_SURROGATE_LEARNER',
+  'ROOT_LOCUS', 'Note',
+], 'No paired canonical-interpreter and strict-C99 embedded conformance case is registered.');
+
+const UNPAIRED_EMBEDDED_OPERATIONS = hostOnlySet([
+  'Step', 'VectorPow', 'SumElements', 'Mean', 'Max', 'IdentityMatrix',
+  'NAND', 'NOR', 'XOR', 'BitwiseAND', 'BitwiseOR', 'BitwiseXOR',
+  'BitwiseNOT', 'ShiftLeft', 'ShiftRight', 'SWITCH', 'MUX', 'DEMUX',
+  'LOW_PASS_FILTER', 'HIGH_PASS_FILTER', 'MOVING_AVERAGE',
+  'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'ASIN', 'ACOS', 'ATAN',
+  'ACOT', 'ASEC', 'ACOSEC', 'SINH', 'COSH', 'TANH', 'COTH', 'SECH',
+  'COSECH', 'ASINH', 'ACOSH', 'ATANH', 'ACOTH', 'ASECH', 'ACOSECH',
+], 'The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage.');
 
 /**
  * Embedded-safe X-Bridges block types. This registry is declarative and never
@@ -203,6 +281,11 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   // Host-only blocks intentionally rejected by embedded code generation.
   Scope: hostOnly('Visualization requires the host runtime.'),
   LMS_ADAPTIVE_FILTER: hostOnly('Online learning is not in the embedded-safe set.'),
+
+  // Every public UI block is classified. The final spread intentionally
+  // overrides family-level entries that still lack paired executable evidence.
+  ...UNCLASSIFIED_HOST_ONLY,
+  ...UNPAIRED_EMBEDDED_OPERATIONS,
 };
 
 export const getXBBlockCapability = (

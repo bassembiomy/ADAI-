@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import { XB_C_CONFORMANCE_CASE_IDS, XB_INTERPRETER_CONFORMANCE_CASE_IDS, getXBBlockCapability } from './xbCapabilities';
 
 describe('getXBBlockCapability', () => {
@@ -49,5 +50,25 @@ describe('getXBBlockCapability', () => {
 
   it.each(['constructor', 'toString'])('treats inherited name %s as unknown', (type) => {
     expect(getXBBlockCapability(type)).toBeNull();
+  });
+
+  it('classifies every public X-Bridges block explicitly', () => {
+    for (const type of Object.keys(BLOCK_LIBRARY)) {
+      expect(getXBBlockCapability(type), type).not.toBeNull();
+    }
+  });
+
+  it('links every code-generation-capable block to interpreter and compiled-C conformance cases', () => {
+    for (const type of Object.keys(BLOCK_LIBRARY)) {
+      const capability = getXBBlockCapability(type);
+      if (capability?.codegen !== true) continue;
+
+      expect(capability.interpreterConformanceCaseIds?.length, `${type}: interpreter`).toBeGreaterThan(0);
+      expect(capability.cConformanceCaseIds?.length, `${type}: compiled C`).toBeGreaterThan(0);
+      expect(capability.interpreterConformanceCaseIds?.every((id) =>
+        XB_INTERPRETER_CONFORMANCE_CASE_IDS.includes(id as typeof XB_INTERPRETER_CONFORMANCE_CASE_IDS[number])), type).toBe(true);
+      expect(capability.cConformanceCaseIds?.every((id) =>
+        XB_C_CONFORMANCE_CASE_IDS.includes(id as typeof XB_C_CONFORMANCE_CASE_IDS[number])), type).toBe(true);
+    }
   });
 });

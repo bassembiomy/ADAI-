@@ -144,13 +144,13 @@ describe('semantic state-machine reports', () => {
           },
         },
         {
-          id: 'sine', type: 'SIN', parameters: {
+          id: 'park', type: 'PARK_TRANSFORM', parameters: {
             inputs: [{ id: 'u', direction: 'input', shape: 'scalar', dimensions: [], dataType: 'float32' }],
             outputs: [{ id: 'y', direction: 'output', shape: 'scalar', dimensions: [], dataType: 'float32' }],
           },
         },
       ],
-      edges: [{ id: 'source-to-sine', sourceNodeId: 'source', sourcePortId: 'y', targetNodeId: 'sine', targetPortId: 'u' }],
+      edges: [{ id: 'source-to-park', sourceNodeId: 'source', sourcePortId: 'y', targetNodeId: 'park', targetPortId: 'u' }],
       mappings: [],
       solver: { kind: 'rk4', stepSeconds: 0.002 },
       policy: { memory: 'reset', numericFault: 'signal-only' },

@@ -456,7 +456,7 @@ describe('X-Bridges interpreter', () => {
     },
   );
 
-  it('executes mappings in, semantic operations, then mappings out', () => {
+  it('T14-INT-CORE-DIRECT executes mappings in, semantic operations, then mappings out', () => {
     const ir = model(
       'reset',
       {
@@ -552,7 +552,7 @@ describe('X-Bridges interpreter', () => {
     ]);
   });
 
-  it('updates stateful memory after direct-feedthrough operations', () => {
+  it('T14-INT-STATEFUL updates stateful memory after direct-feedthrough operations', () => {
     const ir = model(
       'retain',
       {

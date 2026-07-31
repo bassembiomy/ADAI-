@@ -1,5 +1,720 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`Golden-file & behavior trace regression tests > locks the integrated X-Bridges C package to a golden snapshot 1`] = `
+[
+  {
+    "content": "#ifndef SM_CORE_H
+#define SM_CORE_H
+
+#include "sm_config.h"
+
+SM_Error_t SM_Init(ADIA_Instance_t *instance);
+SM_Error_t SM_Reset(ADIA_Instance_t *instance);
+SM_Error_t SM_ReadInputs(ADIA_Instance_t *instance);
+SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms);
+SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance);
+SM_Error_t SM_Sync_IO(ADIA_Instance_t *instance);
+SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t group);
+SM_Error_t SM_GetError(const ADIA_Instance_t *instance);
+#ifdef SM_TRACE_ENABLED
+void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink);
+void SM_TraceAction(ADIA_Instance_t *instance, const char *action);
+#else
+#define SM_TraceAction(instance, action) ((void)0)
+#endif
+
+#endif /* SM_CORE_H */
+",
+    "name": "sm_core.h",
+  },
+  {
+    "content": "#include <float.h>
+#include <limits.h>
+#include <math.h>
+#include <stddef.h>
+#include <string.h>
+#include "sm_core.h"
+#include "sm_safety.h"
+#include "sm_user_logic.h"
+#include "mcal_dio.h"
+
+#ifdef SM_TRACE_ENABLED
+void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink)
+{
+    if (instance != NULL) {
+        instance->trace_sink = sink;
+    }
+}
+
+void SM_TraceAction(ADIA_Instance_t *instance, const char *action)
+{
+    if ((instance != NULL) && (instance->trace_sink != NULL)) {
+        const SM_TraceEvent_t event = { action };
+        instance->trace_sink(&event);
+    }
+}
+#endif
+
+void SM_XB_CONTROLLER_Init(ADIA_Instance_t *instance)
+{
+    (void)memset(&instance->xb_controller, 0, sizeof(instance->xb_controller));
+}
+
+void SM_XB_CONTROLLER_Enter(ADIA_Instance_t *instance)
+{
+    SM_XB_CONTROLLER_Init(instance);
+}
+
+void SM_XB_CONTROLLER_Step(ADIA_Instance_t *instance)
+{
+    {
+        (void)instance;
+    }
+    {
+        (void)instance;
+    }
+    {
+        (void)instance;
+    }
+    {
+        (void)instance;
+    }
+    {
+        (void)instance;
+    }
+}
+
+static void SM_Enter_Layer_Default_0(ADIA_Instance_t *instance);
+static void SM_Exit_Layer_No_History_0(ADIA_Instance_t *instance);
+static bool SM_Execute_Layer_0(ADIA_Instance_t *instance);
+static void SM_Enter_Deep_1(ADIA_Instance_t *instance);
+static void SM_Restore_State_1(ADIA_Instance_t *instance, uint32_t snapshot_layer);
+static bool SM_Execute_State_1(ADIA_Instance_t *instance);
+static void SM_Enter_Deep_2(ADIA_Instance_t *instance);
+static void SM_Restore_State_2(ADIA_Instance_t *instance, uint32_t snapshot_layer);
+static bool SM_Execute_State_2(ADIA_Instance_t *instance);
+static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer);
+static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer);
+static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer);
+static void SM_Exit_All(ADIA_Instance_t *instance);
+static void SM_Enter_Safe_State(ADIA_Instance_t *instance);
+static void SM_Enter_Fault(ADIA_Instance_t *instance);
+
+static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer)
+{
+    uint32_t state_index;
+    for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
+        instance->deep_history[layer][state_index] = false;
+    }
+    switch (layer) {
+        case SM_LYR_ROOT_IDX:
+            instance->history_states[0U] = instance->active_states[0U];
+            instance->deep_history[SM_LYR_ROOT_IDX][SM_ST_ORDINARY_IDX] = instance->state_active[SM_ST_ORDINARY_IDX];
+            instance->deep_history[SM_LYR_ROOT_IDX][SM_ST_CONTROLLER_IDX] = instance->state_active[SM_ST_CONTROLLER_IDX];
+            break;
+        default: break;
+    }
+}
+
+static void SM_Exit_Layer(ADIA_Instance_t *instance, uint32_t layer)
+{
+    switch (layer) {
+        case SM_LYR_ROOT_IDX:
+            SM_Record_Layer_History(instance, SM_LYR_ROOT_IDX);
+            if (instance->active_states[0U] != SM_NODE_INVALID) {
+                SM_Exit_State(instance, instance->active_states[0U], false);
+            }
+            break;
+        default: break;
+    }
+}
+
+static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool record_containing_layer)
+{
+    if (record_containing_layer) {
+        switch (state) {
+            case SM_ST_ORDINARY: SM_Record_Layer_History(instance, SM_LYR_ROOT_IDX); break;
+            case SM_ST_CONTROLLER: SM_Record_Layer_History(instance, SM_LYR_ROOT_IDX); break;
+            default: break;
+        }
+    }
+    switch (state) {
+        case SM_ST_ORDINARY:
+            if (!instance->state_active[SM_ST_ORDINARY_IDX]) { break; }
+            SM_ST_ORDINARY_Exit(instance);
+            instance->state_active[SM_ST_ORDINARY_IDX] = false;
+            instance->state_timers[SM_ST_ORDINARY_IDX] = 0U;
+            if (instance->active_states[0U] == SM_ST_ORDINARY) {
+                instance->active_states[0U] = SM_NODE_INVALID;
+            }
+            break;
+        case SM_ST_CONTROLLER:
+            if (!instance->state_active[SM_ST_CONTROLLER_IDX]) { break; }
+            SM_ST_CONTROLLER_Exit(instance);
+            instance->state_active[SM_ST_CONTROLLER_IDX] = false;
+            instance->state_timers[SM_ST_CONTROLLER_IDX] = 0U;
+            if (instance->active_states[0U] == SM_ST_CONTROLLER) {
+                instance->active_states[0U] = SM_NODE_INVALID;
+            }
+            break;
+        default: break;
+    }
+}
+
+static void SM_Exit_Layer_No_History_0(ADIA_Instance_t *instance)
+{
+    if (instance->active_states[0U] != SM_NODE_INVALID) {
+        SM_Exit_State(instance, instance->active_states[0U], false);
+    }
+}
+
+static void SM_Enter_Layer_Default_0(ADIA_Instance_t *instance)
+{
+    SM_Enter_Deep_1(instance);
+}
+
+static void SM_Enter_Deep_1(ADIA_Instance_t *instance)
+{
+    instance->state_active[SM_ST_ORDINARY_IDX] = true;
+    instance->state_timers[SM_ST_ORDINARY_IDX] = 0U;
+    instance->active_states[0U] = SM_ST_ORDINARY;
+    SM_ST_ORDINARY_Entry(instance);
+}
+
+static void SM_Restore_State_1(ADIA_Instance_t *instance, uint32_t snapshot_layer)
+{
+    (void)snapshot_layer;
+    instance->state_active[SM_ST_ORDINARY_IDX] = true;
+    instance->state_timers[SM_ST_ORDINARY_IDX] = 0U;
+    instance->active_states[0U] = SM_ST_ORDINARY;
+    SM_ST_ORDINARY_Entry(instance);
+}
+
+static void SM_Enter_Deep_2(ADIA_Instance_t *instance)
+{
+    instance->state_active[SM_ST_CONTROLLER_IDX] = true;
+    instance->state_timers[SM_ST_CONTROLLER_IDX] = 0U;
+    instance->active_states[0U] = SM_ST_CONTROLLER;
+    SM_XB_CONTROLLER_Enter(instance);
+    SM_ST_CONTROLLER_Entry(instance);
+}
+
+static void SM_Restore_State_2(ADIA_Instance_t *instance, uint32_t snapshot_layer)
+{
+    (void)snapshot_layer;
+    instance->state_active[SM_ST_CONTROLLER_IDX] = true;
+    instance->state_timers[SM_ST_CONTROLLER_IDX] = 0U;
+    instance->active_states[0U] = SM_ST_CONTROLLER;
+    SM_XB_CONTROLLER_Enter(instance);
+    SM_ST_CONTROLLER_Entry(instance);
+}
+
+static bool SM_Execute_Layer_0(ADIA_Instance_t *instance)
+{
+    switch (instance->active_states[0U]) {
+        case SM_ST_ORDINARY:
+            return SM_Execute_State_1(instance);
+        case SM_ST_CONTROLLER:
+            return SM_Execute_State_2(instance);
+        default: return false;
+    }
+}
+
+static bool SM_Execute_State_1(ADIA_Instance_t *instance)
+{
+    SM_ST_ORDINARY_During(instance);
+    return false;
+}
+
+static bool SM_Execute_State_2(ADIA_Instance_t *instance)
+{
+    SM_ST_CONTROLLER_During(instance);
+    SM_XB_CONTROLLER_Step(instance);
+    if (instance->error_status != SM_ERR_NONE) {
+        return false;
+    }
+    SM_TraceAction(instance, "xbridges:CONTROLLER");
+    return false;
+}
+
+static void SM_Exit_All(ADIA_Instance_t *instance)
+{
+    SM_Exit_Layer(instance, SM_LYR_ROOT_IDX);
+}
+
+static void SM_Enter_Safe_State(ADIA_Instance_t *instance)
+{
+    (void)instance;
+}
+
+static void SM_Enter_Fault(ADIA_Instance_t *instance)
+{
+    if (!instance->fault_latched) {
+        SM_Exit_All(instance);
+        SM_Enter_Safe_State(instance);
+        SM_ApplySafeOutputs(instance);
+        instance->fault_latched = true;
+    }
+}
+
+SM_Error_t SM_Init(ADIA_Instance_t *instance)
+{
+    uint32_t layer_index;
+    uint32_t state_index;
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    (void)memset(instance, 0, sizeof(*instance));
+#ifdef SM_TRACE_ENABLED
+    instance->trace_sink = NULL;
+#endif
+    SM_XB_CONTROLLER_Init(instance);
+    (void)SM_Exit_Layer_No_History_0;
+    (void)SM_Enter_Deep_1;
+    (void)SM_Restore_State_1;
+    (void)SM_Enter_Deep_2;
+    (void)SM_Restore_State_2;
+    instance->data.count = (double)(1.0);
+    instance->data.go = (bool)(false);
+    instance->data.ratio = (double)(0.0);
+    instance->data.total = (double)(0.0);
+    for (layer_index = 0U; layer_index < SM_NUM_ACTIVE_SLOTS; ++layer_index) {
+        instance->active_states[layer_index] = SM_NODE_INVALID;
+        instance->history_states[layer_index] = SM_NODE_INVALID;
+    }
+    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
+        for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
+            instance->deep_history[layer_index][state_index] = false;
+        }
+    }
+    for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
+        instance->state_active[state_index] = false;
+        instance->state_timers[state_index] = 0U;
+    }
+    instance->error_status = SM_ERR_NONE;
+    instance->fault_latched = false;
+    SM_Enter_Layer_Default_0(instance);
+    return SM_ERR_NONE;
+}
+
+SM_Error_t SM_Reset(ADIA_Instance_t *instance)
+{
+    uint32_t layer_index;
+    uint32_t state_index;
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    SM_Exit_Layer(instance, SM_LYR_ROOT_IDX);
+    SM_XB_CONTROLLER_Init(instance);
+    instance->data.count = (double)(1.0);
+    instance->data.go = (bool)(false);
+    instance->data.ratio = (double)(0.0);
+    instance->data.total = (double)(0.0);
+    for (layer_index = 0U; layer_index < SM_NUM_ACTIVE_SLOTS; ++layer_index) {
+        instance->active_states[layer_index] = SM_NODE_INVALID;
+        instance->history_states[layer_index] = SM_NODE_INVALID;
+    }
+    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
+        for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
+            instance->deep_history[layer_index][state_index] = false;
+        }
+    }
+    for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
+        instance->state_active[state_index] = false;
+        instance->state_timers[state_index] = 0U;
+    }
+    instance->error_status = SM_ERR_NONE;
+    instance->fault_latched = false;
+    SM_Enter_Layer_Default_0(instance);
+    return SM_WriteOutputs(instance);
+}
+
+SM_Error_t SM_ReadInputs(ADIA_Instance_t *instance)
+{
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    (void)instance;
+    return SM_ERR_NONE;
+}
+
+SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)
+{
+    uint32_t state_index;
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if (instance->error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+        return instance->error_status;
+    }
+    uint32_t tick_delta;
+    if (delta_ms >= SM_TICK_MS) {
+        tick_delta = delta_ms - SM_TICK_MS;
+    } else {
+        tick_delta = SM_TICK_MS - delta_ms;
+    }
+    if (tick_delta > SM_TICK_TOLERANCE_MS) {
+        instance->error_status = SM_ERR_TIMING;
+        SM_Enter_Fault(instance);
+        return instance->error_status;
+    }
+    instance->error_status = SM_Validate_State_Consistency(instance);
+    if (instance->error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+        return instance->error_status;
+    }
+    for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
+        if (instance->state_active[state_index]) {
+            if (delta_ms > (UINT32_MAX - instance->state_timers[state_index])) {
+                instance->state_timers[state_index] = UINT32_MAX;
+            } else {
+                instance->state_timers[state_index] += delta_ms;
+            }
+        }
+    }
+    (void)SM_Execute_Layer_0(instance);
+    if (instance->error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+    }
+    return instance->error_status;
+}
+
+SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance)
+{
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if (instance->error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+        return instance->error_status;
+    }
+    instance->error_status = SM_Validate_State_Consistency(instance);
+    if (instance->error_status != SM_ERR_NONE) {
+        SM_Enter_Fault(instance);
+        return instance->error_status;
+    }
+    (void)instance;
+    return SM_ERR_NONE;
+}
+
+SM_Error_t SM_Sync_IO(ADIA_Instance_t *instance)
+{
+    SM_Error_t error = SM_ReadInputs(instance);
+    if (error == SM_ERR_NONE) {
+        error = SM_WriteOutputs(instance);
+    }
+    return error;
+}
+
+SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t group)
+{
+    if ((instance == NULL) || (group >= SM_NUM_ACTIVE_SLOTS)) {
+        return SM_NODE_INVALID;
+    }
+    return instance->active_states[group];
+}
+
+SM_Error_t SM_GetError(const ADIA_Instance_t *instance)
+{
+    return instance == NULL ? SM_ERR_NULL_INSTANCE : instance->error_status;
+}
+",
+    "name": "sm_core.c",
+  },
+  {
+    "content": "#ifndef SM_XBRIDGES_H
+#define SM_XBRIDGES_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#ifndef SM_ADIA_INSTANCE_FWD
+#define SM_ADIA_INSTANCE_FWD
+typedef struct ADIA_Instance ADIA_Instance_t;
+#endif
+
+#define SM_XB_SUPPORTS_FLOAT16 0
+#define SM_XB_SUPPORTS_FLOAT32 1
+#define SM_XB_SUPPORTS_FLOAT64 0
+
+typedef enum {
+    SM_XB_FAULT_NONE = 0,
+    SM_XB_FAULT_OVERFLOW,
+    SM_XB_FAULT_NON_FINITE,
+    SM_XB_FAULT_UNSUPPORTED_FLOAT
+} SM_XB_Fault_t;
+
+typedef enum {
+    SM_XB_ROUND_FLOOR = 0,
+    SM_XB_ROUND_CEILING,
+    SM_XB_ROUND_ZERO,
+    SM_XB_ROUND_NEAREST,
+    SM_XB_ROUND_AWAY,
+    SM_XB_ROUND_CONVERGENT
+} SM_XB_Rounding_t;
+
+typedef enum {
+    SM_XB_OVERFLOW_SATURATE = 0,
+    SM_XB_OVERFLOW_WRAP,
+    SM_XB_OVERFLOW_ERROR
+} SM_XB_Overflow_t;
+
+typedef struct {
+    double real_value;
+    int64_t stored_integer;
+    double quantization_error;
+    SM_XB_Fault_t fault;
+    bool has_stored_integer;
+} SM_XB_NumericResult_t;
+
+typedef struct {
+    uint8_t reserved;
+} SM_XB_CONTROLLER_t;
+
+SM_XB_NumericResult_t SM_XB_ConvertFixed(
+    double value,
+    bool is_signed,
+    uint8_t word_length,
+    int16_t fraction_length,
+    SM_XB_Rounding_t rounding,
+    SM_XB_Overflow_t overflow);
+bool SM_XB_Truth(double value);
+SM_XB_NumericResult_t SM_XB_ConvertBoolean(double value);
+SM_XB_NumericResult_t SM_XB_ConvertFloat16(double value);
+SM_XB_NumericResult_t SM_XB_ConvertFloat32(double value);
+SM_XB_NumericResult_t SM_XB_ConvertFloat64(double value);
+
+void SM_XB_CONTROLLER_Init(ADIA_Instance_t *instance);
+void SM_XB_CONTROLLER_Enter(ADIA_Instance_t *instance);
+void SM_XB_CONTROLLER_Step(ADIA_Instance_t *instance);
+
+#endif /* SM_XBRIDGES_H */
+",
+    "name": "sm_xbridges.h",
+  },
+  {
+    "content": "#include "sm_xbridges.h"
+
+#include <float.h>
+#include <math.h>
+
+#define SM_XB_MAX_SAFE_INTEGER 9007199254740991.0
+
+bool SM_XB_Truth(double value)
+{
+    return !isnan(value) && (value != 0.0);
+}
+
+static SM_XB_NumericResult_t SM_XB_DefaultResult(double value)
+{
+    SM_XB_NumericResult_t result;
+    result.real_value = value;
+    result.stored_integer = INT64_C(0);
+    result.quantization_error = 0.0;
+    result.fault = SM_XB_FAULT_NONE;
+    result.has_stored_integer = false;
+    return result;
+}
+
+static double SM_XB_RoundStored(double value, SM_XB_Rounding_t rounding)
+{
+    const double lower = floor(value);
+    const double fraction = value - lower;
+    switch (rounding) {
+        case SM_XB_ROUND_FLOOR:
+            return lower;
+        case SM_XB_ROUND_CEILING:
+            return ceil(value);
+        case SM_XB_ROUND_ZERO:
+            return trunc(value);
+        case SM_XB_ROUND_NEAREST:
+            return fraction < 0.5 ? lower : lower + 1.0;
+        case SM_XB_ROUND_AWAY:
+            return value < 0.0
+                ? -floor(fabs(value) + 0.5)
+                : floor(value + 0.5);
+        case SM_XB_ROUND_CONVERGENT:
+            if (fraction < 0.5) return lower;
+            if (fraction > 0.5) return lower + 1.0;
+            return fmod(fabs(lower), 2.0) == 0.0 ? lower : lower + 1.0;
+        default:
+            return lower;
+    }
+}
+
+static uint64_t SM_XB_PositiveResidue(int64_t value, uint64_t modulus)
+{
+    uint64_t magnitude;
+    uint64_t remainder;
+    if (value >= INT64_C(0)) {
+        return ((uint64_t)value) % modulus;
+    }
+    magnitude = (uint64_t)(-(value + INT64_C(1)));
+    magnitude += UINT64_C(1);
+    remainder = magnitude % modulus;
+    return remainder == UINT64_C(0) ? UINT64_C(0) : modulus - remainder;
+}
+
+SM_XB_NumericResult_t SM_XB_ConvertFixed(
+    double value,
+    bool is_signed,
+    uint8_t word_length,
+    int16_t fraction_length,
+    SM_XB_Rounding_t rounding,
+    SM_XB_Overflow_t overflow)
+{
+    SM_XB_NumericResult_t result = SM_XB_DefaultResult(value);
+    double scale;
+    double scaled;
+    double rounded;
+    double minimum;
+    double maximum;
+    uint64_t modulus;
+    uint64_t half_modulus;
+    int64_t rounded_integer;
+    int64_t stored_integer;
+    bool overflowed;
+
+    if (!isfinite(value)) {
+        result.fault = SM_XB_FAULT_NON_FINITE;
+        return result;
+    }
+    if ((word_length == 0U) || (word_length > 32U)) {
+        result.fault = SM_XB_FAULT_OVERFLOW;
+        return result;
+    }
+    scale = ldexp(1.0, (int)fraction_length);
+    if (!isfinite(scale) || (scale == 0.0)) {
+        result.fault = SM_XB_FAULT_OVERFLOW;
+        return result;
+    }
+
+    modulus = UINT64_C(1) << word_length;
+    half_modulus = modulus >> 1U;
+    minimum = is_signed ? -(double)half_modulus : 0.0;
+    maximum = is_signed
+        ? (double)(half_modulus - UINT64_C(1))
+        : (double)(modulus - UINT64_C(1));
+    scaled = value * scale;
+
+    if (!isfinite(scaled) || (fabs(scaled) > SM_XB_MAX_SAFE_INTEGER)) {
+        stored_integer = scaled < 0.0
+            ? (int64_t)minimum
+            : (int64_t)maximum;
+        result.stored_integer = stored_integer;
+        result.real_value = (double)stored_integer / scale;
+        result.quantization_error = fabs(value - result.real_value);
+        result.fault = SM_XB_FAULT_OVERFLOW;
+        result.has_stored_integer = true;
+        return result;
+    }
+
+    rounded = SM_XB_RoundStored(scaled, rounding);
+    overflowed = (rounded < minimum) || (rounded > maximum);
+    if (overflowed && (overflow != SM_XB_OVERFLOW_WRAP)) {
+        const double bounded = rounded < minimum ? minimum : maximum;
+        stored_integer = (int64_t)bounded;
+        if (overflow == SM_XB_OVERFLOW_ERROR) {
+            result.fault = SM_XB_FAULT_OVERFLOW;
+        }
+    } else {
+        rounded_integer = (int64_t)rounded;
+        if (overflowed) {
+            const uint64_t residue =
+                SM_XB_PositiveResidue(rounded_integer, modulus);
+            if (is_signed && (residue >= half_modulus)) {
+                const uint64_t magnitude = modulus - residue;
+                stored_integer = -(int64_t)magnitude;
+            } else {
+                stored_integer = (int64_t)residue;
+            }
+        } else {
+            stored_integer = rounded_integer;
+        }
+    }
+
+    result.stored_integer = stored_integer;
+    result.real_value = (double)stored_integer / scale;
+    result.quantization_error = fabs(value - result.real_value);
+    result.has_stored_integer = true;
+    return result;
+}
+
+SM_XB_NumericResult_t SM_XB_ConvertBoolean(double value)
+{
+    SM_XB_NumericResult_t result = SM_XB_DefaultResult(value);
+    if (!isfinite(value)) {
+        result.real_value = 0.0;
+        result.fault = SM_XB_FAULT_NON_FINITE;
+        return result;
+    }
+    result.stored_integer = SM_XB_Truth(value) ? INT64_C(1) : INT64_C(0);
+    result.real_value = (double)result.stored_integer;
+    result.quantization_error = fabs(value - result.real_value);
+    result.has_stored_integer = true;
+    return result;
+}
+
+static SM_XB_NumericResult_t SM_XB_UnsupportedFloat(double value)
+{
+    SM_XB_NumericResult_t result = SM_XB_DefaultResult(value);
+    result.fault = SM_XB_FAULT_UNSUPPORTED_FLOAT;
+    return result;
+}
+
+SM_XB_NumericResult_t SM_XB_ConvertFloat16(double value)
+{
+    (void)value;
+    return SM_XB_UnsupportedFloat(value);
+}
+
+SM_XB_NumericResult_t SM_XB_ConvertFloat32(double value)
+{
+#if SM_XB_SUPPORTS_FLOAT32
+    SM_XB_NumericResult_t result = SM_XB_DefaultResult(value);
+    float converted;
+    if (!isfinite(value)) {
+        result.fault = SM_XB_FAULT_NON_FINITE;
+        return result;
+    }
+    if (fabs(value) > (double)FLT_MAX) {
+        result.real_value = value < 0.0 ? -HUGE_VAL : HUGE_VAL;
+        result.quantization_error = HUGE_VAL;
+        result.fault = SM_XB_FAULT_NON_FINITE;
+        return result;
+    }
+    converted = (float)value;
+    result.real_value = (double)converted;
+    result.quantization_error = fabs(value - result.real_value);
+    if (!isfinite(result.real_value)) {
+        result.fault = SM_XB_FAULT_NON_FINITE;
+    }
+    return result;
+#else
+    return SM_XB_UnsupportedFloat(value);
+#endif
+}
+
+SM_XB_NumericResult_t SM_XB_ConvertFloat64(double value)
+{
+#if SM_XB_SUPPORTS_FLOAT64
+    SM_XB_NumericResult_t result = SM_XB_DefaultResult(value);
+    if (!isfinite(value)) {
+        result.fault = SM_XB_FAULT_NON_FINITE;
+        return result;
+    }
+    return result;
+#else
+    return SM_XB_UnsupportedFloat(value);
+#endif
+}
+",
+    "name": "sm_xbridges.c",
+  },
+]
+`;
+
 exports[`Golden-file & behavior trace regression tests > should match golden templates (snapshot comparison) 1`] = `
 [
   {
@@ -8,6 +723,10 @@ exports[`Golden-file & behavior trace regression tests > should match golden tem
 
 #include <stdbool.h>
 #include <stdint.h>
+#ifndef SM_ADIA_INSTANCE_FWD
+#define SM_ADIA_INSTANCE_FWD
+typedef struct ADIA_Instance ADIA_Instance_t;
+#endif
 
 #define SM_TICK_MS 10U
 #define SM_TICK_TOLERANCE_MS ((SM_TICK_MS / 10U) > 0U ? (SM_TICK_MS / 10U) : 1U)
@@ -29,7 +748,8 @@ typedef enum {
     SM_ERR_NULL_INSTANCE,
     SM_ERR_TIMING,
     SM_ERR_CONFIGURATION,
-    SM_ERR_SAFETY_VIOLATION
+    SM_ERR_SAFETY_VIOLATION,
+    SM_ERR_XBRIDGES_NUMERIC
 } SM_Error_t;
 
 typedef uint32_t SM_Group_t;
@@ -47,7 +767,7 @@ typedef struct {
     bool t2;
 } SM_Data_t;
 
-typedef struct {
+struct ADIA_Instance {
     SM_Data_t data;
     SM_Node_t active_states[(SM_NUM_ACTIVE_SLOTS > 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];
     SM_Node_t history_states[(SM_NUM_ACTIVE_SLOTS > 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];
@@ -59,7 +779,7 @@ typedef struct {
 #ifdef SM_TRACE_ENABLED
     SM_TraceSink_t trace_sink;
 #endif
-} ADIA_Instance_t;
+};
 
 #endif /* SM_CONFIG_H */
 ",
@@ -91,7 +811,9 @@ void SM_TraceAction(ADIA_Instance_t *instance, const char *action);
     "name": "sm_core.h",
   },
   {
-    "content": "#include <limits.h>
+    "content": "#include <float.h>
+#include <limits.h>
+#include <math.h>
 #include <stddef.h>
 #include <string.h>
 #include "sm_core.h"
@@ -722,11 +1444,22 @@ void MCAL_Watchdog_Kick(void);
 - Host compilation: NOT RUN
 - Host runtime: NOT RUN
 - Differential trace: NOT RUN
+- Compiled X-Bridges execution: NOT RUN
 - Embedded compilation: NOT RUN
 - Target hardware: PENDING
 - Formal MISRA compliance and safety certification: NOT CLAIMED
 
 Evidence labels describe only the checks actually recorded for this generated package. A PASS at one level does not imply a PASS at any other level.
+
+## X-Bridges code generation
+
+- X-Bridges states: 0
+- X-Bridges blocks: 0
+- Estimated X-Bridges static memory lower bound: 0 bytes (lower-bound-excludes-padding; excludes target ABI padding and linker allocation)
+- Solver: None
+- Numeric types: None
+- Required target capabilities: None
+- Unsupported embedded capabilities: AC_INDUCTION_MOTOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., AC_MOTOR_PID_CONTROL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ACOS: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ACOSEC: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ACOSECH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ACOSH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ACOT: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ACOTH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., AIR_FRYER_LEARNING_MODEL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ASEC: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ASECH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ASIN: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ASINH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ATAN: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ATANH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., BAND_LIMITED_NOISE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., BitwiseAND: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., BitwiseNOT: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., BitwiseOR: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., BitwiseXOR: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., CFD_DEM_SURROGATE_LEARNER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., CFD_SPH_WATER_SOLVER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., Clock: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., COS: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., COSEC: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., COSECH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., COSH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., COT: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., COTH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., Counter: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., CURRENT_CONTROLLER_DQ: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEM_BOND_FABRIC: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEM_CFD_COSIMULATION_INTERFACE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEM_DRUM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEM_FLUID_COUPLING: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEM_HERTZ_CONTACT: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEM_PARTICLE_SYSTEM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEM_WASHING_MACHINE_TWIN: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEMUX: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., DERIVATIVE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., Determinant: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DFlipFlop: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DISCRETE_IMPULSE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DOE_MODEL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DOE_MODULE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., EXTENDED_KALMAN_FILTER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FABRIC_HARMONIC_ANALYZER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FIELD_ORIENTED_CONTROL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FIELD_WEAKENING: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FLUX_REFERENCE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_AND: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_DEFUZZIFY: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_INFERENCE_SYSTEM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_MF_GAUSSMF: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_MF_SIGMF: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_MF_TRAPMF: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_MF_TRIMF: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_NOT: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_OR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_PID_CONTROLLER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_RULE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_SURFACE_VIEWER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., HIGH_PASS_FILTER: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., IdentityMatrix: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., IF_ELSE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., IM_FLUX_OBSERVER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., IM_FOC_CONTROL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., IM_SCALAR_CONTROL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., INTEGRATOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., Inverse: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., JKFlipFlop: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., KALMAN_FILTER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., LAPLACE_TRANSFORM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., LMS_ADAPTIVE_FILTER: Online learning is not in the embedded-safe set., LOW_PASS_FILTER: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., Max: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., Mean: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., MOVING_AVERAGE: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., MPC_CONTROLLER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., MTPA_CONTROLLER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., MTPA_FW_MANAGER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., MUX: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., NAND: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., NEURAL_NEURON_LEARNING: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., NOR: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., Note: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., PID_CONTROLLER: PID_CONTROLLER has no compiled-C conformance contract., PWM_GENERATOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., Register: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., RL_Q_LEARNING_CONTROLLER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_3D_SCENE_VIEW: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_3D_VIZ_COLORS: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_BATTERY: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_BATTERY_HUD: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_BATTERY_MONITOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_BOUSTROPHEDON_SWEEP: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_BUMPER_SENSOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_CAPACITY_THRESHOLD: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_CLIFF_HALT: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_CLIFF_IR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_COLLISION_AVOID: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_COLLISION_MESH: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_COMM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_CONTINUOUS_ENERGY: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_COVERAGE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_COVERAGE_HEATMAP: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_COVERAGE_PLANNER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DIGITAL_TWIN: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DIRT_DENSITY: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DOCK_BEACON: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DOCK_DETECT: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DOCK_ICON: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DOOR_CROSSING: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DOOR_TRACKER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DUSTBIN_HUD: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DUSTBIN_SENSOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DYNAMICS: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ENCODER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ENVIRONMENT: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ERODE_MASK: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_FURNITURE_MESH: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_FUSION: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_GLOBAL_PLANNER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_GOAL_MANAGER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_HALT_ALERT: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_KINEMATICS: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_LIDAR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_LIDAR_SENSOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_LOCALIZATION: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_MAPPING: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_MODE_SUPERVISOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_MOTION_CONTROLLER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_MOTOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_MOTOR_COMMAND: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_MOTOR_CURRENT: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_NAV: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_OBSTACLE_AVOIDANCE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ODOMETRY: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ODOMETRY_SENSOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_RESUME_SCHEDULER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ROOM_SCHEDULER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ROOM_SEGMENTATION: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ROOM_ZONE_COLORS: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_SEMANTIC_MAP: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_SENSOR_FUSION_EKF: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_SIDE_BRUSH: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_SLAM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_SUCTION_PWM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_SURFACE_ADAPTER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_TERRAIN_MODEL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_THETA_STAR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_TOPOLOGY_RETURN: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_VELOCITY_PID: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_VISUALIZATION: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_WAYPOINT_GEN: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_WHEEL_CONTROL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROOT_LOCUS: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROTOR_POSITION_ESTIMATOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., Scope: Visualization requires the host runtime., SEC: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., SECH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., SECTOR_SELECTOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SENSORLESS_SIX_STEP: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ShiftLeft: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ShiftRight: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., SIN: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., SINGLE_PHASE_H_BRIDGE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SINH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., SIX_STEP_COMMUTATION: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SPEED_CONTROLLER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., Step: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., Subsystem: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SumElements: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., SVPWM_CORE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SVPWM_GATE_GENERATOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SVPWM_MODULATOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SWITCH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., SWITCH_CASE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SWITCHING_TIME_CALCULATOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., TAN: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., TANH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., THREE_PHASE_INVERTER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., THREE_PHASE_PWM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., TRANSFER_FUNCTION: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., VectorPow: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., VF_SLIP_COMP: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., VOLTAGE_REFERENCE_GENERATOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., WaveformGen: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., WHITE_NOISE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., XOR: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ZERO_POLE_GAIN: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ZERO_SEQUENCE_INJECTION: No paired canonical-interpreter and strict-C99 embedded conformance case is registered.
 ",
     "name": "sm_testing_report.md",
   },
@@ -764,9 +1497,19 @@ Evidence labels describe only the checks actually recorded for this generated pa
 | Metric | Value |
 |---|---:|
 | Files measured | 8 |
-| Total lines | 660 |
-| Functional lines | 588 |
-| Comment/blank density | 10.9% |
+| Total lines | 667 |
+| Functional lines | 595 |
+| Comment/blank density | 10.8% |
+
+## X-Bridges static code-generation metrics
+
+- X-Bridges states: 0
+- X-Bridges blocks: 0
+- Estimated X-Bridges static memory lower bound: 0 bytes (lower-bound-excludes-padding; excludes target ABI padding and linker allocation)
+- Solver: None
+- Numeric types: None
+- Required target capabilities: None
+- Unsupported embedded capabilities: AC_INDUCTION_MOTOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., AC_MOTOR_PID_CONTROL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ACOS: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ACOSEC: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ACOSECH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ACOSH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ACOT: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ACOTH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., AIR_FRYER_LEARNING_MODEL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ASEC: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ASECH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ASIN: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ASINH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ATAN: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ATANH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., BAND_LIMITED_NOISE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., BitwiseAND: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., BitwiseNOT: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., BitwiseOR: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., BitwiseXOR: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., CFD_DEM_SURROGATE_LEARNER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., CFD_SPH_WATER_SOLVER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., Clock: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., COS: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., COSEC: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., COSECH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., COSH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., COT: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., COTH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., Counter: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., CURRENT_CONTROLLER_DQ: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEM_BOND_FABRIC: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEM_CFD_COSIMULATION_INTERFACE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEM_DRUM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEM_FLUID_COUPLING: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEM_HERTZ_CONTACT: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEM_PARTICLE_SYSTEM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEM_WASHING_MACHINE_TWIN: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DEMUX: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., DERIVATIVE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., Determinant: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DFlipFlop: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DISCRETE_IMPULSE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DOE_MODEL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., DOE_MODULE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., EXTENDED_KALMAN_FILTER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FABRIC_HARMONIC_ANALYZER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FIELD_ORIENTED_CONTROL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FIELD_WEAKENING: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FLUX_REFERENCE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_AND: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_DEFUZZIFY: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_INFERENCE_SYSTEM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_MF_GAUSSMF: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_MF_SIGMF: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_MF_TRAPMF: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_MF_TRIMF: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_NOT: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_OR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_PID_CONTROLLER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_RULE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., FUZZY_SURFACE_VIEWER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., HIGH_PASS_FILTER: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., IdentityMatrix: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., IF_ELSE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., IM_FLUX_OBSERVER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., IM_FOC_CONTROL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., IM_SCALAR_CONTROL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., INTEGRATOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., Inverse: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., JKFlipFlop: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., KALMAN_FILTER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., LAPLACE_TRANSFORM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., LMS_ADAPTIVE_FILTER: Online learning is not in the embedded-safe set., LOW_PASS_FILTER: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., Max: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., Mean: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., MOVING_AVERAGE: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., MPC_CONTROLLER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., MTPA_CONTROLLER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., MTPA_FW_MANAGER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., MUX: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., NAND: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., NEURAL_NEURON_LEARNING: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., NOR: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., Note: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., PID_CONTROLLER: PID_CONTROLLER has no compiled-C conformance contract., PWM_GENERATOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., Register: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., RL_Q_LEARNING_CONTROLLER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_3D_SCENE_VIEW: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_3D_VIZ_COLORS: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_BATTERY: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_BATTERY_HUD: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_BATTERY_MONITOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_BOUSTROPHEDON_SWEEP: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_BUMPER_SENSOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_CAPACITY_THRESHOLD: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_CLIFF_HALT: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_CLIFF_IR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_COLLISION_AVOID: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_COLLISION_MESH: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_COMM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_CONTINUOUS_ENERGY: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_COVERAGE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_COVERAGE_HEATMAP: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_COVERAGE_PLANNER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DIGITAL_TWIN: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DIRT_DENSITY: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DOCK_BEACON: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DOCK_DETECT: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DOCK_ICON: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DOOR_CROSSING: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DOOR_TRACKER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DUSTBIN_HUD: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DUSTBIN_SENSOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_DYNAMICS: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ENCODER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ENVIRONMENT: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ERODE_MASK: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_FURNITURE_MESH: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_FUSION: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_GLOBAL_PLANNER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_GOAL_MANAGER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_HALT_ALERT: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_KINEMATICS: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_LIDAR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_LIDAR_SENSOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_LOCALIZATION: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_MAPPING: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_MODE_SUPERVISOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_MOTION_CONTROLLER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_MOTOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_MOTOR_COMMAND: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_MOTOR_CURRENT: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_NAV: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_OBSTACLE_AVOIDANCE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ODOMETRY: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ODOMETRY_SENSOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_RESUME_SCHEDULER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ROOM_SCHEDULER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ROOM_SEGMENTATION: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_ROOM_ZONE_COLORS: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_SEMANTIC_MAP: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_SENSOR_FUSION_EKF: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_SIDE_BRUSH: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_SLAM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_SUCTION_PWM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_SURFACE_ADAPTER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_TERRAIN_MODEL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_THETA_STAR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_TOPOLOGY_RETURN: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_VELOCITY_PID: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_VISUALIZATION: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_WAYPOINT_GEN: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROBOT_VACUUM_WHEEL_CONTROL: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROOT_LOCUS: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ROTOR_POSITION_ESTIMATOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., Scope: Visualization requires the host runtime., SEC: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., SECH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., SECTOR_SELECTOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SENSORLESS_SIX_STEP: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ShiftLeft: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ShiftRight: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., SIN: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., SINGLE_PHASE_H_BRIDGE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SINH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., SIX_STEP_COMMUTATION: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SPEED_CONTROLLER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., Step: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., Subsystem: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SumElements: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., SVPWM_CORE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SVPWM_GATE_GENERATOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SVPWM_MODULATOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SWITCH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., SWITCH_CASE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., SWITCHING_TIME_CALCULATOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., TAN: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., TANH: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., THREE_PHASE_INVERTER: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., THREE_PHASE_PWM: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., TRANSFER_FUNCTION: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., VectorPow: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., VF_SLIP_COMP: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., VOLTAGE_REFERENCE_GENERATOR: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., WaveformGen: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., WHITE_NOISE: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., XOR: The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage., ZERO_POLE_GAIN: No paired canonical-interpreter and strict-C99 embedded conformance case is registered., ZERO_SEQUENCE_INJECTION: No paired canonical-interpreter and strict-C99 embedded conformance case is registered.
 
 These are structural metrics derived from the same validated semantic analysis used by the testing report. They are not formal MISRA, safety-certification, embedded-timing, or target-hardware evidence.
 ",

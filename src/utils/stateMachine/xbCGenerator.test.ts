@@ -1269,7 +1269,7 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
   it.each([
     { signs: '++', expected: '78,2,1,0' },
     { signs: '+-', expected: '42,2,1,0' },
-  ])('compiles dedicated combinational emitters with Sum "$signs"', ({
+  ])('T14-C99-CORE-DIRECT compiles dedicated combinational emitters with Sum "$signs"', ({
     signs,
     expected,
   }) => {
@@ -2399,7 +2399,7 @@ describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
 });
 
 describe('X-Bridges fixed-point state parity', { timeout: 60_000 }, () => {
-  it('matches Q2 delay conversion for fractional input and saturation', () => {
+  it('T14-C99-STATEFUL matches Q2 delay conversion for fractional input and saturation', () => {
     const ir = fixedDelayModel();
     const runtime = createXBRuntime(ir.states.controller.xBridges!);
     const inputs = [0.5, 100000, 100000];

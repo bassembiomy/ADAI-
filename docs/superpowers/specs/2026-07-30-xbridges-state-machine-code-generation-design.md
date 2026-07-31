@@ -2,7 +2,11 @@
 
 ## Status
 
-Approved design, awaiting user review before implementation planning.
+Implemented through the capability-audit gate on 2026-07-31. Acceptance is
+based on semantic, strict-C99 differential, HIL-host, TypeScript, and
+deterministic runtime-build evidence recorded by the implementation plan. MCU
+toolchain compilation, execution on target hardware, WCET measurement, MISRA
+qualification, and safety certification remain integration responsibilities.
 
 ## Goal
 
@@ -465,3 +469,17 @@ Implementation is complete only when:
 11. Strict C99, state-machine, X-Bridges, differential, HIL, and TypeScript
     suites pass.
 12. Existing unrelated X-Bridges block changes remain intact.
+
+## Delivered Capability Boundary
+
+The public integration contract and current block matrix are documented in
+[`docs/XBRIDGES_EMBEDDED_CODEGEN.md`](../../XBRIDGES_EMBEDDED_CODEGEN.md).
+`xbCapabilities.ts` is exhaustive for the public `BLOCK_LIBRARY`: every type is
+either explicitly enabled with interpreter and C conformance-case identifiers
+or explicitly rejected with a reason. This prevents newly encountered UI-only
+blocks from silently entering the embedded path.
+
+The implemented behavior is intentionally described as Stateflow-style state
+ordering and Simulink-style numeric conversion. It is not a claim of complete
+Stateflow/Simulink feature equivalence, MathWorks code-generation equivalence,
+formal MISRA compliance, or certification for a safety integrity level.

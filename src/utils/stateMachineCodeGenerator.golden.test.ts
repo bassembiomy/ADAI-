@@ -5,6 +5,7 @@ import { StateData, VariableDef, TransitionData, JunctionData, Layer } from '../
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
+import { hybridXBridgesFixture } from './stateMachine/smFixtures';
 
 const mkVar = (id: string, name: string, type: VariableDef['type'], initialValue: string): VariableDef =>
   ({ id, name, type, initialValue, currentValue: 0, visibleInScope: true });
@@ -113,6 +114,22 @@ describe('Golden-file & behavior trace regression tests', () => {
         .replace(/\/\* Model: ADIA State Machine \| .*? \*\//g, '/* Model: ADIA State Machine | STATIC_TIMESTAMP */')
         .replace(/\*\*Timestamp:\*\* .*?\n/g, '**Timestamp:** STATIC_TIMESTAMP\n')
     }));
+
+    expect(filesSnapshot).toMatchSnapshot();
+  });
+
+  it('locks the integrated X-Bridges C package to a golden snapshot', () => {
+    const result = generateMISRACCode(hybridXBridgesFixture() as any);
+    expect(result.errors).toHaveLength(0);
+
+    const filesSnapshot = result.files
+      .filter((file) => ['sm_core.h', 'sm_core.c', 'sm_xbridges.h', 'sm_xbridges.c'].includes(file.name))
+      .map((file) => ({
+        name: file.name,
+        content: file.content
+          .replace(/\/\* Model: ADIA State Machine \| .*? \*\//g, '/* Model: ADIA State Machine | STATIC_TIMESTAMP */')
+          .replace(/\*\*Timestamp:\*\* .*?\n/g, '**Timestamp:** STATIC_TIMESTAMP\n'),
+      }));
 
     expect(filesSnapshot).toMatchSnapshot();
   });

@@ -346,7 +346,7 @@ describe('validateXBModel', () => {
 
   it('requires registry-declared target capabilities and numeric support', () => {
     const registryRequirementCodes = codes(model({
-      nodes: [node('sin', 'SIN')],
+      nodes: [node('park', 'PARK_TRANSFORM')],
     }));
     const persistedNumericCodes = codes(model({
       nodes: [node('double', 'DATA_TYPE_CONVERSION', {
