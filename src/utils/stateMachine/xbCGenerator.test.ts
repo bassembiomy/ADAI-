@@ -2049,7 +2049,9 @@ describe('X-Bridges fixed-point state parity', { timeout: 60_000 }, () => {
         cwd: workspace.directory, encoding: 'utf8',
       }).trim().split(/\r?\n/).map(Number);
       expect(actual).toEqual([expected[0], expected[2]]);
-      expect(actual).toEqual([0.5, 8191.75]);
+      // ZOH publishes the state sampled at the prior hit; the saturated update
+      // becomes observable on the following sample hit.
+      expect(actual).toEqual([0, 0.5]);
     } finally {
       workspace.cleanup();
     }
