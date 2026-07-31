@@ -562,12 +562,17 @@ const updateContinuousState = (
           faults,
         ));
     });
-    return;
   }
-  slots.forEach((slot) => {
-    runtime.stateSlots[slot.slotId] = signalValues(runtime, slot.signalId)
-      .map((value) => convertValue(value, slot.numericType, faults));
-  });
+  if (runtime.ir.solver.kind === 'euler') {
+    slots.forEach((slot) => {
+      runtime.stateSlots[slot.slotId] = signalValues(runtime, slot.signalId)
+        .map((value) => convertValue(value, slot.numericType, faults));
+    });
+  }
+  for (const slot of slots) {
+    writeSignal(runtime, slot.signalId, runtime.stateSlots[slot.slotId], faults);
+  }
+  executeDirectOperations(runtime, faults, true);
 };
 
 const executeSolverSubstep = (

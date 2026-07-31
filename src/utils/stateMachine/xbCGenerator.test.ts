@@ -249,15 +249,19 @@ const continuousSolverModel = (
   const derivative = scalarOperation(
     'derivative', 'Sum', ['derivative:a', 'derivative:b'], ['derivative:y'],
   );
+  const downstream = scalarOperation(
+    'downstream', 'GAIN', ['downstream:u'], ['downstream:y'], { gain: 2 },
+  );
   ir.variables = {
     u: { id: 'u', name: 'u', cName: 'u', type: 'double', initialValue: 0 },
     x: { id: 'x', name: 'x', cName: 'x', type: 'double', initialValue: 0 },
     d: { id: 'd', name: 'd', cName: 'd', type: 'double', initialValue: 0 },
+    twice: { id: 'twice', name: 'twice', cName: 'twice', type: 'double', initialValue: 0 },
   };
   ir.states.controller.xBridges = {
     stateId: 'controller',
-    executionOrder: ['delay', 'integrator', 'negative', 'derivative'],
-    operations: { delay, integrator, negative, derivative },
+    executionOrder: ['delay', 'integrator', 'negative', 'derivative', 'downstream'],
+    operations: { delay, integrator, negative, derivative, downstream },
     signals: {
       'input:y': signal('input:y', float64),
       'delay:u': scalarInputSignal('delay:u', 'input:y', float64),
@@ -269,6 +273,8 @@ const continuousSolverModel = (
       'derivative:a': scalarInputSignal('derivative:a', 'negative:y', float64),
       'derivative:b': scalarInputSignal('derivative:b', 'input:y', float64),
       'derivative:y': signal('derivative:y', float64),
+      'downstream:u': scalarInputSignal('downstream:u', 'integrator:y', float64),
+      'downstream:y': signal('downstream:y', float64),
     },
     mappings: [{
       variableId: 'u', signalId: 'input:y', blockId: 'input', portId: 'y',
@@ -279,9 +285,42 @@ const continuousSolverModel = (
     }, {
       variableId: 'd', signalId: 'delay:y', blockId: 'delay', portId: 'y',
       direction: 'out', numericType: float64,
+    }, {
+      variableId: 'twice', signalId: 'downstream:y', blockId: 'downstream', portId: 'y',
+      direction: 'out', numericType: float64,
     }],
     solver: { kind, stepSeconds: 0.002, substepsPerTick: 5 },
     policy: { memory: 'reset', numericFault: 'escalate' },
+  };
+  return ir;
+};
+
+const fixedDelayModel = (): SemanticModel => {
+  const ir = continuousSolverModel('euler');
+  const xb = ir.states.controller.xBridges!;
+  const q2 = {
+    kind: 'fixed', signed: true, wordLength: 16, fractionLength: 2,
+  } as const;
+  const delay = xb.operations.delay;
+  ir.states.controller.xBridges = {
+    ...xb,
+    operations: {
+      ...xb.operations,
+      delay: {
+        ...delay,
+        state: {
+          ...delay.state!,
+          slots: delay.state!.slots.map((slot) => ({ ...slot, numericType: q2 })),
+        },
+      },
+    },
+    signals: {
+      ...xb.signals,
+      'delay:y': { ...xb.signals['delay:y'], numericType: q2, storage: 'stored-integer' },
+    },
+    mappings: xb.mappings.map((mapping) =>
+      mapping.variableId === 'd' ? { ...mapping, numericType: q2 } : mapping),
+    policy: { memory: 'reset', numericFault: 'signal-only' },
   };
   return ir;
 };
@@ -1704,9 +1743,9 @@ describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
       const ir = continuousSolverModel(kind);
       const runtime = createXBRuntime(ir.states.controller.xBridges!);
       const expected = Array.from({ length: 5 }, () => {
-        const data: Record<string, number | boolean> = { u: 1, x: 0, d: 0 };
+        const data: Record<string, number | boolean> = { u: 1, x: 0, d: 0, twice: 0 };
         stepXBState(runtime, data);
-        return [Number(data.x), Number(data.d)];
+        return [Number(data.x), Number(data.d), Number(data.twice)];
       });
       const workspace = createGeneratedCodeTestWorkspace(`xb-${kind}-solver-c99`);
 
@@ -1725,7 +1764,7 @@ describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
           '    for (unsigned tick = 0U; tick < 5U; ++tick) {',
           '        instance.data.u = 1.0;',
           '        if (SM_Step(&instance, SM_TICK_MS) != SM_ERR_NONE) return 2;',
-          '        (void)printf("%.17g,%.17g\\n", instance.data.x, instance.data.d);',
+          '        (void)printf("%.17g,%.17g,%.17g\\n", instance.data.x, instance.data.d, instance.data.twice);',
           '    }',
           '    return 0;',
           '}',
@@ -1753,6 +1792,53 @@ describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
       }
     },
   );
+});
+
+describe('X-Bridges fixed-point state parity', { timeout: 60_000 }, () => {
+  it('matches Q2 delay conversion for fractional input and saturation', () => {
+    const ir = fixedDelayModel();
+    const runtime = createXBRuntime(ir.states.controller.xBridges!);
+    const inputs = [0.5, 100000, 100000];
+    const expected = inputs.map((u) => {
+      const data: Record<string, number | boolean> = { u, x: 0, d: 0, twice: 0 };
+      stepXBState(runtime, data);
+      return Number(data.d);
+    });
+    const workspace = createGeneratedCodeTestWorkspace('xb-fixed-delay-c99');
+    try {
+      for (const file of generateCArtifacts(ir, { includeTestShims: true }).files) {
+        writeFileSync(join(workspace.directory, file.name), file.content);
+      }
+      writeFileSync(join(workspace.directory, 'harness.c'), [
+        '#include "sm_core.h"', '#include <stdio.h>', '',
+        'int main(void) {',
+        '    ADIA_Instance_t instance;',
+        '    if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+        '    instance.data.u = 0.5;',
+        '    if (SM_Step(&instance, SM_TICK_MS) != SM_ERR_NONE) return 2;',
+        '    (void)printf("%.17g\\n", instance.data.d);',
+        '    instance.data.u = 100000.0;',
+        '    if (SM_Step(&instance, SM_TICK_MS) != SM_ERR_NONE) return 3;',
+        '    instance.data.u = 100000.0;',
+        '    if (SM_Step(&instance, SM_TICK_MS) != SM_ERR_NONE) return 4;',
+        '    (void)printf("%.17g\\n", instance.data.d);',
+        '    return 0;', '}', '',
+      ].join('\n'));
+      const executable = join(workspace.directory, 'xb_fixed_delay.exe');
+      execFileSync('gcc', [
+        '-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.',
+        'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c',
+        'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable,
+      ], { cwd: workspace.directory, stdio: 'pipe' });
+      const actual = execFileSync(executable, [], {
+        cwd: workspace.directory, encoding: 'utf8',
+      }).trim().split(/\r?\n/).map(Number);
+      expect(actual).toEqual([expected[0], expected[2]]);
+      expect(actual).toEqual([0.5, 8191.75]);
+    } finally {
+      workspace.cleanup();
+    }
+  });
 });
 
 describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {

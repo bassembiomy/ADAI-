@@ -173,6 +173,9 @@ describe('X-Bridges interpreter', () => {
             derivative: operation(
               'derivative', 'Sum', ['derivative:a', 'derivative:b'], ['derivative:y'],
             ),
+            downstream: operation(
+              'downstream', 'GAIN', ['downstream:u'], ['downstream:y'], { gain: 2 },
+            ),
           },
           {
             'integrator:u': signal('integrator:u', 'input', 'derivative:y'),
@@ -182,21 +185,26 @@ describe('X-Bridges interpreter', () => {
             'derivative:a': signal('derivative:a', 'input', 'negative:y'),
             'derivative:b': signal('derivative:b', 'input', 'input:y'),
             'derivative:y': signal('derivative:y', 'output'),
+            'downstream:u': signal('downstream:u', 'input', 'integrator:y'),
+            'downstream:y': signal('downstream:y', 'output'),
             'input:y': signal('input:y', 'input'),
           },
-          ['integrator', 'negative', 'derivative'],
+          ['integrator', 'negative', 'derivative', 'downstream'],
           [{
             variableId: 'u', signalId: 'input:y', blockId: 'input',
             portId: 'y', direction: 'in', numericType: float32,
           }, {
             variableId: 'x', signalId: 'integrator:y', blockId: 'integrator',
             portId: 'y', direction: 'out', numericType: float32,
+          }, {
+            variableId: 'twice', signalId: 'downstream:y', blockId: 'downstream',
+            portId: 'y', direction: 'out', numericType: float32,
           }],
         ),
         solver: { kind, substepsPerTick: 5, stepSeconds: 0.002 },
       } as XBSemanticModel;
       const runtime = createXBRuntime(ir);
-      const data = { u: 1, x: 0 };
+      const data = { u: 1, x: 0, twice: 0 };
 
       for (let tick = 0; tick < 5; tick++) stepXBState(runtime, data);
 
@@ -205,6 +213,8 @@ describe('X-Bridges interpreter', () => {
         exact,
         kind === 'rk4' ? 6 : 4,
       );
+      expect(data.x).toBeCloseTo(exact, kind === 'rk4' ? 6 : 4);
+      expect(data.twice).toBeCloseTo(2 * data.x, kind === 'rk4' ? 6 : 4);
     },
   );
 

@@ -1005,6 +1005,45 @@ const stateSlotField = (
   return field;
 };
 
+const stateSlotRealExpression = (
+  slot: XBSemanticStateSlot,
+  layout: XBStateLayout,
+  member: string,
+): string => {
+  const field = `instance->${member}.${stateSlotField(slot, layout)}`;
+  return slot.numericType.kind === 'fixed'
+    ? `ldexp((double)(${field}), ${-slot.numericType.fractionLength})`
+    : slot.numericType.kind === 'boolean'
+      ? `((${field}) ? 1.0 : 0.0)`
+      : `(double)(${field})`;
+};
+
+const renderStateSlotAssignment = (
+  state: SemanticState,
+  slot: XBSemanticStateSlot,
+  expression: string,
+  layout: XBStateLayout,
+  member: string,
+  name: string,
+): string[] => {
+  const field = `instance->${member}.${stateSlotField(slot, layout)}`;
+  if (slot.numericType.kind !== 'fixed') {
+    return [`    ${field} = (${numericCType(slot.numericType)})(${expression});`];
+  }
+  const result = `xb_state_${toCIdentifier(name)}`;
+  return [
+    `    const SM_XB_NumericResult_t ${result} = ${defaultConversionCall(expression, slot.numericType)};`,
+    `    ${field} = (${numericCType(slot.numericType)})${result}.stored_integer;`,
+    ...(state.xBridges!.policy.numericFault === 'escalate'
+      ? [
+          `    if (${result}.fault != SM_XB_FAULT_NONE) {`,
+          '        instance->error_status = SM_ERR_XBRIDGES_NUMERIC;',
+          '    }',
+        ]
+      : []),
+  ];
+};
+
 const renderStateOutputs = (
   state: SemanticState,
   operation: XBSemanticOperation,
@@ -1020,7 +1059,7 @@ const renderStateOutputs = (
     slotIndex,
     slot.signalId,
     expressions?.[slotIndex]
-      ?? `instance->${member}.${stateSlotField(slot, layout)}`,
+      ?? stateSlotRealExpression(slot, layout, member),
     layout,
     member,
   ));
@@ -1082,16 +1121,23 @@ const renderDiscreteStateUpdates = (
   const input = operation.inputSignalIds[0] === undefined
     ? '0.0'
     : signalRealExpression(state, operation.inputSignalIds[0], layout, member);
-  const updates = (operation.state?.slots ?? []).map((slot) => {
-    const field = stateSlotField(slot, layout);
-    const type = numericCType(slot.numericType);
+  const updates = (operation.state?.slots ?? []).flatMap((slot, slotIndex) => {
     switch (operation.type) {
       case 'DELAY':
       case 'UNIT_DELAY':
       case 'MEMORY':
-        return `        instance->${member}.${field} = (${type})(${input});`;
+        return renderStateSlotAssignment(
+          state, slot, input, layout, member, `${operation.id}_${slotIndex}_update`,
+        );
       case 'INTEGRATOR_DISCRETE':
-        return `        instance->${member}.${field} = (${type})((double)(instance->${member}.${field}) + (${input}));`;
+        return renderStateSlotAssignment(
+          state,
+          slot,
+          `${stateSlotRealExpression(slot, layout, member)} + (${input})`,
+          layout,
+          member,
+          `${operation.id}_${slotIndex}_update`,
+        );
       default:
         throw new Error(
           `X-Bridges stateful operation '${operation.id}' has unsupported type '${operation.type}'`,
@@ -1100,11 +1146,11 @@ const renderDiscreteStateUpdates = (
   });
   if (updates.length === 0) return [];
   if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) {
-    return updates.map((line) => line.slice(4));
+    return updates;
   }
   return [
     `    if (instance->${member}.${counter} == UINT32_C(0)) {`,
-    ...updates,
+    ...updates.map((line) => `    ${line}`),
     '    }',
   ];
 });
@@ -1147,7 +1193,7 @@ const renderContinuousStateUpdates = (
   if (slots.length === 0) return [];
   const step = cNumber(xb.solver.stepSeconds);
   const baseLines = slots.map((entry) =>
-    `    const double ${rkName('xb_rk_base', entry)} = (double)(instance->${member}.${stateSlotField(entry.slot, layout)});`);
+    `    const double ${rkName('xb_rk_base', entry)} = ${stateSlotRealExpression(entry.slot, layout, member)};`);
   const derivative = (entry: ContinuousOperationSlot): string => {
     const input = entry.operation.inputSignalIds[0];
     return input === undefined
@@ -1157,8 +1203,10 @@ const renderContinuousStateUpdates = (
   if (xb.solver.kind === 'euler') {
     const nextLines = slots.map((entry) =>
       `    const double ${rkName('xb_euler_next', entry)} = ${rkName('xb_rk_base', entry)} + ${step} * (${derivative(entry)});`);
-    const assignLines = slots.map((entry) =>
-      `    instance->${member}.${stateSlotField(entry.slot, layout)} = (${numericCType(entry.slot.numericType)})${rkName('xb_euler_next', entry)};`);
+    const assignLines = slots.flatMap((entry) => renderStateSlotAssignment(
+      state, entry.slot, rkName('xb_euler_next', entry), layout, member,
+      `euler_${entry.operationIndex}_${entry.slotIndex}`,
+    ));
     return [
       ...baseLines,
       ...nextLines,
@@ -1172,6 +1220,8 @@ const renderContinuousStateUpdates = (
         member,
         [rkName('xb_euler_next', entry)],
       ).map((line) => `    ${line}`)),
+      ...renderDirectEvaluation(state, xb, layout, member, true)
+        .map((line) => `    ${line}`),
       '    }',
     ];
   }
@@ -1202,8 +1252,26 @@ const renderContinuousStateUpdates = (
     `    double ${rkName('xb_rk_k3', entry)};`,
     `    double ${rkName('xb_rk_k4', entry)};`,
   ]);
-  const final = slots.map((entry) =>
-    `    instance->${member}.${stateSlotField(entry.slot, layout)} = (${numericCType(entry.slot.numericType)})(${rkName('xb_rk_base', entry)} + ${step} * (${rkName('xb_rk_k1', entry)} + 2.0 * ${rkName('xb_rk_k2', entry)} + 2.0 * ${rkName('xb_rk_k3', entry)} + ${rkName('xb_rk_k4', entry)}) / 6.0);`);
+  const finalExpression = (entry: ContinuousOperationSlot): string =>
+    `(${rkName('xb_rk_base', entry)} + ${step} * (${rkName('xb_rk_k1', entry)} + 2.0 * ${rkName('xb_rk_k2', entry)} + 2.0 * ${rkName('xb_rk_k3', entry)} + ${rkName('xb_rk_k4', entry)}) / 6.0)`;
+  const final = slots.flatMap((entry) => renderStateSlotAssignment(
+    state, entry.slot, finalExpression(entry), layout, member,
+    `rk4_${entry.operationIndex}_${entry.slotIndex}`,
+  ));
+  const refresh = [
+    '    {',
+    ...slots.flatMap((entry) => renderStateOutputs(
+      state,
+      entry.operation,
+      entry.operationIndex,
+      layout,
+      member,
+      [finalExpression(entry)],
+    ).map((line) => `    ${line}`)),
+    ...renderDirectEvaluation(state, xb, layout, member, true)
+      .map((line) => `    ${line}`),
+    '    }',
+  ];
   return [
     ...baseLines,
     ...k1,
@@ -1212,6 +1280,7 @@ const renderContinuousStateUpdates = (
     ...stage('k3', 'k2', `${step} * 0.5`),
     ...stage('k4', 'k3', step),
     ...final,
+    ...refresh,
   ];
 };
 
@@ -1284,9 +1353,14 @@ const renderStateLifecycle = (
           `X-Bridges Task 9 emitter requires scalar state slot '${slot.id}'`,
         );
       }
-      initLines.push(
-        `    instance->${member}.${stateSlotField(slot, layout)} = (${numericCType(slot.numericType)})${cNumber(slot.initialValues[0])};`,
-      );
+      initLines.push(...renderStateSlotAssignment(
+        state,
+        slot,
+        cNumber(slot.initialValues[0]),
+        layout,
+        member,
+        `initial_${operation.id}_${slot.id}`,
+      ));
     }
   }
   const stepLines: string[] = [];
