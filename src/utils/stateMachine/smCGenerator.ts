@@ -17,6 +17,7 @@ import type {
 import {
   renderXBHeader,
   renderXBInstanceMembers,
+  renderXBLifecycleSource,
   renderXBSource,
 } from './xbCGenerator';
 import {
@@ -74,6 +75,16 @@ const stateNode = (ir: SemanticModel, stateId: string): string =>
 
 const stateIndex = (ir: SemanticModel, stateId: string): string =>
   `${stateNode(ir, stateId)}_IDX`;
+
+const xbStateFunction = (
+  state: SemanticState,
+  phase: 'Init' | 'Enter' | 'Step',
+): string => {
+  const suffix = toCIdentifier(
+    state.enumName.replace(/^SM_ST_/, ''),
+  ).toUpperCase();
+  return `SM_XB_${suffix}_${phase}`;
+};
 
 const stateFunction = (
   index: RenderIndex,
@@ -187,6 +198,9 @@ const renderMarkEntered = (
     `${indent}instance->state_timers[${stateIndex(ir, stateId)}] = 0U;`,
     state.activeSlot >= 0
       ? `${indent}instance->active_states[${state.activeSlot}U] = ${stateNode(ir, stateId)};`
+      : null,
+    state.xBridges?.policy.memory === 'reset'
+      ? `${indent}${xbStateFunction(state, 'Enter')}(instance);`
       : null,
     `${indent}${stateNode(ir, stateId)}_Entry(instance);`,
   ).trimEnd();
@@ -708,6 +722,17 @@ const renderExecuteFunctions = (
       state.childLayerIds.length > 0 ? '    bool transitioned = false;' : null,
       renderTransitionPhase(ir, index, state.id, 'outer') || null,
       `    ${stateNode(ir, state.id)}_During(instance);`,
+      state.xBridges === null
+        ? null
+        : lines(
+          `    ${xbStateFunction(state, 'Step')}(instance);`,
+          '    if (instance->error_status != SM_ERR_NONE) {',
+          '        return false;',
+          '    }',
+          `    SM_TraceAction(instance, ${renderCStringLiteral(
+            `xbridges:${stateActionLabel(state)}`,
+          )});`,
+        ).trimEnd(),
       renderTransitionPhase(ir, index, state.id, 'inner') || null,
       childSteps || null,
       state.childLayerIds.length > 0
@@ -791,6 +816,10 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '',
     '#include <stdbool.h>',
     '#include <stdint.h>',
+    '#ifndef SM_ADIA_INSTANCE_FWD',
+    '#define SM_ADIA_INSTANCE_FWD',
+    'typedef struct ADIA_Instance ADIA_Instance_t;',
+    '#endif',
     orderedStates(ir).some((state) => state.xBridges !== null)
       ? '#include "sm_xbridges.h"'
       : false,
@@ -816,7 +845,8 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '    SM_ERR_NULL_INSTANCE,',
     '    SM_ERR_TIMING,',
     '    SM_ERR_CONFIGURATION,',
-    '    SM_ERR_SAFETY_VIOLATION',
+    '    SM_ERR_SAFETY_VIOLATION,',
+    '    SM_ERR_XBRIDGES_NUMERIC',
     '} SM_Error_t;',
     '',
     'typedef uint32_t SM_Group_t;',
@@ -835,7 +865,7 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
         `    ${renderCType(variable.type)} ${variable.cName};`).join('\n'),
     '} SM_Data_t;',
     '',
-    'typedef struct {',
+    'struct ADIA_Instance {',
     '    SM_Data_t data;',
     ...renderXBInstanceMembers(ir).map((member) => `    ${member}`),
     '    SM_Node_t active_states[(SM_NUM_ACTIVE_SLOTS > 0U) ? SM_NUM_ACTIVE_SLOTS : 1U];',
@@ -848,7 +878,7 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '#ifdef SM_TRACE_ENABLED',
     '    SM_TraceSink_t trace_sink;',
     '#endif',
-    '} ADIA_Instance_t;',
+    '};',
     '',
     '#endif /* SM_CONFIG_H */',
   );
@@ -1283,7 +1313,9 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '}',
   ).trimEnd();
   return lines(
+    '#include <float.h>',
     '#include <limits.h>',
+    '#include <math.h>',
     '#include <stddef.h>',
     '#include <string.h>',
     '#include "sm_core.h"',
@@ -1308,6 +1340,8 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '}',
     '#endif',
     '',
+    renderXBLifecycleSource(ir) || null,
+    orderedStates(ir).some((state) => state.xBridges !== null) ? '' : null,
     ...forwardDeclarations,
     '',
     renderExitFunctions(ir, index).trimEnd(),
@@ -1331,6 +1365,9 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '#ifdef SM_TRACE_ENABLED',
     '    instance->trace_sink = NULL;',
     '#endif',
+    ...states
+      .filter((state) => state.xBridges !== null)
+      .map((state) => `    ${xbStateFunction(state, 'Init')}(instance);`),
     ...orderedLayers(ir).map((layer) =>
       `    (void)${layerFunction(index, 'SM_Exit_Layer_No_History', layer.id)};`),
     ...states.flatMap((state) => [
@@ -1372,6 +1409,9 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '        return SM_ERR_NULL_INSTANCE;',
     '    }',
     `    SM_Exit_Layer(instance, ${layerMacro(rootLayer)});`,
+    ...states
+      .filter((state) => state.xBridges !== null)
+      .map((state) => `    ${xbStateFunction(state, 'Init')}(instance);`),
     ...Object.values(ir.variables)
       .sort((left, right) => left.id.localeCompare(right.id))
       .map((variable) =>

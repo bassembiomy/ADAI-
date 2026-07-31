@@ -13,6 +13,7 @@ import {
 } from './smTrace';
 import {
   semanticFixture,
+  hybridXBridgesFixture,
   type DifferentialFixtureName,
 } from './smFixtures';
 import {
@@ -284,5 +285,67 @@ describe('TypeScript-versus-generated-C differential gate', () => {
     expect(
       compareSemanticTraces(expected, compileAndRunCTrace(fixture)),
     ).toBeNull();
+  }, 60_000);
+
+  it('commits a mapped X-Bridges output before an inner transition in the same tick', () => {
+    const model = hybridXBridgesFixture();
+    const ordinary = model.states.find((state) => state.id === 'ordinary')!;
+    const controller = model.states.find((state) => state.id === 'controller')!;
+    ordinary.autostart = false;
+    controller.autostart = true;
+    controller.during = 'u = 2;';
+    controller.internalTransitions = '[y > 3] / u = u;';
+    controller.xBridgesModel = {
+      schemaVersion: 1,
+      nodes: [{
+        id: 'gain',
+        type: 'GAIN',
+        parameters: {
+          inputs: [{
+            id: 'u',
+            direction: 'input',
+            shape: 'scalar',
+            dataType: 'float32',
+          }],
+          outputs: [{
+            id: 'y',
+            direction: 'output',
+            shape: 'scalar',
+            dataType: 'float32',
+          }],
+          gain: 2,
+        },
+      }],
+      edges: [],
+      mappings: [
+        { smVarId: 'u', blockId: 'gain', portId: 'u', direction: 'in' },
+        { smVarId: 'y', blockId: 'gain', portId: 'y', direction: 'out' },
+      ],
+      solver: { kind: 'euler', stepSeconds: 0.002 },
+      policy: { memory: 'reset', numericFault: 'escalate' },
+    };
+    for (const id of ['u', 'y']) {
+      model.variables.push({
+        id,
+        name: id,
+        type: 'float',
+        initialValue: '0',
+        currentValue: 0,
+        visibleInScope: true,
+      });
+    }
+    const fixture = {
+      name: 'flat-priority' as const,
+      model,
+      steps: [{ kind: 'step' as const }],
+    };
+    const expected = runInterpreterTrace(fixture);
+    const actual = compileAndRunCTrace(fixture);
+
+    expect(expected.at(-1)?.data.y).toBe(4);
+    expect(expected.at(-1)?.actions).toContain(
+      'transition:$internal_controller_0',
+    );
+    expect(compareSemanticTraces(expected, actual)).toBeNull();
   }, 60_000);
 });

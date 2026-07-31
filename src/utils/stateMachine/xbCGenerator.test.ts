@@ -16,6 +16,7 @@ import {
   type XBNumericType,
   type XBShape,
 } from './xbNumeric';
+import { generateCArtifacts } from './smCGenerator';
 import {
   renderXBHeader,
   renderXBInstanceMembers,
@@ -168,6 +169,274 @@ const semanticModel = (): SemanticModel => ({
   activeSlotCount: 1,
 });
 
+const scalarInputSignal = (
+  id: string,
+  sourceSignalId: string,
+  numericType: XBNumericType = float32,
+): XBSemanticSignal => ({
+  ...signal(id, numericType),
+  direction: 'input',
+  sourceSignalId,
+});
+
+const scalarOperation = (
+  id: string,
+  type: string,
+  inputSignalIds: readonly string[],
+  outputSignalIds: readonly string[],
+  parameters: XBSemanticOperation['parameters'] = {},
+  conversion: XBSemanticOperation['conversion'] = null,
+): XBSemanticOperation => ({
+  ...operation(id, conversion),
+  type,
+  inputSignalIds,
+  outputSignalIds,
+  parameters,
+});
+
+const combinationalSemanticModel = (): SemanticModel => {
+  const ir = semanticModel();
+  const booleanType = { kind: 'boolean' } as const;
+  const int32 = {
+    kind: 'fixed',
+    signed: true,
+    wordLength: 32,
+    fractionLength: 0,
+  } as const;
+  const fixedQ2 = {
+    kind: 'fixed',
+    signed: true,
+    wordLength: 16,
+    fractionLength: 2,
+  } as const;
+  const fixedQ1 = {
+    kind: 'fixed',
+    signed: true,
+    wordLength: 16,
+    fractionLength: 1,
+  } as const;
+  const operations = [
+    scalarOperation('input', 'Inport', [], ['input:y']),
+    scalarOperation('constant', 'Constant', [], ['constant:y'], { value: 3 }),
+    scalarOperation('step', 'Step', [], ['step:y'], {
+      stepTime: 0,
+      initialValue: 0,
+      finalValue: 1,
+    }),
+    scalarOperation('gain', 'GAIN', ['gain:u'], ['gain:y'], { gain: 2 }),
+    scalarOperation(
+      'sum',
+      'Sum',
+      ['sum:u1', 'sum:u2'],
+      ['sum:y'],
+      { signs: '++' },
+    ),
+    scalarOperation(
+      'product',
+      'PRODUCT',
+      ['product:u1', 'product:u2'],
+      ['product:y'],
+    ),
+    scalarOperation('negate', 'UnaryNeg', ['negate:u'], ['negate:y']),
+    scalarOperation('absolute', 'Abs', ['absolute:u'], ['absolute:y']),
+    scalarOperation(
+      'logical-and',
+      'AND',
+      ['logical-and:a', 'logical-and:b'],
+      ['logical-and:y'],
+    ),
+    scalarOperation('logical-not', 'NOT', ['logical-not:u'], ['logical-not:y']),
+    scalarOperation(
+      'logical-xor',
+      'XOR',
+      ['logical-xor:a', 'logical-xor:b'],
+      ['logical-xor:y'],
+    ),
+    scalarOperation(
+      'bitwise-and',
+      'BitwiseAND',
+      ['bitwise-and:a', 'bitwise-and:b'],
+      ['bitwise-and:y'],
+    ),
+    scalarOperation(
+      'shift-left',
+      'ShiftLeft',
+      ['shift-left:u', 'shift-left:amount'],
+      ['shift-left:y'],
+    ),
+    scalarOperation(
+      'shift-right',
+      'ShiftRight',
+      ['shift-right:u', 'shift-right:amount'],
+      ['shift-right:y'],
+    ),
+    scalarOperation(
+      'switch',
+      'SWITCH',
+      ['switch:u1', 'switch:u2', 'switch:control'],
+      ['switch:y'],
+      { threshold: 0, criteria: '>' },
+    ),
+    scalarOperation(
+      'convert',
+      'NUMERIC_REPRESENTATION',
+      ['convert:u'],
+      ['convert:y', 'convert:e'],
+      {},
+      {
+        destinationType: fixedQ2,
+        rounding: 'floor',
+        overflow: 'saturate',
+        mode: 'real-world-value',
+      },
+    ),
+    scalarOperation(
+      'reinterpret',
+      'DATA_TYPE_CONVERSION',
+      ['reinterpret:u'],
+      ['reinterpret:y'],
+      {},
+      {
+        destinationType: fixedQ1,
+        rounding: 'floor',
+        overflow: 'saturate',
+        mode: 'stored-integer-reinterpretation',
+      },
+    ),
+    scalarOperation('output', 'Outport', ['output:u'], []),
+    scalarOperation('terminator', 'TERMINATOR', ['terminator:u'], []),
+  ];
+  const signals: Record<string, XBSemanticSignal> = {
+    'input:y': signal('input:y', float32),
+    'constant:y': signal('constant:y', float32),
+    'step:y': signal('step:y', int32),
+    'gain:u': scalarInputSignal('gain:u', 'input:y'),
+    'gain:y': signal('gain:y', float32),
+    'sum:u1': scalarInputSignal('sum:u1', 'gain:y'),
+    'sum:u2': scalarInputSignal('sum:u2', 'constant:y'),
+    'sum:y': signal('sum:y', float32),
+    'product:u1': scalarInputSignal('product:u1', 'sum:y'),
+    'product:u2': scalarInputSignal('product:u2', 'constant:y'),
+    'product:y': signal('product:y', float32),
+    'negate:u': scalarInputSignal('negate:u', 'product:y'),
+    'negate:y': signal('negate:y', float32),
+    'absolute:u': scalarInputSignal('absolute:u', 'negate:y'),
+    'absolute:y': signal('absolute:y', float32),
+    'logical-and:a': scalarInputSignal('logical-and:a', 'absolute:y'),
+    'logical-and:b': scalarInputSignal('logical-and:b', 'constant:y'),
+    'logical-and:y': signal('logical-and:y', booleanType),
+    'logical-not:u': scalarInputSignal('logical-not:u', 'logical-and:y', booleanType),
+    'logical-not:y': signal('logical-not:y', booleanType),
+    'logical-xor:a': scalarInputSignal('logical-xor:a', 'logical-and:y', booleanType),
+    'logical-xor:b': scalarInputSignal('logical-xor:b', 'logical-not:y', booleanType),
+    'logical-xor:y': signal('logical-xor:y', booleanType),
+    'bitwise-and:a': scalarInputSignal('bitwise-and:a', 'input:y'),
+    'bitwise-and:b': scalarInputSignal('bitwise-and:b', 'constant:y'),
+    'bitwise-and:y': signal('bitwise-and:y', int32),
+    'shift-left:u': scalarInputSignal('shift-left:u', 'bitwise-and:y', int32),
+    'shift-left:amount': scalarInputSignal('shift-left:amount', 'step:y', int32),
+    'shift-left:y': signal('shift-left:y', int32),
+    'shift-right:u': scalarInputSignal('shift-right:u', 'shift-left:y', int32),
+    'shift-right:amount': scalarInputSignal(
+      'shift-right:amount',
+      'step:y',
+      int32,
+    ),
+    'shift-right:y': signal('shift-right:y', int32),
+    'switch:u1': scalarInputSignal('switch:u1', 'absolute:y'),
+    'switch:u2': scalarInputSignal('switch:u2', 'input:y'),
+    'switch:control': scalarInputSignal(
+      'switch:control',
+      'logical-xor:y',
+      booleanType,
+    ),
+    'switch:y': signal('switch:y', float32),
+    'convert:u': scalarInputSignal('convert:u', 'switch:y'),
+    'convert:y': signal('convert:y', fixedQ2),
+    'convert:e': signal('convert:e', float32),
+    'reinterpret:u': scalarInputSignal('reinterpret:u', 'convert:y', fixedQ2),
+    'reinterpret:y': signal('reinterpret:y', fixedQ1),
+    'output:u': scalarInputSignal('output:u', 'reinterpret:y', fixedQ1),
+    'terminator:u': scalarInputSignal('terminator:u', 'shift-left:y', int32),
+  };
+  ir.variables = {
+    u: { id: 'u', name: 'u', cName: 'u', type: 'float', initialValue: 5 },
+    y: { id: 'y', name: 'y', cName: 'y', type: 'float', initialValue: 0 },
+    bits: {
+      id: 'bits',
+      name: 'bits',
+      cName: 'bits',
+      type: 'int32',
+      initialValue: 0,
+    },
+    flag: {
+      id: 'flag',
+      name: 'flag',
+      cName: 'flag',
+      type: 'bool',
+      initialValue: false,
+    },
+    error: {
+      id: 'error',
+      name: 'error',
+      cName: 'error',
+      type: 'float',
+      initialValue: -1,
+    },
+  };
+  ir.states.controller.xBridges = {
+    stateId: 'controller',
+    executionOrder: operations.map(({ id }) => id),
+    operations: Object.fromEntries(operations.map((entry) => [entry.id, entry])),
+    signals,
+    mappings: [
+      {
+        variableId: 'u',
+        signalId: 'input:y',
+        blockId: 'input',
+        portId: 'y',
+        direction: 'in',
+        numericType: float32,
+      },
+      {
+        variableId: 'y',
+        signalId: 'output:u',
+        blockId: 'output',
+        portId: 'u',
+        direction: 'out',
+        numericType: float32,
+      },
+      {
+        variableId: 'bits',
+        signalId: 'shift-left:y',
+        blockId: 'shift-left',
+        portId: 'y',
+        direction: 'out',
+        numericType: int32,
+      },
+      {
+        variableId: 'flag',
+        signalId: 'logical-xor:y',
+        blockId: 'logical-xor',
+        portId: 'y',
+        direction: 'out',
+        numericType: booleanType,
+      },
+      {
+        variableId: 'error',
+        signalId: 'convert:e',
+        blockId: 'convert',
+        portId: 'e',
+        direction: 'out',
+        numericType: float32,
+      },
+    ],
+    solver: { kind: 'euler', substepsPerTick: 1 },
+    policy: { memory: 'reset', numericFault: 'escalate' },
+  };
+  return ir;
+};
+
 describe('X-Bridges C99 static storage', () => {
   it('renders exact scalar, vector, matrix, and explicit fault storage', () => {
     const header = renderXBHeader(semanticModel());
@@ -261,6 +530,179 @@ describe('X-Bridges C99 static storage', () => {
       member.match(/\s([A-Za-z_]\w*);$/)?.[1]);
     expect(members).toHaveLength(2);
     expect(new Set(memberNames).size).toBe(2);
+  });
+});
+
+describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => {
+  it.each([
+    { signs: '++', expected: '78,2,1,0' },
+    { signs: '+-', expected: '42,2,1,0' },
+  ])('compiles dedicated combinational emitters with Sum "$signs"', ({
+    signs,
+    expected,
+  }) => {
+    const ir = combinationalSemanticModel();
+    const xb = ir.states.controller.xBridges!;
+    ir.states.controller.xBridges = {
+      ...xb,
+      operations: {
+        ...xb.operations,
+        sum: {
+          ...xb.operations.sum,
+          parameters: { ...xb.operations.sum.parameters, signs },
+        },
+      },
+    };
+    const workspace = createGeneratedCodeTestWorkspace('xb-combinational-c99');
+
+    try {
+      for (const file of generateCArtifacts(ir, { includeTestShims: true }).files) {
+        writeFileSync(join(workspace.directory, file.name), file.content);
+      }
+      writeFileSync(
+        join(workspace.directory, 'harness.c'),
+        [
+          '#include "sm_core.h"',
+          '#include <stdio.h>',
+          '',
+          'int main(void)',
+          '{',
+          '    ADIA_Instance_t instance;',
+          '    if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+          '    if (SM_Step(&instance, SM_TICK_MS) != SM_ERR_NONE) return 2;',
+          '    (void)printf("%.9g,%ld,%u,%.9g\\n",',
+          '        (double)instance.data.y,',
+          '        (long)instance.data.bits,',
+          '        instance.data.flag ? 1U : 0U,',
+          '        (double)instance.data.error);',
+          '    return 0;',
+          '}',
+          '',
+        ].join('\n'),
+      );
+      const executable = join(workspace.directory, 'xb_combinational.exe');
+      execFileSync('gcc', [
+        '-std=c99',
+        '-pedantic-errors',
+        '-Wall',
+        '-Wextra',
+        '-Werror',
+        '-I.',
+        'sm_core.c',
+        'sm_safety.c',
+        'sm_user_logic.c',
+        'sm_xbridges.c',
+        'mcal_dio_test_stubs.c',
+        'harness.c',
+        '-lm',
+        '-o',
+        executable,
+      ], { cwd: workspace.directory, stdio: 'pipe' });
+
+      expect(execFileSync(executable, [], {
+        cwd: workspace.directory,
+        encoding: 'utf8',
+      }).trim()).toBe(expected);
+    } finally {
+      workspace.cleanup();
+    }
+  });
+
+  it('stops generation for an operation without a dedicated emitter', () => {
+    const ir = combinationalSemanticModel();
+    const xb = ir.states.controller.xBridges!;
+    ir.states.controller.xBridges = {
+      ...xb,
+      executionOrder: [...xb.executionOrder, 'unknown'],
+      operations: {
+        ...xb.operations,
+        unknown: {
+          ...scalarOperation('unknown', 'NOT_REGISTERED', [], []),
+          directFeedthrough: false,
+          stateful: true,
+        },
+      },
+    };
+
+    expect(() => renderXBSource(ir)).toThrow(
+      "X-Bridges operation 'unknown' has unsupported type 'NOT_REGISTERED'",
+    );
+  });
+
+  it('renders bitwise shifts without signed-shift undefined behavior', () => {
+    const core = generateCArtifacts(combinationalSemanticModel()).files
+      .find((file) => file.name === 'sm_core.c')!.content;
+
+    expect(core).toContain('SM_XB_ShiftLeft32(');
+    expect(core).toContain('SM_XB_ShiftRight32(');
+    expect(core).not.toMatch(/\(int32_t\)[^\n;]*<</);
+    expect(core).not.toMatch(/\(int32_t\)[^\n;]*>>/);
+  });
+
+  it('emits reset-policy lifecycle calls in interpreter execution order', () => {
+    const core = generateCArtifacts(combinationalSemanticModel()).files
+      .find((file) => file.name === 'sm_core.c')!.content;
+
+    expect(core).toMatch(
+      /SM_Error_t SM_Init[\s\S]*SM_XB_CONTROLLER_Init\(instance\);/,
+    );
+    expect(core).toContain([
+      '    SM_XB_CONTROLLER_Enter(instance);',
+      '    SM_ST_CONTROLLER_Entry(instance);',
+    ].join('\n'));
+    expect(core).toContain([
+      '    SM_ST_CONTROLLER_During(instance);',
+      '    SM_XB_CONTROLLER_Step(instance);',
+      '    if (instance->error_status != SM_ERR_NONE) {',
+    ].join('\n'));
+  });
+
+  it('preserves non-finite float32 payloads before escalating numeric faults', () => {
+    const core = generateCArtifacts(combinationalSemanticModel()).files
+      .find((file) => file.name === 'sm_core.c')!.content;
+
+    expect(core).toMatch(
+      /if \(!isfinite\((xb_value_\d+_\d+)\)\) \{\n\s+\S+ = \(float\)\1;\n[\s\S]*?\} else if \(fabs\(\1\) > \(double\)FLT_MAX\) \{/,
+    );
+  });
+
+  it('compiles finite constants that JavaScript formats with exponents', () => {
+    const ir = combinationalSemanticModel();
+    const xb = ir.states.controller.xBridges!;
+    ir.states.controller.xBridges = {
+      ...xb,
+      operations: {
+        ...xb.operations,
+        constant: {
+          ...xb.operations.constant,
+          parameters: {
+            ...xb.operations.constant.parameters,
+            value: 1e21,
+          },
+        },
+      },
+    };
+    const workspace = createGeneratedCodeTestWorkspace('xb-exponent-c99');
+
+    try {
+      for (const file of generateCArtifacts(ir).files) {
+        writeFileSync(join(workspace.directory, file.name), file.content);
+      }
+      execFileSync('gcc', [
+        '-std=c99',
+        '-pedantic-errors',
+        '-Wall',
+        '-Wextra',
+        '-Werror',
+        '-I.',
+        '-c',
+        'sm_core.c',
+        '-o',
+        'sm_core.o',
+      ], { cwd: workspace.directory, stdio: 'pipe' });
+    } finally {
+      workspace.cleanup();
+    }
   });
 });
 
