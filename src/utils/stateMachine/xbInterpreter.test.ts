@@ -258,18 +258,33 @@ describe('X-Bridges interpreter', () => {
       left: operation('left', 'Constant', [], ['left:y'], { value: [1, 2, 3] }),
       right: operation('right', 'Constant', [], ['right:y'], { value: [4, 5, 6] }),
       add: operation('add', 'VectorAdd', ['add:a', 'add:b'], ['add:y']),
+      sub: operation('sub', 'VectorSub', ['sub:a', 'sub:b'], ['sub:y']),
+      mul: operation('mul', 'VectorMul', ['mul:a', 'mul:b'], ['mul:y']),
+      div: operation('div', 'VectorDiv', ['div:a', 'div:b'], ['div:y']),
     }, {
       'left:y': shapedSignal('left:y', 'output', { kind: 'vector', length: 3 }),
       'right:y': shapedSignal('right:y', 'output', { kind: 'vector', length: 3 }),
       'add:a': shapedSignal('add:a', 'input', { kind: 'vector', length: 3 }, 'left:y'),
       'add:b': shapedSignal('add:b', 'input', { kind: 'vector', length: 3 }, 'right:y'),
       'add:y': shapedSignal('add:y', 'output', { kind: 'vector', length: 3 }),
-    }, ['left', 'right', 'add']);
+      'sub:a': shapedSignal('sub:a', 'input', { kind: 'vector', length: 3 }, 'left:y'),
+      'sub:b': shapedSignal('sub:b', 'input', { kind: 'vector', length: 3 }, 'right:y'),
+      'sub:y': shapedSignal('sub:y', 'output', { kind: 'vector', length: 3 }),
+      'mul:a': shapedSignal('mul:a', 'input', { kind: 'vector', length: 3 }, 'left:y'),
+      'mul:b': shapedSignal('mul:b', 'input', { kind: 'vector', length: 3 }, 'right:y'),
+      'mul:y': shapedSignal('mul:y', 'output', { kind: 'vector', length: 3 }),
+      'div:a': shapedSignal('div:a', 'input', { kind: 'vector', length: 3 }, 'right:y'),
+      'div:b': shapedSignal('div:b', 'input', { kind: 'vector', length: 3 }, 'left:y'),
+      'div:y': shapedSignal('div:y', 'output', { kind: 'vector', length: 3 }),
+    }, ['left', 'right', 'add', 'sub', 'mul', 'div']);
     const runtime = createXBRuntime(ir);
 
     stepXBState(runtime, {});
 
     expect(runtime.signals['add:y']).toEqual([5, 7, 9]);
+    expect(runtime.signals['sub:y']).toEqual([-3, -3, -3]);
+    expect(runtime.signals['mul:y']).toEqual([4, 10, 18]);
+    expect(runtime.signals['div:y']).toEqual([4, 2.5, 2]);
   });
 
   it('T10-INT-MATRIX-OPS evaluates row-major matrix multiply, transpose, concat, diagonal, and submatrix', () => {
@@ -309,7 +324,7 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.signals['sub:y']).toEqual([64, 58]);
   });
 
-  it('solves a bounded linear system and returns zero for a deterministic pivot failure', () => {
+  it('T10-INT-MATRIX-OPS solves a bounded linear system and returns zero for a deterministic pivot failure', () => {
     const makeRuntime = (matrix: number[]) => createXBRuntime(model('retain', {
       a: operation('a', 'Constant', [], ['a:y'], { value: matrix }),
       b: operation('b', 'Constant', [], ['b:y'], { value: [5, 5] }),
@@ -330,7 +345,7 @@ describe('X-Bridges interpreter', () => {
     expect(solved.signals['solve:y']).toEqual([2, 1]);
     expect(singular.signals['solve:y']).toEqual([0, 0]);
   });
-  it('uses five integer solver substeps per tick and holds a 20 ms delay between samples', () => {
+  it('T14-INT-CONTINUOUS uses five integer solver substeps per tick and holds a 20 ms delay between samples', () => {
     const delay = {
       ...operation(
         'delay',
@@ -387,13 +402,16 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.stateSlots['delay:y$state']).toEqual([3]);
   });
 
-  it.each(['euler', 'rk4'] as const)(
-    'integrates dx/dt = -x + u with fixed-step %s',
-    (kind) => {
+  it.each([
+    ['euler', 'INTEGRATOR_CONTINUOUS'], ['rk4', 'INTEGRATOR_CONTINUOUS'],
+    ['euler', 'Integrator'], ['rk4', 'Integrator'],
+  ] as const)(
+    'T14-INT-CONTINUOUS integrates dx/dt = -x + u with fixed-step %s using %s',
+    (kind, integratorType) => {
       const integrator = {
         ...operation(
           'integrator',
-          'INTEGRATOR_CONTINUOUS',
+          integratorType,
           ['integrator:u'],
           ['integrator:y'],
           {},
@@ -512,6 +530,62 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.signals['second:y']).toEqual([10]);
   });
 
+  it('T14-INT-CORE-DIRECT executes every registered scalar core operation', () => {
+    const conversion = {
+      destinationType: float32,
+      rounding: 'floor' as const,
+      overflow: 'saturate' as const,
+      mode: 'real-world-value' as const,
+    };
+    const operations = {
+      input: operation('input', 'Inport', [], ['input:y']),
+      a: operation('a', 'Constant', [], ['a:y'], { value: 2 }),
+      b: operation('b', 'Constant', [], ['b:y'], { value: 3 }),
+      sum: operation('sum', 'Sum', ['sum:a', 'sum:b'], ['sum:y']),
+      junction: operation('junction', 'SUM_JUNCTION', ['junction:a', 'junction:b'], ['junction:y']),
+      gain: operation('gain', 'GAIN', ['gain:u'], ['gain:y'], { gain: 2 }),
+      product: operation('product', 'PRODUCT', ['product:a', 'product:b'], ['product:y']),
+      neg: operation('neg', 'UnaryNeg', ['neg:u'], ['neg:y']),
+      abs: operation('abs', 'Abs', ['abs:u'], ['abs:y']),
+      and: operation('and', 'AND', ['and:a', 'and:b'], ['and:y']),
+      or: operation('or', 'OR', ['or:a', 'or:b'], ['or:y']),
+      not: operation('not', 'NOT', ['not:u'], ['not:y']),
+      convert: { ...operation('convert', 'DATA_TYPE_CONVERSION', ['convert:u'], ['convert:y']), conversion },
+      represent: { ...operation('represent', 'NUMERIC_REPRESENTATION', ['represent:u'], ['represent:y']), conversion },
+      sink: operation('sink', 'TERMINATOR', ['sink:u'], []),
+      output: operation('output', 'Outport', ['output:u'], []),
+    };
+    const linked = (id: string, source: string) => signal(id, 'input', source);
+    const signals = {
+      'input:y': signal('input:y', 'output'),
+      'a:y': signal('a:y', 'output'), 'b:y': signal('b:y', 'output'),
+      'sum:a': linked('sum:a', 'a:y'), 'sum:b': linked('sum:b', 'b:y'), 'sum:y': signal('sum:y', 'output'),
+      'junction:a': linked('junction:a', 'a:y'), 'junction:b': linked('junction:b', 'b:y'), 'junction:y': signal('junction:y', 'output'),
+      'gain:u': linked('gain:u', 'sum:y'), 'gain:y': signal('gain:y', 'output'),
+      'product:a': linked('product:a', 'a:y'), 'product:b': linked('product:b', 'b:y'), 'product:y': signal('product:y', 'output'),
+      'neg:u': linked('neg:u', 'product:y'), 'neg:y': signal('neg:y', 'output'),
+      'abs:u': linked('abs:u', 'neg:y'), 'abs:y': signal('abs:y', 'output'),
+      'and:a': linked('and:a', 'a:y'), 'and:b': linked('and:b', 'b:y'), 'and:y': signal('and:y', 'output'),
+      'or:a': linked('or:a', 'a:y'), 'or:b': linked('or:b', 'b:y'), 'or:y': signal('or:y', 'output'),
+      'not:u': linked('not:u', 'and:y'), 'not:y': signal('not:y', 'output'),
+      'convert:u': linked('convert:u', 'gain:y'), 'convert:y': signal('convert:y', 'output'),
+      'represent:u': linked('represent:u', 'convert:y'), 'represent:y': signal('represent:y', 'output'),
+      'sink:u': linked('sink:u', 'represent:y'),
+      'output:u': linked('output:u', 'gain:y'),
+    };
+    const runtime = createXBRuntime(model(
+      'retain', operations, signals, Object.keys(operations),
+    ));
+
+    expect(stepXBState(runtime, {})).toEqual([]);
+    expect(runtime.signals).toMatchObject({
+      'sum:y': [5], 'junction:y': [5], 'gain:y': [10],
+      'product:y': [6], 'neg:y': [-6], 'abs:y': [6],
+      'and:y': [1], 'or:y': [1], 'not:y': [0],
+      'convert:y': [10], 'represent:y': [10],
+    });
+  });
+
   it('canonicalizes state memory through its declared numeric type', () => {
     const ir = model(
       'retain',
@@ -564,6 +638,11 @@ describe('X-Bridges interpreter', () => {
           {},
           [1],
         ),
+        memory: operation('memory', 'MEMORY', ['memory:u'], ['memory:y'], {}, [3]),
+        integrator: operation(
+          'integrator', 'INTEGRATOR_DISCRETE',
+          ['integrator:u'], ['integrator:y'], {}, [4],
+        ),
         gain: operation(
           'gain',
           'GAIN',
@@ -577,8 +656,12 @@ describe('X-Bridges interpreter', () => {
         'delay:y': signal('delay:y', 'output'),
         'gain:u': signal('gain:u', 'input', 'delay:y'),
         'gain:y': signal('gain:y', 'output'),
+        'memory:u': signal('memory:u', 'input', 'gain:y'),
+        'memory:y': signal('memory:y', 'output'),
+        'integrator:u': signal('integrator:u', 'input', 'gain:y'),
+        'integrator:y': signal('integrator:y', 'output'),
       },
-      ['delay', 'gain'],
+      ['delay', 'memory', 'integrator', 'gain'],
     );
     const runtime = createXBRuntime(ir);
 
@@ -587,6 +670,10 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.signals['delay:y']).toEqual([1]);
     expect(runtime.signals['gain:y']).toEqual([2]);
     expect(runtime.stateSlots['delay:y$state']).toEqual([2]);
+    expect(runtime.signals['memory:y']).toEqual([3]);
+    expect(runtime.stateSlots['memory:y$state']).toEqual([2]);
+    expect(runtime.signals['integrator:y']).toEqual([4]);
+    expect(runtime.stateSlots['integrator:y$state']).toEqual([6]);
   });
 
   it('converts only y and emits quantization error on e', () => {

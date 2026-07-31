@@ -17,23 +17,115 @@ export interface XBBlockCapability {
   outputShapes?: readonly XBSignalShape[];
   reason?: string;
   requiredTargetCapabilities?: readonly XBTargetRequirement[];
-  /** Stable direct interpreter execution cases for enabled Task-10 types. */
+  /** Stable executable interpreter conformance cases. */
   interpreterConformanceCaseIds?: readonly string[];
-  /** Stable strict-C99 execution cases for enabled Task-10 types. */
+  /** Stable executable strict-C99 conformance cases. */
   cConformanceCaseIds?: readonly string[];
 }
 
-/** Canonical executable Task-10 conformance cases referenced by capabilities. */
 export const XB_INTERPRETER_CONFORMANCE_CASE_IDS = [
   'T10-INT-VECTOR-ELEMENTWISE', 'T10-INT-MATRIX-OPS', 'T10-INT-PID-BASIC',
   'T10-INT-DISCRETE-REALIZATION', 'T10-INT-TRANSFORMS',
-  'T14-INT-CORE-DIRECT', 'T14-INT-STATEFUL',
+  'T14-INT-CORE-DIRECT', 'T14-INT-SHAPED-CONSTANT',
+  'T14-INT-STATEFUL', 'T14-INT-CONTINUOUS',
 ] as const;
 
 export const XB_C_CONFORMANCE_CASE_IDS = [
   'T10-C99-VECTOR-MATRIX', 'T10-C99-PID-BASIC', 'T10-C99-DISCRETE-REALIZATION',
-  'T10-C99-TRANSFORMS', 'T14-C99-CORE-DIRECT', 'T14-C99-STATEFUL',
+  'T10-C99-TRANSFORMS', 'T14-C99-CORE-DIRECT',
+  'T14-C99-SHAPED-CONSTANT', 'T14-C99-STATEFUL', 'T14-C99-CONTINUOUS',
 ] as const;
+
+export interface XBConformanceCoverage {
+  readonly blockType: string;
+  readonly inputShapes: readonly XBSignalShape[];
+  readonly outputShapes: readonly XBSignalShape[];
+}
+
+const scalarCoverage = (blockType: string): XBConformanceCoverage => ({
+  blockType, inputShapes: ['scalar'], outputShapes: ['scalar'],
+});
+
+const shapedCoverage = (
+  blockType: string,
+  inputShapes: readonly XBSignalShape[],
+  outputShapes: readonly XBSignalShape[] = inputShapes,
+): XBConformanceCoverage => ({ blockType, inputShapes, outputShapes });
+
+const CORE_SCALAR_COVERAGE: readonly XBConformanceCoverage[] = [
+  shapedCoverage('Constant', [], ['scalar']),
+  shapedCoverage('Inport', [], ['scalar']),
+  shapedCoverage('Outport', ['scalar'], []),
+  ...['Sum', 'SUM_JUNCTION', 'GAIN', 'PRODUCT', 'UnaryNeg', 'Abs',
+    'AND', 'OR', 'NOT', 'DATA_TYPE_CONVERSION', 'NUMERIC_REPRESENTATION']
+    .map(scalarCoverage),
+  shapedCoverage('TERMINATOR', ['scalar'], []),
+];
+
+const VECTOR_COVERAGE: readonly XBConformanceCoverage[] =
+  ['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv']
+    .map((type) => shapedCoverage(type, ['vector']));
+
+const MATRIX_COVERAGE: readonly XBConformanceCoverage[] = [
+  ...['MatrixMul', 'Transpose', 'MatrixConcat', 'SubMatrix', 'MatrixSolve']
+    .map((type) => shapedCoverage(type, ['matrix'])),
+  shapedCoverage('MatrixDiag', ['vector'], ['matrix']),
+];
+
+const TRANSFORM_COVERAGE: readonly XBConformanceCoverage[] =
+  ['CLARKE_TRANSFORM', 'PARK_TRANSFORM', 'INVERSE_PARK', 'INVERSE_CLARKE']
+    .map(scalarCoverage);
+
+export const XB_INTERPRETER_CONFORMANCE_CASES: Readonly<Record<
+string, readonly XBConformanceCoverage[]
+>> = Object.freeze({
+  'T10-INT-VECTOR-ELEMENTWISE': VECTOR_COVERAGE,
+  'T10-INT-MATRIX-OPS': MATRIX_COVERAGE,
+  'T10-INT-PID-BASIC': [scalarCoverage('PID_BASIC')],
+  'T10-INT-DISCRETE-REALIZATION': [
+    shapedCoverage('DISCRETE_TRANSFER_FUNCTION', ['vector']),
+    shapedCoverage('STATE_SPACE', ['vector']),
+  ],
+  'T10-INT-TRANSFORMS': TRANSFORM_COVERAGE,
+  'T14-INT-CORE-DIRECT': CORE_SCALAR_COVERAGE,
+  'T14-INT-SHAPED-CONSTANT': [
+    shapedCoverage('Constant', [], ['vector', 'matrix']),
+    shapedCoverage('TERMINATOR', ['vector', 'matrix'], []),
+  ],
+  'T14-INT-STATEFUL': [
+    scalarCoverage('UNIT_DELAY'), scalarCoverage('MEMORY'),
+    scalarCoverage('INTEGRATOR_DISCRETE'),
+  ],
+  'T14-INT-CONTINUOUS': [
+    scalarCoverage('DELAY'), scalarCoverage('INTEGRATOR_CONTINUOUS'),
+    scalarCoverage('Integrator'),
+  ],
+});
+
+export const XB_C_CONFORMANCE_CASES: Readonly<Record<
+string, readonly XBConformanceCoverage[]
+>> = Object.freeze({
+  'T10-C99-VECTOR-MATRIX': [...VECTOR_COVERAGE, ...MATRIX_COVERAGE],
+  'T10-C99-PID-BASIC': [scalarCoverage('PID_BASIC')],
+  'T10-C99-DISCRETE-REALIZATION': [
+    shapedCoverage('DISCRETE_TRANSFER_FUNCTION', ['vector']),
+    shapedCoverage('STATE_SPACE', ['vector']),
+  ],
+  'T10-C99-TRANSFORMS': TRANSFORM_COVERAGE,
+  'T14-C99-CORE-DIRECT': CORE_SCALAR_COVERAGE,
+  'T14-C99-SHAPED-CONSTANT': [
+    shapedCoverage('Constant', [], ['vector', 'matrix']),
+    shapedCoverage('TERMINATOR', ['vector', 'matrix'], []),
+  ],
+  'T14-C99-STATEFUL': [
+    scalarCoverage('UNIT_DELAY'), scalarCoverage('MEMORY'),
+    scalarCoverage('INTEGRATOR_DISCRETE'),
+  ],
+  'T14-C99-CONTINUOUS': [
+    scalarCoverage('DELAY'), scalarCoverage('INTEGRATOR_CONTINUOUS'),
+    scalarCoverage('Integrator'),
+  ],
+});
 
 type XBCodegenCapability = Omit<XBBlockCapability, 'codegen'> & {
   codegen: true;
@@ -170,23 +262,33 @@ const UNPAIRED_EMBEDDED_OPERATIONS = hostOnlySet([
  */
 export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   // Sources and state-machine mappings.
-  Constant: direct(allShapes),
-  Inport: direct(allShapes),
-  Outport: direct(allShapes),
+  Constant: direct(
+    allShapes,
+    undefined,
+    ['T14-INT-CORE-DIRECT', 'T14-INT-SHAPED-CONSTANT'],
+    ['T14-C99-CORE-DIRECT', 'T14-C99-SHAPED-CONSTANT'],
+    { inputShapes: [], outputShapes: allShapes },
+  ),
+  Inport: direct(scalar, undefined, undefined, undefined, {
+    inputShapes: [], outputShapes: scalar,
+  }),
+  Outport: direct(scalar, undefined, undefined, undefined, {
+    inputShapes: scalar, outputShapes: [],
+  }),
   Step: direct(scalar),
 
   // Deterministic arithmetic and reductions.
-  Sum: direct(allShapes),
-  SUM_JUNCTION: direct(allShapes),
-  GAIN: direct(allShapes),
-  PRODUCT: direct(allShapes),
+  Sum: direct(scalar),
+  SUM_JUNCTION: direct(scalar),
+  GAIN: direct(scalar),
+  PRODUCT: direct(scalar),
   VectorAdd: direct(['vector'], undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
   VectorSub: direct(['vector'], undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
   VectorMul: direct(['vector'], undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
   VectorDiv: direct(['vector'], undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
   VectorPow: direct(allShapes),
-  UnaryNeg: direct(allShapes),
-  Abs: direct(allShapes),
+  UnaryNeg: direct(scalar),
+  Abs: direct(scalar),
   SumElements: direct(vectorOrMatrix),
   Mean: direct(vectorOrMatrix),
   Max: direct(vectorOrMatrix),
@@ -221,15 +323,23 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   SWITCH: direct(allShapes),
   MUX: direct(vectorOrMatrix),
   DEMUX: direct(vectorOrMatrix),
-  TERMINATOR: direct(allShapes),
+  TERMINATOR: direct(
+    allShapes,
+    undefined,
+    ['T14-INT-CORE-DIRECT', 'T14-INT-SHAPED-CONSTANT'],
+    ['T14-C99-CORE-DIRECT', 'T14-C99-SHAPED-CONSTANT'],
+    {
+      inputShapes: allShapes, outputShapes: [],
+    },
+  ),
 
   // Stateful primitives.
-  DELAY: stateful(allShapes),
-  UNIT_DELAY: stateful(allShapes),
-  MEMORY: stateful(allShapes),
-  INTEGRATOR_DISCRETE: stateful(allShapes),
-  INTEGRATOR_CONTINUOUS: stateful(allShapes),
-  Integrator: stateful(allShapes),
+  DELAY: stateful(scalar, undefined, ['T14-INT-CONTINUOUS'], ['T14-C99-CONTINUOUS']),
+  UNIT_DELAY: stateful(scalar),
+  MEMORY: stateful(scalar, undefined, ['T14-INT-STATEFUL'], ['T14-C99-STATEFUL']),
+  INTEGRATOR_DISCRETE: stateful(scalar, undefined, ['T14-INT-STATEFUL'], ['T14-C99-STATEFUL']),
+  INTEGRATOR_CONTINUOUS: stateful(scalar, undefined, ['T14-INT-CONTINUOUS'], ['T14-C99-CONTINUOUS']),
+  Integrator: stateful(scalar, undefined, ['T14-INT-CONTINUOUS'], ['T14-C99-CONTINUOUS']),
 
   // Bounded control and linear-system blocks. Each entry is enabled only with
   // paired interpreter and compiled-C conformance coverage (Task 10).
@@ -275,8 +385,8 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   ACOSECH: direct(scalar, ['math-library']),
 
   // Explicit numeric representation changes.
-  DATA_TYPE_CONVERSION: direct(allShapes),
-  NUMERIC_REPRESENTATION: direct(allShapes),
+  DATA_TYPE_CONVERSION: direct(scalar),
+  NUMERIC_REPRESENTATION: direct(scalar),
 
   // Host-only blocks intentionally rejected by embedded code generation.
   Scope: hostOnly('Visualization requires the host runtime.'),

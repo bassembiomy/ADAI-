@@ -57,8 +57,11 @@ be preserved during implementation.
 - One immutable typed semantic IR for simulation and C generation.
 - Deterministic scalar, vector, and matrix signals with compile-time
   dimensions.
-- True integer-domain fixed-point storage and arithmetic.
-- Float32 by default and explicitly selected float64.
+- Integer fixed-point storage with matching interpreter/C double-intermediate
+  arithmetic and explicit output quantization.
+- Float32 for the current production embedded target. The host semantic layer
+  can represent explicitly selected float64, but embedded generation rejects
+  it unless a qualified target profile enables it.
 - Fixed-step Euler and RK4 continuous-state solvers.
 - Multirate discrete blocks with statically validated sample times and
   zero-order hold.
@@ -236,7 +239,7 @@ heap allocation, polymorphic dispatch, or unbounded loop.
 
 The capability registry will initially support:
 
-- Sources and mappings: `Constant`, `Inport`, `Outport`, `Step`.
+- Sources and mappings: `Constant`, `Inport`, and `Outport`.
 - Arithmetic: `Sum`, `GAIN`, `PRODUCT`, `UnaryNeg`, `Abs`, and vector
   arithmetic.
 - Bounded linear algebra: matrix multiply, transpose, concatenation,
@@ -271,7 +274,11 @@ are rejected.
 ### Floating Point
 
 - `float32` is the default floating type.
-- `float64` requires explicit selection and target capability.
+- `float64` exists in the host semantic/interpreter type system, but requires
+  explicit selection and target capability. The current production
+  `STATE_MACHINE_XB_TARGET_CAPABILITIES` profile disables it, so embedded
+  generation rejects float64 until another target profile explicitly enables
+  and qualifies it.
 - `float16` requires a target-native type or an approved bounded software
   helper. Otherwise generation fails.
 - Narrowing from float64 to float32 or float16 requires an explicit
@@ -305,15 +312,15 @@ Supported overflow semantics:
 - two's-complement modular wrap;
 - error.
 
-Fixed-point values are stored as integers. Binary-point scaling is applied
-through explicit shifts and conversions. Addition/subtraction align binary
-points before operation. Multiplication uses a widened intermediate.
-Accumulator types are computed before the explicit output conversion.
-Intermediate-width validation prevents undefined C signed overflow.
-
-The simulation numeric kernel must reproduce the stored-integer operations,
-not approximate them with a floating-point result followed by an unrelated
-cast.
+Fixed-point values are stored as integers. In the implemented operation path,
+operands are converted to `double`, the operation is evaluated in `double`,
+and the result is explicitly rounded, overflow-processed, and quantized to the
+destination stored integer. The simulation numeric kernel reproduces that same
+sequence. This is deterministic across the tested host interpreter/C harness,
+but it is not a claim of bit-true integer-domain arithmetic: magnitudes outside
+the exact-integer range of the target `double` and target floating-point
+differences require rejection, tighter modeling bounds, or target-specific
+qualification.
 
 ### Conversion Blocks
 
@@ -461,7 +468,8 @@ Implementation is complete only when:
 3. Same-tick inner/child logic observes committed X-Bridges outputs.
 4. Unsupported blocks stop generation with precise diagnostics.
 5. Generated code uses only static bounded memory and execution.
-6. Fixed-point simulation and C use matching stored-integer behavior.
+6. Fixed-point simulation and C use matching double-intermediate evaluation
+   and explicit stored-integer output quantization.
 7. Float32 is the default and narrowing is never silent.
 8. Euler/RK4 and multirate scheduling are deterministic and matched.
 9. Reset/retain memory policies behave identically in simulation and C.

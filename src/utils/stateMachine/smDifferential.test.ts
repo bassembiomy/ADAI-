@@ -394,8 +394,21 @@ const shapedTraceFixture = (): StateMachineModelV4 => {
     nodes: [
       traceConstant('vector', [1.25, -2.5], 'vector', [2]),
       traceConstant('matrix', [1, 2, 3, 4], 'matrix', [2, 2]),
+      {
+        id: 'vector_sink', type: 'TERMINATOR', parameters: {
+          inputs: [xbPort('u', 'input', 'vector', [2], 'float32')], outputs: [],
+        },
+      },
+      {
+        id: 'matrix_sink', type: 'TERMINATOR', parameters: {
+          inputs: [xbPort('u', 'input', 'matrix', [2, 2], 'float32')], outputs: [],
+        },
+      },
     ],
-    edges: [], mappings: [],
+    edges: [
+      { id: 'vector_to_sink', sourceNodeId: 'vector', sourcePortId: 'y', targetNodeId: 'vector_sink', targetPortId: 'u' },
+      { id: 'matrix_to_sink', sourceNodeId: 'matrix', sourcePortId: 'y', targetNodeId: 'matrix_sink', targetPortId: 'u' },
+    ], mappings: [],
     solver: { kind: 'euler', stepSeconds: 0.002 },
     policy: { memory: 'reset', numericFault: 'signal-only' },
   };
@@ -539,7 +552,50 @@ describe('X-Bridges numeric fault recovery and escalation', () => {
 });
 
 describe('TypeScript-versus-generated-C differential gate', () => {
-  it('round-trips vector and matrix trace values through compiled C', () => {
+  it('T14-INT-CORE-DIRECT and T14-C99-CORE-DIRECT preserve mapped Inport values through Outport graphs', () => {
+    const model = hybridXBridgesFixture();
+    model.states[0].autostart = false;
+    const controller = model.states.find((state) => state.id === 'controller')!;
+    controller.autostart = true;
+    for (const id of ['xb_input', 'xb_output']) {
+      model.variables.push({
+        id, name: id, type: 'float', initialValue: '0', currentValue: 0,
+        visibleInScope: true,
+      });
+    }
+    const scalar = (id: string, direction: 'input' | 'output') =>
+      xbPort(id, direction, 'scalar', [], 'float32');
+    controller.xBridgesModel = {
+      schemaVersion: 1,
+      nodes: [
+        { id: 'input', type: 'Inport', parameters: { inputs: [], outputs: [scalar('y', 'output')] } },
+        { id: 'gain', type: 'GAIN', parameters: { gain: 2, inputs: [scalar('u', 'input')], outputs: [scalar('y', 'output')] } },
+        { id: 'output', type: 'Outport', parameters: { inputs: [scalar('u', 'input')], outputs: [] } },
+      ],
+      edges: [
+        { id: 'input_gain', sourceNodeId: 'input', sourcePortId: 'y', targetNodeId: 'gain', targetPortId: 'u' },
+        { id: 'gain_output', sourceNodeId: 'gain', sourcePortId: 'y', targetNodeId: 'output', targetPortId: 'u' },
+      ],
+      mappings: [
+        { smVarId: 'xb_input', blockId: 'input', portId: 'y', direction: 'in' },
+        { smVarId: 'xb_output', blockId: 'gain', portId: 'y', direction: 'out' },
+      ],
+      solver: { kind: 'euler', stepSeconds: 0.002 },
+      policy: { memory: 'reset', numericFault: 'signal-only' },
+    };
+    const fixture = {
+      name: 'flat-priority' as const,
+      model,
+      steps: [{ kind: 'step' as const, inputs: { xb_input: 4 } }],
+    };
+    const expected = runInterpreterTrace(fixture);
+    const actual = compileAndRunCTrace(fixture);
+
+    expect(expected.at(-1)?.data.xb_output).toBe(8);
+    expect(compareSemanticTraces(expected, actual)).toBeNull();
+  }, 60_000);
+
+  it('T14-INT-SHAPED-CONSTANT and T14-C99-SHAPED-CONSTANT round-trip vector and matrix constants through compiled C', () => {
     const fixture = {
       name: 'flat-priority' as const,
       model: shapedTraceFixture(),

@@ -470,9 +470,10 @@ const evaluateDirectOperation = (
       )];
     case 'Inport':
     case 'Outport':
-      return operation.outputSignalIds.length === 0
-        ? []
-        : [inputs[0] ?? [0]];
+      // Port signals are populated/consumed by mappings. The operation itself
+      // is a no-op, matching the generated-C emitter and preserving a mapped
+      // Inport value for downstream operations.
+      return [];
     case 'GAIN': {
       const gain = Number(parameter(
         operation,
@@ -964,6 +965,11 @@ const executeDirectOperations = (
     if (operation.stateful) continue;
     if (runtime.operationFaults[operation.id]?.active) continue;
     if (!forceEvaluation && !scheduledThisSubstep(runtime, operation)) continue;
+    if (operation.type === 'Inport' || operation.type === 'Outport') {
+      // Mappings own these boundary signals. Do not synthesize a default
+      // output, which would overwrite a mapped Inport value.
+      continue;
+    }
     if (
       operation.type === 'DATA_TYPE_CONVERSION'
       || operation.type === 'NUMERIC_REPRESENTATION'

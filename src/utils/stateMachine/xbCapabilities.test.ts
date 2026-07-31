@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
+import * as capabilityModule from './xbCapabilities';
 import { XB_C_CONFORMANCE_CASE_IDS, XB_INTERPRETER_CONFORMANCE_CASE_IDS, getXBBlockCapability } from './xbCapabilities';
 
 describe('getXBBlockCapability', () => {
@@ -7,7 +8,7 @@ describe('getXBBlockCapability', () => {
     expect(getXBBlockCapability('GAIN')).toMatchObject({
       codegen: true,
       directFeedthrough: true,
-      shapes: ['scalar', 'vector', 'matrix'],
+      shapes: ['scalar'],
     });
   });
 
@@ -59,6 +60,13 @@ describe('getXBBlockCapability', () => {
   });
 
   it('links every code-generation-capable block to interpreter and compiled-C conformance cases', () => {
+    const interpreterManifest = (capabilityModule as any).XB_INTERPRETER_CONFORMANCE_CASES as
+      Record<string, readonly { blockType: string; inputShapes: readonly string[]; outputShapes: readonly string[] }[]> | undefined;
+    const cManifest = (capabilityModule as any).XB_C_CONFORMANCE_CASES as
+      Record<string, readonly { blockType: string; inputShapes: readonly string[]; outputShapes: readonly string[] }[]> | undefined;
+    expect(interpreterManifest).toBeDefined();
+    expect(cManifest).toBeDefined();
+
     for (const type of Object.keys(BLOCK_LIBRARY)) {
       const capability = getXBBlockCapability(type);
       if (capability?.codegen !== true) continue;
@@ -69,6 +77,22 @@ describe('getXBBlockCapability', () => {
         XB_INTERPRETER_CONFORMANCE_CASE_IDS.includes(id as typeof XB_INTERPRETER_CONFORMANCE_CASE_IDS[number])), type).toBe(true);
       expect(capability.cConformanceCaseIds?.every((id) =>
         XB_C_CONFORMANCE_CASE_IDS.includes(id as typeof XB_C_CONFORMANCE_CASE_IDS[number])), type).toBe(true);
+
+      for (const [label, ids, manifest] of [
+        ['interpreter', capability.interpreterConformanceCaseIds!, interpreterManifest!],
+        ['compiled C', capability.cConformanceCaseIds!, cManifest!],
+      ] as const) {
+        const records = ids.flatMap((id) => manifest[id] ?? [])
+          .filter((entry) => entry.blockType === type);
+        const coveredInputs = new Set(records.flatMap((entry) => entry.inputShapes));
+        const coveredOutputs = new Set(records.flatMap((entry) => entry.outputShapes));
+        expect(coveredInputs, `${type}: ${label} input shapes`).toEqual(
+          new Set(capability.inputShapes ?? capability.shapes),
+        );
+        expect(coveredOutputs, `${type}: ${label} output shapes`).toEqual(
+          new Set(capability.outputShapes ?? capability.shapes),
+        );
+      }
     }
   });
 });

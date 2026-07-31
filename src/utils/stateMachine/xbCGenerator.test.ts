@@ -229,11 +229,12 @@ const statefulOperation = (
 
 const continuousSolverModel = (
   kind: 'euler' | 'rk4',
+  integratorType: 'INTEGRATOR_CONTINUOUS' | 'Integrator' = 'INTEGRATOR_CONTINUOUS',
 ): SemanticModel => {
   const ir = semanticModel();
   const float64 = { kind: 'float64' } as const;
   const integrator = statefulOperation(
-    'integrator', 'INTEGRATOR_CONTINUOUS', ['integrator:u'], ['integrator:y'], 0,
+    'integrator', integratorType, ['integrator:u'], ['integrator:y'], 0,
   );
   const delay = {
     ...statefulOperation('delay', 'DELAY', ['delay:u'], ['delay:y'], 0),
@@ -365,6 +366,12 @@ const combinationalSemanticModel = (): SemanticModel => {
       { signs: '++' },
     ),
     scalarOperation(
+      'sum-junction',
+      'SUM_JUNCTION',
+      ['sum-junction:u1', 'sum-junction:u2'],
+      ['sum-junction:y'],
+    ),
+    scalarOperation(
       'product',
       'PRODUCT',
       ['product:u1', 'product:u2'],
@@ -379,6 +386,12 @@ const combinationalSemanticModel = (): SemanticModel => {
       ['logical-and:y'],
     ),
     scalarOperation('logical-not', 'NOT', ['logical-not:u'], ['logical-not:y']),
+    scalarOperation(
+      'logical-or',
+      'OR',
+      ['logical-or:a', 'logical-or:b'],
+      ['logical-or:y'],
+    ),
     scalarOperation(
       'logical-xor',
       'XOR',
@@ -448,6 +461,9 @@ const combinationalSemanticModel = (): SemanticModel => {
     'sum:u1': scalarInputSignal('sum:u1', 'gain:y'),
     'sum:u2': scalarInputSignal('sum:u2', 'constant:y'),
     'sum:y': signal('sum:y', float32),
+    'sum-junction:u1': scalarInputSignal('sum-junction:u1', 'gain:y'),
+    'sum-junction:u2': scalarInputSignal('sum-junction:u2', 'constant:y'),
+    'sum-junction:y': signal('sum-junction:y', float32),
     'product:u1': scalarInputSignal('product:u1', 'sum:y'),
     'product:u2': scalarInputSignal('product:u2', 'constant:y'),
     'product:y': signal('product:y', float32),
@@ -460,6 +476,9 @@ const combinationalSemanticModel = (): SemanticModel => {
     'logical-and:y': signal('logical-and:y', booleanType),
     'logical-not:u': scalarInputSignal('logical-not:u', 'logical-and:y', booleanType),
     'logical-not:y': signal('logical-not:y', booleanType),
+    'logical-or:a': scalarInputSignal('logical-or:a', 'logical-and:y', booleanType),
+    'logical-or:b': scalarInputSignal('logical-or:b', 'logical-not:y', booleanType),
+    'logical-or:y': signal('logical-or:y', booleanType),
     'logical-xor:a': scalarInputSignal('logical-xor:a', 'logical-and:y', booleanType),
     'logical-xor:b': scalarInputSignal('logical-xor:b', 'logical-not:y', booleanType),
     'logical-xor:y': signal('logical-xor:y', booleanType),
@@ -1956,8 +1975,7 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
   });
 });
 
-describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
-  const executeStatefulHarness = (
+const executeStatefulHarness = (
     ir: SemanticModel,
     workspaceName: string,
     harnessLines: readonly string[],
@@ -1984,12 +2002,17 @@ describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
     } finally {
       workspace.cleanup();
     }
-  };
+};
 
-  it.each(['euler', 'rk4'] as const)(
-    'matches interpreter ticks for dx/dt = -x + u using %s',
-    (kind) => {
-      const ir = continuousSolverModel(kind);
+describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
+
+  it.each([
+    ['euler', 'INTEGRATOR_CONTINUOUS'], ['rk4', 'INTEGRATOR_CONTINUOUS'],
+    ['euler', 'Integrator'], ['rk4', 'Integrator'],
+  ] as const)(
+    'T14-C99-CONTINUOUS matches interpreter ticks for dx/dt = -x + u using %s and %s',
+    (kind, integratorType) => {
+      const ir = continuousSolverModel(kind, integratorType);
       const runtime = createXBRuntime(ir.states.controller.xBridges!);
       const expected = Array.from({ length: 5 }, () => {
         const data: Record<string, number | boolean> = { u: 1, x: 0, d: 0, twice: 0 };
@@ -2399,6 +2422,51 @@ describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
 });
 
 describe('X-Bridges fixed-point state parity', { timeout: 60_000 }, () => {
+  it('T14-C99-STATEFUL executes unit delay, memory, and discrete integrator state updates', () => {
+    const ir = semanticModel();
+    const source = scalarOperation('source', 'Constant', [], ['source:y'], { value: 2 });
+    const unit = statefulOperation('unit', 'UNIT_DELAY', ['unit:u'], ['unit:y'], 1);
+    const memory = statefulOperation('memory', 'MEMORY', ['memory:u'], ['memory:y'], 3);
+    const integrator = statefulOperation(
+      'integrator', 'INTEGRATOR_DISCRETE', ['integrator:u'], ['integrator:y'], 4,
+    );
+    ir.states.controller.xBridges = {
+      stateId: 'controller',
+      executionOrder: ['source', 'unit', 'memory', 'integrator'],
+      operations: { source, unit, memory, integrator },
+      signals: {
+        'source:y': signal('source:y', float32),
+        'unit:u': scalarInputSignal('unit:u', 'source:y'),
+        'unit:y': signal('unit:y', float32),
+        'memory:u': scalarInputSignal('memory:u', 'source:y'),
+        'memory:y': signal('memory:y', float32),
+        'integrator:u': scalarInputSignal('integrator:u', 'source:y'),
+        'integrator:y': signal('integrator:y', float32),
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
+      policy: { memory: 'retain', numericFault: 'signal-only' },
+    };
+
+    const output = executeStatefulHarness(ir, 'xb-core-stateful-c99', [
+      '#include "sm_core.h"', '#include <stdio.h>',
+      'int main(void) {',
+      '    ADIA_Instance_t instance;',
+      '    if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+      '    SM_XB_CONTROLLER_Step(&instance);',
+      '    (void)printf("%.0f,%.0f,%.0f,%.0f,%.0f,%.0f\\n",',
+      '        instance.xb_controller.unit_y,',
+      '        instance.xb_controller.memory_y,',
+      '        instance.xb_controller.integrator_y,',
+      '        instance.xb_controller.state_unit_y_state,',
+      '        instance.xb_controller.state_memory_y_state,',
+      '        instance.xb_controller.state_integrator_y_state);',
+      '    return 0;', '}', '',
+    ]);
+
+    expect(output).toBe('1,3,4,2,2,6');
+  });
+
   it('T14-C99-STATEFUL matches Q2 delay conversion for fractional input and saturation', () => {
     const ir = fixedDelayModel();
     const runtime = createXBRuntime(ir.states.controller.xBridges!);

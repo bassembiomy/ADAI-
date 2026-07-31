@@ -72,9 +72,18 @@ available in normal application simulation while being rejected for embedded C.
 ### Fixed point
 
 A fixed type records signedness, a word length from 1 through 32, and an integer
-fraction length. Values are represented by stored integers with a binary-point
-scale; generated arithmetic uses bounded, widened intermediates before explicit
-conversion. Dynamic sizing and unsafe intermediate widths are rejected.
+fraction length. Values are stored as scaled integers. The current generated
+operation path converts operands to C `double`, performs the operation, and
+then explicitly rounds and applies the configured overflow policy while
+quantizing to the destination stored integer. The interpreter follows the same
+sequence.
+
+This provides tested interpreter/C parity, but it is not bit-true
+integer-domain arithmetic. Values beyond the exact-integer range of the
+target's `double`, intermediate rounding, and target floating-point behavior
+can affect results before quantization. Models must remain inside the validated
+numeric bounds and require target compiler plus SIL/PIL qualification when
+fixed-point bit exactness is a system requirement.
 
 Supported rounding policies are:
 
