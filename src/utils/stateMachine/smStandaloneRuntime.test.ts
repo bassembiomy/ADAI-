@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { STATE_MACHINE_RUNTIME_BUNDLE } from '../../generated/stateMachineRuntimeBundle';
 import {
+  hybridXBridgesFixture,
   historyFixture,
   parallelHistoryFixture,
 } from './smFixtures';
@@ -131,5 +132,45 @@ describe('standalone state-machine runtime parity', () => {
     expect(runStandaloneScenario(model, operations)).toEqual(
       runModuleScenario(model, operations),
     );
+  });
+
+  it('includes X-Bridges signal and block state in the standalone trace', () => {
+    const model = hybridXBridgesFixture();
+    model.states[0].autostart = false;
+    const controller = model.states.find((state) => state.id === 'controller')!;
+    controller.autostart = true;
+    controller.xBridgesModel = {
+      schemaVersion: 1,
+      nodes: [
+        {
+          id: 'source', type: 'Constant', parameters: {
+            value: 0, inputs: [],
+            outputs: [{ id: 'y', direction: 'output', shape: 'scalar', dimensions: [], dataType: 'float32' }],
+          },
+        },
+        {
+          id: 'delay', type: 'UNIT_DELAY', parameters: {
+            initialValue: 1,
+            inputs: [{ id: 'u', direction: 'input', shape: 'scalar', dimensions: [], dataType: 'float32' }],
+            outputs: [{ id: 'y', direction: 'output', shape: 'scalar', dimensions: [], dataType: 'float32' }],
+          },
+        },
+      ],
+      edges: [{ id: 'source-to-delay', sourceNodeId: 'source', sourcePortId: 'y', targetNodeId: 'delay', targetPortId: 'u' }],
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.002 },
+      policy: { memory: 'reset', numericFault: 'signal-only' },
+    };
+    const standalone = runStandaloneScenario(model, [{ elapsedMs: 10 }]);
+    const module = runModuleScenario(model, [{ elapsedMs: 10 }]);
+
+    expect(standalone).toEqual(module);
+    expect(standalone.at(-1)?.xBridges).toEqual({
+      controller: {
+        signals: { 'delay:u': 0, 'delay:y': 0, 'source:y': 0 },
+        blockState: { delay: { y: 0 } },
+        faults: [],
+      },
+    });
   });
 });

@@ -1541,7 +1541,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
 };
 
 export const renderTestingReport = (ir: SemanticModel): string =>
-  renderSemanticTestingReport(analyzeSemanticModel(ir));
+  renderSemanticTestingReport(analyzeSemanticModel(ir), undefined, ir);
 
 export const generateCArtifacts = (
   ir: SemanticModel,
@@ -1576,11 +1576,11 @@ export const generateCArtifacts = (
       ...implementationFiles,
       {
         name: 'sm_testing_report.md',
-        content: renderSemanticTestingReport(analysis),
+        content: renderSemanticTestingReport(analysis, undefined, ir),
       },
       {
         name: 'static_metrics_report.md',
-        content: renderStaticMetricsReport(analysis, measuredSourceFiles),
+        content: renderStaticMetricsReport(analysis, measuredSourceFiles, ir),
       },
     ],
     errors: [],

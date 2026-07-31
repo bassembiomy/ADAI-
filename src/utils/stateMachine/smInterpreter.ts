@@ -7,7 +7,7 @@ import type {
   SemanticTransition,
   SemanticTransitionRoute,
 } from './smSemanticModel';
-import type { SemanticTraceFrame } from './smTrace';
+import type { SemanticTraceFrame, XBridgesTraceValue } from './smTrace';
 import { xBridgesTraceAction } from './smTrace';
 import {
   createXBRuntime,
@@ -815,6 +815,17 @@ const incrementActiveTimers = (
 const errorText = (error: SemanticRuntimeError | null): string | null =>
   error === null ? null : `${error.code}: ${error.message}`;
 
+const shapedTraceValue = (
+  values: readonly (number | boolean)[],
+  shape: { kind: 'scalar' } | { kind: 'vector'; length: number }
+    | { kind: 'matrix'; rows: number; columns: number },
+): XBridgesTraceValue => {
+  if (shape.kind === 'scalar') return values[0] ?? 0;
+  if (shape.kind === 'vector') return [...values];
+  return Array.from({ length: shape.rows }, (_, row) =>
+    values.slice(row * shape.columns, (row + 1) * shape.columns));
+};
+
 const createTraceFrame = (
   context: StepContext,
   elapsedMs: number,
@@ -842,6 +853,44 @@ const createTraceFrame = (
       history[`${layer.id}:deep`] = JSON.stringify(deepSnapshot);
     }
   }
+  const xBridges = Object.fromEntries(
+    Object.keys(runtime.xBridgesByStateId)
+      .sort((left, right) => left.localeCompare(right))
+      .map((stateId) => {
+        const xbRuntime = runtime.xBridgesByStateId[stateId];
+        const signals = Object.fromEntries(
+          Object.keys(xbRuntime.ir.signals)
+            .sort((left, right) => left.localeCompare(right))
+            .map((signalId) => [
+              signalId,
+              shapedTraceValue(
+                xbRuntime.signals[signalId],
+                xbRuntime.ir.signals[signalId].shape,
+              ),
+            ]),
+        );
+        const blockState: Record<string, Record<string, XBridgesTraceValue>> = {};
+        for (const operationId of xbRuntime.ir.executionOrder) {
+          const operation = xbRuntime.ir.operations[operationId];
+          const slots = operation.state?.slots ?? [];
+          if (slots.length === 0) continue;
+          blockState[operationId] = Object.fromEntries(
+            [...slots]
+              .sort((left, right) => left.role.localeCompare(right.role))
+              .map((slot) => [
+                slot.role,
+                shapedTraceValue(xbRuntime.stateSlots[slot.id], slot.shape),
+              ]),
+          );
+        }
+        return [stateId, {
+          signals,
+          blockState,
+          faults: xbRuntime.ir.executionOrder.filter((operationId) =>
+            xbRuntime.operationFaults[operationId]?.active === true),
+        }];
+      }),
+  );
 
   return Object.freeze({
     sequence: runtime.traceSequence++,
@@ -856,6 +905,7 @@ const createTraceFrame = (
       safeOutputsApplied: 0,
       watchdogKicks: 0,
     }),
+    xBridges: Object.freeze(xBridges),
     error: errorText(runtime.error),
   }) as SemanticTraceFrame;
 };

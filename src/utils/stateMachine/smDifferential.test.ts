@@ -40,6 +40,7 @@ const frame = (
   history: { root: 'a' },
   mappedOutputs: {},
   ioEffects: { safeOutputsApplied: 0, watchdogKicks: 0 },
+  xBridges: {},
   error: null,
 });
 
@@ -73,6 +74,29 @@ describe('semantic trace comparison', () => {
     actual.data = { beta: 2, alpha: 1 };
 
     expect(compareSemanticTraces([expected], [actual])).toBeNull();
+  });
+
+  it('compares canonical X-Bridges signals, block state, and faults deeply', () => {
+    const expected = frame(0);
+    expected.xBridges = {
+      controller: {
+        signals: { 'gain:y': 1.25, 'vector:y': [1, 2] },
+        blockState: { delay: { previous: 1 } },
+        faults: [],
+      },
+    };
+    const actual = frame(0);
+    actual.xBridges = {
+      controller: {
+        signals: { 'vector:y': [1, 2], 'gain:y': 1.25 },
+        blockState: { delay: { previous: 1 } },
+        faults: [],
+      },
+    };
+
+    expect(compareSemanticTraces([expected], [actual])).toBeNull();
+    actual.xBridges.controller.blockState.delay.previous = 2;
+    expect(compareSemanticTraces([expected], [actual])?.index).toBe(0);
   });
 });
 
@@ -411,6 +435,27 @@ describe('X-Bridges numeric fault recovery and escalation', () => {
 });
 
 describe('TypeScript-versus-generated-C differential gate', () => {
+  it('captures deterministic X-Bridges values and state in both traces', () => {
+    const model = statefulOverflowFixture('signal-only');
+    const fixture = {
+      name: 'flat-priority' as const,
+      model,
+      steps: [{ kind: 'step' as const }],
+    };
+    const expected = runInterpreterTrace(fixture);
+    const actual = compileAndRunCTrace(fixture);
+
+    expect(expected.at(-1)?.xBridges.controller).toEqual(
+      expect.objectContaining({
+        signals: expect.objectContaining({ 'delay:y': 7 }),
+        blockState: { delay: { y: 7 } },
+        faults: ['delay'],
+      }),
+    );
+    expect(actual.at(-1)?.xBridges).toEqual(expected.at(-1)?.xBridges);
+    expect(compareSemanticTraces(expected, actual)).toBeNull();
+  }, 60_000);
+
   it.each(fixtureMatrix)(
     '%s matches generated C tick by tick',
     (fixtureName) => {

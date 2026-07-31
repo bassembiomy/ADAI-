@@ -25,7 +25,15 @@ import type {
   SemanticState,
   SemanticVariable,
 } from './smSemanticModel';
-import type { SemanticTraceFrame } from './smTrace';
+import type {
+  SemanticTraceFrame,
+  XBridgesTraceValue,
+} from './smTrace';
+import type {
+  XBSemanticSignal,
+  XBSemanticStateSlot,
+} from './xbSemanticModel';
+import type { XBNumericType, XBShape } from './xbNumeric';
 
 export interface CProgramOptions {
   directory: string;
@@ -99,6 +107,87 @@ const orderedLayers = (ir: SemanticModel): SemanticLayer[] =>
 const orderedVariables = (ir: SemanticModel): SemanticVariable[] =>
   Object.values(ir.variables).sort((left, right) =>
     left.id.localeCompare(right.id));
+
+const xbNumericCType = (type: XBNumericType): string => {
+  if (type.kind === 'fixed') {
+    const width = type.wordLength <= 8 ? 8 : type.wordLength <= 16 ? 16 : 32;
+    return `${type.signed ? 'int' : 'uint'}${width}_t`;
+  }
+  if (type.kind === 'boolean') return 'bool';
+  const precision = type.kind === 'float' ? type.precision : type.kind;
+  return precision === 'float64' ? 'double' : 'float';
+};
+
+interface XBTraceLayout {
+  signalFields: Map<string, string>;
+  fixedValidityFields: Map<string, string>;
+  fixedRealFields: Map<string, string>;
+  slotFields: Map<string, string>;
+  errorFields: Map<string, string>;
+}
+
+const xbTraceLayout = (state: SemanticState): XBTraceLayout => {
+  const xb = state.xBridges!;
+  const names = new Set<string>();
+  const signalFields = new Map<string, string>();
+  const fixedValidityFields = new Map<string, string>();
+  const fixedRealFields = new Map<string, string>();
+  const slotFields = new Map<string, string>();
+  const errorFields = new Map<string, string>();
+  const allocate = (preferred: string, namespace: string): string => {
+    let candidate = preferred;
+    let suffix = 2;
+    if (names.has(candidate)) candidate = `${preferred}_${namespace}`;
+    while (names.has(candidate)) candidate = `${preferred}_${namespace}_${suffix++}`;
+    names.add(candidate);
+    return candidate;
+  };
+  for (const signal of Object.values(xb.signals).sort((left, right) =>
+    left.id.localeCompare(right.id))) {
+    const name = allocate(toCIdentifier(`${signal.nodeId}_${signal.portId}`), 'signal');
+    signalFields.set(signal.id, name);
+    if (signal.numericType.kind === 'fixed') {
+      fixedValidityFields.set(
+        signal.id,
+        allocate(`${name}_has_stored_integer`, 'signal_validity'),
+      );
+      fixedRealFields.set(
+        signal.id,
+        allocate(`${name}_real_value`, 'signal_real'),
+      );
+    }
+  }
+  for (const operationId of xb.executionOrder) {
+    const operation = xb.operations[operationId];
+    for (const slot of operation.state?.slots ?? []) {
+      slotFields.set(
+        slot.id,
+        allocate(`state_${toCIdentifier(slot.id)}`, 'slot'),
+      );
+    }
+    allocate(`schedule_${toCIdentifier(operation.id)}`, 'counter');
+    if (operation.outputSignalIds.length > 0) {
+      errorFields.set(
+        operation.id,
+        allocate(`${toCIdentifier(operation.id)}_error`, 'fault'),
+      );
+    }
+  }
+  return { signalFields, fixedValidityFields, fixedRealFields, slotFields, errorFields };
+};
+
+const xbStateMembers = (ir: SemanticModel): Map<string, string> => {
+  const names = new Set<string>();
+  return new Map(orderedStates(ir).filter((state) => state.xBridges !== null)
+    .map((state) => {
+      const preferred = `xb_${toCIdentifier(state.id).toLowerCase()}`;
+      let name = preferred;
+      let suffix = 2;
+      while (names.has(name)) name = `${preferred}_${suffix++}`;
+      names.add(name);
+      return [state.id, name];
+    }));
+};
 
 const buildFixtureIr = (fixture: DifferentialFixture): SemanticModel => {
   const built = buildSemanticModel(fixture.model);
@@ -410,6 +499,112 @@ const renderScenarioOperations = (
   ];
 }).join('\n');
 
+const xbShapeCode = (shape: XBShape): string => shape.kind === 'scalar'
+  ? 's'
+  : shape.kind === 'vector'
+    ? `v${shape.length}`
+    : `m${shape.rows}x${shape.columns}`;
+
+const xbFlatExpressions = (
+  member: string,
+  field: string,
+  type: XBNumericType,
+  count: number,
+  scalar: boolean,
+): string[] => scalar
+  ? [`instance->${member}.${field}`]
+  : Array.from({ length: count }, (_, index) =>
+    `(((${xbNumericCType(type)} *)&instance->${member}.${field})[${index}])`);
+
+const xbValuePrints = (
+  expressions: readonly string[],
+  boolean: boolean,
+): string[] => expressions.flatMap((expression, index) => [
+  ...(index === 0 ? [] : ['    printf(",");']),
+  boolean
+    ? `    printf("%d", (${expression}) ? 1 : 0);`
+    : `    printf("%.17g", (double)(${expression}));`,
+]);
+
+const renderXBridgesTrace = (ir: SemanticModel): string[] => {
+  const states = orderedStates(ir).filter((state) => state.xBridges !== null);
+  const members = xbStateMembers(ir);
+  let signalIndex = 0;
+  let slotIndex = 0;
+  const signals: string[] = [];
+  const slots: string[] = [];
+  const faults: string[] = ['    first = true;'];
+  for (const state of states) {
+    const xb = state.xBridges!;
+    const member = members.get(state.id)!;
+    const layout = xbTraceLayout(state);
+    for (const signal of Object.values(xb.signals).sort((left, right) =>
+      left.id.localeCompare(right.id))) {
+      const expressions = signal.numericType.kind === 'fixed'
+        ? xbFlatExpressions(
+            member,
+            layout.fixedRealFields.get(signal.id)!,
+            { kind: 'float64' },
+            signal.elementCount,
+            signal.shape.kind === 'scalar',
+          )
+        : xbFlatExpressions(
+            member,
+            layout.signalFields.get(signal.id)!,
+            signal.numericType,
+            signal.elementCount,
+            signal.shape.kind === 'scalar',
+          );
+      if (signalIndex++ > 0) signals.push('    printf(";");');
+      signals.push(
+        `    print_token(${cString(state.id)});`, '    printf(":");',
+        `    print_token(${cString(signal.id)});`,
+        `    printf(":${xbShapeCode(signal.shape)}:${signal.numericType.kind === 'boolean' ? 'b' : 'n'}:");`,
+        ...xbValuePrints(expressions, signal.numericType.kind === 'boolean'),
+      );
+    }
+    for (const operationId of xb.executionOrder) {
+      const operation = xb.operations[operationId];
+      for (const slot of [...(operation.state?.slots ?? [])].sort((left, right) =>
+        left.role.localeCompare(right.role))) {
+        let expressions = xbFlatExpressions(
+          member,
+          layout.slotFields.get(slot.id)!,
+          slot.numericType,
+          slot.initialValues.length,
+          slot.shape.kind === 'scalar',
+        );
+        if (slot.numericType.kind === 'fixed') {
+          const fractionLength = slot.numericType.fractionLength;
+          expressions = expressions.map((value) =>
+            `ldexp((double)(${value}), ${-fractionLength})`);
+        }
+        if (slotIndex++ > 0) slots.push('    printf(";");');
+        slots.push(
+          `    print_token(${cString(state.id)});`, '    printf(":");',
+          `    print_token(${cString(operationId)});`, '    printf(":");',
+          `    print_token(${cString(slot.role)});`,
+          `    printf(":${xbShapeCode(slot.shape)}:${slot.numericType.kind === 'boolean' ? 'b' : 'n'}:");`,
+          ...xbValuePrints(expressions, slot.numericType.kind === 'boolean'),
+        );
+      }
+      const errorField = layout.errorFields.get(operationId);
+      if (errorField !== undefined) faults.push(
+        `    if (instance->${member}.${errorField}) {`,
+        '        printf("%s", first ? "" : ";");',
+        `        print_token(${cString(state.id)});`, '        printf(":");',
+        `        print_token(${cString(operationId)});`,
+        '        first = false;', '    }',
+      );
+    }
+  }
+  return [
+    '    printf("|xbSignals=");', ...signals,
+    '    printf("|xbState=");', ...slots,
+    '    printf("|xbFaults=");', ...faults,
+  ];
+};
+
 const renderFramePrinter = (ir: SemanticModel): string => {
   const states = orderedStates(ir);
   const variables = orderedVariables(ir);
@@ -538,6 +733,7 @@ const renderFramePrinter = (ir: SemanticModel): string => {
     ...outputPrints,
     '    printf("|faults=");',
     ...faultPrints,
+    ...renderXBridgesTrace(ir),
     '    printf("|effects=%u,%u", safe_outputs_applied, watchdog_kicks);',
     '    printf("|error=%u\\n", (unsigned)instance->error_status);',
     '}',
@@ -555,6 +751,7 @@ const renderHarness = (
   );
   return [
     '#include "sm_core.h"',
+    '#include <math.h>',
     '#include <stdio.h>',
     '',
     `#define SM_TRACE_ACTION_CAPACITY ${actionCapacity}U`,
@@ -620,9 +817,64 @@ export interface CTraceFrame extends SemanticTraceFrame {
   readonly xBridgesFaults: Readonly<Record<string, boolean>>;
 }
 
+const parseXBTraceValue = (
+  shape: string,
+  kind: string,
+  encodedValues: string,
+): XBridgesTraceValue => {
+  const values = encodedValues === '' ? [] : encodedValues.split(',').map((value) =>
+    kind === 'b' ? value === '1' : Number(value));
+  if (shape === 's') return values[0] ?? (kind === 'b' ? false : 0);
+  if (shape.startsWith('v')) return values;
+  const match = /^m(\d+)x(\d+)$/.exec(shape);
+  if (match === null) throw new Error(`invalid X-Bridges trace shape '${shape}'`);
+  const rows = Number(match[1]);
+  const columns = Number(match[2]);
+  return Array.from({ length: rows }, (_, row) =>
+    values.slice(row * columns, (row + 1) * columns));
+};
+
+const parseXBridgesFrame = (
+  signalField: string,
+  stateField: string,
+  faultField: string,
+): SemanticTraceFrame['xBridges'] => {
+  const result: SemanticTraceFrame['xBridges'] = {};
+  const ensure = (stateId: string) => result[stateId] ??= {
+    signals: {}, blockState: {}, faults: [],
+  };
+  if (signalField !== '') {
+    for (const item of signalField.split(';')) {
+      const [encodedStateId, encodedSignalId, shape, kind, values] = item.split(':');
+      ensure(decodeURIComponent(encodedStateId)).signals[
+        decodeURIComponent(encodedSignalId)
+      ] = parseXBTraceValue(shape, kind, values);
+    }
+  }
+  if (stateField !== '') {
+    for (const item of stateField.split(';')) {
+      const [encodedStateId, encodedOperationId, encodedRole, shape, kind, values] = item.split(':');
+      const state = ensure(decodeURIComponent(encodedStateId));
+      const operationId = decodeURIComponent(encodedOperationId);
+      state.blockState[operationId] ??= {};
+      state.blockState[operationId][decodeURIComponent(encodedRole)] =
+        parseXBTraceValue(shape, kind, values);
+    }
+  }
+  if (faultField !== '') {
+    for (const item of faultField.split(';')) {
+      const [encodedStateId, encodedOperationId] = item.split(':');
+      ensure(decodeURIComponent(encodedStateId)).faults.push(
+        decodeURIComponent(encodedOperationId),
+      );
+    }
+  }
+  return result;
+};
+
 const parseFrame = (line: string): CTraceFrame => {
   const segments = line.split('|');
-  if (segments.length !== 12 || segments[0] !== 'FRAME') {
+  if (segments.length !== 15 || segments[0] !== 'FRAME') {
     throw new Error(`invalid C trace line: ${line}`);
   }
   const fields = Object.fromEntries(
@@ -678,6 +930,11 @@ const parseFrame = (line: string): CTraceFrame => {
       fields.faults,
       (value, kind) => kind === 'b' ? value === '1' : Number(value),
     ) as Record<string, boolean>,
+    xBridges: parseXBridgesFrame(
+      fields.xbSignals,
+      fields.xbState,
+      fields.xbFaults,
+    ),
     ioEffects: {
       safeOutputsApplied: Number(fields.effects.split(',')[0]),
       watchdogKicks: Number(fields.effects.split(',')[1]),

@@ -1,3 +1,15 @@
+export type XBridgesTraceScalar = number | boolean;
+export type XBridgesTraceValue =
+  | XBridgesTraceScalar
+  | XBridgesTraceScalar[]
+  | XBridgesTraceScalar[][];
+
+export interface XBridgesStateTrace {
+  signals: Record<string, XBridgesTraceValue>;
+  blockState: Record<string, Record<string, XBridgesTraceValue>>;
+  faults: string[];
+}
+
 export interface SemanticTraceFrame {
   sequence: number;
   elapsedMs: number;
@@ -11,6 +23,7 @@ export interface SemanticTraceFrame {
     safeOutputsApplied: number;
     watchdogKicks: number;
   };
+  xBridges: Record<string, XBridgesStateTrace>;
   error: string | null;
 }
 
@@ -33,24 +46,34 @@ const framesEqual = (
     rightItems: readonly T[],
   ): boolean => leftItems.length === rightItems.length
     && leftItems.every((value, index) => Object.is(value, rightItems[index]));
-  const recordsEqual = (
-    leftRecord: Readonly<Record<string, unknown>>,
-    rightRecord: Readonly<Record<string, unknown>>,
-  ): boolean => {
+  const valuesEqual = (leftValue: unknown, rightValue: unknown): boolean => {
+    if (Object.is(leftValue, rightValue)) return true;
+    if (Array.isArray(leftValue) || Array.isArray(rightValue)) {
+      return Array.isArray(leftValue) && Array.isArray(rightValue)
+        && leftValue.length === rightValue.length
+        && leftValue.every((value, index) =>
+          valuesEqual(value, rightValue[index]));
+    }
+    if (
+      leftValue === null || rightValue === null
+      || typeof leftValue !== 'object' || typeof rightValue !== 'object'
+    ) return false;
+    const leftRecord = leftValue as Readonly<Record<string, unknown>>;
+    const rightRecord = rightValue as Readonly<Record<string, unknown>>;
     const leftKeys = Object.keys(leftRecord).sort();
     const rightKeys = Object.keys(rightRecord).sort();
     return arraysEqual(leftKeys, rightKeys)
-      && leftKeys.every((key) =>
-        Object.is(leftRecord[key], rightRecord[key]));
+      && leftKeys.every((key) => valuesEqual(leftRecord[key], rightRecord[key]));
   };
   return left.sequence === right.sequence
     && Object.is(left.elapsedMs, right.elapsedMs)
     && arraysEqual(left.activeStateIds, right.activeStateIds)
     && arraysEqual(left.actions, right.actions)
-    && recordsEqual(left.data, right.data)
-    && recordsEqual(left.stateTimersMs, right.stateTimersMs)
-    && recordsEqual(left.history, right.history)
-    && recordsEqual(left.mappedOutputs, right.mappedOutputs)
+    && valuesEqual(left.data, right.data)
+    && valuesEqual(left.stateTimersMs, right.stateTimersMs)
+    && valuesEqual(left.history, right.history)
+    && valuesEqual(left.mappedOutputs, right.mappedOutputs)
+    && valuesEqual(left.xBridges, right.xBridges)
     && left.ioEffects.safeOutputsApplied
       === right.ioEffects.safeOutputsApplied
     && left.ioEffects.watchdogKicks === right.ioEffects.watchdogKicks

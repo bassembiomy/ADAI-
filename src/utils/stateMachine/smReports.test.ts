@@ -7,9 +7,12 @@ import {
   nestedAndFixture,
 } from './smFixtures';
 import {
+  DEFAULT_VERIFICATION_EVIDENCE,
   generateSemanticReport,
+  renderStaticMetricsReport,
   renderTestingReport,
 } from './smReports';
+import { hybridXBridgesFixture } from './smFixtures';
 
 const analyzedUnreachableFixture = () => {
   const model = flatOrFixture();
@@ -125,5 +128,67 @@ describe('semantic state-machine reports', () => {
     const staticReport = renderTestingReport(analyzedUnreachableFixture());
     expect(staticReport).toContain('Execution mode: STATIC_ANALYSIS_ONLY');
     expect(staticReport).toContain('Dynamic executable reachability: NOT RUN');
+  });
+
+  it('reports deterministic X-Bridges code-generation evidence and limitations', () => {
+    const model = hybridXBridgesFixture();
+    const controller = model.states.find((state) => state.id === 'controller')!;
+    controller.xBridgesModel = {
+      schemaVersion: 1,
+      nodes: [
+        {
+          id: 'source', type: 'Constant', parameters: {
+            value: 1,
+            inputs: [],
+            outputs: [{ id: 'y', direction: 'output', shape: 'scalar', dimensions: [], dataType: 'float32' }],
+          },
+        },
+        {
+          id: 'sine', type: 'SIN', parameters: {
+            inputs: [{ id: 'u', direction: 'input', shape: 'scalar', dimensions: [], dataType: 'float32' }],
+            outputs: [{ id: 'y', direction: 'output', shape: 'scalar', dimensions: [], dataType: 'float32' }],
+          },
+        },
+      ],
+      edges: [{ id: 'source-to-sine', sourceNodeId: 'source', sourcePortId: 'y', targetNodeId: 'sine', targetPortId: 'u' }],
+      mappings: [],
+      solver: { kind: 'rk4', stepSeconds: 0.002 },
+      policy: { memory: 'reset', numericFault: 'signal-only' },
+    };
+    const built = buildSemanticModel(model);
+    if (!built.ir) throw new Error(`fixture failed to build: ${JSON.stringify(built.diagnostics)}`);
+    const analysis = analyzeSemanticModel(built.ir);
+
+    const report = generateSemanticReport(
+      analysis,
+      DEFAULT_VERIFICATION_EVIDENCE,
+      built.ir,
+    );
+    expect(report.xBridges).toMatchObject({
+      blockCount: 2,
+      solvers: [{ stateId: 'controller', kind: 'rk4', stepSeconds: 0.002, substepsPerTick: 5 }],
+      numericTypes: ['float32'],
+      capabilityDependencies: ['math-library'],
+    });
+    expect(report.xBridges.staticMemoryBytes).toBeGreaterThan(0);
+    expect(report.xBridges.unsupportedCapabilities).toContain(
+      'LMS_ADAPTIVE_FILTER: Online learning is not in the embedded-safe set.',
+    );
+
+    const testing = renderTestingReport(
+      analysis,
+      DEFAULT_VERIFICATION_EVIDENCE,
+      built.ir,
+    );
+    expect(testing).toContain('Execution mode: STATIC_ANALYSIS_ONLY');
+    expect(testing).toContain('X-Bridges blocks: 2');
+    expect(testing).toContain('Required target capabilities: math-library');
+    expect(testing).toContain('Compiled X-Bridges execution: NOT RUN');
+
+    const metrics = renderStaticMetricsReport(analysis, [], built.ir);
+    expect(metrics).toContain('X-Bridges static memory bytes:');
+    expect(metrics).toContain('Solver: controller: rk4, 0.002 s, 5 substeps/tick');
+    expect(metrics).toContain('Numeric types: float32');
+    expect(metrics).toContain('Unsupported embedded capabilities:');
   });
 });

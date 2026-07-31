@@ -1,4 +1,7 @@
 import type { SMAnalysisResult } from '../smAnalysisEngine';
+import { XB_CAPABILITIES } from './xbCapabilities';
+import type { SemanticModel } from './smSemanticModel';
+import type { XBNumericType } from './xbNumeric';
 
 export type VerificationEvidenceStatus =
   | 'pass'
@@ -32,6 +35,22 @@ export interface SemanticReport {
   testing: SemanticReportSection;
   staticMetrics: SemanticReportSection;
   evidence: VerificationEvidence;
+  xBridges: XBridgesReport;
+}
+
+export interface XBridgesReport {
+  stateCount: number;
+  blockCount: number;
+  staticMemoryBytes: number;
+  solvers: Array<{
+    stateId: string;
+    kind: 'euler' | 'rk4';
+    stepSeconds: number;
+    substepsPerTick: number;
+  }>;
+  numericTypes: string[];
+  capabilityDependencies: string[];
+  unsupportedCapabilities: string[];
 }
 
 export const DEFAULT_VERIFICATION_EVIDENCE: VerificationEvidence = {
@@ -51,13 +70,79 @@ const copySection = (analysis: SMAnalysisResult): SemanticReportSection => ({
   terminalStateIds: [...analysis.semantic.terminalStateIds],
 });
 
+const numericTypeLabel = (type: XBNumericType): string => {
+  if (type.kind === 'fixed') {
+    return `${type.signed ? 's' : 'u'}fix${type.wordLength}_En${type.fractionLength}`;
+  }
+  return type.kind === 'float' ? type.precision : type.kind;
+};
+
+const numericStorageBytes = (type: XBNumericType): number => {
+  if (type.kind === 'fixed') {
+    return type.wordLength <= 8 ? 1 : type.wordLength <= 16 ? 2 : 4;
+  }
+  if (type.kind === 'boolean') return 1;
+  const precision = type.kind === 'float' ? type.precision : type.kind;
+  return precision === 'float64' ? 8 : 4;
+};
+
+const buildXBridgesReport = (ir?: SemanticModel): XBridgesReport => {
+  const states = ir === undefined ? [] : Object.values(ir.states)
+    .filter((state) => state.xBridges !== null)
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const numericTypes = new Set<string>();
+  const dependencies = new Set<string>();
+  let blockCount = 0;
+  let staticMemoryBytes = 0;
+  for (const state of states) {
+    const xb = state.xBridges!;
+    blockCount += xb.executionOrder.length;
+    for (const signal of Object.values(xb.signals)) {
+      numericTypes.add(numericTypeLabel(signal.numericType));
+      staticMemoryBytes += numericStorageBytes(signal.numericType) * signal.elementCount;
+      if (signal.numericType.kind === 'fixed') staticMemoryBytes += 9 * signal.elementCount;
+    }
+    for (const operationId of xb.executionOrder) {
+      const operation = xb.operations[operationId];
+      staticMemoryBytes += 4;
+      if (operation.outputSignalIds.length > 0) staticMemoryBytes += 1;
+      for (const slot of operation.state?.slots ?? []) {
+        numericTypes.add(numericTypeLabel(slot.numericType));
+        staticMemoryBytes += numericStorageBytes(slot.numericType)
+          * slot.initialValues.length;
+      }
+      for (const dependency of XB_CAPABILITIES[operation.type]
+        ?.requiredTargetCapabilities ?? []) dependencies.add(dependency);
+    }
+  }
+  return {
+    stateCount: states.length,
+    blockCount,
+    staticMemoryBytes,
+    solvers: states.map((state) => ({
+      stateId: state.id,
+      kind: state.xBridges!.solver.kind,
+      stepSeconds: state.xBridges!.solver.stepSeconds,
+      substepsPerTick: state.xBridges!.solver.substepsPerTick,
+    })),
+    numericTypes: [...numericTypes].sort(),
+    capabilityDependencies: [...dependencies].sort(),
+    unsupportedCapabilities: Object.entries(XB_CAPABILITIES)
+      .filter(([, capability]) => capability.codegen !== true)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([type, capability]) => `${type}: ${capability.reason ?? 'Not supported.'}`),
+  };
+};
+
 export const generateSemanticReport = (
   analysis: SMAnalysisResult,
   evidence: VerificationEvidence = DEFAULT_VERIFICATION_EVIDENCE,
+  ir?: SemanticModel,
 ): SemanticReport => ({
   testing: copySection(analysis),
   staticMetrics: copySection(analysis),
   evidence: { ...evidence },
+  xBridges: buildXBridgesReport(ir),
 });
 
 const evidenceLabel = (status: VerificationEvidenceStatus): string =>
@@ -97,9 +182,11 @@ const dynamicReachabilityLabel = (
 export const renderTestingReport = (
   analysis: SMAnalysisResult,
   evidence: VerificationEvidence = DEFAULT_VERIFICATION_EVIDENCE,
+  ir?: SemanticModel,
 ): string => {
-  const report = generateSemanticReport(analysis, evidence);
+  const report = generateSemanticReport(analysis, evidence, ir);
   const section = report.testing;
+  const xb = report.xBridges;
   return `# ADIA State Machine Generated-C Verification Report
 
 ## Summary
@@ -135,20 +222,33 @@ export const renderTestingReport = (
 - Host compilation: ${evidenceLabel(report.evidence.hostCompile)}
 - Host runtime: ${evidenceLabel(report.evidence.hostRuntime)}
 - Differential trace: ${evidenceLabel(report.evidence.differential)}
+- Compiled X-Bridges execution: ${evidenceLabel(report.evidence.differential)}
 - Embedded compilation: ${evidenceLabel(report.evidence.embeddedCompile)}
 - Target hardware: ${evidenceLabel(report.evidence.targetHardware)}
 - Formal MISRA compliance and safety certification: NOT CLAIMED
 
 Evidence labels describe only the checks actually recorded for this generated package. A PASS at one level does not imply a PASS at any other level.
+
+## X-Bridges code generation
+
+- X-Bridges states: ${xb.stateCount}
+- X-Bridges blocks: ${xb.blockCount}
+- X-Bridges static memory bytes: ${xb.staticMemoryBytes}
+- Solver: ${xb.solvers.length === 0 ? 'None' : xb.solvers.map((solver) => `${solver.stateId}: ${solver.kind}, ${solver.stepSeconds} s, ${solver.substepsPerTick} substeps/tick`).join('; ')}
+- Numeric types: ${idsOrNone(xb.numericTypes)}
+- Required target capabilities: ${idsOrNone(xb.capabilityDependencies)}
+- Unsupported embedded capabilities: ${idsOrNone(xb.unsupportedCapabilities)}
 `;
 };
 
 export const renderStaticMetricsReport = (
   analysis: SMAnalysisResult,
   files: readonly ReportSourceFile[] = [],
+  ir?: SemanticModel,
 ): string => {
-  const report = generateSemanticReport(analysis);
+  const report = generateSemanticReport(analysis, DEFAULT_VERIFICATION_EVIDENCE, ir);
   const section = report.staticMetrics;
+  const xb = report.xBridges;
   const sourceLines = files.reduce(
     (sum, file) => sum + file.content.split('\n').length,
     0,
@@ -203,6 +303,16 @@ export const renderStaticMetricsReport = (
 | Total lines | ${sourceLines} |
 | Functional lines | ${functionalLines} |
 | Comment/blank density | ${commentDensity.toFixed(1)}% |
+
+## X-Bridges static code-generation metrics
+
+- X-Bridges states: ${xb.stateCount}
+- X-Bridges blocks: ${xb.blockCount}
+- X-Bridges static memory bytes: ${xb.staticMemoryBytes}
+- Solver: ${xb.solvers.length === 0 ? 'None' : xb.solvers.map((solver) => `${solver.stateId}: ${solver.kind}, ${solver.stepSeconds} s, ${solver.substepsPerTick} substeps/tick`).join('; ')}
+- Numeric types: ${idsOrNone(xb.numericTypes)}
+- Required target capabilities: ${idsOrNone(xb.capabilityDependencies)}
+- Unsupported embedded capabilities: ${idsOrNone(xb.unsupportedCapabilities)}
 
 These are structural metrics derived from the same validated semantic analysis used by the testing report. They are not formal MISRA, safety-certification, embedded-timing, or target-hardware evidence.
 `;
