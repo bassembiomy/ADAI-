@@ -4,6 +4,7 @@ import type {
   XBSemanticOperation,
   XBSemanticSignal,
 } from './xbSemanticModel';
+import type { XBNumericType } from './xbNumeric';
 import {
   createXBRuntime,
   enterXBState,
@@ -18,6 +19,7 @@ const signal = (
   id: string,
   direction: 'input' | 'output',
   sourceSignalId: string | null = null,
+  numericType: XBNumericType = float32,
 ): XBSemanticSignal => {
   const separator = id.indexOf(':');
   return {
@@ -30,8 +32,8 @@ const signal = (
     dimensions: [],
     elementCount: 1,
     layout: 'scalar',
-    numericType: float32,
-    storage: 'native',
+    numericType,
+    storage: numericType.kind === 'fixed' ? 'stored-integer' : 'native',
   };
 };
 
@@ -221,6 +223,160 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.signals['delay:y']).toEqual([1]);
     expect(runtime.signals['gain:y']).toEqual([2]);
     expect(runtime.stateSlots['delay:y$state']).toEqual([2]);
+  });
+
+  it('converts only y and emits quantization error on e', () => {
+    const fixedQ2 = {
+      kind: 'fixed',
+      signed: true,
+      wordLength: 8,
+      fractionLength: 2,
+    } as const;
+    const convert = {
+      ...operation(
+        'convert',
+        'NUMERIC_REPRESENTATION',
+        ['convert:u'],
+        ['convert:y', 'convert:e'],
+      ),
+      conversion: {
+        destinationType: fixedQ2,
+        rounding: 'floor',
+        overflow: 'saturate',
+        mode: 'real-world-value',
+      },
+    } satisfies XBSemanticOperation;
+    const ir = model(
+      'reset',
+      { convert },
+      {
+        'convert:u': signal('convert:u', 'input'),
+        'convert:y': signal('convert:y', 'output', null, fixedQ2),
+        'convert:e': signal('convert:e', 'output'),
+      },
+      ['convert'],
+      [
+        {
+          variableId: 'u',
+          signalId: 'convert:u',
+          blockId: 'convert',
+          portId: 'u',
+          direction: 'in',
+          numericType: float32,
+        },
+        {
+          variableId: 'y',
+          signalId: 'convert:y',
+          blockId: 'convert',
+          portId: 'y',
+          direction: 'out',
+          numericType: fixedQ2,
+        },
+        {
+          variableId: 'e',
+          signalId: 'convert:e',
+          blockId: 'convert',
+          portId: 'e',
+          direction: 'out',
+          numericType: float32,
+        },
+      ],
+    );
+    const runtime = createXBRuntime(ir);
+    const data = { u: 1.2, y: 0, e: 0 };
+
+    expect(stepXBState(runtime, data)).toEqual([]);
+
+    expect(data.y).toBe(1);
+    expect(data.e).toBeCloseTo(0.2, 6);
+    expect(runtime.signals['convert:y']).toEqual([1]);
+    expect(runtime.signals['convert:e'][0]).toBeCloseTo(0.2, 6);
+    expect(runtime.storedIntegers['convert:y']).toEqual([4]);
+    expect(runtime.storedIntegers['convert:e']).toEqual([null]);
+  });
+
+  it('reinterprets source stored integers without real-world conversion', () => {
+    const fixedQ4 = {
+      kind: 'fixed',
+      signed: true,
+      wordLength: 8,
+      fractionLength: 4,
+    } as const;
+    const fixedQ2 = {
+      kind: 'fixed',
+      signed: true,
+      wordLength: 8,
+      fractionLength: 2,
+    } as const;
+    const reinterpret = {
+      ...operation(
+        'reinterpret',
+        'NUMERIC_REPRESENTATION',
+        ['reinterpret:u'],
+        ['reinterpret:y', 'reinterpret:e'],
+      ),
+      conversion: {
+        destinationType: fixedQ2,
+        rounding: 'floor',
+        overflow: 'saturate',
+        mode: 'stored-integer-reinterpretation',
+      },
+    } satisfies XBSemanticOperation;
+    const ir = model(
+      'reset',
+      { reinterpret },
+      {
+        'reinterpret:u': signal(
+          'reinterpret:u',
+          'input',
+          null,
+          fixedQ4,
+        ),
+        'reinterpret:y': signal(
+          'reinterpret:y',
+          'output',
+          null,
+          fixedQ2,
+        ),
+        'reinterpret:e': signal('reinterpret:e', 'output'),
+      },
+      ['reinterpret'],
+      [
+        {
+          variableId: 'u',
+          signalId: 'reinterpret:u',
+          blockId: 'reinterpret',
+          portId: 'u',
+          direction: 'in',
+          numericType: fixedQ4,
+        },
+        {
+          variableId: 'y',
+          signalId: 'reinterpret:y',
+          blockId: 'reinterpret',
+          portId: 'y',
+          direction: 'out',
+          numericType: fixedQ2,
+        },
+        {
+          variableId: 'e',
+          signalId: 'reinterpret:e',
+          blockId: 'reinterpret',
+          portId: 'e',
+          direction: 'out',
+          numericType: float32,
+        },
+      ],
+    );
+    const runtime = createXBRuntime(ir);
+    const data = { u: 1.5, y: 0, e: -1 };
+
+    expect(stepXBState(runtime, data)).toEqual([]);
+
+    expect(runtime.storedIntegers['reinterpret:u']).toEqual([24]);
+    expect(runtime.storedIntegers['reinterpret:y']).toEqual([24]);
+    expect(data.y).toBe(6);
+    expect(data.e).toBe(0);
   });
 
   it.each(['reset', 'retain'] as const)(

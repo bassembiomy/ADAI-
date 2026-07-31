@@ -259,6 +259,28 @@ describe('X-Bridges during order and memory policy', () => {
       .toEqual(['xbridges:R1', 'xbridges:R2']);
   });
 
+  it('orders parallel X-Bridges states by priority before stable ID', () => {
+    const model = parallelHistoryFixture('parallel-order');
+    const r1 = model.states.find((state) => state.id === 'R1')!;
+    const r2 = model.states.find((state) => state.id === 'R2')!;
+    r1.priority = 2;
+    r2.priority = 1;
+    r1.isXBridges = true;
+    r2.isXBridges = true;
+    r1.xBridgesModel = xbModel();
+    r2.xBridgesModel = xbModel();
+
+    const built = buildSemanticModel(model);
+    expect(built.diagnostics).toEqual([]);
+    const runtime = createRuntime(built.ir!);
+    initializeRuntime(runtime);
+
+    const frame = stepRuntime(runtime, 10);
+
+    expect(frame.actions.filter((action) => action.startsWith('xbridges:')))
+      .toEqual(['xbridges:R2', 'xbridges:R1']);
+  });
+
   it.each(['reset', 'retain'] as const)(
     'applies %s memory policy on exit and re-entry and clears it on resetRuntime',
     (memory) => {
@@ -333,6 +355,17 @@ describe('X-Bridges during order and memory policy', () => {
       runtime.data.select_a = true;
       stepRuntime(runtime, 10);
       runtime.data.select_a = false;
+      for (
+        const signal of [
+          'advance_nested',
+          'advance_left',
+          'advance_right',
+        ]
+      ) {
+        runtime.data[signal] = true;
+        stepRuntime(runtime, 10);
+        runtime.data[signal] = false;
+      }
       runtime.data.u = 7;
       stepRuntime(runtime, 10);
       runtime.data.leave = true;
@@ -345,6 +378,23 @@ describe('X-Bridges during order and memory policy', () => {
       expect(
         runtime.stateActive[runtime.ir.states.parent_a.activityIndex],
       ).toBe(true);
+      const active = (stateId: string): boolean =>
+        runtime.stateActive[runtime.ir.states[stateId].activityIndex];
+      if (history === 'shallow') {
+        expect(active('nested_default')).toBe(true);
+        expect(active('nested_previous')).toBe(false);
+        expect(active('parallel_left_default')).toBe(true);
+        expect(active('parallel_left_previous')).toBe(false);
+        expect(active('parallel_right_default')).toBe(true);
+        expect(active('parallel_right_previous')).toBe(false);
+      } else {
+        expect(active('nested_default')).toBe(false);
+        expect(active('nested_previous')).toBe(true);
+        expect(active('parallel_left_default')).toBe(false);
+        expect(active('parallel_left_previous')).toBe(true);
+        expect(active('parallel_right_default')).toBe(false);
+        expect(active('parallel_right_previous')).toBe(true);
+      }
       const xb = runtime.xBridgesByStateId.parent_a;
       expect(xb.stateSlots['delay:y$state']).toEqual(
         memory === 'reset' ? [2] : [7],

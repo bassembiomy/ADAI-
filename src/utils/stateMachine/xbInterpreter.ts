@@ -1,5 +1,6 @@
 import {
   xbConvertScalar,
+  type XBConversionResult,
   type XBNumericFault,
   type XBNumericType,
 } from './xbNumeric';
@@ -13,6 +14,7 @@ type XBScalar = number | boolean;
 export interface XBRuntime {
   readonly ir: XBSemanticModel;
   signals: Record<string, XBScalar[]>;
+  storedIntegers: Record<string, Array<number | null>>;
   stateSlots: Record<string, XBScalar[]>;
   scheduleCounters: Record<string, number>;
 }
@@ -51,12 +53,12 @@ const parameterValues = (
   return fallback;
 };
 
-const convertValue = (
+const convertScalar = (
   value: XBScalar,
   type: XBNumericType,
   faults: XBNumericFault[],
   operation: XBSemanticOperation | null = null,
-): XBScalar => {
+): XBConversionResult => {
   const conversion = operation?.conversion;
   const result = xbConvertScalar(Number(value), type, {
     rounding: conversion?.rounding ?? 'floor',
@@ -65,24 +67,40 @@ const convertValue = (
     supportsFloat64: true,
   });
   if (result.fault !== null) faults.push(result.fault);
-  return result.value;
+  return result;
 };
+
+const convertValue = (
+  value: XBScalar,
+  type: XBNumericType,
+  faults: XBNumericFault[],
+  operation: XBSemanticOperation | null = null,
+): XBScalar => convertScalar(value, type, faults, operation).value;
 
 const resetStorage = (runtime: XBRuntime): void => {
   const signals: Record<string, XBScalar[]> = {};
+  const storedIntegers: Record<string, Array<number | null>> = {};
+  const initialFaults: XBNumericFault[] = [];
   for (const signalId of Object.keys(runtime.ir.signals).sort((left, right) =>
     left.localeCompare(right))) {
     const signal = runtime.ir.signals[signalId];
-    signals[signalId] = Array.from(
+    const results = Array.from(
       { length: signal.elementCount },
-      () => defaultValue(signal.numericType),
+      () => convertScalar(
+        defaultValue(signal.numericType),
+        signal.numericType,
+        initialFaults,
+      ),
     );
+    signals[signalId] = results.map((result) => result.value);
+    storedIntegers[signalId] = results.map((result) =>
+      result.storedInteger);
   }
   runtime.signals = signals;
+  runtime.storedIntegers = storedIntegers;
 
   const stateSlots: Record<string, XBScalar[]> = {};
   const scheduleCounters: Record<string, number> = {};
-  const initialFaults: XBNumericFault[] = [];
   for (const operationId of runtime.ir.executionOrder) {
     const operation = runtime.ir.operations[operationId];
     scheduleCounters[operationId] = operation.schedule.initialCounter;
@@ -99,6 +117,7 @@ export const createXBRuntime = (ir: XBSemanticModel): XBRuntime => {
   const runtime: XBRuntime = {
     ir,
     signals: {},
+    storedIntegers: {},
     stateSlots: {},
     scheduleCounters: {},
   };
@@ -130,11 +149,29 @@ const signalValues = (
   return values;
 };
 
-const broadcast = (
-  values: readonly XBScalar[],
+const signalStoredIntegers = (
+  runtime: XBRuntime,
+  signalId: string,
+): readonly (number | null)[] => {
+  const signal = runtime.ir.signals[signalId];
+  if (signal === undefined) {
+    throw new Error(`X-Bridges signal '${signalId}' is absent from semantic IR`);
+  }
+  const sourceId = signal.sourceSignalId ?? signalId;
+  const values = runtime.storedIntegers[sourceId];
+  if (values === undefined) {
+    throw new Error(
+      `X-Bridges signal source '${sourceId}' has no stored-integer metadata`,
+    );
+  }
+  return values;
+};
+
+const broadcast = <T>(
+  values: readonly T[],
   length: number,
   label: string,
-): readonly XBScalar[] => {
+): readonly T[] => {
   if (values.length === length) return values;
   if (values.length === 1) {
     return Array.from({ length }, () => values[0]);
@@ -157,8 +194,26 @@ const writeSignal = (
   }
   const source = broadcast(values, signal.elementCount, signalId);
   const type = operation?.conversion?.destinationType ?? signal.numericType;
-  runtime.signals[signalId] = source.map((value) =>
-    convertValue(value, type, faults, operation));
+  const results = source.map((value) =>
+    convertScalar(value, type, faults, operation));
+  runtime.signals[signalId] = results.map((result) => result.value);
+  runtime.storedIntegers[signalId] = results.map((result) =>
+    result.storedInteger);
+};
+
+const writeConversionResults = (
+  runtime: XBRuntime,
+  signalId: string,
+  results: readonly XBConversionResult[],
+): void => {
+  const signal = runtime.ir.signals[signalId];
+  if (signal === undefined) {
+    throw new Error(`X-Bridges signal '${signalId}' is absent from semantic IR`);
+  }
+  const values = broadcast(results, signal.elementCount, signalId);
+  runtime.signals[signalId] = values.map((result) => result.value);
+  runtime.storedIntegers[signalId] = values.map((result) =>
+    result.storedInteger);
 };
 
 const unary = (
@@ -238,9 +293,6 @@ const evaluateDirectOperation = (
       return [[inputs.some((input) => input.some(Boolean))]];
     case 'NOT':
       return [unary(inputs[0] ?? [false], (value) => !value)];
-    case 'DATA_TYPE_CONVERSION':
-    case 'NUMERIC_REPRESENTATION':
-      return [inputs[0] ?? [0]];
     case 'TERMINATOR':
       return [];
     default:
@@ -248,6 +300,74 @@ const evaluateDirectOperation = (
         `X-Bridges operation '${operation.id}' has unsupported type `
           + `'${operation.type}'`,
       );
+  }
+};
+
+const reinterpretValue = (
+  storedInteger: number,
+  destinationType: XBNumericType,
+): number => destinationType.kind === 'fixed'
+  ? storedInteger / (2 ** destinationType.fractionLength)
+  : storedInteger;
+
+const executeConversionOperation = (
+  runtime: XBRuntime,
+  operation: XBSemanticOperation,
+  faults: XBNumericFault[],
+): void => {
+  const conversion = operation.conversion;
+  if (conversion === null) {
+    throw new Error(
+      `X-Bridges conversion operation '${operation.id}' lacks conversion IR`,
+    );
+  }
+  const dataOutputId = operation.outputSignalIds.find((signalId) =>
+    runtime.ir.signals[signalId]?.portId === 'y')
+    ?? (operation.outputSignalIds.length === 1
+      ? operation.outputSignalIds[0]
+      : undefined);
+  if (dataOutputId === undefined) {
+    throw new Error(
+      `X-Bridges conversion operation '${operation.id}' lacks a y output`,
+    );
+  }
+
+  const inputSignalId = operation.inputSignalIds[0];
+  if (inputSignalId === undefined) {
+    throw new Error(
+      `X-Bridges conversion operation '${operation.id}' lacks an input`,
+    );
+  }
+  const inputValues = signalValues(runtime, inputSignalId);
+  const storedInputs = signalStoredIntegers(runtime, inputSignalId);
+  const results = inputValues.map((value, index) => {
+    let conversionInput = Number(value);
+    if (conversion.mode === 'stored-integer-reinterpretation') {
+      const storedInteger = storedInputs[index];
+      if (storedInteger === null || storedInteger === undefined) {
+        throw new Error(
+          `X-Bridges conversion operation '${operation.id}' requires `
+            + 'stored-integer input metadata',
+        );
+      }
+      conversionInput = reinterpretValue(
+        storedInteger,
+        conversion.destinationType,
+      );
+    }
+    return convertScalar(
+      conversionInput,
+      conversion.destinationType,
+      faults,
+      operation,
+    );
+  });
+
+  writeConversionResults(runtime, dataOutputId, results);
+  const errors = results.map((result) => result.quantizationError);
+  for (const outputSignalId of operation.outputSignalIds) {
+    if (outputSignalId === dataOutputId) continue;
+    writeSignal(runtime, outputSignalId, errors, faults);
   }
 };
 
@@ -311,6 +431,13 @@ const executeOperations = (
         );
       }
       statefulOperations.push(operation);
+      continue;
+    }
+    if (
+      operation.type === 'DATA_TYPE_CONVERSION'
+      || operation.type === 'NUMERIC_REPRESENTATION'
+    ) {
+      executeConversionOperation(runtime, operation, faults);
       continue;
     }
 
