@@ -7,6 +7,7 @@ import {
 } from './smFixtures';
 import {
   applyMappedInputs,
+  applyPersistedAppSimulationModel,
   applyAppFrameAndCommitOutputs,
   commitAppOutputRequest,
   createAppSimulationLifecycle,
@@ -16,6 +17,7 @@ import {
   createSimulationModelKey,
   readMappedOutputs,
   resetAppSimulationSession,
+  restorePersistedAppSimulationModel,
   SemanticModelError,
   setSessionVariableValue,
   shouldReportAppOperationError,
@@ -245,6 +247,85 @@ describe('state-machine application adapter', () => {
       numericType: { wordLength: 16, fractionLength: 8 },
     });
     expect(xBridgesModel.nodes[0].position).toEqual({ x: 12, y: 34 });
+  });
+
+  it('round-trips state-file and history snapshots with timing, safety, and embedded HIL data', () => {
+    const model = flatOrFixture();
+    model.tickMs = 25;
+    model.safetyMode = true;
+    model.hilConfig = {
+      enabled: true,
+      target: 'Generic',
+      clockSpeed: 48,
+      commPort: 'COM7',
+      baudRate: 460800,
+      channels: [{
+        id: 'pwm', name: 'PWM', peripheral: 'PWM', pin: 'PA8',
+        direction: 'Out', dataType: 'float', rangeMin: 0, rangeMax: 100,
+        scalingFactor: 0.01, unit: '%',
+      }],
+      mappings: [{
+        id: 'map-pwm', adiaVarId: 'total', channelId: 'pwm',
+        direction: 'write', safeValue: 0,
+      }],
+    };
+    model.states[0].isXBridges = true;
+    model.states[0].xBridgesModel = {
+      nodes: [{
+        id: 'typed', type: 'xblock', position: { x: 1, y: 2 },
+        data: {
+          id: 'typed', type: 'GAIN', params: { gain: 2 },
+          inputs: [{
+            id: 'u', direction: 'input', shape: 'matrix', dimensions: [2, 2],
+            dataType: 'fixed', numericType: {
+              kind: 'fixed', signed: true, wordLength: 16, fractionLength: 7,
+            },
+          }],
+          outputs: [{
+            id: 'y', direction: 'output', shape: 'matrix', dimensions: [2, 2],
+            dataType: 'float32',
+          }],
+          execute: () => ({ outputs: [] }),
+        },
+      }],
+      edges: [],
+      mappings: [{
+        smVarId: 'total', blockId: 'typed', portId: 'y', direction: 'out',
+      }],
+      solver: { kind: 'rk4', stepSeconds: 0.005 },
+      policy: { memory: 'retain', numericFault: 'signal-only' },
+    };
+
+    const stateFile = createPersistedAppSimulationModel(model);
+    const historyPayload = JSON.stringify({
+      ...stateFile,
+      blocks: [{ id: 'preserved-block' }],
+    });
+    const parsedHistory = JSON.parse(historyPayload);
+    const applied: Array<ReturnType<typeof restorePersistedAppSimulationModel>> = [];
+    const restored = applyPersistedAppSimulationModel(
+      parsedHistory,
+      (snapshot) => applied.push(snapshot),
+    );
+
+    expect(applied).toEqual([restored]);
+    expect(restored.tickMs).toBe(25);
+    expect(restored.safetyMode).toBe(true);
+    expect(restored.hilConfig).toEqual(model.hilConfig);
+    expect((restored.states[0].xBridgesModel as any)).toMatchObject({
+      solver: { kind: 'rk4', stepSeconds: 0.005 },
+      policy: { memory: 'retain', numericFault: 'signal-only' },
+      mappings: [{
+        smVarId: 'total', blockId: 'typed', portId: 'y', direction: 'out',
+      }],
+    });
+    expect((restored.states[0].xBridgesModel as any)
+      .nodes[0].data.inputs[0]).toMatchObject({
+        shape: 'matrix', dimensions: [2, 2], dataType: 'fixed',
+        numericType: { wordLength: 16, fractionLength: 7 },
+      });
+    expect(historyPayload).not.toContain('execute');
+    expect(parsedHistory.blocks).toEqual([{ id: 'preserved-block' }]);
   });
 
   it.each([

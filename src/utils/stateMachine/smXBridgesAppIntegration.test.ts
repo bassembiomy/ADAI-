@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { hybridXBridgesFixture } from './smFixtures';
 import { compileAndRunCTrace } from './smCHarness';
 import { compareSemanticTraces } from './smTrace';
 import {
   createAppSimulationSession,
+  runAppSimulationTick,
   stepAppSimulationSession,
 } from './smAppAdapter';
 
@@ -35,11 +37,24 @@ const sameTickInnerTransitionModel = () => {
         }],
         gain: 2,
       },
+    }, {
+      id: 'integrator',
+      type: 'INTEGRATOR_DISCRETE',
+      parameters: {
+        initialValue: 3,
+        inputs: [{
+          id: 'u', direction: 'input', shape: 'scalar', dataType: 'float32',
+        }],
+        outputs: [{
+          id: 'y', direction: 'output', shape: 'scalar', dataType: 'float32',
+        }],
+      },
     }],
     edges: [],
     mappings: [
       { smVarId: 'u', blockId: 'gain', portId: 'u', direction: 'in' },
       { smVarId: 'y', blockId: 'gain', portId: 'y', direction: 'out' },
+      { smVarId: 'u', blockId: 'integrator', portId: 'u', direction: 'in' },
     ],
     solver: { kind: 'euler', stepSeconds: 0.002 },
     policy: { memory: 'reset', numericFault: 'escalate' },
@@ -95,16 +110,40 @@ const discreteSubstepModel = () => {
 };
 
 describe('application X-Bridges simulation integration', () => {
-  it('commits an X-Bridges output before an inner transition on the first tick', () => {
+  it('orchestrates exactly one stateful X-Bridges step before a first-tick inner transition', async () => {
     const session = createAppSimulationSession(sameTickInnerTransitionModel());
+    const applied = [] as number[];
+    const committed = [] as Array<Readonly<Record<string, number | boolean>>>;
 
-    const frame = stepAppSimulationSession(session, 10);
+    const frame = await runAppSimulationTick(session, 10, {
+      readInputs: async () => ({}),
+      isCurrent: () => true,
+      applyFrame: (nextFrame) => applied.push(nextFrame.sequence),
+      commitOutputs: async (outputs) => { committed.push(outputs); },
+    });
 
-    expect(frame.sequence).toBe(1);
-    expect(frame.data.y).toBe(4);
-    expect(frame.actions).toContain('xbridges:CONTROLLER');
-    expect(frame.actions).toContain('transition:$internal_controller_0');
-    expect(frame.xBridges.controller).toBeDefined();
+    expect(frame?.sequence).toBe(1);
+    expect(frame?.data.y).toBe(4);
+    expect(frame?.actions).toContain('xbridges:CONTROLLER');
+    expect(frame?.actions).toContain('transition:$internal_controller_0');
+    expect(frame?.xBridges.controller.blockState.integrator.y).toBe(13);
+    expect(applied).toEqual([1]);
+    expect(committed).toEqual([{}]);
+  });
+
+  it('keeps the React simulation path on the extracted orchestrator only', () => {
+    const source = readFileSync(
+      new URL('../../App.tsx', import.meta.url),
+      'utf8',
+    );
+
+    expect(source).toContain('runAppSimulationTick(session, tickMs');
+    expect(source).not.toContain('stepActiveXBridgesModels');
+    expect(source).not.toContain('xBridgesEnginesRef');
+    expect(source).not.toContain('new XbridgesEngine');
+    expect(source).toContain('applyStateMachineSnapshot(d)');
+    expect(source).toContain('applyStateMachineSnapshot(prevSnapshot)');
+    expect(source).toContain('applyStateMachineSnapshot(nextSnapshot)');
   });
 
   it('uses the compiled-C substep schedule and exposes identical block state', () => {

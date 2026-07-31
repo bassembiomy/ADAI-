@@ -293,6 +293,38 @@ export const createPersistedAppSimulationModel = <
   T extends StateMachineModelV4 | LegacyStateMachineModel,
 >(model: T): T => clonePersistentValue(model) as T;
 
+export const restorePersistedAppSimulationModel = (
+  snapshot: unknown,
+): StateMachineModelV4 => {
+  const persisted = clonePersistentValue(snapshot) as LegacyStateMachineModel;
+  const persistedXBridges = new Map(
+    (Array.isArray(persisted?.states) ? persisted.states : [])
+      .filter((state) => state.xBridgesModel !== undefined)
+      .map((state) => [state.id, state.xBridgesModel] as const),
+  );
+  const migrated = migrateStateMachineModel(
+    persisted,
+  );
+  const errors = migrated.diagnostics.filter((item) => item.severity === 'error');
+  if (errors.length > 0) throw new SemanticModelError(errors);
+  return createPersistedAppSimulationModel({
+    ...migrated.model,
+    states: migrated.model.states.map((state) => {
+      const xBridgesModel = persistedXBridges.get(state.id);
+      return xBridgesModel === undefined ? state : { ...state, xBridgesModel };
+    }),
+  });
+};
+
+export const applyPersistedAppSimulationModel = (
+  snapshot: unknown,
+  apply: (model: StateMachineModelV4) => void,
+): StateMachineModelV4 => {
+  const restored = restorePersistedAppSimulationModel(snapshot);
+  apply(restored);
+  return restored;
+};
+
 export const createFactoryIOMappings = (
   mappings: readonly FactoryIOMapping[],
 ): AppIOMapping[] =>
@@ -413,6 +445,38 @@ export const readMappedOutputs = (
     );
   }
   return freezeRecord(outputs);
+};
+
+export interface AppSimulationTickCallbacks {
+  readInputs(): Promise<Readonly<Record<string, AppSimulationValue>>>;
+  isCurrent(): boolean;
+  applyFrame(frame: SemanticTraceFrame): void;
+  commitOutputs(
+    outputs: Readonly<Record<string, AppSimulationValue>>,
+  ): Promise<void>;
+}
+
+/**
+ * Owns the complete application tick boundary so the React app cannot add a
+ * second post-step X-Bridges execution phase.
+ */
+export const runAppSimulationTick = async (
+  session: AppSimulationSession,
+  elapsedMs: number,
+  callbacks: AppSimulationTickCallbacks,
+): Promise<SemanticTraceFrame | null> => {
+  const inputs = await callbacks.readInputs();
+  if (!callbacks.isCurrent()) return null;
+
+  applyMappedInputs(session, inputs);
+  const frame = stepAppSimulationSession(session, elapsedMs);
+  if (!callbacks.isCurrent()) return null;
+
+  await applyAppFrameAndCommitOutputs(
+    () => callbacks.applyFrame(frame),
+    () => callbacks.commitOutputs(readMappedOutputs(session)),
+  );
+  return callbacks.isCurrent() ? frame : null;
 };
 
 export const resetAppSimulationSession = async (

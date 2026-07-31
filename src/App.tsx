@@ -34,19 +34,17 @@ import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineCl
 import { pruneStateHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
 import {
-  applyMappedInputs,
-  applyAppFrameAndCommitOutputs,
+  applyPersistedAppSimulationModel,
   commitAppOutputRequest,
   createAppSimulationLifecycle,
   createAppSimulationSession,
   createFactoryIOMappings,
   createPersistedAppSimulationModel,
   createSimulationModelKey,
-  readMappedOutputs,
   resetAppSimulationSession,
+  runAppSimulationTick,
   setSessionVariableValue,
   shouldReportAppOperationError,
-  stepAppSimulationSession,
   traceFrameToAppUpdate,
   type AppSimulationSession,
   type AppSimulationValue,
@@ -7035,6 +7033,27 @@ const ADIA = () => {
     });
   }, [getActiveStateData]);
 
+  const applyStateMachineSnapshot = useCallback((snapshot: unknown) => (
+    applyPersistedAppSimulationModel(snapshot, restored => {
+      setStates(restored.states);
+      setJunctions(restored.junctions);
+      setTransitions(restored.transitions);
+      setLayers(restored.layers);
+      setVariables(restored.variables);
+      setTickMs(restored.tickMs);
+      setSafetyMode(restored.safetyMode);
+      setHilConfig(restored.hilConfig ?? {
+        enabled: false,
+        target: 'Generic',
+        clockSpeed: 16,
+        channels: [],
+        mappings: [],
+        commPort: '',
+        baudRate: 115200,
+      });
+    })
+  ), []);
+
   // Helper to load file state into respective state variables
   const loadStateForFile = useCallback((file: WorkspaceFile) => {
     if (!file.data) {
@@ -7086,13 +7105,8 @@ const ADIA = () => {
     const d = file.data;
     switch (file.type) {
       case 'statemachine':
-        if (d.states) setStates(d.states);
-        if (d.junctions) setJunctions(d.junctions);
-        if (d.transitions) setTransitions(d.transitions);
-        if (d.layers) setLayers(d.layers);
-        if (d.variables) setVariables(d.variables);
+        applyStateMachineSnapshot(d);
         if (d.view) setView(d.view);
-        if (d.tickMs) setTickMs(d.tickMs);
         break;
       case 'bdd':
         setBlocks(prev => [
@@ -7144,7 +7158,8 @@ const ADIA = () => {
     setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
     setBlocks, setRelationships, setCustomStereotypes, setParts, setConnectors, setInterfaceRealizations,
     setGlobalXBridgesNodes, setGlobalXBridgesEdges, setVlabNodes, setVlabEdges, setHilConfig,
-    setEntropyNodes, setEntropyEdges, setHmiComponents, setHeaders, setData, setActiveModel, setTaguchiConfig, setResults
+    setEntropyNodes, setEntropyEdges, setHmiComponents, setHeaders, setData, setActiveModel, setTaguchiConfig, setResults,
+    applyStateMachineSnapshot
   ]);
 
   // Switch active file function
@@ -8405,11 +8420,7 @@ const ADIA = () => {
   const undo = useCallback(() => {
     if (historyIndex > 0) {
       const prevSnapshot = JSON.parse(history[historyIndex - 1]);
-      setStates(prevSnapshot.states || []);
-      setJunctions(prevSnapshot.junctions || []);
-      setTransitions(prevSnapshot.transitions || []);
-      setLayers(prevSnapshot.layers || []);
-      setVariables(prevSnapshot.variables || []);
+      applyStateMachineSnapshot(prevSnapshot);
       setBlocks(migrateBlocks(prevSnapshot.blocks));
       setRelationships(prevSnapshot.relationships || []);
       setParts(prevSnapshot.parts || []);
@@ -8419,16 +8430,12 @@ const ADIA = () => {
       setHistoryIndex(prev => prev - 1);
       addError('info', 'Undo');
     }
-  }, [history, historyIndex, addError]);
+  }, [history, historyIndex, addError, applyStateMachineSnapshot]);
 
   const redo = useCallback(() => {
     if (historyIndex < history.length - 1) {
       const nextSnapshot = JSON.parse(history[historyIndex + 1]);
-      setStates(nextSnapshot.states || []);
-      setJunctions(nextSnapshot.junctions || []);
-      setTransitions(nextSnapshot.transitions || []);
-      setLayers(nextSnapshot.layers || []);
-      setVariables(nextSnapshot.variables || []);
+      applyStateMachineSnapshot(nextSnapshot);
       setBlocks(migrateBlocks(nextSnapshot.blocks));
       setRelationships(nextSnapshot.relationships || []);
       setParts(nextSnapshot.parts || []);
@@ -8438,7 +8445,7 @@ const ADIA = () => {
       setHistoryIndex(prev => prev + 1);
       addError('info', 'Redo');
     }
-  }, [history, historyIndex, addError]);
+  }, [history, historyIndex, addError, applyStateMachineSnapshot]);
 
   // VALIDATION
   // VALIDATION
@@ -9099,22 +9106,17 @@ const ADIA = () => {
         );
       }
 
-      const inputValues = await readFactoryInputs();
-      if (!lifecycle.isCurrent(operation)) return false;
-
-      applyMappedInputs(session, inputValues);
-      const frame = stepAppSimulationSession(session, tickMs);
       const newTime = simulationTime + tickMs / 1000;
-      if (!lifecycle.isCurrent(operation)) return false;
-
-      await applyAppFrameAndCommitOutputs(
-        () => {
+      const frame = await runAppSimulationTick(session, tickMs, {
+        readInputs: readFactoryInputs,
+        isCurrent: () => lifecycle.isCurrent(operation),
+        applyFrame: nextFrame => {
           setSimulationTime(newTime);
-          applySimulationFrameToReact(session, frame, newTime, true);
+          applySimulationFrameToReact(session, nextFrame, newTime, true);
         },
-        () => writeFactoryOutputs(readMappedOutputs(session))
-      );
-      if (!lifecycle.isCurrent(operation)) return false;
+        commitOutputs: writeFactoryOutputs,
+      });
+      if (frame === null) return false;
 
       if (frame.error) {
         setIsRunning(false);
