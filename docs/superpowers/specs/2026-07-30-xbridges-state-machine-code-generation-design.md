@@ -235,28 +235,38 @@ The generated state-machine action code calls the X-Bridges step from the
 owning state's `during` function. There is no runtime graph traversal,
 heap allocation, polymorphic dispatch, or unbounded loop.
 
-## Initial Embedded-Safe Block Families
+## Delivered Embedded-Safe Block Boundary
 
-The capability registry will initially support:
+An earlier proposal for this design considered broader families including
+bitwise logic, switches, mux/demux, filters, and standalone trigonometric
+blocks. That proposal is superseded and does not describe delivered embedded
+support.
 
-- Sources and mappings: `Constant`, `Inport`, and `Outport`.
-- Arithmetic: `Sum`, `GAIN`, `PRODUCT`, `UnaryNeg`, `Abs`, and vector
-  arithmetic.
-- Bounded linear algebra: matrix multiply, transpose, concatenation,
-  diagonal construction, submatrix, and statically bounded solve operations.
-- Logic and bitwise operations.
-- Routing: switches, mux, demux, and terminator.
-- Stateful primitives: delay, unit delay, memory, discrete integrator, and
-  continuous integrator.
-- Control: PID, bounded filters, discrete transfer functions, and bounded
-  state-space models.
-- Motor-control transforms: Clarke, Park, inverse Park, and inverse Clarke.
-- Trigonometric operations when target math support is enabled.
-- `DATA_TYPE_CONVERSION` and `NUMERIC_REPRESENTATION`.
+The implemented boundary is exclusively the entries marked `codegen: true` in
+`src/utils/stateMachine/xbCapabilities.ts`. The synchronized public table and
+host-only explanations are maintained in `docs/XBRIDGES_EMBEDDED_CODEGEN.md`.
+At this implementation status, the enabled types are:
 
-Each individual type must have a capability entry and conformance tests before
-it is enabled. A family name does not automatically authorize every block in
-that family.
+- sources and mappings: `Constant`, `Inport`, `Outport`;
+- scalar/core arithmetic and logic: `Sum`, `SUM_JUNCTION`, `GAIN`, `PRODUCT`,
+  `UnaryNeg`, `Abs`, `AND`, `OR`, `NOT`;
+- vector arithmetic: `VectorAdd`, `VectorSub`, `VectorMul`, `VectorDiv`;
+- bounded matrix operations: `MatrixMul`, `Transpose`, `MatrixConcat`,
+  `MatrixDiag`, `SubMatrix`, `MatrixSolve`;
+- routing: `TERMINATOR`;
+- stateful operations: `DELAY`, `UNIT_DELAY`, `MEMORY`,
+  `INTEGRATOR_DISCRETE`, `INTEGRATOR_CONTINUOUS`, `Integrator`;
+- control and linear systems: `PID_BASIC`, `DISCRETE_TRANSFER_FUNCTION`,
+  `STATE_SPACE`;
+- motor transforms: `CLARKE_TRANSFORM`, `PARK_TRANSFORM`, `INVERSE_PARK`,
+  `INVERSE_CLARKE`;
+- numeric conversion: `DATA_TYPE_CONVERSION`, `NUMERIC_REPRESENTATION`.
+
+Every enabled type and shape must have typed interpreter and strict-C99
+conformance evidence. A family name never authorizes additional blocks;
+bitwise, switches/mux/demux, filters, and standalone trigonometric blocks
+remain host-only until that evidence exists and the registry is explicitly
+changed.
 
 ## Numeric Type System
 
