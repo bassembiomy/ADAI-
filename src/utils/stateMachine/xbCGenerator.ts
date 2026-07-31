@@ -518,7 +518,7 @@ const renderSignalElementWrite = (
     const real = layout.fixedRealFields.get(signal.id);
     if (validity === undefined || real === undefined) throw new Error(`X-Bridges fixed signal '${signal.id}' lacks sidecar storage`);
     return [
-      `        const SM_XB_NumericResult_t ${resultName} = ${defaultConversionCall(expression, signal.numericType)};`,
+      `        const SM_XB_NumericResult_t ${resultName} = ${defaultConversionCall(expression, signal.numericType, operation)};`,
       `        if (${resultName}.fault != SM_XB_FAULT_NONE) {`,
       `            ${destination} = (${numericCType(signal.numericType)})0;`,
       `            (((bool *)&(instance->${member}.${validity}))[${index}]) = false;`,
@@ -683,7 +683,7 @@ const renderSignalWrite = (
   if (signal.numericType.kind === 'fixed') {
     const sidecars = fixedSignalSidecarExpressions(signal, layout, member);
     return [
-      `    const SM_XB_NumericResult_t ${resultName} = ${defaultConversionCall(expression, signal.numericType)};`,
+      `    const SM_XB_NumericResult_t ${resultName} = ${defaultConversionCall(expression, signal.numericType, operation)};`,
       `    if (${resultName}.fault != SM_XB_FAULT_NONE) {`,
       `        instance->${member}.${field} = (${numericCType(signal.numericType)})0;`,
       `        ${sidecars.validity} = false;`,
@@ -1642,6 +1642,93 @@ const renderStateOutputs = (
   ));
 };
 
+const renderOperationFaultSignalSyncForOperation = (
+  state: SemanticState,
+  operation: XBSemanticOperation,
+  layout: XBStateLayout,
+  member: string,
+): string[] => {
+  const field = layout.errorFields.get(operation.id);
+  const signalId = numericFaultContract(state, operation).errorSignalId;
+  if (field === undefined || signalId === null) return [];
+  return [
+    `    ${signalStorageExpression(state, signalId, layout, member).expression} = instance->${member}.${field};`,
+  ];
+};
+
+const renderTransactionalStateOutputs = (
+  state: SemanticState,
+  operation: XBSemanticOperation,
+  outputLines: readonly string[],
+  layout: XBStateLayout,
+  member: string,
+): string[] => {
+  const errorField = layout.errorFields.get(operation.id);
+  if (errorField === undefined || outputLines.length === 0) {
+    return [
+      ...outputLines,
+      ...renderOperationFaultSignalSyncForOperation(
+        state, operation, layout, member,
+      ),
+    ];
+  }
+  const errorSignalId = numericFaultContract(state, operation).errorSignalId;
+  const outputIds = [...new Set(operation.outputSignalIds)]
+    .filter((signalId) => signalId !== errorSignalId);
+  const snapshots = outputIds.flatMap((signalId, signalIndex) => {
+    const signal = requireSignal(state, signalId);
+    const field = layout.signalFields.get(signal.id);
+    if (field === undefined) {
+      throw new Error(`X-Bridges signal '${signal.id}' lacks generated storage`);
+    }
+    const components = [{
+      field,
+      type: numericCType(signal.numericType),
+      suffix: 'value',
+    }];
+    if (signal.numericType.kind === 'fixed') {
+      const validity = layout.fixedValidityFields.get(signal.id);
+      const real = layout.fixedRealFields.get(signal.id);
+      if (validity === undefined || real === undefined) {
+        throw new Error(`X-Bridges fixed signal '${signal.id}' lacks sidecar storage`);
+      }
+      components.push(
+        { field: validity, type: 'bool', suffix: 'validity' },
+        { field: real, type: 'double', suffix: 'real' },
+      );
+    }
+    return components.map((component, componentIndex) => {
+      const name = `xb_output_snapshot_${toCIdentifier(operation.id)}_${signalIndex}_${component.suffix}`;
+      if (signal.shape.kind === 'scalar') return {
+        declaration: `        ${component.type} ${name};`,
+        save: `        ${name} = instance->${member}.${component.field};`,
+        restore: `            instance->${member}.${component.field} = ${name};`,
+      };
+      const index = `xb_output_snapshot_index_${signalIndex}_${componentIndex}`;
+      return {
+        declaration: `        ${component.type} ${name}${shapeSuffix(signal.shape)};`,
+        save: `        for (uint32_t ${index} = 0U; ${index} < ${signal.elementCount}U; ++${index}) (((${component.type} *)&${name})[${index}]) = (((${component.type} *)&(instance->${member}.${component.field}))[${index}]);`,
+        restore: `            for (uint32_t ${index} = 0U; ${index} < ${signal.elementCount}U; ++${index}) (((${component.type} *)&(instance->${member}.${component.field}))[${index}]) = (((${component.type} *)&${name})[${index}]);`,
+      };
+    });
+  });
+  return [
+    '    {',
+    `        if (!instance->${member}.${errorField}) {`,
+    ...snapshots.map((snapshot) => snapshot.declaration),
+    ...snapshots.map((snapshot) => snapshot.save),
+    ...outputLines.map((line) => `        ${line}`),
+    `        if (instance->${member}.${errorField}) {`,
+    ...snapshots.map((snapshot) => snapshot.restore),
+    '        }',
+    '        }',
+    '    }',
+    ...renderOperationFaultSignalSyncForOperation(
+      state, operation, layout, member,
+    ),
+  ];
+};
+
 const renderDirectEvaluation = (
   state: SemanticState,
   xb: XBSemanticModel,
@@ -1671,11 +1758,17 @@ const renderDirectEvaluation = (
     ...emitted.map((line) => `    ${line}`),
     '    }',
   ];
+  const evaluated = [
+    ...guarded,
+    ...renderOperationFaultSignalSyncForOperation(
+      state, operation, layout, member,
+    ),
+  ];
   if (
     forceEvaluation
     || operation.schedule.hold === 'none'
     || operation.schedule.periodSubsteps <= 1
-  ) return guarded;
+  ) return evaluated;
   const counter = layout.counterFields.get(operation.id);
   if (counter === undefined) {
     throw new Error(`X-Bridges operation '${operation.id}' lacks a schedule counter`);
@@ -1684,6 +1777,9 @@ const renderDirectEvaluation = (
     `    if (instance->${member}.${counter} == UINT32_C(0)) {`,
     ...guarded.map((line) => `    ${line}`),
     '    }',
+    ...renderOperationFaultSignalSyncForOperation(
+      state, operation, layout, member,
+    ),
   ];
 });
 
@@ -1743,11 +1839,11 @@ const renderOperationFaultSignalSync = (
   member: string,
 ): string[] => xb.executionOrder.flatMap((operationId) => {
   const operation = xb.operations[operationId];
-  const field = layout.errorFields.get(operationId);
-  if (operation === undefined || field === undefined) return [];
-  const signalId = numericFaultContract(state, operation).errorSignalId;
-  if (signalId === null) return [];
-  return [`    ${signalStorageExpression(state, signalId, layout, member).expression} = instance->${member}.${field};`];
+  return operation === undefined
+    ? []
+    : renderOperationFaultSignalSyncForOperation(
+        state, operation, layout, member,
+      );
 });
 
 const renderDiscreteStateUpdates = (
@@ -1767,6 +1863,12 @@ const renderDiscreteStateUpdates = (
   if (counter === undefined) {
     throw new Error(`X-Bridges operation '${operation.id}' lacks a schedule counter`);
   }
+  const withFaultSync = (rendered: readonly string[]): string[] => [
+    ...rendered,
+    ...renderOperationFaultSignalSyncForOperation(
+      state, operation, layout, member,
+    ),
+  ];
   const input = (operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION') || operation.inputSignalIds[0] === undefined
     ? '0.0'
     : signalRealExpression(state, operation.inputSignalIds[0], layout, member);
@@ -1804,8 +1906,8 @@ const renderDiscreteStateUpdates = (
       ...renderStateSlotElementAssignment(state, xSlot, 'xb_row', 'xb_state_space_next[xb_row]', layout, member, `${operation.id}_state_space_update`, layout.errorFields.get(operation.id), operation).map((line) => `    ${line}`),
       '        }', '    }');
     const transactional = renderTransactionalStateUpdates(operation, updateLines, layout, member);
-    if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return transactional;
-    return [`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...transactional.map((line) => `    ${line}`), '    }'];
+    if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return withFaultSync(transactional);
+    return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...transactional.map((line) => `    ${line}`), '    }']);
   }
   if (operation.type === 'PID_BASIC') {
     const iSlot = stateSlotForRole(operation, 'i_state');
@@ -1822,8 +1924,8 @@ const renderDiscreteStateUpdates = (
     ];
     const block = ['    {', ...renderPIDComputation(state, operation, layout, member),
       ...renderTransactionalStateUpdates(operation, updates, layout, member).map((line) => `    ${line}`), '    }'];
-    if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return block;
-    return [`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...block.map((line) => `    ${line}`), '    }'];
+    if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return withFaultSync(block);
+    return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...block.map((line) => `    ${line}`), '    }']);
   }
   const updates = (operation.state?.slots ?? []).flatMap((slot, slotIndex) => {
     switch (operation.type) {
@@ -1873,13 +1975,13 @@ const renderDiscreteStateUpdates = (
   if (updates.length === 0) return [];
   const transactional = renderTransactionalStateUpdates(operation, updates, layout, member);
   if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) {
-    return transactional;
+    return withFaultSync(transactional);
   }
-  return [
+  return withFaultSync([
     `    if (instance->${member}.${counter} == UINT32_C(0)) {`,
     ...transactional.map((line) => `    ${line}`),
     '    }',
-  ];
+  ]);
 });
 
 interface ContinuousOperationSlot {
@@ -1929,21 +2031,26 @@ const renderContinuousStateUpdates = (
       group.push(entry);
       groups.set(entry.operation.id, group);
     }
-    return [...groups.values()].flatMap((group) => renderTransactionalStateUpdates(
-      group[0].operation,
-      group.flatMap((entry) => renderStateSlotAssignment(
-        state,
-        entry.slot,
-        expression(entry),
+    return [...groups.values()].flatMap((group) => [
+      ...renderTransactionalStateUpdates(
+        group[0].operation,
+        group.flatMap((entry) => renderStateSlotAssignment(
+          state,
+          entry.slot,
+          expression(entry),
+          layout,
+          member,
+          `${prefix}_${entry.operationIndex}_${entry.slotIndex}`,
+          layout.errorFields.get(entry.operation.id),
+          entry.operation,
+        )),
         layout,
         member,
-        `${prefix}_${entry.operationIndex}_${entry.slotIndex}`,
-        layout.errorFields.get(entry.operation.id),
-        entry.operation,
-      )),
-      layout,
-      member,
-    ));
+      ),
+      ...renderOperationFaultSignalSyncForOperation(
+        state, group[0].operation, layout, member,
+      ),
+    ]);
   };
   const step = cNumber(xb.solver.stepSeconds);
   const baseLines = slots.map((entry) =>
@@ -1967,13 +2074,14 @@ const renderContinuousStateUpdates = (
       ...nextLines,
       ...assignLines,
       '    {',
-      ...slots.flatMap((entry) => renderStateOutputs(
+      ...slots.flatMap((entry) => renderTransactionalStateOutputs(
         state,
         entry.operation,
-        entry.operationIndex,
+        renderStateOutputs(
+          state, entry.operation, entry.operationIndex, layout, member, null,
+        ),
         layout,
         member,
-        null,
       ).map((line) => `    ${line}`)),
       ...renderDirectEvaluation(state, xb, layout, member, true)
         .map((line) => `    ${line}`),
@@ -1986,13 +2094,19 @@ const renderContinuousStateUpdates = (
     scale: string,
   ): string[] => [
     '    {',
-    ...slots.flatMap((entry) => renderStateOutputs(
+    ...slots.flatMap((entry) => renderTransactionalStateOutputs(
       state,
       entry.operation,
-      entry.operationIndex,
+      renderStateOutputs(
+        state,
+        entry.operation,
+        entry.operationIndex,
+        layout,
+        member,
+        [`${rkName('xb_rk_base', entry)} + ${scale} * ${rkName(`xb_rk_${previous}`, entry)}`],
+      ),
       layout,
       member,
-      [`${rkName('xb_rk_base', entry)} + ${scale} * ${rkName(`xb_rk_${previous}`, entry)}`],
     ).map((line) => `    ${line}`)),
     ...renderDirectEvaluation(state, xb, layout, member, true)
       .map((line) => `    ${line}`),
@@ -2012,13 +2126,14 @@ const renderContinuousStateUpdates = (
   const final = transactionalAssignments(slots, finalExpression, 'rk4');
   const refresh = [
     '    {',
-    ...slots.flatMap((entry) => renderStateOutputs(
+    ...slots.flatMap((entry) => renderTransactionalStateOutputs(
       state,
       entry.operation,
-      entry.operationIndex,
+      renderStateOutputs(
+        state, entry.operation, entry.operationIndex, layout, member, null,
+      ),
       layout,
       member,
-      null,
     ).map((line) => `    ${line}`)),
     ...renderDirectEvaluation(state, xb, layout, member, true)
       .map((line) => `    ${line}`),
@@ -2066,7 +2181,13 @@ const renderSolverSubstep = (
   ...xb.executionOrder.flatMap((operationId, operationIndex) => {
     const operation = xb.operations[operationId];
     if (!operation?.stateful) return [];
-    const outputs = renderStateOutputs(state, operation, operationIndex, layout, member)
+    const outputs = renderTransactionalStateOutputs(
+      state,
+      operation,
+      renderStateOutputs(state, operation, operationIndex, layout, member),
+      layout,
+      member,
+    )
       .map((line) => `    ${line}`);
     if (operation.type === 'INTEGRATOR_CONTINUOUS' || operation.type === 'Integrator'
       || operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) {
@@ -2130,6 +2251,7 @@ const renderStateLifecycle = (
   }
   const stepLines: string[] = [];
   stepLines.push(...renderOperationFaultReset(xb, layout, member));
+  stepLines.push(...renderOperationFaultSignalSync(state, xb, layout, member));
   let inputMappingIndex = 0;
   for (const mapping of xb.mappings) {
     if (mapping.direction !== 'in') continue;

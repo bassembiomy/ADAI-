@@ -2107,6 +2107,76 @@ describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
     expect(output).toBe('1,0');
   });
 
+  it('publishes a direct fault before downstream evaluation and clears it at the next tick start', () => {
+    const ir = semanticModel();
+    const int8 = {
+      kind: 'fixed', signed: true, wordLength: 8, fractionLength: 0,
+    } as const;
+    const convert: XBSemanticOperation = {
+      ...scalarOperation(
+        'convert',
+        'NUMERIC_REPRESENTATION',
+        ['convert:u'],
+        ['convert:y', 'convert:e', 'convert:error'],
+        {},
+        {
+          destinationType: int8,
+          rounding: 'floor',
+          overflow: 'error',
+          mode: 'real-world-value',
+        },
+      ),
+      numericFault: { fallback: 'zero', errorSignalId: 'convert:error' },
+    };
+    const downstream = scalarOperation(
+      'downstream', 'GAIN', ['downstream:u'], ['downstream:y'], { gain: 1 },
+    );
+    ir.states.controller.xBridges = {
+      stateId: 'controller',
+      executionOrder: ['convert', 'downstream'],
+      operations: { convert, downstream },
+      signals: {
+        'input:y': signal('input:y', { kind: 'float64' }),
+        'convert:u': scalarInputSignal('convert:u', 'input:y', { kind: 'float64' }),
+        'convert:y': signal('convert:y', int8),
+        'convert:e': signal('convert:e', { kind: 'float64' }),
+        'convert:error': signal('convert:error', { kind: 'boolean' }),
+        'downstream:u': scalarInputSignal(
+          'downstream:u', 'convert:error', { kind: 'boolean' },
+        ),
+        'downstream:y': signal('downstream:y', { kind: 'float64' }),
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 1, substepsPerTick: 1 },
+      policy: { memory: 'retain', numericFault: 'signal-only' },
+    };
+
+    const output = executeStatefulHarness(ir, 'xb-public-fault-timing-c99', [
+      '#include "sm_core.h"',
+      '#include <stdio.h>',
+      'int main(void)',
+      '{',
+      '    ADIA_Instance_t instance;',
+      '    if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+      '    instance.xb_controller.input_y = 300.0;',
+      '    SM_XB_CONTROLLER_Step(&instance);',
+      '    (void)printf("%u,%.17g,%.17g;",',
+      '        instance.xb_controller.convert_error ? 1U : 0U,',
+      '        instance.xb_controller.downstream_y,',
+      '        instance.xb_controller.convert_e);',
+      '    instance.xb_controller.input_y = 1.25;',
+      '    SM_XB_CONTROLLER_Step(&instance);',
+      '    (void)printf("%u,%.17g,%.17g\\n",',
+      '        instance.xb_controller.convert_error ? 1U : 0U,',
+      '        instance.xb_controller.downstream_y,',
+      '        instance.xb_controller.convert_e);',
+      '    return 0;',
+      '}',
+    ]);
+
+    expect(output).toBe('1,1,173;0,0,0.25');
+  });
+
   it('rolls back every PID slot when a later fixed-state assignment fails', () => {
     const ir = semanticModel();
     const int8 = {
@@ -2243,6 +2313,89 @@ describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
       expect(output).toBe('7,7,1');
     },
   );
+
+  it('rolls back every STATE_SPACE output and fixed sidecar after a late conversion fault', () => {
+    const ir = semanticModel();
+    const int8 = {
+      kind: 'fixed', signed: true, wordLength: 8, fractionLength: 0,
+    } as const;
+    const vector2 = { kind: 'vector', length: 2 } as const;
+    const stateSpace: XBSemanticOperation = {
+      ...scalarOperation(
+        'ss', 'STATE_SPACE', ['ss:u'], ['ss:y', 'ss:x', 'ss:error'],
+        {
+          A: [[1, 0], [0, 1]], B: [[0], [0]],
+          C: [[1, 0], [0, 100]], D: [[0], [0]],
+          representation: 'discrete', overflow: 'error',
+        },
+      ),
+      directFeedthrough: false,
+      stateful: true,
+      numericFault: { fallback: 'previous-value', errorSignalId: 'ss:error' },
+      state: {
+        outputPhase: 'read-before-update',
+        updatePhase: 'after-direct-feedthrough',
+        slots: [{
+          id: 'ss:x$state', role: 'x', signalId: 'ss:x',
+          numericType: { kind: 'float64' }, shape: vector2,
+          initialValues: [5, 6],
+        }],
+      },
+    };
+    ir.states.controller.xBridges = {
+      stateId: 'controller',
+      executionOrder: ['ss'],
+      operations: { ss: stateSpace },
+      signals: {
+        'input:y': signal('input:y', { kind: 'float64' }),
+        'ss:u': scalarInputSignal('ss:u', 'input:y', { kind: 'float64' }),
+        'ss:y': signal('ss:y', int8, vector2),
+        'ss:x': signal('ss:x', { kind: 'float64' }, vector2),
+        'ss:error': signal('ss:error', { kind: 'boolean' }),
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 1, substepsPerTick: 2 },
+      policy: { memory: 'retain', numericFault: 'signal-only' },
+    };
+
+    const source = generateCArtifacts(ir).files
+      .find((file) => file.name === 'sm_core.c')!.content;
+    expect(source).toMatch(
+      /if \(!instance->xb_controller\.ss_error_fault\) \{\s+int8_t xb_output_snapshot_ss_0_value\[2\];/,
+    );
+
+    const output = executeStatefulHarness(ir, 'xb-state-space-output-rollback-c99', [
+      '#include "sm_core.h"',
+      '#include <stdio.h>',
+      'int main(void)',
+      '{',
+      '    ADIA_Instance_t instance;',
+      '    if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+      '    instance.xb_controller.ss_y[0] = 11;',
+      '    instance.xb_controller.ss_y[1] = 12;',
+      '    instance.xb_controller.ss_y_has_stored_integer[0] = true;',
+      '    instance.xb_controller.ss_y_has_stored_integer[1] = false;',
+      '    instance.xb_controller.ss_y_real_value[0] = 11.5;',
+      '    instance.xb_controller.ss_y_real_value[1] = 12.5;',
+      '    instance.xb_controller.ss_x[0] = 21.0;',
+      '    instance.xb_controller.ss_x[1] = 22.0;',
+      '    SM_XB_CONTROLLER_Step(&instance);',
+      '    (void)printf("%d,%d,%u,%u,%.17g,%.17g,%.17g,%.17g,%u\\n",',
+      '        (int)instance.xb_controller.ss_y[0],',
+      '        (int)instance.xb_controller.ss_y[1],',
+      '        instance.xb_controller.ss_y_has_stored_integer[0] ? 1U : 0U,',
+      '        instance.xb_controller.ss_y_has_stored_integer[1] ? 1U : 0U,',
+      '        instance.xb_controller.ss_y_real_value[0],',
+      '        instance.xb_controller.ss_y_real_value[1],',
+      '        instance.xb_controller.ss_x[0],',
+      '        instance.xb_controller.ss_x[1],',
+      '        instance.xb_controller.ss_error ? 1U : 0U);',
+      '    return 0;',
+      '}',
+    ]);
+
+    expect(output).toBe('11,12,1,0,11.5,12.5,21,22,1');
+  });
 });
 
 describe('X-Bridges fixed-point state parity', { timeout: 60_000 }, () => {
