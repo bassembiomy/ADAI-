@@ -23,6 +23,17 @@ export interface XBBlockCapability {
   cConformanceCaseIds?: readonly string[];
 }
 
+/** Canonical executable Task-10 conformance cases referenced by capabilities. */
+export const XB_INTERPRETER_CONFORMANCE_CASE_IDS = [
+  'T10-INT-VECTOR-ELEMENTWISE', 'T10-INT-MATRIX-OPS', 'T10-INT-PID-BASIC',
+  'T10-INT-DISCRETE-REALIZATION', 'T10-INT-TRANSFORMS',
+] as const;
+
+export const XB_C_CONFORMANCE_CASE_IDS = [
+  'T10-C99-VECTOR-MATRIX', 'T10-C99-PID-BASIC', 'T10-C99-DISCRETE-REALIZATION',
+  'T10-C99-TRANSFORMS',
+] as const;
+
 type XBCodegenCapability = Omit<XBBlockCapability, 'codegen'> & {
   codegen: true;
 };

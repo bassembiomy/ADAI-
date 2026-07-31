@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getXBBlockCapability } from './xbCapabilities';
+import { XB_C_CONFORMANCE_CASE_IDS, XB_INTERPRETER_CONFORMANCE_CASE_IDS, getXBBlockCapability } from './xbCapabilities';
 
 describe('getXBBlockCapability', () => {
   it('marks deterministic arithmetic as codegen capable', () => {
@@ -33,6 +33,10 @@ describe('getXBBlockCapability', () => {
       };
       expect(capability.interpreterConformanceCaseIds?.length).toBeGreaterThan(0);
       expect(capability.cConformanceCaseIds?.length).toBeGreaterThan(0);
+      expect(capability.interpreterConformanceCaseIds?.every((id) =>
+        XB_INTERPRETER_CONFORMANCE_CASE_IDS.includes(id as typeof XB_INTERPRETER_CONFORMANCE_CASE_IDS[number]))).toBe(true);
+      expect(capability.cConformanceCaseIds?.every((id) =>
+        XB_C_CONFORMANCE_CASE_IDS.includes(id as typeof XB_C_CONFORMANCE_CASE_IDS[number]))).toBe(true);
     }
     const matrixDiag = getXBBlockCapability('MatrixDiag') as unknown as {
       readonly inputShapes?: readonly string[];

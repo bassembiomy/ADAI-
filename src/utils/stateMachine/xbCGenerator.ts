@@ -1609,8 +1609,8 @@ const renderDiscreteStateUpdates = (
     }
     const inputSignal = requireSignal(state, inputId);
     const dimension = xSlot.initialValues.length;
-    if (dimension === 0 || dimension > 8 || inputSignal.elementCount > 8) {
-      throw new Error(`X-Bridges STATE_SPACE '${operation.id}' exceeds static dimension bound 8`);
+    if (dimension === 0) {
+      throw new Error(`X-Bridges STATE_SPACE '${operation.id}' requires a non-empty state vector`);
     }
     const coefficientByRow = (name: string, column: number): string =>
       Array.from({ length: dimension }, (_, row) =>
@@ -1866,10 +1866,22 @@ const renderSolverSubstep = (
   '    {',
   ...xb.executionOrder.flatMap((operationId, operationIndex) => {
     const operation = xb.operations[operationId];
-    return operation?.stateful
-      ? renderStateOutputs(state, operation, operationIndex, layout, member)
-        .map((line) => `    ${line}`)
-      : [];
+    if (!operation?.stateful) return [];
+    const outputs = renderStateOutputs(state, operation, operationIndex, layout, member)
+      .map((line) => `    ${line}`);
+    if (operation.type === 'INTEGRATOR_CONTINUOUS' || operation.type === 'Integrator'
+      || operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) {
+      return outputs;
+    }
+    const counter = layout.counterFields.get(operation.id);
+    if (counter === undefined) {
+      throw new Error(`X-Bridges operation '${operation.id}' lacks a schedule counter`);
+    }
+    return [
+      `    if (instance->${member}.${counter} == UINT32_C(0)) {`,
+      ...outputs.map((line) => `    ${line}`),
+      '    }',
+    ];
   }),
   ...renderDirectEvaluation(state, xb, layout, member).map((line) => `    ${line}`),
   ...renderDiscreteStateUpdates(state, xb, layout, member).map((line) => `    ${line}`),

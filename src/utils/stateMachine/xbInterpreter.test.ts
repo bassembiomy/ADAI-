@@ -125,7 +125,7 @@ const contractState = (
 } as unknown as XBSemanticOperation['state']);
 
 describe('X-Bridges interpreter', () => {
-  it('executes public PID and multi-state discrete realization contracts without output-backed state', () => {
+  it('T10-INT-PID-BASIC and T10-INT-DISCRETE-REALIZATION execute public controller and multi-state realization contracts without output-backed state', () => {
     const float64 = { kind: 'float64' } as const;
     const vector2 = { kind: 'vector', length: 2 } as const;
     const vector1 = { kind: 'vector', length: 1 } as const;
@@ -223,7 +223,7 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.stateSlots['pid:last_e$state']).toEqual([0]);
   });
 
-  it('evaluates Clarke, Park, and inverse transforms against known references', () => {
+  it('T10-INT-TRANSFORMS evaluates Clarke, Park, and inverse transforms against known references', () => {
     const ir = model('retain', {
       clarke: operation('clarke', 'CLARKE_TRANSFORM', ['clarke:ia', 'clarke:ib', 'clarke:ic'], ['clarke:alpha', 'clarke:beta']),
       park: operation('park', 'PARK_TRANSFORM', ['park:alpha', 'park:beta', 'park:theta'], ['park:d', 'park:q']),
@@ -253,7 +253,7 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.signals['inverseClarke:b'][0]).toBeCloseTo(-0.5, 12);
     expect(runtime.signals['inverseClarke:c'][0]).toBeCloseTo(-0.5, 12);
   });
-  it('evaluates elementwise vectors in their contiguous element order', () => {
+  it('T10-INT-VECTOR-ELEMENTWISE evaluates elementwise vectors in their contiguous element order', () => {
     const ir = model('retain', {
       left: operation('left', 'Constant', [], ['left:y'], { value: [1, 2, 3] }),
       right: operation('right', 'Constant', [], ['right:y'], { value: [4, 5, 6] }),
@@ -272,7 +272,7 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.signals['add:y']).toEqual([5, 7, 9]);
   });
 
-  it('evaluates row-major matrix multiply, transpose, concat, diagonal, and submatrix', () => {
+  it('T10-INT-MATRIX-OPS evaluates row-major matrix multiply, transpose, concat, diagonal, and submatrix', () => {
     const ir = model('retain', {
       a: operation('a', 'Constant', [], ['a:y'], { value: [1, 2, 3, 4, 5, 6] }),
       b: operation('b', 'Constant', [], ['b:y'], { value: [7, 8, 9, 10, 11, 12] }),
@@ -372,18 +372,18 @@ describe('X-Bridges interpreter', () => {
     const second = { u: 2, y: -1 };
 
     stepXBState(runtime, first);
-    expect(first.y).toBe(1);
+    expect(first.y).toBe(0);
     expect(runtime.stateSlots['delay:y$state']).toEqual([1]);
     expect(runtime.scheduleCounters.delay).toBe(5);
 
     stepXBState(runtime, second);
-    expect(second.y).toBe(1);
+    expect(second.y).toBe(0);
     expect(runtime.stateSlots['delay:y$state']).toEqual([1]);
     expect(runtime.scheduleCounters.delay).toBe(0);
 
     const third = { u: 3, y: -1 };
     stepXBState(runtime, third);
-    expect(third.y).toBe(3);
+    expect(third.y).toBe(1);
     expect(runtime.stateSlots['delay:y$state']).toEqual([3]);
   });
 

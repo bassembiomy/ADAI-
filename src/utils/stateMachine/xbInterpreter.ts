@@ -968,7 +968,11 @@ const executeSolverSubstep = (
       `X-Bridges execution order references missing operation '${operationId}'`,
     );
     if (!operation.stateful) continue;
-    writeStateOutputs(runtime, operation, faults);
+    if (scheduledThisSubstep(runtime, operation)
+      || operation.type === 'INTEGRATOR_CONTINUOUS'
+      || operation.type === 'Integrator') {
+      writeStateOutputs(runtime, operation, faults);
+    }
     statefulOperations.push(operation);
   }
   executeDirectOperations(runtime, faults);

@@ -128,6 +128,17 @@ describe('validateXBModel', () => {
     ]));
   });
 
+  it('accepts target-valid 9-element discrete realization vectors without applying MatrixSolve bounds', () => {
+    const target16 = { ...target, maxVectorLength: 16 };
+    const result = validateXBModel(model({ nodes: [node('ss9', 'STATE_SPACE', {
+      representation: 'discrete',
+      inputs: [port('u', 'input', { shape: 'vector', dimensions: [9] })],
+      outputs: [port('y', 'output', { shape: 'vector', dimensions: [9] }), port('x', 'output', { shape: 'vector', dimensions: [9] })],
+    })] }), variables, target16).map((diagnostic) => diagnostic.code);
+    expect(result).not.toContain('XB_BLOCK_NOT_CODEGEN_CAPABLE');
+    expect(result).not.toContain('XB_MATRIX_SOLVE_BOUND_INVALID');
+  });
+
   it('rejects malformed canonical port collections', () => {
     const result = codes(model({
       nodes: [node('gain', 'GAIN', {
