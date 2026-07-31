@@ -16,6 +16,7 @@ import {
   type XBNumericType,
   type XBShape,
 } from './xbNumeric';
+import { createXBRuntime, stepXBState } from './xbInterpreter';
 import { generateCArtifacts } from './smCGenerator';
 import {
   renderXBHeader,
@@ -437,6 +438,219 @@ const combinationalSemanticModel = (): SemanticModel => {
   return ir;
 };
 
+const signalOnlyNonFiniteModel = (): SemanticModel => {
+  const ir = semanticModel();
+  const float64 = { kind: 'float64' } as const;
+  const booleanType = { kind: 'boolean' } as const;
+  const fixedQ2 = {
+    kind: 'fixed',
+    signed: true,
+    wordLength: 16,
+    fractionLength: 2,
+  } as const;
+  const operations = [
+    scalarOperation('one', 'Constant', [], ['one:y'], { value: 1 }),
+    scalarOperation(
+      'convert',
+      'NUMERIC_REPRESENTATION',
+      ['convert:u'],
+      ['convert:y'],
+      {},
+      {
+        destinationType: fixedQ2,
+        rounding: 'floor',
+        overflow: 'saturate',
+        mode: 'real-world-value',
+      },
+    ),
+    scalarOperation('gain', 'GAIN', ['gain:u'], ['gain:y'], { gain: 2 }),
+    scalarOperation(
+      'and',
+      'AND',
+      ['and:a', 'and:b'],
+      ['and:y'],
+    ),
+  ];
+  const signals: Record<string, XBSemanticSignal> = {
+    'input:y': signal('input:y', float64),
+    'one:y': signal('one:y', float64),
+    'convert:u': scalarInputSignal('convert:u', 'input:y', float64),
+    'convert:y': signal('convert:y', fixedQ2),
+    'gain:u': scalarInputSignal('gain:u', 'convert:y', fixedQ2),
+    'gain:y': signal('gain:y', float64),
+    'and:a': scalarInputSignal('and:a', 'convert:y', fixedQ2),
+    'and:b': scalarInputSignal('and:b', 'one:y', float64),
+    'and:y': signal('and:y', booleanType),
+  };
+  ir.variables = {
+    u: { id: 'u', name: 'u', cName: 'u', type: 'double', initialValue: 0 },
+    fixed: {
+      id: 'fixed',
+      name: 'fixed',
+      cName: 'fixed',
+      type: 'double',
+      initialValue: 0,
+    },
+    doubled: {
+      id: 'doubled',
+      name: 'doubled',
+      cName: 'doubled',
+      type: 'double',
+      initialValue: 0,
+    },
+    truth: {
+      id: 'truth',
+      name: 'truth',
+      cName: 'truth',
+      type: 'bool',
+      initialValue: false,
+    },
+  };
+  ir.states.controller.xBridges = {
+    stateId: 'controller',
+    executionOrder: operations.map(({ id }) => id),
+    operations: Object.fromEntries(operations.map((entry) => [entry.id, entry])),
+    signals,
+    mappings: [
+      {
+        variableId: 'u',
+        signalId: 'input:y',
+        blockId: 'input',
+        portId: 'y',
+        direction: 'in',
+        numericType: float64,
+      },
+      {
+        variableId: 'fixed',
+        signalId: 'convert:y',
+        blockId: 'convert',
+        portId: 'y',
+        direction: 'out',
+        numericType: float64,
+      },
+      {
+        variableId: 'doubled',
+        signalId: 'gain:y',
+        blockId: 'gain',
+        portId: 'y',
+        direction: 'out',
+        numericType: float64,
+      },
+      {
+        variableId: 'truth',
+        signalId: 'and:y',
+        blockId: 'and',
+        portId: 'y',
+        direction: 'out',
+        numericType: booleanType,
+      },
+    ],
+    solver: { kind: 'euler', substepsPerTick: 1 },
+    policy: { memory: 'reset', numericFault: 'signal-only' },
+  };
+  return ir;
+};
+
+const truthSemanticModel = (): SemanticModel => {
+  const ir = semanticModel();
+  const float64 = { kind: 'float64' } as const;
+  const booleanType = { kind: 'boolean' } as const;
+  const gate = (
+    id: string,
+    type: string,
+    sources: readonly string[],
+  ): XBSemanticOperation => scalarOperation(
+    id,
+    type,
+    sources.map((_, index) => `${id}:u${index + 1}`),
+    [`${id}:y`],
+  );
+  const operations = [
+    scalarOperation('input', 'Inport', [], ['input:y']),
+    scalarOperation('zero', 'Constant', [], ['zero:y'], { value: 0 }),
+    scalarOperation('one', 'Constant', [], ['one:y'], { value: 1 }),
+    gate('and', 'AND', ['input:y', 'one:y']),
+    gate('or', 'OR', ['input:y', 'zero:y']),
+    gate('not', 'NOT', ['input:y']),
+    gate('nand', 'NAND', ['input:y', 'one:y']),
+    gate('nor', 'NOR', ['input:y', 'zero:y']),
+    gate('xor', 'XOR', ['input:y', 'zero:y']),
+    scalarOperation(
+      'convert-bool',
+      'DATA_TYPE_CONVERSION',
+      ['convert-bool:u'],
+      ['convert-bool:y'],
+      {},
+      {
+        destinationType: booleanType,
+        rounding: 'floor',
+        overflow: 'saturate',
+        mode: 'real-world-value',
+      },
+    ),
+  ];
+  const signals: Record<string, XBSemanticSignal> = {
+    'input:y': signal('input:y', float64),
+    'zero:y': signal('zero:y', float64),
+    'one:y': signal('one:y', float64),
+    'convert-bool:u': scalarInputSignal('convert-bool:u', 'input:y', float64),
+    'convert-bool:y': signal('convert-bool:y', booleanType),
+  };
+  for (const operation of operations.filter(({ id }) =>
+    ['and', 'or', 'not', 'nand', 'nor', 'xor'].includes(id))) {
+    const sources = operation.id === 'not'
+      ? ['input:y']
+      : operation.id === 'and' || operation.id === 'nand'
+        ? ['input:y', 'one:y']
+        : ['input:y', 'zero:y'];
+    operation.inputSignalIds.forEach((signalId, index) => {
+      signals[signalId] = scalarInputSignal(signalId, sources[index], float64);
+    });
+    signals[`${operation.id}:y`] = signal(`${operation.id}:y`, booleanType);
+  }
+  const outputIds = ['and', 'or', 'not', 'nand', 'nor', 'xor', 'convert-bool'];
+  ir.variables = {
+    u: { id: 'u', name: 'u', cName: 'u', type: 'double', initialValue: 0 },
+    ...Object.fromEntries(outputIds.map((id) => [
+      id,
+      {
+        id,
+        name: id,
+        cName: `out_${id.replace('-', '_')}`,
+        type: 'bool' as const,
+        initialValue: false,
+      },
+    ])),
+  };
+  ir.states.controller.xBridges = {
+    stateId: 'controller',
+    executionOrder: operations.map(({ id }) => id),
+    operations: Object.fromEntries(operations.map((entry) => [entry.id, entry])),
+    signals,
+    mappings: [
+      {
+        variableId: 'u',
+        signalId: 'input:y',
+        blockId: 'input',
+        portId: 'y',
+        direction: 'in',
+        numericType: float64,
+      },
+      ...outputIds.map((id) => ({
+        variableId: id,
+        signalId: `${id}:y`,
+        blockId: id,
+        portId: 'y',
+        direction: 'out' as const,
+        numericType: booleanType,
+      })),
+    ],
+    solver: { kind: 'euler', substepsPerTick: 1 },
+    policy: { memory: 'reset', numericFault: 'signal-only' },
+  };
+  return ir;
+};
+
 describe('X-Bridges C99 static storage', () => {
   it('renders exact scalar, vector, matrix, and explicit fault storage', () => {
     const header = renderXBHeader(semanticModel());
@@ -444,6 +658,8 @@ describe('X-Bridges C99 static storage', () => {
     expect(header).toContain('typedef struct {');
     expect(header).toContain('float gain_y;');
     expect(header).toContain('int16_t quantize_y;');
+    expect(header).toContain('bool quantize_y_has_stored_integer;');
+    expect(header).toContain('double quantize_y_real_value;');
     expect(header).toContain('uint8_t vector_y[3];');
     expect(header).toContain('float matrix_y[2][2];');
     expect(header).toContain('bool quantize_error;');
@@ -476,12 +692,19 @@ describe('X-Bridges C99 static storage', () => {
       signals: {
         ...xb.signals,
         'quantize:error': signal('quantize:error', float32),
+        'quantize:y_has_stored_integer': signal(
+          'quantize:y_has_stored_integer',
+          float32,
+        ),
+        'quantize:y_real_value': signal('quantize:y_real_value', float32),
       },
     };
 
     const header = renderXBHeader(ir);
     expect(header).toContain('float quantize_error;');
     expect(header).toContain('bool quantize_error_fault;');
+    expect(header).toContain('float quantize_y_has_stored_integer_signal;');
+    expect(header).toContain('float quantize_y_real_value_signal;');
   });
 
   it('emits distinct wrappers when operation IDs normalize to the same C name', () => {
@@ -603,6 +826,283 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
         cwd: workspace.directory,
         encoding: 'utf8',
       }).trim()).toBe(expected);
+    } finally {
+      workspace.cleanup();
+    }
+  });
+
+  it('matches JavaScript numeric truth for every logic emitter and boolean conversion', () => {
+    const ir = truthSemanticModel();
+    const workspace = createGeneratedCodeTestWorkspace('xb-truth-c99');
+
+    try {
+      for (const file of generateCArtifacts(ir, { includeTestShims: true }).files) {
+        writeFileSync(join(workspace.directory, file.name), file.content);
+      }
+      writeFileSync(
+        join(workspace.directory, 'harness.c'),
+        [
+          '#include "sm_core.h"',
+          '#include <math.h>',
+          '#include <stdio.h>',
+          '',
+          'static int run_case(ADIA_Instance_t *instance, double value)',
+          '{',
+          '    instance->data.u = value;',
+          '    if (SM_Step(instance, SM_TICK_MS) != SM_ERR_NONE) return 1;',
+          '    (void)printf("%u,%u,%u,%u,%u,%u,%u\\n",',
+          '        instance->data.out_and ? 1U : 0U,',
+          '        instance->data.out_or ? 1U : 0U,',
+          '        instance->data.out_not ? 1U : 0U,',
+          '        instance->data.out_nand ? 1U : 0U,',
+          '        instance->data.out_nor ? 1U : 0U,',
+          '        instance->data.out_xor ? 1U : 0U,',
+          '        instance->data.out_convert_bool ? 1U : 0U);',
+          '    return 0;',
+          '}',
+          '',
+          'int main(void)',
+          '{',
+          '    ADIA_Instance_t instance;',
+          '    if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+          '    if (run_case(&instance, NAN) != 0) return 2;',
+          '    if (run_case(&instance, INFINITY) != 0) return 3;',
+          '    if (run_case(&instance, -INFINITY) != 0) return 4;',
+          '    if (run_case(&instance, 0.0) != 0) return 5;',
+          '    if (run_case(&instance, -0.0) != 0) return 6;',
+          '    if (run_case(&instance, 2.0) != 0) return 7;',
+          '    return 0;',
+          '}',
+          '',
+        ].join('\n'),
+      );
+      const executable = join(workspace.directory, 'xb_truth.exe');
+      execFileSync('gcc', [
+        '-std=c99',
+        '-pedantic-errors',
+        '-Wall',
+        '-Wextra',
+        '-Werror',
+        '-I.',
+        'sm_core.c',
+        'sm_safety.c',
+        'sm_user_logic.c',
+        'sm_xbridges.c',
+        'mcal_dio_test_stubs.c',
+        'harness.c',
+        '-lm',
+        '-o',
+        executable,
+      ], { cwd: workspace.directory, stdio: 'pipe' });
+
+      expect(execFileSync(executable, [], {
+        cwd: workspace.directory,
+        encoding: 'utf8',
+      }).trim().split(/\r?\n/)).toEqual([
+        '0,0,1,1,1,0,0',
+        '1,1,0,0,0,1,1',
+        '1,1,0,0,0,1,1',
+        '0,0,1,1,1,0,0',
+        '0,0,1,1,1,0,0',
+        '1,1,0,0,0,1,1',
+      ]);
+    } finally {
+      workspace.cleanup();
+    }
+  });
+
+  it('matches interpreter signal-only fixed semantics for NaN, infinities, and finite storage', () => {
+    const ir = signalOnlyNonFiniteModel();
+    const workspace = createGeneratedCodeTestWorkspace('xb-fixed-non-finite-c99');
+    const inputs = [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      1.75,
+    ];
+    const runtime = createXBRuntime(ir.states.controller.xBridges!);
+    const expected = inputs.map((u) => {
+      const data: Record<string, number | boolean> = {
+        u,
+        fixed: 0,
+        doubled: 0,
+        truth: false,
+      };
+      stepXBState(runtime, data);
+      return data;
+    });
+    const classify = (value: number): number => Number.isNaN(value)
+      ? 2
+      : value === Number.POSITIVE_INFINITY
+        ? 1
+        : value === Number.NEGATIVE_INFINITY
+          ? -1
+          : 0;
+
+    try {
+      for (const file of generateCArtifacts(ir, { includeTestShims: true }).files) {
+        writeFileSync(join(workspace.directory, file.name), file.content);
+      }
+      writeFileSync(
+        join(workspace.directory, 'harness.c'),
+        [
+          '#include "sm_core.h"',
+          '#include <math.h>',
+          '#include <stdio.h>',
+          '',
+          'static int classify(double value)',
+          '{',
+          '    if (isnan(value)) return 2;',
+          '    if (isinf(value)) return signbit(value) ? -1 : 1;',
+          '    return 0;',
+          '}',
+          '',
+          'static int run_case(ADIA_Instance_t *instance, double value)',
+          '{',
+          '    instance->data.u = value;',
+          '    if (SM_Step(instance, SM_TICK_MS) != SM_ERR_NONE) return 1;',
+          '    (void)printf("%d,%d,%u,%.17g,%.17g\\n",',
+          '        classify(instance->data.fixed),',
+          '        classify(instance->data.doubled),',
+          '        instance->data.truth ? 1U : 0U,',
+          '        instance->data.fixed,',
+          '        instance->data.doubled);',
+          '    return 0;',
+          '}',
+          '',
+          'int main(void)',
+          '{',
+          '    ADIA_Instance_t instance;',
+          '    if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+          '    if (run_case(&instance, NAN) != 0) return 2;',
+          '    if (run_case(&instance, INFINITY) != 0) return 3;',
+          '    if (run_case(&instance, -INFINITY) != 0) return 4;',
+          '    if (run_case(&instance, 1.75) != 0) return 5;',
+          '    return 0;',
+          '}',
+          '',
+        ].join('\n'),
+      );
+      const executable = join(workspace.directory, 'xb_fixed_non_finite.exe');
+      execFileSync('gcc', [
+        '-std=c99',
+        '-pedantic-errors',
+        '-Wall',
+        '-Wextra',
+        '-Werror',
+        '-I.',
+        'sm_core.c',
+        'sm_safety.c',
+        'sm_user_logic.c',
+        'sm_xbridges.c',
+        'mcal_dio_test_stubs.c',
+        'harness.c',
+        '-lm',
+        '-o',
+        executable,
+      ], { cwd: workspace.directory, stdio: 'pipe' });
+      const rows = execFileSync(executable, [], {
+        cwd: workspace.directory,
+        encoding: 'utf8',
+      }).trim().split(/\r?\n/).map((line) => line.split(','));
+
+      expected.forEach((data, index) => {
+        const fixed = Number(data.fixed);
+        const doubled = Number(data.doubled);
+        expect(
+          Number(rows[index][0]),
+          `fixed classification for case ${index}`,
+        ).toBe(classify(fixed));
+        expect(
+          Number(rows[index][1]),
+          `doubled classification for case ${index}`,
+        ).toBe(classify(doubled));
+        expect(
+          Number(rows[index][2]),
+          `truth for case ${index}`,
+        ).toBe(data.truth ? 1 : 0);
+        if (classify(fixed) === 0) {
+          expect(Number(rows[index][3])).toBe(fixed);
+        }
+        if (classify(doubled) === 0) {
+          expect(Number(rows[index][4])).toBe(doubled);
+        }
+      });
+    } finally {
+      workspace.cleanup();
+    }
+  });
+
+  it.each([
+    1e18,
+    -0.001,
+    0.0005,
+    4294967.296,
+  ])('rejects Step stepTime %s when it is not an exact uint32 millisecond threshold', (
+    stepTime,
+  ) => {
+    const ir = combinationalSemanticModel();
+    const xb = ir.states.controller.xBridges!;
+    ir.states.controller.xBridges = {
+      ...xb,
+      operations: {
+        ...xb.operations,
+        step: {
+          ...xb.operations.step,
+          parameters: { ...xb.operations.step.parameters, stepTime },
+        },
+      },
+    };
+
+    expect(() => generateCArtifacts(ir)).toThrow(
+      new RegExp(
+        "X-Bridges Step operation 'step' requires stepTime to be finite, "
+          + 'nonnegative, and exactly representable as uint32_t milliseconds; '
+          + `received ${stepTime}`,
+      ),
+    );
+  });
+
+  it('strictly compiles the maximum uint32 millisecond Step threshold', () => {
+    const ir = combinationalSemanticModel();
+    const xb = ir.states.controller.xBridges!;
+    ir.states.controller.xBridges = {
+      ...xb,
+      operations: {
+        ...xb.operations,
+        step: {
+          ...xb.operations.step,
+          parameters: {
+            ...xb.operations.step.parameters,
+            stepTime: 4294967.295,
+          },
+        },
+      },
+    };
+    const workspace = createGeneratedCodeTestWorkspace('xb-step-max-c99');
+
+    try {
+      const core = generateCArtifacts(ir).files
+        .find((file) => file.name === 'sm_core.c')!.content;
+      writeFileSync(join(workspace.directory, 'sm_core.c'), core);
+      for (const file of generateCArtifacts(ir).files) {
+        if (file.name !== 'sm_core.c') {
+          writeFileSync(join(workspace.directory, file.name), file.content);
+        }
+      }
+      expect(core).toContain('UINT32_C(4294967295)');
+      execFileSync('gcc', [
+        '-std=c99',
+        '-pedantic-errors',
+        '-Wall',
+        '-Wextra',
+        '-Werror',
+        '-I.',
+        '-c',
+        'sm_core.c',
+        '-o',
+        'sm_core.o',
+      ], { cwd: workspace.directory, stdio: 'pipe' });
     } finally {
       workspace.cleanup();
     }

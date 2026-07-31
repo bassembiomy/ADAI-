@@ -61,6 +61,8 @@ const operationErrorFieldName = (operation: XBSemanticOperation): string =>
 interface XBStateLayout {
   readonly declarations: readonly string[];
   readonly signalFields: ReadonlyMap<string, string>;
+  readonly fixedValidityFields: ReadonlyMap<string, string>;
+  readonly fixedRealFields: ReadonlyMap<string, string>;
   readonly slotFields: ReadonlyMap<string, string>;
   readonly counterFields: ReadonlyMap<string, string>;
   readonly errorFields: ReadonlyMap<string, string>;
@@ -71,6 +73,8 @@ const stateLayout = (state: SemanticState): XBStateLayout => {
   const declarations: string[] = [];
   const names = new Set<string>();
   const signalFields = new Map<string, string>();
+  const fixedValidityFields = new Map<string, string>();
+  const fixedRealFields = new Map<string, string>();
   const slotFields = new Map<string, string>();
   const counterFields = new Map<string, string>();
   const errorFields = new Map<string, string>();
@@ -95,6 +99,19 @@ const stateLayout = (state: SemanticState): XBStateLayout => {
     declarations.push(
       `    ${numericCType(signal.numericType)} ${name}${shapeSuffix(signal.shape)};`,
     );
+    if (signal.numericType.kind === 'fixed') {
+      const validityName = allocateName(
+        `${name}_has_stored_integer`,
+        'signal_validity',
+      );
+      const realName = allocateName(`${name}_real_value`, 'signal_real');
+      fixedValidityFields.set(signal.id, validityName);
+      fixedRealFields.set(signal.id, realName);
+      declarations.push(
+        `    bool ${validityName}${shapeSuffix(signal.shape)};`,
+        `    double ${realName}${shapeSuffix(signal.shape)};`,
+      );
+    }
   }
 
   for (const operationId of xb.executionOrder) {
@@ -127,6 +144,8 @@ const stateLayout = (state: SemanticState): XBStateLayout => {
       ? ['    uint8_t reserved;']
       : declarations,
     signalFields,
+    fixedValidityFields,
+    fixedRealFields,
     slotFields,
     counterFields,
     errorFields,
@@ -249,6 +268,7 @@ export const renderXBHeader = (ir: SemanticModel): string => {
     '    int16_t fraction_length,',
     '    SM_XB_Rounding_t rounding,',
     '    SM_XB_Overflow_t overflow);',
+    'bool SM_XB_Truth(double value);',
     'SM_XB_NumericResult_t SM_XB_ConvertBoolean(double value);',
     'SM_XB_NumericResult_t SM_XB_ConvertFloat16(double value);',
     'SM_XB_NumericResult_t SM_XB_ConvertFloat32(double value);',
@@ -391,6 +411,22 @@ const signalStorageExpression = (
   };
 };
 
+const fixedSignalSidecarExpressions = (
+  signal: XBSemanticSignal,
+  layout: XBStateLayout,
+  member: string,
+): { validity: string; real: string } => {
+  const validityField = layout.fixedValidityFields.get(signal.id);
+  const realField = layout.fixedRealFields.get(signal.id);
+  if (validityField === undefined || realField === undefined) {
+    throw new Error(`X-Bridges fixed signal '${signal.id}' lacks sidecar storage`);
+  }
+  return {
+    validity: `instance->${member}.${validityField}`,
+    real: `instance->${member}.${realField}`,
+  };
+};
+
 const signalRealExpression = (
   state: SemanticState,
   signalId: string,
@@ -399,7 +435,12 @@ const signalRealExpression = (
 ): string => {
   const storage = signalStorageExpression(state, signalId, layout, member);
   if (storage.signal.numericType.kind === 'fixed') {
-    return `ldexp((double)(${storage.expression}), ${-storage.signal.numericType.fractionLength})`;
+    const sidecars = fixedSignalSidecarExpressions(
+      storage.signal,
+      layout,
+      member,
+    );
+    return `((${sidecars.validity}) ? ldexp((double)(${storage.expression}), ${-storage.signal.numericType.fractionLength}) : (${sidecars.real}))`;
   }
   if (storage.signal.numericType.kind === 'boolean') {
     return `((${storage.expression}) ? 1.0 : 0.0)`;
@@ -457,11 +498,9 @@ const renderSignalWrite = (
   if (signal.numericType.kind === 'boolean') {
     return [
       `    const double ${valueName} = (double)(${expression});`,
+      `    instance->${member}.${field} = SM_XB_Truth(${valueName});`,
       `    if (!isfinite(${valueName})) {`,
-      `        instance->${member}.${field} = false;`,
       ...faultLines,
-      '    } else {',
-      `        instance->${member}.${field} = ${valueName} != 0.0;`,
       '    }',
     ];
   }
@@ -489,6 +528,22 @@ const renderSignalWrite = (
       `    if (!isfinite(${valueName})) {`,
       ...faultLines,
       '    }',
+    ];
+  }
+  if (signal.numericType.kind === 'fixed') {
+    const sidecars = fixedSignalSidecarExpressions(signal, layout, member);
+    return [
+      `    const SM_XB_NumericResult_t ${resultName} = ${defaultConversionCall(expression, signal.numericType)};`,
+      `    instance->${member}.${field} = (${numericCType(signal.numericType)})${resultName}.stored_integer;`,
+      `    ${sidecars.validity} = ${resultName}.has_stored_integer;`,
+      `    ${sidecars.real} = ${resultName}.real_value;`,
+      ...(state.xBridges!.policy.numericFault === 'escalate'
+        ? [
+            `    if (${resultName}.fault != SM_XB_FAULT_NONE) {`,
+            '        instance->error_status = SM_ERR_XBRIDGES_NUMERIC;',
+            '    }',
+          ]
+        : []),
     ];
   }
   return [
@@ -552,7 +607,19 @@ const emitStep = emitSingleOutput((_inputs, operation, state) => {
   const stepTimeSeconds = Number(
     scalarParameter(operation, ['stepTime', 'time'], 1),
   );
-  const thresholdMs = Math.max(0, Math.round(stepTimeSeconds * 1000));
+  const thresholdMs = stepTimeSeconds * 1000;
+  if (
+    !Number.isFinite(stepTimeSeconds)
+    || stepTimeSeconds < 0
+    || !Number.isSafeInteger(thresholdMs)
+    || thresholdMs > 0xffff_ffff
+  ) {
+    throw new Error(
+      `X-Bridges Step operation '${operation.id}' requires stepTime to be `
+        + 'finite, nonnegative, and exactly representable as uint32_t '
+        + `milliseconds; received ${stepTimeSeconds}`,
+    );
+  }
   const initial = cNumber(
     scalarParameter(operation, ['initialValue', 'initial'], 0),
   );
@@ -560,7 +627,7 @@ const emitStep = emitSingleOutput((_inputs, operation, state) => {
     scalarParameter(operation, ['finalValue', 'final'], 1),
   );
   if (thresholdMs === 0) return final;
-  return `(instance->state_timers[${state.enumName}_IDX] < ${thresholdMs}U ? ${initial} : ${final})`;
+  return `(instance->state_timers[${state.enumName}_IDX] < UINT32_C(${thresholdMs}) ? ${initial} : ${final})`;
 });
 
 const emitGain = emitSingleOutput((inputs, operation) =>
@@ -597,17 +664,33 @@ const emitAbsolute = emitSingleOutput((inputs) =>
   `fabs(${inputs[0] ?? '0.0'})`);
 
 const emitAnd = emitSingleOutput((inputs) =>
-  reduceExpression(inputs, '&&', '1.0'));
+  reduceExpression(
+    inputs.map((input) => `SM_XB_Truth(${input})`),
+    '&&',
+    'true',
+  ));
 const emitOr = emitSingleOutput((inputs) =>
-  reduceExpression(inputs, '||', '0.0'));
+  reduceExpression(
+    inputs.map((input) => `SM_XB_Truth(${input})`),
+    '||',
+    'false',
+  ));
 const emitNot = emitSingleOutput((inputs) =>
-  `(!(${inputs[0] ?? '0.0'}))`);
+  `(!SM_XB_Truth(${inputs[0] ?? '0.0'}))`);
 const emitNand = emitSingleOutput((inputs) =>
-  `(!${reduceExpression(inputs, '&&', '1.0')})`);
+  `(!${reduceExpression(
+    inputs.map((input) => `SM_XB_Truth(${input})`),
+    '&&',
+    'true',
+  )})`);
 const emitNor = emitSingleOutput((inputs) =>
-  `(!${reduceExpression(inputs, '||', '0.0')})`);
+  `(!${reduceExpression(
+    inputs.map((input) => `SM_XB_Truth(${input})`),
+    '||',
+    'false',
+  )})`);
 const emitXor = emitSingleOutput((inputs) =>
-  `((${inputs.map((input) => `((${input}) != 0.0)`).join(' + ') || '0'}) % 2)`);
+  `((${inputs.map((input) => `SM_XB_Truth(${input})`).join(' + ') || '0'}) % 2)`);
 
 const bitwiseBinary = (operator: string): OperationEmitter =>
   emitSingleOutput((inputs) =>
@@ -689,9 +772,25 @@ const emitConversion: OperationEmitter = (
     );
   }
   const call = renderConversionCall(operation).replace(/\bvalue\b/g, input);
+  const dataWriteLines = dataSignal.numericType.kind === 'fixed'
+    ? (() => {
+        const sidecars = fixedSignalSidecarExpressions(
+          dataSignal,
+          layout,
+          member,
+        );
+        return [
+          `    instance->${member}.${dataField} = (${numericCType(dataSignal.numericType)})${resultName}.stored_integer;`,
+          `    ${sidecars.validity} = ${resultName}.has_stored_integer;`,
+          `    ${sidecars.real} = ${resultName}.real_value;`,
+        ];
+      })()
+    : [
+        `    instance->${member}.${dataField} = (${numericCType(dataSignal.numericType)})${resultName}.${convertedStorageMember(dataSignal.numericType)};`,
+      ];
   const linesOut: string[] = [
     `    const SM_XB_NumericResult_t ${resultName} = ${call};`,
-    `    instance->${member}.${dataField} = (${numericCType(dataSignal.numericType)})${resultName}.${convertedStorageMember(dataSignal.numericType)};`,
+    ...dataWriteLines,
     `    instance->${member}.${errorField} = ${resultName}.fault != SM_XB_FAULT_NONE;`,
   ];
   operation.outputSignalIds.forEach((signalId, outputIndex) => {
@@ -998,6 +1097,11 @@ export const renderXBLifecycleSource = (ir: SemanticModel): string =>
 
 const NUMERIC_HELPERS = `#define SM_XB_MAX_SAFE_INTEGER 9007199254740991.0
 
+bool SM_XB_Truth(double value)
+{
+    return !isnan(value) && (value != 0.0);
+}
+
 static SM_XB_NumericResult_t SM_XB_DefaultResult(double value)
 {
     SM_XB_NumericResult_t result;
@@ -1136,15 +1240,15 @@ SM_XB_NumericResult_t SM_XB_ConvertFixed(
 SM_XB_NumericResult_t SM_XB_ConvertBoolean(double value)
 {
     SM_XB_NumericResult_t result = SM_XB_DefaultResult(value);
+    const bool converted = SM_XB_Truth(value);
+    result.stored_integer = converted ? INT64_C(1) : INT64_C(0);
+    result.real_value = (double)result.stored_integer;
+    result.has_stored_integer = true;
     if (!isfinite(value)) {
-        result.real_value = 0.0;
         result.fault = SM_XB_FAULT_NON_FINITE;
         return result;
     }
-    result.stored_integer = value != 0.0 ? INT64_C(1) : INT64_C(0);
-    result.real_value = (double)result.stored_integer;
     result.quantization_error = fabs(value - result.real_value);
-    result.has_stored_integer = true;
     return result;
 }
 
