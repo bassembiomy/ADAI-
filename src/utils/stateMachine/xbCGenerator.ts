@@ -1409,6 +1409,85 @@ const renderStateSlotAssignment = (
   ];
 };
 
+const stateSlotForRole = (
+  operation: XBSemanticOperation,
+  role: string,
+) => (operation.state?.slots ?? []).find((slot) => slot.role === role);
+
+const renderPIDComputation = (
+  state: SemanticState,
+  operation: XBSemanticOperation,
+  layout: XBStateLayout,
+  member: string,
+): string[] => {
+  const iSlot = stateSlotForRole(operation, 'i_state');
+  const dSlot = stateSlotForRole(operation, 'd_state');
+  const lastESlot = stateSlotForRole(operation, 'last_e');
+  const [errorId, enableId, resetId] = operation.inputSignalIds;
+  if (iSlot === undefined || dSlot === undefined || lastESlot === undefined
+    || errorId === undefined || enableId === undefined || resetId === undefined) {
+    throw new Error(`X-Bridges PID_BASIC '${operation.id}' requires e, enable, reset, i_state, d_state, and last_e`);
+  }
+  const identifier = toCIdentifier(operation.id);
+  const e = `xb_pid_${identifier}_e`;
+  const enabled = `xb_pid_${identifier}_enabled`;
+  const reset = `xb_pid_${identifier}_reset`;
+  const i = `xb_pid_${identifier}_i`;
+  const d = `xb_pid_${identifier}_d`;
+  const lastE = `xb_pid_${identifier}_last_e`;
+  const derivative = `xb_pid_${identifier}_derivative`;
+  const unlimited = `xb_pid_${identifier}_unlimited`;
+  const output = `xb_pid_${identifier}_output`;
+  const kp = cNumber(scalarParameter(operation, ['Kp', 'kp'], 1));
+  const ki = cNumber(scalarParameter(operation, ['Ki', 'ki'], 0));
+  const kd = cNumber(scalarParameter(operation, ['Kd', 'kd'], 0));
+  const n = cNumber(scalarParameter(operation, ['N', 'n'], 100));
+  const dt = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], 1));
+  const minimum = cNumber(scalarParameter(operation, ['min', 'minimum'], -100));
+  const maximum = cNumber(scalarParameter(operation, ['max', 'maximum'], 100));
+  const mode = operation.parameters.mode;
+  const method = operation.parameters.method;
+  const integralLines = mode === 'PD' ? [] : method === 'forward_euler'
+    ? [`            ${i} += (${ki}) * ${lastE} * (${dt});`]
+    : method === 'backward_euler'
+      ? [`            ${i} += (${ki}) * ${e} * (${dt});`]
+      : [`            ${i} += (${ki}) * (${e} + ${lastE}) * (${dt}) / 2.0;`];
+  const derivativeLines = mode === 'PI' ? [] : method === 'forward_euler'
+    ? [
+      `            ${derivative} = (${kd}) * (${n}) * (${e} - ${d});`,
+      `            ${d} += (${n}) * (${e} - ${d}) * (${dt});`,
+    ] : method === 'backward_euler'
+      ? [
+        `            ${derivative} = (${kd}) * (${n}) * (${e} - ${d}) / (1.0 + (${n}) * (${dt}));`,
+        `            ${d} = (${d} + (${n}) * ${e} * (${dt})) / (1.0 + (${n}) * (${dt}));`,
+      ] : [
+        `            ${derivative} = 2.0 * (${kd}) * (${n}) * (${e} - ${d}) / (2.0 + (${n}) * (${dt}));`,
+        `            ${d} = (${d} * (2.0 - (${n}) * (${dt})) + 2.0 * (${n}) * ${e} * (${dt})) / (2.0 + (${n}) * (${dt}));`,
+      ];
+  return [
+    `        const double ${e} = ${signalRealExpression(state, errorId, layout, member)};`,
+    `        const double ${enabled} = ${signalRealExpression(state, enableId, layout, member)};`,
+    `        const double ${reset} = ${signalRealExpression(state, resetId, layout, member)};`,
+    `        double ${i} = ${stateSlotRealExpression(iSlot, layout, member)};`,
+    `        double ${d} = ${stateSlotRealExpression(dSlot, layout, member)};`,
+    `        double ${lastE} = ${stateSlotRealExpression(lastESlot, layout, member)};`,
+    `        double ${derivative} = 0.0;`,
+    `        double ${unlimited} = 0.0;`,
+    `        double ${output} = 0.0;`,
+    `        if (${reset} > 0.5) { ${i} = 0.0; ${d} = 0.0; ${lastE} = 0.0; }`,
+    `        else if (${enabled} < 0.5) { ${output} = 0.0; }`,
+    '        else {',
+    ...integralLines,
+    ...derivativeLines,
+    `            ${unlimited} = (${kp}) * ${e} + ${i} + ${derivative};`,
+    `            ${output} = fmax(${minimum}, fmin(${maximum}, ${unlimited}));`,
+    `            if (((${ki}) != 0.0) && (((${unlimited} > ${maximum}) && (${e} > 0.0)) || ((${unlimited} < ${minimum}) && (${e} < 0.0)))) ${i} = ${stateSlotRealExpression(iSlot, layout, member)};`,
+    `            ${lastE} = ${e};`,
+    '        }',
+    `        (void)${output};`,
+  ];
+};
+
 const renderStateOutputs = (
   state: SemanticState,
   operation: XBSemanticOperation,
@@ -1417,9 +1496,17 @@ const renderStateOutputs = (
   member: string,
   expressions: readonly string[] | null = null,
 ): string[] => {
-  if (operation.type === 'STATE_SPACE') {
-    const xSlot = (operation.state?.slots ?? []).find((slot) =>
-      state.xBridges!.signals[slot.signalId]?.portId === 'x');
+  if (operation.type === 'PID_BASIC') {
+    const outputSignalId = operation.outputSignalIds.find((signalId) =>
+      state.xBridges!.signals[signalId]?.portId === 'u');
+    if (outputSignalId === undefined) return [];
+    const outputName = `xb_pid_${toCIdentifier(operation.id)}_output`;
+    return ['    {', ...renderPIDComputation(state, operation, layout, member),
+      ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, outputName, layout, member).map((line) => `    ${line}`),
+      '    }'];
+  }
+  if (operation.type === 'DISCRETE_TRANSFER_FUNCTION' || operation.type === 'STATE_SPACE') {
+    const xSlot = stateSlotForRole(operation, 'x');
     const ySignalId = operation.outputSignalIds.find((signalId) =>
       state.xBridges!.signals[signalId]?.portId === 'y');
     if (xSlot !== undefined && ySignalId !== undefined) {
@@ -1436,15 +1523,14 @@ const renderStateOutputs = (
         return renderSignalElementWrite(state, operation, operationIndex, row, ySignalId, `${row}U`,
           [...stateTerms, ...inputTerms].join(' + ') || '0.0', layout, member);
       }).flat();
-      const xSignalId = operation.outputSignalIds.find((signalId) =>
-        state.xBridges!.signals[signalId]?.portId === 'x');
-      const xLines = xSignalId === undefined ? [] : Array.from({ length: xSlot.initialValues.length }, (_, index) =>
+      const xSignalId = xSlot.signalId;
+      const xLines = xSignalId === null ? [] : Array.from({ length: xSlot.initialValues.length }, (_, index) =>
         renderSignalElementWrite(state, operation, operationIndex, y.elementCount + index, xSignalId, `${index}U`,
           stateSlotElementRealExpression(xSlot, layout, member, `${index}U`), layout, member)).flat();
       return [...terms, ...xLines];
     }
   }
-  return (operation.state?.slots ?? []).flatMap((slot, slotIndex) =>
+  return (operation.state?.slots ?? []).flatMap((slot, slotIndex) => slot.signalId === null ? [] :
   renderSignalWrite(
     state,
     operation,
@@ -1512,12 +1598,11 @@ const renderDiscreteStateUpdates = (
   if (counter === undefined) {
     throw new Error(`X-Bridges operation '${operation.id}' lacks a schedule counter`);
   }
-  const input = operation.type === 'STATE_SPACE' || operation.inputSignalIds[0] === undefined
+  const input = (operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION') || operation.inputSignalIds[0] === undefined
     ? '0.0'
     : signalRealExpression(state, operation.inputSignalIds[0], layout, member);
-  if (operation.type === 'STATE_SPACE') {
-    const xSlot = (operation.state?.slots ?? []).find((slot) =>
-      state.xBridges!.signals[slot.signalId]?.portId === 'x');
+  if (operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION') {
+    const xSlot = stateSlotForRole(operation, 'x');
     const inputId = operation.inputSignalIds[0];
     if (xSlot === undefined || inputId === undefined) {
       throw new Error(`X-Bridges STATE_SPACE '${operation.id}' requires x state and input signals`);
@@ -1552,6 +1637,24 @@ const renderDiscreteStateUpdates = (
     if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return updateLines;
     return [`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...updateLines.map((line) => `    ${line}`), '    }'];
   }
+  if (operation.type === 'PID_BASIC') {
+    const iSlot = stateSlotForRole(operation, 'i_state');
+    const dSlot = stateSlotForRole(operation, 'd_state');
+    const lastESlot = stateSlotForRole(operation, 'last_e');
+    if (iSlot === undefined || dSlot === undefined || lastESlot === undefined) {
+      throw new Error(`X-Bridges PID_BASIC '${operation.id}' requires i_state, d_state, and last_e`);
+    }
+    const identifier = toCIdentifier(operation.id);
+    const updates = [
+      ...renderStateSlotAssignment(state, iSlot, `xb_pid_${identifier}_i`, layout, member, `${operation.id}_i_state_update`),
+      ...renderStateSlotAssignment(state, dSlot, `xb_pid_${identifier}_d`, layout, member, `${operation.id}_d_state_update`),
+      ...renderStateSlotAssignment(state, lastESlot, `xb_pid_${identifier}_last_e`, layout, member, `${operation.id}_last_e_state_update`),
+    ];
+    const block = ['    {', ...renderPIDComputation(state, operation, layout, member),
+      ...updates.map((line) => `    ${line}`), '    }'];
+    if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return block;
+    return [`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...block.map((line) => `    ${line}`), '    }'];
+  }
   const updates = (operation.state?.slots ?? []).flatMap((slot, slotIndex) => {
     switch (operation.type) {
       case 'DELAY':
@@ -1569,7 +1672,6 @@ const renderDiscreteStateUpdates = (
           member,
           `${operation.id}_${slotIndex}_update`,
         );
-      case 'PID_BASIC':
       case 'PID_CONTROLLER': {
         const feedbackId = operation.inputSignalIds[1];
         const feedback = feedbackId === undefined
@@ -1585,19 +1687,6 @@ const renderDiscreteStateUpdates = (
           state,
           slot,
           `fmax(${minimum}, fmin(${maximum}, (${proportional}) * ${error} + ${stateSlotRealExpression(slot, layout, member)} + (${integral}) * ${error} * (${step})))`,
-          layout,
-          member,
-          `${operation.id}_${slotIndex}_update`,
-        );
-      }
-      case 'DISCRETE_TRANSFER_FUNCTION':
-      case 'STATE_SPACE': {
-        const a = cNumber(matrixParameterValue(operation, 'A', 0, 0, 0));
-        const b = cNumber(matrixParameterValue(operation, 'B', 0, 0, 1));
-        return renderStateSlotAssignment(
-          state,
-          slot,
-          `((${a}) * ${stateSlotRealExpression(slot, layout, member)} + (${b}) * (${input}))`,
           layout,
           member,
           `${operation.id}_${slotIndex}_update`,

@@ -12,8 +12,15 @@ export interface XBBlockCapability {
   codegen: boolean;
   directFeedthrough: boolean;
   shapes: readonly XBSignalShape[];
+  /** Optional direction-specific shapes where a block's ports differ. */
+  inputShapes?: readonly XBSignalShape[];
+  outputShapes?: readonly XBSignalShape[];
   reason?: string;
   requiredTargetCapabilities?: readonly XBTargetRequirement[];
+  /** Stable direct interpreter execution cases for enabled Task-10 types. */
+  interpreterConformanceCaseIds?: readonly string[];
+  /** Stable strict-C99 execution cases for enabled Task-10 types. */
+  cConformanceCaseIds?: readonly string[];
 }
 
 type XBCodegenCapability = Omit<XBBlockCapability, 'codegen'> & {
@@ -32,21 +39,33 @@ const vectorOrMatrix: readonly XBSignalShape[] = ['vector', 'matrix'];
 const direct = (
   shapes: readonly XBSignalShape[] = allShapes,
   requiredTargetCapabilities?: readonly XBTargetRequirement[],
+  interpreterConformanceCaseIds?: readonly string[],
+  cConformanceCaseIds?: readonly string[],
+  directionalShapes: Pick<XBBlockCapability, 'inputShapes' | 'outputShapes'> = {},
 ): XBCodegenCapability => ({
   codegen: true,
   directFeedthrough: true,
   shapes,
   requiredTargetCapabilities,
+  interpreterConformanceCaseIds,
+  cConformanceCaseIds,
+  ...directionalShapes,
 });
 
 const stateful = (
   shapes: readonly XBSignalShape[] = allShapes,
   requiredTargetCapabilities?: readonly XBTargetRequirement[],
+  interpreterConformanceCaseIds?: readonly string[],
+  cConformanceCaseIds?: readonly string[],
+  directionalShapes: Pick<XBBlockCapability, 'inputShapes' | 'outputShapes'> = {},
 ): XBCodegenCapability => ({
   codegen: true,
   directFeedthrough: false,
   shapes,
   requiredTargetCapabilities,
+  interpreterConformanceCaseIds,
+  cConformanceCaseIds,
+  ...directionalShapes,
 });
 
 const hostOnly = (reason: string): XBHostOnlyCapability => ({
@@ -72,10 +91,10 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   SUM_JUNCTION: direct(allShapes),
   GAIN: direct(allShapes),
   PRODUCT: direct(allShapes),
-  VectorAdd: direct(allShapes),
-  VectorSub: direct(allShapes),
-  VectorMul: direct(allShapes),
-  VectorDiv: direct(allShapes),
+  VectorAdd: direct(['vector'], undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
+  VectorSub: direct(['vector'], undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
+  VectorMul: direct(['vector'], undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
+  VectorDiv: direct(['vector'], undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
   VectorPow: direct(allShapes),
   UnaryNeg: direct(allShapes),
   Abs: direct(allShapes),
@@ -85,13 +104,15 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
 
   // Statically bounded linear algebra. Each entry has interpreter and C99
   // conformance coverage in xbInterpreter/xbCGenerator tests (Task 10).
-  MatrixMul: direct(vectorOrMatrix),
-  Transpose: direct(vectorOrMatrix),
-  MatrixConcat: direct(vectorOrMatrix),
-  MatrixDiag: direct(vectorOrMatrix),
+  MatrixMul: direct(['matrix'], undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX']),
+  Transpose: direct(['matrix'], undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX']),
+  MatrixConcat: direct(['matrix'], undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX']),
+  MatrixDiag: direct(vectorOrMatrix, undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX'], {
+    inputShapes: ['vector'], outputShapes: ['matrix'],
+  }),
   IdentityMatrix: direct(vectorOrMatrix),
-  SubMatrix: direct(vectorOrMatrix),
-  MatrixSolve: direct(vectorOrMatrix),
+  SubMatrix: direct(['matrix'], undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX']),
+  MatrixSolve: direct(['matrix'], undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX']),
 
   // Logic and bitwise operations.
   AND: direct(scalar),
@@ -123,20 +144,20 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
 
   // Bounded control and linear-system blocks. Each entry is enabled only with
   // paired interpreter and compiled-C conformance coverage (Task 10).
-  PID_BASIC: stateful(scalar),
-  PID_CONTROLLER: stateful(scalar),
+  PID_BASIC: stateful(scalar, undefined, ['T10-INT-PID-BASIC'], ['T10-C99-PID-BASIC']),
+  PID_CONTROLLER: hostOnly('PID_CONTROLLER has no compiled-C conformance contract.'),
   LOW_PASS_FILTER: stateful(allShapes),
   HIGH_PASS_FILTER: stateful(allShapes),
   MOVING_AVERAGE: stateful(allShapes),
-  DISCRETE_TRANSFER_FUNCTION: stateful(allShapes),
-  STATE_SPACE: stateful(allShapes),
+  DISCRETE_TRANSFER_FUNCTION: stateful(['vector'], undefined, ['T10-INT-DISCRETE-REALIZATION'], ['T10-C99-DISCRETE-REALIZATION']),
+  STATE_SPACE: stateful(['vector'], undefined, ['T10-INT-DISCRETE-REALIZATION'], ['T10-C99-DISCRETE-REALIZATION']),
 
   // Motor-control transforms, covered against fixed reference vectors in both
   // the interpreter and generated C conformance suites (Task 10).
-  CLARKE_TRANSFORM: direct(vectorOrMatrix),
-  PARK_TRANSFORM: direct(vectorOrMatrix),
-  INVERSE_PARK: direct(vectorOrMatrix),
-  INVERSE_CLARKE: direct(vectorOrMatrix),
+  CLARKE_TRANSFORM: direct(scalar, ['math-library'], ['T10-INT-TRANSFORMS'], ['T10-C99-TRANSFORMS']),
+  PARK_TRANSFORM: direct(scalar, ['math-library'], ['T10-INT-TRANSFORMS'], ['T10-C99-TRANSFORMS']),
+  INVERSE_PARK: direct(scalar, ['math-library'], ['T10-INT-TRANSFORMS'], ['T10-C99-TRANSFORMS']),
+  INVERSE_CLARKE: direct(scalar, ['math-library'], ['T10-INT-TRANSFORMS'], ['T10-C99-TRANSFORMS']),
 
   // Trigonometry requires a target-provided math library.
   SIN: direct(scalar, ['math-library']),

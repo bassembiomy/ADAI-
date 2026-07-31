@@ -6,6 +6,7 @@ import type {
   XBPersistedModelV1,
   XBTargetCapabilities,
 } from './xbModel';
+import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import { buildXBSemanticModel } from './xbSemanticBuilder';
 
 const target: XBTargetCapabilities = {
@@ -93,6 +94,71 @@ const build = (
 });
 
 describe('buildXBSemanticModel', () => {
+  it('keeps public PID and discrete-transfer-function state separate from outputs', () => {
+    const pid = BLOCK_LIBRARY.PID_BASIC('pid', {
+      Kp: 2,
+      Ki: 3,
+      Kd: 4,
+      N: 5,
+      sampleTime: 0.1,
+    });
+    const transfer = BLOCK_LIBRARY.DISCRETE_TRANSFER_FUNCTION('transfer', {
+      numerator: [1],
+      denominator: [1, 3, 2],
+      sampleTime: 0.1,
+      x0: [7, 11],
+    });
+    const publicPorts = (block: typeof pid, shapes: Record<string, XBParameterValue>) => ({
+      id: block.id,
+      type: block.type,
+      parameters: {
+        ...block.params,
+        inputs: block.inputs.map((publicPort) => ({
+          id: publicPort.id,
+          direction: publicPort.direction,
+          shape: shapes[`in:${publicPort.id}`] ?? 'scalar',
+          dimensions: shapes[`in:${publicPort.id}:dimensions`] ?? [],
+          dataType: 'float32',
+        })),
+        outputs: block.outputs.map((publicPort) => ({
+          id: publicPort.id,
+          direction: publicPort.direction,
+          shape: shapes[`out:${publicPort.id}`] ?? 'scalar',
+          dimensions: shapes[`out:${publicPort.id}:dimensions`] ?? [],
+          dataType: 'float32',
+        })),
+      },
+    } satisfies XBNodeV1);
+    const result = build(model({
+      nodes: [
+        publicPorts(pid, {}),
+        publicPorts(transfer, {
+          'in:u': 'vector', 'in:u:dimensions': [1],
+          'out:y': 'vector', 'out:y:dimensions': [1],
+          'out:x': 'vector', 'out:x:dimensions': [2],
+        }),
+      ],
+    }));
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir?.operations.pid.state?.slots).toMatchObject([
+      { id: 'pid:i_state$state', role: 'i_state', signalId: null },
+      { id: 'pid:d_state$state', role: 'd_state', signalId: null },
+      { id: 'pid:last_e$state', role: 'last_e', signalId: null },
+    ]);
+    expect(result.ir?.operations.transfer.state?.slots).toMatchObject([
+      {
+        id: 'transfer:x$state',
+        role: 'x',
+        signalId: 'transfer:x',
+        initialValues: [7, 11],
+      },
+    ]);
+    expect(result.ir?.operations.transfer.state?.slots).toHaveLength(1);
+    expect(result.ir?.operations.transfer.state?.slots.some((slot) =>
+      slot.signalId === 'transfer:y')).toBe(false);
+  });
+
   it('orders operations by dependencies and stable node IDs and propagates conversion types', () => {
     const xbModel = model({
       nodes: [
@@ -282,6 +348,7 @@ describe('buildXBSemanticModel', () => {
       updatePhase: 'after-direct-feedthrough',
       slots: [{
         id: 'delay:y$state',
+        role: 'y',
         signalId: 'delay:y',
         numericType: { kind: 'float32' },
         shape: { kind: 'scalar' },

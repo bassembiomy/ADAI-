@@ -601,15 +601,16 @@ const initialValuesForSignal = (
   node: XBNodeV1,
   signal: XBSemanticSignal,
   diagnostics: ModelDiagnostic[],
-): readonly (number | boolean)[] => {
-  const parameters = node.parameters as UnknownRecord;
-  const defaultValue = signal.numericType.kind === 'boolean' ? false : 0;
-  const source = firstPresentParameter(parameters, [
+  names: readonly string[] = [
     'initialValue',
     'initialCondition',
     'initial_state',
     'initial',
-  ]);
+  ],
+): readonly (number | boolean)[] => {
+  const parameters = node.parameters as UnknownRecord;
+  const defaultValue = signal.numericType.kind === 'boolean' ? false : 0;
+  const source = firstPresentParameter(parameters, names);
   if (source === undefined) {
     return Array.from({ length: signal.elementCount }, () => defaultValue);
   }
@@ -638,20 +639,64 @@ const stateBoundaryForNode = (
   outputSignalIds: readonly string[],
   signals: Readonly<Record<string, XBSemanticSignal>>,
   diagnostics: ModelDiagnostic[],
-): XBSemanticStateBoundary => ({
-  outputPhase: 'read-before-update',
-  updatePhase: 'after-direct-feedthrough',
-  slots: outputSignalIds.map((signalId) => {
+): XBSemanticStateBoundary => {
+  const boundary = (slots: XBSemanticStateBoundary['slots']): XBSemanticStateBoundary => ({
+    outputPhase: 'read-before-update',
+    updatePhase: 'after-direct-feedthrough',
+    slots,
+  });
+  const outputByPort = (portId: string): XBSemanticSignal | undefined =>
+    outputSignalIds.map((id) => signals[id]).find((signal) => signal?.portId === portId);
+
+  if (node.type === 'PID_BASIC') {
+    const control = outputByPort('u') ?? signals[outputSignalIds[0] ?? ''];
+    if (control === undefined) return boundary([]);
+    return boundary(['i_state', 'd_state', 'last_e'].map((role) => ({
+      id: `${node.id}:${role}$state`,
+      role,
+      signalId: null,
+      numericType: control.numericType,
+      shape: { kind: 'scalar' },
+      initialValues: [control.numericType.kind === 'boolean' ? false : 0],
+    })));
+  }
+
+  if (node.type === 'DISCRETE_TRANSFER_FUNCTION' || node.type === 'STATE_SPACE') {
+    const exposedX = outputByPort('x');
+    const fallback = exposedX ?? outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
+    if (fallback === undefined) return boundary([]);
+    const a = node.parameters.A;
+    const dimension = Array.isArray(a) && a.length > 0 ? a.length : 1;
+    const x = exposedX ?? {
+      ...fallback,
+      id: `${node.id}:x$hidden`,
+      shape: { kind: 'vector' as const, length: dimension },
+      elementCount: dimension,
+      dimensions: [dimension],
+      layout: 'contiguous' as const,
+    };
+    return boundary([{
+      id: `${node.id}:x$state`,
+      role: 'x',
+      signalId: exposedX?.id ?? null,
+      numericType: x.numericType,
+      shape: x.shape,
+      initialValues: initialValuesForSignal(node, x, diagnostics, ['x0']),
+    }]);
+  }
+
+  return boundary(outputSignalIds.map((signalId) => {
     const signal = signals[signalId];
     return {
       id: `${signalId}$state`,
+      role: signal.portId,
       signalId,
       numericType: signal.numericType,
       shape: signal.shape,
       initialValues: initialValuesForSignal(node, signal, diagnostics),
     };
-  }),
-});
+  }));
+};
 
 export const buildXBSemanticModel = (
   input: XBSemanticBuildInput,

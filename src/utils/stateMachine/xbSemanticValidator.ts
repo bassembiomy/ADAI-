@@ -422,12 +422,40 @@ export const validateXBModel = (
         }
       }
     }
+    const parameters = node.parameters as Record<string, unknown>;
+    if (node.type === 'MatrixSolve') {
+      const maximum = parameters.maxDimension ?? parameters.maximumDimension ?? 8;
+      if (!Number.isSafeInteger(maximum) || (maximum as number) < 1 || (maximum as number) > 8) {
+        diagnostics.push(diagnostic(
+          'XB_MATRIX_SOLVE_BOUND_INVALID',
+          `MatrixSolve '${node.id}' maxDimension must be an integer from 1 through 8.`,
+          node.id,
+        ));
+      }
+    }
+    if (node.type === 'PID_BASIC' && !(typeof parameters.sampleTime === 'number' && parameters.sampleTime > 0)) {
+      diagnostics.push(diagnostic(
+        'XB_DISCRETE_SAMPLE_TIME_REQUIRED',
+        `PID_BASIC '${node.id}' requires a positive discrete sampleTime for embedded generation.`,
+        node.id,
+      ));
+    }
+    if (node.type === 'STATE_SPACE' && parameters.representation !== 'discrete') {
+      diagnostics.push(diagnostic(
+        'XB_DISCRETE_REPRESENTATION_REQUIRED',
+        `STATE_SPACE '${node.id}' requires representation: 'discrete' for embedded generation.`,
+        node.id,
+      ));
+    }
 
     const ports = portsForNode(node, diagnostics);
     portsByNode.set(node.id, ports);
     if (capability?.codegen === true) {
       for (const port of ports) {
-        if (!capability.shapes.includes(port.shape)) {
+        const allowedShapes = port.direction === 'input'
+          ? capability.inputShapes ?? capability.shapes
+          : capability.outputShapes ?? capability.shapes;
+        if (!allowedShapes.includes(port.shape)) {
           diagnostics.push(diagnostic(
             'XB_BLOCK_NOT_CODEGEN_CAPABLE',
             `Block '${node.id}' does not support ${port.shape} signals in embedded code.`,

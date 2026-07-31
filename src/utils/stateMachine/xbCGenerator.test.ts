@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import { createGeneratedCodeTestWorkspace } from '../generatedCodeTestWorkspace';
 import type { SemanticModel } from './smSemanticModel';
 import type {
@@ -210,6 +211,7 @@ const statefulOperation = (
     updatePhase: 'after-direct-feedthrough',
     slots: outputSignalIds.map((signalId) => ({
       id: `${signalId}$state`,
+      role: signalId.slice(signalId.indexOf(':') + 1),
       signalId,
       numericType: { kind: 'float64' } as const,
       shape: scalar,
@@ -946,7 +948,7 @@ const reinterpretationParityModel = (): SemanticModel => {
 };
 
 describe('X-Bridges C99 static storage', () => {
-  it('compiles static row-major matrix loop emitters and a bounded solve buffer', () => {
+  it('T10-C99-VECTOR-MATRIX executes vector and row-major matrix operations identically to the interpreter', { timeout: 60_000 }, () => {
     const ir = semanticModel();
     const matrix23 = { kind: 'matrix', rows: 2, columns: 3 } as const;
     const matrix32 = { kind: 'matrix', rows: 3, columns: 2 } as const;
@@ -959,114 +961,154 @@ describe('X-Bridges C99 static storage', () => {
       ...scalarOperation(id, type, inputSignalIds, outputSignalIds, parameters),
     });
     ir.states.controller.xBridges = {
-      stateId: 'controller', executionOrder: ['mul', 'transpose', 'concat', 'diag', 'sub', 'solve'],
+      stateId: 'controller', executionOrder: ['add', 'subtract', 'multiply', 'divide', 'mul', 'transpose', 'concat', 'diag', 'sub', 'solve', 'singular'],
       operations: {
+        add: matrixOperation('add', 'VectorAdd', ['add:a', 'add:b'], ['add:y']),
+        subtract: matrixOperation('subtract', 'VectorSub', ['subtract:a', 'subtract:b'], ['subtract:y']),
+        multiply: matrixOperation('multiply', 'VectorMul', ['multiply:a', 'multiply:b'], ['multiply:y']),
+        divide: matrixOperation('divide', 'VectorDiv', ['divide:a', 'divide:b'], ['divide:y']),
         mul: matrixOperation('mul', 'MatrixMul', ['mul:a', 'mul:b'], ['mul:y']),
         transpose: matrixOperation('transpose', 'Transpose', ['transpose:u'], ['transpose:y']),
         concat: matrixOperation('concat', 'MatrixConcat', ['concat:a', 'concat:b'], ['concat:y'], { axis: 1 }),
         diag: matrixOperation('diag', 'MatrixDiag', ['diag:u'], ['diag:y']),
         sub: matrixOperation('sub', 'SubMatrix', ['sub:u'], ['sub:y'], { rowStart: 0, rowEnd: 0, colStart: 1, colEnd: 2 }),
         solve: matrixOperation('solve', 'MatrixSolve', ['solve:a', 'solve:b'], ['solve:y'], { maxDimension: 4 }),
+        singular: matrixOperation('singular', 'MatrixSolve', ['singular:a', 'singular:b'], ['singular:y'], { maxDimension: 4 }),
       },
       signals: {
+        ...Object.fromEntries(['add', 'subtract', 'multiply', 'divide'].flatMap((id) => [
+          [`${id}:a`, shaped(`${id}:a`, { kind: 'vector', length: 3 })],
+          [`${id}:b`, shaped(`${id}:b`, { kind: 'vector', length: 3 })],
+          [`${id}:y`, shaped(`${id}:y`, { kind: 'vector', length: 3 })],
+        ])),
         'mul:a': shaped('mul:a', matrix23), 'mul:b': shaped('mul:b', matrix32), 'mul:y': shaped('mul:y', matrix22),
         'transpose:u': shaped('transpose:u', matrix22, 'mul:y'), 'transpose:y': shaped('transpose:y', matrix22),
         'concat:a': shaped('concat:a', matrix22, 'mul:y'), 'concat:b': shaped('concat:b', matrix22, 'transpose:y'), 'concat:y': shaped('concat:y', { kind: 'matrix', rows: 2, columns: 4 }),
         'diag:u': shaped('diag:u', { kind: 'vector', length: 2 }), 'diag:y': shaped('diag:y', matrix22),
         'sub:u': shaped('sub:u', { kind: 'matrix', rows: 2, columns: 4 }, 'concat:y'), 'sub:y': shaped('sub:y', { kind: 'matrix', rows: 1, columns: 2 }),
         'solve:a': shaped('solve:a', matrix22), 'solve:b': shaped('solve:b', matrix21), 'solve:y': shaped('solve:y', matrix21),
-      },
-      mappings: [], solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 }, policy: { memory: 'retain', numericFault: 'escalate' },
-    };
-    const workspace = createGeneratedCodeTestWorkspace('xb-matrix-static-c99');
-    try {
-      for (const file of generateCArtifacts(ir).files) writeFileSync(join(workspace.directory, file.name), file.content);
-      const source = generateCArtifacts(ir).files.find((file) => file.name === 'sm_core.c')!.content;
-      expect(source).toContain('#define SM_XB_MAX_SOLVE_DIMENSION 8U');
-      expect(source).toMatch(/xb_k < 3U/);
-      expect(source).toContain('double xb_solve_a[SM_XB_MAX_SOLVE_DIMENSION * SM_XB_MAX_SOLVE_DIMENSION];');
-      execFileSync('gcc', ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.', '-c', 'sm_core.c', '-o', 'sm_core.o'], { cwd: workspace.directory, stdio: 'pipe' });
-    } finally { workspace.cleanup(); }
-  });
-
-  it('matches static PID state and Clarke/Park transform references in compiled C', { timeout: 60_000 }, () => {
-    const ir = semanticModel();
-    const pid = statefulOperation('pid', 'PID_BASIC', ['pid:u', 'pid:feedback'], ['pid:y'], 0);
-    const tf = statefulOperation('tf', 'DISCRETE_TRANSFER_FUNCTION', ['tf:u'], ['tf:y'], 0);
-    const stateSpace: XBSemanticOperation = {
-      ...scalarOperation('ss', 'STATE_SPACE', ['ss:u'], ['ss:y', 'ss:x']),
-      directFeedthrough: false, stateful: true,
-      state: {
-        outputPhase: 'read-before-update', updatePhase: 'after-direct-feedthrough',
-        slots: [{ id: 'ss:y$state', signalId: 'ss:y', numericType: { kind: 'float64' }, shape: { kind: 'vector', length: 1 }, initialValues: [0] }, {
-          id: 'ss:x$state', signalId: 'ss:x', numericType: { kind: 'float64' }, shape: { kind: 'vector', length: 2 }, initialValues: [0, 0],
-        }],
-      },
-    };
-    const direct = (id: string, type: string, inputs: string[], outputs: string[]): XBSemanticOperation =>
-      scalarOperation(id, type, inputs, outputs);
-    ir.states.controller.xBridges = {
-      stateId: 'controller', executionOrder: ['pid', 'tf', 'ss', 'clarke', 'park', 'inversePark', 'inverseClarke'],
-      operations: {
-        pid: { ...pid, parameters: { Kp: 10, Ki: 0, min: -2, max: 2, sampleTime: 0.1 } },
-        tf: { ...tf, parameters: { A: [[0.5]], B: [[1]] } },
-        ss: { ...stateSpace, parameters: { A: [[0.5, 1], [-1, 0.5]], B: [[1], [0]], C: [[1, 0]], D: [[0]] } },
-        clarke: direct('clarke', 'CLARKE_TRANSFORM', ['clarke:ia', 'clarke:ib', 'clarke:ic'], ['clarke:alpha', 'clarke:beta']),
-        park: direct('park', 'PARK_TRANSFORM', ['park:alpha', 'park:beta', 'park:theta'], ['park:d', 'park:q']),
-        inversePark: direct('inversePark', 'INVERSE_PARK', ['inversePark:d', 'inversePark:q', 'inversePark:theta'], ['inversePark:alpha', 'inversePark:beta']),
-        inverseClarke: direct('inverseClarke', 'INVERSE_CLARKE', ['inverseClarke:alpha', 'inverseClarke:beta'], ['inverseClarke:a', 'inverseClarke:b', 'inverseClarke:c']),
-      },
-      signals: {
-        ...Object.fromEntries([
-        'pid:u', 'pid:feedback', 'pid:y', 'tf:u', 'tf:y', 'ss:u', 'ss:y',
-        'clarke:ia', 'clarke:ib', 'clarke:ic', 'clarke:alpha', 'clarke:beta',
-        'park:alpha', 'park:beta', 'park:theta', 'park:d', 'park:q',
-        'inversePark:d', 'inversePark:q', 'inversePark:theta', 'inversePark:alpha', 'inversePark:beta',
-        'inverseClarke:alpha', 'inverseClarke:beta', 'inverseClarke:a', 'inverseClarke:b', 'inverseClarke:c',
-        ].map((id) => [id, { ...signal(id, { kind: 'float64' }), direction: 'output' as const }])),
-        'ss:u': { ...signal('ss:u', { kind: 'float64' }, { kind: 'vector', length: 1 }), direction: 'input' },
-        'ss:y': signal('ss:y', { kind: 'float64' }, { kind: 'vector', length: 1 }),
-        'ss:x': signal('ss:x', { kind: 'float64' }, { kind: 'vector', length: 2 }),
+        'singular:a': shaped('singular:a', matrix22), 'singular:b': shaped('singular:b', matrix21), 'singular:y': shaped('singular:y', matrix21),
       },
       mappings: [], solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 }, policy: { memory: 'retain', numericFault: 'escalate' },
     };
     const runtime = createXBRuntime(ir.states.controller.xBridges!);
     Object.assign(runtime.signals, {
-      'pid:u': [1], 'pid:feedback': [0], 'tf:u': [1], 'ss:u': [1],
-      'clarke:ia': [1], 'clarke:ib': [-0.5], 'clarke:ic': [-0.5],
-      'park:alpha': [1], 'park:beta': [0], 'park:theta': [Math.PI / 2],
-      'inversePark:d': [0], 'inversePark:q': [-1], 'inversePark:theta': [Math.PI / 2],
-      'inverseClarke:alpha': [1], 'inverseClarke:beta': [0],
+      'add:a': [1, 2, 3], 'add:b': [4, -2, 0.5],
+      'subtract:a': [1, 2, 3], 'subtract:b': [4, -2, 0.5],
+      'multiply:a': [1, 2, 3], 'multiply:b': [4, -2, 0.5],
+      'divide:a': [1, 2, 3], 'divide:b': [4, -2, 0.5],
+      'mul:a': [1, 2, 3, 4, 5, 6], 'mul:b': [7, 8, 9, 10, 11, 12],
+      'transpose:u': [1, 2, 3, 4], 'concat:a': [1, 2, 3, 4], 'concat:b': [5, 6, 7, 8],
+      'diag:u': [9, 10], 'sub:u': [1, 2, 3, 4, 5, 6, 7, 8],
+      'solve:a': [2, 1, 1, 3], 'solve:b': [5, 7],
+      'singular:a': [1, 2, 2, 4], 'singular:b': [3, 6],
     });
-    stepXBState(runtime, {}); stepXBState(runtime, {});
+    stepXBState(runtime, {});
     const expected = [
-      Number(runtime.stateSlots['pid:y$state'][0]), Number(runtime.stateSlots['tf:y$state'][0]),
-      Number(runtime.stateSlots['ss:x$state'][0]), Number(runtime.stateSlots['ss:x$state'][1]),
-      Number(runtime.signals['ss:y'][0]), Number(runtime.signals['clarke:alpha'][0]),
-      Number(runtime.signals['clarke:beta'][0]), Number(runtime.signals['park:d'][0]),
-      Number(runtime.signals['park:q'][0]), Number(runtime.signals['inversePark:alpha'][0]),
+      ...['add:y', 'subtract:y', 'multiply:y', 'divide:y', 'mul:y', 'transpose:y', 'concat:y', 'diag:y', 'sub:y', 'solve:y', 'singular:y']
+        .flatMap((id) => runtime.signals[id].map(Number)),
     ];
+    const workspace = createGeneratedCodeTestWorkspace('xb-matrix-static-c99');
+    try {
+      for (const file of generateCArtifacts(ir, { includeTestShims: true }).files) writeFileSync(join(workspace.directory, file.name), file.content);
+      const source = generateCArtifacts(ir).files.find((file) => file.name === 'sm_core.c')!.content;
+      expect(source).toContain('#define SM_XB_MAX_SOLVE_DIMENSION 8U');
+      writeFileSync(join(workspace.directory, 'harness.c'), [
+        '#include "sm_core.h"', '#include <stdio.h>', '',
+        'int main(void) {', '  ADIA_Instance_t instance;', '  if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+        '  const double a[3] = {1, 2, 3}; const double b[3] = {4, -2, 0.5};',
+        '  const double ma[6] = {1,2,3,4,5,6}; const double mb[6] = {7,8,9,10,11,12};',
+        '  const double m22a[4] = {1,2,3,4}; const double m22b[4] = {5,6,7,8}; const double rhs[2] = {5,7}; const double singular[4] = {1,2,2,4};',
+        '  for (unsigned i = 0; i < 3; ++i) { instance.xb_controller.add_a[i]=a[i]; instance.xb_controller.add_b[i]=b[i]; instance.xb_controller.subtract_a[i]=a[i]; instance.xb_controller.subtract_b[i]=b[i]; instance.xb_controller.multiply_a[i]=a[i]; instance.xb_controller.multiply_b[i]=b[i]; instance.xb_controller.divide_a[i]=a[i]; instance.xb_controller.divide_b[i]=b[i]; instance.xb_controller.diag_u[i < 2 ? i : 0] = i < 2 ? 9 + i : instance.xb_controller.diag_u[0]; }',
+        '  for (unsigned i = 0; i < 6; ++i) { instance.xb_controller.mul_a[i / 3][i % 3]=ma[i]; instance.xb_controller.mul_b[i / 2][i % 2]=mb[i]; }',
+        '  for (unsigned i = 0; i < 4; ++i) { instance.xb_controller.transpose_u[i / 2][i % 2]=m22a[i]; instance.xb_controller.concat_a[i / 2][i % 2]=m22a[i]; instance.xb_controller.concat_b[i / 2][i % 2]=m22b[i]; instance.xb_controller.solve_a[i / 2][i % 2]=(double[]){2,1,1,3}[i]; instance.xb_controller.singular_a[i / 2][i % 2]=singular[i]; }',
+        '  for (unsigned i = 0; i < 2; ++i) { instance.xb_controller.sub_u[i / 4][i % 4] = 1 + i; instance.xb_controller.solve_b[i][0]=rhs[i]; instance.xb_controller.singular_b[i][0]=3 + 3 * i; }',
+        '  instance.xb_controller.sub_u[0][2]=3; instance.xb_controller.sub_u[0][3]=4; instance.xb_controller.sub_u[1][0]=5; instance.xb_controller.sub_u[1][1]=6; instance.xb_controller.sub_u[1][2]=7; instance.xb_controller.sub_u[1][3]=8;',
+        '  SM_XB_CONTROLLER_Step(&instance);',
+        '  for (unsigned i=0;i<3;++i) { printf("%.17g,", instance.xb_controller.add_y[i]); } for (unsigned i=0;i<3;++i) { printf("%.17g,", instance.xb_controller.subtract_y[i]); } for (unsigned i=0;i<3;++i) { printf("%.17g,", instance.xb_controller.multiply_y[i]); } for (unsigned i=0;i<3;++i) { printf("%.17g,", instance.xb_controller.divide_y[i]); }',
+        '  for (unsigned i=0;i<4;++i) { printf("%.17g,", instance.xb_controller.mul_y[i/2][i%2]); } for (unsigned i=0;i<4;++i) { printf("%.17g,", instance.xb_controller.transpose_y[i/2][i%2]); } for (unsigned i=0;i<8;++i) { printf("%.17g,", instance.xb_controller.concat_y[i/4][i%4]); } for (unsigned i=0;i<4;++i) { printf("%.17g,", instance.xb_controller.diag_y[i/2][i%2]); } for (unsigned i=0;i<2;++i) { printf("%.17g,", instance.xb_controller.sub_y[0][i]); } for (unsigned i=0;i<2;++i) { printf("%.17g,", instance.xb_controller.solve_y[i][0]); } for (unsigned i=0;i<2;++i) { printf("%.17g%s", instance.xb_controller.singular_y[i][0], i == 1 ? "\\n" : ","); }',
+        '  return 0;', '}', '',
+      ].join('\n'));
+      const executable = join(workspace.directory, 'xb_matrix.exe');
+      execFileSync('gcc', ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c', 'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable], { cwd: workspace.directory, stdio: 'pipe' });
+      const actual = execFileSync(executable, [], { cwd: workspace.directory, encoding: 'utf8' }).trim().split(',').map(Number);
+      expect(actual).toHaveLength(expected.length);
+      actual.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 12));
+      expect(expected.slice(-2)).toEqual([0, 0]);
+    } finally { workspace.cleanup(); }
+  });
+
+  it('T10-C99-PID-BASIC and T10-C99-DISCRETE-REALIZATION execute public controller and vector state traces identically to the interpreter', { timeout: 60_000 }, () => {
+    const ir = semanticModel();
+    const publicTf = BLOCK_LIBRARY.DISCRETE_TRANSFER_FUNCTION('tf', {
+      numerator: [1, 0.5, 0.25], denominator: [1, -0.75, 0.125],
+      sampleTime: 0.1, x0: [1, -1],
+    });
+    const pid: XBSemanticOperation = {
+      ...scalarOperation('pid', 'PID_BASIC', ['pid:e', 'pid:enable', 'pid:reset'], ['pid:u']), directFeedthrough: false, stateful: true,
+      state: { outputPhase: 'read-before-update', updatePhase: 'after-direct-feedthrough', slots: ['i_state', 'd_state', 'last_e'].map((role) => ({ id: `pid:${role}$state`, role, signalId: null, numericType: { kind: 'float64' }, shape: scalar, initialValues: [0] })) },
+    };
+    const tf: XBSemanticOperation = {
+      ...scalarOperation('tf', 'DISCRETE_TRANSFER_FUNCTION', ['tf:u'], ['tf:y', 'tf:x']), directFeedthrough: false, stateful: true,
+      state: { outputPhase: 'read-before-update', updatePhase: 'after-direct-feedthrough', slots: [{ id: 'tf:x$state', role: 'x', signalId: 'tf:x', numericType: { kind: 'float64' }, shape: { kind: 'vector', length: 2 }, initialValues: publicTf.params.x0 as number[] }] },
+    };
+    const stateSpace: XBSemanticOperation = {
+      ...scalarOperation('ss', 'STATE_SPACE', ['ss:u'], ['ss:y', 'ss:x']),
+      directFeedthrough: false, stateful: true,
+      state: {
+        outputPhase: 'read-before-update', updatePhase: 'after-direct-feedthrough',
+        slots: [{ id: 'ss:x$state', role: 'x', signalId: 'ss:x', numericType: { kind: 'float64' }, shape: { kind: 'vector', length: 2 }, initialValues: [1, 2] }],
+      },
+    };
+    const direct = (id: string, type: string, inputs: string[], outputs: string[]): XBSemanticOperation =>
+      scalarOperation(id, type, inputs, outputs);
+    ir.states.controller.xBridges = {
+      stateId: 'controller', executionOrder: ['pid', 'tf', 'ss'],
+      operations: {
+        pid: { ...pid, parameters: { Kp: 1.2, Ki: 4, Kd: 0.25, N: 5, mode: 'PID', method: 'trapezoidal', min: -1, max: 1, sampleTime: 0.1 } },
+        tf: { ...tf, parameters: publicTf.params },
+        ss: { ...stateSpace, parameters: { A: [[0.5, 1], [-1, 0.5]], B: [[1], [0.25]], C: [[2, -1]], D: [[0.5]] } },
+      },
+      signals: {
+        ...Object.fromEntries([
+        'pid:e', 'pid:enable', 'pid:reset', 'pid:u', 'tf:u', 'tf:y', 'tf:x', 'ss:u', 'ss:y', 'ss:x',
+        ].map((id) => [id, { ...signal(id, { kind: 'float64' }), direction: 'output' as const }])),
+        'ss:u': { ...signal('ss:u', { kind: 'float64' }, { kind: 'vector', length: 1 }), direction: 'input' },
+        'ss:y': signal('ss:y', { kind: 'float64' }, { kind: 'vector', length: 1 }),
+        'ss:x': signal('ss:x', { kind: 'float64' }, { kind: 'vector', length: 2 }),
+        'tf:u': { ...signal('tf:u', { kind: 'float64' }, { kind: 'vector', length: 1 }), direction: 'input' },
+        'tf:y': signal('tf:y', { kind: 'float64' }, { kind: 'vector', length: 1 }),
+        'tf:x': signal('tf:x', { kind: 'float64' }, { kind: 'vector', length: 2 }),
+      },
+      mappings: [], solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 }, policy: { memory: 'retain', numericFault: 'escalate' },
+    };
+    const runtime = createXBRuntime(ir.states.controller.xBridges!);
+    const inputs = [[2, 1, 0, 1, 1], [2, 1, 0, -1, 0.5], [0, 0, 0, 0.5, 2], [3, 1, 1, 2, -0.5]];
+    const expected: number[] = [];
+    for (const [e, enable, reset, tfInput, ssInput] of inputs) {
+      Object.assign(runtime.signals, { 'pid:e': [e], 'pid:enable': [enable], 'pid:reset': [reset], 'tf:u': [tfInput], 'ss:u': [ssInput] });
+      stepXBState(runtime, {});
+      expected.push(Number(runtime.signals['pid:u'][0]), Number(runtime.signals['tf:y'][0]), ...runtime.signals['tf:x'].map(Number), Number(runtime.signals['ss:y'][0]), ...runtime.signals['ss:x'].map(Number));
+    }
+    expect(expected[0]).toBe(1);
+    expect(expected[14]).toBe(0);
+    expect(expected[21]).toBe(0);
     const workspace = createGeneratedCodeTestWorkspace('xb-control-transform-c99');
     try {
       for (const file of generateCArtifacts(ir, { includeTestShims: true }).files) writeFileSync(join(workspace.directory, file.name), file.content);
       writeFileSync(join(workspace.directory, 'harness.c'), [
         '#include "sm_core.h"', '#include <stdio.h>', '#include <math.h>', '',
         'int main(void) {', '    ADIA_Instance_t instance;', '    if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
-        '    instance.xb_controller.pid_u = 1.0; instance.xb_controller.pid_feedback = 0.0;',
-        '    instance.xb_controller.tf_u = 1.0; instance.xb_controller.ss_u[0] = 1.0;',
-        '    instance.xb_controller.clarke_ia = 1.0; instance.xb_controller.clarke_ib = -0.5; instance.xb_controller.clarke_ic = -0.5;',
-        '    instance.xb_controller.park_alpha = 1.0; instance.xb_controller.park_beta = 0.0; instance.xb_controller.park_theta = 1.5707963267948966;',
-        '    instance.xb_controller.inversePark_d = 0.0; instance.xb_controller.inversePark_q = -1.0; instance.xb_controller.inversePark_theta = 1.5707963267948966;',
-        '    instance.xb_controller.inverseClarke_alpha = 1.0; instance.xb_controller.inverseClarke_beta = 0.0;',
-        '    SM_XB_CONTROLLER_Step(&instance);', '    SM_XB_CONTROLLER_Step(&instance);',
-        '    (void)printf("%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g\\n", instance.xb_controller.state_pid_y_state, instance.xb_controller.state_tf_y_state, instance.xb_controller.state_ss_x_state[0], instance.xb_controller.state_ss_x_state[1], instance.xb_controller.ss_y[0], instance.xb_controller.clarke_alpha, instance.xb_controller.clarke_beta, instance.xb_controller.park_d, instance.xb_controller.park_q, instance.xb_controller.inversePark_alpha);',
+        '    const double trace[4][5] = {{2,1,0,1,1},{2,1,0,-1,0.5},{0,0,0,0.5,2},{3,1,1,2,-0.5}};',
+        '    for (unsigned i = 0; i < 4; ++i) { instance.xb_controller.pid_e=trace[i][0]; instance.xb_controller.pid_enable=trace[i][1]; instance.xb_controller.pid_reset=trace[i][2]; instance.xb_controller.tf_u[0]=trace[i][3]; instance.xb_controller.ss_u[0]=trace[i][4]; SM_XB_CONTROLLER_Step(&instance); printf("%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g%s", instance.xb_controller.pid_u, instance.xb_controller.tf_y[0], instance.xb_controller.tf_x[0], instance.xb_controller.tf_x[1], instance.xb_controller.ss_y[0], instance.xb_controller.ss_x[0], instance.xb_controller.ss_x[1], i == 3 ? "\\n" : ","); }',
         '    return 0;', '}', '',
       ].join('\n'));
       const executable = join(workspace.directory, 'xb_control_transform.exe');
       execFileSync('gcc', ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c', 'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable], { cwd: workspace.directory, stdio: 'pipe' });
       const actual = execFileSync(executable, [], { cwd: workspace.directory, encoding: 'utf8' }).trim().split(',').map(Number);
       actual.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 12));
-      expect(actual.slice(0, 5)).toEqual([2, 1.5, 1.5, -1, 1]);
+      expect(actual).toHaveLength(expected.length);
+      actual.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 12));
     } finally { workspace.cleanup(); }
   });
 

@@ -267,9 +267,11 @@ const boundedSolve = (
   rightColumns: number,
   maximumDimension: number,
 ): XBScalar[] => {
-  if (dimension > maximumDimension || rightColumns > maximumDimension) {
+  if (!Number.isSafeInteger(maximumDimension) || maximumDimension < 1 || maximumDimension > 8
+    || dimension > 8 || rightColumns > 8
+    || dimension > maximumDimension || rightColumns > maximumDimension) {
     throw new Error(
-      `X-Bridges MatrixSolve dimension ${dimension} exceeds configured maximum ${maximumDimension}`,
+      `X-Bridges MatrixSolve dimensions must not exceed static maximum 8 (configured ${maximumDimension})`,
     );
   }
   const a = matrix.map(Number);
@@ -613,30 +615,105 @@ const executeConversionOperation = (
   }
 };
 
+const stateSlotForRole = (
+  operation: XBSemanticOperation,
+  role: string,
+) => (operation.state?.slots ?? []).find((slot) => slot.role === role);
+
+interface PIDValues {
+  readonly output: number;
+  readonly iState: number;
+  readonly dState: number;
+  readonly lastE: number;
+}
+
+const pidValues = (
+  runtime: XBRuntime,
+  operation: XBSemanticOperation,
+): PIDValues => {
+  const iSlot = stateSlotForRole(operation, 'i_state');
+  const dSlot = stateSlotForRole(operation, 'd_state');
+  const lastESlot = stateSlotForRole(operation, 'last_e');
+  if (iSlot === undefined || dSlot === undefined || lastESlot === undefined) {
+    throw new Error(`X-Bridges PID_BASIC '${operation.id}' requires i_state, d_state, and last_e slots`);
+  }
+  const error = Number(signalValues(runtime, operation.inputSignalIds[0] ?? '')[0] ?? 0);
+  const enabled = Number(signalValues(runtime, operation.inputSignalIds[1] ?? '')[0] ?? 0);
+  const reset = Number(signalValues(runtime, operation.inputSignalIds[2] ?? '')[0] ?? 0);
+  const previousI = Number((runtime.stateSlots[iSlot.id] ?? iSlot.initialValues)[0] ?? 0);
+  const previousD = Number((runtime.stateSlots[dSlot.id] ?? dSlot.initialValues)[0] ?? 0);
+  const previousE = Number((runtime.stateSlots[lastESlot.id] ?? lastESlot.initialValues)[0] ?? 0);
+  if (reset > 0.5) return { output: 0, iState: 0, dState: 0, lastE: 0 };
+  if (enabled < 0.5) return {
+    output: 0, iState: previousI, dState: previousD, lastE: previousE,
+  };
+
+  const kp = Number(parameter(operation, ['Kp', 'kp'], 1));
+  const ki = Number(parameter(operation, ['Ki', 'ki'], 0));
+  const kd = Number(parameter(operation, ['Kd', 'kd'], 0));
+  const n = Number(parameter(operation, ['N', 'n'], 100));
+  const dt = Number(parameter(operation, ['sampleTime', 'dt'], 1));
+  const lower = Number(parameter(operation, ['min', 'minimum'], -100));
+  const upper = Number(parameter(operation, ['max', 'maximum'], 100));
+  const mode = operation.parameters.mode;
+  const method = operation.parameters.method;
+  let nextI = previousI;
+  let nextD = previousD;
+  let derivative = 0;
+  if (mode === 'PI' || mode === 'PID' || mode === undefined) {
+    if (method === 'forward_euler') nextI = previousI + ki * previousE * dt;
+    else if (method === 'backward_euler') nextI = previousI + ki * error * dt;
+    else nextI = previousI + ki * (error + previousE) * dt / 2;
+  }
+  if (mode === 'PD' || mode === 'PID' || mode === undefined) {
+    if (method === 'forward_euler') {
+      derivative = kd * n * (error - previousD);
+      nextD = previousD + n * (error - previousD) * dt;
+    } else if (method === 'backward_euler') {
+      derivative = kd * n * (error - previousD) / (1 + n * dt);
+      nextD = (previousD + n * error * dt) / (1 + n * dt);
+    } else {
+      derivative = 2 * kd * n * (error - previousD) / (2 + n * dt);
+      nextD = (previousD * (2 - n * dt) + 2 * n * error * dt) / (2 + n * dt);
+    }
+  }
+  const unlimited = kp * error + nextI + derivative;
+  const output = Math.max(lower, Math.min(upper, unlimited));
+  if (ki !== 0 && ((unlimited > upper && error > 0) || (unlimited < lower && error < 0))) {
+    nextI = previousI;
+  }
+  return { output, iState: nextI, dState: nextD, lastE: error };
+};
+
 const writeStateOutputs = (
   runtime: XBRuntime,
   operation: XBSemanticOperation,
   faults: XBNumericFault[],
 ): void => {
-  if (operation.type === 'STATE_SPACE') {
-    const xSlot = (operation.state?.slots ?? []).find((slot) =>
-      runtime.ir.signals[slot.signalId]?.portId === 'x');
-    const ySlot = (operation.state?.slots ?? []).find((slot) =>
-      runtime.ir.signals[slot.signalId]?.portId === 'y');
-    if (xSlot !== undefined && ySlot !== undefined) {
+  if (operation.type === 'PID_BASIC') {
+    const output = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'u');
+    if (output !== undefined) writeSignal(runtime, output, [pidValues(runtime, operation).output], faults);
+    return;
+  }
+  if (operation.type === 'DISCRETE_TRANSFER_FUNCTION' || operation.type === 'STATE_SPACE') {
+    const xSlot = stateSlotForRole(operation, 'x');
+    const ySignalId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'y');
+    if (xSlot !== undefined && ySignalId !== undefined) {
       const x = runtime.stateSlots[xSlot.id] ?? xSlot.initialValues;
       const input = signalValues(runtime, operation.inputSignalIds[0] ?? '');
       const c = matrixParameter(operation, 'C', [[]]);
       const d = matrixParameter(operation, 'D', [[]]);
-      const y = Array.from({ length: ySlot.initialValues.length }, (_, row) =>
+      const yLength = runtime.ir.signals[ySignalId].elementCount;
+      const y = Array.from({ length: yLength }, (_, row) =>
         x.reduce<number>((total, value, column) => total + (c[row]?.[column] ?? 0) * Number(value), 0)
         + input.reduce<number>((total, value, column) => total + (d[row]?.[column] ?? 0) * Number(value), 0));
-      writeSignal(runtime, ySlot.signalId, y, faults);
-      writeSignal(runtime, xSlot.signalId, x, faults);
+      writeSignal(runtime, ySignalId, y, faults);
+      if (xSlot.signalId !== null) writeSignal(runtime, xSlot.signalId, x, faults);
       return;
     }
   }
-  for (const [slotIndex, slot] of (operation.state?.slots ?? []).entries()) {
+  for (const slot of operation.state?.slots ?? []) {
+    if (slot.signalId === null) continue;
     writeSignal(
       runtime,
       slot.signalId,
@@ -672,6 +749,33 @@ const statefulUpdate = (
   operation: XBSemanticOperation,
   faults: XBNumericFault[],
 ): Record<string, XBScalar[]> => {
+  if (operation.type === 'PID_BASIC') {
+    const values = pidValues(runtime, operation);
+    const updates: Record<string, XBScalar[]> = {};
+    for (const [role, value] of Object.entries({
+      i_state: values.iState, d_state: values.dState, last_e: values.lastE,
+    })) {
+      const slot = stateSlotForRole(operation, role);
+      if (slot !== undefined) updates[slot.id] = [convertValue(value, slot.numericType, faults)];
+    }
+    return updates;
+  }
+  if (operation.type === 'DISCRETE_TRANSFER_FUNCTION' || operation.type === 'STATE_SPACE') {
+    const xSlot = stateSlotForRole(operation, 'x');
+    if (xSlot === undefined) throw new Error(`X-Bridges ${operation.type} '${operation.id}' requires an x state slot`);
+    const a = matrixParameter(operation, 'A', [[0]]);
+    const b = matrixParameter(operation, 'B', [[1]]);
+    const state = (runtime.stateSlots[xSlot.id] ?? xSlot.initialValues).map(Number);
+    const inputValues = signalValues(runtime, operation.inputSignalIds[0] ?? '').map(Number);
+    return {
+      [xSlot.id]: state.map((_, row) => convertValue(
+        state.reduce((sum, value, column) => sum + (a[row]?.[column] ?? 0) * value, 0)
+          + inputValues.reduce((sum, value, column) => sum + (b[row]?.[column] ?? 0) * value, 0),
+        xSlot.numericType,
+        faults,
+      )),
+    };
+  }
   const input = signalValues(runtime, operation.inputSignalIds[0]);
   const updates: Record<string, XBScalar[]> = {};
   for (const [slotIndex, slot] of (operation.state?.slots ?? []).entries()) {
@@ -692,7 +796,6 @@ const statefulUpdate = (
             faults,
           ));
         break;
-      case 'PID_BASIC':
       case 'PID_CONTROLLER': {
         const reference = Number(signalValues(runtime, operation.inputSignalIds[0] ?? '')[0] ?? 0);
         const feedback = Number(signalValues(runtime, operation.inputSignalIds[1] ?? '')[0] ?? 0);
@@ -706,32 +809,6 @@ const statefulUpdate = (
         const output = Math.max(lower, Math.min(upper, proportional + integral));
         updates[slot.id] = Array.from({ length: previous.length }, () =>
           convertValue(slotIndex === 0 ? output : error, slot.numericType, faults));
-        break;
-      }
-      case 'DISCRETE_TRANSFER_FUNCTION': {
-        const a = matrixParameter(operation, 'A', [[0]]);
-        const b = matrixParameter(operation, 'B', [[1]]);
-        const state = previous.map(Number);
-        const inputValues = signalValues(runtime, operation.inputSignalIds[0] ?? '').map(Number);
-        updates[slot.id] = state.map((_, row) => convertValue(
-          state.reduce((sum, value, column) => sum + (a[row]?.[column] ?? 0) * value, 0)
-            + inputValues.reduce((sum, value, column) => sum + (b[row]?.[column] ?? 0) * value, 0),
-          slot.numericType,
-          faults,
-        ));
-        break;
-      }
-      case 'STATE_SPACE': {
-        const a = matrixParameter(operation, 'A', [[0]]);
-        const b = matrixParameter(operation, 'B', [[1]]);
-        const state = previous.map(Number);
-        const inputValues = signalValues(runtime, operation.inputSignalIds[0] ?? '').map(Number);
-        updates[slot.id] = state.map((_, row) => convertValue(
-          state.reduce((sum, value, column) => sum + (a[row]?.[column] ?? 0) * value, 0)
-            + inputValues.reduce((sum, value, column) => sum + (b[row]?.[column] ?? 0) * value, 0),
-          slot.numericType,
-          faults,
-        ));
         break;
       }
       default:
@@ -796,6 +873,9 @@ const continuousSlots = (runtime: XBRuntime): ContinuousSlot[] => {
       && operation?.type !== 'Integrator'
     ) continue;
     for (const slot of operation.state?.slots ?? []) {
+      if (slot.signalId === null) {
+        throw new Error(`X-Bridges continuous state '${slot.id}' must expose a signal`);
+      }
       slots.push({
         operation,
         slotId: slot.id,

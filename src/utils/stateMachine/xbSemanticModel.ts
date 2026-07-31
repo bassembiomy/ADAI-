@@ -45,7 +45,10 @@ export interface XBSemanticConversion {
 
 export interface XBSemanticStateSlot {
   readonly id: string;
-  readonly signalId: string;
+  /** Stable block-local state identity, independent of any exposed output. */
+  readonly role: string;
+  /** Optional output signal that exposes this state during read-before-update. */
+  readonly signalId: string | null;
   readonly numericType: XBNumericType;
   readonly shape: XBShape;
   readonly initialValues: readonly (number | boolean)[];

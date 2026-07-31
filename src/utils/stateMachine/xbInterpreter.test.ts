@@ -84,6 +84,7 @@ const operation = (
       updatePhase: 'after-direct-feedthrough',
       slots: outputSignalIds.map((signalId) => ({
         id: `${signalId}$state`,
+        role: signalId.slice(signalId.indexOf(':') + 1),
         signalId,
         numericType: float32,
         shape: scalar,
@@ -115,28 +116,111 @@ const model = (
   policy: { memory, numericFault: 'escalate' },
 });
 
+const contractState = (
+  slots: readonly Record<string, unknown>[],
+): XBSemanticOperation['state'] => ({
+  outputPhase: 'read-before-update',
+  updatePhase: 'after-direct-feedthrough',
+  slots,
+} as unknown as XBSemanticOperation['state']);
+
 describe('X-Bridges interpreter', () => {
-  it('updates saturated PID, transfer-function, and bounded state-space state deterministically', () => {
-    const stateful = (id: string, type: string, parameters: XBSemanticOperation['parameters'], initialValues: number[]) => operation(
-      id, type, [`${id}:u`, `${id}:feedback`], [`${id}:y`], parameters, initialValues,
-    );
-    const ir = model('retain', {
-      pid: stateful('pid', 'PID_BASIC', { Kp: 10, Ki: 0, min: -2, max: 2, sampleTime: 0.1 }, [0]),
-      tf: stateful('tf', 'DISCRETE_TRANSFER_FUNCTION', { A: [[0.5]], B: [[1]] }, [0]),
-      ss: stateful('ss', 'STATE_SPACE', { A: [[0.5]], B: [[2]] }, [0]),
-    }, {
-      'pid:u': signal('pid:u', 'input'), 'pid:feedback': signal('pid:feedback', 'input'), 'pid:y': signal('pid:y', 'output'),
-      'tf:u': signal('tf:u', 'input'), 'tf:feedback': signal('tf:feedback', 'input'), 'tf:y': signal('tf:y', 'output'),
-      'ss:u': signal('ss:u', 'input'), 'ss:feedback': signal('ss:feedback', 'input'), 'ss:y': signal('ss:y', 'output'),
+  it('executes public PID and multi-state discrete realization contracts without output-backed state', () => {
+    const float64 = { kind: 'float64' } as const;
+    const vector2 = { kind: 'vector', length: 2 } as const;
+    const vector1 = { kind: 'vector', length: 1 } as const;
+    const stateSlot = (
+      id: string,
+      role: string,
+      initialValues: readonly number[],
+      shape: XBSemanticSignal['shape'] = scalar,
+      signalId: string | null = null,
+    ) => ({ id, role, signalId, numericType: float64, shape, initialValues });
+    const pid: XBSemanticOperation = {
+      ...operation('pid', 'PID_BASIC', ['pid:e', 'pid:enable', 'pid:reset'], ['pid:u']),
+      directFeedthrough: false,
+      stateful: true,
+      parameters: {
+        mode: 'PID', Kp: 1, Ki: 2, Kd: 1, N: 4,
+        min: -1, max: 1, method: 'trapezoidal', sampleTime: 0.5,
+      },
+      state: contractState([
+        stateSlot('pid:i_state$state', 'i_state', [0]),
+        stateSlot('pid:d_state$state', 'd_state', [0]),
+        stateSlot('pid:last_e$state', 'last_e', [0]),
+      ]),
+    };
+    const realization = (id: string, type: 'DISCRETE_TRANSFER_FUNCTION' | 'STATE_SPACE', parameters: XBSemanticOperation['parameters'], initialValues: readonly number[]): XBSemanticOperation => ({
+      ...operation(id, type, [`${id}:u`], [`${id}:y`, `${id}:x`]),
+      directFeedthrough: false,
+      stateful: true,
+      parameters,
+      state: contractState([
+        stateSlot(`${id}:x$state`, 'x', initialValues, vector2, `${id}:x`),
+      ]),
+    });
+    const tf = realization('tf', 'DISCRETE_TRANSFER_FUNCTION', {
+      A: [[0, 1], [-2, -3]], B: [[0], [1]], C: [[1, 0]], D: [[0]],
+    }, [1, 2]);
+    const ss = realization('ss', 'STATE_SPACE', {
+      A: [[1, 0.5], [0, 1]], B: [[1, 0], [0, 1]],
+      C: [[2, -1], [1, 3]], D: [[1, 0], [0, 2]], representation: 'discrete',
+    }, [1, 2]);
+    const ir = model('retain', { pid, tf, ss }, {
+      'pid:e': signal('pid:e', 'input', null, float64),
+      'pid:enable': signal('pid:enable', 'input', null, float64),
+      'pid:reset': signal('pid:reset', 'input', null, float64),
+      'pid:u': signal('pid:u', 'output', null, float64),
+      'tf:u': shapedSignal('tf:u', 'input', vector1),
+      'tf:y': shapedSignal('tf:y', 'output', vector1),
+      'tf:x': shapedSignal('tf:x', 'output', vector2),
+      'ss:u': shapedSignal('ss:u', 'input', { kind: 'vector', length: 2 }),
+      'ss:y': shapedSignal('ss:y', 'output', { kind: 'vector', length: 2 }),
+      'ss:x': shapedSignal('ss:x', 'output', vector2),
     }, ['pid', 'tf', 'ss']);
     const runtime = createXBRuntime(ir);
-    runtime.signals['pid:u'] = [1]; runtime.signals['tf:u'] = [1]; runtime.signals['ss:u'] = [1];
 
+    Object.assign(runtime.signals, {
+      'pid:e': [2], 'pid:enable': [1], 'pid:reset': [0],
+      'tf:u': [5], 'ss:u': [3, 4],
+    });
     stepXBState(runtime, {});
+    expect(runtime.signals['pid:u']).toEqual([1]);
+    expect(runtime.stateSlots['pid:i_state$state']).toEqual([0]);
+    expect(runtime.stateSlots['pid:d_state$state']).toEqual([2]);
+    expect(runtime.stateSlots['pid:last_e$state']).toEqual([2]);
+    expect(runtime.signals['tf:y']).toEqual([1]);
+    expect(runtime.signals['tf:x']).toEqual([1, 2]);
+    expect(runtime.stateSlots['tf:x$state']).toEqual([2, -3]);
+    expect(runtime.signals['ss:y']).toEqual([3, 15]);
+    expect(runtime.signals['ss:x']).toEqual([1, 2]);
+    expect(runtime.stateSlots['ss:x$state']).toEqual([5, 6]);
 
-    expect(runtime.stateSlots['pid:y$state']).toEqual([2]);
-    expect(runtime.stateSlots['tf:y$state']).toEqual([1]);
-    expect(runtime.stateSlots['ss:y$state']).toEqual([2]);
+    Object.assign(runtime.signals, {
+      'pid:e': [1], 'pid:enable': [1], 'pid:reset': [0],
+      'tf:u': [4], 'ss:u': [1, 2],
+    });
+    stepXBState(runtime, {});
+    expect(runtime.signals['pid:u'][0]).toBeCloseTo(0.5, 12);
+    expect(runtime.stateSlots['pid:i_state$state'][0]).toBeCloseTo(1.5, 12);
+    expect(runtime.stateSlots['pid:d_state$state']).toEqual([1]);
+    expect(runtime.signals['tf:y']).toEqual([2]);
+    expect(runtime.signals['tf:x']).toEqual([2, -3]);
+    expect(runtime.stateSlots['tf:x$state']).toEqual([-3, 9]);
+    expect(runtime.signals['ss:y']).toEqual([5, 27]);
+    expect(runtime.signals['ss:x']).toEqual([5, 6]);
+    expect(runtime.stateSlots['ss:x$state']).toEqual([9, 8]);
+
+    Object.assign(runtime.signals, { 'pid:e': [99], 'pid:enable': [0], 'pid:reset': [0] });
+    stepXBState(runtime, {});
+    expect(runtime.signals['pid:u']).toEqual([0]);
+    expect(runtime.stateSlots['pid:i_state$state'][0]).toBeCloseTo(1.5, 12);
+    Object.assign(runtime.signals, { 'pid:enable': [1], 'pid:reset': [1] });
+    stepXBState(runtime, {});
+    expect(runtime.signals['pid:u']).toEqual([0]);
+    expect(runtime.stateSlots['pid:i_state$state']).toEqual([0]);
+    expect(runtime.stateSlots['pid:d_state$state']).toEqual([0]);
+    expect(runtime.stateSlots['pid:last_e$state']).toEqual([0]);
   });
 
   it('evaluates Clarke, Park, and inverse transforms against known references', () => {

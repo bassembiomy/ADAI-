@@ -103,6 +103,31 @@ describe('validateXBModel', () => {
     expect(result).toContain('XB_BLOCK_NOT_CODEGEN_CAPABLE');
   });
 
+  it('enforces Task 10 bounds, discrete controls, math support, and directional matrix shapes', () => {
+    const matrixDiagShapeCodes = codes(model({
+      nodes: [node('diag', 'MatrixDiag', {
+        inputs: [port('u', 'input', { shape: 'vector', dimensions: [2] })],
+        outputs: [port('y', 'output', { shape: 'vector', dimensions: [2] })],
+      })],
+    }));
+    const contractCodes = codes(model({
+      nodes: [
+        node('solve', 'MatrixSolve', { maxDimension: 9 }),
+        node('pid', 'PID_BASIC', { sampleTime: 0 }),
+        node('continuous', 'STATE_SPACE', { representation: 'continuous' }),
+        node('clarke', 'CLARKE_TRANSFORM'),
+      ],
+    }));
+
+    expect(matrixDiagShapeCodes).toContain('XB_BLOCK_NOT_CODEGEN_CAPABLE');
+    expect(contractCodes).toEqual(expect.arrayContaining([
+      'XB_MATRIX_SOLVE_BOUND_INVALID',
+      'XB_DISCRETE_SAMPLE_TIME_REQUIRED',
+      'XB_DISCRETE_REPRESENTATION_REQUIRED',
+      'XB_TARGET_CAPABILITY_MISSING',
+    ]));
+  });
+
   it('rejects malformed canonical port collections', () => {
     const result = codes(model({
       nodes: [node('gain', 'GAIN', {
