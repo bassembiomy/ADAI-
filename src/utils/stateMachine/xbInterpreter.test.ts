@@ -812,4 +812,34 @@ describe('X-Bridges interpreter', () => {
       expect(runtime.stateSlots['integrator:y$state']).toEqual([3]);
     },
   );
+
+  it('keeps a stateful fixed delay fault sticky for one tick, restores its previous value, then clears the public error output', () => {
+    const int8 = { kind: 'fixed', signed: true, wordLength: 8, fractionLength: 0 } as const;
+    const delay: XBSemanticOperation = {
+      ...operation('delay', 'UNIT_DELAY', ['delay:u'], ['delay:y', 'delay:error'], { overflow: 'error' }, [7]),
+      numericFault: { fallback: 'previous-value', errorSignalId: 'delay:error' },
+      state: contractState([{
+        id: 'delay:y$state', role: 'y', signalId: 'delay:y', numericType: int8,
+        shape: scalar, initialValues: [7],
+      }]),
+    };
+    const ir = model('retain', { delay }, {
+      'delay:u': signal('delay:u', 'input'),
+      'delay:y': signal('delay:y', 'output', null, int8),
+      'delay:error': signal('delay:error', 'output', null, { kind: 'boolean' }),
+    }, ['delay'], [{
+      variableId: 'u', signalId: 'delay:u', blockId: 'delay', portId: 'u',
+      direction: 'in', numericType: float32,
+    }]);
+    const runtime = createXBRuntime(ir);
+
+    stepXBState(runtime, { u: 128 });
+    expect(runtime.stateSlots['delay:y$state']).toEqual([7]);
+    expect(runtime.operationFaults.delay.active).toBe(true);
+    expect(runtime.signals['delay:error']).toEqual([true]);
+
+    stepXBState(runtime, { u: 0 });
+    expect(runtime.operationFaults.delay.active).toBe(false);
+    expect(runtime.signals['delay:error']).toEqual([false]);
+  });
 });

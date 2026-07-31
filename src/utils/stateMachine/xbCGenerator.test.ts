@@ -1357,6 +1357,7 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
           '',
           'static int run_case(ADIA_Instance_t *instance, double value)',
           '{',
+          '    if (SM_Init(instance) != SM_ERR_NONE) return 1;',
           '    instance->data.u = value;',
           '    if (SM_Step(instance, SM_TICK_MS) != SM_ERR_NONE) return 1;',
           '    (void)printf("%u,%u,%u,%u,%u,%u,%u\\n",',
@@ -1408,9 +1409,11 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
         cwd: workspace.directory,
         encoding: 'utf8',
       }).trim().split(/\r?\n/)).toEqual([
+        // Signal-only non-finite inputs use Task 11's explicit safe-zero
+        // fallback; finite inputs retain the JavaScript truth table below.
         '0,0,1,1,1,0,0',
-        '1,1,0,0,0,1,0',
-        '1,1,0,0,0,1,0',
+        '0,0,1,1,1,0,0',
+        '0,0,1,1,1,0,0',
         '0,0,1,1,1,0,0',
         '0,0,1,1,1,0,0',
         '1,1,0,0,0,1,1',
@@ -1512,9 +1515,11 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
 
       expected.forEach(({ data, faults }, index) => {
         const nonFinite = !Number.isFinite(inputs[index]);
-        expect(rows[index][0]).toBe(data.y ? 1 : 0);
+        expect(rows[index][0]).toBe(nonFinite ? 0 : (data.y ? 1 : 0));
+        // The non-finite value is rejected while importing the mapped input,
+        // before the conversion operation runs, so its operation error stays clear.
         expect(rows[index][1]).toBe(Number(data.e));
-        expect(rows[index][2]).toBe(nonFinite ? 1 : 0);
+        expect(rows[index][2]).toBe(0);
         expect(rows[index][3]).toBe(nonFinite ? 0 : 1);
         expect(rows[index][4] === 0).toBe(!nonFinite);
         expect(faults.includes('non-finite')).toBe(nonFinite);
@@ -1641,14 +1646,15 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
           expect(Number(rows[index][3])).toBe(1);
           expect(Number(rows[index][4])).toBe(0);
         } else {
-          expect(result.faults).toEqual([]);
+          // Missing stored metadata now surfaces the explicit numeric fault
+          // contract instead of permitting a raw finite reinterpretation.
+          expect(result.faults.every((fault) => fault === 'non-finite')).toBe(true);
           expect(Number(rows[index][0])).toBe(0);
           expect(Number(rows[index][1])).toBe(Number(result.data.y));
           expect(Number(rows[index][2])).toBe(Number(result.data.e));
           expect(Number(rows[index][3])).toBe(0);
           expect(Number(rows[index][4])).toBe(1);
           expect(Number(rows[index][5])).toBe(result.stored);
-          expect(Number(rows[index][5])).toBe(24);
         }
       });
     } finally {
@@ -1906,9 +1912,8 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
     const core = generateCArtifacts(combinationalSemanticModel()).files
       .find((file) => file.name === 'sm_core.c')!.content;
 
-    expect(core).toMatch(
-      /if \(!isfinite\((xb_value_\d+_\d+)\)\) \{\n\s+\S+ = \(float\)\1;\n[\s\S]*?\} else if \(fabs\(\1\) > \(double\)FLT_MAX\) \{/,
-    );
+    expect(core).toContain('= 0.0F;');
+    expect(core).toContain('SM_ERR_XBRIDGES_NUMERIC');
   });
 
   it('compiles finite constants that JavaScript formats with exponents', () => {
@@ -1952,6 +1957,35 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
 });
 
 describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
+  const executeStatefulHarness = (
+    ir: SemanticModel,
+    workspaceName: string,
+    harnessLines: readonly string[],
+  ): string => {
+    const workspace = createGeneratedCodeTestWorkspace(workspaceName);
+    try {
+      for (const file of generateCArtifacts(ir, { includeTestShims: true }).files) {
+        writeFileSync(join(workspace.directory, file.name), file.content);
+      }
+      writeFileSync(
+        join(workspace.directory, 'harness.c'),
+        [...harnessLines, ''].join('\n'),
+      );
+      const executable = join(workspace.directory, `${workspaceName}.exe`);
+      execFileSync('gcc', [
+        '-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.',
+        'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c',
+        'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable,
+      ], { cwd: workspace.directory, stdio: 'pipe' });
+      return execFileSync(executable, [], {
+        cwd: workspace.directory,
+        encoding: 'utf8',
+      }).trim();
+    } finally {
+      workspace.cleanup();
+    }
+  };
+
   it.each(['euler', 'rk4'] as const)(
     'matches interpreter ticks for dx/dt = -x + u using %s',
     (kind) => {
@@ -2005,6 +2039,208 @@ describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
       } finally {
         workspace.cleanup();
       }
+    },
+  );
+
+  it('keeps an RK-stage conversion fault sticky through the tick and clears it on the next clean tick', () => {
+    const ir = continuousSolverModel('rk4');
+    const xb = ir.states.controller.xBridges!;
+    const int8 = {
+      kind: 'fixed', signed: true, wordLength: 8, fractionLength: 0,
+    } as const;
+    const monitor: XBSemanticOperation = {
+      ...scalarOperation(
+        'monitor',
+        'NUMERIC_REPRESENTATION',
+        ['monitor:u'],
+        ['monitor:y', 'monitor:error'],
+        {},
+        {
+          destinationType: int8,
+          rounding: 'floor',
+          overflow: 'error',
+          mode: 'real-world-value',
+        },
+      ),
+      numericFault: { fallback: 'zero', errorSignalId: 'monitor:error' },
+    };
+    ir.states.controller.xBridges = {
+      ...xb,
+      executionOrder: [
+        'delay', 'integrator', 'monitor', 'negative', 'derivative', 'downstream',
+      ],
+      operations: {
+        ...xb.operations,
+        monitor,
+        negative: {
+          ...xb.operations.negative,
+          parameters: { ...xb.operations.negative.parameters, gain: -2 },
+        },
+      },
+      signals: {
+        ...xb.signals,
+        'monitor:u': scalarInputSignal('monitor:u', 'integrator:y', { kind: 'float64' }),
+        'monitor:y': signal('monitor:y', int8),
+        'monitor:error': signal('monitor:error', { kind: 'boolean' }),
+      },
+      solver: { kind: 'rk4', stepSeconds: 1, substepsPerTick: 1 },
+      policy: { memory: 'reset', numericFault: 'signal-only' },
+    };
+
+    const output = executeStatefulHarness(ir, 'xb-rk-sticky-fault-c99', [
+      '#include "sm_core.h"',
+      '#include <stdio.h>',
+      'int main(void)',
+      '{',
+      '    ADIA_Instance_t instance;',
+      '    if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+      '    instance.data.u = 300.0;',
+      '    if (SM_Step(&instance, SM_TICK_MS) != SM_ERR_NONE) return 2;',
+      '    (void)printf("%u,", instance.xb_controller.monitor_error ? 1U : 0U);',
+      '    instance.data.u = 0.0;',
+      '    if (SM_Step(&instance, SM_TICK_MS) != SM_ERR_NONE) return 3;',
+      '    (void)printf("%u\\n", instance.xb_controller.monitor_error ? 1U : 0U);',
+      '    return 0;',
+      '}',
+    ]);
+
+    expect(output).toBe('1,0');
+  });
+
+  it('rolls back every PID slot when a later fixed-state assignment fails', () => {
+    const ir = semanticModel();
+    const int8 = {
+      kind: 'fixed', signed: true, wordLength: 8, fractionLength: 0,
+    } as const;
+    const pid: XBSemanticOperation = {
+      ...scalarOperation(
+        'pid',
+        'PID_BASIC',
+        ['pid:e', 'pid:enable', 'pid:reset'],
+        ['pid:u', 'pid:error'],
+        {
+          Kp: 0, Ki: 1, Kd: 1, N: 100, mode: 'PID',
+          method: 'forward_euler', sampleTime: 1,
+          min: -1000, max: 1000, overflow: 'error',
+        },
+      ),
+      directFeedthrough: false,
+      stateful: true,
+      numericFault: { fallback: 'previous-value', errorSignalId: 'pid:error' },
+      state: {
+        outputPhase: 'read-before-update',
+        updatePhase: 'after-direct-feedthrough',
+        slots: [
+          { id: 'pid:i_state$state', role: 'i_state', signalId: null, numericType: { kind: 'float64' }, shape: scalar, initialValues: [10] },
+          { id: 'pid:d_state$state', role: 'd_state', signalId: null, numericType: int8, shape: scalar, initialValues: [0] },
+          { id: 'pid:last_e$state', role: 'last_e', signalId: null, numericType: { kind: 'float64' }, shape: scalar, initialValues: [1] },
+        ],
+      },
+    };
+    ir.states.controller.xBridges = {
+      stateId: 'controller',
+      executionOrder: ['pid'],
+      operations: { pid },
+      signals: {
+        'pid:e': signal('pid:e', { kind: 'float64' }),
+        'pid:enable': signal('pid:enable', { kind: 'float64' }),
+        'pid:reset': signal('pid:reset', { kind: 'float64' }),
+        'pid:u': signal('pid:u', { kind: 'float64' }),
+        'pid:error': signal('pid:error', { kind: 'boolean' }),
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 1, substepsPerTick: 1 },
+      policy: { memory: 'retain', numericFault: 'signal-only' },
+    };
+
+    const output = executeStatefulHarness(ir, 'xb-multislot-rollback-c99', [
+      '#include "sm_core.h"',
+      '#include <stdio.h>',
+      'int main(void)',
+      '{',
+      '    ADIA_Instance_t instance;',
+      '    if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+      '    instance.xb_controller.pid_e = 2.0;',
+      '    instance.xb_controller.pid_enable = 1.0;',
+      '    instance.xb_controller.pid_reset = 0.0;',
+      '    SM_XB_CONTROLLER_Step(&instance);',
+      '    (void)printf("%.17g,%d,%.17g,%u\\n",',
+      '        instance.xb_controller.state_pid_i_state_state,',
+      '        (int)instance.xb_controller.state_pid_d_state_state,',
+      '        instance.xb_controller.state_pid_last_e_state,',
+      '        instance.xb_controller.pid_error ? 1U : 0U);',
+      '    return 0;',
+      '}',
+    ]);
+
+    expect(output).toBe('10,0,1,1');
+  });
+
+  it.each(['euler', 'rk4'] as const)(
+    'retains previous continuous fixed state and output after %s overflow',
+    (kind) => {
+      const ir = semanticModel();
+      const int8 = {
+        kind: 'fixed', signed: true, wordLength: 8, fractionLength: 0,
+      } as const;
+      const integrator: XBSemanticOperation = {
+        ...statefulOperation(
+          'integrator', 'INTEGRATOR_CONTINUOUS',
+          ['integrator:u'], ['integrator:y'], 7,
+        ),
+        outputSignalIds: ['integrator:y', 'integrator:error'],
+        parameters: { overflow: 'error' },
+        numericFault: {
+          fallback: 'previous-value', errorSignalId: 'integrator:error',
+        },
+        state: {
+          outputPhase: 'read-before-update',
+          updatePhase: 'after-direct-feedthrough',
+          slots: [{
+            id: 'integrator:y$state', role: 'y', signalId: 'integrator:y',
+            numericType: int8, shape: scalar, initialValues: [7],
+          }],
+        },
+      };
+      ir.states.controller.xBridges = {
+        stateId: 'controller',
+        executionOrder: ['integrator'],
+        operations: { integrator },
+        signals: {
+          'input:y': signal('input:y', { kind: 'float64' }),
+          'integrator:u': scalarInputSignal(
+            'integrator:u', 'input:y', { kind: 'float64' },
+          ),
+          'integrator:y': signal('integrator:y', int8),
+          'integrator:error': signal('integrator:error', { kind: 'boolean' }),
+        },
+        mappings: [],
+        solver: { kind, stepSeconds: 1, substepsPerTick: 1 },
+        policy: { memory: 'retain', numericFault: 'signal-only' },
+      };
+
+      const output = executeStatefulHarness(
+        ir,
+        `xb-${kind}-continuous-overflow-c99`,
+        [
+          '#include "sm_core.h"',
+          '#include <stdio.h>',
+          'int main(void)',
+          '{',
+          '    ADIA_Instance_t instance;',
+          '    if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+          '    instance.xb_controller.input_y = 1000.0;',
+          '    SM_XB_CONTROLLER_Step(&instance);',
+          '    (void)printf("%d,%d,%u\\n",',
+          '        (int)instance.xb_controller.state_integrator_y_state,',
+          '        (int)instance.xb_controller.integrator_y,',
+          '        instance.xb_controller.integrator_error ? 1U : 0U);',
+          '    return 0;',
+          '}',
+        ],
+      );
+
+      expect(output).toBe('7,7,1');
     },
   );
 });

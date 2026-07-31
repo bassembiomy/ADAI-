@@ -918,7 +918,11 @@ export const buildXBSemanticModel = (
         fallback: stateful ? 'previous-value' : 'zero',
         errorSignalId: outputSignalIds.find((signalId) => {
           const portId = signals[signalId]?.portId;
-          return portId === 'error' || portId === 'e';
+          return portId === 'error' || (
+            portId === 'e'
+            && node.type !== 'DATA_TYPE_CONVERSION'
+            && node.type !== 'NUMERIC_REPRESENTATION'
+          );
         }) ?? null,
       },
     };

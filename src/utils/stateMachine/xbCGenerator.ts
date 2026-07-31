@@ -66,7 +66,11 @@ const numericFaultContract = (
   fallback: operation.stateful ? 'previous-value' as const : 'zero' as const,
   errorSignalId: operation.outputSignalIds.find((signalId) => {
     const portId = state.xBridges!.signals[signalId]?.portId;
-    return portId === 'error' || portId === 'e';
+    return portId === 'error' || (
+      portId === 'e'
+      && operation.type !== 'DATA_TYPE_CONVERSION'
+      && operation.type !== 'NUMERIC_REPRESENTATION'
+    );
   }) ?? null,
 };
 
@@ -1653,12 +1657,7 @@ const renderDirectEvaluation = (
   }
   if (operation.stateful) return [];
   const errorField = layout.errorFields.get(operation.id);
-  const errorSignalId = numericFaultContract(state, operation).errorSignalId;
-  const errorSignalDestination = errorSignalId === null
-    ? undefined
-    : signalStorageExpression(state, errorSignalId, layout, member).expression;
   const emitted = [
-    ...(errorField === undefined ? [] : [`    instance->${member}.${errorField} = false;`]),
     ...operationEmitter(operation)(
     state,
     operation,
@@ -1666,24 +1665,89 @@ const renderDirectEvaluation = (
     layout,
     member,
   ),
-    ...(errorField === undefined || errorSignalDestination === undefined
-      ? []
-      : [`    ${errorSignalDestination} = instance->${member}.${errorField};`]),
+  ];
+  const guarded = errorField === undefined ? emitted : [
+    `    if (!instance->${member}.${errorField}) {`,
+    ...emitted.map((line) => `    ${line}`),
+    '    }',
   ];
   if (
     forceEvaluation
     || operation.schedule.hold === 'none'
     || operation.schedule.periodSubsteps <= 1
-  ) return [...emitted];
+  ) return guarded;
   const counter = layout.counterFields.get(operation.id);
   if (counter === undefined) {
     throw new Error(`X-Bridges operation '${operation.id}' lacks a schedule counter`);
   }
   return [
     `    if (instance->${member}.${counter} == UINT32_C(0)) {`,
-    ...emitted.map((line) => `    ${line}`),
+    ...guarded.map((line) => `    ${line}`),
     '    }',
   ];
+});
+
+const renderTransactionalStateUpdates = (
+  operation: XBSemanticOperation,
+  updates: readonly string[],
+  layout: XBStateLayout,
+  member: string,
+): string[] => {
+  const errorField = layout.errorFields.get(operation.id);
+  const slots = operation.state?.slots ?? [];
+  if (errorField === undefined || slots.length === 0) return [...updates];
+  const stem = `xb_snapshot_${toCIdentifier(operation.id)}`;
+  const snapshots = slots.map((slot, index) => {
+    const field = stateSlotField(slot, layout);
+    const name = `${stem}_${index}`;
+    const type = numericCType(slot.numericType);
+    const count = slot.initialValues.length;
+    if (slot.shape.kind === 'scalar') return {
+      declaration: `        ${type} ${name};`,
+      save: `        ${name} = instance->${member}.${field};`,
+      restore: `            instance->${member}.${field} = ${name};`,
+    };
+    return {
+      declaration: `        ${type} ${name}${shapeSuffix(slot.shape)};`,
+      save: `        for (uint32_t xb_snapshot_index_${index} = 0U; xb_snapshot_index_${index} < ${count}U; ++xb_snapshot_index_${index}) (((${type} *)&${name})[xb_snapshot_index_${index}]) = (((${type} *)&(instance->${member}.${field}))[xb_snapshot_index_${index}]);`,
+      restore: `            for (uint32_t xb_snapshot_index_${index} = 0U; xb_snapshot_index_${index} < ${count}U; ++xb_snapshot_index_${index}) (((${type} *)&(instance->${member}.${field}))[xb_snapshot_index_${index}]) = (((${type} *)&${name})[xb_snapshot_index_${index}]);`,
+    };
+  });
+  return [
+    '    {',
+    `        if (!instance->${member}.${errorField}) {`,
+    ...snapshots.map((snapshot) => snapshot.declaration),
+    ...snapshots.map((snapshot) => snapshot.save),
+    ...updates.map((line) => `        ${line}`),
+    `        if (instance->${member}.${errorField}) {`,
+    ...snapshots.map((snapshot) => snapshot.restore),
+    '        }',
+    '        }',
+    '    }',
+  ];
+};
+
+const renderOperationFaultReset = (
+  xb: XBSemanticModel,
+  layout: XBStateLayout,
+  member: string,
+): string[] => xb.executionOrder.flatMap((operationId) => {
+  const field = layout.errorFields.get(operationId);
+  return field === undefined ? [] : [`    instance->${member}.${field} = false;`];
+});
+
+const renderOperationFaultSignalSync = (
+  state: SemanticState,
+  xb: XBSemanticModel,
+  layout: XBStateLayout,
+  member: string,
+): string[] => xb.executionOrder.flatMap((operationId) => {
+  const operation = xb.operations[operationId];
+  const field = layout.errorFields.get(operationId);
+  if (operation === undefined || field === undefined) return [];
+  const signalId = numericFaultContract(state, operation).errorSignalId;
+  if (signalId === null) return [];
+  return [`    ${signalStorageExpression(state, signalId, layout, member).expression} = instance->${member}.${field};`];
 });
 
 const renderDiscreteStateUpdates = (
@@ -1739,8 +1803,9 @@ const renderDiscreteStateUpdates = (
       `        for (uint32_t xb_row = 0U; xb_row < ${dimension}U; ++xb_row) {`,
       ...renderStateSlotElementAssignment(state, xSlot, 'xb_row', 'xb_state_space_next[xb_row]', layout, member, `${operation.id}_state_space_update`, layout.errorFields.get(operation.id), operation).map((line) => `    ${line}`),
       '        }', '    }');
-    if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return updateLines;
-    return [`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...updateLines.map((line) => `    ${line}`), '    }'];
+    const transactional = renderTransactionalStateUpdates(operation, updateLines, layout, member);
+    if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return transactional;
+    return [`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...transactional.map((line) => `    ${line}`), '    }'];
   }
   if (operation.type === 'PID_BASIC') {
     const iSlot = stateSlotForRole(operation, 'i_state');
@@ -1756,7 +1821,7 @@ const renderDiscreteStateUpdates = (
       ...renderStateSlotAssignment(state, lastESlot, `xb_pid_${identifier}_last_e`, layout, member, `${operation.id}_last_e_state_update`, layout.errorFields.get(operation.id), operation),
     ];
     const block = ['    {', ...renderPIDComputation(state, operation, layout, member),
-      ...updates.map((line) => `    ${line}`), '    }'];
+      ...renderTransactionalStateUpdates(operation, updates, layout, member).map((line) => `    ${line}`), '    }'];
     if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return block;
     return [`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...block.map((line) => `    ${line}`), '    }'];
   }
@@ -1806,12 +1871,13 @@ const renderDiscreteStateUpdates = (
     }
   });
   if (updates.length === 0) return [];
+  const transactional = renderTransactionalStateUpdates(operation, updates, layout, member);
   if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) {
-    return updates;
+    return transactional;
   }
   return [
     `    if (instance->${member}.${counter} == UINT32_C(0)) {`,
-    ...updates.map((line) => `    ${line}`),
+    ...transactional.map((line) => `    ${line}`),
     '    }',
   ];
 });
@@ -1852,6 +1918,33 @@ const renderContinuousStateUpdates = (
 ): string[] => {
   const slots = continuousOperationSlots(xb);
   if (slots.length === 0) return [];
+  const transactionalAssignments = (
+    entries: readonly ContinuousOperationSlot[],
+    expression: (entry: ContinuousOperationSlot) => string,
+    prefix: string,
+  ): string[] => {
+    const groups = new Map<string, ContinuousOperationSlot[]>();
+    for (const entry of entries) {
+      const group = groups.get(entry.operation.id) ?? [];
+      group.push(entry);
+      groups.set(entry.operation.id, group);
+    }
+    return [...groups.values()].flatMap((group) => renderTransactionalStateUpdates(
+      group[0].operation,
+      group.flatMap((entry) => renderStateSlotAssignment(
+        state,
+        entry.slot,
+        expression(entry),
+        layout,
+        member,
+        `${prefix}_${entry.operationIndex}_${entry.slotIndex}`,
+        layout.errorFields.get(entry.operation.id),
+        entry.operation,
+      )),
+      layout,
+      member,
+    ));
+  };
   const step = cNumber(xb.solver.stepSeconds);
   const baseLines = slots.map((entry) =>
     `    const double ${rkName('xb_rk_base', entry)} = ${stateSlotRealExpression(entry.slot, layout, member)};`);
@@ -1864,11 +1957,11 @@ const renderContinuousStateUpdates = (
   if (xb.solver.kind === 'euler') {
     const nextLines = slots.map((entry) =>
       `    const double ${rkName('xb_euler_next', entry)} = ${rkName('xb_rk_base', entry)} + ${step} * (${derivative(entry)});`);
-    const assignLines = slots.flatMap((entry) => renderStateSlotAssignment(
-      state, entry.slot, rkName('xb_euler_next', entry), layout, member,
-      `euler_${entry.operationIndex}_${entry.slotIndex}`,
-      layout.errorFields.get(entry.operation.id),
-    ));
+    const assignLines = transactionalAssignments(
+      slots,
+      (entry) => rkName('xb_euler_next', entry),
+      'euler',
+    );
     return [
       ...baseLines,
       ...nextLines,
@@ -1880,7 +1973,7 @@ const renderContinuousStateUpdates = (
         entry.operationIndex,
         layout,
         member,
-        [rkName('xb_euler_next', entry)],
+        null,
       ).map((line) => `    ${line}`)),
       ...renderDirectEvaluation(state, xb, layout, member, true)
         .map((line) => `    ${line}`),
@@ -1916,11 +2009,7 @@ const renderContinuousStateUpdates = (
   ]);
   const finalExpression = (entry: ContinuousOperationSlot): string =>
     `(${rkName('xb_rk_base', entry)} + ${step} * (${rkName('xb_rk_k1', entry)} + 2.0 * ${rkName('xb_rk_k2', entry)} + 2.0 * ${rkName('xb_rk_k3', entry)} + ${rkName('xb_rk_k4', entry)}) / 6.0)`;
-  const final = slots.flatMap((entry) => renderStateSlotAssignment(
-    state, entry.slot, finalExpression(entry), layout, member,
-    `rk4_${entry.operationIndex}_${entry.slotIndex}`,
-    layout.errorFields.get(entry.operation.id),
-  ));
+  const final = transactionalAssignments(slots, finalExpression, 'rk4');
   const refresh = [
     '    {',
     ...slots.flatMap((entry) => renderStateOutputs(
@@ -1929,7 +2018,7 @@ const renderContinuousStateUpdates = (
       entry.operationIndex,
       layout,
       member,
-      [finalExpression(entry)],
+      null,
     ).map((line) => `    ${line}`)),
     ...renderDirectEvaluation(state, xb, layout, member, true)
       .map((line) => `    ${line}`),
@@ -2040,6 +2129,7 @@ const renderStateLifecycle = (
     }
   }
   const stepLines: string[] = [];
+  stepLines.push(...renderOperationFaultReset(xb, layout, member));
   let inputMappingIndex = 0;
   for (const mapping of xb.mappings) {
     if (mapping.direction !== 'in') continue;
@@ -2080,6 +2170,7 @@ const renderStateLifecycle = (
   for (let substep = 0; substep < xb.solver.substepsPerTick; substep++) {
     stepLines.push(...renderSolverSubstep(state, xb, layout, member));
   }
+  stepLines.push(...renderOperationFaultSignalSync(state, xb, layout, member));
   for (const mapping of xb.mappings) {
     if (mapping.direction !== 'out') continue;
     const variable = ir.variables[mapping.variableId];

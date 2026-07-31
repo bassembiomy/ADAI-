@@ -21,6 +21,12 @@ export interface XBRuntime {
   numericFaults: Array<{ operationId: string; fault: XBNumericFault }>;
 }
 
+interface XBSnapshot {
+  readonly signals: Record<string, XBScalar[]>;
+  readonly storedIntegers: Record<string, Array<number | null>>;
+  readonly stateSlots: Record<string, XBScalar[]>;
+}
+
 const defaultValue = (type: XBNumericType): XBScalar =>
   type.kind === 'boolean' ? false : 0;
 
@@ -206,27 +212,61 @@ const writeSignal = (
   const type = operation?.conversion?.destinationType ?? signal.numericType;
   const results = source.map((value) =>
     convertScalar(value, type, faults, operation));
-  runtime.signals[signalId] = results.map((result) => result.value);
+  runtime.signals[signalId] = results.map((result) => (
+    operation === null && result.fault !== null
+      ? defaultValue(type)
+      : result.value
+  ));
   runtime.storedIntegers[signalId] = results.map((result) =>
     result.storedInteger);
+};
+
+const snapshotOperation = (
+  runtime: XBRuntime,
+  operation: XBSemanticOperation,
+): XBSnapshot => ({
+  signals: Object.fromEntries(operation.outputSignalIds.map((signalId) => [
+    signalId, [...(runtime.signals[signalId] ?? [])],
+  ])),
+  storedIntegers: Object.fromEntries(operation.outputSignalIds.map((signalId) => [
+    signalId, [...(runtime.storedIntegers[signalId] ?? [])],
+  ])),
+  stateSlots: Object.fromEntries((operation.state?.slots ?? []).map((slot) => [
+    slot.id, [...(runtime.stateSlots[slot.id] ?? slot.initialValues)],
+  ])),
+});
+
+const operationFaultContract = (
+  runtime: XBRuntime,
+  operation: XBSemanticOperation,
+): NonNullable<XBSemanticOperation['numericFault']> => operation.numericFault ?? {
+  fallback: operation.stateful ? 'previous-value' : 'zero',
+  errorSignalId: operation.outputSignalIds.find((signalId) => {
+    const portId = runtime.ir.signals[signalId]?.portId;
+    return portId === 'error' || (
+      portId === 'e'
+      && operation.type !== 'DATA_TYPE_CONVERSION'
+      && operation.type !== 'NUMERIC_REPRESENTATION'
+    );
+  }) ?? null,
 };
 
 const recordOperationFault = (
   runtime: XBRuntime,
   operation: XBSemanticOperation,
   fault: XBNumericFault,
+  snapshot: XBSnapshot | null = null,
 ): void => {
   const current = runtime.operationFaults[operation.id];
   if (current?.active) return;
   runtime.operationFaults[operation.id] = { active: true, fault };
   runtime.numericFaults.push({ operationId: operation.id, fault });
-  const contract = operation.numericFault ?? {
-    fallback: operation.stateful ? 'previous-value' as const : 'zero' as const,
-    errorSignalId: operation.outputSignalIds.find((signalId) => {
-      const portId = runtime.ir.signals[signalId]?.portId;
-      return portId === 'error' || portId === 'e';
-    }) ?? null,
-  };
+  const contract = operationFaultContract(runtime, operation);
+  if (contract.fallback === 'previous-value' && snapshot !== null) {
+    Object.assign(runtime.signals, snapshot.signals);
+    Object.assign(runtime.storedIntegers, snapshot.storedIntegers);
+    Object.assign(runtime.stateSlots, snapshot.stateSlots);
+  }
   for (const signalId of operation.outputSignalIds) {
     const signal = runtime.ir.signals[signalId];
     if (signal === undefined) continue;
@@ -694,8 +734,9 @@ const executeConversionOperation = (
 
   writeConversionResults(runtime, dataOutputId, results);
   const errors = results.map((result) => result.quantizationError);
+  const errorSignalId = operationFaultContract(runtime, operation).errorSignalId;
   for (const outputSignalId of operation.outputSignalIds) {
-    if (outputSignalId === dataOutputId) continue;
+    if (outputSignalId === dataOutputId || outputSignalId === errorSignalId) continue;
     writeSignal(runtime, outputSignalId, errors, faults);
   }
   const fault = faults[faultStart];
@@ -779,7 +820,7 @@ const writeStateOutputs = (
 ): void => {
   if (operation.type === 'PID_BASIC') {
     const output = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'u');
-    if (output !== undefined) writeSignal(runtime, output, [pidValues(runtime, operation).output], faults);
+    if (output !== undefined) writeSignal(runtime, output, [pidValues(runtime, operation).output], faults, operation);
     return;
   }
   if (operation.type === 'DISCRETE_TRANSFER_FUNCTION' || operation.type === 'STATE_SPACE') {
@@ -794,8 +835,8 @@ const writeStateOutputs = (
       const y = Array.from({ length: yLength }, (_, row) =>
         x.reduce<number>((total, value, column) => total + (c[row]?.[column] ?? 0) * Number(value), 0)
         + input.reduce<number>((total, value, column) => total + (d[row]?.[column] ?? 0) * Number(value), 0));
-      writeSignal(runtime, ySignalId, y, faults);
-      if (xSlot.signalId !== null) writeSignal(runtime, xSlot.signalId, x, faults);
+      writeSignal(runtime, ySignalId, y, faults, operation);
+      if (xSlot.signalId !== null) writeSignal(runtime, xSlot.signalId, x, faults, operation);
       return;
     }
   }
@@ -806,6 +847,7 @@ const writeStateOutputs = (
       slot.signalId,
       runtime.stateSlots[slot.id] ?? slot.initialValues,
       faults,
+      operation,
     );
   }
 };
@@ -920,6 +962,7 @@ const executeDirectOperations = (
       );
     }
     if (operation.stateful) continue;
+    if (runtime.operationFaults[operation.id]?.active) continue;
     if (!forceEvaluation && !scheduledThisSubstep(runtime, operation)) continue;
     if (
       operation.type === 'DATA_TYPE_CONVERSION'
@@ -929,6 +972,7 @@ const executeDirectOperations = (
       continue;
     }
     const faultStart = faults.length;
+    const snapshot = snapshotOperation(runtime, operation);
     const outputs = evaluateDirectOperation(runtime, operation);
     operation.outputSignalIds.forEach((signalId, index) => {
       writeSignal(
@@ -942,7 +986,7 @@ const executeDirectOperations = (
     const intrinsicFault = intrinsicOperationFault(runtime, operation);
     if (intrinsicFault !== null && faults[faultStart] === undefined) faults.push(intrinsicFault);
     const fault = intrinsicFault ?? faults[faultStart];
-    if (fault !== undefined) recordOperationFault(runtime, operation, fault);
+    if (fault !== undefined) recordOperationFault(runtime, operation, fault, snapshot);
   }
 };
 
@@ -993,11 +1037,18 @@ const writeContinuousStage = (
   derivatives: readonly (readonly XBScalar[])[],
   scale: number,
   faults: XBNumericFault[],
+  snapshots: ReadonlyMap<string, XBSnapshot>,
 ): void => {
   slots.forEach((slot, index) => {
+    if (runtime.operationFaults[slot.operation.id]?.active) return;
     const values = slot.base.map((value, valueIndex) =>
       Number(value) + scale * Number(derivatives[index][valueIndex]));
-    writeSignal(runtime, slot.signalId, values, faults);
+    const faultStart = faults.length;
+    writeSignal(runtime, slot.signalId, values, faults, slot.operation);
+    const fault = faults[faultStart];
+    if (fault !== undefined) recordOperationFault(
+      runtime, slot.operation, fault, snapshots.get(slot.operation.id),
+    );
   });
 };
 
@@ -1007,21 +1058,29 @@ const updateContinuousState = (
 ): void => {
   const slots = continuousSlots(runtime);
   if (slots.length === 0) return;
+  const snapshots = new Map<string, XBSnapshot>();
+  for (const slot of slots) {
+    if (!snapshots.has(slot.operation.id)) {
+      snapshots.set(slot.operation.id, snapshotOperation(runtime, slot.operation));
+    }
+  }
   const step = runtime.ir.solver.stepSeconds;
   const k1 = continuousDerivatives(runtime, slots);
   if (runtime.ir.solver.kind === 'euler') {
-    writeContinuousStage(runtime, slots, k1, step, faults);
+    writeContinuousStage(runtime, slots, k1, step, faults, snapshots);
   } else {
-    writeContinuousStage(runtime, slots, k1, step / 2, faults);
+    writeContinuousStage(runtime, slots, k1, step / 2, faults, snapshots);
     executeDirectOperations(runtime, faults, true);
     const k2 = continuousDerivatives(runtime, slots);
-    writeContinuousStage(runtime, slots, k2, step / 2, faults);
+    writeContinuousStage(runtime, slots, k2, step / 2, faults, snapshots);
     executeDirectOperations(runtime, faults, true);
     const k3 = continuousDerivatives(runtime, slots);
-    writeContinuousStage(runtime, slots, k3, step, faults);
+    writeContinuousStage(runtime, slots, k3, step, faults, snapshots);
     executeDirectOperations(runtime, faults, true);
     const k4 = continuousDerivatives(runtime, slots);
     slots.forEach((slot, index) => {
+      if (runtime.operationFaults[slot.operation.id]?.active) return;
+      const faultStart = faults.length;
       runtime.stateSlots[slot.slotId] = slot.base.map((value, valueIndex) =>
         convertValue(
           Number(value) + step * (
@@ -1031,18 +1090,29 @@ const updateContinuousState = (
             + Number(k4[index][valueIndex])
           ) / 6,
           slot.numericType,
-          faults,
+          faults, slot.operation,
         ));
+      const fault = faults[faultStart];
+      if (fault !== undefined) recordOperationFault(
+        runtime, slot.operation, fault, snapshots.get(slot.operation.id),
+      );
     });
   }
   if (runtime.ir.solver.kind === 'euler') {
     slots.forEach((slot) => {
+      if (runtime.operationFaults[slot.operation.id]?.active) return;
+      const faultStart = faults.length;
       runtime.stateSlots[slot.slotId] = signalValues(runtime, slot.signalId)
-        .map((value) => convertValue(value, slot.numericType, faults));
+        .map((value) => convertValue(value, slot.numericType, faults, slot.operation));
+      const fault = faults[faultStart];
+      if (fault !== undefined) recordOperationFault(
+        runtime, slot.operation, fault, snapshots.get(slot.operation.id),
+      );
     });
   }
   for (const slot of slots) {
-    writeSignal(runtime, slot.signalId, runtime.stateSlots[slot.slotId], faults);
+    if (runtime.operationFaults[slot.operation.id]?.active) continue;
+    writeSignal(runtime, slot.signalId, runtime.stateSlots[slot.slotId], faults, slot.operation);
   }
   executeDirectOperations(runtime, faults, true);
 };
@@ -1058,10 +1128,18 @@ const executeSolverSubstep = (
       `X-Bridges execution order references missing operation '${operationId}'`,
     );
     if (!operation.stateful) continue;
+    if (runtime.operationFaults[operation.id]?.active) {
+      statefulOperations.push(operation);
+      continue;
+    }
+    const outputSnapshot = snapshotOperation(runtime, operation);
+    const faultStart = faults.length;
     if (scheduledThisSubstep(runtime, operation)
       || operation.type === 'INTEGRATOR_CONTINUOUS'
       || operation.type === 'Integrator') {
       writeStateOutputs(runtime, operation, faults);
+      const fault = faults[faultStart];
+      if (fault !== undefined) recordOperationFault(runtime, operation, fault, outputSnapshot);
     }
     statefulOperations.push(operation);
   }
@@ -1073,11 +1151,13 @@ const executeSolverSubstep = (
       operation.type === 'INTEGRATOR_CONTINUOUS'
       || operation.type === 'Integrator'
     ) continue;
+    if (runtime.operationFaults[operation.id]?.active) continue;
+    const snapshot = snapshotOperation(runtime, operation);
     const faultStart = faults.length;
     const updates = statefulUpdate(runtime, operation, faults);
     const fault = faults[faultStart];
     if (fault !== undefined) {
-      recordOperationFault(runtime, operation, fault);
+      recordOperationFault(runtime, operation, fault, snapshot);
       continue;
     }
     Object.assign(pendingState, updates);
@@ -1100,6 +1180,23 @@ export const stepXBState = (
   runtime.numericFaults = [];
   for (const operationId of runtime.ir.executionOrder) {
     runtime.operationFaults[operationId] = { active: false, fault: null };
+    const operation = runtime.ir.operations[operationId];
+    const errorSignalId = operation === undefined
+      ? null
+      : operationFaultContract(runtime, operation).errorSignalId;
+    if (errorSignalId !== null) {
+      const errorSignal = runtime.ir.signals[errorSignalId];
+      if (errorSignal !== undefined) {
+        runtime.signals[errorSignalId] = Array.from(
+          { length: errorSignal.elementCount },
+          () => false,
+        );
+        runtime.storedIntegers[errorSignalId] = Array.from(
+          { length: errorSignal.elementCount },
+          () => 0,
+        );
+      }
+    }
   }
   for (const mapping of runtime.ir.mappings) {
     if (mapping.direction !== 'in') continue;
