@@ -12,6 +12,7 @@ import {
   createAppSimulationLifecycle,
   createAppSimulationSession,
   createFactoryIOMappings,
+  createPersistedAppSimulationModel,
   createSimulationModelKey,
   readMappedOutputs,
   resetAppSimulationSession,
@@ -194,6 +195,56 @@ describe('state-machine application adapter', () => {
 
     model.transitions[0].condition = 'false';
     expect(createSimulationModelKey(model, [])).not.toBe(first);
+  });
+
+  it('persists complete X-Bridges configuration without executable closures', () => {
+    const model = flatOrFixture();
+    model.states[0].isXBridges = true;
+    model.states[0].xBridgesModel = {
+      nodes: [{
+        id: 'gain-node',
+        type: 'xblock',
+        position: { x: 12, y: 34 },
+        data: {
+          id: 'gain-node',
+          type: 'GAIN',
+          params: { gain: 2 },
+          inputs: [{
+            id: 'u', direction: 'input', shape: 'vector', dimensions: [2],
+            dataType: 'fixed', numericType: {
+              kind: 'fixed', signed: true, wordLength: 16, fractionLength: 8,
+            },
+          }],
+          outputs: [{
+            id: 'y', direction: 'output', shape: 'vector', dimensions: [2],
+            dataType: 'float32',
+          }],
+          execute: () => ({ outputs: [[0, 0]] }),
+        },
+      }],
+      edges: [],
+      mappings: [{
+        smVarId: 'total', blockId: 'gain-node', portId: 'y', direction: 'out',
+      }],
+      solver: { kind: 'rk4', stepSeconds: 0.002 },
+      policy: { memory: 'retain', numericFault: 'signal-only' },
+    };
+
+    const persisted = createPersistedAppSimulationModel(model);
+    const serialized = JSON.stringify(persisted);
+    const xBridgesModel = persisted.states[0].xBridgesModel as any;
+
+    expect(serialized).not.toContain('execute');
+    expect(xBridgesModel.solver).toEqual({ kind: 'rk4', stepSeconds: 0.002 });
+    expect(xBridgesModel.policy).toEqual({
+      memory: 'retain', numericFault: 'signal-only',
+    });
+    expect(xBridgesModel.mappings).toEqual(model.states[0].xBridgesModel.mappings);
+    expect(xBridgesModel.nodes[0].data.inputs[0]).toMatchObject({
+      shape: 'vector', dimensions: [2], dataType: 'fixed',
+      numericType: { wordLength: 16, fractionLength: 8 },
+    });
+    expect(xBridgesModel.nodes[0].position).toEqual({ x: 12, y: 34 });
   });
 
   it.each([

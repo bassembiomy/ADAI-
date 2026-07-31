@@ -11,8 +11,6 @@ import { VLabWorkspace } from './components/vlab/VLabWorkspace';
 import { HILWorkspace } from './components/hil/HILWorkspace';
 import { EntropyWorkspace } from './components/entropy/EntropyWorkspace';
 import { HILConfig, HILSessionState } from './engine/hil/hilTypes';
-import { XbridgesEngine } from './engine/xbridges/XbridgesEngine';
-import { Solvers } from './engine/xbridges/Solvers';
 import { GMDHEngine, solveLeastSquares } from './engine/gmdh/gmdh_core/combi';
 import { ChevronLeft } from 'lucide-react';
 import {
@@ -42,16 +40,17 @@ import {
   createAppSimulationLifecycle,
   createAppSimulationSession,
   createFactoryIOMappings,
+  createPersistedAppSimulationModel,
   createSimulationModelKey,
   readMappedOutputs,
   resetAppSimulationSession,
   setSessionVariableValue,
   shouldReportAppOperationError,
+  stepAppSimulationSession,
   traceFrameToAppUpdate,
   type AppSimulationSession,
   type AppSimulationValue,
 } from './utils/stateMachine/smAppAdapter';
-import { stepRuntime } from './utils/stateMachine/smInterpreter';
 import { serializeInlineScriptJson } from './utils/stateMachine/smInlineScriptSerialization';
 import { migrateStateMachineModel } from './utils/stateMachine/smModelMigration';
 import type { SemanticTraceFrame } from './utils/stateMachine/smTrace';
@@ -6587,7 +6586,6 @@ const ADIA = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [tickMs, setTickMs] = useState(500);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const xBridgesEnginesRef = useRef<Map<string, XbridgesEngine>>(new Map());
 
   const [errors, setErrors] = useState<ErrorItem[]>([]);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
@@ -6991,7 +6989,13 @@ const ADIA = () => {
   const getActiveStateData = useCallback((type: string) => {
     switch (type) {
       case 'statemachine':
-        return { states, junctions, transitions, layers, variables, view, tickMs };
+        return {
+          ...createPersistedAppSimulationModel({
+            tickMs, states, junctions, transitions, variables, layers,
+            safetyMode, hilConfig,
+          }),
+          view,
+        };
       case 'bdd':
         return { blocks: blocks.filter(b => b.stereotype !== 'requirement'), relationships, customStereotypes };
       case 'requirements':
@@ -7014,7 +7018,7 @@ const ADIA = () => {
         return null;
     }
   }, [
-    states, junctions, transitions, layers, variables, view, tickMs,
+    states, junctions, transitions, layers, variables, view, tickMs, safetyMode,
     blocks, relationships, customStereotypes, parts, connectors, interfaceRealizations,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges, hilConfig,
     entropyNodes, entropyEdges, hmiComponents, headers, data, activeModel, taguchiConfig, results
@@ -7448,6 +7452,7 @@ const ADIA = () => {
           ? {
               ...s,
               xBridgesModel: {
+                ...s.xBridgesModel,
                 nodes: [...(s.xBridgesModel?.nodes || []), newNode],
                 edges: Array.from(s.xBridgesModel?.edges || []),
                 mappings: Array.from(s.xBridgesModel?.mappings || [])
@@ -7578,7 +7583,10 @@ const ADIA = () => {
    */
   const adiaExportItems: AdiaExportItem[] = useMemo(() => {
     const projectPayload = {
-      states, junctions, transitions, layers, variables,
+      ...createPersistedAppSimulationModel({
+        tickMs, states, junctions, transitions, layers, variables,
+        safetyMode, hilConfig,
+      }),
       blocks, relationships, parts, connectors, interfaceRealizations,
     };
     const projectJson = JSON.stringify(projectPayload, null, 2);
@@ -7613,7 +7621,7 @@ const ADIA = () => {
         available: vlabNodes && vlabNodes.length > 0,
       },
     ] as AdiaExportItem[];
-  }, [states, junctions, transitions, layers, variables, blocks, relationships, parts, connectors, interfaceRealizations, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
+  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, blocks, relationships, parts, connectors, interfaceRealizations, globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges]);
 
 
 
@@ -7892,9 +7900,13 @@ const ADIA = () => {
 
   const executeExportProject = useCallback(async (selectedKeys: string[]) => {
     const projectFiles: Record<string, any> = {};
+    const persistedStateMachine = createPersistedAppSimulationModel({
+      tickMs, states, junctions, transitions, layers, variables,
+      safetyMode, hilConfig,
+    });
 
     if (selectedKeys.includes('statemachine')) {
-      projectFiles['statemachine.json'] = { states, junctions, transitions, layers, variables, view, tickMs };
+      projectFiles['statemachine.json'] = { ...persistedStateMachine, view };
     }
     if (selectedKeys.includes('bdd')) {
       projectFiles['bdd.json'] = { blocks: blocks.filter(b => b.stereotype !== 'requirement'), relationships, customStereotypes };
@@ -7929,7 +7941,7 @@ const ADIA = () => {
         timestamp: new Date().toISOString(),
         projectName: currentProjectName,
         openTabs,
-        states, junctions, transitions, layers, variables, view, tickMs,
+        ...persistedStateMachine, view,
         blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
         hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
         hilConfig,
@@ -7993,7 +8005,7 @@ const ADIA = () => {
     }
     addError('info', 'Selected project modules exported as files.');
   }, [
-    states, junctions, transitions, layers, variables, view, tickMs,
+    states, junctions, transitions, layers, variables, view, tickMs, safetyMode,
     blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
     hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
     hilConfig,
@@ -8008,7 +8020,6 @@ const ADIA = () => {
 
   const handleXBridgesSave = useCallback((nodes: any[], edges: any[]) => {
     if (xBridgesStateId) {
-      xBridgesEnginesRef.current.delete(xBridgesStateId);
       setStates(prev => prev.map(s =>
         s.id === xBridgesStateId
           ? { ...s, xBridgesModel: { ...s.xBridgesModel, nodes, edges } }
@@ -8344,7 +8355,6 @@ const ADIA = () => {
     setStateTimers({});
     setSimulationTime(0);
     setScopeData([]);
-    xBridgesEnginesRef.current.clear();
   }, []);
 
   // SCOPE
@@ -8377,7 +8387,10 @@ const ADIA = () => {
   // HISTORY OPERATIONS
   const addToHistory = useCallback(() => {
     const snapshot = JSON.stringify({
-      states, junctions, transitions, layers, variables,
+      ...createPersistedAppSimulationModel({
+        tickMs, states, junctions, transitions, layers, variables,
+        safetyMode, hilConfig,
+      }),
       blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes
     });
     setHistory(prev => {
@@ -8387,7 +8400,7 @@ const ADIA = () => {
       return newHistory;
     });
     setHistoryIndex(prev => Math.min(prev + 1, 49));
-  }, [states, junctions, transitions, layers, variables, blocks, relationships, parts, connectors, interfaceRealizations, historyIndex]);
+  }, [states, junctions, transitions, layers, variables, tickMs, safetyMode, hilConfig, blocks, relationships, parts, connectors, interfaceRealizations, historyIndex]);
 
   const undo = useCallback(() => {
     if (historyIndex > 0) {
@@ -8927,7 +8940,6 @@ const ADIA = () => {
     setSimulationTime(0);
     setTraceHistory([]);
     setScopeData([]);
-    xBridgesEnginesRef.current.clear();
     setStates(prev => prev.map(state =>
       state.isActive ? { ...state, isActive: false } : state
     ));
@@ -9068,134 +9080,6 @@ const ADIA = () => {
     }
   }, [sampleOnTransitionOnly, states, variables]);
 
-  const stepActiveXBridgesModels = useCallback((
-    session: AppSimulationSession,
-    activeStateIds: readonly string[],
-    timeSeconds: number
-  ) => {
-    const activeIds = new Set(activeStateIds);
-    for (const stateId of xBridgesEnginesRef.current.keys()) {
-      if (!activeIds.has(stateId)) xBridgesEnginesRef.current.delete(stateId);
-    }
-
-    const activeXBridgesStates = activeStateIds
-      .map(stateId => states.find(state => state.id === stateId))
-      .filter((state): state is StateData => !!state?.isXBridges && !!state.xBridgesModel)
-      .sort((left, right) => left.priority - right.priority);
-
-    activeXBridgesStates.forEach(state => {
-      const xBridgesModel = state.xBridgesModel!;
-      let engine = xBridgesEnginesRef.current.get(state.id);
-      if (!engine) {
-        const model = {
-          blocks: xBridgesModel.nodes.map(node => {
-            const data = node.data as any;
-            if (!XBRIDGES_LIBRARY[data.type]) return data;
-            try {
-              const params = { ...data.params };
-              if (
-                data.type === 'FUZZY_SURFACE_VIEWER'
-                && typeof data.params.fisConfig === 'string'
-              ) {
-                const targetNode = xBridgesModel.nodes.find(
-                  candidate => candidate.id === data.params.fisConfig
-                );
-                params.fisConfig = targetNode?.data.type === 'FUZZY_INFERENCE_SYSTEM'
-                  ? targetNode.data.params
-                  : null;
-              }
-              const freshBlock = XBRIDGES_LIBRARY[data.type](data.id, params);
-              return {
-                ...freshBlock,
-                id: data.id,
-                state: data.state || freshBlock.state,
-                params: { ...freshBlock.params, ...params }
-              };
-            } catch {
-              return data;
-            }
-          }),
-          connections: xBridgesModel.edges.map(edge => ({
-            sourceBlock: edge.source,
-            sourcePort: edge.sourceHandle!,
-            targetBlock: edge.target,
-            targetPort: edge.targetHandle!
-          }))
-        };
-        engine = new XbridgesEngine(model);
-        try {
-          engine.compile();
-          xBridgesEnginesRef.current.set(state.id, engine);
-        } catch (error: any) {
-          addError(
-            'error',
-            'Failed to compile X-Bridges sub-model in state '
-              + state.name + ': ' + error.message,
-            'Simulation'
-          );
-          return;
-        }
-      }
-
-      const setInput = (
-        variableId: string,
-        blockId: string,
-        portId: string
-      ) => {
-        const variable = variables.find(item => item.id === variableId);
-        if (!variable) return;
-        const value = Number(session.runtime.data[variable.id]);
-        engine!.setSignalValue(blockId, portId, value);
-        const block = engine!['blockMap'].get(blockId);
-        if (block?.params) block.params.value = value;
-      };
-
-      xBridgesModel.mappings?.forEach(mapping => {
-        if (mapping.direction === 'in') {
-          setInput(mapping.smVarId, mapping.blockId, mapping.portId);
-        }
-      });
-      xBridgesModel.nodes.forEach(node => {
-        if (node.data.type === 'Inport' && node.data.params.smVarId) {
-          setInput(node.data.params.smVarId, node.id, 'out');
-        }
-      });
-
-      try {
-        Solvers.stepRK4(engine, timeSeconds, tickMs / 1000);
-      } catch (error: any) {
-        addError(
-          'error',
-          'X-Bridges simulation error in state '
-            + state.name + ': ' + error.message,
-          'Simulation'
-        );
-      }
-
-      const setOutput = (
-        variableId: string,
-        blockId: string,
-        portId: string
-      ) => {
-        const variable = variables.find(item => item.id === variableId);
-        if (!variable) return;
-        const value = engine!.getSignalValue(blockId, portId);
-        if (value !== undefined) session.runtime.data[variable.id] = value;
-      };
-
-      xBridgesModel.mappings?.forEach(mapping => {
-        if (mapping.direction === 'out') {
-          setOutput(mapping.smVarId, mapping.blockId, mapping.portId);
-        }
-      });
-      xBridgesModel.nodes.forEach(node => {
-        if (node.data.type === 'Outport' && node.data.params.smVarId) {
-          setOutput(node.data.params.smVarId, node.id, 'in');
-        }
-      });
-    });
-  }, [addError, states, tickMs, variables]);
-
   // SIMULATION: shared semantic interpreter with explicit read/step/write I/O.
   const simulationStep = useCallback(async () => {
     const lifecycle = simulationLifecycleRef.current;
@@ -9219,19 +9103,14 @@ const ADIA = () => {
       if (!lifecycle.isCurrent(operation)) return false;
 
       applyMappedInputs(session, inputValues);
-      const frame = stepRuntime(session.runtime, tickMs);
+      const frame = stepAppSimulationSession(session, tickMs);
       const newTime = simulationTime + tickMs / 1000;
-      stepActiveXBridgesModels(session, frame.activeStateIds, newTime);
-      const uiFrame: SemanticTraceFrame = Object.freeze({
-        ...frame,
-        data: Object.freeze({ ...session.runtime.data })
-      });
       if (!lifecycle.isCurrent(operation)) return false;
 
       await applyAppFrameAndCommitOutputs(
         () => {
           setSimulationTime(newTime);
-          applySimulationFrameToReact(session, uiFrame, newTime, true);
+          applySimulationFrameToReact(session, frame, newTime, true);
         },
         () => writeFactoryOutputs(readMappedOutputs(session))
       );
@@ -9256,7 +9135,7 @@ const ADIA = () => {
     }
   }, [
     addError, applySimulationFrameToReact, createSimulationSession,
-    readFactoryInputs, simulationTime, stepActiveXBridgesModels, tickMs,
+    readFactoryInputs, simulationTime, tickMs,
     writeFactoryOutputs
   ]);
 
@@ -9276,7 +9155,6 @@ const ADIA = () => {
       setScopeData([]);
       setTraceHistory([]);
       setFiredTransitions({});
-      xBridgesEnginesRef.current.clear();
       applySimulationFrameToReact(session, session.initialFrame, 0, false);
       if (session.initialFrame.error) {
         addError('error', session.initialFrame.error, 'Simulation');
@@ -9327,7 +9205,6 @@ const ADIA = () => {
       setScopeData([]);
       setTraceHistory([]);
       setFiredTransitions({});
-      xBridgesEnginesRef.current.clear();
       applySimulationFrameToReact(session, frame, 0, false);
       addError(
         frame.error ? 'error' : 'info',
@@ -9637,7 +9514,13 @@ const ADIA = () => {
       regionId: null,
       autostart: false,
       isXBridges: true,
-      xBridgesModel: { nodes: [], edges: [], mappings: [] },
+      xBridgesModel: {
+        nodes: [],
+        edges: [],
+        mappings: [],
+        solver: { kind: 'euler', stepSeconds: 0.01 },
+        policy: { memory: 'reset', numericFault: 'escalate' },
+      },
       internalTransitions: ''
     };
 
@@ -15232,7 +15115,6 @@ const ADIA = () => {
                   onClipboardChange={setSharedClipboard}
                   fileId={activeFileId}
                   workspaceFiles={workspaceFiles}
-                  coSimEngine={xBridgesStateId ? xBridgesEnginesRef.current.get(xBridgesStateId) : undefined}
                   isSmSimulating={isRunning}
                   simulationTime={simulationTime}
                 />
@@ -16091,6 +15973,7 @@ const ADIA = () => {
                             const currentMappings = selectedState.xBridgesModel?.mappings || [];
                             updateState(selectedState.id, {
                               xBridgesModel: {
+                                ...selectedState.xBridgesModel,
                                 nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
                                 edges: Array.from(selectedState.xBridgesModel?.edges || []),
                                 mappings: [...currentMappings, { smVarId: '', blockId: '', portId: '', direction: 'in' }]
@@ -16112,6 +15995,7 @@ const ADIA = () => {
                                     newMaps[idx] = { ...map, smVarId: e.target.value };
                                     updateState(selectedState.id, {
                                       xBridgesModel: {
+                                        ...selectedState.xBridgesModel,
                                         nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
                                         edges: Array.from(selectedState.xBridgesModel?.edges || []),
                                         mappings: newMaps
@@ -16133,6 +16017,7 @@ const ADIA = () => {
                                     newMaps[idx] = { ...map, direction: e.target.value as any };
                                     updateState(selectedState.id, {
                                       xBridgesModel: {
+                                        ...selectedState.xBridgesModel,
                                         nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
                                         edges: Array.from(selectedState.xBridgesModel?.edges || []),
                                         mappings: newMaps
@@ -16156,6 +16041,7 @@ const ADIA = () => {
                                     newMaps[idx] = { ...map, blockId: e.target.value };
                                     updateState(selectedState.id, {
                                       xBridgesModel: {
+                                        ...selectedState.xBridgesModel,
                                         nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
                                         edges: Array.from(selectedState.xBridgesModel?.edges || []),
                                         mappings: newMaps
@@ -16175,6 +16061,7 @@ const ADIA = () => {
                                     newMaps[idx] = { ...map, portId: e.target.value };
                                     updateState(selectedState.id, {
                                       xBridgesModel: {
+                                        ...selectedState.xBridgesModel,
                                         nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
                                         edges: Array.from(selectedState.xBridgesModel?.edges || []),
                                         mappings: newMaps
@@ -16192,6 +16079,7 @@ const ADIA = () => {
                                 const newMaps = selectedState.xBridgesModel!.mappings!.filter((_, i) => i !== idx);
                                 updateState(selectedState.id, {
                                   xBridgesModel: {
+                                    ...selectedState.xBridgesModel,
                                     nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
                                     edges: Array.from(selectedState.xBridgesModel?.edges || []),
                                     mappings: newMaps

@@ -218,6 +218,8 @@ describe('X-Bridges during order and memory policy', () => {
     const runtime = createRuntime(built.ir!);
     initializeRuntime(runtime);
     runtime.data.u = 7;
+    const expectedIntegratorState = 3
+      + built.ir!.states.controller.xBridges!.solver.substepsPerTick * 7;
 
     const frame = stepRuntime(runtime, 10);
 
@@ -232,7 +234,7 @@ describe('X-Bridges during order and memory policy', () => {
       runtime.xBridgesByStateId.controller.stateSlots[
         'integrator:y$state'
       ],
-    ).toEqual([10]);
+    ).toEqual([expectedIntegratorState]);
   });
 
   it('steps parallel X-Bridges states by layer priority and stable ID', () => {
@@ -316,6 +318,8 @@ describe('X-Bridges during order and memory policy', () => {
       const runtime = createRuntime(built.ir!);
       initializeRuntime(runtime);
       runtime.data.u = 7;
+      const expectedRetainedIntegratorState = 3
+        + built.ir!.states.controller.xBridges!.solver.substepsPerTick * 7;
       stepRuntime(runtime, 10);
       runtime.data.reenter = true;
 
@@ -326,7 +330,7 @@ describe('X-Bridges during order and memory policy', () => {
         memory === 'reset' ? [2] : [7],
       );
       expect(xb.stateSlots['integrator:y$state']).toEqual(
-        memory === 'reset' ? [3] : [10],
+        memory === 'reset' ? [3] : [expectedRetainedIntegratorState],
       );
 
       resetRuntime(runtime);
@@ -352,6 +356,8 @@ describe('X-Bridges during order and memory policy', () => {
       expect(built.diagnostics).toEqual([]);
       const runtime = createRuntime(built.ir!);
       initializeRuntime(runtime);
+      const expectedRetainedIntegratorState = 3
+        + built.ir!.states.parent_a.xBridges!.solver.substepsPerTick * 7;
       runtime.data.select_a = true;
       stepRuntime(runtime, 10);
       runtime.data.select_a = false;
@@ -400,7 +406,7 @@ describe('X-Bridges during order and memory policy', () => {
         memory === 'reset' ? [2] : [7],
       );
       expect(xb.stateSlots['integrator:y$state']).toEqual(
-        memory === 'reset' ? [3] : [10],
+        memory === 'reset' ? [3] : [expectedRetainedIntegratorState],
       );
     },
   );

@@ -4,6 +4,7 @@ import {
   createRuntime,
   initializeRuntime,
   resetRuntime,
+  stepRuntime,
   type SemanticRuntime,
 } from './smInterpreter';
 import type {
@@ -268,6 +269,30 @@ export const createSimulationModelKey = (
   mappings,
 });
 
+const clonePersistentValue = (value: unknown): unknown => {
+  if (typeof value === 'function' || value === undefined) return undefined;
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    return value.map((entry) => clonePersistentValue(entry));
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const cloned = clonePersistentValue(entry);
+    if (cloned !== undefined) result[key] = cloned;
+  }
+  return result;
+};
+
+/**
+ * Produces the JSON-safe application model used by save/load boundaries.
+ * Runtime block closures are deliberately excluded while UI layout and the
+ * complete typed X-Bridges configuration remain intact for later adaptation.
+ */
+export const createPersistedAppSimulationModel = <
+  T extends StateMachineModelV4 | LegacyStateMachineModel,
+>(model: T): T => clonePersistentValue(model) as T;
+
 export const createFactoryIOMappings = (
   mappings: readonly FactoryIOMapping[],
 ): AppIOMapping[] =>
@@ -335,6 +360,12 @@ export const createAppSimulationSession = (
     ioMappings: normalizeMappings(built.ir, mappings),
   };
 };
+
+/** Execute one canonical semantic tick, including embedded X-Bridges states. */
+export const stepAppSimulationSession = (
+  session: AppSimulationSession,
+  elapsedMs: number,
+): SemanticTraceFrame => stepRuntime(session.runtime, elapsedMs);
 
 export const setSessionVariableValue = (
   session: AppSimulationSession,
