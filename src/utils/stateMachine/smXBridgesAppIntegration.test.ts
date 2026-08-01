@@ -109,7 +109,59 @@ const discreteSubstepModel = () => {
   return model;
 };
 
+const boundaryMappingModel = () => {
+  const model = hybridXBridgesFixture();
+  model.states[0].autostart = false;
+  const controller = model.states.find((state) => state.id === 'controller')!;
+  controller.autostart = true;
+  model.variables.push({
+    id: 'x', name: 'x', type: 'float', initialValue: '1', currentValue: 1,
+    visibleInScope: true,
+  });
+  const scalar = (id: string, direction: 'input' | 'output') => ({
+    id, direction, shape: 'scalar' as const, dataType: 'float32',
+  });
+  controller.xBridgesModel = {
+    schemaVersion: 1,
+    nodes: [
+      { id: 'inport', type: 'Inport', parameters: {
+        inputs: [scalar('in', 'input')], outputs: [scalar('y', 'output')],
+      } },
+      { id: 'constant', type: 'Constant', parameters: {
+        value: 1, inputs: [], outputs: [scalar('y', 'output')],
+      } },
+      { id: 'sum', type: 'Sum', parameters: {
+        signs: '++', inputs: [scalar('a', 'input'), scalar('b', 'input')],
+        outputs: [scalar('y', 'output')],
+      } },
+      { id: 'outport', type: 'Outport', parameters: {
+        inputs: [scalar('u', 'input')], outputs: [scalar('out', 'output')],
+      } },
+    ],
+    edges: [
+      { id: 'inport_sum', sourceNodeId: 'inport', sourcePortId: 'y', targetNodeId: 'sum', targetPortId: 'a' },
+      { id: 'constant_sum', sourceNodeId: 'constant', sourcePortId: 'y', targetNodeId: 'sum', targetPortId: 'b' },
+      { id: 'sum_outport', sourceNodeId: 'sum', sourcePortId: 'y', targetNodeId: 'outport', targetPortId: 'u' },
+    ],
+    mappings: [
+      { smVarId: 'x', blockId: 'inport', portId: 'in', direction: 'in' },
+      { smVarId: 'x', blockId: 'outport', portId: 'out', direction: 'out' },
+    ],
+    solver: { kind: 'euler', stepSeconds: 0.002 },
+    policy: { memory: 'reset', numericFault: 'escalate' },
+  };
+  return model;
+};
+
 describe('application X-Bridges simulation integration', () => {
+  it('T14-INT-CORE-DIRECT maps an SM variable through Inport and Outport in the integrated runtime', () => {
+    const model = boundaryMappingModel();
+    const session = createAppSimulationSession(model);
+    const frame = stepAppSimulationSession(session, model.tickMs);
+
+    expect(frame.data.x).toBe(2);
+  });
+
   it('orchestrates exactly one stateful X-Bridges step before a first-tick inner transition', async () => {
     const session = createAppSimulationSession(sameTickInnerTransitionModel());
     const applied = [] as number[];

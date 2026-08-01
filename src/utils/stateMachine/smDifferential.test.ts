@@ -552,33 +552,33 @@ describe('X-Bridges numeric fault recovery and escalation', () => {
 });
 
 describe('TypeScript-versus-generated-C differential gate', () => {
-  it('T14-INT-CORE-DIRECT and T14-C99-CORE-DIRECT preserve mapped Inport values through Outport graphs', () => {
+  it('T14-INT-CORE-DIRECT and T14-C99-CORE-DIRECT preserve boundary mapping parity through Inport, Sum, and Outport', () => {
     const model = hybridXBridgesFixture();
     model.states[0].autostart = false;
     const controller = model.states.find((state) => state.id === 'controller')!;
     controller.autostart = true;
-    for (const id of ['xb_input', 'xb_output']) {
-      model.variables.push({
-        id, name: id, type: 'float', initialValue: '0', currentValue: 0,
-        visibleInScope: true,
-      });
-    }
+    model.variables.push({
+      id: 'x', name: 'x', type: 'float', initialValue: '1', currentValue: 1,
+      visibleInScope: true,
+    });
     const scalar = (id: string, direction: 'input' | 'output') =>
       xbPort(id, direction, 'scalar', [], 'float32');
     controller.xBridgesModel = {
       schemaVersion: 1,
       nodes: [
-        { id: 'input', type: 'Inport', parameters: { inputs: [], outputs: [scalar('y', 'output')] } },
-        { id: 'gain', type: 'GAIN', parameters: { gain: 2, inputs: [scalar('u', 'input')], outputs: [scalar('y', 'output')] } },
-        { id: 'output', type: 'Outport', parameters: { inputs: [scalar('u', 'input')], outputs: [] } },
+        { id: 'inport', type: 'Inport', parameters: { inputs: [scalar('in', 'input')], outputs: [scalar('y', 'output')] } },
+        { id: 'constant', type: 'Constant', parameters: { value: 1, inputs: [], outputs: [scalar('y', 'output')] } },
+        { id: 'sum', type: 'Sum', parameters: { signs: '++', inputs: [scalar('a', 'input'), scalar('b', 'input')], outputs: [scalar('y', 'output')] } },
+        { id: 'outport', type: 'Outport', parameters: { inputs: [scalar('u', 'input')], outputs: [scalar('out', 'output')] } },
       ],
       edges: [
-        { id: 'input_gain', sourceNodeId: 'input', sourcePortId: 'y', targetNodeId: 'gain', targetPortId: 'u' },
-        { id: 'gain_output', sourceNodeId: 'gain', sourcePortId: 'y', targetNodeId: 'output', targetPortId: 'u' },
+        { id: 'inport_sum', sourceNodeId: 'inport', sourcePortId: 'y', targetNodeId: 'sum', targetPortId: 'a' },
+        { id: 'constant_sum', sourceNodeId: 'constant', sourcePortId: 'y', targetNodeId: 'sum', targetPortId: 'b' },
+        { id: 'sum_outport', sourceNodeId: 'sum', sourcePortId: 'y', targetNodeId: 'outport', targetPortId: 'u' },
       ],
       mappings: [
-        { smVarId: 'xb_input', blockId: 'input', portId: 'y', direction: 'in' },
-        { smVarId: 'xb_output', blockId: 'gain', portId: 'y', direction: 'out' },
+        { smVarId: 'x', blockId: 'inport', portId: 'in', direction: 'in' },
+        { smVarId: 'x', blockId: 'outport', portId: 'out', direction: 'out' },
       ],
       solver: { kind: 'euler', stepSeconds: 0.002 },
       policy: { memory: 'reset', numericFault: 'signal-only' },
@@ -586,12 +586,12 @@ describe('TypeScript-versus-generated-C differential gate', () => {
     const fixture = {
       name: 'flat-priority' as const,
       model,
-      steps: [{ kind: 'step' as const, inputs: { xb_input: 4 } }],
+      steps: [{ kind: 'step' as const }],
     };
     const expected = runInterpreterTrace(fixture);
     const actual = compileAndRunCTrace(fixture);
 
-    expect(expected.at(-1)?.data.xb_output).toBe(8);
+    expect(expected.at(-1)?.data.x).toBe(2);
     expect(compareSemanticTraces(expected, actual)).toBeNull();
   }, 60_000);
 

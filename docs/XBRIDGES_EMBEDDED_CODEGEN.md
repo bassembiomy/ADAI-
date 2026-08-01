@@ -40,6 +40,18 @@ also requires a configured maximum dimension from 1 through 8. `PID_BASIC`
 requires a positive discrete `sampleTime`; `STATE_SPACE` requires the
 `discrete` representation.
 
+## State-machine boundary mapping
+
+Use canonical mappings to connect a state-machine scalar to an X-Bridges graph:
+
+```text
+SM x -> Inport input -> Sum(+ Constant 1) -> Outport output -> SM x
+```
+
+Scalar arithmetic uses `Sum`; `VectorAdd` requires vector signals. The input
+mapping targets the Inport input and the output mapping originates from the
+Outport output.
+
 ### Host-only and unsupported blocks
 
 The following categories are explicitly rejected because no paired canonical
