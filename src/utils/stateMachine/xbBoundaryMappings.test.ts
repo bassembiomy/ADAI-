@@ -166,7 +166,7 @@ describe('reconcileXBBoundaryMappings', () => {
       .toEqual(canonical);
   });
 
-  it('drops previous mappings without a valid state-machine variable', () => {
+  it('drops incomplete mappings but preserves complete unknown-variable mappings for validation', () => {
     const nodesWithoutMetadata = nodes.map(node => ({
       ...node,
       data: { ...node.data, params: {} },
@@ -175,7 +175,7 @@ describe('reconcileXBBoundaryMappings', () => {
     const unknown = { smVarId: 'stale', blockId: 'input', portId: 'in', direction: 'in' as const };
 
     expect(reconcileXBBoundaryMappings(nodesWithoutMetadata, [incomplete, unknown], new Set(['x'])))
-      .toEqual([]);
+      .toEqual([unknown]);
   });
 
   it('rejects an absent target tuple even when concatenated target fields collide', () => {
@@ -257,6 +257,38 @@ describe('repairLegacyXBBoundaryMappings', () => {
       mappings: [
         { smVarId: 'x', blockId: 'input', portId: 'in', direction: 'in' },
         { smVarId: 'x', blockId: 'output', portId: 'out', direction: 'out' },
+      ],
+    });
+  });
+
+  it('imports an unambiguous metadata-only legacy boundary mapping', () => {
+    const repaired = repairLegacyXBBoundaryMappings({
+      ...legacyModel,
+      nodes: [nodes[0]],
+      mappings: [],
+    }, new Set(['x']));
+
+    expect(repaired.diagnostics).toEqual([]);
+    expect(repaired.model).toMatchObject({
+      mappings: [
+        { smVarId: 'x', blockId: 'input', portId: 'in', direction: 'in' },
+      ],
+    });
+  });
+
+  it('repairs a partially blank target using its specified boundary block', () => {
+    const repaired = repairLegacyXBBoundaryMappings({
+      ...legacyModel,
+      nodes: [nodes[0]],
+      mappings: [
+        { smVarId: 'x', blockId: 'input', portId: '', direction: 'in' as const },
+      ],
+    }, new Set(['x']));
+
+    expect(repaired.diagnostics).toEqual([]);
+    expect(repaired.model).toMatchObject({
+      mappings: [
+        { smVarId: 'x', blockId: 'input', portId: 'in', direction: 'in' },
       ],
     });
   });

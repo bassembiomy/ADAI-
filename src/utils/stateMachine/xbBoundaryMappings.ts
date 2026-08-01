@@ -186,7 +186,6 @@ export const reconcileXBBoundaryMappings = (
   const coveredBlocks = new Set<string>();
   for (const mapping of previousMappings) {
     if (isCompleteXBBoundaryMapping(mapping)
-      && validVariableIds.has(mapping.smVarId)
       && targetKeys.has(targetKey(mapping.blockId, mapping.portId, mapping.direction))) {
       reconciled.push(mapping);
       coveredBlocks.add(mapping.blockId);
@@ -252,10 +251,10 @@ export const repairLegacyXBBoundaryMappings = (
     const direction = mapping.direction;
     const blockId = nonEmptyString(mapping.blockId);
     const portId = nonEmptyString(mapping.portId);
-    if (smVarId === null
-      || (direction !== 'in' && direction !== 'out')
-      || blockId !== null
-      || portId !== null) {
+    if (smVarId === null || (direction !== 'in' && direction !== 'out')) {
+      return mapping;
+    }
+    if (blockId !== null && portId !== null) {
       return mapping;
     }
 
@@ -268,7 +267,9 @@ export const repairLegacyXBBoundaryMappings = (
       return mapping;
     }
 
-    const candidates = targetsByDirection[direction];
+    const candidates = targetsByDirection[direction].filter((target) =>
+      (blockId === null || target.blockId === blockId)
+      && (portId === null || target.portId === portId));
     if (candidates.length !== 1) {
       const boundaryType = direction === 'in' ? 'input' : 'output';
       const blockType = direction === 'in' ? 'Inport' : 'Outport';
@@ -282,6 +283,34 @@ export const repairLegacyXBBoundaryMappings = (
 
     return createXBBoundaryMapping(smVarId, candidates[0]);
   });
+
+  const coveredBlocks = new Set<string>();
+  const explicitDirections = new Set<'in' | 'out'>();
+  for (const mapping of mappings) {
+    if (!isRecord(mapping)) continue;
+    if (mapping.direction === 'in' || mapping.direction === 'out') {
+      explicitDirections.add(mapping.direction);
+    }
+    const blockId = nonEmptyString(mapping.blockId);
+    const portId = nonEmptyString(mapping.portId);
+    if (blockId !== null && portId !== null) coveredBlocks.add(blockId);
+  }
+
+  for (const value of input.nodes) {
+    if (!isRecord(value)) continue;
+    const blockId = nonEmptyString(value.id);
+    if (blockId === null || coveredBlocks.has(blockId)) continue;
+    const type = resolveNodeType(value);
+    if (type !== 'Inport' && type !== 'Outport') continue;
+    const smVarId = resolveSmVarId(value);
+    if (smVarId === null || !validVariableIds.has(smVarId)) continue;
+    const direction = type === 'Inport' ? 'in' : 'out';
+    if (explicitDirections.has(direction)) continue;
+    const candidates = listXBBoundaryTargets([value], direction);
+    if (candidates.length !== 1) continue;
+    mappings.push(createXBBoundaryMapping(smVarId, candidates[0]));
+    coveredBlocks.add(blockId);
+  }
 
   return {
     model: { ...input, mappings },
