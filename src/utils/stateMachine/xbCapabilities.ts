@@ -54,8 +54,8 @@ const shapedCoverage = (
 
 const CORE_SCALAR_COVERAGE: readonly XBConformanceCoverage[] = [
   shapedCoverage('Constant', [], ['scalar']),
-  shapedCoverage('Inport', [], ['scalar']),
-  shapedCoverage('Outport', ['scalar'], []),
+  shapedCoverage('Inport', ['scalar'], ['scalar']),
+  shapedCoverage('Outport', ['scalar'], ['scalar']),
   ...['Sum', 'SUM_JUNCTION', 'GAIN', 'PRODUCT', 'UnaryNeg', 'Abs',
     'AND', 'OR', 'NOT', 'DATA_TYPE_CONVERSION', 'NUMERIC_REPRESENTATION']
     .map(scalarCoverage),
@@ -270,10 +270,10 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
     { inputShapes: [], outputShapes: allShapes },
   ),
   Inport: direct(scalar, undefined, undefined, undefined, {
-    inputShapes: [], outputShapes: scalar,
+    inputShapes: scalar, outputShapes: scalar,
   }),
   Outport: direct(scalar, undefined, undefined, undefined, {
-    inputShapes: scalar, outputShapes: [],
+    inputShapes: scalar, outputShapes: scalar,
   }),
   Step: direct(scalar),
 

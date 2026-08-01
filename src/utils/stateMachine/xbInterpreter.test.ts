@@ -538,7 +538,7 @@ describe('X-Bridges interpreter', () => {
       mode: 'real-world-value' as const,
     };
     const operations = {
-      input: operation('input', 'Inport', [], ['input:y']),
+      input: operation('input', 'Inport', ['input:u'], ['input:y']),
       a: operation('a', 'Constant', [], ['a:y'], { value: 2 }),
       b: operation('b', 'Constant', [], ['b:y'], { value: 3 }),
       sum: operation('sum', 'Sum', ['sum:a', 'sum:b'], ['sum:y']),
@@ -553,11 +553,11 @@ describe('X-Bridges interpreter', () => {
       convert: { ...operation('convert', 'DATA_TYPE_CONVERSION', ['convert:u'], ['convert:y']), conversion },
       represent: { ...operation('represent', 'NUMERIC_REPRESENTATION', ['represent:u'], ['represent:y']), conversion },
       sink: operation('sink', 'TERMINATOR', ['sink:u'], []),
-      output: operation('output', 'Outport', ['output:u'], []),
+      output: operation('output', 'Outport', ['output:u'], ['output:y']),
     };
     const linked = (id: string, source: string) => signal(id, 'input', source);
     const signals = {
-      'input:y': signal('input:y', 'output'),
+      'input:u': signal('input:u', 'input'), 'input:y': signal('input:y', 'output'),
       'a:y': signal('a:y', 'output'), 'b:y': signal('b:y', 'output'),
       'sum:a': linked('sum:a', 'a:y'), 'sum:b': linked('sum:b', 'b:y'), 'sum:y': signal('sum:y', 'output'),
       'junction:a': linked('junction:a', 'a:y'), 'junction:b': linked('junction:b', 'b:y'), 'junction:y': signal('junction:y', 'output'),
@@ -571,7 +571,7 @@ describe('X-Bridges interpreter', () => {
       'convert:u': linked('convert:u', 'gain:y'), 'convert:y': signal('convert:y', 'output'),
       'represent:u': linked('represent:u', 'convert:y'), 'represent:y': signal('represent:y', 'output'),
       'sink:u': linked('sink:u', 'represent:y'),
-      'output:u': linked('output:u', 'gain:y'),
+      'output:u': linked('output:u', 'gain:y'), 'output:y': signal('output:y', 'output'),
     };
     const runtime = createXBRuntime(model(
       'retain', operations, signals, Object.keys(operations),

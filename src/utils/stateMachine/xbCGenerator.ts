@@ -782,8 +782,18 @@ const emitConstant: OperationEmitter = (
     )).flat();
 };
 
-const emitInport: OperationEmitter = () => [];
-const emitOutport: OperationEmitter = () => [];
+const emitBoundaryPassThrough = emitSingleOutput((inputs) => inputs[0] ?? '0.0F');
+const emitBoundaryPort: OperationEmitter = (
+  state,
+  operation,
+  operationIndex,
+  layout,
+  member,
+) => operation.inputSignalIds.length === 0 || operation.outputSignalIds.length === 0
+  ? []
+  : emitBoundaryPassThrough(state, operation, operationIndex, layout, member);
+const emitInport: OperationEmitter = emitBoundaryPort;
+const emitOutport: OperationEmitter = emitBoundaryPort;
 const emitTerminator: OperationEmitter = () => [];
 
 const emitStep = emitSingleOutput((_inputs, operation, state) => {

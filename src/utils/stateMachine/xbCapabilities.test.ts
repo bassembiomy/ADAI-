@@ -59,6 +59,26 @@ describe('getXBBlockCapability', () => {
     }
   });
 
+  it.each(['Inport', 'Outport'] as const)(
+    'allows every scalar port declared by the real %s block',
+    (type) => {
+      const block = BLOCK_LIBRARY[type](`test-${type}`, {});
+      const capability = getXBBlockCapability(type);
+      expect(capability?.codegen).toBe(true);
+      for (const port of block.inputs) {
+        expect(port.direction).toBe('input');
+        expect(port.dimensions ?? []).toEqual([]);
+        expect(capability?.inputShapes).toContain('scalar');
+      }
+      for (const port of block.outputs) {
+        expect(port.direction).toBe('output');
+        expect(port.dimensions ?? []).toEqual([]);
+        expect(capability?.outputShapes).toContain('scalar');
+      }
+      expect([block.inputs.length, block.outputs.length]).toEqual([1, 1]);
+    },
+  );
+
   it('links every code-generation-capable block to interpreter and compiled-C conformance cases', () => {
     const interpreterManifest = (capabilityModule as any).XB_INTERPRETER_CONFORMANCE_CASES as
       Record<string, readonly { blockType: string; inputShapes: readonly string[]; outputShapes: readonly string[] }[]> | undefined;

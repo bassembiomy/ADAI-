@@ -470,10 +470,10 @@ const evaluateDirectOperation = (
       )];
     case 'Inport':
     case 'Outport':
-      // Port signals are populated/consumed by mappings. The operation itself
-      // is a no-op, matching the generated-C emitter and preserving a mapped
-      // Inport value for downstream operations.
-      return [];
+      // State-machine mappings drive Inport inputs and consume Outport
+      // outputs. Propagate the scalar value across the boundary block so the
+      // editor model, interpreter, and generated C share one contract.
+      return [inputs[0] ?? [0]];
     case 'GAIN': {
       const gain = Number(parameter(
         operation,
@@ -965,9 +965,11 @@ const executeDirectOperations = (
     if (operation.stateful) continue;
     if (runtime.operationFaults[operation.id]?.active) continue;
     if (!forceEvaluation && !scheduledThisSubstep(runtime, operation)) continue;
-    if (operation.type === 'Inport' || operation.type === 'Outport') {
-      // Mappings own these boundary signals. Do not synthesize a default
-      // output, which would overwrite a mapped Inport value.
+    if ((operation.type === 'Inport' || operation.type === 'Outport')
+      && (operation.inputSignalIds.length === 0
+        || operation.outputSignalIds.length === 0)) {
+      // Preserve legacy one-sided boundary models whose mapped signal is
+      // already the block's only semantic port.
       continue;
     }
     if (

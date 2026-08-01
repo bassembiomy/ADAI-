@@ -350,7 +350,7 @@ const combinationalSemanticModel = (): SemanticModel => {
     fractionLength: 1,
   } as const;
   const operations = [
-    scalarOperation('input', 'Inport', [], ['input:y']),
+    scalarOperation('input', 'Inport', ['input:u'], ['input:y']),
     scalarOperation('constant', 'Constant', [], ['constant:y'], { value: 3 }),
     scalarOperation('step', 'Step', [], ['step:y'], {
       stepTime: 0,
@@ -449,10 +449,11 @@ const combinationalSemanticModel = (): SemanticModel => {
         mode: 'stored-integer-reinterpretation',
       },
     ),
-    scalarOperation('output', 'Outport', ['output:u'], []),
+    scalarOperation('output', 'Outport', ['output:u'], ['output:y']),
     scalarOperation('terminator', 'TERMINATOR', ['terminator:u'], []),
   ];
   const signals: Record<string, XBSemanticSignal> = {
+    'input:u': { ...signal('input:u', float32), direction: 'input', sourceSignalId: null },
     'input:y': signal('input:y', float32),
     'constant:y': signal('constant:y', float32),
     'step:y': signal('step:y', int32),
@@ -509,6 +510,7 @@ const combinationalSemanticModel = (): SemanticModel => {
     'reinterpret:u': scalarInputSignal('reinterpret:u', 'convert:y', fixedQ2),
     'reinterpret:y': signal('reinterpret:y', fixedQ1),
     'output:u': scalarInputSignal('output:u', 'reinterpret:y', fixedQ1),
+    'output:y': signal('output:y', fixedQ1),
     'terminator:u': scalarInputSignal('terminator:u', 'shift-left:y', int32),
   };
   ir.variables = {
@@ -544,17 +546,17 @@ const combinationalSemanticModel = (): SemanticModel => {
     mappings: [
       {
         variableId: 'u',
-        signalId: 'input:y',
+        signalId: 'input:u',
         blockId: 'input',
-        portId: 'y',
+        portId: 'u',
         direction: 'in',
         numericType: float32,
       },
       {
         variableId: 'y',
-        signalId: 'output:u',
+        signalId: 'output:y',
         blockId: 'output',
-        portId: 'u',
+        portId: 'y',
         direction: 'out',
         numericType: float32,
       },
