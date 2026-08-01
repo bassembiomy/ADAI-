@@ -134,6 +134,26 @@ describe('syncXBBoundaryNodeMetadata', () => {
     expect(synced[0]).toMatchObject({ parameters: { smVarId: 'z' } });
     expect(canonicalNodes[0].parameters.smVarId).toBe('x');
   });
+
+  it('keeps canonical mappings stable across metadata sync and reloads', () => {
+    const inputMapping = createXBBoundaryMapping('x', listXBBoundaryTargets(nodes, 'in')[0]);
+    const syncedInput = syncXBBoundaryNodeMetadata(nodes, [inputMapping]);
+    const reloadedInput = structuredClone(syncedInput);
+    const reconciledInput = reconcileXBBoundaryMappings(reloadedInput, [inputMapping], new Set(['x']));
+
+    expect(reconciledInput).toEqual([inputMapping]);
+
+    const outputMapping = createXBBoundaryMapping('x', listXBBoundaryTargets(nodes, 'out')[0]);
+    expect(outputMapping).toEqual({ smVarId: 'x', blockId: 'output', portId: 'out', direction: 'out' });
+    const syncedOutput = syncXBBoundaryNodeMetadata(reloadedInput, [outputMapping]);
+    const reloadedOutput = structuredClone(syncedOutput);
+    const reconciledOutput = reconcileXBBoundaryMappings(reloadedOutput, [outputMapping], new Set(['x']));
+
+    expect(reconciledOutput).toEqual([outputMapping]);
+    expect([inputMapping, ...reconciledInput, outputMapping, ...reconciledOutput]
+      .every(mapping => Object.values(mapping).every(value => typeof value === 'string' && value.length > 0)))
+      .toBe(true);
+  });
 });
 
 describe('reconcileXBBoundaryMappings', () => {
@@ -142,8 +162,47 @@ describe('reconcileXBBoundaryMappings', () => {
   });
 
   it('preserves already-complete canonical mappings', () => {
-    expect(reconcileXBBoundaryMappings(nodes, canonical, new Set(['other'])))
+    expect(reconcileXBBoundaryMappings(nodes, canonical, new Set(['x'])))
       .toEqual(canonical);
+  });
+
+  it('drops previous mappings without a valid state-machine variable', () => {
+    const nodesWithoutMetadata = nodes.map(node => ({
+      ...node,
+      data: { ...node.data, params: {} },
+    }));
+    const incomplete = { smVarId: '', blockId: 'input', portId: 'in', direction: 'in' as const };
+    const unknown = { smVarId: 'stale', blockId: 'input', portId: 'in', direction: 'in' as const };
+
+    expect(reconcileXBBoundaryMappings(nodesWithoutMetadata, [incomplete, unknown], new Set(['x'])))
+      .toEqual([]);
+  });
+
+  it('rejects an absent target tuple even when concatenated target fields collide', () => {
+    const collisionTargets = [
+      {
+        id: 'a', type: 'xblock',
+        data: {
+          type: 'Inport', params: {},
+          inputs: [{ id: 'bc', direction: 'input' }],
+          outputs: [],
+        },
+      },
+      {
+        id: 'ab', type: 'xblock',
+        data: {
+          type: 'Inport', params: {},
+          inputs: [],
+          outputs: [],
+        },
+      },
+    ];
+    const absentButColliding = {
+      smVarId: 'x', blockId: 'ab', portId: 'c', direction: 'in' as const,
+    };
+
+    expect(reconcileXBBoundaryMappings(collisionTargets, [absentButColliding], new Set(['x'])))
+      .toEqual([]);
   });
 
   it('does not import variables that do not exist', () => {

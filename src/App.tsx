@@ -51,6 +51,13 @@ import {
 } from './utils/stateMachine/smAppAdapter';
 import { serializeInlineScriptJson } from './utils/stateMachine/smInlineScriptSerialization';
 import { migrateStateMachineModel } from './utils/stateMachine/smModelMigration';
+import type { XBMappingV1 } from './utils/stateMachine/xbModel';
+import {
+  createXBBoundaryMapping,
+  listXBBoundaryTargets,
+  pruneXBBoundaryMappings,
+  syncXBBoundaryNodeMetadata,
+} from './utils/stateMachine/xbBoundaryMappings';
 import type { SemanticTraceFrame } from './utils/stateMachine/smTrace';
 import { STATE_MACHINE_RUNTIME_BUNDLE } from './generated/stateMachineRuntimeBundle';
 import { analyzeStateMachine } from './utils/smAnalysisEngine';
@@ -8033,11 +8040,12 @@ const ADIA = () => {
     setShowSaveSelectionModal(true);
   }, []);
 
-  const handleXBridgesSave = useCallback((nodes: any[], edges: any[]) => {
+  const handleXBridgesSave = useCallback((nodes: any[], edges: any[], mappings: readonly XBMappingV1[]) => {
+    const prunedMappings = pruneXBBoundaryMappings(mappings, nodes);
     if (xBridgesStateId) {
       setStates(prev => prev.map(s =>
         s.id === xBridgesStateId
-          ? { ...s, xBridgesModel: { ...s.xBridgesModel, nodes, edges } }
+          ? { ...s, xBridgesModel: { ...s.xBridgesModel, nodes, edges, mappings: Array.from(prunedMappings) } }
           : s
       ));
     } else {
@@ -8268,6 +8276,22 @@ const ADIA = () => {
 
   // Computed values
   const selectedState = useMemo(() => selectedIds.length === 1 ? states.find(s => s.id === selectedIds[0]) : null, [selectedIds, states]);
+  const selectedXBridgesNodes = useMemo(
+    () => Array.from(selectedState?.xBridgesModel?.nodes || []),
+    [selectedState],
+  );
+  const selectedInputBoundaryTargets = useMemo(
+    () => listXBBoundaryTargets(selectedXBridgesNodes, 'in'),
+    [selectedXBridgesNodes],
+  );
+  const selectedOutputBoundaryTargets = useMemo(
+    () => listXBBoundaryTargets(selectedXBridgesNodes, 'out'),
+    [selectedXBridgesNodes],
+  );
+  const mappingVariables = useMemo(
+    () => variables.filter(variable => typeof variable.id === 'string' && variable.id.length > 0),
+    [variables],
+  );
   const selectedJunction = useMemo(() => selectedIds.length === 1 ? junctions.find(j => j.id === selectedIds[0]) : null, [selectedIds, junctions]);
   const selectedTransition = useMemo(() => selectedIds.length === 1 ? transitions.find(t => t.id === selectedIds[0]) : null, [selectedIds, transitions]);
   const selectedBlock = useMemo(() => selectedIds.length === 1 ? blocks.find(b => b.id === selectedIds[0]) : null, [selectedIds, blocks]);
@@ -15101,8 +15125,12 @@ const ADIA = () => {
               {(xBridgesStateId || diagramMode === 'xbridges') && (
                 <XbridgesWorkspace
                   key={xBridgesStateId || activeFileId}
-                  initialNodes={xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.nodes || []) : globalXBridgesNodes}
+                  initialNodes={syncXBBoundaryNodeMetadata(
+                    xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.nodes || []) : globalXBridgesNodes,
+                    xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.mappings || []) : [],
+                  )}
                   initialEdges={xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.edges || []) : globalXBridgesEdges}
+                  initialMappings={xBridgesStateId ? Array.from(states.find(s => s.id === xBridgesStateId)?.xBridgesModel?.mappings || []) : []}
                   availableVariables={variables}
                   tickMs={tickMs}
                   onLaunchDoe={() => toggleWindow('doe')}
@@ -15970,19 +15998,31 @@ const ADIA = () => {
                     <div className="space-y-3 p-3 bg-[#1a1a1a] rounded border border-[#f97316]/30">
                       <div className="flex justify-between items-center">
                         <Label className="text-amber-400 font-bold">Variable Mappings</Label>
-                        <Button size="sm" className="h-5 text-[10px] px-2 bg-amber-600/20 text-amber-500 border-amber-500/50"
-                          onClick={() => {
-                            const currentMappings = selectedState.xBridgesModel?.mappings || [];
-                            updateState(selectedState.id, {
-                              xBridgesModel: {
-                                ...selectedState.xBridgesModel,
-                                nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
-                                edges: Array.from(selectedState.xBridgesModel?.edges || []),
-                                mappings: [...currentMappings, { smVarId: '', blockId: '', portId: '', direction: 'in' }]
-                              }
-                            });
-                          }}
-                        >+ Add Map</Button>
+                        <div className="flex gap-1">
+                          {(['in', 'out'] as const).map(direction => {
+                            const targets = direction === 'in' ? selectedInputBoundaryTargets : selectedOutputBoundaryTargets;
+                            const disabled = mappingVariables.length === 0 || targets.length === 0;
+                            return (
+                              <Button
+                                key={direction}
+                                size="sm"
+                                disabled={disabled}
+                                className="h-5 text-[10px] px-2 bg-amber-600/20 text-amber-500 border-amber-500/50 disabled:opacity-40"
+                                onClick={() => {
+                                  const mappings = selectedState.xBridgesModel?.mappings || [];
+                                  updateState(selectedState.id, {
+                                    xBridgesModel: {
+                                      ...selectedState.xBridgesModel,
+                                      nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
+                                      edges: Array.from(selectedState.xBridgesModel?.edges || []),
+                                      mappings: [...mappings, createXBBoundaryMapping(mappingVariables[0].id, targets[0])],
+                                    },
+                                  });
+                                }}
+                              >{direction === 'in' ? '+ Input' : '+ Output'}</Button>
+                            );
+                          })}
+                        </div>
                       </div>
                       <div className="space-y-2 max-h-60 overflow-y-auto pr-1 thin-scrollbar">
                         {(selectedState.xBridgesModel?.mappings || []).map((map, idx) => (
@@ -16006,74 +16046,49 @@ const ADIA = () => {
                                   }}
                                   className="w-full h-7 bg-[#1a1a1a] border border-[#333] rounded text-[10px] px-1 text-amber-200"
                                 >
-                                  <option value="">Select...</option>
-                                  {variables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                                  {mappingVariables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                                 </select>
                               </div>
                               <div className="flex flex-col gap-1">
                                 <Label className="text-[9px] uppercase tracking-wider text-gray-500">Direction</Label>
-                                <select
-                                  value={map.direction}
-                                  onChange={(e) => {
-                                    const newMaps = [...selectedState.xBridgesModel!.mappings!];
-                                    newMaps[idx] = { ...map, direction: e.target.value as any };
-                                    updateState(selectedState.id, {
-                                      xBridgesModel: {
-                                        ...selectedState.xBridgesModel,
-                                        nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
-                                        edges: Array.from(selectedState.xBridgesModel?.edges || []),
-                                        mappings: newMaps
-                                      }
-                                    });
-                                  }}
-                                  className="w-full h-7 bg-[#1a1a1a] border border-[#333] rounded text-[10px] px-1 text-gray-300"
-                                >
-                                  <option value="in">SM → Block</option>
-                                  <option value="out">Block → SM</option>
-                                </select>
+                                <div className="h-7 flex items-center px-2 bg-[#1a1a1a] border border-[#333] rounded text-[10px] text-gray-300">
+                                  {map.direction === 'in' ? 'SM → Inport' : 'Outport → SM'}
+                                </div>
                               </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div className="flex flex-col gap-1">
-                                <Label className="text-[9px] uppercase tracking-wider text-gray-500">Block ID</Label>
-                                <Input
-                                  value={map.blockId}
-                                  onChange={(e) => {
-                                    const newMaps = [...selectedState.xBridgesModel!.mappings!];
-                                    newMaps[idx] = { ...map, blockId: e.target.value };
-                                    updateState(selectedState.id, {
-                                      xBridgesModel: {
-                                        ...selectedState.xBridgesModel,
-                                        nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
-                                        edges: Array.from(selectedState.xBridgesModel?.edges || []),
-                                        mappings: newMaps
-                                      }
-                                    });
-                                  }}
-                                  placeholder="e.g. Constant-1"
-                                  className="h-7 text-[10px] font-mono"
-                                />
-                              </div>
-                              <div className="flex flex-col gap-1">
-                                <Label className="text-[9px] uppercase tracking-wider text-gray-500">Block Port</Label>
-                                <Input
-                                  value={map.portId}
-                                  onChange={(e) => {
-                                    const newMaps = [...selectedState.xBridgesModel!.mappings!];
-                                    newMaps[idx] = { ...map, portId: e.target.value };
-                                    updateState(selectedState.id, {
-                                      xBridgesModel: {
-                                        ...selectedState.xBridgesModel,
-                                        nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
-                                        edges: Array.from(selectedState.xBridgesModel?.edges || []),
-                                        mappings: newMaps
-                                      }
-                                    });
-                                  }}
-                                  placeholder="e.g. in1"
-                                  className="h-7 text-[10px] font-mono"
-                                />
-                              </div>
+                            <div className="flex flex-col gap-1">
+                              <Label className="text-[9px] uppercase tracking-wider text-gray-500">Boundary</Label>
+                              {(() => {
+                                const targets = map.direction === 'in' ? selectedInputBoundaryTargets : selectedOutputBoundaryTargets;
+                                const selectedTargetIndex = targets.findIndex(target => target.blockId === map.blockId && target.portId === map.portId);
+                                return (
+                                  <select
+                                    value={selectedTargetIndex >= 0 ? String(selectedTargetIndex) : ''}
+                                    onChange={(e) => {
+                                      const target = targets[Number(e.target.value)];
+                                      if (!target) return;
+                                      const newMaps = [...selectedState.xBridgesModel!.mappings!];
+                                      newMaps[idx] = createXBBoundaryMapping(map.smVarId, target);
+                                      updateState(selectedState.id, {
+                                        xBridgesModel: {
+                                          ...selectedState.xBridgesModel,
+                                          nodes: Array.from(selectedState.xBridgesModel?.nodes || []),
+                                          edges: Array.from(selectedState.xBridgesModel?.edges || []),
+                                          mappings: newMaps,
+                                        },
+                                      });
+                                    }}
+                                    className="w-full h-7 bg-[#1a1a1a] border border-[#333] rounded text-[10px] px-1 text-gray-300"
+                                  >
+                                    {selectedTargetIndex < 0 && <option value="" disabled>Boundary unavailable</option>}
+                                    {targets.map((target, targetIndex) => (
+                                      <option key={`${target.blockId}:${target.portId}`} value={targetIndex}>
+                                        {target.label} · {target.portId}
+                                      </option>
+                                    ))}
+                                  </select>
+                                );
+                              })()}
                             </div>
                             <button
                               className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"

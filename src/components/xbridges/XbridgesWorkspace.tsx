@@ -22,6 +22,11 @@ import {
   GraduationCap, ArrowRightCircle, ArrowLeftCircle, Cloud, CheckCircle2, AlertCircle, FileText
 } from 'lucide-react';
 import { XBRIDGES_CATEGORIES, BLOCK_LIBRARY, getPolynomialCoefficients, trimLeadingZeros } from '../../engine/xbridges/BlockDefinitions';
+import type { XBMappingV1 } from '../../utils/stateMachine/xbModel';
+import {
+  reconcileXBBoundaryMappings,
+  syncXBBoundaryNodeMetadata,
+} from '../../utils/stateMachine/xbBoundaryMappings';
 
 // Map icon string names to Lucide icon components
 const LucideIconMap: Record<string, React.ComponentType<any>> = {
@@ -1241,10 +1246,11 @@ const XBRIDGES_LEARNING_LAB_STEPS: Record<string, any[]> = {
 export const XbridgesWorkspace: React.FC<{
   initialNodes?: any[];
   initialEdges?: any[];
+  initialMappings?: readonly XBMappingV1[];
   availableVariables?: any[];
   tickMs?: number; // Added to sync with State Machine
   onBack?: () => void;
-  onSave?: (nodes: any[], edges: any[]) => void;
+  onSave?: (nodes: any[], edges: any[], mappings: readonly XBMappingV1[]) => void;
   onSaveAll?: () => void;
   onLaunchDoe?: () => void;
   initialSelectedNodeId?: string | null;
@@ -1258,6 +1264,7 @@ export const XbridgesWorkspace: React.FC<{
 }> = ({
   initialNodes = [],
   initialEdges = [],
+  initialMappings = [],
   availableVariables = [],
   tickMs,
   onBack,
@@ -1273,7 +1280,11 @@ export const XbridgesWorkspace: React.FC<{
   isSmSimulating = false,
   simulationTime = 0
 }) => {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const initialNodesWithMappings = useMemo(
+    () => syncXBBoundaryNodeMetadata(initialNodes, initialMappings),
+    [initialNodes, initialMappings],
+  );
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodesWithMappings);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [localClipboard, setLocalClipboard] = useState<{
     nodes: any[];
@@ -1301,6 +1312,35 @@ export const XbridgesWorkspace: React.FC<{
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialNodesRef = React.useRef(initialNodes);
   const initialEdgesRef = React.useRef(initialEdges);
+  const initialMappingsRef = React.useRef<readonly XBMappingV1[]>(initialMappings);
+  const nodesRef = React.useRef(nodes);
+  const edgesRef = React.useRef(edges);
+  const validVariableIds = useMemo(
+    () => new Set(availableVariables.map(variable => variable.id).filter((id): id is string => typeof id === 'string' && id.length > 0)),
+    [availableVariables],
+  );
+  const persistWorkspace = useCallback((nextNodes: any[], nextEdges: any[]) => {
+    const mappings = reconcileXBBoundaryMappings(
+      nextNodes,
+      initialMappingsRef.current,
+      validVariableIds,
+    );
+    const syncedNodes = syncXBBoundaryNodeMetadata(nextNodes, mappings);
+    initialMappingsRef.current = mappings;
+    onSave?.(syncedNodes, nextEdges, mappings);
+  }, [onSave, validVariableIds]);
+  const persistWorkspaceRef = React.useRef(persistWorkspace);
+
+  React.useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+  React.useEffect(() => { edgesRef.current = edges; }, [edges]);
+  React.useEffect(() => { persistWorkspaceRef.current = persistWorkspace; }, [persistWorkspace]);
+
+  useEffect(() => {
+    initialMappingsRef.current = initialMappings;
+    if (!isSavingRef.current) {
+      setNodes(currentNodes => syncXBBoundaryNodeMetadata(currentNodes, initialMappings));
+    }
+  }, [initialMappings, setNodes]);
 
   // Debounced save: fire onSave 300ms after changes settle, but never re-import changes we caused
   useEffect(() => {
@@ -1310,13 +1350,13 @@ export const XbridgesWorkspace: React.FC<{
     saveTimerRef.current = setTimeout(() => {
       if (onSave) {
         isSavingRef.current = true;
-        onSave(nodes, edges);
+        persistWorkspace(nodes, edges);
         // Allow inward sync again after two animation frames
         requestAnimationFrame(() => requestAnimationFrame(() => { isSavingRef.current = false; }));
       }
     }, 300);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [nodes, edges, onSave]);
+  }, [nodes, edges, onSave, persistWorkspace]);
 
   // Inward sync: only apply when initialNodes/initialEdges change AND we didn't cause the change
   useEffect(() => {
@@ -1325,7 +1365,7 @@ export const XbridgesWorkspace: React.FC<{
     initialNodesRef.current = initialNodes;
     // If we are currently saving, this change came from our own onSave callback — skip it
     if (isSavingRef.current) return;
-    setNodes(initialNodes);
+    setNodes(syncXBBoundaryNodeMetadata(initialNodes, initialMappingsRef.current));
   }, [initialNodes, setNodes]);
 
   useEffect(() => {
@@ -1546,7 +1586,7 @@ export const XbridgesWorkspace: React.FC<{
         // Fire one save after copy-drag ends
         if (onSave) {
           isSavingRef.current = true;
-          onSave(nodesRef.current, edgesRef.current);
+          persistWorkspace(nodesRef.current, edgesRef.current);
           requestAnimationFrame(() => requestAnimationFrame(() => { isSavingRef.current = false; }));
         }
       }
@@ -1565,7 +1605,7 @@ export const XbridgesWorkspace: React.FC<{
       window.removeEventListener('mouseup', handleWindowMouseUp);
       window.removeEventListener('contextmenu', handleContextMenu);
     };
-  }, [rightClickDrag, reactFlowInstance, setNodes, onSave]);
+  }, [rightClickDrag, reactFlowInstance, setNodes, onSave, persistWorkspace]);
 
   // Select and focus programmatic node from V-Lab
   useEffect(() => {
@@ -1806,19 +1846,9 @@ export const XbridgesWorkspace: React.FC<{
   }, [nodes, saveHistory, setNodes, setSelectedNodeId]);
 
   // Auto-save on unmount to prevent data loss (FR-Persistence)
-  const nodesRef = React.useRef(nodes);
-  const edgesRef = React.useRef(edges);
-  const onSaveRef = React.useRef(onSave);
-
-  React.useEffect(() => { nodesRef.current = nodes; }, [nodes]);
-  React.useEffect(() => { edgesRef.current = edges; }, [edges]);
-  React.useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
-
   React.useEffect(() => {
     return () => {
-      if (onSaveRef.current) {
-        onSaveRef.current(nodesRef.current, edgesRef.current);
-      }
+      persistWorkspaceRef.current(nodesRef.current, edgesRef.current);
     };
   }, []); // Run ONLY on unmount
 
@@ -2363,6 +2393,7 @@ export const XbridgesWorkspace: React.FC<{
       // Save (Ctrl+S or Cmd+S)
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
         e.preventDefault();
+        if (onSave) persistWorkspace(nodes, edges);
         if (onSaveAll) onSaveAll();
         else console.log('Saved workspace state:', { nodes, edges });
       }
@@ -2477,7 +2508,7 @@ export const XbridgesWorkspace: React.FC<{
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [nodes, edges, history, selectedNodeId, sharedClipboard, onClipboardChange, localClipboard, fileId, setNodes, setEdges, setIsSimulating, saveHistory, isLibCollapsed, isPropsCollapsed]);
+  }, [nodes, edges, history, selectedNodeId, sharedClipboard, onClipboardChange, localClipboard, fileId, setNodes, setEdges, setIsSimulating, saveHistory, isLibCollapsed, isPropsCollapsed, onSave, onSaveAll, persistWorkspace]);
 
   const updateBlock = (blockId: string, data: any) => {
     setNodes(nds => nds.map(n => {
@@ -3185,7 +3216,7 @@ export const XbridgesWorkspace: React.FC<{
 
                 {onBack && (
                   <button
-                    onClick={() => { if (onSave) onSave(nodes, edges); onBack(); }}
+                    onClick={() => { if (onSave) persistWorkspace(nodes, edges); onBack(); }}
                     className="p-2.5 rounded-xl bg-[#222] text-[#e0e0e0] hover:bg-[#333] border border-[#333] transition-all shadow-sm"
                     title="Save & Exit"
                   >

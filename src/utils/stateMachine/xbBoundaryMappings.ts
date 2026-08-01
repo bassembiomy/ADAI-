@@ -71,7 +71,13 @@ const boundarySpec = (
 );
 
 const targetKey = (blockId: string, portId: string, direction: 'in' | 'out') =>
-  `${blockId}${portId}${direction}`;
+  JSON.stringify([blockId, portId, direction]);
+
+const isCompleteXBBoundaryMapping = (mapping: XBMappingV1): boolean =>
+  nonEmptyString(mapping.smVarId) !== null
+  && nonEmptyString(mapping.blockId) !== null
+  && nonEmptyString(mapping.portId) !== null
+  && (mapping.direction === 'in' || mapping.direction === 'out');
 
 /** Lists every boundary port of the requested direction, sorted by block and port. */
 export const listXBBoundaryTargets = (
@@ -109,9 +115,10 @@ export const createXBBoundaryMapping = (
 });
 
 /**
- * Mirrors the canonical variable ID into legacy `data.params.smVarId` or
- * canonical `parameters.smVarId`. Input nodes are never mutated; nodes that
- * change are shallow-cloned along the updated path.
+ * Mirrors canonical mappings into legacy `data.params.smVarId` or canonical
+ * `parameters.smVarId`. Stale boundary metadata is removed so it cannot be
+ * re-imported as an additional mapping after a save/reload. Input nodes are
+ * never mutated; nodes that change are shallow-cloned along the updated path.
  */
 export const syncXBBoundaryNodeMetadata = (
   nodes: readonly any[],
@@ -128,18 +135,30 @@ export const syncXBBoundaryNodeMetadata = (
     if (!isRecord(node)) return node;
     const blockId = nonEmptyString(node.id);
     if (blockId === null) return node;
+    const type = resolveNodeType(node);
+    if (type !== 'Inport' && type !== 'Outport') return node;
     const smVarId = smVarIdByBlock.get(blockId);
-    if (smVarId === undefined || resolveSmVarId(node) === smVarId) return node;
+    const currentSmVarId = resolveSmVarId(node);
+    if (smVarId === undefined && currentSmVarId === null) return node;
+    if (smVarId !== undefined && currentSmVarId === smVarId) return node;
 
-    if (isRecord(node.data)) {
+    if (smVarId !== undefined && isRecord(node.data)) {
       const params = isRecord(node.data.params) ? node.data.params : {};
       return {
         ...node,
         data: { ...node.data, params: { ...params, smVarId } },
       };
     }
-    if (isRecord(node.parameters)) {
+    if (smVarId !== undefined && isRecord(node.parameters)) {
       return { ...node, parameters: { ...node.parameters, smVarId } };
+    }
+    if (smVarId === undefined && isRecord(node.data) && isRecord(node.data.params)) {
+      const { smVarId: _staleSmVarId, ...params } = node.data.params;
+      return { ...node, data: { ...node.data, params } };
+    }
+    if (smVarId === undefined && isRecord(node.parameters)) {
+      const { smVarId: _staleSmVarId, ...parameters } = node.parameters;
+      return { ...node, parameters };
     }
     return node;
   });
@@ -166,7 +185,9 @@ export const reconcileXBBoundaryMappings = (
   const reconciled: XBMappingV1[] = [];
   const coveredBlocks = new Set<string>();
   for (const mapping of previousMappings) {
-    if (targetKeys.has(targetKey(mapping.blockId, mapping.portId, mapping.direction))) {
+    if (isCompleteXBBoundaryMapping(mapping)
+      && validVariableIds.has(mapping.smVarId)
+      && targetKeys.has(targetKey(mapping.blockId, mapping.portId, mapping.direction))) {
       reconciled.push(mapping);
       coveredBlocks.add(mapping.blockId);
     }
