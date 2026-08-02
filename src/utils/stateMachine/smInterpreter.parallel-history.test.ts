@@ -9,6 +9,7 @@ import {
   createRuntime,
   initializeRuntime,
   resetRuntime,
+  snapshotRuntime,
   stepRuntime,
   type SemanticRuntime,
 } from './smInterpreter';
@@ -326,7 +327,7 @@ describe('shallow and deep history', () => {
   it('serializes the saved deep configuration in canonical history traces', () => {
     const runtime = runHistoryScenario('deep');
 
-    const frame = stepRuntime(runtime, 0);
+    const frame = snapshotRuntime(runtime);
 
     expect(JSON.parse(frame.history['workspace_children:deep']!)).toEqual([
       'parent_a',

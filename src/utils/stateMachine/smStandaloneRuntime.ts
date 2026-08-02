@@ -3,6 +3,7 @@ import {
   coerceSemanticValue,
   initializeRuntime,
   resetRuntime,
+  snapshotRuntime,
   stepRuntime,
   type SemanticRuntime,
 } from './smInterpreter';
@@ -29,6 +30,7 @@ export {
   createRuntime,
   initializeRuntime,
   resetRuntime,
+  snapshotRuntime,
   stepRuntime,
 };
 
@@ -38,5 +40,6 @@ export const ADIAStateMachineRuntime = Object.freeze({
   initializeRuntime,
   applyInputs,
   stepRuntime,
+  snapshotRuntime,
   resetRuntime,
 });

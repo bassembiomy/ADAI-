@@ -11,6 +11,7 @@ import {
   createRuntime,
   initializeRuntime,
   resetRuntime,
+  snapshotRuntime,
   stepRuntime,
 } from './smInterpreter';
 import { buildSemanticModel } from './smSemanticBuilder';
@@ -574,16 +575,29 @@ describe('runtime lifecycle and canonical traces', () => {
     expect(runtime.error).toBeNull();
   });
 
-  it('increments active-state timers and latches invalid elapsed-time errors', () => {
+  it('increments active-state timers by logical tickMs for accepted jitter and latches invalid/out-of-tolerance errors', () => {
     const runtime = initializedFixture('reset');
 
-    const tick = stepRuntime(runtime, 10);
-    const fault = stepRuntime(runtime, -1);
+    const tick1 = stepRuntime(runtime, 11);
+    const tick2 = stepRuntime(runtime, 9);
 
-    expect(tick.stateTimersMs).toMatchObject({ a: 10 });
+    expect(tick1.stateTimersMs).toMatchObject({ a: 10 });
+    expect(tick2.stateTimersMs).toMatchObject({ a: 20 });
+
+    const fault = stepRuntime(runtime, -1);
     expect(runtime.error?.code).toBe('INVALID_ELAPSED_MS');
     expect(fault.error).toContain('INVALID_ELAPSED_MS');
-    expect(fault.stateTimersMs).toMatchObject({ a: 10 });
+    expect(fault.stateTimersMs).toMatchObject({ a: 20 });
+  });
+
+  it('proves snapshotRuntime does not execute transitions, actions, timers, or X-Bridges', () => {
+    const runtime = initializedFixture('reset');
+    const timerBefore = runtime.stateTimersMs[0];
+    const frame = snapshotRuntime(runtime);
+
+    expect(frame.actions).toEqual([]);
+    expect(runtime.stateTimersMs[0]).toBe(timerBefore);
+    expect(runtime.error).toBeNull();
   });
 
   it('preserves the first latched error across later invalid steps', () => {

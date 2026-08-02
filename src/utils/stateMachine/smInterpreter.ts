@@ -16,12 +16,14 @@ import {
   stepXBState,
   type XBRuntime,
 } from './xbInterpreter';
+import { normalizeLogicalTick } from './smTiming';
 
 export interface SemanticRuntimeError {
   code:
     | 'INVALID_ELAPSED_MS'
     | 'RUNTIME_EVALUATION_ERROR'
     | 'SAFETY_VIOLATION'
+    | 'TIMING'
     | 'XBRIDGES_NUMERIC';
   message: string;
 }
@@ -988,16 +990,25 @@ export const stepRuntime = (
 ): SemanticTraceFrame => {
   const context: StepContext = { runtime, actions: [] };
   if (runtime.error !== null) return createTraceFrame(context, elapsedMs);
-  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) {
+  const timing = normalizeLogicalTick(runtime.ir.tickMs, elapsedMs);
+  if (timing.kind === 'invalid') {
     runtime.error = {
       code: 'INVALID_ELAPSED_MS',
       message: `elapsed time must be finite and non-negative; received ${elapsedMs}`,
     };
     return createTraceFrame(context, elapsedMs);
   }
+  if (timing.kind === 'out-of-tolerance') {
+    runtime.error = {
+      code: 'TIMING',
+      message: `observed ${elapsedMs} ms outside ${runtime.ir.tickMs} ms tick tolerance`,
+    };
+    enterFaultConfiguration(context);
+    return createTraceFrame(context, elapsedMs);
+  }
 
   try {
-    incrementActiveTimers(runtime, elapsedMs);
+    incrementActiveTimers(runtime, timing.logicalMs);
     executeLayer(context, runtime.ir.rootLayerId);
     if ((runtime.error as SemanticRuntimeError | null)?.code === 'XBRIDGES_NUMERIC') {
       enterFaultConfiguration(context);
@@ -1007,6 +1018,9 @@ export const stepRuntime = (
   }
   return createTraceFrame(context, elapsedMs);
 };
+
+export const snapshotRuntime = (runtime: SemanticRuntime): SemanticTraceFrame =>
+  createTraceFrame({ runtime, actions: [] }, 0);
 
 export const resetRuntime = (
   runtime: SemanticRuntime,
