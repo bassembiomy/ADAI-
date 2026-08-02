@@ -626,7 +626,8 @@ export type DifferentialFixtureName =
   | 'terminal-or'
   | 'terminal-and-sibling'
   | 'reset'
-  | 'safe-output-fault';
+  | 'safe-output-fault'
+  | '50-substep-pkg';
 
 export type DifferentialScenarioStep =
   | {
@@ -842,6 +843,12 @@ export const semanticFixture = (
           { kind: 'step', inputs: { output_enable: true } },
           { kind: 'fault' },
         ],
+      };
+    case '50-substep-pkg':
+      return {
+        name,
+        model: hybridXBridgesFixture(),
+        steps: [{ kind: 'step' }],
       };
   }
 };

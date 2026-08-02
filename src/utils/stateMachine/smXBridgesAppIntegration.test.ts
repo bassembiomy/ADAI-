@@ -274,7 +274,8 @@ describe('application X-Bridges simulation integration', () => {
         action: '',
         afterTicks: null,
         type: 'condition',
-        priority: 1,
+        hasControlPoint: false,
+        order: 1,
       },
       {
         id: 't_ctrl_3',
@@ -284,7 +285,8 @@ describe('application X-Bridges simulation integration', () => {
         action: '',
         afterTicks: null,
         type: 'condition',
-        priority: 1,
+        hasControlPoint: false,
+        order: 1,
       },
       {
         id: 't_3_ord',
@@ -294,7 +296,8 @@ describe('application X-Bridges simulation integration', () => {
         action: '',
         afterTicks: null,
         type: 'condition',
-        priority: 1,
+        hasControlPoint: false,
+        order: 1,
       },
     ];
     base.layers[0].transitionIds = ['t_ord_ctrl', 't_ctrl_3', 't_3_ord'];
