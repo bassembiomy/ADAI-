@@ -219,4 +219,122 @@ describe('application X-Bridges simulation integration', () => {
       cTrace,
     )).toBeNull();
   }, 60_000);
+
+  it('runs a 50-substep generated package with compact C loop and fixed-tick timing parity', () => {
+    const scalarPort = (id: string, direction: 'input' | 'output') => ({
+      id, direction, shape: 'scalar' as const, dimensions: [], dataType: 'float32' as const,
+    });
+    const base = hybridXBridgesFixture();
+    const countVar = base.variables.find((v) => v.id === 'count')!;
+    countVar.type = 'float';
+    countVar.initialValue = '0';
+    countVar.currentValue = 0;
+
+    const ordinary = base.states.find((s) => s.id === 'ordinary')!;
+    const controller = base.states.find((s) => s.id === 'controller')!;
+    ordinary.autostart = true;
+    controller.autostart = false;
+
+    controller.xBridgesModel = {
+      schemaVersion: 1,
+      nodes: [
+        { id: 'inport', type: 'Inport', parameters: { inputs: [scalarPort('in', 'input')], outputs: [scalarPort('y', 'output')] } },
+        { id: 'constant', type: 'Constant', parameters: { value: 1, inputs: [], outputs: [scalarPort('y', 'output')] } },
+        { id: 'sum', type: 'Sum', parameters: { signs: '++', inputs: [scalarPort('a', 'input'), scalarPort('b', 'input')], outputs: [scalarPort('y', 'output')] } },
+        { id: 'outport', type: 'Outport', parameters: { inputs: [scalarPort('u', 'input')], outputs: [scalarPort('out', 'output')] } },
+      ],
+      edges: [
+        { id: 'in_sum', sourceNodeId: 'inport', sourcePortId: 'y', targetNodeId: 'sum', targetPortId: 'a' },
+        { id: 'const_sum', sourceNodeId: 'constant', sourcePortId: 'y', targetNodeId: 'sum', targetPortId: 'b' },
+        { id: 'sum_out', sourceNodeId: 'sum', sourcePortId: 'y', targetNodeId: 'outport', targetPortId: 'u' },
+      ],
+      mappings: [
+        { smVarId: 'count', blockId: 'inport', portId: 'in', direction: 'in' },
+        { smVarId: 'count', blockId: 'outport', portId: 'out', direction: 'out' },
+      ],
+      solver: { kind: 'euler', stepSeconds: 0.0002 }, // 10 ms / 0.0002 s = 50 substeps
+      policy: { memory: 'reset', numericFault: 'signal-only' },
+    };
+
+    base.states.push({
+      ...ordinary,
+      id: 'state_3',
+      name: 'State 3',
+      autostart: false,
+      priority: 3,
+    });
+    base.layers[0].stateIds.push('state_3');
+
+    base.transitions = [
+      {
+        id: 't_ord_ctrl',
+        sourceId: 'ordinary',
+        targetId: 'controller',
+        condition: 'count == 1',
+        action: '',
+        afterTicks: null,
+        type: 'condition',
+        priority: 1,
+      },
+      {
+        id: 't_ctrl_3',
+        sourceId: 'controller',
+        targetId: 'state_3',
+        condition: 'count >= 2',
+        action: '',
+        afterTicks: null,
+        type: 'condition',
+        priority: 1,
+      },
+      {
+        id: 't_3_ord',
+        sourceId: 'state_3',
+        targetId: 'ordinary',
+        condition: 'count >= 2',
+        action: '',
+        afterTicks: null,
+        type: 'condition',
+        priority: 1,
+      },
+    ];
+    base.layers[0].transitionIds = ['t_ord_ctrl', 't_ctrl_3', 't_3_ord'];
+
+    const session = createAppSimulationSession(base);
+    expect(session.initialFrame.activeStateIds).toEqual(['ordinary']);
+    expect(session.initialFrame.data.count).toBe(0);
+
+    // Tick 1: input count=1 -> transition to controller
+    session.runtime.data.count = 1;
+    const f1 = stepAppSimulationSession(session, 10);
+    expect(f1.activeStateIds).toEqual(['controller']);
+
+    // Tick 2: controller runs 50 substeps. count was 1, sum(+1) -> count becomes 2
+    const f2 = stepAppSimulationSession(session, 10);
+    expect(f2.activeStateIds).toEqual(['controller']);
+    expect(f2.data.count).toBe(2);
+
+    // Tick 3: count is 2 -> transition to state_3
+    const f3 = stepAppSimulationSession(session, 10);
+    expect(f3.activeStateIds).toEqual(['state_3']);
+
+    // Tick 4: count >= 2 -> transition back to ordinary
+    const f4 = stepAppSimulationSession(session, 10);
+    expect(f4.activeStateIds).toEqual(['ordinary']);
+
+    // Compare with C execution
+    const cTrace = compileAndRunCTrace({
+      name: '50-substep-pkg',
+      model: base,
+      steps: [
+        { kind: 'step', inputs: { count: 1 } },
+        { kind: 'step' },
+        { kind: 'step' },
+        { kind: 'step' },
+      ],
+    });
+    expect(compareSemanticTraces(
+      [session.initialFrame, f1, f2, f3, f4],
+      cTrace,
+    )).toBeNull();
+  }, 60_000);
 });

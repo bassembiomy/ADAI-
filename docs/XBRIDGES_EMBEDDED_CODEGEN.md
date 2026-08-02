@@ -223,3 +223,6 @@ semantic builder, or generator template and regenerate the complete package.
   HIL or target tests.
 - Required coding-standard analysis, traceability, reviews, and safety
   certification remain completed by the integrating organization.
+
+For detailed runtime contracts, bounded loop specifications, and verification evidence rules, see [CODEGEN_MCU_VERIFICATION_GATE.md](CODEGEN_MCU_VERIFICATION_GATE.md).
+
