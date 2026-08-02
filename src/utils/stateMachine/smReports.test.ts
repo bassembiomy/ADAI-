@@ -107,6 +107,7 @@ describe('semantic state-machine reports', () => {
       hostCompile: 'fail',
       hostRuntime: 'not-run',
       differential: 'not-run',
+      dynamicReachability: 'fail',
       embeddedCompile: 'not-run',
       targetHardware: 'pending',
     });
@@ -119,11 +120,21 @@ describe('semantic state-machine reports', () => {
       hostCompile: 'pass',
       hostRuntime: 'pass',
       differential: 'pass',
+      dynamicReachability: 'pass',
       embeddedCompile: 'not-run',
       targetHardware: 'pending',
     });
     expect(verifiedReport).toContain('Execution mode: DYNAMIC_EXECUTION_VERIFIED');
     expect(verifiedReport).toContain('Dynamic executable reachability: PASS');
+
+    const smokeOnly = renderTestingReport(analyzedUnreachableFixture(), {
+      ...DEFAULT_VERIFICATION_EVIDENCE,
+      hostCompile: 'pass',
+      hostRuntime: 'pass',
+    });
+    expect(smokeOnly).toContain('Execution mode: DYNAMIC_EXECUTION_VERIFIED');
+    expect(smokeOnly).toContain('Dynamic executable reachability: NOT RUN');
+    expect(smokeOnly).toContain('Compiled X-Bridges execution: NOT RUN');
 
     const staticReport = renderTestingReport(analyzedUnreachableFixture());
     expect(staticReport).toContain('Execution mode: STATIC_ANALYSIS_ONLY');

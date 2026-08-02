@@ -15,6 +15,7 @@ export interface VerificationEvidence {
   hostCompile: VerificationEvidenceStatus;
   hostRuntime: VerificationEvidenceStatus;
   differential: VerificationEvidenceStatus;
+  dynamicReachability: VerificationEvidenceStatus;
   embeddedCompile: VerificationEvidenceStatus;
   targetHardware: VerificationEvidenceStatus;
 }
@@ -61,6 +62,7 @@ export const DEFAULT_VERIFICATION_EVIDENCE: VerificationEvidence = {
   hostCompile: 'not-run',
   hostRuntime: 'not-run',
   differential: 'not-run',
+  dynamicReachability: 'not-run',
   embeddedCompile: 'not-run',
   targetHardware: 'pending',
 };
@@ -181,9 +183,9 @@ const executionMode = (
 const dynamicReachabilityLabel = (
   evidence: VerificationEvidence,
 ): string =>
-  evidence.hostCompile === 'fail' || evidence.hostRuntime === 'fail'
+  evidence.dynamicReachability === 'fail'
     ? 'FAIL'
-    : evidence.hostCompile === 'pass' && evidence.hostRuntime === 'pass'
+    : evidence.dynamicReachability === 'pass'
       ? 'PASS'
       : 'NOT RUN';
 

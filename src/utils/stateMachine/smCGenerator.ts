@@ -21,13 +21,18 @@ import {
   renderXBSource,
 } from './xbCGenerator';
 import {
+  DEFAULT_VERIFICATION_EVIDENCE,
   renderStaticMetricsReport,
   renderTestingReport as renderSemanticTestingReport,
+  type VerificationEvidence,
 } from './smReports';
+import { renderHostSmokeHarness } from './smHostHarness';
 
 export interface CGeneratorOptions {
   includeTestShims?: boolean;
+  includeHostHarness?: boolean;
   reportSourceFiles?: readonly GeneratedCFile[];
+  verificationEvidence?: VerificationEvidence;
 }
 
 export interface GeneratedCFile {
@@ -1552,8 +1557,11 @@ export const renderCoreSource = (ir: SemanticModel): string => {
   );
 };
 
-export const renderTestingReport = (ir: SemanticModel): string =>
-  renderSemanticTestingReport(analyzeSemanticModel(ir), undefined, ir);
+export const renderTestingReport = (
+  ir: SemanticModel,
+  evidence?: VerificationEvidence,
+): string =>
+  renderSemanticTestingReport(analyzeSemanticModel(ir), evidence, ir);
 
 export const generateCArtifacts = (
   ir: SemanticModel,
@@ -1577,6 +1585,9 @@ export const generateCArtifacts = (
     ...(options.includeTestShims
       ? [{ name: 'mcal_dio_test_stubs.c', content: renderMcalTestStubs() }]
       : []),
+    ...(options.includeHostHarness
+      ? [{ name: 'sm_host_test.c', content: renderHostSmokeHarness(ir) }]
+      : []),
   ];
   const analysis = analyzeSemanticModel(ir);
   const measuredSourceFiles = [
@@ -1588,7 +1599,11 @@ export const generateCArtifacts = (
       ...implementationFiles,
       {
         name: 'sm_testing_report.md',
-        content: renderSemanticTestingReport(analysis, undefined, ir),
+        content: renderSemanticTestingReport(
+          analysis,
+          options.verificationEvidence ?? DEFAULT_VERIFICATION_EVIDENCE,
+          ir,
+        ),
       },
       {
         name: 'static_metrics_report.md',

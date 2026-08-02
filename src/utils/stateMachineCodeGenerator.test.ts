@@ -146,4 +146,27 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
     expect(testing).toContain('Unreachable state IDs: unreachable');
     expect(metrics).toContain('Unreachable state IDs: unreachable');
   });
+
+  it('includes host test harness and passes custom verification evidence when requested', () => {
+    const result = generateMISRACCode(flatOrFixture(), {
+      includeHostHarness: true,
+      verificationEvidence: {
+        structural: 'pass',
+        semantic: 'pass',
+        hostCompile: 'pass',
+        hostRuntime: 'pass',
+        differential: 'pass',
+        dynamicReachability: 'pass',
+        embeddedCompile: 'not-run',
+        targetHardware: 'pending',
+      },
+    });
+
+    const harness = result.files.find((file) => file.name === 'sm_host_test.c');
+    expect(harness).toBeDefined();
+    expect(harness!.content).toContain('int main(void)');
+
+    const testing = result.files.find((file) => file.name === 'sm_testing_report.md')!.content;
+    expect(testing).toContain('Dynamic executable reachability: PASS');
+  });
 });

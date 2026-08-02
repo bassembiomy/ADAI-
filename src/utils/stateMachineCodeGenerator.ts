@@ -2905,7 +2905,11 @@ const HIL_TEST_SHIM_NAMES = new Set([
  */
 export const generateMISRACCode = (
   chart: Omit<LegacyStateMachineModel, 'hilConfig'> & { hilConfig?: any },
-  options: { includeTestShims?: boolean } = {},
+  options: {
+    includeTestShims?: boolean;
+    includeHostHarness?: boolean;
+    verificationEvidence?: VerificationEvidence;
+  } = {},
 ): { files: { name: string; content: string }[]; errors: ErrorItem[]; warnings: string[] } => {
   if (
     chart.safetyMode === true
@@ -2953,7 +2957,9 @@ export const generateMISRACCode = (
   const rendered = generateCArtifacts(built.ir, {
     includeTestShims: options.includeTestShims === true
       && chart.hilConfig?.enabled !== true,
+    includeHostHarness: options.includeHostHarness,
     reportSourceFiles: [...hilFiles, ...testShimFiles],
+    verificationEvidence: options.verificationEvidence,
   });
   const files = rendered.files.map((file) => {
     if (file.name !== 'sm_testing_report.md' || chart.hilConfig?.enabled !== true) {
