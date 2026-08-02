@@ -1091,4 +1091,18 @@ int main(void) {
       workspace.cleanup();
     }
   });
+
+  it('renders safe state traceability C comments before macros and declarations without comment injection', () => {
+    const model = flatOrFixture();
+    model.states[0].name = 'State A */ #include <bad.h>\nLine2';
+    const built = build(model);
+    const files = generateCArtifacts(built).files;
+
+    const configHeader = files.find((f) => f.name === 'sm_config.h')!.content;
+    const userHeader = files.find((f) => f.name === 'sm_user_logic.h')!.content;
+
+    expect(configHeader).toContain('/* State: State A * / #include <bad.h> Line2 | Model ID: a | C enum: SM_ST_A */');
+    expect(userHeader).toContain('/* State: State A * / #include <bad.h> Line2 | Model ID: a | C enum: SM_ST_A */');
+    expect(configHeader).not.toContain('*/ #include');
+  });
 });

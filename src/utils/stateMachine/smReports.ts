@@ -52,6 +52,7 @@ export interface XBridgesReport {
   numericTypes: string[];
   capabilityDependencies: string[];
   unsupportedCapabilities: string[];
+  operationEvaluationsPerTick: number;
 }
 
 export const DEFAULT_VERIFICATION_EVIDENCE: VerificationEvidence = {
@@ -93,11 +94,14 @@ const buildXBridgesReport = (ir?: SemanticModel): XBridgesReport => {
     .sort((left, right) => left.id.localeCompare(right.id));
   const numericTypes = new Set<string>();
   const dependencies = new Set<string>();
+  const usedOperationTypes = new Set<string>();
   let blockCount = 0;
   let staticMemoryBytes = 0;
+  let operationEvaluationsPerTick = 0;
   for (const state of states) {
     const xb = state.xBridges!;
     blockCount += xb.executionOrder.length;
+    operationEvaluationsPerTick += xb.executionOrder.length * xb.solver.substepsPerTick;
     for (const signal of Object.values(xb.signals)) {
       numericTypes.add(numericTypeLabel(signal.numericType));
       staticMemoryBytes += numericStorageBytes(signal.numericType) * signal.elementCount;
@@ -105,6 +109,7 @@ const buildXBridgesReport = (ir?: SemanticModel): XBridgesReport => {
     }
     for (const operationId of xb.executionOrder) {
       const operation = xb.operations[operationId];
+      usedOperationTypes.add(operation.type);
       staticMemoryBytes += 4;
       if (operation.outputSignalIds.length > 0) staticMemoryBytes += 1;
       for (const slot of operation.state?.slots ?? []) {
@@ -129,10 +134,11 @@ const buildXBridgesReport = (ir?: SemanticModel): XBridgesReport => {
     })),
     numericTypes: [...numericTypes].sort(),
     capabilityDependencies: [...dependencies].sort(),
-    unsupportedCapabilities: Object.entries(XB_CAPABILITIES)
-      .filter(([, capability]) => capability.codegen !== true)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([type, capability]) => `${type}: ${capability.reason ?? 'Not supported.'}`),
+    unsupportedCapabilities: [...usedOperationTypes]
+      .filter((type) => XB_CAPABILITIES[type]?.codegen !== true)
+      .sort()
+      .map((type) => `${type}: ${XB_CAPABILITIES[type]?.reason ?? 'Not supported.'}`),
+    operationEvaluationsPerTick,
   };
 };
 
@@ -193,6 +199,33 @@ const compiledXBridgesEvidence = (
   return required.every((status) => status === 'pass') ? 'pass' : 'not-run';
 };
 
+const escapeMarkdown = (value: string): string => value
+  .replaceAll('|', '\\|')
+  .replace(/[\r\n]+/g, ' ');
+
+const renderStateTraceabilityTable = (ir?: SemanticModel): string => {
+  if (ir === undefined) return '';
+  const states = Object.values(ir.states).sort((left, right) =>
+    left.activityIndex - right.activityIndex);
+  if (states.length === 0) return '';
+  const rows = states.map((state) => {
+    const name = escapeMarkdown(state.name);
+    const id = escapeMarkdown(state.id);
+    const enumName = escapeMarkdown(state.enumName);
+    const layer = escapeMarkdown(state.parentLayerId ?? 'root');
+    const xBridges = state.xBridges !== null ? 'yes' : 'no';
+    return `| ${name} | ${id} | ${enumName} | ${layer} | ${xBridges} |`;
+  });
+  return [
+    '## State traceability',
+    '',
+    '| State name | Model ID | C enum | Layer | X-Bridges |',
+    '|---|---|---|---|---|',
+    ...rows,
+    '',
+  ].join('\n');
+};
+
 export const renderTestingReport = (
   analysis: SMAnalysisResult,
   evidence: VerificationEvidence = DEFAULT_VERIFICATION_EVIDENCE,
@@ -201,6 +234,7 @@ export const renderTestingReport = (
   const report = generateSemanticReport(analysis, evidence, ir);
   const section = report.testing;
   const xb = report.xBridges;
+
   return `# ADIA State Machine Generated-C Verification Report
 
 ## Summary
@@ -247,12 +281,14 @@ Evidence labels describe only the checks actually recorded for this generated pa
 
 - X-Bridges states: ${xb.stateCount}
 - X-Bridges blocks: ${xb.blockCount}
+- Operation evaluations per tick: ${xb.operationEvaluationsPerTick}
 - Estimated X-Bridges static memory lower bound: ${xb.estimatedStaticMemoryLowerBoundBytes} bytes (${xb.memoryEstimateAccuracy}; excludes target ABI padding and linker allocation)
 - Solver: ${xb.solvers.length === 0 ? 'None' : xb.solvers.map((solver) => `${solver.stateId}: ${solver.kind}, ${solver.stepSeconds} s, ${solver.substepsPerTick} substeps/tick`).join('; ')}
 - Numeric types: ${idsOrNone(xb.numericTypes)}
 - Required target capabilities: ${idsOrNone(xb.capabilityDependencies)}
 - Unsupported embedded capabilities: ${idsOrNone(xb.unsupportedCapabilities)}
-`;
+
+${renderStateTraceabilityTable(ir)}`;
 };
 
 export const renderStaticMetricsReport = (
@@ -322,6 +358,7 @@ export const renderStaticMetricsReport = (
 
 - X-Bridges states: ${xb.stateCount}
 - X-Bridges blocks: ${xb.blockCount}
+- Operation evaluations per tick: ${xb.operationEvaluationsPerTick}
 - Estimated X-Bridges static memory lower bound: ${xb.estimatedStaticMemoryLowerBoundBytes} bytes (${xb.memoryEstimateAccuracy}; excludes target ABI padding and linker allocation)
 - Solver: ${xb.solvers.length === 0 ? 'None' : xb.solvers.map((solver) => `${solver.stateId}: ${solver.kind}, ${solver.stepSeconds} s, ${solver.substepsPerTick} substeps/tick`).join('; ')}
 - Numeric types: ${idsOrNone(xb.numericTypes)}

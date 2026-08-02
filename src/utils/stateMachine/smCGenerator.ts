@@ -804,6 +804,13 @@ const renderNoHistoryExitWrappers = (
   );
 }).join('\n');
 
+const cCommentText = (value: string): string => value
+  .replaceAll('*/', '* /')
+  .replace(/[\r\n]+/g, ' ');
+
+const stateTraceComment = (state: SemanticState): string =>
+  `/* State: ${cCommentText(state.name)} | Model ID: ${cCommentText(state.id)} | C enum: ${state.enumName} */`;
+
 export const renderConfigHeader = (ir: SemanticModel): string => {
   const index = buildIndex(ir);
   const states = orderedStates(ir);
@@ -831,8 +838,10 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     `#define SM_NUM_ACTIVE_SLOTS ${ir.activeSlotCount}U`,
     ...layers.map((layer) =>
       `#define ${layerMacro(layer)} ${index.layerNumber.get(layer.id)!}U`),
-    ...states.map((state) =>
-      `#define ${stateNode(ir, state.id)}_IDX ${index.stateNumber.get(state.id)!}U`),
+    ...states.flatMap((state) => [
+      stateTraceComment(state),
+      `#define ${stateNode(ir, state.id)}_IDX ${index.stateNumber.get(state.id)!}U`,
+    ]),
     '',
     'typedef enum {',
     '    SM_NODE_INVALID = 0,',
@@ -915,6 +924,7 @@ export const renderUserLogicHeader = (ir: SemanticModel): string => lines(
   '#include "sm_config.h"',
   '',
   ...orderedStates(ir).flatMap((state) => [
+    stateTraceComment(state),
     `void ${stateNode(ir, state.id)}_Entry(ADIA_Instance_t *instance);`,
     `void ${stateNode(ir, state.id)}_During(ADIA_Instance_t *instance);`,
     `void ${stateNode(ir, state.id)}_Exit(ADIA_Instance_t *instance);`,
@@ -928,6 +938,7 @@ export const renderUserLogicSource = (ir: SemanticModel): string => lines(
   '#include "sm_user_logic.h"',
   '',
   ...orderedStates(ir).flatMap((state) => [
+    stateTraceComment(state),
     lines(
       `void ${stateNode(ir, state.id)}_Entry(ADIA_Instance_t *instance)`,
       '{',

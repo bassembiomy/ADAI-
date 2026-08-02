@@ -150,7 +150,9 @@ describe('semantic state-machine reports', () => {
           },
         },
       ],
-      edges: [{ id: 'source-to-park', sourceNodeId: 'source', sourcePortId: 'y', targetNodeId: 'park', targetPortId: 'u' }],
+      edges: [
+        { id: 'source-to-park', sourceNodeId: 'source', sourcePortId: 'y', targetNodeId: 'park', targetPortId: 'u' },
+      ],
       mappings: [],
       solver: { kind: 'rk4', stepSeconds: 0.002 },
       policy: { memory: 'reset', numericFault: 'signal-only' },
@@ -169,13 +171,11 @@ describe('semantic state-machine reports', () => {
       solvers: [{ stateId: 'controller', kind: 'rk4', stepSeconds: 0.002, substepsPerTick: 5 }],
       numericTypes: ['float32'],
       capabilityDependencies: ['math-library'],
+      unsupportedCapabilities: [],
     });
     expect(report.xBridges.estimatedStaticMemoryLowerBoundBytes).toBeGreaterThan(0);
     expect(report.xBridges.memoryEstimateAccuracy)
       .toBe('lower-bound-excludes-padding');
-    expect(report.xBridges.unsupportedCapabilities).toContain(
-      'LMS_ADAPTIVE_FILTER: Online learning is not in the embedded-safe set.',
-    );
 
     const testing = renderTestingReport(
       analysis,
@@ -192,7 +192,46 @@ describe('semantic state-machine reports', () => {
     expect(metrics).toContain('excludes target ABI padding and linker allocation');
     expect(metrics).toContain('Solver: controller: rk4, 0.002 s, 5 substeps/tick');
     expect(metrics).toContain('Numeric types: float32');
-    expect(metrics).toContain('Unsupported embedded capabilities:');
+    expect(metrics).toContain('Unsupported embedded capabilities: None');
+  });
+
+  it('scopes unsupported capabilities to model-used operations, counts operation evaluations per tick, and renders state traceability', () => {
+    const model = hybridXBridgesFixture();
+    model.states[0].autostart = false;
+    const controller = model.states.find((state) => state.id === 'controller')!;
+    controller.autostart = true;
+    const scalarPort = (id: string, direction: 'input' | 'output') => ({
+      id, direction, shape: 'scalar' as const, dimensions: [], dataType: 'float32' as const,
+    });
+    controller.xBridgesModel = {
+      schemaVersion: 1,
+      nodes: [
+        { id: 'constant1', type: 'Constant', parameters: { value: 1, inputs: [], outputs: [scalarPort('y', 'output')] } },
+        { id: 'constant2', type: 'Constant', parameters: { value: 2, inputs: [], outputs: [scalarPort('y', 'output')] } },
+        { id: 'sum', type: 'Sum', parameters: { signs: '++', inputs: [scalarPort('a', 'input'), scalarPort('b', 'input')], outputs: [scalarPort('y', 'output')] } },
+        { id: 'terminator', type: 'TERMINATOR', parameters: { inputs: [scalarPort('u', 'input')], outputs: [] } },
+      ],
+      edges: [
+        { id: 'c1_sum', sourceNodeId: 'constant1', sourcePortId: 'y', targetNodeId: 'sum', targetPortId: 'a' },
+        { id: 'c2_sum', sourceNodeId: 'constant2', sourcePortId: 'y', targetNodeId: 'sum', targetPortId: 'b' },
+        { id: 'sum_term', sourceNodeId: 'sum', sourcePortId: 'y', targetNodeId: 'terminator', targetPortId: 'u' },
+      ],
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.0002 },
+      policy: { memory: 'reset', numericFault: 'signal-only' },
+    };
+    const built = buildSemanticModel(model);
+    if (!built.ir) throw new Error(`model build failed: ${JSON.stringify(built.diagnostics)}`);
+    const analysis = analyzeSemanticModel(built.ir);
+
+    const report = generateSemanticReport(analysis, DEFAULT_VERIFICATION_EVIDENCE, built.ir);
+    expect(report.xBridges.unsupportedCapabilities).toEqual([]);
+    expect(report.xBridges.operationEvaluationsPerTick).toBe(200);
+
+    const testing = renderTestingReport(analysis, DEFAULT_VERIFICATION_EVIDENCE, built.ir);
+    expect(testing).toContain('| State name | Model ID | C enum | Layer | X-Bridges |');
+    expect(testing).toContain('| Controller | controller | SM_ST_CONTROLLER | root | yes |');
+    expect(testing).not.toContain('LMS_ADAPTIVE_FILTER');
   });
 
   it('does not claim compiled X-Bridges execution from differential evidence alone', () => {
