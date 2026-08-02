@@ -134,8 +134,9 @@ Security requirements:
 
 Browser-only export continues safely with `STATIC_ANALYSIS_ONLY`. Electron
 generation rerenders the report with host compile/runtime evidence only after
-the trusted verifier succeeds. Differential evidence remains NOT RUN unless a
-real model-specific TypeScript-versus-C trace was executed.
+the trusted verifier succeeds. Dynamic reachability and differential evidence
+remain NOT RUN unless their own model-specific executions occurred. A smoke
+test never upgrades either label.
 
 ## Generated Smoke Harness
 
@@ -175,8 +176,10 @@ X-Bridges integration. It does not claim dynamic reachability of every state.
 5. Reports omit every unsupported capability not used by the model and include
    operation-evaluations-per-tick metrics.
 6. Reports include complete state name/ID/C-symbol traceability.
-7. A successful trusted host gate records host compile/runtime and compiled
-   X-Bridges PASS; missing or failed verification cannot produce those labels.
+7. A successful trusted host gate records host compile/runtime PASS only.
+   Dynamic reachability and compiled X-Bridges parity remain NOT RUN until
+   dedicated reachability and differential evidence pass; missing or failed
+   verification cannot produce any PASS label.
 8. Production and trace artifacts compile under strict C99 with
    `-pedantic-errors -Wall -Wextra -Werror`.
 9. The packaged standalone runtime bundle regenerates deterministically.
