@@ -828,12 +828,17 @@ int main(void) {
     expect(output.trim().replace(/\r/g, '')).toBe('1 1\n0 1');
   });
 
-  it('tolerates small jitter around SM_TICK_MS without a timing fault', () => {
+  it('tolerates small jitter around SM_TICK_MS without a timing fault and advances state timers by SM_TICK_MS', () => {
+    const ir = build(flatOrFixture());
+    const code = generateCArtifacts(ir).files.find((file) => file.name === 'sm_core.c')!.content;
+    expect(code).toContain('SM_TICK_MS > (UINT32_MAX - instance->state_timers[state_index])');
+    expect(code).not.toContain('delta_ms > (UINT32_MAX - instance->state_timers[state_index])');
+
     const output = compileAndRun(
-      build(flatOrFixture()),
-      `#include "sm_core.h"\n#include <stdio.h>\nbool MCAL_Dio_ReadChannel(uint32_t channel) { (void)channel; return false; }\nvoid MCAL_Dio_WriteChannel(uint32_t channel, bool level) { (void)channel; (void)level; }\nvoid MCAL_ApplySafeOutputs(void) {}\nvoid MCAL_Watchdog_Kick(void) {}\nint main(void) {\n    ADIA_Instance_t inst;\n    (void)SM_Init(&inst);\n    (void)SM_Step(&inst, SM_TICK_MS + 1U);\n    printf("%d\\n", SM_GetError(&inst) == SM_ERR_NONE);\n    (void)SM_Step(&inst, SM_TICK_MS - 1U);\n    printf("%d\\n", SM_GetError(&inst) == SM_ERR_NONE);\n    (void)SM_Step(&inst, SM_TICK_MS + 5U);\n    printf("%d\\n", SM_GetError(&inst) == SM_ERR_TIMING);\n    return 0;\n}\n`,
+      ir,
+      `#include "sm_core.h"\n#include <stdio.h>\nbool MCAL_Dio_ReadChannel(uint32_t channel) { (void)channel; return false; }\nvoid MCAL_Dio_WriteChannel(uint32_t channel, bool level) { (void)channel; (void)level; }\nvoid MCAL_ApplySafeOutputs(void) {}\nvoid MCAL_Watchdog_Kick(void) {}\nint main(void) {\n    ADIA_Instance_t inst;\n    (void)SM_Init(&inst);\n    (void)SM_Step(&inst, SM_TICK_MS + 1U);\n    printf("%u %d\\n", (unsigned)inst.state_timers[SM_ST_A_IDX], SM_GetError(&inst) == SM_ERR_NONE);\n    (void)SM_Step(&inst, SM_TICK_MS - 1U);\n    printf("%u %d\\n", (unsigned)inst.state_timers[SM_ST_A_IDX], SM_GetError(&inst) == SM_ERR_NONE);\n    (void)SM_Step(&inst, SM_TICK_MS + 55U);\n    printf("%d\\n", SM_GetError(&inst) == SM_ERR_TIMING);\n    return 0;\n}\n`,
     );
-    expect(output.trim().replace(/\r/g, '')).toBe('1\n1\n1');
+    expect(output.trim().replace(/\r/g, '')).toBe('10 1\n20 1\n1');
   });
 
   it('commits safe outputs immediately and latches a fault', () => {

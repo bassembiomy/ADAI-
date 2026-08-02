@@ -159,6 +159,7 @@ const fixtureMatrix: readonly DifferentialFixtureName[] = [
   'deep-history-and',
   'junction-backtracking',
   'temporal-exact-boundary',
+  'timing-jitter-normalized',
   'terminal-or',
   'terminal-and-sibling',
   'reset',

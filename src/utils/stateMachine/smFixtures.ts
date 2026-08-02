@@ -622,6 +622,7 @@ export type DifferentialFixtureName =
   | 'deep-history-and'
   | 'junction-backtracking'
   | 'temporal-exact-boundary'
+  | 'timing-jitter-normalized'
   | 'terminal-or'
   | 'terminal-and-sibling'
   | 'reset'
@@ -798,6 +799,16 @@ export const semanticFixture = (
         name,
         model: parallelHistoryFixture('timing-boundary'),
         steps: [{ kind: 'step' }, { kind: 'step' }, { kind: 'step' }],
+      };
+    case 'timing-jitter-normalized':
+      return {
+        name,
+        model: parallelHistoryFixture('timing-boundary'),
+        steps: [
+          { kind: 'step', elapsedMs: 11 },
+          { kind: 'step', elapsedMs: 9 },
+          { kind: 'step', elapsedMs: 10 },
+        ],
       };
     case 'terminal-or':
       return {

@@ -960,11 +960,13 @@ const parseFrame = (line: string): CTraceFrame => {
     },
     error: fields.error === '0'
       ? null
-      : fields.error === '4'
-        ? 'SAFETY_VIOLATION: safety violation'
-        : fields.error === '5'
-          ? 'XBRIDGES_NUMERIC: X-Bridges numeric fault'
-        : `C_ERROR_${fields.error}`,
+      : fields.error === '2'
+        ? 'TIMING: timing error'
+        : fields.error === '4'
+          ? 'SAFETY_VIOLATION: safety violation'
+          : fields.error === '5'
+            ? 'XBRIDGES_NUMERIC: X-Bridges numeric fault'
+          : `C_ERROR_${fields.error}`,
   };
 };
 
