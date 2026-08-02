@@ -19,11 +19,21 @@ import {
 } from './xbNumeric';
 import { createXBRuntime, stepXBState } from './xbInterpreter';
 import { generateCArtifacts } from './smCGenerator';
+import { hybridXBridgesFixture } from './smFixtures';
+import type { StateMachineModelV4 } from './smModel';
+import { buildSemanticModel } from './smSemanticBuilder';
 import {
   renderXBHeader,
   renderXBInstanceMembers,
   renderXBSource,
 } from './xbCGenerator';
+
+const build = (model: StateMachineModelV4): SemanticModel => {
+  const result = buildSemanticModel(model);
+  expect(result.diagnostics).toEqual([]);
+  if (!result.ir) throw new Error('semantic model build failed');
+  return result.ir;
+};
 
 const scalar = { kind: 'scalar' } as const;
 const float32 = { kind: 'float32' } as const;
@@ -2667,5 +2677,29 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     } finally {
       workspace.cleanup();
     }
+  });
+
+  it('renders one bounded substep loop for multi-substep solvers', () => {
+    const model1 = hybridXBridgesFixture();
+    model1.states[0].autostart = false;
+    const c1 = model1.states.find((s) => s.id === 'controller')!;
+    c1.autostart = true;
+    c1.xBridgesModel!.solver = { kind: 'euler', stepSeconds: 0.01 };
+    const ir1 = build(model1);
+    const code1 = generateCArtifacts(ir1).files.find((f) => f.name === 'sm_core.c')!.content;
+
+    const model50 = hybridXBridgesFixture();
+    model50.states[0].autostart = false;
+    const c50 = model50.states.find((s) => s.id === 'controller')!;
+    c50.autostart = true;
+    c50.xBridgesModel!.solver = { kind: 'euler', stepSeconds: 0.0002 };
+    const ir50 = build(model50);
+    const code50 = generateCArtifacts(ir50).files.find((f) => f.name === 'sm_core.c')!.content;
+    const header50 = generateCArtifacts(ir50).files.find((f) => f.name === 'sm_xbridges.h')!.content;
+
+    expect(header50).toContain('#define SM_XB_CONTROLLER_SUBSTEPS_PER_TICK 50U');
+    expect(code50).toContain('for (xb_substep = 0U; xb_substep < SM_XB_CONTROLLER_SUBSTEPS_PER_TICK; ++xb_substep)');
+    expect(code50).toContain('SM_XB_CONTROLLER_SolverSubstep(instance);');
+    expect(Math.abs(code50.length - code1.length)).toBeLessThan(512);
   });
 });

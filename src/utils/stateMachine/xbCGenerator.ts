@@ -276,7 +276,11 @@ export const renderXBHeader = (ir: SemanticModel): string => {
     '    bool has_stored_integer;',
     '} SM_XB_NumericResult_t;',
     '',
-    ...states.flatMap((state) => [renderStateType(state), '']),
+    ...states.flatMap((state) => [
+      `#define SM_XB_${stateSuffix(state)}_SUBSTEPS_PER_TICK ${state.xBridges!.solver.substepsPerTick}U`,
+      renderStateType(state),
+      '',
+    ]),
     'SM_XB_NumericResult_t SM_XB_ConvertFixed(',
     '    double value,',
     '    bool is_signed,',
@@ -2220,6 +2224,18 @@ const renderSolverSubstep = (
   '    }',
 ];
 
+const renderSolverSubstepFunction = (
+  state: SemanticState,
+  xb: XBSemanticModel,
+  layout: XBStateLayout,
+  member: string,
+): string => lines(
+  `static void SM_XB_${stateSuffix(state)}_SolverSubstep(ADIA_Instance_t *instance)`,
+  '{',
+  ...renderSolverSubstep(state, xb, layout, member),
+  '}',
+);
+
 const renderStateLifecycle = (
   ir: SemanticModel,
   state: SemanticState,
@@ -2299,9 +2315,12 @@ const renderStateLifecycle = (
       member,
     ));
   }
-  for (let substep = 0; substep < xb.solver.substepsPerTick; substep++) {
-    stepLines.push(...renderSolverSubstep(state, xb, layout, member));
-  }
+  stepLines.push(
+    '    uint32_t xb_substep;',
+    `    for (xb_substep = 0U; xb_substep < SM_XB_${stateSuffix(state)}_SUBSTEPS_PER_TICK; ++xb_substep) {`,
+    `        SM_XB_${stateSuffix(state)}_SolverSubstep(instance);`,
+    '    }',
+  );
   stepLines.push(...renderOperationFaultSignalSync(state, xb, layout, member));
   for (const mapping of xb.mappings) {
     if (mapping.direction !== 'out') continue;
@@ -2316,6 +2335,8 @@ const renderStateLifecycle = (
     );
   }
   return lines(
+    renderSolverSubstepFunction(state, xb, layout, member),
+    '',
     `void SM_XB_${stateSuffix(state)}_Init(ADIA_Instance_t *instance)`,
     '{',
     ...initLines,
