@@ -64,6 +64,9 @@ const PERMISSIONS = {
     save: ROLES.ENGINEER,       // Save project to file
     exportFolder: ROLES.ENGINEER,
   },
+  codegen: {
+    verify: ROLES.ENGINEER,     // Compile and smoke test generated C in isolated sandbox
+  },
   settings: {
     installToolchain: ROLES.ENGINEER,
     factoryIO: ROLES.ENGINEER,

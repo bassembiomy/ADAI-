@@ -12,6 +12,7 @@ const ALLOWED_INVOKE_CHANNELS = [
   '3dx-browser-back', '3dx-browser-forward', '3dx-browser-reload',
   '3dx-dashboard-open', '3dx-dashboard-close',
   'store-api-key', 'load-api-key', 'openai-chat-completion',
+  'sm-verify-generated-c',
 ];
 
 const ALLOWED_ON_CHANNELS = [

@@ -1368,6 +1368,7 @@ ipcMain.handle('hil-send', async (event, payload) => {
 const credentialVault = require('./security/credentialVault.cjs');
 const { checkRateLimit } = require('./security/rateLimiter.cjs');
 const { checkPermission, getEffectiveRole, rlsDenied } = require('./security/roleSecurity.cjs');
+const { verifyGeneratedCode } = require('./security/generatedCodeVerifier.cjs');
 
 /** Returns the effective RLS role based on the current stored credentials. */
 async function getCurrentRole() {
@@ -2037,6 +2038,19 @@ ipcMain.handle('openai-chat-completion', async (_, { apiKey, messages, baseUrl, 
   } catch (err) {
     return { success: false, error: err.message };
   }
+});
+
+ipcMain.handle('sm-verify-generated-c', async (_, payload) => {
+  const role = await getCurrentRole();
+  const perm = checkPermission(role, 'codegen', 'verify');
+  if (!perm.allowed) {
+    return rlsDenied('codegen', 'verify', perm.reason);
+  }
+  const rl = checkRateLimit('sm-verify-generated-c', 20, 60000);
+  if (!rl.allowed) {
+    return { success: false, error: 'Rate limit exceeded for code verification. Please wait.' };
+  }
+  return await verifyGeneratedCode(payload);
 });
 
 

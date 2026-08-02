@@ -214,7 +214,7 @@ const renderStateTraceabilityTable = (ir?: SemanticModel): string => {
     const name = escapeMarkdown(state.name);
     const id = escapeMarkdown(state.id);
     const enumName = escapeMarkdown(state.enumName);
-    const layer = escapeMarkdown(state.parentLayerId ?? 'root');
+    const layer = escapeMarkdown(state.parentStateId ?? 'root');
     const xBridges = state.xBridges !== null ? 'yes' : 'no';
     return `| ${name} | ${id} | ${enumName} | ${layer} | ${xBridges} |`;
   });

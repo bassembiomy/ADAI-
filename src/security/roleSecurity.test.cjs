@@ -105,6 +105,12 @@ test('admin can view audit log', () => {
 test('admin can flash HIL', () => {
   assert.strictEqual(checkPermission(ROLES.ADMIN, 'hil', 'flash').allowed, true);
 });
+test('engineer can verify codegen', () => {
+  assert.strictEqual(checkPermission(ROLES.ENGINEER, 'codegen', 'verify').allowed, true);
+});
+test('guest cannot verify codegen', () => {
+  assert.strictEqual(checkPermission(ROLES.GUEST, 'codegen', 'verify').allowed, false);
+});
 
 // ─── checkPermission — edge cases ─────────────────────────────────────────────
 console.log('\n[checkPermission — edge cases]');

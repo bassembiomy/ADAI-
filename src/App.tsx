@@ -13345,7 +13345,6 @@ const ADIA = () => {
   const generateCode = useCallback(async () => {
     // First validate syntax of actions and conditions
     if (!validateModel()) {
-      // addError('error', 'Code generation blocked: Fix syntax errors in actions/conditions before generating.'); // Handled by validateModel
       return;
     }
 

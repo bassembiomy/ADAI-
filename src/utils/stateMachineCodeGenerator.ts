@@ -9,6 +9,7 @@ import { migrateStateMachineModel } from './stateMachine/smModelMigration';
 import { buildSemanticModel } from './stateMachine/smSemanticBuilder';
 import {
   renderTestingReport as renderSemanticTestingReport,
+  type VerificationEvidence,
 } from './stateMachine/smReports';
 import type {
   LegacyStateMachineModel,

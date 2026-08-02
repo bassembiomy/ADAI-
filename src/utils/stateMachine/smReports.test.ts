@@ -48,6 +48,7 @@ describe('semantic state-machine reports', () => {
       hostCompile: 'pass',
       hostRuntime: 'pass',
       differential: 'pass',
+      dynamicReachability: 'not-run',
       embeddedCompile: 'not-run',
       targetHardware: 'pending',
     });
