@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { validateString, validateUrl, validateFilename, sanitizeShellArg, validateToolchainKey, validateServiceName, validateRedirectUrl } = require('./security/inputValidator.cjs');
+const { evaluateFlashRequest } = require('./security/hilFlashPolicy.cjs');
 const asarGuard = require('./security/asarGuard.cjs');
 
 // Allowlist of trusted hosts for toolchain download redirects
@@ -724,6 +725,7 @@ ipcMain.handle('hil-save-build-files', async (event, { files }) => {
 });
 
 let activeHilProcess = null;
+let currentVerifiedHilBuild = null;
 
 // HIL Compile IPC handler
 ipcMain.handle('hil-run-compile', async (event, { target, optimization, warningLevel, debugLevel }) => {
@@ -892,7 +894,17 @@ ipcMain.handle('hil-run-compile', async (event, { target, optimization, warningL
 });
 
 // HIL Flash IPC handler
-ipcMain.handle('hil-run-flash', async (event, { target, programmer, flashAddress, commPort, baudRate }) => {
+ipcMain.handle('hil-run-flash', async (event, request = {}) => {
+  const role = await getCurrentRole();
+  const permission = checkPermission(role, 'hil', 'flash');
+  if (!permission.allowed) return rlsDenied('hil', 'flash', permission.reason);
+  const rateLimit = checkRateLimit('hil-run-flash', event.sender.id);
+  if (!rateLimit.allowed) {
+    return { success: false, code: 'RATE_LIMITED', retryAfterMs: rateLimit.retryAfterMs };
+  }
+  const policy = evaluateFlashRequest(request, currentVerifiedHilBuild);
+  if (!policy.allowed) return { success: false, ...policy };
+  const { target, programmer, flashAddress, commPort, baudRate } = request;
   return new Promise((resolve) => {
     const allowedTargets = ['Generic', 'Arduino_Uno', 'Arduino_Mega', 'ESP32', 'STM32F1', 'STM32F4'];
     const allowedProgrammers = [
@@ -999,103 +1011,19 @@ ipcMain.handle('hil-run-flash', async (event, { target, programmer, flashAddress
 });
 
 // HIL Erase IPC handler
-ipcMain.handle('hil-run-erase', async (event, { target, programmer, commPort, baudRate }) => {
-  return new Promise((resolve) => {
-    const allowedTargets = ['Generic', 'Arduino_Uno', 'Arduino_Mega', 'ESP32', 'STM32F1', 'STM32F4'];
-    const allowedProgrammers = [
-      'arduino', 'wiring', 'esptool.py', 'STM32_Programmer_CLI', 'None',
-      'avrdude (Arduino Bootloader)', 'ST-LINK V2/V3 (OpenOCD)', 'J-Link (SEGGER)',
-      'esptool.py (ESP Web/Serial)', 'Host PC GDB Simulator'
-    ];
-    const portRegex = /^[a-zA-Z0-9_\s()./\\-]+$/;
-
-    if (!target || (!allowedTargets.includes(target) && !target.startsWith('STM32'))) {
-      return resolve({ success: false, error: 'Invalid erasing target' });
-    }
-    if (programmer && !allowedProgrammers.includes(programmer)) {
-      return resolve({ success: false, error: 'Invalid programmer utility' });
-    }
-    if (commPort && !portRegex.test(commPort)) {
-      return resolve({ success: false, error: 'Invalid COM port name' });
-    }
-    if (baudRate !== undefined) {
-      const parsedBaud = parseInt(baudRate, 10);
-      if (isNaN(parsedBaud) || parsedBaud <= 0) {
-        return resolve({ success: false, error: 'Invalid baud rate' });
-      }
-    }
-
-    const buildDir = path.join(process.cwd(), 'hil_build');
-    let cmd = '';
-    let args = [];
-
-    if (target === 'Arduino_Uno') {
-      cmd = 'avrdude';
-      args = [
-        '-c', 'arduino',
-        '-p', 'm328p',
-        '-P', commPort || 'COM3',
-        '-b', '115200',
-        '-e'
-      ];
-    } else if (target === 'Arduino_Mega') {
-      cmd = 'avrdude';
-      args = [
-        '-c', 'wiring',
-        '-p', 'm2560',
-        '-P', commPort || 'COM3',
-        '-b', '115200',
-        '-e'
-      ];
-    } else if (target === 'ESP32') {
-      cmd = 'esptool.py';
-      args = [
-        '--chip', 'esp32',
-        '--port', commPort || 'COM3',
-        '--baud', baudRate ? baudRate.toString() : '921600',
-        'erase_flash'
-      ];
-    } else if (target.startsWith('STM32')) {
-      cmd = 'STM32_Programmer_CLI';
-      args = [
-        '-c', 'port=SWD', 'mode=UR',
-        '-e', 'all'
-      ];
-    } else {
-      event.sender.send('hil-flasher-log-line', `[INFO] Host PC simulation target detected. Bypassing flash sector erase.\n`);
-      return resolve({ success: true, bypassed: true });
-    }
-
-    event.sender.send('hil-flasher-log-line', `> Executing erase command: ${cmd} ${args.join(' ')}\n`);
-
-    // Sanitize parameters to mitigate command injection
-    const sanitizedArgs = args.map(arg => sanitizeShellArg(String(arg)));
-    const proc = spawn(cmd, sanitizedArgs, { cwd: buildDir, shell: false });
-
-    proc.stdout.on('data', (data) => {
-      event.sender.send('hil-flasher-log-line', data.toString());
-    });
-
-    proc.stderr.on('data', (data) => {
-      event.sender.send('hil-flasher-log-line', data.toString());
-    });
-
-    proc.on('error', (err) => {
-      event.sender.send('hil-flasher-log-line', `[ERROR] Failed to start erase utility: ${err.message}\n`);
-      event.sender.send('hil-flasher-log-line', `[TIP] Make sure '${cmd}' is installed on your system and added to your environmental variables PATH.\n`);
-      resolve({ success: false, error: err.message });
-    });
-
-    proc.on('close', (code) => {
-      if (code === 0) {
-        event.sender.send('hil-flasher-log-line', `[SUCCESS] Target flash memory erased successfully.\n`);
-        resolve({ success: true });
-      } else {
-        event.sender.send('hil-flasher-log-line', `[ERROR] Erase utility exited with code ${code}.\n`);
-        resolve({ success: false, exitCode: code });
-      }
-    });
-  });
+ipcMain.handle('hil-run-erase', async (event) => {
+  const role = await getCurrentRole();
+  const permission = checkPermission(role, 'hil', 'erase');
+  if (!permission.allowed) return rlsDenied('hil', 'erase', permission.reason);
+  const rateLimit = checkRateLimit('hil-run-erase', event.sender.id);
+  if (!rateLimit.allowed) {
+    return { success: false, code: 'RATE_LIMITED', retryAfterMs: rateLimit.retryAfterMs };
+  }
+  return {
+    success: false,
+    code: 'EXACT_TARGET_ERASE_REQUIRED',
+    error: 'Erase is blocked until exact device and probe identity verification is available.',
+  };
 });
 
 ipcMain.handle('hil-list-ports', async () => {
@@ -2052,5 +1980,3 @@ ipcMain.handle('sm-verify-generated-c', async (_, payload) => {
   }
   return await verifyGeneratedCode(payload);
 });
-
-
