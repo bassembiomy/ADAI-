@@ -1,0 +1,104 @@
+{
+  "schemaVersion": "1.0.0",
+  "packVersion": "1.0.0",
+  "minimumGeneratorSchemaVersion": "1.0.0",
+  "targetId": "atmega2560",
+  "deviceRevision": "A",
+  "displayName": "ATmega2560",
+  "device": {
+    "architecture": "avr",
+    "core": "avr6",
+    "fpu": "none",
+    "abi": "eabi",
+    "endianness": "little",
+    "maxCpuClockHz": 16000000
+  },
+  "memoryRegions": [
+    {
+      "name": "FLASH",
+      "start": 0,
+      "size": 262144
+    },
+    {
+      "name": "RAM",
+      "start": 8389120,
+      "size": 8192
+    }
+  ],
+  "supportedDriverModes": [
+    "vendor",
+    "bare-metal"
+  ],
+  "pinnedToolchains": [
+    {
+      "name": "avr-gcc",
+      "version": "15.2.0"
+    }
+  ],
+  "recipes": {
+    "build": "avr-atmega2560-v1",
+    "flash": "avrdude-atmega2560-v1",
+    "inspect": "avr-elf-v1"
+  },
+  "deviceIdentity": {
+    "mask": "0xFFFFFF",
+    "value": "0x1E9801",
+    "signature": "0x1E9801"
+  },
+  "pins": [
+    {
+      "id": "PB7",
+      "port": "PORTB",
+      "pin": 7,
+      "alternateFunctions": {
+        "pwm": "OC0A"
+      }
+    }
+  ],
+  "peripheralConstraints": [
+    {
+      "peripheral": "gpio"
+    },
+    {
+      "peripheral": "adc"
+    },
+    {
+      "peripheral": "pwm"
+    },
+    {
+      "peripheral": "uart"
+    }
+  ],
+  "buildRecipes": {
+    "compilerFlags": [
+      "-mmcu=atmega2560",
+      "-Os",
+      "-Wall",
+      "-Wextra",
+      "-Werror"
+    ],
+    "linkerFlags": [
+      "-mmcu=atmega2560"
+    ]
+  },
+  "programmers": [
+    {
+      "id": "wiring",
+      "name": "Wiring Bootloader"
+    }
+  ],
+  "capabilityManifest": {
+    "supportedPeripherals": [
+      "gpio",
+      "adc",
+      "pwm",
+      "uart"
+    ],
+    "certifiedStatuses": [
+      "STATIC_ANALYSIS_ONLY",
+      "TARGET_COMPILE_VERIFIED",
+      "LINKED_IMAGE_VERIFIED"
+    ]
+  },
+  "contentHash": "sha256:4651d2576a060ea5e7ad71d6049612be17fe1b80fa9e282a3c828d632e9e305a"
+}

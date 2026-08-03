@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "1.0.0",
+  "packVersion": "1.0.0",
+  "minimumGeneratorSchemaVersion": "1.0.0",
+  "targetId": "esp32-wroom-32",
+  "deviceRevision": "V3",
+  "displayName": "ESP32-WROOM-32",
+  "device": {
+    "architecture": "xtensa-esp32",
+    "core": "lx6",
+    "fpu": "hard",
+    "abi": "windowed",
+    "endianness": "little",
+    "maxCpuClockHz": 240000000
+  },
+  "memoryRegions": [
+    {
+      "name": "FLASH",
+      "start": 1061158912,
+      "size": 4194304
+    },
+    {
+      "name": "RAM",
+      "start": 1073414144,
+      "size": 327680
+    }
+  ],
+  "supportedDriverModes": [
+    "vendor"
+  ],
+  "pinnedToolchains": [
+    {
+      "name": "esp-idf-xtensa-gcc",
+      "version": "v5.2"
+    }
+  ],
+  "recipes": {
+    "build": "esp-idf-wroom32-v1",
+    "flash": "esptool-wroom32-v1",
+    "inspect": "esp-idf-image-v1"
+  },
+  "assets": [
+    {
+      "kind": "sdk-lock",
+      "path": "sdk/sdkconfig.defaults",
+      "sha256": "sha256:5166d17fbdb2f1e7c6fa11382f9fa3f59fbb153b0f27baeadda2bb5edbb97690"
+    }
+  ],
+  "deviceIdentity": {
+    "mask": "0x00FFFFFF",
+    "value": "0x00000000"
+  },
+  "pins": [
+    {
+      "id": "GPIO1",
+      "port": "GPIO",
+      "pin": 1,
+      "alternateFunctions": {
+        "uart": "U0TXD"
+      }
+    }
+  ],
+  "peripheralConstraints": [
+    {
+      "peripheral": "gpio"
+    },
+    {
+      "peripheral": "adc"
+    },
+    {
+      "peripheral": "pwm"
+    },
+    {
+      "peripheral": "uart"
+    }
+  ],
+  "buildRecipes": {
+    "compilerFlags": [
+      "-Os",
+      "-Wall",
+      "-Wextra",
+      "-Werror"
+    ],
+    "linkerFlags": []
+  },
+  "programmers": [
+    {
+      "id": "esptool",
+      "name": "esptool.py"
+    }
+  ],
+  "capabilityManifest": {
+    "supportedPeripherals": [
+      "gpio",
+      "adc",
+      "pwm",
+      "uart"
+    ],
+    "certifiedStatuses": [
+      "STATIC_ANALYSIS_ONLY",
+      "TARGET_COMPILE_VERIFIED",
+      "LINKED_IMAGE_VERIFIED"
+    ]
+  },
+  "contentHash": "sha256:0cb39c5080814a0bb705f78acf99da439c44a9cae10df00baa638b3a30aa5e9a"
+}

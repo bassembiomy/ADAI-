@@ -1,0 +1,125 @@
+{
+  "schemaVersion": "1.0.0",
+  "packVersion": "1.0.0",
+  "minimumGeneratorSchemaVersion": "1.0.0",
+  "targetId": "stm32f103c8t6",
+  "deviceRevision": "A",
+  "displayName": "STM32F103C8T6",
+  "device": {
+    "architecture": "armv7-m",
+    "core": "cortex-m3",
+    "fpu": "none",
+    "abi": "eabi",
+    "endianness": "little",
+    "maxCpuClockHz": 72000000
+  },
+  "memoryRegions": [
+    {
+      "name": "FLASH",
+      "start": 134217728,
+      "size": 65536
+    },
+    {
+      "name": "RAM",
+      "start": 536870912,
+      "size": 20480
+    }
+  ],
+  "supportedDriverModes": [
+    "vendor",
+    "bare-metal"
+  ],
+  "pinnedToolchains": [
+    {
+      "name": "arm-none-eabi-gcc",
+      "version": "10.3.1"
+    }
+  ],
+  "recipes": {
+    "build": "arm-none-eabi-stm32f103-v1",
+    "flash": "openocd-stm32f103-v1",
+    "inspect": "arm-elf-v1"
+  },
+  "assets": [
+    {
+      "kind": "startup",
+      "path": "startup/startup_stm32f103c8tx.c",
+      "sha256": "sha256:df9d52122a167e136bf0f1ca3b15b0629ef2eace551f5945ec78c6198f6bf735"
+    },
+    {
+      "kind": "linker",
+      "path": "linker/stm32f103c8tx.ld",
+      "sha256": "sha256:2417849ff75c1f421b6403349d27fa73c0a2aca6034f6f30d295e0ce0876fb58"
+    }
+  ],
+  "deviceIdentity": {
+    "mask": "0x0FFFFFFF",
+    "value": "0x10016410"
+  },
+  "pins": [
+    {
+      "id": "PA0",
+      "port": "GPIOA",
+      "pin": 0,
+      "alternateFunctions": {
+        "adc": "ADC1_IN0"
+      }
+    },
+    {
+      "id": "PA9",
+      "port": "GPIOA",
+      "pin": 9,
+      "alternateFunctions": {
+        "uart": "USART1_TX",
+        "pwm": "TIM1_CH2"
+      }
+    }
+  ],
+  "peripheralConstraints": [
+    {
+      "peripheral": "gpio"
+    },
+    {
+      "peripheral": "adc"
+    },
+    {
+      "peripheral": "pwm"
+    },
+    {
+      "peripheral": "uart"
+    }
+  ],
+  "buildRecipes": {
+    "compilerFlags": [
+      "-mcpu=cortex-m3",
+      "-mthumb",
+      "-Os",
+      "-Wall",
+      "-Wextra",
+      "-Werror"
+    ],
+    "linkerFlags": [
+      "-Wl,-Map=firmware.map"
+    ]
+  },
+  "programmers": [
+    {
+      "id": "stlink-v2",
+      "name": "ST-LINK/V2"
+    }
+  ],
+  "capabilityManifest": {
+    "supportedPeripherals": [
+      "gpio",
+      "adc",
+      "pwm",
+      "uart"
+    ],
+    "certifiedStatuses": [
+      "STATIC_ANALYSIS_ONLY",
+      "TARGET_COMPILE_VERIFIED",
+      "LINKED_IMAGE_VERIFIED"
+    ]
+  },
+  "contentHash": "sha256:6f13d329acc45ed7dc55e34a7a2f8eb75d0b93d9c476973b2d4e3f77fcee6687"
+}

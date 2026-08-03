@@ -1,0 +1,104 @@
+{
+  "schemaVersion": "1.0.0",
+  "packVersion": "1.0.0",
+  "minimumGeneratorSchemaVersion": "1.0.0",
+  "targetId": "atmega328p",
+  "deviceRevision": "A",
+  "displayName": "ATmega328P",
+  "device": {
+    "architecture": "avr",
+    "core": "avr5",
+    "fpu": "none",
+    "abi": "eabi",
+    "endianness": "little",
+    "maxCpuClockHz": 16000000
+  },
+  "memoryRegions": [
+    {
+      "name": "FLASH",
+      "start": 0,
+      "size": 32768
+    },
+    {
+      "name": "RAM",
+      "start": 8388864,
+      "size": 2048
+    }
+  ],
+  "supportedDriverModes": [
+    "vendor",
+    "bare-metal"
+  ],
+  "pinnedToolchains": [
+    {
+      "name": "avr-gcc",
+      "version": "15.2.0"
+    }
+  ],
+  "recipes": {
+    "build": "avr-atmega328p-v1",
+    "flash": "avrdude-atmega328p-v1",
+    "inspect": "avr-elf-v1"
+  },
+  "deviceIdentity": {
+    "mask": "0xFFFFFF",
+    "value": "0x1E950F",
+    "signature": "0x1E950F"
+  },
+  "pins": [
+    {
+      "id": "PB5",
+      "port": "PORTB",
+      "pin": 5,
+      "alternateFunctions": {
+        "gpio": "SPI_SCK"
+      }
+    }
+  ],
+  "peripheralConstraints": [
+    {
+      "peripheral": "gpio"
+    },
+    {
+      "peripheral": "adc"
+    },
+    {
+      "peripheral": "pwm"
+    },
+    {
+      "peripheral": "uart"
+    }
+  ],
+  "buildRecipes": {
+    "compilerFlags": [
+      "-mmcu=atmega328p",
+      "-Os",
+      "-Wall",
+      "-Wextra",
+      "-Werror"
+    ],
+    "linkerFlags": [
+      "-mmcu=atmega328p"
+    ]
+  },
+  "programmers": [
+    {
+      "id": "usbasp",
+      "name": "USBasp"
+    }
+  ],
+  "capabilityManifest": {
+    "supportedPeripherals": [
+      "gpio",
+      "adc",
+      "pwm",
+      "uart"
+    ],
+    "certifiedStatuses": [
+      "STATIC_ANALYSIS_ONLY",
+      "TARGET_COMPILE_VERIFIED",
+      "LINKED_IMAGE_VERIFIED"
+    ]
+  },
+  "contentHash": "sha256:d0a5c0ae7e57a83d80c0a0e06eb46648b73faaa35ff37b7f10d8ac86b19f1401"
+}
