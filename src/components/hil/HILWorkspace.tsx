@@ -255,28 +255,26 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
 
           // Trigger the real compilation command on disk!
           const compileRes = await ipcRenderer.invoke('hil-run-compile', {
-            target,
-            optimization: opt,
-            warningLevel: warn,
-            debugLevel: dbg
+            buildId: res.buildId,
+            sourceManifestHash: res.sourceManifestHash,
+            targetSelection: res.targetSelection,
           });
 
-          if (compileRes && compileRes.success) {
-            const flashPctStr = memoryUsage.flashPct.toFixed(1);
-            const ramPctStr = memoryUsage.ramPct.toFixed(1);
-
+          if (compileRes && compileRes.success && compileRes.linkedImageVerified) {
             setConsoleLogs(prev => [
               ...prev,
-              `[SIZE] Target Output Binary Memory Report:`,
-              `======================================================================`,
-              `Memory Section       Used Bytes    Total Available    Percent Used`,
-              `----------------------------------------------------------------------`,
-              `  FLASH (text+data):  ${memoryUsage.flashUsed} B          ${memoryLimits.flash} B           ${flashPctStr}%`,
-              `  SRAM (static+data): ${memoryUsage.ramUsed} B          ${memoryLimits.ram} B           ${ramPctStr}%`,
-              `======================================================================`,
+              `[SIZE] FLASH: ${compileRes.measuredFlashBytes} B; SRAM: ${compileRes.measuredRamBytes} B`,
               `[SYSTEM] NATIVE EMBEDDED TOOLCHAIN BUILD COMPLETED SUCCESSFULLY.`
             ]);
             setBuildStatus('success');
+          } else if (compileRes && compileRes.success) {
+            setConsoleLogs(prev => [
+              ...prev,
+              `[BLOCKED] Object compilation completed, but the linked image was not verified.`,
+              `[BLOCKED] ${compileRes.blockReasons?.join(', ') || 'LINKED_IMAGE_NOT_VERIFIED'}`,
+              `[SYSTEM] Flashing remains disabled; estimated memory values are not reported as executable evidence.`,
+            ]);
+            setBuildStatus('error');
           } else {
             // Real compilation failed (e.g. GCC missing or exited with error)
             const isExitError = compileRes && compileRes.exitCode !== undefined;

@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { validateString, validateUrl, validateFilename, sanitizeShellArg, validateToolchainKey, validateServiceName, validateRedirectUrl } = require('./security/inputValidator.cjs');
+const { evaluateBuildRequest } = require('./security/hilBuildPolicy.cjs');
 const { evaluateFlashRequest } = require('./security/hilFlashPolicy.cjs');
 const asarGuard = require('./security/asarGuard.cjs');
 
@@ -662,6 +663,8 @@ async function getRealPorts() {
   return [];
 }
 
+let currentHilWorkspace = null;
+
 ipcMain.handle('hil-save-build-files', async (event, { files }) => {
   // RLS check: at least engineer role required to write HIL build files
   const role = await getCurrentRole();
@@ -669,10 +672,25 @@ ipcMain.handle('hil-save-build-files', async (event, { files }) => {
   if (!perm.allowed) return rlsDenied('hil', 'saveFiles', perm.reason);
 
   try {
-    const buildDir = path.join(process.cwd(), 'hil_build');
+    if (!Array.isArray(files) || files.length === 0 || files.length > 64) {
+      return { success: false, code: 'INVALID_FILE_SET', error: 'Generated file set must contain 1 to 64 files.' };
+    }
+    const seenNames = new Set();
+    for (const file of files) {
+      if (!file || typeof file.name !== 'string' || typeof file.content !== 'string' || file.content.length > 2 * 1024 * 1024) {
+        return { success: false, code: 'INVALID_GENERATED_FILE', error: 'Generated files require bounded string names and contents.' };
+      }
+      const safeName = validateFilename(file.name);
+      if (safeName !== file.name || seenNames.has(safeName)) {
+        return { success: false, code: 'INVALID_GENERATED_FILENAME', error: `Unsafe or duplicate generated filename: ${file.name}` };
+      }
+      seenNames.add(safeName);
+    }
+    const buildDir = currentHilWorkspace.buildDir;
     if (!fs.existsSync(buildDir)) {
       fs.mkdirSync(buildDir, { recursive: true });
     }
+    const writtenFiles = [];
     for (const file of files) {
       // Sanitize filename to prevent path traversal attacks
       const safeFileName = validateFilename(file.name);
@@ -716,8 +734,41 @@ ipcMain.handle('hil-save-build-files', async (event, { files }) => {
       }
 
       fs.writeFileSync(filePath, contentToWrite, 'utf8');
+      writtenFiles.push({ name: safeFileName, content: contentToWrite });
     }
-    return { success: true, path: buildDir };
+    const manifestFile = writtenFiles.find(file => file.name === 'integration_manifest.json');
+    if (!manifestFile) {
+      return { success: false, code: 'MISSING_INTEGRATION_MANIFEST', error: 'Generated project has no integration manifest.' };
+    }
+    let integrationManifest;
+    try {
+      integrationManifest = JSON.parse(manifestFile.content);
+    } catch {
+      return { success: false, code: 'INVALID_INTEGRATION_MANIFEST', error: 'Integration manifest is not valid JSON.' };
+    }
+    const canonicalSources = writtenFiles
+      .slice()
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map(file => `${file.name}\0${file.content.length}\0${file.content}`)
+      .join('\0');
+    const sourceManifestHash = `sha256:${crypto.createHash('sha256').update(canonicalSources, 'utf8').digest('hex')}`;
+    currentHilWorkspace = Object.freeze({
+      buildId: `build-${crypto.randomUUID()}`,
+      sourceManifestHash,
+      targetSelection: Object.freeze({ ...integrationManifest.targetSelection }),
+      flashBlocked: integrationManifest.flashBlocked !== false,
+      files: Object.freeze(writtenFiles.map(file => file.name)),
+      buildDir,
+    });
+    currentVerifiedHilBuild = null;
+    return {
+      success: true,
+      path: buildDir,
+      buildId: currentHilWorkspace.buildId,
+      sourceManifestHash,
+      targetSelection: currentHilWorkspace.targetSelection,
+      flashBlocked: currentHilWorkspace.flashBlocked,
+    };
   } catch (error) {
     console.error('Failed to save HIL build files:', error);
     return { success: false, error: error.message };
@@ -728,29 +779,34 @@ let activeHilProcess = null;
 let currentVerifiedHilBuild = null;
 
 // HIL Compile IPC handler
-ipcMain.handle('hil-run-compile', async (event, { target, optimization, warningLevel, debugLevel }) => {
+ipcMain.handle('hil-run-compile', async (event, request = {}) => {
   // RLS check: at least engineer role required to compile firmware
   const role = await getCurrentRole();
   const perm = checkPermission(role, 'hil', 'compile');
   if (!perm.allowed) return rlsDenied('hil', 'compile', perm.reason);
+  const rateLimit = checkRateLimit('hil-run-compile', event.sender.id);
+  if (!rateLimit.allowed) {
+    return { success: false, code: 'RATE_LIMITED', retryAfterMs: rateLimit.retryAfterMs };
+  }
+  const buildPolicy = evaluateBuildRequest(request, currentHilWorkspace);
+  if (!buildPolicy.allowed) return { success: false, ...buildPolicy };
+
+  const targetById = {
+    stm32f103c8t6: 'STM32F1',
+    stm32f407vgt6: 'STM32F4',
+    atmega328p: 'Arduino_Uno',
+    atmega2560: 'Arduino_Mega',
+    'esp32-wroom-32': 'ESP32',
+  };
+  const target = targetById[request.targetSelection.targetId];
+  const optimization = buildPolicy.compilerFlags.find(flag => /^-O(?:[0-3s])$/.test(flag)) || '-Os';
+  const warningLevel = '-Wall -Wextra -Werror';
+  const debugLevel = 'None';
 
   return new Promise((resolve) => {
     const allowedTargets = ['Generic', 'Arduino_Uno', 'Arduino_Mega', 'ESP32', 'STM32F1', 'STM32F4'];
-    const allowedOptimizations = ['-O0', '-O1', '-O2', '-O3', '-Os'];
-    const allowedWarningLevels = ['-w', '-Wall', '-Wextra', '-Wall -Wextra', '-Wall -Wextra -Werror'];
-    const allowedDebugLevels = ['None', '-g', '-g3'];
-
-    if (!target || (!allowedTargets.includes(target) && !target.startsWith('STM32'))) {
+    if (!target || !allowedTargets.includes(target)) {
       return resolve({ success: false, error: 'Invalid compilation target' });
-    }
-    if (optimization && !allowedOptimizations.includes(optimization)) {
-      return resolve({ success: false, error: 'Invalid optimization level' });
-    }
-    if (warningLevel && !allowedWarningLevels.includes(warningLevel)) {
-      return resolve({ success: false, error: 'Invalid warning level' });
-    }
-    if (debugLevel && !allowedDebugLevels.includes(debugLevel)) {
-      return resolve({ success: false, error: 'Invalid debug level' });
     }
 
     const buildDir = path.join(process.cwd(), 'hil_build');
@@ -776,6 +832,9 @@ ipcMain.handle('hil-run-compile', async (event, { target, optimization, warningL
           'sm_core.c',
           'sm_safety.c',
           'sm_user_logic.c',
+          'mcal_dio_hil.c',
+          'adia_mcal.c',
+          'adia_component.c',
           '-o',
           'adia_hil.exe'
         ];
@@ -785,16 +844,20 @@ ipcMain.handle('hil-run-compile', async (event, { target, optimization, warningL
           '-mmcu=atmega328p',
           '-DF_CPU=16000000UL',
           '-I.',
+          '-x', 'c++',
           optimization || '-Os',
           ...warningFlags,
           ...dbg,
           'Arduino.cpp',
           'hal_drivers.c',
           'hil_interface.c',
-          'main_hil.c',
+          'main_hil.ino',
           'sm_core.c',
           'sm_safety.c',
           'sm_user_logic.c',
+          'mcal_dio_hil.c',
+          'adia_mcal.c',
+          'adia_component.c',
           '-o',
           'adia_hil.elf'
         ];
@@ -804,16 +867,20 @@ ipcMain.handle('hil-run-compile', async (event, { target, optimization, warningL
           '-mmcu=atmega2560',
           '-DF_CPU=16000000UL',
           '-I.',
+          '-x', 'c++',
           optimization || '-Os',
           ...warningFlags,
           ...dbg,
           'Arduino.cpp',
           'hal_drivers.c',
           'hil_interface.c',
-          'main_hil.c',
+          'main_hil.ino',
           'sm_core.c',
           'sm_safety.c',
           'sm_user_logic.c',
+          'mcal_dio_hil.c',
+          'adia_mcal.c',
+          'adia_component.c',
           '-o',
           'adia_hil.elf'
         ];
@@ -833,11 +900,14 @@ ipcMain.handle('hil-run-compile', async (event, { target, optimization, warningL
           'sm_core.c',
           'sm_safety.c',
           'sm_user_logic.c',
+          'mcal_dio_hil.c',
+          'adia_mcal.c',
+          'adia_component.c',
           '-o',
           'adia_hil.elf'
         ];
       } else {
-        return resolve({ success: true, bypassed: true });
+        return resolve({ success: false, code: 'TRUSTED_RECIPE_NOT_IMPLEMENTED', error: `Linked image recipe is not implemented for ${target}.` });
       }
 
       event.sender.send('hil-compiler-log-line', `> Executing compile command: ${cmd} ${args.join(' ')}\n`);
@@ -863,7 +933,17 @@ ipcMain.handle('hil-run-compile', async (event, { target, optimization, warningL
       proc.on('close', (code) => {
         if (code === 0) {
           event.sender.send('hil-compiler-log-line', `[SUCCESS] Compilation complete. Build binary generated.\n`);
-          resolve({ success: true, binary: target === 'Generic' ? 'adia_hil.exe' : 'adia_hil.elf' });
+          resolve({
+            success: true,
+            binary: 'adia_hil.elf',
+            buildId: currentHilWorkspace.buildId,
+            sourceManifestHash: currentHilWorkspace.sourceManifestHash,
+            targetSelection: currentHilWorkspace.targetSelection,
+            recipeId: buildPolicy.recipeId,
+            linkedImageVerified: false,
+            flashBlocked: true,
+            blockReasons: ['STARTUP_VECTOR_AND_LINKER_INSPECTION_NOT_IMPLEMENTED'],
+          });
         } else {
           event.sender.send('hil-compiler-log-line', `[ERROR] Compiler exited with code ${code}.\n`);
           resolve({ success: false, exitCode: code });
