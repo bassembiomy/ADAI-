@@ -87,6 +87,12 @@ Production CSP (applied via `webRequest.onHeadersReceived`):
 - All toolchain downloads validate redirect chains against `ALLOWED_DOWNLOAD_HOSTS`
 - HIL compile uses allowlisted arguments for targets, optimization levels, warning levels
 
+### 9. MCU Build, Flash Confirmation & Evidence Security
+- **Target Packs**: Immutable, hashed (`sha256`) target-pack manifests (`target-packs/`) own build/flash recipes and driver providers. Renderer cannot pass arbitrary compile flags or executable command strings.
+- **Single-Use Flash Confirmation Tokens**: Flashing requires a short-lived (60s), single-use cryptographically random token bound to build ID, exact target, programmer, probe serial, and readback hash.
+- **Tamper-Evident Evidence Chain**: Evidence progression (`TARGET_COMPILE_VERIFIED` → `LINKED_IMAGE_VERIFIED` → `FLASH_VERIFIED` → `SELF_TEST_VERIFIED` → `EXTERNAL_HIL_VERIFIED` → `RELEASE_READY`) is hashed sequentially (`recordHash`). Tampering invalidates the evidence chain.
+
+
 ---
 
 ## Known Residual Risks

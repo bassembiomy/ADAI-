@@ -18,6 +18,11 @@ export interface VerificationEvidence {
   dynamicReachability: VerificationEvidenceStatus;
   embeddedCompile: VerificationEvidenceStatus;
   targetHardware: VerificationEvidenceStatus;
+  targetCompile?: VerificationEvidenceStatus;
+  linkedImage?: VerificationEvidenceStatus;
+  flash?: VerificationEvidenceStatus;
+  selfTest?: VerificationEvidenceStatus;
+  externalHil?: VerificationEvidenceStatus;
 }
 
 export interface ReportSourceFile {
