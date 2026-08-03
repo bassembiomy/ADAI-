@@ -19,12 +19,23 @@
  */
 
 export const START_BYTE = 0xAA;
+export const PROTO_MAGIC = 0x4144; // "AD"
+export const PROTO_VERSION = 0x01;
 
 export enum ValueType {
   BOOL = 0x01,
   INT = 0x02,
   FLOAT = 0x03,
   DOUBLE = 0x04
+}
+
+export interface HILFrameHeader {
+  magic: number;
+  version: number;
+  sequence: number;
+  logicalTick: number;
+  targetId: string;
+  firmwareHash: string;
 }
 
 // Map JavaScript/C types to protocol value types
