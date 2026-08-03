@@ -33,7 +33,8 @@ function evaluateFlashRequest(request, currentBuild) {
   if (!SAFE_ID.test(String(request.buildId || '')) || request.buildId !== currentBuild.buildId) {
     return denied('STALE_BUILD', 'The requested build is not current');
   }
-  if (!SHA256.test(String(request.artifactHash || '')) || request.artifactHash !== currentBuild.artifactHash) {
+  const buildArtifactHash = currentBuild.artifactHash || currentBuild.artifacts?.hashes?.elf;
+  if (!SHA256.test(String(request.artifactHash || '')) || request.artifactHash !== buildArtifactHash) {
     return denied('STALE_ARTIFACT', 'The requested artifact hash is not current');
   }
   if (!sameSelection(request.targetSelection, currentBuild.targetSelection)) {
