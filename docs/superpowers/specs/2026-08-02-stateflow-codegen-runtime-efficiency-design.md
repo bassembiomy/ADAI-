@@ -108,6 +108,7 @@ C enum, layer, and X-Bridges flag. Generated user-logic declarations receive
 the same name/ID comments. Existing UUID-based symbols are retained to avoid an
 ABI change.
 
+
 ## Trusted Host Verification
 
 The pure generator remains deterministic and does not invoke external tools.

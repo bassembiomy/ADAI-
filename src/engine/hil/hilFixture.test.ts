@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateHilFixture, type HilFixtureManifest } from './hilFixture.js';
+import { validateHilFixture, type HilFixtureManifest } from './hilFixture';
 
 describe('hilFixture', () => {
   it('validates a complete HIL fixture manifest and returns success', () => {

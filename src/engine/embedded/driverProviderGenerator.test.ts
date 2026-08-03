@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { generateDriverProviders } from './driverProviderGenerator.js';
-import { loadBuiltinPack } from '../targetPacks/builtinPackLoader.js';
-import type { HILConfig } from '../hil/hilTypes.js';
+import { generateDriverProviders } from './driverProviderGenerator';
+import { loadBuiltinPack } from '../targetPacks/builtinPackLoader';
+import type { HILConfig } from '../hil/hilTypes';
 
 describe('driverProviderGenerator', () => {
   it('generates exact driver files and records channel providers in integration manifest', async () => {
@@ -32,7 +32,7 @@ describe('driverProviderGenerator', () => {
       stub: false,
     }));
 
-    const filePaths = result.files.map(f => f.path);
+    const filePaths = result.files.map((f: { path: string }) => f.path);
     expect(filePaths).toContain('src/driver/adia_mcal_pwm.c');
     expect(filePaths).toContain('src/driver/adia_mcal_gpio.c');
     expect(filePaths).not.toContain('src/driver/adia_mcal_adc.c');
@@ -66,7 +66,7 @@ describe('driverProviderGenerator', () => {
       reason: 'UNSUPPORTED_PERIPHERAL',
     }));
 
-    const dacFile = result.files.find(f => f.path === 'src/driver/adia_mcal_dac.c');
+    const dacFile = result.files.find((f: { path: string }) => f.path === 'src/driver/adia_mcal_dac.c');
     expect(dacFile).toBeDefined();
     expect(dacFile?.content).toContain('ADIA_MCAL_NOT_IMPLEMENTED');
   });

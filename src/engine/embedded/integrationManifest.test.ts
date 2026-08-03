@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { createIntegrationManifest } from './integrationManifest.js';
-import type { DriverProviderResolution } from './driverProviderGenerator.js';
+import { createIntegrationManifest } from './integrationManifest';
+import type { DriverProviderResolution } from './driverProviderGenerator';
 
 describe('integrationManifest', () => {
   it('creates manifest and sets flashBlocked=true when any channel is stubbed', () => {
