@@ -2,24 +2,27 @@ import type { HILConfig } from '../hil/hilTypes.js';
 import { resolveTargetSelection } from '../hil/hilTypes.js';
 import { generateMcalHeader } from '../mcal/mcalHeaderGenerator.js';
 import type { McalChannelConfig, McalPeripheral } from '../mcal/mcalTypes.js';
+import type { TargetPackManifest } from '../targetPacks/targetPackTypes.js';
+import { generateDriverProviders, type DriverProviderResolution } from './driverProviderGenerator.js';
+import { generatePlatformProject } from './platformProjectGenerator.js';
+import { createIntegrationManifest, type IntegrationManifest } from './integrationManifest.js';
+import { createHash } from 'node:crypto';
 
-export interface EmbeddedLayerFile {
-  name: string;
+export interface EmbeddedProjectFile {
+  path: string;
+  layer: 'component' | 'mcal' | 'driver' | 'platform' | 'build' | 'app';
+  sha256: `sha256:${string}`;
   content: string;
 }
 
-export interface EmbeddedIntegrationManifest {
-  schemaVersion: '1.0.0';
-  targetSelection: NonNullable<ReturnType<typeof resolveTargetSelection>>;
-  generatedLayers: readonly ['component', 'mcal', 'driver'];
-  stubbedPeripherals: readonly McalPeripheral[];
-  flashBlocked: boolean;
-  blockReasons: readonly string[];
+export interface EmbeddedProjectResult {
+  files: EmbeddedProjectFile[];
+  manifest: IntegrationManifest;
+  diagnostics: readonly string[];
 }
 
-export interface EmbeddedLayerResult {
-  files: EmbeddedLayerFile[];
-  manifest: EmbeddedIntegrationManifest;
+function sha256Content(content: string): `sha256:${string}` {
+  return `sha256:${createHash('sha256').update(content, 'utf8').digest('hex')}`;
 }
 
 function channelModel(config: HILConfig): McalChannelConfig[] {
@@ -198,11 +201,9 @@ SM_Error_t ADIA_Component_Cyclic(ADIA_Instance_t *instance, uint32_t observed_de
 function renderComponentSource(): string {
   return `#include "adia_component.h"
 #include "adia_mcal.h"
-#include "hal_drivers.h"
 
 SM_Error_t ADIA_Component_Init(ADIA_Instance_t *instance)
 {
-    HAL_Drivers_Init();
     return SM_Init(instance);
 }
 
@@ -220,6 +221,82 @@ SM_Error_t ADIA_Component_Cyclic(ADIA_Instance_t *instance, uint32_t observed_de
 `;
 }
 
+export function generateEmbeddedProject(
+  config: HILConfig,
+  pack: TargetPackManifest,
+): EmbeddedProjectResult {
+  const selection = resolveTargetSelection(config);
+  if (!selection) throw new Error('An exact target selection is required');
+
+  const channels = channelModel(config);
+  const mcalHeaderContent = generateMcalHeader({ packTargetId: selection.targetId, channels });
+
+  // Generate driver providers
+  const driverResult = generateDriverProviders(config, pack);
+
+  // Generate platform build assets
+  const platformResult = generatePlatformProject(config, pack);
+
+  // Component files
+  const componentHeader = renderComponentHeader();
+  const componentSource = renderComponentSource();
+
+  const files: EmbeddedProjectFile[] = [
+    { path: 'src/mcal/adia_mcal.h', layer: 'mcal', sha256: sha256Content(mcalHeaderContent), content: mcalHeaderContent },
+    { path: 'src/mcal/adia_mcal.c', layer: 'mcal', sha256: sha256Content(renderMcalImplementation(config, channels)), content: renderMcalImplementation(config, channels) },
+    { path: 'src/component/adia_component.h', layer: 'component', sha256: sha256Content(componentHeader), content: componentHeader },
+    { path: 'src/component/adia_component.c', layer: 'component', sha256: sha256Content(componentSource), content: componentSource },
+    ...driverResult.files.map(f => ({ path: f.path, layer: 'driver' as const, sha256: f.sha256, content: f.content })),
+    ...platformResult.files.map(f => ({ path: f.path, layer: f.layer, sha256: f.sha256, content: f.content })),
+  ];
+
+  const contentHashes: Record<string, string> = {};
+  for (const f of files) {
+    contentHashes[f.path] = f.sha256;
+  }
+
+  const manifest = createIntegrationManifest(selection, driverResult.channels, contentHashes);
+  const manifestJson = `${JSON.stringify(manifest, null, 2)}\n`;
+
+  files.push({
+    path: 'integration_manifest.json',
+    layer: 'build',
+    sha256: sha256Content(manifestJson),
+    content: manifestJson,
+  });
+
+  const diagnostics: string[] = [];
+  if (manifest.flashBlocked) {
+    diagnostics.push(`Flash blocked due to stubs: ${manifest.stubs.join(', ')}`);
+  }
+
+  return {
+    files,
+    manifest,
+    diagnostics,
+  };
+}
+
+// Backward compatibility legacy wrapper
+export interface EmbeddedLayerFile {
+  name: string;
+  content: string;
+}
+
+export interface EmbeddedIntegrationManifest {
+  schemaVersion: '1.0.0';
+  targetSelection: NonNullable<ReturnType<typeof resolveTargetSelection>>;
+  generatedLayers: readonly ['component', 'mcal', 'driver'];
+  stubbedPeripherals: readonly McalPeripheral[];
+  flashBlocked: boolean;
+  blockReasons: readonly string[];
+}
+
+export interface EmbeddedLayerResult {
+  files: EmbeddedLayerFile[];
+  manifest: EmbeddedIntegrationManifest;
+}
+
 export function generateEmbeddedLayers(config: HILConfig): EmbeddedLayerResult {
   const targetSelection = resolveTargetSelection(config);
   if (!targetSelection) throw new Error('An exact target selection is required for embedded layers');
@@ -235,12 +312,18 @@ export function generateEmbeddedLayers(config: HILConfig): EmbeddedLayerResult {
     flashBlocked: stubbedPeripherals.length > 0,
     blockReasons: stubbedPeripherals.length > 0 ? ['TARGET_DRIVER_PROVIDER_NOT_GENERATED'] : [],
   };
+
+  const header = generateMcalHeader({ packTargetId: targetSelection.targetId, channels });
+  const mcalImpl = renderMcalImplementation(config, channels);
+  const compHeader = renderComponentHeader();
+  const compSource = renderComponentSource();
+
   return {
     files: [
-      { name: 'adia_mcal.h', content: generateMcalHeader({ packTargetId: targetSelection.targetId, channels }) },
-      { name: 'adia_mcal.c', content: renderMcalImplementation(config, channels) },
-      { name: 'adia_component.h', content: renderComponentHeader() },
-      { name: 'adia_component.c', content: renderComponentSource() },
+      { name: 'adia_mcal.h', content: header },
+      { name: 'adia_mcal.c', content: mcalImpl },
+      { name: 'adia_component.h', content: compHeader },
+      { name: 'adia_component.c', content: compSource },
       { name: 'integration_manifest.json', content: `${JSON.stringify(manifest, null, 2)}\n` },
     ],
     manifest,
