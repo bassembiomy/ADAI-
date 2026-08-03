@@ -1,4 +1,5 @@
 import { readdir, readFile } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
 import { resolve } from 'node:path';
 import type { TargetPackManifest } from './targetPackTypes.js';
 import { validateTargetPackManifest } from './targetPackSchema.js';
@@ -11,7 +12,7 @@ export interface ResolvedPack {
 
 export async function resolvePacks(searchPath: string): Promise<ResolvedPack[]> {
   const packs: ResolvedPack[] = [];
-  let entries: string[] = [];
+  let entries: Dirent[] = [];
   try {
     entries = await readdir(searchPath, { withFileTypes: true });
   } catch {

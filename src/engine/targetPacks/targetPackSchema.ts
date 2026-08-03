@@ -129,5 +129,5 @@ export function validateTargetPackManifest(
     return { success: false, errors };
   }
 
-  return { success: true, manifest: value as TargetPackManifest };
+  return { success: true, manifest: value as unknown as TargetPackManifest };
 }
