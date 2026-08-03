@@ -142,6 +142,50 @@ Each target pack shall supply or render:
 - programmer/probe configuration and flash/readback verification recipe;
 - on-target self-test and external-HIL transport integration.
 
+### 4.6 MCAL public API contract
+
+The component layer and target-pack drivers shall communicate through a stable
+C99 API contract. The generator shall emit:
+
+- one header `adia_mcal.h` declaring the public types, channel enums, status
+codes, and function signatures used by the component layer;
+- one implementation file per configured peripheral instance, owned by the
+target pack, containing the vendor or bare-metal driver body;
+- safe-value and range metadata as compile-time constants consumed by the
+component layer.
+
+Every MCAL operation shall return an explicit status:
+
+```c
+typedef enum {
+  ADIA_MCAL_OK = 0,
+  ADIA_MCAL_ERROR,
+  ADIA_MCAL_TIMEOUT,
+  ADIA_MCAL_NOT_IMPLEMENTED,
+  ADIA_MCAL_INVALID_CHANNEL,
+  ADIA_MCAL_INVALID_STATE,
+  ADIA_MCAL_HEALTH_FAULT,
+} adia_mcal_status_t;
+```
+
+Read and write functions shall use typed channel handles, never raw register
+addresses or free-form strings:
+
+```c
+adia_mcal_status_t adia_mcal_gpio_read(adia_mcal_gpio_channel_t ch,
+                                        bool *out_value);
+adia_mcal_status_t adia_mcal_gpio_write(adia_mcal_gpio_channel_t ch,
+                                         bool value);
+adia_mcal_status_t adia_mcal_adc_read(adia_mcal_adc_channel_t ch,
+                                       int32_t *out_counts);
+adia_mcal_status_t adia_mcal_pwm_write(adia_mcal_pwm_channel_t ch,
+                                        uint32_t duty_counts);
+```
+
+Initialization, deinitialization, health, and safe-state functions shall take
+no opaque context pointers and shall leave peripherals in a known safe state on
+failure. Unused channel enums and peripheral files shall not be generated.
+
 ## 5. Target-Pack Contract
 
 A target pack shall be an immutable, versioned package with:
@@ -160,6 +204,24 @@ A target pack shall be an immutable, versioned package with:
 `TargetRegistry` shall validate schema compatibility, unique IDs, content
 hashes, paths, build recipes, capability references, and evidence metadata
 before a pack can be selected.
+
+### 5.1 Packaging, discovery, and driver-mode selection
+
+A target pack shall be distributed as a versioned directory or archive with a
+single root manifest file. The registry shall discover packs from a configured
+search path; no pack may be loaded from user-typed filesystem paths at runtime.
+
+The driver mode (`vendor` or `bare-metal`) shall be selected in the project
+target configuration, not inferred from installed SDKs. The registry shall
+verify that the selected mode is listed in the pack's `supportedDriverModes`
+before generation begins. Changing the driver mode shall be treated as a new
+target configuration and shall invalidate previous compile, link, flash, and HIL
+evidence.
+
+Each pack shall declare its minimum ADIA generator schema version and shall be
+rejected if the running generator is incompatible. A dependency lock shall
+record the pack version, content hash, schema version, and selected driver mode
+inside the generated delivery package.
 
 ## 6. Generation and Validation Flow
 
@@ -185,6 +247,15 @@ before a pack can be selected.
 12. Run the external HIL suite and compare its trace against simulation and
     compiled-C reference traces.
 13. Package artifacts and evidence with the exact firmware hash.
+
+A failure at any step shall stop the pipeline, record the failing step and the
+exact configuration hashes, and shall not allow later steps to claim success.
+Each successful step shall append an immutable evidence record containing the
+step name, input hashes, output hashes, tool versions, timestamp, and the
+status reached. Evidence records shall be stored alongside the generated
+deliverable and shall be signed by the build identity for audit traceability.
+The build identity is the stable ADIA generator instance identifier used for
+the session; it is not a production code-signing key infrastructure.
 
 ## 7. HIL Architecture
 
@@ -258,6 +329,21 @@ is not linked-image evidence, host-stub compilation is not target compilation,
 estimated memory is not ELF/map evidence, and a family label is not exact-device
 flash evidence.
 
+### 9.1 Status transitions and evidence storage
+
+The status model is cumulative and ordered. A configuration may advance only
+through the sequence above, but it may regress to an earlier status or to
+`STATIC_ANALYSIS_ONLY` whenever the model, target selection, driver mode,
+toolchain, board revision, or target-pack version changes. Regression shall
+clear all downstream evidence records.
+
+Evidence shall be stored as a chain of signed JSON objects, each referencing the
+previous record by hash, containing the status reached, all input and output
+hashes, and a stable tool-version identifier. Evidence shall be written to the
+delivery package and to the project's evidence store; it shall never be edited
+in place. A missing or tampered evidence record shall be treated as no evidence
+for that step.
+
 ## 10. Generated Delivery Package
 
 The final package shall contain:
@@ -273,6 +359,47 @@ The final package shall contain:
 - firmware/model/source/target-pack/test-vector hashes;
 - MCU integration, wiring, build, flash, debugging, rollback, and recovery
   instructions.
+
+### 10.1 Package layout
+
+The delivery package shall have a deterministic directory layout so that build,
+flash, and HIL scripts can locate files without parsing free-form paths:
+
+```text
+<project>-<targetId>-<driverMode>-<firmwareHash>/
+  src/
+    app/
+    component/
+    mcal/
+    driver/
+    platform/
+  build/
+    Makefile / CMakeLists.txt / build script
+    linker/
+    startup/
+  out/
+    firmware.elf
+    firmware.bin
+    firmware.hex
+    firmware.map
+    firmware.lst
+    size.report
+  evidence/
+    integration_manifest.json
+    evidence_chain.json
+    compile.report
+    link.report
+    flash.report
+    self_test.report
+    hil.report
+  docs/
+    integration.md
+    wiring.md
+    build.md
+    flash.md
+    debug.md
+    recovery.md
+```
 
 ## 11. First-Release Acceptance Criteria
 
