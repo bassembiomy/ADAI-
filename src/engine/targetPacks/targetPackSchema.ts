@@ -20,6 +20,35 @@ const PERIPHERALS = new Set([
   'capture', 'watchdog', 'systemclock', 'resetreason', 'nonvolatilestorage',
 ]);
 
+const ALLOWED_BUILD_RECIPES = new Set([
+  'arm-none-eabi-stm32f103-v1',
+  'arm-none-eabi-stm32f407-v1',
+  'avr-atmega328p-v1',
+  'avr-atmega2560-v1',
+  'esp-idf-wroom32-v1',
+]);
+
+const ALLOWED_FLASH_RECIPES = new Set([
+  'openocd-stm32f103-v1',
+  'openocd-stm32f407-v1',
+  'avrdude-atmega328p-v1',
+  'avrdude-atmega2560-v1',
+  'esptool-wroom32-v1',
+]);
+
+const ALLOWED_INSPECT_RECIPES = new Set([
+  'arm-elf-v1',
+  'avr-elf-v1',
+  'esp-idf-image-v1',
+]);
+
+const ALLOWED_ASSET_KINDS = new Set([
+  'startup', 'linker', 'driver', 'sdk-lock', 'hil-fixture',
+]);
+
+const SHA256_HASH_PATTERN = /^sha256:[a-f0-9]{64}$/;
+const HEX_STRING_PATTERN = /^0x[0-9a-fA-F]+$/;
+
 export interface ValidationError {
   path: string;
   message: string;
@@ -178,6 +207,67 @@ export function validateTargetPackManifest(
       item => item.length <= 255 && !/[\0\r\n]/.test(item));
     validateStringArray(value.buildRecipes.linkerFlags, 'buildRecipes.linkerFlags', errors,
       item => item.length <= 255 && !/[\0\r\n]/.test(item));
+  }
+
+  if (value.recipes !== undefined) {
+    if (!isObject(value.recipes)) {
+      errors.push({ path: 'recipes', message: 'recipes must be an object' });
+    } else {
+      if (!isString(value.recipes.build) || !ALLOWED_BUILD_RECIPES.has(value.recipes.build)) {
+        errors.push({ path: 'recipes.build', message: 'recipes.build must be an allowed build recipe ID' });
+      }
+      if (!isString(value.recipes.flash) || !ALLOWED_FLASH_RECIPES.has(value.recipes.flash)) {
+        errors.push({ path: 'recipes.flash', message: 'recipes.flash must be an allowed flash recipe ID' });
+      }
+      if (!isString(value.recipes.inspect) || !ALLOWED_INSPECT_RECIPES.has(value.recipes.inspect)) {
+        errors.push({ path: 'recipes.inspect', message: 'recipes.inspect must be an allowed inspect recipe ID' });
+      }
+    }
+  }
+
+  if (value.assets !== undefined) {
+    if (!isArray(value.assets)) {
+      errors.push({ path: 'assets', message: 'assets must be an array' });
+    } else {
+      const seenPaths = new Set<string>();
+      value.assets.forEach((asset, idx) => {
+        if (!isObject(asset)) {
+          errors.push({ path: `assets[${idx}]`, message: 'asset must be an object' });
+          return;
+        }
+        if (!isString(asset.kind) || !ALLOWED_ASSET_KINDS.has(asset.kind)) {
+          errors.push({ path: `assets[${idx}].kind`, message: 'asset kind must be an allowed kind' });
+        }
+        if (!isString(asset.path) || asset.path.includes('..') || asset.path.startsWith('/') || asset.path.startsWith('\\') || /^[a-zA-Z]:/.test(asset.path)) {
+          errors.push({ path: `assets[${idx}].path`, message: 'asset path must be a contained relative path without traversal' });
+        } else {
+          if (seenPaths.has(asset.path)) {
+            errors.push({ path: `assets[${idx}].path`, message: `duplicate asset path ${asset.path}` });
+          } else {
+            seenPaths.add(asset.path);
+          }
+        }
+        if (!isString(asset.sha256) || !SHA256_HASH_PATTERN.test(asset.sha256)) {
+          errors.push({ path: `assets[${idx}].sha256`, message: 'asset sha256 must be a canonical sha256:hash string' });
+        }
+      });
+    }
+  }
+
+  if (value.deviceIdentity !== undefined) {
+    if (!isObject(value.deviceIdentity)) {
+      errors.push({ path: 'deviceIdentity', message: 'deviceIdentity must be an object' });
+    } else {
+      if (!isString(value.deviceIdentity.mask) || !HEX_STRING_PATTERN.test(value.deviceIdentity.mask)) {
+        errors.push({ path: 'deviceIdentity.mask', message: 'deviceIdentity.mask must be a hex string starting with 0x' });
+      }
+      if (!isString(value.deviceIdentity.value) || !HEX_STRING_PATTERN.test(value.deviceIdentity.value)) {
+        errors.push({ path: 'deviceIdentity.value', message: 'deviceIdentity.value must be a hex string starting with 0x' });
+      }
+      if (value.deviceIdentity.signature !== undefined && (!isString(value.deviceIdentity.signature) || !HEX_STRING_PATTERN.test(value.deviceIdentity.signature))) {
+        errors.push({ path: 'deviceIdentity.signature', message: 'deviceIdentity.signature must be a hex string starting with 0x' });
+      }
+    }
   }
 
   if (!isArray(value.programmers)) errors.push({ path: 'programmers', message: 'programmers must be an array' });

@@ -99,4 +99,18 @@ describe('validateTargetPackManifest', () => {
       expect(paths).toContain('contentHash');
     }
   });
+
+  it('rejects traversal, unknown recipes, and unhashed startup assets', () => {
+    const result = validateTargetPackManifest({
+      ...validManifest,
+      assets: [{ kind: 'startup', path: '../startup.c', sha256: '' as any }],
+      recipes: { build: 'renderer-command' as any, flash: 'unknown-flasher' as any, inspect: 'arm-elf-v1' },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors.map(error => error.path)).toEqual(expect.arrayContaining([
+        'assets[0].path', 'assets[0].sha256', 'recipes.build', 'recipes.flash',
+      ]));
+    }
+  });
 });
