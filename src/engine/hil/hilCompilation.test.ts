@@ -109,7 +109,7 @@ int main(void) { ADIA_Instance_t inst; (void)SM_Init(&inst); (void)SM_ReadInputs
     {
       target: 'Arduino_Uno',
       compiler: AVR_GPP,
-      compileCmd: (dir: string) => `"${AVR_GPP}" -mmcu=atmega328p -DF_CPU=16000000UL -DADIA_BARE_ARDUINO_MAIN -Os -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.cpp sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c`,
+      compileCmd: (dir: string) => `"${AVR_GPP}" -mmcu=atmega328p -DF_CPU=16000000UL -DADIA_BARE_ARDUINO_MAIN -Os -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.cpp sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c adia_mcal.c adia_component.c`,
       channels: [
         { id: 'c1', name: 'v_gpio_in', peripheral: 'GPIO', pin: '2', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
         { id: 'c2', name: 'v_gpio_out', peripheral: 'GPIO', pin: '13', direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
@@ -127,7 +127,7 @@ int main(void) { ADIA_Instance_t inst; (void)SM_Init(&inst); (void)SM_ReadInputs
     {
       target: 'Arduino_Mega',
       compiler: AVR_GPP,
-      compileCmd: (dir: string) => `"${AVR_GPP}" -mmcu=atmega2560 -DF_CPU=16000000UL -DADIA_BARE_ARDUINO_MAIN -Os -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.cpp sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c`,
+      compileCmd: (dir: string) => `"${AVR_GPP}" -mmcu=atmega2560 -DF_CPU=16000000UL -DADIA_BARE_ARDUINO_MAIN -Os -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.cpp sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c adia_mcal.c adia_component.c`,
       channels: [
         { id: 'c1', name: 'v_gpio_in', peripheral: 'GPIO', pin: '22', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
         { id: 'c2', name: 'v_gpio_out', peripheral: 'GPIO', pin: '13', direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
@@ -145,7 +145,7 @@ int main(void) { ADIA_Instance_t inst; (void)SM_Init(&inst); (void)SM_ReadInputs
     {
       target: 'STM32F4',
       compiler: ARM_GCC,
-      compileCmd: (dir: string) => `"${ARM_GCC}" -mcpu=cortex-m4 -mthumb --specs=nosys.specs -Os -I. -c hal_drivers.c hil_interface.c main_hil.c sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c`,
+      compileCmd: (dir: string) => `"${ARM_GCC}" -mcpu=cortex-m4 -mthumb --specs=nosys.specs -Os -I. -c hal_drivers.c hil_interface.c main_hil.c sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c adia_mcal.c adia_component.c`,
       channels: [
         { id: 'c1', name: 'v_gpio_in', peripheral: 'GPIO', pin: 'PA0', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
         { id: 'c2', name: 'v_gpio_out', peripheral: 'GPIO', pin: 'PD12', direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
@@ -163,7 +163,7 @@ int main(void) { ADIA_Instance_t inst; (void)SM_Init(&inst); (void)SM_ReadInputs
     {
       target: 'STM32F1',
       compiler: ARM_GCC,
-      compileCmd: (dir: string) => `"${ARM_GCC}" -mcpu=cortex-m3 -mthumb --specs=nosys.specs -Os -I. -c hal_drivers.c hil_interface.c main_hil.c sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c`,
+      compileCmd: (dir: string) => `"${ARM_GCC}" -mcpu=cortex-m3 -mthumb --specs=nosys.specs -Os -I. -c hal_drivers.c hil_interface.c main_hil.c sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c adia_mcal.c adia_component.c`,
       channels: [
         { id: 'c1', name: 'v_gpio_in', peripheral: 'GPIO', pin: 'PA0', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
         { id: 'c2', name: 'v_gpio_out', peripheral: 'GPIO', pin: 'PC13', direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
@@ -181,7 +181,7 @@ int main(void) { ADIA_Instance_t inst; (void)SM_Init(&inst); (void)SM_ReadInputs
     {
       target: 'ESP32',
       compiler: HOST_GPP,
-      compileCmd: (dir: string) => `g++ -O2 -Wall -Wextra -Werror -DADIA_BARE_ARDUINO_MAIN -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.cpp sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c`,
+      compileCmd: (dir: string) => `g++ -O2 -Wall -Wextra -Werror -DADIA_BARE_ARDUINO_MAIN -I. -c Arduino.cpp hal_drivers.c hil_interface.c main_hil.cpp sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c adia_mcal.c adia_component.c`,
       channels: [
         { id: 'c1', name: 'v_gpio_in', peripheral: 'GPIO', pin: '4', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
         { id: 'c2', name: 'v_gpio_out', peripheral: 'GPIO', pin: '2', direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
@@ -199,7 +199,7 @@ int main(void) { ADIA_Instance_t inst; (void)SM_Init(&inst); (void)SM_ReadInputs
     {
       target: 'Generic',
       compiler: HOST_GCC,
-      compileCmd: (dir: string) => `gcc -std=c99 -O2 -Wall -Wextra -Werror -I. -c hal_drivers.c hil_interface.c main_hil.c sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c`,
+      compileCmd: (dir: string) => `gcc -std=c99 -O2 -Wall -Wextra -Werror -I. -c hal_drivers.c hil_interface.c main_hil.c sm_core.c sm_safety.c sm_user_logic.c mcal_dio_hil.c adia_mcal.c adia_component.c`,
       channels: [
         { id: 'c1', name: 'v_gpio_in', peripheral: 'GPIO', pin: 'PA0', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },
         { id: 'c2', name: 'v_gpio_out', peripheral: 'GPIO', pin: 'PD12', direction: 'Out', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' },

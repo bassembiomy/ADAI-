@@ -1,8 +1,7 @@
 import { HILConfig } from './hilTypes';
 import { hilDriverTemplates } from './hilDriverTemplates';
 import { resolveTargetSelection } from './hilTypes';
-import { generateMcalHeader } from '../mcal/mcalHeaderGenerator';
-import type { McalChannelConfig, McalPeripheral } from '../mcal/mcalTypes';
+import { generateEmbeddedLayers } from '../embedded/embeddedLayerGenerator';
 
 const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9_]/g, '_');
 
@@ -644,32 +643,19 @@ void MCAL_Watchdog_Kick(void) { }
 This project is configured for PlatformIO (see \`platformio.ini\`). Open the folder in VS Code with the PlatformIO extension or run \`pio run\` to build and upload.
 `;
 
-  const exactTargetId = targetSelection?.targetId ?? 'generic-host';
-  const mcalChannels: McalChannelConfig[] = config.channels.map(channel => {
-    const mapping = config.mappings.find(item => item.channelId === channel.id);
-    return {
-      peripheral: channel.peripheral.toLowerCase() as McalPeripheral,
-      channelId: channel.id,
-      pin: channel.pin,
-      direction: channel.direction === 'In' ? 'input' : 'output',
-      units: channel.unit,
-      range: { min: channel.rangeMin, max: channel.rangeMax },
-      safeValue: mapping?.safeValue ?? false,
-    };
-  });
-  const mcalHeader = generateMcalHeader({ packTargetId: exactTargetId, channels: mcalChannels });
-  const integrationManifest = JSON.stringify({
-    schemaVersion: '1.0.0',
-    targetSelection,
-    provider: 'legacy-hil-template',
-    generatedMcalContract: true,
-    flashBlocked: true,
-    blockReasons: ['TARGET_DRIVER_PROVIDER_NOT_GENERATED'],
-  }, null, 2) + '\n';
+  const embeddedConfig = targetSelection ? config : {
+    ...config,
+    targetSelection: {
+      targetId: 'generic-host',
+      packVersion: '1.0.0',
+      driverMode: 'vendor' as const,
+      boardRevision: 'host',
+    },
+  };
+  const embeddedFiles = generateEmbeddedLayers(embeddedConfig).files;
 
   return [
-    { name: 'adia_mcal.h', content: mcalHeader },
-    { name: 'integration_manifest.json', content: integrationManifest },
+    ...embeddedFiles,
     { name: 'hal_config.h', content: halConfigH },
     { name: 'hal_drivers.h', content: halDriversH },
     { name: 'hal_drivers.c', content: halDriversC },

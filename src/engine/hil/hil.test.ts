@@ -92,7 +92,7 @@ describe('HIL Code Generator', () => {
 
   it('should generate all HIL driver files for STM32F4', () => {
     const files = generateHALCode(mockConfig, smVariables);
-    expect(files).toHaveLength(11);
+    expect(files).toHaveLength(14);
 
 
     const names = files.map(f => f.name);
@@ -142,8 +142,8 @@ describe('HIL Code Generator', () => {
     expect(result.errors).toHaveLength(0);
 
     // Default files (10, including both reports)
-    // + HIL files (11, including MCAL contract and integration manifest) = 21 files.
-    expect(result.files).toHaveLength(21);
+    // + HIL files (14, including component, MCAL, driver stub, and manifest) = 24 files.
+    expect(result.files).toHaveLength(24);
     const names = result.files.map(f => f.name);
     expect(names).not.toContain('stm32f4xx_hal.h');
     expect(names).toContain('mcal_dio_hil.c');
@@ -164,8 +164,8 @@ describe('HIL Code Generator', () => {
     expect(result.errors).toHaveLength(0);
 
     // Default files (10 after excluding the generic MCAL stub)
-    // + HIL files (11) + STM32 shim (1) = 22 files.
-    expect(result.files).toHaveLength(22);
+    // + HIL files (14) + STM32 shim (1) = 25 files.
+    expect(result.files).toHaveLength(25);
     const names = result.files.map(f => f.name);
     expect(names).toContain('stm32f4xx_hal.h');
     expect(names).toContain('mcal_dio_hil.c');
@@ -229,7 +229,7 @@ describe('HIL Code Generator', () => {
     // STM32F1
     const f1Config = { ...mockConfig, target: 'STM32F1' as const };
     const f1Files = generateHALCode(f1Config, smVariables);
-    expect(f1Files).toHaveLength(11);
+    expect(f1Files).toHaveLength(14);
     const f1DriversC = f1Files.find(f => f.name === 'hal_drivers.c')?.content || '';
     expect(f1DriversC).toContain('#include "stm32f1xx_hal.h"');
     expect(f1DriversC).toContain('HAL_UART_Receive(&huart1');
@@ -237,12 +237,12 @@ describe('HIL Code Generator', () => {
     // ESP32
     const espConfig = { ...mockConfig, target: 'ESP32' as const };
     const espFiles = generateHALCode(espConfig, smVariables);
-    expect(espFiles).toHaveLength(11);
+    expect(espFiles).toHaveLength(14);
 
     // Arduino_Uno
     const unoConfig = { ...mockConfig, target: 'Arduino_Uno' as const };
     const unoFiles = generateHALCode(unoConfig, smVariables);
-    expect(unoFiles).toHaveLength(11);
+    expect(unoFiles).toHaveLength(14);
 
     const mainUno = unoFiles.find(f => f.name.startsWith('main_hil'))?.content || '';
     expect(mainUno).toContain('#include "Arduino.h"');
@@ -368,7 +368,7 @@ describe('HIL Code Generator', () => {
     ];
 
     const files = generateHALCode(uartSpiConfig, smVars);
-    expect(files).toHaveLength(11);
+    expect(files).toHaveLength(14);
 
 
     const driversH = files.find(f => f.name === 'hal_drivers.h')?.content || '';
