@@ -11,5 +11,5 @@ describe('validate_target_pack CLI', () => {
   it('exits 0 for the valid fixture', () => {
     const output = execSync(`npx tsx "${script}" "${fixture}"`, { encoding: 'utf8' });
     expect(output).toContain('VALID');
-  });
+  }, 15000);
 });

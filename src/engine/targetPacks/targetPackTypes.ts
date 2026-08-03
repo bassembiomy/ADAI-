@@ -58,6 +58,8 @@ export interface TargetCapabilityManifest {
 
 export interface TargetPackManifest {
   schemaVersion: string;
+  packVersion: string;
+  minimumGeneratorSchemaVersion: string;
   targetId: string;
   deviceRevision: string;
   displayName: string;

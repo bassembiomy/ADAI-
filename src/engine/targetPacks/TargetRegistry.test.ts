@@ -3,9 +3,15 @@ import { TargetRegistry } from './TargetRegistry.js';
 import type { ResolvedPack } from './packResolver.js';
 import type { TargetPackManifest } from './targetPackTypes.js';
 
-function makeManifest(targetId: string, modes: ('vendor' | 'bare-metal')[]): TargetPackManifest {
+function makeManifest(
+  targetId: string,
+  modes: ('vendor' | 'bare-metal')[],
+  packVersion = '1.0.0',
+): TargetPackManifest {
   return {
     schemaVersion: '1.0.0',
+    packVersion,
+    minimumGeneratorSchemaVersion: '1.0.0',
     targetId,
     deviceRevision: 'A',
     displayName: targetId,
@@ -65,5 +71,26 @@ describe('TargetRegistry', () => {
       { manifest: makeManifest('stm32f103c8t6', ['vendor']), packPath: '/p2', manifestPath: '/p2/manifest.json' },
     ];
     expect(() => new TargetRegistry(packs)).toThrow('Duplicate targetId');
+  });
+
+  it('supports multiple immutable versions and explicit version selection', () => {
+    const packs: ResolvedPack[] = [
+      { manifest: makeManifest('stm32f103c8t6', ['vendor'], '1.0.0'), packPath: '/v1', manifestPath: '/v1/manifest.json' },
+      { manifest: makeManifest('stm32f103c8t6', ['vendor', 'bare-metal'], '2.0.0'), packPath: '/v2', manifestPath: '/v2/manifest.json' },
+    ];
+    const versioned = new TargetRegistry(packs);
+    expect(versioned.getTarget('stm32f103c8t6', '1.0.0')?.packVersion).toBe('1.0.0');
+    expect(versioned.getTarget('stm32f103c8t6')?.packVersion).toBe('2.0.0');
+    expect(versioned.select('stm32f103c8t6', 'bare-metal', '1.0.0').success).toBe(false);
+    expect(versioned.select('stm32f103c8t6', 'bare-metal', '2.0.0').success).toBe(true);
+  });
+
+  it('does not expose mutable manifest state', () => {
+    const manifest = registry.getTarget('atmega328p');
+    expect(manifest).toBeDefined();
+    expect(Object.isFrozen(manifest)).toBe(true);
+    expect(Object.isFrozen(manifest?.supportedDriverModes)).toBe(true);
+    expect(() => manifest?.supportedDriverModes.push('bare-metal')).toThrow();
+    expect(registry.select('atmega328p', 'bare-metal').success).toBe(false);
   });
 });

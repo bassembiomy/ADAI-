@@ -6,7 +6,13 @@ import {
 import { HILDriverPanel } from './HILDriverPanel';
 import { HILSignalMapper } from './HILSignalMapper';
 import { HILDashboard } from './HILDashboard';
-import { HILConfig, HILSessionState } from '../../engine/hil/hilTypes';
+import { TargetPackSelector } from './TargetPackSelector';
+import {
+  applyTargetSelection,
+  HILConfig,
+  HILSessionState,
+  resolveTargetSelection,
+} from '../../engine/hil/hilTypes';
 import { generateHALCode } from '../../engine/hil/hilCodeGenerator';
 import { generateMISRACCode } from '../../utils/stateMachineCodeGenerator';
 import { StateData, JunctionData, TransitionData, Layer, VariableDef } from '../../types/sm_types';
@@ -569,27 +575,45 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
         
         {/* Tab 1: Configure */}
         {activeMainTab === 'configure' && (
-          <div className="grid grid-cols-12 gap-4 h-full overflow-hidden">
-            {/* Driver Setup */}
-            <div className="col-span-4 h-full overflow-hidden">
-              <HILDriverPanel
-                channels={config.channels}
-                target={config.target}
-                onChange={(channels) => onChangeConfig({ ...config, channels })}
+          <div className="flex flex-col gap-4 h-full overflow-hidden">
+            {/* Target Pack Registry Header & Selector */}
+            <div className="shrink-0">
+              <TargetPackSelector
+                selectedTargetId={resolveTargetSelection(config)?.targetId ?? ''}
+                selectedDriverMode={resolveTargetSelection(config)?.driverMode ?? 'vendor'}
+                onSelectTarget={(targetId, mode, manifest) => {
+                  onChangeConfig(applyTargetSelection(config, {
+                    targetId,
+                    packVersion: manifest.packVersion,
+                    driverMode: mode,
+                    boardRevision: manifest.deviceRevision,
+                  }));
+                }}
               />
             </div>
 
-            {/* Variable Mapper */}
-            <div className="col-span-4 h-full overflow-hidden">
-              <HILSignalMapper
-                channels={config.channels}
-                mappings={config.mappings}
-                availableVariables={variables}
-                onChange={(mappings) => onChangeConfig({ ...config, mappings })}
-              />
-            </div>
+            {/* Grid Panels */}
+            <div className="grid grid-cols-12 gap-4 flex-1 overflow-hidden">
+              {/* Driver Setup */}
+              <div className="col-span-4 h-full overflow-hidden">
+                <HILDriverPanel
+                  channels={config.channels}
+                  target={config.target}
+                  onChange={(channels) => onChangeConfig({ ...config, channels })}
+                />
+              </div>
 
-            {/* Live Generated HAL Code Preview */}
+              {/* Variable Mapper */}
+              <div className="col-span-4 h-full overflow-hidden">
+                <HILSignalMapper
+                  channels={config.channels}
+                  mappings={config.mappings}
+                  availableVariables={variables}
+                  onChange={(mappings) => onChangeConfig({ ...config, mappings })}
+                />
+              </div>
+
+              {/* Live Generated HAL Code Preview */}
             <div className="col-span-4 bg-[#111111] border border-[#222] rounded-xl p-4 flex flex-col h-full overflow-hidden">
               <div className="flex justify-between items-center mb-3 shrink-0">
                 <div>
@@ -630,6 +654,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
               </div>
             </div>
           </div>
+        </div>
         )}
 
         {/* Tab 2: Build & Flash Toolchain */}

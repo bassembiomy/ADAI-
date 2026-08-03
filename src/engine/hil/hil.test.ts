@@ -92,7 +92,7 @@ describe('HIL Code Generator', () => {
 
   it('should generate all HIL driver files for STM32F4', () => {
     const files = generateHALCode(mockConfig, smVariables);
-    expect(files).toHaveLength(9);
+    expect(files).toHaveLength(11);
 
 
     const names = files.map(f => f.name);
@@ -142,8 +142,8 @@ describe('HIL Code Generator', () => {
     expect(result.errors).toHaveLength(0);
 
     // Default files (10, including both reports)
-    // + HIL files (9, including the MCAL-to-HAL bridge) = 19 files.
-    expect(result.files).toHaveLength(19);
+    // + HIL files (11, including MCAL contract and integration manifest) = 21 files.
+    expect(result.files).toHaveLength(21);
     const names = result.files.map(f => f.name);
     expect(names).not.toContain('stm32f4xx_hal.h');
     expect(names).toContain('mcal_dio_hil.c');
@@ -164,8 +164,8 @@ describe('HIL Code Generator', () => {
     expect(result.errors).toHaveLength(0);
 
     // Default files (10 after excluding the generic MCAL stub)
-    // + HIL files (9) + STM32 shim (1) = 20 files.
-    expect(result.files).toHaveLength(20);
+    // + HIL files (11) + STM32 shim (1) = 22 files.
+    expect(result.files).toHaveLength(22);
     const names = result.files.map(f => f.name);
     expect(names).toContain('stm32f4xx_hal.h');
     expect(names).toContain('mcal_dio_hil.c');
@@ -229,7 +229,7 @@ describe('HIL Code Generator', () => {
     // STM32F1
     const f1Config = { ...mockConfig, target: 'STM32F1' as const };
     const f1Files = generateHALCode(f1Config, smVariables);
-    expect(f1Files).toHaveLength(9);
+    expect(f1Files).toHaveLength(11);
     const f1DriversC = f1Files.find(f => f.name === 'hal_drivers.c')?.content || '';
     expect(f1DriversC).toContain('#include "stm32f1xx_hal.h"');
     expect(f1DriversC).toContain('HAL_UART_Receive(&huart1');
@@ -237,12 +237,12 @@ describe('HIL Code Generator', () => {
     // ESP32
     const espConfig = { ...mockConfig, target: 'ESP32' as const };
     const espFiles = generateHALCode(espConfig, smVariables);
-    expect(espFiles).toHaveLength(9);
+    expect(espFiles).toHaveLength(11);
 
     // Arduino_Uno
     const unoConfig = { ...mockConfig, target: 'Arduino_Uno' as const };
     const unoFiles = generateHALCode(unoConfig, smVariables);
-    expect(unoFiles).toHaveLength(9);
+    expect(unoFiles).toHaveLength(11);
 
     const mainUno = unoFiles.find(f => f.name.startsWith('main_hil'))?.content || '';
     expect(mainUno).toContain('#include "Arduino.h"');
@@ -368,7 +368,7 @@ describe('HIL Code Generator', () => {
     ];
 
     const files = generateHALCode(uartSpiConfig, smVars);
-    expect(files).toHaveLength(9);
+    expect(files).toHaveLength(11);
 
 
     const driversH = files.find(f => f.name === 'hal_drivers.h')?.content || '';
@@ -557,5 +557,59 @@ describe('HIL Code Generator', () => {
     
     expect(driversC).toContain('GetLEDCChannel(atoi("2"))');
     expect(driversC).toContain('ledcWrite(GetLEDCChannel(atoi("2")), value)');
+  });
+
+  it('should warn on Arduino targets when pins 0 or 1 are used for channel pins', () => {
+    const arduinoConfig: HILConfig = {
+      ...mockConfig,
+      target: 'Arduino_Mega',
+      channels: [
+        {
+          id: 'ch_rx',
+          name: 'sensor_rx',
+          peripheral: 'GPIO',
+          pin: '0',
+          direction: 'In',
+          dataType: 'bool',
+          rangeMin: 0,
+          rangeMax: 1,
+          scalingFactor: 1,
+          unit: ''
+        }
+      ],
+      mappings: [{ id: 'm0', adiaVarId: 'is_active', channelId: 'ch_rx', direction: 'read' }]
+    };
+
+    const warnings: string[] = [];
+    generateHALCode(arduinoConfig, smVariables, warnings);
+    expect(warnings.some(w => w.includes("uses Hardware Serial RX/TX pin"))).toBe(true);
+  });
+
+  it('should cast override float value explicitly to SM variable type in hil_interface.c', () => {
+    const files = generateHALCode(mockConfig, smVariables);
+    const interfaceC = files.find(f => f.name === 'hil_interface.c')?.content || '';
+    expect(interfaceC).toContain('instance->data.sensor_val = (float)(override_val_sensor_temp);');
+  });
+
+  it('should emit exact target selection, MCAL contract, and an honest integration manifest', () => {
+    const exactConfig: HILConfig = {
+      ...mockConfig,
+      target: 'STM32F4',
+      targetSelection: {
+        targetId: 'stm32f407vgt6',
+        packVersion: '1.0.0',
+        driverMode: 'bare-metal',
+        boardRevision: 'A',
+      },
+    };
+    const files = generateHALCode(exactConfig, smVariables);
+    const mcalHeader = files.find(file => file.name === 'adia_mcal.h')?.content ?? '';
+    const manifestText = files.find(file => file.name === 'integration_manifest.json')?.content ?? '';
+    expect(mcalHeader).toContain('Target: stm32f407vgt6');
+    expect(mcalHeader).toContain('adia_mcal_gpio_channel_t');
+    const manifest = JSON.parse(manifestText);
+    expect(manifest.targetSelection).toEqual(exactConfig.targetSelection);
+    expect(manifest.flashBlocked).toBe(true);
+    expect(manifest.blockReasons).toContain('TARGET_DRIVER_PROVIDER_NOT_GENERATED');
   });
 });

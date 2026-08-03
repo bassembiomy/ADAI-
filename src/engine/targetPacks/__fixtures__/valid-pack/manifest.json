@@ -1,5 +1,7 @@
 {
   "schemaVersion": "1.0.0",
+  "packVersion": "1.0.0",
+  "minimumGeneratorSchemaVersion": "1.0.0",
   "targetId": "atmega328p",
   "deviceRevision": "A",
   "displayName": "ATmega328P",
@@ -28,5 +30,5 @@
     "supportedPeripherals": ["gpio", "adc", "pwm", "uart"],
     "certifiedStatuses": ["STATIC_ANALYSIS_ONLY"]
   },
-  "contentHash": "fixture-hash-1"
+  "contentHash": "sha256:6be8434ab2040f9da218f6c3f1a3712453109b0c78c67c13ebf8dc7d6dc5e478"
 }

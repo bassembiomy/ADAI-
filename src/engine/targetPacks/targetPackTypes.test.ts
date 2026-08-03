@@ -11,6 +11,8 @@ describe('target pack types', () => {
   it('accepts a minimal manifest shape', () => {
     const manifest: TargetPackManifest = {
       schemaVersion: '1.0.0',
+      packVersion: '1.0.0',
+      minimumGeneratorSchemaVersion: '1.0.0',
       targetId: 'stm32f103c8t6',
       deviceRevision: 'A',
       displayName: 'STM32F103C8T6',

@@ -1,5 +1,8 @@
 import { HILConfig } from './hilTypes';
 import { hilDriverTemplates } from './hilDriverTemplates';
+import { resolveTargetSelection } from './hilTypes';
+import { generateMcalHeader } from '../mcal/mcalHeaderGenerator';
+import type { McalChannelConfig, McalPeripheral } from '../mcal/mcalTypes';
 
 const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9_]/g, '_');
 
@@ -13,6 +16,7 @@ export function generateHALCode(
   }
 
   const target = config.target || 'Generic';
+  const targetSelection = resolveTargetSelection(config);
   const mcu = hilDriverTemplates[target] || hilDriverTemplates.Generic;
 
   /* Surface unsupported-peripheral channels as user-visible diagnostics instead
@@ -29,8 +33,12 @@ export function generateHALCode(
       if (/^P[A-L]\d+$/i.test(ch.pin)) {
         warnings?.push(`[HIL] Channel '${ch.name}': pin '${ch.pin}' uses STM32-style port naming which is invalid on ${target}. Use numeric pins (e.g. '13') or analog pins (e.g. 'A0').`);
       }
+      if (target.startsWith('Arduino') && (ch.pin.trim() === '0' || ch.pin.trim() === '1')) {
+        warnings?.push(`[HIL] Channel '${ch.name}': pin '${ch.pin}' uses Hardware Serial RX/TX pin (0/1) on ${target}, which conflicts with HIL Serial communication. Remap to another pin (e.g. '4' or '22').`);
+      }
     });
   }
+
 
   const disclaimer = `/* ============================================================= */
 /*  ADIA HIL (Hardware-in-the-Loop) - AUTO GENERATED CODE       */
@@ -280,7 +288,18 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
         expr = m.conversionExpr.replace(/\bx\b/g, `((float)(${readCall}))`);
       }
 
-      return `    if (override_active_${sanitize(ch.name)}) {\n        instance->data.${smVar.name} = override_val_${sanitize(ch.name)};\n    } else {\n        instance->data.${smVar.name} = ${expr};\n    }`;
+      const targetType = (t: string) => {
+        if (t.endsWith('_t') || t === 'bool' || t === 'float' || t === 'double') return t;
+        if (t === 'uint16') return 'uint16_t';
+        if (t === 'int16') return 'int16_t';
+        if (t === 'uint32' || t === 'uint') return 'uint32_t';
+        if (t === 'int32' || t === 'int') return 'int32_t';
+        if (t === 'uint8') return 'uint8_t';
+        if (t === 'int8') return 'int8_t';
+        if (t === 'single') return 'float';
+        return t;
+      };
+      return `    if (override_active_${sanitize(ch.name)}) {\n        instance->data.${smVar.name} = (${targetType(smVar.type || 'float')})(override_val_${sanitize(ch.name)});\n    } else {\n        instance->data.${smVar.name} = ${expr};\n    }`;
     })
     .filter(Boolean)
     .join('\n');
@@ -625,7 +644,32 @@ void MCAL_Watchdog_Kick(void) { }
 This project is configured for PlatformIO (see \`platformio.ini\`). Open the folder in VS Code with the PlatformIO extension or run \`pio run\` to build and upload.
 `;
 
+  const exactTargetId = targetSelection?.targetId ?? 'generic-host';
+  const mcalChannels: McalChannelConfig[] = config.channels.map(channel => {
+    const mapping = config.mappings.find(item => item.channelId === channel.id);
+    return {
+      peripheral: channel.peripheral.toLowerCase() as McalPeripheral,
+      channelId: channel.id,
+      pin: channel.pin,
+      direction: channel.direction === 'In' ? 'input' : 'output',
+      units: channel.unit,
+      range: { min: channel.rangeMin, max: channel.rangeMax },
+      safeValue: mapping?.safeValue ?? false,
+    };
+  });
+  const mcalHeader = generateMcalHeader({ packTargetId: exactTargetId, channels: mcalChannels });
+  const integrationManifest = JSON.stringify({
+    schemaVersion: '1.0.0',
+    targetSelection,
+    provider: 'legacy-hil-template',
+    generatedMcalContract: true,
+    flashBlocked: true,
+    blockReasons: ['TARGET_DRIVER_PROVIDER_NOT_GENERATED'],
+  }, null, 2) + '\n';
+
   return [
+    { name: 'adia_mcal.h', content: mcalHeader },
+    { name: 'integration_manifest.json', content: integrationManifest },
     { name: 'hal_config.h', content: halConfigH },
     { name: 'hal_drivers.h', content: halDriversH },
     { name: 'hal_drivers.c', content: halDriversC },

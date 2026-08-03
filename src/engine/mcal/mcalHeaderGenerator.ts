@@ -26,7 +26,24 @@ function channelEnumName(p: McalPeripheral): string {
   return `${peripheralPrefix(p)}_channel_t`;
 }
 
+const SAFE_TARGET_ID = /^[a-z][a-z0-9-]{1,63}$/;
+const SAFE_CHANNEL_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+
+function cChannelId(id: string): string {
+  if (!SAFE_CHANNEL_ID.test(id)) throw new Error(`Invalid MCAL channel identifier: ${id}`);
+  return id.replaceAll('-', '_').toUpperCase();
+}
+
 export function generateMcalHeader(model: McalHeaderModel): string {
+  if (!SAFE_TARGET_ID.test(model.packTargetId)) {
+    throw new Error(`Invalid target identifier: ${model.packTargetId}`);
+  }
+  const normalizedIds = new Set<string>();
+  for (const channel of model.channels) {
+    const key = `${channel.peripheral}:${cChannelId(channel.channelId)}`;
+    if (normalizedIds.has(key)) throw new Error(`Duplicate generated MCAL identifier: ${key}`);
+    normalizedIds.add(key);
+  }
   const peripherals = usedPeripherals(model);
   const lines: string[] = [];
 
@@ -50,7 +67,7 @@ export function generateMcalHeader(model: McalHeaderModel): string {
     const enumName = channelEnumName(p);
     lines.push(`typedef enum ${enumName} {`);
     for (const ch of channels) {
-      lines.push(`  ${peripheralPrefix(p).toUpperCase()}_${ch.channelId},`);
+      lines.push(`  ${peripheralPrefix(p).toUpperCase()}_${cChannelId(ch.channelId)},`);
     }
     lines.push(`} ${enumName};`);
     lines.push('');
@@ -68,8 +85,18 @@ export function generateMcalHeader(model: McalHeaderModel): string {
     lines.push(`adia_mcal_status_t ${prefix}_deinit(void);`);
     lines.push(`adia_mcal_status_t ${prefix}_health(void);`);
     lines.push(`adia_mcal_status_t ${prefix}_safe_state(void);`);
-    if (p === 'gpio' || p === 'adc' || p === 'dac' || p === 'pwm') {
+    const channels = model.channels.filter(channel => channel.peripheral === p);
+    const hasInput = channels.some(channel => channel.direction === 'input');
+    const hasOutput = channels.some(channel => channel.direction === 'output');
+    const isCommunication = p === 'uart' || p === 'spi' || p === 'i2c' || p === 'can';
+    if (hasInput && isCommunication) {
+      lines.push(`adia_mcal_status_t ${prefix}_read(${enumName} ch, uint8_t *buffer, uint32_t capacity, uint32_t *out_length);`);
+    } else if (hasInput) {
       lines.push(`adia_mcal_status_t ${prefix}_read(${enumName} ch, int32_t *out_value);`);
+    }
+    if (hasOutput && isCommunication) {
+      lines.push(`adia_mcal_status_t ${prefix}_write(${enumName} ch, const uint8_t *data, uint32_t length);`);
+    } else if (hasOutput) {
       lines.push(`adia_mcal_status_t ${prefix}_write(${enumName} ch, int32_t value);`);
     }
     lines.push('');
