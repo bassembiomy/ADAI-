@@ -45,11 +45,63 @@ function enumName(peripheral: McalPeripheral): string {
   return `${prefix(peripheral)}_channel_t`;
 }
 
-function renderMcalStub(channels: readonly McalChannelConfig[]): string {
+const SCALAR_PROVIDER_MATRIX: Readonly<Record<HILConfig['target'], readonly McalPeripheral[]>> = {
+  STM32F4: ['gpio', 'adc', 'dac', 'pwm'],
+  STM32F1: ['gpio', 'adc', 'pwm'],
+  Arduino_Uno: ['gpio', 'adc', 'pwm'],
+  Arduino_Mega: ['gpio', 'adc', 'pwm'],
+  ESP32: ['gpio', 'adc', 'dac', 'pwm'],
+  Generic: [],
+};
+
+function cEnumMember(peripheral: McalPeripheral, channelId: string): string {
+  return `${prefix(peripheral).toUpperCase()}_${channelId.replaceAll('-', '_').toUpperCase()}`;
+}
+
+function halPinMacro(name: string): string {
+  return `PIN_${name.replace(/[^a-zA-Z0-9_]/g, '_').toUpperCase()}`;
+}
+
+function cString(value: string): string {
+  return JSON.stringify(value).replaceAll('\\u2028', '\\u2028').replaceAll('\\u2029', '\\u2029');
+}
+
+function isProviderImplemented(config: HILConfig, peripheral: McalPeripheral): boolean {
+  return resolveTargetSelection(config)?.driverMode === 'vendor'
+    && SCALAR_PROVIDER_MATRIX[config.target].includes(peripheral);
+}
+
+function configuredChannel(config: HILConfig, channel: McalChannelConfig) {
+  const resolved = config.channels.find(item => item.id === channel.channelId);
+  if (!resolved) throw new Error(`Missing configured channel: ${channel.channelId}`);
+  return resolved;
+}
+
+function scalarRead(config: HILConfig, channel: McalChannelConfig): string {
+  const configured = configuredChannel(config, channel);
+  const pin = halPinMacro(configured.name);
+  const name = cString(configured.name);
+  if (channel.peripheral === 'gpio') return `HAL_GPIO_Read(${pin}, ${name}) ? 1 : 0`;
+  if (channel.peripheral === 'adc') return `(int32_t)HAL_ADC_Read(${pin}, ${name})`;
+  return '0';
+}
+
+function scalarWrite(config: HILConfig, channel: McalChannelConfig, value: string): string {
+  const configured = configuredChannel(config, channel);
+  const pin = halPinMacro(configured.name);
+  const name = cString(configured.name);
+  if (channel.peripheral === 'gpio') return `HAL_GPIO_Write(${pin}, ${name}, (${value} != 0));`;
+  if (channel.peripheral === 'dac') return `HAL_DAC_Write(${pin}, ${name}, (uint32_t)${value});`;
+  if (channel.peripheral === 'pwm') return `HAL_PWM_Write(${pin}, ${name}, (uint32_t)${value});`;
+  return '(void)value;';
+}
+
+function renderMcalImplementation(config: HILConfig, channels: readonly McalChannelConfig[]): string {
   const peripherals = [...new Set(channels.map(channel => channel.peripheral))].sort();
   const lines = [
-    '/* Generated integration stubs. Replace through a certified target driver provider. */',
+    '/* Generated MCAL adapters. Unsupported providers fail closed. */',
     '#include "adia_mcal.h"',
+    '#include "hal_drivers.h"',
     '',
   ];
   for (const peripheral of peripherals) {
@@ -59,10 +111,16 @@ function renderMcalStub(channels: readonly McalChannelConfig[]): string {
     const hasInput = configured.some(channel => channel.direction === 'input');
     const hasOutput = configured.some(channel => channel.direction === 'output');
     const communication = ['uart', 'spi', 'i2c', 'can'].includes(peripheral);
+    const implemented = isProviderImplemented(config, peripheral);
     for (const operation of ['init', 'deinit', 'health', 'safe_state']) {
       lines.push(`adia_mcal_status_t ${pfx}_${operation}(void)`);
       lines.push('{');
-      lines.push('    return ADIA_MCAL_NOT_IMPLEMENTED;');
+      if (implemented && operation === 'safe_state') {
+        for (const channel of configured.filter(item => item.direction === 'output')) {
+          lines.push(`    ${scalarWrite(config, channel, String(Number(channel.safeValue)))}`);
+        }
+      }
+      lines.push(`    return ${implemented ? 'ADIA_MCAL_OK' : 'ADIA_MCAL_NOT_IMPLEMENTED'};`);
       lines.push('}');
       lines.push('');
     }
@@ -77,7 +135,20 @@ function renderMcalStub(channels: readonly McalChannelConfig[]): string {
         lines.push('    (void)capacity;');
         lines.push('    (void)out_length;');
       } else lines.push('    (void)out_value;');
-      lines.push('    return ADIA_MCAL_NOT_IMPLEMENTED;');
+      if (implemented && !communication) {
+        lines.pop();
+        lines.push('    if (out_value == NULL) { return ADIA_MCAL_INVALID_STATE; }');
+        lines.push('    switch (ch) {');
+        for (const channel of configured.filter(item => item.direction === 'input')) {
+          lines.push(`    case ${cEnumMember(peripheral, channel.channelId)}:`);
+          lines.push(`        *out_value = ${scalarRead(config, channel)};`);
+          lines.push('        return ADIA_MCAL_OK;');
+        }
+        lines.push('    default: return ADIA_MCAL_INVALID_CHANNEL;');
+        lines.push('    }');
+      } else {
+        lines.push('    return ADIA_MCAL_NOT_IMPLEMENTED;');
+      }
       lines.push('}');
       lines.push('');
     }
@@ -91,7 +162,19 @@ function renderMcalStub(channels: readonly McalChannelConfig[]): string {
         lines.push('    (void)data;');
         lines.push('    (void)length;');
       } else lines.push('    (void)value;');
-      lines.push('    return ADIA_MCAL_NOT_IMPLEMENTED;');
+      if (implemented && !communication) {
+        lines.pop();
+        lines.push('    switch (ch) {');
+        for (const channel of configured.filter(item => item.direction === 'output')) {
+          lines.push(`    case ${cEnumMember(peripheral, channel.channelId)}:`);
+          lines.push(`        ${scalarWrite(config, channel, 'value')}`);
+          lines.push('        return ADIA_MCAL_OK;');
+        }
+        lines.push('    default: return ADIA_MCAL_INVALID_CHANNEL;');
+        lines.push('    }');
+      } else {
+        lines.push('    return ADIA_MCAL_NOT_IMPLEMENTED;');
+      }
       lines.push('}');
       lines.push('');
     }
@@ -112,18 +195,14 @@ SM_Error_t ADIA_Component_Cyclic(ADIA_Instance_t *instance, uint32_t observed_de
 `;
 }
 
-function renderComponentSource(peripherals: readonly McalPeripheral[]): string {
-  const initLines = peripherals.map(peripheral => [
-    `    if (${prefix(peripheral)}_init() != ADIA_MCAL_OK) {`,
-    '        return SM_ERR_CONFIGURATION;',
-    '    }',
-  ]).flat();
+function renderComponentSource(): string {
   return `#include "adia_component.h"
 #include "adia_mcal.h"
+#include "hal_drivers.h"
 
 SM_Error_t ADIA_Component_Init(ADIA_Instance_t *instance)
 {
-${initLines.join('\n')}
+    HAL_Drivers_Init();
     return SM_Init(instance);
 }
 
@@ -145,7 +224,9 @@ export function generateEmbeddedLayers(config: HILConfig): EmbeddedLayerResult {
   const targetSelection = resolveTargetSelection(config);
   if (!targetSelection) throw new Error('An exact target selection is required for embedded layers');
   const channels = channelModel(config);
-  const stubbedPeripherals = [...new Set(channels.map(channel => channel.peripheral))].sort();
+  const stubbedPeripherals = [...new Set(channels
+    .map(channel => channel.peripheral)
+    .filter(peripheral => !isProviderImplemented(config, peripheral)))].sort();
   const manifest: EmbeddedIntegrationManifest = {
     schemaVersion: '1.0.0',
     targetSelection,
@@ -157,9 +238,9 @@ export function generateEmbeddedLayers(config: HILConfig): EmbeddedLayerResult {
   return {
     files: [
       { name: 'adia_mcal.h', content: generateMcalHeader({ packTargetId: targetSelection.targetId, channels }) },
-      { name: 'adia_mcal.c', content: renderMcalStub(channels) },
+      { name: 'adia_mcal.c', content: renderMcalImplementation(config, channels) },
       { name: 'adia_component.h', content: renderComponentHeader() },
-      { name: 'adia_component.c', content: renderComponentSource(stubbedPeripherals) },
+      { name: 'adia_component.c', content: renderComponentSource() },
       { name: 'integration_manifest.json', content: `${JSON.stringify(manifest, null, 2)}\n` },
     ],
     manifest,

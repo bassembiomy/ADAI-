@@ -21,7 +21,7 @@ const config: HILConfig = {
 };
 
 describe('generateEmbeddedLayers', () => {
-  it('automatically emits component, MCAL, driver-stub, and manifest layers', () => {
+  it('automatically emits component, MCAL, driver-adapter, and manifest layers', () => {
     const result = generateEmbeddedLayers(config);
     expect(result.files.map(file => file.name)).toEqual([
       'adia_mcal.h',
@@ -33,8 +33,20 @@ describe('generateEmbeddedLayers', () => {
     expect(result.files.find(file => file.name === 'adia_component.c')?.content)
       .toContain('SM_ReadInputs(instance)');
     expect(result.files.find(file => file.name === 'adia_mcal.c')?.content)
+      .toContain('HAL_GPIO_Write(PIN_LED');
+    expect(result.manifest.stubbedPeripherals).toEqual([]);
+    expect(result.manifest.flashBlocked).toBe(false);
+  });
+
+  it('keeps unsupported buffered communication adapters explicit and flash-blocking', () => {
+    const result = generateEmbeddedLayers({
+      ...config,
+      channels: [{ ...config.channels[0], id: 'SERIAL_0', name: 'serial', peripheral: 'UART', pin: 'PA9' }],
+      mappings: [{ ...config.mappings[0], channelId: 'SERIAL_0' }],
+    });
+    expect(result.files.find(file => file.name === 'adia_mcal.c')?.content)
       .toContain('return ADIA_MCAL_NOT_IMPLEMENTED;');
-    expect(result.manifest.stubbedPeripherals).toEqual(['gpio']);
+    expect(result.manifest.stubbedPeripherals).toEqual(['uart']);
     expect(result.manifest.flashBlocked).toBe(true);
   });
 
