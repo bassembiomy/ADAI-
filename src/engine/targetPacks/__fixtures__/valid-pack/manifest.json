@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "1.0.0",
+  "targetId": "atmega328p",
+  "deviceRevision": "A",
+  "displayName": "ATmega328P",
+  "device": {
+    "architecture": "avr",
+    "core": "avr5",
+    "fpu": "none",
+    "abi": "eabi",
+    "endianness": "little",
+    "maxCpuClockHz": 16000000
+  },
+  "memoryRegions": [
+    { "name": "flash", "start": 0, "size": 32768 },
+    { "name": "sram", "start": 256, "size": 2048 }
+  ],
+  "supportedDriverModes": ["vendor"],
+  "pinnedToolchains": [{ "name": "avr-gcc", "version": "14.1.0" }],
+  "pins": [],
+  "peripheralConstraints": [],
+  "buildRecipes": {
+    "compilerFlags": ["-mmcu=atmega328p", "-Os"],
+    "linkerFlags": []
+  },
+  "programmers": [],
+  "capabilityManifest": {
+    "supportedPeripherals": ["gpio", "adc", "pwm", "uart"],
+    "certifiedStatuses": ["STATIC_ANALYSIS_ONLY"]
+  },
+  "contentHash": "fixture-hash-1"
+}
