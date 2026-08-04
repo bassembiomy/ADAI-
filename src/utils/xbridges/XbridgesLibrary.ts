@@ -257,7 +257,7 @@ export const XBRIDGES_CATEGORIES = [
   {
     name: 'Memory & Delay',
     blocks: [
-      { type: 'DELAY', label: 'Delay', icon: 'trending-up' },
+      { type: 'DELAY', label: 'Delay (Solver Substeps)', icon: 'database' },
     ]
   },
   {
