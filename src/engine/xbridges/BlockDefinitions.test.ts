@@ -200,6 +200,34 @@ describe('X-Bridges Learning Models Block Tests', () => {
     expect(block.state.y).toBeCloseTo(2.5, 5);
   });
 
+  it('TC-DELAY-IC-01: DELAY block initializes buffer with initial_condition param', () => {
+    const block = BLOCK_LIBRARY['DELAY']('d1', { delay_length: 1, initial_condition: -1 });
+    expect(block.params.initial_condition).toBe(-1);
+    // First execution: buffer filled with IC = -1, so output is -1
+    const result = block.execute!([5.0], block.params, block.state!, 0);
+    expect(result.outputs[0]).toBe(-1);
+    // Second execution: now the delayed value (5.0) comes out
+    const result2 = block.execute!([10.0], block.params, result.nextState!, 0);
+    expect(result2.outputs[0]).toBe(5.0);
+  });
+
+  it('TC-DELAY-IC-02: DELAY block defaults to 0 when initial_condition is not set', () => {
+    const block = BLOCK_LIBRARY['DELAY']('d2', { delay_length: 1 });
+    expect(block.params.initial_condition).toBe(0);
+    const result = block.execute!([7.0], block.params, block.state!, 0);
+    expect(result.outputs[0]).toBe(0);
+  });
+
+  it('TC-DELAY-IC-03: DELAY block respects negative initial_condition with length 2', () => {
+    const block = BLOCK_LIBRARY['DELAY']('d3', { delay_length: 2, initial_condition: -5 });
+    const r1 = block.execute!([1.0], block.params, block.state!, 0);
+    expect(r1.outputs[0]).toBe(-5);
+    const r2 = block.execute!([2.0], block.params, r1.nextState!, 0);
+    expect(r2.outputs[0]).toBe(-5);
+    const r3 = block.execute!([3.0], block.params, r2.nextState!, 0);
+    expect(r3.outputs[0]).toBe(1.0);
+  });
+
   it('TC-MATH-01: Max Block Element-Wise and Array Broadcasting', () => {
     const maxBlock = BLOCK_LIBRARY['Max']('max_test', {});
     
@@ -1493,6 +1521,30 @@ describe('X-Bridges Learning Models Block Tests', () => {
         expect(res.outputs[1]).toEqual([0.25, -0.35]); // eccentricity
         expect(state.dx).not.toBeNaN();
         expect(state.dy).not.toBeNaN();
+      }
+    });
+
+    it('should maintain numerical stability in FABRIC_HARMONIC_ANALYZER across long-running simulations (t up to 10s)', () => {
+      const analyzerBlock = BLOCK_LIBRARY['FABRIC_HARMONIC_ANALYZER']('analyzer', {
+        drum_mass: 15.0,
+        suspension_stiffness: 8000
+      });
+
+      const demPos = [0.2, -0.3, 0.3, -0.4];
+      const demVel = [0.5, 0.5, -0.5, -0.5];
+      const fluidForces = [1.0, 1.0, -1.0, -1.0];
+      const drumState = [0.8, 0.2, 5.0];
+
+      let state = analyzerBlock.state;
+      // Simulate over 500 steps as total time t increases from 0s to 10s
+      for (let step = 0; step < 500; step++) {
+        const elapsedTime = step * 0.02; // t = 0s to 10s
+        const res = analyzerBlock.execute([demPos, demVel, fluidForces, drumState], analyzerBlock.params, state, elapsedTime);
+        state = res.nextState;
+        expect(Number.isNaN(res.outputs[0])).toBe(false);
+        expect(Number.isFinite(res.outputs[0])).toBe(true);
+        expect(Number.isNaN(state.dx)).toBe(false);
+        expect(Number.isNaN(state.dy)).toBe(false);
       }
     });
 
