@@ -17,6 +17,27 @@ describe('getXBBlockCapability', () => {
     expect(getXBBlockCapability('LMS_ADAPTIVE_FILTER')?.codegen).toBe(false);
   });
 
+  it('declares executable conformance coverage for all 24 Trigonometry blocks', () => {
+    for (const type of [
+      'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'ASIN', 'ACOS', 'ATAN',
+      'ACOT', 'ASEC', 'ACOSEC', 'SINH', 'COSH', 'TANH', 'COTH', 'SECH',
+      'COSECH', 'ASINH', 'ACOSH', 'ATANH', 'ACOTH', 'ASECH', 'ACOSECH',
+    ]) {
+      const cap = getXBBlockCapability(type);
+      expect(cap?.codegen).toBe(true);
+      expect(cap?.requiredTargetCapabilities).toContain('math-library');
+      expect(cap?.interpreterConformanceCaseIds).toContain('T10-INT-TRIGONOMETRY');
+      expect(cap?.cConformanceCaseIds).toContain('T10-C99-TRIGONOMETRY');
+    }
+  });
+
+  it('declares executable conformance coverage for IF_ELSE block', () => {
+    const cap = getXBBlockCapability('IF_ELSE');
+    expect(cap?.codegen).toBe(true);
+    expect(cap?.interpreterConformanceCaseIds).toContain('T10-INT-SIGNAL-ROUTING');
+    expect(cap?.cConformanceCaseIds).toContain('T10-C99-SIGNAL-ROUTING');
+  });
+
   it('does not assume unknown block types are codegen capable', () => {
     expect(getXBBlockCapability('UNKNOWN_BLOCK')).toBeNull();
   });
@@ -26,6 +47,11 @@ describe('getXBBlockCapability', () => {
       'VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'MatrixMul', 'Transpose', 'MatrixConcat', 'MatrixDiag', 'SubMatrix',
       'MatrixSolve', 'PID_BASIC', 'DISCRETE_TRANSFER_FUNCTION', 'STATE_SPACE',
       'CLARKE_TRANSFORM', 'PARK_TRANSFORM', 'INVERSE_PARK', 'INVERSE_CLARKE',
+      'NAND', 'NOR', 'XOR', 'BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight',
+      'SWITCH', 'MUX', 'DEMUX', 'IF_ELSE',
+      'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'ASIN', 'ACOS', 'ATAN',
+      'ACOT', 'ASEC', 'ACOSEC', 'SINH', 'COSH', 'TANH', 'COTH', 'SECH',
+      'COSECH', 'ASINH', 'ACOSH', 'ATANH', 'ACOTH', 'ASECH', 'ACOSECH',
     ]) {
       const capability = getXBBlockCapability(type) as unknown as {
         readonly interpreterConformanceCaseIds?: readonly string[];
