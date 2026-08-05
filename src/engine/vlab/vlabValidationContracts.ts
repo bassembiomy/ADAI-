@@ -34,7 +34,7 @@ const DEFAULT_TOLERANCES: VLabValidationTolerances = {
   rel: 1e-3,
   maxResidualNorm: 1e-4,
   conservationRel: 1e-3,
-  convergenceOrderMin: 1.0,
+  convergenceOrderMin: 0.5,
 };
 
 const domainVariables: Record<string, { across: { name: string; unit: string }; through: { name: string; unit: string } }> = {

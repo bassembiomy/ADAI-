@@ -66,12 +66,18 @@ export const runBlockValidationHarness = (
     const residuals: number[] = [];
 
     for (let s = 0; s < steps; s++) {
-      state = engine.simulateStep(nodes, edges, state, dt);
-      if (!state || !state.x || state.x.some((val: number) => !Number.isFinite(val))) {
-        diagnostics.push(`Non-finite state value detected at step ${s} for dt=${dt}`);
+      try {
+        state = engine.simulateStep(nodes, edges, state, dt);
+        if (!state || !state.x || state.x.some((val: number) => !Number.isFinite(val))) {
+          diagnostics.push(`Non-finite state value detected at step ${s} for dt=${dt}`);
+        }
+        trajectory.push(state?.x?.[0] ?? 0);
+        residuals.push(0.00001);
+      } catch (err: any) {
+        diagnostics.push(`Step execution error at step ${s} for dt=${dt}: ${err?.message || err}`);
+        trajectory.push(0);
+        residuals.push(1.0);
       }
-      trajectory.push(state?.x?.[0] ?? 0);
-      residuals.push(0.00001); // Simulated DAE residual norm
     }
     return { trajectory, residuals };
   };
