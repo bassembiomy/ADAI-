@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import * as capabilityModule from './xbCapabilities';
 import { XB_C_CONFORMANCE_CASE_IDS, XB_INTERPRETER_CONFORMANCE_CASE_IDS, getXBBlockCapability } from './xbCapabilities';
+import { XB_EXECUTABLE_C_CONFORMANCE_COVERAGE } from './xbCConformanceCases';
 
 describe('getXBBlockCapability', () => {
   it('marks deterministic arithmetic as codegen capable', () => {
@@ -115,6 +116,41 @@ describe('getXBBlockCapability', () => {
     expect(getXBBlockCapability('SATURATION')?.requiredTargetCapabilities).toContain('math-library');
     expect(getXBBlockCapability('DEADZONE')?.requiredTargetCapabilities).toContain('math-library');
     expect(getXBBlockCapability('RATE_LIMITER')?.requiredTargetCapabilities).toContain('math-library');
+  });
+
+  it('declares directional signal contracts for MUX and DEMUX', () => {
+    expect(getXBBlockCapability('MUX')).toMatchObject({
+      inputShapes: ['scalar'],
+      outputShapes: ['vector'],
+    });
+    expect(getXBBlockCapability('DEMUX')).toMatchObject({
+      inputShapes: ['vector'],
+      outputShapes: ['scalar'],
+    });
+  });
+
+  it('derives newly enabled family coverage from cases that are actually executed', () => {
+    const executableCaseIds = new Set([
+      'T10-C99-LOGIC-BITWISE',
+      'T10-C99-SIGNAL-ROUTING',
+      'T10-C99-TRIGONOMETRY',
+      'T10-C99-DISCONTINUOUS',
+      'T14-C99-DISCONTINUOUS',
+    ]);
+
+    for (const type of Object.keys(BLOCK_LIBRARY)) {
+      const capability = getXBBlockCapability(type);
+      if (capability?.codegen !== true
+        || !capability.cConformanceCaseIds?.some((id) => executableCaseIds.has(id))) {
+        continue;
+      }
+      const records = XB_EXECUTABLE_C_CONFORMANCE_COVERAGE
+        .filter((entry) => entry.blockType === type);
+      expect(new Set(records.flatMap((entry) => entry.inputShapes)), `${type}: executable inputs`)
+        .toEqual(new Set(capability.inputShapes ?? capability.shapes));
+      expect(new Set(records.flatMap((entry) => entry.outputShapes)), `${type}: executable outputs`)
+        .toEqual(new Set(capability.outputShapes ?? capability.shapes));
+    }
   });
 
   it('links every code-generation-capable block to interpreter and compiled-C conformance cases', () => {

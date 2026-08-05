@@ -954,6 +954,13 @@ export const buildXBSemanticModel = (
         const rest = inputs.filter((p) => p !== cond && p !== uTrue && p !== uFalse);
         return [cond, uTrue, uFalse, ...rest];
       }
+    } else if (node.type === 'ShiftLeft' || node.type === 'ShiftRight') {
+      const value = inputs.find((port) => port.id.toLowerCase() === 'u');
+      const amount = inputs.find((port) => port.id.toLowerCase() === 'amount');
+      if (value && amount) {
+        const rest = inputs.filter((port) => port !== value && port !== amount);
+        return [value, amount, ...rest];
+      }
     }
     return [...inputs];
   };

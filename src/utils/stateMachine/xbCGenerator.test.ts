@@ -2536,7 +2536,7 @@ describe('X-Bridges fixed-point state parity', { timeout: 60_000 }, () => {
     }
   });
 
-  it('T10-C99-TRIGONOMETRY executes SIN, COS, TAN, and inverse operations identically to the interpreter', () => {
+  it('T10-C99-TRIGONOMETRY executes SIN identically to the interpreter', () => {
     const ir = semanticModel();
     ir.variables = {
       u: { id: 'u', name: 'u', cName: 'u', type: 'double', initialValue: 0 },

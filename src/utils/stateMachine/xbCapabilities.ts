@@ -70,9 +70,12 @@ const LOGIC_BITWISE_COVERAGE: readonly XBConformanceCoverage[] =
   ['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'BitwiseAND', 'BitwiseOR', 'BitwiseXOR', 'BitwiseNOT', 'ShiftLeft', 'ShiftRight']
     .map(scalarCoverage);
 
-const SIGNAL_ROUTING_COVERAGE: readonly XBConformanceCoverage[] =
-  ['SWITCH', 'MUX', 'DEMUX', 'IF_ELSE']
-    .map((type) => shapedCoverage(type, ['scalar', 'vector', 'matrix']));
+const SIGNAL_ROUTING_COVERAGE: readonly XBConformanceCoverage[] = [
+  scalarCoverage('SWITCH'),
+  scalarCoverage('IF_ELSE'),
+  shapedCoverage('MUX', ['scalar'], ['vector']),
+  shapedCoverage('DEMUX', ['vector'], ['scalar']),
+];
 
 const TRIGONOMETRY_COVERAGE: readonly XBConformanceCoverage[] = [
   'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'ASIN', 'ACOS', 'ATAN',
@@ -352,10 +355,14 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   ShiftRight: direct(scalar, undefined, ['T10-INT-LOGIC-BITWISE'], ['T10-C99-LOGIC-BITWISE']),
 
   // Signal routing.
-  SWITCH: direct(allShapes, undefined, ['T10-INT-SIGNAL-ROUTING'], ['T10-C99-SIGNAL-ROUTING']),
-  MUX: direct(allShapes, undefined, ['T10-INT-SIGNAL-ROUTING'], ['T10-C99-SIGNAL-ROUTING']),
-  DEMUX: direct(allShapes, undefined, ['T10-INT-SIGNAL-ROUTING'], ['T10-C99-SIGNAL-ROUTING']),
-  IF_ELSE: direct(allShapes, undefined, ['T10-INT-SIGNAL-ROUTING'], ['T10-C99-SIGNAL-ROUTING']),
+  SWITCH: direct(scalar, undefined, ['T10-INT-SIGNAL-ROUTING'], ['T10-C99-SIGNAL-ROUTING']),
+  MUX: direct(allShapes, undefined, ['T10-INT-SIGNAL-ROUTING'], ['T10-C99-SIGNAL-ROUTING'], {
+    inputShapes: scalar, outputShapes: ['vector'],
+  }),
+  DEMUX: direct(allShapes, undefined, ['T10-INT-SIGNAL-ROUTING'], ['T10-C99-SIGNAL-ROUTING'], {
+    inputShapes: ['vector'], outputShapes: scalar,
+  }),
+  IF_ELSE: direct(scalar, undefined, ['T10-INT-SIGNAL-ROUTING'], ['T10-C99-SIGNAL-ROUTING']),
   TERMINATOR: direct(
     allShapes,
     undefined,

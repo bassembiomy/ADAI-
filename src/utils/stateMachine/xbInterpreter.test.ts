@@ -955,7 +955,7 @@ describe('X-Bridges interpreter', () => {
   });
 
   it('evaluates Batch 2 routing operations (SWITCH, MUX, DEMUX)', () => {
-    const switchOp = operation('switch', 'SWITCH', ['cond', 'in1', 'in2'], ['switch:y'], { threshold: 0.5 });
+    const switchOp = operation('switch', 'SWITCH', ['in1', 'in2', 'cond'], ['switch:y'], { threshold: 0.5 });
     const ir = model('retain', { switchOp }, {
       cond: signal('cond', 'input'),
       in1: signal('in1', 'input'),

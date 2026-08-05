@@ -1469,6 +1469,8 @@ const OPERATION_EMITTERS: Readonly<Record<string, OperationEmitter>> = {
   MOVING_AVERAGE: emitMovingAverageLifecycleStub,
   DISCRETE_TRANSFER_FUNCTION: emitTransferFunctionLifecycleStub,
   STATE_SPACE: emitStateSpaceLifecycleStub,
+  RATE_LIMITER: emitBasicPidLifecycleStub,
+  RELAY: emitBasicPidLifecycleStub,
 };
 
 const operationEmitter = (operation: XBSemanticOperation): OperationEmitter => {

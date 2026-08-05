@@ -674,22 +674,22 @@ const evaluateDirectOperation = (
       return [[activeCount % 2 === 1]];
     }
     case 'BitwiseAND':
-      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) & Number(right)) >>> 0)];
+      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) & Number(right)) | 0)];
     case 'BitwiseOR':
-      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) | Number(right)) >>> 0)];
+      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) | Number(right)) | 0)];
     case 'BitwiseXOR':
-      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) ^ Number(right)) >>> 0)];
+      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) ^ Number(right)) | 0)];
     case 'BitwiseNOT':
-      return [unary(inputs[0] ?? [0], (value) => (~Number(value)) >>> 0)];
+      return [unary(inputs[0] ?? [0], (value) => ~Number(value))];
     case 'ShiftLeft':
-      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) << Number(right)) >>> 0)];
+      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) << Number(right)) | 0)];
     case 'ShiftRight':
-      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) >> Number(right)) >>> 0)];
+      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) >> Number(right)) | 0)];
     case 'SWITCH': {
-      const cond = inputs[0]?.[0];
+      const cond = inputs[2]?.[0];
       const threshold = Number(parameter(operation, ['threshold', 'Threshold'], 0));
       const pass = Boolean(cond) && Number(cond) >= threshold;
-      return [pass ? (inputs[1] ?? [0]) : (inputs[2] ?? [0])];
+      return [pass ? (inputs[0] ?? [0]) : (inputs[1] ?? [0])];
     }
     case 'IF_ELSE': {
       const cond = inputs[0]?.[0];
