@@ -906,11 +906,11 @@ export const buildXBSemanticModel = (
     };
   }
 
-  const orderedInputPorts = (node: XBNodeV1, ports: PortDescriptor[]): PortDescriptor[] => {
+  const orderedInputPorts = (node: XBNodeV1, ports: readonly PortDescriptor[]): PortDescriptor[] => {
     const inputs = ports.filter((p) => p.direction === 'input');
     if (node.type === 'SWITCH') {
       const findPort = (kw: string[]) =>
-        inputs.find((p) => kw.some((k) => p.id.toLowerCase() === k || p.name?.toLowerCase() === k));
+        inputs.find((p) => kw.some((k) => p.id.toLowerCase() === k));
       const u1 = findPort(['u1', 'in1', 'pass', 'u_true']);
       const u2 = findPort(['u2', 'in2', 'fail', 'u_false']);
       const ctrl = findPort(['ctrl', 'control', 'cond', 'condition', 'u3']);
@@ -920,7 +920,7 @@ export const buildXBSemanticModel = (
       }
     } else if (node.type === 'IF_ELSE') {
       const findPort = (kw: string[]) =>
-        inputs.find((p) => kw.some((k) => p.id.toLowerCase() === k || p.name?.toLowerCase() === k));
+        inputs.find((p) => kw.some((k) => p.id.toLowerCase() === k));
       const cond = findPort(['cond', 'condition', 'ctrl', 'control']);
       const uTrue = findPort(['u_true', 'true_val', 'u1', 'in1', 'pass']);
       const uFalse = findPort(['u_false', 'false_val', 'u2', 'in2', 'fail']);
@@ -929,7 +929,7 @@ export const buildXBSemanticModel = (
         return [cond, uTrue, uFalse, ...rest];
       }
     }
-    return inputs;
+    return [...inputs];
   };
 
   const operations: Record<string, XBSemanticOperation> = {};
