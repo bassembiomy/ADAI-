@@ -74,6 +74,30 @@ const model = (
 const codes = (input: XBPersistedModelV1): string[] =>
   validateXBModel(input, variables, target).map((diagnostic) => diagnostic.code);
 
+const connectedModel = (
+  sourcePort: Record<string, XBParameterValue>,
+  targetPort: Record<string, XBParameterValue>,
+  targetType = 'GAIN',
+): XBPersistedModelV1 => model({
+  nodes: [
+    node('source', 'Constant', {
+      inputs: [],
+      outputs: [port('y', 'output', sourcePort)],
+    }),
+    node('target', targetType, {
+      inputs: [port('u', 'input', targetPort)],
+      outputs: [port('y', 'output', targetPort)],
+    }),
+  ],
+  edges: [{
+    id: 'source-target',
+    sourceNodeId: 'source',
+    sourcePortId: 'y',
+    targetNodeId: 'target',
+    targetPortId: 'u',
+  }],
+});
+
 describe('validateXBModel', () => {
   it('rejects unknown and host-only block types', () => {
     const result = codes(model({
@@ -228,6 +252,58 @@ describe('validateXBModel', () => {
     }));
 
     expect(result).toContain('XB_PORT_DANGLING');
+  });
+
+  it.each([
+    {
+      name: 'different shapes',
+      source: { shape: 'scalar', dimensions: [] },
+      destination: { shape: 'vector', dimensions: [2] },
+    },
+    {
+      name: 'different vector lengths',
+      source: { shape: 'vector', dimensions: [2] },
+      destination: { shape: 'vector', dimensions: [4] },
+    },
+    {
+      name: 'different matrix dimensions',
+      source: { shape: 'matrix', dimensions: [2, 2] },
+      destination: { shape: 'matrix', dimensions: [1, 4] },
+    },
+  ])('rejects edge ports with $name', ({ source, destination }) => {
+    expect(codes(connectedModel(source, destination)))
+      .toContain('XB_EDGE_INCOMPATIBLE');
+  });
+
+  it('rejects implicit numeric conversion across an edge', () => {
+    expect(codes(connectedModel(
+      { dataType: 'float32' },
+      { dataType: 'boolean' },
+    ))).toContain('XB_EDGE_INCOMPATIBLE');
+  });
+
+  it('allows numeric conversion at an explicit conversion block', () => {
+    expect(codes(connectedModel(
+      { dataType: 'float32' },
+      { dataType: 'boolean' },
+      'DATA_TYPE_CONVERSION',
+    ))).not.toContain('XB_EDGE_INCOMPATIBLE');
+  });
+
+  it('does not add an incompatibility diagnostic for a dangling edge', () => {
+    const result = codes(model({
+      nodes: [node('source', 'Constant', { inputs: [] })],
+      edges: [{
+        id: 'missing-target',
+        sourceNodeId: 'source',
+        sourcePortId: 'y',
+        targetNodeId: 'missing',
+        targetPortId: 'u',
+      }],
+    }));
+
+    expect(result).toContain('XB_PORT_DANGLING');
+    expect(result).not.toContain('XB_EDGE_INCOMPATIBLE');
   });
 
   it('requires exactly one effective driver for every scalar input', () => {

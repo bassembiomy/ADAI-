@@ -521,6 +521,34 @@ export const validateXBModel = (
       ));
       continue;
     }
+
+    const sourceType = canonicalPortType(source.dataType);
+    const destinationType = canonicalPortType(destination.dataType);
+    const destinationNode = nodesById.get(edge.targetNodeId);
+    const explicitConversion = destinationNode?.type === 'DATA_TYPE_CONVERSION'
+      || destinationNode?.type === 'NUMERIC_REPRESENTATION';
+    const sameShape = source.shape === destination.shape;
+    const sameDimensions = source.dimensions.length === destination.dimensions.length
+      && source.dimensions.every(
+        (dimension, index) => dimension === destination.dimensions[index],
+      );
+    const compatibleNumericType = sourceType === null
+      || destinationType === null
+      || sourceType === destinationType
+      || explicitConversion;
+    if (!sameShape || !sameDimensions || !compatibleNumericType) {
+      const contract = (port: PortDescriptor, numericType: string | null): string =>
+        `${port.shape}[${port.dimensions.join(',')}]/${numericType ?? 'auto'}`;
+      diagnostics.push(diagnostic(
+        'XB_EDGE_INCOMPATIBLE',
+        `Edge '${edge.id}' connects incompatible ports `
+          + `'${edge.sourceNodeId}:${edge.sourcePortId}' `
+          + `(${contract(source, sourceType)}) and `
+          + `'${edge.targetNodeId}:${edge.targetPortId}' `
+          + `(${contract(destination, destinationType)}).`,
+        edge.id,
+      ));
+    }
     if (destination.shape === 'scalar') {
       const inputKey = `${edge.targetNodeId}:${edge.targetPortId}`;
       scalarDriverCounts.set(
