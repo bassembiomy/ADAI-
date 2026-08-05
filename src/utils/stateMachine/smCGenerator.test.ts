@@ -1156,7 +1156,7 @@ int main(void) {
       expect(coreSource).toMatch(/Control5_out\)\)\s*>\s*3\.0\s*\?\s*\(\(double\)\(instance->xb_[^.]+\.XB5_Route11_out\)\)\s*:\s*\(\(double\)\(instance->xb_[^.]+\.XB5_Route22_out\)\)/);
 
       // 2. IF_ELSE must evaluate (ConditionOne ? True33 : False44)
-      expect(coreSource).toMatch(/SM_XB_Truth\([^)]+ConditionOne_out\)\)\s*\?\s*\(\(double\)\(instance->xb_[^.]+\.XB5_True33_out\)\)\s*:\s*\(\(double\)\(instance->xb_[^.]+\.XB5_False44_out\)\)/);
+      expect(coreSource).toMatch(/SM_XB_Truth[\s\S]+?ConditionOne_out[\s\S]+?\?\s*\(\(double\)\(instance->xb_[^.]+\.XB5_True33_out\)\)\s*:\s*\(\(double\)\(instance->xb_[^.]+\.XB5_False44_out\)\)/);
 
       // 3. IF_ELSE output signal must be float (not bool)
       expect(headerSource).toContain('float XB5_IfElse_y;');
