@@ -1126,7 +1126,7 @@ int main(void) {
     it('renders simple equality as "if (instance->data.x == 1)" without extra outer parentheses', () => {
       const model = flatOrFixture();
       if (!model.variables.some((v) => v.name === 'x')) {
-        model.variables.push({ id: 'var_x', name: 'x', cName: 'x', type: 'uint8', currentValue: 0, initialValue: '0' });
+        model.variables.push({ id: 'var_x', name: 'x', type: 'uint8', currentValue: 0, initialValue: '0' });
       }
       model.transitions[0].condition = 'x == 1';
       const built = build(model);
