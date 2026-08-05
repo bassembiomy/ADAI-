@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import type {
   XBSemanticModel,
   XBSemanticOperation,
@@ -1025,8 +1026,7 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.signals['sinh:y']).toEqual([0]);
   });
 
-  it('instantiates Batch 1 discontinuities blocks with defaults', async () => {
-    const { BLOCK_LIBRARY } = await import('../../engine/xbridges/BlockDefinitions');
+  it('instantiates Batch 1 discontinuities blocks with defaults', () => {
     const sat = BLOCK_LIBRARY.SATURATION('sat', {});
     expect(sat.params).toMatchObject({ upper: 1, lower: -1 });
     const dz = BLOCK_LIBRARY.DEADZONE('dz', {});

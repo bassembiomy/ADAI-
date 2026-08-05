@@ -26,8 +26,10 @@ pass-through behavior.
 | Sources and mappings | `Constant`, `Inport`, `Outport` |
 | Arithmetic | `Sum`, `SUM_JUNCTION`, `GAIN`, `PRODUCT`, `VectorAdd`, `VectorSub`, `VectorMul`, `VectorDiv`, `UnaryNeg`, `Abs` |
 | Matrix | `MatrixMul`, `Transpose`, `MatrixConcat`, `MatrixDiag`, `SubMatrix`, `MatrixSolve` |
-| Logic | `AND`, `OR`, `NOT` |
-| Routing | `TERMINATOR` |
+| Extended logic and bitwise | `AND`, `OR`, `NOT`, `NAND`, `NOR`, `XOR`, `BitwiseAND`, `BitwiseOR`, `BitwiseXOR`, `BitwiseNOT`, `ShiftLeft`, `ShiftRight` |
+| Signal routing | `SWITCH`, `IF_ELSE`, `MUX`, `DEMUX`, `TERMINATOR` |
+| Trigonometric and hyperbolic | `SIN`, `COS`, `TAN`, `COT`, `SEC`, `COSEC`, `ASIN`, `ACOS`, `ATAN`, `ACOT`, `ASEC`, `ACOSEC`, `SINH`, `COSH`, `TANH`, `COTH`, `SECH`, `COSECH`, `ASINH`, `ACOSH`, `ATANH`, `ACOTH`, `ASECH`, `ACOSECH` |
+| Discontinuities | `SATURATION`, `DEADZONE`, `RATE_LIMITER`, `RELAY` |
 | Stateful | `DELAY`, `UNIT_DELAY`, `MEMORY`, `INTEGRATOR_DISCRETE`, `INTEGRATOR_CONTINUOUS`, `Integrator` |
 | Control and linear systems | `PID_BASIC`, `DISCRETE_TRANSFER_FUNCTION`, `STATE_SPACE` |
 | Motor transforms | `CLARKE_TRANSFORM`, `PARK_TRANSFORM`, `INVERSE_PARK`, `INVERSE_CLARKE` |
@@ -39,6 +41,14 @@ maximum vector length of 16 and maximum matrix dimension of 8. `MatrixSolve`
 also requires a configured maximum dimension from 1 through 8. `PID_BASIC`
 requires a positive discrete `sampleTime`; `STATE_SPACE` requires the
 `discrete` representation.
+
+Routing has a deliberately narrower generated-C contract than the general
+signal model. `SWITCH` and `IF_ELSE` operate on scalar data. `MUX` concatenates
+scalar inputs to a vector output, while `DEMUX` partitions a vector input to
+scalar outputs. The semantic validator rejects other routing shapes rather than
+coercing them. The families above are enabled only where both the canonical
+interpreter and strict-C99 generated package are executed by registered
+conformance cases; registry metadata by itself is not treated as evidence.
 
 ## State-machine boundary mapping
 
@@ -57,10 +67,9 @@ Outport output.
 The following categories are explicitly rejected because no paired canonical
 interpreter and strict-C99 embedded conformance case is registered:
 
-- `Step`, `VectorPow`, reductions, `IdentityMatrix`, extended logic/bitwise,
-  switches/muxes, low/high-pass and moving-average filters, and the standalone
-  trigonometric family. Some have a partial emitter or host implementation, but
-  partial support is not enough to authorize embedded generation;
+- `Step`, `VectorPow`, reductions, `IdentityMatrix`, and low/high-pass and
+  moving-average filters. Some have a partial emitter or host implementation,
+  but partial support is not enough to authorize embedded generation;
 - digital/UI simulation helpers such as flip-flops, registers, counters,
   clocks, waveform generators, notes, subsystems, inverse, and determinant;
 - PWM, inverter, motor, FOC/SVPWM, estimator, Kalman, MPC, transfer-function,

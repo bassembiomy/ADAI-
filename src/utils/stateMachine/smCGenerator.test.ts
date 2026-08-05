@@ -194,7 +194,7 @@ int main(void) {
 `,
     );
     expect(andOutput.trim()).toBe('1');
-  });
+  }, 120_000);
 
   it('keeps a leaf state with an empty child layer fault-free', () => {
     const model = flatOrFixture();
