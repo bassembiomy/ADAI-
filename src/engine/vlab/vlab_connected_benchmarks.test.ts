@@ -66,15 +66,19 @@ describe('V-Lab Connected Model Benchmarks (10 Major System Topologies)', () => 
   // 2. Translational Mechanics Benchmark: Mass-Spring-Damper System
   it('benchmark 2: translational mass-spring-damper system response', () => {
     const nodes: Node[] = [
-      makeNode('src', 'force_source', { F: 100 }),
-      makeNode('mass', 'mass', { m: 5, b: 2 }),
-      makeNode('spring', 'trans_spring', { k: 250 }),
+      makeNode('src', 'force_source', { F: 10 }),
+      makeNode('mass', 'mass', { m: 1.0 }),
+      makeNode('spring', 'trans_spring', { k: 100 }),
+      makeNode('damper', 'trans_damper', { b: 5 }),
       makeNode('ref', 'trans_ref', {}),
     ];
     const edges: Edge[] = [
-      makeEdge('e1', 'src', 'mass', 'p', 'p'),
-      makeEdge('e2', 'mass', 'spring', 'n', 'p'),
-      makeEdge('e3', 'spring', 'ref', 'n', 'gnd'),
+      makeEdge('e1', 'src', 'mass', 'a', 'p'),
+      makeEdge('e2', 'src', 'ref', 'b', 'p'),
+      makeEdge('e3', 'mass', 'spring', 'p', 'r'),
+      makeEdge('e4', 'spring', 'ref', 'c', 'p'),
+      makeEdge('e5', 'mass', 'damper', 'p', 'r'),
+      makeEdge('e6', 'damper', 'ref', 'c', 'p'),
     ];
 
     let state: any = null;
@@ -87,13 +91,16 @@ describe('V-Lab Connected Model Benchmarks (10 Major System Topologies)', () => 
   // 3. Rotational Mechanics Benchmark: Inertia-Damper Drivetrain
   it('benchmark 3: rotational inertia and damper system', () => {
     const nodes: Node[] = [
-      makeNode('torque', 'torque_source', { T: 50 }),
-      makeNode('inertia', 'inertia', { J: 0.5, b: 0.1 }),
+      makeNode('torque', 'torque_source', { T: 10 }),
+      makeNode('inertia', 'inertia', { J: 0.5 }),
+      makeNode('damper', 'rot_damper', { b: 0.1 }),
       makeNode('ref', 'rot_ref', {}),
     ];
     const edges: Edge[] = [
-      makeEdge('e1', 'torque', 'inertia', 'p', 'p'),
-      makeEdge('e2', 'inertia', 'ref', 'n', 'gnd'),
+      makeEdge('e1', 'torque', 'inertia', 'a', 'p'),
+      makeEdge('e2', 'torque', 'ref', 'b', 'p'),
+      makeEdge('e3', 'inertia', 'damper', 'p', 'r'),
+      makeEdge('e4', 'damper', 'ref', 'c', 'p'),
     ];
 
     let state: any = null;
