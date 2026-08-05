@@ -6,6 +6,7 @@ import {
   renderCExpression,
   renderCInitialValue,
   renderCType,
+  unwrapTopLevelCondition,
 } from './smCExpressions';
 import type {
   SemanticLayer,
@@ -187,10 +188,12 @@ const renderRouteEnabled = (
   ir: SemanticModel,
   route: SemanticTransitionRoute,
   timerStateId: string,
-): string => route.transitionIds.map((transitionId) =>
-  renderTransitionEnabled(ir, ir.transitions[transitionId], timerStateId))
-  .map((condition) => `(${condition})`)
-  .join(' && ');
+): string => {
+  const conds = route.transitionIds.map((transitionId) =>
+    renderTransitionEnabled(ir, ir.transitions[transitionId], timerStateId));
+  if (conds.length === 1) return unwrapTopLevelCondition(conds[0]);
+  return conds.map((condition) => `(${unwrapTopLevelCondition(condition)})`).join(' && ');
+};
 
 const renderMarkEntered = (
   ir: SemanticModel,
@@ -373,9 +376,11 @@ const renderDefaultJunction = (
   const paths = collectDefaultJunctionPaths(ir, junctionId);
   return paths.map((transitionIds, pathIndex) => {
     const transitions = transitionIds.map((id) => ir.transitions[id]);
-    const condition = transitions.map((transition) =>
-      `(${renderTransitionEnabled(ir, transition, transition.sourceStateId)})`)
-      .join(' && ');
+    const conds = transitions.map((transition) =>
+      renderTransitionEnabled(ir, transition, transition.sourceStateId));
+    const condition = conds.length === 1
+      ? unwrapTopLevelCondition(conds[0])
+      : conds.map((c) => `(${unwrapTopLevelCondition(c)})`).join(' && ');
     const actionCode = transitions.map((transition) =>
       renderActions(
         ir,

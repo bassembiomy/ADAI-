@@ -686,6 +686,32 @@ const stateBoundaryForNode = (
     }]);
   }
 
+  if (node.type === 'RATE_LIMITER') {
+    const control = outputByPort('u') ?? outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
+    if (control === undefined) return boundary([]);
+    return boundary([{
+      id: `${node.id}:prev_y$state`,
+      role: 'prev_y',
+      signalId: null,
+      numericType: { kind: 'float64' },
+      shape: { kind: 'scalar' },
+      initialValues: [0],
+    }]);
+  }
+
+  if (node.type === 'RELAY') {
+    const output = outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
+    if (output === undefined) return boundary([]);
+    return boundary([{
+      id: `${node.id}:current_on$state`,
+      role: 'current_on',
+      signalId: output.id,
+      numericType: { kind: 'boolean' },
+      shape: { kind: 'scalar' },
+      initialValues: [node.parameters.initialState === true || node.parameters.initialState === 'on'],
+    }]);
+  }
+
   return boundary(outputSignalIds.map((signalId) => {
     const signal = signals[signalId];
     return {

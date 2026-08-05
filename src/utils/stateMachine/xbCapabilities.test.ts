@@ -105,6 +105,18 @@ describe('getXBBlockCapability', () => {
     },
   );
 
+  it('declares executable conformance coverage for Batch 1 discontinuities blocks', () => {
+    for (const type of ['SATURATION', 'DEADZONE', 'RATE_LIMITER', 'RELAY']) {
+      const cap = getXBBlockCapability(type);
+      expect(cap?.codegen).toBe(true);
+      expect(cap?.interpreterConformanceCaseIds).toContain('T10-INT-DISCONTINUOUS');
+      expect(cap?.cConformanceCaseIds).toContain('T10-C99-DISCONTINUOUS');
+    }
+    expect(getXBBlockCapability('SATURATION')?.requiredTargetCapabilities).toContain('math-library');
+    expect(getXBBlockCapability('DEADZONE')?.requiredTargetCapabilities).toContain('math-library');
+    expect(getXBBlockCapability('RATE_LIMITER')?.requiredTargetCapabilities).toContain('math-library');
+  });
+
   it('links every code-generation-capable block to interpreter and compiled-C conformance cases', () => {
     const interpreterManifest = (capabilityModule as any).XB_INTERPRETER_CONFORMANCE_CASES as
       Record<string, readonly { blockType: string; inputShapes: readonly string[]; outputShapes: readonly string[] }[]> | undefined;

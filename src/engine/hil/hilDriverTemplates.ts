@@ -1,5 +1,17 @@
 import { TargetMCU, PeripheralType } from './hilTypes';
 
+const formatArduinoPinExpr = (pin: string) => {
+  const trimmed = (pin || '0').trim();
+  if (/^\d+$/.test(trimmed)) return trimmed;
+  if (/^A\d+$/i.test(trimmed)) return trimmed.toUpperCase();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    const unquoted = trimmed.slice(1, -1).trim();
+    if (/^\d+$/.test(unquoted)) return unquoted;
+    if (/^A\d+$/i.test(unquoted)) return unquoted.toUpperCase();
+  }
+  return `parseArduinoPin(${trimmed})`;
+};
+
 export interface DriverSnippet {
   includes: string;
   globals: string;
@@ -858,6 +870,17 @@ SoftwareSerial softSerial(10, 11);
 #include <SPI.h>
 
 #ifdef __cplusplus
+static inline int parseArduinoPin(const char* pinStr) {
+    if (!pinStr || !*pinStr) return 0;
+    if (pinStr[0] == 'A' || pinStr[0] == 'a') {
+#if defined(A0)
+        return A0 + atoi(pinStr + 1);
+#else
+        return 14 + atoi(pinStr + 1);
+#endif
+    }
+    return atoi(pinStr);
+}
 static inline uint32_t HAL_UART_ReadChannel(void) {
     return softSerial.available() ? (uint32_t)softSerial.read() : 0U;
 }
@@ -907,24 +930,24 @@ void HIL_SendString(const char* str) {
     tickDelay: `delay(10);`,
     peripherals: {
       GPIO: {
-        init: (pin, name, dir) => `  pinMode(${pin}, ${dir === 'In' ? 'INPUT' : 'OUTPUT'});`,
-        read: (pin) => `digitalRead(${pin}) == HIGH`,
-        write: (pin, name, valExpr) => `digitalWrite(${pin}, (${valExpr}) ? HIGH : LOW);`
+        init: (pin, name, dir) => `  pinMode(${formatArduinoPinExpr(pin)}, ${dir === 'In' ? 'INPUT' : 'OUTPUT'});`,
+        read: (pin) => `digitalRead(${formatArduinoPinExpr(pin)}) == HIGH`,
+        write: (pin, name, valExpr) => `digitalWrite(${formatArduinoPinExpr(pin)}, (${valExpr}) ? HIGH : LOW);`
       },
       ADC: {
-        init: (pin) => `  pinMode(${pin}, INPUT);`,
-        read: (pin) => `analogRead(${pin})`,
+        init: (pin) => `  pinMode(${formatArduinoPinExpr(pin)}, INPUT);`,
+        read: (pin) => `analogRead(${formatArduinoPinExpr(pin)})`,
         write: () => `/* Analog Read Pins are input only */`
       },
       DAC: {
         init: () => ``,
         read: () => `0.0f`,
-        write: (pin, name, valExpr) => `analogWrite(${pin}, ${valExpr}); /* Pseudo-DAC via PWM on Uno */`
+        write: (pin, name, valExpr) => `analogWrite(${formatArduinoPinExpr(pin)}, ${valExpr}); /* Pseudo-DAC via PWM on Uno */`
       },
       PWM: {
-        init: (pin) => `  pinMode(${pin}, OUTPUT);`,
+        init: (pin) => `  pinMode(${formatArduinoPinExpr(pin)}, OUTPUT);`,
         read: () => `0.0f`,
-        write: (pin, name, valExpr) => `analogWrite(${pin}, ${valExpr});`
+        write: (pin, name, valExpr) => `analogWrite(${formatArduinoPinExpr(pin)}, ${valExpr});`
       },
       UART: {
         init: (pin, name, dir) => `  softSerial.begin(9600);`,
@@ -932,9 +955,9 @@ void HIL_SendString(const char* str) {
         write: (pin, name, valExpr) => `HAL_UART_WriteChannel(${valExpr});`
       },
       SPI: {
-        init: (pin) => `  SPI.begin();\n  pinMode(${pin}, OUTPUT);\n  digitalWrite(${pin}, HIGH);`,
-        read: (pin) => `HAL_SPI_ReadChannel(${pin})`,
-        write: (pin, name, valExpr) => `HAL_SPI_WriteChannel(${pin}, ${valExpr});`
+        init: (pin) => `  SPI.begin();\n  pinMode(${formatArduinoPinExpr(pin)}, OUTPUT);\n  digitalWrite(${formatArduinoPinExpr(pin)}, HIGH);`,
+        read: (pin) => `HAL_SPI_ReadChannel(${formatArduinoPinExpr(pin)})`,
+        write: (pin, name, valExpr) => `HAL_SPI_WriteChannel(${formatArduinoPinExpr(pin)}, ${valExpr});`
       },
       I2C: {
         init: () => `  Wire.begin();`,
@@ -957,6 +980,17 @@ uint8_t rx_index = 0;
 #include <SPI.h>
 
 #ifdef __cplusplus
+static inline int parseArduinoPin(const char* pinStr) {
+    if (!pinStr || !*pinStr) return 0;
+    if (pinStr[0] == 'A' || pinStr[0] == 'a') {
+#if defined(A0)
+        return A0 + atoi(pinStr + 1);
+#else
+        return 14 + atoi(pinStr + 1);
+#endif
+    }
+    return atoi(pinStr);
+}
 static inline uint32_t HAL_UART_ReadChannel(void) {
     return Serial1.available() ? (uint32_t)Serial1.read() : 0U;
 }
@@ -1006,24 +1040,24 @@ void HIL_SendString(const char* str) {
     tickDelay: `delay(10);`,
     peripherals: {
       GPIO: {
-        init: (pin, name, dir) => `  pinMode(${pin}, ${dir === 'In' ? 'INPUT' : 'OUTPUT'});`,
-        read: (pin) => `digitalRead(${pin}) == HIGH`,
-        write: (pin, name, valExpr) => `digitalWrite(${pin}, (${valExpr}) ? HIGH : LOW);`
+        init: (pin, name, dir) => `  pinMode(${formatArduinoPinExpr(pin)}, ${dir === 'In' ? 'INPUT' : 'OUTPUT'});`,
+        read: (pin) => `digitalRead(${formatArduinoPinExpr(pin)}) == HIGH`,
+        write: (pin, name, valExpr) => `digitalWrite(${formatArduinoPinExpr(pin)}, (${valExpr}) ? HIGH : LOW);`
       },
       ADC: {
-        init: (pin) => `  pinMode(${pin}, INPUT);`,
-        read: (pin) => `analogRead(${pin})`,
+        init: (pin) => `  pinMode(${formatArduinoPinExpr(pin)}, INPUT);`,
+        read: (pin) => `analogRead(${formatArduinoPinExpr(pin)})`,
         write: () => `/* Analog Read Pins are input only */`
       },
       DAC: {
         init: () => ``,
         read: () => `0.0f`,
-        write: (pin, name, valExpr) => `analogWrite(${pin}, ${valExpr});`
+        write: (pin, name, valExpr) => `analogWrite(${formatArduinoPinExpr(pin)}, ${valExpr});`
       },
       PWM: {
-        init: (pin) => `  pinMode(${pin}, OUTPUT);`,
+        init: (pin) => `  pinMode(${formatArduinoPinExpr(pin)}, OUTPUT);`,
         read: () => `0.0f`,
-        write: (pin, name, valExpr) => `analogWrite(${pin}, ${valExpr});`
+        write: (pin, name, valExpr) => `analogWrite(${formatArduinoPinExpr(pin)}, ${valExpr});`
       },
       UART: {
         init: (pin, name, dir) => `  Serial1.begin(9600);`,
@@ -1031,9 +1065,9 @@ void HIL_SendString(const char* str) {
         write: (pin, name, valExpr) => `HAL_UART_WriteChannel(${valExpr});`
       },
       SPI: {
-        init: (pin) => `  SPI.begin();\n  pinMode(${pin}, OUTPUT);\n  digitalWrite(${pin}, HIGH);`,
-        read: (pin) => `HAL_SPI_ReadChannel(${pin})`,
-        write: (pin, name, valExpr) => `HAL_SPI_WriteChannel(${pin}, ${valExpr});`
+        init: (pin) => `  SPI.begin();\n  pinMode(${formatArduinoPinExpr(pin)}, OUTPUT);\n  digitalWrite(${formatArduinoPinExpr(pin)}, HIGH);`,
+        read: (pin) => `HAL_SPI_ReadChannel(${formatArduinoPinExpr(pin)})`,
+        write: (pin, name, valExpr) => `HAL_SPI_WriteChannel(${formatArduinoPinExpr(pin)}, ${valExpr});`
       },
       I2C: {
         init: () => `  Wire.begin();`,
@@ -1056,6 +1090,17 @@ uint8_t rx_index = 0;
 #include <SPI.h>
 
 #ifdef __cplusplus
+static inline int parseArduinoPin(const char* pinStr) {
+    if (!pinStr || !*pinStr) return 0;
+    if (pinStr[0] == 'A' || pinStr[0] == 'a') {
+#if defined(A0)
+        return A0 + atoi(pinStr + 1);
+#else
+        return 14 + atoi(pinStr + 1);
+#endif
+    }
+    return atoi(pinStr);
+}
 static inline int GetLEDCChannel(int pin) {
     switch(pin) {
         case 2: return 0;
@@ -1126,19 +1171,19 @@ void HIL_SendString(const char* str) {
     tickDelay: `delay(10);`,
     peripherals: {
       GPIO: {
-        init: (pin, name, dir) => `  pinMode(${pin}, ${dir === 'In' ? 'INPUT' : 'OUTPUT'});`,
-        read: (pin) => `digitalRead(${pin}) == HIGH`,
-        write: (pin, name, valExpr) => `digitalWrite(${pin}, (${valExpr}) ? HIGH : LOW);`
+        init: (pin, name, dir) => `  pinMode(${formatArduinoPinExpr(pin)}, ${dir === 'In' ? 'INPUT' : 'OUTPUT'});`,
+        read: (pin) => `digitalRead(${formatArduinoPinExpr(pin)}) == HIGH`,
+        write: (pin, name, valExpr) => `digitalWrite(${formatArduinoPinExpr(pin)}, (${valExpr}) ? HIGH : LOW);`
       },
       ADC: {
-        init: (pin) => `  pinMode(${pin}, INPUT);`,
-        read: (pin) => `analogRead(${pin})`,
+        init: (pin) => `  pinMode(${formatArduinoPinExpr(pin)}, INPUT);`,
+        read: (pin) => `analogRead(${formatArduinoPinExpr(pin)})`,
         write: () => `/* ESP32 ADC is input only */`
       },
       DAC: {
         init: (pin) => `  // ESP32 has DAC on Pin 25 and 26. No init needed usually.`,
         read: () => `0.0f`,
-        write: (pin, name, valExpr) => `dacWrite(${pin}, ${valExpr});`
+        write: (pin, name, valExpr) => `dacWrite(${formatArduinoPinExpr(pin)}, ${valExpr});`
       },
       PWM: {
         init: (pin, name) => `  ledcAttachPin(atoi("${pin}"), GetLEDCChannel(atoi("${pin}"))); ledcSetup(GetLEDCChannel(atoi("${pin}")), 5000, 8);`,
@@ -1151,9 +1196,9 @@ void HIL_SendString(const char* str) {
         write: (pin, name, valExpr) => `HAL_UART_WriteChannel(${valExpr});`
       },
       SPI: {
-        init: (pin) => `  SPI.begin();\n  pinMode(${pin}, OUTPUT);\n  digitalWrite(${pin}, HIGH);`,
-        read: (pin) => `HAL_SPI_ReadChannel(${pin})`,
-        write: (pin, name, valExpr) => `HAL_SPI_WriteChannel(${pin}, ${valExpr});`
+        init: (pin) => `  SPI.begin();\n  pinMode(${formatArduinoPinExpr(pin)}, OUTPUT);\n  digitalWrite(${formatArduinoPinExpr(pin)}, HIGH);`,
+        read: (pin) => `HAL_SPI_ReadChannel(${formatArduinoPinExpr(pin)})`,
+        write: (pin, name, valExpr) => `HAL_SPI_WriteChannel(${formatArduinoPinExpr(pin)}, ${valExpr});`
       },
       I2C: {
         init: () => `  Wire.begin();`,

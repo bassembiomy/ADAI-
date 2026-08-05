@@ -971,6 +971,13 @@ const validateExpressions = (
 
   for (const transition of model.transitions) {
     validateAction(transition.action, transition.id);
+    if (transition.condition.trim() !== '' && /(?:^|[^=!<>])=(?![=])/.test(transition.condition)) {
+      diagnostics.push(diagnostic(
+        'GUARD_ASSIGNMENT_DISALLOWED',
+        `Guard on '${transition.id}' contains assignment operator '='. Assignments are forbidden in guard conditions; use '==' for equality comparison.`,
+        transition.id,
+      ));
+    }
     try {
       const guard = parseCondition(transition.condition, symbols);
       if (inferExpressionType(guard, symbolTypes) !== 'boolean') {

@@ -4095,6 +4095,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         {/* Center: Flow Canvas */}
         <div className={`flex-1 relative bg-[#0a0a0a] ${isConnecting ? 'react-flow--connection-active' : ''}`} onDrop={onDrop} onDragOver={onDragOver} onContextMenu={(e) => e.preventDefault()}>
           <ReactFlow
+            proOptions={{ hideAttribution: true }}
             nodes={useMemo(() => nodes.filter(n => (n.data.parentId || 'root') === currentParentId).map(n => ({
               ...n,
               data: {

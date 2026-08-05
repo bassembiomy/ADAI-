@@ -147,6 +147,7 @@ void HAL_Drivers_Init(void) {
 
 bool HAL_GPIO_Read(const char* pin, const char* name) {
     (void)pin;
+    (void)name;
     ${gpioReadChannels.length > 0 ? gpioReadChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        return ${mcu.peripherals.GPIO.read(ch.pin, ch.name)};\n    }`)
       .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
@@ -155,6 +156,8 @@ bool HAL_GPIO_Read(const char* pin, const char* name) {
 
 void HAL_GPIO_Write(const char* pin, const char* name, bool value) {
     (void)pin;
+    (void)name;
+    (void)value;
     ${gpioWriteChannels.length > 0 ? gpioWriteChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        ${mcu.peripherals.GPIO.write(ch.pin, ch.name, 'value')}\n        return;\n    }`)
       .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
@@ -162,6 +165,7 @@ void HAL_GPIO_Write(const char* pin, const char* name, bool value) {
 
 uint32_t HAL_ADC_Read(const char* pin, const char* name) {
     (void)pin;
+    (void)name;
     ${adcChannels.length > 0 ? adcChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        return ${mcu.peripherals.ADC.read(ch.pin, ch.name)};\n    }`)
       .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
@@ -170,6 +174,8 @@ uint32_t HAL_ADC_Read(const char* pin, const char* name) {
 
 void HAL_DAC_Write(const char* pin, const char* name, uint32_t value) {
     (void)pin;
+    (void)name;
+    (void)value;
     ${dacChannels.length > 0 ? dacChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        ${mcu.peripherals.DAC.write(ch.pin, ch.name, 'value')}\n        return;\n    }`)
       .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
@@ -177,6 +183,8 @@ void HAL_DAC_Write(const char* pin, const char* name, uint32_t value) {
 
 void HAL_PWM_Write(const char* pin, const char* name, uint32_t value) {
     (void)pin;
+    (void)name;
+    (void)value;
     ${pwmChannels.length > 0 ? pwmChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        ${mcu.peripherals.PWM.write(ch.pin, ch.name, 'value')}\n        return;\n    }`)
       .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
@@ -184,6 +192,7 @@ void HAL_PWM_Write(const char* pin, const char* name, uint32_t value) {
 
 uint32_t HAL_UART_Read(const char* pin, const char* name) {
     (void)pin;
+    (void)name;
     ${uartReadChannels.length > 0 ? uartReadChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        return ${mcu.peripherals.UART.read(ch.pin, ch.name)};\n    }`)
       .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
@@ -192,6 +201,8 @@ uint32_t HAL_UART_Read(const char* pin, const char* name) {
 
 void HAL_UART_Write(const char* pin, const char* name, uint32_t value) {
     (void)pin;
+    (void)name;
+    (void)value;
     ${uartWriteChannels.length > 0 ? uartWriteChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        ${mcu.peripherals.UART.write(ch.pin, ch.name, 'value')}\n        return;\n    }`)
       .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
@@ -199,6 +210,7 @@ void HAL_UART_Write(const char* pin, const char* name, uint32_t value) {
 
 uint32_t HAL_SPI_Read(const char* pin, const char* name) {
     (void)pin;
+    (void)name;
     ${spiReadChannels.length > 0 ? spiReadChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        return ${mcu.peripherals.SPI.read(ch.pin, ch.name)};\n    }`)
       .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
@@ -207,6 +219,8 @@ uint32_t HAL_SPI_Read(const char* pin, const char* name) {
 
 void HAL_SPI_Write(const char* pin, const char* name, uint32_t value) {
     (void)pin;
+    (void)name;
+    (void)value;
     ${spiWriteChannels.length > 0 ? spiWriteChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        ${mcu.peripherals.SPI.write(ch.pin, ch.name, 'value')}\n        return;\n    }`)
       .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
@@ -214,6 +228,7 @@ void HAL_SPI_Write(const char* pin, const char* name, uint32_t value) {
 
 uint32_t HAL_I2C_Read(const char* pin, const char* name) {
     (void)pin;
+    (void)name;
     ${i2cReadChannels.length > 0 ? i2cReadChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        return ${mcu.peripherals.I2C.read(ch.pin, ch.name)};\n    }`)
       .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}
@@ -222,6 +237,8 @@ uint32_t HAL_I2C_Read(const char* pin, const char* name) {
 
 void HAL_I2C_Write(const char* pin, const char* name, uint32_t value) {
     (void)pin;
+    (void)name;
+    (void)value;
     ${i2cWriteChannels.length > 0 ? i2cWriteChannels
       .map(ch => `if (strcmp(name, "${ch.name}") == 0) {\n        ${mcu.peripherals.I2C.write(ch.pin, ch.name, 'value')}\n        return;\n    }`)
       .join('\n    ') + '\n    else { /* MISRA 15.7 */ }' : '/* No channels */'}

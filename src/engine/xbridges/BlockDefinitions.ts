@@ -4309,6 +4309,66 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     };
   },
 
+  'SATURATION': (id, params) => ({
+    id, type: 'SATURATION',
+    params: { upper: params.upper ?? 1, lower: params.lower ?? -1 },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins: any[], p: any) => ({
+      outputs: [Math.max(p.lower, Math.min(p.upper, Number(ins[0])))]
+    })
+  }),
+
+  'DEADZONE': (id, params) => ({
+    id, type: 'DEADZONE',
+    params: { start: params.start ?? 0.5, end: params.end ?? -0.5 },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    execute: (ins: any[], p: any) => {
+      const u = Number(ins[0]);
+      const y = u > p.start ? (u - p.start) : (u < p.end ? (u - p.end) : 0);
+      return { outputs: [y] };
+    }
+  }),
+
+  'RATE_LIMITER': (id, params) => ({
+    id, type: 'RATE_LIMITER',
+    isStateful: true,
+    params: {
+      risingLimit: params.risingLimit ?? 1,
+      fallingLimit: params.fallingLimit ?? 1,
+      sampleTime: params.sampleTime ?? params.dt ?? 1,
+    },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    state: { prev_y: 0 },
+    execute: (ins: any[], p: any, state: any) => {
+      const dt = Number(p.sampleTime);
+      const u = Number(ins[0]);
+      const y = Math.max(state.prev_y - p.fallingLimit * dt,
+                         Math.min(state.prev_y + p.risingLimit * dt, u));
+      return { outputs: [y], nextState: { prev_y: y } };
+    }
+  }),
+
+  'RELAY': (id, params) => ({
+    id, type: 'RELAY',
+    isStateful: true,
+    params: {
+      switchOn: params.switchOn ?? 1,
+      switchOff: params.switchOff ?? 0,
+      initialState: params.initialState ?? false,
+    },
+    inputs: [createPort('u', 'u', 'input')],
+    outputs: [createPort('y', 'y', 'output')],
+    state: { current_on: Boolean(params.initialState) },
+    execute: (ins: any[], p: any, state: any) => {
+      const u = Number(ins[0]);
+      const current_on = u >= p.switchOn || (state.current_on && u > p.switchOff);
+      return { outputs: [current_on], nextState: { current_on } };
+    }
+  }),
+
   'DERIVATIVE': (id, params) => {
     const tau = Number(params.tau) || 0.01;
     return {
@@ -9995,7 +10055,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       execute: (ins, p, state, dt) => {
         const rpm = Number(ins[0]) || 0;
         const omega = (rpm * 2 * Math.PI) / 60;
-        const dtSec = dt !== undefined && dt > 0 ? dt : 0.08;
+        const dtSec = (dt !== undefined && dt > 0 && dt < 0.05) ? dt : 0.016;
         const nextAngle = (state.angle || 0) + omega * dtSec;
         
         const pulsator_omega = p.pulsator_mode ? omega * p.pulsator_speed_ratio : 0;
@@ -10108,7 +10168,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
           initialized = true;
         }
 
-        const dtSec = dt || 0.08;
+        const dtSec = (dt !== undefined && dt > 0 && dt < 0.05) ? dt : 0.016;
         const nextParticles = particles.map((part: any, idx: number) => {
           const fx_c = Number(contactForces[idx * 2]) || 0;
           const fy_c = Number(contactForces[idx * 2 + 1]) || 0;
@@ -10616,7 +10676,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
           initialized = true;
         }
 
-        const dtSec = dt || 0.01;
+        const dtSec = (dt !== undefined && dt > 0 && dt < 0.05) ? dt : 0.01;
         const nextParticles = fluidParticles.map((part: any, idx: number) => {
           const fx_c = Number(couplingForces[idx * 2]) || 0;
           const fy_c = Number(couplingForces[idx * 2 + 1]) || 0;
@@ -10966,7 +11026,7 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
           ecc_y = sum_y / numParticles;
         }
 
-        const dtSec = dt || 0.08;
+        const dtSec = (dt !== undefined && dt > 0 && dt < 0.05) ? dt : 0.016;
         const c_damping = 100;
 
         const fx_ecc = p.drum_mass * ecc_x * drum_omega * drum_omega;

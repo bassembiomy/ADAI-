@@ -686,7 +686,9 @@ ipcMain.handle('hil-save-build-files', async (event, { files }) => {
       }
       seenNames.add(safeName);
     }
-    const buildDir = currentHilWorkspace.buildDir;
+    const buildDir = (currentHilWorkspace && currentHilWorkspace.buildDir)
+      ? currentHilWorkspace.buildDir
+      : path.join(process.cwd(), 'hil_build');
     if (!fs.existsSync(buildDir)) {
       fs.mkdirSync(buildDir, { recursive: true });
     }

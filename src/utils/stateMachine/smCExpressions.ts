@@ -125,3 +125,36 @@ export const renderCType = cType;
 export const renderCInitialValue = (
   variable: SemanticVariable,
 ): string => renderLiteral(variable.initialValue, variable.type);
+
+export function outerParenthesesWrapWholeExpression(expression: string): boolean {
+  const trimmed = expression.trim();
+  if (!trimmed.startsWith('(') || !trimmed.endsWith(')')) {
+    return false;
+  }
+  let depth = 0;
+  for (let i = 0; i < trimmed.length; i++) {
+    const char = trimmed[i];
+    if (char === '(') {
+      depth++;
+    } else if (char === ')') {
+      depth--;
+      if (depth === 0 && i < trimmed.length - 1) {
+        return false;
+      }
+    }
+  }
+  return depth === 0;
+}
+
+export function unwrapTopLevelCondition(expression: string): string {
+  let value = expression.trim();
+  while (
+    value.startsWith('(') &&
+    value.endsWith(')') &&
+    outerParenthesesWrapWholeExpression(value)
+  ) {
+    value = value.slice(1, -1).trim();
+  }
+  return value;
+}
+

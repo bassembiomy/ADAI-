@@ -2773,8 +2773,8 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
 
   it('emits Boolean logic without redundant double conversions', () => {
     const ir = combinationalSemanticModel();
-    ir.states.controller.xBridges!.executionOrder = ['logical-and', 'logical-not', 'logical-or', 'nand', 'nor', 'xor', 'constant'];
-    ir.states.controller.xBridges!.operations = {
+    (ir.states.controller.xBridges as any).executionOrder = ['logical-and', 'logical-not', 'logical-or', 'nand', 'nor', 'xor', 'constant'];
+    (ir.states.controller.xBridges as any).operations = {
       'logical-and': scalarOperation('logical-and', 'AND', ['logical-and:a', 'logical-and:b'], ['logical-and:y']),
       'logical-not': scalarOperation('logical-not', 'NOT', ['logical-not:u'], ['logical-not:y']),
       'logical-or': scalarOperation('logical-or', 'OR', ['logical-or:a', 'logical-or:b'], ['logical-or:y']),

@@ -20,6 +20,17 @@ uint8_t rx_index = 0;
 #include <SPI.h>
 
 #ifdef __cplusplus
+static inline int parseArduinoPin(const char* pinStr) {
+    if (!pinStr || !*pinStr) return 0;
+    if (pinStr[0] == 'A' || pinStr[0] == 'a') {
+#if defined(A0)
+        return A0 + atoi(pinStr + 1);
+#else
+        return 14 + atoi(pinStr + 1);
+#endif
+    }
+    return atoi(pinStr);
+}
 static inline uint32_t HAL_UART_ReadChannel(void) {
     return Serial1.available() ? (uint32_t)Serial1.read() : 0U;
 }
@@ -45,17 +56,15 @@ void HAL_Drivers_Init(void) {
     Serial.begin(HIL_BAUDRATE);
 
     /* Peripherals Initialization */
-    pinMode(PA0, INPUT);
-    pinMode(PA1, INPUT);
+    pinMode(parseArduinoPin(PIN_0), OUTPUT);
+    pinMode(parseArduinoPin(PIN_1), INPUT);
 }
 
 bool HAL_GPIO_Read(const char* pin, const char* name) {
     (void)pin;
-    if (strcmp(name, "ch_1") == 0) {
-        return digitalRead(PA0) == HIGH;
-    }
+    (void)name;
     if (strcmp(name, "ch_2") == 0) {
-        return digitalRead(PA1) == HIGH;
+        return digitalRead(parseArduinoPin(PIN_1)) == HIGH;
     }
     else { /* MISRA 15.7 */ }
     return false;
@@ -63,55 +72,75 @@ bool HAL_GPIO_Read(const char* pin, const char* name) {
 
 void HAL_GPIO_Write(const char* pin, const char* name, bool value) {
     (void)pin;
-    /* No channels */
+    (void)name;
+    (void)value;
+    if (strcmp(name, "ch_1") == 0) {
+        digitalWrite(parseArduinoPin(PIN_0), (value) ? HIGH : LOW);
+        return;
+    }
+    else { /* MISRA 15.7 */ }
 }
 
 uint32_t HAL_ADC_Read(const char* pin, const char* name) {
     (void)pin;
+    (void)name;
     /* No channels */
     return 0;
 }
 
 void HAL_DAC_Write(const char* pin, const char* name, uint32_t value) {
     (void)pin;
+    (void)name;
+    (void)value;
     /* No channels */
 }
 
 void HAL_PWM_Write(const char* pin, const char* name, uint32_t value) {
     (void)pin;
+    (void)name;
+    (void)value;
     /* No channels */
 }
 
 uint32_t HAL_UART_Read(const char* pin, const char* name) {
     (void)pin;
+    (void)name;
     /* No channels */
     return 0;
 }
 
 void HAL_UART_Write(const char* pin, const char* name, uint32_t value) {
     (void)pin;
+    (void)name;
+    (void)value;
     /* No channels */
 }
 
 uint32_t HAL_SPI_Read(const char* pin, const char* name) {
     (void)pin;
+    (void)name;
     /* No channels */
     return 0;
 }
 
 void HAL_SPI_Write(const char* pin, const char* name, uint32_t value) {
     (void)pin;
+    (void)name;
+    (void)value;
     /* No channels */
 }
 
 uint32_t HAL_I2C_Read(const char* pin, const char* name) {
     (void)pin;
+    (void)name;
     /* No channels */
     return 0;
 }
 
 void HAL_I2C_Write(const char* pin, const char* name, uint32_t value) {
     (void)pin;
+    (void)name;
+    (void)value;
     /* No channels */
 }
 

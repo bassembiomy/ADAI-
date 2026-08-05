@@ -381,6 +381,40 @@ describe('buildXBSemanticModel', () => {
     });
   });
 
+  it('T14-INT-DISCONTINUOUS adds Semantic State Slots for Stateful Blocks (RateLimiter and Relay)', () => {
+    const xbModel = model({
+      nodes: [
+        node('rl', 'RATE_LIMITER', [port('u', 'input')], [port('y', 'output')]),
+        node('relay', 'RELAY', [port('u', 'input')], [port('y', 'output', { dataType: 'boolean' })], { initialState: false }),
+      ],
+      edges: [],
+    });
+
+    const result = build(xbModel);
+    expect(result.diagnostics).toEqual([]);
+    const rlState = result.ir?.operations.rl.state;
+    expect(rlState).toBeDefined();
+    expect(rlState?.slots).toEqual([{
+      id: 'rl:prev_y$state',
+      role: 'prev_y',
+      signalId: null,
+      numericType: { kind: 'float64' },
+      shape: { kind: 'scalar' },
+      initialValues: [0],
+    }]);
+
+    const relayState = result.ir?.operations.relay.state;
+    expect(relayState).toBeDefined();
+    expect(relayState?.slots).toEqual([{
+      id: 'relay:current_on$state',
+      role: 'current_on',
+      signalId: 'relay:y',
+      numericType: { kind: 'boolean' },
+      shape: { kind: 'scalar' },
+      initialValues: [false],
+    }]);
+  });
+
   it('rejects a pure direct-feedthrough algebraic loop', () => {
     const xbModel = model({
       nodes: [

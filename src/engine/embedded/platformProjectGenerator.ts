@@ -1,7 +1,7 @@
 import type { TargetPackManifest } from '../targetPacks/targetPackTypes.js';
 import type { HILConfig } from '../hil/hilTypes.js';
 import { resolveTargetSelection } from '../hil/hilTypes.js';
-import { createHash } from 'node:crypto';
+import { contentHash } from './contentHash.js';
 
 export interface GeneratedPlatformFile {
   path: string;
@@ -12,10 +12,6 @@ export interface GeneratedPlatformFile {
 
 export interface PlatformProjectResult {
   files: GeneratedPlatformFile[];
-}
-
-function sha256Content(content: string): `sha256:${string}` {
-  return `sha256:${createHash('sha256').update(content, 'utf8').digest('hex')}`;
 }
 
 function renderCMakeLists(config: HILConfig, pack: TargetPackManifest): string {
@@ -57,7 +53,7 @@ export function generatePlatformProject(
         files.push({
           path: destPath,
           layer: 'platform',
-          sha256: sha256Content(dummyStartupContent),
+          sha256: contentHash(dummyStartupContent),
           content: dummyStartupContent,
         });
       } else if (asset.kind === 'linker') {
@@ -66,7 +62,7 @@ export function generatePlatformProject(
         files.push({
           path: destPath,
           layer: 'build',
-          sha256: sha256Content(dummyLinkerContent),
+          sha256: contentHash(dummyLinkerContent),
           content: dummyLinkerContent,
         });
       }
@@ -78,7 +74,7 @@ export function generatePlatformProject(
   files.push({
     path: 'CMakeLists.txt',
     layer: 'build',
-    sha256: sha256Content(cmake),
+    sha256: contentHash(cmake),
     content: cmake,
   });
 
@@ -97,7 +93,7 @@ export function generatePlatformProject(
   files.push({
     path: 'dependency_lock.json',
     layer: 'build',
-    sha256: sha256Content(lockContent),
+    sha256: contentHash(lockContent),
     content: lockContent,
   });
 

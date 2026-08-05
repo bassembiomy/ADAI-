@@ -1805,7 +1805,7 @@ const renderStateOutputs = (
       const fallingLimit = cNumber(scalarParameter(operation, ['fallingLimit'], 1));
       const dt = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], 1));
       const y = `fmax(${prev_y} - (${fallingLimit}) * (${dt}), fmin(${prev_y} + (${risingLimit}) * (${dt}), ${u}))`;
-      return renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, y, layout, member);
+      return [...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, y, layout, member)];
     }
   }
   if (operation.type === 'RELAY') {
@@ -1820,11 +1820,11 @@ const renderStateOutputs = (
       // In C, boolean is typically 1 or 0, but it might be bool if stdbool.h is included.
       // We'll write an expression that evaluates to 1.0 or 0.0 based on the numeric type.
       const current_on = `(${u} >= ${switchOn} || (${prev_on} != 0.0 && ${u} > ${switchOff})) ? 1.0 : 0.0`;
-      return renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, current_on, layout, member);
+      return [...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, current_on, layout, member)];
     }
   }
   return (operation.state?.slots ?? []).flatMap((slot, slotIndex) => slot.signalId === null ? [] :
-  renderSignalWrite(
+  [...renderSignalWrite(
     state,
     operation,
     operationIndex,
@@ -1836,7 +1836,7 @@ const renderStateOutputs = (
         : stateSlotRealExpression(slot, layout, member)),
     layout,
     member,
-  ));
+  )]);
 };
 
 const renderOperationFaultSignalSyncForOperation = (

@@ -16,21 +16,14 @@
 #include <string.h>
 #include <stdlib.h>
 
-static float override_val_ch_1 = 0.0f;
-static bool override_active_ch_1 = false;
 static float override_val_ch_2 = 0.0f;
 static bool override_active_ch_2 = false;
 
 void HIL_Sync_Inputs(ADIA_Instance_t* instance) {
-    if (override_active_ch_1) {
-        instance->data.x = override_val_ch_1;
-    } else {
-        instance->data.x = HAL_GPIO_Read(PIN_CH_1, "ch_1");
-    }
     if (override_active_ch_2) {
-        instance->data.y = override_val_ch_2;
+        instance->data.x = (int32_t)(override_val_ch_2);
     } else {
-        instance->data.y = HAL_GPIO_Read(PIN_CH_2, "ch_2");
+        instance->data.x = HAL_GPIO_Read(PIN_CH_2, "ch_2");
     }
 }
 
@@ -39,10 +32,11 @@ void HIL_Sync_Outputs(ADIA_Instance_t* instance) {
     /* Run safety validation on state consistency before writing outputs */
     if (SM_Validate_State_Consistency(instance) != SM_ERR_NONE) {
         instance->error_status = SM_ERR_INVALID_STATE;
+        HAL_GPIO_Write(PIN_CH_1, "ch_1", 0);
         return;
     }
 #endif
-    (void)instance;
+    HAL_GPIO_Write(PIN_CH_1, "ch_1", instance->data.y);
 }
 
 void HIL_ProcessMessage(const char* msg) {
@@ -64,12 +58,7 @@ void HIL_ProcessMessage(const char* msg) {
         char name[64];
         float val = 0.0f;
         if (sscanf(token, "%63[^=]=%f", name, &val) == 2) {
-            if (strcmp(name, "ch_1") == 0) {
-                override_val_ch_1 = val;
-                override_active_ch_1 = true;
-            } else if (strcmp(name, "ch_1_release") == 0) {
-                override_active_ch_1 = false;
-            } else if (strcmp(name, "ch_2") == 0) {
+            if (strcmp(name, "ch_2") == 0) {
                 override_val_ch_2 = val;
                 override_active_ch_2 = true;
             } else if (strcmp(name, "ch_2_release") == 0) {
@@ -86,12 +75,12 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance) {
     (void)instance;
     if ((len >= 0) && ((size_t)len < (sizeof(buf) - 32U))) {
         int remaining = (int)(sizeof(buf) - (size_t)len);
-        int written = snprintf(buf + len, (size_t)remaining, "ch_1=%.4f;", (double)(instance->data.x));
+        int written = snprintf(buf + len, (size_t)remaining, "ch_1=%.4f;", (double)(instance->data.y));
         if (written > 0) { len += (written < remaining) ? written : (remaining - 1); }
     }
     if ((len >= 0) && ((size_t)len < (sizeof(buf) - 32U))) {
         int remaining = (int)(sizeof(buf) - (size_t)len);
-        int written = snprintf(buf + len, (size_t)remaining, "ch_2=%.4f", (double)(instance->data.y));
+        int written = snprintf(buf + len, (size_t)remaining, "ch_2=%.4f", (double)(instance->data.x));
         if (written > 0) { len += (written < remaining) ? written : (remaining - 1); }
     }
     

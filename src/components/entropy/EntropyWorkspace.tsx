@@ -1430,6 +1430,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           {/* React Flow Canvas */}
           <div className="flex-1 h-full" onClick={handleCanvasClick}>
             <ReactFlow
+              proOptions={{ hideAttribution: true }}
               nodes={filteredNodes}
               edges={mappedEdges}
               onNodesChange={onNodesChange}

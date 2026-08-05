@@ -27,6 +27,7 @@ export const XB_INTERPRETER_CONFORMANCE_CASE_IDS = [
   'T10-INT-VECTOR-ELEMENTWISE', 'T10-INT-MATRIX-OPS', 'T10-INT-PID-BASIC',
   'T10-INT-DISCRETE-REALIZATION', 'T10-INT-TRANSFORMS',
   'T10-INT-LOGIC-BITWISE', 'T10-INT-SIGNAL-ROUTING', 'T10-INT-TRIGONOMETRY',
+  'T10-INT-DISCONTINUOUS', 'T14-INT-DISCONTINUOUS',
   'T14-INT-CORE-DIRECT', 'T14-INT-SHAPED-CONSTANT',
   'T14-INT-STATEFUL', 'T14-INT-CONTINUOUS',
 ] as const;
@@ -34,6 +35,7 @@ export const XB_INTERPRETER_CONFORMANCE_CASE_IDS = [
 export const XB_C_CONFORMANCE_CASE_IDS = [
   'T10-C99-VECTOR-MATRIX', 'T10-C99-PID-BASIC', 'T10-C99-DISCRETE-REALIZATION',
   'T10-C99-TRANSFORMS', 'T10-C99-LOGIC-BITWISE', 'T10-C99-SIGNAL-ROUTING', 'T10-C99-TRIGONOMETRY',
+  'T10-C99-DISCONTINUOUS', 'T14-C99-DISCONTINUOUS',
   'T14-C99-CORE-DIRECT', 'T14-C99-SHAPED-CONSTANT',
   'T14-C99-STATEFUL', 'T14-C99-CONTINUOUS',
 ] as const;
@@ -92,6 +94,13 @@ const TRANSFORM_COVERAGE: readonly XBConformanceCoverage[] =
   ['CLARKE_TRANSFORM', 'PARK_TRANSFORM', 'INVERSE_PARK', 'INVERSE_CLARKE']
     .map(scalarCoverage);
 
+const DISCONTINUOUS_COVERAGE: readonly XBConformanceCoverage[] = [
+  scalarCoverage('SATURATION'),
+  scalarCoverage('DEADZONE'),
+  scalarCoverage('RATE_LIMITER'),
+  scalarCoverage('RELAY'),
+];
+
 export const XB_INTERPRETER_CONFORMANCE_CASES: Readonly<Record<
 string, readonly XBConformanceCoverage[]
 >> = Object.freeze({
@@ -106,6 +115,8 @@ string, readonly XBConformanceCoverage[]
   'T10-INT-LOGIC-BITWISE': LOGIC_BITWISE_COVERAGE,
   'T10-INT-SIGNAL-ROUTING': SIGNAL_ROUTING_COVERAGE,
   'T10-INT-TRIGONOMETRY': TRIGONOMETRY_COVERAGE,
+  'T10-INT-DISCONTINUOUS': DISCONTINUOUS_COVERAGE,
+  'T14-INT-DISCONTINUOUS': DISCONTINUOUS_COVERAGE,
   'T14-INT-CORE-DIRECT': CORE_SCALAR_COVERAGE,
   'T14-INT-SHAPED-CONSTANT': [
     shapedCoverage('Constant', [], ['vector', 'matrix']),
@@ -134,6 +145,8 @@ string, readonly XBConformanceCoverage[]
   'T10-C99-LOGIC-BITWISE': LOGIC_BITWISE_COVERAGE,
   'T10-C99-SIGNAL-ROUTING': SIGNAL_ROUTING_COVERAGE,
   'T10-C99-TRIGONOMETRY': TRIGONOMETRY_COVERAGE,
+  'T10-C99-DISCONTINUOUS': DISCONTINUOUS_COVERAGE,
+  'T14-C99-DISCONTINUOUS': DISCONTINUOUS_COVERAGE,
   'T14-C99-CORE-DIRECT': CORE_SCALAR_COVERAGE,
   'T14-C99-SHAPED-CONSTANT': [
     shapedCoverage('Constant', [], ['vector', 'matrix']),
@@ -370,6 +383,12 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   MOVING_AVERAGE: stateful(allShapes),
   DISCRETE_TRANSFER_FUNCTION: stateful(['vector'], undefined, ['T10-INT-DISCRETE-REALIZATION'], ['T10-C99-DISCRETE-REALIZATION']),
   STATE_SPACE: stateful(['vector'], undefined, ['T10-INT-DISCRETE-REALIZATION'], ['T10-C99-DISCRETE-REALIZATION']),
+
+  // Discontinuities: saturation, dead zone, rate limiter, and relay.
+  SATURATION:   direct(scalar, ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
+  DEADZONE:     direct(scalar, ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
+  RATE_LIMITER: stateful(scalar, ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
+  RELAY:        stateful(scalar, undefined, ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
 
   // Motor-control transforms, covered against fixed reference vectors in both
   // the interpreter and generated C conformance suites (Task 10).

@@ -443,6 +443,12 @@ describe('buildSemanticModel', () => {
     ]));
   });
 
+  it('rejects assignment operator = in guard condition', () => {
+    const fixture = flatOrFixture();
+    fixture.transitions[0].condition = 'x = 1';
+    expect(diagnosticCodes(fixture)).toContain('GUARD_ASSIGNMENT_DISALLOWED');
+  });
+
   it('rejects IDs ambiguous across endpoint and generated-C namespaces', () => {
     const fixture = flatOrFixture();
     fixture.junctions.push({

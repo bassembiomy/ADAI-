@@ -1,7 +1,7 @@
 import type { TargetPackManifest } from '../targetPacks/targetPackTypes.js';
 import type { HILConfig } from '../hil/hilTypes.js';
 import { resolveTargetSelection } from '../hil/hilTypes.js';
-import { createHash } from 'node:crypto';
+import { contentHash } from './contentHash.js';
 
 export interface DriverProviderResolution {
   channelId: string;
@@ -24,9 +24,6 @@ export interface DriverProviderGeneratorResult {
   channels: DriverProviderResolution[];
 }
 
-function sha256Content(content: string): `sha256:${string}` {
-  return `sha256:${createHash('sha256').update(content, 'utf8').digest('hex')}`;
-}
 
 export function generateDriverProviders(
   config: HILConfig,
@@ -104,7 +101,7 @@ export function generateDriverProviders(
   const generatedFiles: GeneratedDriverFile[] = Array.from(filesMap.entries()).map(([path, content]) => ({
     path,
     layer: 'driver',
-    sha256: sha256Content(content),
+    sha256: contentHash(content),
     content,
   }));
 

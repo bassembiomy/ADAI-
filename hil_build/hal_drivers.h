@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 #include "hal_config.h"
 
 #ifdef TARGET_MCU_STM32F4
@@ -34,9 +35,6 @@ extern I2C_HandleTypeDef hi2c1;
 #include "Arduino.h"
 #include "SPI.h"
 #include "Wire.h"
-extern SPIImpl SPI;
-extern TwoWire Wire;
-static const uint8_t HIL_HIGH_VAL = HIGH;
 #endif
 
 void HAL_Drivers_Init(void);

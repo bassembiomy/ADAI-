@@ -262,5 +262,7 @@ input[type=range]::-moz-range-thumb {
   background-color: var(--border-dark) !important;
 }
 
-
-
+/* Hide React Flow Attribution Badge */
+.react-flow__attribution {
+  display: none !important;
+}

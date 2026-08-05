@@ -716,8 +716,8 @@ const XBRIDGES_LEARNING_LABS = [
       { id: 'cde19', source: 'bond_fabric', sourceHandle: 'bond_forces', target: 'dem_particles', targetHandle: 'bond_forces' },
       { id: 'cde20', source: 'dem_cfd_coupler', sourceHandle: 'dem_coupling_forces', target: 'dem_particles', targetHandle: 'fluid_forces' },
       { id: 'cde21', source: 'dem_cfd_coupler', sourceHandle: 'fluid_coupling_forces', target: 'cfd_sph', targetHandle: 'coupling_forces' },
-      { id: 'cde22', source: 'dem_particles', sourceHandle: 'positions', target: 'fabric_analyzer', targetHandle: 'fabric_positions' },
-      { id: 'cde23', source: 'dem_particles', sourceHandle: 'velocities', target: 'fabric_analyzer', targetHandle: 'fabric_velocities' },
+      { id: 'cde22', source: 'dem_particles', sourceHandle: 'positions', target: 'fabric_analyzer', targetHandle: 'dem_positions' },
+      { id: 'cde23', source: 'dem_particles', sourceHandle: 'velocities', target: 'fabric_analyzer', targetHandle: 'dem_velocities' },
       { id: 'cde24', source: 'dem_cfd_coupler', sourceHandle: 'fluid_coupling_forces', target: 'fabric_analyzer', targetHandle: 'fluid_forces' },
       { id: 'cde25', source: 'fabric_analyzer', sourceHandle: 'vibration_amplitude', target: 'surrogate_learner', targetHandle: 'vibration_amp' },
       { id: 'cde26', source: 'dem_particles', sourceHandle: 'cleanliness', target: 'surrogate_learner', targetHandle: 'cleanliness' },
@@ -3272,6 +3272,7 @@ export const XbridgesWorkspace: React.FC<{
               getColor: getColor
             }}>
               <ReactFlow
+              proOptions={{ hideAttribution: true }}
               onInit={setReactFlowInstance}
               nodes={useMemo(() => nodes.filter(n => (n.data.parentId || 'root') === currentParentId), [nodes, currentParentId])}
               edges={useMemo(() => edges.filter(e => {

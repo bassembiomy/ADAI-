@@ -743,6 +743,19 @@ const evaluateDirectOperation = (
     case 'ACOSECH': return [unary(inputs[0] ?? [0], (x) => Math.asinh(1 / x))];
     case 'TERMINATOR':
       return [];
+    case 'SATURATION': {
+      const u = Number(inputs[0]?.[0] ?? 0);
+      const upper = Number(parameter(operation, ['upper'], 1));
+      const lower = Number(parameter(operation, ['lower'], -1));
+      return [[Math.max(lower, Math.min(upper, u))]];
+    }
+    case 'DEADZONE': {
+      const u = Number(inputs[0]?.[0] ?? 0);
+      const start = Number(parameter(operation, ['start'], 0.5));
+      const end = Number(parameter(operation, ['end'], -0.5));
+      const y = u > start ? (u - start) : (u < end ? (u - end) : 0);
+      return [[y]];
+    }
     default:
       throw new Error(
         `X-Bridges operation '${operation.id}' has unsupported type `
@@ -920,6 +933,33 @@ const writeStateOutputs = (
       return;
     }
   }
+  if (operation.type === 'RATE_LIMITER') {
+    const prevSlot = stateSlotForRole(operation, 'prev_y');
+    const outputId = operation.outputSignalIds[0];
+    if (prevSlot !== undefined && outputId !== undefined) {
+      const u = Number(signalValues(runtime, operation.inputSignalIds[0] ?? '')[0] ?? 0);
+      const rising = Number(parameter(operation, ['risingLimit'], 1));
+      const falling = Number(parameter(operation, ['fallingLimit'], 1));
+      const dt = Number(parameter(operation, ['sampleTime', 'dt'], 1));
+      const prev_y = Number((runtime.stateSlots[prevSlot.id] ?? prevSlot.initialValues)[0] ?? 0);
+      const y = Math.max(prev_y - falling * dt, Math.min(prev_y + rising * dt, u));
+      writeSignal(runtime, outputId, [y], faults, operation);
+    }
+    return;
+  }
+  if (operation.type === 'RELAY') {
+    const onSlot = stateSlotForRole(operation, 'current_on');
+    const outputId = operation.outputSignalIds[0];
+    if (onSlot !== undefined && outputId !== undefined) {
+      const u = Number(signalValues(runtime, operation.inputSignalIds[0] ?? '')[0] ?? 0);
+      const on = Number(parameter(operation, ['switchOn'], 1));
+      const off = Number(parameter(operation, ['switchOff'], 0));
+      const current_on_prev = Boolean((runtime.stateSlots[onSlot.id] ?? onSlot.initialValues)[0]);
+      const current_on = u >= on || (current_on_prev && u > off);
+      writeSignal(runtime, outputId, [current_on], faults, operation);
+    }
+    return;
+  }
   for (const slot of operation.state?.slots ?? []) {
     if (slot.signalId === null) continue;
     writeSignal(
@@ -983,6 +1023,27 @@ const statefulUpdate = (
         xSlot.numericType, faults, operation,
       )),
     };
+  }
+  if (operation.type === 'RATE_LIMITER') {
+    const prevSlot = stateSlotForRole(operation, 'prev_y');
+    if (prevSlot === undefined) throw new Error(`X-Bridges RATE_LIMITER '${operation.id}' requires a prev_y state slot`);
+    const u = Number(signalValues(runtime, operation.inputSignalIds[0] ?? '')[0] ?? 0);
+    const rising = Number(parameter(operation, ['risingLimit'], 1));
+    const falling = Number(parameter(operation, ['fallingLimit'], 1));
+    const dt = Number(parameter(operation, ['sampleTime', 'dt'], 1));
+    const prev_y = Number((runtime.stateSlots[prevSlot.id] ?? prevSlot.initialValues)[0] ?? 0);
+    const y = Math.max(prev_y - falling * dt, Math.min(prev_y + rising * dt, u));
+    return { [prevSlot.id]: [convertValue(y, prevSlot.numericType, faults, operation)] };
+  }
+  if (operation.type === 'RELAY') {
+    const onSlot = stateSlotForRole(operation, 'current_on');
+    if (onSlot === undefined) throw new Error(`X-Bridges RELAY '${operation.id}' requires a current_on state slot`);
+    const u = Number(signalValues(runtime, operation.inputSignalIds[0] ?? '')[0] ?? 0);
+    const on = Number(parameter(operation, ['switchOn'], 1));
+    const off = Number(parameter(operation, ['switchOff'], 0));
+    const current_on_prev = Boolean((runtime.stateSlots[onSlot.id] ?? onSlot.initialValues)[0]);
+    const current_on = u >= on || (current_on_prev && u > off);
+    return { [onSlot.id]: [current_on] };
   }
   const input = signalValues(runtime, operation.inputSignalIds[0]);
   const updates: Record<string, XBScalar[]> = {};

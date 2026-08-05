@@ -6,7 +6,7 @@ import type { TargetPackManifest } from '../targetPacks/targetPackTypes.js';
 import { generateDriverProviders, type DriverProviderResolution } from './driverProviderGenerator.js';
 import { generatePlatformProject } from './platformProjectGenerator.js';
 import { createIntegrationManifest, type IntegrationManifest } from './integrationManifest.js';
-import { createHash } from 'node:crypto';
+import { contentHash } from './contentHash.js';
 
 export interface EmbeddedProjectFile {
   path: string;
@@ -19,10 +19,6 @@ export interface EmbeddedProjectResult {
   files: EmbeddedProjectFile[];
   manifest: IntegrationManifest;
   diagnostics: readonly string[];
-}
-
-function sha256Content(content: string): `sha256:${string}` {
-  return `sha256:${createHash('sha256').update(content, 'utf8').digest('hex')}`;
 }
 
 function channelModel(config: HILConfig): McalChannelConfig[] {
@@ -242,10 +238,10 @@ export function generateEmbeddedProject(
   const componentSource = renderComponentSource();
 
   const files: EmbeddedProjectFile[] = [
-    { path: 'src/mcal/adia_mcal.h', layer: 'mcal', sha256: sha256Content(mcalHeaderContent), content: mcalHeaderContent },
-    { path: 'src/mcal/adia_mcal.c', layer: 'mcal', sha256: sha256Content(renderMcalImplementation(config, channels)), content: renderMcalImplementation(config, channels) },
-    { path: 'src/component/adia_component.h', layer: 'component', sha256: sha256Content(componentHeader), content: componentHeader },
-    { path: 'src/component/adia_component.c', layer: 'component', sha256: sha256Content(componentSource), content: componentSource },
+    { path: 'src/mcal/adia_mcal.h', layer: 'mcal', sha256: contentHash(mcalHeaderContent), content: mcalHeaderContent },
+    { path: 'src/mcal/adia_mcal.c', layer: 'mcal', sha256: contentHash(renderMcalImplementation(config, channels)), content: renderMcalImplementation(config, channels) },
+    { path: 'src/component/adia_component.h', layer: 'component', sha256: contentHash(componentHeader), content: componentHeader },
+    { path: 'src/component/adia_component.c', layer: 'component', sha256: contentHash(componentSource), content: componentSource },
     ...driverResult.files.map(f => ({ path: f.path, layer: 'driver' as const, sha256: f.sha256, content: f.content })),
     ...platformResult.files.map(f => ({ path: f.path, layer: f.layer, sha256: f.sha256, content: f.content })),
   ];
@@ -261,7 +257,7 @@ export function generateEmbeddedProject(
   files.push({
     path: 'integration_manifest.json',
     layer: 'build',
-    sha256: sha256Content(manifestJson),
+    sha256: contentHash(manifestJson),
     content: manifestJson,
   });
 

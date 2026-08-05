@@ -1024,4 +1024,104 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.signals['tan:y']).toEqual([0]);
     expect(runtime.signals['sinh:y']).toEqual([0]);
   });
+
+  it('instantiates Batch 1 discontinuities blocks with defaults', async () => {
+    const { BLOCK_LIBRARY } = await import('../../engine/xbridges/BlockDefinitions');
+    const sat = BLOCK_LIBRARY.SATURATION('sat', {});
+    expect(sat.params).toMatchObject({ upper: 1, lower: -1 });
+    const dz = BLOCK_LIBRARY.DEADZONE('dz', {});
+    expect(dz.params).toMatchObject({ start: 0.5, end: -0.5 });
+    const rl = BLOCK_LIBRARY.RATE_LIMITER('rl', {});
+    expect(rl.isStateful).toBe(true);
+    expect(rl.params).toMatchObject({ risingLimit: 1, fallingLimit: 1, sampleTime: 1 });
+    const relay = BLOCK_LIBRARY.RELAY('relay', {});
+    expect(relay.isStateful).toBe(true);
+    expect(relay.params).toMatchObject({ switchOn: 1, switchOff: 0, initialState: false });
+  });
+
+  it('T10-INT-DISCONTINUOUS evaluates Saturation and DeadZone', () => {
+    const sat = operation('sat', 'SATURATION', ['sat:u'], ['sat:y'], { upper: 5, lower: -5 });
+    const dz = operation('dz', 'DEADZONE', ['dz:u'], ['dz:y'], { start: 0.5, end: -0.5 });
+    const ir = model('reset', { sat, dz }, {
+      'sat:u': signal('sat:u', 'input', null, { kind: 'float64' }),
+      'sat:y': signal('sat:y', 'output', null, { kind: 'float64' }),
+      'dz:u': signal('dz:u', 'input', null, { kind: 'float64' }),
+      'dz:y': signal('dz:y', 'output', null, { kind: 'float64' }),
+    }, ['sat', 'dz']);
+    const runtime = createXBRuntime(ir);
+    runtime.signals['sat:u'] = [10];
+    runtime.signals['dz:u'] = [0.25];
+    stepXBState(runtime, {});
+    expect(runtime.signals['sat:y']).toEqual([5]);
+    expect(runtime.signals['dz:y']).toEqual([0]);
+    runtime.signals['sat:u'] = [-10];
+    runtime.signals['dz:u'] = [2];
+    stepXBState(runtime, {});
+    expect(runtime.signals['sat:y']).toEqual([-5]);
+    expect(runtime.signals['dz:y']).toEqual([1.5]);
+    runtime.signals['sat:u'] = [2];
+    runtime.signals['dz:u'] = [-2];
+    stepXBState(runtime, {});
+    expect(runtime.signals['sat:y']).toEqual([2]);
+    expect(runtime.signals['dz:y']).toEqual([-1.5]);
+  });
+
+  it('T10-INT-DISCONTINUOUS evaluates RateLimiter with state', () => {
+    const rl: XBSemanticOperation = {
+      ...operation('rl', 'RATE_LIMITER', ['rl:u'], ['rl:y'], { risingLimit: 1, fallingLimit: 1, sampleTime: 0.1 }),
+      directFeedthrough: false,
+      stateful: true,
+      state: {
+        outputPhase: 'read-before-update',
+        updatePhase: 'after-direct-feedthrough',
+        slots: [{ id: 'rl:prev_y$state', role: 'prev_y', signalId: null, numericType: { kind: 'float64' }, shape: { kind: 'scalar' }, initialValues: [0] }],
+      },
+      schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+    };
+    const ir = model('reset', { rl }, {
+      'rl:u': signal('rl:u', 'input', null, { kind: 'float64' }),
+      'rl:y': signal('rl:y', 'output', null, { kind: 'float64' }),
+    }, ['rl']);
+    const runtime = createXBRuntime(ir);
+    runtime.signals['rl:u'] = [100];
+    stepXBState(runtime, {});
+    expect(runtime.signals['rl:y'][0]).toBeCloseTo(0.1, 10);
+    runtime.signals['rl:u'] = [100];
+    stepXBState(runtime, {});
+    expect(runtime.signals['rl:y'][0]).toBeCloseTo(0.2, 10);
+    runtime.signals['rl:u'] = [0];
+    stepXBState(runtime, {});
+    expect(runtime.signals['rl:y'][0]).toBeCloseTo(0.1, 10);
+  });
+
+  it('T10-INT-DISCONTINUOUS evaluates Relay hysteresis', () => {
+    const relay: XBSemanticOperation = {
+      ...operation('relay', 'RELAY', ['relay:u'], ['relay:y'], { switchOn: 2, switchOff: 0.5, initialState: false }),
+      directFeedthrough: false,
+      stateful: true,
+      state: {
+        outputPhase: 'read-before-update',
+        updatePhase: 'after-direct-feedthrough',
+        slots: [{ id: 'relay:current_on$state', role: 'current_on', signalId: 'relay:y', numericType: { kind: 'boolean' }, shape: { kind: 'scalar' }, initialValues: [false] }],
+      },
+      schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+    };
+    const ir = model('reset', { relay }, {
+      'relay:u': signal('relay:u', 'input', null, { kind: 'float64' }),
+      'relay:y': signal('relay:y', 'output', null, { kind: 'boolean' }),
+    }, ['relay']);
+    const runtime = createXBRuntime(ir);
+    runtime.signals['relay:u'] = [1];
+    stepXBState(runtime, {});
+    expect(runtime.signals['relay:y']).toEqual([false]);
+    runtime.signals['relay:u'] = [3];
+    stepXBState(runtime, {});
+    expect(runtime.signals['relay:y']).toEqual([true]);
+    runtime.signals['relay:u'] = [0.75];
+    stepXBState(runtime, {});
+    expect(runtime.signals['relay:y']).toEqual([true]);
+    runtime.signals['relay:u'] = [0.25];
+    stepXBState(runtime, {});
+    expect(runtime.signals['relay:y']).toEqual([false]);
+  });
 });

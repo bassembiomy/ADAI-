@@ -13,7 +13,7 @@
 #define SYSTEM_CLOCK_MHZ 16U
 
 /* Channels Pin Mappings */
-#define PIN_CH_1 "PA0"
-#define PIN_CH_2 "PA1"
+#define PIN_CH_1 "PIN_0"
+#define PIN_CH_2 "PIN_1"
 
 #endif /* HAL_CONFIG_H */
