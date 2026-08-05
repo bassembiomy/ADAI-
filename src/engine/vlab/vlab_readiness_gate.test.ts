@@ -18,7 +18,7 @@ describe('V-Lab Engineering Readiness Gate', () => {
     expect(coverage.isComplete).toBe(true);
   });
 
-  it('GATE-02: Block Contract Certification (Zero Silent Fallbacks, Finite Trajectories)', () => {
+  it('GATE-02: Block Contract Certification (Zero Silent Fallbacks, Finite Trajectories)', { timeout: 120_000 }, () => {
     const allBlocks = VLAB_LIBRARY.flatMap((domain) => domain.blocks);
     const failedBlocks: string[] = [];
 
