@@ -2763,8 +2763,7 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
 
   it('renders C code for IF_ELSE routing block correctly', () => {
     const ifElseModel = hybridXBridgesFixture();
-    ifElseModel.states[0].autostart = true;
-    const state = ifElseModel.states[0];
+    const state = ifElseModel.states.find((s) => s.id === 'controller')!;
     state.xBridgesModel!.nodes.push({
       id: 'ifelse1',
       type: 'xblock',
