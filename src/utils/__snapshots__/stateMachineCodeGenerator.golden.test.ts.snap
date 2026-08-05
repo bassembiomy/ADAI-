@@ -975,7 +975,7 @@ static bool SM_Execute_Layer_0(ADIA_Instance_t *instance)
 
 static bool SM_Execute_State_1(ADIA_Instance_t *instance)
 {
-    if (((instance->state_timers[SM_ST_S1_IDX] >= 20U))) {
+    if (instance->state_timers[SM_ST_S1_IDX] >= 20U) {
         SM_Exit_State(instance, SM_ST_S1, true);
         instance->state_active[SM_ST_S2_IDX] = true;
         instance->state_timers[SM_ST_S2_IDX] = 0U;
