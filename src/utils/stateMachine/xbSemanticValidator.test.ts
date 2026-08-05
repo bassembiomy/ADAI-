@@ -86,6 +86,20 @@ describe('validateXBModel', () => {
     expect(result).toContain('XB_BLOCK_NOT_CODEGEN_CAPABLE');
   });
 
+  it('accepts trigonometry blocks as codegen capable with paired conformance', () => {
+    const diagnostics = validateXBModel(model({
+      nodes: [node('sin', 'SIN')],
+    }), variables, target);
+    expect(diagnostics.find((d) => d.code === 'XB_BLOCK_NOT_CODEGEN_CAPABLE')).toBeUndefined();
+  });
+
+  it('accepts IF_ELSE blocks cleanly without XB_BLOCK_NOT_CODEGEN_CAPABLE error', () => {
+    const diagnostics = validateXBModel(model({
+      nodes: [node('ifelse', 'IF_ELSE')],
+    }), variables, target);
+    expect(diagnostics.find((d) => d.code === 'XB_BLOCK_NOT_CODEGEN_CAPABLE')).toBeUndefined();
+  });
+
   it('rejects signal shapes outside a block capability declaration', () => {
     const result = codes(model({
       nodes: [node('sin', 'SIN', {
