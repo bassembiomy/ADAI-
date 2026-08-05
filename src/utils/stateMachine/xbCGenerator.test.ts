@@ -434,6 +434,12 @@ const combinationalSemanticModel = (): SemanticModel => {
       { threshold: 0, criteria: '>' },
     ),
     scalarOperation(
+      'ifelse',
+      'IF_ELSE',
+      ['ifelse:cond', 'ifelse:u_true', 'ifelse:u_false'],
+      ['ifelse:y'],
+    ),
+    scalarOperation(
       'convert',
       'NUMERIC_REPRESENTATION',
       ['convert:u'],
@@ -514,7 +520,11 @@ const combinationalSemanticModel = (): SemanticModel => {
       booleanType,
     ),
     'switch:y': signal('switch:y', float32),
-    'convert:u': scalarInputSignal('convert:u', 'switch:y'),
+    'ifelse:cond': scalarInputSignal('ifelse:cond', 'logical-xor:y', booleanType),
+    'ifelse:u_true': scalarInputSignal('ifelse:u_true', 'absolute:y'),
+    'ifelse:u_false': scalarInputSignal('ifelse:u_false', 'input:y'),
+    'ifelse:y': signal('ifelse:y', float32),
+    'convert:u': scalarInputSignal('convert:u', 'ifelse:y'),
     'convert:y': signal('convert:y', fixedQ2),
     'convert:e': signal('convert:e', float32),
     'reinterpret:u': scalarInputSignal('reinterpret:u', 'convert:y', fixedQ2),
@@ -2761,29 +2771,5 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(Math.abs(code50.length - code1.length)).toBeLessThan(512);
   });
 
-  it('renders C code for IF_ELSE routing block correctly', () => {
-    const ifElseModel = hybridXBridgesFixture();
-    const state = ifElseModel.states.find((s) => s.id === 'controller')!;
-    state.xBridgesModel!.nodes.push({
-      id: 'ifelse1',
-      type: 'xblock',
-      position: { x: 0, y: 0 },
-      data: {
-        id: 'ifelse1',
-        type: 'IF_ELSE',
-        params: {},
-        inputs: [
-          { id: 'cond', name: 'cond', type: 'auto', direction: 'input', value: 0, position: 'left' },
-          { id: 'u_true', name: 'u_true', type: 'auto', direction: 'input', value: 0, position: 'left' },
-          { id: 'u_false', name: 'u_false', type: 'auto', direction: 'input', value: 0, position: 'left' },
-        ],
-        outputs: [
-          { id: 'y', name: 'y', type: 'auto', direction: 'output', value: 0, position: 'right' },
-        ],
-      },
-    });
-    const ir = build(ifElseModel);
-    const code = generateCArtifacts(ir).files.find((f) => f.name === 'sm_core.c')!.content;
-    expect(code).toContain('SM_XB_Truth');
   });
 });
