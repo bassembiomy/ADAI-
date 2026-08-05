@@ -500,9 +500,8 @@ const renderSignalElementWrite = (
       : []),
   ];
   if (signal.numericType.kind === 'boolean') return [
-    `        const double ${valueName} = (double)(${expression});`,
-    `        ${destination} = SM_XB_Truth(${valueName});`,
-    `        if (!isfinite(${valueName})) {`, `            ${destination} = false;`, ...faultLines, '        }',
+    `        const bool ${valueName} = (${expression});`,
+    `        ${destination} = ${valueName};`,
   ];
   const precision = signal.numericType.kind === 'float' ? signal.numericType.precision : signal.numericType.kind;
   if (precision === 'float32') return [
@@ -650,12 +649,8 @@ const renderSignalWrite = (
   ];
   if (signal.numericType.kind === 'boolean') {
     return [
-      `    const double ${valueName} = (double)(${expression});`,
-      `    instance->${member}.${field} = SM_XB_Truth(${valueName});`,
-      `    if (!isfinite(${valueName})) {`,
-      `        instance->${member}.${field} = false;`,
-      ...faultLines,
-      '    }',
+      `    const bool ${valueName} = (${expression});`,
+      `    instance->${member}.${field} = ${valueName};`,
     ];
   }
   const precision = signal.numericType.kind === 'float'
@@ -780,7 +775,9 @@ const emitConstant: OperationEmitter = (
       index,
       outputId,
       `${index}U`,
-      cNumber(source[index] ?? source[0]!),
+      output.numericType.kind === 'boolean'
+        ? ((source[index] ?? source[0]!) ? 'true' : 'false')
+        : cNumber(source[index] ?? source[0]!),
       layout,
       member,
     )).flat();
@@ -859,6 +856,19 @@ const emitNegate = emitSingleOutput((inputs) =>
   `(-(${inputs[0] ?? '0.0'}))`);
 const emitAbsolute = emitSingleOutput((inputs) =>
   `fabs(${inputs[0] ?? '0.0'})`);
+
+const emitSaturation = emitSingleOutput((inputs, operation) => {
+  const upper = cNumber(scalarParameter(operation, ['upper'], 1));
+  const lower = cNumber(scalarParameter(operation, ['lower'], -1));
+  return `fmax(${lower}, fmin(${upper}, ${inputs[0] ?? '0.0'}))`;
+});
+
+const emitDeadzone = emitSingleOutput((inputs, operation) => {
+  const start = cNumber(scalarParameter(operation, ['start'], 0.5));
+  const end = cNumber(scalarParameter(operation, ['end'], -0.5));
+  const u = inputs[0] ?? '0.0';
+  return `(${u} > ${start} ? ${u} - ${start} : (${u} < ${end} ? ${u} - ${end} : 0.0))`;
+});
 
 const emitElementwise = (
   expression: (inputs: readonly string[]) => string,
@@ -1070,34 +1080,57 @@ const emitInverseClarke: OperationEmitter = (state, operation, operationIndex, l
   return operation.outputSignalIds.flatMap((id, index) => renderSignalWrite(state, operation, operationIndex, index, id, values[index] ?? '0.0', layout, member));
 };
 
-const emitAnd = emitSingleOutput((inputs) =>
-  reduceExpression(
-    inputs.map((input) => `SM_XB_Truth(${input})`),
-    '&&',
-    'true',
-  ));
-const emitOr = emitSingleOutput((inputs) =>
-  reduceExpression(
-    inputs.map((input) => `SM_XB_Truth(${input})`),
-    '||',
-    'false',
-  ));
-const emitNot = emitSingleOutput((inputs) =>
-  `(!SM_XB_Truth(${inputs[0] ?? '0.0'}))`);
-const emitNand = emitSingleOutput((inputs) =>
-  `(!${reduceExpression(
-    inputs.map((input) => `SM_XB_Truth(${input})`),
-    '&&',
-    'true',
-  )})`);
-const emitNor = emitSingleOutput((inputs) =>
-  `(!${reduceExpression(
-    inputs.map((input) => `SM_XB_Truth(${input})`),
-    '||',
-    'false',
-  )})`);
-const emitXor = emitSingleOutput((inputs) =>
-  `((${inputs.map((input) => `SM_XB_Truth(${input})`).join(' + ') || '0'}) % 2)`);
+const signalBooleanExpression = (
+  state: SemanticState,
+  signalId: string,
+  layout: XBStateLayout,
+  member: string,
+): string => {
+  const storage = signalStorageExpression(state, signalId, layout, member);
+  if (storage.signal.numericType.kind === 'boolean') {
+    return storage.expression;
+  }
+  return `SM_XB_Truth(${signalRealExpression(state, signalId, layout, member)})`;
+};
+
+const inputBooleanExpressions = (
+  state: SemanticState,
+  operation: XBSemanticOperation,
+  layout: XBStateLayout,
+  member: string,
+): string[] => operation.inputSignalIds.map((signalId) =>
+  signalBooleanExpression(state, signalId, layout, member));
+
+const emitAnd: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputs = inputBooleanExpressions(state, operation, layout, member);
+  return emitSingleOutput(() => reduceExpression(inputs, '&&', 'true'))(state, operation, operationIndex, layout, member);
+};
+
+const emitOr: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputs = inputBooleanExpressions(state, operation, layout, member);
+  return emitSingleOutput(() => reduceExpression(inputs, '||', 'false'))(state, operation, operationIndex, layout, member);
+};
+
+const emitNot: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputs = inputBooleanExpressions(state, operation, layout, member);
+  const first = inputs[0] ?? 'false';
+  return emitSingleOutput(() => `(!${first})`)(state, operation, operationIndex, layout, member);
+};
+
+const emitNand: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputs = inputBooleanExpressions(state, operation, layout, member);
+  return emitSingleOutput(() => `(!${reduceExpression(inputs, '&&', 'true')})`)(state, operation, operationIndex, layout, member);
+};
+
+const emitNor: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputs = inputBooleanExpressions(state, operation, layout, member);
+  return emitSingleOutput(() => `(!${reduceExpression(inputs, '||', 'false')})`)(state, operation, operationIndex, layout, member);
+};
+
+const emitXor: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputs = inputBooleanExpressions(state, operation, layout, member);
+  return emitSingleOutput(() => `((${inputs.map((input) => `((${input}) ? 1 : 0)`).join(' + ') || '0'}) % 2)`)(state, operation, operationIndex, layout, member);
+};
 
 const bitwiseBinary = (operator: string): OperationEmitter =>
   emitSingleOutput((inputs) =>
@@ -1368,6 +1401,8 @@ const OPERATION_EMITTERS: Readonly<Record<string, OperationEmitter>> = {
   VectorPow: emitVectorElementwisePower,
   UnaryNeg: emitNegate,
   Abs: emitAbsolute,
+  SATURATION: emitSaturation,
+  DEADZONE: emitDeadzone,
   MatrixMul: emitMatrixMultiply,
   Transpose: emitTranspose,
   MatrixConcat: emitMatrixConcat,
@@ -1615,6 +1650,13 @@ const renderStateSlotAssignment = (
       ? ['        instance->error_status = SM_ERR_XBRIDGES_NUMERIC;']
       : []),
   ];
+  if (slot.numericType.kind === 'boolean') {
+    const value = `xb_state_${toCIdentifier(name)}_value`;
+    return [
+      `    const bool ${value} = (${expression});`,
+      `    ${field} = ${value};`,
+    ];
+  }
   if (slot.numericType.kind !== 'fixed') {
     const value = `xb_state_${toCIdentifier(name)}_value`;
     return [
@@ -1752,6 +1794,35 @@ const renderStateOutputs = (
       return [...terms, ...xLines];
     }
   }
+  if (operation.type === 'RATE_LIMITER') {
+    const prevSlot = stateSlotForRole(operation, 'prev_y');
+    const outputSignalId = operation.outputSignalIds[0];
+    const inputSignalId = operation.inputSignalIds[0];
+    if (prevSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
+      const u = signalElementRealExpression(state, inputSignalId, layout, member, '0U');
+      const prev_y = stateSlotElementRealExpression(prevSlot, layout, member, '0U');
+      const risingLimit = cNumber(scalarParameter(operation, ['risingLimit'], 1));
+      const fallingLimit = cNumber(scalarParameter(operation, ['fallingLimit'], 1));
+      const dt = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], 1));
+      const y = `fmax(${prev_y} - (${fallingLimit}) * (${dt}), fmin(${prev_y} + (${risingLimit}) * (${dt}), ${u}))`;
+      return renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, y, layout, member);
+    }
+  }
+  if (operation.type === 'RELAY') {
+    const onSlot = stateSlotForRole(operation, 'current_on');
+    const outputSignalId = operation.outputSignalIds[0];
+    const inputSignalId = operation.inputSignalIds[0];
+    if (onSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
+      const u = signalElementRealExpression(state, inputSignalId, layout, member, '0U');
+      const prev_on = stateSlotElementRealExpression(onSlot, layout, member, '0U');
+      const switchOn = cNumber(scalarParameter(operation, ['switchOn'], 1));
+      const switchOff = cNumber(scalarParameter(operation, ['switchOff'], 0));
+      // In C, boolean is typically 1 or 0, but it might be bool if stdbool.h is included.
+      // We'll write an expression that evaluates to 1.0 or 0.0 based on the numeric type.
+      const current_on = `(${u} >= ${switchOn} || (${prev_on} != 0.0 && ${u} > ${switchOff})) ? 1.0 : 0.0`;
+      return renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, current_on, layout, member);
+    }
+  }
   return (operation.state?.slots ?? []).flatMap((slot, slotIndex) => slot.signalId === null ? [] :
   renderSignalWrite(
     state,
@@ -1760,7 +1831,9 @@ const renderStateOutputs = (
     slotIndex,
     slot.signalId,
     expressions?.[slotIndex]
-      ?? stateSlotRealExpression(slot, layout, member),
+      ?? (slot.numericType.kind === 'boolean'
+        ? `instance->${member}.${stateSlotField(slot, layout)}`
+        : stateSlotRealExpression(slot, layout, member)),
     layout,
     member,
   ));
@@ -2103,6 +2176,27 @@ const renderDiscreteStateUpdates = (
           member,
           `${operation.id}_${slotIndex}_update`,
           layout.errorFields.get(operation.id), operation,
+        );
+      }
+      case 'RATE_LIMITER': {
+        const rising = cNumber(scalarParameter(operation, ['risingLimit'], 1));
+        const falling = cNumber(scalarParameter(operation, ['fallingLimit'], 1));
+        const dt = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], 1));
+        const prev_y = stateSlotRealExpression(slot, layout, member);
+        return renderStateSlotAssignment(
+          state, slot,
+          `fmax(${prev_y} - (${falling}) * (${dt}), fmin(${prev_y} + (${rising}) * (${dt}), ${input}))`,
+          layout, member, `${operation.id}_${slotIndex}_update`, layout.errorFields.get(operation.id), operation,
+        );
+      }
+      case 'RELAY': {
+        const switchOn = cNumber(scalarParameter(operation, ['switchOn'], 1));
+        const switchOff = cNumber(scalarParameter(operation, ['switchOff'], 0));
+        const prev_on = stateSlotRealExpression(slot, layout, member);
+        return renderStateSlotAssignment(
+          state, slot,
+          `(${input} >= ${switchOn} || (${prev_on} != 0.0 && ${input} > ${switchOff})) ? 1.0 : 0.0`,
+          layout, member, `${operation.id}_${slotIndex}_update`, layout.errorFields.get(operation.id), operation,
         );
       }
       default:

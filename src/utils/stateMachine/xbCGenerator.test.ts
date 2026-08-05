@@ -2770,4 +2770,50 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(code50).toContain('SM_XB_CONTROLLER_SolverSubstep(instance);');
     expect(Math.abs(code50.length - code1.length)).toBeLessThan(512);
   });
+
+  it('emits Boolean logic without redundant double conversions', () => {
+    const ir = combinationalSemanticModel();
+    ir.states.controller.xBridges!.executionOrder = ['logical-and', 'logical-not', 'logical-or', 'nand', 'nor', 'xor', 'constant'];
+    ir.states.controller.xBridges!.operations = {
+      'logical-and': scalarOperation('logical-and', 'AND', ['logical-and:a', 'logical-and:b'], ['logical-and:y']),
+      'logical-not': scalarOperation('logical-not', 'NOT', ['logical-not:u'], ['logical-not:y']),
+      'logical-or': scalarOperation('logical-or', 'OR', ['logical-or:a', 'logical-or:b'], ['logical-or:y']),
+      'nand': scalarOperation('nand', 'NAND', ['nand:a', 'nand:b'], ['nand:y']),
+      'nor': scalarOperation('nor', 'NOR', ['nor:a', 'nor:b'], ['nor:y']),
+      'xor': scalarOperation('xor', 'XOR', ['xor:a', 'xor:b'], ['xor:y']),
+      'constant': scalarOperation('constant', 'Constant', [], ['constant:y'], { value: true }),
+    };
+    Object.assign(ir.states.controller.xBridges!.signals, {
+      'logical-and:a': scalarInputSignal('logical-and:a', 'input:y', { kind: 'boolean' }),
+      'logical-and:b': scalarInputSignal('logical-and:b', 'input:y', { kind: 'boolean' }),
+      'logical-and:y': signal('logical-and:y', { kind: 'boolean' }),
+      'logical-not:u': scalarInputSignal('logical-not:u', 'input:y', { kind: 'boolean' }),
+      'logical-not:y': signal('logical-not:y', { kind: 'boolean' }),
+      'logical-or:a': scalarInputSignal('logical-or:a', 'input:y', { kind: 'boolean' }),
+      'logical-or:b': scalarInputSignal('logical-or:b', 'input:y', { kind: 'boolean' }),
+      'logical-or:y': signal('logical-or:y', { kind: 'boolean' }),
+      'nand:a': scalarInputSignal('nand:a', 'input:y', { kind: 'boolean' }),
+      'nand:b': scalarInputSignal('nand:b', 'input:y', { kind: 'boolean' }),
+      'nand:y': signal('nand:y', { kind: 'boolean' }),
+      'nor:a': scalarInputSignal('nor:a', 'input:y', { kind: 'boolean' }),
+      'nor:b': scalarInputSignal('nor:b', 'input:y', { kind: 'boolean' }),
+      'nor:y': signal('nor:y', { kind: 'boolean' }),
+      'xor:a': scalarInputSignal('xor:a', 'input:y', { kind: 'boolean' }),
+      'xor:b': scalarInputSignal('xor:b', 'input:y', { kind: 'boolean' }),
+      'xor:y': signal('xor:y', { kind: 'boolean' }),
+      'constant:y': signal('constant:y', { kind: 'boolean' }),
+      'input:y': signal('input:y', { kind: 'boolean' }),
+    });
+    const source = generateCArtifacts(ir).files.find((file) => file.name === 'sm_core.c')!.content;
+    const logicLines = source.split('\n').filter((line) =>
+      line.includes('logical_and') || line.includes('logical_not') || line.includes('logical_or') ||
+      line.includes('nand') || line.includes('nor') || line.includes('xor') || line.includes('constant_y')
+    );
+    for (const line of logicLines) {
+      expect(line).not.toMatch(/isfinite\s*\(/);
+    }
+    // Boolean constant should be emitted as true, not 1.0
+    expect(source).toMatch(/const bool xb_value_\d+_\d+ = \(true\);/);
+    expect(source).toMatch(/constant_y\)\)\[0U\]\) = xb_value_\d+_\d+;/);
+  });
 });
