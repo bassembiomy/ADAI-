@@ -1149,13 +1149,15 @@ const emitSwitch = emitSingleOutput((inputs, operation) => {
 });
 
 const emitIfElse = emitSingleOutput((inputs, operation) => {
-  const threshold = cNumber(
-    scalarParameter(operation, ['threshold', 'Threshold'], 0.5),
-  );
   const cond = inputs[0] ?? '0.0';
   const trueVal = inputs[1] ?? '0.0';
   const falseVal = inputs[2] ?? '0.0';
-  return `((SM_XB_Truth(${cond}) && (${cond}) >= ${threshold}) ? (${trueVal}) : (${falseVal}))`;
+  const thresholdParam = operation.parameters.threshold ?? operation.parameters.Threshold;
+  if (thresholdParam !== undefined && thresholdParam !== null) {
+    const threshold = cNumber(Number(thresholdParam));
+    return `((SM_XB_Truth(${cond}) && (${cond}) >= ${threshold}) ? (${trueVal}) : (${falseVal}))`;
+  }
+  return `(SM_XB_Truth(${cond}) ? (${trueVal}) : (${falseVal}))`;
 });
 
 const emitConversion: OperationEmitter = (

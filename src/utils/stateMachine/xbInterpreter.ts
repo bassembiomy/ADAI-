@@ -693,8 +693,16 @@ const evaluateDirectOperation = (
     }
     case 'IF_ELSE': {
       const cond = inputs[0]?.[0];
-      const threshold = Number(parameter(operation, ['threshold', 'Threshold'], 0.5));
-      const pass = cond !== undefined && (Boolean(cond) && (typeof cond === 'boolean' || Number(cond) >= threshold || Number(cond) !== 0));
+      const thresholdParam = operation.parameters.threshold ?? operation.parameters.Threshold;
+      let pass = false;
+      if (cond !== undefined) {
+        if (thresholdParam !== undefined && thresholdParam !== null) {
+          const threshold = Number(thresholdParam);
+          pass = Boolean(cond) && Number(cond) >= threshold;
+        } else {
+          pass = typeof cond === 'boolean' ? cond : Number(cond) !== 0;
+        }
+      }
       return [pass ? (inputs[1] ?? [0]) : (inputs[2] ?? [0])];
     }
     case 'MUX': {
