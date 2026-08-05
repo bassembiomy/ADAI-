@@ -2770,6 +2770,4 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(code50).toContain('SM_XB_CONTROLLER_SolverSubstep(instance);');
     expect(Math.abs(code50.length - code1.length)).toBeLessThan(512);
   });
-
-  });
 });
