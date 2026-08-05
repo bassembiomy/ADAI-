@@ -91,16 +91,16 @@ describe('V-Lab Connected Model Benchmarks (10 Major System Topologies)', () => 
   // 3. Rotational Mechanics Benchmark: Inertia-Damper Drivetrain
   it('benchmark 3: rotational inertia and damper system', () => {
     const nodes: Node[] = [
-      makeNode('torque', 'torque_source', { T: 10 }),
-      makeNode('inertia', 'inertia', { J: 0.5 }),
+      makeNode('torque', 'torque_source', { T: 5 }),
+      makeNode('inertia', 'inertia', { J: 0.01 }),
       makeNode('damper', 'rot_damper', { b: 0.1 }),
       makeNode('ref', 'rot_ref', {}),
     ];
     const edges: Edge[] = [
-      makeEdge('e1', 'torque', 'inertia', 'a', 'p'),
-      makeEdge('e2', 'torque', 'ref', 'b', 'p'),
-      makeEdge('e3', 'inertia', 'damper', 'p', 'r'),
-      makeEdge('e4', 'damper', 'ref', 'c', 'p'),
+      makeEdge('e1', 'torque', 'inertia', 'r', 'r'),
+      makeEdge('e2', 'torque', 'ref', 'c', 'r'),
+      makeEdge('e3', 'inertia', 'damper', 'r', 'r'),
+      makeEdge('e4', 'damper', 'ref', 'c', 'r'),
     ];
 
     let state: any = null;
