@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0.0",
+  "targetSelection": {
+    "targetId": "atmega2560",
+    "packVersion": "1.0.0",
+    "driverMode": "vendor",
+    "boardRevision": "A"
+  },
+  "generatedLayers": [
+    "component",
+    "mcal",
+    "driver"
+  ],
+  "stubbedPeripherals": [],
+  "flashBlocked": false,
+  "blockReasons": []
+}

@@ -24,3 +24,7 @@ scratch/
 .worktrees/
 *.exe
 *.o
+dist-electron/
+out.c
+out.txt
+test_bool.*
