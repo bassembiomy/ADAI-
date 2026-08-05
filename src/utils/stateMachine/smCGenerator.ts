@@ -684,14 +684,15 @@ const renderTransitionPhase = (
   for (const transition of transitions) {
     for (const route of transition.routes) {
       const condition = renderRouteEnabled(ir, route, stateId);
+      const isUnconditional = condition === '(true)' || condition === 'true';
       const commit = renderCommitRoute(
         ir,
         index,
         transition,
         route,
-        condition === '(true)' ? '    ' : '        ',
+        isUnconditional ? '    ' : '        ',
       );
-      if (condition === '(true)') {
+      if (isUnconditional) {
         blocks.push(lines(commit, '    return true;').trimEnd());
         return blocks.join('\n');
       }
