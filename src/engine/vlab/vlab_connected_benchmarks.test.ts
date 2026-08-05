@@ -2,15 +2,33 @@ import { describe, it, expect } from 'vitest';
 import { VLabPhysicsEngine } from './vlabPhysics';
 import { Node, Edge } from 'reactflow';
 
+import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
+
 describe('V-Lab Connected Model Benchmarks (10 Major System Topologies)', () => {
   const engine = new VLabPhysicsEngine();
+  const allBlocks = VLAB_LIBRARY.flatMap((d) => d.blocks);
 
-  const makeNode = (id: string, type: string, params: Record<string, any> = {}): Node => ({
-    id,
-    type: 'default',
-    position: { x: 0, y: 0 },
-    data: { type, params },
-  } as any);
+  const makeNode = (id: string, blockId: string, customParams: Record<string, any> = {}): Node => {
+    const baseBlock = allBlocks.find((b) => b.id === blockId);
+    const domain = VLAB_LIBRARY.find((d) => d.blocks.some((b) => b.id === blockId))?.type || 'Electrical';
+    const mergedParams = baseBlock?.params ? JSON.parse(JSON.stringify(baseBlock.params)) : {};
+    Object.keys(customParams).forEach((k) => {
+      if (mergedParams[k]) mergedParams[k].value = customParams[k];
+      else mergedParams[k] = { value: customParams[k] };
+    });
+    return {
+      id,
+      type: 'default',
+      position: { x: 0, y: 0 },
+      data: {
+        type: blockId,
+        label: baseBlock?.name || blockId,
+        ports: baseBlock?.ports || [],
+        params: mergedParams,
+        domain,
+      },
+    } as Node;
+  };
 
   const makeEdge = (id: string, source: string, target: string, sourceHandle?: string, targetHandle?: string): Edge => ({
     id,
@@ -50,8 +68,8 @@ describe('V-Lab Connected Model Benchmarks (10 Major System Topologies)', () => 
     const nodes: Node[] = [
       makeNode('src', 'force_source', { F: 100 }),
       makeNode('mass', 'mass', { m: 5, b: 2 }),
-      makeNode('spring', 'spring', { k: 250 }),
-      makeNode('ref', 'mechanical_reference', {}),
+      makeNode('spring', 'trans_spring', { k: 250 }),
+      makeNode('ref', 'trans_ref', {}),
     ];
     const edges: Edge[] = [
       makeEdge('e1', 'src', 'mass', 'p', 'p'),
@@ -71,7 +89,7 @@ describe('V-Lab Connected Model Benchmarks (10 Major System Topologies)', () => 
     const nodes: Node[] = [
       makeNode('torque', 'torque_source', { T: 50 }),
       makeNode('inertia', 'inertia', { J: 0.5, b: 0.1 }),
-      makeNode('ref', 'rotational_reference', {}),
+      makeNode('ref', 'rot_ref', {}),
     ];
     const edges: Edge[] = [
       makeEdge('e1', 'torque', 'inertia', 'p', 'p'),
