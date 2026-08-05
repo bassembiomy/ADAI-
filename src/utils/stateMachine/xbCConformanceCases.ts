@@ -31,6 +31,13 @@ export interface XBExecutableCConformanceCase {
   readonly model: StateMachineModelV4;
   readonly steps: readonly DifferentialScenarioStep[];
   readonly expectedFinalSignals: Readonly<Record<string, number | boolean | readonly number[]>>;
+  readonly expectedFrames?: readonly {
+    readonly signals?: Readonly<Record<string, number | boolean | readonly number[]>>;
+    readonly blockState?: Readonly<Record<
+    string,
+    Readonly<Record<string, number | boolean | readonly number[]>>
+    >>;
+  }[];
 }
 
 const port = (
@@ -145,12 +152,12 @@ const logicSpecs = [
   ['NAND', [true, true], false, 'boolean'],
   ['NOR', [false, false], true, 'boolean'],
   ['XOR', [true, false], true, 'boolean'],
-  ['BitwiseAND', [6, 3], 2, 'int32'],
-  ['BitwiseOR', [6, 3], 7, 'int32'],
-  ['BitwiseXOR', [6, 3], 5, 'int32'],
+  ['BitwiseAND', [-2, 3], 2, 'int32'],
+  ['BitwiseOR', [-8, 3], -5, 'int32'],
+  ['BitwiseXOR', [-1, 5], -6, 'int32'],
   ['BitwiseNOT', [6], -7, 'int32'],
-  ['ShiftLeft', [6, 2], 24, 'int32'],
-  ['ShiftRight', [24, 2], 6, 'int32'],
+  ['ShiftLeft', [-3, 2], -12, 'int32'],
+  ['ShiftRight', [-8, 2], -2, 'int32'],
 ] as const;
 
 const logicNodes: PersistedNode[] = [];
@@ -205,6 +212,34 @@ for (const shape of ['scalar'] as const) {
     );
     routingExpected[`${operationId}:y`] = values.first;
   }
+}
+for (const [criteria, control, expected] of [
+  ['>', 0, 20],
+  ['>=', 0, 10],
+  ['<', -1, 10],
+  ['<=', 0, 10],
+] as const) {
+  const suffix = criteria === '>' ? 'gt'
+    : criteria === '>=' ? 'ge'
+      : criteria === '<' ? 'lt' : 'le';
+  const operationId = `operation_SWITCH_${suffix}`;
+  const firstId = `source_SWITCH_${suffix}_first`;
+  const secondId = `source_SWITCH_${suffix}_second`;
+  const controlId = `source_SWITCH_${suffix}_control`;
+  routingNodes.push(
+    constant(firstId, 10),
+    constant(secondId, 20),
+    constant(controlId, control),
+    node(operationId, 'SWITCH', [
+      port('u1', 'input'), port('u2', 'input'), port('control', 'input'),
+    ], [port('y', 'output')], { criteria, threshold: 0 }),
+  );
+  routingEdges.push(
+    edge(`edge_${operationId}_first`, firstId, operationId, 'u1'),
+    edge(`edge_${operationId}_second`, secondId, operationId, 'u2'),
+    edge(`edge_${operationId}_control`, controlId, operationId, 'control'),
+  );
+  routingExpected[`${operationId}:y`] = expected;
 }
 routingNodes.push(
   constant('source_MUX_0', 3),
@@ -294,6 +329,48 @@ export const XB_EXECUTABLE_C_CONFORMANCE_CASES: readonly XBExecutableCConformanc
       'operation_RATE_LIMITER:y': 1,
       'operation_RELAY:y': false,
     },
+    expectedFrames: [
+      {
+        signals: {
+          'operation_RATE_LIMITER:y': 0,
+          'operation_RELAY:y': false,
+        },
+        blockState: {
+          operation_RATE_LIMITER: { prev_y: 0 },
+          operation_RELAY: { current_on: false },
+        },
+      },
+      {
+        signals: {
+          'operation_RATE_LIMITER:y': 1,
+          'operation_RELAY:y': true,
+        },
+        blockState: {
+          operation_RATE_LIMITER: { prev_y: 1 },
+          operation_RELAY: { current_on: true },
+        },
+      },
+      {
+        signals: {
+          'operation_RATE_LIMITER:y': 0,
+          'operation_RELAY:y': true,
+        },
+        blockState: {
+          operation_RATE_LIMITER: { prev_y: 0 },
+          operation_RELAY: { current_on: true },
+        },
+      },
+      {
+        signals: {
+          'operation_RATE_LIMITER:y': 1,
+          'operation_RELAY:y': false,
+        },
+        blockState: {
+          operation_RATE_LIMITER: { prev_y: 1 },
+          operation_RELAY: { current_on: false },
+        },
+      },
+    ],
   },
 ]);
 

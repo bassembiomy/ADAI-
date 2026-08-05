@@ -20,6 +20,11 @@ interface PortDescriptor {
   readonly dataType: string | null;
 }
 
+const portElementCount = (port: PortDescriptor): number =>
+  port.shape === 'scalar'
+    ? 1
+    : port.dimensions.reduce((product, dimension) => product * dimension, 1);
+
 const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -462,6 +467,28 @@ export const validateXBModel = (
             node.id,
           ));
         }
+      }
+    }
+    if (node.type === 'MUX' || node.type === 'DEMUX') {
+      const inputs = ports.filter((port) => port.direction === 'input');
+      const outputs = ports.filter((port) => port.direction === 'output');
+      const inputElements = inputs.reduce(
+        (total, port) => total + portElementCount(port),
+        0,
+      );
+      const outputElements = outputs.reduce(
+        (total, port) => total + portElementCount(port),
+        0,
+      );
+      const topologyInvalid = node.type === 'MUX'
+        ? inputs.length === 0 || outputs.length !== 1
+        : inputs.length !== 1 || outputs.length === 0;
+      if (topologyInvalid || inputElements !== outputElements) {
+        diagnostics.push(diagnostic(
+          'XB_ROUTING_CARDINALITY_INVALID',
+          `${node.type} '${node.id}' requires total input and output element counts to match exactly.`,
+          node.id,
+        ));
       }
     }
     for (const port of ports) {

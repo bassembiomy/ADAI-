@@ -995,6 +995,38 @@ describe('X-Bridges interpreter', () => {
     expect(ifElseRuntime.signals['ifelse:y']).toEqual([99]);
   });
 
+  it.each([
+    { criteria: '>', control: 0, threshold: 0, expected: 20 },
+    { criteria: '>=', control: 0, threshold: 0, expected: 10 },
+    { criteria: '<', control: -1, threshold: 0, expected: 10 },
+    { criteria: '<=', control: 0, threshold: 0, expected: 10 },
+  ])('applies SWITCH criteria $criteria at its boundary', ({
+    criteria, control, threshold, expected,
+  }) => {
+    const switchOp = operation(
+      'switch',
+      'SWITCH',
+      ['in1', 'in2', 'cond'],
+      ['switch:y'],
+      { criteria, threshold },
+    );
+    const ir = model('retain', { switchOp }, {
+      cond: signal('cond', 'input'),
+      in1: signal('in1', 'input'),
+      in2: signal('in2', 'input'),
+      'switch:y': signal('switch:y', 'output'),
+    }, ['switchOp'], [
+      { variableId: 'cond', signalId: 'cond', blockId: 'cond', portId: 'u', direction: 'in', numericType: float32 },
+      { variableId: 'in1', signalId: 'in1', blockId: 'in1', portId: 'u', direction: 'in', numericType: float32 },
+      { variableId: 'in2', signalId: 'in2', blockId: 'in2', portId: 'u', direction: 'in', numericType: float32 },
+    ]);
+    const runtime = createXBRuntime(ir);
+
+    stepXBState(runtime, { cond: control, in1: 10, in2: 20 });
+
+    expect(runtime.signals['switch:y']).toEqual([expected]);
+  });
+
   it('evaluates Batch 3 Trigonometry operations with numerical precision', () => {
     const sinOp = operation('sinOp', 'SIN', ['angle'], ['sin:y']);
     const cosOp = operation('cosOp', 'COS', ['angle'], ['cos:y']);

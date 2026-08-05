@@ -141,6 +141,26 @@ describe('validateXBModel', () => {
     expect(result).toContain('XB_BLOCK_NOT_CODEGEN_CAPABLE');
   });
 
+  it.each([
+    {
+      name: 'MUX output length differs from its scalar input count',
+      node: node('mux', 'MUX', {
+        inputs: [port('in1', 'input'), port('in2', 'input')],
+        outputs: [port('y', 'output', { shape: 'vector', dimensions: [1] })],
+      }),
+    },
+    {
+      name: 'DEMUX input length differs from its scalar output count',
+      node: node('demux', 'DEMUX', {
+        inputs: [port('u', 'input', { shape: 'vector', dimensions: [3] })],
+        outputs: [port('out1', 'output'), port('out2', 'output')],
+      }),
+    },
+  ])('rejects $name', ({ node: routingNode }) => {
+    expect(codes(model({ nodes: [routingNode] })))
+      .toContain('XB_ROUTING_CARDINALITY_INVALID');
+  });
+
   it('enforces Task 10 bounds, discrete controls, math support, and directional matrix shapes', () => {
     const matrixDiagShapeCodes = codes(model({
       nodes: [node('diag', 'MatrixDiag', {

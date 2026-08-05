@@ -686,9 +686,21 @@ const evaluateDirectOperation = (
     case 'ShiftRight':
       return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) >> Number(right)) | 0)];
     case 'SWITCH': {
-      const cond = inputs[2]?.[0];
+      const control = Number(inputs[2]?.[0] ?? 0);
       const threshold = Number(parameter(operation, ['threshold', 'Threshold'], 0));
-      const pass = Boolean(cond) && Number(cond) >= threshold;
+      const criteriaValue = operation.parameters.criteria;
+      const criteria = criteriaValue === '<'
+        || criteriaValue === '>='
+        || criteriaValue === '<='
+        ? criteriaValue
+        : '>';
+      const pass = criteria === '<'
+        ? control < threshold
+        : criteria === '>='
+          ? control >= threshold
+          : criteria === '<='
+            ? control <= threshold
+            : control > threshold;
       return [pass ? (inputs[0] ?? [0]) : (inputs[1] ?? [0])];
     }
     case 'IF_ELSE': {

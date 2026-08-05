@@ -41,6 +41,24 @@ describe('declared X-Bridges strict-C99 conformance', { timeout: 120_000 }, () =
       for (const [signalId, expected] of Object.entries(testCase.expectedFinalSignals)) {
         expectSignalValue(signals[signalId], expected);
       }
+      if (testCase.expectedFrames !== undefined) {
+        expect(interpreter).toHaveLength(testCase.expectedFrames.length);
+        testCase.expectedFrames.forEach((expectedFrame, frameIndex) => {
+          const frame = interpreter[frameIndex].xBridges.controller;
+          for (const [signalId, expected] of Object.entries(
+            expectedFrame.signals ?? {},
+          )) {
+            expectSignalValue(frame.signals[signalId], expected);
+          }
+          for (const [operationId, expectedState] of Object.entries(
+            expectedFrame.blockState ?? {},
+          )) {
+            for (const [role, expected] of Object.entries(expectedState)) {
+              expectSignalValue(frame.blockState[operationId]?.[role], expected);
+            }
+          }
+        });
+      }
     },
   );
 });

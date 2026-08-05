@@ -1339,7 +1339,30 @@ const emitMovingAverageLifecycleStub: OperationEmitter = () => [];
 const emitTransferFunctionLifecycleStub: OperationEmitter = () => [];
 const emitStateSpaceLifecycleStub: OperationEmitter = () => [];
 
+const requireRoutingCardinality = (
+  state: SemanticState,
+  operation: XBSemanticOperation,
+): void => {
+  const inputElements = operation.inputSignalIds.reduce(
+    (total, signalId) => total + requireSignal(state, signalId).elementCount,
+    0,
+  );
+  const outputElements = operation.outputSignalIds.reduce(
+    (total, signalId) => total + requireSignal(state, signalId).elementCount,
+    0,
+  );
+  const topologyInvalid = operation.type === 'MUX'
+    ? operation.inputSignalIds.length === 0 || operation.outputSignalIds.length !== 1
+    : operation.inputSignalIds.length !== 1 || operation.outputSignalIds.length === 0;
+  if (topologyInvalid || inputElements !== outputElements) {
+    throw new Error(
+      `X-Bridges ${operation.type} operation '${operation.id}' has mismatched input/output element counts (${inputElements} != ${outputElements})`,
+    );
+  }
+};
+
 const emitMux: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  requireRoutingCardinality(state, operation);
   const outputId = operation.outputSignalIds[0];
   if (outputId === undefined || operation.inputSignalIds.length === 0) return [];
   const pieces: string[] = ['    {'];
@@ -1363,23 +1386,24 @@ const emitMux: OperationEmitter = (state, operation, operationIndex, layout, mem
 };
 
 const emitDemux: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  requireRoutingCardinality(state, operation);
   const inputId = operation.inputSignalIds[0];
   if (inputId === undefined || operation.outputSignalIds.length === 0) return [];
-  const inputSignal = requireSignal(state, inputId);
-  const outputCount = operation.outputSignalIds.length;
-  const elementsPerOutput = Math.max(1, Math.floor(inputSignal.elementCount / outputCount));
   const pieces: string[] = ['    {'];
+  let offset = 0;
   operation.outputSignalIds.forEach((outputId, idx) => {
+    const outputSignal = requireSignal(state, outputId);
     pieces.push(
-      `        for (uint32_t xb_index = 0U; xb_index < ${elementsPerOutput}U; ++xb_index) {`,
+      `        for (uint32_t xb_index = 0U; xb_index < ${outputSignal.elementCount}U; ++xb_index) {`,
       ...renderSignalElementWrite(
         state, operation, operationIndex, idx, outputId,
         'xb_index',
-        signalElementRealExpression(state, inputId, layout, member, `${idx * elementsPerOutput}U + xb_index`),
+        signalElementRealExpression(state, inputId, layout, member, `${offset}U + xb_index`),
         layout, member,
       ).map((line) => `    ${line}`),
       '        }',
     );
+    offset += outputSignal.elementCount;
   });
   pieces.push('    }');
   return pieces;

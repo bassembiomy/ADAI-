@@ -1931,6 +1931,50 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
     expect(core).not.toMatch(/\(int32_t\)[^\n;]*>>/);
   });
 
+  it.each(['MUX', 'DEMUX'] as const)(
+    'rejects handcrafted %s IR with mismatched routing cardinality',
+    (type) => {
+      const ir = combinationalSemanticModel();
+      const xb = ir.states.controller.xBridges!;
+      const routingOperation = type === 'MUX'
+        ? scalarOperation('invalid-routing', type, [
+          'invalid-routing:in1', 'invalid-routing:in2',
+        ], ['invalid-routing:y'])
+        : scalarOperation('invalid-routing', type, [
+          'invalid-routing:u',
+        ], ['invalid-routing:out1', 'invalid-routing:out2']);
+      const routingSignals: Record<string, XBSemanticSignal> = type === 'MUX'
+        ? {
+          'invalid-routing:in1': scalarInputSignal('invalid-routing:in1', 'constant:y'),
+          'invalid-routing:in2': scalarInputSignal('invalid-routing:in2', 'constant:y'),
+          'invalid-routing:y': signal(
+            'invalid-routing:y', float32, { kind: 'vector', length: 1 },
+          ),
+        }
+        : {
+          'invalid-routing:u': {
+            ...signal(
+              'invalid-routing:u', float32, { kind: 'vector', length: 3 },
+            ),
+            direction: 'input',
+            sourceSignalId: null,
+          },
+          'invalid-routing:out1': signal('invalid-routing:out1', float32),
+          'invalid-routing:out2': signal('invalid-routing:out2', float32),
+        };
+      ir.states.controller.xBridges = {
+        ...xb,
+        executionOrder: [...xb.executionOrder, routingOperation.id],
+        operations: { ...xb.operations, [routingOperation.id]: routingOperation },
+        signals: { ...xb.signals, ...routingSignals },
+      };
+
+      expect(() => generateCArtifacts(ir)).toThrow(
+        `X-Bridges ${type} operation 'invalid-routing' has mismatched input/output element counts`,
+      );
+    },
+  );
+
   it('emits reset-policy lifecycle calls in interpreter execution order', () => {
     const core = generateCArtifacts(combinationalSemanticModel()).files
       .find((file) => file.name === 'sm_core.c')!.content;
