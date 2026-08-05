@@ -1109,6 +1109,31 @@ const emitShiftLeft = emitSingleOutput((inputs) =>
 const emitShiftRight = emitSingleOutput((inputs) =>
   `SM_XB_ShiftRight32(${inputs[0] ?? '0.0'}, ${inputs[1] ?? '0.0'})`);
 
+const emitSin = emitSingleOutput((inputs) => `sin(${inputs[0] ?? '0.0'})`);
+const emitCos = emitSingleOutput((inputs) => `cos(${inputs[0] ?? '0.0'})`);
+const emitTan = emitSingleOutput((inputs) => `tan(${inputs[0] ?? '0.0'})`);
+const emitCot = emitSingleOutput((inputs) => `(1.0 / tan(${inputs[0] ?? '0.0'}))`);
+const emitSec = emitSingleOutput((inputs) => `(1.0 / cos(${inputs[0] ?? '0.0'}))`);
+const emitCosec = emitSingleOutput((inputs) => `(1.0 / sin(${inputs[0] ?? '0.0'}))`);
+const emitAsin = emitSingleOutput((inputs) => `asin(${inputs[0] ?? '0.0'})`);
+const emitAcos = emitSingleOutput((inputs) => `acos(${inputs[0] ?? '0.0'})`);
+const emitAtan = emitSingleOutput((inputs) => `atan(${inputs[0] ?? '0.0'})`);
+const emitAcot = emitSingleOutput((inputs) => `atan(1.0 / (${inputs[0] ?? '0.0'}))`);
+const emitAsec = emitSingleOutput((inputs) => `acos(1.0 / (${inputs[0] ?? '0.0'}))`);
+const emitAcosec = emitSingleOutput((inputs) => `asin(1.0 / (${inputs[0] ?? '0.0'}))`);
+const emitSinh = emitSingleOutput((inputs) => `sinh(${inputs[0] ?? '0.0'})`);
+const emitCosh = emitSingleOutput((inputs) => `cosh(${inputs[0] ?? '0.0'})`);
+const emitTanh = emitSingleOutput((inputs) => `tanh(${inputs[0] ?? '0.0'})`);
+const emitCoth = emitSingleOutput((inputs) => `(1.0 / tanh(${inputs[0] ?? '0.0'}))`);
+const emitSech = emitSingleOutput((inputs) => `(1.0 / cosh(${inputs[0] ?? '0.0'}))`);
+const emitCosech = emitSingleOutput((inputs) => `(1.0 / sinh(${inputs[0] ?? '0.0'}))`);
+const emitAsinh = emitSingleOutput((inputs) => `asinh(${inputs[0] ?? '0.0'})`);
+const emitAcosh = emitSingleOutput((inputs) => `acosh(${inputs[0] ?? '0.0'})`);
+const emitAtanh = emitSingleOutput((inputs) => `atanh(${inputs[0] ?? '0.0'})`);
+const emitAcoth = emitSingleOutput((inputs) => `atanh(1.0 / (${inputs[0] ?? '0.0'}))`);
+const emitAsech = emitSingleOutput((inputs) => `acosh(1.0 / (${inputs[0] ?? '0.0'}))`);
+const emitAcosech = emitSingleOutput((inputs) => `asinh(1.0 / (${inputs[0] ?? '0.0'}))`);
+
 const emitSwitch = emitSingleOutput((inputs, operation) => {
   const threshold = cNumber(
     scalarParameter(operation, ['threshold', 'Threshold'], 0),
@@ -1121,6 +1146,16 @@ const emitSwitch = emitSingleOutput((inputs, operation) => {
     ? criteriaValue
     : '>';
   return `((${control}) ${criteria} ${threshold} ? (${inputs[0] ?? '0.0'}) : (${inputs[1] ?? '0.0'}))`;
+});
+
+const emitIfElse = emitSingleOutput((inputs, operation) => {
+  const threshold = cNumber(
+    scalarParameter(operation, ['threshold', 'Threshold'], 0.5),
+  );
+  const cond = inputs[0] ?? '0.0';
+  const trueVal = inputs[1] ?? '0.0';
+  const falseVal = inputs[2] ?? '0.0';
+  return `((SM_XB_Truth(${cond}) && (${cond}) >= ${threshold}) ? (${trueVal}) : (${falseVal}))`;
 });
 
 const emitConversion: OperationEmitter = (
@@ -1269,6 +1304,52 @@ const emitMovingAverageLifecycleStub: OperationEmitter = () => [];
 const emitTransferFunctionLifecycleStub: OperationEmitter = () => [];
 const emitStateSpaceLifecycleStub: OperationEmitter = () => [];
 
+const emitMux: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const outputId = operation.outputSignalIds[0];
+  if (outputId === undefined || operation.inputSignalIds.length === 0) return [];
+  const pieces: string[] = ['    {'];
+  let offset = 0;
+  for (const inputId of operation.inputSignalIds) {
+    const inputSignal = requireSignal(state, inputId);
+    pieces.push(
+      `        for (uint32_t xb_index = 0U; xb_index < ${inputSignal.elementCount}U; ++xb_index) {`,
+      ...renderSignalElementWrite(
+        state, operation, operationIndex, 0, outputId,
+        `${offset}U + xb_index`,
+        signalElementRealExpression(state, inputId, layout, member, 'xb_index'),
+        layout, member,
+      ).map((line) => `    ${line}`),
+      '        }',
+    );
+    offset += inputSignal.elementCount;
+  }
+  pieces.push('    }');
+  return pieces;
+};
+
+const emitDemux: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputId = operation.inputSignalIds[0];
+  if (inputId === undefined || operation.outputSignalIds.length === 0) return [];
+  const inputSignal = requireSignal(state, inputId);
+  const outputCount = operation.outputSignalIds.length;
+  const elementsPerOutput = Math.max(1, Math.floor(inputSignal.elementCount / outputCount));
+  const pieces: string[] = ['    {'];
+  operation.outputSignalIds.forEach((outputId, idx) => {
+    pieces.push(
+      `        for (uint32_t xb_index = 0U; xb_index < ${elementsPerOutput}U; ++xb_index) {`,
+      ...renderSignalElementWrite(
+        state, operation, operationIndex, idx, outputId,
+        'xb_index',
+        signalElementRealExpression(state, inputId, layout, member, `${idx * elementsPerOutput}U + xb_index`),
+        layout, member,
+      ).map((line) => `    ${line}`),
+      '        }',
+    );
+  });
+  pieces.push('    }');
+  return pieces;
+};
+
 const OPERATION_EMITTERS: Readonly<Record<string, OperationEmitter>> = {
   Constant: emitConstant,
   Inport: emitInport,
@@ -1308,6 +1389,33 @@ const OPERATION_EMITTERS: Readonly<Record<string, OperationEmitter>> = {
   ShiftLeft: emitShiftLeft,
   ShiftRight: emitShiftRight,
   SWITCH: emitSwitch,
+  IF_ELSE: emitIfElse,
+  MUX: emitMux,
+  DEMUX: emitDemux,
+  SIN: emitSin,
+  COS: emitCos,
+  TAN: emitTan,
+  COT: emitCot,
+  SEC: emitSec,
+  COSEC: emitCosec,
+  ASIN: emitAsin,
+  ACOS: emitAcos,
+  ATAN: emitAtan,
+  ACOT: emitAcot,
+  ASEC: emitAsec,
+  ACOSEC: emitAcosec,
+  SINH: emitSinh,
+  COSH: emitCosh,
+  TANH: emitTanh,
+  COTH: emitCoth,
+  SECH: emitSech,
+  COSECH: emitCosech,
+  ASINH: emitAsinh,
+  ACOSH: emitAcosh,
+  ATANH: emitAtanh,
+  ACOTH: emitAcoth,
+  ASECH: emitAsech,
+  ACOSECH: emitAcosech,
   TERMINATOR: emitTerminator,
   DATA_TYPE_CONVERSION: emitDataTypeConversion,
   NUMERIC_REPRESENTATION: emitNumericRepresentation,
@@ -1949,16 +2057,31 @@ const renderDiscreteStateUpdates = (
         return renderStateSlotAssignment(
           state, slot, input, layout, member, `${operation.id}_${slotIndex}_update`, layout.errorFields.get(operation.id), operation,
         );
-      case 'INTEGRATOR_DISCRETE':
+      case 'INTEGRATOR_DISCRETE': {
+        const dt = cNumber(scalarParameter(operation, ['sample_time', 'sampleTime', 'dt'], 1));
+        const method = String(operation.parameters.method ?? 'forward_euler');
+        const stateExpr = stateSlotRealExpression(slot, layout, member);
+        const uPrevSlot = operation.state?.slots.find(s => s.role === 'u_prev');
+        const uInputExpr = uPrevSlot && method !== 'backward_euler'
+          ? stateSlotRealExpression(uPrevSlot, layout, member)
+          : input;
+        let updateExpr: string;
+        if (method === 'trapezoidal' || method === 'tustin') {
+          const uPrev = uPrevSlot ? stateSlotRealExpression(uPrevSlot, layout, member) : input;
+          updateExpr = `${stateExpr} + (0.5 * (${dt})) * ((${input}) + (${uPrev}))`;
+        } else {
+          updateExpr = `${stateExpr} + (${dt}) * (${uInputExpr})`;
+        }
         return renderStateSlotAssignment(
           state,
           slot,
-          `${stateSlotRealExpression(slot, layout, member)} + (${input})`,
+          updateExpr,
           layout,
           member,
           `${operation.id}_${slotIndex}_update`,
           layout.errorFields.get(operation.id), operation,
         );
+      }
       case 'PID_CONTROLLER': {
         const feedbackId = operation.inputSignalIds[1];
         const feedback = feedbackId === undefined

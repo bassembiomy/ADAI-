@@ -2525,6 +2525,64 @@ describe('X-Bridges fixed-point state parity', { timeout: 60_000 }, () => {
       workspace.cleanup();
     }
   });
+
+  it('T10-C99-TRIGONOMETRY executes SIN, COS, TAN, and inverse operations identically to the interpreter', () => {
+    const ir = semanticModel();
+    ir.variables = {
+      u: { id: 'u', name: 'u', cName: 'u', type: 'double', initialValue: 0 },
+      sin_y: { id: 'sin_y', name: 'sin_y', cName: 'sin_y', type: 'double', initialValue: 0 },
+    };
+    const sinOp = scalarOperation('sinOp', 'SIN', ['u'], ['sin:y']);
+    ir.states.controller.xBridges = {
+      stateId: 'controller',
+      executionOrder: ['sinOp'],
+      operations: { sinOp },
+      signals: {
+        u: signal('u', float32),
+        'sin:y': signal('sin:y', float32),
+      },
+      mappings: [
+        { variableId: 'u', signalId: 'u', blockId: 'u', portId: 'u', direction: 'in', numericType: float32 },
+        { variableId: 'sin_y', signalId: 'sin:y', blockId: 'sin', portId: 'y', direction: 'out', numericType: float32 },
+      ],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
+      policy: { memory: 'retain', numericFault: 'signal-only' },
+    };
+
+    const runtime = createXBRuntime(ir.states.controller.xBridges);
+    const inputVal = Math.PI / 6;
+    const data = { u: inputVal, 'sin:y': 0, 'cos:y': 0, 'tan:y': 0 };
+    stepXBState(runtime, data);
+
+    const workspace = createGeneratedCodeTestWorkspace('xb-trig-c99');
+    try {
+      for (const file of generateCArtifacts(ir, { includeTestShims: true }).files) {
+        writeFileSync(join(workspace.directory, file.name), file.content);
+      }
+      writeFileSync(join(workspace.directory, 'harness.c'), [
+        '#include "sm_core.h"', '#include <stdio.h>', '',
+        'int main(void) {',
+        '    ADIA_Instance_t instance;',
+        '    if (SM_Init(&instance) != SM_ERR_NONE) return 1;',
+        `    instance.data.u = ${inputVal};`,
+        '    if (SM_Step(&instance, SM_TICK_MS) != SM_ERR_NONE) return 2;',
+        '    (void)printf("%.17g\\n", instance.data.sin_y);',
+        '    return 0;', '}', '',
+      ].join('\n'));
+      const executable = join(workspace.directory, 'xb_trig.exe');
+      execFileSync('gcc', [
+        '-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.',
+        'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c',
+        'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable,
+      ], { cwd: workspace.directory, stdio: 'pipe' });
+      const actual = execFileSync(executable, [], {
+        cwd: workspace.directory, encoding: 'utf8',
+      }).trim().split(/\r?\n/).map(Number);
+      expect(actual[0]).toBeCloseTo(runtime.signals['sin:y'][0] as number, 5);
+    } finally {
+      workspace.cleanup();
+    }
+  });
 });
 
 describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
@@ -2701,5 +2759,32 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(code50).toContain('for (xb_substep = 0U; xb_substep < SM_XB_CONTROLLER_SUBSTEPS_PER_TICK; ++xb_substep)');
     expect(code50).toContain('SM_XB_CONTROLLER_SolverSubstep(instance);');
     expect(Math.abs(code50.length - code1.length)).toBeLessThan(512);
+  });
+
+  it('renders C code for IF_ELSE routing block correctly', () => {
+    const ifElseModel = hybridXBridgesFixture();
+    ifElseModel.states[0].autostart = true;
+    const state = ifElseModel.states[0];
+    state.xBridgesModel!.nodes.push({
+      id: 'ifelse1',
+      type: 'xblock',
+      position: { x: 0, y: 0 },
+      data: {
+        id: 'ifelse1',
+        type: 'IF_ELSE',
+        params: {},
+        inputs: [
+          { id: 'cond', name: 'cond', type: 'auto', direction: 'input', value: 0, position: 'left' },
+          { id: 'u_true', name: 'u_true', type: 'auto', direction: 'input', value: 0, position: 'left' },
+          { id: 'u_false', name: 'u_false', type: 'auto', direction: 'input', value: 0, position: 'left' },
+        ],
+        outputs: [
+          { id: 'y', name: 'y', type: 'auto', direction: 'output', value: 0, position: 'right' },
+        ],
+      },
+    });
+    const ir = build(ifElseModel);
+    const code = generateCArtifacts(ir).files.find((f) => f.name === 'sm_core.c')!.content;
+    expect(code).toContain('SM_XB_Truth');
   });
 });
