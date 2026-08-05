@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { createGeneratedCodeTestWorkspace } from '../generatedCodeTestWorkspace';
 import { generateMISRACCode } from '../stateMachineCodeGenerator';
 import { buildSemanticModel } from './smSemanticBuilder';
+import { migrateStateMachineModel } from './smModelMigration';
 import {
   flatOrFixture,
   historyFixture,
@@ -21,7 +22,7 @@ import {
   renderCoreSource,
   renderSafetySource,
 } from './smCGenerator';
-import { renderCExpression } from './smCExpressions';
+import { renderCExpression, unwrapTopLevelCondition } from './smCExpressions';
 
 const build = (model: ReturnType<typeof flatOrFixture>) => {
   const result = buildSemanticModel(model);
@@ -1104,5 +1105,44 @@ int main(void) {
     expect(configHeader).toContain('/* State: State A * / #include <bad.h> Line2 | Model ID: a | C enum: SM_ST_A */');
     expect(userHeader).toContain('/* State: State A * / #include <bad.h> Line2 | Model ID: a | C enum: SM_ST_A */');
     expect(configHeader).not.toContain('*/ #include');
+  });
+
+  describe('Strict Build Condition Unwrapping', () => {
+    it('unwraps single top-level outer parentheses around simple equality', () => {
+      expect(unwrapTopLevelCondition('(instance->data.x == 1)')).toBe('instance->data.x == 1');
+      expect(unwrapTopLevelCondition('((instance->data.x == 1))')).toBe('instance->data.x == 1');
+      expect(unwrapTopLevelCondition('(instance->data.x != 1)')).toBe('instance->data.x != 1');
+      expect(unwrapTopLevelCondition('(instance->data.x >= 1)')).toBe('instance->data.x >= 1');
+      expect(unwrapTopLevelCondition('(!instance->data.enabled)')).toBe('!instance->data.enabled');
+    });
+
+    it('preserves inner grouping in compound expressions', () => {
+      expect(unwrapTopLevelCondition('(instance->data.x == 1) && (instance->data.y == 2)'))
+        .toBe('(instance->data.x == 1) && (instance->data.y == 2)');
+      expect(unwrapTopLevelCondition('(x == 1 || y == 2) && z != 0'))
+        .toBe('(x == 1 || y == 2) && z != 0');
+    });
+
+    it('renders simple equality as "if (instance->data.x == 1)" without extra outer parentheses', () => {
+      const model = flatOrFixture();
+      if (!model.variables.some((v) => v.name === 'x')) {
+        model.variables.push({ id: 'var_x', name: 'x', cName: 'x', type: 'uint8', currentValue: 0 });
+      }
+      model.transitions[0].condition = 'x == 1';
+      const built = build(model);
+      const coreSource = generatedFile(built, 'sm_core.c');
+
+      expect(coreSource).toContain('if (instance->data.x == 1) {');
+      expect(coreSource).not.toContain('if ((instance->data.x == 1)) {');
+    });
+
+    it('generates correct DELAY block initial condition (-1.0) for statemachine-xbridges-scalar-multisystem-test.json', () => {
+      const rawJson = readFileSync('C:/Users/EL-Dawlia/Downloads/delay/statemachine-xbridges-scalar-multisystem-test.json', 'utf-8');
+      const rawModel = JSON.parse(rawJson);
+      const output = generateMISRACCode(rawModel);
+      const coreSource = output.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
+      expect(coreSource).toContain('xb_state_initial_3_XB2_Delay_XB2_Delay_y_state_value = (double)(-1.0)');
+      expect(coreSource).not.toContain('xb_state_initial_3_XB2_Delay_XB2_Delay_y_state_value = (double)(0.0)');
+    });
   });
 });
