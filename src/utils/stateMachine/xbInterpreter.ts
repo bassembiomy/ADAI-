@@ -662,6 +662,77 @@ const evaluateDirectOperation = (
       return [[inputs.some((input) => input.some(Boolean))]];
     case 'NOT':
       return [unary(inputs[0] ?? [false], (value) => !value)];
+    case 'NAND':
+      return [[!inputs.every((input) => input.every(Boolean))]];
+    case 'NOR':
+      return [[!inputs.some((input) => input.some(Boolean))]];
+    case 'XOR': {
+      const activeCount = inputs.reduce(
+        (count, input) => count + (input.some(Boolean) ? 1 : 0),
+        0,
+      );
+      return [[activeCount % 2 === 1]];
+    }
+    case 'BitwiseAND':
+      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) & Number(right)) >>> 0)];
+    case 'BitwiseOR':
+      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) | Number(right)) >>> 0)];
+    case 'BitwiseXOR':
+      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) ^ Number(right)) >>> 0)];
+    case 'BitwiseNOT':
+      return [unary(inputs[0] ?? [0], (value) => (~Number(value)) >>> 0)];
+    case 'ShiftLeft':
+      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) << Number(right)) >>> 0)];
+    case 'ShiftRight':
+      return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) >> Number(right)) >>> 0)];
+    case 'SWITCH': {
+      const cond = inputs[0]?.[0];
+      const threshold = Number(parameter(operation, ['threshold', 'Threshold'], 0));
+      const pass = Boolean(cond) && Number(cond) >= threshold;
+      return [pass ? (inputs[1] ?? [0]) : (inputs[2] ?? [0])];
+    }
+    case 'IF_ELSE': {
+      const cond = inputs[0]?.[0];
+      const threshold = Number(parameter(operation, ['threshold', 'Threshold'], 0.5));
+      const pass = cond !== undefined && (Boolean(cond) && (typeof cond === 'boolean' || Number(cond) >= threshold || Number(cond) !== 0));
+      return [pass ? (inputs[1] ?? [0]) : (inputs[2] ?? [0])];
+    }
+    case 'MUX': {
+      const result = inputs.flatMap((input) => Array.from(input));
+      return [result];
+    }
+    case 'DEMUX': {
+      const input = inputs[0] ?? [0];
+      const count = operation.outputSignalIds.length;
+      const elementsPerOutput = Math.max(1, Math.floor(input.length / count));
+      return Array.from({ length: count }, (_, idx) =>
+        input.slice(idx * elementsPerOutput, (idx + 1) * elementsPerOutput),
+      );
+    }
+    case 'SIN': return [unary(inputs[0] ?? [0], Math.sin)];
+    case 'COS': return [unary(inputs[0] ?? [0], Math.cos)];
+    case 'TAN': return [unary(inputs[0] ?? [0], Math.tan)];
+    case 'COT': return [unary(inputs[0] ?? [0], (x) => 1 / Math.tan(x))];
+    case 'SEC': return [unary(inputs[0] ?? [0], (x) => 1 / Math.cos(x))];
+    case 'COSEC': return [unary(inputs[0] ?? [0], (x) => 1 / Math.sin(x))];
+    case 'ASIN': return [unary(inputs[0] ?? [0], Math.asin)];
+    case 'ACOS': return [unary(inputs[0] ?? [0], Math.acos)];
+    case 'ATAN': return [unary(inputs[0] ?? [0], Math.atan)];
+    case 'ACOT': return [unary(inputs[0] ?? [0], (x) => Math.atan(1 / x))];
+    case 'ASEC': return [unary(inputs[0] ?? [0], (x) => Math.acos(1 / x))];
+    case 'ACOSEC': return [unary(inputs[0] ?? [0], (x) => Math.asin(1 / x))];
+    case 'SINH': return [unary(inputs[0] ?? [0], Math.sinh)];
+    case 'COSH': return [unary(inputs[0] ?? [0], Math.cosh)];
+    case 'TANH': return [unary(inputs[0] ?? [0], Math.tanh)];
+    case 'COTH': return [unary(inputs[0] ?? [0], (x) => 1 / Math.tanh(x))];
+    case 'SECH': return [unary(inputs[0] ?? [0], (x) => 1 / Math.cosh(x))];
+    case 'COSECH': return [unary(inputs[0] ?? [0], (x) => 1 / Math.sinh(x))];
+    case 'ASINH': return [unary(inputs[0] ?? [0], Math.asinh)];
+    case 'ACOSH': return [unary(inputs[0] ?? [0], Math.acosh)];
+    case 'ATANH': return [unary(inputs[0] ?? [0], Math.atanh)];
+    case 'ACOTH': return [unary(inputs[0] ?? [0], (x) => Math.atanh(1 / x))];
+    case 'ASECH': return [unary(inputs[0] ?? [0], (x) => Math.acosh(1 / x))];
+    case 'ACOSECH': return [unary(inputs[0] ?? [0], (x) => Math.asinh(1 / x))];
     case 'TERMINATOR':
       return [];
     default:
@@ -917,14 +988,36 @@ const statefulUpdate = (
         updates[slot.id] = values.map((value) =>
           convertValue(value, slot.numericType, faults, operation));
         break;
-      case 'INTEGRATOR_DISCRETE':
-        updates[slot.id] = previous.map((value, index) =>
-          convertValue(
-            Number(value) + Number(values[index]),
-            slot.numericType,
-            faults, operation,
-          ));
+      case 'INTEGRATOR_DISCRETE': {
+        const dt = Number(parameter(operation, ['sample_time', 'sampleTime', 'dt'], 1));
+        const method = String(operation.parameters.method ?? 'forward_euler');
+        const uPrevSlot = operation.state?.slots.find(s => s.role === 'u_prev');
+        const uPrevValues = uPrevSlot ? (runtime.stateSlots[uPrevSlot.id] ?? uPrevSlot.initialValues) : values;
+
+        if (slot.role === 'u_prev') {
+          updates[slot.id] = values.map((val) => convertValue(val, slot.numericType, faults, operation));
+        } else {
+          updates[slot.id] = previous.map((value, index) => {
+            const uCurr = Number(values[index] ?? 0);
+            const uPrev = Number(uPrevValues[index] ?? 0);
+            let delta = 0;
+            if (method === 'backward_euler') {
+              delta = dt * uCurr;
+            } else if (method === 'trapezoidal' || method === 'tustin') {
+              delta = 0.5 * dt * (uCurr + uPrev);
+            } else {
+              // forward_euler or default
+              delta = uPrevSlot ? dt * uPrev : dt * uCurr;
+            }
+            return convertValue(
+              Number(value) + delta,
+              slot.numericType,
+              faults, operation,
+            );
+          });
+        }
         break;
+      }
       case 'PID_CONTROLLER': {
         const reference = Number(signalValues(runtime, operation.inputSignalIds[0] ?? '')[0] ?? 0);
         const feedback = Number(signalValues(runtime, operation.inputSignalIds[1] ?? '')[0] ?? 0);

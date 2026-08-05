@@ -929,4 +929,99 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.operationFaults.delay.active).toBe(false);
     expect(runtime.signals['delay:error']).toEqual([false]);
   });
+
+  it('evaluates Batch 2 logic operations (NAND, NOR, XOR, bitwise, shifts)', () => {
+    const nandOp = operation('nand', 'NAND', ['in1', 'in2'], ['nand:y']);
+    const bitAndOp = operation('bitAnd', 'BitwiseAND', ['in1', 'in2'], ['bitAnd:y']);
+    const shiftLeftOp = operation('shiftLeft', 'ShiftLeft', ['in1', 'in2'], ['shiftLeft:y']);
+    const ir = model('retain', { nandOp, bitAndOp, shiftLeftOp }, {
+      in1: signal('in1', 'input'),
+      in2: signal('in2', 'input'),
+      'nand:y': signal('nand:y', 'output', null, { kind: 'boolean' }),
+      'bitAnd:y': signal('bitAnd:y', 'output'),
+      'shiftLeft:y': signal('shiftLeft:y', 'output'),
+    }, ['nandOp', 'bitAndOp', 'shiftLeftOp'], [
+      { variableId: 'in1', signalId: 'in1', blockId: 'in1', portId: 'u', direction: 'in', numericType: float32 },
+      { variableId: 'in2', signalId: 'in2', blockId: 'in2', portId: 'u', direction: 'in', numericType: float32 },
+    ]);
+    const runtime = createXBRuntime(ir);
+
+    stepXBState(runtime, { in1: 1, in2: 1 });
+    expect(runtime.signals['nand:y']).toEqual([false]);
+
+    stepXBState(runtime, { in1: 6, in2: 3 });
+    expect(runtime.signals['bitAnd:y']).toEqual([2]);
+    expect(runtime.signals['shiftLeft:y']).toEqual([48]);
+  });
+
+  it('evaluates Batch 2 routing operations (SWITCH, MUX, DEMUX)', () => {
+    const switchOp = operation('switch', 'SWITCH', ['cond', 'in1', 'in2'], ['switch:y'], { threshold: 0.5 });
+    const ir = model('retain', { switchOp }, {
+      cond: signal('cond', 'input'),
+      in1: signal('in1', 'input'),
+      in2: signal('in2', 'input'),
+      'switch:y': signal('switch:y', 'output'),
+    }, ['switchOp'], [
+      { variableId: 'cond', signalId: 'cond', blockId: 'cond', portId: 'u', direction: 'in', numericType: float32 },
+      { variableId: 'in1', signalId: 'in1', blockId: 'in1', portId: 'u', direction: 'in', numericType: float32 },
+      { variableId: 'in2', signalId: 'in2', blockId: 'in2', portId: 'u', direction: 'in', numericType: float32 },
+    ]);
+    const runtime = createXBRuntime(ir);
+
+    stepXBState(runtime, { cond: 1, in1: 10, in2: 20 });
+    expect(runtime.signals['switch:y']).toEqual([10]);
+
+    stepXBState(runtime, { cond: 0, in1: 10, in2: 20 });
+    expect(runtime.signals['switch:y']).toEqual([20]);
+
+    const ifElseOp = operation('ifelse', 'IF_ELSE', ['cond', 'trueVal', 'falseVal'], ['ifelse:y']);
+    const ifElseIr = model('retain', { ifElseOp }, {
+      cond: signal('cond', 'input'),
+      trueVal: signal('trueVal', 'input'),
+      falseVal: signal('falseVal', 'input'),
+      'ifelse:y': signal('ifelse:y', 'output'),
+    }, ['ifElseOp'], [
+      { variableId: 'cond', signalId: 'cond', blockId: 'cond', portId: 'u', direction: 'in', numericType: float32 },
+      { variableId: 'trueVal', signalId: 'trueVal', blockId: 'trueVal', portId: 'u', direction: 'in', numericType: float32 },
+      { variableId: 'falseVal', signalId: 'falseVal', blockId: 'falseVal', portId: 'u', direction: 'in', numericType: float32 },
+    ]);
+    const ifElseRuntime = createXBRuntime(ifElseIr);
+
+    stepXBState(ifElseRuntime, { cond: 1, trueVal: 42, falseVal: 99 });
+    expect(ifElseRuntime.signals['ifelse:y']).toEqual([42]);
+
+    stepXBState(ifElseRuntime, { cond: 0, trueVal: 42, falseVal: 99 });
+    expect(ifElseRuntime.signals['ifelse:y']).toEqual([99]);
+  });
+
+  it('evaluates Batch 3 Trigonometry operations with numerical precision', () => {
+    const sinOp = operation('sinOp', 'SIN', ['angle'], ['sin:y']);
+    const cosOp = operation('cosOp', 'COS', ['angle'], ['cos:y']);
+    const tanOp = operation('tanOp', 'TAN', ['angle'], ['tan:y']);
+    const asinOp = operation('asinOp', 'ASIN', ['ratio'], ['asin:y']);
+    const sinhOp = operation('sinhOp', 'SINH', ['angle'], ['sinh:y']);
+    const ir = model('retain', { sinOp, cosOp, tanOp, asinOp, sinhOp }, {
+      angle: signal('angle', 'input'),
+      ratio: signal('ratio', 'input'),
+      'sin:y': signal('sin:y', 'output'),
+      'cos:y': signal('cos:y', 'output'),
+      'tan:y': signal('tan:y', 'output'),
+      'asin:y': signal('asin:y', 'output'),
+      'sinh:y': signal('sinh:y', 'output'),
+    }, ['sinOp', 'cosOp', 'tanOp', 'asinOp', 'sinhOp'], [
+      { variableId: 'angle', signalId: 'angle', blockId: 'angle', portId: 'u', direction: 'in', numericType: float32 },
+      { variableId: 'ratio', signalId: 'ratio', blockId: 'ratio', portId: 'u', direction: 'in', numericType: float32 },
+    ]);
+    const runtime = createXBRuntime(ir);
+
+    stepXBState(runtime, { angle: Math.PI / 6, ratio: 1 });
+    expect(runtime.signals['sin:y'][0]).toBeCloseTo(0.5, 5);
+    expect(runtime.signals['asin:y'][0]).toBeCloseTo(Math.PI / 2, 5);
+
+    stepXBState(runtime, { angle: 0, ratio: 0 });
+    expect(runtime.signals['sin:y']).toEqual([0]);
+    expect(runtime.signals['cos:y']).toEqual([1]);
+    expect(runtime.signals['tan:y']).toEqual([0]);
+    expect(runtime.signals['sinh:y']).toEqual([0]);
+  });
 });
