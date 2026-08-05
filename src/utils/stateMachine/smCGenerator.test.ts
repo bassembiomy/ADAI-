@@ -1132,8 +1132,8 @@ int main(void) {
       const built = build(model);
       const coreSource = generatedFile(built, 'sm_core.c');
 
-      expect(coreSource).toContain('if (instance->data.x == 1) {');
-      expect(coreSource).not.toContain('if ((instance->data.x == 1)) {');
+      expect(coreSource).toContain('if (instance->data.x == 1U) {');
+      expect(coreSource).not.toContain('if ((instance->data.x == 1U)) {');
     });
 
     it('generates correct DELAY block initial condition (-1.0) for statemachine-xbridges-scalar-multisystem-test.json', () => {
