@@ -14,6 +14,7 @@ import {
 import {
   semanticFixture,
   hybridXBridgesFixture,
+  historyXBridgesTimingFixture,
   type DifferentialFixtureName,
 } from './smFixtures';
 import {
@@ -655,6 +656,48 @@ describe('TypeScript-versus-generated-C differential gate', () => {
     expect(actual.at(-1)?.xBridges).toEqual(expected.at(-1)?.xBridges);
     expect(compareSemanticTraces(expected, actual)).toBeNull();
   }, 60_000);
+
+  it('documents that the supplied history X-Bridges timing model needs an explicit activation stimulus', () => {
+    const fixture = {
+      name: 'flat-priority' as const,
+      model: historyXBridgesTimingFixture(),
+      steps: Array.from({ length: 30 }, () => ({ kind: 'step' as const })),
+    };
+    const trace = runInterpreterTrace(fixture);
+
+    expect(trace.every((frame) => !frame.activeStateIds.includes('state-2'))).toBe(true);
+    expect(trace.every((frame) => frame.data.xb_output === 0)).toBe(true);
+  });
+
+  it('supplied history X-Bridges timing model matches strict C after explicit activation', () => {
+    const fixture = {
+      name: 'flat-priority' as const,
+      model: historyXBridgesTimingFixture(),
+      steps: [
+        { kind: 'step' as const, inputs: { x: 1 } },
+        ...Array.from({ length: 6 }, () => ({ kind: 'step' as const })),
+      ],
+    };
+    const expected = runInterpreterTrace(fixture);
+    const actual = compileAndRunCTrace(fixture);
+
+    expect(compareSemanticTraces(expected, actual)).toBeNull();
+    expect(expected.map((frame) => frame.data.xb_output)).toEqual([
+      0,
+      0,
+      0,
+      0.20000000298023224,
+      0.4000000059604645,
+      0.6000000238418579,
+      0.800000011920929,
+      0.800000011920929,
+    ]);
+    expect(expected[1].activeStateIds).toEqual(['state-2']);
+    expect(expected[6].data.x).toBe(3);
+    expect(expected[7].activeStateIds).toEqual([
+      'state-1', 'state-a', 'state-p1', 'state-p2',
+    ]);
+  }, 120_000);
 
   it.each(fixtureMatrix)(
     '%s matches generated C tick by tick',

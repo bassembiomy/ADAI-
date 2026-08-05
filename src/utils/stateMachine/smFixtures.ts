@@ -153,6 +153,127 @@ export const hybridXBridgesFixture = (): StateMachineModelV4 => ({
   safetyMode: false,
 });
 
+export const historyXBridgesTimingFixture = (): StateMachineModelV4 => ({
+  schemaVersion: CURRENT_SM_SCHEMA_VERSION,
+  tickMs: 100,
+  states: [
+    state('state-1', {
+      name: 'State_1', autostart: true, priority: 10, entry: 'x = 0;',
+    }),
+    state('state-a', {
+      name: 'State_A', parentId: 'state-1', autostart: true, priority: 10,
+      entry: 'y = 0;', internalTransitions: '[y == 1] / z = 1;',
+    }),
+    state('state-p1', {
+      name: 'State_P1', parentId: 'state-a', autostart: true, priority: 10,
+      isParallel: true, regionId: 'A', entry: 'p1_active = true;',
+      exit: 'p1_active = false;',
+    }),
+    state('state-p2', {
+      name: 'State_P2', parentId: 'state-a', autostart: true, priority: 20,
+      isParallel: true, regionId: 'B', entry: 'p2_active = true;',
+      exit: 'p2_active = false;',
+    }),
+    state('state-2', {
+      name: 'State_2', priority: 20, entry: 'x = 2;',
+      internalTransitions: '[xb_output >= 0.75] / x = 3;',
+      isXBridges: true,
+      xBridgesModel: {
+        schemaVersion: 1,
+        nodes: [
+          {
+            id: 'inport', type: 'Inport', parameters: {
+              inputs: [{ id: 'in', direction: 'input', shape: 'scalar', dimensions: [], dataType: 'float32' }],
+              outputs: [{ id: 'out', direction: 'output', shape: 'scalar', dimensions: [], dataType: 'float32' }],
+            },
+          },
+          {
+            id: 'gain', type: 'GAIN', parameters: {
+              gain: 2,
+              inputs: [{ id: 'u', direction: 'input', shape: 'scalar', dimensions: [], dataType: 'float32' }],
+              outputs: [{ id: 'y', direction: 'output', shape: 'scalar', dimensions: [], dataType: 'float32' }],
+            },
+          },
+          {
+            id: 'integrator', type: 'INTEGRATOR_DISCRETE', parameters: {
+              initial_condition: 0, sample_time: 0.1, method: 'forward_euler',
+              inputs: [{ id: 'u', direction: 'input', shape: 'scalar', dimensions: [], dataType: 'float32' }],
+              outputs: [{ id: 'y', direction: 'output', shape: 'scalar', dimensions: [], dataType: 'float32' }],
+            },
+          },
+          {
+            id: 'outport', type: 'Outport', parameters: {
+              inputs: [{ id: 'in', direction: 'input', shape: 'scalar', dimensions: [], dataType: 'float32' }],
+              outputs: [{ id: 'out', direction: 'output', shape: 'scalar', dimensions: [], dataType: 'float32' }],
+            },
+          },
+        ],
+        edges: [
+          { id: 'inport-gain', sourceNodeId: 'inport', sourcePortId: 'out', targetNodeId: 'gain', targetPortId: 'u' },
+          { id: 'gain-integrator', sourceNodeId: 'gain', sourcePortId: 'y', targetNodeId: 'integrator', targetPortId: 'u' },
+          { id: 'integrator-outport', sourceNodeId: 'integrator', sourcePortId: 'y', targetNodeId: 'outport', targetPortId: 'in' },
+        ],
+        mappings: [
+          { smVarId: 'xb_input', blockId: 'inport', portId: 'in', direction: 'in' },
+          { smVarId: 'xb_output', blockId: 'outport', portId: 'out', direction: 'out' },
+        ],
+        solver: { kind: 'euler', stepSeconds: 0.01 },
+        policy: { memory: 'reset', numericFault: 'escalate' },
+      },
+    }),
+    state('state-6', {
+      name: 'State_6', parentId: 'state-1', priority: 20,
+      entry: 's = 5;', historyType: 'shallow',
+    }),
+    state('state-6-copy', {
+      name: 'State_6_copy', parentId: 'state-1', priority: 30,
+      entry: 's = 6;', historyType: 'none',
+    }),
+  ],
+  junctions: [{
+    id: 'history-state-6', x: 0, y: 0, name: 'H', color: '#ff9900',
+    parentId: 'state-1', type: 'history', autostart: false,
+  }],
+  transitions: [
+    transition('p1-to-state2', 'state-p1', 'state-2', { condition: 'z == 1', order: 0 }),
+    transition('p2-to-state2', 'state-p2', 'state-2', { condition: 'z == 1', order: 0 }),
+    transition('state2-to-state1', 'state-2', 'state-1', { condition: 'x == 3', order: 0 }),
+    transition('state1-to-state2', 'state-1', 'state-2', { condition: 'x == 1', order: 0 }),
+    transition('state-a-to-state-6', 'state-a', 'state-6', {
+      condition: 'true', type: 'after', afterTicks: 5, order: 0,
+    }),
+    transition('state-6-to-copy', 'state-6', 'state-6-copy', {
+      condition: 'true', type: 'after', afterTicks: 5, order: 0,
+    }),
+    transition('copy-to-state-a', 'state-6-copy', 'state-a', {
+      condition: 'true', type: 'after', afterTicks: 5, order: 0,
+    }),
+  ],
+  variables: [
+    { id: 'x', name: 'x', type: 'int32', initialValue: '0', currentValue: 0, visibleInScope: true },
+    { id: 'y', name: 'y', type: 'int32', initialValue: '0', currentValue: 0, visibleInScope: true },
+    { id: 'z', name: 'z', type: 'int32', initialValue: '0', currentValue: 0, visibleInScope: true },
+    { id: 'p1_active', name: 'p1_active', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true },
+    { id: 'p2_active', name: 'p2_active', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true },
+    { id: 's', name: 's', type: 'int32', initialValue: '0', currentValue: 0, visibleInScope: true },
+    { id: 'xb_input', name: 'xb_input', type: 'float', initialValue: '1', currentValue: 1, visibleInScope: true },
+    { id: 'xb_output', name: 'xb_output', type: 'float', initialValue: '0', currentValue: 0, visibleInScope: true },
+  ],
+  layers: [
+    layer('root', null, 'OR', ['state-1', 'state-2'], ['state2-to-state1', 'state1-to-state2']),
+    {
+      ...layer('state-1-children', 'state-1', 'OR', ['state-a', 'state-6', 'state-6-copy'], [
+        'state-a-to-state-6', 'state-6-to-copy', 'copy-to-state-a',
+      ]),
+      junctionIds: ['history-state-6'],
+    },
+    layer('state-a-children', 'state-a', 'AND', ['state-p1', 'state-p2'], [
+      'p1-to-state2', 'p2-to-state2',
+    ]),
+  ],
+  safetyMode: false,
+});
+
 export const nestedAndFixture = (): StateMachineModelV4 => ({
   schemaVersion: CURRENT_SM_SCHEMA_VERSION,
   tickMs: 10,
