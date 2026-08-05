@@ -1144,5 +1144,27 @@ int main(void) {
       expect(coreSource).toContain('xb_state_initial_3_XB2_Delay_XB2_Delay_y_state_value = (double)(-1.0)');
       expect(coreSource).not.toContain('xb_state_initial_3_XB2_Delay_XB2_Delay_y_state_value = (double)(0.0)');
     });
+
+    it('generates correct routing equations for SWITCH (11) and IF_ELSE (33) for statemachine-xbridges-master-batch2b-routing-probe.json', () => {
+      const rawJson = readFileSync('C:/Users/EL-Dawlia/Downloads/delay/New folder/statemachine-xbridges-master-batch2b-routing-probe.json', 'utf-8');
+      const rawModel = JSON.parse(rawJson);
+      const output = generateMISRACCode(rawModel);
+      const coreSource = output.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
+      const headerSource = output.files.find((f) => f.name === 'sm_xbridges.h')?.content ?? '';
+
+      // 1. SWITCH must evaluate (Control5 > 3.0 ? Route11 : Route22)
+      expect(coreSource).toMatch(/Control5_out\)\)\s*>\s*3\.0\s*\?\s*\(\(double\)\(instance->xb_[^.]+\.XB5_Route11_out\)\)\s*:\s*\(\(double\)\(instance->xb_[^.]+\.XB5_Route22_out\)\)/);
+
+      // 2. IF_ELSE must evaluate (ConditionOne ? True33 : False44)
+      expect(coreSource).toMatch(/ConditionOne_out\)\)\s*>=\s*0\.5\)\s*\?\s*\(\(double\)\(instance->xb_[^.]+\.XB5_True33_out\)\)\s*:\s*\(\(double\)\(instance->xb_[^.]+\.XB5_False44_out\)\)/);
+
+      // 3. IF_ELSE output signal must be float (not bool)
+      expect(headerSource).toContain('float XB5_IfElse_y;');
+      expect(headerSource).not.toContain('bool XB5_IfElse_y;');
+
+      // 4. Output variables receive exact values
+      expect(coreSource).toContain('instance->data.xb5_ifelse_output = (float)((double)(instance->xb_');
+      expect(coreSource).toContain('instance->data.xb5_switch_output = (float)((double)(instance->xb_');
+    });
   });
 });

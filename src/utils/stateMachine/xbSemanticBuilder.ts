@@ -604,6 +604,7 @@ const initialValuesForSignal = (
   names: readonly string[] = [
     'initialValue',
     'initialCondition',
+    'initial_condition',
     'initial_state',
     'initial',
   ],
@@ -807,10 +808,32 @@ export const buildXBSemanticModel = (
       resolved = variableNumericType(input.variables[mapping.smVarId]);
     }
     if (resolved === null && port?.direction === 'output' && node !== undefined) {
+      if (node.type === 'IF_ELSE' || node.type === 'SWITCH') {
+        const inputPorts = (portsByNode.get(node.id) ?? []).filter(
+          (candidate) => candidate.direction === 'input',
+        );
+        const dataInputPorts = node.type === 'IF_ELSE'
+          ? inputPorts.filter((p) => {
+              const id = p.id.toLowerCase();
+              return id.includes('true') || id.includes('false') || id === 'u1' || id === 'u2' || id === 'in1' || id === 'in2';
+            })
+          : inputPorts.filter((p) => {
+              const id = p.id.toLowerCase();
+              return id === 'u1' || id === 'u2' || id === 'in1' || id === 'in2' || id === 'pass' || id === 'fail';
+            });
+        const candidatePorts = dataInputPorts.length > 0 ? dataInputPorts : inputPorts;
+        for (const candidatePort of candidatePorts) {
+          const t = resolveNumericType(`${node.id}:${candidatePort.id}`);
+          if (t !== null && t !== undefined) {
+            resolved = t;
+            break;
+          }
+        }
+      }
       const firstInput = (portsByNode.get(node.id) ?? [])
         .filter((candidate) => candidate.direction === 'input')
         .sort((left, right) => compareStable(left.id, right.id))[0];
-      if (firstInput !== undefined) {
+      if (resolved === null && firstInput !== undefined) {
         resolved = resolveNumericType(`${node.id}:${firstInput.id}`);
       }
     }
@@ -883,6 +906,32 @@ export const buildXBSemanticModel = (
     };
   }
 
+  const orderedInputPorts = (node: XBNodeV1, ports: PortDescriptor[]): PortDescriptor[] => {
+    const inputs = ports.filter((p) => p.direction === 'input');
+    if (node.type === 'SWITCH') {
+      const findPort = (kw: string[]) =>
+        inputs.find((p) => kw.some((k) => p.id.toLowerCase() === k || p.name?.toLowerCase() === k));
+      const u1 = findPort(['u1', 'in1', 'pass', 'u_true']);
+      const u2 = findPort(['u2', 'in2', 'fail', 'u_false']);
+      const ctrl = findPort(['ctrl', 'control', 'cond', 'condition', 'u3']);
+      if (u1 && u2 && ctrl) {
+        const rest = inputs.filter((p) => p !== u1 && p !== u2 && p !== ctrl);
+        return [u1, u2, ctrl, ...rest];
+      }
+    } else if (node.type === 'IF_ELSE') {
+      const findPort = (kw: string[]) =>
+        inputs.find((p) => kw.some((k) => p.id.toLowerCase() === k || p.name?.toLowerCase() === k));
+      const cond = findPort(['cond', 'condition', 'ctrl', 'control']);
+      const uTrue = findPort(['u_true', 'true_val', 'u1', 'in1', 'pass']);
+      const uFalse = findPort(['u_false', 'false_val', 'u2', 'in2', 'fail']);
+      if (cond && uTrue && uFalse) {
+        const rest = inputs.filter((p) => p !== cond && p !== uTrue && p !== uFalse);
+        return [cond, uTrue, uFalse, ...rest];
+      }
+    }
+    return inputs;
+  };
+
   const operations: Record<string, XBSemanticOperation> = {};
   for (const nodeId of executionOrder) {
     const node = nodeById.get(nodeId)!;
@@ -902,8 +951,7 @@ export const buildXBSemanticModel = (
     operations[node.id] = {
       id: node.id,
       type: node.type,
-      inputSignalIds: (portsByNode.get(node.id) ?? [])
-        .filter((port) => port.direction === 'input')
+      inputSignalIds: orderedInputPorts(node, portsByNode.get(node.id) ?? [])
         .map((port) => `${node.id}:${port.id}`),
       outputSignalIds,
       parameters: cloneParameters(node.parameters),
