@@ -27,6 +27,7 @@ export interface XBRuntime {
   scheduleCounters: Record<string, number>;
   operationFaults: Record<string, { active: boolean; fault: XBNumericFault | null }>;
   numericFaults: Array<{ operationId: string; fault: XBNumericFault }>;
+  simTime?: number;
 }
 
 interface XBSnapshot {
@@ -133,6 +134,7 @@ const resetStorage = (runtime: XBRuntime): void => {
     id, { active: false, fault: null },
   ]));
   runtime.numericFaults = [];
+  runtime.simTime = 0;
 };
 
 export const createXBRuntime = (ir: XBSemanticModel): XBRuntime => {
@@ -763,6 +765,13 @@ const evaluateDirectOperation = (
       const end = Number(parameter(operation, ['end'], -0.5));
       const y = u > start ? (u - start) : (u < end ? (u - end) : 0);
       return [[y]];
+    }
+    case 'Step': {
+      const stepTime = Number(parameter(operation, ['stepTime', 'time'], 1));
+      const initial = Number(parameter(operation, ['initialValue', 'initial'], 0));
+      const final = Number(parameter(operation, ['finalValue', 'final'], 1));
+      const t = runtime.simTime ?? 0;
+      return [[t < stepTime ? initial : final]];
     }
     default:
       throw new Error(
@@ -1698,6 +1707,7 @@ const executeSolverSubstep = (
     .map((operationId) => runtime.ir.operations[operationId])) {
     if (operation !== undefined) advanceSchedule(runtime, operation);
   }
+  runtime.simTime = (runtime.simTime ?? 0) + runtime.ir.solver.stepSeconds;
 };
 
 export const stepXBState = (

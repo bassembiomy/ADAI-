@@ -2814,6 +2814,6 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     }
     // Boolean constant should be emitted as true, not 1.0
     expect(source).toMatch(/const bool xb_value_\d+_\d+ = \(true\);/);
-    expect(source).toMatch(/constant_y\)\)\[0U\]\) = xb_value_\d+_\d+;/);
+    expect(source).toMatch(/instance->xb_controller\.constant_y = xb_value_\d+_\d+;/);
   });
 });
