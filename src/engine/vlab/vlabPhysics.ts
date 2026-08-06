@@ -60,7 +60,23 @@ export class VLabPhysicsEngine {
       // for thermal nodes to avoid absolute zero calculations, and fluid/gas pressures to 101325 Pa (1 atm)
       system.variableNames.forEach((name, idx) => {
         if (name.includes('(thermal)') || name.includes('_state_temp') || name.includes('_state_temp_')) {
-          x[idx] = 293.15;
+          // For component temperature states, prefer the block's own ambient_temp parameter
+          // so the cavity starts at the user-specified ambient temperature (Simscape convention).
+          let T_init = 293.15;
+          const stateParts = name.split('_state_');
+          if (stateParts.length === 2) {
+            const nodeId = stateParts[0];
+            const node = nodes.find(n => n.id === nodeId);
+            const ambientParam = node?.data?.params?.ambient_temp;
+            if (ambientParam !== undefined) {
+              const raw = typeof ambientParam === 'object' && 'value' in ambientParam ? ambientParam.value : ambientParam;
+              const numeric = Number(raw);
+              if (!isNaN(numeric)) {
+                T_init = numeric > 200 ? numeric : numeric + 273.15;
+              }
+            }
+          }
+          x[idx] = T_init;
         } else if (name.includes('(fluid)') || name.includes('(gas)')) {
           x[idx] = 101325;
         } else if (name.includes('_state_')) {

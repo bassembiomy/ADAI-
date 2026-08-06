@@ -2,8 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import * as capabilityModule from './xbCapabilities';
 import { XB_C_CONFORMANCE_CASE_IDS, XB_INTERPRETER_CONFORMANCE_CASE_IDS, getXBBlockCapability } from './xbCapabilities';
+import { XB_EXECUTABLE_C_CASES } from './xbCConformanceCases';
 
 describe('getXBBlockCapability', () => {
+  it('requires every enabled capability case ID to resolve to an executed case', () => {
+    for (const type of Object.keys(BLOCK_LIBRARY)) {
+      const capability = getXBBlockCapability(type);
+      if (!capability || !capability.codegen) continue;
+      for (const id of capability.cConformanceCaseIds ?? []) {
+        expect(XB_EXECUTABLE_C_CASES[id], `${type}: ${id}`).toBeDefined();
+      }
+    }
+  });
   it('marks deterministic arithmetic as codegen capable', () => {
     expect(getXBBlockCapability('GAIN')).toMatchObject({
       codegen: true,

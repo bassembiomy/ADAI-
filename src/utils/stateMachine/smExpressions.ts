@@ -24,7 +24,8 @@ export type ExpressionNode =
     left: ExpressionNode;
     right: ExpressionNode;
   }
-  | { kind: 'unary'; operator: UnaryOperator; operand: ExpressionNode };
+  | { kind: 'unary'; operator: UnaryOperator; operand: ExpressionNode }
+  | { kind: 'call'; functionName: string; argument: ExpressionNode };
 
 export type ActionNode = {
   kind: 'assign';
@@ -293,6 +294,15 @@ class Parser {
       this.index += 1;
       if (token.value === 'true' || token.value === 'false') {
         return { kind: 'literal', value: token.value === 'true' };
+      }
+      if (
+        ['sin', 'cos', 'exp', 'sqrt', 'abs'].includes(token.value)
+        && this.peek()?.value === '('
+      ) {
+        this.index += 1;
+        const expression = this.parseExpression();
+        this.consumeValue(')');
+        return { kind: 'call', functionName: token.value, argument: expression };
       }
       this.assertDeclared(token.value);
       return this.variable(token.value);

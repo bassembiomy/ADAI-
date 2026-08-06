@@ -24,6 +24,7 @@ import {
   type XBSemanticStateBoundary,
 } from './xbSemanticModel';
 import { normalizePidParameters } from './xbPidContract';
+import { compileEkfVectorExpressions } from './xbEkfExpressions';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -676,6 +677,48 @@ const stateBoundaryForNode = (
     })));
   }
 
+  if (node.type === 'KALMAN_FILTER') {
+    const exposedX = outputByPort('x_hat');
+    const fallback = exposedX ?? outputByPort('y_hat') ?? signals[outputSignalIds[0] ?? ''];
+    if (fallback === undefined) return boundary([]);
+    const a = node.parameters.A;
+    const dimension = Array.isArray(a) && a.length > 0 ? a.length : 1;
+    const x = exposedX ?? {
+      ...fallback,
+      id: `${node.id}:x$hidden`,
+      shape: { kind: 'vector' as const, length: dimension },
+      elementCount: dimension,
+      dimensions: [dimension],
+      layout: 'contiguous' as const,
+    };
+    const pMatrix = {
+      ...fallback,
+      id: `${node.id}:p$hidden`,
+      shape: { kind: 'matrix' as const, rows: dimension, columns: dimension },
+      elementCount: dimension * dimension,
+      dimensions: [dimension, dimension],
+      layout: 'row-major' as const,
+    };
+    return boundary([
+      {
+        id: `${node.id}:x$state`,
+        role: 'x',
+        signalId: exposedX?.id ?? null,
+        numericType: x.numericType,
+        shape: x.shape,
+        initialValues: initialValuesForSignal(node, x, diagnostics, ['x0']),
+      },
+      {
+        id: `${node.id}:P$state`,
+        role: 'P',
+        signalId: null,
+        numericType: pMatrix.numericType,
+        shape: pMatrix.shape,
+        initialValues: initialValuesForSignal(node, pMatrix, diagnostics, ['P0']),
+      }
+    ]);
+  }
+
   if (node.type === 'DISCRETE_TRANSFER_FUNCTION' || node.type === 'STATE_SPACE') {
     const exposedX = outputByPort('x');
     const fallback = exposedX ?? outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
@@ -1126,6 +1169,40 @@ export const buildXBSemanticModel = (
       },
       pidParameters: node.type === 'PID_CONTROLLER' ? normalizePidParameters(node.parameters, solverStep!) : undefined,
     };
+    
+    if (node.type === 'EXTENDED_KALMAN_FILTER') {
+      const f = Array.isArray(node.parameters.f) ? node.parameters.f as string[] : [];
+      const h = Array.isArray(node.parameters.h) ? node.parameters.h as string[] : [];
+      const P0 = Array.isArray(node.parameters.P0) ? node.parameters.P0 : [[]];
+      const nStates = P0.length;
+      const uPort = (portsByNode.get(node.id) ?? []).find(p => p.id === 'u');
+      const yPort = (portsByNode.get(node.id) ?? []).find(p => p.id === 'y_meas');
+      const uSignalId = uPort ? `${node.id}:${uPort.id}` : null;
+      const ySignalId = yPort ? `${node.id}:${yPort.id}` : null;
+      const uShape = uSignalId ? resolveShape(uSignalId) : { kind: 'scalar' };
+      const yShape = ySignalId ? resolveShape(ySignalId) : { kind: 'scalar' };
+      const mInputs = uShape.kind === 'vector' ? uShape.length : (uShape.kind === 'scalar' ? 1 : 0);
+      const pOutputs = yShape.kind === 'vector' ? yShape.length : (yShape.kind === 'scalar' ? 1 : 0);
+      
+      if (f.length !== nStates) {
+        diagnostics.push(diagnostic('XB_EKF_DIMENSION_MISMATCH', `EKF 'f' must have ${nStates} expressions.`, node.id));
+      }
+      if (h.length !== pOutputs) {
+        diagnostics.push(diagnostic('XB_EKF_DIMENSION_MISMATCH', `EKF 'h' must have ${pOutputs} expressions.`, node.id));
+      }
+      
+      const symbols = new Set(['dt']);
+      for (let i = 0; i < nStates; i++) symbols.add(`x${i}`);
+      for (let i = 0; i < mInputs; i++) symbols.add(`u${i}`);
+      
+      try {
+        const limits = { maxNodes: 1000, maxExpressions: Math.max(nStates, pOutputs) };
+        operations[node.id].parameters.fAst = compileEkfVectorExpressions(f, symbols, limits) as any;
+        operations[node.id].parameters.hAst = compileEkfVectorExpressions(h, symbols, limits) as any;
+      } catch (err) {
+        diagnostics.push(diagnostic('XB_EKF_INVALID_EXPRESSION', String(err), node.id));
+      }
+    }
   }
 
   const mappings: XBSemanticMapping[] = [...input.model.mappings]

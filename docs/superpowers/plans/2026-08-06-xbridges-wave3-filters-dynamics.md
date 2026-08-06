@@ -28,6 +28,7 @@
 ### Task 1: Static realization helper
 
 **Files:**
+
 - Create: `src/utils/stateMachine/xbDynamicRealization.ts`
 - Create: `src/utils/stateMachine/xbDynamicRealization.test.ts`
 - Modify: `src/utils/stateMachine/xbSemanticModel.ts`

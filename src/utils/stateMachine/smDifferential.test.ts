@@ -180,6 +180,32 @@ const xbPort = (
   dataType: string,
 ) => ({ id, direction, shape, dimensions, dataType });
 
+const stepSourceFixture = (): StateMachineModelV4 => {
+  const model = hybridXBridgesFixture();
+  model.states[0].autostart = false;
+  const controller = model.states.find((state) => state.id === 'controller')!;
+  controller.autostart = true;
+  controller.xBridgesModel = {
+    schemaVersion: 1,
+    nodes: [{
+      id: 'step',
+      type: 'Step',
+      parameters: {
+        step_time: 0.03,
+        initial_value: 2,
+        final_value: 5,
+        inputs: [],
+        outputs: [xbPort('out', 'output', 'scalar', [], 'float32')],
+      },
+    }],
+    edges: [],
+    mappings: [],
+    solver: { kind: 'euler', stepSeconds: 0.002 },
+    policy: { memory: 'reset', numericFault: 'escalate' },
+  };
+  return model;
+};
+
 const numericFaultFixture = (
   faultCase: NumericFaultCase,
   numericFault: 'signal-only' | 'escalate',
@@ -553,6 +579,25 @@ describe('X-Bridges numeric fault recovery and escalation', () => {
 });
 
 describe('TypeScript-versus-generated-C differential gate', () => {
+  it('T14-INT-STEP and T14-C99-STEP preserve state-timer Step semantics', () => {
+    const fixture = {
+      name: 'flat-priority' as const,
+      model: stepSourceFixture(),
+      steps: [
+        { kind: 'step' as const },
+        { kind: 'step' as const },
+        { kind: 'step' as const },
+      ],
+    };
+    const expected = runInterpreterTrace(fixture);
+    const actual = compileAndRunCTrace(fixture);
+
+    expect(expected.map((frame) =>
+      frame.xBridges.controller.signals['step:out']))
+      .toEqual([0, 2, 2, 5]);
+    expect(compareSemanticTraces(expected, actual)).toBeNull();
+  }, 60_000);
+
   it('T14-INT-CORE-DIRECT and T14-C99-CORE-DIRECT preserve boundary mapping parity through Inport, Sum, and Outport', () => {
     const model = hybridXBridgesFixture();
     model.states[0].autostart = false;

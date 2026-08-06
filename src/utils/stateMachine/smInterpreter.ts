@@ -739,7 +739,11 @@ const executeState = (
 
   const xBridges = context.runtime.xBridgesByStateId[stateId];
   if (xBridges !== undefined) {
-    const faults = stepXBState(xBridges, context.runtime.data);
+    const faults = stepXBState(
+      xBridges,
+      context.runtime.data,
+      context.runtime.stateTimersMs[state.activityIndex],
+    );
     if (
       faults.length > 0
       && xBridges.ir.policy.numericFault === 'escalate'

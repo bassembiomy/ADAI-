@@ -1295,10 +1295,10 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     description: 'Visualizes signal time-histories in a dedicated window.'
   },
   magnetron: {
-    equations: ['Qh = -power_rating * (efficiency/100) * ((Vp - Vn)/4000)^2'],
-    latex: ['Q = -P \eta (\frac{V}{4000})^2'],
+    equations: ['P_elec = power_rating * ((Vp - Vn)/4000)^2', 'I = P_elec / (Vp - Vn)', 'Qh = -power_rating * (efficiency/100) * ((Vp - Vn)/4000)^2'],
+    latex: ['P_{elec} = P_{rated} \left(\frac{V}{4000}\right)^2', 'I = \frac{P_{elec}}{V}', 'Q = -P_{rated} \eta \left(\frac{V}{4000}\right)^2'],
     across: 'Voltage (V)', through: 'Heat Flow (W)',
-    description: 'Converts high-voltage electrical energy into microwave thermal power. Negative through-value at port indicates heat injection into the connected node.'
+    description: 'Converts high-voltage electrical energy into microwave thermal power. At the nominal 4000 V anode voltage it consumes the rated power and outputs rated_power * efficiency as heat. Negative through-value at port indicates heat injection into the connected node.'
   },
   upper_heater: {
     equations: ['Qh = -((Vp - Vn)^2) / resistance'],
@@ -1323,11 +1323,16 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
       'Th1 = Th2',
       'Th1 = Th3',
       't = Th1',
-      'dTh1/dt = (Qh1 + Qh2 + Qh3 - 0.05 * (Th1 - ambient_temp)) / (volume * 1.2)'
+      'C = C_air + m_wall*Cp_wall + m_food*Cp_food',
+      'A = 6 * (V/1000)^(2/3)',
+      'Q_conv = h_conv * A * (Th1 - T_amb)',
+      'Q_rad = eps * sigma * A * (Th1^4 - T_amb^4)',
+      'cutout = 0.5 * (1 + tanh((T_max - Th1)/3))',
+      'dTh1/dt = (cutout*(Q1+Q2+Q3) - Q_conv - Q_rad) / C'
     ],
-    latex: ['T = T_0 + \int \frac{\Sigma Q - Q_{loss}}{C} dt'],
+    latex: ['T = T_0 + \\int \\frac{cutout \\cdot \\Sigma Q - Q_{conv} - Q_{rad}}{C} dt'],
     across: 'Temperature (K)', through: 'Heat Flow (W)',
-    description: 'Thermal mass model for the microwave cooking volume (25L). Accounts for heat addition from multiple sources and convection losses to ambient.'
+    description: 'Thermal mass model for the microwave cavity (25L/55L). Includes air, wall, and optional food/water thermal mass, convective and Stefan-Boltzmann radiative cooling scaled by cavity surface area, and a smooth thermal cutout that gradually reduces heat input near the safety limit.'
   },
   lms_adaptive_filter: {
     equations: [

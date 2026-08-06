@@ -716,7 +716,7 @@ describe('VLab Learning Labs — All 7 Labs Integration Tests', () => {
       }
     });
 
-    it('L6-004: Heating rate is physically plausible (~17°C/step)', () => {
+    it('L6-004: Heating rate is physically plausible (~1°C/s)', () => {
       const engine = new VLabPhysicsEngine();
       const lab = LEARNING_LABS.find(l => l.id === 'advanced_microwave_design')!;
       const nodes = reconstructLabNodes(lab.nodes);
@@ -724,15 +724,17 @@ describe('VLab Learning Labs — All 7 Labs Integration Tests', () => {
 
       let state: any = null;
       const temps: number[] = [];
+      // Use a 1 s step so the fixed thermal mass model produces a measurable,
+      // stable rate instead of the previous runaway ~340 °C/s behaviour.
       for (let i = 0; i < 3; i++) {
-        state = engine.simulateStep(nodes, edges, state, 0.05);
+        state = engine.simulateStep(nodes, edges, state, 1.0);
         temps.push(state.scopeValues);
       }
 
       const rate = temps[1] - temps[0];
-      // Heating rate should be between 5°C and 50°C per step (reasonable range)
-      expect(rate).toBeGreaterThan(5);
-      expect(rate).toBeLessThan(50);
+      // Heating rate should be between 0.5 °C/s and 5 °C/s for a real cavity
+      expect(rate).toBeGreaterThan(0.5);
+      expect(rate).toBeLessThan(5.0);
     });
   });
 

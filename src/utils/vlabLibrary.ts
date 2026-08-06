@@ -1655,8 +1655,14 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         id: 'microwave_cavity', name: '25L Microwave Cavity', color: '#64748b', icon: 'cavity', category: 'Thermal',
         params: {
           volume: { value: 25, unit: 'L', label: 'Volume' },
-          insulation: { value: 0.02, unit: 'W/mK', label: 'Insulation' },
-          ambient_temp: { value: 25, unit: 'C', label: 'Ambient' }
+          ambient_temp: { value: 25, unit: 'C', label: 'Ambient' },
+          max_temp: { value: 250, unit: 'C', label: 'Thermal Cutout Limit' },
+          food_mass: { value: 0.5, unit: 'kg', label: 'Food/Water Mass' },
+          food_cp: { value: 4184, unit: 'J/(kg*K)', label: 'Food Specific Heat' },
+          wall_mass: { value: 2.0, unit: 'kg', label: 'Wall Mass' },
+          wall_cp: { value: 460, unit: 'J/(kg*K)', label: 'Wall Specific Heat' },
+          h_conv: { value: 10, unit: 'W/(m^2*K)', label: 'Convection Coeff.' },
+          eps: { value: 0.85, unit: '-', label: 'Surface Emissivity' }
         },
         ports: [
           { id: 'h1', pos: 'left', label: 'M', domain: 'Thermal' },

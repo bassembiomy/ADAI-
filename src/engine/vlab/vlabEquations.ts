@@ -582,22 +582,30 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     // branch[0] is current_in, branch[1] is current_out
     const ctrl_val = across[2] !== undefined ? across[2] : 1.0;
     const v_out_target = (params.v_out || 4000) * ctrl_val;
-    const V_in = across[0];
+    const v_in_nom = params.v_in || 230;
     const V_out = across[1];
+    // Use the nominal input voltage for the ideal power-balance relation.
+    // Dividing by the instantaneous AC voltage caused runaway input current
+    // near zero-crossings and made the microwave temperature unstable.
     return [
       V_out - v_out_target,
-      branch[0] + (v_out_target / Math.max(1.0, Math.abs(V_in || 230))) * branch[1]
+      branch[0] + (v_out_target / v_in_nom) * branch[1]
     ];
   },
 
   magnetron: ({ across, branch, params }) => {
     // branch[0] is current, branch[1] is heat_flow
     const V = across[0] - across[1];
-    const P_rated = params.P_rated || 900;
+    const P_rated = params.power_rating || 900;
     const eff = (params.efficiency !== undefined ? params.efficiency : 65) / 100;
-    const R_load = (230 * 230) / Math.max(1, P_rated);
-    const I = V / Math.max(1, R_load);
-    const Q = Math.abs(I * V) * eff;
+    const V_nom = params.v_nominal !== undefined ? params.v_nominal : 4000;
+    // Electrical power follows the documented P = P_rated * (V/V_nom)^2
+    // characteristic, so at the nominal 4000 V the magnetron draws its
+    // rated power and outputs P_rated * efficiency as heat (≈585 W for 900 W, 65%).
+    const power_factor = Math.pow(V / Math.max(1, V_nom), 2);
+    const P_elec = P_rated * power_factor;
+    const I = P_elec / Math.max(1, Math.abs(V));
+    const Q = P_rated * eff * power_factor;
     return [
       branch[0] - I,
       branch[1] - Q
@@ -631,14 +639,55 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   microwave_cavity: ({ across, branch, state, dState, params }) => {
     // branch[0] is heat_flow1, branch[1] is heat_flow2, branch[2] is heat_flow3, branch[3] is signal_t
     // state[0] is temp
-    const vol = params.volume || 25;
-    const T_amb = 298.15;
-    const C = (vol * 0.0012 * 1005) + 500;
-    const U_A = 0.8;
+    const getVal = (p: any, fallback: number): number => {
+      if (p === undefined || p === null) return fallback;
+      if (typeof p === 'number') return p;
+      if (typeof p === 'object' && typeof p.value === 'number') return p.value;
+      const num = parseFloat(p);
+      return isNaN(num) ? fallback : num;
+    };
+
+    const vol = getVal(params.volume, 25);
+    const maxTempC = getVal(params.max_temp, 250);
+    const maxTempK = maxTempC > 350 ? maxTempC : maxTempC + 273.15;
+    const T_amb_C = getVal(params.ambient_temp, 25);
+    const T_amb = T_amb_C > 200 ? T_amb_C : T_amb_C + 273.15;
+
+    // Thermal mass: air + cavity walls + optional food/water load.
+    // Without a food load the cavity has very little thermal capacitance,
+    // which is unphysical and causes the temperature to rise without limit.
+    const food_mass = getVal(params.food_mass, 0.5); // kg
+    const food_cp = getVal(params.food_cp, 4184);    // J/(kg*K), water approx.
+    const wall_mass = getVal(params.wall_mass, 2.0); // kg
+    const wall_cp = getVal(params.wall_cp, 460);     // J/(kg*K), steel approx.
+    const C_air = vol * 0.0012 * 1005;
+    const C = C_air + wall_mass * wall_cp + food_mass * food_cp;
+
+    // Heat loss based on cavity surface area (cube approximation) so that
+    // larger 55 L cavities lose heat faster than smaller 25 L ones.
+    const V_m3 = vol * 1e-3;
+    const side = Math.pow(V_m3, 1 / 3);
+    const A = 6 * side * side;
+    const h_conv = getVal(params.h_conv, 10); // W/(m^2*K) natural convection
+    const eps = getVal(params.eps, 0.85);     // emissivity
+    const sigma = 5.67e-8;
+    const U_A = h_conv * A;
+
     const temp = state[0] > 1.0 ? state[0] : T_amb;
-    const Q_loss = U_A * (temp - T_amb);
-    const Q_in = branch[0] + branch[1] + branch[2];
-    
+
+    // Convective loss + Stefan-Boltzmann radiation loss
+    const Q_conv = U_A * (temp - T_amb);
+    const Q_rad = eps * sigma * A * (Math.pow(temp, 4) - Math.pow(T_amb, 4));
+    const Q_loss = Q_conv + Q_rad;
+
+    // Thermal safety cutout: smoothly reduce heat input as the cavity
+    // temperature approaches the safety limit. A hard step discontinuity
+    // caused DAE solver convergence failures in Simscape-style models.
+    const Q_raw = branch[0] + branch[1] + branch[2];
+    const cutoff_width = 3.0; // K
+    const cutoff = 0.5 * (1.0 + Math.tanh((maxTempK - temp) / cutoff_width));
+    const Q_in = Q_raw * cutoff;
+
     return [
       across[0] - temp,
       across[1] - temp,
