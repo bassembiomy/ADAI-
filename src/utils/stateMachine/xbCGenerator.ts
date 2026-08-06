@@ -1492,6 +1492,18 @@ const OPERATION_EMITTERS: Readonly<Record<string, OperationEmitter>> = {
   BAND_LIMITED_NOISE: () => [],
   RELAY: () => [],
   KALMAN_FILTER: () => [],
+  EXTENDED_KALMAN_FILTER: () => [],
+};
+
+const renderEKFExpression = (
+  expr: string,
+  xVarName: string,
+  uVarName: string,
+): string => {
+  let cExpr = expr;
+  cExpr = cExpr.replace(/\bx(\d+)\b/g, (_, idx) => `${xVarName}[${parseInt(idx, 10) - 1}]`);
+  cExpr = cExpr.replace(/\bu(\d+)\b/g, (_, idx) => `${uVarName}[${parseInt(idx, 10) - 1}]`);
+  return cExpr;
 };
 
 const operationEmitter = (operation: XBSemanticOperation): OperationEmitter => {
@@ -2072,6 +2084,213 @@ const renderStateOutputs = (
       return lines;
     }
   }
+  if (operation.type === 'EXTENDED_KALMAN_FILTER') {
+    const xSlot = stateSlotForRole(operation, 'x');
+    const pSlot = stateSlotForRole(operation, 'P');
+    const xHatId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'x_hat');
+    const yHatId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'y_hat');
+    const innovationId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'innovation');
+    const kId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'K');
+    if (xSlot !== undefined && pSlot !== undefined) {
+      const uId = operation.inputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'u');
+      const yMeasId = operation.inputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'y_meas');
+      const xLength = state.xBridges!.signals[xSlot.signalId ?? xHatId ?? '']?.elementCount ?? 1;
+      const uLength = uId ? (state.xBridges!.signals[uId]?.elementCount ?? 1) : 1;
+      const yMeasLength = yMeasId ? (state.xBridges!.signals[yMeasId]?.elementCount ?? 1) : 1;
+
+      const fExprs = (operation.parameters.f as string | string[]) ?? ['x1'];
+      const fArr = Array.isArray(fExprs) ? fExprs : [fExprs];
+      const hExprs = (operation.parameters.h as string | string[]) ?? ['x1'];
+      const hArr = Array.isArray(hExprs) ? hExprs : [hExprs];
+
+      const prefix = `ekf_${operationIndex}`;
+      const lines: string[] = [];
+
+      lines.push(`    double ${prefix}_xPrev[${xLength}];`);
+      for (let i = 0; i < xLength; i++) {
+        const xExpr = stateSlotElementRealExpression(xSlot, layout, member, `${i}U`);
+        lines.push(`    ${prefix}_xPrev[${i}] = ${xExpr};`);
+      }
+      lines.push(`    double ${prefix}_pPrev[${xLength}][${xLength}];`);
+      for (let r = 0; r < xLength; r++) {
+        for (let c = 0; c < xLength; c++) {
+          const pExpr = stateSlotElementRealExpression(pSlot, layout, member, `${r * xLength + c}U`);
+          lines.push(`    ${prefix}_pPrev[${r}][${c}] = ${pExpr};`);
+        }
+      }
+
+      lines.push(`    double ${prefix}_u[${uLength}];`);
+      for (let i = 0; i < uLength; i++) {
+        const uExpr = uId ? signalElementRealExpression(state, uId, layout, member, `${i}U`) : '0.0';
+        lines.push(`    ${prefix}_u[${i}] = ${uExpr};`);
+      }
+      lines.push(`    double ${prefix}_yMeas[${yMeasLength}];`);
+      for (let i = 0; i < yMeasLength; i++) {
+        const yExpr = yMeasId ? signalElementRealExpression(state, yMeasId, layout, member, `${i}U`) : '0.0';
+        lines.push(`    ${prefix}_yMeas[${i}] = ${yExpr};`);
+      }
+
+      lines.push(`    double ${prefix}_Q[${xLength}][${xLength}] = ${formatC2DArray(operation, 'Q', xLength, xLength)};`);
+      lines.push(`    double ${prefix}_R[${yMeasLength}][${yMeasLength}] = ${formatC2DArray(operation, 'R', yMeasLength, yMeasLength)};`);
+
+      lines.push(`    double ${prefix}_xPred[${xLength}];`);
+      for (let i = 0; i < fArr.length; i++) {
+        const cExpr = renderEKFExpression(fArr[i], `${prefix}_xPrev`, `${prefix}_u`);
+        lines.push(`    ${prefix}_xPred[${i}] = (${cExpr});`);
+      }
+
+      lines.push(`    double ${prefix}_F[${xLength}][${xLength}];`);
+      lines.push(`    {`);
+      lines.push(`        double ${prefix}_xP[${xLength}]; double ${prefix}_xM[${xLength}];`);
+      lines.push(`        for (uint32_t j = 0U; j < ${xLength}U; ++j) {`);
+      lines.push(`            for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
+      lines.push(`                ${prefix}_xP[k] = ${prefix}_xPrev[k] + (k == j ? 1e-6 : 0.0);`);
+      lines.push(`                ${prefix}_xM[k] = ${prefix}_xPrev[k] - (k == j ? 1e-6 : 0.0);`);
+      lines.push(`            }`);
+      for (let i = 0; i < fArr.length; i++) {
+        const cExprP = renderEKFExpression(fArr[i], `${prefix}_xP`, `${prefix}_u`);
+        const cExprM = renderEKFExpression(fArr[i], `${prefix}_xM`, `${prefix}_u`);
+        lines.push(`            ${prefix}_F[${i}][j] = ((${cExprP}) - (${cExprM})) / 2e-6;`);
+      }
+      lines.push(`        }`);
+      lines.push(`    }`);
+
+      lines.push(`    double ${prefix}_pPred[${xLength}][${xLength}];`);
+      lines.push(`    for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
+      lines.push(`        for (uint32_t c = 0U; c < ${xLength}U; ++c) {`);
+      lines.push(`            double sum = ${prefix}_Q[r][c];`);
+      lines.push(`            for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
+      lines.push(`                for (uint32_t m = 0U; m < ${xLength}U; ++m) {`);
+      lines.push(`                    sum += ${prefix}_F[r][k] * ${prefix}_pPrev[k][m] * ${prefix}_F[c][m];`);
+      lines.push(`                }`);
+      lines.push(`            }`);
+      lines.push(`            ${prefix}_pPred[r][c] = sum;`);
+      lines.push(`        }`);
+      lines.push(`    }`);
+
+      lines.push(`    double ${prefix}_yHat[${yMeasLength}];`);
+      lines.push(`    double ${prefix}_inn[${yMeasLength}];`);
+      for (let i = 0; i < hArr.length; i++) {
+        const cExpr = renderEKFExpression(hArr[i], `${prefix}_xPred`, `${prefix}_u`);
+        lines.push(`    ${prefix}_yHat[${i}] = (${cExpr});`);
+        lines.push(`    ${prefix}_inn[${i}] = ${prefix}_yMeas[${i}] - ${prefix}_yHat[${i}];`);
+      }
+
+      lines.push(`    double ${prefix}_H[${yMeasLength}][${xLength}];`);
+      lines.push(`    {`);
+      lines.push(`        double ${prefix}_xP[${xLength}]; double ${prefix}_xM[${xLength}];`);
+      lines.push(`        for (uint32_t j = 0U; j < ${xLength}U; ++j) {`);
+      lines.push(`            for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
+      lines.push(`                ${prefix}_xP[k] = ${prefix}_xPred[k] + (k == j ? 1e-6 : 0.0);`);
+      lines.push(`                ${prefix}_xM[k] = ${prefix}_xPred[k] - (k == j ? 1e-6 : 0.0);`);
+      lines.push(`            }`);
+      for (let i = 0; i < hArr.length; i++) {
+        const cExprP = renderEKFExpression(hArr[i], `${prefix}_xP`, `${prefix}_u`);
+        const cExprM = renderEKFExpression(hArr[i], `${prefix}_xM`, `${prefix}_u`);
+        lines.push(`            ${prefix}_H[${i}][j] = ((${cExprP}) - (${cExprM})) / 2e-6;`);
+      }
+      lines.push(`        }`);
+      lines.push(`    }`);
+
+      lines.push(`    double ${prefix}_S[${yMeasLength}][${yMeasLength}];`);
+      lines.push(`    for (uint32_t r = 0U; r < ${yMeasLength}U; ++r) {`);
+      lines.push(`        for (uint32_t c = 0U; c < ${yMeasLength}U; ++c) {`);
+      lines.push(`            double sum = ${prefix}_R[r][c];`);
+      lines.push(`            for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
+      lines.push(`                for (uint32_t m = 0U; m < ${xLength}U; ++m) {`);
+      lines.push(`                    sum += ${prefix}_H[r][k] * ${prefix}_pPred[k][m] * ${prefix}_H[c][m];`);
+      lines.push(`                }`);
+      lines.push(`            }`);
+      lines.push(`            ${prefix}_S[r][c] = sum;`);
+      lines.push(`        }`);
+      lines.push(`    }`);
+
+      lines.push(`    bool ${prefix}_invFailed = false;`);
+      lines.push(...renderCMatrixInverseGaussJordan(`${prefix}_S`, `${prefix}_Sinv`, `${prefix}_invFailed`, yMeasLength));
+
+      lines.push(`    double ${prefix}_K[${xLength}][${yMeasLength}];`);
+      lines.push(`    double ${prefix}_xHat[${xLength}];`);
+      lines.push(`    double ${prefix}_pHat[${xLength}][${xLength}];`);
+      lines.push(`    if (${prefix}_invFailed) {`);
+      lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
+      lines.push(`            ${prefix}_xHat[r] = ${prefix}_xPrev[r];`);
+      lines.push(`            for (uint32_t c = 0U; c < ${yMeasLength}U; ++c) ${prefix}_K[r][c] = 0.0;`);
+      lines.push(`            for (uint32_t c = 0U; c < ${xLength}U; ++c) ${prefix}_pHat[r][c] = ${prefix}_pPrev[r][c];`);
+      lines.push(`        }`);
+      lines.push(`    } else {`);
+      lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
+      lines.push(`            for (uint32_t c = 0U; c < ${yMeasLength}U; ++c) {`);
+      lines.push(`                double sum = 0.0;`);
+      lines.push(`                for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
+      lines.push(`                    for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) {`);
+      lines.push(`                        sum += ${prefix}_pPred[r][k] * ${prefix}_H[m][k] * ${prefix}_Sinv[m][c];`);
+      lines.push(`                    }`);
+      lines.push(`                }`);
+      lines.push(`                ${prefix}_K[r][c] = sum;`);
+      lines.push(`            }`);
+      lines.push(`        }`);
+      lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
+      lines.push(`            double sum = ${prefix}_xPred[r];`);
+      lines.push(`            for (uint32_t k = 0U; k < ${yMeasLength}U; ++k) sum += ${prefix}_K[r][k] * ${prefix}_inn[k];`);
+      lines.push(`            ${prefix}_xHat[r] = sum;`);
+      lines.push(`        }`);
+      lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
+      lines.push(`            for (uint32_t c = 0U; c < ${xLength}U; ++c) {`);
+      lines.push(`                double sum = 0.0;`);
+      lines.push(`                for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
+      lines.push(`                    double ikh_rk = (r == k ? 1.0 : 0.0);`);
+      lines.push(`                    for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) ikh_rk -= ${prefix}_K[r][m] * ${prefix}_H[m][k];`);
+      lines.push(`                    for (uint32_t n_idx = 0U; n_idx < ${xLength}U; ++n_idx) {`);
+      lines.push(`                        double ikh_cn = (c == n_idx ? 1.0 : 0.0);`);
+      lines.push(`                        for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) ikh_cn -= ${prefix}_K[c][m] * ${prefix}_H[m][n_idx];`);
+      lines.push(`                        sum += ikh_rk * ${prefix}_pPred[k][n_idx] * ikh_cn;`);
+      lines.push(`                    }`);
+      lines.push(`                }`);
+      lines.push(`                for (uint32_t k = 0U; k < ${yMeasLength}U; ++k) {`);
+      lines.push(`                    for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) {`);
+      lines.push(`                        sum += ${prefix}_K[r][k] * ${prefix}_R[k][m] * ${prefix}_K[c][m];`);
+      lines.push(`                    }`);
+      lines.push(`                }`);
+      lines.push(`                ${prefix}_pHat[r][c] = sum;`);
+      lines.push(`            }`);
+      lines.push(`        }`);
+      lines.push(`    }`);
+
+      if (xHatId !== undefined) {
+        for (let i = 0; i < xLength; i++) {
+          lines.push(...renderSignalElementWrite(state, operation, operationIndex, 0, xHatId, `${i}U`, `${prefix}_xHat[${i}]`, layout, member));
+        }
+      }
+      if (yHatId !== undefined) {
+        for (let i = 0; i < yMeasLength; i++) {
+          lines.push(...renderSignalElementWrite(state, operation, operationIndex, 1, yHatId, `${i}U`, `${prefix}_yHat[${i}]`, layout, member));
+        }
+      }
+      if (innovationId !== undefined) {
+        for (let i = 0; i < yMeasLength; i++) {
+          lines.push(...renderSignalElementWrite(state, operation, operationIndex, 2, innovationId, `${i}U`, `${prefix}_inn[${i}]`, layout, member));
+        }
+      }
+      if (kId !== undefined) {
+        for (let r = 0; r < xLength; r++) {
+          for (let c = 0; c < yMeasLength; c++) {
+            lines.push(...renderSignalElementWrite(state, operation, operationIndex, 3, kId, `${r * yMeasLength + c}U`, `${prefix}_K[${r}][${c}]`, layout, member));
+          }
+        }
+      }
+
+      for (let i = 0; i < xLength; i++) {
+        lines.push(...renderStateSlotElementAssignment(state, xSlot, `${i}U`, `${prefix}_xHat[${i}]`, layout, member, `${operation.id}_x_update_${i}`, layout.errorFields.get(operation.id), operation));
+      }
+      for (let r = 0; r < xLength; r++) {
+        for (let c = 0; c < xLength; c++) {
+          lines.push(...renderStateSlotElementAssignment(state, pSlot, `${r * xLength + c}U`, `${prefix}_pHat[${r}][${c}]`, layout, member, `${operation.id}_P_update_${r}_${c}`, layout.errorFields.get(operation.id), operation));
+        }
+      }
+
+      return lines;
+    }
+  }
   return (operation.state?.slots ?? []).flatMap((slot, slotIndex) => slot.signalId === null ? [] :
   [...renderSignalWrite(
     state,
@@ -2511,6 +2730,9 @@ const renderDiscreteStateUpdates = (
           layout, member, `${operation.id}_${slotIndex}_update`, layout.errorFields.get(operation.id), operation,
         );
       }
+      case 'KALMAN_FILTER':
+      case 'EXTENDED_KALMAN_FILTER':
+        return [];
       default:
         throw new Error(
           `X-Bridges stateful operation '${operation.id}' has unsupported type '${operation.type}'`,

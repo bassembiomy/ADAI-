@@ -30,6 +30,7 @@ export const XB_INTERPRETER_CONFORMANCE_CASE_IDS = [
   'T10-INT-DISCONTINUOUS', 'T14-INT-DISCONTINUOUS',
   'T14-INT-CORE-DIRECT', 'T14-INT-SHAPED-CONSTANT',
   'T14-INT-STATEFUL', 'T14-INT-CONTINUOUS',
+  'XB-W5-KALMAN', 'XB-W5-EKF',
 ] as const;
 
 export const XB_C_CONFORMANCE_CASE_IDS = [
@@ -38,6 +39,7 @@ export const XB_C_CONFORMANCE_CASE_IDS = [
   'T10-C99-DISCONTINUOUS', 'T14-C99-DISCONTINUOUS',
   'T14-C99-CORE-DIRECT', 'T14-C99-SHAPED-CONSTANT',
   'T14-C99-STATEFUL', 'T14-C99-CONTINUOUS',
+  'XB-W5-KALMAN', 'XB-W5-EKF',
 ] as const;
 
 export interface XBConformanceCoverage {
@@ -132,6 +134,12 @@ string, readonly XBConformanceCoverage[]
     scalarCoverage('DELAY'), scalarCoverage('INTEGRATOR_CONTINUOUS'),
     scalarCoverage('Integrator'),
   ],
+  'XB-W5-KALMAN': [
+    shapedCoverage('KALMAN_FILTER', ['scalar', 'vector', 'matrix']),
+  ],
+  'XB-W5-EKF': [
+    shapedCoverage('EXTENDED_KALMAN_FILTER', ['scalar', 'vector', 'matrix']),
+  ],
 });
 
 export const XB_C_CONFORMANCE_CASES: Readonly<Record<
@@ -163,6 +171,12 @@ string, readonly XBConformanceCoverage[]
   'T14-C99-CONTINUOUS': [
     scalarCoverage('DELAY'), scalarCoverage('INTEGRATOR_CONTINUOUS'),
     scalarCoverage('Integrator'),
+  ],
+  'XB-W5-KALMAN': [
+    shapedCoverage('KALMAN_FILTER', ['scalar', 'vector', 'matrix']),
+  ],
+  'XB-W5-EKF': [
+    shapedCoverage('EXTENDED_KALMAN_FILTER', ['scalar', 'vector', 'matrix']),
   ],
 });
 
@@ -234,8 +248,9 @@ const UNCLASSIFIED_HOST_ONLY = hostOnlySet([
   'SPEED_CONTROLLER', 'FLUX_REFERENCE', 'ROTOR_POSITION_ESTIMATOR',
   'SVPWM_CORE', 'SECTOR_SELECTOR', 'SWITCHING_TIME_CALCULATOR',
   'SVPWM_GATE_GENERATOR', 'ZERO_SEQUENCE_INJECTION', 'SVPWM_MODULATOR',
+  'SWITCH_CASE', 'INTEGRATOR', 'DERIVATIVE', 'TRANSFER_FUNCTION',
   'ZERO_POLE_GAIN', 'LAPLACE_TRANSFORM', 'DISCRETE_IMPULSE',
-  'EXTENDED_KALMAN_FILTER', 'MPC_CONTROLLER', 'DOE_MODULE',
+  'MPC_CONTROLLER', 'DOE_MODULE',
   'AC_INDUCTION_MOTOR', 'IM_SCALAR_CONTROL', 'IM_FOC_CONTROL',
   'IM_FLUX_OBSERVER', 'VF_SLIP_COMP', 'FIELD_WEAKENING', 'MTPA_CONTROLLER',
   'MTPA_FW_MANAGER', 'AC_MOTOR_PID_CONTROL', 'NEURAL_NEURON_LEARNING',
@@ -380,6 +395,10 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   KALMAN_FILTER: stateful(
     allShapes, undefined,
     ['XB-W5-KALMAN'], ['XB-W5-KALMAN']
+  ),
+  EXTENDED_KALMAN_FILTER: stateful(
+    allShapes, undefined,
+    ['XB-W5-EKF'], ['XB-W5-EKF']
   ),
 
   // Bounded control and linear-system blocks. Each entry is enabled only with

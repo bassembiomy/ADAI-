@@ -1305,4 +1305,51 @@ describe('Noise and Estimation', () => {
     expect(runtime.signals['kf:innovation'][0]).toBeCloseTo(1.0);
     expect(runtime.signals['kf:K'][0]).toBeCloseTo(1.01 / 1.11, 2);
   });
+
+  it('matches a hand-calculated Extended Kalman Filter update', () => {
+    const ekfOp: XBSemanticOperation = {
+      id: 'ekf',
+      type: 'EXTENDED_KALMAN_FILTER',
+      inputSignalIds: ['ekf:u', 'ekf:y_meas'],
+      outputSignalIds: ['ekf:x_hat', 'ekf:y_hat', 'ekf:innovation', 'ekf:K'],
+      parameters: {
+        f: ['x1 + 0.01 * x2 + 0.00005 * u1', 'x2 + 0.01 * u1'],
+        h: ['x1'],
+        Q: [[0.001, 0], [0, 0.001]],
+        R: [[0.01]],
+        P0: [[1, 0], [0, 1]],
+        x0: [[0], [0]],
+      },
+      directFeedthrough: false,
+      stateful: true,
+      conversion: null,
+      state: {
+        outputPhase: 'read-before-update',
+        updatePhase: 'after-direct-feedthrough',
+        slots: [
+          { id: 'ekf:x$state', role: 'x', signalId: 'ekf:x_hat', numericType: float32, shape: { kind: 'vector', length: 2 }, initialValues: [0, 0] },
+          { id: 'ekf:P$state', role: 'P', signalId: null, numericType: float32, shape: { kind: 'matrix', rows: 2, columns: 2 }, initialValues: [1, 0, 0, 1] },
+        ],
+      },
+      schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+    };
+    const ir = model('ekf_model', { ekf: ekfOp }, {
+      'ekf:u': signal('ekf:u', 'input'),
+      'ekf:y_meas': signal('ekf:y_meas', 'input'),
+      'ekf:x_hat': { ...signal('ekf:x_hat', 'output'), shape: { kind: 'vector', length: 2 }, elementCount: 2, dimensions: [2], layout: 'contiguous' },
+      'ekf:y_hat': signal('ekf:y_hat', 'output'),
+      'ekf:innovation': signal('ekf:innovation', 'output'),
+      'ekf:K': { ...signal('ekf:K', 'output'), shape: { kind: 'matrix', rows: 2, columns: 1 }, elementCount: 2, dimensions: [2, 1], layout: 'row-major' },
+    }, ['ekf'], [
+      { variableId: 'u', signalId: 'ekf:u', blockId: 'ekf', portId: 'u', direction: 'in', numericType: float32 },
+      { variableId: 'y_meas', signalId: 'ekf:y_meas', blockId: 'ekf', portId: 'y_meas', direction: 'in', numericType: float32 },
+    ]);
+
+    const runtime = createXBRuntime(ir);
+    const data = { u: 1, y_meas: 0.5 };
+    stepXBState(runtime, data);
+
+    expect(runtime.signals['ekf:x_hat'][0]).toBeGreaterThan(0);
+    expect(runtime.signals['ekf:innovation'][0]).toBeCloseTo(0.49995, 3);
+  });
 });

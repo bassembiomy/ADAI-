@@ -1027,6 +1027,131 @@ const writeStateOutputs = (
     }
     return;
   }
+  if (operation.type === 'EXTENDED_KALMAN_FILTER') {
+    const xSlot = stateSlotForRole(operation, 'x');
+    const pSlot = stateSlotForRole(operation, 'P');
+    const xHatId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'x_hat');
+    const yHatId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'y_hat');
+    const innovationId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'innovation');
+    const kId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'K');
+    if (xSlot !== undefined && pSlot !== undefined) {
+      const uId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'u');
+      const yMeasId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'y_meas');
+      const u = uId ? signalValues(runtime, uId).map(Number) : [0];
+      const yMeas = yMeasId ? signalValues(runtime, yMeasId).map(Number) : [0];
+      const xLength = runtime.ir.signals[xSlot.signalId ?? xHatId ?? '']?.elementCount ?? 1;
+      const xPrevFlat = runtime.stateSlots[xSlot.id] ?? xSlot.initialValues;
+      const pPrevFlat = runtime.stateSlots[pSlot.id] ?? pSlot.initialValues;
+      const type = xSlot.numericType;
+
+      const xPrev = xPrevFlat.map(Number);
+      const pPrev: number[][] = [];
+      for (let i = 0; i < xLength; i++) {
+        pPrev.push(pPrevFlat.slice(i * xLength, (i + 1) * xLength).map(Number));
+      }
+
+      const fExprs = (operation.parameters.f as string | string[]) ?? ['x1'];
+      const hExprs = (operation.parameters.h as string | string[]) ?? ['x1'];
+      const Q = matrixParameter(operation, 'Q', [[0]]);
+      const R = matrixParameter(operation, 'R', [[1]]);
+
+      const evalStr = (expr: string, scope: Record<string, number>): number => {
+        try {
+          let jsExpr = expr;
+          for (const [k, v] of Object.entries(scope)) {
+            jsExpr = jsExpr.replace(new RegExp(`\\b${k}\\b`, 'g'), String(v));
+          }
+          const res = Number(new Function(`return (${jsExpr});`)());
+          return Number.isFinite(res) ? res : 0;
+        } catch {
+          return 0;
+        }
+      };
+
+      const evalVec = (exprs: string | string[], xVal: number[], uVal: number[]): number[] => {
+        const scope: Record<string, number> = {};
+        for (let i = 0; i < xVal.length; i++) scope[`x${i + 1}`] = xVal[i];
+        for (let i = 0; i < uVal.length; i++) scope[`u${i + 1}`] = uVal[i];
+        const arr = Array.isArray(exprs) ? exprs : [exprs];
+        return arr.map((e) => evalStr(e, scope));
+      };
+
+      const computeJacobian = (exprs: string | string[], x0: number[], u0: number[], eps = 1e-6): number[][] => {
+        const nx = x0.length;
+        const y0 = evalVec(exprs, x0, u0);
+        const ny = y0.length;
+        const J: number[][] = Array.from({ length: ny }, () => Array.from({ length: nx }, () => 0));
+        for (let j = 0; j < nx; j++) {
+          const xPlus = [...x0]; xPlus[j] += eps;
+          const xMinus = [...x0]; xMinus[j] -= eps;
+          const yPlus = evalVec(exprs, xPlus, u0);
+          const yMinus = evalVec(exprs, xMinus, u0);
+          for (let i = 0; i < ny; i++) J[i][j] = (yPlus[i] - yMinus[i]) / (2 * eps);
+        }
+        return J;
+      };
+
+      // Predict
+      const xPredVec = evalVec(fExprs, xPrev, u);
+      const xPred = xPredVec.map((v) => [v]);
+      const F = computeJacobian(fExprs, xPrev, u);
+      const pPred = matrixAdd(
+        matrixMultiply(matrixMultiply(F, pPrev, type, faults), matrixTranspose(F), type, faults),
+        Q, type, faults,
+      );
+
+      // Update
+      const H = computeJacobian(hExprs, xPredVec, u);
+      const yHatVec = evalVec(hExprs, xPredVec, u);
+      const yHat = yHatVec.map((v) => [v]);
+      const yMeasVec = yMeas.map((v) => [v]);
+      const innovation = matrixSubtract(yMeasVec, yHat, type, faults);
+
+      const hTrans = matrixTranspose(H);
+      const sPre = matrixAdd(
+        matrixMultiply(matrixMultiply(H, pPred, type, faults), hTrans, type, faults),
+        R, type, faults,
+      );
+      const invRes = matrixInverseGaussJordan(sPre, type, faults);
+
+      let xHat = xPred;
+      let pHat = pPred;
+      let K: number[][] = [];
+      for (let i = 0; i < xLength; i++) {
+        K[i] = [];
+        for (let j = 0; j < yMeas.length; j++) K[i]![j] = 0;
+      }
+
+      if (invRes.fault) {
+        faults.push({ operationId: operation.id, errorId: 'XB_MATRIX_SINGULAR' });
+        xHat = xPrev.map((v) => [v]);
+        pHat = pPrev;
+      } else {
+        const I: number[][] = Array.from({ length: xLength }, (_, r) =>
+          Array.from({ length: xLength }, (_, c) => (r === c ? 1 : 0)),
+        );
+        K = matrixMultiply(matrixMultiply(pPred, hTrans, type, faults), invRes.matrix, type, faults);
+        xHat = matrixAdd(xPred, matrixMultiply(K, innovation, type, faults), type, faults);
+        const kh = matrixMultiply(K, H, type, faults);
+        const ikh = matrixSubtract(I, kh, type, faults);
+        pHat = matrixAdd(
+          matrixMultiply(matrixMultiply(ikh, pPred, type, faults), matrixTranspose(ikh), type, faults),
+          matrixMultiply(matrixMultiply(K, R, type, faults), matrixTranspose(K), type, faults),
+          type, faults,
+        );
+      }
+
+      const xHatFlat = xHat.map((r) => r[0]!);
+      if (xHatId !== undefined) writeSignal(runtime, xHatId, xHatFlat, faults, operation);
+      if (yHatId !== undefined) writeSignal(runtime, yHatId, yHat.map((r) => r[0]!), faults, operation);
+      if (innovationId !== undefined) writeSignal(runtime, innovationId, innovation.map((r) => r[0]!), faults, operation);
+      if (kId !== undefined) writeSignal(runtime, kId, K.flat(), faults, operation);
+
+      runtime.stateSlots[xSlot.id] = xHatFlat;
+      runtime.stateSlots[pSlot.id] = pHat.flat();
+    }
+    return;
+  }
   if (operation.type === 'RATE_LIMITER') {
     const prevSlot = stateSlotForRole(operation, 'prev_y');
     const outputId = operation.outputSignalIds[0];
@@ -1231,7 +1356,7 @@ const statefulUpdate = (
     const current_on = u >= on || (current_on_prev && u > off);
     return { [onSlot.id]: [current_on] };
   }
-  if (operation.type === 'KALMAN_FILTER') {
+  if (operation.type === 'KALMAN_FILTER' || operation.type === 'EXTENDED_KALMAN_FILTER') {
     return {};
   }
   const input = signalValues(runtime, operation.inputSignalIds[0]);
