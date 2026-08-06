@@ -5,6 +5,13 @@ import {
   type XBNumericType,
 } from './xbNumeric';
 import { nextGaussianPair } from './xbDeterministicNoise';
+import {
+  matrixAdd,
+  matrixSubtract,
+  matrixInverseGaussJordan,
+  matrixMultiply,
+  matrixTranspose,
+} from './xbStaticMatrix';
 import type {
   XBSemanticModel,
   XBSemanticOperation,
@@ -81,7 +88,7 @@ const convertScalar = (
   return result;
 };
 
-const convertValue = (
+export const convertValue = (
   value: XBScalar,
   type: XBNumericType,
   faults: XBNumericFault[],
@@ -978,6 +985,92 @@ const writeStateOutputs = (
       return;
     }
   }
+  if (operation.type === 'KALMAN_FILTER') {
+    const xSlot = stateSlotForRole(operation, 'x');
+    const pSlot = stateSlotForRole(operation, 'P');
+    const xHatId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'x_hat');
+    const yHatId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'y_hat');
+    const innovationId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'innovation');
+    const kId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'K');
+    if (xSlot !== undefined && pSlot !== undefined) {
+      const uId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'u');
+      const yMeasId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'y_meas');
+      const u = uId ? signalValues(runtime, uId) : [0];
+      const yMeas = yMeasId ? signalValues(runtime, yMeasId) : [0];
+      const xLength = runtime.ir.signals[xSlot.signalId ?? xHatId ?? '']?.elementCount ?? 1;
+      const xPrevFlat = runtime.stateSlots[xSlot.id] ?? xSlot.initialValues;
+      const pPrevFlat = runtime.stateSlots[pSlot.id] ?? pSlot.initialValues;
+      const type = xSlot.numericType;
+      
+      const xPrev = xPrevFlat.map(v => [Number(v)]);
+      const pPrev: number[][] = [];
+      for (let i = 0; i < xLength; i++) {
+        pPrev.push(pPrevFlat.slice(i * xLength, (i + 1) * xLength).map(Number));
+      }
+      
+      const A = matrixParameter(operation, 'A', [[1]]);
+      const B = matrixParameter(operation, 'B', [[0]]);
+      const C = matrixParameter(operation, 'C', [[1]]);
+      const D = matrixParameter(operation, 'D', [[0]]);
+      const Q = matrixParameter(operation, 'Q', [[0]]);
+      const R = matrixParameter(operation, 'R', [[1]]);
+      const I: number[][] = [];
+      for (let i = 0; i < xLength; i++) {
+        I[i] = [];
+        for (let j = 0; j < xLength; j++) I[i]![j] = i === j ? 1 : 0;
+      }
+      
+      const uVec = u.map(v => [Number(v)]);
+      const yMeasVec = yMeas.map(v => [Number(v)]);
+      
+      // Predict: x = Ax + Bu
+      let xPred = matrixAdd(matrixMultiply(A, xPrev, type, faults), matrixMultiply(B, uVec, type, faults), type, faults);
+      // P = APA' + Q
+      let pPred = matrixAdd(matrixMultiply(matrixMultiply(A, pPrev, type, faults), matrixTranspose(A), type, faults), Q, type, faults);
+      
+      // Update: innovation = y_meas - (C xPred + D u)
+      const yHat = matrixAdd(matrixMultiply(C, xPred, type, faults), matrixMultiply(D, uVec, type, faults), type, faults);
+      const innovation = matrixSubtract(yMeasVec, yHat, type, faults);
+      
+      // K = P_pred C' (C P_pred C' + R)^-1
+      const cTrans = matrixTranspose(C);
+      const sPre = matrixAdd(matrixMultiply(matrixMultiply(C, pPred, type, faults), cTrans, type, faults), R, type, faults);
+      const invRes = matrixInverseGaussJordan(sPre, type, faults);
+      
+      let xHat = xPrev;
+      let pHat = pPrev;
+      let K: number[][] = [];
+      for (let i = 0; i < xLength; i++) {
+        K[i] = [];
+        for (let j = 0; j < yMeas.length; j++) K[i]![j] = 0;
+      }
+
+      if (invRes.fault) {
+        // Fallback: retain state, output default
+        faults.push({ operationId: operation.id, errorId: 'XB_MATRIX_SINGULAR' });
+        xHat = xPrev;
+        pHat = pPrev;
+      } else {
+        K = matrixMultiply(matrixMultiply(pPred, cTrans, type, faults), invRes.matrix, type, faults);
+        xHat = matrixAdd(xPred, matrixMultiply(K, innovation, type, faults), type, faults);
+        const kc = matrixMultiply(K, C, type, faults);
+        const ikc = matrixSubtract(I, kc, type, faults);
+        pHat = matrixAdd(matrixMultiply(matrixMultiply(ikc, pPred, type, faults), matrixTranspose(ikc), type, faults), matrixMultiply(matrixMultiply(K, R, type, faults), matrixTranspose(K), type, faults), type, faults);
+      }
+      
+      // Write state outputs
+      const xHatFlat = xHat.map(r => r[0]!);
+      if (xHatId !== undefined) writeSignal(runtime, xHatId, xHatFlat, faults, operation);
+      if (yHatId !== undefined) writeSignal(runtime, yHatId, yHat.map(r => r[0]!), faults, operation);
+      if (innovationId !== undefined) writeSignal(runtime, innovationId, innovation.map(r => r[0]!), faults, operation);
+      if (kId !== undefined) writeSignal(runtime, kId, K.flat(), faults, operation);
+      
+      // Update internal state directly to avoid re-evaluating
+      runtime.stateSlots[xSlot.id] = xHatFlat;
+      runtime.stateSlots[pSlot.id] = pHat.flat();
+    }
+    return;
+  }
   if (operation.type === 'RATE_LIMITER') {
     const prevSlot = stateSlotForRole(operation, 'prev_y');
     const outputId = operation.outputSignalIds[0];
@@ -1090,7 +1183,7 @@ const statefulUpdate = (
     const current_on = u >= on || (current_on_prev && u > off);
     return { [onSlot.id]: [current_on] };
   }
-  if (operation.type === 'WHITE_NOISE' || operation.type === 'BAND_LIMITED_NOISE') {
+  if (operation.type === 'WHITE_NOISE' || operation.type === 'BAND_LIMITED_NOISE' || operation.type === 'KALMAN_FILTER') {
     return {};
   }
   const input = signalValues(runtime, operation.inputSignalIds[0]);

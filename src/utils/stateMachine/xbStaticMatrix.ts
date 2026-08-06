@@ -11,8 +11,8 @@ const q = (value: number, type: XBNumericType, faults: XBNumericFault[]): number
 };
 
 export function matrixMultiply(
-  a: number[][],
-  b: number[][],
+  a: readonly (readonly number[])[],
+  b: readonly (readonly number[])[],
   type: XBNumericType,
   faults: XBNumericFault[] = []
 ): number[][] {
@@ -39,8 +39,8 @@ export function matrixMultiply(
 }
 
 export function matrixAdd(
-  a: number[][],
-  b: number[][],
+  a: readonly (readonly number[])[],
+  b: readonly (readonly number[])[],
   type: XBNumericType,
   faults: XBNumericFault[] = []
 ): number[][] {
@@ -57,8 +57,27 @@ export function matrixAdd(
   return result;
 }
 
+export function matrixSubtract(
+  a: readonly (readonly number[])[],
+  b: readonly (readonly number[])[],
+  type: XBNumericType,
+  faults: XBNumericFault[] = []
+): number[][] {
+  const m = a.length;
+  const n = a[0]?.length || 0;
+  
+  const result: number[][] = [];
+  for (let i = 0; i < m; i++) {
+    result[i] = [];
+    for (let j = 0; j < n; j++) {
+      result[i]![j] = q(a[i]![j]! - b[i]![j]!, type, faults);
+    }
+  }
+  return result;
+}
+
 export function matrixTranspose(
-  a: number[][]
+  a: readonly (readonly number[])[]
 ): number[][] {
   const m = a.length;
   const n = a[0]?.length || 0;
@@ -74,7 +93,7 @@ export function matrixTranspose(
 }
 
 export function matrixInverseGaussJordan(
-  a: number[][],
+  a: readonly (readonly number[])[],
   type: XBNumericType,
   faults: XBNumericFault[] = []
 ): MatrixResult {
