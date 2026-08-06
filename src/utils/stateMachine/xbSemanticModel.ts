@@ -54,6 +54,13 @@ export interface XBSemanticStateSlot {
   readonly initialValues: readonly (number | boolean)[];
 }
 
+/** Constrained roles for noise block state slots. */
+export type XBNoiseStateSlotRole = 'rng_state' | 'spare_normal' | 'has_spare_normal';
+
+export interface XBNoiseStateSlot extends XBSemanticStateSlot {
+  readonly role: XBNoiseStateSlotRole;
+}
+
 export interface XBSemanticStateBoundary {
   readonly outputPhase: 'read-before-update';
   readonly updatePhase: 'after-direct-feedthrough';
@@ -65,6 +72,21 @@ export interface XBNumericFaultContract {
   readonly fallback: 'zero' | 'previous-value';
   /** Existing model-owned error/e output when the block declares one. */
   readonly errorSignalId: string | null;
+}
+
+/** Resolved and normalized PID parameters for the advanced PID controller. */
+export interface XBPidParameters {
+  readonly mode: 'continuous' | 'discrete';
+  readonly kp: number;
+  readonly ki: number;
+  readonly kd: number;
+  readonly filterN: number;
+  readonly beta: number;
+  readonly gamma: number;
+  readonly minimum: number;
+  readonly maximum: number;
+  readonly method: 'ForwardEuler' | 'BackwardEuler' | 'Trapezoidal';
+  readonly sampleTime: number;
 }
 
 /** A generic operation description interpreted or rendered by later stages. */
@@ -81,6 +103,7 @@ export interface XBSemanticOperation {
   readonly schedule: XBSemanticSchedule;
   /** Present on every builder-produced operation; optional for legacy IR fixtures. */
   readonly numericFault?: XBNumericFaultContract;
+  readonly pidParameters?: XBPidParameters;
 }
 
 export interface XBSemanticMapping {
