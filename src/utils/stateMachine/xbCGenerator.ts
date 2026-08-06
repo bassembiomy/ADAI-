@@ -1469,6 +1469,9 @@ const OPERATION_EMITTERS: Readonly<Record<string, OperationEmitter>> = {
   MOVING_AVERAGE: emitMovingAverageLifecycleStub,
   DISCRETE_TRANSFER_FUNCTION: emitTransferFunctionLifecycleStub,
   STATE_SPACE: emitStateSpaceLifecycleStub,
+  WHITE_NOISE: () => [],
+  BAND_LIMITED_NOISE: () => [],
+  RELAY: () => [],
 };
 
 const operationEmitter = (operation: XBSemanticOperation): OperationEmitter => {
@@ -1808,6 +1811,52 @@ const renderStateOutputs = (
       return [...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, y, layout, member)];
     }
   }
+  if (operation.type === 'WHITE_NOISE' || operation.type === 'BAND_LIMITED_NOISE') {
+    const rngSlot = operation.state?.slots.find((s) => s.role === 'rng_state');
+    const spareSlot = operation.state?.slots.find((s) => s.role === 'spare_normal');
+    const hasSpareSlot = operation.state?.slots.find((s) => s.role === 'has_spare_normal');
+    const outputSignalId = operation.outputSignalIds[0];
+    
+    if (rngSlot !== undefined && spareSlot !== undefined && hasSpareSlot !== undefined && outputSignalId !== undefined) {
+      const rng = stateSlotElementRealExpression(rngSlot, layout, member, '0U');
+      const spare = stateSlotElementRealExpression(spareSlot, layout, member, '0U');
+      const hasSpare = stateSlotElementRealExpression(hasSpareSlot, layout, member, '0U');
+      const mean = cNumber(scalarParameter(operation, ['mean'], 0));
+      const variance = cNumber(scalarParameter(operation, ['variance'], 1));
+      
+      const prefix = `${operation.id}_${operationIndex}`;
+      const lines = [
+        `    double ${prefix}_normal = 0.0;`,
+        `    if (${hasSpare} != 0.0) {`,
+        `      ${prefix}_normal = ${spare};`,
+        `    } else {`,
+        `      uint32_t s = (uint32_t)(${rng});`,
+        `      if (s == 0) s = 0x6d2b79f5;`,
+        `      s ^= s << 13; s ^= s >> 17; s ^= s << 5;`,
+        `      double u1 = (s + 0.5) / 4294967296.0;`,
+        `      s ^= s << 13; s ^= s >> 17; s ^= s << 5;`,
+        `      double u2 = (s + 0.5) / 4294967296.0;`,
+        `      ${prefix}_normal = sqrt(-2.0 * log(u1)) * sin(2.0 * 3.14159265358979323846 * u2);`,
+        `    }`,
+        `    double ${prefix}_white = ${mean} + sqrt(fmax(0.0, ${variance})) * ${prefix}_normal;`,
+      ];
+      
+      if (operation.type === 'BAND_LIMITED_NOISE') {
+        const filterSlot = operation.state?.slots.find((s) => s.role === 'filter_state');
+        if (filterSlot !== undefined) {
+          const prevFilter = stateSlotElementRealExpression(filterSlot, layout, member, '0U');
+          const fc = cNumber(scalarParameter(operation, ['fc'], 1));
+          const dt = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], state.xBridges!.solver.stepSeconds));
+          lines.push(`    double ${prefix}_fcCoeff = 1.0 - exp(-2.0 * 3.14159265358979323846 * (${fc}) * (${dt}));`);
+          lines.push(`    double ${prefix}_out = ${prevFilter} + ${prefix}_fcCoeff * (${prefix}_white - ${prevFilter});`);
+          lines.push(...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `${prefix}_out`, layout, member));
+        }
+      } else {
+        lines.push(...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `${prefix}_white`, layout, member));
+      }
+      return lines;
+    }
+  }
   if (operation.type === 'RELAY') {
     const onSlot = stateSlotForRole(operation, 'current_on');
     const outputSignalId = operation.outputSignalIds[0];
@@ -2121,6 +2170,66 @@ const renderDiscreteStateUpdates = (
     ];
     const block = ['    {', ...renderPIDComputation(state, operation, layout, member),
       ...renderTransactionalStateUpdates(operation, updates, layout, member).map((line) => `    ${line}`), '    }'];
+    if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return withFaultSync(block);
+    return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...block.map((line) => `    ${line}`), '    }']);
+  }
+  if (operation.type === 'WHITE_NOISE' || operation.type === 'BAND_LIMITED_NOISE') {
+    const rngSlot = stateSlotForRole(operation, 'rng_state');
+    const spareSlot = stateSlotForRole(operation, 'spare_normal');
+    const hasSpareSlot = stateSlotForRole(operation, 'has_spare_normal');
+    const filterSlot = stateSlotForRole(operation, 'filter_state');
+    
+    if (rngSlot === undefined || spareSlot === undefined || hasSpareSlot === undefined) {
+      throw new Error(`X-Bridges NOISE '${operation.id}' requires rng_state, spare_normal, and has_spare_normal`);
+    }
+    
+    const rng = stateSlotRealExpression(rngSlot, layout, member);
+    const spare = stateSlotRealExpression(spareSlot, layout, member);
+    const hasSpare = stateSlotRealExpression(hasSpareSlot, layout, member);
+    const mean = cNumber(scalarParameter(operation, ['mean'], 0));
+    const variance = cNumber(scalarParameter(operation, ['variance'], 1));
+    const prefix = `${operation.id}_update`;
+    
+    const lines = [
+      `double ${prefix}_nextRng = ${rng};`,
+      `double ${prefix}_nextSpare = ${spare};`,
+      `double ${prefix}_nextHasSpare = ${hasSpare};`,
+      `double ${prefix}_white = 0.0;`,
+      `if (${hasSpare} != 0.0) {`,
+      `  ${prefix}_nextHasSpare = 0.0;`,
+      `  ${prefix}_white = ${mean} + sqrt(fmax(0.0, ${variance})) * ${spare};`,
+      `} else {`,
+      `  uint32_t s = (uint32_t)(${rng});`,
+      `  if (s == 0) s = 0x6d2b79f5;`,
+      `  s ^= s << 13; s ^= s >> 17; s ^= s << 5;`,
+      `  double u1 = (s + 0.5) / 4294967296.0;`,
+      `  s ^= s << 13; s ^= s >> 17; s ^= s << 5;`,
+      `  double u2 = (s + 0.5) / 4294967296.0;`,
+      `  ${prefix}_nextRng = (double)s;`,
+      `  double normal = sqrt(-2.0 * log(u1)) * sin(2.0 * 3.14159265358979323846 * u2);`,
+      `  ${prefix}_nextSpare = sqrt(-2.0 * log(u1)) * cos(2.0 * 3.14159265358979323846 * u2);`,
+      `  ${prefix}_nextHasSpare = 1.0;`,
+      `  ${prefix}_white = ${mean} + sqrt(fmax(0.0, ${variance})) * normal;`,
+      `}`,
+      `(void)${prefix}_white;`,
+    ];
+    
+    const noiseUpdates = [
+      ...renderStateSlotAssignment(state, rngSlot, `${prefix}_nextRng`, layout, member, `${operation.id}_rng_state_update`, layout.errorFields.get(operation.id), operation),
+      ...renderStateSlotAssignment(state, spareSlot, `${prefix}_nextSpare`, layout, member, `${operation.id}_spare_normal_update`, layout.errorFields.get(operation.id), operation),
+      ...renderStateSlotAssignment(state, hasSpareSlot, `${prefix}_nextHasSpare`, layout, member, `${operation.id}_has_spare_normal_update`, layout.errorFields.get(operation.id), operation),
+    ];
+    
+    if (operation.type === 'BAND_LIMITED_NOISE' && filterSlot !== undefined) {
+      const prevFilter = stateSlotRealExpression(filterSlot, layout, member);
+      const fc = cNumber(scalarParameter(operation, ['fc'], 1));
+      const dt = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], state.xBridges!.solver.stepSeconds));
+      lines.push(`double ${prefix}_fcCoeff = 1.0 - exp(-2.0 * 3.14159265358979323846 * (${fc}) * (${dt}));`);
+      lines.push(`double ${prefix}_nextFilter = ${prevFilter} + ${prefix}_fcCoeff * (${prefix}_white - ${prevFilter});`);
+      noiseUpdates.push(...renderStateSlotAssignment(state, filterSlot, `${prefix}_nextFilter`, layout, member, `${operation.id}_filter_state_update`, layout.errorFields.get(operation.id), operation));
+    }
+    
+    const block = ['    {', ...lines.map((line) => `      ${line}`), ...renderTransactionalStateUpdates(operation, noiseUpdates, layout, member).map((line) => `    ${line}`), '    }'];
     if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return withFaultSync(block);
     return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...block.map((line) => `    ${line}`), '    }']);
   }

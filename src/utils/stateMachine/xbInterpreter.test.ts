@@ -1125,3 +1125,96 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.signals['relay:y']).toEqual([false]);
   });
 });
+
+describe('Noise and Estimation', () => {
+  const float32 = { kind: 'float32' } as const;
+  const scalar = { kind: 'scalar' } as const;
+
+  const createNoiseOperation = (id: string, type: 'WHITE_NOISE' | 'BAND_LIMITED_NOISE', seed: number, mean: number, variance: number, fc?: number): XBSemanticOperation => {
+    const parameters: Record<string, unknown> = { mean, variance, seed };
+    if (fc !== undefined) parameters.fc = fc;
+    return {
+      id,
+      type,
+      inputSignalIds: [],
+      outputSignalIds: [`${id}:y`],
+      parameters,
+      directFeedthrough: false,
+      stateful: true,
+      conversion: null,
+      state: {
+        outputPhase: 'read-before-update',
+        updatePhase: 'after-direct-feedthrough',
+        slots: [
+          { id: `${id}:rng_state$state`, role: 'rng_state', signalId: null, numericType: float32, shape: scalar, initialValues: [seed] },
+          { id: `${id}:spare_normal$state`, role: 'spare_normal', signalId: null, numericType: float32, shape: scalar, initialValues: [0] },
+          { id: `${id}:has_spare_normal$state`, role: 'has_spare_normal', signalId: null, numericType: float32, shape: scalar, initialValues: [false] },
+          ...(type === 'BAND_LIMITED_NOISE' ? [{ id: `${id}:filter_state$state`, role: 'filter_state', signalId: null, numericType: float32, shape: scalar, initialValues: [mean] } as const] : []),
+        ],
+      },
+      schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+    };
+  };
+
+  const runNoiseTwice = (seed: number) => {
+    const op = createNoiseOperation('n', 'WHITE_NOISE', seed, 0, 1);
+    const ir = model('reset', { n: op }, {
+      'n:y': signal('n:y', 'output', null, float32),
+    }, ['n']);
+    
+    const run = () => {
+      const runtime = createXBRuntime(ir);
+      const trace: number[] = [];
+      for (let i = 0; i < 50; i++) {
+        stepXBState(runtime, {});
+        trace.push(Number(runtime.signals['n:y'][0]));
+      }
+      return trace;
+    };
+    return [run(), run()];
+  };
+
+  const runTwoInterleavedInstances = (seed: number) => {
+    const op1 = createNoiseOperation('n1', 'WHITE_NOISE', seed, 0, 1);
+    const op2 = createNoiseOperation('n2', 'WHITE_NOISE', seed, 0, 1);
+    const ir = model('reset', { n1: op1, n2: op2 }, {
+      'n1:y': signal('n1:y', 'output', null, float32),
+      'n2:y': signal('n2:y', 'output', null, float32),
+    }, ['n1', 'n2']);
+    
+    const runtime = createXBRuntime(ir);
+    const trace1: number[] = [];
+    const trace2: number[] = [];
+    for (let i = 0; i < 50; i++) {
+      stepXBState(runtime, {});
+      trace1.push(Number(runtime.signals['n1:y'][0]));
+      trace2.push(Number(runtime.signals['n2:y'][0]));
+    }
+    return [trace1, trace2];
+  };
+
+  const runTwoSeparateInstances = (seed: number) => {
+    const op = createNoiseOperation('n', 'WHITE_NOISE', seed, 0, 1);
+    const ir = model('reset', { n: op }, {
+      'n:y': signal('n:y', 'output', null, float32),
+    }, ['n']);
+    
+    const runtime1 = createXBRuntime(ir);
+    const runtime2 = createXBRuntime(ir);
+    const trace1: number[] = [];
+    const trace2: number[] = [];
+    for (let i = 0; i < 50; i++) {
+      stepXBState(runtime1, {});
+      stepXBState(runtime2, {});
+      trace1.push(Number(runtime1.signals['n:y'][0]));
+      trace2.push(Number(runtime2.signals['n:y'][0]));
+    }
+    return [trace1, trace2];
+  };
+
+  it('repeats noise traces for equal seeds and isolates instances', () => {
+    const [traceA1, traceA2] = runNoiseTwice(1234);
+    expect(traceA1).toEqual(traceA2);
+    expect(runTwoInterleavedInstances(1234)).toEqual(runTwoSeparateInstances(1234));
+  });
+});

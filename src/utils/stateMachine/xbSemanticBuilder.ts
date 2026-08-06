@@ -712,6 +712,48 @@ const stateBoundaryForNode = (
     }]);
   }
 
+  if (node.type === 'WHITE_NOISE' || node.type === 'BAND_LIMITED_NOISE') {
+    const seed = Number(node.parameters.seed ?? 1831565813);
+    const mean = Number(node.parameters.mean ?? 0);
+    const slots = [
+      {
+        id: `${node.id}:rng_state$state`,
+        role: 'rng_state',
+        signalId: null,
+        numericType: { kind: 'float64' } as const,
+        shape: { kind: 'scalar' } as const,
+        initialValues: [seed],
+      },
+      {
+        id: `${node.id}:spare_normal$state`,
+        role: 'spare_normal',
+        signalId: null,
+        numericType: { kind: 'float32' } as const,
+        shape: { kind: 'scalar' } as const,
+        initialValues: [0],
+      },
+      {
+        id: `${node.id}:has_spare_normal$state`,
+        role: 'has_spare_normal',
+        signalId: null,
+        numericType: { kind: 'float32' } as const,
+        shape: { kind: 'scalar' } as const,
+        initialValues: [false],
+      },
+    ];
+    if (node.type === 'BAND_LIMITED_NOISE') {
+      slots.push({
+        id: `${node.id}:filter_state$state`,
+        role: 'filter_state',
+        signalId: null,
+        numericType: { kind: 'float32' } as const,
+        shape: { kind: 'scalar' } as const,
+        initialValues: [mean],
+      });
+    }
+    return boundary(slots);
+  }
+
   return boundary(outputSignalIds.map((signalId) => {
     const signal = signals[signalId];
     return {

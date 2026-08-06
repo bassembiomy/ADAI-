@@ -231,8 +231,7 @@ const UNCLASSIFIED_HOST_ONLY = hostOnlySet([
   'SVPWM_CORE', 'SECTOR_SELECTOR', 'SWITCHING_TIME_CALCULATOR',
   'SVPWM_GATE_GENERATOR', 'ZERO_SEQUENCE_INJECTION', 'SVPWM_MODULATOR',
   'SWITCH_CASE', 'INTEGRATOR', 'DERIVATIVE', 'TRANSFER_FUNCTION',
-  'ZERO_POLE_GAIN', 'LAPLACE_TRANSFORM', 'WHITE_NOISE',
-  'BAND_LIMITED_NOISE', 'DISCRETE_IMPULSE', 'KALMAN_FILTER',
+  'ZERO_POLE_GAIN', 'LAPLACE_TRANSFORM', 'DISCRETE_IMPULSE', 'KALMAN_FILTER',
   'EXTENDED_KALMAN_FILTER', 'MPC_CONTROLLER', 'DOE_MODULE',
   'AC_INDUCTION_MOTOR', 'IM_SCALAR_CONTROL', 'IM_FOC_CONTROL',
   'IM_FLUX_OBSERVER', 'VF_SLIP_COMP', 'FIELD_WEAKENING', 'MTPA_CONTROLLER',
@@ -373,6 +372,8 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   INTEGRATOR_DISCRETE: stateful(scalar, undefined, ['T14-INT-STATEFUL'], ['T14-C99-STATEFUL']),
   INTEGRATOR_CONTINUOUS: stateful(scalar, undefined, ['T14-INT-CONTINUOUS'], ['T14-C99-CONTINUOUS']),
   Integrator: stateful(scalar, undefined, ['T14-INT-CONTINUOUS'], ['T14-C99-CONTINUOUS']),
+  WHITE_NOISE: stateful(scalar, ['math-library'], undefined, undefined, { inputShapes: [], outputShapes: scalar }),
+  BAND_LIMITED_NOISE: stateful(scalar, ['math-library'], undefined, undefined, { inputShapes: [], outputShapes: scalar }),
 
   // Bounded control and linear-system blocks. Each entry is enabled only with
   // paired interpreter and compiled-C conformance coverage (Task 10).

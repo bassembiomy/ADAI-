@@ -4,6 +4,8 @@ import {
   type XBNumericFault,
   type XBNumericType,
 } from './xbNumeric';
+import { evaluateNumericExpression } from './smCExpressions';
+import { nextGaussianPair } from './xbDeterministicNoise';
 import type {
   XBSemanticModel,
   XBSemanticOperation,
@@ -947,6 +949,48 @@ const writeStateOutputs = (
     }
     return;
   }
+  if (operation.type === 'WHITE_NOISE' || operation.type === 'BAND_LIMITED_NOISE') {
+    const rngSlotId = `${operation.id}:rng_state$state`;
+    const spareSlotId = `${operation.id}:spare_normal$state`;
+    const hasSpareSlotId = `${operation.id}:has_spare_normal$state`;
+    const rng = Number((runtime.stateSlots[rngSlotId] ?? [0])[0] ?? 0);
+    const spare = Number((runtime.stateSlots[spareSlotId] ?? [0])[0] ?? 0);
+    const hasSpare = Boolean((runtime.stateSlots[hasSpareSlotId] ?? [false])[0]);
+
+    let normal = 0;
+    if (hasSpare) {
+      normal = spare;
+    } else {
+      normal = nextGaussianPair(rng).gaussian;
+    }
+
+    const mean = Number(parameter(operation, ['mean'], 0));
+    const variance = Number(parameter(operation, ['variance'], 1));
+    const white = mean + Math.sqrt(Math.max(0, variance)) * normal;
+
+    let output = white;
+    if (operation.type === 'BAND_LIMITED_NOISE') {
+      const filterSlotId = `${operation.id}:filter_state$state`;
+      const prevFilter = Number((runtime.stateSlots[filterSlotId] ?? [0])[0] ?? 0);
+      const fc = Number(parameter(operation, ['fc'], 1));
+      const dt = runtime.ir.solver.stepSeconds;
+      const fcCoeff = 1 - Math.exp(-2 * Math.PI * fc * dt);
+      output = prevFilter + fcCoeff * (white - prevFilter);
+      
+      const filterSlot = operation.state?.slots.find((s) => s.role === 'filter_state');
+      if (filterSlot) {
+        output = Number(convertValue(output, filterSlot.numericType, faults, operation));
+      }
+    }
+
+    const outputSlot = operation.outputSignalIds[0];
+    if (outputSlot) {
+      const numericType = runtime.ir.signals[outputSlot]?.numericType ?? { kind: 'float64' };
+      writeSignal(runtime, outputSlot, [Number(convertValue(output, numericType, faults, operation))], faults, operation);
+    }
+    return;
+  }
+
   if (operation.type === 'RELAY') {
     const onSlot = stateSlotForRole(operation, 'current_on');
     const outputId = operation.outputSignalIds[0];
@@ -1035,6 +1079,56 @@ const statefulUpdate = (
     const y = Math.max(prev_y - falling * dt, Math.min(prev_y + rising * dt, u));
     return { [prevSlot.id]: [convertValue(y, prevSlot.numericType, faults, operation)] };
   }
+  if (operation.type === 'WHITE_NOISE' || operation.type === 'BAND_LIMITED_NOISE') {
+    const rngSlotId = `${operation.id}:rng_state$state`;
+    const spareSlotId = `${operation.id}:spare_normal$state`;
+    const hasSpareSlotId = `${operation.id}:has_spare_normal$state`;
+    const rng = Number((runtime.stateSlots[rngSlotId] ?? [0])[0] ?? 0);
+    const spare = Number((runtime.stateSlots[spareSlotId] ?? [0])[0] ?? 0);
+    const hasSpare = Boolean((runtime.stateSlots[hasSpareSlotId] ?? [false])[0]);
+
+    let nextRng = rng;
+    let nextSpare = spare;
+    let nextHasSpare = hasSpare;
+    let white = 0;
+
+    if (hasSpare) {
+      nextHasSpare = false;
+      const mean = Number(parameter(operation, ['mean'], 0));
+      const variance = Number(parameter(operation, ['variance'], 1));
+      white = mean + Math.sqrt(Math.max(0, variance)) * spare;
+    } else {
+      const result = nextGaussianPair(rng);
+      nextRng = result.state;
+      nextSpare = result.spare;
+      nextHasSpare = true;
+      const mean = Number(parameter(operation, ['mean'], 0));
+      const variance = Number(parameter(operation, ['variance'], 1));
+      white = mean + Math.sqrt(Math.max(0, variance)) * result.gaussian;
+    }
+
+    const updates: Record<string, [number | boolean]> = {
+      [rngSlotId]: [nextRng],
+      [spareSlotId]: [nextSpare],
+      [hasSpareSlotId]: [nextHasSpare],
+    };
+
+    if (operation.type === 'BAND_LIMITED_NOISE') {
+      const filterSlotId = `${operation.id}:filter_state$state`;
+      const filterSlot = operation.state?.slots.find((s) => s.role === 'filter_state');
+      const prevFilter = Number((runtime.stateSlots[filterSlotId] ?? [0])[0] ?? 0);
+      const fc = Number(parameter(operation, ['fc'], 1));
+      const dt = runtime.ir.solver.stepSeconds;
+      const fcCoeff = 1 - Math.exp(-2 * Math.PI * fc * dt);
+      let nextFilter = prevFilter + fcCoeff * (white - prevFilter);
+      if (filterSlot) {
+        nextFilter = Number(convertValue(nextFilter, filterSlot.numericType, faults, operation));
+      }
+      updates[filterSlotId] = [nextFilter];
+    }
+    return updates;
+  }
+
   if (operation.type === 'RELAY') {
     const onSlot = stateSlotForRole(operation, 'current_on');
     if (onSlot === undefined) throw new Error(`X-Bridges RELAY '${operation.id}' requires a current_on state slot`);
