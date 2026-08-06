@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SemanticVariable } from './smSemanticModel';
+import { DEFAULT_XB_EMBEDDED_LIMITS } from './xbEmbeddedProfile';
 import type {
   XBParameterValue,
   XBPersistedModelV1,
@@ -14,6 +15,7 @@ const target: XBTargetCapabilities = {
   supportsMathLibrary: false,
   maxVectorLength: 8,
   maxMatrixDimension: 4,
+  embeddedLimits: DEFAULT_XB_EMBEDDED_LIMITS,
 };
 
 const variables: Readonly<Record<string, SemanticVariable>> = {

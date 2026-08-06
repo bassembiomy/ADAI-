@@ -68,6 +68,8 @@ export interface XBLegacyXBridgesModel extends Partial<
   mappings?: XBMappingV1[];
 }
 
+import type { XBEmbeddedLimits } from './xbEmbeddedProfile';
+
 /** Static limits and optional libraries supplied by an embedded target. */
 export interface XBTargetCapabilities {
   supportsFloat32: boolean;
@@ -76,4 +78,5 @@ export interface XBTargetCapabilities {
   supportsMathLibrary: boolean;
   maxVectorLength: number;
   maxMatrixDimension: number;
+  embeddedLimits: XBEmbeddedLimits;
 }

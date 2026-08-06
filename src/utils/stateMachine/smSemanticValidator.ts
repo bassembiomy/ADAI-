@@ -17,6 +17,7 @@ import type {
   StateMachineModelV4,
 } from './smModel';
 import type { SemanticVariable } from './smSemanticModel';
+import { DEFAULT_XB_EMBEDDED_LIMITS } from './xbEmbeddedProfile';
 import type { XBTargetCapabilities } from './xbModel';
 import { adaptXBModel } from './xbModelAdapter';
 import { validateXBModel } from './xbSemanticValidator';
@@ -40,6 +41,7 @@ Readonly<XBTargetCapabilities> = Object.freeze({
   supportsMathLibrary: true,
   maxVectorLength: 16,
   maxMatrixDimension: 8,
+  embeddedLimits: DEFAULT_XB_EMBEDDED_LIMITS,
 });
 
 const prefixXBDiagnostic = (
