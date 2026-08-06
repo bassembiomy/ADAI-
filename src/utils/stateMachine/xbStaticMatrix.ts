@@ -10,9 +10,9 @@ export const PIVOT_THRESHOLD_F32 = 1e-6;
 export function matrixMultiply(
   a: readonly (readonly number[])[],
   b: readonly (readonly number[])[],
-  rowsA: number,
-  colsA: number,
-  colsB: number,
+  rowsA: number = a.length,
+  colsA: number = a[0]?.length || 0,
+  colsB: number = b[0]?.length || 0,
   _type: XBNumericType = { kind: 'float32' },
 ): number[][] {
   const result: number[][] = Array.from({ length: rowsA }, () => Array.from({ length: colsB }, () => 0));
@@ -20,7 +20,7 @@ export function matrixMultiply(
     for (let c = 0; c < colsB; c++) {
       let sum = 0;
       for (let k = 0; k < colsA; k++) {
-        sum += a[r][k] * b[k][c];
+        sum += (a[r]?.[k] ?? 0) * (b[k]?.[c] ?? 0);
       }
       result[r][c] = sum;
     }
@@ -31,14 +31,30 @@ export function matrixMultiply(
 export function matrixAdd(
   a: readonly (readonly number[])[],
   b: readonly (readonly number[])[],
-  rows: number,
-  cols: number,
+  rows: number = a.length,
+  cols: number = a[0]?.length || 0,
   _type: XBNumericType = { kind: 'float32' },
 ): number[][] {
   const result: number[][] = Array.from({ length: rows }, () => Array.from({ length: cols }, () => 0));
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      result[r][c] = a[r][c] + b[r][c];
+      result[r][c] = (a[r]?.[c] ?? 0) + (b[r]?.[c] ?? 0);
+    }
+  }
+  return result;
+}
+
+export function matrixSubtract(
+  a: readonly (readonly number[])[],
+  b: readonly (readonly number[])[],
+  rows: number = a.length,
+  cols: number = a[0]?.length || 0,
+  _type: XBNumericType = { kind: 'float32' },
+): number[][] {
+  const result: number[][] = Array.from({ length: rows }, () => Array.from({ length: cols }, () => 0));
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      result[r][c] = (a[r]?.[c] ?? 0) - (b[r]?.[c] ?? 0);
     }
   }
   return result;
@@ -46,13 +62,13 @@ export function matrixAdd(
 
 export function matrixTranspose(
   a: readonly (readonly number[])[],
-  rows: number,
-  cols: number,
+  rows: number = a.length,
+  cols: number = a[0]?.length || 0,
 ): number[][] {
   const result: number[][] = Array.from({ length: cols }, () => Array.from({ length: rows }, () => 0));
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      result[c][r] = a[r][c];
+      result[c][r] = a[r]?.[c] ?? 0;
     }
   }
   return result;
@@ -60,7 +76,7 @@ export function matrixTranspose(
 
 export function matrixInverseGaussJordan(
   a: readonly (readonly number[])[],
-  n: number,
+  n: number = a.length,
   type: XBNumericType = { kind: 'float32' },
 ): MatrixInverseResult {
   const threshold = type.kind === 'fixed'
