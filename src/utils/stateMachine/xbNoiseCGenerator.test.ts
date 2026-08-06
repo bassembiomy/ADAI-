@@ -25,7 +25,7 @@ const createNoiseOperation = (id: string, type: 'WHITE_NOISE' | 'BAND_LIMITED_NO
     parameters: { seed, mean, variance, ...(type === 'BAND_LIMITED_NOISE' ? { fc } : {}) },
     directFeedthrough: false,
     stateful: true,
-    conversion: { output: 'exact', internal: 'exact', parameters: 'exact', destinationType: float32 },
+    conversion: null,
     numericFault: { fallback: 'previous-value', errorSignalId: null },
     state: {
       outputPhase: 'read-before-update',

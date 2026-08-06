@@ -125,6 +125,8 @@ string, readonly XBConformanceCoverage[]
   'T14-INT-STATEFUL': [
     scalarCoverage('UNIT_DELAY'), scalarCoverage('MEMORY'),
     scalarCoverage('INTEGRATOR_DISCRETE'),
+    shapedCoverage('WHITE_NOISE', [], ['scalar']),
+    shapedCoverage('BAND_LIMITED_NOISE', [], ['scalar']),
   ],
   'T14-INT-CONTINUOUS': [
     scalarCoverage('DELAY'), scalarCoverage('INTEGRATOR_CONTINUOUS'),
@@ -155,6 +157,8 @@ string, readonly XBConformanceCoverage[]
   'T14-C99-STATEFUL': [
     scalarCoverage('UNIT_DELAY'), scalarCoverage('MEMORY'),
     scalarCoverage('INTEGRATOR_DISCRETE'),
+    shapedCoverage('WHITE_NOISE', [], ['scalar']),
+    shapedCoverage('BAND_LIMITED_NOISE', [], ['scalar']),
   ],
   'T14-C99-CONTINUOUS': [
     scalarCoverage('DELAY'), scalarCoverage('INTEGRATOR_CONTINUOUS'),

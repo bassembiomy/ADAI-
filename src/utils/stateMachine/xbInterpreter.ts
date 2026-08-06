@@ -4,7 +4,6 @@ import {
   type XBNumericFault,
   type XBNumericType,
 } from './xbNumeric';
-import { evaluateNumericExpression } from './smCExpressions';
 import { nextGaussianPair } from './xbDeterministicNoise';
 import type {
   XBSemanticModel,

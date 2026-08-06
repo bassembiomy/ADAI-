@@ -4,6 +4,7 @@ import type {
   XBSemanticOperation,
   XBSemanticSignal,
 } from './xbSemanticModel';
+import type { XBParameterValue } from './xbModel';
 import type { XBNumericType } from './xbNumeric';
 import {
   createXBRuntime,
@@ -1131,7 +1132,7 @@ describe('Noise and Estimation', () => {
   const scalar = { kind: 'scalar' } as const;
 
   const createNoiseOperation = (id: string, type: 'WHITE_NOISE' | 'BAND_LIMITED_NOISE', seed: number, mean: number, variance: number, fc?: number): XBSemanticOperation => {
-    const parameters: Record<string, unknown> = { mean, variance, seed };
+    const parameters: Record<string, XBParameterValue> = { mean, variance, seed };
     if (fc !== undefined) parameters.fc = fc;
     return {
       id,
