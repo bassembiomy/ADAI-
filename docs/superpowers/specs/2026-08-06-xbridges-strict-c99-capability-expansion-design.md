@@ -39,53 +39,15 @@ separate downstream gates.
 - Bounded optimization and adaptation: `MPC_CONTROLLER`,
   `LMS_ADAPTIVE_FILTER`.
 
-### Included robot blocks
-
-The following 57 runtime blocks are included:
-
-- Hardware and sensing: `ROBOT_VACUUM_BATTERY`, `ROBOT_VACUUM_COMM`,
-  `ROBOT_VACUUM_BUMPER_SENSOR`, `ROBOT_VACUUM_CLIFF_IR`,
-  `ROBOT_VACUUM_DUSTBIN_SENSOR`, `ROBOT_VACUUM_MOTOR_CURRENT`,
-  `ROBOT_VACUUM_ENCODER`, `ROBOT_VACUUM_LIDAR_SENSOR`,
-  `ROBOT_VACUUM_ODOMETRY_SENSOR`, `ROBOT_VACUUM_DOCK_BEACON`, and
-  `ROBOT_VACUUM_DIRT_DENSITY`.
-- Dynamics and low-level control: `ROBOT_VACUUM_MOTOR`,
-  `ROBOT_VACUUM_DYNAMICS`, `ROBOT_VACUUM_KINEMATICS`,
-  `ROBOT_VACUUM_ODOMETRY`, `ROBOT_VACUUM_FUSION`,
-  `ROBOT_VACUUM_LOCALIZATION`, `ROBOT_VACUUM_SENSOR_FUSION_EKF`,
-  `ROBOT_VACUUM_WHEEL_CONTROL`, `ROBOT_VACUUM_VELOCITY_PID`,
-  `ROBOT_VACUUM_MOTION_CONTROLLER`, `ROBOT_VACUUM_MOTOR_COMMAND`,
-  `ROBOT_VACUUM_SIDE_BRUSH`, `ROBOT_VACUUM_SUCTION_PWM`,
-  `ROBOT_VACUUM_SURFACE_ADAPTER`, `ROBOT_VACUUM_CLIFF_HALT`,
-  `ROBOT_VACUUM_HALT_ALERT`, `ROBOT_VACUUM_CAPACITY_THRESHOLD`, and
-  `ROBOT_VACUUM_DOCK_DETECT`.
-- Perception and mapping: `ROBOT_VACUUM_LIDAR`,
-  `ROBOT_VACUUM_ENVIRONMENT`, `ROBOT_VACUUM_TERRAIN_MODEL`,
-  `ROBOT_VACUUM_COLLISION_MESH`, `ROBOT_VACUUM_MAPPING`,
-  `ROBOT_VACUUM_SLAM`, `ROBOT_VACUUM_ROOM_SEGMENTATION`,
-  `ROBOT_VACUUM_SEMANTIC_MAP`, `ROBOT_VACUUM_ERODE_MASK`,
-  `ROBOT_VACUUM_DOOR_TRACKER`, and `ROBOT_VACUUM_DOOR_CROSSING`.
-- Planning and behavior: `ROBOT_VACUUM_BOUSTROPHEDON_SWEEP`,
-  `ROBOT_VACUUM_CONTINUOUS_ENERGY`, `ROBOT_VACUUM_COVERAGE`,
-  `ROBOT_VACUUM_COVERAGE_PLANNER`, `ROBOT_VACUUM_DIGITAL_TWIN`,
-  `ROBOT_VACUUM_GLOBAL_PLANNER`, `ROBOT_VACUUM_GOAL_MANAGER`,
-  `ROBOT_VACUUM_NAV`, `ROBOT_VACUUM_OBSTACLE_AVOIDANCE`,
-  `ROBOT_VACUUM_COLLISION_AVOID`, `ROBOT_VACUUM_RESUME_SCHEDULER`,
-  `ROBOT_VACUUM_ROOM_SCHEDULER`, `ROBOT_VACUUM_THETA_STAR`,
-  `ROBOT_VACUUM_TOPOLOGY_RETURN`, `ROBOT_VACUUM_WAYPOINT_GEN`,
-  `ROBOT_VACUUM_BATTERY_MONITOR`, and `ROBOT_VACUUM_MODE_SUPERVISOR`.
-
 ### Excluded host-only blocks
 
 Authoring and visualization blocks do not receive placeholder C emitters. They
 remain host-only and fail closed when placed in an embedded state:
 
 - `Note`, `ROOT_LOCUS`, and `Scope`.
-- `ROBOT_VACUUM_3D_SCENE_VIEW`, `ROBOT_VACUUM_3D_VIZ_COLORS`,
-  `ROBOT_VACUUM_BATTERY_HUD`, `ROBOT_VACUUM_COVERAGE_HEATMAP`,
-  `ROBOT_VACUUM_DOCK_ICON`, `ROBOT_VACUUM_DUSTBIN_HUD`,
-  `ROBOT_VACUUM_FURNITURE_MESH`, `ROBOT_VACUUM_ROOM_ZONE_COLORS`, and
-  `ROBOT_VACUUM_VISUALIZATION`.
+- Every block whose type starts with `ROBOT_VACUUM_`, including sensing,
+  dynamics, control, mapping, planning, behavior, digital-twin, HUD, and
+  visualization blocks.
 
 Blocks not explicitly listed in the included scope are not added implicitly by
 this program.
@@ -111,8 +73,7 @@ Every included block follows the same delivery path:
 
 Shared kernels are introduced only when required by an active family. Expected
 kernels include fixed-point arithmetic, matrix operations, ring buffers,
-instance-local deterministic PRNG, bounded solvers, grid containers, path
-containers, and bounded priority queues.
+instance-local deterministic PRNG, and bounded solvers.
 
 ## Numeric and Storage Contract
 
@@ -127,10 +88,10 @@ use widened bounded integer intermediates but must not silently fall back to
 floating point.
 
 The generator specializes storage from exact model dimensions. Array sizes,
-filter order, state count, prediction horizon, control horizon, grid dimensions,
-path capacity, and iteration ceilings become compile-time constants. Validators
+filter order, state count, prediction horizon, control horizon, and iteration
+ceilings become compile-time constants. Validators
 calculate resource estimates and reject configurations above configurable
-limits. Matrix and grid storage is row-major and contiguous.
+limits. Matrix storage is row-major and contiguous.
 
 Stateful blocks explicitly define initialization, reset and retain behavior,
 sample time, scheduling, update ordering, previous-value fallback, and traceable
@@ -154,22 +115,17 @@ The shared fault vocabulary is:
 
 Stateful filters, estimators, controllers, LMS, and MPC retain their previous
 valid output and state on execution faults. Stateless operations publish zero or
-a configured safe value. Robot motion and control failures publish a safe-stop
-command. Mapping and planning capacity failures publish an empty bounded result
-plus an explicit status.
+a configured safe value.
 
-Iterative algorithms such as MPC, Kalman variants, SLAM, and Theta* use fixed
-iteration or work ceilings. Ceiling exhaustion produces a deterministic status
-and fallback. Noise sources use an instance-local explicitly seeded PRNG with
+Iterative algorithms such as MPC and Kalman variants use fixed iteration or work
+ceilings. Ceiling exhaustion produces a deterministic status and fallback.
+Noise sources use an instance-local explicitly seeded PRNG with
 defined reset/retain behavior. Identical models, seeds, inputs, and logical time
 must produce identical traces.
 
-Robot sensing, estimation, planning, and actuation expose separate status paths
-so downstream safety logic can observe component failures.
-
 ## Delivery Waves
 
-The work is divided into ten independently releasable waves:
+The work is divided into six independently releasable waves:
 
 1. Math and reductions.
 2. Deterministic digital primitives.
@@ -177,19 +133,13 @@ The work is divided into ten independently releasable waves:
 4. Controllers and switching.
 5. Noise and estimation.
 6. Bounded optimization and adaptation.
-7. Robot hardware and sensing.
-8. Robot dynamics and low-level control.
-9. Robot perception and mapping.
-10. Robot planning and behavior.
 
 Each wave completes its entire vertical contract before the next wave begins.
 Later waves may consume verified kernels from earlier waves, but an unfinished
 later family cannot weaken or bypass an earlier capability gate.
 
-Because the ten waves cover independent execution architectures, each wave will
-receive its own implementation plan and review checkpoint. Robot waves may be
-split into smaller task batches within their plan, but their capability entries
-remain disabled until the whole claimed contract is executable.
+Because the six waves cover independent execution architectures, each wave will
+receive its own implementation plan and review checkpoint.
 
 ## Verification Gate
 
@@ -215,8 +165,7 @@ Before any block becomes code-generation capable, it must pass:
 Noise reference tests include deterministic sequence checks and bounded
 statistical checks. Controller tests include known step responses and saturation
 cases. Kalman and MPC tests use independent reference traces and infeasible or
-iteration-limit cases. Robot tests use deterministic sensor traces, maps, paths,
-localization sequences, and actuator commands.
+iteration-limit cases.
 
 ## Acceptance Criteria
 
@@ -227,8 +176,8 @@ localization sequences, and actuator commands.
 - Oversized or invalid configurations fail before C generation.
 - Every enabled capability has paired executable interpreter and strict-C99
   evidence for all claimed shapes and numeric profiles.
-- No authoring or visualization block is falsely presented as an embedded
-  runtime capability.
+- No authoring, visualization, or `ROBOT_VACUUM_*` block is presented as an
+  embedded runtime capability.
 - Existing supported X-Bridges and state-machine behavior remains green.
 - Documentation distinguishes host C99 assurance from target/HIL qualification.
 
