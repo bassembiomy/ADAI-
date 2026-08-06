@@ -14,7 +14,7 @@ describe('getXBBlockCapability', () => {
 
   it('rejects host-only visualization and learning blocks', () => {
     expect(getXBBlockCapability('Scope')?.codegen).toBe(false);
-    expect(getXBBlockCapability('LMS_ADAPTIVE_FILTER')?.codegen).toBe(false);
+    expect(getXBBlockCapability('NEURAL_NEURON_LEARNING')?.codegen).toBe(false);
   });
 
   it('declares executable conformance coverage for all 24 Trigonometry blocks', () => {

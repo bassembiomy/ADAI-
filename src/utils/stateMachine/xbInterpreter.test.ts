@@ -1242,7 +1242,7 @@ describe('Noise and Estimation', () => {
       },
       schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' }
     };
-    const ir = model('kalman', { kf: kfOp }, {
+    const ir = model('reset', { kf: kfOp }, {
       'kf:u': signal('kf:u', 'input'),
       'kf:y_meas': signal('kf:y_meas', 'input'),
       'kf:x_hat': signal('kf:x_hat', 'output'),
@@ -1286,7 +1286,7 @@ describe('Noise and Estimation', () => {
       },
       schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' }
     };
-    const ir = model('kalman2', { kf: kfOp }, {
+    const ir = model('reset', { kf: kfOp }, {
       'kf:u': signal('kf:u', 'input'),
       'kf:y_meas': signal('kf:y_meas', 'input'),
       'kf:x_hat': { ...signal('kf:x_hat', 'output'), shape: { kind: 'vector', length: 2 }, elementCount: 2, dimensions: [2], layout: 'contiguous' },
@@ -1333,7 +1333,7 @@ describe('Noise and Estimation', () => {
       },
       schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
     };
-    const ir = model('ekf_model', { ekf: ekfOp }, {
+    const ir = model('reset', { ekf: ekfOp }, {
       'ekf:u': signal('ekf:u', 'input'),
       'ekf:y_meas': signal('ekf:y_meas', 'input'),
       'ekf:x_hat': { ...signal('ekf:x_hat', 'output'), shape: { kind: 'vector', length: 2 }, elementCount: 2, dimensions: [2], layout: 'contiguous' },
@@ -1351,5 +1351,66 @@ describe('Noise and Estimation', () => {
 
     expect(runtime.signals['ekf:x_hat'][0]).toBeGreaterThan(0);
     expect(runtime.signals['ekf:innovation'][0]).toBeCloseTo(0.49995, 3);
+  });
+
+  it('updates weights for LMS_ADAPTIVE_FILTER', () => {
+    const lmsOp: XBSemanticOperation = {
+      id: 'lms',
+      type: 'LMS_ADAPTIVE_FILTER',
+      inputSignalIds: ['lms:x', 'lms:d', 'lms:lr'],
+      outputSignalIds: ['lms:y', 'lms:err', 'lms:w1', 'lms:w2'],
+      parameters: { lr: 0.1 },
+      directFeedthrough: false,
+      stateful: true,
+      conversion: null,
+      state: {
+        outputPhase: 'read-before-update',
+        updatePhase: 'after-direct-feedthrough',
+        slots: [
+          { id: 'lms:w1$state', role: 'w1', signalId: 'lms:w1', numericType: float32, shape: scalar, initialValues: [0] },
+          { id: 'lms:w2$state', role: 'w2', signalId: 'lms:w2', numericType: float32, shape: scalar, initialValues: [0] },
+          { id: 'lms:x_prev$state', role: 'x_prev', signalId: null, numericType: float32, shape: scalar, initialValues: [0] },
+        ],
+      },
+      schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+    };
+
+    const ir = model('reset', { lms: lmsOp }, {
+      'lms:x': signal('lms:x', 'input'),
+      'lms:d': signal('lms:d', 'input'),
+      'lms:lr': signal('lms:lr', 'input'),
+      'lms:y': signal('lms:y', 'output'),
+      'lms:err': signal('lms:err', 'output'),
+      'lms:w1': signal('lms:w1', 'output'),
+      'lms:w2': signal('lms:w2', 'output'),
+    }, ['lms'], [
+      { variableId: 'x', signalId: 'lms:x', blockId: 'lms', portId: 'x', direction: 'in', numericType: float32 },
+      { variableId: 'd', signalId: 'lms:d', blockId: 'lms', portId: 'd', direction: 'in', numericType: float32 },
+      { variableId: 'lr', signalId: 'lms:lr', blockId: 'lms', portId: 'lr', direction: 'in', numericType: float32 },
+    ]);
+
+    const runtime = createXBRuntime(ir);
+
+    // Step 1: x = 1, d = 2, lr = 0.1
+    // y = 0*1 + 0*0 = 0
+    // err = 2 - 0 = 2
+    // w1_next = 0 + 0.1 * 2 * 1 = 0.2
+    // w2_next = 0 + 0.1 * 2 * 0 = 0
+    // x_prev_next = 1
+    stepXBState(runtime, { x: 1, d: 2, lr: 0.1 });
+    expect(runtime.signals['lms:y'][0]).toBeCloseTo(0);
+    expect(runtime.signals['lms:err'][0]).toBeCloseTo(2);
+    expect(runtime.stateSlots['lms:w1$state'][0]).toBeCloseTo(0.2);
+
+    // Step 2: x = 2, d = 3, lr = 0.1
+    // y = 0.2 * 2 + 0 * 1 = 0.4
+    // err = 3 - 0.4 = 2.6
+    // w1_next = 0.2 + 0.1 * 2.6 * 2 = 0.72
+    // w2_next = 0 + 0.1 * 2.6 * 1 = 0.26
+    stepXBState(runtime, { x: 2, d: 3, lr: 0.1 });
+    expect(runtime.signals['lms:y'][0]).toBeCloseTo(0.4);
+    expect(runtime.signals['lms:err'][0]).toBeCloseTo(2.6);
+    expect(runtime.stateSlots['lms:w1$state'][0]).toBeCloseTo(0.72);
+    expect(runtime.stateSlots['lms:w2$state'][0]).toBeCloseTo(0.26);
   });
 });

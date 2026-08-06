@@ -77,7 +77,7 @@ describe('KALMAN_FILTER C Generator Conformance', { timeout: 60_000 }, () => {
     const interpreterTrace: number[] = [];
     for (const inp of inputs) {
       stepXBState(runtime, { u_in: inp.u, y_in: inp.y });
-      interpreterTrace.push(Number(runtime.signals['kf1:x_hat']?.[0] ?? runtime.variables['x_out'] ?? 0));
+      interpreterTrace.push(Number(runtime.signals['kf1:x_hat']?.[0] ?? 0));
     }
 
     const workspace = createGeneratedCodeTestWorkspace('xb-kalman-c99');
@@ -181,7 +181,7 @@ describe('KALMAN_FILTER C Generator Conformance', { timeout: 60_000 }, () => {
     const interpreterTrace: number[] = [];
     for (const inp of inputs) {
       stepXBState(runtime, { u_in: inp.u, y_in: inp.y });
-      interpreterTrace.push(Number(runtime.signals['ekf1:x_hat']?.[0] ?? runtime.variables['x_out'] ?? 0));
+      interpreterTrace.push(Number(runtime.signals['ekf1:x_hat']?.[0] ?? 0));
     }
 
     const workspace = createGeneratedCodeTestWorkspace('xb-ekf-c99');

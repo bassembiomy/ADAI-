@@ -754,6 +754,39 @@ const stateBoundaryForNode = (
     return boundary(slots);
   }
 
+  if (node.type === 'LMS_ADAPTIVE_FILTER') {
+    const w1Out = outputByPort('w1') ?? signals[outputSignalIds[2] ?? ''];
+    const w2Out = outputByPort('w2') ?? signals[outputSignalIds[3] ?? ''];
+    const numericType = (w1Out ?? signals[outputSignalIds[0] ?? ''])?.numericType ?? { kind: 'float32' as const };
+    const shape = { kind: 'scalar' } as const;
+    return boundary([
+      {
+        id: `${node.id}:w1$state`,
+        role: 'w1',
+        signalId: w1Out?.id ?? null,
+        numericType,
+        shape,
+        initialValues: [Number(node.parameters.w10 ?? node.parameters.w1 ?? 0)],
+      },
+      {
+        id: `${node.id}:w2$state`,
+        role: 'w2',
+        signalId: w2Out?.id ?? null,
+        numericType,
+        shape,
+        initialValues: [Number(node.parameters.w20 ?? node.parameters.w2 ?? 0)],
+      },
+      {
+        id: `${node.id}:x_prev$state`,
+        role: 'x_prev',
+        signalId: null,
+        numericType,
+        shape,
+        initialValues: [0],
+      },
+    ]);
+  }
+
   return boundary(outputSignalIds.map((signalId) => {
     const signal = signals[signalId];
     return {

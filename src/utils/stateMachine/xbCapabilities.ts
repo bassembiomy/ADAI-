@@ -30,7 +30,7 @@ export const XB_INTERPRETER_CONFORMANCE_CASE_IDS = [
   'T10-INT-DISCONTINUOUS', 'T14-INT-DISCONTINUOUS',
   'T14-INT-CORE-DIRECT', 'T14-INT-SHAPED-CONSTANT',
   'T14-INT-STATEFUL', 'T14-INT-CONTINUOUS',
-  'XB-W5-KALMAN', 'XB-W5-EKF',
+  'XB-W5-KALMAN', 'XB-W5-EKF', 'XB-W5-SYSID',
 ] as const;
 
 export const XB_C_CONFORMANCE_CASE_IDS = [
@@ -39,7 +39,7 @@ export const XB_C_CONFORMANCE_CASE_IDS = [
   'T10-C99-DISCONTINUOUS', 'T14-C99-DISCONTINUOUS',
   'T14-C99-CORE-DIRECT', 'T14-C99-SHAPED-CONSTANT',
   'T14-C99-STATEFUL', 'T14-C99-CONTINUOUS',
-  'XB-W5-KALMAN', 'XB-W5-EKF',
+  'XB-W5-KALMAN', 'XB-W5-EKF', 'XB-W5-SYSID',
 ] as const;
 
 export interface XBConformanceCoverage {
@@ -140,6 +140,9 @@ string, readonly XBConformanceCoverage[]
   'XB-W5-EKF': [
     shapedCoverage('EXTENDED_KALMAN_FILTER', ['scalar', 'vector', 'matrix']),
   ],
+  'XB-W5-SYSID': [
+    scalarCoverage('LMS_ADAPTIVE_FILTER'),
+  ],
 });
 
 export const XB_C_CONFORMANCE_CASES: Readonly<Record<
@@ -177,6 +180,9 @@ string, readonly XBConformanceCoverage[]
   ],
   'XB-W5-EKF': [
     shapedCoverage('EXTENDED_KALMAN_FILTER', ['scalar', 'vector', 'matrix']),
+  ],
+  'XB-W5-SYSID': [
+    scalarCoverage('LMS_ADAPTIVE_FILTER'),
   ],
 });
 
@@ -400,6 +406,10 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
     allShapes, undefined,
     ['XB-W5-EKF'], ['XB-W5-EKF']
   ),
+  LMS_ADAPTIVE_FILTER: stateful(
+    scalar, undefined,
+    ['XB-W5-SYSID'], ['XB-W5-SYSID']
+  ),
 
   // Bounded control and linear-system blocks. Each entry is enabled only with
   // paired interpreter and compiled-C conformance coverage (Task 10).
@@ -456,7 +466,6 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
 
   // Host-only blocks intentionally rejected by embedded code generation.
   Scope: hostOnly('Visualization requires the host runtime.'),
-  LMS_ADAPTIVE_FILTER: hostOnly('Online learning is not in the embedded-safe set.'),
 
   // Every public UI block is classified. The final spread intentionally
   // overrides family-level entries that still lack paired executable evidence.

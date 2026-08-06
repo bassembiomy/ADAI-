@@ -1493,6 +1493,7 @@ const OPERATION_EMITTERS: Readonly<Record<string, OperationEmitter>> = {
   RELAY: () => [],
   KALMAN_FILTER: () => [],
   EXTENDED_KALMAN_FILTER: () => [],
+  LMS_ADAPTIVE_FILTER: () => [],
 };
 
 const renderEKFExpression = (
@@ -2291,6 +2292,56 @@ const renderStateOutputs = (
       return lines;
     }
   }
+  if (operation.type === 'LMS_ADAPTIVE_FILTER') {
+    const w1Slot = stateSlotForRole(operation, 'w1');
+    const w2Slot = stateSlotForRole(operation, 'w2');
+    const xPrevSlot = stateSlotForRole(operation, 'x_prev');
+
+    const xId = operation.inputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'x') ?? operation.inputSignalIds[0];
+    const dId = operation.inputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'd') ?? operation.inputSignalIds[1];
+    const lrId = operation.inputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'lr') ?? operation.inputSignalIds[2];
+
+    const yId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'y') ?? operation.outputSignalIds[0];
+    const errId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'err') ?? operation.outputSignalIds[1];
+    const w1Id = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'w1') ?? operation.outputSignalIds[2];
+    const w2Id = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'w2') ?? operation.outputSignalIds[3];
+
+    const prefix = `lms_${operationIndex}`;
+    const lines: string[] = [];
+
+    const xExpr = xId ? signalElementRealExpression(state, xId, layout, member, '0U') : '0.0';
+    const dExpr = dId ? signalElementRealExpression(state, dId, layout, member, '0U') : '0.0';
+    const lrDefault = cNumber(scalarParameter(operation, ['lr', 'learningRate'], 0.05));
+    const lrExpr = lrId ? signalElementRealExpression(state, lrId, layout, member, '0U') : lrDefault;
+
+    const w1Expr = w1Slot ? stateSlotElementRealExpression(w1Slot, layout, member, '0U') : '0.0';
+    const w2Expr = w2Slot ? stateSlotElementRealExpression(w2Slot, layout, member, '0U') : '0.0';
+    const xPrevExpr = xPrevSlot ? stateSlotElementRealExpression(xPrevSlot, layout, member, '0U') : '0.0';
+
+    lines.push(`    double ${prefix}_x = ${xExpr};`);
+    lines.push(`    double ${prefix}_d = ${dExpr};`);
+    lines.push(`    double ${prefix}_lr = ${lrExpr};`);
+    lines.push(`    double ${prefix}_w1 = ${w1Expr};`);
+    lines.push(`    double ${prefix}_w2 = ${w2Expr};`);
+    lines.push(`    double ${prefix}_xPrev = ${xPrevExpr};`);
+
+    lines.push(`    double ${prefix}_y = ${prefix}_w1 * ${prefix}_x + ${prefix}_w2 * ${prefix}_xPrev;`);
+    lines.push(`    double ${prefix}_err = ${prefix}_d - ${prefix}_y;`);
+    lines.push(`    double ${prefix}_nextW1 = ${prefix}_w1 + ${prefix}_lr * ${prefix}_err * ${prefix}_x;`);
+    lines.push(`    double ${prefix}_nextW2 = ${prefix}_w2 + ${prefix}_lr * ${prefix}_err * ${prefix}_xPrev;`);
+    lines.push(`    double ${prefix}_nextXPrev = ${prefix}_x;`);
+
+    if (yId !== undefined) lines.push(...renderSignalElementWrite(state, operation, operationIndex, 0, yId, '0U', `${prefix}_y`, layout, member));
+    if (errId !== undefined) lines.push(...renderSignalElementWrite(state, operation, operationIndex, 1, errId, '0U', `${prefix}_err`, layout, member));
+    if (w1Id !== undefined) lines.push(...renderSignalElementWrite(state, operation, operationIndex, 2, w1Id, '0U', `${prefix}_w1`, layout, member));
+    if (w2Id !== undefined) lines.push(...renderSignalElementWrite(state, operation, operationIndex, 3, w2Id, '0U', `${prefix}_w2`, layout, member));
+
+    if (w1Slot) lines.push(...renderStateSlotElementAssignment(state, w1Slot, '0U', `${prefix}_nextW1`, layout, member, `${operation.id}_w1_update`, layout.errorFields.get(operation.id), operation));
+    if (w2Slot) lines.push(...renderStateSlotElementAssignment(state, w2Slot, '0U', `${prefix}_nextW2`, layout, member, `${operation.id}_w2_update`, layout.errorFields.get(operation.id), operation));
+    if (xPrevSlot) lines.push(...renderStateSlotElementAssignment(state, xPrevSlot, '0U', `${prefix}_nextXPrev`, layout, member, `${operation.id}_xPrev_update`, layout.errorFields.get(operation.id), operation));
+
+    return lines;
+  }
   return (operation.state?.slots ?? []).flatMap((slot, slotIndex) => slot.signalId === null ? [] :
   [...renderSignalWrite(
     state,
@@ -2732,6 +2783,7 @@ const renderDiscreteStateUpdates = (
       }
       case 'KALMAN_FILTER':
       case 'EXTENDED_KALMAN_FILTER':
+      case 'LMS_ADAPTIVE_FILTER':
         return [];
       default:
         throw new Error(

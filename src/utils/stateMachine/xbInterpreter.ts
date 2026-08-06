@@ -1003,7 +1003,7 @@ const writeStateOutputs = (
 
       if (invRes.fault) {
         // Fallback: retain state, output default
-        faults.push({ operationId: operation.id, errorId: 'XB_MATRIX_SINGULAR' });
+        if (invRes.fault) faults.push('solve-pivot-failure');
         xHat = xPrev;
         pHat = pPrev;
       } else {
@@ -1123,7 +1123,7 @@ const writeStateOutputs = (
       }
 
       if (invRes.fault) {
-        faults.push({ operationId: operation.id, errorId: 'XB_MATRIX_SINGULAR' });
+        if (invRes.fault) faults.push('solve-pivot-failure');
         xHat = xPrev.map((v) => [v]);
         pHat = pPrev;
       } else {
@@ -1150,6 +1150,46 @@ const writeStateOutputs = (
       runtime.stateSlots[xSlot.id] = xHatFlat;
       runtime.stateSlots[pSlot.id] = pHat.flat();
     }
+    return;
+  }
+  if (operation.type === 'LMS_ADAPTIVE_FILTER') {
+    const w1Slot = stateSlotForRole(operation, 'w1');
+    const w2Slot = stateSlotForRole(operation, 'w2');
+    const xPrevSlot = stateSlotForRole(operation, 'x_prev');
+
+    const xId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'x') ?? operation.inputSignalIds[0];
+    const dId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'd') ?? operation.inputSignalIds[1];
+    const lrId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'lr') ?? operation.inputSignalIds[2];
+
+    const yId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'y') ?? operation.outputSignalIds[0];
+    const errId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'err') ?? operation.outputSignalIds[1];
+    const w1Id = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'w1') ?? operation.outputSignalIds[2];
+    const w2Id = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'w2') ?? operation.outputSignalIds[3];
+
+    const x = Number(xId ? signalValues(runtime, xId)[0] ?? 0 : 0);
+    const d = Number(dId ? signalValues(runtime, dId)[0] ?? 0 : 0);
+    const lr = Number(lrId ? signalValues(runtime, lrId)[0] ?? parameter(operation, ['lr', 'learningRate'], 0.05) : parameter(operation, ['lr', 'learningRate'], 0.05));
+
+    const w1 = Number((w1Slot ? (runtime.stateSlots[w1Slot.id] ?? w1Slot.initialValues) : [0])[0] ?? 0);
+    const w2 = Number((w2Slot ? (runtime.stateSlots[w2Slot.id] ?? w2Slot.initialValues) : [0])[0] ?? 0);
+    const x_prev = Number((xPrevSlot ? (runtime.stateSlots[xPrevSlot.id] ?? xPrevSlot.initialValues) : [0])[0] ?? 0);
+
+    const y = w1 * x + w2 * x_prev;
+    const err = d - y;
+
+    const nextW1 = w1 + lr * err * x;
+    const nextW2 = w2 + lr * err * x_prev;
+    const nextXPrev = x;
+
+    if (yId !== undefined) writeSignal(runtime, yId, [y], faults, operation);
+    if (errId !== undefined) writeSignal(runtime, errId, [err], faults, operation);
+    if (w1Id !== undefined) writeSignal(runtime, w1Id, [w1], faults, operation);
+    if (w2Id !== undefined) writeSignal(runtime, w2Id, [w2], faults, operation);
+
+    if (w1Slot) runtime.stateSlots[w1Slot.id] = [nextW1];
+    if (w2Slot) runtime.stateSlots[w2Slot.id] = [nextW2];
+    if (xPrevSlot) runtime.stateSlots[xPrevSlot.id] = [nextXPrev];
+
     return;
   }
   if (operation.type === 'RATE_LIMITER') {
@@ -1356,7 +1396,11 @@ const statefulUpdate = (
     const current_on = u >= on || (current_on_prev && u > off);
     return { [onSlot.id]: [current_on] };
   }
-  if (operation.type === 'KALMAN_FILTER' || operation.type === 'EXTENDED_KALMAN_FILTER') {
+  if (
+    operation.type === 'KALMAN_FILTER'
+    || operation.type === 'EXTENDED_KALMAN_FILTER'
+    || operation.type === 'LMS_ADAPTIVE_FILTER'
+  ) {
     return {};
   }
   const input = signalValues(runtime, operation.inputSignalIds[0]);
