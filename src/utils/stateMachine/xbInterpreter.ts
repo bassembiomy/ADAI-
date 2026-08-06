@@ -1229,6 +1229,8 @@ const statefulUpdate = (
     const off = Number(parameter(operation, ['switchOff'], 0));
     const current_on_prev = Boolean((runtime.stateSlots[onSlot.id] ?? onSlot.initialValues)[0]);
     const current_on = u >= on || (current_on_prev && u > off);
+    return { [onSlot.id]: [current_on] };
+  }
   if (operation.type === 'KALMAN_FILTER') {
     return {};
   }

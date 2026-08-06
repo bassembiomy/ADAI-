@@ -1,25 +1,30 @@
-import type { XBNumericType } from './xbNumeric';
+import type { XBNumericFault, XBNumericType } from './xbNumeric';
 
 export interface MatrixInverseResult {
   readonly matrix: number[][];
   readonly fault: boolean;
 }
 
+export type MatrixResult = MatrixInverseResult;
+
 export const PIVOT_THRESHOLD_F32 = 1e-6;
 
 export function matrixMultiply(
   a: readonly (readonly number[])[],
   b: readonly (readonly number[])[],
-  rowsA: number = a.length,
-  colsA: number = a[0]?.length || 0,
-  colsB: number = b[0]?.length || 0,
+  rowsAOrType?: number | XBNumericType,
+  colsA?: number | XBNumericFault[],
+  colsB?: number,
   _type: XBNumericType = { kind: 'float32' },
 ): number[][] {
-  const result: number[][] = Array.from({ length: rowsA }, () => Array.from({ length: colsB }, () => 0));
-  for (let r = 0; r < rowsA; r++) {
-    for (let c = 0; c < colsB; c++) {
+  const rA = typeof rowsAOrType === 'number' ? rowsAOrType : a.length;
+  const cA = typeof colsA === 'number' ? colsA : (a[0]?.length || 0);
+  const cB = typeof colsB === 'number' ? colsB : (b[0]?.length || 0);
+  const result: number[][] = Array.from({ length: rA }, () => Array.from({ length: cB }, () => 0));
+  for (let r = 0; r < rA; r++) {
+    for (let c = 0; c < cB; c++) {
       let sum = 0;
-      for (let k = 0; k < colsA; k++) {
+      for (let k = 0; k < cA; k++) {
         sum += (a[r]?.[k] ?? 0) * (b[k]?.[c] ?? 0);
       }
       result[r][c] = sum;
@@ -31,10 +36,12 @@ export function matrixMultiply(
 export function matrixAdd(
   a: readonly (readonly number[])[],
   b: readonly (readonly number[])[],
-  rows: number = a.length,
-  cols: number = a[0]?.length || 0,
+  rowsOrType?: number | XBNumericType,
+  colsOrFaults?: number | XBNumericFault[],
   _type: XBNumericType = { kind: 'float32' },
 ): number[][] {
+  const rows = typeof rowsOrType === 'number' ? rowsOrType : a.length;
+  const cols = typeof colsOrFaults === 'number' ? colsOrFaults : (a[0]?.length || 0);
   const result: number[][] = Array.from({ length: rows }, () => Array.from({ length: cols }, () => 0));
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -47,10 +54,12 @@ export function matrixAdd(
 export function matrixSubtract(
   a: readonly (readonly number[])[],
   b: readonly (readonly number[])[],
-  rows: number = a.length,
-  cols: number = a[0]?.length || 0,
+  rowsOrType?: number | XBNumericType,
+  colsOrFaults?: number | XBNumericFault[],
   _type: XBNumericType = { kind: 'float32' },
 ): number[][] {
+  const rows = typeof rowsOrType === 'number' ? rowsOrType : a.length;
+  const cols = typeof colsOrFaults === 'number' ? colsOrFaults : (a[0]?.length || 0);
   const result: number[][] = Array.from({ length: rows }, () => Array.from({ length: cols }, () => 0));
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -62,9 +71,11 @@ export function matrixSubtract(
 
 export function matrixTranspose(
   a: readonly (readonly number[])[],
-  rows: number = a.length,
-  cols: number = a[0]?.length || 0,
+  rowsParam?: number,
+  colsParam?: number,
 ): number[][] {
+  const rows = typeof rowsParam === 'number' ? rowsParam : a.length;
+  const cols = typeof colsParam === 'number' ? colsParam : (a[0]?.length || 0);
   const result: number[][] = Array.from({ length: cols }, () => Array.from({ length: rows }, () => 0));
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -76,12 +87,22 @@ export function matrixTranspose(
 
 export function matrixInverseGaussJordan(
   a: readonly (readonly number[])[],
-  n: number = a.length,
-  type: XBNumericType = { kind: 'float32' },
+  nOrType?: number | XBNumericType,
+  typeOrFaults?: XBNumericType | XBNumericFault[],
+  _faults?: XBNumericFault[],
 ): MatrixInverseResult {
+  const n = typeof nOrType === 'number' ? nOrType : a.length;
+  const type = typeof nOrType === 'object' ? nOrType : (typeof typeOrFaults === 'object' && !Array.isArray(typeOrFaults) ? typeOrFaults : { kind: 'float32' as const });
   const threshold = type.kind === 'fixed'
     ? Math.pow(2, -type.fractionLength)
     : PIVOT_THRESHOLD_F32;
+
+  if (n === 0 || (a[0]?.length ?? 0) !== n) {
+    return {
+      matrix: Array.from({ length: Math.max(1, n) }, () => Array.from({ length: Math.max(1, n) }, () => 0)),
+      fault: true,
+    };
+  }
 
   // Augment matrix with N-by-N Identity
   const aug: number[][] = Array.from({ length: n }, (_, r) => [
