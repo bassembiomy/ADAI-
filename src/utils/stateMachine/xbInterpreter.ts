@@ -4,6 +4,7 @@ import {
   type XBNumericFault,
   type XBNumericType,
 } from './xbNumeric';
+import { nextGaussianPair } from './xbDeterministicNoise';
 import type {
   XBSemanticModel,
   XBSemanticOperation,
@@ -911,6 +912,50 @@ const writeStateOutputs = (
   operation: XBSemanticOperation,
   faults: XBNumericFault[],
 ): void => {
+  if (operation.type === 'WHITE_NOISE' || operation.type === 'BAND_LIMITED_NOISE') {
+    const rngSlot = stateSlotForRole(operation, 'rng_state');
+    const spareSlot = stateSlotForRole(operation, 'spare_normal');
+    const hasSpareSlot = stateSlotForRole(operation, 'has_spare_normal');
+    const outputId = operation.outputSignalIds[0];
+    if (rngSlot && spareSlot && hasSpareSlot && outputId) {
+      let state = Number((runtime.stateSlots[rngSlot.id] ?? rngSlot.initialValues)[0] ?? 0);
+      let spare = Number((runtime.stateSlots[spareSlot.id] ?? spareSlot.initialValues)[0] ?? 0);
+      let hasSpare = Boolean((runtime.stateSlots[hasSpareSlot.id] ?? hasSpareSlot.initialValues)[0] ?? false);
+      let gaussian = 0;
+      if (hasSpare) {
+        gaussian = spare;
+        hasSpare = false;
+      } else {
+        const result = nextGaussianPair(state);
+        state = result.state;
+        gaussian = result.gaussian;
+        spare = result.spare;
+        hasSpare = result.hasSpare;
+      }
+      runtime.stateSlots[rngSlot.id] = [convertValue(state, rngSlot.numericType, faults, operation)];
+      runtime.stateSlots[spareSlot.id] = [convertValue(spare, spareSlot.numericType, faults, operation)];
+      runtime.stateSlots[hasSpareSlot.id] = [convertValue(hasSpare ? 1 : 0, hasSpareSlot.numericType, faults, operation)];
+
+      const mean = Number(parameter(operation, ['mean'], 0));
+      const variance = Number(parameter(operation, ['variance'], 1));
+      let y = mean + Math.sqrt(Math.max(0, variance)) * gaussian;
+
+      if (operation.type === 'BAND_LIMITED_NOISE') {
+        const filterSlot = stateSlotForRole(operation, 'filter_state');
+        if (filterSlot) {
+          let filterState = Number((runtime.stateSlots[filterSlot.id] ?? filterSlot.initialValues)[0] ?? 0);
+          const dt = Number(parameter(operation, ['sampleTime', 'dt'], 1));
+          const fc = Number(parameter(operation, ['fc'], 100));
+          const alpha = dt / (1 / (2 * Math.PI * fc) + dt);
+          filterState += alpha * (y - filterState);
+          y = filterState;
+          runtime.stateSlots[filterSlot.id] = [convertValue(filterState, filterSlot.numericType, faults, operation)];
+        }
+      }
+      writeSignal(runtime, outputId, [y], faults, operation);
+    }
+    return;
+  }
   if (operation.type === 'PID_BASIC') {
     const output = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'u');
     if (output !== undefined) writeSignal(runtime, output, [pidValues(runtime, operation).output], faults, operation);
@@ -1044,6 +1089,9 @@ const statefulUpdate = (
     const current_on_prev = Boolean((runtime.stateSlots[onSlot.id] ?? onSlot.initialValues)[0]);
     const current_on = u >= on || (current_on_prev && u > off);
     return { [onSlot.id]: [current_on] };
+  }
+  if (operation.type === 'WHITE_NOISE' || operation.type === 'BAND_LIMITED_NOISE') {
+    return {};
   }
   const input = signalValues(runtime, operation.inputSignalIds[0]);
   const updates: Record<string, XBScalar[]> = {};

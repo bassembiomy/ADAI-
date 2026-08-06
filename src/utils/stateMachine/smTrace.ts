@@ -39,6 +39,7 @@ export const xBridgesTraceAction = (stateLabel: string): string =>
 const framesEqual = (
   left: SemanticTraceFrame | undefined,
   right: SemanticTraceFrame | undefined,
+  tolerance?: Readonly<{ absolute: number; relative: number }>
 ): boolean => {
   if (left === undefined || right === undefined) return left === right;
   const arraysEqual = <T>(
@@ -48,6 +49,12 @@ const framesEqual = (
     && leftItems.every((value, index) => Object.is(value, rightItems[index]));
   const valuesEqual = (leftValue: unknown, rightValue: unknown): boolean => {
     if (Object.is(leftValue, rightValue)) return true;
+    if (typeof leftValue === 'number' && typeof rightValue === 'number' && tolerance) {
+      if (Number.isNaN(leftValue) && Number.isNaN(rightValue)) return true;
+      const diff = Math.abs(leftValue - rightValue);
+      if (diff <= tolerance.absolute) return true;
+      if (diff <= Math.max(Math.abs(leftValue), Math.abs(rightValue)) * tolerance.relative) return true;
+    }
     if (Array.isArray(leftValue) || Array.isArray(rightValue)) {
       return Array.isArray(leftValue) && Array.isArray(rightValue)
         && leftValue.length === rightValue.length
@@ -83,13 +90,14 @@ const framesEqual = (
 export const compareSemanticTraces = (
   expected: readonly SemanticTraceFrame[],
   actual: readonly SemanticTraceFrame[],
+  tolerance?: Readonly<{ absolute: number; relative: number }>
 ): TraceDifference | null => {
   for (
     let index = 0;
     index < Math.max(expected.length, actual.length);
     index += 1
   ) {
-    if (!framesEqual(expected[index], actual[index])) {
+    if (!framesEqual(expected[index], actual[index], tolerance)) {
       return {
         index,
         expected: expected[index],

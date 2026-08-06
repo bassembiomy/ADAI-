@@ -29,7 +29,7 @@ export const XB_INTERPRETER_CONFORMANCE_CASE_IDS = [
   'T10-INT-LOGIC-BITWISE', 'T10-INT-SIGNAL-ROUTING', 'T10-INT-TRIGONOMETRY',
   'T10-INT-DISCONTINUOUS', 'T14-INT-DISCONTINUOUS',
   'T14-INT-CORE-DIRECT', 'T14-INT-SHAPED-CONSTANT',
-  'T14-INT-STATEFUL', 'T14-INT-CONTINUOUS',
+  'T14-INT-STATEFUL', 'T14-INT-CONTINUOUS', 'T14-INT-STEP',
 ] as const;
 
 export const XB_C_CONFORMANCE_CASE_IDS = [
@@ -37,7 +37,7 @@ export const XB_C_CONFORMANCE_CASE_IDS = [
   'T10-C99-TRANSFORMS', 'T10-C99-LOGIC-BITWISE', 'T10-C99-SIGNAL-ROUTING', 'T10-C99-TRIGONOMETRY',
   'T10-C99-DISCONTINUOUS', 'T14-C99-DISCONTINUOUS',
   'T14-C99-CORE-DIRECT', 'T14-C99-SHAPED-CONSTANT',
-  'T14-C99-STATEFUL', 'T14-C99-CONTINUOUS',
+  'T14-C99-STATEFUL', 'T14-C99-CONTINUOUS', 'T14-C99-STEP',
 ] as const;
 
 export interface XBConformanceCoverage {
@@ -130,37 +130,18 @@ string, readonly XBConformanceCoverage[]
     scalarCoverage('DELAY'), scalarCoverage('INTEGRATOR_CONTINUOUS'),
     scalarCoverage('Integrator'),
   ],
+  'T14-INT-STEP': [shapedCoverage('Step', [], ['scalar'])],
 });
+
+import { getExecutedCoverage, XB_EXECUTABLE_C_CASES } from './xbCConformanceCases';
 
 export const XB_C_CONFORMANCE_CASES: Readonly<Record<
 string, readonly XBConformanceCoverage[]
->> = Object.freeze({
-  'T10-C99-VECTOR-MATRIX': [...VECTOR_COVERAGE, ...MATRIX_COVERAGE],
-  'T10-C99-PID-BASIC': [scalarCoverage('PID_BASIC')],
-  'T10-C99-DISCRETE-REALIZATION': [
-    shapedCoverage('DISCRETE_TRANSFER_FUNCTION', ['vector']),
-    shapedCoverage('STATE_SPACE', ['vector']),
-  ],
-  'T10-C99-TRANSFORMS': TRANSFORM_COVERAGE,
-  'T10-C99-LOGIC-BITWISE': LOGIC_BITWISE_COVERAGE,
-  'T10-C99-SIGNAL-ROUTING': SIGNAL_ROUTING_COVERAGE,
-  'T10-C99-TRIGONOMETRY': TRIGONOMETRY_COVERAGE,
-  'T10-C99-DISCONTINUOUS': DISCONTINUOUS_COVERAGE,
-  'T14-C99-DISCONTINUOUS': DISCONTINUOUS_COVERAGE,
-  'T14-C99-CORE-DIRECT': CORE_SCALAR_COVERAGE,
-  'T14-C99-SHAPED-CONSTANT': [
-    shapedCoverage('Constant', [], ['vector', 'matrix']),
-    shapedCoverage('TERMINATOR', ['vector', 'matrix'], []),
-  ],
-  'T14-C99-STATEFUL': [
-    scalarCoverage('UNIT_DELAY'), scalarCoverage('MEMORY'),
-    scalarCoverage('INTEGRATOR_DISCRETE'),
-  ],
-  'T14-C99-CONTINUOUS': [
-    scalarCoverage('DELAY'), scalarCoverage('INTEGRATOR_CONTINUOUS'),
-    scalarCoverage('Integrator'),
-  ],
-});
+>> = Object.freeze(
+  Object.fromEntries(
+    Object.entries(XB_EXECUTABLE_C_CASES).map(([id, c]) => [id, c.coverage]),
+  ),
+);
 
 type XBCodegenCapability = Omit<XBBlockCapability, 'codegen'> & {
   codegen: true;
@@ -222,17 +203,16 @@ const hostOnlySet = (
 );
 
 const UNCLASSIFIED_HOST_ONLY = hostOnlySet([
-  'DFlipFlop', 'JKFlipFlop', 'Register', 'Counter', 'Clock', 'WaveformGen',
   'Inverse', 'Determinant', 'Subsystem', 'PWM_GENERATOR', 'THREE_PHASE_PWM',
-  'SIX_STEP_COMMUTATION', 'SENSORLESS_SIX_STEP', 'THREE_PHASE_INVERTER',
+  'SENSORLESS_SIX_STEP', 'THREE_PHASE_INVERTER',
   'SINGLE_PHASE_H_BRIDGE', 'VOLTAGE_REFERENCE_GENERATOR',
   'FIELD_ORIENTED_CONTROL', 'CURRENT_CONTROLLER_DQ', 'DOE_MODEL',
   'SPEED_CONTROLLER', 'FLUX_REFERENCE', 'ROTOR_POSITION_ESTIMATOR',
   'SVPWM_CORE', 'SECTOR_SELECTOR', 'SWITCHING_TIME_CALCULATOR',
   'SVPWM_GATE_GENERATOR', 'ZERO_SEQUENCE_INJECTION', 'SVPWM_MODULATOR',
   'SWITCH_CASE', 'INTEGRATOR', 'DERIVATIVE', 'TRANSFER_FUNCTION',
-  'ZERO_POLE_GAIN', 'LAPLACE_TRANSFORM', 'WHITE_NOISE',
-  'BAND_LIMITED_NOISE', 'DISCRETE_IMPULSE', 'KALMAN_FILTER',
+  'ZERO_POLE_GAIN', 'LAPLACE_TRANSFORM', 
+  'DISCRETE_IMPULSE', 'KALMAN_FILTER',
   'EXTENDED_KALMAN_FILTER', 'MPC_CONTROLLER', 'DOE_MODULE',
   'AC_INDUCTION_MOTOR', 'IM_SCALAR_CONTROL', 'IM_FOC_CONTROL',
   'IM_FLUX_OBSERVER', 'VF_SLIP_COMP', 'FIELD_WEAKENING', 'MTPA_CONTROLLER',
@@ -284,7 +264,7 @@ const UNCLASSIFIED_HOST_ONLY = hostOnlySet([
 
 
 const UNPAIRED_EMBEDDED_OPERATIONS = hostOnlySet([
-  'Step', 'VectorPow', 'SumElements', 'Mean', 'Max', 'IdentityMatrix',
+  'VectorPow', 'SumElements', 'Mean', 'Max', 'IdentityMatrix',
   'LOW_PASS_FILTER', 'HIGH_PASS_FILTER', 'MOVING_AVERAGE',
 ], 'The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage.');
 
@@ -307,10 +287,36 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   Outport: direct(scalar, undefined, undefined, undefined, {
     inputShapes: scalar, outputShapes: scalar,
   }),
-  Step: direct(scalar),
+  Step: direct(
+    scalar,
+    undefined,
+    ['T14-INT-STEP'],
+    ['T14-C99-STEP'],
+    { inputShapes: [], outputShapes: scalar },
+  ),
+  WHITE_NOISE: stateful(
+    scalar,
+    ['math-library'],
+    ['T10-INT-NOISE'],
+    ['XB-W5-NOISE'],
+    { inputShapes: [], outputShapes: scalar },
+  ),
+  BAND_LIMITED_NOISE: stateful(
+    scalar,
+    ['math-library'],
+    ['T10-INT-NOISE'],
+    ['XB-W5-NOISE'],
+    { inputShapes: [], outputShapes: scalar },
+  ),
 
   // Deterministic arithmetic and reductions.
   Sum: direct(scalar),
+  Clock: direct(scalar, undefined, undefined, ['T10-C99-WAVEFORMS'], { inputShapes: [], outputShapes: scalar }),
+  WaveformGen: direct(scalar, undefined, undefined, ['T10-C99-WAVEFORMS'], { inputShapes: [], outputShapes: scalar }),
+  DFlipFlop: stateful(scalar, undefined, undefined, ['T10-C99-FLIPFLOPS']),
+  JKFlipFlop: stateful(scalar, undefined, undefined, ['T10-C99-FLIPFLOPS']),
+  Register: stateful(scalar, undefined, undefined, ['T10-C99-REGISTER-COUNTER']),
+  Counter: stateful(scalar, undefined, undefined, ['T10-C99-REGISTER-COUNTER']),
   SUM_JUNCTION: direct(scalar),
   GAIN: direct(scalar),
   PRODUCT: direct(scalar),
@@ -353,6 +359,7 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
 
   // Signal routing.
   SWITCH: direct(allShapes, undefined, ['T10-INT-SIGNAL-ROUTING'], ['T10-C99-SIGNAL-ROUTING']),
+  SIX_STEP_COMMUTATION: direct(scalar, undefined, ['T10-INT-SIX-STEP'], ['T10-C99-SIX-STEP']),
   MUX: direct(allShapes, undefined, ['T10-INT-SIGNAL-ROUTING'], ['T10-C99-SIGNAL-ROUTING']),
   DEMUX: direct(allShapes, undefined, ['T10-INT-SIGNAL-ROUTING'], ['T10-C99-SIGNAL-ROUTING']),
   IF_ELSE: direct(allShapes, undefined, ['T10-INT-SIGNAL-ROUTING'], ['T10-C99-SIGNAL-ROUTING']),
@@ -377,7 +384,7 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   // Bounded control and linear-system blocks. Each entry is enabled only with
   // paired interpreter and compiled-C conformance coverage (Task 10).
   PID_BASIC: stateful(scalar, undefined, ['T10-INT-PID-BASIC'], ['T10-C99-PID-BASIC']),
-  PID_CONTROLLER: hostOnly('PID_CONTROLLER has no compiled-C conformance contract.'),
+  PID_CONTROLLER: stateful(scalar, undefined, ['T10-INT-PID-CONTROLLER'], ['T10-C99-PID-CONTROLLER']),
   LOW_PASS_FILTER: stateful(allShapes),
   HIGH_PASS_FILTER: stateful(allShapes),
   MOVING_AVERAGE: stateful(allShapes),

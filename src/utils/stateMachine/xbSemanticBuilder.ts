@@ -23,6 +23,7 @@ import {
   type XBSemanticSignal,
   type XBSemanticStateBoundary,
 } from './xbSemanticModel';
+import { normalizePidParameters } from './xbPidContract';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -662,6 +663,19 @@ const stateBoundaryForNode = (
     })));
   }
 
+  if (node.type === 'PID_CONTROLLER') {
+    const control = outputByPort('u') ?? signals[outputSignalIds[0] ?? ''];
+    if (control === undefined) return boundary([]);
+    return boundary(['i_state', 'd_state', 'last_e', 'last_ed'].map((role) => ({
+      id: `${node.id}:${role}$state`,
+      role,
+      signalId: null,
+      numericType: control.numericType,
+      shape: { kind: 'scalar' },
+      initialValues: [control.numericType.kind === 'boolean' ? false : 0],
+    })));
+  }
+
   if (node.type === 'DISCRETE_TRANSFER_FUNCTION' || node.type === 'STATE_SPACE') {
     const exposedX = outputByPort('x');
     const fallback = exposedX ?? outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
@@ -710,6 +724,109 @@ const stateBoundaryForNode = (
       shape: { kind: 'scalar' },
       initialValues: [node.parameters.initialState === true || node.parameters.initialState === 'on'],
     }]);
+  }
+
+  if (node.type === 'DFlipFlop' || node.type === 'JKFlipFlop') {
+    const q = outputByPort('q') ?? signals[outputSignalIds[0] ?? ''];
+    const qbar = outputByPort('qbar');
+    if (q === undefined) return boundary([]);
+    const initialQ = Number(node.parameters.initialCondition ?? 0);
+    const slots = [
+      {
+        id: `${node.id}:q$state`,
+        role: 'q',
+        signalId: q.id,
+        numericType: q.numericType,
+        shape: { kind: 'scalar' as const },
+        initialValues: [initialQ],
+      },
+      {
+        id: `${node.id}:lastClk$state`,
+        role: 'lastClk',
+        signalId: null,
+        numericType: q.numericType,
+        shape: { kind: 'scalar' as const },
+        initialValues: [0],
+      }
+    ];
+    if (qbar) {
+      slots.push({
+        id: `${node.id}:qbar$state`,
+        role: 'qbar',
+        signalId: qbar.id,
+        numericType: qbar.numericType,
+        shape: { kind: 'scalar' as const },
+        initialValues: [initialQ ? 0 : 1],
+      });
+    }
+    return boundary(slots);
+  }
+
+  if (node.type === 'Register') {
+    const out = outputByPort('out') ?? signals[outputSignalIds[0] ?? ''];
+    if (out === undefined) return boundary([]);
+    const initialValue = Number(node.parameters.initialValue ?? 0);
+    return boundary([
+      {
+        id: `${node.id}:value$state`,
+        role: 'value',
+        signalId: out.id,
+        numericType: out.numericType,
+        shape: { kind: 'scalar' as const },
+        initialValues: [initialValue],
+      },
+      {
+        id: `${node.id}:lastClk$state`,
+        role: 'lastClk',
+        signalId: null,
+        numericType: out.numericType,
+        shape: { kind: 'scalar' as const },
+        initialValues: [0],
+      }
+    ]);
+  }
+
+  if (node.type === 'Counter') {
+    const out = outputByPort('out') ?? signals[outputSignalIds[0] ?? ''];
+    if (out === undefined) return boundary([]);
+    const initialCount = Number(node.parameters.initialCount ?? 0);
+    return boundary([
+      {
+        id: `${node.id}:count$state`,
+        role: 'count',
+        signalId: out.id,
+        numericType: out.numericType,
+        shape: { kind: 'scalar' as const },
+        initialValues: [initialCount],
+      },
+      {
+        id: `${node.id}:lastClk$state`,
+        role: 'lastClk',
+        signalId: null,
+        numericType: out.numericType,
+        shape: { kind: 'scalar' as const },
+        initialValues: [0],
+      }
+    ]);
+  }
+
+  if (node.type === 'WHITE_NOISE' || node.type === 'BAND_LIMITED_NOISE') {
+    const output = outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
+    if (output === undefined) return boundary([]);
+    const float64 = { kind: 'float64' } as const;
+    const boolean = { kind: 'boolean' } as const;
+    const scalar = { kind: 'scalar' } as const;
+    const seedRaw = node.parameters.seed;
+    const seed = Number(seedRaw !== undefined ? seedRaw : 1831565813);
+    const slots = [
+      { id: `${node.id}:rng_state$state`, role: 'rng_state', signalId: null, numericType: float64, shape: scalar, initialValues: [seed] },
+      { id: `${node.id}:spare_normal$state`, role: 'spare_normal', signalId: null, numericType: float64, shape: scalar, initialValues: [0] },
+      { id: `${node.id}:has_spare_normal$state`, role: 'has_spare_normal', signalId: null, numericType: boolean, shape: scalar, initialValues: [false] }
+    ];
+    if (node.type === 'BAND_LIMITED_NOISE') {
+      slots.push({ id: `${node.id}:filter_state$state`, role: 'filter_state', signalId: null, numericType: output.numericType, shape: scalar, initialValues: [0] });
+    }
+    return boundary(slots);
   }
 
   return boundary(outputSignalIds.map((signalId) => {
@@ -942,7 +1059,7 @@ export const buildXBSemanticModel = (
       const ctrl = findPort(['ctrl', 'control', 'cond', 'condition', 'u3']);
       if (u1 && u2 && ctrl) {
         const rest = inputs.filter((p) => p !== u1 && p !== u2 && p !== ctrl);
-        return [u1, u2, ctrl, ...rest];
+        return [u1, ctrl, u2, ...rest];
       }
     } else if (node.type === 'IF_ELSE') {
       const findPort = (kw: string[]) =>
@@ -953,6 +1070,14 @@ export const buildXBSemanticModel = (
       if (cond && uTrue && uFalse) {
         const rest = inputs.filter((p) => p !== cond && p !== uTrue && p !== uFalse);
         return [cond, uTrue, uFalse, ...rest];
+      }
+    } else if (node.type === 'SIX_STEP_COMMUTATION') {
+      const h1 = inputs.find((p) => p.id === 'h1');
+      const h2 = inputs.find((p) => p.id === 'h2');
+      const h3 = inputs.find((p) => p.id === 'h3');
+      if (h1 && h2 && h3) {
+        const rest = inputs.filter((p) => p !== h1 && p !== h2 && p !== h3);
+        return [h1, h2, h3, ...rest];
       }
     }
     return [...inputs];
@@ -999,6 +1124,7 @@ export const buildXBSemanticModel = (
           );
         }) ?? null,
       },
+      pidParameters: node.type === 'PID_CONTROLLER' ? normalizePidParameters(node.parameters, solverStep!) : undefined,
     };
   }
 
