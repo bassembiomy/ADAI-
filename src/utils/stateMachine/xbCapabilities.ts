@@ -378,7 +378,7 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   WHITE_NOISE: stateful(scalar, ['math-library'], undefined, undefined, { inputShapes: [], outputShapes: scalar }),
   BAND_LIMITED_NOISE: stateful(scalar, ['math-library'], undefined, undefined, { inputShapes: [], outputShapes: scalar }),
   KALMAN_FILTER: stateful(
-    vectorOrMatrix, undefined,
+    allShapes, undefined,
     ['XB-W5-KALMAN'], ['XB-W5-KALMAN']
   ),
 

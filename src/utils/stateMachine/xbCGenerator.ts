@@ -12,6 +12,7 @@ import type {
   XBNumericType,
   XBShape,
 } from './xbNumeric';
+import { renderCMatrixInverseGaussJordan } from './xbStaticMatrix';
 
 const lines = (...parts: Array<string | false | null | undefined>): string =>
   `${parts.filter((part): part is string => typeof part === 'string')
@@ -397,6 +398,24 @@ const matrixParameterValue = (
     return value[row][column] as number;
   }
   return fallback;
+};
+
+const formatC2DArray = (
+  operation: XBSemanticOperation,
+  paramName: string,
+  rows: number,
+  cols: number,
+  fallback = 0,
+): string => {
+  const rowStrs: string[] = [];
+  for (let r = 0; r < rows; r++) {
+    const colStrs: string[] = [];
+    for (let c = 0; c < cols; c++) {
+      colStrs.push(cNumber(matrixParameterValue(operation, paramName, r, c, fallback)));
+    }
+    rowStrs.push(`{ ${colStrs.join(', ')} }`);
+  }
+  return `{ ${rowStrs.join(', ')} }`;
 };
 
 const cNumber = (value: number | boolean): string => {
@@ -1472,6 +1491,7 @@ const OPERATION_EMITTERS: Readonly<Record<string, OperationEmitter>> = {
   WHITE_NOISE: () => [],
   BAND_LIMITED_NOISE: () => [],
   RELAY: () => [],
+  KALMAN_FILTER: () => [],
 };
 
 const operationEmitter = (operation: XBSemanticOperation): OperationEmitter => {
@@ -1872,6 +1892,186 @@ const renderStateOutputs = (
       return [...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, current_on, layout, member)];
     }
   }
+  if (operation.type === 'KALMAN_FILTER') {
+    const xSlot = stateSlotForRole(operation, 'x');
+    const pSlot = stateSlotForRole(operation, 'P');
+    const xHatId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'x_hat');
+    const yHatId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'y_hat');
+    const innovationId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'innovation');
+    const kId = operation.outputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'K');
+    if (xSlot !== undefined && pSlot !== undefined) {
+      const uId = operation.inputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'u');
+      const yMeasId = operation.inputSignalIds.find((id) => state.xBridges!.signals[id]?.portId === 'y_meas');
+      const xLength = state.xBridges!.signals[xSlot.signalId ?? xHatId ?? '']?.elementCount ?? 1;
+      const uLength = uId ? (state.xBridges!.signals[uId]?.elementCount ?? 1) : 1;
+      const yMeasLength = yMeasId ? (state.xBridges!.signals[yMeasId]?.elementCount ?? 1) : 1;
+
+      const prefix = `kf_${operationIndex}`;
+      const lines: string[] = [];
+
+      lines.push(`    double ${prefix}_xPrev[${xLength}];`);
+      for (let i = 0; i < xLength; i++) {
+        const xExpr = stateSlotElementRealExpression(xSlot, layout, member, `${i}U`);
+        lines.push(`    ${prefix}_xPrev[${i}] = ${xExpr};`);
+      }
+      lines.push(`    double ${prefix}_pPrev[${xLength}][${xLength}];`);
+      for (let r = 0; r < xLength; r++) {
+        for (let c = 0; c < xLength; c++) {
+          const pExpr = stateSlotElementRealExpression(pSlot, layout, member, `${r * xLength + c}U`);
+          lines.push(`    ${prefix}_pPrev[${r}][${c}] = ${pExpr};`);
+        }
+      }
+
+      lines.push(`    double ${prefix}_u[${uLength}];`);
+      for (let i = 0; i < uLength; i++) {
+        const uExpr = uId ? signalElementRealExpression(state, uId, layout, member, `${i}U`) : '0.0';
+        lines.push(`    ${prefix}_u[${i}] = ${uExpr};`);
+      }
+      lines.push(`    double ${prefix}_yMeas[${yMeasLength}];`);
+      for (let i = 0; i < yMeasLength; i++) {
+        const yExpr = yMeasId ? signalElementRealExpression(state, yMeasId, layout, member, `${i}U`) : '0.0';
+        lines.push(`    ${prefix}_yMeas[${i}] = ${yExpr};`);
+      }
+
+      lines.push(`    double ${prefix}_A[${xLength}][${xLength}] = ${formatC2DArray(operation, 'A', xLength, xLength)};`);
+      lines.push(`    double ${prefix}_B[${xLength}][${uLength}] = ${formatC2DArray(operation, 'B', xLength, uLength)};`);
+      lines.push(`    double ${prefix}_C[${yMeasLength}][${xLength}] = ${formatC2DArray(operation, 'C', yMeasLength, xLength)};`);
+      lines.push(`    double ${prefix}_D[${yMeasLength}][${uLength}] = ${formatC2DArray(operation, 'D', yMeasLength, uLength)};`);
+      lines.push(`    double ${prefix}_Q[${xLength}][${xLength}] = ${formatC2DArray(operation, 'Q', xLength, xLength)};`);
+      lines.push(`    double ${prefix}_R[${yMeasLength}][${yMeasLength}] = ${formatC2DArray(operation, 'R', yMeasLength, yMeasLength)};`);
+
+      lines.push(`    double ${prefix}_xPred[${xLength}];`);
+      lines.push(`    for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
+      lines.push(`        double sum = 0.0;`);
+      lines.push(`        for (uint32_t k = 0U; k < ${xLength}U; ++k) sum += ${prefix}_A[r][k] * ${prefix}_xPrev[k];`);
+      lines.push(`        for (uint32_t k = 0U; k < ${uLength}U; ++k) sum += ${prefix}_B[r][k] * ${prefix}_u[k];`);
+      lines.push(`        ${prefix}_xPred[r] = sum;`);
+      lines.push(`    }`);
+
+      lines.push(`    double ${prefix}_pPred[${xLength}][${xLength}];`);
+      lines.push(`    for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
+      lines.push(`        for (uint32_t c = 0U; c < ${xLength}U; ++c) {`);
+      lines.push(`            double sum = ${prefix}_Q[r][c];`);
+      lines.push(`            for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
+      lines.push(`                for (uint32_t m = 0U; m < ${xLength}U; ++m) {`);
+      lines.push(`                    sum += ${prefix}_A[r][k] * ${prefix}_pPrev[k][m] * ${prefix}_A[c][m];`);
+      lines.push(`                }`);
+      lines.push(`            }`);
+      lines.push(`            ${prefix}_pPred[r][c] = sum;`);
+      lines.push(`        }`);
+      lines.push(`    }`);
+
+      lines.push(`    double ${prefix}_yHat[${yMeasLength}];`);
+      lines.push(`    double ${prefix}_inn[${yMeasLength}];`);
+      lines.push(`    for (uint32_t r = 0U; r < ${yMeasLength}U; ++r) {`);
+      lines.push(`        double sum = 0.0;`);
+      lines.push(`        for (uint32_t k = 0U; k < ${xLength}U; ++k) sum += ${prefix}_C[r][k] * ${prefix}_xPred[k];`);
+      lines.push(`        for (uint32_t k = 0U; k < ${uLength}U; ++k) sum += ${prefix}_D[r][k] * ${prefix}_u[k];`);
+      lines.push(`        ${prefix}_yHat[r] = sum;`);
+      lines.push(`        ${prefix}_inn[r] = ${prefix}_yMeas[r] - sum;`);
+      lines.push(`    }`);
+
+      lines.push(`    double ${prefix}_S[${yMeasLength}][${yMeasLength}];`);
+      lines.push(`    for (uint32_t r = 0U; r < ${yMeasLength}U; ++r) {`);
+      lines.push(`        for (uint32_t c = 0U; c < ${yMeasLength}U; ++c) {`);
+      lines.push(`            double sum = ${prefix}_R[r][c];`);
+      lines.push(`            for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
+      lines.push(`                for (uint32_t m = 0U; m < ${xLength}U; ++m) {`);
+      lines.push(`                    sum += ${prefix}_C[r][k] * ${prefix}_pPred[k][m] * ${prefix}_C[c][m];`);
+      lines.push(`                }`);
+      lines.push(`            }`);
+      lines.push(`            ${prefix}_S[r][c] = sum;`);
+      lines.push(`        }`);
+      lines.push(`    }`);
+
+      lines.push(`    bool ${prefix}_invFailed = false;`);
+      lines.push(...renderCMatrixInverseGaussJordan(`${prefix}_S`, `${prefix}_Sinv`, `${prefix}_invFailed`, yMeasLength));
+
+      lines.push(`    double ${prefix}_K[${xLength}][${yMeasLength}];`);
+      lines.push(`    double ${prefix}_xHat[${xLength}];`);
+      lines.push(`    double ${prefix}_pHat[${xLength}][${xLength}];`);
+      lines.push(`    if (${prefix}_invFailed) {`);
+      lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
+      lines.push(`            ${prefix}_xHat[r] = ${prefix}_xPrev[r];`);
+      lines.push(`            for (uint32_t c = 0U; c < ${yMeasLength}U; ++c) ${prefix}_K[r][c] = 0.0;`);
+      lines.push(`            for (uint32_t c = 0U; c < ${xLength}U; ++c) ${prefix}_pHat[r][c] = ${prefix}_pPrev[r][c];`);
+      lines.push(`        }`);
+      lines.push(`    } else {`);
+      lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
+      lines.push(`            for (uint32_t c = 0U; c < ${yMeasLength}U; ++c) {`);
+      lines.push(`                double sum = 0.0;`);
+      lines.push(`                for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
+      lines.push(`                    for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) {`);
+      lines.push(`                        sum += ${prefix}_pPred[r][k] * ${prefix}_C[m][k] * ${prefix}_Sinv[m][c];`);
+      lines.push(`                    }`);
+      lines.push(`                }`);
+      lines.push(`                ${prefix}_K[r][c] = sum;`);
+      lines.push(`            }`);
+      lines.push(`        }`);
+      lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
+      lines.push(`            double sum = ${prefix}_xPred[r];`);
+      lines.push(`            for (uint32_t k = 0U; k < ${yMeasLength}U; ++k) sum += ${prefix}_K[r][k] * ${prefix}_inn[k];`);
+      lines.push(`            ${prefix}_xHat[r] = sum;`);
+      lines.push(`        }`);
+      lines.push(`        for (uint32_t r = 0U; r < ${xLength}U; ++r) {`);
+      lines.push(`            for (uint32_t c = 0U; c < ${xLength}U; ++c) {`);
+      lines.push(`                double sum = 0.0;`);
+      lines.push(`                for (uint32_t k = 0U; k < ${xLength}U; ++k) {`);
+      lines.push(`                    double ikc_rk = (r == k ? 1.0 : 0.0);`);
+      lines.push(`                    for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) ikc_rk -= ${prefix}_K[r][m] * ${prefix}_C[m][k];`);
+      lines.push(`                    for (uint32_t n_idx = 0U; n_idx < ${xLength}U; ++n_idx) {`);
+      lines.push(`                        double ikc_cn = (c == n_idx ? 1.0 : 0.0);`);
+      lines.push(`                        for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) ikc_cn -= ${prefix}_K[c][m] * ${prefix}_C[m][n_idx];`);
+      lines.push(`                        sum += ikc_rk * ${prefix}_pPred[k][n_idx] * ikc_cn;`);
+      lines.push(`                    }`);
+      lines.push(`                }`);
+      lines.push(`                for (uint32_t k = 0U; k < ${yMeasLength}U; ++k) {`);
+      lines.push(`                    for (uint32_t m = 0U; m < ${yMeasLength}U; ++m) {`);
+      lines.push(`                        sum += ${prefix}_K[r][k] * ${prefix}_R[k][m] * ${prefix}_K[c][m];`);
+      lines.push(`                    }`);
+      lines.push(`                }`);
+      lines.push(`                ${prefix}_pHat[r][c] = sum;`);
+      lines.push(`            }`);
+      lines.push(`        }`);
+      lines.push(`    }`);
+
+      // Write outputs
+      if (xHatId !== undefined) {
+        for (let i = 0; i < xLength; i++) {
+          lines.push(...renderSignalElementWrite(state, operation, operationIndex, 0, xHatId, `${i}U`, `${prefix}_xHat[${i}]`, layout, member));
+        }
+      }
+      if (yHatId !== undefined) {
+        for (let i = 0; i < yMeasLength; i++) {
+          lines.push(...renderSignalElementWrite(state, operation, operationIndex, 1, yHatId, `${i}U`, `${prefix}_yHat[${i}]`, layout, member));
+        }
+      }
+      if (innovationId !== undefined) {
+        for (let i = 0; i < yMeasLength; i++) {
+          lines.push(...renderSignalElementWrite(state, operation, operationIndex, 2, innovationId, `${i}U`, `${prefix}_inn[${i}]`, layout, member));
+        }
+      }
+      if (kId !== undefined) {
+        for (let r = 0; r < xLength; r++) {
+          for (let c = 0; c < yMeasLength; c++) {
+            lines.push(...renderSignalElementWrite(state, operation, operationIndex, 3, kId, `${r * yMeasLength + c}U`, `${prefix}_K[${r}][${c}]`, layout, member));
+          }
+        }
+      }
+
+      // Update state slots x and P
+      for (let i = 0; i < xLength; i++) {
+        lines.push(...renderStateSlotElementAssignment(state, xSlot, `${i}U`, `${prefix}_xHat[${i}]`, layout, member, `${operation.id}_x_update_${i}`, layout.errorFields.get(operation.id), operation));
+      }
+      for (let r = 0; r < xLength; r++) {
+        for (let c = 0; c < xLength; c++) {
+          lines.push(...renderStateSlotElementAssignment(state, pSlot, `${r * xLength + c}U`, `${prefix}_pHat[${r}][${c}]`, layout, member, `${operation.id}_P_update_${r}_${c}`, layout.errorFields.get(operation.id), operation));
+        }
+      }
+
+      return lines;
+    }
+  }
   return (operation.state?.slots ?? []).flatMap((slot, slotIndex) => slot.signalId === null ? [] :
   [...renderSignalWrite(
     state,
@@ -2232,6 +2432,9 @@ const renderDiscreteStateUpdates = (
     const block = ['    {', ...lines.map((line) => `      ${line}`), ...renderTransactionalStateUpdates(operation, noiseUpdates, layout, member).map((line) => `    ${line}`), '    }'];
     if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return withFaultSync(block);
     return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...block.map((line) => `    ${line}`), '    }']);
+  }
+  if (operation.type === 'KALMAN_FILTER') {
+    return [];
   }
   const updates = (operation.state?.slots ?? []).flatMap((slot, slotIndex) => {
     switch (operation.type) {
