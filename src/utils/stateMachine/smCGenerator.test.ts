@@ -1166,5 +1166,32 @@ int main(void) {
       expect(coreSource).toContain('instance->data.xb5_ifelse_output = (float)((double)(instance->xb_');
       expect(coreSource).toContain('instance->data.xb5_switch_output = (float)((double)(instance->xb_');
     });
+
+    it('renders namespaced local variables, traceId markers, and compiles warning-free under -Wshadow -Werror', () => {
+      const model = nestedAndFixture();
+      const { ir } = buildSemanticModel(model);
+      const artifacts = generateCArtifacts(ir!);
+      const workspace = createGeneratedCodeTestWorkspace('shadow-test');
+
+      for (const f of artifacts.files) {
+        if (f.name.endsWith('.c') || f.name.endsWith('.h')) {
+          writeFileSync(join(workspace.directory, f.name), f.content);
+        }
+      }
+
+      const dummyMain = `
+        #include "sm_core.h"
+        int main(void) {
+            ADIA_Instance_t inst;
+            SM_Init(&inst);
+            return 0;
+        }
+      `;
+      writeFileSync(join(workspace.directory, 'main.c'), dummyMain);
+
+      expect(() => {
+        execFileSync('gcc', ['-std=c99', '-Wall', '-Wextra', '-Wshadow', '-Werror', '-I.', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'main.c', '-o', join(workspace.directory, 'out.exe')], { cwd: workspace.directory });
+      }).not.toThrow();
+    });
   });
 });
