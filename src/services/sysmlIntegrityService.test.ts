@@ -8,7 +8,14 @@ import {
   validateTraceabilityRelation,
   validateUniqueRequirementIds,
 } from './sysmlIntegrityService';
-import { SysMLDiagramState } from '../types/sysml_types';
+import {
+  SysMLDiagramState,
+  SysMLBlock,
+  SysMLPort,
+  SysMLPart,
+  SysMLConnector,
+  SysMLRelation,
+} from '../types/sysml_types';
 
 describe('sysmlIntegrityService - Schema Hydration', () => {
   it('hydrates empty or undefined state with empty arrays', () => {
@@ -83,11 +90,11 @@ describe('sysmlIntegrityService - Cascade Deletion & Impact Preview', () => {
 
   it('cascade deletes a block and all dependent parts/ports/connectors/relations', () => {
     const updatedState = cascadeDeleteBlock('b1', sampleState);
-    expect(updatedState.blocks.find(b => b.id === 'b1')).toBeUndefined();
-    expect(updatedState.ports.find(p => p.id === 'p1')).toBeUndefined();
-    expect(updatedState.parts.find(pt => pt.id === 'pt1')).toBeUndefined();
-    expect(updatedState.connectors.find(c => c.id === 'c1')).toBeUndefined();
-    expect(updatedState.relations.find(r => r.id === 'r1')).toBeUndefined();
+    expect(updatedState.blocks.find((b: SysMLBlock) => b.id === 'b1')).toBeUndefined();
+    expect(updatedState.ports.find((p: SysMLPort) => p.id === 'p1')).toBeUndefined();
+    expect(updatedState.parts.find((pt: SysMLPart) => pt.id === 'pt1')).toBeUndefined();
+    expect(updatedState.connectors.find((c: SysMLConnector) => c.id === 'c1')).toBeUndefined();
+    expect(updatedState.relations.find((r: SysMLRelation) => r.id === 'r1')).toBeUndefined();
     // b2, p2, req1 should remain
     expect(updatedState.blocks.length).toBe(1);
     expect(updatedState.ports.length).toBe(1);
@@ -95,11 +102,12 @@ describe('sysmlIntegrityService - Cascade Deletion & Impact Preview', () => {
 
   it('cascade deletes a port and affected connectors/relations', () => {
     const updatedState = cascadeDeletePort('p1', sampleState);
-    expect(updatedState.ports.find(p => p.id === 'p1')).toBeUndefined();
-    expect(updatedState.connectors.find(c => c.id === 'c1')).toBeUndefined();
-    expect(updatedState.blocks.find(b => b.id === 'b1')?.ports).not.toContain('p1');
+    expect(updatedState.ports.find((p: SysMLPort) => p.id === 'p1')).toBeUndefined();
+    expect(updatedState.connectors.find((c: SysMLConnector) => c.id === 'c1')).toBeUndefined();
+    expect(updatedState.blocks.find((b: SysMLBlock) => b.id === 'b1')?.ports).not.toContain('p1');
   });
 });
+
 
 describe('sysmlIntegrityService - Connector Validation', () => {
   const state: SysMLDiagramState = {
