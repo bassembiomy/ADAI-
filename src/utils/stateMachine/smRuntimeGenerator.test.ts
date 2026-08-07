@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderRuntimeFiles } from './smRuntimeGenerator';
+import { renderRuntimeFiles, type GeneratedFile } from './smRuntimeGenerator';
 import { flatOrFixture } from './smFixtures';
 import { buildSemanticModel } from './smSemanticBuilder';
 
@@ -9,10 +9,10 @@ describe('smRuntimeGenerator', () => {
     const { ir } = buildSemanticModel(model);
     const files = renderRuntimeFiles(ir!);
     
-    const configHeader = files.find(f => f.name === 'generated/sm_config.h');
-    const versionHeader = files.find(f => f.name === 'generated/sm_version.h');
-    const runtimeHeader = files.find(f => f.name === 'runtime/sm_runtime.h');
-    const manifest = files.find(f => f.name === 'generated/manifest.json');
+    const configHeader = files.find((f: GeneratedFile) => f.name === 'generated/sm_config.h');
+    const versionHeader = files.find((f: GeneratedFile) => f.name === 'generated/sm_version.h');
+    const runtimeHeader = files.find((f: GeneratedFile) => f.name === 'runtime/sm_runtime.h');
+    const manifest = files.find((f: GeneratedFile) => f.name === 'generated/manifest.json');
 
     expect(configHeader?.content).toContain('#define SM_ENABLE_TRACE');
     expect(configHeader?.content).toContain('#define SM_XB_ABS_EPSILON');
