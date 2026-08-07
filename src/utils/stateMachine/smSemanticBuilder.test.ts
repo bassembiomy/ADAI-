@@ -26,6 +26,26 @@ describe('buildSemanticModel', () => {
     expect(result.ir!.transitions.t_ab.entryStateIds).toEqual(['b']);
   });
 
+  it('builds authoritative variable and state symbol maps', () => {
+    const model = hybridXBridgesFixture();
+    const result = buildSemanticModel(model);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.variableSymbols).toBeDefined();
+    expect(result.stateSymbols).toBeDefined();
+    expect(result.variableSymbols!.size).toBeGreaterThan(0);
+    expect(result.stateSymbols!.size).toBeGreaterThan(0);
+
+    const firstStateSymbol = Array.from(result.stateSymbols!.values())[0];
+    expect(firstStateSymbol.cIndexSymbol).toContain('SM_ST_');
+    expect(firstStateSymbol.cIndexSymbol).toContain('_IDX');
+
+    const firstVarSymbol = Array.from(result.variableSymbols!.values())[0];
+    expect(firstVarSymbol.cIdentifier).toBeDefined();
+    expect(firstVarSymbol.semanticType).toBeDefined();
+  });
+
+
   it('assigns deterministic hierarchy and AND execution order', () => {
     const fixture = nestedAndFixture();
     fixture.states.reverse();

@@ -150,4 +150,7 @@ export interface SemanticModel {
 export interface SemanticBuildResult {
   ir?: SemanticModel;
   diagnostics: ModelDiagnostic[];
+  variableSymbols?: ReadonlyMap<string, SemanticVariableSymbol>;
+  stateSymbols?: ReadonlyMap<string, XBOwnerState>;
 }
+

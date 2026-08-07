@@ -536,12 +536,39 @@ export const buildSemanticModel = (
   }
 
   const variables: Record<string, SemanticVariable> = {};
+  const variableSymbols = new Map<string, SemanticVariableSymbol>();
   for (const variable of [...model.variables].sort((left, right) =>
     left.id.localeCompare(right.id))) {
+    const cIdentifier = toCIdentifier(variable.name);
+    let semanticType: SemanticType = 'float64';
+    let cType = 'double';
+    switch (variable.type) {
+      case 'boolean': semanticType = 'boolean'; cType = 'bool'; break;
+      case 'int8': semanticType = 'int8'; cType = 'int8_t'; break;
+      case 'uint8': semanticType = 'uint8'; cType = 'uint8_t'; break;
+      case 'int16': semanticType = 'int16'; cType = 'int16_t'; break;
+      case 'uint16': semanticType = 'uint16'; cType = 'uint16_t'; break;
+      case 'int32': semanticType = 'int32'; cType = 'int32_t'; break;
+      case 'uint32': semanticType = 'uint32'; cType = 'uint32_t'; break;
+      case 'float32': semanticType = 'float32'; cType = 'float'; break;
+      case 'float64': semanticType = 'float64'; cType = 'double'; break;
+    }
+    const varSymbol: SemanticVariableSymbol = {
+      id: variable.id,
+      modelName: variable.name,
+      cIdentifier,
+      semanticType,
+      cType,
+    };
+    variableSymbols.set(variable.id, varSymbol);
+    if (!variableSymbols.has(variable.name)) {
+      variableSymbols.set(variable.name, varSymbol);
+    }
+
     variables[variable.id] = {
       id: variable.id,
       name: variable.name,
-      cName: toCIdentifier(variable.name),
+      cName: cIdentifier,
       type: variable.type,
       initialValue: parseInitialValue(
         variable.type,
@@ -549,6 +576,18 @@ export const buildSemanticModel = (
         variable.currentValue,
       ),
     };
+  }
+
+  const stateSymbols = new Map<string, XBOwnerState>();
+  for (let idx = 0; idx < hierarchy.orderedStateIds.length; idx++) {
+    const sId = hierarchy.orderedStateIds[idx];
+    const sourceState = hierarchy.stateById.get(sId)!;
+    stateSymbols.set(sId, {
+      stateId: sourceState.id,
+      stateName: sourceState.name,
+      cIndexSymbol: `SM_ST_${toCIdentifier(sourceState.id).toUpperCase()}_IDX`,
+      numericIndex: idx,
+    });
   }
 
   for (const stateId of hierarchy.orderedStateIds) {
@@ -578,7 +617,7 @@ export const buildSemanticModel = (
     states[stateId].xBridges = result.ir ?? null;
   }
   if (diagnostics.some((item) => item.severity === 'error')) {
-    return { diagnostics };
+    return { diagnostics, variableSymbols, stateSymbols };
   }
 
   const variableIdByReference = new Map<string, string>();
@@ -625,6 +664,8 @@ export const buildSemanticModel = (
 
   return {
     diagnostics,
+    variableSymbols,
+    stateSymbols,
     ir: freezeSemanticModel({
       tickMs: model.tickMs,
       safetyMode: model.safetyMode,
@@ -646,3 +687,4 @@ export const buildSemanticModel = (
     }),
   };
 };
+
