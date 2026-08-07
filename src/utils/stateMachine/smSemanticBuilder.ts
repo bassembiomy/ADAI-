@@ -492,7 +492,8 @@ export const buildSemanticModel = (
         destinationKind: 'history',
         destinationStateId: null,
         destinationJunctionId: destinationJunction.id,
-        ...routePaths,
+        exitStateIds: routePaths.exitStateIds,
+        entryStateIds: routePaths.entryStateIds,
       }];
     }
     if (visitedJunctions.has(transition.destinationStateId)) return [];
