@@ -435,4 +435,44 @@ describe('migrateStateMachineModel', () => {
       { smVarId: 'x', blockId: 'output', portId: 'out', direction: 'out' },
     ]);
   });
+
+  it('synchronizes xBridgesModel.mappings when an Outport contains smVarId (APP-XB-MAP-001)', () => {
+    const rawModel = {
+      schemaVersion: 4,
+      tickMs: 10,
+      states: [
+        {
+          id: 's1',
+          parentId: 'root',
+          decomposition: 'OR',
+          xBridgesModel: {
+            nodes: [
+              {
+                id: 'XB6-StepOut',
+                type: 'Outport',
+                params: { smVarId: 'xb6-step-output-0001' },
+                inputs: [{ id: 'in', direction: 'input' }],
+                outputs: [{ id: 'out', direction: 'output' }],
+              },
+            ],
+            edges: [],
+            mappings: [],
+          },
+        },
+      ],
+      layers: [{ id: 'root', parentStateId: null, stateIds: ['s1'], decomposition: 'OR' }],
+      junctions: [],
+      transitions: [],
+      variables: [{ id: 'v1', name: 'xb6-step-output-0001', type: 'number', initialValue: '0' }],
+    };
+
+    const result = migrateStateMachineModel(rawModel as any);
+    const mappings = result.model.states[0].xBridgesModel?.mappings || [];
+    expect(mappings).toContainEqual({
+      smVarId: 'xb6-step-output-0001',
+      blockId: 'XB6-StepOut',
+      portId: 'out',
+      direction: 'out',
+    });
+  });
 });

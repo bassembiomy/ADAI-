@@ -91,9 +91,13 @@ export const listXBBoundaryTargets = (
     const blockId = nonEmptyString(value.id);
     if (blockId === null || resolveNodeType(value) !== spec.type) continue;
     const label = resolveLabel(value);
-    for (const port of resolvePorts(value, spec.collection)) {
+    const resolved = resolvePorts(value, spec.collection);
+    const ports = resolved.length > 0
+      ? resolved
+      : [{ id: direction === 'out' ? 'out' : 'in', direction: spec.portDirection }];
+    for (const port of ports) {
       const portId = nonEmptyString(port.id);
-      if (portId === null || port.direction !== spec.portDirection) continue;
+      if (portId === null) continue;
       targets.push({ blockId, portId, direction, label });
     }
   }

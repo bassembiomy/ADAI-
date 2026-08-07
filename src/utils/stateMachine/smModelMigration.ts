@@ -17,7 +17,7 @@ const normalizeEmbeddedXBModels = (
   diagnostics: ModelDiagnostic[];
 } => {
   const diagnostics: ModelDiagnostic[] = [];
-  const validVariableIds = new Set(variables.map((variable) => variable.id));
+  const validVariableIds = new Set(variables.flatMap((variable) => [variable.id, variable.name]));
   const normalizedStates = states.map((state) => {
     if (state.xBridgesModel === undefined) return state;
 
