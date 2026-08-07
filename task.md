@@ -21,9 +21,9 @@
   - [x] Run test and confirm GREEN pass
   - [x] Commit Task 3 changes
 
-- [ ] **Task 4: Traceability Governance & Requirement Canonicalization (BR-04, BR-07, BR-10)**
-  - [ ] Write failing tests for traceability relations & unique requirement IDs
-  - [ ] Confirm RED failure
-  - [ ] Implement `validateTraceabilityRelation` & `validateUniqueRequirementIds`
-  - [ ] Run test, full suite, and `npx tsc --noEmit`
-  - [ ] Commit Task 4 changes
+- [x] **Task 4: Traceability Governance & Requirement Canonicalization (BR-04, BR-07, BR-10)**
+  - [x] Write failing tests for traceability relations & unique requirement IDs
+  - [x] Confirm RED failure
+  - [x] Implement `validateTraceabilityRelation` & `validateUniqueRequirementIds`
+  - [x] Run test, full suite, and `npx tsc --noEmit`
+  - [x] Commit Task 4 changes

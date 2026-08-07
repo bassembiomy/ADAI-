@@ -236,4 +236,57 @@ export function validateConnectorConnection(
   return { valid: true };
 }
 
+export function validateTraceabilityRelation(
+  sourceId: string,
+  targetId: string,
+  relationType: string,
+  state: SysMLDiagramState
+): ValidationResult {
+  const isSourceReq = state.requirements.some(r => r.id === sourceId);
+  const isTargetReq = state.requirements.some(r => r.id === targetId);
+
+  const isSourceBlockOrPart =
+    state.blocks.some(b => b.id === sourceId) || state.parts.some(p => p.id === sourceId);
+
+  const normalizedType = relationType === 'derive' ? 'deriveReqt' : relationType;
+
+  if (normalizedType === 'satisfy') {
+    if (!isTargetReq) {
+      return { valid: false, reason: 'Target must be a Requirement for satisfy relation' };
+    }
+    if (!isSourceBlockOrPart) {
+      return { valid: false, reason: 'Source must be a Block or Part for satisfy relation' };
+    }
+  } else if (normalizedType === 'deriveReqt') {
+    if (!isSourceReq) {
+      return { valid: false, reason: 'Source must be a Requirement for deriveReqt relation' };
+    }
+    if (!isTargetReq) {
+      return { valid: false, reason: 'Target must be a Requirement for deriveReqt relation' };
+    }
+  } else if (normalizedType === 'verify') {
+    if (!isTargetReq) {
+      return { valid: false, reason: 'Target must be a Requirement for verify relation' };
+    }
+  }
+
+  return { valid: true };
+}
+
+export function validateUniqueRequirementIds(requirements: SysMLRequirement[]): ValidationResult {
+  const seen = new Set<string>();
+  for (const req of requirements) {
+    const normalizedReqId = req.reqId.trim().toUpperCase();
+    if (seen.has(normalizedReqId)) {
+      return {
+        valid: false,
+        reason: `Duplicate requirement ID found: ${req.reqId}`,
+      };
+    }
+    seen.add(normalizedReqId);
+  }
+  return { valid: true };
+}
+
+
 

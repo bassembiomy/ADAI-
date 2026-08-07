@@ -5,6 +5,8 @@ import {
   cascadeDeleteBlock,
   cascadeDeletePort,
   validateConnectorConnection,
+  validateTraceabilityRelation,
+  validateUniqueRequirementIds,
 } from './sysmlIntegrityService';
 import { SysMLDiagramState } from '../types/sysml_types';
 
@@ -151,5 +153,57 @@ describe('sysmlIntegrityService - Connector Validation', () => {
     expect(res.reason).toContain('already exists');
   });
 });
+
+describe('sysmlIntegrityService - Traceability & Requirement Governance', () => {
+  const state: SysMLDiagramState = {
+    blocks: [{ id: 'b1', name: 'Controller', ports: [], parts: [] }],
+    parts: [{ id: 'pt1', name: 'Pump', typeBlockId: 'b1', parentBlockId: 'b1', parentPartId: null }],
+    ports: [],
+    connectors: [],
+    requirements: [
+      { id: 'req1', reqId: 'REQ-01', text: 'Safety Limit' },
+      { id: 'req2', reqId: 'REQ-02', text: 'Derived Limit' },
+    ],
+    relations: [],
+  };
+
+  it('validates satisfy relation from block to requirement', () => {
+    const res = validateTraceabilityRelation('b1', 'req1', 'satisfy', state);
+    expect(res.valid).toBe(true);
+  });
+
+  it('rejects satisfy relation from requirement to block', () => {
+    const res = validateTraceabilityRelation('req1', 'b1', 'satisfy', state);
+    expect(res.valid).toBe(false);
+    expect(res.reason).toContain('Target must be a Requirement');
+  });
+
+  it('validates deriveReqt relation from requirement to requirement', () => {
+    const res = validateTraceabilityRelation('req1', 'req2', 'deriveReqt', state);
+    expect(res.valid).toBe(true);
+  });
+
+  it('rejects deriveReqt relation if source is a block', () => {
+    const res = validateTraceabilityRelation('b1', 'req2', 'deriveReqt', state);
+    expect(res.valid).toBe(false);
+    expect(res.reason).toContain('Source must be a Requirement');
+  });
+
+  it('validates uniqueness of requirement IDs', () => {
+    const validRes = validateUniqueRequirementIds([
+      { id: '1', reqId: 'REQ-01', text: 'A' },
+      { id: '2', reqId: 'REQ-02', text: 'B' },
+    ]);
+    expect(validRes.valid).toBe(true);
+
+    const dupRes = validateUniqueRequirementIds([
+      { id: '1', reqId: 'REQ-01', text: 'A' },
+      { id: '2', reqId: 'req-01', text: 'B' },
+    ]);
+    expect(dupRes.valid).toBe(false);
+    expect(dupRes.reason).toContain('Duplicate requirement ID');
+  });
+});
+
 
 
