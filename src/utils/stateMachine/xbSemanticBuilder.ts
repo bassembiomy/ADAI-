@@ -25,6 +25,8 @@ import {
 } from './xbSemanticModel';
 import { normalizePidParameters } from './xbPidContract';
 import { compileEkfVectorExpressions } from './xbEkfExpressions';
+import { alignRuntimeThreshold, convertTime } from './smTiming';
+
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -1187,8 +1189,34 @@ export const buildXBSemanticModel = (
           `Step block '${node.id}' parameters must be numeric values.`,
           node.id,
         ));
+      } else {
+        const timeMs = convertTime(stepTime, 'seconds', 'milliseconds', input.baseTickMs);
+        const { thresholdMs } = alignRuntimeThreshold(timeMs, input.baseTickMs, 'ceil-to-tick');
+        const ownerSt = input.ownerState ?? {
+          stateId: input.stateId,
+          stateName: input.stateId,
+          cIndexSymbol: `SM_ST_${input.stateId.replace(/[^a-zA-Z0-9_]/g, '_').toUpperCase()}_IDX`,
+          numericIndex: 0,
+        };
+        operations[node.id] = {
+          ...operations[node.id],
+          stepParameters: {
+            initialValue: initialVal,
+            finalValue: finalVal,
+            threshold: {
+              milliseconds: thresholdMs,
+              alignment: 'ceil-to-tick',
+            },
+            timerSource: {
+              kind: 'stateElapsedTime',
+              stateId: ownerSt.stateId,
+              stateIndexSymbol: ownerSt.cIndexSymbol,
+            },
+          },
+        };
       }
     }
+
 
     if (node.type === 'Outport' && node.parameters?.smVarId) {
       const smVarId = String(node.parameters.smVarId);

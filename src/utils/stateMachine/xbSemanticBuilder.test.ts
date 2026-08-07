@@ -141,6 +141,51 @@ describe('buildXBSemanticModel', () => {
     expect(result.ir!.mappings[0].variable.cIdentifier).toBe('xb_output');
   });
 
+  it('lowers Step parameters into pre-aligned threshold milliseconds and state timer source', () => {
+    const m = model({
+      nodes: [
+        node('step1', 'Step', [], [port('out', 'output')], {
+          step_time: 0.3,
+          initial_value: 0,
+          final_value: 5,
+        }),
+      ],
+    });
+
+    const ownerState = {
+      stateId: 'state_6_copy',
+      stateName: 'State_6_copy',
+      cIndexSymbol: 'SM_ST__1FC92E02_C821_43E6_9B89_2F938DB7945D_IDX',
+      numericIndex: 1,
+    };
+
+    const result = buildXBSemanticModel({
+      stateId: 'state_6_copy',
+      ownerState,
+      model: m,
+      variables,
+      target,
+      baseTickMs: 100,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir).toBeDefined();
+    const stepOp = result.ir!.operations['step1'];
+    expect(stepOp).toBeDefined();
+    expect(stepOp.stepParameters).toEqual({
+      initialValue: 0,
+      finalValue: 5,
+      threshold: { milliseconds: 300, alignment: 'ceil-to-tick' },
+      timerSource: {
+        kind: 'stateElapsedTime',
+        stateId: 'state_6_copy',
+        stateIndexSymbol: 'SM_ST__1FC92E02_C821_43E6_9B89_2F938DB7945D_IDX',
+      },
+    });
+  });
+
+
+
 
   it('declares a numeric fault fallback and optional error signal for every operation', () => {
     const result = build(model({

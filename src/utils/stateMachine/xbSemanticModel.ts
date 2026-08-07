@@ -126,6 +126,20 @@ export interface XBPidParameters {
   readonly sampleTime: number;
 }
 
+export interface XBStepOperationParameters {
+  readonly initialValue: number;
+  readonly finalValue: number;
+  readonly threshold: {
+    readonly milliseconds: number;
+    readonly alignment: 'ceil-to-tick' | 'exact';
+  };
+  readonly timerSource: {
+    readonly kind: 'stateElapsedTime';
+    readonly stateId: string;
+    readonly stateIndexSymbol: string;
+  };
+}
+
 /** A generic operation description interpreted or rendered by later stages. */
 export interface XBSemanticOperation {
   readonly id: string;
@@ -141,7 +155,9 @@ export interface XBSemanticOperation {
   /** Present on every builder-produced operation; optional for legacy IR fixtures. */
   readonly numericFault?: XBNumericFaultContract;
   readonly pidParameters?: XBPidParameters;
+  readonly stepParameters?: XBStepOperationParameters;
 }
+
 
 export interface XBSemanticMapping {
   readonly variableId: string;
