@@ -145,18 +145,20 @@ const transitionPaths = (
   targetId: string,
   kind: SemanticTransition['kind'],
   parentByStateId: ReadonlyMap<string, string | null>,
-): Pick<SemanticTransition, 'exitStateIds' | 'entryStateIds'> => {
+): Pick<SemanticTransition, 'exitStateIds' | 'entryStateIds' | 'lcaStateId' | 'transitionKind'> => {
   if (kind === 'internal-action') {
-    return { exitStateIds: [], entryStateIds: [] };
+    return { exitStateIds: [], entryStateIds: [], lcaStateId: sourceId, transitionKind: 'internal' };
   }
   if (kind === 'external-self') {
-    return { exitStateIds: [sourceId], entryStateIds: [targetId] };
+    return { exitStateIds: [sourceId], entryStateIds: [targetId], lcaStateId: parentByStateId.get(sourceId) ?? null, transitionKind: 'external' };
   }
 
   const sourceAncestors = ancestorsFromSelf(sourceId, parentByStateId);
   const targetAncestors = ancestorsFromSelf(targetId, parentByStateId);
   const targetSet = new Set(targetAncestors);
   const lca = sourceAncestors.find((id) => targetSet.has(id)) ?? null;
+  const transitionKind: SemanticTransition['transitionKind'] = (kind as any) === 'local' ? 'local' : 'external';
+
   if (kind === 'outer' && lca === sourceId) {
     const descendants = targetAncestors
       .slice(0, targetAncestors.indexOf(sourceId))
@@ -164,6 +166,8 @@ const transitionPaths = (
     return {
       exitStateIds: [sourceId],
       entryStateIds: [sourceId, ...descendants],
+      lcaStateId: lca,
+      transitionKind,
     };
   }
   const exitStateIds = sourceAncestors.slice(
@@ -177,6 +181,8 @@ const transitionPaths = (
   return {
     exitStateIds,
     entryStateIds: targetToLca.reverse(),
+    lcaStateId: lca,
+    transitionKind,
   };
 };
 
@@ -375,7 +381,7 @@ export const buildSemanticModel = (
         kind,
         hierarchy.parentByStateId,
       )
-      : { exitStateIds: [], entryStateIds: [] };
+      : { exitStateIds: [], entryStateIds: [], lcaStateId: null, transitionKind: 'external' as const };
 
     transitions[transition.id] = {
       id: transition.id,
@@ -414,6 +420,8 @@ export const buildSemanticModel = (
         sourceStateId: state.id,
         destinationStateId: state.id,
         kind: 'internal-action',
+        transitionKind: 'internal',
+        lcaStateId: state.id,
         priority: 1000 + index,
         triggerMode: internal.triggerMode,
         afterTicks: internal.afterTicks,

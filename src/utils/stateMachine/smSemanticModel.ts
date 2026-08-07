@@ -46,6 +46,8 @@ export interface SemanticTransition {
   sourceStateId: string;
   destinationStateId: string;
   kind: 'outer' | 'inner' | 'internal-action' | 'external-self';
+  transitionKind: 'external' | 'internal' | 'local';
+  lcaStateId: string | null;
   priority: number;
   triggerMode: 'condition' | 'after' | 'and' | 'or';
   afterTicks: number | null;
