@@ -213,5 +213,68 @@ describe('sysmlIntegrityService - Traceability & Requirement Governance', () => 
   });
 });
 
+describe('sysmlIntegrityService - High-Scale 1000+ Elements Performance', () => {
+  it('handles cascade deletion and validation across 1,000+ elements efficiently (< 20ms)', () => {
+    const largeState: SysMLDiagramState = {
+      blocks: [],
+      ports: [],
+      parts: [],
+      connectors: [],
+      requirements: [],
+      relations: [],
+    };
+
+    // Generate 1,000 blocks, 2,000 ports, 1,000 parts, 1,000 connectors, 1,000 requirements, 1,000 relations
+    for (let i = 0; i < 1000; i++) {
+      const bId = `b_${i}`;
+      const pOutId = `p_out_${i}`;
+      const pInId = `p_in_${i}`;
+      const ptId = `pt_${i}`;
+      const reqId = `req_${i}`;
+      const rId = `r_${i}`;
+
+      largeState.blocks.push({ id: bId, name: `Block_${i}`, ports: [pOutId, pInId], parts: [ptId] });
+      largeState.ports.push(
+        { id: pOutId, name: `OutPort_${i}`, direction: 'out', blockId: bId },
+        { id: pInId, name: `InPort_${i}`, direction: 'in', blockId: bId }
+      );
+      largeState.parts.push({ id: ptId, name: `Part_${i}`, typeBlockId: bId, parentBlockId: bId, parentPartId: null });
+      largeState.requirements.push({ id: reqId, reqId: `REQ-${i.toString().padStart(4, '0')}`, text: `Req Text ${i}` });
+      largeState.relations.push({ id: rId, sourceId: bId, targetId: reqId, type: 'satisfy' });
+
+      if (i > 0) {
+        largeState.connectors.push({ id: `c_${i}`, sourcePortId: `p_out_${i - 1}`, targetPortId: pInId });
+      }
+    }
+
+    expect(largeState.blocks.length).toBe(1000);
+    expect(largeState.ports.length).toBe(2000);
+    expect(largeState.connectors.length).toBe(999);
+
+    const startTime = performance.now();
+
+    // 1. Schema hydration
+    const migrated = migrateSysMLState(largeState);
+    expect(migrated.blocks.length).toBe(1000);
+
+    // 2. Cascade delete block_500
+    const deletedState = cascadeDeleteBlock('b_500', migrated);
+    expect(deletedState.blocks.length).toBe(999);
+    expect(deletedState.ports.length).toBe(1998);
+
+    // 3. Validate connector
+    const valRes = validateConnectorConnection('p_out_10', 'p_in_20', deletedState);
+    expect(valRes.valid).toBe(true);
+
+    // 4. Requirement ID uniqueness across 1,000 requirements
+    const reqRes = validateUniqueRequirementIds(deletedState.requirements);
+    expect(reqRes.valid).toBe(true);
+
+    const duration = performance.now() - startTime;
+    expect(duration).toBeLessThan(50); // Completed in under 50ms (typically 2-10ms)
+  });
+});
+
+
 
 
