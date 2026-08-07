@@ -1246,29 +1246,56 @@ export const buildXBSemanticModel = (
     }
   }
 
-  const mappings: XBSemanticMapping[] = [...input.model.mappings]
-    .sort((left, right) =>
-      compareStable(left.blockId, right.blockId)
-      || compareStable(left.portId, right.portId)
-      || compareStable(left.direction, right.direction)
-      || compareStable(left.smVarId, right.smVarId))
-    .map((mapping) => {
-      const signalId = `${mapping.blockId}:${mapping.portId}`;
-      return {
-        variableId: mapping.smVarId,
-        signalId,
-        blockId: mapping.blockId,
-        portId: mapping.portId,
-        direction: mapping.direction,
-        numericType: resolveNumericType(signalId),
-      };
+  const ownerState: XBOwnerState = input.ownerState ?? {
+    stateId: input.stateId,
+    stateName: input.stateId,
+    cIndexSymbol: `SM_ST_${input.stateId.replace(/[^a-zA-Z0-9_]/g, '_').toUpperCase()}_IDX`,
+    numericIndex: 0,
+  };
+
+  const rawMappings = [...input.model.mappings].sort((left, right) =>
+    compareStable(left.blockId, right.blockId)
+    || compareStable(left.portId, right.portId)
+    || compareStable(left.direction, right.direction)
+    || compareStable(left.smVarId, right.smVarId));
+
+  const mappings: XBSemanticMapping[] = [];
+  for (const mapping of rawMappings) {
+    const signalId = `${mapping.blockId}:${mapping.portId}`;
+    const resolvedSymbol = input.variableSymbols?.get(mapping.smVarId)
+      ?? (input.variables[mapping.smVarId] ? {
+        id: mapping.smVarId,
+        modelName: input.variables[mapping.smVarId].name,
+        cIdentifier: input.variables[mapping.smVarId].cName,
+        semanticType: 'float64',
+        cType: 'double',
+      } : undefined);
+
+    const symbolToUse: SemanticVariableSymbol = resolvedSymbol ?? {
+      id: mapping.smVarId,
+      modelName: mapping.smVarId,
+      cIdentifier: mapping.smVarId.replace(/[^a-zA-Z0-9_]/g, '_'),
+      semanticType: 'float64',
+      cType: 'double',
+    };
+
+    mappings.push({
+      sourceVariableId: mapping.smVarId,
+      variable: symbolToUse,
+      signalId,
+      blockId: mapping.blockId,
+      portId: mapping.portId,
+      direction: mapping.direction,
+      numericType: resolveNumericType(signalId),
     });
+  }
 
   if (diagnostics.length > 0) return { diagnostics };
   return {
     diagnostics,
     ir: freezeXBSemanticModel({
       stateId: input.stateId,
+      ownerState,
       executionOrder: [...executionOrder],
       operations,
       signals,
@@ -1285,3 +1312,4 @@ export const buildXBSemanticModel = (
     }),
   };
 };
+

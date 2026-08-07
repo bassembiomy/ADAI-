@@ -604,11 +604,14 @@ export const buildSemanticModel = (
     }
     const result = buildXBSemanticModel({
       stateId,
+      ownerState: stateSymbols.get(stateId),
+      variableSymbols,
       model: adapted.model,
       variables,
       target: STATE_MACHINE_XB_TARGET_CAPABILITIES,
       baseTickMs: model.tickMs,
     });
+
     diagnostics.push(...result.diagnostics.map((item) => ({
       ...item,
       message: `State '${stateId}': ${item.message}`,

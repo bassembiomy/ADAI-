@@ -96,6 +96,52 @@ const build = (
 });
 
 describe('buildXBSemanticModel', () => {
+  it('resolves XBridge mappings and attaches ownerState symbol context', () => {
+    const m = model({
+      nodes: [
+        node('const1', 'Constant', [], [port('out', 'output')], { value: 5.0 }),
+        node('out1', 'Outport', [port('in', 'input')], [], { smVarId: 'xb_output' }),
+      ],
+      edges: [edge('e1', 'const1', 'out', 'out1', 'in')],
+      mappings: [{ smVarId: 'xb_output', blockId: 'out1', portId: 'in', direction: 'out' }],
+    });
+
+    const ownerState = {
+      stateId: 'state_1fc92e',
+      stateName: 'State_6_copy',
+      cIndexSymbol: 'SM_ST__1FC92E02_C821_43E6_9B89_2F938DB7945D_IDX',
+      numericIndex: 2,
+    };
+
+    const varSymbols = new Map([
+      ['xb_output', {
+        id: 'cc53310b-344b-4df9-84f3-6068138c22aa',
+        modelName: 'xb_output',
+        cIdentifier: 'xb_output',
+        semanticType: 'float64' as const,
+        cType: 'double',
+      }],
+    ]);
+
+    const result = buildXBSemanticModel({
+      stateId: 'state_1fc92e',
+      ownerState,
+      variableSymbols: varSymbols,
+      model: m,
+      variables,
+      target,
+      baseTickMs: 100,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir).toBeDefined();
+    expect(result.ir!.ownerState).toEqual(ownerState);
+    expect(result.ir!.mappings).toHaveLength(1);
+    expect(result.ir!.mappings[0].sourceVariableId).toBe('xb_output');
+    expect(result.ir!.mappings[0].variable.cIdentifier).toBe('xb_output');
+  });
+
+
   it('declares a numeric fault fallback and optional error signal for every operation', () => {
     const result = build(model({
       nodes: [

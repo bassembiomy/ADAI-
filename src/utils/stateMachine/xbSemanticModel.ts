@@ -1,11 +1,48 @@
 import type { ModelDiagnostic } from './smModel';
-import type { SemanticVariable } from './smSemanticModel';
+import type { SemanticVariable, SemanticVariableSymbol, XBOwnerState } from './smSemanticModel';
 import type {
   XBParameterValue,
   XBPersistedModelV1,
   XBStatePolicy,
   XBTargetCapabilities,
 } from './xbModel';
+
+export interface XBSemanticMapping {
+  readonly sourceVariableId: string;
+  readonly variable: SemanticVariableSymbol;
+  readonly signalId: string;
+  readonly blockId: string;
+  readonly portId: string;
+  readonly direction: 'in' | 'out';
+  readonly numericType: XBNumericType;
+}
+
+export interface XBSemanticModel {
+  readonly stateId: string;
+  readonly ownerState: XBOwnerState;
+  readonly executionOrder: readonly string[];
+  readonly operations: Readonly<Record<string, XBSemanticOperation>>;
+  readonly signals: Readonly<Record<string, XBSemanticSignal>>;
+  readonly mappings: readonly XBSemanticMapping[];
+  readonly solver: {
+    readonly kind: 'euler' | 'rk4';
+    /** Canonical fixed solver interval, validated against the base tick. */
+    readonly stepSeconds: number;
+    readonly substepsPerTick: number;
+  };
+  readonly policy: XBStatePolicy;
+}
+
+export interface XBSemanticBuildInput {
+  readonly stateId: string;
+  readonly ownerState?: XBOwnerState;
+  readonly variableSymbols?: ReadonlyMap<string, SemanticVariableSymbol>;
+  readonly model: XBPersistedModelV1;
+  readonly variables: Readonly<Record<string, SemanticVariable>>;
+  readonly target: XBTargetCapabilities;
+  readonly baseTickMs: number;
+}
+
 import type { XBNumericType, XBShape } from './xbNumeric';
 import type { XBOverflowMode, XBRoundingMode } from './xbNumeric';
 
