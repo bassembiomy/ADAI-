@@ -57,9 +57,7 @@ void SM_TraceAction(ADIA_Instance_t *instance, const char *action)
 
 static void SM_XB_CONTROLLER_SolverSubstep(ADIA_Instance_t *instance)
 {
-    {
-        (void)instance;
-    }
+    (void)instance;
 }
 
 
