@@ -463,6 +463,7 @@ export const buildSemanticModel = (
         transitionIds,
         destinationKind: ownedHistory === undefined ? 'state' : 'history',
         destinationStateId: transition.destinationStateId,
+        destinationJunctionId: ownedHistory?.id ?? null,
         exitStateIds: routePaths.exitStateIds,
         entryStateIds: routePaths.entryStateIds,
       }];
