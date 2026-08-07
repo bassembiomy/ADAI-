@@ -852,3 +852,46 @@ export const semanticFixture = (
       };
   }
 };
+
+export const xb6StepFixture = (): StateMachineModelV4 => ({
+  schemaVersion: CURRENT_SM_SCHEMA_VERSION,
+  tickMs: 100,
+  safetyMode: false,
+  states: [
+    state('s1', {
+      name: 'State1',
+      xBridgesModel: {
+        nodes: [
+          {
+            id: 'b1',
+            type: 'Step',
+            params: { step_time: 0.3, initial_value: 0, final_value: 5 },
+            inputs: [],
+            outputs: [{ id: 'out', direction: 'output' }],
+          },
+          {
+            id: 'XB6-StepOut',
+            type: 'Outport',
+            params: { smVarId: 'xb6_step_output' },
+            inputs: [{ id: 'in', direction: 'input' }],
+            outputs: [{ id: 'out', direction: 'output' }],
+          },
+        ],
+        edges: [
+          { id: 'e1', sourceNodeId: 'b1', sourcePortId: 'out', targetNodeId: 'XB6-StepOut', targetPortId: 'in' },
+        ],
+        mappings: [
+          { smVarId: 'xb6_step_output', blockId: 'XB6-StepOut', portId: 'out', direction: 'out' },
+        ],
+      },
+    }),
+  ],
+  layers: [
+    layer('root', null, ['s1']),
+  ],
+  junctions: [],
+  transitions: [],
+  variables: [
+    { id: 'v1', name: 'xb6_step_output', type: 'number', initialValue: '0' },
+  ],
+});

@@ -1,11 +1,12 @@
-import { flatOrFixture, hybridXBridgesFixture } from '../src/utils/stateMachine/smFixtures';
+import { flatOrFixture, hybridXBridgesFixture, xb6StepFixture } from '../src/utils/stateMachine/smFixtures';
 import { buildSemanticModel } from '../src/utils/stateMachine/smSemanticBuilder';
 import { runVerificationPipeline } from '../src/utils/stateMachine/smPipelineOrchestrator';
 
 console.log('=== ADIA State Machine Code Generator Verification Orchestrator ===');
 const models = [
   { name: 'Flat OR Fixture', model: flatOrFixture() },
-  { name: 'Hybrid XBridges Fixture', model: hybridXBridgesFixture() }
+  { name: 'Hybrid XBridges Fixture', model: hybridXBridgesFixture() },
+  { name: 'XB6 Step Fixture', model: xb6StepFixture() },
 ];
 
 for (const item of models) {
