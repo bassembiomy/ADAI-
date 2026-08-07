@@ -19,7 +19,8 @@ import {
 } from './xbNumeric';
 import { createXBRuntime, stepXBState } from './xbInterpreter';
 import { generateCArtifacts } from './smCGenerator';
-import { hybridXBridgesFixture } from './smFixtures';
+import { flatOrFixture, hybridXBridgesFixture } from './smFixtures';
+
 import type { StateMachineModelV4 } from './smModel';
 import { buildSemanticModel } from './smSemanticBuilder';
 import {
@@ -2831,37 +2832,44 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
 
   it('generates exact float-formatted Step block evaluation with ceiling threshold and mapped Outport propagation (GEN-XB-STEP-002, 003, 004)', () => {
     const model = flatOrFixture();
+    model.states[0].isXBridges = true;
     model.states[0].xBridgesModel = {
+
+
       nodes: [
         {
           id: 'step1',
           type: 'Step',
-          params: { step_time: 0.3, initial_value: 0, final_value: 5 },
+          parameters: { step_time: 0.3, initial_value: 0, final_value: 5 },
           inputs: [],
           outputs: [{ id: 'out', direction: 'output' }],
         },
         {
           id: 'XB6-StepOut',
           type: 'Outport',
-          params: { smVarId: 'xb6-step-output-0001' },
+          parameters: { smVarId: 'xb6-step-output-0001' },
           inputs: [{ id: 'in', direction: 'input' }],
           outputs: [{ id: 'out', direction: 'output' }],
         },
       ],
       edges: [{ id: 'e1', sourceNodeId: 'step1', sourcePortId: 'out', targetNodeId: 'XB6-StepOut', targetPortId: 'in' }],
       mappings: [
-        { smVarId: 'xb6-step-output-0001', blockId: 'XB6-StepOut', portId: 'out', direction: 'out' },
+        { smVarId: 'xb6-step-output-0001', blockId: 'XB6-StepOut', portId: 'in', direction: 'out' },
       ],
     };
-    model.variables.push({ id: 'v_step', name: 'xb6-step-output-0001', type: 'number', initialValue: '0' });
+    model.variables.push({ id: 'xb6-step-output-0001', name: 'xb6_step_output', type: 'float', initialValue: '0' });
+
+
 
     const { ir } = buildSemanticModel(model);
     const artifacts = generateCArtifacts(ir!);
     const coreSource = artifacts.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
 
-    expect(coreSource).toContain('0.3f');
-    expect(coreSource).toContain('0.0f');
-    expect(coreSource).toContain('5.0f');
-    expect(coreSource).toMatch(/instance->data\.xb6_step_output_0001\s*=/);
+    expect(coreSource).toContain('instance->state_timers[SM_ST_A_IDX] < 300U');
+    expect(coreSource).not.toContain('state_timers[0U]');
+    expect(coreSource).toContain('instance->data.xb6_step_output');
+    expect(coreSource).not.toContain('xb6_step_output_0001');
   });
+
+
 });

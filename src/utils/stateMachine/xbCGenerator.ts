@@ -835,17 +835,37 @@ const emitBoundaryPort: OperationEmitter = (
 const emitInport: OperationEmitter = emitBoundaryPort;
 const emitOutport: OperationEmitter = (state, operation, operationIndex, layout, member) => {
   const lines = emitBoundaryPort(state, operation, operationIndex, layout, member);
-  const smVarId = operation.parameters?.smVarId ?? operation.mapping?.smVarId;
-  if (smVarId && operation.inputSignalIds[0]) {
+  const mapping = state.xBridges?.mappings.find((m) => m.blockId === operation.id);
+  const varName = mapping?.variable.cIdentifier;
+  if (varName && operation.inputSignalIds[0]) {
     const inputSignal = signalRealExpression(state, operation.inputSignalIds[0], layout, member);
-    const varName = toCIdentifier(String(smVarId));
     lines.push(`    instance->data.${varName} = ${inputSignal};`);
   }
   return lines;
 };
 const emitTerminator: OperationEmitter = () => [];
 
-const emitStep = emitSingleOutput((_inputs, operation) => {
+const emitStep: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  if (operation.stepParameters) {
+    const { initialValue, finalValue, threshold, timerSource } = operation.stepParameters;
+    const initialFmt = `${initialValue.toFixed(1)}`;
+    const finalFmt = `${finalValue.toFixed(1)}`;
+    const timerIndexSymbol = timerSource.stateIndexSymbol;
+    const expr = `(instance->state_timers[${timerIndexSymbol}] < ${threshold.milliseconds}U ? ${initialFmt} : ${finalFmt})`;
+    return renderSignalWrite(
+      state,
+      operation,
+      operationIndex,
+      0,
+      operation.outputSignalIds[0],
+      expr,
+      layout,
+      member,
+    );
+  }
+
+  const ownerIndexSymbol = state.xBridges?.ownerState.cIndexSymbol
+    ?? `SM_ST_${toCIdentifier(state.id).toUpperCase()}_IDX`;
   const stepTimeSeconds = Number(
     scalarParameter(operation, ['step_time', 'stepTime', 'time'], 0.3),
   );
@@ -855,13 +875,20 @@ const emitStep = emitSingleOutput((_inputs, operation) => {
   const final = Number(
     scalarParameter(operation, ['final_value', 'finalValue', 'final'], 1),
   );
+  const thresholdMs = Math.ceil(stepTimeSeconds * 1000);
+  const expr = `(instance->state_timers[${ownerIndexSymbol}] < ${thresholdMs}U ? ${initial.toFixed(1)} : ${final.toFixed(1)})`;
+  return renderSignalWrite(
+    state,
+    operation,
+    operationIndex,
+    0,
+    operation.outputSignalIds[0],
+    expr,
+    layout,
+    member,
+  );
+};
 
-  const stepTimeFmt = `${stepTimeSeconds.toFixed(1)}f`;
-  const initialFmt = `${initial.toFixed(1)}f`;
-  const finalFmt = `${final.toFixed(1)}f`;
-
-  return `(instance->state_timers[0U] < (uint32_t)ceil(${stepTimeFmt} / (SM_TICK_MS / 1000.0f)) ? ${initialFmt} : ${finalFmt})`;
-});
 
 const emitGain = emitSingleOutput((inputs, operation) =>
   `((${inputs[0] ?? '0.0'}) * ${cNumber(scalarParameter(
@@ -3123,12 +3150,7 @@ const renderStateLifecycle = (
   let inputMappingIndex = 0;
   for (const mapping of xb.mappings) {
     if (mapping.direction !== 'in') continue;
-    const variable = ir.variables[mapping.variableId];
-    if (variable === undefined) {
-      throw new Error(
-        `X-Bridges input mapping variable '${mapping.variableId}' is absent`,
-      );
-    }
+    const varCId = mapping.variable.cIdentifier;
     stepLines.push(...renderSignalWrite(
       state,
       {
@@ -3152,7 +3174,7 @@ const renderStateLifecycle = (
       100000 + inputMappingIndex++,
       0,
       mapping.signalId,
-      `(double)(instance->data.${variable.cName})`,
+      `(double)(instance->data.${varCId})`,
       layout,
       member,
     ));
@@ -3166,16 +3188,12 @@ const renderStateLifecycle = (
   stepLines.push(...renderOperationFaultSignalSync(state, xb, layout, member));
   for (const mapping of xb.mappings) {
     if (mapping.direction !== 'out') continue;
-    const variable = ir.variables[mapping.variableId];
-    if (variable === undefined) {
-      throw new Error(
-        `X-Bridges output mapping variable '${mapping.variableId}' is absent`,
-      );
-    }
+    const varCId = mapping.variable.cIdentifier;
     stepLines.push(
-      `    instance->data.${variable.cName} = (${renderVariableCast(variable.type)})(${signalRealExpression(state, mapping.signalId, layout, member)});`,
+      `    instance->data.${varCId} = (${renderVariableCast(mapping.variable.semanticType)})(${signalRealExpression(state, mapping.signalId, layout, member)});`,
     );
   }
+
   return lines(
     renderSolverSubstepFunction(state, xb, layout, member),
     '',
