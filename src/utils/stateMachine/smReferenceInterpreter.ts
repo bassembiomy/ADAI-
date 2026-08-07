@@ -64,7 +64,27 @@ export function runReferenceInterpreter(
       activeStateId = selectedTransition.destinationStateId;
     }
 
-    const currentEnum = ir.states[activeStateId] ? ir.states[activeStateId].enumName : initialEnumName;
+    const currentState = ir.states[activeStateId];
+    const currentEnum = currentState ? currentState.enumName : initialEnumName;
+
+    // Evaluate XBridges state operations (Step & Outport propagation)
+    if (currentState?.xBridges) {
+      const stateTimerMs = tick * vec.deltaMs;
+      for (const opId of currentState.xBridges.executionOrder) {
+        const op = currentState.xBridges.operations[opId];
+        if (op?.type === 'Step') {
+          const stepTimeSec = Number(op.parameters.step_time ?? op.parameters.stepTime ?? op.parameters.time ?? 0.3);
+          const initialVal = Number(op.parameters.initial_value ?? op.parameters.initialValue ?? op.parameters.initial ?? 0);
+          const finalVal = Number(op.parameters.final_value ?? op.parameters.finalValue ?? op.parameters.final ?? 1);
+          const thresholdMs = Math.ceil(stepTimeSec * 1000.0);
+          const val = stateTimerMs < thresholdMs ? initialVal : finalVal;
+
+          for (const m of currentState.xBridges.mappings) {
+            variables[m.smVarId] = val;
+          }
+        }
+      }
+    }
 
     steps.push({
       tick,
