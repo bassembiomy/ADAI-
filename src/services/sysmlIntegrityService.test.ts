@@ -8,7 +8,7 @@ import {
   validateTraceabilityRelation,
   validateUniqueRequirementIds,
 } from './sysmlIntegrityService';
-import {
+import type {
   SysMLDiagramState,
   SysMLBlock,
   SysMLPort,
