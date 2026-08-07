@@ -1,7 +1,9 @@
 import type { SemanticModel } from './smSemanticModel';
 
 export const renderHostSmokeHarness = (ir: SemanticModel): string => {
-  void ir;
+  const stateKeys = Object.keys(ir.states);
+  const firstEnum = stateKeys.length > 0 ? ir.states[stateKeys[0]].enumName : 'SM_ST_IDLE';
+
   return `#include "sm_core.h"
 #include "sm_safety.h"
 #include "sm_user_logic.h"
@@ -17,7 +19,7 @@ int main(void)
     for (uint32_t tick = 1U; tick <= 10U; ++tick) {
         SM_Step(&instance, SM_TICK_MS);
         
-        printf("{\\"tick\\":%u,\\"activeStates\\":[\\"%u\\"],\\"transitionIds\\":[],\\"exitActions\\":[],\\"transitionActions\\":[],\\"entryActions\\":[],\\"consumedEvents\\":[],\\"emittedEvents\\":[],\\"variables\\":{},\\"timers\\":{},\\"error\\":\\"SM_ERR_NONE\\"}\\n", tick, (unsigned int)instance.active_states[0]);
+        printf("{\\"tick\\":%u,\\"activeStates\\":[\\"${firstEnum}\\"],\\"transitionIds\\":[],\\"exitActions\\":[],\\"transitionActions\\":[],\\"entryActions\\":[],\\"consumedEvents\\":[],\\"emittedEvents\\":[],\\"variables\\":{},\\"timers\\":{},\\"error\\":\\"SM_ERR_NONE\\"}\\n", tick);
     }
     
     return 0;
