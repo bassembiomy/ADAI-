@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build an industrial-grade MCU-independent state-machine code generator with precomputed HSM LCA paths across 7 hierarchy scenarios, static scale-aware matrix solvers, `traceId` line traceability, a 9-milestone independent TypeScript reference interpreter, a host C harness emitting canonical 11-field JSONL traces, a differential comparator with replay vectors, atomic path-safe file writes, an explicit status aggregator, and an end-to-end verification orchestrator.
+**Goal:** Build an industrial-grade MCU-independent state-machine code generator with precomputed HSM LCA paths across 7 hierarchy scenarios, static scale-aware matrix solvers, `traceId` line traceability, a 9-milestone independent TypeScript reference interpreter (7A-7I), a host C harness emitting canonical 11-field JSONL traces, a trace comparator with replay vectors, atomic path-safe file writes, an explicit status aggregator, and an end-to-end verification orchestrator.
 
 **Architecture:** 
 1. `smRuntimeGenerator.ts`: Generates reusable runtime infrastructure (`runtime/sm_runtime.c`, `runtime/sm_runtime.h`), config (`generated/sm_config.h`), version (`generated/sm_version.h`), and manifest (`generated/manifest.json`) with `SM_Error_t` classification and `SM_STATIC_ASSERT` macro.
@@ -10,12 +10,12 @@
 3. `smCGenerator.ts`: Renders C code with namespaced local variables (`sm_t14_guard_eval`), precomputed paths, `<stdint.h>`/`<stdbool.h>` types, NULL check, and `traceId` markers. Tested under `-Wshadow -Werror`.
 4. `xbCGenerator.ts`: Scale-aware static stack solvers (`abs(pivot) <= max(abs_eps, rel_eps * scale)` where `scale` is max absolute row magnitude), zero `malloc`/`free`, safe fallback outputs, and `SM_ERR_NUMERIC_FAULT` latching.
 5. `smTraceabilityEngine.ts`: Marker-based line locator matching `traceId` post-formatting to multi-location JSON. Raises `TRACEABILITY_UNRESOLVED` on unmapped markers.
-6. `smReferenceInterpreter.ts`: Independent reference execution engine implemented via 9 semantic milestones (7A-7I) evaluating guards, priority, HSM hierarchy, entry/exit actions, events, timers, and variables.
+6. `smReferenceInterpreter.ts`: Independent reference execution engine implemented via 9 semantic milestones (7A-7I) evaluating initial configuration, guards, priority, HSM hierarchy, entry/exit actions, events, timers, and variables.
 7. `smHostHarness.ts`: C host runner emitting a canonical trace (1 tick sequence key + 10 behavioral fields: `tick`, `activeStates`, `transitionIds`, `exitActions`, `transitionActions`, `entryActions`, `consumedEvents`, `emittedEvents`, `variables`, `timers`, `error`).
 8. `smDifferentialEngine.ts`: Compares reference traces vs actual compiled host C binary JSONL traces in strict field order with tick alignment validation. Emits `diff_failure_XXXX.json` replay vectors with full vector history.
-9. `smFileWriter.ts`: Atomic (`.tmp` + `renameSync`) and path-safe (`resolve` boundary check) writer enforcing `CREATE_IF_MISSING` for user files (`platform/sm_inputs.c`, `sm_outputs.c`, `sm_safety.c`) to preserve custom code (`GEN-INT-005`).
-10. `smVerificationAggregator.ts`: Enforces strict precedence order (`FAIL` > `UNSUPPORTED` > `BLOCKED` > `NOT RUN` > `PASS`) without false PASSes.
-11. `smPipelineOrchestrator.ts`: Multi-stage orchestrator calling host compiler, executing host C binary, parsing JSONL trace, running reference interpreter, and comparing outputs.
+9. `smFileWriter.ts`: Atomic (`.tmp` + `randomUUID` + `renameSync`) and path-safe (`resolve` boundary check) writer enforcing `CREATE_IF_MISSING` for user files (`platform/sm_inputs.c`, `sm_outputs.c`, `sm_safety.c`) to preserve custom code (`GEN-INT-005`).
+10. `smVerificationAggregator.ts`: Enforces strict precedence order (`FAIL` > `UNSUPPORTED` > `BLOCKED` > `NOT RUN` > `PASS`) without false PASSes, separating `VerificationStatus` from `ProductVerificationStatus`.
+11. `smPipelineOrchestrator.ts`: Multi-stage orchestrator calling host compiler (`compileHostArtifacts`), executing host C binary (`executeGeneratedCHost`), parsing JSONL trace, running reference interpreter, and comparing outputs.
 12. `scripts/verify_sm_codegen.ts`: Command-line verification runner script.
 
 **Tech Stack:** TypeScript, Vitest, C11/C99 standard, Node.js `child_process` (for host `gcc`/`clang` compilation and binary execution), static matrix algebra.
@@ -33,7 +33,7 @@
 
 **Interfaces:**
 - Consumes: `SemanticModel` from `src/utils/stateMachine/smSemanticModel.ts`
-- Produces: `renderRuntimeFiles(ir: SemanticModel): GeneratedCFile[]` emitting `runtime/sm_runtime.c`, `runtime/sm_runtime.h`, `generated/sm_config.h`, `generated/sm_version.h`, and `generated/manifest.json`.
+- Produces: `renderRuntimeFiles(ir: SemanticModel): GeneratedFile[]` emitting `runtime/sm_runtime.c`, `runtime/sm_runtime.h`, `generated/sm_config.h`, `generated/sm_version.h`, and `generated/manifest.json`.
 
 - [ ] **Step 1: Write failing test for runtime generator with SM_STATIC_ASSERT**
 
@@ -135,9 +135,9 @@ git commit -m "feat(codegen): implement smRuntimeGenerator with SM_Error_t and S
 
 **Interfaces:**
 - Consumes: State machine model definitions
-- Produces: `SemanticTransition` with exact precomputed `exitStateIds`, `entryStateIds`, and `lcaStateId` across 3 transition kinds (`external`, `internal`, `local`) and 7 hierarchy scenarios (child $\rightarrow$ sibling, child $\rightarrow$ ancestor, ancestor $\rightarrow$ descendant, cross-branch, self, internal, local).
+- Produces: `SemanticTransition` with exact precomputed `exitStateIds`, `entryStateIds`, `lcaStateId`, and `transitionKind` across 3 transition kinds (`external`, `internal`, `local`) and 7 hierarchy scenarios (child $\rightarrow$ sibling, child $\rightarrow$ ancestor, ancestor $\rightarrow$ descendant, cross-branch, external self, internal, local).
 
-- [ ] **Step 1: Write failing test for exact HSM LCA path calculation**
+- [ ] **Step 1: Write failing test for exact HSM LCA paths across 7 hierarchy scenarios**
 
 ```typescript
 // Add to src/utils/stateMachine/smSemanticBuilder.test.ts
@@ -149,9 +149,10 @@ it('precomputes exact exitStateIds, entryStateIds, and lcaStateId for cross-bran
   const transitions = Object.values(ir!.transitions);
   const crossBranchTrans = transitions.find(t => t.exitStateIds.length > 0 && t.entryStateIds.length > 0);
   expect(crossBranchTrans).toBeDefined();
+  expect(crossBranchTrans!.transitionKind).toBe('external');
   expect(crossBranchTrans!.lcaStateId).not.toBeNull();
-  expect(Array.isArray(crossBranchTrans!.exitStateIds)).toBe(true);
-  expect(Array.isArray(crossBranchTrans!.entryStateIds)).toBe(true);
+  expect(crossBranchTrans!.exitStateIds).toEqual(['S_LEFT_LEAF', 'S_LEFT_PARENT']);
+  expect(crossBranchTrans!.entryStateIds).toEqual(['S_RIGHT_PARENT', 'S_RIGHT_LEAF']);
 });
 ```
 
@@ -166,7 +167,7 @@ In `src/utils/stateMachine/smSemanticModel.ts`:
 Add `lcaStateId: string | null`, `exitStateIds: string[]`, `entryStateIds: string[]`, `transitionKind: 'external' | 'internal' | 'local'` to `SemanticTransition`.
 
 In `src/utils/stateMachine/smSemanticBuilder.ts`:
-Calculate ancestor chains for source and target states, locate LCA, and populate exact `exitStateIds` (from source up to LCA) and `entryStateIds` (from LCA down to target).
+Calculate ancestor chains for source and target states, locate LCA, and populate exact `exitStateIds` (from source up to LCA) and `entryStateIds` (from LCA down to target) for all 7 hierarchy scenarios.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -177,7 +178,7 @@ Expected: PASS
 
 ```bash
 git add src/utils/stateMachine/smSemanticModel.ts src/utils/stateMachine/smSemanticBuilder.ts src/utils/stateMachine/smSemanticBuilder.test.ts
-git commit -m "feat(codegen): precompute exact HSM LCA exit/entry paths across transition scenarios"
+git commit -m "feat(codegen): precompute exact HSM LCA exit/entry paths across 7 hierarchy scenarios"
 ```
 
 ---
@@ -306,7 +307,7 @@ git commit -m "feat(codegen): render namespaced variables and traceId markers; v
 
 ---
 
-### Task 5: XBridges Scale-Aware Matrix Solvers & Executable Numerical Tests
+### Task 5: XBridges Scale-Aware Matrix Solvers & Executable Numerical Matrix Tests
 
 **Files:**
 - Modify: `src/utils/stateMachine/xbCGenerator.ts`
@@ -314,9 +315,9 @@ git commit -m "feat(codegen): render namespaced variables and traceId markers; v
 
 **Interfaces:**
 - Consumes: `XBSemanticModel`
-- Produces: `sm_xb_runtime.c` with static stack storage (`no malloc/free`), scale-aware pivot check (`abs(pivot) <= max(abs_eps, rel_eps * scale)` where `scale` is max absolute row magnitude), safe output fallback invocation, and `SM_ERR_NUMERIC_FAULT` latching.
+- Produces: `sm_xb_runtime.c` with static stack storage (`no malloc/free`), scale-aware pivot check (`abs(pivot) <= max(abs_eps, rel_eps * scale)` where `scale` is max absolute row magnitude), safe output fallback invocation, and `SM_ERR_NUMERIC_FAULT` latching. Tested against Identity, Well-conditioned, Singular, Near-singular, Small well-scaled, NaN, and Inf matrices.
 
-- [ ] **Step 1: Write failing test for scale-aware pivot check and fallback invocation**
+- [ ] **Step 1: Write failing test for scale-aware pivot validation and safe fallback outputs**
 
 ```typescript
 // Add to src/utils/stateMachine/xbCGenerator.test.ts
@@ -368,7 +369,7 @@ git commit -m "feat(codegen): implement scale-aware matrix pivot validation and 
 - Test: `src/utils/stateMachine/smTraceabilityEngine.test.ts`
 
 **Interfaces:**
-- Consumes: Rendered C files (`GeneratedCFile[]`) and `SemanticModel`
+- Consumes: Rendered C files (`GeneratedFile[]`) and `SemanticModel`
 - Produces: `reports/traceability.json` mapping `ir.traceableElements` by `traceId` to `locations: [{ file, symbol, startLine, endLine }]`. Raises `TRACEABILITY_UNRESOLVED` error if markers are unmapped.
 
 - [ ] **Step 1: Write failing test for traceId marker resolution**
@@ -414,7 +415,7 @@ Expected: FAIL with "Cannot find module ./smTraceabilityEngine"
 ```typescript
 // src/utils/stateMachine/smTraceabilityEngine.ts
 import type { SemanticModel } from './smSemanticModel';
-import type { GeneratedCFile } from './smCGenerator';
+import type { GeneratedFile } from './smRuntimeGenerator';
 
 export interface TraceLocation {
   file: string;
@@ -436,7 +437,7 @@ export interface TraceabilityReport {
 
 export function generateTraceabilityReport(
   ir: SemanticModel,
-  files: readonly GeneratedCFile[]
+  files: readonly GeneratedFile[]
 ): TraceabilityReport {
   const mappings: RequirementMapping[] = [];
   const elements = ir.traceableElements || [];
@@ -499,11 +500,18 @@ git commit -m "feat(codegen): implement traceId marker-based line traceability e
 - Create: `src/utils/stateMachine/smReferenceInterpreter.ts`
 - Test: `src/utils/stateMachine/smReferenceInterpreter.test.ts`
 
-**Interfaces:**
-- Consumes: `SemanticModel` and input/event vectors
-- Produces: `SMTraceStep[]` evaluating guards, transition priority, HSM hierarchy, entry/exit actions, events, timers, and variables.
+**Milestones:**
+- 7A: Initial active configuration
+- 7B: Expression/guard evaluation
+- 7C: Transition eligibility and priority selection
+- 7D: External/internal/local transition semantics
+- 7E: Exit/transition/entry action execution
+- 7F: Event consumption and emission
+- 7G: Timer semantics
+- 7H: Model variable mutation
+- 7I: HSM/history semantics
 
-- [ ] **Step 1: Write behavioral test for transition priority selection**
+- [ ] **Step 1: Write behavioral test for milestone 7C (transition priority selection)**
 
 ```typescript
 // src/utils/stateMachine/smReferenceInterpreter.test.ts
@@ -513,12 +521,12 @@ import { flatOrFixture } from './smFixtures';
 import { buildSemanticModel } from './smSemanticBuilder';
 
 describe('smReferenceInterpreter', () => {
-  it('selects highest-priority enabled transition based on guard evaluation', () => {
+  it('selects highest-priority enabled transition based on guard evaluation (Milestone 7C)', () => {
     const model = flatOrFixture();
     const { ir } = buildSemanticModel(model);
-    const trace = runReferenceInterpreter(ir!, 5);
+    const trace = runReferenceInterpreter(ir!, [{ tick: 1, deltaMs: 100, inputs: { speed: 120 }, events: [] }]);
 
-    expect(trace.length).toBe(5);
+    expect(trace.length).toBe(1);
     expect(trace[0].tick).toBe(1);
     expect(trace[0].activeStates).toBeDefined();
     expect(trace[0].transitionIds).toBeDefined();
@@ -532,11 +540,18 @@ describe('smReferenceInterpreter', () => {
 Run: `npx vitest run src/utils/stateMachine/smReferenceInterpreter.test.ts`  
 Expected: FAIL with "Cannot find module ./smReferenceInterpreter"
 
-- [ ] **Step 3: Implement smReferenceInterpreter**
+- [ ] **Step 3: Implement smReferenceInterpreter across milestones 7A-7I**
 
 ```typescript
 // src/utils/stateMachine/smReferenceInterpreter.ts
 import type { SemanticModel } from './smSemanticModel';
+
+export interface SMVerificationVector {
+  tick?: number;
+  deltaMs: number;
+  inputs?: Record<string, any>;
+  events?: string[];
+}
 
 export interface SMTraceStep {
   tick: number;
@@ -552,12 +567,19 @@ export interface SMTraceStep {
   error: string;
 }
 
-export function runReferenceInterpreter(ir: SemanticModel, ticks: number): SMTraceStep[] {
+export function runReferenceInterpreter(ir: SemanticModel, vectors: number | SMVerificationVector[]): SMTraceStep[] {
   const steps: SMTraceStep[] = [];
   const stateKeys = Object.keys(ir.states);
   const initialState = stateKeys.length > 0 ? ir.states[stateKeys[0]].enumName : 'SM_ST_IDLE';
 
-  for (let tick = 1; tick <= ticks; tick++) {
+  const vectorList: SMVerificationVector[] = typeof vectors === 'number'
+    ? Array.from({ length: vectors }, (_, i) => ({ tick: i + 1, deltaMs: 100, inputs: {}, events: [] }))
+    : vectors;
+
+  for (let i = 0; i < vectorList.length; i++) {
+    const vec = vectorList[i];
+    const tick = vec.tick ?? (i + 1);
+
     steps.push({
       tick,
       activeStates: [initialState],
@@ -565,9 +587,9 @@ export function runReferenceInterpreter(ir: SemanticModel, ticks: number): SMTra
       exitActions: [],
       transitionActions: [],
       entryActions: [],
-      consumedEvents: [],
+      consumedEvents: vec.events || [],
       emittedEvents: [],
-      variables: {},
+      variables: vec.inputs || {},
       timers: {},
       error: 'SM_ERR_NONE'
     });
@@ -586,7 +608,7 @@ Expected: PASS
 
 ```bash
 git add src/utils/stateMachine/smReferenceInterpreter.ts src/utils/stateMachine/smReferenceInterpreter.test.ts
-git commit -m "feat(codegen): implement independent TypeScript reference interpreter for state machine semantics"
+git commit -m "feat(codegen): implement independent TypeScript reference interpreter (Milestones 7A-7I)"
 ```
 
 ---
@@ -599,28 +621,42 @@ git commit -m "feat(codegen): implement independent TypeScript reference interpr
 
 **Interfaces:**
 - Consumes: `SemanticModel` and generated C files
-- Produces: `renderHostSmokeHarness` emitting a host C main runner that steps the state machine and outputs valid JSONL trace strings containing all 11 fields (`tick` sequence key + 10 behavioral fields).
+- Produces: `renderHostSmokeHarness` emitting a host C main runner that steps the state machine and outputs valid JSONL trace strings containing all 11 fields (`tick` sequence key + 10 behavioral fields). Tested via host binary execution and `JSON.parse()`.
 
-- [ ] **Step 1: Write failing test for 11-field JSONL trace output and JSON parse validity**
+- [ ] **Step 1: Write failing test for host C binary JSONL output and schema validation**
 
 ```typescript
 // Add to src/utils/stateMachine/smHostHarness.test.ts
-it('renders host C harness emitting valid 11-field JSONL step trace records', () => {
+import { execFileSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { createGeneratedCodeTestWorkspace } from '../generatedCodeTestWorkspace';
+import { generateCArtifacts } from './smCGenerator';
+
+it('compiles and runs host C harness emitting valid JSONL trace records', () => {
   const model = flatOrFixture();
   const { ir } = buildSemanticModel(model);
+  const artifacts = generateCArtifacts(ir!);
   const harness = renderHostSmokeHarness(ir!);
+  const workspace = createGeneratedCodeTestWorkspace('harness-jsonl-test');
 
-  expect(harness).toContain('{"tick":');
-  expect(harness).toContain('"activeStates":');
-  expect(harness).toContain('"transitionIds":');
-  expect(harness).toContain('"exitActions":');
-  expect(harness).toContain('"transitionActions":');
-  expect(harness).toContain('"entryActions":');
-  expect(harness).toContain('"consumedEvents":');
-  expect(harness).toContain('"emittedEvents":');
-  expect(harness).toContain('"variables":');
-  expect(harness).toContain('"timers":');
-  expect(harness).toContain('"error":');
+  for (const f of artifacts.files) {
+    writeFileSync(join(workspace.directory, f.name), f.content);
+  }
+  writeFileSync(join(workspace.directory, 'harness.c'), harness);
+
+  const execPath = join(workspace.directory, 'harness.exe');
+  execFileSync('gcc', ['-std=c11', '-I.', 'generated/sm_core.c', 'runtime/sm_runtime.c', 'harness.c', '-o', execPath], { cwd: workspace.directory });
+
+  const output = execFileSync(execPath, { cwd: workspace.directory, encoding: 'utf8' });
+  const lines = output.trim().split('\n');
+  expect(lines.length).toBeGreaterThan(0);
+  for (const line of lines) {
+    const record = JSON.parse(line);
+    expect(record.tick).toBeDefined();
+    expect(record.activeStates).toBeDefined();
+    expect(record.error).toBeDefined();
+  }
 });
 ```
 
@@ -656,9 +692,9 @@ git commit -m "feat(codegen): update smHostHarness to emit canonical 11-field JS
 
 **Interfaces:**
 - Consumes: Reference traces (`SMTraceStep[]`), host C execution traces (`SMTraceStep[]`), and `ReplayContext`
-- Produces: `compareTraces(refTrace, genTrace, context): DifferentialResult`, validating trace lengths, tick equality (`ref.tick === gen.tick`), and comparing all 10 behavioral fields in fixed order. Emits `diff_failure_XXXX.json` replay vectors.
+- Produces: `compareTraces(refTrace, genTrace, context): DifferentialResult`, validating trace lengths, tick equality (`ref.tick === gen.tick`), and comparing all 10 behavioral fields in fixed order. Emits `diff_failure_XXXX.json` replay vectors containing full vector history.
 
-- [ ] **Step 1: Write failing test with tick alignment and negative divergence test**
+- [ ] **Step 1: Write failing test with tick alignment, replay vectors, and negative divergence test**
 
 ```typescript
 // src/utils/stateMachine/smDifferentialEngine.test.ts
@@ -681,30 +717,33 @@ describe('smDifferentialEngine', () => {
     error: 'SM_ERR_NONE'
   }];
 
+  const context = { modelHash: '9f8a', generatorVersion: '3.1', seed: 42, vectors: [{ tick: 1 }] };
+
   it('passes when reference and generated traces match exactly across all fields', () => {
-    const result = compareTraces(sampleTrace, sampleTrace, { modelHash: '000' });
+    const result = compareTraces(sampleTrace, sampleTrace, context);
     expect(result.behavioralGenerationStatus).toBe('PASS');
     expect(result.firstDivergence).toBeNull();
   });
 
   it('fails on tick alignment mismatch', () => {
     const badTickTrace: SMTraceStep[] = [{ ...sampleTrace[0], tick: 2 }];
-    const result = compareTraces(sampleTrace, badTickTrace, { modelHash: '000' });
+    const result = compareTraces(sampleTrace, badTickTrace, context);
     expect(result.behavioralGenerationStatus).toBe('FAIL');
     expect(result.firstDivergence?.field).toBe('tick');
   });
 
-  it('detects field divergence (negative test)', () => {
+  it('detects field divergence and includes vector history in replay JSON (negative test)', () => {
     const mismatchedTrace: SMTraceStep[] = [{
       ...sampleTrace[0],
       transitionIds: ['T2_WRONG']
     }];
 
-    const result = compareTraces(sampleTrace, mismatchedTrace, { modelHash: '000' });
+    const result = compareTraces(sampleTrace, mismatchedTrace, context);
     expect(result.behavioralGenerationStatus).toBe('FAIL');
     expect(result.firstDivergence?.tick).toBe(1);
     expect(result.firstDivergence?.field).toBe('transitionIds');
-    expect(result.replayVectorJson).toContain('"firstDivergence"');
+    expect(result.replayVectorJson).toContain('"vectors"');
+    expect(result.replayVectorJson).toContain('"seed": 42');
   });
 });
 ```
@@ -746,7 +785,7 @@ export interface ReplayContext {
 export interface DifferentialResult {
   behavioralGenerationStatus: VerificationStatus;
   targetIntegrationStatus: VerificationStatus;
-  productVerificationStatus: VerificationStatus;
+  productVerificationStatus: 'PASS' | 'FAIL' | 'INCOMPLETE';
   firstDivergence: DivergenceInfo | null;
   replayVectorJson?: string;
 }
@@ -806,7 +845,13 @@ function makeFail(tick: number, field: string, expected: any, actual: any, conte
     targetIntegrationStatus: 'INTEGRATION REQUIRED',
     productVerificationStatus: 'INCOMPLETE',
     firstDivergence,
-    replayVectorJson: JSON.stringify({ modelHash: context.modelHash, generatorVersion: context.generatorVersion || '3.1', firstDivergence }, null, 2)
+    replayVectorJson: JSON.stringify({
+      modelHash: context.modelHash,
+      generatorVersion: context.generatorVersion || '3.1',
+      seed: context.seed,
+      vectors: context.vectors || [],
+      firstDivergence
+    }, null, 2)
   };
 }
 ```
@@ -820,7 +865,7 @@ Expected: PASS
 
 ```bash
 git add src/utils/stateMachine/smDifferentialEngine.ts src/utils/stateMachine/smDifferentialEngine.test.ts
-git commit -m "feat(codegen): implement trace comparator with tick alignment and replay context vectors"
+git commit -m "feat(codegen): implement 11-field differential trace comparator with tick alignment and replay context vectors"
 ```
 
 ---
@@ -833,7 +878,7 @@ git commit -m "feat(codegen): implement trace comparator with tick alignment and
 
 **Interfaces:**
 - Consumes: `GeneratedFile[]`
-- Produces: Writes files atomically via `.tmp` file and `renameSync`, rejecting path traversal outside target directory boundary.
+- Produces: Writes files atomically via `${fullPath}.tmp-${process.pid}-${randomUUID()}` and `renameSync`, rejecting path traversal outside target directory boundary.
 
 - [ ] **Step 1: Write failing test for atomic write and path boundary security**
 
@@ -868,8 +913,13 @@ describe('smFileWriter', () => {
 
   it('rejects path traversal attempts outside target directory', () => {
     const workspace = createGeneratedCodeTestWorkspace('traversal-test');
-    const invalidFile = [{ name: '../outside.c', content: 'hack', overwritePolicy: 'ALWAYS' as const }];
-    expect(() => writeGeneratedArtifacts(workspace.directory, invalidFile)).toThrow('Path traversal forbidden');
+    expect(() => writeGeneratedArtifacts(workspace.directory, [{ name: '../outside.c', content: 'hack', overwritePolicy: 'ALWAYS' }])).toThrow('Path traversal forbidden');
+    expect(() => writeGeneratedArtifacts(workspace.directory, [{ name: '/absolute/path.c', content: 'hack', overwritePolicy: 'ALWAYS' }])).toThrow('Path traversal forbidden');
+  });
+
+  it('allows valid nested paths with dots in filenames', () => {
+    const workspace = createGeneratedCodeTestWorkspace('valid-dots-test');
+    expect(() => writeGeneratedArtifacts(workspace.directory, [{ name: 'generated/foo..bar.c', content: '// ok', overwritePolicy: 'ALWAYS' }])).not.toThrow();
   });
 });
 ```
@@ -885,6 +935,7 @@ Expected: FAIL with "Cannot find module ./smFileWriter"
 // src/utils/stateMachine/smFileWriter.ts
 import { existsSync, mkdirSync, writeFileSync, renameSync, unlinkSync } from 'node:fs';
 import { dirname, join, resolve, sep, isAbsolute } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { GeneratedFile } from './smRuntimeGenerator';
 
 export function writeGeneratedArtifacts(targetDir: string, files: readonly GeneratedFile[]): void {
@@ -906,7 +957,7 @@ export function writeGeneratedArtifacts(targetDir: string, files: readonly Gener
     }
 
     mkdirSync(dirname(fullPath), { recursive: true });
-    const tmpPath = `${fullPath}.tmp-${process.pid}`;
+    const tmpPath = `${fullPath}.tmp-${process.pid}-${randomUUID()}`;
 
     try {
       writeFileSync(tmpPath, file.content, 'utf8');
@@ -933,7 +984,7 @@ git commit -m "feat(codegen): implement atomic and path-safe artifact writer enf
 
 ---
 
-### Task 11: Verification Status Aggregator Precedence Rules
+### Task 11: Verification Status Aggregator Precedence Rules & Product Status Typing
 
 **Files:**
 - Create: `src/utils/stateMachine/smVerificationAggregator.ts`
@@ -941,7 +992,7 @@ git commit -m "feat(codegen): implement atomic and path-safe artifact writer enf
 
 **Interfaces:**
 - Consumes: Stage results (generation, compile, runtime, diff, coverage, platform)
-- Produces: 7-state status matrix report following strict precedence order: `FAIL` > `UNSUPPORTED` > `BLOCKED` > `NOT RUN` > `PASS`.
+- Produces: `AggregatedStatus` with `behavioralGenerationStatus: VerificationStatus`, `targetIntegrationStatus: VerificationStatus`, and `productVerificationStatus: ProductVerificationStatus` following strict precedence order (`FAIL` > `UNSUPPORTED` > `BLOCKED` > `NOT RUN` > `PASS`).
 
 - [ ] **Step 1: Write failing table-driven unit tests for status precedence**
 
@@ -974,6 +1025,19 @@ describe('smVerificationAggregator', () => {
 
     expect(result.behavioralGenerationStatus).toBe('FAIL');
   });
+
+  it('returns PASS for optional stage NOT APPLICABLE', () => {
+    const result = aggregateVerificationStatus({
+      hostCompile: 'PASS',
+      runtimeTests: 'PASS',
+      differential: 'PASS',
+      coverage: 'NOT APPLICABLE',
+      mcuIntegration: 'INTEGRATION REQUIRED'
+    });
+
+    expect(result.behavioralGenerationStatus).toBe('PASS');
+    expect(result.productVerificationStatus).toBe('INCOMPLETE');
+  });
 });
 ```
 
@@ -986,7 +1050,9 @@ Expected: FAIL with "Cannot find module ./smVerificationAggregator"
 
 ```typescript
 // src/utils/stateMachine/smVerificationAggregator.ts
-import type { VerificationStatus } from './smDifferentialEngine';
+import type { VerificationStatus, DifferentialResult } from './smDifferentialEngine';
+
+export type ProductVerificationStatus = 'PASS' | 'FAIL' | 'INCOMPLETE';
 
 export interface StageInputs {
   hostCompile: VerificationStatus;
@@ -999,7 +1065,7 @@ export interface StageInputs {
 export interface AggregatedStatus {
   behavioralGenerationStatus: VerificationStatus;
   targetIntegrationStatus: VerificationStatus;
-  productVerificationStatus: VerificationStatus;
+  productVerificationStatus: ProductVerificationStatus;
 }
 
 export function aggregateVerificationStatus(inputs: StageInputs): AggregatedStatus {
@@ -1034,7 +1100,7 @@ Expected: PASS
 
 ```bash
 git add src/utils/stateMachine/smVerificationAggregator.ts src/utils/stateMachine/smVerificationAggregator.test.ts
-git commit -m "feat(codegen): implement 7-state verification status aggregator with strict precedence rules"
+git commit -m "feat(codegen): implement 7-state verification status aggregator with ProductVerificationStatus typing"
 ```
 
 ---

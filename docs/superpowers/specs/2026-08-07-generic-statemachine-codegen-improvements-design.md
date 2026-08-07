@@ -1,7 +1,7 @@
 # Generic State Machine Code Generator — Design Specification
 
 **Date:** 2026-08-07  
-**Status:** APPROVED FOR IMPLEMENTATION  
+**Status:** APPROVED FOR EXECUTION  
 **Target Module:** ADIA State Machine Code Generator Engine (`src/utils/stateMachine/`)  
 
 ---
@@ -80,24 +80,28 @@ The generator **shall never modify existing user implementation files** (`platfo
 
 ### 3.1 State Representation & Hierarchical Precomputation
 1. **Precomputed HSM LCA & Paths (`GEN-HSM-001` - `GEN-HSM-004`):**
-   * The generator shall precompute LCA and exit/entry paths at generation time for the 3 transition kinds (`external`, `internal`, `local`) across 7 hierarchy scenarios (child $\rightarrow$ sibling, child $\rightarrow$ ancestor, ancestor $\rightarrow$ descendant, cross-branch, self, internal, local).
-   * Runtime execution shall perform no dynamic hierarchy search.
-   * The maximum number of exit/entry operations shall be statically bounded by the generated model, enabling deterministic worst-case execution time (WCET) analysis.
-   * The generation report shall include static metrics: `Maximum hierarchy depth`, `Maximum transition exit depth`, `Maximum transition entry depth`, and `Maximum state actions per step`.
+   * Precomputes LCA and exit/entry paths at generation time for 3 transition kinds (`external`, `internal`, `local`) across 7 hierarchy scenarios:
+     - Child $\rightarrow$ sibling
+     - Child $\rightarrow$ ancestor
+     - Ancestor $\rightarrow$ descendant
+     - Cross-branch
+     - External self
+     - Internal
+     - Local
+   * Runtime execution performs zero dynamic hierarchy search.
+   * Maximum number of exit/entry operations is statically bounded by generated model.
 2. **Transition Execution Order (`GEN-FUN-008`):**
    * For **external transitions**: Source Exit Actions $\rightarrow$ Transition Action $\rightarrow$ Destination Entry Actions.
    * For **internal transitions**: Transition Action executed; zero exit/entry actions performed.
    * For **local transitions**: Sub-state exit/entry executed without exiting/re-entering containing parent state.
 3. **Variable Shadowing Prevention (`GEN-CODE-002`):**
-   * Generated local variables within transition/action functions shall use unique namespaced identifiers (e.g. `const bool sm_t14_guard_eval = ...`).
-   * Generated C code shall compile warning-free under `-Wshadow -Werror`.
+   * Local variables inside transition/action functions use unique namespaced identifiers (e.g. `const bool sm_t14_guard_eval = ...`).
+   * Generated C code compiles warning-free under `-Wshadow -Werror`.
 
 ### 3.2 Type Mapping & Timing Semantics
 1. **Data Types & Static Portability Assertions (`GEN-DATA-001` - `GEN-DATA-003`):**
-   * Integer model types shall map strictly to fixed-width types from `<stdint.h>` (`uint8_t`, `int16_t`, `uint32_t`, etc.).
-   * Boolean values shall map to `bool` from `<stdbool.h>`.
-   * Floating-point model types shall map explicitly to `float` or `double`.
-   * Type width assumptions shall be validated via C portability assertions:
+   * Integer types map to `<stdint.h>`, booleans to `<stdbool.h>`, floats to `float`/`double`.
+   * Type width assumptions validated via `SM_STATIC_ASSERT`:
      ```c
      #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
      #define SM_STATIC_ASSERT(cond, msg) _Static_assert((cond), msg)
@@ -111,9 +115,8 @@ The generator **shall never modify existing user implementation files** (`platfo
      ```
 2. **Timing Model & Wraparound (`GEN-TIME-001` - `GEN-TIME-004`):**
    * Timebase unit: `uint32_t` milliseconds.
-   * Elapsed time comparisons shall use modular subtraction: `(uint32_t)(now - start) >= duration`.
-   * Duration Restriction: Generated timeout durations shall not exceed $\text{UINT32\_MAX} / 2$ ($2,147,483,647\text{ ms} \approx 24.8\text{ days}$) to maintain unambiguous modular subtraction.
-   * Timebase Model: Documented in `generated/sm_config.h`.
+   * Elapsed time comparisons use modular subtraction: `(uint32_t)(now - start) >= duration`.
+   * Timeout durations shall not exceed $\text{UINT32\_MAX} / 2$.
 
 ### 3.3 Robustness & Fault Handling
 1. **Error Classification (`SM_Error_t`):**
@@ -131,13 +134,13 @@ The generator **shall never modify existing user implementation files** (`platfo
    } SM_Error_t;
    ```
 2. **Null-Pointer Handling (`GEN-ROB-002`):**
-   * If a public API receives a `NULL` instance pointer, it shall return `SM_ERR_NULL_POINTER` immediately without dereferencing `instance`.
+   * If a public API receives a `NULL` instance pointer, it returns `SM_ERR_NULL_POINTER` immediately without dereferencing `instance`.
 3. **Instance Runtime Fault Latching (`GEN-SAFE-001` - `GEN-SAFE-004`):**
-   * A valid instance encountering a fatal error latches `SM_Error_t`, latches fault state, and calls `SM_ApplySafeOutputs(instance)`.
+   * Latches specific `SM_Error_t`, latches fault state, and calls `SM_ApplySafeOutputs(instance)`.
 4. **XBridges Scale-Aware Matrix Solvers (`GEN-DATA-005`):**
    * Statically bounded storage (`no malloc/free`).
-   * Scale-aware pivot validation: `abs(pivot) <= max(abs_eps, rel_eps * scale)`, where `scale` is the maximum absolute element magnitude of the active pivot row.
-   * Detection of NaN, Inf, singular, or ill-conditioned inputs triggers `SM_ERR_NUMERIC_FAULT` and safe output fallback.
+   * Scale-aware pivot validation: `abs(pivot) <= max(abs_eps, rel_eps * scale)`, where `scale` is the maximum absolute row magnitude.
+   * Executable tests verify Identity (PASS), Well-conditioned (PASS), Exactly singular (`SM_ERR_NUMERIC_FAULT`), Near singular (`SM_ERR_NUMERIC_FAULT`), Small well-scaled (PASS), NaN (`SM_ERR_NUMERIC_FAULT`), Inf (`SM_ERR_NUMERIC_FAULT`).
 
 ---
 
@@ -146,7 +149,6 @@ The generator **shall never modify existing user implementation files** (`platfo
 1. **Traceable Elements Metadata (`ir.traceableElements`):**
    Collection of states, transitions, guards, entry actions, exit actions, transition actions, events, and XBridges operations.
 2. **`traceId` Marker Pairing (`GEN-TRACE-001/002`):**
-   Generated C files embed unique `traceId` markers:
    ```c
    /* TRACE-BEGIN: traceId=TRACE-T14-GUARD model=T14 symbol=sm_t14_guard */
    case SM_STATE_RUNNING: { ... }
@@ -164,34 +166,51 @@ The generator **shall never modify existing user implementation files** (`platfo
 * Execution under ASan and UBSan where supported.
 
 ### 5.2 Independent Differential Execution Oracle (`GEN-DIFF-001` - `GEN-DIFF-004`)
-* **Independent Semantics (`GEN-DIFF-004`):** `smReferenceInterpreter.ts` evaluates guards, priority, HSM hierarchy, entry/exit actions, events, timers, and variable mutations independently of C generation logic.
+* **Independent Semantics (`GEN-DIFF-004`):** `smReferenceInterpreter.ts` evaluates guards, priority, HSM hierarchy, entry/exit actions, events, timers, and variable mutations independently of C generation code via 9 semantic milestones (7A-7I).
 * **Canonical Trace Protocol:**
-  Contains **1 sequence identifier (`tick`) + 10 behavioral comparison fields**:
+  Contains **1 sequence key (`tick`) + 10 behavioral comparison fields**:
   `tick`, `activeStates`, `transitionIds`, `exitActions`, `transitionActions`, `entryActions`, `consumedEvents`, `emittedEvents`, `variables`, `timers`, `error`.
+* **Host Binary JSONL Execution:** Host harness stdout parsed line-by-line using `JSON.parse()` asserting trace schema.
 * **Step-by-Step Comparator (`GEN-DIFF-002`):**
-  Compares reference trace steps vs actual host-compiled C binary JSONL trace steps. Validates tick equality (`ref.tick === gen.tick`) and canonical fields in fixed order. On mismatch, logs `firstDivergence` and produces deterministic `diff_failure_XXXX.json` replay vectors containing `modelHash`, `generatorVersion`, `seed`, `vectors`, and divergence info.
+  Compares reference trace steps vs actual host C binary JSONL trace steps. Validates trace length and tick equality (`ref.tick === gen.tick`). Mismatch in trace length or any field reports `FAIL` and logs `firstDivergence`.
+* **Deterministic Replay Context Vectors:**
+  Failing differential tests produce `reports/failures/diff_failure_XXXX.json` containing `modelHash`, `generatorVersion`, `seed`, `vectors`, and divergence info.
 
 ---
 
 ## 6. Verification Status Model & Hierarchical Aggregation Precedence
 
-Verification results enforce a strict 7-state status model (`GEN-RPT-001` - `GEN-RPT-003`):
+Verification results distinguish `VerificationStatus` from overall product status:
+
+```typescript
+export type VerificationStatus =
+  | 'PASS'
+  | 'FAIL'
+  | 'NOT RUN'
+  | 'NOT APPLICABLE'
+  | 'UNSUPPORTED'
+  | 'INTEGRATION REQUIRED'
+  | 'BLOCKED';
+
+export type ProductVerificationStatus =
+  | 'PASS'
+  | 'FAIL'
+  | 'INCOMPLETE';
+
+export interface AggregatedStatus {
+  behavioralGenerationStatus: VerificationStatus;
+  targetIntegrationStatus: VerificationStatus;
+  productVerificationStatus: ProductVerificationStatus;
+}
+```
 
 ### Aggregation Precedence Order
 When aggregating required verification stages:
-1. If any required stage is `FAIL` $\rightarrow$ Overall status is `FAIL`.
-2. If any required stage is `UNSUPPORTED` $\rightarrow$ Overall status is `UNSUPPORTED`.
-3. If any required stage is `BLOCKED` $\rightarrow$ Overall status is `BLOCKED`.
-4. If any required stage is `NOT RUN` $\rightarrow$ Overall status is `NOT RUN`.
-5. If all required stages are `PASS` or `NOT APPLICABLE` $\rightarrow$ Overall status is `PASS`.
-
-### Hierarchical Status Aggregation Matrix
-
-| Aggregate Level | Contributing Inputs | Expected Result |
-| :--- | :--- | :--- |
-| **Behavioral Generation Status** | Generator run, host compile, runtime tests, differential verification | `PASS` |
-| **Target Integration Status** | Platform implementation, target compiler, hardware test bench | `INTEGRATION REQUIRED` |
-| **Product Verification Status** | Aggregation of Behavioral Generation Status & Target Integration Status | `INCOMPLETE` |
+1. `FAIL`
+2. `UNSUPPORTED`
+3. `BLOCKED`
+4. `NOT RUN`
+5. `PASS` (or `NOT APPLICABLE` if stage is optional)
 
 ---
 
