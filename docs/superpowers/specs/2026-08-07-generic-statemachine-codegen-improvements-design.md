@@ -80,29 +80,40 @@ The generator **shall never modify existing user implementation files** (`platfo
 
 ### 3.1 State Representation & Hierarchical Precomputation
 1. **Precomputed HSM LCA & Paths (`GEN-HSM-001` - `GEN-HSM-004`):**
-   * The generator shall precompute the Lowest Common Ancestor (LCA) and exit/entry paths at generation time across all transition types (child $\rightarrow$ sibling, child $\rightarrow$ ancestor, ancestor $\rightarrow$ descendant, cross-branch, self, internal, local).
+   * The generator shall precompute LCA and exit/entry paths at generation time for the 3 transition kinds (`external`, `internal`, `local`) across 7 hierarchy scenarios (child $\rightarrow$ sibling, child $\rightarrow$ ancestor, ancestor $\rightarrow$ descendant, cross-branch, self, internal, local).
    * Runtime execution shall perform no dynamic hierarchy search.
    * The maximum number of exit/entry operations shall be statically bounded by the generated model, enabling deterministic worst-case execution time (WCET) analysis.
-   * The generation report shall include exact static metrics: `Maximum hierarchy depth`, `Maximum transition exit depth`, `Maximum transition entry depth`, and `Maximum state actions per step`.
+   * The generation report shall include static metrics: `Maximum hierarchy depth`, `Maximum transition exit depth`, `Maximum transition entry depth`, and `Maximum state actions per step`.
 2. **Transition Execution Order (`GEN-FUN-008`):**
    * For **external transitions**: Source Exit Actions $\rightarrow$ Transition Action $\rightarrow$ Destination Entry Actions.
    * For **internal transitions**: Transition Action executed; zero exit/entry actions performed.
-   * For **local transitions**: Sub-state exit/entry executed without exiting/re-entering the containing parent state.
+   * For **local transitions**: Sub-state exit/entry executed without exiting/re-entering containing parent state.
 3. **Variable Shadowing Prevention (`GEN-CODE-002`):**
    * Generated local variables within transition/action functions shall use unique namespaced identifiers (e.g. `const bool sm_t14_guard_eval = ...`).
    * Generated C code shall compile warning-free under `-Wshadow -Werror`.
 
 ### 3.2 Type Mapping & Timing Semantics
-1. **Data Types (`GEN-DATA-001` - `GEN-DATA-003`):**
+1. **Data Types & Static Portability Assertions (`GEN-DATA-001` - `GEN-DATA-003`):**
    * Integer model types shall map strictly to fixed-width types from `<stdint.h>` (`uint8_t`, `int16_t`, `uint32_t`, etc.).
    * Boolean values shall map to `bool` from `<stdbool.h>`.
    * Floating-point model types shall map explicitly to `float` or `double`.
-   * Type assumptions shall be validated via C compile-time assertions: `_Static_assert(sizeof(float) == 4U, "Invalid float width");`.
+   * Type width assumptions shall be validated via C portability assertions:
+     ```c
+     #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+     #define SM_STATIC_ASSERT(cond, msg) _Static_assert((cond), msg)
+     #else
+     #define SM_STATIC_ASSERT_GLUE_(a, b) a##b
+     #define SM_STATIC_ASSERT_GLUE(a, b) SM_STATIC_ASSERT_GLUE_(a, b)
+     #define SM_STATIC_ASSERT(cond, msg) typedef char SM_STATIC_ASSERT_GLUE(sm_static_assert_, __LINE__)[(cond) ? 1 : -1]
+     #endif
+     SM_STATIC_ASSERT(sizeof(float) == 4U, "Unsupported float storage width");
+     SM_STATIC_ASSERT(sizeof(double) == 8U, "Unsupported double storage width");
+     ```
 2. **Timing Model & Wraparound (`GEN-TIME-001` - `GEN-TIME-004`):**
    * Timebase unit: `uint32_t` milliseconds.
    * Elapsed time comparisons shall use modular subtraction: `(uint32_t)(now - start) >= duration`.
    * Duration Restriction: Generated timeout durations shall not exceed $\text{UINT32\_MAX} / 2$ ($2,147,483,647\text{ ms} \approx 24.8\text{ days}$) to maintain unambiguous modular subtraction.
-   * Timebase Model: The generator shall explicitly document whether the timebase uses absolute monotonic clock ticks or accumulated logical ticks in `generated/sm_config.h`.
+   * Timebase Model: Documented in `generated/sm_config.h`.
 
 ### 3.3 Robustness & Fault Handling
 1. **Error Classification (`SM_Error_t`):**
@@ -122,81 +133,57 @@ The generator **shall never modify existing user implementation files** (`platfo
 2. **Null-Pointer Handling (`GEN-ROB-002`):**
    * If a public API receives a `NULL` instance pointer, it shall return `SM_ERR_NULL_POINTER` immediately without dereferencing `instance`.
 3. **Instance Runtime Fault Latching (`GEN-SAFE-001` - `GEN-SAFE-004`):**
-   * A valid instance encountering a fatal runtime error shall latch the specific `SM_Error_t` value, latch the fault state, and invoke `SM_ApplySafeOutputs(instance)`.
-4. **XBridges Static Matrix Solvers (`GEN-DATA-005`):**
-   * XBridges numerical operations shall use statically bounded storage with **zero dynamic memory allocation** (`no malloc/free`).
-   * Singularity & ill-conditioning detection shall be based on scale-aware pivot validation: `abs(pivot) <= max(abs_eps, rel_eps * scale)`.
-   * Detection of NaN, Inf, singular, or numerically invalid results shall raise `SM_ERR_NUMERIC_FAULT` and invoke the configured fallback behavior.
+   * A valid instance encountering a fatal error latches `SM_Error_t`, latches fault state, and calls `SM_ApplySafeOutputs(instance)`.
+4. **XBridges Scale-Aware Matrix Solvers (`GEN-DATA-005`):**
+   * Statically bounded storage (`no malloc/free`).
+   * Scale-aware pivot validation: `abs(pivot) <= max(abs_eps, rel_eps * scale)`, where `scale` is the maximum absolute element magnitude of the active pivot row.
+   * Detection of NaN, Inf, singular, or ill-conditioned inputs triggers `SM_ERR_NUMERIC_FAULT` and safe output fallback.
 
 ---
 
 ## 4. Traceability & Line Mapping Engine
 
 1. **Traceable Elements Metadata (`ir.traceableElements`):**
-   The semantic model shall maintain a normalized collection of all traceable elements across states, transitions, guards, entry actions, exit actions, transition actions, events, and XBridges operations.
-2. **Marker-Based Line Resolution (`GEN-TRACE-001/002`):**
-   Generated C files embed explicit marker pairs:
+   Collection of states, transitions, guards, entry actions, exit actions, transition actions, events, and XBridges operations.
+2. **`traceId` Marker Pairing (`GEN-TRACE-001/002`):**
+   Generated C files embed unique `traceId` markers:
    ```c
-   /* TRACE-BEGIN: model=S17 requirement=REQ-SM-042 symbol=sm_state_S17_execute */
+   /* TRACE-BEGIN: traceId=TRACE-T14-GUARD model=T14 symbol=sm_t14_guard */
    case SM_STATE_RUNNING: { ... }
-   /* TRACE-END: model=S17 */
+   /* TRACE-END: traceId=TRACE-T14-GUARD */
    ```
-3. **Machine-Readable Multi-Location Mapping (`reports/traceability.json`):**
-   Post-processing locates markers after formatting. If a traceable element cannot be resolved, line mapping raises `TRACEABILITY_UNRESOLVED` rather than inventing false locations:
-   ```json
-   {
-     "mappings": [
-       {
-         "requirementIds": ["REQ-SM-042"],
-         "traceId": "TRACE-STATE-S17",
-         "modelElementId": "S17",
-         "locations": [
-           {
-             "file": "generated/sm_core.c",
-             "symbol": "sm_state_S17_execute",
-             "startLine": 410,
-             "endLine": 462
-           }
-         ]
-       }
-     ]
-   }
-   ```
+3. **Machine-Readable Mapping (`reports/traceability.json`):**
+   Post-processing locates markers by `traceId` after formatting. Unmapped markers raise `TRACEABILITY_UNRESOLVED`.
 
 ---
 
 ## 5. Automated Verification & Differential Execution Engine
 
 ### 5.1 Host Compilation Verification (`GEN-TEST-001` - `GEN-TEST-003`)
-* Automatic compilation of generated C code using host compiler (`gcc` / `clang` / `cl`).
-* Exact compiler versions logged in `generation.json`. Warnings promoted to errors (`-Wshadow -Werror`).
-* Execution under AddressSanitizer (ASan) and UndefinedBehaviorSanitizer (UBSan) where supported.
+* Compilation of generated C code using host compiler (`gcc` / `clang` / `cl`) under strict warnings (`-Wshadow -Werror`).
+* Execution under ASan and UBSan where supported.
 
 ### 5.2 Independent Differential Execution Oracle (`GEN-DIFF-001` - `GEN-DIFF-004`)
-* **Independent Semantics (`GEN-DIFF-004`):** `smReferenceInterpreter.ts` interprets normalized source state machine models independently of C generation code.
-* **Canonical 10-Field Trace Protocol:**
-  Both reference interpreter and host C binary emit steps containing:
+* **Independent Semantics (`GEN-DIFF-004`):** `smReferenceInterpreter.ts` evaluates guards, priority, HSM hierarchy, entry/exit actions, events, timers, and variable mutations independently of C generation logic.
+* **Canonical Trace Protocol:**
+  Contains **1 sequence identifier (`tick`) + 10 behavioral comparison fields**:
   `tick`, `activeStates`, `transitionIds`, `exitActions`, `transitionActions`, `entryActions`, `consumedEvents`, `emittedEvents`, `variables`, `timers`, `error`.
 * **Step-by-Step Comparator (`GEN-DIFF-002`):**
-  Compares reference trace steps vs host C JSONL binary trace steps in deterministic field order. Mismatch in trace length or any field reports `FAIL` and logs first point of divergence (`GEN-DIFF-003`).
-* **Deterministic Replay Vectors:**
-  Failing differential tests produce `reports/failures/diff_failure_XXXX.json` containing `modelHash`, `inputs`, `events`, `timing`, and exact divergence info.
+  Compares reference trace steps vs actual host-compiled C binary JSONL trace steps. Validates tick equality (`ref.tick === gen.tick`) and canonical fields in fixed order. On mismatch, logs `firstDivergence` and produces deterministic `diff_failure_XXXX.json` replay vectors containing `modelHash`, `generatorVersion`, `seed`, `vectors`, and divergence info.
 
 ---
 
-## 6. Verification Status Model & Hierarchical Aggregation Rules
+## 6. Verification Status Model & Hierarchical Aggregation Precedence
 
 Verification results enforce a strict 7-state status model (`GEN-RPT-001` - `GEN-RPT-003`):
 
-| Status | Definition |
-| :--- | :--- |
-| `PASS` | Stage executed and strictly verified. |
-| `FAIL` | Verification executed and detected a mismatch/error. |
-| `NOT RUN` | Verification stage not scheduled or executed. |
-| `NOT APPLICABLE` | Feature not present in current model. |
-| `UNSUPPORTED` | Model construct explicitly rejected by generator. |
-| `INTEGRATION REQUIRED` | Target MCU driver integration pending (not a generator defect). |
-| `BLOCKED` | Stage could not run due to an upstream failure (e.g. host compile failure). |
+### Aggregation Precedence Order
+When aggregating required verification stages:
+1. If any required stage is `FAIL` $\rightarrow$ Overall status is `FAIL`.
+2. If any required stage is `UNSUPPORTED` $\rightarrow$ Overall status is `UNSUPPORTED`.
+3. If any required stage is `BLOCKED` $\rightarrow$ Overall status is `BLOCKED`.
+4. If any required stage is `NOT RUN` $\rightarrow$ Overall status is `NOT RUN`.
+5. If all required stages are `PASS` or `NOT APPLICABLE` $\rightarrow$ Overall status is `PASS`.
 
 ### Hierarchical Status Aggregation Matrix
 
@@ -213,5 +200,5 @@ Verification results enforce a strict 7-state status model (`GEN-RPT-001` - `GEN
 ### GEN-SYS-001 — Behavioral Equivalence
 Given identical initial configuration, ordered inputs, events, and timing observations, the generated C implementation shall produce the same observable behavioral trace as the independent reference semantics for every supported model construct.
 
-### GEN-SYS-002 — Verification Evidence
-`GEN-SYS-001` shall be considered `PASS` only when host compilation succeeds, required runtime tests execute successfully, differential execution against actual host C binary output reports zero divergence, and coverage thresholds are achieved.
+### GEN-SYS-002 — Verification Evidence (No False PASSes)
+`GEN-SYS-001` shall be considered `PASS` only when host compilation succeeds, required runtime tests execute successfully, differential execution against actual host-compiled C binary output reports zero divergence, and coverage thresholds are achieved. **No verification component may produce `PASS` from generated placeholders, self-comparison, assumed compiler success, assumed runtime success, or unexecuted stages.**
