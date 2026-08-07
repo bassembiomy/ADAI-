@@ -682,6 +682,7 @@ const renderTransitionPhase = (
       left.priority - right.priority || left.id.localeCompare(right.id));
   const blocks: string[] = [];
   for (const transition of transitions) {
+    const transTraceId = `TRACE-TRANS-${toCIdentifier(transition.id).toUpperCase()}`;
     for (const route of transition.routes) {
       const condition = renderRouteEnabled(ir, route, stateId);
       const isUnconditional = condition === '(true)' || condition === 'true';
@@ -693,14 +694,21 @@ const renderTransitionPhase = (
         isUnconditional ? '    ' : '        ',
       );
       if (isUnconditional) {
-        blocks.push(lines(commit, '    return true;').trimEnd());
+        blocks.push(lines(
+          `    /* TRACE-BEGIN: traceId=${transTraceId} symbol=sm_trans_${toCIdentifier(transition.id).toLowerCase()} */`,
+          commit,
+          '    return true;',
+          `    /* TRACE-END: traceId=${transTraceId} */`
+        ).trimEnd());
         return blocks.join('\n');
       }
       blocks.push(lines(
+        `    /* TRACE-BEGIN: traceId=${transTraceId} symbol=sm_trans_${toCIdentifier(transition.id).toLowerCase()} */`,
         `    if (${condition}) {`,
         commit,
         '        return true;',
         '    }',
+        `    /* TRACE-END: traceId=${transTraceId} */`
       ).trimEnd());
     }
   }
@@ -727,7 +735,9 @@ const renderExecuteFunctions = (
       '        return transitioned;',
       '    }',
     ).trimEnd()).join('\n');
+    const stateTraceId = `TRACE-STATE-${toCIdentifier(state.id).toUpperCase()}`;
     return lines(
+      `/* TRACE-BEGIN: traceId=${stateTraceId} symbol=SM_ST_${toCIdentifier(state.id).toUpperCase()} */`,
       `static bool ${stateFunction(index, 'SM_Execute_State', state.id)}(ADIA_Instance_t *instance)`,
       '{',
       state.childLayerIds.length > 0 ? '    bool transitioned = false;' : null,
@@ -750,6 +760,7 @@ const renderExecuteFunctions = (
         ? '    return transitioned;'
         : '    return false;',
       '}',
+      `/* TRACE-END: traceId=${stateTraceId} */`,
     );
   }).join('\n');
 
