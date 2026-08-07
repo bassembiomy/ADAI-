@@ -867,7 +867,7 @@ const stateBoundaryForNode = (
       { id: `${node.id}:has_spare_normal$state`, role: 'has_spare_normal', signalId: null, numericType: boolean, shape: scalar, initialValues: [false] }
     ];
     if (node.type === 'BAND_LIMITED_NOISE') {
-      slots.push({ id: `${node.id}:filter_state$state`, role: 'filter_state', signalId: null, numericType: output.numericType, shape: scalar, initialValues: [0] });
+      slots.push({ id: `${node.id}:filter_state$state`, role: 'filter_state', signalId: null, numericType: (output.numericType.kind === 'boolean' ? boolean : float64) as any, shape: scalar, initialValues: [0] });
     }
     return boundary(slots);
   }
@@ -1167,7 +1167,7 @@ export const buildXBSemanticModel = (
           );
         }) ?? null,
       },
-      pidParameters: node.type === 'PID_CONTROLLER' ? normalizePidParameters(node.parameters, solverStep!) : undefined,
+      pidParameters: node.type === 'PID_CONTROLLER' ? normalizePidParameters(node.parameters, solverStep as any) : undefined,
     };
 
     if (node.type === 'Step') {
@@ -1219,8 +1219,8 @@ export const buildXBSemanticModel = (
       const ySignalId = yPort ? `${node.id}:${yPort.id}` : null;
       const uShape = uSignalId ? resolveShape(uSignalId) : { kind: 'scalar' };
       const yShape = ySignalId ? resolveShape(ySignalId) : { kind: 'scalar' };
-      const mInputs = uShape.kind === 'vector' ? uShape.length : (uShape.kind === 'scalar' ? 1 : 0);
-      const pOutputs = yShape.kind === 'vector' ? yShape.length : (yShape.kind === 'scalar' ? 1 : 0);
+      const mInputs = uShape.kind === 'vector' ? (uShape as any).length : (uShape.kind === 'scalar' ? 1 : 0);
+      const pOutputs = yShape.kind === 'vector' ? (yShape as any).length : (yShape.kind === 'scalar' ? 1 : 0);
       
       if (f.length !== nStates) {
         diagnostics.push(diagnostic('XB_EKF_DIMENSION_MISMATCH', `EKF 'f' must have ${nStates} expressions.`, node.id));
@@ -1235,8 +1235,8 @@ export const buildXBSemanticModel = (
       
       try {
         const limits = { maxNodes: 1000, maxExpressions: Math.max(nStates, pOutputs) };
-        operations[node.id].parameters.fAst = compileEkfVectorExpressions(f, symbols, limits) as any;
-        operations[node.id].parameters.hAst = compileEkfVectorExpressions(h, symbols, limits) as any;
+        (operations[node.id].parameters as any).fAst = compileEkfVectorExpressions(f, symbols, limits);
+        (operations[node.id].parameters as any).hAst = compileEkfVectorExpressions(h, symbols, limits);
       } catch (err) {
         diagnostics.push(diagnostic('XB_EKF_INVALID_EXPRESSION', String(err), node.id));
       }
