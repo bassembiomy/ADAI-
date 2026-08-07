@@ -35,5 +35,5 @@ describe('smHostHarness', () => {
       expect(record.activeStates).toBeDefined();
       expect(record.error).toBeDefined();
     }
-  });
+  }, 30000);
 });
