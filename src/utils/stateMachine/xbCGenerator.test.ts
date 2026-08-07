@@ -2828,4 +2828,40 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(coreSource).toContain('SM_XB_ABS_EPSILON');
     expect(coreSource).toContain('SM_XB_REL_EPSILON');
   });
+
+  it('generates exact float-formatted Step block evaluation with ceiling threshold and mapped Outport propagation (GEN-XB-STEP-002, 003, 004)', () => {
+    const model = flatOrFixture();
+    model.states[0].xBridgesModel = {
+      nodes: [
+        {
+          id: 'step1',
+          type: 'Step',
+          params: { step_time: 0.3, initial_value: 0, final_value: 5 },
+          inputs: [],
+          outputs: [{ id: 'out', direction: 'output' }],
+        },
+        {
+          id: 'XB6-StepOut',
+          type: 'Outport',
+          params: { smVarId: 'xb6-step-output-0001' },
+          inputs: [{ id: 'in', direction: 'input' }],
+          outputs: [{ id: 'out', direction: 'output' }],
+        },
+      ],
+      edges: [{ id: 'e1', sourceNodeId: 'step1', sourcePortId: 'out', targetNodeId: 'XB6-StepOut', targetPortId: 'in' }],
+      mappings: [
+        { smVarId: 'xb6-step-output-0001', blockId: 'XB6-StepOut', portId: 'out', direction: 'out' },
+      ],
+    };
+    model.variables.push({ id: 'v_step', name: 'xb6-step-output-0001', type: 'number', initialValue: '0' });
+
+    const { ir } = buildSemanticModel(model);
+    const artifacts = generateCArtifacts(ir!);
+    const coreSource = artifacts.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
+
+    expect(coreSource).toContain('0.3f');
+    expect(coreSource).toContain('0.0f');
+    expect(coreSource).toContain('5.0f');
+    expect(coreSource).toMatch(/instance->data\.xb6_step_output_0001\s*=/);
+  });
 });

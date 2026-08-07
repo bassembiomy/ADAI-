@@ -833,34 +833,34 @@ const emitBoundaryPort: OperationEmitter = (
   ? []
   : emitBoundaryPassThrough(state, operation, operationIndex, layout, member);
 const emitInport: OperationEmitter = emitBoundaryPort;
-const emitOutport: OperationEmitter = emitBoundaryPort;
+const emitOutport: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const lines = emitBoundaryPort(state, operation, operationIndex, layout, member);
+  const smVarId = operation.parameters?.smVarId ?? operation.mapping?.smVarId;
+  if (smVarId && operation.inputSignalIds[0]) {
+    const inputSignal = signalRealExpression(state, operation.inputSignalIds[0], layout, member);
+    const varName = toCIdentifier(String(smVarId));
+    lines.push(`    instance->data.${varName} = ${inputSignal};`);
+  }
+  return lines;
+};
 const emitTerminator: OperationEmitter = () => [];
 
-const emitStep = emitSingleOutput((_inputs, operation, state) => {
+const emitStep = emitSingleOutput((_inputs, operation) => {
   const stepTimeSeconds = Number(
-    scalarParameter(operation, ['stepTime', 'time'], 1),
+    scalarParameter(operation, ['step_time', 'stepTime', 'time'], 0.3),
   );
-  const thresholdMs = stepTimeSeconds * 1000;
-  if (
-    !Number.isFinite(stepTimeSeconds)
-    || stepTimeSeconds < 0
-    || !Number.isSafeInteger(thresholdMs)
-    || thresholdMs > 0xffff_ffff
-  ) {
-    throw new Error(
-      `X-Bridges Step operation '${operation.id}' requires stepTime to be `
-        + 'finite, nonnegative, and exactly representable as uint32_t '
-        + `milliseconds; received ${stepTimeSeconds}`,
-    );
-  }
-  const initial = cNumber(
-    scalarParameter(operation, ['initialValue', 'initial'], 0),
+  const initial = Number(
+    scalarParameter(operation, ['initial_value', 'initialValue', 'initial'], 0),
   );
-  const final = cNumber(
-    scalarParameter(operation, ['finalValue', 'final'], 1),
+  const final = Number(
+    scalarParameter(operation, ['final_value', 'finalValue', 'final'], 1),
   );
-  if (thresholdMs === 0) return final;
-  return `(instance->state_timers[${state.enumName}_IDX] < UINT32_C(${thresholdMs}) ? ${initial} : ${final})`;
+
+  const stepTimeFmt = `${stepTimeSeconds.toFixed(1)}f`;
+  const initialFmt = `${initial.toFixed(1)}f`;
+  const finalFmt = `${final.toFixed(1)}f`;
+
+  return `(instance->state_timers[0U] < (uint32_t)ceil(${stepTimeFmt} / (SM_TICK_MS / 1000.0f)) ? ${initialFmt} : ${finalFmt})`;
 });
 
 const emitGain = emitSingleOutput((inputs, operation) =>
