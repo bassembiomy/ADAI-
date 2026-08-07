@@ -1210,14 +1210,14 @@ const emitSwitch = emitSingleOutput((inputs, operation) => {
   const threshold = cNumber(
     scalarParameter(operation, ['threshold', 'Threshold'], 0),
   );
-  const control = inputs[2] ?? '0.0';
+  const control = inputs[1] ?? '0.0';
   const criteriaValue = operation.parameters.criteria;
   const criteria = criteriaValue === '<'
     || criteriaValue === '>='
     || criteriaValue === '<='
     ? criteriaValue
     : '>';
-  return `((${control}) ${criteria} ${threshold} ? (${inputs[0] ?? '0.0'}) : (${inputs[1] ?? '0.0'}))`;
+  return `((${control}) ${criteria} ${threshold} ? (${inputs[0] ?? '0.0'}) : (${inputs[2] ?? '0.0'}))`;
 });
 
 const emitIfElse = emitSingleOutput((inputs, operation) => {
@@ -2920,7 +2920,6 @@ const renderContinuousStateUpdates = (
       ...baseLines,
       ...nextLines,
       ...assignLines,
-      '    {',
       ...slots.flatMap((entry) => renderTransactionalStateOutputs(
         state,
         entry.operation,
@@ -2930,9 +2929,6 @@ const renderContinuousStateUpdates = (
         layout,
         member,
       ).map((line) => `    ${line}`)),
-      ...renderDirectEvaluation(state, xb, layout, member, true)
-        .map((line) => `    ${line}`),
-      '    }',
     ];
   }
   const stage = (
@@ -3037,8 +3033,20 @@ const renderSolverSubstep = (
         member,
       )
         .map((line) => `    ${line}`);
-      if (operation.type === 'INTEGRATOR_CONTINUOUS' || operation.type === 'Integrator'
-        || operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) {
+      // Continuous integrators: emit the current (pre-integration) state value to the
+      // output signal unconditionally at the top of the substep. This seeds the output
+      // with the old state value so that:
+      //   - On successful integration: the post-update block in renderContinuousStateUpdates
+      //     will overwrite the output with the new (integrated) state.
+      //   - On overflow/fault: the post-update block is fault-guarded and skips, so the
+      //     output retains this pre-integration value (= rolled-back old state). Correct.
+      // We do NOT use renderTransactionalStateOutputs here because we always want to write
+      // the current state, even when there is a latched fault from a previous step.
+      if (operation.type === 'INTEGRATOR_CONTINUOUS' || operation.type === 'Integrator') {
+        return renderStateOutputs(state, operation, operationIndex, layout, member)
+          .map((line) => `    ${line}`);
+      }
+      if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) {
         return outputs;
       }
       const counter = layout.counterFields.get(operation.id);
