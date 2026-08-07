@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { migrateSysMLState } from './sysmlIntegrityService';
+import {
+  migrateSysMLState,
+  previewDeletionImpact,
+  cascadeDeleteBlock,
+  cascadeDeletePort,
+} from './sysmlIntegrityService';
+import { SysMLDiagramState } from '../types/sysml_types';
 
 describe('sysmlIntegrityService - Schema Hydration', () => {
   it('hydrates empty or undefined state with empty arrays', () => {
@@ -38,3 +44,57 @@ describe('sysmlIntegrityService - Schema Hydration', () => {
     expect(migrated.relations[0].type).toBe('deriveReqt');
   });
 });
+
+describe('sysmlIntegrityService - Cascade Deletion & Impact Preview', () => {
+  const sampleState: SysMLDiagramState = {
+    blocks: [
+      { id: 'b1', name: 'EngineBlock', ports: ['p1'], parts: ['pt1'] },
+      { id: 'b2', name: 'SensorBlock', ports: ['p2'], parts: [] },
+    ],
+    ports: [
+      { id: 'p1', name: 'OutPort', direction: 'out', blockId: 'b1' },
+      { id: 'p2', name: 'InPort', direction: 'in', blockId: 'b2' },
+    ],
+    parts: [
+      { id: 'pt1', name: 'SubPart', typeBlockId: 'b2', parentBlockId: 'b1', parentPartId: null },
+    ],
+    connectors: [
+      { id: 'c1', sourcePortId: 'p1', targetPortId: 'p2' },
+    ],
+    requirements: [
+      { id: 'req1', reqId: 'REQ-01', text: 'Must work' },
+    ],
+    relations: [
+      { id: 'r1', sourceId: 'b1', targetId: 'req1', type: 'satisfy' },
+    ],
+  };
+
+  it('previews deletion impact for a block', () => {
+    const impact = previewDeletionImpact('b1', sampleState);
+    expect(impact.elementId).toBe('b1');
+    expect(impact.elementType).toBe('block');
+    expect(impact.affectedParts).toContain('pt1');
+    expect(impact.affectedConnectors).toContain('c1');
+    expect(impact.affectedRelations).toContain('r1');
+  });
+
+  it('cascade deletes a block and all dependent parts/ports/connectors/relations', () => {
+    const updatedState = cascadeDeleteBlock('b1', sampleState);
+    expect(updatedState.blocks.find(b => b.id === 'b1')).toBeUndefined();
+    expect(updatedState.ports.find(p => p.id === 'p1')).toBeUndefined();
+    expect(updatedState.parts.find(pt => pt.id === 'pt1')).toBeUndefined();
+    expect(updatedState.connectors.find(c => c.id === 'c1')).toBeUndefined();
+    expect(updatedState.relations.find(r => r.id === 'r1')).toBeUndefined();
+    // b2, p2, req1 should remain
+    expect(updatedState.blocks.length).toBe(1);
+    expect(updatedState.ports.length).toBe(1);
+  });
+
+  it('cascade deletes a port and affected connectors/relations', () => {
+    const updatedState = cascadeDeletePort('p1', sampleState);
+    expect(updatedState.ports.find(p => p.id === 'p1')).toBeUndefined();
+    expect(updatedState.connectors.find(c => c.id === 'c1')).toBeUndefined();
+    expect(updatedState.blocks.find(b => b.id === 'b1')?.ports).not.toContain('p1');
+  });
+});
+

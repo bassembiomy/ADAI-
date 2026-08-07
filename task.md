@@ -7,12 +7,12 @@
   - [x] Run test and confirm GREEN pass
   - [x] Commit Task 1 changes
 
-- [ ] **Task 2: Transactional Cascade Deletion & Impact Preview (BR-01, BR-02, BR-08)**
-  - [ ] Write failing tests for cascade deletion & deletion impact preview
-  - [ ] Confirm RED failure
-  - [ ] Implement `previewDeletionImpact`, `cascadeDeleteBlock`, and `cascadeDeletePort`
-  - [ ] Run test and confirm GREEN pass
-  - [ ] Commit Task 2 changes
+- [x] **Task 2: Transactional Cascade Deletion & Impact Preview (BR-01, BR-02, BR-08)**
+  - [x] Write failing tests for cascade deletion & deletion impact preview
+  - [x] Confirm RED failure
+  - [x] Implement `previewDeletionImpact`, `cascadeDeleteBlock`, and `cascadeDeletePort`
+  - [x] Run test and confirm GREEN pass
+  - [x] Commit Task 2 changes
 
 - [ ] **Task 3: Semantic Connector & Port Direction Validation (BR-03, BR-05)**
   - [ ] Write failing tests for port direction compatibility & duplicate connector validation

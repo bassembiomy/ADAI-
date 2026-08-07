@@ -7,6 +7,7 @@ import {
   SysMLRequirement,
   SysMLRelation,
   RelationType,
+  DeletionImpact,
 } from '../types/sysml_types';
 
 export function migrateSysMLState(rawState: any): SysMLDiagramState {
@@ -92,3 +93,108 @@ export function migrateSysMLState(rawState: any): SysMLDiagramState {
     relations,
   };
 }
+
+export function previewDeletionImpact(elementId: string, state: SysMLDiagramState): DeletionImpact {
+  const isBlock = state.blocks.some(b => b.id === elementId);
+  const isPort = state.ports.some(p => p.id === elementId);
+  const isPart = state.parts.some(pt => pt.id === elementId);
+  const isReq = state.requirements.some(r => r.id === elementId);
+
+  const elementType = isBlock ? 'block' : isPort ? 'port' : isPart ? 'part' : 'requirement';
+  const affectedParts: Set<string> = new Set();
+  const affectedConnectors: Set<string> = new Set();
+  const affectedRelations: Set<string> = new Set();
+
+  if (isBlock) {
+    const blockPortIds = new Set(state.ports.filter(p => p.blockId === elementId).map(p => p.id));
+    state.parts.forEach(pt => {
+      if (pt.parentBlockId === elementId || pt.typeBlockId === elementId) {
+        affectedParts.add(pt.id);
+      }
+    });
+    state.connectors.forEach(c => {
+      if (blockPortIds.has(c.sourcePortId) || blockPortIds.has(c.targetPortId)) {
+        affectedConnectors.add(c.id);
+      }
+    });
+    state.relations.forEach(r => {
+      if (r.sourceId === elementId || r.targetId === elementId ||
+          blockPortIds.has(r.sourceId) || blockPortIds.has(r.targetId) ||
+          affectedParts.has(r.sourceId) || affectedParts.has(r.targetId)) {
+        affectedRelations.add(r.id);
+      }
+    });
+  } else if (isPort) {
+    state.connectors.forEach(c => {
+      if (c.sourcePortId === elementId || c.targetPortId === elementId) {
+        affectedConnectors.add(c.id);
+      }
+    });
+    state.relations.forEach(r => {
+      if (r.sourceId === elementId || r.targetId === elementId) {
+        affectedRelations.add(r.id);
+      }
+    });
+  } else if (isPart) {
+    state.parts.forEach(pt => {
+      if (pt.parentPartId === elementId) {
+        affectedParts.add(pt.id);
+      }
+    });
+    state.relations.forEach(r => {
+      if (r.sourceId === elementId || r.targetId === elementId) {
+        affectedRelations.add(r.id);
+      }
+    });
+  } else if (isReq) {
+    state.relations.forEach(r => {
+      if (r.sourceId === elementId || r.targetId === elementId) {
+        affectedRelations.add(r.id);
+      }
+    });
+  }
+
+  return {
+    elementId,
+    elementType,
+    affectedParts: Array.from(affectedParts),
+    affectedConnectors: Array.from(affectedConnectors),
+    affectedRelations: Array.from(affectedRelations),
+  };
+}
+
+export function cascadeDeleteBlock(blockId: string, state: SysMLDiagramState): SysMLDiagramState {
+  const impact = previewDeletionImpact(blockId, state);
+  const blockPorts = new Set(state.ports.filter(p => p.blockId === blockId).map(p => p.id));
+  const affectedParts = new Set(impact.affectedParts);
+  const affectedConnectors = new Set(impact.affectedConnectors);
+  const affectedRelations = new Set(impact.affectedRelations);
+
+  return {
+    blocks: state.blocks.filter(b => b.id !== blockId),
+    ports: state.ports.filter(p => !blockPorts.has(p.id)),
+    parts: state.parts.filter(pt => !affectedParts.has(pt.id)),
+    connectors: state.connectors.filter(c => !affectedConnectors.has(c.id)),
+    requirements: state.requirements,
+    relations: state.relations.filter(r => !affectedRelations.has(r.id)),
+  };
+}
+
+export function cascadeDeletePort(portId: string, state: SysMLDiagramState): SysMLDiagramState {
+  const impact = previewDeletionImpact(portId, state);
+  const affectedConnectors = new Set(impact.affectedConnectors);
+  const affectedRelations = new Set(impact.affectedRelations);
+
+  return {
+    blocks: state.blocks.map(b => ({
+      ...b,
+      ports: b.ports.filter(pid => pid !== portId),
+    })),
+    ports: state.ports.filter(p => p.id !== portId),
+    parts: state.parts,
+    connectors: state.connectors.filter(c => !affectedConnectors.has(c.id)),
+    requirements: state.requirements,
+    relations: state.relations.filter(r => !affectedRelations.has(r.id)),
+  };
+}
+
