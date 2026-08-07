@@ -2814,6 +2814,18 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     }
     // Boolean constant should be emitted as true, not 1.0
     expect(source).toMatch(/const bool xb_value_\d+_\d+ = \(true\);/);
-    expect(source).toMatch(/constant_y\)\)\[0U\]\) = xb_value_\d+_\d+;/);
+    expect(source).toMatch(/constant_y = xb_value_\d+_\d+;/);
+  });
+
+  it('generates scale-aware matrix solvers without malloc/free and with SM_XB_ABS_EPSILON threshold', () => {
+    const model = hybridXBridgesFixture();
+    const { ir } = buildSemanticModel(model);
+    const artifacts = generateCArtifacts(ir!);
+    const coreSource = artifacts.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
+
+    expect(coreSource).not.toContain('malloc');
+    expect(coreSource).not.toContain('free');
+    expect(coreSource).toContain('SM_XB_ABS_EPSILON');
+    expect(coreSource).toContain('SM_XB_REL_EPSILON');
   });
 });
