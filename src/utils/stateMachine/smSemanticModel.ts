@@ -95,6 +95,14 @@ export interface SemanticJunction {
   outgoingTransitionIds: string[];
 }
 
+export interface TraceableElement {
+  id: string;
+  kind: 'state' | 'transition' | 'guard' | 'entry-action' | 'exit-action' | 'transition-action' | 'event' | 'xbridge';
+  requirementIds: string[];
+  modelPath: string;
+  traceId: string;
+}
+
 export interface SemanticModel {
   tickMs: number;
   safetyMode: boolean;
@@ -108,6 +116,8 @@ export interface SemanticModel {
   variables: Record<string, SemanticVariable>;
   ioMappings: SemanticIOMapping[];
   activeSlotCount: number;
+  traceableElements: TraceableElement[];
+  modelHash?: string;
 }
 
 export interface SemanticBuildResult {

@@ -15,6 +15,7 @@ import type {
   SemanticState,
   SemanticTransition,
   SemanticVariable,
+  TraceableElement,
 } from './smSemanticModel';
 import { adaptXBModel } from './xbModelAdapter';
 import { buildXBSemanticModel } from './xbSemanticBuilder';
@@ -602,6 +603,26 @@ export const buildSemanticModel = (
     }))
     .sort((left, right) => left.id.localeCompare(right.id));
 
+  const traceableElements: TraceableElement[] = [];
+  for (const state of Object.values(states)) {
+    traceableElements.push({
+      id: state.id,
+      kind: 'state',
+      requirementIds: [],
+      modelPath: `states.${state.id}`,
+      traceId: `TRACE-STATE-${toCIdentifier(state.id).toUpperCase()}`,
+    });
+  }
+  for (const trans of Object.values(transitions)) {
+    traceableElements.push({
+      id: trans.id,
+      kind: 'transition',
+      requirementIds: [],
+      modelPath: `transitions.${trans.id}`,
+      traceId: `TRACE-TRANS-${toCIdentifier(trans.id).toUpperCase()}`,
+    });
+  }
+
   return {
     diagnostics,
     ir: freezeSemanticModel({
@@ -620,6 +641,8 @@ export const buildSemanticModel = (
       activeSlotCount: [...slots.values()].filter(
         (slot): slot is number => slot !== null,
       ).length,
+      traceableElements,
+      modelHash: "0000000000000000",
     }),
   };
 };
