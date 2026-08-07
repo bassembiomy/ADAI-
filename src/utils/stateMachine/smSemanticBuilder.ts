@@ -463,8 +463,8 @@ export const buildSemanticModel = (
         transitionIds,
         destinationKind: ownedHistory === undefined ? 'state' : 'history',
         destinationStateId: transition.destinationStateId,
-        destinationJunctionId: ownedHistory?.id ?? null,
-        ...routePaths,
+        exitStateIds: routePaths.exitStateIds,
+        entryStateIds: routePaths.entryStateIds,
       }];
     }
     const destinationJunction = model.junctions.find(
