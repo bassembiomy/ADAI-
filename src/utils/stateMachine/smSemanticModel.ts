@@ -3,6 +3,33 @@ import type { ActionNode, ExpressionNode } from './smExpressions';
 import type { ModelDiagnostic, StateDecomposition } from './smModel';
 import type { XBSemanticModel } from './xbSemanticModel';
 
+export type SemanticType =
+  | 'boolean'
+  | 'int8'
+  | 'uint8'
+  | 'int16'
+  | 'uint16'
+  | 'int32'
+  | 'uint32'
+  | 'float32'
+  | 'float64';
+
+export interface SemanticVariableSymbol {
+  readonly id: string;
+  readonly modelName: string;
+  readonly cIdentifier: string;
+  readonly semanticType: SemanticType;
+  readonly cType: string;
+}
+
+export interface XBOwnerState {
+  readonly stateId: string;
+  readonly stateName: string;
+  readonly cIndexSymbol: string;
+  readonly numericIndex: number;
+}
+
+
 export interface SemanticState {
   id: string;
   name: string;
