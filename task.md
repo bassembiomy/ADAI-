@@ -14,12 +14,12 @@
   - [x] Run test and confirm GREEN pass
   - [x] Commit Task 2 changes
 
-- [ ] **Task 3: Semantic Connector & Port Direction Validation (BR-03, BR-05)**
-  - [ ] Write failing tests for port direction compatibility & duplicate connector validation
-  - [ ] Confirm RED failure
-  - [ ] Implement `validateConnectorConnection`
-  - [ ] Run test and confirm GREEN pass
-  - [ ] Commit Task 3 changes
+- [x] **Task 3: Semantic Connector & Port Direction Validation (BR-03, BR-05)**
+  - [x] Write failing tests for port direction compatibility & duplicate connector validation
+  - [x] Confirm RED failure
+  - [x] Implement `validateConnectorConnection`
+  - [x] Run test and confirm GREEN pass
+  - [x] Commit Task 3 changes
 
 - [ ] **Task 4: Traceability Governance & Requirement Canonicalization (BR-04, BR-07, BR-10)**
   - [ ] Write failing tests for traceability relations & unique requirement IDs

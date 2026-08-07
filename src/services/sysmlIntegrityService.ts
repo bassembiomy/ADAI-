@@ -8,6 +8,7 @@ import {
   SysMLRelation,
   RelationType,
   DeletionImpact,
+  ValidationResult,
 } from '../types/sysml_types';
 
 export function migrateSysMLState(rawState: any): SysMLDiagramState {
@@ -197,4 +198,42 @@ export function cascadeDeletePort(portId: string, state: SysMLDiagramState): Sys
     relations: state.relations.filter(r => !affectedRelations.has(r.id)),
   };
 }
+
+export function validateConnectorConnection(
+  sourcePortId: string,
+  targetPortId: string,
+  state: SysMLDiagramState
+): ValidationResult {
+  if (sourcePortId === targetPortId) {
+    return { valid: false, reason: 'Cannot connect a port to itself' };
+  }
+
+  const srcPort = state.ports.find(p => p.id === sourcePortId);
+  const tgtPort = state.ports.find(p => p.id === targetPortId);
+
+  if (!srcPort || !tgtPort) {
+    return { valid: false, reason: 'Source or target port not found' };
+  }
+
+  const duplicate = state.connectors.some(
+    c =>
+      (c.sourcePortId === sourcePortId && c.targetPortId === targetPortId) ||
+      (c.sourcePortId === targetPortId && c.targetPortId === sourcePortId)
+  );
+
+  if (duplicate) {
+    return { valid: false, reason: 'A connector already exists between these ports' };
+  }
+
+  if (srcPort.direction === 'out' && tgtPort.direction === 'out') {
+    return { valid: false, reason: 'Cannot connect output port to output port' };
+  }
+
+  if (srcPort.direction === 'in' && tgtPort.direction === 'in') {
+    return { valid: false, reason: 'Cannot connect input port to input port' };
+  }
+
+  return { valid: true };
+}
+
 

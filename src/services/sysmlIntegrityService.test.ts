@@ -4,6 +4,7 @@ import {
   previewDeletionImpact,
   cascadeDeleteBlock,
   cascadeDeletePort,
+  validateConnectorConnection,
 } from './sysmlIntegrityService';
 import { SysMLDiagramState } from '../types/sysml_types';
 
@@ -97,4 +98,58 @@ describe('sysmlIntegrityService - Cascade Deletion & Impact Preview', () => {
     expect(updatedState.blocks.find(b => b.id === 'b1')?.ports).not.toContain('p1');
   });
 });
+
+describe('sysmlIntegrityService - Connector Validation', () => {
+  const state: SysMLDiagramState = {
+    blocks: [],
+    ports: [
+      { id: 'p_out1', name: 'Out1', direction: 'out', blockId: 'b1' },
+      { id: 'p_out2', name: 'Out2', direction: 'out', blockId: 'b1' },
+      { id: 'p_in1', name: 'In1', direction: 'in', blockId: 'b2' },
+      { id: 'p_in2', name: 'In2', direction: 'in', blockId: 'b2' },
+      { id: 'p_inout1', name: 'Bi1', direction: 'inout', blockId: 'b3' },
+    ],
+    parts: [],
+    connectors: [
+      { id: 'c_existing', sourcePortId: 'p_out1', targetPortId: 'p_in1' }
+    ],
+    requirements: [],
+    relations: [],
+  };
+
+  it('validates out -> in connection as valid', () => {
+    const res = validateConnectorConnection('p_out1', 'p_in2', state);
+    expect(res.valid).toBe(true);
+  });
+
+  it('validates inout -> in connection as valid', () => {
+    const res = validateConnectorConnection('p_inout1', 'p_in1', state);
+    expect(res.valid).toBe(true);
+  });
+
+  it('rejects self-connection on same port', () => {
+    const res = validateConnectorConnection('p_out1', 'p_out1', state);
+    expect(res.valid).toBe(false);
+    expect(res.reason).toContain('Cannot connect a port to itself');
+  });
+
+  it('rejects out -> out connection', () => {
+    const res = validateConnectorConnection('p_out1', 'p_out2', state);
+    expect(res.valid).toBe(false);
+    expect(res.reason).toContain('out');
+  });
+
+  it('rejects in -> in connection', () => {
+    const res = validateConnectorConnection('p_in1', 'p_in2', state);
+    expect(res.valid).toBe(false);
+    expect(res.reason).toContain('in');
+  });
+
+  it('rejects duplicate connector between same ports', () => {
+    const res = validateConnectorConnection('p_out1', 'p_in1', state);
+    expect(res.valid).toBe(false);
+    expect(res.reason).toContain('already exists');
+  });
+});
+
 
