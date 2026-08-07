@@ -939,7 +939,7 @@ describe('buildSemanticModel', () => {
     expect(codes).toContain('XB_STEP_PARAM_MISSING');
   });
 
-  it('emits XB_MAPPING_NOT_FOUND when Outport smVarId is not bound in xBridgesModel.mappings', () => {
+  it('auto-repairs missing mapping when Outport smVarId is not bound in xBridgesModel.mappings (APP-XB-MAP-001)', () => {
     const fixture = flatOrFixture();
     fixture.states[0].xBridgesModel = {
       nodes: [
@@ -948,13 +948,19 @@ describe('buildSemanticModel', () => {
           type: 'Outport',
           params: { smVarId: 'unbound_var' },
           inputs: [{ id: 'in', direction: 'input' }],
-          outputs: [],
+          outputs: [{ id: 'out', direction: 'output' }],
         },
       ],
       edges: [],
       mappings: [],
     };
     const codes = diagnosticCodes(fixture);
-    expect(codes).toContain('XB_MAPPING_NOT_FOUND');
+    expect(codes).not.toContain('XB_MAPPING_NOT_FOUND');
+    // Verify the mapping was auto-created
+    expect(fixture.states[0].xBridgesModel!.mappings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ smVarId: 'unbound_var', blockId: 'out1' }),
+      ]),
+    );
   });
 });

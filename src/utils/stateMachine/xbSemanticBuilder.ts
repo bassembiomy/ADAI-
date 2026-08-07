@@ -1194,11 +1194,14 @@ export const buildXBSemanticModel = (
       const smVarId = String(node.parameters.smVarId);
       const mapped = input.model.mappings.filter((m) => m.smVarId === smVarId && m.blockId === node.id);
       if (mapped.length === 0) {
-        diagnostics.push(diagnostic(
-          'XB_MAPPING_NOT_FOUND',
-          `Outport '${node.id}' smVarId '${smVarId}' is not bound in xBridgesModel.mappings.`,
-          node.id,
-        ));
+        // Auto-repair: create the missing mapping entry (APP-XB-MAP-001)
+        const defaultPortId = (portsByNode.get(node.id) ?? []).find(p => p.direction === 'output')?.id ?? 'out';
+        input.model.mappings.push({
+          smVarId,
+          blockId: node.id,
+          portId: defaultPortId,
+          direction: 'out',
+        });
       } else if (mapped.length > 1) {
         diagnostics.push(diagnostic(
           'XB_MAPPING_DUPLICATE',
