@@ -1169,6 +1169,44 @@ export const buildXBSemanticModel = (
       },
       pidParameters: node.type === 'PID_CONTROLLER' ? normalizePidParameters(node.parameters, solverStep!) : undefined,
     };
+
+    if (node.type === 'Step') {
+      const stepTime = node.parameters.step_time ?? node.parameters.time;
+      const initialVal = node.parameters.initial_value ?? node.parameters.initial;
+      const finalVal = node.parameters.final_value ?? node.parameters.final;
+
+      if (stepTime === undefined || initialVal === undefined || finalVal === undefined) {
+        diagnostics.push(diagnostic(
+          'XB_STEP_PARAM_MISSING',
+          `Step block '${node.id}' must specify 'step_time', 'initial_value', and 'final_value'.`,
+          node.id,
+        ));
+      } else if (typeof stepTime !== 'number' || typeof initialVal !== 'number' || typeof finalVal !== 'number') {
+        diagnostics.push(diagnostic(
+          'XB_STEP_PARAM_INVALID',
+          `Step block '${node.id}' parameters must be numeric values.`,
+          node.id,
+        ));
+      }
+    }
+
+    if (node.type === 'Outport' && node.parameters?.smVarId) {
+      const smVarId = String(node.parameters.smVarId);
+      const mapped = input.model.mappings.filter((m) => m.smVarId === smVarId && m.blockId === node.id);
+      if (mapped.length === 0) {
+        diagnostics.push(diagnostic(
+          'XB_MAPPING_NOT_FOUND',
+          `Outport '${node.id}' smVarId '${smVarId}' is not bound in xBridgesModel.mappings.`,
+          node.id,
+        ));
+      } else if (mapped.length > 1) {
+        diagnostics.push(diagnostic(
+          'XB_MAPPING_DUPLICATE',
+          `Outport '${node.id}' smVarId '${smVarId}' has duplicate entries in xBridgesModel.mappings.`,
+          node.id,
+        ));
+      }
+    }
     
     if (node.type === 'EXTENDED_KALMAN_FILTER') {
       const f = Array.isArray(node.parameters.f) ? node.parameters.f as string[] : [];

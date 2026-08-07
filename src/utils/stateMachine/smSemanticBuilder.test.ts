@@ -919,4 +919,42 @@ describe('buildSemanticModel', () => {
       'IO_MAPPING_ID_DUPLICATE',
     ]));
   });
+
+  it('emits XB_STEP_PARAM_MISSING when a Step block lacks step_time, initial_value, or final_value', () => {
+    const fixture = flatOrFixture();
+    fixture.states[0].xBridgesModel = {
+      nodes: [
+        {
+          id: 'step1',
+          type: 'Step',
+          params: { step_time: 0.3 }, // missing initial_value and final_value
+          inputs: [],
+          outputs: [{ id: 'out', direction: 'output' }],
+        },
+      ],
+      edges: [],
+      mappings: [],
+    };
+    const codes = diagnosticCodes(fixture);
+    expect(codes).toContain('XB_STEP_PARAM_MISSING');
+  });
+
+  it('emits XB_MAPPING_NOT_FOUND when Outport smVarId is not bound in xBridgesModel.mappings', () => {
+    const fixture = flatOrFixture();
+    fixture.states[0].xBridgesModel = {
+      nodes: [
+        {
+          id: 'out1',
+          type: 'Outport',
+          params: { smVarId: 'unbound_var' },
+          inputs: [{ id: 'in', direction: 'input' }],
+          outputs: [],
+        },
+      ],
+      edges: [],
+      mappings: [],
+    };
+    const codes = diagnosticCodes(fixture);
+    expect(codes).toContain('XB_MAPPING_NOT_FOUND');
+  });
 });
