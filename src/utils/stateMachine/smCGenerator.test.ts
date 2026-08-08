@@ -21,7 +21,9 @@ import {
   renderConfigHeader,
   renderCoreSource,
   renderSafetySource,
+  verifyGeneratedCStructure,
 } from './smCGenerator';
+
 import { renderCExpression, unwrapTopLevelCondition } from './smCExpressions';
 
 const build = (model: ReturnType<typeof flatOrFixture>) => {
@@ -1194,4 +1196,36 @@ int main(void) {
       }).not.toThrow();
     });
   });
+
+  describe('verifyGeneratedCStructure', () => {
+    it('passes for valid generated C artifacts where all instance->data accesses exist in SM_Data_t', () => {
+      const model = flatOrFixture();
+      const ir = build(model);
+      const artifacts = generateCArtifacts(ir);
+      const check = verifyGeneratedCStructure(artifacts.files);
+      expect(check.valid).toBe(true);
+      expect(check.diagnostics).toEqual([]);
+    });
+
+    it('fails with GEN_C_UNDECLARED_DATA_MEMBER when instance->data accesses an undeclared field', () => {
+      const mockFiles = [
+        {
+          name: 'sm_config.h',
+          content: 'typedef struct {\n    double valid_var;\n} SM_Data_t;',
+        },
+        {
+          name: 'sm_core.c',
+          content: 'void test(ADIA_Instance_t *inst) { inst->data.valid_var = 1.0; inst->data.xb6_step_output_0001 = 2.0; }',
+        },
+      ];
+
+      const check = verifyGeneratedCStructure(mockFiles);
+      expect(check.valid).toBe(false);
+      expect(check.diagnostics).toHaveLength(1);
+      expect(check.diagnostics[0].code).toBe('GEN_C_UNDECLARED_DATA_MEMBER');
+      expect(check.undeclaredMembers).toEqual(['xb6_step_output_0001']);
+    });
+  });
+});
+
 });

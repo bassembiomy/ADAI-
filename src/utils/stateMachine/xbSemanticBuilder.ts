@@ -1223,13 +1223,16 @@ export const buildXBSemanticModel = (
       const mapped = input.model.mappings.filter((m) => m.smVarId === smVarId && m.blockId === node.id);
       if (mapped.length === 0) {
         // Auto-repair: create the missing mapping entry (APP-XB-MAP-001)
-        const defaultPortId = (portsByNode.get(node.id) ?? []).find(p => p.direction === 'output')?.id ?? 'out';
+        const defaultPortId = (portsByNode.get(node.id) ?? []).find(p => p.direction === 'input')?.id
+          ?? (portsByNode.get(node.id) ?? [])[0]?.id
+          ?? 'in';
         input.model.mappings.push({
           smVarId,
           blockId: node.id,
           portId: defaultPortId,
           direction: 'out',
         });
+
       } else if (mapped.length > 1) {
         diagnostics.push(diagnostic(
           'XB_MAPPING_DUPLICATE',

@@ -1,5 +1,7 @@
 import type { ErrorItem } from '../../types/sm_types';
+import type { ModelDiagnostic } from './smModel';
 import { analyzeSemanticModel } from '../smAnalysisEngine';
+
 import { toCIdentifier } from './smExpressions';
 import {
   renderCAction,
@@ -1611,23 +1613,95 @@ export const generateCArtifacts = (
     ...implementationFiles,
     ...(options.reportSourceFiles ?? []),
   ].filter((file) => /\.(?:c|h|cpp|ino)$/i.test(file.name));
+  const allFiles = [
+    ...implementationFiles,
+    {
+      name: 'sm_testing_report.md',
+      content: renderSemanticTestingReport(
+        analysis,
+        options.verificationEvidence ?? DEFAULT_VERIFICATION_EVIDENCE,
+        ir,
+      ),
+    },
+    {
+      name: 'static_metrics_report.md',
+      content: renderStaticMetricsReport(analysis, measuredSourceFiles, ir),
+    },
+  ];
+
+  const structCheck = verifyGeneratedCStructure(allFiles);
+  const errors: ErrorItem[] = structCheck.diagnostics.map((diag) => ({
+    code: diag.code,
+    message: diag.message,
+    severity: 'error',
+  }));
+
   return {
-    files: [
-      ...implementationFiles,
-      {
-        name: 'sm_testing_report.md',
-        content: renderSemanticTestingReport(
-          analysis,
-          options.verificationEvidence ?? DEFAULT_VERIFICATION_EVIDENCE,
-          ir,
-        ),
-      },
-      {
-        name: 'static_metrics_report.md',
-        content: renderStaticMetricsReport(analysis, measuredSourceFiles, ir),
-      },
-    ],
-    errors: [],
+    files: allFiles,
+    errors,
     warnings: [],
   };
 };
+
+export interface StructureVerificationResult {
+  valid: boolean;
+  diagnostics: ModelDiagnostic[];
+  declaredMembers: string[];
+  usedMembers: string[];
+  undeclaredMembers: string[];
+}
+
+export function verifyGeneratedCStructure(
+  files: readonly GeneratedCFile[]
+): StructureVerificationResult {
+  const diagnostics: ModelDiagnostic[] = [];
+  const headerFile = files.find((f) => f.name.endsWith('.h') && f.content.includes('SM_Data_t'));
+  const declaredMembers = new Set<string>();
+
+  if (headerFile) {
+    const structMatch = /typedef\s+struct\s*\{([\s\S]*?)\}\s*SM_Data_t;/m.exec(headerFile.content);
+    if (structMatch) {
+      const structBody = structMatch[1];
+      const memberRegex = /([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*\[[^\]]+\])*\s*;/g;
+      let match: RegExpExecArray | null;
+      while ((match = memberRegex.exec(structBody)) !== null) {
+        declaredMembers.add(match[1]);
+      }
+    }
+  }
+
+  const usedMembers = new Set<string>();
+  const undeclaredMembers = new Set<string>();
+  const dataAccessRegex = /instance->data\.([a-zA-Z_][a-zA-Z0-9_]*)/g;
+
+  for (const file of files) {
+    if (!file.name.endsWith('.c') && !file.name.endsWith('.h')) continue;
+    let match: RegExpExecArray | null;
+    while ((match = dataAccessRegex.exec(file.content)) !== null) {
+      const member = match[1];
+      usedMembers.add(member);
+      if (headerFile && declaredMembers.size > 0 && !declaredMembers.has(member)) {
+        undeclaredMembers.add(member);
+      }
+    }
+  }
+
+  if (undeclaredMembers.size > 0) {
+    for (const member of undeclaredMembers) {
+      diagnostics.push({
+        code: 'GEN_C_UNDECLARED_DATA_MEMBER',
+        message: `Generated data access "instance->data.${member}" references undeclared field in SM_Data_t`,
+        severity: 'error',
+      });
+    }
+  }
+
+  return {
+    valid: diagnostics.length === 0,
+    diagnostics,
+    declaredMembers: Array.from(declaredMembers),
+    usedMembers: Array.from(usedMembers),
+    undeclaredMembers: Array.from(undeclaredMembers),
+  };
+}
+
