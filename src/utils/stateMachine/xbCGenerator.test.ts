@@ -105,7 +105,7 @@ const fixed16Q8: XBFixedType = {
 const defaultOwnerState = (stateId = 'controller'): XBOwnerState => ({
   stateId,
   stateName: stateId,
-  cIndexSymbol: `SM_ST_${toCIdentifier(stateId).toUpperCase()}_IDX`,
+  cIndexSymbol: `SM_ST_${stateId.replace(/[^a-zA-Z0-9_]/g, '_').toUpperCase()}_IDX`,
   numericIndex: 1,
 });
 
@@ -2760,15 +2760,34 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
   });
 
   it('generates scale-aware matrix solvers without malloc/free and with SM_XB_ABS_EPSILON threshold', () => {
-    const model = hybridXBridgesFixture();
-    const { ir } = buildSemanticModel(model);
-    const artifacts = generateCArtifacts(ir!);
-    const coreSource = artifacts.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
+    const ir = semanticModel();
+    const matrix22 = { kind: 'matrix', rows: 2, columns: 2 } as const;
+    const matrix21 = { kind: 'matrix', rows: 2, columns: 1 } as const;
+    const shaped = (id: string, shape: XBShape): XBSemanticSignal => ({
+      ...signal(id, float32, shape), direction: 'input',
+    });
+    const matrixOperation = (id: string, type: string, inputSignalIds: readonly string[], outputSignalIds: readonly string[], parameters: XBSemanticOperation['parameters'] = {}): XBSemanticOperation => ({
+      ...scalarOperation(id, type, inputSignalIds, outputSignalIds, parameters),
+    });
+    ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
+      stateId: 'controller',
+      executionOrder: ['solve'],
+      operations: {
+        solve: matrixOperation('solve', 'MatrixSolve', ['solve:a', 'solve:b'], ['solve:y'], { maxDimension: 4 }),
+      },
+      signals: {
+        'solve:a': shaped('solve:a', matrix22), 'solve:b': shaped('solve:b', matrix21), 'solve:y': shaped('solve:y', matrix21),
+      },
+      mappings: [], solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 }, policy: { memory: 'retain', numericFault: 'escalate' },
+    };
+    const artifacts = generateCArtifacts(ir);
+    const allSource = artifacts.files.map((f) => f.content).join('\n');
 
-    expect(coreSource).not.toContain('malloc');
-    expect(coreSource).not.toContain('free');
-    expect(coreSource).toContain('SM_XB_ABS_EPSILON');
-    expect(coreSource).toContain('SM_XB_REL_EPSILON');
+    expect(allSource).not.toContain('malloc');
+    expect(allSource).not.toContain('free');
+    expect(allSource).toContain('SM_XB_ABS_EPSILON');
+    expect(allSource).toContain('SM_XB_REL_EPSILON');
   });
 
   it('generates exact float-formatted Step block evaluation with ceiling threshold and mapped Outport propagation (GEN-XB-STEP-002, 003, 004)', () => {
