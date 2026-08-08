@@ -18,7 +18,10 @@ describe('smPipelineOrchestrator', () => {
 
   it('verifies XB6 Step block model differential trace parity across 0ms to 1000ms steps (GEN-XB-STEP-007, 009)', () => {
     const fixture = xb6StepFixture();
-    const { ir } = buildSemanticModel(fixture);
+    const res = buildSemanticModel(fixture);
+    expect(res.diagnostics.filter(d => d.severity === 'error')).toEqual([]);
+    const ir = res.ir!;
+
     const vectors = Array.from({ length: 10 }, (_, i) => ({
       tick: i + 1,
       deltaMs: 100,
@@ -31,3 +34,4 @@ describe('smPipelineOrchestrator', () => {
     expect(report.status.behavioralGenerationStatus).toBe('PASS');
   }, 30000);
 });
+

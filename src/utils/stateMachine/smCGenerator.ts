@@ -34,9 +34,11 @@ import { renderHostSmokeHarness } from './smHostHarness';
 export interface CGeneratorOptions {
   includeTestShims?: boolean;
   includeHostHarness?: boolean;
+  vectorCount?: number;
   reportSourceFiles?: readonly GeneratedCFile[];
   verificationEvidence?: VerificationEvidence;
 }
+
 
 export interface GeneratedCFile {
   name: string;
@@ -1605,8 +1607,9 @@ export const generateCArtifacts = (
       ? [{ name: 'mcal_dio_test_stubs.c', content: renderMcalTestStubs() }]
       : []),
     ...(options.includeHostHarness
-      ? [{ name: 'sm_host_test.c', content: renderHostSmokeHarness(ir) }]
+      ? [{ name: 'sm_host_test.c', content: renderHostSmokeHarness(ir, options.vectorCount) }]
       : []),
+
   ];
   const analysis = analyzeSemanticModel(ir);
   const measuredSourceFiles = [

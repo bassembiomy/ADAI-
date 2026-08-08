@@ -91,6 +91,46 @@ export const compileAndRunCProgram = (
   });
 };
 
+export interface SyntaxCompilationResult {
+  success: boolean;
+  errors: string[];
+}
+
+export function compileGeneratedCSyntax(
+  artifacts: { files: readonly { name: string; content: string }[] },
+  strictCI = false,
+): SyntaxCompilationResult {
+  const workspace = createGeneratedCodeTestWorkspace('syntax-check');
+  for (const file of artifacts.files) {
+    if (file.name.endsWith('.c') || file.name.endsWith('.h')) {
+      writeFileSync(join(workspace.directory, file.name), file.content);
+    }
+  }
+
+  const cFiles = artifacts.files
+    .filter((f) => f.name.endsWith('.c'))
+    .map((f) => f.name);
+
+  const flags = [
+    '-std=c11',
+    '-Wall',
+    '-Wextra',
+    ...(strictCI ? ['-Werror'] : []),
+    '-fsyntax-only',
+    '-I.',
+    ...cFiles,
+  ];
+
+  try {
+    execFileSync('gcc', flags, { cwd: workspace.directory, stdio: 'pipe' });
+    return { success: true, errors: [] };
+  } catch (err: any) {
+    const errorMsg = err.stderr ? err.stderr.toString() : String(err);
+    return { success: false, errors: [errorMsg] };
+  }
+}
+
+
 const orderedStates = (ir: SemanticModel): SemanticState[] =>
   Object.values(ir.states).sort(
     (left, right) =>

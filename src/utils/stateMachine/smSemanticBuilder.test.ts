@@ -942,12 +942,14 @@ describe('buildSemanticModel', () => {
 
   it('emits XB_STEP_PARAM_MISSING when a Step block lacks step_time, initial_value, or final_value', () => {
     const fixture = flatOrFixture();
+    fixture.states[0].isXBridges = true;
     fixture.states[0].xBridgesModel = {
+
       nodes: [
         {
           id: 'step1',
           type: 'Step',
-          params: { step_time: 0.3 }, // missing initial_value and final_value
+          parameters: { step_time: 0.3 }, // missing initial_value and final_value
           inputs: [],
           outputs: [{ id: 'out', direction: 'output' }],
         },
@@ -961,12 +963,13 @@ describe('buildSemanticModel', () => {
 
   it('auto-repairs missing mapping when Outport smVarId is not bound in xBridgesModel.mappings (APP-XB-MAP-001)', () => {
     const fixture = flatOrFixture();
+    fixture.states[0].isXBridges = true;
     fixture.states[0].xBridgesModel = {
       nodes: [
         {
           id: 'out1',
           type: 'Outport',
-          params: { smVarId: 'unbound_var' },
+          parameters: { smVarId: 'unbound_var' },
           inputs: [{ id: 'in', direction: 'input' }],
           outputs: [{ id: 'out', direction: 'output' }],
         },
@@ -974,13 +977,15 @@ describe('buildSemanticModel', () => {
       edges: [],
       mappings: [],
     };
-    const codes = diagnosticCodes(fixture);
-    expect(codes).not.toContain('XB_MAPPING_NOT_FOUND');
-    // Verify the mapping was auto-created
-    expect(fixture.states[0].xBridgesModel!.mappings).toEqual(
+
+    const result = buildSemanticModel(fixture);
+    expect(result.diagnostics.map(d => d.code)).not.toContain('XB_MAPPING_NOT_FOUND');
+    // Verify the mapping was auto-created on semantic IR
+    expect(result.ir!.states.a.xBridges!.mappings).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ smVarId: 'unbound_var', blockId: 'out1' }),
+        expect.objectContaining({ sourceVariableId: 'unbound_var', blockId: 'out1' }),
       ]),
     );
   });
+
 });

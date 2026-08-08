@@ -18,7 +18,8 @@ export interface PipelineReport {
 
 export function runVerificationPipeline(ir: SemanticModel, vectors?: SMVerificationVector[]): PipelineReport {
   const testVectors = vectors || [{ tick: 1, deltaMs: 100, inputs: {}, events: [] }];
-  const artifacts = generateCArtifacts(ir, { includeHostHarness: true });
+  const artifacts = generateCArtifacts(ir, { includeHostHarness: true, vectorCount: testVectors.length });
+
   const traceReport = generateTraceabilityReport(ir, artifacts.files);
   const referenceTrace = runReferenceInterpreter(ir, testVectors);
 
@@ -39,7 +40,8 @@ export function runVerificationPipeline(ir: SemanticModel, vectors?: SMVerificat
     const execPath = join(workspace.directory, 'sm_host.exe');
     
     // Attempt host GCC compilation
-    execFileSync('gcc', ['-std=c99', '-Wall', '-Wextra', '-Wshadow', '-Werror', '-I.', ...sourceFiles, '-o', execPath], { cwd: workspace.directory });
+    execFileSync('gcc', ['-std=c99', '-Wall', '-Wextra', '-Wshadow', '-Werror', '-I.', ...sourceFiles, '-lm', '-o', execPath], { cwd: workspace.directory });
+
     hostCompileStatus = 'PASS';
 
     // Execute compiled C binary and capture JSONL trace
@@ -47,7 +49,8 @@ export function runVerificationPipeline(ir: SemanticModel, vectors?: SMVerificat
     const lines = output.trim().split('\n');
     generatedTrace = lines.filter(l => l.trim().startsWith('{')).map(l => JSON.parse(l));
     runtimeStatus = 'PASS';
-  } catch (err) {
+  } catch (err: any) {
+    console.error('PIPELINE GCC COMPILE ERROR:', err?.stderr ? err.stderr.toString() : String(err));
     if (hostCompileStatus === 'PASS') {
       runtimeStatus = 'FAIL';
     } else {
@@ -55,6 +58,7 @@ export function runVerificationPipeline(ir: SemanticModel, vectors?: SMVerificat
       runtimeStatus = 'BLOCKED';
     }
   }
+
 
   const diffResult = (hostCompileStatus === 'PASS' && runtimeStatus === 'PASS')
     ? compareTraces(referenceTrace, generatedTrace, { modelHash: ir.modelHash || '000', vectors: testVectors })

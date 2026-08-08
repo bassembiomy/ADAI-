@@ -53,10 +53,17 @@ export function runReferenceInterpreter(
       Object.assign(variables, vec.inputs);
     }
 
-    // Milestone 7C: Evaluate transition guards and priority
+    const evaluateCondition = (cond: string | undefined): boolean => {
+      if (!cond || cond === 'true') return true;
+      if (cond === 'false') return false;
+      const val = variables[cond];
+      return Boolean(val);
+    };
+
     const enabledTransitions = Object.values(ir.transitions)
-      .filter(t => t.sourceStateId === activeStateId)
+      .filter(t => t.sourceStateId === activeStateId && evaluateCondition(t.guardSource))
       .sort((a, b) => a.priority - b.priority);
+
 
     const selectedTransition = enabledTransitions.length > 0 ? enabledTransitions[0] : null;
 
@@ -80,8 +87,10 @@ export function runReferenceInterpreter(
           const val = stateTimerMs < thresholdMs ? initialVal : finalVal;
 
           for (const m of currentState.xBridges.mappings) {
-            variables[m.smVarId] = val;
+            const varName = m.variable.modelName;
+            variables[varName] = val;
           }
+
         }
       }
     }

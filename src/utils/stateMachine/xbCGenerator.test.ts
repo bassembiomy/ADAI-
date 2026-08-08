@@ -20,6 +20,8 @@ import {
 import { createXBRuntime, stepXBState } from './xbInterpreter';
 import { generateCArtifacts } from './smCGenerator';
 import { flatOrFixture, hybridXBridgesFixture } from './smFixtures';
+import { compileGeneratedCSyntax } from './smCHarness';
+
 
 import type { StateMachineModelV4 } from './smModel';
 import { buildSemanticModel } from './smSemanticBuilder';
@@ -2869,7 +2871,11 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(coreSource).not.toContain('state_timers[0U]');
     expect(coreSource).toContain('instance->data.xb6_step_output');
     expect(coreSource).not.toContain('xb6_step_output_0001');
+
+    const check = compileGeneratedCSyntax(artifacts);
+    expect(check.success).toBe(true);
+    expect(check.errors).toEqual([]);
   });
 
-
 });
+
