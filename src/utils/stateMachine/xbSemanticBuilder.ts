@@ -1,7 +1,8 @@
 import { getXBBlockCapability } from './xbCapabilities';
 import type { ModelDiagnostic } from './smModel';
-import type { SemanticVariable } from './smSemanticModel';
+import type { SemanticVariable, SemanticVariableSymbol, XBOwnerState } from './smSemanticModel';
 import type {
+  XBMappingV1,
   XBNodeV1,
   XBParameterValue,
   XBTargetCapabilities,
@@ -1218,15 +1219,17 @@ export const buildXBSemanticModel = (
     }
 
 
+  const effectiveMappings: XBMappingV1[] = [...input.model.mappings];
+  for (const node of sortedNodes) {
     if (node.type === 'Outport' && node.parameters?.smVarId) {
       const smVarId = String(node.parameters.smVarId);
-      const mapped = input.model.mappings.filter((m) => m.smVarId === smVarId && m.blockId === node.id);
+      const mapped = effectiveMappings.filter((m) => m.smVarId === smVarId && m.blockId === node.id);
       if (mapped.length === 0) {
         // Auto-repair: create the missing mapping entry (APP-XB-MAP-001)
         const defaultPortId = (portsByNode.get(node.id) ?? []).find(p => p.direction === 'input')?.id
           ?? (portsByNode.get(node.id) ?? [])[0]?.id
           ?? 'in';
-        input.model.mappings.push({
+        effectiveMappings.push({
           smVarId,
           blockId: node.id,
           portId: defaultPortId,
@@ -1284,7 +1287,7 @@ export const buildXBSemanticModel = (
     numericIndex: 0,
   };
 
-  const rawMappings = [...input.model.mappings].sort((left, right) =>
+  const rawMappings = effectiveMappings.sort((left, right) =>
     compareStable(left.blockId, right.blockId)
     || compareStable(left.portId, right.portId)
     || compareStable(left.direction, right.direction)
