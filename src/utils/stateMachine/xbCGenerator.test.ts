@@ -2788,7 +2788,7 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
       },
       mappings: [], solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 }, policy: { memory: 'retain', numericFault: 'escalate' },
     };
-    const artifacts = generateCArtifacts(ir);
+    const artifacts = generateCArtifacts(ir, { includeTestShims: true });
     const allSource = artifacts.files.map((f) => f.content).join('\n');
 
     expect(allSource).not.toContain('malloc');
