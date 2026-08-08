@@ -1665,7 +1665,7 @@ export function verifyGeneratedCStructure(
     const structMatch = /typedef\s+struct\s*\{([\s\S]*?)\}\s*SM_Data_t;/m.exec(headerFile.content);
     if (structMatch) {
       const structBody = structMatch[1];
-      const memberRegex = /([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*\[[^\]]+\])*\s*;/g;
+      const memberRegex = /\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*\[[^\]]+\])*\s*;/g;
       let match: RegExpExecArray | null;
       while ((match = memberRegex.exec(structBody)) !== null) {
         declaredMembers.add(match[1]);
@@ -1675,7 +1675,7 @@ export function verifyGeneratedCStructure(
 
   const usedMembers = new Set<string>();
   const undeclaredMembers = new Set<string>();
-  const dataAccessRegex = /instance->data\.([a-zA-Z_][a-zA-Z0-9_]*)/g;
+  const dataAccessRegex = /[a-zA-Z_][a-zA-Z0-9_]*->data\.([a-zA-Z_][a-zA-Z0-9_]*)/g;
 
   for (const file of files) {
     if (!file.name.endsWith('.c') && !file.name.endsWith('.h')) continue;
@@ -1683,7 +1683,7 @@ export function verifyGeneratedCStructure(
     while ((match = dataAccessRegex.exec(file.content)) !== null) {
       const member = match[1];
       usedMembers.add(member);
-      if (headerFile && declaredMembers.size > 0 && !declaredMembers.has(member)) {
+      if (headerFile && !declaredMembers.has(member)) {
         undeclaredMembers.add(member);
       }
     }

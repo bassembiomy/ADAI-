@@ -963,24 +963,34 @@ describe('buildSemanticModel', () => {
 
   it('auto-repairs missing mapping when Outport smVarId is not bound in xBridgesModel.mappings (APP-XB-MAP-001)', () => {
     const fixture = flatOrFixture();
+    fixture.variables.push({ id: 'unbound_var', name: 'unbound_var', type: 'double', initialValue: '0', currentValue: 0, visibleInScope: true });
     fixture.states[0].isXBridges = true;
     fixture.states[0].xBridgesModel = {
       nodes: [
+        {
+          id: 'c1',
+          type: 'Constant',
+          parameters: { value: 1.0 },
+          inputs: [],
+          outputs: [{ id: 'out', direction: 'output' }],
+        },
         {
           id: 'out1',
           type: 'Outport',
           parameters: { smVarId: 'unbound_var' },
           inputs: [{ id: 'in', direction: 'input' }],
-          outputs: [{ id: 'out', direction: 'output' }],
+          outputs: [],
         },
       ],
-      edges: [],
+      edges: [
+        { id: 'e1', sourceNodeId: 'c1', sourcePortId: 'out', targetNodeId: 'out1', targetPortId: 'in' },
+      ],
       mappings: [],
     };
 
     const result = buildSemanticModel(fixture);
     expect(result.diagnostics.map(d => d.code)).not.toContain('XB_MAPPING_NOT_FOUND');
-    // Verify the mapping was auto-created on semantic IR
+    expect(result.ir).toBeDefined();
     expect(result.ir!.states.a.xBridges!.mappings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ sourceVariableId: 'unbound_var', blockId: 'out1' }),

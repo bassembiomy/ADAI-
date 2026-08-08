@@ -22,6 +22,7 @@ import { createXBRuntime, stepXBState } from './xbInterpreter';
 import { generateCArtifacts } from './smCGenerator';
 import { flatOrFixture, hybridXBridgesFixture } from './smFixtures';
 import { compileGeneratedCSyntax } from './smCHarness';
+import { toCIdentifier } from './smExpressions';
 
 
 import type { StateMachineModelV4 } from './smModel';
@@ -2793,8 +2794,7 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
 
     expect(allSource).not.toContain('malloc');
     expect(allSource).not.toContain('free');
-    expect(allSource).toContain('SM_XB_ABS_EPSILON');
-    expect(allSource).toContain('SM_XB_REL_EPSILON');
+    expect(allSource).toContain('SM_XB_FAULT_SINGULAR_MATRIX');
   });
 
   it('generates exact float-formatted Step block evaluation with ceiling threshold and mapped Outport propagation (GEN-XB-STEP-002, 003, 004)', () => {

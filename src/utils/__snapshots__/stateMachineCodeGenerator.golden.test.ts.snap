@@ -215,12 +215,15 @@ static bool SM_Execute_Layer_0(ADIA_Instance_t *instance)
     }
 }
 
+/* TRACE-BEGIN: traceId=TRACE-STATE-ORDINARY symbol=SM_ST_ORDINARY */
 static bool SM_Execute_State_1(ADIA_Instance_t *instance)
 {
     SM_ST_ORDINARY_During(instance);
     return false;
 }
+/* TRACE-END: traceId=TRACE-STATE-ORDINARY */
 
+/* TRACE-BEGIN: traceId=TRACE-STATE-CONTROLLER symbol=SM_ST_CONTROLLER */
 static bool SM_Execute_State_2(ADIA_Instance_t *instance)
 {
     SM_ST_CONTROLLER_During(instance);
@@ -231,6 +234,7 @@ static bool SM_Execute_State_2(ADIA_Instance_t *instance)
     SM_TraceAction(instance, "xbridges:CONTROLLER");
     return false;
 }
+/* TRACE-END: traceId=TRACE-STATE-CONTROLLER */
 
 static void SM_Exit_All(ADIA_Instance_t *instance)
 {
@@ -971,8 +975,10 @@ static bool SM_Execute_Layer_0(ADIA_Instance_t *instance)
     }
 }
 
+/* TRACE-BEGIN: traceId=TRACE-STATE-S1 symbol=SM_ST_S1 */
 static bool SM_Execute_State_1(ADIA_Instance_t *instance)
 {
+    /* TRACE-BEGIN: traceId=TRACE-TRANS-T1 symbol=sm_trans_t1 */
     if (instance->state_timers[SM_ST_S1_IDX] >= 20U) {
         SM_Exit_State(instance, SM_ST_S1, true);
         instance->state_active[SM_ST_S2_IDX] = true;
@@ -981,15 +987,19 @@ static bool SM_Execute_State_1(ADIA_Instance_t *instance)
         SM_ST_S2_Entry(instance);
         return true;
     }
+    /* TRACE-END: traceId=TRACE-TRANS-T1 */
     SM_ST_S1_During(instance);
     return false;
 }
+/* TRACE-END: traceId=TRACE-STATE-S1 */
 
+/* TRACE-BEGIN: traceId=TRACE-STATE-S2 symbol=SM_ST_S2 */
 static bool SM_Execute_State_2(ADIA_Instance_t *instance)
 {
     SM_ST_S2_During(instance);
     return false;
 }
+/* TRACE-END: traceId=TRACE-STATE-S2 */
 
 static void SM_Exit_All(ADIA_Instance_t *instance)
 {
@@ -1509,9 +1519,9 @@ Evidence labels describe only the checks actually recorded for this generated pa
 | Metric | Value |
 |---|---:|
 | Files measured | 8 |
-| Total lines | 674 |
+| Total lines | 680 |
 | Functional lines | 595 |
-| Comment/blank density | 11.7% |
+| Comment/blank density | 12.5% |
 
 ## X-Bridges static code-generation metrics
 

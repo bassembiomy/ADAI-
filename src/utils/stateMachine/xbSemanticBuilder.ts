@@ -927,6 +927,26 @@ export const buildXBSemanticModel = (
   const portsByNode = new Map(
     input.model.nodes.map((node) => [node.id, portsForNode(node)]),
   );
+
+  const effectiveMappings: XBMappingV1[] = [...input.model.mappings];
+  for (const node of input.model.nodes) {
+    if (node.type === 'Outport' && node.parameters?.smVarId) {
+      const smVarId = String(node.parameters.smVarId);
+      const mapped = effectiveMappings.filter((m) => m.smVarId === smVarId && m.blockId === node.id);
+      if (mapped.length === 0) {
+        const ports = portsByNode.get(node.id) ?? [];
+        const defaultPortId = ports.find((p) => p.direction === 'input')?.id
+          ?? ports[0]?.id
+          ?? 'in';
+        effectiveMappings.push({
+          smVarId,
+          blockId: node.id,
+          portId: defaultPortId,
+          direction: 'out',
+        });
+      }
+    }
+  }
   const sourceByInputSignalId = new Map<string, string>();
   for (const edge of input.model.edges) {
     const inputSignalId = `${edge.targetNodeId}:${edge.targetPortId}`;
@@ -1129,7 +1149,6 @@ export const buildXBSemanticModel = (
     return [...inputs];
   };
 
-  const effectiveMappings: XBMappingV1[] = [...input.model.mappings];
   const operations: Record<string, XBSemanticOperation> = {};
   for (const nodeId of executionOrder) {
     const node = nodeById.get(nodeId)!;
