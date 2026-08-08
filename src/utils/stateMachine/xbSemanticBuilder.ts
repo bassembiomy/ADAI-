@@ -1313,6 +1313,7 @@ export const buildXBSemanticModel = (
     mappings.push({
       sourceVariableId: mapping.smVarId,
       variable: symbolToUse,
+      variableId: mapping.smVarId,
       signalId,
       blockId: mapping.blockId,
       portId: mapping.portId,

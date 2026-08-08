@@ -10,6 +10,7 @@ import type {
 export interface XBSemanticMapping {
   readonly sourceVariableId: string;
   readonly variable: SemanticVariableSymbol;
+  readonly variableId: string;
   readonly signalId: string;
   readonly blockId: string;
   readonly portId: string;

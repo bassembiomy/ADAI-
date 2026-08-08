@@ -1661,15 +1661,16 @@ export const stepXBState = (
   }
   for (const mapping of runtime.ir.mappings) {
     if (mapping.direction !== 'in') continue;
-    if (!Object.prototype.hasOwnProperty.call(data, mapping.variableId)) {
+    const varId = mapping.variableId ?? mapping.sourceVariableId ?? mapping.variable?.id;
+    if (!Object.prototype.hasOwnProperty.call(data, varId)) {
       throw new Error(
-        `X-Bridges input mapping variable '${mapping.variableId}' is absent`,
+        `X-Bridges input mapping variable '${varId}' is absent`,
       );
     }
     writeSignal(
       runtime,
       mapping.signalId,
-      [data[mapping.variableId]],
+      [data[varId]],
       faults,
     );
   }
@@ -1680,14 +1681,15 @@ export const stepXBState = (
 
   for (const mapping of runtime.ir.mappings) {
     if (mapping.direction !== 'out') continue;
+    const varId = mapping.variableId ?? mapping.sourceVariableId ?? mapping.variable?.id;
     const values = signalValues(runtime, mapping.signalId);
     if (values.length !== 1) {
       throw new Error(
-        `X-Bridges state-machine output mapping '${mapping.variableId}' `
+        `X-Bridges state-machine output mapping '${varId}' `
           + 'must be scalar',
       );
     }
-    data[mapping.variableId] = convertValue(
+    data[varId] = convertValue(
       values[0],
       mapping.numericType,
       faults,
