@@ -1129,6 +1129,7 @@ export const buildXBSemanticModel = (
     return [...inputs];
   };
 
+  const effectiveMappings: XBMappingV1[] = [...input.model.mappings];
   const operations: Record<string, XBSemanticOperation> = {};
   for (const nodeId of executionOrder) {
     const node = nodeById.get(nodeId)!;
@@ -1218,9 +1219,6 @@ export const buildXBSemanticModel = (
       }
     }
 
-
-  const effectiveMappings: XBMappingV1[] = [...input.model.mappings];
-  for (const node of sortedNodes) {
     if (node.type === 'Outport' && node.parameters?.smVarId) {
       const smVarId = String(node.parameters.smVarId);
       const mapped = effectiveMappings.filter((m) => m.smVarId === smVarId && m.blockId === node.id);

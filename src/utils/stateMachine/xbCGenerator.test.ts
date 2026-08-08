@@ -4,8 +4,9 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import { createGeneratedCodeTestWorkspace } from '../generatedCodeTestWorkspace';
-import type { SemanticModel } from './smSemanticModel';
+import type { SemanticModel, XBOwnerState } from './smSemanticModel';
 import type {
+  XBSemanticMapping,
   XBSemanticModel,
   XBSemanticOperation,
   XBSemanticSignal,
@@ -317,7 +318,9 @@ const continuousSolverModel = (
     twice: { id: 'twice', name: 'twice', cName: 'twice', type: 'double', initialValue: 0 },
   };
   ir.states.controller.xBridges = {
+    ownerState: defaultOwnerState(),
     stateId: 'controller',
+
     executionOrder: ['delay', 'integrator', 'negative', 'derivative', 'downstream'],
     operations: { delay, integrator, negative, derivative, downstream },
     signals: {
@@ -1037,7 +1040,9 @@ describe('X-Bridges C99 static storage', () => {
     const direct = (id: string, type: string, inputs: string[], outputs: string[]): XBSemanticOperation =>
       scalarOperation(id, type, inputs, outputs);
     ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
       stateId: 'controller', executionOrder: ['pid', 'tf', 'ss'],
+
       operations: {
         pid: { ...pid, parameters: { Kp: 1.2, Ki: 4, Kd: 0.25, N: 5, mode: 'PID', method: 'trapezoidal', min: -1, max: 1, sampleTime: 0.1 } },
         tf: { ...tf, parameters: publicTf.params },
@@ -2110,7 +2115,9 @@ describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
       'downstream', 'GAIN', ['downstream:u'], ['downstream:y'], { gain: 1 },
     );
     ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
       stateId: 'controller',
+
       executionOrder: ['convert', 'downstream'],
       operations: { convert, downstream },
       signals: {
