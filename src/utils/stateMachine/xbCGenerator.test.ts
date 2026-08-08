@@ -102,8 +102,48 @@ const fixed16Q8: XBFixedType = {
   fractionLength: 8,
 };
 
-const xbModel = (): XBSemanticModel => ({
-  stateId: 'controller',
+const defaultOwnerState = (stateId = 'controller'): XBOwnerState => ({
+  stateId,
+  stateName: stateId,
+  cIndexSymbol: `SM_ST_${toCIdentifier(stateId).toUpperCase()}_IDX`,
+  numericIndex: 1,
+});
+
+const mapping = (
+  variableId: string,
+  signalId: string,
+  blockId: string,
+  portId: string,
+  direction: 'in' | 'out',
+  numericType: XBNumericType,
+): XBSemanticMapping => ({
+  variableId,
+  signalId,
+  blockId,
+  portId,
+  direction,
+  numericType,
+  sourceVariableId: variableId,
+  variable: {
+    id: variableId,
+    modelName: variableId,
+    cIdentifier: toCIdentifier(variableId),
+    semanticType: numericType.kind === 'float64'
+      ? 'float64'
+      : numericType.kind === 'float32'
+        ? 'float32'
+        : numericType.kind === 'boolean'
+          ? 'boolean'
+          : numericType.kind === 'fixed'
+            ? (numericType.wordLength === 8 ? 'int8' : numericType.wordLength === 16 ? 'int16' : 'int32')
+            : 'float64',
+    cType: numericType.kind === 'float32' ? 'float' : numericType.kind === 'boolean' ? 'bool' : 'double',
+  },
+});
+
+const xbModel = (ownerState = defaultOwnerState()): XBSemanticModel => ({
+  ownerState,
+  stateId: ownerState.stateId,
   executionOrder: ['gain', 'quantize'],
   operations: {
     gain: operation('gain'),
@@ -133,11 +173,12 @@ const xbModel = (): XBSemanticModel => ({
   policy: { memory: 'reset', numericFault: 'escalate' },
 });
 
-const semanticModel = (): SemanticModel => ({
+const semanticModel = (ownerState = defaultOwnerState()): SemanticModel => ({
   tickMs: 10,
   safetyMode: false,
   safeStateId: null,
   rootLayerId: 'root',
+  traceableElements: [],
   states: {
     controller: {
       id: 'controller',
@@ -159,7 +200,7 @@ const semanticModel = (): SemanticModel => ({
       entryActions: [],
       duringActions: [],
       exitActions: [],
-      xBridges: xbModel(),
+      xBridges: xbModel(ownerState),
     },
   },
   layers: {
@@ -183,6 +224,7 @@ const semanticModel = (): SemanticModel => ({
   ioMappings: [],
   activeSlotCount: 1,
 });
+
 
 const scalarInputSignal = (
   id: string,
@@ -292,19 +334,13 @@ const continuousSolverModel = (
       'downstream:u': scalarInputSignal('downstream:u', 'integrator:y', float64),
       'downstream:y': signal('downstream:y', float64),
     },
-    mappings: [{
-      variableId: 'u', signalId: 'input:y', blockId: 'input', portId: 'y',
-      direction: 'in', numericType: float64,
-    }, {
-      variableId: 'x', signalId: 'integrator:y', blockId: 'integrator', portId: 'y',
-      direction: 'out', numericType: float64,
-    }, {
-      variableId: 'd', signalId: 'delay:y', blockId: 'delay', portId: 'y',
-      direction: 'out', numericType: float64,
-    }, {
-      variableId: 'twice', signalId: 'downstream:y', blockId: 'downstream', portId: 'y',
-      direction: 'out', numericType: float64,
-    }],
+    mappings: [
+      mapping('u', 'input:y', 'input', 'y', 'in', float64),
+      mapping('x', 'integrator:y', 'integrator', 'y', 'out', float64),
+      mapping('d', 'delay:y', 'delay', 'y', 'out', float64),
+      mapping('twice', 'downstream:y', 'downstream', 'y', 'out', float64),
+    ],
+
     solver: { kind, stepSeconds: 0.002, substepsPerTick: 5 },
     policy: { memory: 'reset', numericFault: 'escalate' },
   };
@@ -562,55 +598,22 @@ const combinationalSemanticModel = (): SemanticModel => {
     },
   };
   ir.states.controller.xBridges = {
+    ownerState: defaultOwnerState(),
     stateId: 'controller',
     executionOrder: operations.map(({ id }) => id),
     operations: Object.fromEntries(operations.map((entry) => [entry.id, entry])),
     signals,
     mappings: [
-      {
-        variableId: 'u',
-        signalId: 'input:u',
-        blockId: 'input',
-        portId: 'u',
-        direction: 'in',
-        numericType: float32,
-      },
-      {
-        variableId: 'y',
-        signalId: 'output:y',
-        blockId: 'output',
-        portId: 'y',
-        direction: 'out',
-        numericType: float32,
-      },
-      {
-        variableId: 'bits',
-        signalId: 'shift-left:y',
-        blockId: 'shift-left',
-        portId: 'y',
-        direction: 'out',
-        numericType: int32,
-      },
-      {
-        variableId: 'flag',
-        signalId: 'logical-xor:y',
-        blockId: 'logical-xor',
-        portId: 'y',
-        direction: 'out',
-        numericType: booleanType,
-      },
-      {
-        variableId: 'error',
-        signalId: 'convert:e',
-        blockId: 'convert',
-        portId: 'e',
-        direction: 'out',
-        numericType: float32,
-      },
+      mapping('u', 'input:u', 'input', 'u', 'in', float32),
+      mapping('y', 'output:y', 'output', 'y', 'out', float32),
+      mapping('bits', 'shift-left:y', 'shift-left', 'y', 'out', int32),
+      mapping('flag', 'logical-xor:y', 'logical-xor', 'y', 'out', booleanType),
+      mapping('error', 'convert:e', 'convert', 'e', 'out', float32),
     ],
     solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
     policy: { memory: 'reset', numericFault: 'escalate' },
   };
+
   return ir;
 };
 
@@ -683,47 +686,21 @@ const signalOnlyNonFiniteModel = (): SemanticModel => {
     },
   };
   ir.states.controller.xBridges = {
+    ownerState: defaultOwnerState(),
     stateId: 'controller',
     executionOrder: operations.map(({ id }) => id),
     operations: Object.fromEntries(operations.map((entry) => [entry.id, entry])),
     signals,
     mappings: [
-      {
-        variableId: 'u',
-        signalId: 'input:y',
-        blockId: 'input',
-        portId: 'y',
-        direction: 'in',
-        numericType: float64,
-      },
-      {
-        variableId: 'fixed',
-        signalId: 'convert:y',
-        blockId: 'convert',
-        portId: 'y',
-        direction: 'out',
-        numericType: float64,
-      },
-      {
-        variableId: 'doubled',
-        signalId: 'gain:y',
-        blockId: 'gain',
-        portId: 'y',
-        direction: 'out',
-        numericType: float64,
-      },
-      {
-        variableId: 'truth',
-        signalId: 'and:y',
-        blockId: 'and',
-        portId: 'y',
-        direction: 'out',
-        numericType: booleanType,
-      },
+      mapping('u', 'input:y', 'input', 'y', 'in', float64),
+      mapping('fixed', 'convert:y', 'convert', 'y', 'out', float64),
+      mapping('doubled', 'gain:y', 'gain', 'y', 'out', float64),
+      mapping('truth', 'and:y', 'and', 'y', 'out', booleanType),
     ],
     solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
     policy: { memory: 'reset', numericFault: 'signal-only' },
   };
+
   return ir;
 };
 
@@ -799,27 +776,14 @@ const truthSemanticModel = (): SemanticModel => {
     ])),
   };
   ir.states.controller.xBridges = {
+    ownerState: defaultOwnerState(),
     stateId: 'controller',
     executionOrder: operations.map(({ id }) => id),
     operations: Object.fromEntries(operations.map((entry) => [entry.id, entry])),
     signals,
     mappings: [
-      {
-        variableId: 'u',
-        signalId: 'input:y',
-        blockId: 'input',
-        portId: 'y',
-        direction: 'in',
-        numericType: float64,
-      },
-      ...outputIds.map((id) => ({
-        variableId: id,
-        signalId: `${id}:y`,
-        blockId: id,
-        portId: 'y',
-        direction: 'out' as const,
-        numericType: booleanType,
-      })),
+      mapping('u', 'input:y', 'input', 'y', 'in', float64),
+      ...outputIds.map((id) => mapping(id, `${id}:y`, id, 'y', 'out', booleanType)),
     ],
     solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
     policy: { memory: 'reset', numericFault: 'signal-only' },
@@ -852,6 +816,7 @@ const booleanConversionModel = (
     e: { id: 'e', name: 'e', cName: 'e', type: 'double', initialValue: 0 },
   };
   ir.states.controller.xBridges = {
+    ownerState: defaultOwnerState(),
     stateId: 'controller',
     executionOrder: ['convert'],
     operations: { convert },
@@ -864,34 +829,14 @@ const booleanConversionModel = (
       'convert:e': signal('convert:e', float64),
     },
     mappings: [
-      {
-        variableId: 'u',
-        signalId: 'convert:u',
-        blockId: 'convert',
-        portId: 'u',
-        direction: 'in',
-        numericType: float64,
-      },
-      {
-        variableId: 'y',
-        signalId: 'convert:y',
-        blockId: 'convert',
-        portId: 'y',
-        direction: 'out',
-        numericType: booleanType,
-      },
-      {
-        variableId: 'e',
-        signalId: 'convert:e',
-        blockId: 'convert',
-        portId: 'e',
-        direction: 'out',
-        numericType: float64,
-      },
+      mapping('u', 'convert:u', 'convert', 'u', 'in', float64),
+      mapping('y', 'convert:y', 'convert', 'y', 'out', booleanType),
+      mapping('e', 'convert:e', 'convert', 'e', 'out', float64),
     ],
     solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
     policy: { memory: 'reset', numericFault: 'signal-only' },
   };
+
   return ir;
 };
 
@@ -942,6 +887,7 @@ const reinterpretationParityModel = (): SemanticModel => {
     e: { id: 'e', name: 'e', cName: 'e', type: 'double', initialValue: 0 },
   };
   ir.states.controller.xBridges = {
+    ownerState: defaultOwnerState(),
     stateId: 'controller',
     executionOrder: ['quantize', 'reinterpret'],
     operations: { quantize, reinterpret },
@@ -960,30 +906,9 @@ const reinterpretationParityModel = (): SemanticModel => {
       'reinterpret:e': signal('reinterpret:e', float64),
     },
     mappings: [
-      {
-        variableId: 'u',
-        signalId: 'quantize:u',
-        blockId: 'quantize',
-        portId: 'u',
-        direction: 'in',
-        numericType: float64,
-      },
-      {
-        variableId: 'y',
-        signalId: 'reinterpret:y',
-        blockId: 'reinterpret',
-        portId: 'y',
-        direction: 'out',
-        numericType: float64,
-      },
-      {
-        variableId: 'e',
-        signalId: 'reinterpret:e',
-        blockId: 'reinterpret',
-        portId: 'e',
-        direction: 'out',
-        numericType: float64,
-      },
+      mapping('u', 'quantize:u', 'quantize', 'u', 'in', float64),
+      mapping('y', 'reinterpret:y', 'reinterpret', 'y', 'out', float64),
+      mapping('e', 'reinterpret:e', 'reinterpret', 'e', 'out', float64),
     ],
     solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
     policy: { memory: 'reset', numericFault: 'signal-only' },
@@ -1005,6 +930,7 @@ describe('X-Bridges C99 static storage', () => {
       ...scalarOperation(id, type, inputSignalIds, outputSignalIds, parameters),
     });
     ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
       stateId: 'controller', executionOrder: ['add', 'subtract', 'multiply', 'divide', 'mul', 'transpose', 'concat', 'diag', 'sub', 'solve', 'singular'],
       operations: {
         add: matrixOperation('add', 'VectorAdd', ['add:a', 'add:b'], ['add:y']),
@@ -1035,6 +961,7 @@ describe('X-Bridges C99 static storage', () => {
       },
       mappings: [], solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 }, policy: { memory: 'retain', numericFault: 'escalate' },
     };
+
     const runtime = createXBRuntime(ir.states.controller.xBridges!);
     Object.assign(runtime.signals, {
       'add:a': [1, 2, 3], 'add:b': [4, -2, 0.5],
@@ -1165,7 +1092,9 @@ describe('X-Bridges C99 static storage', () => {
     const names = ['clarke:ia', 'clarke:ib', 'clarke:ic', 'clarke:alpha', 'clarke:beta', 'park:alpha', 'park:beta', 'park:theta', 'park:d', 'park:q', 'inversePark:d', 'inversePark:q', 'inversePark:theta', 'inversePark:alpha', 'inversePark:beta', 'inverseClarke:alpha', 'inverseClarke:beta', 'inverseClarke:a', 'inverseClarke:b', 'inverseClarke:c'];
     const direct = (id: string, type: string, inputSignalIds: string[], outputSignalIds: string[]) => scalarOperation(id, type, inputSignalIds, outputSignalIds);
     ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
       stateId: 'controller', executionOrder: ['clarke', 'park', 'inversePark', 'inverseClarke'],
+
       operations: {
         clarke: direct('clarke', 'CLARKE_TRANSFORM', ['clarke:ia', 'clarke:ib', 'clarke:ic'], ['clarke:alpha', 'clarke:beta']),
         park: direct('park', 'PARK_TRANSFORM', ['park:alpha', 'park:beta', 'park:theta'], ['park:d', 'park:q']),
@@ -1194,7 +1123,8 @@ describe('X-Bridges C99 static storage', () => {
     const ir = semanticModel(); const vector9 = { kind: 'vector', length: 9 } as const;
     const identity = Array.from({ length: 9 }, (_, row) => Array.from({ length: 9 }, (_, column) => row === column ? 1 : 0));
     const ss: XBSemanticOperation = { ...scalarOperation('ss9', 'STATE_SPACE', ['ss9:u'], ['ss9:y', 'ss9:x']), directFeedthrough: false, stateful: true, parameters: { A: identity, B: identity, C: [Array(9).fill(1)], D: [Array(9).fill(1)], representation: 'discrete' }, state: { outputPhase: 'read-before-update', updatePhase: 'after-direct-feedthrough', slots: [{ id: 'ss9:x$state', role: 'x', signalId: 'ss9:x', numericType: { kind: 'float64' }, shape: vector9, initialValues: [1,2,3,4,5,6,7,8,9] }] }, schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' } };
-    ir.states.controller.xBridges = { stateId: 'controller', executionOrder: ['ss9'], operations: { ss9: ss }, signals: { 'ss9:u': { ...signal('ss9:u', { kind: 'float64' }, vector9), direction: 'input' }, 'ss9:y': signal('ss9:y', { kind: 'float64' }, { kind: 'vector', length: 1 }), 'ss9:x': signal('ss9:x', { kind: 'float64' }, vector9) }, mappings: [], solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 }, policy: { memory: 'retain', numericFault: 'escalate' } };
+    ir.states.controller.xBridges = { ownerState: defaultOwnerState(), stateId: 'controller', executionOrder: ['ss9'], operations: { ss9: ss }, signals: { 'ss9:u': { ...signal('ss9:u', { kind: 'float64' }, vector9), direction: 'input' }, 'ss9:y': signal('ss9:y', { kind: 'float64' }, { kind: 'vector', length: 1 }), 'ss9:x': signal('ss9:x', { kind: 'float64' }, vector9) }, mappings: [], solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 }, policy: { memory: 'retain', numericFault: 'escalate' } };
+
     const runtime = createXBRuntime(ir.states.controller.xBridges!); runtime.signals['ss9:u'] = Array(9).fill(1); stepXBState(runtime, {});
     const expected = [Number(runtime.signals['ss9:y'][0]), ...runtime.signals['ss9:x'].map(Number), ...runtime.stateSlots['ss9:x$state'].map(Number)];
     const workspace = createGeneratedCodeTestWorkspace('xb-9state-c99');
@@ -2256,7 +2186,9 @@ describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
       },
     };
     ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
       stateId: 'controller',
+
       executionOrder: ['pid'],
       operations: { pid },
       signals: {
@@ -2321,7 +2253,9 @@ describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
         },
       };
       ir.states.controller.xBridges = {
+        ownerState: defaultOwnerState(),
         stateId: 'controller',
+
         executionOrder: ['integrator'],
         operations: { integrator },
         signals: {
@@ -2391,7 +2325,9 @@ describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
       },
     };
     ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
       stateId: 'controller',
+
       executionOrder: ['ss'],
       operations: { ss: stateSpace },
       signals: {
@@ -2456,7 +2392,9 @@ describe('X-Bridges fixed-point state parity', { timeout: 60_000 }, () => {
       'integrator', 'INTEGRATOR_DISCRETE', ['integrator:u'], ['integrator:y'], 4,
     );
     ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
       stateId: 'controller',
+
       executionOrder: ['source', 'unit', 'memory', 'integrator'],
       operations: { source, unit, memory, integrator },
       signals: {
@@ -2547,6 +2485,7 @@ describe('X-Bridges fixed-point state parity', { timeout: 60_000 }, () => {
     };
     const sinOp = scalarOperation('sinOp', 'SIN', ['u'], ['sin:y']);
     ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
       stateId: 'controller',
       executionOrder: ['sinOp'],
       operations: { sinOp },
@@ -2555,14 +2494,14 @@ describe('X-Bridges fixed-point state parity', { timeout: 60_000 }, () => {
         'sin:y': signal('sin:y', float32),
       },
       mappings: [
-        { variableId: 'u', signalId: 'u', blockId: 'u', portId: 'u', direction: 'in', numericType: float32 },
-        { variableId: 'sin_y', signalId: 'sin:y', blockId: 'sin', portId: 'y', direction: 'out', numericType: float32 },
+        mapping('u', 'u', 'u', 'u', 'in', float32),
+        mapping('sin_y', 'sin:y', 'sin', 'y', 'out', float32),
       ],
       solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
       policy: { memory: 'retain', numericFault: 'signal-only' },
     };
 
-    const runtime = createXBRuntime(ir.states.controller.xBridges);
+    const runtime = createXBRuntime(ir.states.controller.xBridges!);
     const inputVal = Math.PI / 6;
     const data = { u: inputVal, 'sin:y': 0, 'cos:y': 0, 'tan:y': 0 };
     stepXBState(runtime, data);
@@ -2859,7 +2798,8 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
         { smVarId: 'xb6-step-output-0001', blockId: 'XB6-StepOut', portId: 'in', direction: 'out' },
       ],
     };
-    model.variables.push({ id: 'xb6-step-output-0001', name: 'xb6_step_output', type: 'float', initialValue: '0' });
+    model.variables.push({ id: 'xb6-step-output-0001', name: 'xb6_step_output', type: 'float', initialValue: '0', currentValue: 0, visibleInScope: true });
+
 
 
 
