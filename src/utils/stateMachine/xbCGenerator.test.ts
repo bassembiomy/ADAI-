@@ -2883,4 +2883,134 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(coreSource).not.toContain('(float)((double)(instance->xb_a.XB6_StepOut_out))');
   });
 
+  it('generates vector signal array and indexed assignments for MUX and DEMUX (GEN-XB-MUX-DEMUX-VECTOR)', () => {
+    const model = flatOrFixture();
+    model.states[0].isXBridges = true;
+    model.states[0].xBridgesModel = {
+      solver: { kind: 'euler', stepSeconds: 0.001 },
+      nodes: [
+        {
+          id: 'const1',
+          type: 'Constant',
+          parameters: { value: 7 },
+          inputs: [],
+          outputs: [{ id: 'out', direction: 'output' }],
+        },
+        {
+          id: 'const2',
+          type: 'Constant',
+          parameters: { value: 9 },
+          inputs: [],
+          outputs: [{ id: 'out', direction: 'output' }],
+        },
+        {
+          id: 'mux2',
+          type: 'MUX',
+          parameters: {},
+          inputs: [{ id: 'u1', direction: 'input' }, { id: 'u2', direction: 'input' }],
+          outputs: [{ id: 'out', direction: 'output' }],
+        },
+        {
+          id: 'demux2',
+          type: 'DEMUX',
+          parameters: {},
+          inputs: [{ id: 'in', direction: 'input' }],
+          outputs: [{ id: 'out1', direction: 'output' }, { id: 'out2', direction: 'output' }],
+        },
+        {
+          id: 'outport1',
+          type: 'Outport',
+          parameters: { smVarId: 'xb6-demux-output1-0001' },
+          inputs: [{ id: 'in', direction: 'input' }],
+          outputs: [{ id: 'out', direction: 'output' }],
+        },
+        {
+          id: 'outport2',
+          type: 'Outport',
+          parameters: { smVarId: 'xb6-demux-output2-0001' },
+          inputs: [{ id: 'in', direction: 'input' }],
+          outputs: [{ id: 'out', direction: 'output' }],
+        },
+      ],
+      edges: [
+        { id: 'e1', sourceNodeId: 'const1', sourcePortId: 'out', targetNodeId: 'mux2', targetPortId: 'u1' },
+        { id: 'e2', sourceNodeId: 'const2', sourcePortId: 'out', targetNodeId: 'mux2', targetPortId: 'u2' },
+        { id: 'e3', sourceNodeId: 'mux2', sourcePortId: 'out', targetNodeId: 'demux2', targetPortId: 'in' },
+        { id: 'e4', sourceNodeId: 'demux2', sourcePortId: 'out1', targetNodeId: 'outport1', targetPortId: 'in' },
+        { id: 'e5', sourceNodeId: 'demux2', sourcePortId: 'out2', targetNodeId: 'outport2', targetPortId: 'in' },
+      ],
+      mappings: [
+        { smVarId: 'xb6-demux-output1-0001', blockId: 'outport1', portId: 'in', direction: 'out' },
+        { smVarId: 'xb6-demux-output2-0001', blockId: 'outport2', portId: 'in', direction: 'out' },
+      ],
+    };
+    model.variables.push(
+      { id: 'xb6-demux-output1-0001', name: 'xb6_demux_output1', type: 'float', initialValue: '0', currentValue: 0, visibleInScope: true },
+      { id: 'xb6-demux-output2-0001', name: 'xb6_demux_output2', type: 'float', initialValue: '0', currentValue: 0, visibleInScope: true },
+    );
+
+    const { ir } = buildSemanticModel(model);
+    expect(ir).not.toBeNull();
+    const artifacts = generateCArtifacts(ir!);
+    const headerSource = artifacts.files.find((f) => f.name === 'sm_xbridges.h')?.content ?? '';
+    const coreSource = artifacts.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
+
+    // Header must declare vector arrays float mux2_out[2]; and float demux2_in[2];
+    expect(headerSource).toMatch(/float\s+mux2_out\[2\];/i);
+    expect(headerSource).toMatch(/float\s+demux2_in\[2\];/i);
+
+    // MUX source must write with indices [0U + xb_index] and [1U + xb_index]
+    expect(coreSource).toContain('mux2_out[0U + xb_index]');
+    expect(coreSource).toContain('mux2_out[1U + xb_index]');
+
+    const check = compileGeneratedCSyntax(artifacts, true);
+    expect(check.errors).toEqual([]);
+    expect(check.success).toBe(true);
+  });
+
+  it('generates circular buffer array and index state declarations and modulo updates for DELAY(N=2)', () => {
+    const float32 = { kind: 'float32' } as const;
+    const model: SemanticModel = {
+      ...semanticModel(),
+      states: {
+        S1: {
+          id: 'S1', name: 'State1', enumName: 'SM_ST_S1', activityIndex: 0,
+          parentStateId: null, childStateIds: [], isInitial: true, isTerminal: false,
+          actions: [], transitions: [], xBridges: {
+            stateId: 'S1', ownerState: { stateId: 'S1', stateName: 'State1', cIndexSymbol: 'SM_ST_S1_IDX', numericIndex: 0 },
+            executionOrder: ['delay1'],
+            operations: {
+              delay1: {
+                id: 'delay1', type: 'DELAY', inputSignalIds: ['delay1:u'], outputSignalIds: ['delay1:y'],
+                parameters: { delay_length: 2, initial_condition: -1 }, directFeedthrough: false, stateful: true,
+                conversion: null,
+                state: {
+                  outputPhase: 'read-before-update', updatePhase: 'after-direct-feedthrough',
+                  slots: [
+                    { id: 'delay1:buffer$state', role: 'buffer', signalId: 'delay1:y', numericType: float32, shape: { kind: 'vector', length: 2 }, initialValues: [-1, -1] },
+                    { id: 'delay1:index$state', role: 'index', signalId: null, numericType: { kind: 'uint32' }, shape: { kind: 'scalar' }, initialValues: [0] },
+                  ],
+                },
+                schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'zero-order' },
+                delayParameters: { delayLength: 2, initialCondition: -1, samplePeriod: 0.1, isUnitDelay: false },
+              },
+            },
+            signals: {
+              'delay1:u': { id: 'delay1:u', nodeId: 'delay1', portId: 'u', direction: 'input', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'scalar', numericType: float32, storage: 'native' },
+              'delay1:y': { id: 'delay1:y', nodeId: 'delay1', portId: 'y', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'scalar', numericType: float32, storage: 'native' },
+            },
+            mappings: [],
+            solver: { kind: 'euler', stepSeconds: 0.1, substepsPerTick: 1 },
+            policy: { memory: 'reset', numericFault: 'report' },
+          },
+        },
+      },
+    };
+
+    const cCode = generateCCode(model);
+    expect(cCode).toContain('state_delay1_buffer$state[2];');
+    expect(cCode).toContain('uint32_t state_delay1_index$state;');
+    expect(cCode).toContain('% 2U;');
+  });
 });
+

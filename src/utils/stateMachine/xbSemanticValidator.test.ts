@@ -450,4 +450,89 @@ describe('validateXBModel', () => {
       supportsMathLibrary: true,
     })).toEqual([]);
   });
+
+  it('rejects multi-element MUX when output storage capacity is scalar (1) (XB_DIMENSION_MISMATCH)', () => {
+    const result = codes(model({
+      nodes: [
+        node('mux1', 'MUX', {
+          inputs: [port('u1', 'input'), port('u2', 'input')],
+          outputs: [port('y', 'output', { shape: 'scalar' })],
+        }),
+      ],
+    }));
+    expect(result).toContain('XB_DIMENSION_MISMATCH');
+  });
+
+  it('rejects DEMUX when input storage capacity is scalar (1) for multiple output ports (XB_DIMENSION_MISMATCH)', () => {
+    const result = codes(model({
+      nodes: [
+        node('demux1', 'DEMUX', {
+          inputs: [port('u', 'input', { shape: 'scalar' })],
+          outputs: [port('y1', 'output'), port('y2', 'output')],
+        }),
+      ],
+    }));
+    expect(result).toContain('XB_DIMENSION_MISMATCH');
+  });
+
+  it('Batch4 Vector Arithmetic Probe: accepts MUX output connected to VectorAdd inputs without scalar fallback', () => {
+    const batch4Model: XBPersistedModelV1 = {
+      schemaVersion: 1,
+      solver: { kind: 'euler', stepSeconds: 0.01 },
+      nodes: [
+        {
+          id: 'c7',
+          type: 'Constant',
+          parameters: {
+            value: 7,
+            inputs: [],
+            outputs: [{ id: 'out', dataType: 'auto' }],
+          },
+        },
+        {
+          id: 'c9',
+          type: 'Constant',
+          parameters: {
+            value: 9,
+            inputs: [],
+            outputs: [{ id: 'out', dataType: 'auto' }],
+          },
+        },
+        {
+          id: 'XB6-Mux2',
+          type: 'MUX',
+          parameters: {
+            inputs: [
+              { id: 'in1', dataType: 'auto' },
+              { id: 'in2', dataType: 'auto' },
+            ],
+            outputs: [{ id: 'out', dataType: 'auto' }],
+          },
+        },
+        {
+          id: 'XB7-VectorAdd',
+          type: 'VectorAdd',
+          parameters: {
+            inputs: [
+              { id: 'in1', dataType: 'auto' },
+              { id: 'in2', dataType: 'auto' },
+            ],
+            outputs: [{ id: 'out', dataType: 'auto' }],
+          },
+        },
+      ],
+      edges: [
+        { id: 'e1', sourceNodeId: 'c7', sourcePortId: 'out', targetNodeId: 'XB6-Mux2', targetPortId: 'in1' },
+        { id: 'e2', sourceNodeId: 'c9', sourcePortId: 'out', targetNodeId: 'XB6-Mux2', targetPortId: 'in2' },
+        { id: 'e3', sourceNodeId: 'XB6-Mux2', sourcePortId: 'out', targetNodeId: 'XB7-VectorAdd', targetPortId: 'in1' },
+        { id: 'e4', sourceNodeId: 'XB6-Mux2', sourcePortId: 'out', targetNodeId: 'XB7-VectorAdd', targetPortId: 'in2' },
+      ],
+      mappings: [],
+      policy: { memory: 'reset', numericFault: 'signal-only' },
+    };
+
+    const diagnostics = validateXBModel(batch4Model, variables, target);
+    expect(diagnostics).toEqual([]);
+  });
 });
+

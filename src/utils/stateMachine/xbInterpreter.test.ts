@@ -468,6 +468,91 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.stateSlots['delay:y$state']).toEqual([3]);
   });
 
+  it('GEN-XB-DELAY-TEST-001: executes multi-sample DELAY(N=2, IC=-1, input=7) with output sequence [-1, -1, 7, 7]', () => {
+    const float32 = { kind: 'float32' } as const;
+    const delay = {
+      id: 'delay',
+      type: 'DELAY',
+      inputSignalIds: ['delay:u'],
+      outputSignalIds: ['delay:y'],
+      parameters: { delay_length: 2, initial_condition: -1 },
+      directFeedthrough: false,
+      stateful: true,
+      conversion: null,
+      state: {
+        outputPhase: 'read-before-update' as const,
+        updatePhase: 'after-direct-feedthrough' as const,
+        slots: [
+          {
+            id: 'delay:buffer$state',
+            role: 'buffer',
+            signalId: 'delay:y',
+            numericType: float32,
+            shape: { kind: 'vector' as const, length: 2 },
+            initialValues: [-1, -1],
+          },
+          {
+            id: 'delay:index$state',
+            role: 'index',
+            signalId: null,
+            numericType: { kind: 'uint32' } as const,
+            shape: { kind: 'scalar' as const },
+            initialValues: [0],
+          },
+        ],
+      },
+      schedule: {
+        periodSubsteps: 1,
+        offsetSubsteps: 0,
+        initialCounter: 0,
+        counterIncrement: 1,
+        hold: 'zero-order' as const,
+      },
+      delayParameters: {
+        delayLength: 2,
+        initialCondition: -1,
+        samplePeriod: 0.1,
+        isUnitDelay: false,
+      },
+    } satisfies XBSemanticOperation;
+
+    const ir = {
+      stateId: 'S1',
+      executionOrder: ['delay'],
+      operations: { delay },
+      signals: {
+        'delay:u': {
+          id: 'delay:u', nodeId: 'delay', portId: 'u', direction: 'input',
+          sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [],
+          elementCount: 1, layout: 'scalar', numericType: float32, storage: 'native',
+        },
+        'delay:y': {
+          id: 'delay:y', nodeId: 'delay', portId: 'y', direction: 'output',
+          sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [],
+          elementCount: 1, layout: 'scalar', numericType: float32, storage: 'native',
+        },
+      },
+      mappings: [
+        { variableId: 'u', signalId: 'delay:u', blockId: 'delay', portId: 'u', direction: 'in', numericType: float32 },
+        { variableId: 'y', signalId: 'delay:y', blockId: 'delay', portId: 'y', direction: 'out', numericType: float32 },
+      ],
+      solver: { kind: 'euler' as const, stepSeconds: 0.1, substepsPerTick: 1 },
+      policy: { overflowMode: 'saturate', roundingMode: 'nearest', numericFault: 'report' },
+    } as unknown as XBSemanticModel;
+
+    const runtime = createXBRuntime(ir);
+    const outputs: number[] = [];
+
+    for (let k = 0; k < 4; k++) {
+      const io = { u: 7, y: 0 };
+      stepXBState(runtime, io);
+      outputs.push(io.y);
+    }
+
+    expect(outputs).toEqual([-1, -1, 7, 7]);
+  });
+
+
   it.each([
     ['euler', 'INTEGRATOR_CONTINUOUS'], ['rk4', 'INTEGRATOR_CONTINUOUS'],
     ['euler', 'Integrator'], ['rk4', 'Integrator'],

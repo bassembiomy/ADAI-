@@ -1,4 +1,5 @@
 import { getXBBlockCapability } from './xbCapabilities';
+import { resolveGraphShapes } from './xbShapeResolver';
 import type { ModelDiagnostic } from './smModel';
 import type { SemanticVariable } from './smSemanticModel';
 import type {
@@ -16,6 +17,7 @@ interface PortDescriptor {
   readonly id: string;
   readonly direction: PortDirection;
   readonly shape: PortShape;
+  readonly explicitShape?: string;
   readonly dimensions: readonly number[];
   readonly dataType: string | null;
 }
@@ -142,7 +144,8 @@ const parsePortCollection = (
               ? value.numericType.precision
               : value.numericType.kind
             : null;
-    ports.push({ id: value.id, direction, shape, dimensions, dataType });
+    const explicitShapeStr = typeof value.shape === 'string' ? value.shape : undefined;
+    ports.push({ id: value.id, direction, shape, explicitShape: explicitShapeStr, dimensions, dataType });
   });
   return ports;
 };
@@ -390,6 +393,9 @@ export const validateXBModel = (
   target: XBTargetCapabilities,
 ): ModelDiagnostic[] => {
   const diagnostics: ModelDiagnostic[] = [];
+  const shapeResult = resolveGraphShapes(model);
+  diagnostics.push(...shapeResult.diagnostics);
+
   const nodesById = new Map<string, XBNodeV1>();
   const portsByNode = new Map<string, readonly PortDescriptor[]>();
 
@@ -455,10 +461,14 @@ export const validateXBModel = (
         const allowedShapes = port.direction === 'input'
           ? capability.inputShapes ?? capability.shapes
           : capability.outputShapes ?? capability.shapes;
-        if (!allowedShapes.includes(port.shape)) {
+        const resolved = shapeResult.portShapes.get(`${node.id}:${port.id}`);
+        const effectiveShape: PortShape = (resolved && resolved.kind !== 'unresolved')
+          ? (resolved.kind as PortShape)
+          : port.shape;
+        if (!allowedShapes.includes(effectiveShape)) {
           diagnostics.push(diagnostic(
             'XB_BLOCK_NOT_CODEGEN_CAPABLE',
-            `Block '${node.id}' does not support ${port.shape} signals in embedded code.`,
+            `Block '${node.id}' does not support ${effectiveShape} signals in embedded code.`,
             node.id,
           ));
         }
@@ -485,6 +495,54 @@ export const validateXBModel = (
           `Port '${node.id}:${port.id}' requires unsupported ${numericType}.`,
           node.id,
         ));
+      }
+    }
+    if (node.type === 'MUX') {
+      const inputPorts = ports.filter((p) => p.direction === 'input');
+      const outputPort = ports.find((p) => p.direction === 'output');
+      const totalInputElements = inputPorts.reduce((sum, p) => {
+        const count = p.shape === 'scalar' ? 1 : p.dimensions.reduce((a, b) => a * b, 1);
+        return sum + count;
+      }, 0);
+      if (outputPort !== undefined) {
+        const outputStorageCapacity = outputPort.shape === 'scalar' ? 1 : outputPort.dimensions.reduce((a, b) => a * b, 1);
+        if (totalInputElements > 1 && outputPort.explicitShape === 'scalar') {
+          diagnostics.push(diagnostic(
+            'XB_DIMENSION_MISMATCH',
+            `MUX block '${node.id}' combines ${totalInputElements} input elements, but output port '${outputPort.id}' has storage capacity 1.`,
+            node.id,
+          ));
+        } else if (outputPort.dimensions.length > 0 && outputStorageCapacity !== totalInputElements) {
+          diagnostics.push(diagnostic(
+            'XB_DIMENSION_MISMATCH',
+            `MUX block '${node.id}' combines ${totalInputElements} input elements, but output port '${outputPort.id}' dimension is ${outputStorageCapacity}.`,
+            node.id,
+          ));
+        }
+      }
+    }
+    if (node.type === 'DEMUX') {
+      const inputPort = ports.find((p) => p.direction === 'input');
+      const outputPorts = ports.filter((p) => p.direction === 'output');
+      const totalOutputElements = outputPorts.reduce((sum, p) => {
+        const count = p.shape === 'scalar' ? 1 : p.dimensions.reduce((a, b) => a * b, 1);
+        return sum + count;
+      }, 0);
+      if (inputPort !== undefined) {
+        const inputStorageCapacity = inputPort.shape === 'scalar' ? 1 : inputPort.dimensions.reduce((a, b) => a * b, 1);
+        if (totalOutputElements > 1 && inputPort.explicitShape === 'scalar') {
+          diagnostics.push(diagnostic(
+            'XB_DIMENSION_MISMATCH',
+            `DEMUX block '${node.id}' input storage capacity is 1, but output ports require ${totalOutputElements} elements.`,
+            node.id,
+          ));
+        } else if (inputPort.dimensions.length > 0 && inputStorageCapacity !== totalOutputElements) {
+          diagnostics.push(diagnostic(
+            'XB_DIMENSION_MISMATCH',
+            `DEMUX block '${node.id}' input storage capacity (${inputStorageCapacity}) does not match output total elements (${totalOutputElements}).`,
+            node.id,
+          ));
+        }
       }
     }
     validateFixedAndTargetTypes(node, target, diagnostics);

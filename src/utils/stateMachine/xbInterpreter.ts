@@ -1244,6 +1244,21 @@ const writeStateOutputs = (
     }
     return;
   }
+  if (operation.type === 'DELAY' || operation.type === 'UNIT_DELAY') {
+    const bufferSlot = stateSlotForRole(operation, 'buffer');
+    const indexSlot = stateSlotForRole(operation, 'index');
+    const outputId = operation.outputSignalIds[0];
+    if (bufferSlot !== undefined && outputId !== undefined) {
+      const buffer = runtime.stateSlots[bufferSlot.id] ?? bufferSlot.initialValues;
+      const index = indexSlot ? Number((runtime.stateSlots[indexSlot.id] ?? indexSlot.initialValues)[0] ?? 0) : 0;
+      const outputSignal = runtime.ir.signals[outputId];
+      const elementCount = outputSignal ? outputSignal.elementCount : 1;
+      const start = index * elementCount;
+      const outputValues = buffer.slice(start, start + elementCount);
+      writeSignal(runtime, outputId, outputValues, faults, operation);
+      return;
+    }
+  }
   for (const slot of operation.state?.slots ?? []) {
     if (slot.signalId === null) continue;
     writeSignal(
@@ -1331,6 +1346,28 @@ const statefulUpdate = (
   }
   if (operation.type === 'WHITE_NOISE' || operation.type === 'BAND_LIMITED_NOISE' || operation.type === 'KALMAN_FILTER' || operation.type === 'EXTENDED_KALMAN_FILTER') {
     return {};
+  }
+  if (operation.type === 'DELAY' || operation.type === 'UNIT_DELAY') {
+    const bufferSlot = stateSlotForRole(operation, 'buffer');
+    const indexSlot = stateSlotForRole(operation, 'index');
+    if (bufferSlot !== undefined) {
+      const buffer = [...(runtime.stateSlots[bufferSlot.id] ?? bufferSlot.initialValues)];
+      const index = indexSlot ? Number((runtime.stateSlots[indexSlot.id] ?? indexSlot.initialValues)[0] ?? 0) : 0;
+      const inputVals = signalValues(runtime, operation.inputSignalIds[0] ?? '');
+      const elementCount = inputVals.length || 1;
+      const delayLength = operation.delayParameters?.delayLength ?? Math.max(1, Math.floor(buffer.length / elementCount));
+
+      for (let m = 0; m < elementCount; m++) {
+        buffer[index * elementCount + m] = convertValue(inputVals[m] ?? 0, bufferSlot.numericType, faults, operation);
+      }
+      const updates: Record<string, XBScalar[]> = { [bufferSlot.id]: buffer };
+
+      if (indexSlot !== undefined && delayLength > 1) {
+        const nextIndex = (index + 1) % delayLength;
+        updates[indexSlot.id] = [nextIndex];
+      }
+      return updates;
+    }
   }
   const input = signalValues(runtime, operation.inputSignalIds[0]);
   const updates: Record<string, XBScalar[]> = {};

@@ -503,6 +503,45 @@ const collisionAndOrderingFixture = (): StateMachineModelV4 => {
   return model;
 };
 
+const multiSampleDelayFixture = (): StateMachinePersistedModelV1 => {
+  const model = emptyModel();
+  const scalar = (id: string, direction: 'input' | 'output') =>
+    xbPort(id, direction, 'scalar', [], 'float32');
+  const source = traceConstant('u_source', 7, 'scalar', []);
+  const delay = {
+    id: 'delay',
+    type: 'DELAY',
+    parameters: {
+      delay_length: 2,
+      initial_condition: -1,
+      inputs: [scalar('u', 'input')],
+      outputs: [scalar('y', 'output')],
+    },
+  };
+  const outport = {
+    id: 'out_y',
+    type: 'Outport',
+    parameters: {
+      smVarId: 'delay_y',
+      inputs: [scalar('in', 'input')],
+    },
+  };
+  const controller = makeState('controller', [source, delay, outport], [
+    { id: 'src-del', sourceNodeId: 'u_source', sourcePortId: 'y', targetNodeId: 'delay', targetPortId: 'u' },
+    { id: 'del-out', sourceNodeId: 'delay', sourcePortId: 'y', targetNodeId: 'out_y', targetPortId: 'in' },
+  ]);
+  controller.xBridgesModel!.mappings = [{
+    smVarId: 'delay_y',
+    blockId: 'out_y',
+    portId: 'in',
+    direction: 'out',
+  }];
+  model.states = [controller];
+  model.layers[0].stateIds = ['controller'];
+  model.variables = [{ id: 'delay_y', name: 'delay_y', type: 'float', initialValue: '-1', currentValue: -1, visibleInScope: true }];
+  return model;
+};
+
 describe('X-Bridges numeric fault recovery and escalation', () => {
   it.each([
     'division-by-zero',
@@ -595,6 +634,23 @@ describe('TypeScript-versus-generated-C differential gate', () => {
     expect(expected.map((frame) =>
       frame.xBridges.controller.signals['step:out']))
       .toEqual([0, 2, 2, 5]);
+    expect(compareSemanticTraces(expected, actual)).toBeNull();
+  }, 60_000);
+
+  it('GEN-XB-DELAY-TEST-001/DIFF: multi-sample DELAY(N=2, IC=-1, input=7) produces identical output sequence [-1, -1, 7, 7] in TypeScript and C', () => {
+    const fixture = {
+      name: 'flat-priority' as const,
+      model: multiSampleDelayFixture(),
+      steps: [
+        { kind: 'step' as const },
+        { kind: 'step' as const },
+        { kind: 'step' as const },
+      ],
+    };
+    const expected = runInterpreterTrace(fixture);
+    const actual = compileAndRunCTrace(fixture);
+
+    expect(expected.map((frame) => frame.data.delay_y)).toEqual([-1, -1, 7, 7]);
     expect(compareSemanticTraces(expected, actual)).toBeNull();
   }, 60_000);
 

@@ -153,12 +153,20 @@ export const generateSemanticReport = (
   analysis: SMAnalysisResult,
   evidence: VerificationEvidence = DEFAULT_VERIFICATION_EVIDENCE,
   ir?: SemanticModel,
-): SemanticReport => ({
-  testing: copySection(analysis),
-  staticMetrics: copySection(analysis),
-  evidence: { ...evidence },
-  xBridges: buildXBridgesReport(ir),
-});
+): SemanticReport => {
+  const xBridgesReport = buildXBridgesReport(ir);
+  const finalEvidence = { ...evidence };
+  if (xBridgesReport.unsupportedCapabilities.length > 0) {
+    if (evidence.structural === 'pass') finalEvidence.structural = 'fail';
+    if (evidence.semantic === 'pass') finalEvidence.semantic = 'fail';
+  }
+  return {
+    testing: copySection(analysis),
+    staticMetrics: copySection(analysis),
+    evidence: finalEvidence,
+    xBridges: xBridgesReport,
+  };
+};
 
 const evidenceLabel = (status: VerificationEvidenceStatus): string =>
   status === 'not-run' ? 'NOT RUN' : status.toUpperCase();

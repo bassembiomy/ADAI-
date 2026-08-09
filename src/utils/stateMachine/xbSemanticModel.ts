@@ -141,6 +141,13 @@ export interface XBStepOperationParameters {
   };
 }
 
+export interface XBDelayParameters {
+  readonly delayLength: number;
+  readonly initialCondition: number;
+  readonly samplePeriod: number;
+  readonly isUnitDelay: boolean;
+}
+
 /** A generic operation description interpreted or rendered by later stages. */
 export interface XBSemanticOperation {
   readonly id: string;
@@ -157,6 +164,7 @@ export interface XBSemanticOperation {
   readonly numericFault?: XBNumericFaultContract;
   readonly pidParameters?: XBPidParameters;
   readonly stepParameters?: XBStepOperationParameters;
+  readonly delayParameters?: XBDelayParameters;
 }
 
 

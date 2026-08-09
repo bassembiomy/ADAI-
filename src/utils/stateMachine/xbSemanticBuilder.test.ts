@@ -905,4 +905,119 @@ describe('buildXBSemanticModel', () => {
       'XB_SAMPLE_TIME_INVALID',
     );
   });
+
+  it('correctly resolves vector shape for MUX output and propagates to DEMUX inputs/outputs', () => {
+    const xbModel = model({
+      nodes: [
+        node('const1', 'Constant', [], [port('out', 'output')], { value: 7 }),
+        node('const2', 'Constant', [], [port('out', 'output')], { value: 9 }),
+        node('mux1', 'MUX', [port('u1', 'input'), port('u2', 'input')], [port('out', 'output')]),
+        node('demux1', 'DEMUX', [port('in', 'input')], [port('out1', 'output'), port('out2', 'output')]),
+      ],
+      edges: [
+        { id: 'e1', sourceNodeId: 'const1', sourcePortId: 'out', targetNodeId: 'mux1', targetPortId: 'u1' },
+        { id: 'e2', sourceNodeId: 'const2', sourcePortId: 'out', targetNodeId: 'mux1', targetPortId: 'u2' },
+        { id: 'e3', sourceNodeId: 'mux1', sourcePortId: 'out', targetNodeId: 'demux1', targetPortId: 'in' },
+      ],
+    });
+
+    const result = build(xbModel);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir).toBeDefined();
+    const ir = result.ir!;
+    expect(ir.signals['mux1:out'].shape).toEqual({ kind: 'vector', length: 2 });
+    expect(ir.signals['mux1:out'].elementCount).toBe(2);
+    expect(ir.signals['demux1:in'].shape).toEqual({ kind: 'vector', length: 2 });
+    expect(ir.signals['demux1:in'].elementCount).toBe(2);
+    expect(ir.signals['demux1:out1'].shape).toEqual({ kind: 'scalar' });
+    expect(ir.signals['demux1:out2'].shape).toEqual({ kind: 'scalar' });
+  });
+
+  describe('DELAY(N) state boundary and parameter validation', () => {
+    it('creates buffer array and index state slots for DELAY with delay_length=2 and initial_condition=-1', () => {
+      const xbModel = model({
+        nodes: [
+          node(
+            'delay1',
+            'DELAY',
+            [port('u', 'input')],
+            [port('y', 'output')],
+            { delay_length: 2, initial_condition: -1 },
+          ),
+        ],
+      });
+
+      const result = build(xbModel);
+      expect(result.diagnostics).toEqual([]);
+      expect(result.ir).toBeDefined();
+      const op = result.ir!.operations.delay1;
+      expect(op.delayParameters).toEqual({
+        delayLength: 2,
+        initialCondition: -1,
+        samplePeriod: expect.any(Number),
+        isUnitDelay: false,
+      });
+      expect(op.state?.slots).toHaveLength(2);
+      const bufferSlot = op.state!.slots.find((s) => s.role === 'buffer');
+      const indexSlot = op.state!.slots.find((s) => s.role === 'index');
+      expect(bufferSlot).toBeDefined();
+      expect(bufferSlot!.initialValues).toEqual([-1, -1]);
+      expect(indexSlot).toBeDefined();
+      expect(indexSlot!.initialValues).toEqual([0]);
+    });
+
+    it('optimizes DELAY with delay_length=1 to omit index slot', () => {
+      const xbModel = model({
+        nodes: [
+          node(
+            'delay1',
+            'DELAY',
+            [port('u', 'input')],
+            [port('y', 'output')],
+            { delay_length: 1, initialCondition: 5 },
+          ),
+        ],
+      });
+
+      const result = build(xbModel);
+      expect(result.diagnostics).toEqual([]);
+      const op = result.ir!.operations.delay1;
+      expect(op.delayParameters?.isUnitDelay).toBe(true);
+      expect(op.state?.slots).toHaveLength(1);
+      expect(op.state!.slots[0].role).toBe('buffer');
+      expect(op.state!.slots[0].initialValues).toEqual([5]);
+    });
+
+    it('emits diagnostic for missing or invalid delay_length in DELAY block', () => {
+      const xbModelMissing = model({
+        nodes: [
+          node('delay1', 'DELAY', [port('u', 'input')], [port('y', 'output')], {}),
+        ],
+      });
+      const resMissing = build(xbModelMissing);
+      expect(resMissing.ir).toBeUndefined();
+      expect(resMissing.diagnostics).toContainEqual(
+        expect.objectContaining({ code: 'XB_DELAY_LENGTH_MISSING' }),
+      );
+
+      const xbModelInvalid = model({
+        nodes: [
+          node(
+            'delay2',
+            'DELAY',
+            [port('u', 'input')],
+            [port('y', 'output')],
+            { delay_length: -3 },
+          ),
+        ],
+      });
+      const resInvalid = build(xbModelInvalid);
+      expect(resInvalid.ir).toBeUndefined();
+      expect(resInvalid.diagnostics).toContainEqual(
+        expect.objectContaining({ code: 'XB_DELAY_LENGTH_INVALID' }),
+      );
+    });
+  });
 });
+
+

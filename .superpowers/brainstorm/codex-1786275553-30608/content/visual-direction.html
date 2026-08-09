@@ -1,0 +1,104 @@
+<style>
+  .directions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+  .direction-card { border:1px solid var(--border); border-radius:14px; overflow:hidden; background:var(--card); cursor:pointer; transition:transform .16s ease, box-shadow .16s ease; }
+  .direction-card:hover { transform:translateY(-2px); box-shadow:0 12px 28px color-mix(in srgb,var(--foreground) 10%,transparent); }
+  .direction-card.is-selected { outline:2px solid var(--primary); outline-offset:2px; }
+  .product { height:330px; padding:12px; color:light-dark(#172033,#edf2f7); background:light-dark(#eef2f7,#0a0d13); font-family:Inter,system-ui,sans-serif; }
+  .product * { box-sizing:border-box; }
+  .report { background:light-dark(#fff,#151a23); border:1px solid light-dark(#dbe2ea,#283141); border-radius:9px; padding:12px; margin-bottom:9px; }
+  .report-kicker { font-size:7px; letter-spacing:1.4px; color:light-dark(#64748b,#8e9bad); text-transform:uppercase; }
+  .report-title { font-size:15px; font-weight:600; margin:3px 0 8px; }
+  .metric-row { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+  .metric { padding:7px; background:light-dark(#f5f7fa,#1b2230); border-radius:6px; }
+  .metric span { display:block; font-size:6px; color:light-dark(#64748b,#8e9bad); text-transform:uppercase; }
+  .metric strong { font-size:12px; font-weight:600; }
+  .hmi { background:light-dark(#fff,#151a23); border:1px solid light-dark(#dbe2ea,#283141); border-radius:9px; padding:10px; }
+  .hmi-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .hmi-title { font-size:9px; font-weight:600; }
+  .status { font-size:6px; color:light-dark(#15803d,#4ade80); }
+  .hmi-grid { display:grid; grid-template-columns:1.25fr .75fr; gap:8px; }
+  .chart { height:104px; border:1px solid light-dark(#e2e8f0,#2b3545); border-radius:6px; padding:6px; }
+  .chart-label { font-size:6px; color:light-dark(#64748b,#8e9bad); }
+  .chart svg { width:100%; height:78px; overflow:visible; }
+  .readings { display:grid; gap:5px; }
+  .reading { display:flex; justify-content:space-between; align-items:center; padding:6px; border:1px solid light-dark(#e2e8f0,#2b3545); border-radius:5px; font-size:7px; }
+  .reading b { font-size:9px; }
+  .accent-a { color:#d97706; }
+  .accent-b { color:light-dark(#172033,#edf2f7); }
+  .accent-c { color:#22d3ee; }
+  .b .product { background:light-dark(#f6f6f4,#101010); }
+  .b .report,.b .hmi { border-radius:2px; box-shadow:none; }
+  .b .metric,.b .chart,.b .reading { border-radius:1px; }
+  .c .product { background:#071018; color:#d8f9ff; }
+  .c .report,.c .hmi { background:#0a1720; border-color:#164657; box-shadow:inset 0 0 0 1px rgba(34,211,238,.04); }
+  .c .metric,.c .chart,.c .reading { background:#0d202b; border-color:#164657; }
+  .c .report-kicker,.c .chart-label,.c .metric span { color:#72a9b7; }
+  .card-copy { padding:12px 14px 15px; }
+  .card-copy h3 { margin:0 0 4px; }
+  .card-copy p { margin:0; color:var(--muted-foreground); }
+  .recommend { display:inline-block; margin-top:8px; font-size:11px; color:var(--primary); }
+  @media(max-width:850px){ .directions{grid-template-columns:1fr;} .product{height:auto;min-height:320px;} }
+</style>
+
+<h2>Choose the professional direction</h2>
+<p class="subtitle">Each option applies to the report, charts, and reactive HMI as one system. Click the direction that best fits ADIA.</p>
+
+<div class="directions">
+  <div class="direction-card a" data-choice="executive-engineering" onclick="toggleSelect(this)">
+    <div class="product">
+      <div class="report">
+        <div class="report-kicker">ADIA · System engineering report</div>
+        <div class="report-title">Thermal Control Verification</div>
+        <div class="metric-row">
+          <div class="metric"><span>Coverage</span><strong>96.4%</strong></div>
+          <div class="metric"><span>Requirements</span><strong>48 / 50</strong></div>
+          <div class="metric"><span>Open risks</span><strong class="accent-a">02</strong></div>
+        </div>
+      </div>
+      <div class="hmi">
+        <div class="hmi-top"><div class="hmi-title">Live process overview</div><div class="status">● SYSTEM NOMINAL</div></div>
+        <div class="hmi-grid">
+          <div class="chart"><div class="chart-label">Temperature response · °C</div><svg viewBox="0 0 180 78" aria-label="Temperature trend"><path d="M4 63 C25 62 35 48 53 47 S78 25 99 31 S130 16 176 20" fill="none" stroke="#d97706" stroke-width="2"/><path d="M4 66H176M4 45H176M4 24H176" stroke="currentColor" opacity=".1"/></svg></div>
+          <div class="readings"><div class="reading"><span>Chamber</span><b>184.2°</b></div><div class="reading"><span>Fan</span><b>72%</b></div><div class="reading"><span>Mode</span><b>AUTO</b></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-copy"><h3>A · Executive engineering</h3><p>Formal report typography paired with a calm, high-clarity industrial dashboard.</p><span class="recommend">Recommended — strongest balance of authority and usability</span></div>
+  </div>
+
+  <div class="direction-card b" data-choice="minimal-technical" onclick="toggleSelect(this)">
+    <div class="product">
+      <div class="report">
+        <div class="report-kicker">Verification record / ADIA-TR-024</div>
+        <div class="report-title">Thermal Control Verification</div>
+        <div class="metric-row"><div class="metric"><span>Coverage</span><strong>96.4%</strong></div><div class="metric"><span>Requirements</span><strong>48 / 50</strong></div><div class="metric"><span>Open risks</span><strong>02</strong></div></div>
+      </div>
+      <div class="hmi">
+        <div class="hmi-top"><div class="hmi-title">PROCESS / THERMAL_LOOP_01</div><div class="status">RUNNING</div></div>
+        <div class="hmi-grid">
+          <div class="chart"><div class="chart-label">TEMPERATURE [°C]</div><svg viewBox="0 0 180 78" aria-label="Temperature trend"><path d="M4 63 L34 57 L54 47 L74 42 L99 31 L126 27 L176 20" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4 66H176M4 45H176M4 24H176" stroke="currentColor" opacity=".12"/></svg></div>
+          <div class="readings"><div class="reading"><span>CHAMBER</span><b>184.2</b></div><div class="reading"><span>FAN</span><b>72%</b></div><div class="reading"><span>MODE</span><b>AUTO</b></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-copy"><h3>B · Minimal technical</h3><p>Dense, restrained, documentation-first styling for expert engineering teams.</p></div>
+  </div>
+
+  <div class="direction-card c" data-choice="operations-console" onclick="toggleSelect(this)">
+    <div class="product">
+      <div class="report">
+        <div class="report-kicker">ADIA CONTROL INTELLIGENCE</div>
+        <div class="report-title">Thermal Control Verification</div>
+        <div class="metric-row"><div class="metric"><span>Coverage</span><strong>96.4%</strong></div><div class="metric"><span>Requirements</span><strong>48 / 50</strong></div><div class="metric"><span>Open risks</span><strong class="accent-c">02</strong></div></div>
+      </div>
+      <div class="hmi">
+        <div class="hmi-top"><div class="hmi-title">THERMAL LOOP / LIVE TELEMETRY</div><div class="status">● LINK STABLE</div></div>
+        <div class="hmi-grid">
+          <div class="chart"><div class="chart-label">CHAMBER TEMPERATURE</div><svg viewBox="0 0 180 78" aria-label="Temperature trend"><defs><linearGradient id="cy" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#22d3ee" stop-opacity=".28"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></linearGradient></defs><path d="M4 63 C25 62 35 48 53 47 S78 25 99 31 S130 16 176 20 L176 70 L4 70Z" fill="url(#cy)"/><path d="M4 63 C25 62 35 48 53 47 S78 25 99 31 S130 16 176 20" fill="none" stroke="#22d3ee" stroke-width="2"/><path d="M4 66H176M4 45H176M4 24H176" stroke="#22d3ee" opacity=".1"/></svg></div>
+          <div class="readings"><div class="reading"><span>CHAMBER</span><b>184.2°</b></div><div class="reading"><span>FAN PWM</span><b>72%</b></div><div class="reading"><span>PROFILE</span><b>AUTO</b></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-copy"><h3>C · Operations console</h3><p>High-tech telemetry styling with stronger color and real-time visual energy.</p></div>
+  </div>
+</div>

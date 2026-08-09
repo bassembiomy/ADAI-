@@ -1,0 +1,14 @@
+{"type":"server-started","port":62237,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:62237/?key=f7d9d3318b81fe4b0895f86ba0ac6588ed68609163fdf82ad228ba2bc54649b0","screen_dir":"G:\\adia project\\.superpowers\\brainstorm\\codex-1786275553-30608\\content","state_dir":"G:\\adia project\\.superpowers\\brainstorm\\codex-1786275553-30608\\state","idle_timeout_ms":14400000}
+{"type":"screen-added","file":"G:\\adia project\\.superpowers\\brainstorm\\codex-1786275553-30608\\content\\visual-direction.html"}
+{"source":"user-event","type":"click","text":"ADIA CONTROL INTELLIGENCE\n        Thermal Control Verification\n        Coverage96.4%Requirements48 / 50Open risks02\n      \n      \n        THERMAL LOOP / LIVE TELEMETRY● LINK STABLE\n        \n          CHAMBER TEMPERATURE\n          CHAMBER184.2°FAN PWM72%PROFILEAUTO\n        \n      \n    \n    C · Operations consoleHigh-tech telemetry styling with stronger color and real-time visual energy.","choice":"operations-console","id":null,"timestamp":1786275676365}
+{"type":"screen-added","file":"G:\\adia project\\.superpowers\\brainstorm\\codex-1786275553-30608\\content\\waiting-report-mode.html"}
+{"type":"screen-added","file":"G:\\adia project\\.superpowers\\brainstorm\\codex-1786275553-30608\\content\\report-hmi-layout.html"}
+{"type":"screen-added","file":"G:\\adia project\\.superpowers\\brainstorm\\codex-1786275553-30608\\content\\waiting-behavior.html"}
+{"type":"screen-updated","file":"G:\\adia project\\.superpowers\\brainstorm\\codex-1786275553-30608\\content\\visual-direction.html"}
+{"type":"screen-updated","file":"G:\\adia project\\.superpowers\\brainstorm\\codex-1786275553-30608\\content\\waiting-report-mode.html"}
+{"type":"screen-updated","file":"G:\\adia project\\.superpowers\\brainstorm\\codex-1786275553-30608\\content\\report-hmi-layout.html"}
+{"type":"screen-updated","file":"G:\\adia project\\.superpowers\\brainstorm\\codex-1786275553-30608\\content\\waiting-behavior.html"}
+{"type":"screen-updated","file":"G:\\adia project\\.superpowers\\brainstorm\\codex-1786275553-30608\\content\\visual-direction.html"}
+{"type":"screen-updated","file":"G:\\adia project\\.superpowers\\brainstorm\\codex-1786275553-30608\\content\\waiting-report-mode.html"}
+{"type":"screen-updated","file":"G:\\adia project\\.superpowers\\brainstorm\\codex-1786275553-30608\\content\\report-hmi-layout.html"}
+{"type":"screen-updated","file":"G:\\adia project\\.superpowers\\brainstorm\\codex-1786275553-30608\\content\\waiting-behavior.html"}

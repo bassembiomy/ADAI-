@@ -1,4 +1,5 @@
 import { getXBBlockCapability } from './xbCapabilities';
+import { resolveGraphShapes } from './xbShapeResolver';
 import type { ModelDiagnostic } from './smModel';
 import type { SemanticVariable, SemanticVariableSymbol, XBOwnerState } from './smSemanticModel';
 import type {
@@ -875,6 +876,78 @@ const stateBoundaryForNode = (
     return boundary(slots);
   }
 
+  if (node.type === 'DELAY' || node.type === 'UNIT_DELAY') {
+    const output = outputByPort('y') ?? outputByPort('out') ?? signals[outputSignalIds[0] ?? ''];
+    if (output === undefined) return boundary([]);
+
+    let delayLength = 1;
+    if (node.type === 'DELAY') {
+      const lengthParam = node.parameters.delay_length ?? node.parameters.delayLength ?? node.parameters.delay_samples ?? node.parameters.N;
+      if (lengthParam === undefined || lengthParam === null) {
+        diagnostics.push(diagnostic(
+          'XB_DELAY_LENGTH_MISSING',
+          `DELAY block '${node.id}' is missing required 'delay_length' parameter.`,
+          node.id,
+        ));
+        return boundary([]);
+      }
+      if (typeof lengthParam !== 'number' || !Number.isInteger(lengthParam) || lengthParam <= 0) {
+        diagnostics.push(diagnostic(
+          'XB_DELAY_LENGTH_INVALID',
+          `DELAY block '${node.id}' parameter 'delay_length' must be a positive integer.`,
+          node.id,
+        ));
+        return boundary([]);
+      }
+      if (lengthParam > 65536) {
+        diagnostics.push(diagnostic(
+          'XB_DELAY_STORAGE_LIMIT_EXCEEDED',
+          `DELAY block '${node.id}' delay_length '${lengthParam}' exceeds supported limit of 65536.`,
+          node.id,
+        ));
+        return boundary([]);
+      }
+      delayLength = lengthParam;
+    }
+
+    const baseInitialValues = initialValuesForSignal(node, output, diagnostics, [
+      'initialValue',
+      'initialCondition',
+      'initial_condition',
+      'initial_state',
+      'initial',
+    ]);
+    const totalBufferValues: Array<number | boolean> = [];
+    for (let i = 0; i < delayLength; i++) {
+      totalBufferValues.push(...baseInitialValues);
+    }
+
+    const totalBufferElements = delayLength * output.elementCount;
+    const isUnitDelayNode = node.type === 'UNIT_DELAY';
+    const bufferSlot: XBSemanticStateSlot = {
+      id: isUnitDelayNode ? `${output.id}$state` : (delayLength === 1 ? `${output.id}$state` : `${node.id}:buffer$state`),
+      role: isUnitDelayNode ? output.portId : 'buffer',
+      signalId: output.id,
+      numericType: output.numericType,
+      shape: delayLength === 1 ? output.shape : { kind: 'vector', length: totalBufferElements },
+      initialValues: totalBufferValues,
+    };
+
+    const slots: XBSemanticStateSlot[] = [bufferSlot];
+    if (delayLength > 1) {
+      slots.push({
+        id: `${node.id}:index$state`,
+        role: 'index',
+        signalId: null,
+        numericType: { kind: 'uint32' },
+        shape: { kind: 'scalar' },
+        initialValues: [0],
+      });
+    }
+
+    return boundary(slots);
+  }
+
   return boundary(outputSignalIds.map((signalId) => {
     const signal = signals[signalId];
     return {
@@ -1034,32 +1107,21 @@ export const buildXBSemanticModel = (
     return resolved;
   };
 
-  const resolvingShapes = new Set<string>();
-  const resolvedShapes = new Map<string, XBShape>();
+  const graphShapeResult = resolveGraphShapes(input.model);
+
   const resolveShape = (signalId: string): XBShape => {
-    const cached = resolvedShapes.get(signalId);
-    if (cached !== undefined) return cached;
-    if (resolvingShapes.has(signalId)) return { kind: 'scalar' };
-    resolvingShapes.add(signalId);
-    const separator = signalId.indexOf(':');
-    const nodeId = signalId.slice(0, separator);
-    const port = portBySignalId.get(signalId);
-    const node = nodeById.get(nodeId);
-    let resolved = port?.shape ?? null;
-    const sourceSignalId = sourceByInputSignalId.get(signalId);
-    if (resolved === null && sourceSignalId !== undefined) {
-      resolved = resolveShape(sourceSignalId);
+    const semShape = graphShapeResult.portShapes.get(signalId);
+    if (semShape && semShape.kind === 'vector') {
+      return { kind: 'vector', length: semShape.elementCount };
     }
-    if (resolved === null && port?.direction === 'output' && node !== undefined) {
-      const firstInput = (portsByNode.get(node.id) ?? [])
-        .filter((candidate) => candidate.direction === 'input')
-        .sort((left, right) => compareStable(left.id, right.id))[0];
-      if (firstInput !== undefined) resolved = resolveShape(`${node.id}:${firstInput.id}`);
+    if (semShape && semShape.kind === 'matrix') {
+      return {
+        kind: 'matrix',
+        rows: semShape.dimensions[0] ?? 1,
+        columns: semShape.dimensions[1] ?? 1,
+      };
     }
-    resolved ??= { kind: 'scalar' };
-    resolvingShapes.delete(signalId);
-    resolvedShapes.set(signalId, resolved);
-    return resolved;
+    return { kind: 'scalar' };
   };
 
   const signals: Record<string, XBSemanticSignal> = {};
@@ -1174,6 +1236,27 @@ export const buildXBSemanticModel = (
       },
       pidParameters: node.type === 'PID_CONTROLLER' ? normalizePidParameters(node.parameters, solverStep as any) : undefined,
     };
+
+    if (node.type === 'DELAY' || node.type === 'UNIT_DELAY') {
+      const schedule = operations[node.id].schedule;
+      const lengthParam = node.type === 'UNIT_DELAY'
+        ? 1
+        : (node.parameters.delay_length ?? node.parameters.delayLength ?? node.parameters.delay_samples ?? node.parameters.N);
+      const delayLength = typeof lengthParam === 'number' && lengthParam > 0 ? lengthParam : 1;
+      const icParam = node.parameters.initialCondition ?? node.parameters.initial_condition ?? node.parameters.ic ?? 0;
+      const initialCondition = typeof icParam === 'number' ? icParam : (icParam === true ? 1 : 0);
+      const stepSec = solverStep ? Number(solverStep.numerator) / Number(solverStep.denominator) : 0.001;
+      const samplePeriod = schedule.periodSubsteps * stepSec;
+      operations[node.id] = {
+        ...operations[node.id],
+        delayParameters: {
+          delayLength,
+          initialCondition,
+          samplePeriod,
+          isUnitDelay: delayLength === 1,
+        },
+      };
+    }
 
     if (node.type === 'Step') {
       const stepTime = node.parameters.step_time ?? node.parameters.time;

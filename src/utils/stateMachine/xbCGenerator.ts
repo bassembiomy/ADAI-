@@ -2795,6 +2795,32 @@ const renderDiscreteStateUpdates = (
   if (operation.type === 'KALMAN_FILTER') {
     return [];
   }
+  if (operation.type === 'DELAY' || operation.type === 'UNIT_DELAY') {
+    const bufferSlot = stateSlotForRole(operation, 'buffer') ?? operation.state?.slots.find(s => s.role !== 'index');
+    const indexSlot = stateSlotForRole(operation, 'index');
+    if (bufferSlot && indexSlot) {
+      const bufferField = layout.slotFields.get(bufferSlot.id);
+      const indexField = layout.slotFields.get(indexSlot.id);
+      if (bufferField && indexField) {
+        const inputSignalId = operation.inputSignalIds[0] ?? '';
+        const inputSignal = state.xBridges!.signals[inputSignalId];
+        const elementCount = inputSignal ? inputSignal.elementCount : 1;
+        const delayLength = operation.delayParameters?.delayLength ?? 1;
+
+        const updateLines: string[] = ['    {'];
+        updateLines.push(`        uint32_t xb_delay_idx = instance->${member}.${indexField};`);
+        for (let m = 0; m < elementCount; m++) {
+          const inputElemExpr = signalElementRealExpression(state, inputSignalId, layout, member, `${m}U`);
+          updateLines.push(`        instance->${member}.${bufferField}[xb_delay_idx * ${elementCount}U + ${m}U] = (${numericCType(bufferSlot.numericType)})(${inputElemExpr});`);
+        }
+        updateLines.push(`        instance->${member}.${indexField} = (xb_delay_idx + 1U) % ${delayLength}U;`, '    }');
+
+        const transactional = renderTransactionalStateUpdates(operation, updateLines, layout, member);
+        if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return withFaultSync(transactional);
+        return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...transactional.map((line) => `    ${line}`), '    }']);
+      }
+    }
+  }
   const updates = (operation.state?.slots ?? []).flatMap((slot, slotIndex) => {
     switch (operation.type) {
       case 'DELAY':
