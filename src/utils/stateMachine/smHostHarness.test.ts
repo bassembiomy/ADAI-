@@ -24,7 +24,7 @@ describe('smHostHarness', () => {
     writeFileSync(join(workspace.directory, 'harness.c'), harness);
 
     const execPath = join(workspace.directory, 'harness.exe');
-    execFileSync('gcc', ['-std=c99', '-I.', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'harness.c', '-o', execPath], { cwd: workspace.directory });
+    execFileSync('gcc', ['-std=c99', '-I.', 'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'harness.c', '-o', execPath], { cwd: workspace.directory });
 
     const output = execFileSync(execPath, { cwd: workspace.directory, encoding: 'utf8' });
     const lines = output.trim().split('\n').filter(l => l.trim().startsWith('{'));

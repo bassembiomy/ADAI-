@@ -141,6 +141,21 @@ describe('buildXBSemanticModel', () => {
     expect(result.ir!.mappings[0].variable.cIdentifier).toBe('xb_output');
   });
 
+  it('does not invent an Outport mapping for an unknown state-machine variable', () => {
+    const m = model({
+      nodes: [
+        node('const1', 'Constant', [], [port('out', 'output')], { value: 5.0 }),
+        node('out1', 'Outport', [port('in', 'input')], [], { smVarId: 'missing' }),
+      ],
+      edges: [edge('e1', 'const1', 'out', 'out1', 'in')],
+    });
+
+    const result = build(m);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir?.mappings).toEqual([]);
+  });
+
   it('lowers Step parameters into pre-aligned threshold milliseconds and state timer source', () => {
     const m = model({
       nodes: [

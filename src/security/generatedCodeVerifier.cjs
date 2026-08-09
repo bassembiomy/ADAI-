@@ -8,6 +8,8 @@ const { spawn } = require('node:child_process');
 
 const ALLOWED_FILES = new Set([
   'sm_config.h',
+  'sm_mapping.h',
+  'sm_mapping.c',
   'sm_core.h',
   'sm_core.c',
   'sm_safety.h',
@@ -156,7 +158,7 @@ async function verifyGeneratedCode(payload, deps = {}) {
     }
 
     const fileNames = payload.files.map((f) => f.name);
-    const cFiles = ['sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_host_test.c'];
+    const cFiles = ['sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_host_test.c'];
     if (fileNames.includes('sm_xbridges.c')) {
       cFiles.push('sm_xbridges.c');
     }

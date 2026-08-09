@@ -14,7 +14,11 @@ SM_Error_t SM_ReadInputs(ADIA_Instance_t *instance);
 SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms);
 SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance);
 SM_Error_t SM_Sync_IO(ADIA_Instance_t *instance);
-SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t group);
+SM_Node_t SM_GetActiveSlot(const ADIA_Instance_t *instance, uint32_t slot);
+SM_Node_t SM_GetLayerActive(const ADIA_Instance_t *instance, uint32_t layer);
+bool SM_IsStateActive(const ADIA_Instance_t *instance, SM_Node_t state);
+/* Deprecated: use SM_GetActiveSlot(). The argument is an active-slot ID. */
+SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t slot);
 SM_Error_t SM_GetError(const ADIA_Instance_t *instance);
 #ifdef SM_TRACE_ENABLED
 void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink);
@@ -34,6 +38,7 @@ void SM_TraceAction(ADIA_Instance_t *instance, const char *action);
 #include <stddef.h>
 #include <string.h>
 #include "sm_core.h"
+#include "sm_mapping.h"
 #include "sm_safety.h"
 #include "sm_user_logic.h"
 #include "mcal_dio.h"
@@ -259,6 +264,7 @@ static void SM_Enter_Fault(ADIA_Instance_t *instance)
 SM_Error_t SM_Init(ADIA_Instance_t *instance)
 {
     uint32_t layer_index;
+    uint32_t slot_index;
     uint32_t state_index;
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
@@ -277,9 +283,9 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     instance->data.go = (bool)(false);
     instance->data.ratio = (double)(0.0);
     instance->data.total = (double)(0.0);
-    for (layer_index = 0U; layer_index < SM_NUM_ACTIVE_SLOTS; ++layer_index) {
-        instance->active_states[layer_index] = SM_NODE_INVALID;
-        instance->history_states[layer_index] = SM_NODE_INVALID;
+    for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {
+        instance->active_states[slot_index] = SM_NODE_INVALID;
+        instance->history_states[slot_index] = SM_NODE_INVALID;
     }
     for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
         for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
@@ -292,6 +298,10 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     }
     instance->error_status = SM_ERR_NONE;
     instance->fault_latched = false;
+    instance->error_status = SM_Validate_Mapping_Configuration();
+    if (instance->error_status != SM_ERR_NONE) {
+        return SM_ERR_CONFIGURATION;
+    }
     SM_Enter_Layer_Default_0(instance);
     return SM_ERR_NONE;
 }
@@ -299,6 +309,7 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
 SM_Error_t SM_Reset(ADIA_Instance_t *instance)
 {
     uint32_t layer_index;
+    uint32_t slot_index;
     uint32_t state_index;
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
@@ -309,9 +320,9 @@ SM_Error_t SM_Reset(ADIA_Instance_t *instance)
     instance->data.go = (bool)(false);
     instance->data.ratio = (double)(0.0);
     instance->data.total = (double)(0.0);
-    for (layer_index = 0U; layer_index < SM_NUM_ACTIVE_SLOTS; ++layer_index) {
-        instance->active_states[layer_index] = SM_NODE_INVALID;
-        instance->history_states[layer_index] = SM_NODE_INVALID;
+    for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {
+        instance->active_states[slot_index] = SM_NODE_INVALID;
+        instance->history_states[slot_index] = SM_NODE_INVALID;
     }
     for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
         for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
@@ -407,12 +418,40 @@ SM_Error_t SM_Sync_IO(ADIA_Instance_t *instance)
     return error;
 }
 
-SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t group)
+SM_Node_t SM_GetActiveSlot(const ADIA_Instance_t *instance, uint32_t slot)
 {
-    if ((instance == NULL) || (group >= SM_NUM_ACTIVE_SLOTS)) {
+    if ((instance == NULL) || (slot >= SM_NUM_ACTIVE_SLOTS)) {
         return SM_NODE_INVALID;
     }
-    return instance->active_states[group];
+    return instance->active_states[slot];
+}
+
+SM_Node_t SM_GetLayerActive(const ADIA_Instance_t *instance, uint32_t layer)
+{
+    int32_t slot;
+    if ((instance == NULL) || (layer >= SM_NUM_LAYERS)) {
+        return SM_NODE_INVALID;
+    }
+    slot = SM_Layer_Active_Slot_Map[layer];
+    if (slot < 0) {
+        return SM_NODE_INVALID;
+    }
+    return SM_GetActiveSlot(instance, (uint32_t)slot);
+}
+
+bool SM_IsStateActive(const ADIA_Instance_t *instance, SM_Node_t state)
+{
+    if ((instance == NULL)
+        || (state <= SM_NODE_INVALID)
+        || ((uint32_t)state > SM_NUM_STATES)) {
+        return false;
+    }
+    return instance->state_active[(uint32_t)state];
+}
+
+SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t slot)
+{
+    return SM_GetActiveSlot(instance, (uint32_t)slot);
 }
 
 SM_Error_t SM_GetError(const ADIA_Instance_t *instance)
@@ -789,6 +828,91 @@ struct ADIA_Instance {
     "name": "sm_config.h",
   },
   {
+    "content": "#ifndef SM_MAPPING_H
+#define SM_MAPPING_H
+
+#include "sm_config.h"
+
+extern const uint32_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U];
+extern const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U];
+extern const SM_Node_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS];
+extern const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS];
+
+SM_Error_t SM_Validate_Mapping_Configuration(void);
+
+#endif /* SM_MAPPING_H */
+",
+    "name": "sm_mapping.h",
+  },
+  {
+    "content": "#include "sm_mapping.h"
+
+/*
+ * Active State Mapping
+ *
+ * Layer | Slot
+ * ------------------------------
+ * root | 0
+ *
+ * Parallel child states are tracked using state_active[].
+ * Layer IDs, active-slot IDs, and state IDs are distinct.
+ */
+const uint32_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U] = {
+    [0] = 0U,
+    [SM_ST_S1_IDX] = SM_LYR_ROOT_IDX,
+    [SM_ST_S2_IDX] = SM_LYR_ROOT_IDX,
+};
+
+const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U] = {
+    [0] = -1,
+    [SM_ST_S1_IDX] = 0,
+    [SM_ST_S2_IDX] = 0,
+};
+
+const SM_Node_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS] = {
+    [SM_LYR_ROOT_IDX] = SM_NODE_INVALID,
+};
+
+const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS] = {
+    [SM_LYR_ROOT_IDX] = 0,
+};
+
+SM_Error_t SM_Validate_Mapping_Configuration(void)
+{
+    uint32_t layer_index;
+    uint32_t state_index;
+    uint32_t parent_layer;
+    int32_t slot;
+    SM_Node_t parent_state;
+    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
+        slot = SM_Layer_Active_Slot_Map[layer_index];
+        if ((slot < -1) || (slot >= (int32_t)SM_NUM_ACTIVE_SLOTS)) {
+            return SM_ERR_CONFIGURATION;
+        }
+        parent_state = SM_Layer_Parent_State_Map[layer_index];
+        if ((uint32_t)parent_state > SM_NUM_STATES) {
+            return SM_ERR_CONFIGURATION;
+        }
+    }
+    for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {
+        parent_layer = SM_State_Parent_Layer_Map[state_index];
+        if (parent_layer >= SM_NUM_LAYERS) {
+            return SM_ERR_CONFIGURATION;
+        }
+        slot = SM_State_Active_Slot_Map[state_index];
+        if ((slot < -1) || (slot >= (int32_t)SM_NUM_ACTIVE_SLOTS)) {
+            return SM_ERR_CONFIGURATION;
+        }
+        if (slot != SM_Layer_Active_Slot_Map[parent_layer]) {
+            return SM_ERR_CONFIGURATION;
+        }
+    }
+    return SM_ERR_NONE;
+}
+",
+    "name": "sm_mapping.c",
+  },
+  {
     "content": "#ifndef SM_CORE_H
 #define SM_CORE_H
 
@@ -800,7 +924,11 @@ SM_Error_t SM_ReadInputs(ADIA_Instance_t *instance);
 SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms);
 SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance);
 SM_Error_t SM_Sync_IO(ADIA_Instance_t *instance);
-SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t group);
+SM_Node_t SM_GetActiveSlot(const ADIA_Instance_t *instance, uint32_t slot);
+SM_Node_t SM_GetLayerActive(const ADIA_Instance_t *instance, uint32_t layer);
+bool SM_IsStateActive(const ADIA_Instance_t *instance, SM_Node_t state);
+/* Deprecated: use SM_GetActiveSlot(). The argument is an active-slot ID. */
+SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t slot);
 SM_Error_t SM_GetError(const ADIA_Instance_t *instance);
 #ifdef SM_TRACE_ENABLED
 void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink);
@@ -820,6 +948,7 @@ void SM_TraceAction(ADIA_Instance_t *instance, const char *action);
 #include <stddef.h>
 #include <string.h>
 #include "sm_core.h"
+#include "sm_mapping.h"
 #include "sm_safety.h"
 #include "sm_user_logic.h"
 #include "mcal_dio.h"
@@ -1024,6 +1153,7 @@ static void SM_Enter_Fault(ADIA_Instance_t *instance)
 SM_Error_t SM_Init(ADIA_Instance_t *instance)
 {
     uint32_t layer_index;
+    uint32_t slot_index;
     uint32_t state_index;
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
@@ -1040,9 +1170,9 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     instance->data.log = (uint32_t)(0U);
     instance->data.t1 = (bool)(false);
     instance->data.t2 = (bool)(false);
-    for (layer_index = 0U; layer_index < SM_NUM_ACTIVE_SLOTS; ++layer_index) {
-        instance->active_states[layer_index] = SM_NODE_INVALID;
-        instance->history_states[layer_index] = SM_NODE_INVALID;
+    for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {
+        instance->active_states[slot_index] = SM_NODE_INVALID;
+        instance->history_states[slot_index] = SM_NODE_INVALID;
     }
     for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
         for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
@@ -1055,6 +1185,10 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     }
     instance->error_status = SM_ERR_NONE;
     instance->fault_latched = false;
+    instance->error_status = SM_Validate_Mapping_Configuration();
+    if (instance->error_status != SM_ERR_NONE) {
+        return SM_ERR_CONFIGURATION;
+    }
     SM_Enter_Layer_Default_0(instance);
     return SM_ERR_NONE;
 }
@@ -1062,6 +1196,7 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
 SM_Error_t SM_Reset(ADIA_Instance_t *instance)
 {
     uint32_t layer_index;
+    uint32_t slot_index;
     uint32_t state_index;
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
@@ -1070,9 +1205,9 @@ SM_Error_t SM_Reset(ADIA_Instance_t *instance)
     instance->data.log = (uint32_t)(0U);
     instance->data.t1 = (bool)(false);
     instance->data.t2 = (bool)(false);
-    for (layer_index = 0U; layer_index < SM_NUM_ACTIVE_SLOTS; ++layer_index) {
-        instance->active_states[layer_index] = SM_NODE_INVALID;
-        instance->history_states[layer_index] = SM_NODE_INVALID;
+    for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {
+        instance->active_states[slot_index] = SM_NODE_INVALID;
+        instance->history_states[slot_index] = SM_NODE_INVALID;
     }
     for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
         for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
@@ -1168,12 +1303,40 @@ SM_Error_t SM_Sync_IO(ADIA_Instance_t *instance)
     return error;
 }
 
-SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t group)
+SM_Node_t SM_GetActiveSlot(const ADIA_Instance_t *instance, uint32_t slot)
 {
-    if ((instance == NULL) || (group >= SM_NUM_ACTIVE_SLOTS)) {
+    if ((instance == NULL) || (slot >= SM_NUM_ACTIVE_SLOTS)) {
         return SM_NODE_INVALID;
     }
-    return instance->active_states[group];
+    return instance->active_states[slot];
+}
+
+SM_Node_t SM_GetLayerActive(const ADIA_Instance_t *instance, uint32_t layer)
+{
+    int32_t slot;
+    if ((instance == NULL) || (layer >= SM_NUM_LAYERS)) {
+        return SM_NODE_INVALID;
+    }
+    slot = SM_Layer_Active_Slot_Map[layer];
+    if (slot < 0) {
+        return SM_NODE_INVALID;
+    }
+    return SM_GetActiveSlot(instance, (uint32_t)slot);
+}
+
+bool SM_IsStateActive(const ADIA_Instance_t *instance, SM_Node_t state)
+{
+    if ((instance == NULL)
+        || (state <= SM_NODE_INVALID)
+        || ((uint32_t)state > SM_NUM_STATES)) {
+        return false;
+    }
+    return instance->state_active[(uint32_t)state];
+}
+
+SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t slot)
+{
+    return SM_GetActiveSlot(instance, (uint32_t)slot);
 }
 
 SM_Error_t SM_GetError(const ADIA_Instance_t *instance)
@@ -1199,25 +1362,12 @@ void SM_ApplySafeOutputs(ADIA_Instance_t *instance);
   {
     "content": "#include <stddef.h>
 #include "sm_safety.h"
+#include "sm_mapping.h"
 
 static const SM_Node_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {
     [0] = SM_NODE_INVALID,
     [SM_ST_S1_IDX] = SM_NODE_INVALID,
     [SM_ST_S2_IDX] = SM_NODE_INVALID,
-};
-
-static const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U] = {
-    [0] = -1,
-    [SM_ST_S1_IDX] = 0,
-    [SM_ST_S2_IDX] = 0,
-};
-
-static const SM_Node_t SM_Layer_Parent_Map[SM_NUM_LAYERS] = {
-    [SM_LYR_ROOT_IDX] = SM_NODE_INVALID,
-};
-
-static const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS] = {
-    [SM_LYR_ROOT_IDX] = 0,
 };
 
 static const bool SM_Layer_Has_Children_Map[SM_NUM_LAYERS] = {
@@ -1279,7 +1429,7 @@ SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)
         }
     }
     for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
-        parent = SM_Layer_Parent_Map[layer_index];
+        parent = SM_Layer_Parent_State_Map[layer_index];
         container_active = (parent == SM_NODE_INVALID)
             || instance->state_active[(uint32_t)parent];
         active_slot = SM_Layer_Active_Slot_Map[layer_index];
@@ -1518,10 +1668,10 @@ Evidence labels describe only the checks actually recorded for this generated pa
 
 | Metric | Value |
 |---|---:|
-| Files measured | 8 |
-| Total lines | 680 |
-| Functional lines | 595 |
-| Comment/blank density | 12.5% |
+| Files measured | 10 |
+| Total lines | 785 |
+| Functional lines | 678 |
+| Comment/blank density | 13.6% |
 
 ## X-Bridges static code-generation metrics
 

@@ -140,6 +140,7 @@ test('rejects non-string content', () => {
 
     const validPayload = {
       files: [
+        { name: 'sm_mapping.c', content: 'int mapping;' },
         { name: 'sm_core.c', content: 'int x;' },
         { name: 'sm_safety.c', content: 'int y;' },
         { name: 'sm_user_logic.c', content: 'int z;' },

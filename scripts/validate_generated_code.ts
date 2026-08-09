@@ -180,6 +180,7 @@ export function validateTR02(outputDir: string, jsonModel: any): { success: bool
 export function validateTR03(outputDir: string): { success: boolean; errors: string[] } {
   const errors: string[] = [];
   const filePairs = [
+    { header: 'sm_mapping.h', source: 'sm_mapping.c' },
     { header: 'sm_core.h', source: 'sm_core.c' },
     { header: 'sm_user_logic.h', source: 'sm_user_logic.c' },
     { header: 'sm_safety.h', source: 'sm_safety.c' }

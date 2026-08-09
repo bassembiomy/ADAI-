@@ -6,7 +6,7 @@ const SHA256 = /^sha256:[a-f0-9]{64}$/;
 const SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
 const REQUEST_FIELDS = new Set(['buildId', 'sourceManifestHash', 'targetSelection']);
 const COMMON_SOURCES = Object.freeze([
-  'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'hal_drivers.c',
+  'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'hal_drivers.c',
   'hil_interface.c', 'mcal_dio_hil.c', 'adia_mcal.c', 'adia_component.c',
 ]);
 

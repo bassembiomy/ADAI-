@@ -14,7 +14,7 @@ const workspace = Object.freeze({
   sourceManifestHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   targetSelection: selection,
   flashBlocked: false,
-  files: Object.freeze(['sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'main_hil.c', 'hal_drivers.c', 'hil_interface.c', 'mcal_dio_hil.c', 'adia_mcal.c', 'adia_component.c']),
+  files: Object.freeze(['sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'main_hil.c', 'hal_drivers.c', 'hil_interface.c', 'mcal_dio_hil.c', 'adia_mcal.c', 'adia_component.c']),
 });
 const request = Object.freeze({
   buildId: workspace.buildId,
@@ -41,4 +41,5 @@ const allowed = evaluateBuildRequest(request, workspace);
 assert.equal(allowed.allowed, true);
 assert.equal(allowed.recipeId, 'arm-none-eabi-stm32f407vg-v1');
 assert.deepEqual(allowed.compilerFlags, ['-mcpu=cortex-m4', '-mthumb', '-Os', '-Wall', '-Wextra', '-Werror']);
+assert.equal(allowed.sourceFiles.includes('sm_mapping.c'), true);
 process.stdout.write('  ✓ returns an application-owned fixed recipe\n');

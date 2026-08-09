@@ -901,7 +901,7 @@ int main(void) {
       }
       expect(() => execFileSync('gcc', [
         '-std=c99', '-DMCAL_CUSTOM_DIO', '-pedantic-errors', '-Wall',
-        '-Wextra', '-Werror', '-I.', '-c', 'sm_core.c', 'sm_safety.c',
+        '-Wextra', '-Werror', '-I.', '-c', 'sm_mapping.c', 'sm_core.c', 'sm_safety.c',
         'sm_user_logic.c',
       ], { cwd: workspace.directory, stdio: 'pipe' })).not.toThrow();
     } finally {
@@ -1276,8 +1276,10 @@ int main(void) {
       expect(headerSource).not.toContain('bool XB5_IfElse_y;');
 
       // 4. Output variables receive exact values
-      expect(coreSource).toContain('instance->data.xb5_ifelse_output = (float)((double)(instance->xb_');
-      expect(coreSource).toContain('instance->data.xb5_switch_output = (float)((double)(instance->xb_');
+      expect(coreSource).toMatch(/instance->data\.xb5_ifelse_output = instance->xb_[^;]+;/);
+      expect(coreSource).toMatch(/instance->data\.xb5_switch_output = instance->xb_[^;]+;/);
+      expect(coreSource).not.toContain('instance->data.xb5_ifelse_output = (float)((double)(');
+      expect(coreSource).not.toContain('instance->data.xb5_switch_output = (float)((double)(');
     });
 
     it('renders namespaced local variables, traceId markers, and compiles warning-free under -Wshadow -Werror', () => {

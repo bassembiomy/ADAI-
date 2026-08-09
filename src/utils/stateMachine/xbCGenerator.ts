@@ -867,8 +867,20 @@ const emitStep: OperationEmitter = (state, operation, operationIndex, layout, me
   const final = Number(
     scalarParameter(operation, ['final_value', 'finalValue', 'final'], 1),
   );
-  const thresholdMs = Math.ceil(stepTimeSeconds * 1000);
-  const expr = `(instance->state_timers[${ownerIndexSymbol}] < ${thresholdMs}U ? ${initial.toFixed(1)} : ${final.toFixed(1)})`;
+  const thresholdMs = stepTimeSeconds * 1000;
+  if (!Number.isFinite(stepTimeSeconds)
+    || stepTimeSeconds < 0
+    || !Number.isInteger(thresholdMs)
+    || thresholdMs > 0xFFFFFFFF) {
+    throw new Error(
+      `X-Bridges Step operation '${operation.id}' requires stepTime to be finite, `
+        + 'nonnegative, and exactly representable as uint32_t milliseconds; '
+        + `received ${stepTimeSeconds}`,
+    );
+  }
+  const expr = thresholdMs === 0
+    ? final.toFixed(1)
+    : `(instance->state_timers[${ownerIndexSymbol}] < UINT32_C(${thresholdMs}) ? ${initial.toFixed(1)} : ${final.toFixed(1)})`;
   return renderSignalWrite(
     state,
     operation,

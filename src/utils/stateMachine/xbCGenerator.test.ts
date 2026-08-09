@@ -1005,7 +1005,7 @@ describe('X-Bridges C99 static storage', () => {
         '  return 0;', '}', '',
       ].join('\n'));
       const executable = join(workspace.directory, 'xb_matrix.exe');
-      execFileSync('gcc', ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c', 'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable], { cwd: workspace.directory, stdio: 'pipe' });
+      execFileSync('gcc', ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.', 'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c', 'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable], { cwd: workspace.directory, stdio: 'pipe' });
       const actual = execFileSync(executable, [], { cwd: workspace.directory, encoding: 'utf8' }).trim().split(',').map(Number);
       expect(actual).toHaveLength(expected.length);
       actual.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 12));
@@ -1086,7 +1086,7 @@ describe('X-Bridges C99 static storage', () => {
         '    return 0;', '}', '',
       ].join('\n'));
       const executable = join(workspace.directory, 'xb_control_transform.exe');
-      execFileSync('gcc', ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c', 'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable], { cwd: workspace.directory, stdio: 'pipe' });
+      execFileSync('gcc', ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.', 'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c', 'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable], { cwd: workspace.directory, stdio: 'pipe' });
       const actual = execFileSync(executable, [], { cwd: workspace.directory, encoding: 'utf8' }).trim().split(',').map(Number);
       expect(actual).toHaveLength(expected.length);
       actual.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 12));
@@ -1119,7 +1119,7 @@ describe('X-Bridges C99 static storage', () => {
       for (const file of generateCArtifacts(ir, { includeTestShims: true }).files) writeFileSync(join(workspace.directory, file.name), file.content);
       writeFileSync(join(workspace.directory, 'harness.c'), ['#include "sm_core.h"', '#include <stdio.h>', 'int main(void) { ADIA_Instance_t instance; if (SM_Init(&instance) != SM_ERR_NONE) return 1;', 'instance.xb_controller.clarke_ia=1; instance.xb_controller.clarke_ib=-0.5; instance.xb_controller.clarke_ic=-0.5; instance.xb_controller.park_alpha=1; instance.xb_controller.park_beta=0; instance.xb_controller.park_theta=1.5707963267948966; instance.xb_controller.inversePark_d=0; instance.xb_controller.inversePark_q=-1; instance.xb_controller.inversePark_theta=1.5707963267948966; instance.xb_controller.inverseClarke_alpha=1; instance.xb_controller.inverseClarke_beta=0;', 'SM_XB_CONTROLLER_Step(&instance); printf("%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g\\n", instance.xb_controller.clarke_alpha, instance.xb_controller.clarke_beta, instance.xb_controller.park_d, instance.xb_controller.park_q, instance.xb_controller.inversePark_alpha, instance.xb_controller.inversePark_beta, instance.xb_controller.inverseClarke_a, instance.xb_controller.inverseClarke_b, instance.xb_controller.inverseClarke_c); return 0; }'].join('\n'));
       const executable = join(workspace.directory, 'xb_transforms.exe');
-      execFileSync('gcc', ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c', 'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable], { cwd: workspace.directory, stdio: 'pipe' });
+      execFileSync('gcc', ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.', 'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c', 'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable], { cwd: workspace.directory, stdio: 'pipe' });
       const actual = execFileSync(executable, [], { cwd: workspace.directory, encoding: 'utf8' }).trim().split(',').map(Number);
       actual.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 12));
     } finally { workspace.cleanup(); }
@@ -1136,7 +1136,7 @@ describe('X-Bridges C99 static storage', () => {
     const workspace = createGeneratedCodeTestWorkspace('xb-9state-c99');
     try { for (const file of generateCArtifacts(ir, { includeTestShims: true }).files) writeFileSync(join(workspace.directory, file.name), file.content);
       writeFileSync(join(workspace.directory, 'harness.c'), ['#include "sm_core.h"', '#include <stdio.h>', 'int main(void) { ADIA_Instance_t instance; if (SM_Init(&instance) != SM_ERR_NONE) return 1; for (unsigned i=0;i<9;++i) { instance.xb_controller.ss9_u[i]=1; } SM_XB_CONTROLLER_Step(&instance); printf("%.17g,", instance.xb_controller.ss9_y[0]); for(unsigned i=0;i<9;++i) { printf("%.17g,", instance.xb_controller.ss9_x[i]); } for(unsigned i=0;i<9;++i) { printf("%.17g%s", instance.xb_controller.state_ss9_x_state[i], i==8 ? "\\n" : ","); } return 0; }'].join('\n'));
-      const executable = join(workspace.directory, 'xb_9state.exe'); execFileSync('gcc', ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c', 'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable], { cwd: workspace.directory, stdio: 'pipe' });
+      const executable = join(workspace.directory, 'xb_9state.exe'); execFileSync('gcc', ['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.', 'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c', 'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable], { cwd: workspace.directory, stdio: 'pipe' });
       const actual = execFileSync(executable, [], { cwd: workspace.directory, encoding: 'utf8' }).trim().split(',').map(Number); actual.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 12));
     } finally { workspace.cleanup(); }
   });
@@ -1300,6 +1300,7 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
         '-Wextra',
         '-Werror',
         '-I.',
+        'sm_mapping.c',
         'sm_core.c',
         'sm_safety.c',
         'sm_user_logic.c',
@@ -1374,6 +1375,7 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
         '-Wextra',
         '-Werror',
         '-I.',
+        'sm_mapping.c',
         'sm_core.c',
         'sm_safety.c',
         'sm_user_logic.c',
@@ -1478,6 +1480,7 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
         '-Wextra',
         '-Werror',
         '-I.',
+        'sm_mapping.c',
         'sm_core.c',
         'sm_safety.c',
         'sm_user_logic.c',
@@ -1603,6 +1606,7 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
         '-Wextra',
         '-Werror',
         '-I.',
+        'sm_mapping.c',
         'sm_core.c',
         'sm_safety.c',
         'sm_user_logic.c',
@@ -1722,6 +1726,7 @@ describe('X-Bridges scalar combinational execution', { timeout: 60_000 }, () => 
         '-Wextra',
         '-Werror',
         '-I.',
+        'sm_mapping.c',
         'sm_core.c',
         'sm_safety.c',
         'sm_user_logic.c',
@@ -1953,7 +1958,7 @@ const executeStatefulHarness = (
       const executable = join(workspace.directory, `${workspaceName}.exe`);
       execFileSync('gcc', [
         '-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.',
-        'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c',
+        'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c',
         'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable,
       ], { cwd: workspace.directory, stdio: 'pipe' });
       return execFileSync(executable, [], {
@@ -2006,7 +2011,7 @@ describe('X-Bridges stateful solver parity', { timeout: 60_000 }, () => {
         const executable = join(workspace.directory, `xb_${kind}_solver.exe`);
         execFileSync('gcc', [
           '-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.',
-          'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c',
+          'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c',
           'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable,
         ], { cwd: workspace.directory, stdio: 'pipe' });
         const actual = execFileSync(executable, [], {
@@ -2470,7 +2475,7 @@ describe('X-Bridges fixed-point state parity', { timeout: 60_000 }, () => {
       const executable = join(workspace.directory, 'xb_fixed_delay.exe');
       execFileSync('gcc', [
         '-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.',
-        'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c',
+        'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c',
         'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable,
       ], { cwd: workspace.directory, stdio: 'pipe' });
       const actual = execFileSync(executable, [], {
@@ -2532,7 +2537,7 @@ describe('X-Bridges fixed-point state parity', { timeout: 60_000 }, () => {
       const executable = join(workspace.directory, 'xb_trig.exe');
       execFileSync('gcc', [
         '-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.',
-        'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c',
+        'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c',
         'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable,
       ], { cwd: workspace.directory, stdio: 'pipe' });
       const actual = execFileSync(executable, [], {

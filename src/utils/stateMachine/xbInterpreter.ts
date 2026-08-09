@@ -768,11 +768,19 @@ const evaluateDirectOperation = (
       return [[y]];
     }
     case 'Step': {
-      const stepTime = Number(parameter(operation, ['stepTime', 'time'], 1));
-      const initial = Number(parameter(operation, ['initialValue', 'initial'], 0));
-      const final = Number(parameter(operation, ['finalValue', 'final'], 1));
+      const stepTime = operation.stepParameters
+        ? operation.stepParameters.threshold.milliseconds / 1000
+        : Number(parameter(operation, ['step_time', 'stepTime', 'time'], 1));
+      const initial = operation.stepParameters?.initialValue
+        ?? Number(parameter(operation, ['initial_value', 'initialValue', 'initial'], 0));
+      const final = operation.stepParameters?.finalValue
+        ?? Number(parameter(operation, ['final_value', 'finalValue', 'final'], 1));
       const t = runtime.simTime ?? 0;
-      return [[t < stepTime ? initial : final]];
+      const beforeThreshold = operation.stepParameters
+        ? Math.round((t + runtime.ir.solver.stepSeconds) * 1000)
+          < operation.stepParameters.threshold.milliseconds
+        : t < stepTime;
+      return [[beforeThreshold ? initial : final]];
     }
     default:
       throw new Error(

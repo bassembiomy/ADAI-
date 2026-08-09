@@ -45,7 +45,7 @@ const hostCompileAndRun = (dir: string, harnessC: string): string => {
   fs.writeFileSync(path.join(dir, 'harness.c'), harnessC);
   const exe = path.join(dir, process.platform === 'win32' ? 'harness.exe' : 'harness');
   execSync(
-    `${gcc} -std=c99 -Wall -Wextra -Werror -I. sm_core.c sm_safety.c sm_user_logic.c harness.c -o "${exe}"`,
+    `${gcc} -std=c99 -Wall -Wextra -Werror -I. sm_mapping.c sm_core.c sm_safety.c sm_user_logic.c harness.c -o "${exe}"`,
     { cwd: dir, stdio: 'pipe' }
   );
   return execSync(`"${exe}"`, { cwd: dir, stdio: 'pipe' }).toString();

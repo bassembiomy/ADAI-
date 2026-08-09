@@ -162,7 +162,7 @@ writeFileSync(join(outDir, 'harness.c'), [
 const executable = join(outDir, `xb_${kind}_solver.exe`);
 execFileSync('gcc', [
   '-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror', '-I.',
-  'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c', 'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable,
+  'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'sm_xbridges.c', 'mcal_dio_test_stubs.c', 'harness.c', '-lm', '-o', executable,
 ], { cwd: outDir, stdio: 'pipe' });
 const actual = execFileSync(executable, [], { cwd: outDir, encoding: 'utf8' }).trim().split(/\r?\n/).map((line) => line.split(',').map(Number));
 console.log('Generated C actual:');

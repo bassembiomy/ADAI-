@@ -1477,6 +1477,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     'SM_Error_t SM_Init(ADIA_Instance_t *instance)',
     '{',
     '    uint32_t layer_index;',
+    ...(ir.activeSlotCount > 0 ? ['    uint32_t slot_index;'] : []),
     '    uint32_t state_index;',
     '    if (instance == NULL) {',
     '        return SM_ERR_NULL_INSTANCE;',
@@ -1500,9 +1501,9 @@ export const renderCoreSource = (ir: SemanticModel): string => {
         `    instance->data.${variable.cName} = (${renderCType(variable.type)})(${renderCInitialValue(variable)});`),
     ir.activeSlotCount > 0
       ? lines(
-        '    for (layer_index = 0U; layer_index < SM_NUM_ACTIVE_SLOTS; ++layer_index) {',
-        '        instance->active_states[layer_index] = SM_NODE_INVALID;',
-        '        instance->history_states[layer_index] = SM_NODE_INVALID;',
+        '    for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {',
+        '        instance->active_states[slot_index] = SM_NODE_INVALID;',
+        '        instance->history_states[slot_index] = SM_NODE_INVALID;',
         '    }',
       ).trimEnd()
       : null,
@@ -1528,6 +1529,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     'SM_Error_t SM_Reset(ADIA_Instance_t *instance)',
     '{',
     '    uint32_t layer_index;',
+    ...(ir.activeSlotCount > 0 ? ['    uint32_t slot_index;'] : []),
     '    uint32_t state_index;',
     '    if (instance == NULL) {',
     '        return SM_ERR_NULL_INSTANCE;',
@@ -1542,9 +1544,9 @@ export const renderCoreSource = (ir: SemanticModel): string => {
         `    instance->data.${variable.cName} = (${renderCType(variable.type)})(${renderCInitialValue(variable)});`),
     ir.activeSlotCount > 0
       ? lines(
-        '    for (layer_index = 0U; layer_index < SM_NUM_ACTIVE_SLOTS; ++layer_index) {',
-        '        instance->active_states[layer_index] = SM_NODE_INVALID;',
-        '        instance->history_states[layer_index] = SM_NODE_INVALID;',
+        '    for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {',
+        '        instance->active_states[slot_index] = SM_NODE_INVALID;',
+        '        instance->history_states[slot_index] = SM_NODE_INVALID;',
         '    }',
       ).trimEnd()
       : null,

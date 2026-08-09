@@ -64,7 +64,7 @@ const avrCompile = (dir: string) => {
   /* The bundled toolchain must be present — fail loudly instead of skipping */
   expect(fs.existsSync(AVR_GCC)).toBe(true);
   execSync(
-    `"${AVR_GCC}" -Wall -Wextra -Werror -c sm_core.c sm_safety.c sm_user_logic.c -I. -I"${AVR_INC}" -D__AVR_ATmega2560__ -DF_CPU=16000000UL -D__AVR__`,
+    `"${AVR_GCC}" -Wall -Wextra -Werror -c sm_mapping.c sm_core.c sm_safety.c sm_user_logic.c -I. -I"${AVR_INC}" -D__AVR_ATmega2560__ -DF_CPU=16000000UL -D__AVR__`,
     { cwd: dir, stdio: 'pipe' }
   );
 };

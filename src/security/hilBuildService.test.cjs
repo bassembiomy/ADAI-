@@ -22,7 +22,7 @@ async function runTests() {
     },
     flashBlocked: false,
     files: [
-      'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'hal_drivers.c',
+      'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'hal_drivers.c',
       'hil_interface.c', 'mcal_dio_hil.c', 'adia_mcal.c', 'adia_component.c',
       'main_hil.c',
     ],
