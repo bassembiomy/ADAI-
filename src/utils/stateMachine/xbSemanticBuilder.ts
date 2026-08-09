@@ -940,7 +940,7 @@ const stateBoundaryForNode = (
         id: `${node.id}:index$state`,
         role: 'index',
         signalId: null,
-        numericType: { kind: 'uint32' },
+        numericType: { kind: 'fixed', wordLength: 32, fractionLength: 0, signed: false },
         shape: { kind: 'scalar' },
         initialValues: [0],
       });

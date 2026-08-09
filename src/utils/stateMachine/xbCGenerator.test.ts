@@ -2970,41 +2970,34 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
 
   it('generates circular buffer array and index state declarations and modulo updates for DELAY(N=2)', () => {
     const float32 = { kind: 'float32' } as const;
-    const model: SemanticModel = {
-      ...semanticModel(),
-      states: {
-        S1: {
-          id: 'S1', name: 'State1', enumName: 'SM_ST_S1', activityIndex: 0,
-          parentStateId: null, childStateIds: [], isInitial: true, isTerminal: false,
-          actions: [], transitions: [], xBridges: {
-            stateId: 'S1', ownerState: { stateId: 'S1', stateName: 'State1', cIndexSymbol: 'SM_ST_S1_IDX', numericIndex: 0 },
-            executionOrder: ['delay1'],
-            operations: {
-              delay1: {
-                id: 'delay1', type: 'DELAY', inputSignalIds: ['delay1:u'], outputSignalIds: ['delay1:y'],
-                parameters: { delay_length: 2, initial_condition: -1 }, directFeedthrough: false, stateful: true,
-                conversion: null,
-                state: {
-                  outputPhase: 'read-before-update', updatePhase: 'after-direct-feedthrough',
-                  slots: [
-                    { id: 'delay1:buffer$state', role: 'buffer', signalId: 'delay1:y', numericType: float32, shape: { kind: 'vector', length: 2 }, initialValues: [-1, -1] },
-                    { id: 'delay1:index$state', role: 'index', signalId: null, numericType: { kind: 'fixed', wordLength: 32, fractionLength: 0, signed: false }, shape: { kind: 'scalar' }, initialValues: [0] },
-                  ],
-                },
-                schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'zero-order' },
-                delayParameters: { delayLength: 2, initialCondition: -1, samplePeriod: 0.1, isUnitDelay: false },
-              },
-            },
-            signals: {
-              'delay1:u': { id: 'delay1:u', nodeId: 'delay1', portId: 'u', direction: 'input', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'scalar', numericType: float32, storage: 'native' },
-              'delay1:y': { id: 'delay1:y', nodeId: 'delay1', portId: 'y', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'scalar', numericType: float32, storage: 'native' },
-            },
-            mappings: [],
-            solver: { kind: 'euler', stepSeconds: 0.1, substepsPerTick: 1 },
-            policy: { memory: 'reset', numericFault: 'escalate' },
+    const model = semanticModel();
+    model.states.controller.xBridges = {
+      stateId: 'controller',
+      ownerState: { stateId: 'controller', stateName: 'controller', cIndexSymbol: 'SM_ST_CONTROLLER_IDX', numericIndex: 0 },
+      executionOrder: ['delay1'],
+      operations: {
+        delay1: {
+          id: 'delay1', type: 'DELAY', inputSignalIds: ['delay1:u'], outputSignalIds: ['delay1:y'],
+          parameters: { delay_length: 2, initial_condition: -1 }, directFeedthrough: false, stateful: true,
+          conversion: null,
+          state: {
+            outputPhase: 'read-before-update', updatePhase: 'after-direct-feedthrough',
+            slots: [
+              { id: 'delay1:buffer$state', role: 'buffer', signalId: 'delay1:y', numericType: float32, shape: { kind: 'vector', length: 2 }, initialValues: [-1, -1] },
+              { id: 'delay1:index$state', role: 'index', signalId: null, numericType: { kind: 'fixed', wordLength: 32, fractionLength: 0, signed: false }, shape: { kind: 'scalar' }, initialValues: [0] },
+            ],
           },
+          schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'zero-order' },
+          delayParameters: { delayLength: 2, initialCondition: -1, samplePeriod: 0.1, isUnitDelay: false },
         },
       },
+      signals: {
+        'delay1:u': { id: 'delay1:u', nodeId: 'delay1', portId: 'u', direction: 'input', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'scalar', numericType: float32, storage: 'native' },
+        'delay1:y': { id: 'delay1:y', nodeId: 'delay1', portId: 'y', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'scalar', numericType: float32, storage: 'native' },
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.1, substepsPerTick: 1 },
+      policy: { memory: 'reset', numericFault: 'escalate' },
     };
 
     const artifacts = generateCArtifacts(model);
