@@ -91,6 +91,7 @@ const compileAndRun = (ir: SemanticModel, harness: string): string => {
         '-Wextra',
         '-Werror',
         '-I.',
+        'sm_mapping.c',
         'sm_core.c',
         'sm_safety.c',
         'sm_user_logic.c',
@@ -139,6 +140,7 @@ describe('structured C99 renderer', { timeout: 60_000 }, () => {
 
   it('renders consistency maps from the actual semantic hierarchy and slots', () => {
     const safety = renderSafetySource(build(nestedAndFixture()));
+    const mapping = generatedFile(build(nestedAndFixture()), 'sm_mapping.c');
 
     expect(safety).toContain(
       'static const SM_Node_t SM_State_Parent_Map[SM_NUM_STATES + 1U]',
@@ -149,15 +151,77 @@ describe('structured C99 renderer', { timeout: 60_000 }, () => {
     expect(safety).toContain(
       '[SM_ST_REGION_B_IDX] = SM_ST_PARALLEL',
     );
-    expect(safety).toContain(
+    expect(mapping).toContain(
       '[SM_ST_PARALLEL_IDX] = 0',
     );
-    expect(safety).toContain(
+    expect(mapping).toContain(
       '[SM_ST_REGION_A_IDX] = -1',
     );
     expect(safety).toContain(
       'return SM_ERR_CONFIGURATION;',
     );
+  });
+
+  it('renders shared parent and active-slot mapping metadata', () => {
+    const ir = build(nestedAndFixture());
+    const header = generatedFile(ir, 'sm_mapping.h');
+    const source = generatedFile(ir, 'sm_mapping.c');
+
+    expect(header).toContain(
+      'extern const uint32_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U];',
+    );
+    expect(header).toContain(
+      'SM_Error_t SM_Validate_Mapping_Configuration(void);',
+    );
+    expect(source).toContain(
+      '[SM_ST_REGION_A_IDX] = SM_LYR_PARALLEL_IDX',
+    );
+    expect(source).toContain('[SM_ST_REGION_A_IDX] = -1');
+    expect(source).toContain('[SM_ST_REGION_B_IDX] = -1');
+    expect(source).toContain('Active State Mapping');
+    expect(source).toContain(
+      'Parallel child states are tracked using state_active[].',
+    );
+  });
+
+  it('validates generated mapping metadata before root entry', () => {
+    const core = renderCoreSource(build(flatOrFixture()));
+    const init = core.slice(core.indexOf(
+      'SM_Error_t SM_Init(ADIA_Instance_t *instance)\n{',
+    ));
+    const validation = init.indexOf('SM_Validate_Mapping_Configuration()');
+    const rootEntry = init.indexOf('SM_Enter_Layer_Default_0(instance);');
+
+    expect(validation).toBeGreaterThan(-1);
+    expect(rootEntry).toBeGreaterThan(validation);
+    expect(init).toContain('return SM_ERR_CONFIGURATION;');
+  });
+
+  it('rejects invalid generated mapping metadata during initialization', () => {
+    const valid = build(flatOrFixture());
+    const invalid: SemanticModel = {
+      ...valid,
+      states: {
+        ...valid.states,
+        a: {
+          ...valid.states.a,
+          activeSlot: valid.activeSlotCount,
+        },
+      },
+    };
+    const output = compileAndRun(
+      invalid,
+      `#include "sm_core.h"
+#include <stdio.h>
+int main(void) {
+    ADIA_Instance_t instance;
+    printf("%u\\n", SM_Init(&instance) == SM_ERR_CONFIGURATION ? 1U : 0U);
+    return 0;
+}
+`,
+    );
+
+    expect(output.trim()).toBe('1');
   });
 
   it('rejects missing active children in OR and AND containers', () => {
@@ -277,6 +341,8 @@ int main(void) {
     expect(result.errors).toEqual([]);
     expect(result.files.map((file) => file.name)).toEqual([
       'sm_config.h',
+      'sm_mapping.h',
+      'sm_mapping.c',
       'sm_core.h',
       'sm_core.c',
       'sm_safety.h',
@@ -299,6 +365,8 @@ int main(void) {
     const hybrid = build(hybridXBridgesFixture());
     expect(generateCArtifacts(hybrid).files.map((file) => file.name)).toEqual([
       'sm_config.h',
+      'sm_mapping.h',
+      'sm_mapping.c',
       'sm_core.h',
       'sm_core.c',
       'sm_safety.h',
@@ -1075,6 +1143,7 @@ int main(void) {
           '-Werror',
           '-DSM_TRACE_ENABLED',
           '-I.',
+          'sm_mapping.c',
           'sm_core.c',
           'sm_safety.c',
           'sm_user_logic.c',
@@ -1192,7 +1261,7 @@ int main(void) {
       writeFileSync(join(workspace.directory, 'main.c'), dummyMain);
 
       expect(() => {
-        execFileSync('gcc', ['-std=c99', '-Wall', '-Wextra', '-Wshadow', '-Werror', '-I.', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'main.c', '-o', join(workspace.directory, 'out.exe')], { cwd: workspace.directory });
+        execFileSync('gcc', ['-std=c99', '-Wall', '-Wextra', '-Wshadow', '-Werror', '-I.', 'sm_mapping.c', 'sm_core.c', 'sm_safety.c', 'sm_user_logic.c', 'main.c', '-o', join(workspace.directory, 'out.exe')], { cwd: workspace.directory });
       }).not.toThrow();
     });
   });

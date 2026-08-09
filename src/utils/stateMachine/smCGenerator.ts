@@ -1004,6 +1004,99 @@ export const renderUserLogicSource = (ir: SemanticModel): string => lines(
   ]),
 );
 
+export const renderMappingHeader = (): string => lines(
+  '#ifndef SM_MAPPING_H',
+  '#define SM_MAPPING_H',
+  '',
+  '#include "sm_config.h"',
+  '',
+  'extern const uint32_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U];',
+  'extern const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U];',
+  'extern const SM_Node_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS];',
+  'extern const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS];',
+  '',
+  'SM_Error_t SM_Validate_Mapping_Configuration(void);',
+  '',
+  '#endif /* SM_MAPPING_H */',
+);
+
+export const renderMappingSource = (ir: SemanticModel): string => {
+  const states = orderedStates(ir);
+  const layers = orderedLayers(ir);
+  const mappingRows = layers.map((layer) => {
+    const slot = layer.activeSlot === null ? 'NONE' : layer.activeSlot.toString();
+    return ` * ${cCommentText(layer.name || layer.id)} | ${slot}`;
+  });
+  return lines(
+    '#include "sm_mapping.h"',
+    '',
+    '/*',
+    ' * Active State Mapping',
+    ' *',
+    ' * Layer | Slot',
+    ' * ------------------------------',
+    ...mappingRows,
+    ' *',
+    ' * Parallel child states are tracked using state_active[].',
+    ' * Layer IDs, active-slot IDs, and state IDs are distinct.',
+    ' */',
+    'const uint32_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U] = {',
+    '    [0] = 0U,',
+    ...states.map((state) =>
+      `    [${stateIndex(ir, state.id)}] = ${layerMacro(ir.layers[state.layerId])},`),
+    '};',
+    '',
+    'const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U] = {',
+    '    [0] = -1,',
+    ...states.map((state) =>
+      `    [${stateIndex(ir, state.id)}] = ${state.activeSlot},`),
+    '};',
+    '',
+    'const SM_Node_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS] = {',
+    ...layers.map((layer) =>
+      `    [${layerMacro(layer)}] = ${layer.parentStateId === null ? 'SM_NODE_INVALID' : stateNode(ir, layer.parentStateId)},`),
+    '};',
+    '',
+    'const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS] = {',
+    ...layers.map((layer) =>
+      `    [${layerMacro(layer)}] = ${layer.activeSlot ?? -1},`),
+    '};',
+    '',
+    'SM_Error_t SM_Validate_Mapping_Configuration(void)',
+    '{',
+    '    uint32_t layer_index;',
+    '    uint32_t state_index;',
+    '    uint32_t parent_layer;',
+    '    int32_t slot;',
+    '    SM_Node_t parent_state;',
+    '    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {',
+    '        slot = SM_Layer_Active_Slot_Map[layer_index];',
+    '        if ((slot < -1) || (slot >= (int32_t)SM_NUM_ACTIVE_SLOTS)) {',
+    '            return SM_ERR_CONFIGURATION;',
+    '        }',
+    '        parent_state = SM_Layer_Parent_State_Map[layer_index];',
+    '        if ((uint32_t)parent_state > SM_NUM_STATES) {',
+    '            return SM_ERR_CONFIGURATION;',
+    '        }',
+    '    }',
+    '    for (state_index = 1U; state_index <= SM_NUM_STATES; ++state_index) {',
+    '        parent_layer = SM_State_Parent_Layer_Map[state_index];',
+    '        if (parent_layer >= SM_NUM_LAYERS) {',
+    '            return SM_ERR_CONFIGURATION;',
+    '        }',
+    '        slot = SM_State_Active_Slot_Map[state_index];',
+    '        if ((slot < -1) || (slot >= (int32_t)SM_NUM_ACTIVE_SLOTS)) {',
+    '            return SM_ERR_CONFIGURATION;',
+    '        }',
+    '        if (slot != SM_Layer_Active_Slot_Map[parent_layer]) {',
+    '            return SM_ERR_CONFIGURATION;',
+    '        }',
+    '    }',
+    '    return SM_ERR_NONE;',
+    '}',
+  );
+};
+
 export const renderSafetyHeader = (): string => lines(
   '#ifndef SM_SAFETY_H',
   '#define SM_SAFETY_H',
@@ -1041,6 +1134,7 @@ export const renderSafetySource = (ir: SemanticModel): string => {
   return lines(
     '#include <stddef.h>',
     '#include "sm_safety.h"',
+    '#include "sm_mapping.h"',
     (ir.safetyMode || mappedOutputs.length > 0)
       ? '#include "mcal_dio.h"'
       : null,
@@ -1049,22 +1143,6 @@ export const renderSafetySource = (ir: SemanticModel): string => {
     '    [0] = SM_NODE_INVALID,',
     ...states.map((state) =>
       `    [${stateIndex(ir, state.id)}] = ${state.parentStateId === null ? 'SM_NODE_INVALID' : stateNode(ir, state.parentStateId)},`),
-    '};',
-    '',
-    'static const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U] = {',
-    '    [0] = -1,',
-    ...states.map((state) =>
-      `    [${stateIndex(ir, state.id)}] = ${state.activeSlot},`),
-    '};',
-    '',
-    'static const SM_Node_t SM_Layer_Parent_Map[SM_NUM_LAYERS] = {',
-    ...layers.map((layer) =>
-      `    [${layerMacro(layer)}] = ${layer.parentStateId === null ? 'SM_NODE_INVALID' : stateNode(ir, layer.parentStateId)},`),
-    '};',
-    '',
-    'static const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS] = {',
-    ...layers.map((layer) =>
-      `    [${layerMacro(layer)}] = ${layer.activeSlot ?? -1},`),
     '};',
     '',
     'static const bool SM_Layer_Has_Children_Map[SM_NUM_LAYERS] = {',
@@ -1117,7 +1195,7 @@ export const renderSafetySource = (ir: SemanticModel): string => {
     '        }',
     '    }',
     '    for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {',
-    '        parent = SM_Layer_Parent_Map[layer_index];',
+    '        parent = SM_Layer_Parent_State_Map[layer_index];',
     '        container_active = (parent == SM_NODE_INVALID)',
     '            || instance->state_active[(uint32_t)parent];',
     '        active_slot = SM_Layer_Active_Slot_Map[layer_index];',
@@ -1356,6 +1434,7 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '#include <stddef.h>',
     '#include <string.h>',
     '#include "sm_core.h"',
+    '#include "sm_mapping.h"',
     '#include "sm_safety.h"',
     '#include "sm_user_logic.h"',
     '#include "mcal_dio.h"',
@@ -1434,6 +1513,10 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '    }',
     '    instance->error_status = SM_ERR_NONE;',
     '    instance->fault_latched = false;',
+    '    instance->error_status = SM_Validate_Mapping_Configuration();',
+    '    if (instance->error_status != SM_ERR_NONE) {',
+    '        return SM_ERR_CONFIGURATION;',
+    '    }',
     `    ${layerFunction(index, 'SM_Enter_Layer_Default', rootLayer.id)}(instance);`,
     '    return SM_ERR_NONE;',
     '}',
@@ -1590,6 +1673,8 @@ export const generateCArtifacts = (
 ): CGeneratorResult => {
   const implementationFiles: GeneratedCFile[] = [
     { name: 'sm_config.h', content: renderConfigHeader(ir) },
+    { name: 'sm_mapping.h', content: renderMappingHeader() },
+    { name: 'sm_mapping.c', content: renderMappingSource(ir) },
     { name: 'sm_core.h', content: renderCoreHeader() },
     { name: 'sm_core.c', content: renderCoreSource(ir) },
     { name: 'sm_safety.h', content: renderSafetyHeader() },
