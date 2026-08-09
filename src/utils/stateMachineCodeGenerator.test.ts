@@ -14,6 +14,8 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
     expect(result.errors).toEqual([]);
     expect(result.files.map((file) => file.name)).toEqual([
       'sm_config.h',
+      'sm_mapping.h',
+      'sm_mapping.c',
       'sm_core.h',
       'sm_core.c',
       'sm_safety.h',
@@ -35,6 +37,9 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
     expect(header).toContain('SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms);');
     expect(header).toContain('SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance);');
     expect(header).toContain('SM_Error_t SM_Sync_IO(ADIA_Instance_t *instance);');
+    expect(header).toContain('SM_Node_t SM_GetActiveSlot(');
+    expect(header).toContain('SM_Node_t SM_GetLayerActive(');
+    expect(header).toContain('bool SM_IsStateActive(');
     expect(header).toContain('SM_Node_t SM_GetActive(');
     expect(header).toContain('SM_Error_t SM_GetError(');
   });

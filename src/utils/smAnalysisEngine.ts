@@ -664,7 +664,7 @@ const generateTestScenarios = (
             expected: `System remains in "${cc.elementName}" — verify no memory corruption or watchdog timeout`,
           },
           {
-            action: 'Verify SM_GetActive() returns expected enum',
+            action: 'Verify SM_GetActiveSlot() or SM_GetLayerActive() returns expected enum',
             expected: `Active state is SM_ST_${cc.elementName.toUpperCase().replace(/[^A-Z0-9_]/g, '_')}`,
           },
         );

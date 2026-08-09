@@ -224,6 +224,48 @@ int main(void) {
     expect(output.trim()).toBe('1');
   });
 
+  it('renders distinct slot, layer, and state activity APIs', () => {
+    const ir = build(nestedAndFixture());
+    const header = generatedFile(ir, 'sm_core.h');
+    const core = generatedFile(ir, 'sm_core.c');
+
+    expect(header).toContain('SM_Node_t SM_GetActiveSlot(');
+    expect(header).toContain('SM_Node_t SM_GetLayerActive(');
+    expect(header).toContain('bool SM_IsStateActive(');
+    expect(header).toContain('Deprecated: use SM_GetActiveSlot()');
+    expect(core).toContain('slot = SM_Layer_Active_Slot_Map[layer];');
+    expect(core).not.toContain('active_states[layer]');
+    expect(core).toContain(
+      'return SM_GetActiveSlot(instance, (uint32_t)slot);',
+    );
+  });
+
+  it('queries OR slots and parallel state activity without identifier mixing', () => {
+    const output = compileAndRun(
+      build(nestedAndFixture()),
+      `#include "sm_core.h"
+#include <stdio.h>
+int main(void) {
+    ADIA_Instance_t inst;
+    (void)SM_Init(&inst);
+    printf("%u %u %u %u %u %u %u %u %u\\n",
+        SM_GetActiveSlot(&inst, 0U) == SM_ST_PARALLEL,
+        SM_GetActiveSlot(&inst, SM_NUM_ACTIVE_SLOTS) == SM_NODE_INVALID,
+        SM_GetLayerActive(&inst, SM_LYR_ROOT_IDX) == SM_ST_PARALLEL,
+        SM_GetLayerActive(&inst, SM_LYR_PARALLEL_IDX) == SM_NODE_INVALID,
+        SM_GetLayerActive(&inst, SM_NUM_LAYERS) == SM_NODE_INVALID,
+        SM_IsStateActive(&inst, SM_ST_REGION_A),
+        SM_IsStateActive(&inst, SM_ST_REGION_B),
+        !SM_IsStateActive(&inst, SM_NODE_INVALID),
+        !SM_IsStateActive(&inst, (SM_Node_t)(SM_NUM_STATES + 1U)));
+    return 0;
+}
+`,
+    );
+
+    expect(output.trim()).toBe('1 1 1 1 1 1 1 1 1');
+  });
+
   it('rejects missing active children in OR and AND containers', () => {
     const orIr = build(flatOrFixture());
     const orSlot = orIr.layers.root.activeSlot!;
@@ -894,7 +936,7 @@ int main(void) {
   it('returns to the autostart state and resets variables after SM_Reset', () => {
     const output = compileAndRun(
       build(flatOrFixture()),
-      `#include "sm_core.h"\n#include <stdio.h>\nbool MCAL_Dio_ReadChannel(uint32_t channel) { (void)channel; return false; }\nvoid MCAL_Dio_WriteChannel(uint32_t channel, bool level) { (void)channel; (void)level; }\nvoid MCAL_ApplySafeOutputs(void) {}\nvoid MCAL_Watchdog_Kick(void) {}\nint main(void) {\n    ADIA_Instance_t inst;\n    (void)SM_Init(&inst);\n    inst.data.go = true;\n    (void)SM_Step(&inst, SM_TICK_MS);\n    printf("%d %d\\n", inst.data.go, SM_GetActive(&inst, 0U) == SM_ST_B);\n    (void)SM_Reset(&inst);\n    printf("%d %d\\n", inst.data.go, SM_GetActive(&inst, 0U) == SM_ST_A);\n    return 0;\n}\n`,
+      `#include "sm_core.h"\n#include <stdio.h>\nbool MCAL_Dio_ReadChannel(uint32_t channel) { (void)channel; return false; }\nvoid MCAL_Dio_WriteChannel(uint32_t channel, bool level) { (void)channel; (void)level; }\nvoid MCAL_ApplySafeOutputs(void) {}\nvoid MCAL_Watchdog_Kick(void) {}\nint main(void) {\n    ADIA_Instance_t inst;\n    (void)SM_Init(&inst);\n    inst.data.go = true;\n    (void)SM_Step(&inst, SM_TICK_MS);\n    printf("%d %d\\n", inst.data.go, SM_GetActiveSlot(&inst, 0U) == SM_ST_B);\n    (void)SM_Reset(&inst);\n    printf("%d %d\\n", inst.data.go, SM_GetActiveSlot(&inst, 0U) == SM_ST_A);\n    return 0;\n}\n`,
     );
     expect(output.trim().replace(/\r/g, '')).toBe('1 1\n0 1');
   });

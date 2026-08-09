@@ -72,6 +72,7 @@ export const compileAndRunCProgram = (
     '-Werror',
     ...(options.defines ?? []).map((define) => `-D${define}`),
     '-I.',
+    'sm_mapping.c',
     'sm_core.c',
     'sm_safety.c',
     'sm_user_logic.c',
