@@ -467,6 +467,28 @@ const signalElementStorageExpression = (
   const requested = requireSignal(state, signalId);
   const sourceId = requested.sourceSignalId ?? requested.id;
   const source = requireSignal(state, sourceId);
+
+  const sourceOp = state.xBridges?.operations[source.nodeId];
+  if (sourceOp && (sourceOp.type === 'DELAY' || sourceOp.type === 'UNIT_DELAY')) {
+    const bufferSlot = sourceOp.state?.slots.find(
+      (s) => s.role === 'buffer' || s.storageCategory === 'array',
+    );
+    const indexSlot = sourceOp.state?.slots.find(
+      (s) => s.role === 'index' || s.storageCategory === 'integral_index',
+    );
+    if (bufferSlot && indexSlot) {
+      const bufferField = layout.slotFields.get(bufferSlot.id);
+      const indexField = layout.slotFields.get(indexSlot.id);
+      if (bufferField && indexField) {
+        const elementCount = source.elementCount;
+        return {
+          signal: source,
+          expression: `instance->${member}.${bufferField}[(uint32_t)instance->${member}.${indexField} * ${elementCount}U + (${index})]`,
+        };
+      }
+    }
+  }
+
   const field = layout.signalFields.get(sourceId);
   if (field === undefined) {
     throw new Error(`X-Bridges signal '${sourceId}' lacks generated storage`);
@@ -2819,8 +2841,10 @@ const renderDiscreteStateUpdates = (
         updateLines.push(`        instance->${member}.${indexField} = (xb_delay_idx + 1U) % ${delayLength}U;`, '    }');
 
         const transactional = renderTransactionalStateUpdates(operation, updateLines, layout, member);
-        if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return withFaultSync(transactional);
-        return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...transactional.map((line) => `    ${line}`), '    }']);
+        if (operation.schedule.periodSubsteps > 1) {
+          return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...transactional.map((line) => `    ${line}`), '    }']);
+        }
+        return withFaultSync(transactional);
       }
     }
   }
@@ -3506,6 +3530,9 @@ SM_XB_NumericResult_t SM_XB_ConvertFloat64(double value)
         return result;
     }
     return result;
+#else
+    return SM_XB_UnsupportedFloat(value);
+#endif
 }`;
 
 export const validateGeneratedCAST = (cCode: string): void => {

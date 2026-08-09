@@ -3002,9 +3002,10 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
 
     const artifacts = generateCArtifacts(model);
     const cCode = artifacts.files.map((f) => f.content).join('\n');
-    expect(cCode).toContain('state_delay1_buffer$state[2];');
-    expect(cCode).toContain('uint32_t state_delay1_index$state;');
+    expect(cCode).toContain('state_delay1_buffer_state[2];');
+    expect(cCode).toContain('uint32_t state_delay1_index_state;');
     expect(cCode).toContain('% 2U;');
+    expect(cCode).toContain('state_delay1_buffer_state[(uint32_t)instance->');
   });
 });
 
