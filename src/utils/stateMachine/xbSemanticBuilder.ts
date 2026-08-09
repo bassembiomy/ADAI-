@@ -930,19 +930,22 @@ export const buildXBSemanticModel = (
 
   const effectiveMappings: XBMappingV1[] = [...input.model.mappings];
   for (const node of input.model.nodes) {
-    if (node.type === 'Outport' && node.parameters?.smVarId) {
+    if ((node.type === 'Outport' || node.type === 'Inport') && node.parameters?.smVarId) {
       const smVarId = String(node.parameters.smVarId);
       const mapped = effectiveMappings.filter((m) => m.smVarId === smVarId && m.blockId === node.id);
       if (mapped.length === 0) {
         const ports = portsByNode.get(node.id) ?? [];
-        const defaultPortId = ports.find((p) => p.direction === 'input')?.id
+        const isOut = node.type === 'Outport';
+        const dir = isOut ? 'out' : 'in';
+        const defaultPortId = ports.find((p) => p.direction === (isOut ? 'output' : 'input'))?.id
+          ?? ports.find((p) => p.direction === (isOut ? 'input' : 'output'))?.id
           ?? ports[0]?.id
-          ?? 'in';
+          ?? (isOut ? 'out' : 'in');
         effectiveMappings.push({
           smVarId,
           blockId: node.id,
           portId: defaultPortId,
-          direction: 'out',
+          direction: dir,
         });
       }
     }
@@ -965,7 +968,7 @@ export const buildXBSemanticModel = (
   }
   if (diagnostics.length > 0) return { diagnostics };
   const inputMappingBySignalId = new Map(
-    input.model.mappings
+    effectiveMappings
       .filter((mapping) => mapping.direction === 'in')
       .map((mapping) => [
         `${mapping.blockId}:${mapping.portId}`,

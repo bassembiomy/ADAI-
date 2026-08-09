@@ -2835,13 +2835,47 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
 
     expect(coreSource).toContain('instance->state_timers[SM_ST_A_IDX] < 300U');
     expect(coreSource).not.toContain('state_timers[0U]');
-    expect(coreSource).toContain('instance->data.xb6_step_output');
-    expect(coreSource).not.toContain('xb6_step_output_0001');
+    expect(coreSource).toContain('instance->data.xb6_step_output = instance->xb_a.XB6_StepOut_out;');
+    expect(coreSource).not.toContain('(float)((double)(instance->xb_a.XB6_StepOut_out))');
+    expect(coreSource).not.toContain('instance->data.xb6_step_output = instance->xb_a.step1_out;');
 
-    const check = compileGeneratedCSyntax(artifacts);
-    expect(check.success).toBe(true);
+    const check = compileGeneratedCSyntax(artifacts, true);
     expect(check.errors).toEqual([]);
+    expect(check.success).toBe(true);
+  });
+
+  it('auto-generates Outport mapping from smVarId when mappings array is empty in JSON model', () => {
+    const model = flatOrFixture();
+    model.states[0].isXBridges = true;
+    model.states[0].xBridgesModel = {
+      nodes: [
+        {
+          id: 'step1',
+          type: 'Step',
+          parameters: { step_time: 0.3, initial_value: 0, final_value: 5 },
+          inputs: [],
+          outputs: [{ id: 'out', direction: 'output' }],
+        },
+        {
+          id: 'XB6-StepOut',
+          type: 'Outport',
+          parameters: { smVarId: 'xb6-step-output-0001' },
+          inputs: [{ id: 'in', direction: 'input' }],
+          outputs: [{ id: 'out', direction: 'output' }],
+        },
+      ],
+      edges: [{ id: 'e1', sourceNodeId: 'step1', sourcePortId: 'out', targetNodeId: 'XB6-StepOut', targetPortId: 'in' }],
+      mappings: [], // Explicitly empty! smVarId on Outport must trigger auto-mapping
+    };
+    model.variables.push({ id: 'xb6-step-output-0001', name: 'xb6_step_output', type: 'float', initialValue: '0', currentValue: 0, visibleInScope: true });
+
+    const { ir } = buildSemanticModel(model);
+    expect(ir).not.toBeNull();
+    const artifacts = generateCArtifacts(ir!);
+    const coreSource = artifacts.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
+
+    expect(coreSource).toContain('instance->data.xb6_step_output = instance->xb_a.XB6_StepOut_out;');
+    expect(coreSource).not.toContain('(float)((double)(instance->xb_a.XB6_StepOut_out))');
   });
 
 });
-

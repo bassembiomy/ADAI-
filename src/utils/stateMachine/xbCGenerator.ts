@@ -2,6 +2,7 @@ import { toCIdentifier } from './smExpressions';
 import type { SemanticModel, SemanticState } from './smSemanticModel';
 import { STATE_MACHINE_XB_TARGET_CAPABILITIES } from './smSemanticValidator';
 import type {
+  XBSemanticMapping,
   XBSemanticModel,
   XBSemanticOperation,
   XBSemanticSignal,
@@ -833,16 +834,7 @@ const emitBoundaryPort: OperationEmitter = (
   ? []
   : emitBoundaryPassThrough(state, operation, operationIndex, layout, member);
 const emitInport: OperationEmitter = emitBoundaryPort;
-const emitOutport: OperationEmitter = (state, operation, operationIndex, layout, member) => {
-  const lines = emitBoundaryPort(state, operation, operationIndex, layout, member);
-  const mapping = state.xBridges?.mappings.find((m) => m.blockId === operation.id);
-  const varName = mapping?.variable.cIdentifier;
-  if (varName && operation.inputSignalIds[0]) {
-    const inputSignal = signalRealExpression(state, operation.inputSignalIds[0], layout, member);
-    lines.push(`    instance->data.${varName} = ${inputSignal};`);
-  }
-  return lines;
-};
+const emitOutport: OperationEmitter = emitBoundaryPort;
 const emitTerminator: OperationEmitter = () => [];
 
 const emitStep: OperationEmitter = (state, operation, operationIndex, layout, member) => {
@@ -1580,6 +1572,36 @@ const renderVariableCast = (
     default:
       return 'float';
   }
+};
+
+const nativeSignalCType = (type: XBNumericType): string | null => {
+  if (type.kind === 'boolean') return 'bool';
+  if (type.kind === 'fixed') return null;
+  const precision = type.kind === 'float' ? type.precision : type.kind;
+  return precision === 'float64' ? 'double' : 'float';
+};
+
+const renderMappedOutputExpression = (
+  state: SemanticState,
+  mapping: XBSemanticMapping,
+  signalId: string,
+  layout: XBStateLayout,
+  member: string,
+): string => {
+  const storage = signalStorageExpression(state, signalId, layout, member);
+  const destinationType = renderVariableCast(mapping.variable.semanticType);
+  const sourceType = nativeSignalCType(storage.signal.numericType);
+  if (sourceType !== null) {
+    return sourceType === destinationType
+      ? storage.expression
+      : `(${destinationType})(${storage.expression})`;
+  }
+  return `(${destinationType})(${signalRealExpression(
+    state,
+    signalId,
+    layout,
+    member,
+  )})`;
 };
 
 const BITWISE_OPERATION_TYPES = new Set([
@@ -3189,8 +3211,12 @@ const renderStateLifecycle = (
   for (const mapping of xb.mappings) {
     if (mapping.direction !== 'out') continue;
     const varCId = mapping.variable.cIdentifier;
+    const op = xb.operations[mapping.blockId];
+    const targetSignalId = (op?.type === 'Outport' && op.outputSignalIds[0])
+      ? op.outputSignalIds[0]
+      : mapping.signalId;
     stepLines.push(
-      `    instance->data.${varCId} = (${renderVariableCast(mapping.variable.semanticType)})(${signalRealExpression(state, mapping.signalId, layout, member)});`,
+      `    instance->data.${varCId} = ${renderMappedOutputExpression(state, mapping, targetSignalId, layout, member)};`,
     );
   }
 
