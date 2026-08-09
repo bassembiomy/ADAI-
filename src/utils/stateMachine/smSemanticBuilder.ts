@@ -243,7 +243,15 @@ export const buildSemanticModel = (
     return { diagnostics };
   }
 
-  const hierarchy = buildHierarchyIndex(model);
+  const codegenModel: StateMachineModelV4 = {
+    ...model,
+    layers: model.layers.filter((layer) =>
+      layer.parentStateId === null
+      || layer.stateIds.length > 0
+      || layer.junctionIds.length > 0
+      || layer.transitionIds.length > 0),
+  };
+  const hierarchy = buildHierarchyIndex(codegenModel);
   const slots = allocateActiveSlots(hierarchy);
   const activityIndexByStateId = new Map(
     hierarchy.orderedStateIds.map((id, index) => [id, index]),
@@ -292,7 +300,7 @@ export const buildSemanticModel = (
     model.transitions.map((transition) => [transition.id, transition]),
   );
   const layerIdByJunctionId = new Map<string, string>();
-  for (const layer of model.layers) {
+  for (const layer of codegenModel.layers) {
     for (const junctionId of layer.junctionIds) {
       layerIdByJunctionId.set(junctionId, layer.id);
     }
@@ -690,4 +698,3 @@ export const buildSemanticModel = (
     }),
   };
 };
-

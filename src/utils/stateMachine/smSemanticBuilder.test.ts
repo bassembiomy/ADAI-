@@ -61,7 +61,7 @@ describe('buildSemanticModel', () => {
     );
   });
 
-  it('does not allocate an active slot to an empty OR child layer', () => {
+  it('omits a truly empty non-root layer from semantic code generation', () => {
     const model = flatOrFixture();
     model.layers.push({
       ...model.layers[0],
@@ -78,8 +78,10 @@ describe('buildSemanticModel', () => {
 
     expect(result.diagnostics).toEqual([]);
     expect(result.ir).toBeDefined();
-    expect(result.ir!.layers.empty_b_children.activeSlot).toBeNull();
+    expect(result.ir!.layers).not.toHaveProperty('empty_b_children');
+    expect(Object.keys(result.ir!.layers)).toEqual(['root']);
     expect(result.ir!.activeSlotCount).toBe(1);
+    expect(model.layers).toHaveLength(2);
   });
 
   it('retains trigger combination mode and normalizes temporal thresholds', () => {
