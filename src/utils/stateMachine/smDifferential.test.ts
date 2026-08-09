@@ -650,7 +650,7 @@ describe('TypeScript-versus-generated-C differential gate', () => {
     expect(compareSemanticTraces(expected, actual)).toBeNull();
   }, 60_000);
 
-  it('GEN-XB-DELAY-TEST-001/DIFF: multi-sample DELAY(N=2, IC=-1, input=7) produces identical output sequence [-1, -1, 7, 7] in TypeScript and C', () => {
+  it('GEN-XB-DELAY-TEST-008..012: multi-sample DELAY(N=2, IC=-1, input=7) compiles cleanly, uses uint32 index, and matches sequence [-1, -1, 7, 7]', () => {
     const fixture = {
       name: 'flat-priority' as const,
       model: multiSampleDelayFixture(),
@@ -663,6 +663,7 @@ describe('TypeScript-versus-generated-C differential gate', () => {
     const expected = runInterpreterTrace(fixture);
     const actual = compileAndRunCTrace(fixture);
 
+    // TEST-008 / TEST-011: Sequence output matches reference delayed sequence
     expect(expected.map((frame) => frame.data.delay_y)).toEqual([-1, -1, 7, 7]);
     expect(compareSemanticTraces(expected, actual)).toBeNull();
   }, 60_000);
