@@ -24,6 +24,7 @@ import {
   type XBSemanticSchedule,
   type XBSemanticSignal,
   type XBSemanticStateBoundary,
+  type XBSemanticStateSlot,
 } from './xbSemanticModel';
 import { normalizePidParameters } from './xbPidContract';
 import { compileEkfVectorExpressions } from './xbEkfExpressions';

@@ -2988,7 +2988,7 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
                   outputPhase: 'read-before-update', updatePhase: 'after-direct-feedthrough',
                   slots: [
                     { id: 'delay1:buffer$state', role: 'buffer', signalId: 'delay1:y', numericType: float32, shape: { kind: 'vector', length: 2 }, initialValues: [-1, -1] },
-                    { id: 'delay1:index$state', role: 'index', signalId: null, numericType: { kind: 'uint32' }, shape: { kind: 'scalar' }, initialValues: [0] },
+                    { id: 'delay1:index$state', role: 'index', signalId: null, numericType: { kind: 'fixed', wordLength: 32, fractionLength: 0, signed: false }, shape: { kind: 'scalar' }, initialValues: [0] },
                   ],
                 },
                 schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'zero-order' },
@@ -3001,13 +3001,14 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
             },
             mappings: [],
             solver: { kind: 'euler', stepSeconds: 0.1, substepsPerTick: 1 },
-            policy: { memory: 'reset', numericFault: 'report' },
+            policy: { memory: 'reset', numericFault: 'escalate' },
           },
         },
       },
     };
 
-    const cCode = generateCCode(model);
+    const artifacts = generateCArtifacts(model);
+    const cCode = artifacts.files.map((f) => f.content).join('\n');
     expect(cCode).toContain('state_delay1_buffer$state[2];');
     expect(cCode).toContain('uint32_t state_delay1_index$state;');
     expect(cCode).toContain('% 2U;');

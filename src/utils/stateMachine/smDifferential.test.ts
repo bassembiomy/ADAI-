@@ -503,8 +503,9 @@ const collisionAndOrderingFixture = (): StateMachineModelV4 => {
   return model;
 };
 
-const multiSampleDelayFixture = (): StateMachinePersistedModelV1 => {
-  const model = emptyModel();
+const multiSampleDelayFixture = (): StateMachineModelV4 => {
+  const model = hybridXBridgesFixture();
+  const template = model.states.find((state) => state.id === 'controller')!;
   const scalar = (id: string, direction: 'input' | 'output') =>
     xbPort(id, direction, 'scalar', [], 'float32');
   const source = traceConstant('u_source', 7, 'scalar', []);
@@ -526,16 +527,28 @@ const multiSampleDelayFixture = (): StateMachinePersistedModelV1 => {
       inputs: [scalar('in', 'input')],
     },
   };
-  const controller = makeState('controller', [source, delay, outport], [
-    { id: 'src-del', sourceNodeId: 'u_source', sourcePortId: 'y', targetNodeId: 'delay', targetPortId: 'u' },
-    { id: 'del-out', sourceNodeId: 'delay', sourcePortId: 'y', targetNodeId: 'out_y', targetPortId: 'in' },
-  ]);
-  controller.xBridgesModel!.mappings = [{
-    smVarId: 'delay_y',
-    blockId: 'out_y',
-    portId: 'in',
-    direction: 'out',
-  }];
+  const controller = {
+    ...template,
+    id: 'controller',
+    name: 'controller',
+    autostart: true,
+    xBridgesModel: {
+      schemaVersion: 1 as const,
+      nodes: [source, delay, outport],
+      edges: [
+        { id: 'src-del', sourceNodeId: 'u_source', sourcePortId: 'y', targetNodeId: 'delay', targetPortId: 'u' },
+        { id: 'del-out', sourceNodeId: 'delay', sourcePortId: 'y', targetNodeId: 'out_y', targetPortId: 'in' },
+      ],
+      mappings: [{
+        smVarId: 'delay_y',
+        blockId: 'out_y',
+        portId: 'in',
+        direction: 'out' as const,
+      }],
+      solver: { kind: 'euler' as const, stepSeconds: 0.1 },
+      policy: { memory: 'reset' as const, numericFault: 'signal-only' as const },
+    },
+  };
   model.states = [controller];
   model.layers[0].stateIds = ['controller'];
   model.variables = [{ id: 'delay_y', name: 'delay_y', type: 'float', initialValue: '-1', currentValue: -1, visibleInScope: true }];
