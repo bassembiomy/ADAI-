@@ -1625,8 +1625,9 @@ const renderMappedOutputExpression = (
   layout: XBStateLayout,
   member: string,
 ): string => {
-  const storage = signalStorageExpression(state, signalId, layout, member);
-  const destinationType = renderVariableCast(mapping.variable.semanticType);
+  const destinationType = renderVariableCast(
+    mapping.variable?.semanticType ?? mapping.numericType.kind,
+  );
   const sourceType = nativeSignalCType(storage.signal.numericType);
   if (sourceType !== null) {
     return sourceType === destinationType
@@ -3237,7 +3238,7 @@ const renderStateLifecycle = (
   let inputMappingIndex = 0;
   for (const mapping of xb.mappings) {
     if (mapping.direction !== 'in') continue;
-    const varCId = mapping.variable.cIdentifier;
+    const varCId = mapping.variable?.cIdentifier ?? toCIdentifier(mapping.variableId);
     stepLines.push(...renderSignalWrite(
       state,
       {
@@ -3275,7 +3276,7 @@ const renderStateLifecycle = (
   stepLines.push(...renderOperationFaultSignalSync(state, xb, layout, member));
   for (const mapping of xb.mappings) {
     if (mapping.direction !== 'out') continue;
-    const varCId = mapping.variable.cIdentifier;
+    const varCId = mapping.variable?.cIdentifier ?? toCIdentifier(mapping.variableId);
     const op = xb.operations[mapping.blockId];
     const targetSignalId = (op?.type === 'Outport' && op.outputSignalIds[0])
       ? op.outputSignalIds[0]
