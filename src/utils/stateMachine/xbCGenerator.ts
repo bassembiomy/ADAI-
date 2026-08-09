@@ -1625,6 +1625,7 @@ const renderMappedOutputExpression = (
   layout: XBStateLayout,
   member: string,
 ): string => {
+  const storage = signalStorageExpression(state, signalId, layout, member);
   const destinationType = renderVariableCast(
     mapping.variable?.semanticType ?? mapping.numericType.kind,
   );
