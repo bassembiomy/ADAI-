@@ -932,6 +932,7 @@ const stateBoundaryForNode = (
       numericType: output.numericType,
       shape: delayLength === 1 ? output.shape : { kind: 'vector', length: totalBufferElements },
       initialValues: totalBufferValues,
+      storageCategory: delayLength === 1 ? 'scalar' : 'array',
     };
 
     const slots: XBSemanticStateSlot[] = [bufferSlot];
@@ -943,6 +944,7 @@ const stateBoundaryForNode = (
         numericType: { kind: 'fixed', wordLength: 32, fractionLength: 0, signed: false },
         shape: { kind: 'scalar' },
         initialValues: [0],
+        storageCategory: 'integral_index',
       });
     }
 

@@ -81,6 +81,8 @@ export interface XBSemanticConversion {
   readonly mode: 'real-world-value' | 'stored-integer-reinterpretation';
 }
 
+export type XBStorageCategory = 'scalar' | 'array' | 'matrix' | 'integral_index';
+
 export interface XBSemanticStateSlot {
   readonly id: string;
   /** Stable block-local state identity, independent of any exposed output. */
@@ -90,6 +92,7 @@ export interface XBSemanticStateSlot {
   readonly numericType: XBNumericType;
   readonly shape: XBShape;
   readonly initialValues: readonly (number | boolean)[];
+  readonly storageCategory?: XBStorageCategory;
 }
 
 /** Constrained roles for noise block state slots. */

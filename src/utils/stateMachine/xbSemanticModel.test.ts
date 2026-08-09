@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { XBDelayParameters, XBSemanticOperation } from './xbSemanticModel';
+import type { XBDelayParameters, XBSemanticOperation, XBSemanticStateSlot } from './xbSemanticModel';
 
 describe('XBDelayParameters', () => {
   it('supports delayParameters on XBSemanticOperation', () => {
@@ -14,5 +14,16 @@ describe('XBDelayParameters', () => {
     expect(op.delayParameters?.initialCondition).toBe(-1);
     expect(op.delayParameters?.samplePeriod).toBe(0.1);
     expect(op.delayParameters?.isUnitDelay).toBe(false);
+  it('supports storageCategory on XBSemanticStateSlot', () => {
+    const slot: XBSemanticStateSlot = {
+      id: 'delay:buffer$state',
+      role: 'buffer',
+      signalId: 'delay:y',
+      numericType: { kind: 'float32' },
+      shape: { kind: 'vector', length: 2 },
+      initialValues: [-1, -1],
+      storageCategory: 'array',
+    };
+    expect(slot.storageCategory).toBe('array');
   });
 });
