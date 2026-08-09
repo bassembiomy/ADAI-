@@ -8,8 +8,8 @@ import type {
 } from './xbModel';
 
 export interface XBSemanticMapping {
-  readonly sourceVariableId: string;
-  readonly variable: SemanticVariableSymbol;
+  readonly sourceVariableId?: string;
+  readonly variable?: SemanticVariableSymbol;
   readonly variableId: string;
   readonly signalId: string;
   readonly blockId: string;
@@ -170,16 +170,6 @@ export interface XBSemanticOperation {
   readonly delayParameters?: XBDelayParameters;
 }
 
-
-export interface XBSemanticMapping {
-  readonly variableId: string;
-  readonly signalId: string;
-  readonly blockId: string;
-  readonly portId: string;
-  readonly direction: 'in' | 'out';
-  readonly numericType: XBNumericType;
-  readonly sourceVariableId?: string;
-  readonly variable?: SemanticVariableSymbol;
 }
 
 export interface XBSemanticModel {
