@@ -1569,18 +1569,21 @@ const operationEmitter = (operation: XBSemanticOperation): OperationEmitter => {
 };
 
 const renderVariableCast = (
-  type: SemanticModel['variables'][string]['type'],
+  type: string,
 ): string => {
   switch (type) {
-    case 'bool': return 'bool';
+    case 'bool':
+    case 'boolean': return 'bool';
     case 'int8': return 'int8_t';
     case 'uint8': return 'uint8_t';
     case 'int16': return 'int16_t';
     case 'uint16': return 'uint16_t';
     case 'int32': return 'int32_t';
     case 'uint32': return 'uint32_t';
-    case 'double': return 'double';
+    case 'double':
+    case 'float64': return 'double';
     case 'float':
+    case 'float32':
     default:
       return 'float';
   }

@@ -178,6 +178,8 @@ export interface XBSemanticMapping {
   readonly portId: string;
   readonly direction: 'in' | 'out';
   readonly numericType: XBNumericType;
+  readonly sourceVariableId?: string;
+  readonly variable?: SemanticVariableSymbol;
 }
 
 export interface XBSemanticModel {

@@ -108,6 +108,7 @@ const model = (
   mappings: XBSemanticModel['mappings'] = [],
 ): XBSemanticModel => ({
   stateId: 'controller',
+  ownerState: { stateId: 'controller', stateName: 'controller', cIndexSymbol: 'SM_ST_CONTROLLER_IDX', numericIndex: 0 },
   executionOrder,
   operations,
   signals,
@@ -245,7 +246,7 @@ describe('X-Bridges interpreter', () => {
       ]),
     };
 
-    const ir = model('pid_test', { pid }, Object.fromEntries([
+    const ir = model('reset', { pid }, Object.fromEntries([
       ...['pid:r', 'pid:y', 'pid:enable', 'pid:reset', 'pid:u', 'pid:error', 'pid:p_term', 'pid:i_term', 'pid:d_term'].map((id) => [id, signal(id, 'output', null, float64)] as const)
     ]), ['pid']);
     
@@ -1395,7 +1396,7 @@ describe('X-Bridges interpreter', () => {
 
   it('matches a hand-calculated scalar Kalman update', () => {
     const ir = model(
-      'kalman',
+      'reset',
       {
         kf: {
           ...operation(
@@ -1450,7 +1451,7 @@ describe('X-Bridges interpreter', () => {
 
   it('matches a hand-calculated 2-state Kalman update', () => {
     const ir = model(
-      'kalman2',
+      'reset',
       {
         kf: {
           ...operation(
