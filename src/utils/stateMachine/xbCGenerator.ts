@@ -3503,10 +3503,21 @@ SM_XB_NumericResult_t SM_XB_ConvertFloat64(double value)
         return result;
     }
     return result;
-#else
-    return SM_XB_UnsupportedFloat(value);
-#endif
 }`;
+
+export const validateGeneratedCAST = (cCode: string): void => {
+  const scalarArrayCastRegex = /\((?:double|float)\)\s*([A-Za-z0-9_.]*state_[A-Za-z0-9_]+_buffer(?!\s*\[))/;
+  const matchCast = cCode.match(scalarArrayCastRegex);
+  if (matchCast) {
+    throw new Error(`XBridge Structural C Validation failure (GEN-XB-DELAY-C-006): illegal scalar cast of array buffer '${matchCast[0]}'. Array state requires explicit indexed dereference.`);
+  }
+
+  const unindexedArrayAssignRegex = /(instance->[A-Za-z0-9_.]*state_[A-Za-z0-9_]+_buffer(?!\s*\[))\s*=/;
+  const matchAssign = cCode.match(unindexedArrayAssignRegex);
+  if (matchAssign) {
+    throw new Error(`XBridge Structural C Validation failure (GEN-XB-DELAY-C-006): illegal unindexed assignment to array buffer '${matchAssign[0]}'. Array state requires explicit index subscripting.`);
+  }
+};
 
 export const renderXBSource = (ir: SemanticModel): string => {
   for (const state of orderedXBStates(ir)) {
@@ -3523,7 +3534,7 @@ export const renderXBSource = (ir: SemanticModel): string => {
   const wrappers = orderedXBStates(ir).flatMap((state) =>
     conversionWrappers(state).map(({ operation, name }) =>
       renderWrapper(name, operation)));
-  return lines(
+  const cCode = lines(
     '#include "sm_xbridges.h"',
     '',
     '#include <float.h>',
@@ -3533,4 +3544,6 @@ export const renderXBSource = (ir: SemanticModel): string => {
     wrappers.length > 0 ? '' : false,
     ...wrappers,
   );
+  validateGeneratedCAST(cCode);
+  return cCode;
 };
