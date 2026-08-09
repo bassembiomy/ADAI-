@@ -170,8 +170,6 @@ export interface XBSemanticOperation {
   readonly delayParameters?: XBDelayParameters;
 }
 
-}
-
 export interface XBSemanticModel {
   readonly stateId: string;
   readonly executionOrder: readonly string[];
