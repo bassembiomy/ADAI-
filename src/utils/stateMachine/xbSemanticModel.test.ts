@@ -14,6 +14,8 @@ describe('XBDelayParameters', () => {
     expect(op.delayParameters?.initialCondition).toBe(-1);
     expect(op.delayParameters?.samplePeriod).toBe(0.1);
     expect(op.delayParameters?.isUnitDelay).toBe(false);
+  });
+
   it('supports storageCategory on XBSemanticStateSlot', () => {
     const slot: XBSemanticStateSlot = {
       id: 'delay:buffer$state',

@@ -485,6 +485,7 @@ describe('buildXBSemanticModel', () => {
         numericType: { kind: 'float32' },
         shape: { kind: 'scalar' },
         initialValues: [0],
+        storageCategory: 'scalar',
       }],
     });
   });

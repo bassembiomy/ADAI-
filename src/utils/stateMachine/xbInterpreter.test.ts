@@ -490,14 +490,16 @@ describe('X-Bridges interpreter', () => {
             numericType: float32,
             shape: { kind: 'vector' as const, length: 2 },
             initialValues: [-1, -1],
+            storageCategory: 'array',
           },
           {
             id: 'delay:index$state',
             role: 'index',
             signalId: null,
-            numericType: { kind: 'uint32' } as const,
+            numericType: { kind: 'fixed', wordLength: 32, fractionLength: 0, signed: false } as const,
             shape: { kind: 'scalar' as const },
             initialValues: [0],
+            storageCategory: 'integral_index',
           },
         ],
       },
@@ -550,6 +552,8 @@ describe('X-Bridges interpreter', () => {
     }
 
     expect(outputs).toEqual([-1, -1, 7, 7]);
+    expect(ir.operations.delay.state?.slots[0].storageCategory).toBe('array');
+    expect(ir.operations.delay.state?.slots[1].storageCategory).toBe('integral_index');
   });
 
 
