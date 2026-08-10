@@ -13301,7 +13301,7 @@ const ADIA = () => {
         }
       }
 
-      if (e.key === 'Delete') {
+      if (e.key === 'Delete' && !xBridgesStateId) {
         if (selectedIds.length > 0) {
           addToHistory();
           selectedIds.forEach(id => {
