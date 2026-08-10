@@ -3300,6 +3300,15 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(code).toContain('asin(sin(');
     expect(code).toContain('instance->xb_controller.sim_time');
   });
+
+  it('executes T10-C99-WAVEFORMS conformance suite without errors', () => {
+    const cCase = XB_EXECUTABLE_C_CASES['T10-C99-WAVEFORMS'];
+    expect(cCase).toBeDefined();
+    expect(cCase.coverage).toEqual([
+      { blockType: 'Clock', inputShapes: ['scalar'], outputShapes: ['scalar'] },
+      { blockType: 'WaveformGen', inputShapes: ['scalar'], outputShapes: ['scalar'] },
+    ]);
+  });
 });
 
 
