@@ -2367,7 +2367,7 @@ export const XbridgesWorkspace: React.FC<{
         if (selectedNodes.length > 0 || selectedEdges.length > 0) {
           e.preventDefault(); // Prevent React Flow from also handling it
           e.stopPropagation();
-          e.nativeEvent?.stopImmediatePropagation?.();
+          e.stopImmediatePropagation?.();
           saveHistory();
 
           if (selectedNodes.length > 0) {

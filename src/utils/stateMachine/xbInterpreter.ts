@@ -459,9 +459,24 @@ const matrixParameter = (
   fallback: readonly (readonly number[])[],
 ): readonly (readonly number[])[] => {
   const value = operation.parameters[name];
-  if (Array.isArray(value) && value.every((row) =>
-    Array.isArray(row) && row.every((entry) => typeof entry === 'number'))) {
-    return value as readonly (readonly number[])[];
+  if (typeof value === 'number') {
+    return [[value]];
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) return fallback;
+    if (value.every((row) => Array.isArray(row) && row.every((entry) => typeof entry === 'number'))) {
+      return value as readonly (readonly number[])[];
+    }
+    const d1 = value.filter((v): v is number => typeof v === 'number');
+    if (d1.length > 0) {
+      if (fallback.length === 1) {
+        return [d1];
+      }
+      if (fallback[0]?.length === 1) {
+        return d1.map((v) => [v]);
+      }
+      return [d1];
+    }
   }
   return fallback;
 };
@@ -737,9 +752,18 @@ const evaluateDirectOperation = (
     case 'DEMUX': {
       const input = inputs[0] ?? [0];
       const count = operation.outputSignalIds.length;
+      if (input.length === 0) {
+        return Array.from({ length: count }, () => [0]);
+      }
       const elementsPerOutput = Math.max(1, Math.floor(input.length / count));
+      const requiredLength = count * elementsPerOutput;
+      const padded = input.length === 1
+        ? Array.from({ length: requiredLength }, () => input[0])
+        : input.length >= requiredLength
+          ? input.slice(0, requiredLength)
+          : [...input, ...Array.from({ length: requiredLength - input.length }, () => 0)];
       return Array.from({ length: count }, (_, idx) =>
-        input.slice(idx * elementsPerOutput, (idx + 1) * elementsPerOutput),
+        padded.slice(idx * elementsPerOutput, (idx + 1) * elementsPerOutput),
       );
     }
     case 'SIN': return [unary(inputs[0] ?? [0], Math.sin)];
@@ -822,6 +846,36 @@ const evaluateDirectOperation = (
     case 'PID_BASIC':
     case 'PID_CONTROLLER': {
       return [[pidValues(runtime, operation).output]];
+    }
+    case 'DISCRETE_TRANSFER_FUNCTION':
+    case 'STATE_SPACE': {
+      let effectiveOp = operation;
+      if (operation.type === 'DISCRETE_TRANSFER_FUNCTION' && (operation.parameters.A === undefined || operation.parameters.C === undefined)) {
+        const ss = synthesizeTransferFunctionStateSpace(
+          operation.parameters.numerator as number[],
+          operation.parameters.denominator as number[],
+        );
+        effectiveOp = {
+          ...operation,
+          parameters: { ...operation.parameters, A: ss.A, B: ss.B, C: ss.C, D: ss.D },
+        };
+      }
+      const xSlot = stateSlotForRole(effectiveOp, 'x');
+      const c = matrixParameter(effectiveOp, 'C', [[1]]);
+      const d = matrixParameter(effectiveOp, 'D', [[0]]);
+      const x = (xSlot ? (runtime.stateSlots[xSlot.id] ?? xSlot.initialValues) : [0]).map(Number);
+      const u = (inputs[0] ?? [0]).map(Number);
+      const y = c.map((cRow, row) =>
+        cRow.reduce((sum, val, col) => sum + val * (x[col] ?? 0), 0)
+        + (d[row] ?? []).reduce((sum, val, col) => sum + val * (u[col] ?? 0), 0),
+      );
+      return operation.outputSignalIds.map((signalId) => {
+        const portId = runtime.ir.signals[signalId]?.portId;
+        if (portId === 'x' || (xSlot && signalId === xSlot.signalId)) {
+          return x;
+        }
+        return y;
+      });
     }
     case 'Step': {
       const stepTime = operation.stepParameters
@@ -1407,17 +1461,28 @@ const statefulUpdate = (
     return updates;
   }
   if (operation.type === 'DISCRETE_TRANSFER_FUNCTION' || operation.type === 'STATE_SPACE') {
-    const xSlot = stateSlotForRole(operation, 'x');
-    if (xSlot === undefined) throw new Error(`X-Bridges ${operation.type} '${operation.id}' requires an x state slot`);
-    const a = matrixParameter(operation, 'A', [[0]]);
-    const b = matrixParameter(operation, 'B', [[1]]);
+    let effectiveOp = operation;
+    if (operation.type === 'DISCRETE_TRANSFER_FUNCTION' && (operation.parameters.A === undefined || operation.parameters.C === undefined)) {
+      const ss = synthesizeTransferFunctionStateSpace(
+        operation.parameters.numerator as number[],
+        operation.parameters.denominator as number[],
+      );
+      effectiveOp = {
+        ...operation,
+        parameters: { ...operation.parameters, A: ss.A, B: ss.B, C: ss.C, D: ss.D },
+      };
+    }
+    const xSlot = stateSlotForRole(effectiveOp, 'x');
+    if (xSlot === undefined) throw new Error(`X-Bridges ${effectiveOp.type} '${effectiveOp.id}' requires an x state slot`);
+    const a = matrixParameter(effectiveOp, 'A', [[0]]);
+    const b = matrixParameter(effectiveOp, 'B', [[1]]);
     const state = (runtime.stateSlots[xSlot.id] ?? xSlot.initialValues).map(Number);
-    const inputValues = signalValues(runtime, operation.inputSignalIds[0] ?? '').map(Number);
+    const inputValues = signalValues(runtime, effectiveOp.inputSignalIds[0] ?? '').map(Number);
     return {
       [xSlot.id]: state.map((_, row) => convertValue(
         state.reduce((sum, value, column) => sum + (a[row]?.[column] ?? 0) * value, 0)
         + inputValues.reduce((sum, value, column) => sum + (b[row]?.[column] ?? 0) * value, 0),
-        xSlot.numericType, faults, operation,
+        xSlot.numericType, faults, effectiveOp,
       )),
     };
   }
@@ -1604,7 +1669,9 @@ const executeDirectOperations = (
       operation.type !== 'PID_CONTROLLER' &&
       operation.type !== 'LOW_PASS_FILTER' &&
       operation.type !== 'HIGH_PASS_FILTER' &&
-      operation.type !== 'MOVING_AVERAGE'
+      operation.type !== 'MOVING_AVERAGE' &&
+      operation.type !== 'DISCRETE_TRANSFER_FUNCTION' &&
+      operation.type !== 'STATE_SPACE'
     ) continue;
     if (runtime.operationFaults[operation.id]?.active) continue;
     if (!forceEvaluation && !scheduledThisSubstep(runtime, operation)) continue;

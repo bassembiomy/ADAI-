@@ -1111,6 +1111,44 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.signals['shiftLeft:y']).toEqual([48]);
   });
 
+  it('broadcasts a scalar DEMUX input to all outputs and pads missing elements with zero', () => {
+    const demuxOp = operation('demux', 'DEMUX', ['demux:u'], ['demux:out1', 'demux:out2', 'demux:out3']);
+    const ir = model('retain', { demuxOp }, {
+      'demux:u': signal('demux:u', 'input'),
+      'demux:out1': signal('demux:out1', 'output'),
+      'demux:out2': signal('demux:out2', 'output'),
+      'demux:out3': signal('demux:out3', 'output'),
+    }, ['demuxOp']);
+
+    const scalarRuntime = createXBRuntime(ir);
+    scalarRuntime.signals['demux:u'] = [5];
+    stepXBState(scalarRuntime, {});
+    expect(scalarRuntime.signals['demux:out1']).toEqual([5]);
+    expect(scalarRuntime.signals['demux:out2']).toEqual([5]);
+    expect(scalarRuntime.signals['demux:out3']).toEqual([5]);
+
+    const shortRuntime = createXBRuntime(ir);
+    shortRuntime.signals['demux:u'] = [1, 2];
+    stepXBState(shortRuntime, {});
+    expect(shortRuntime.signals['demux:out1']).toEqual([1]);
+    expect(shortRuntime.signals['demux:out2']).toEqual([2]);
+    expect(shortRuntime.signals['demux:out3']).toEqual([0]);
+
+    const emptyRuntime = createXBRuntime(ir);
+    emptyRuntime.signals['demux:u'] = [];
+    stepXBState(emptyRuntime, {});
+    expect(emptyRuntime.signals['demux:out1']).toEqual([0]);
+    expect(emptyRuntime.signals['demux:out2']).toEqual([0]);
+    expect(emptyRuntime.signals['demux:out3']).toEqual([0]);
+
+    const vectorRuntime = createXBRuntime(ir);
+    vectorRuntime.signals['demux:u'] = [10, 20, 30];
+    stepXBState(vectorRuntime, {});
+    expect(vectorRuntime.signals['demux:out1']).toEqual([10]);
+    expect(vectorRuntime.signals['demux:out2']).toEqual([20]);
+    expect(vectorRuntime.signals['demux:out3']).toEqual([30]);
+  });
+
   it('evaluates Batch 2 routing operations (SWITCH, MUX, DEMUX)', () => {
     const switchOp = operation('switch', 'SWITCH', ['in1', 'cond', 'in2'], ['switch:y'], { threshold: 0.5 });
     const ir = model('retain', { switchOp }, {

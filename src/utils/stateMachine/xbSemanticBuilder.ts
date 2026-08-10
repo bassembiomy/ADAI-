@@ -654,6 +654,33 @@ const initialValuesForSignal = (
   return values;
 };
 
+export const synthesizeTransferFunctionStateSpace = (
+  numRaw: unknown,
+  denRaw: unknown,
+): { A: number[][]; B: number[][]; C: number[][]; D: number[][] } => {
+  const num = Array.isArray(numRaw) && numRaw.length > 0 ? (numRaw as unknown[]).map(Number) : [1];
+  const den = Array.isArray(denRaw) && denRaw.length > 0 ? (denRaw as unknown[]).map(Number) : [1, 1];
+  const a0 = den[0] || 1;
+  const n = Math.max(1, den.length - 1);
+
+  const d = den.map((val) => val / a0);
+  const b = num.map((val) => val / a0);
+  while (b.length <= n) b.unshift(0);
+
+  const A: number[][] = Array.from({ length: n }, (_, i) =>
+    Array.from({ length: n }, (__, j) => {
+      if (i < n - 1) return j === i + 1 ? 1 : 0;
+      return -d[n - j];
+    }),
+  );
+  const B: number[][] = Array.from({ length: n }, (_, i) => [i === n - 1 ? 1 : 0]);
+  const b0 = b[0];
+  const C: number[][] = [Array.from({ length: n }, (_, i) => b[n - i] - d[n - i] * b0)];
+  const D: number[][] = [[b0]];
+
+  return { A, B, C, D };
+};
+
 const stateBoundaryForNode = (
   node: XBNodeV1,
   outputSignalIds: readonly string[],
@@ -737,6 +764,13 @@ const stateBoundaryForNode = (
   }
 
   if (node.type === 'DISCRETE_TRANSFER_FUNCTION' || node.type === 'STATE_SPACE') {
+    if (node.type === 'DISCRETE_TRANSFER_FUNCTION' && (node.parameters.A === undefined || node.parameters.C === undefined)) {
+      const ss = synthesizeTransferFunctionStateSpace(node.parameters.numerator, node.parameters.denominator);
+      node.parameters.A = ss.A;
+      node.parameters.B = ss.B;
+      node.parameters.C = ss.C;
+      node.parameters.D = ss.D;
+    }
     const exposedX = outputByPort('x');
     const fallback = exposedX ?? outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
     if (fallback === undefined) return boundary([]);
@@ -1224,6 +1258,38 @@ export const buildXBSemanticModel = (
       if (portId === 'in' || portId === 'u') {
         const sourceSignalId = sourceByInputSignalId.get(signalId);
         if (sourceSignalId) return resolveShape(sourceSignalId);
+      }
+    }
+
+    if (node?.type === 'STATE_SPACE' || node?.type === 'DISCRETE_TRANSFER_FUNCTION') {
+      if (node.type === 'DISCRETE_TRANSFER_FUNCTION' && (node.parameters.A === undefined || node.parameters.C === undefined)) {
+        const ss = synthesizeTransferFunctionStateSpace(node.parameters.numerator, node.parameters.denominator);
+        node.parameters.A = ss.A;
+        node.parameters.B = ss.B;
+        node.parameters.C = ss.C;
+        node.parameters.D = ss.D;
+      }
+      if (portId === 'y') {
+        const cParam = node.parameters.C;
+        const dParam = node.parameters.D;
+        let numOutputs = 1;
+        if (Array.isArray(cParam) && cParam.length > 0) {
+          numOutputs = cParam.length;
+        } else if (Array.isArray(dParam) && dParam.length > 0) {
+          numOutputs = dParam.length;
+        }
+        if (numOutputs > 1) {
+          return { kind: 'vector', length: numOutputs };
+        }
+      } else if (portId === 'x') {
+        const aParam = node.parameters.A;
+        let numStates = 1;
+        if (Array.isArray(aParam) && aParam.length > 0) {
+          numStates = aParam.length;
+        }
+        if (numStates > 1) {
+          return { kind: 'vector', length: numStates };
+        }
       }
     }
 
