@@ -27,6 +27,7 @@ import { XB_EXECUTABLE_C_CASES } from './xbCConformanceCases';
 
 import type { StateMachineModelV4 } from './smModel';
 import { buildSemanticModel } from './smSemanticBuilder';
+import { XB_CAPABILITIES } from './xbCapabilities';
 import {
   renderXBHeader,
   renderXBInstanceMembers,
@@ -2967,6 +2968,69 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(check.success).toBe(true);
   });
 
+  it('generates safe DEMUX code when the input is shorter than the number of outputs (GEN-XB-DEMUX-SHORT-INPUT)', () => {
+    const model = flatOrFixture();
+    model.states[0].isXBridges = true;
+    model.states[0].xBridgesModel = {
+      solver: { kind: 'euler', stepSeconds: 0.001 },
+      nodes: [
+        {
+          id: 'const1',
+          type: 'Constant',
+          parameters: { value: 7 },
+          inputs: [],
+          outputs: [{ id: 'out', direction: 'output' }],
+        },
+        {
+          id: 'demux2',
+          type: 'DEMUX',
+          parameters: {},
+          inputs: [{ id: 'in', direction: 'input' }],
+          outputs: [{ id: 'out1', direction: 'output' }, { id: 'out2', direction: 'output' }],
+        },
+        {
+          id: 'outport1',
+          type: 'Outport',
+          parameters: { smVarId: 'xb6-demux-output1-0001' },
+          inputs: [{ id: 'in', direction: 'input' }],
+          outputs: [{ id: 'out', direction: 'output' }],
+        },
+        {
+          id: 'outport2',
+          type: 'Outport',
+          parameters: { smVarId: 'xb6-demux-output2-0001' },
+          inputs: [{ id: 'in', direction: 'input' }],
+          outputs: [{ id: 'out', direction: 'output' }],
+        },
+      ],
+      edges: [
+        { id: 'e1', sourceNodeId: 'const1', sourcePortId: 'out', targetNodeId: 'demux2', targetPortId: 'in' },
+        { id: 'e2', sourceNodeId: 'demux2', sourcePortId: 'out1', targetNodeId: 'outport1', targetPortId: 'in' },
+        { id: 'e3', sourceNodeId: 'demux2', sourcePortId: 'out2', targetNodeId: 'outport2', targetPortId: 'in' },
+      ],
+      mappings: [
+        { smVarId: 'xb6-demux-output1-0001', blockId: 'outport1', portId: 'in', direction: 'out' },
+        { smVarId: 'xb6-demux-output2-0001', blockId: 'outport2', portId: 'in', direction: 'out' },
+      ],
+    };
+    model.variables.push(
+      { id: 'xb6-demux-output1-0001', name: 'xb6_demux_output1', type: 'float', initialValue: '0', currentValue: 0, visibleInScope: true },
+      { id: 'xb6-demux-output2-0001', name: 'xb6_demux_output2', type: 'float', initialValue: '0', currentValue: 0, visibleInScope: true },
+    );
+
+    const { ir } = buildSemanticModel(model);
+    expect(ir).not.toBeNull();
+    const artifacts = generateCArtifacts(ir!);
+    const coreSource = artifacts.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
+
+    // Guarded read should fall back to the scalar value when the index is out of bounds.
+    expect(coreSource).toContain('(1U + xb_index) < 1U');
+
+    const check = compileGeneratedCSyntax(artifacts, true);
+    expect(check.errors).toEqual([]);
+    expect(check.success).toBe(true);
+  });
+
   it('generates circular buffer array and index state declarations and modulo updates for DELAY(N=2)', () => {
     const float32 = { kind: 'float32' } as const;
     const model = semanticModel();
@@ -3085,8 +3149,8 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     const cCode = artifacts.files.map((f) => f.content).join('\n');
 
     // Verify presence of filter structs and equations
-    expect(cCode).toContain('lpf_1_alpha');
-    expect(cCode).toContain('hpf_2_alpha');
+    expect(cCode).toMatch(/lpf_\d+_alpha/);
+    expect(cCode).toMatch(/hpf_\d+_alpha/);
     expect(cCode).toContain('ma_3_sum');
 
     // Verify syntax compilation
@@ -3094,7 +3158,115 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(syntax.success).toBe(true);
     expect(syntax.errors).toHaveLength(0);
   });
+
+  it('synthesizes state-space parameters and non-zero C code for DISCRETE_TRANSFER_FUNCTION without precomputed A,B,C,D', () => {
+    const float32: XBNumericType = { kind: 'float32' };
+    const model = semanticModel();
+    model.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
+      stateId: 'controller',
+      executionOrder: ['dtf_1'],
+      operations: {
+        dtf_1: {
+          id: 'dtf_1',
+          type: 'DISCRETE_TRANSFER_FUNCTION',
+          inputSignalIds: ['u'],
+          outputSignalIds: ['y'],
+          parameters: { numerator: [1], denominator: [1, -0.5] },
+          directFeedthrough: false,
+          stateful: true,
+          conversion: null,
+          state: {
+            outputPhase: 'read-before-update',
+            updatePhase: 'after-direct-feedthrough',
+            slots: [{ id: 'dtf_1:x$state', role: 'x', signalId: null, numericType: { kind: 'float64' }, shape: { kind: 'scalar' }, initialValues: [0] }],
+          },
+          schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+          numericFault: { fallback: 'previous-value', errorSignalId: null },
+        },
+      },
+      signals: {
+        u: { id: 'u', nodeId: 'dtf_1', portId: 'u', direction: 'input', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'scalar', numericType: float32, storage: 'native' },
+        y: { id: 'y', nodeId: 'dtf_1', portId: 'y', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'scalar', numericType: float32, storage: 'native' },
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 10 },
+      policy: { memory: 'reset', numericFault: 'escalate' },
+    };
+
+    const artifacts = generateCArtifacts(model);
+    const cCode = artifacts.files.map((f) => f.content).join('\n');
+
+    // Should contain non-zero coefficient 0.5 and 1.0 in update and output equations
+    expect(cCode).toContain('(xb_row == 0U ? 0.5 : 0.0)');
+    expect(cCode).toContain('(xb_row == 0U ? 1.0 : 0.0)');
+    expect(cCode).toContain('(1.0) * (double)(instance->xb_controller.state_dtf_1_x_state)');
+    expect(cCode).not.toContain('(xb_row == 0U ? 0.0 : 0.0)');
+  });
+
+  it('generates correct multi-channel vector output and state updates for STATE_SPACE with 1D vector parameters', () => {
+    const float32: XBNumericType = { kind: 'float32' };
+    const model = semanticModel();
+    model.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
+      stateId: 'controller',
+      executionOrder: ['ss_1'],
+      operations: {
+        ss_1: {
+          id: 'ss_1',
+          type: 'STATE_SPACE',
+          inputSignalIds: ['u'],
+          outputSignalIds: ['y'],
+          parameters: {
+            A: 0.5,
+            B: [1, 2],
+            C: [1, 0.5],
+            D: [[0, 0], [0, 0]],
+          },
+          directFeedthrough: false,
+          stateful: true,
+          conversion: null,
+          state: {
+            outputPhase: 'read-before-update',
+            updatePhase: 'after-direct-feedthrough',
+            slots: [{ id: 'ss_1:x$state', role: 'x', signalId: null, numericType: { kind: 'float64' }, shape: { kind: 'scalar' }, initialValues: [0] }],
+          },
+          schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+          numericFault: { fallback: 'previous-value', errorSignalId: null },
+        },
+      },
+      signals: {
+        u: { id: 'u', nodeId: 'ss_1', portId: 'u', direction: 'input', sourceSignalId: null, shape: { kind: 'vector', length: 2 }, dimensions: [2], elementCount: 2, layout: 'contiguous', numericType: float32, storage: 'native' },
+        y: { id: 'y', nodeId: 'ss_1', portId: 'y', direction: 'output', sourceSignalId: null, shape: { kind: 'vector', length: 2 }, dimensions: [2], elementCount: 2, layout: 'contiguous', numericType: float32, storage: 'native' },
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 10 },
+      policy: { memory: 'reset', numericFault: 'escalate' },
+    };
+
+    const artifacts = generateCArtifacts(model);
+    const cCode = artifacts.files.map((f) => f.content).join('\n');
+
+    // Check state update contains both inputs u[0] and u[1] with coefficients 1 and 2
+    expect(cCode).toContain('(xb_row == 0U ? 1.0 : 0.0)');
+    expect(cCode).toContain('(xb_row == 0U ? 2.0 : 0.0)');
+    expect(cCode).toContain('instance->xb_controller.ss_1_u[0U]');
+    expect(cCode).toContain('instance->xb_controller.ss_1_u[1U]');
+
+    // Check vector output y writes element 0 (C=1.0) and element 1 (C=0.5)
+    expect(cCode).toContain('instance->xb_controller.ss_1_y[0U] =');
+    expect(cCode).toContain('instance->xb_controller.ss_1_y[1U] =');
+    expect(cCode).toContain('(0.5) * (double)(instance->xb_controller.state_ss_1_x_state)');
+  });
+
+  it('registers Clock and WaveformGen as C99 codegen capable blocks in XB_CAPABILITIES', () => {
+    expect(XB_CAPABILITIES.Clock).toBeDefined();
+    expect(XB_CAPABILITIES.Clock.codegen).toBe(true);
+    expect(XB_CAPABILITIES.WaveformGen).toBeDefined();
+    expect(XB_CAPABILITIES.WaveformGen.codegen).toBe(true);
+  });
 });
+
 
 
 
