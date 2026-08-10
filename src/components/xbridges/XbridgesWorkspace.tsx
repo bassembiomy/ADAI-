@@ -27,6 +27,7 @@ import {
   reconcileXBBoundaryMappings,
   syncXBBoundaryNodeMetadata,
 } from '../../utils/stateMachine/xbBoundaryMappings';
+import { isInputFocused } from '../../utils/domUtils';
 
 // Map icon string names to Lucide icon components
 const LucideIconMap: Record<string, React.ComponentType<any>> = {
@@ -2309,7 +2310,7 @@ export const XbridgesWorkspace: React.FC<{
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Prevent shortcuts when typing in input fields (Properties Panel)
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      if (isInputFocused(e.target)) {
         return;
       }
 
@@ -3272,6 +3273,7 @@ export const XbridgesWorkspace: React.FC<{
               getColor: getColor
             }}>
               <ReactFlow
+              deleteKeyCode={null}
               proOptions={{ hideAttribution: true }}
               onInit={setReactFlowInstance}
               nodes={useMemo(() => nodes.filter(n => (n.data.parentId || 'root') === currentParentId), [nodes, currentParentId])}

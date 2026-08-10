@@ -33,6 +33,7 @@ import {
 import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineClipboardData } from './utils/stateMachineClipboard';
 import { pruneStateHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
+import { isInputFocused } from './utils/domUtils';
 import {
   applyPersistedAppSimulationModel,
   commitAppOutputRequest,

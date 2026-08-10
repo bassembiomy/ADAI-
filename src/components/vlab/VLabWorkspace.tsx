@@ -27,6 +27,7 @@ import { VLabPhysicsEngine } from '../../engine/vlab/vlabPhysics';
 import { Settings2, Play, Pause, Square, Send, ChevronLeft, ChevronDown, ChevronRight, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus, Network, Cloud, Download, CheckCircle2, AlertCircle, Triangle, Trash2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
+import { isInputFocused } from '../../utils/domUtils';
 
 interface LabNode {
   id: string;
@@ -2997,9 +2998,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
-      if (isInput) return;
+      if (isInputFocused(e.target)) return;
 
       // Track Space press
       if (e.code === 'Space' && !e.ctrlKey) {
@@ -4095,6 +4094,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         {/* Center: Flow Canvas */}
         <div className={`flex-1 relative bg-[#0a0a0a] ${isConnecting ? 'react-flow--connection-active' : ''}`} onDrop={onDrop} onDragOver={onDragOver} onContextMenu={(e) => e.preventDefault()}>
           <ReactFlow
+            deleteKeyCode={null}
             proOptions={{ hideAttribution: true }}
             nodes={useMemo(() => nodes.filter(n => (n.data.parentId || 'root') === currentParentId).map(n => ({
               ...n,
