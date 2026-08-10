@@ -14,6 +14,7 @@ import type {
   XBShape,
 } from './xbNumeric';
 import { renderCMatrixInverseGaussJordan } from './xbStaticMatrix';
+import { synthesizeTransferFunctionStateSpace } from './xbSemanticBuilder';
 
 const lines = (...parts: Array<string | false | null | undefined>): string =>
   `${parts.filter((part): part is string => typeof part === 'string')
@@ -391,6 +392,64 @@ const scalarParameter = (
   return fallback;
 };
 
+export const extractMatrixParameter = (
+  operation: XBSemanticOperation,
+  name: string,
+  targetRows: number,
+  targetCols: number,
+  fallback = 0,
+): number[][] => {
+  const value = operation.parameters[name];
+  const result: number[][] = Array.from({ length: targetRows }, () =>
+    Array.from({ length: targetCols }, () => fallback));
+
+  if (typeof value === 'number') {
+    for (let r = 0; r < targetRows; r++) {
+      for (let c = 0; c < targetCols; c++) {
+        if (r === c || (targetRows === 1 && targetCols === 1)) {
+          result[r][c] = value;
+        }
+      }
+    }
+    return result;
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return result;
+    if (Array.isArray(value[0])) {
+      const d2 = value as number[][];
+      for (let r = 0; r < targetRows; r++) {
+        for (let c = 0; c < targetCols; c++) {
+          if (d2[r] !== undefined && typeof d2[r][c] === 'number') {
+            result[r][c] = d2[r][c];
+          }
+        }
+      }
+      return result;
+    }
+    const d1 = value as number[];
+    if (targetRows === 1) {
+      for (let c = 0; c < targetCols; c++) {
+        if (typeof d1[c] === 'number') result[0][c] = d1[c];
+      }
+    } else if (targetCols === 1) {
+      for (let r = 0; r < targetRows; r++) {
+        if (typeof d1[r] === 'number') result[r][0] = d1[r];
+      }
+    } else {
+      for (let r = 0; r < targetRows; r++) {
+        for (let c = 0; c < targetCols; c++) {
+          const idx = r * targetCols + c;
+          if (typeof d1[idx] === 'number') result[r][c] = d1[idx];
+        }
+      }
+    }
+    return result;
+  }
+
+  return result;
+};
+
 const matrixParameterValue = (
   operation: XBSemanticOperation,
   name: string,
@@ -398,11 +457,8 @@ const matrixParameterValue = (
   column: number,
   fallback: number,
 ): number => {
-  const value = operation.parameters[name];
-  if (Array.isArray(value) && Array.isArray(value[row]) && typeof value[row][column] === 'number') {
-    return value[row][column] as number;
-  }
-  return fallback;
+  const extracted = extractMatrixParameter(operation, name, Math.max(1, row + 1), Math.max(1, column + 1), fallback);
+  return extracted[row]?.[column] ?? fallback;
 };
 
 const formatC2DArray = (
@@ -899,6 +955,46 @@ const emitStep: OperationEmitter = (state, operation, operationIndex, layout, me
     layout,
     member,
   );
+};
+
+const emitClock: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const outputSignalId = operation.outputSignalIds[0];
+  if (outputSignalId === undefined) return [];
+  const dt = cNumber(state.xBridges!.solver.stepSeconds);
+  return [
+    `    instance->${member}.sim_time += (${dt});`,
+    ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `instance->${member}.sim_time`, layout, member),
+  ];
+};
+
+const emitWaveformGen: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const outputSignalId = operation.outputSignalIds[0];
+  if (outputSignalId === undefined) return [];
+  const waveform = String(operation.parameters.waveform ?? operation.parameters.type ?? 'sine').toLowerCase();
+  const amp = cNumber(scalarParameter(operation, ['amplitude', 'amp'], 1.0));
+  const freq = cNumber(scalarParameter(operation, ['frequency', 'freq'], 1.0));
+  const phase = cNumber(scalarParameter(operation, ['phase'], 0.0));
+  const bias = cNumber(scalarParameter(operation, ['bias', 'offset'], 0.0));
+  const prefix = `wave_${operationIndex}`;
+  const lines = [
+    `    double ${prefix}_t = instance->${member}.sim_time;`,
+    `    double ${prefix}_arg = 2.0 * 3.14159265358979323846 * (${freq}) * ${prefix}_t + (${phase});`,
+    `    double ${prefix}_val = (${bias});`,
+  ];
+  if (waveform === 'sine') {
+    lines.push(`    ${prefix}_val += (${amp}) * sin(${prefix}_arg);`);
+  } else if (waveform === 'square') {
+    lines.push(`    ${prefix}_val += (${amp}) * (sin(${prefix}_arg) >= 0.0 ? 1.0 : -1.0);`);
+  } else if (waveform === 'triangle') {
+    lines.push(`    ${prefix}_val += (${amp}) * (2.0 / 3.14159265358979323846) * asin(sin(${prefix}_arg));`);
+  } else if (waveform === 'sawtooth') {
+    lines.push(`    double ${prefix}_u = (${freq}) * ${prefix}_t + (${phase}) / (2.0 * 3.14159265358979323846);`);
+    lines.push(`    ${prefix}_val += (${amp}) * (2.0 * (${prefix}_u - floor(${prefix}_u)) - 1.0);`);
+  } else {
+    lines.push(`    ${prefix}_val += (${amp}) * sin(${prefix}_arg);`);
+  }
+  lines.push(...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `${prefix}_val`, layout, member));
+  return lines;
 };
 
 
@@ -1446,14 +1542,20 @@ const emitDemux: OperationEmitter = (state, operation, operationIndex, layout, m
   const inputSignal = requireSignal(state, inputId);
   const outputCount = operation.outputSignalIds.length;
   const elementsPerOutput = Math.max(1, Math.floor(inputSignal.elementCount / outputCount));
+  const requiredLength = outputCount * elementsPerOutput;
+  const needsGuard = inputSignal.elementCount < requiredLength;
   const pieces: string[] = ['    {'];
   operation.outputSignalIds.forEach((outputId, idx) => {
+    const offset = idx * elementsPerOutput;
+    const indexExpr = `${offset}U + xb_index`;
     pieces.push(
       `        for (uint32_t xb_index = 0U; xb_index < ${elementsPerOutput}U; ++xb_index) {`,
       ...renderSignalElementWrite(
         state, operation, operationIndex, idx, outputId,
         'xb_index',
-        signalElementRealExpression(state, inputId, layout, member, `${idx * elementsPerOutput}U + xb_index`),
+        needsGuard
+          ? `(((${indexExpr}) < ${inputSignal.elementCount}U) ? ${signalElementRealExpression(state, inputId, layout, member, indexExpr)} : (${inputSignal.elementCount === 1 ? signalElementRealExpression(state, inputId, layout, member, '0U') : '0.0'}))`
+          : signalElementRealExpression(state, inputId, layout, member, indexExpr),
         layout, member,
       ).map((line) => `    ${line}`),
       '        }',
@@ -1553,14 +1655,15 @@ const OPERATION_EMITTERS: Readonly<Record<string, OperationEmitter>> = {
   KALMAN_FILTER: () => [],
   EXTENDED_KALMAN_FILTER: () => [],
   LMS_ADAPTIVE_FILTER: () => [],
-  Clock: () => [],
-  CLOCK: () => [],
+  Clock: emitClock,
+  CLOCK: emitClock,
   SIX_STEP_COMMUTATION: () => [],
   DFlipFlop: () => [],
   JKFlipFlop: () => [],
   Counter: () => [],
   Register: () => [],
-  WaveformGen: () => [],
+  WaveformGen: emitWaveformGen,
+  WAVEFORM_GEN: emitWaveformGen,
 };
 
 const renderEKFExpression = (
@@ -1947,14 +2050,19 @@ const renderStateOutputs = (
       '    }'];
   }
   if (operation.type === 'DISCRETE_TRANSFER_FUNCTION' || operation.type === 'STATE_SPACE') {
-    const xSlot = stateSlotForRole(operation, 'x');
-    const ySignalId = operation.outputSignalIds.find((signalId) =>
+    let effectiveOp = operation;
+    if (operation.type === 'DISCRETE_TRANSFER_FUNCTION' && (operation.parameters.A === undefined || operation.parameters.C === undefined)) {
+      const ss = synthesizeTransferFunctionStateSpace(operation.parameters.numerator, operation.parameters.denominator);
+      effectiveOp = { ...operation, parameters: { ...operation.parameters, A: ss.A, B: ss.B, C: ss.C, D: ss.D } };
+    }
+    const xSlot = stateSlotForRole(effectiveOp, 'x');
+    const ySignalId = effectiveOp.outputSignalIds.find((signalId) =>
       state.xBridges!.signals[signalId]?.portId === 'y');
     if (xSlot !== undefined && ySignalId !== undefined) {
       const y = requireSignal(state, ySignalId);
-      const inputId = operation.inputSignalIds[0];
-      const c = (row: number, column: number) => cNumber(matrixParameterValue(operation, 'C', row, column, 0));
-      const d = (row: number, column: number) => cNumber(matrixParameterValue(operation, 'D', row, column, 0));
+      const inputId = effectiveOp.inputSignalIds[0];
+      const c = (row: number, column: number) => cNumber(matrixParameterValue(effectiveOp, 'C', row, column, 0));
+      const d = (row: number, column: number) => cNumber(matrixParameterValue(effectiveOp, 'D', row, column, 0));
       const terms = Array.from({ length: y.elementCount }, (_, row) => {
         const stateTerms = Array.from({ length: xSlot.initialValues.length }, (_, column) =>
           `(${c(row, column)}) * ${stateSlotElementRealExpression(xSlot, layout, member, `${column}U`)}`);
@@ -2039,6 +2147,36 @@ const renderStateOutputs = (
         `    instance->${member}.sim_time += (${dt});`,
         ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `instance->${member}.sim_time`, layout, member),
       ];
+    }
+  }
+  if (operation.type === 'WaveformGen' || operation.type === 'WAVEFORM_GEN') {
+    const outputSignalId = operation.outputSignalIds[0];
+    if (outputSignalId !== undefined) {
+      const waveform = String(operation.parameters.waveform ?? operation.parameters.type ?? 'sine').toLowerCase();
+      const amp = cNumber(scalarParameter(operation, ['amplitude', 'amp'], 1.0));
+      const freq = cNumber(scalarParameter(operation, ['frequency', 'freq'], 1.0));
+      const phase = cNumber(scalarParameter(operation, ['phase'], 0.0));
+      const bias = cNumber(scalarParameter(operation, ['bias', 'offset'], 0.0));
+      const prefix = `wave_${operationIndex}`;
+      const lines = [
+        `    double ${prefix}_t = instance->${member}.sim_time;`,
+        `    double ${prefix}_arg = 2.0 * 3.14159265358979323846 * (${freq}) * ${prefix}_t + (${phase});`,
+        `    double ${prefix}_val = (${bias});`,
+      ];
+      if (waveform === 'sine') {
+        lines.push(`    ${prefix}_val += (${amp}) * sin(${prefix}_arg);`);
+      } else if (waveform === 'square') {
+        lines.push(`    ${prefix}_val += (${amp}) * (sin(${prefix}_arg) >= 0.0 ? 1.0 : -1.0);`);
+      } else if (waveform === 'triangle') {
+        lines.push(`    ${prefix}_val += (${amp}) * (2.0 / 3.14159265358979323846) * asin(sin(${prefix}_arg));`);
+      } else if (waveform === 'sawtooth') {
+        lines.push(`    double ${prefix}_u = (${freq}) * ${prefix}_t + (${phase}) / (2.0 * 3.14159265358979323846);`);
+        lines.push(`    ${prefix}_val += (${amp}) * (2.0 * (${prefix}_u - floor(${prefix}_u)) - 1.0);`);
+      } else {
+        lines.push(`    ${prefix}_val += (${amp}) * sin(${prefix}_arg);`);
+      }
+      lines.push(...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `${prefix}_val`, layout, member));
+      return lines;
     }
   }
   if (operation.type === 'SIX_STEP_COMMUTATION') {
@@ -2874,19 +3012,24 @@ const renderDiscreteStateUpdates = (
     ? '0.0'
     : signalRealExpression(state, operation.inputSignalIds[0], layout, member);
   if (operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION') {
-    const xSlot = stateSlotForRole(operation, 'x');
-    const inputId = operation.inputSignalIds[0];
+    let effectiveOp = operation;
+    if (operation.type === 'DISCRETE_TRANSFER_FUNCTION' && (operation.parameters.A === undefined || operation.parameters.C === undefined)) {
+      const ss = synthesizeTransferFunctionStateSpace(operation.parameters.numerator, operation.parameters.denominator);
+      effectiveOp = { ...operation, parameters: { ...operation.parameters, A: ss.A, B: ss.B, C: ss.C, D: ss.D } };
+    }
+    const xSlot = stateSlotForRole(effectiveOp, 'x');
+    const inputId = effectiveOp.inputSignalIds[0];
     if (xSlot === undefined || inputId === undefined) {
-      throw new Error(`X-Bridges STATE_SPACE '${operation.id}' requires x state and input signals`);
+      throw new Error(`X-Bridges STATE_SPACE '${effectiveOp.id}' requires x state and input signals`);
     }
     const inputSignal = requireSignal(state, inputId);
     const dimension = xSlot.initialValues.length;
     if (dimension === 0) {
-      throw new Error(`X-Bridges STATE_SPACE '${operation.id}' requires a non-empty state vector`);
+      throw new Error(`X-Bridges STATE_SPACE '${effectiveOp.id}' requires a non-empty state vector`);
     }
     const coefficientByRow = (name: string, column: number): string =>
       Array.from({ length: dimension }, (_, row) =>
-        `(xb_row == ${row}U ? ${cNumber(matrixParameterValue(operation, name, row, column, 0))}`)
+        `(xb_row == ${row}U ? ${cNumber(matrixParameterValue(effectiveOp, name, row, column, 0))}`)
         .join(' : ') + ' : 0.0' + ')'.repeat(dimension);
     // Matrix coefficients are emitted directly from validated, finite parameters;
     // loop bounds remain literal dimensions from the semantic IR.
@@ -3243,6 +3386,8 @@ const renderContinuousStateUpdates = (
         layout,
         member,
       ).map((line) => `    ${line}`)),
+      ...renderDirectEvaluation(state, xb, layout, member, true)
+        .map((line) => `    ${line}`),
     ];
   }
   const stage = (

@@ -3265,6 +3265,41 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(XB_CAPABILITIES.WaveformGen).toBeDefined();
     expect(XB_CAPABILITIES.WaveformGen.codegen).toBe(true);
   });
+
+  it('lowers WaveformGen block to C99 expressions for sine, square, triangle, and sawtooth', () => {
+    const ir = semanticModel();
+    ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
+      stateId: 'controller',
+      executionOrder: ['op_wave'],
+      operations: {
+        op_wave: {
+          id: 'op_wave',
+          type: 'WaveformGen',
+          parameters: { waveform: 'triangle', amplitude: 2.0, frequency: 5.0, bias: 1.0, phase: 0.5 },
+          directFeedthrough: true,
+          stateful: false,
+          inputSignalIds: [],
+          outputSignalIds: ['y'],
+          conversion: null,
+          state: null,
+          schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+          numericFault: { fallback: 'zero', errorSignalId: null }
+        }
+      },
+      signals: {
+        y: { id: 'y', nodeId: 'node_wave', portId: 'y', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'contiguous', numericType: { kind: 'float64' }, storage: 'native' }
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
+      policy: { memory: 'reset', numericFault: 'escalate' }
+    };
+
+    const artifacts = generateCArtifacts(ir);
+    const code = artifacts.files.map((f) => f.content).join('\n');
+    expect(code).toContain('asin(sin(');
+    expect(code).toContain('instance->xb_controller.sim_time');
+  });
 });
 
 
