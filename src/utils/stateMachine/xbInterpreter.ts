@@ -556,7 +556,7 @@ const evaluateDirectOperation = (
       }
       return [Array.from({ length: outputShape.rows * outputShape.columns }, (_, index) =>
         inputs[0][(index % outputShape.columns) * inputShape.columns
-          + Math.floor(index / outputShape.columns)])];
+        + Math.floor(index / outputShape.columns)])];
     }
     case 'MatrixConcat': {
       const outputId = operation.outputSignalIds[0];
@@ -623,7 +623,7 @@ const evaluateDirectOperation = (
       }
       return [Array.from({ length: outputShape.rows * outputShape.columns }, (_, index) =>
         inputs[0][(rowStart + Math.floor(index / outputShape.columns)) * inputShape.columns
-          + colStart + (index % outputShape.columns)])];
+        + colStart + (index % outputShape.columns)])];
     }
     case 'MatrixSolve': {
       const matrixId = operation.inputSignalIds[0];
@@ -697,10 +697,24 @@ const evaluateDirectOperation = (
     case 'ShiftRight':
       return [binary(inputs[0] ?? [0], inputs[1] ?? [0], (left, right) => (Number(left) >> Number(right)) >>> 0)];
     case 'SWITCH': {
-      const cond = inputs[0]?.[0];
-      const threshold = Number(parameter(operation, ['threshold', 'Threshold'], 0));
-      const pass = Boolean(cond) && Number(cond) >= threshold;
-      return [pass ? (inputs[1] ?? [0]) : (inputs[2] ?? [0])];
+      const getSignal = (kw: string[]) => {
+        const idx = operation.inputSignalIds.findIndex((id) => {
+          const portId = runtime.ir.signals[id]?.portId?.toLowerCase() ?? id.slice(id.indexOf(':') + 1).toLowerCase();
+          return kw.some((k) => portId === k || portId.endsWith(k));
+        });
+        return idx >= 0 ? inputs[idx] : undefined;
+      };
+      const ctrlSignal = getSignal(['ctrl', 'control', 'cond', 'condition']);
+      const ctrl = Number((ctrlSignal ?? (operation.inputSignalIds.length === 3 ? inputs[0] : inputs[1]))?.[0] ?? 0);
+      const u1 = getSignal(['u1', 'in1', 'pass', 'u_true']) ?? (ctrlSignal === inputs[0] ? inputs[1] : inputs[0]) ?? [0];
+      const u2 = getSignal(['u2', 'in2', 'fail', 'u_false']) ?? inputs[2] ?? [0];
+      const threshold = Number(parameter(operation, ['threshold', 'Threshold'], 0.5));
+      const criteria = String(parameter(operation, ['criteria'], 0) || 'u2 >= Threshold');
+      let pass = false;
+      if (criteria === 'u2 > Threshold') pass = ctrl > threshold;
+      else if (criteria === 'u2 ~= 0') pass = ctrl !== 0;
+      else pass = ctrl >= threshold;
+      return [pass ? u1 : u2];
     }
     case 'IF_ELSE': {
       const cond = inputs[0]?.[0];
@@ -767,6 +781,48 @@ const evaluateDirectOperation = (
       const y = u > start ? (u - start) : (u < end ? (u - end) : 0);
       return [[y]];
     }
+    case 'LOW_PASS_FILTER': {
+      const prevYSlot = stateSlotForRole(operation, 'prev_y');
+      const prev_y = prevYSlot ? Number((runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues)[0] ?? 0) : 0;
+      const u = Number(inputs[0]?.[0] ?? 0);
+      const fc = Number(parameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
+      const dt = Number(parameter(operation, ['sample_time', 'sampleTime', 'dt'], runtime.ir.solver.stepSeconds));
+      const tau = 1 / (2 * Math.PI * fc);
+      const alpha = dt / (tau + dt);
+      const y = (1 - alpha) * prev_y + alpha * u;
+      return [[y]];
+    }
+    case 'HIGH_PASS_FILTER': {
+      const prevYSlot = stateSlotForRole(operation, 'prev_y');
+      const prevUSlot = stateSlotForRole(operation, 'prev_u');
+      const prev_y = prevYSlot ? Number((runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues)[0] ?? 0) : 0;
+      const prev_u = prevUSlot ? Number((runtime.stateSlots[prevUSlot.id] ?? prevUSlot.initialValues)[0] ?? 0) : 0;
+      const u = Number(inputs[0]?.[0] ?? 0);
+      const fc = Number(parameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
+      const dt = Number(parameter(operation, ['sample_time', 'sampleTime', 'dt'], runtime.ir.solver.stepSeconds));
+      const tau = 1 / (2 * Math.PI * fc);
+      const alpha = tau / (tau + dt);
+      const y = alpha * (prev_y + u - prev_u);
+      return [[y]];
+    }
+    case 'MOVING_AVERAGE': {
+      const bufferSlot = stateSlotForRole(operation, 'buffer');
+      const indexSlot = stateSlotForRole(operation, 'index');
+      const u = Number(inputs[0]?.[0] ?? 0);
+      if (bufferSlot && indexSlot) {
+        const currentBuf = [...(runtime.stateSlots[bufferSlot.id] ?? bufferSlot.initialValues)];
+        const idx = Number((runtime.stateSlots[indexSlot.id] ?? indexSlot.initialValues)[0] ?? 0);
+        const windowSize = bufferSlot.shape.kind === 'vector' ? bufferSlot.shape.length : 4;
+        currentBuf[idx] = u;
+        const sum = currentBuf.slice(0, windowSize).reduce((acc: number, val) => acc + Number(val), 0);
+        return [[sum / windowSize]];
+      }
+      return [[u]];
+    }
+    case 'PID_BASIC':
+    case 'PID_CONTROLLER': {
+      return [[pidValues(runtime, operation).output]];
+    }
     case 'Step': {
       const stepTime = operation.stepParameters
         ? operation.stepParameters.threshold.milliseconds / 1000
@@ -778,14 +834,33 @@ const evaluateDirectOperation = (
       const t = runtime.simTime ?? 0;
       const beforeThreshold = operation.stepParameters
         ? Math.round((t + runtime.ir.solver.stepSeconds) * 1000)
-          < operation.stepParameters.threshold.milliseconds
+        < operation.stepParameters.threshold.milliseconds
         : t < stepTime;
       return [[beforeThreshold ? initial : final]];
     }
+    case 'SIX_STEP_COMMUTATION': {
+      const h1 = Boolean(inputs[0]?.[0] ?? 0);
+      const h2 = Boolean(inputs[1]?.[0] ?? 0);
+      const h3 = Boolean(inputs[2]?.[0] ?? 0);
+      const hall = (h1 ? 4 : 0) | (h2 ? 2 : 0) | (h3 ? 1 : 0);
+      let ah = 0, al = 0, bh = 0, bl = 0, ch = 0, cl = 0;
+      if (hall === 5) { ah = 1; bl = 1; }      // 101: Sector 1 (AH, BL)
+      else if (hall === 4) { ah = 1; cl = 1; } // 100: Sector 2 (AH, CL)
+      else if (hall === 6) { bh = 1; cl = 1; } // 110: Sector 3 (BH, CL)
+      else if (hall === 2) { bh = 1; al = 1; } // 010: Sector 4 (BH, AL)
+      else if (hall === 3) { ch = 1; al = 1; } // 011: Sector 5 (CH, AL)
+      else if (hall === 1) { ch = 1; bl = 1; } // 001: Sector 6 (CH, BL)
+      return [[ah], [al], [bh], [bl], [ch], [cl]];
+    }
+    case 'Clock':
+    case 'CLOCK':
+      return [[runtime.simTime ?? 0]];
+    case 'WaveformGen':
+      return [[0]];
     default:
       throw new Error(
         `X-Bridges operation '${operation.id}' has unsupported type `
-          + `'${operation.type}'`,
+        + `'${operation.type}'`,
       );
   }
 };
@@ -794,8 +869,8 @@ const reinterpretValue = (
   storedInteger: number,
   destinationType: XBNumericType,
 ): number => destinationType.kind === 'fixed'
-  ? storedInteger / (2 ** destinationType.fractionLength)
-  : storedInteger;
+    ? storedInteger / (2 ** destinationType.fractionLength)
+    : storedInteger;
 
 const executeConversionOperation = (
   runtime: XBRuntime,
@@ -835,7 +910,7 @@ const executeConversionOperation = (
       if (storedInteger === null || storedInteger === undefined) {
         throw new Error(
           `X-Bridges conversion operation '${operation.id}' requires `
-            + 'stored-integer input metadata',
+          + 'stored-integer input metadata',
         );
       }
       conversionInput = reinterpretValue(
@@ -884,9 +959,26 @@ const pidValues = (
   if (iSlot === undefined || dSlot === undefined || lastESlot === undefined) {
     throw new Error(`X-Bridges PID_BASIC '${operation.id}' requires i_state, d_state, and last_e slots`);
   }
-  const error = Number(signalValues(runtime, operation.inputSignalIds[0] ?? '')[0] ?? 0);
-  const enabled = Number(signalValues(runtime, operation.inputSignalIds[1] ?? '')[0] ?? 0);
-  const reset = Number(signalValues(runtime, operation.inputSignalIds[2] ?? '')[0] ?? 0);
+  let error = 0;
+  let enabled = 1;
+  let reset = 0;
+  if (operation.inputSignalIds.length >= 4) {
+    const port0 = runtime.ir.signals[operation.inputSignalIds[0] ?? '']?.portId;
+    const val0 = Number(signalValues(runtime, operation.inputSignalIds[0] ?? '')[0] ?? 0);
+    const val1 = Number(signalValues(runtime, operation.inputSignalIds[1] ?? '')[0] ?? 0);
+    error = port0 === 'y' ? val1 - val0 : val0 - val1;
+    enabled = Number(signalValues(runtime, operation.inputSignalIds[2] ?? '')[0] ?? 1);
+    reset = Number(signalValues(runtime, operation.inputSignalIds[3] ?? '')[0] ?? 0);
+  } else if (operation.type === 'PID_CONTROLLER' || operation.inputSignalIds.length === 2) {
+    const port0 = runtime.ir.signals[operation.inputSignalIds[0] ?? '']?.portId;
+    const val0 = Number(signalValues(runtime, operation.inputSignalIds[0] ?? '')[0] ?? 0);
+    const val1 = Number(signalValues(runtime, operation.inputSignalIds[1] ?? '')[0] ?? 0);
+    error = port0 === 'y' ? val1 - val0 : val0 - val1;
+  } else {
+    error = Number(signalValues(runtime, operation.inputSignalIds[0] ?? '')[0] ?? 0);
+    enabled = Number(signalValues(runtime, operation.inputSignalIds[1] ?? '')[0] ?? 1);
+    reset = Number(signalValues(runtime, operation.inputSignalIds[2] ?? '')[0] ?? 0);
+  }
   const previousI = Number((runtime.stateSlots[iSlot.id] ?? iSlot.initialValues)[0] ?? 0);
   const previousD = Number((runtime.stateSlots[dSlot.id] ?? dSlot.initialValues)[0] ?? 0);
   const previousE = Number((runtime.stateSlots[lastESlot.id] ?? lastESlot.initialValues)[0] ?? 0);
@@ -895,33 +987,39 @@ const pidValues = (
     output: 0, iState: previousI, dState: previousD, lastE: previousE,
   };
 
-  const kp = Number(parameter(operation, ['Kp', 'kp'], 1));
-  const ki = Number(parameter(operation, ['Ki', 'ki'], 0));
-  const kd = Number(parameter(operation, ['Kd', 'kd'], 0));
-  const n = Number(parameter(operation, ['N', 'n'], 100));
-  const dt = Number(parameter(operation, ['sampleTime', 'dt'], 1));
-  const lower = Number(parameter(operation, ['min', 'minimum'], -100));
-  const upper = Number(parameter(operation, ['max', 'maximum'], 100));
-  const mode = operation.parameters.mode;
-  const method = operation.parameters.method;
+  const pidParams = operation.pidParameters as Record<string, unknown> | undefined;
+  const kp = Number(pidParams?.kp ?? pidParams?.proportionalGain ?? parameter(operation, ['Kp', 'kp'], 1));
+  const ki = Number(pidParams?.ki ?? pidParams?.integralGain ?? parameter(operation, ['Ki', 'ki'], 0));
+  const kd = Number(pidParams?.kd ?? pidParams?.derivativeGain ?? parameter(operation, ['Kd', 'kd'], 0));
+  const n = Number(pidParams?.filterN ?? pidParams?.filterCoefficient ?? parameter(operation, ['N', 'n'], 100));
+  const dt = Number(pidParams?.sampleTime ?? parameter(operation, ['sampleTime', 'dt'], 1));
+  const lower = Number(pidParams?.minimum ?? pidParams?.minimumOutput ?? parameter(operation, ['min', 'minimum'], -100));
+  const upper = Number(pidParams?.maximum ?? pidParams?.maximumOutput ?? parameter(operation, ['max', 'maximum'], 100));
+  const mode = (pidParams?.mode ?? operation.parameters.mode) as string | undefined;
+  const method = (pidParams?.method ?? operation.parameters.method) as string | undefined;
+  const methodLower = String(method ?? 'trapezoidal').toLowerCase();
   let nextI = previousI;
   let nextD = previousD;
   let derivative = 0;
-  if (mode === 'PI' || mode === 'PID' || mode === undefined) {
-    if (method === 'forward_euler') nextI = previousI + ki * previousE * dt;
-    else if (method === 'backward_euler') nextI = previousI + ki * error * dt;
+  if (mode === 'PI' || mode === 'PID' || mode === 'discrete' || mode === undefined) {
+    if (methodLower.includes('forward')) nextI = previousI + ki * previousE * dt;
+    else if (methodLower.includes('backward')) nextI = previousI + ki * error * dt;
     else nextI = previousI + ki * (error + previousE) * dt / 2;
   }
-  if (mode === 'PD' || mode === 'PID' || mode === undefined) {
-    if (method === 'forward_euler') {
-      derivative = kd * n * (error - previousD);
-      nextD = previousD + n * (error - previousD) * dt;
-    } else if (method === 'backward_euler') {
-      derivative = kd * n * (error - previousD) / (1 + n * dt);
-      nextD = (previousD + n * error * dt) / (1 + n * dt);
+  if (mode === 'PD' || mode === 'PID' || mode === 'discrete' || mode === undefined) {
+    if (dSlot?.role === 'd_state' && operation.type === 'PID_CONTROLLER') {
+      const dFiltered = (previousD + n * (error - previousE)) / (1 + n * dt);
+      derivative = kd * dFiltered;
+      nextD = dFiltered;
+    } else if (methodLower.includes('forward')) {
+      derivative = kd * n * (error - previousE);
+      nextD = error;
+    } else if (methodLower.includes('backward')) {
+      derivative = (kd * n * (error - previousE)) / (1 + n * dt);
+      nextD = error;
     } else {
-      derivative = 2 * kd * n * (error - previousD) / (2 + n * dt);
-      nextD = (previousD * (2 - n * dt) + 2 * n * error * dt) / (2 + n * dt);
+      derivative = (2 * kd * n * (error - previousE)) / (2 + n * dt);
+      nextD = error;
     }
   }
   const unlimited = kp * error + nextI + derivative;
@@ -984,8 +1082,8 @@ const writeStateOutputs = (
     }
     return;
   }
-  if (operation.type === 'PID_BASIC') {
-    const output = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'u');
+  if (operation.type === 'PID_BASIC' || operation.type === 'PID_CONTROLLER') {
+    const output = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'u') ?? operation.outputSignalIds[0];
     if (output !== undefined) writeSignal(runtime, output, [pidValues(runtime, operation).output], faults, operation);
     return;
   }
@@ -1022,13 +1120,13 @@ const writeStateOutputs = (
       const xPrevFlat = runtime.stateSlots[xSlot.id] ?? xSlot.initialValues;
       const pPrevFlat = runtime.stateSlots[pSlot.id] ?? pSlot.initialValues;
       const type = xSlot.numericType;
-      
+
       const xPrev = xPrevFlat.map(v => [Number(v)]);
       const pPrev: number[][] = [];
       for (let i = 0; i < xLength; i++) {
         pPrev.push(pPrevFlat.slice(i * xLength, (i + 1) * xLength).map(Number));
       }
-      
+
       const A = matrixParameter(operation, 'A', [[1]]);
       const B = matrixParameter(operation, 'B', [[0]]);
       const C = matrixParameter(operation, 'C', [[1]]);
@@ -1040,24 +1138,24 @@ const writeStateOutputs = (
         I[i] = [];
         for (let j = 0; j < xLength; j++) I[i]![j] = i === j ? 1 : 0;
       }
-      
+
       const uVec = u.map(v => [Number(v)]);
       const yMeasVec = yMeas.map(v => [Number(v)]);
-      
+
       // Predict: x = Ax + Bu
       let xPred = matrixAdd(matrixMultiply(A, xPrev, type, faults), matrixMultiply(B, uVec, type, faults), type, faults);
       // P = APA' + Q
       let pPred = matrixAdd(matrixMultiply(matrixMultiply(A, pPrev, type, faults), matrixTranspose(A), type, faults), Q, type, faults);
-      
+
       // Update: innovation = y_meas - (C xPred + D u)
       const yHat = matrixAdd(matrixMultiply(C, xPred, type, faults), matrixMultiply(D, uVec, type, faults), type, faults);
       const innovation = matrixSubtract(yMeasVec, yHat, type, faults);
-      
+
       // K = P_pred C' (C P_pred C' + R)^-1
       const cTrans = matrixTranspose(C);
       const sPre = matrixAdd(matrixMultiply(matrixMultiply(C, pPred, type, faults), cTrans, type, faults), R, type, faults);
       const invRes = matrixInverseGaussJordan(sPre, type, faults);
-      
+
       let xHat = xPrev;
       let pHat = pPrev;
       let K: number[][] = [];
@@ -1078,14 +1176,14 @@ const writeStateOutputs = (
         const ikc = matrixSubtract(I, kc, type, faults);
         pHat = matrixAdd(matrixMultiply(matrixMultiply(ikc, pPred, type, faults), matrixTranspose(ikc), type, faults), matrixMultiply(matrixMultiply(K, R, type, faults), matrixTranspose(K), type, faults), type, faults);
       }
-      
+
       // Write state outputs
       const xHatFlat = xHat.map(r => r[0]!);
       if (xHatId !== undefined) writeSignal(runtime, xHatId, xHatFlat, faults, operation);
       if (yHatId !== undefined) writeSignal(runtime, yHatId, yHat.map(r => r[0]!), faults, operation);
       if (innovationId !== undefined) writeSignal(runtime, innovationId, innovation.map(r => r[0]!), faults, operation);
       if (kId !== undefined) writeSignal(runtime, kId, K.flat(), faults, operation);
-      
+
       // Update internal state directly to avoid re-evaluating
       runtime.stateSlots[xSlot.id] = xHatFlat;
       runtime.stateSlots[pSlot.id] = pHat.flat();
@@ -1205,13 +1303,13 @@ const writeStateOutputs = (
           type, faults,
         );
       }
-      
+
       const xHatFlat = xHat.map(r => r[0]!);
       if (xHatId !== undefined) writeSignal(runtime, xHatId, xHatFlat, faults, operation);
       if (yHatId !== undefined) writeSignal(runtime, yHatId, yHat.map(r => r[0]!), faults, operation);
       if (innovationId !== undefined) writeSignal(runtime, innovationId, innovation.map(r => r[0]!), faults, operation);
       if (kId !== undefined) writeSignal(runtime, kId, K.flat(), faults, operation);
-      
+
       runtime.stateSlots[xSlot.id] = xHatFlat;
       runtime.stateSlots[pSlot.id] = pHat.flat();
     }
@@ -1297,7 +1395,7 @@ const statefulUpdate = (
   operation: XBSemanticOperation,
   faults: XBNumericFault[],
 ): Record<string, XBScalar[]> => {
-  if (operation.type === 'PID_BASIC') {
+  if (operation.type === 'PID_BASIC' || operation.type === 'PID_CONTROLLER') {
     const values = pidValues(runtime, operation);
     const updates: Record<string, XBScalar[]> = {};
     for (const [role, value] of Object.entries({
@@ -1318,7 +1416,7 @@ const statefulUpdate = (
     return {
       [xSlot.id]: state.map((_, row) => convertValue(
         state.reduce((sum, value, column) => sum + (a[row]?.[column] ?? 0) * value, 0)
-          + inputValues.reduce((sum, value, column) => sum + (b[row]?.[column] ?? 0) * value, 0),
+        + inputValues.reduce((sum, value, column) => sum + (b[row]?.[column] ?? 0) * value, 0),
         xSlot.numericType, faults, operation,
       )),
     };
@@ -1343,6 +1441,56 @@ const statefulUpdate = (
     const current_on_prev = Boolean((runtime.stateSlots[onSlot.id] ?? onSlot.initialValues)[0]);
     const current_on = u >= on || (current_on_prev && u > off);
     return { [onSlot.id]: [current_on] };
+  }
+  if (operation.type === 'LOW_PASS_FILTER') {
+    const prevYSlot = stateSlotForRole(operation, 'prev_y');
+    if (prevYSlot === undefined) throw new Error(`X-Bridges LOW_PASS_FILTER '${operation.id}' requires a prev_y state slot`);
+    const inputId = operation.inputSignalIds[0];
+    const u = inputId ? Number(signalValues(runtime, inputId)[0] ?? 0) : 0;
+    const fc = Number(parameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
+    const dt = Number(parameter(operation, ['sample_time', 'sampleTime', 'dt'], 0.1));
+    const tau = 1 / (2 * Math.PI * fc);
+    const alpha = dt / (tau + dt);
+    const prev_y = Number((runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues)[0] ?? 0);
+    const y = (1 - alpha) * prev_y + alpha * u;
+    return { [prevYSlot.id]: [convertValue(y, prevYSlot.numericType, faults, operation)] };
+  }
+  if (operation.type === 'HIGH_PASS_FILTER') {
+    const prevYSlot = stateSlotForRole(operation, 'prev_y');
+    const prevUSlot = stateSlotForRole(operation, 'prev_u');
+    if (prevYSlot === undefined || prevUSlot === undefined) {
+      throw new Error(`X-Bridges HIGH_PASS_FILTER '${operation.id}' requires prev_y and prev_u state slots`);
+    }
+    const inputId = operation.inputSignalIds[0];
+    const u = inputId ? Number(signalValues(runtime, inputId)[0] ?? 0) : 0;
+    const fc = Number(parameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
+    const dt = Number(parameter(operation, ['sample_time', 'sampleTime', 'dt'], 0.1));
+    const tau = 1 / (2 * Math.PI * fc);
+    const alpha = tau / (tau + dt);
+    const prev_y = Number((runtime.stateSlots[prevYSlot.id] ?? prevYSlot.initialValues)[0] ?? 0);
+    const prev_u = Number((runtime.stateSlots[prevUSlot.id] ?? prevUSlot.initialValues)[0] ?? 0);
+    const y = alpha * (prev_y + u - prev_u);
+    return {
+      [prevYSlot.id]: [convertValue(y, prevYSlot.numericType, faults, operation)],
+      [prevUSlot.id]: [convertValue(u, prevUSlot.numericType, faults, operation)],
+    };
+  }
+  if (operation.type === 'MOVING_AVERAGE') {
+    const bufferSlot = stateSlotForRole(operation, 'buffer');
+    const indexSlot = stateSlotForRole(operation, 'index');
+    if (bufferSlot === undefined || indexSlot === undefined) {
+      throw new Error(`X-Bridges MOVING_AVERAGE '${operation.id}' requires buffer and index state slots`);
+    }
+    const inputId = operation.inputSignalIds[0];
+    const u = inputId ? Number(signalValues(runtime, inputId)[0] ?? 0) : 0;
+    const buffer = [...(runtime.stateSlots[bufferSlot.id] ?? bufferSlot.initialValues)].map(Number);
+    const index = Number((runtime.stateSlots[indexSlot.id] ?? indexSlot.initialValues)[0] ?? 0);
+    buffer[index] = convertValue(u, bufferSlot.numericType, faults, operation) as number;
+    const nextIndex = (index + 1) % buffer.length;
+    return {
+      [bufferSlot.id]: buffer,
+      [indexSlot.id]: [nextIndex],
+    };
   }
   if (operation.type === 'WHITE_NOISE' || operation.type === 'BAND_LIMITED_NOISE' || operation.type === 'KALMAN_FILTER' || operation.type === 'EXTENDED_KALMAN_FILTER') {
     return {};
@@ -1369,6 +1517,7 @@ const statefulUpdate = (
       return updates;
     }
   }
+  if (operation.inputSignalIds.length === 0 || operation.inputSignalIds[0] === undefined) return {};
   const input = signalValues(runtime, operation.inputSignalIds[0]);
   const updates: Record<string, XBScalar[]> = {};
   for (const [slotIndex, slot] of (operation.state?.slots ?? []).entries()) {
@@ -1418,7 +1567,7 @@ const statefulUpdate = (
         const proportional = Number(parameter(operation, ['Kp', 'kp'], 1)) * error;
         const integral = Number(previous[0] ?? 0)
           + Number(parameter(operation, ['Ki', 'ki'], 0)) * error
-            * Number(parameter(operation, ['sampleTime', 'dt'], 1));
+          * Number(parameter(operation, ['sampleTime', 'dt'], 1));
         const lower = Number(parameter(operation, ['min', 'minimum'], -100));
         const upper = Number(parameter(operation, ['max', 'maximum'], 100));
         const output = Math.max(lower, Math.min(upper, proportional + integral));
@@ -1429,7 +1578,7 @@ const statefulUpdate = (
       default:
         throw new Error(
           `X-Bridges stateful operation '${operation.id}' has unsupported `
-            + `type '${operation.type}'`,
+          + `type '${operation.type}'`,
         );
     }
   }
@@ -1448,7 +1597,15 @@ const executeDirectOperations = (
         `X-Bridges execution order references missing operation '${operationId}'`,
       );
     }
-    if (operation.stateful) continue;
+    if (
+      operation.stateful &&
+      !operation.directFeedthrough &&
+      operation.type !== 'PID_BASIC' &&
+      operation.type !== 'PID_CONTROLLER' &&
+      operation.type !== 'LOW_PASS_FILTER' &&
+      operation.type !== 'HIGH_PASS_FILTER' &&
+      operation.type !== 'MOVING_AVERAGE'
+    ) continue;
     if (runtime.operationFaults[operation.id]?.active) continue;
     if (!forceEvaluation && !scheduledThisSubstep(runtime, operation)) continue;
     if ((operation.type === 'Inport' || operation.type === 'Outport')
@@ -1615,33 +1772,23 @@ const executeSolverSubstep = (
   runtime: XBRuntime,
   faults: XBNumericFault[],
 ): void => {
-  console.log("EXECUTE SOLVER SUBSTEP", runtime.ir.executionOrder);
   const statefulOperations: XBSemanticOperation[] = [];
   for (const operationId of runtime.ir.executionOrder) {
     const operation = runtime.ir.operations[operationId];
     if (operation === undefined) throw new Error(
       `X-Bridges execution order references missing operation '${operationId}'`,
     );
-    console.log("execute loop", operationId, operation.stateful);
     if (!operation.stateful) continue;
-    
+
     if (runtime.operationFaults[operation.id]?.active) {
-      console.log("skipping due to active fault", operation.id);
       statefulOperations.push(operation);
       continue;
     }
     const outputSnapshot = snapshotOperation(runtime, operation);
     const faultStart = faults.length;
-    console.log("checking scheduledThisSubstep", operation.id);
-    const isScheduled = scheduledThisSubstep(runtime, operation);
-    console.log("scheduledThisSubstep result:", isScheduled);
-    if (isScheduled
+    if (scheduledThisSubstep(runtime, operation)
       || operation.type === 'INTEGRATOR_CONTINUOUS'
       || operation.type === 'Integrator') {
-      console.log("calling writeStateOutputs", operation.id);
-      if (operation.id === 'ekf') {
-        throw new Error(`EKF is scheduled! stateful=${operation.stateful}, activeFault=${runtime.operationFaults[operation.id]?.active}`);
-      }
       writeStateOutputs(runtime, operation, faults);
       const fault = faults[faultStart];
       if (fault !== undefined) recordOperationFault(runtime, operation, fault, outputSnapshot);
@@ -1731,7 +1878,7 @@ export const stepXBState = (
     if (values.length !== 1) {
       throw new Error(
         `X-Bridges state-machine output mapping '${varId}' `
-          + 'must be scalar',
+        + 'must be scalar',
       );
     }
     data[varId] = convertValue(

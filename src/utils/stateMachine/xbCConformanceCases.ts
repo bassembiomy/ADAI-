@@ -196,6 +196,102 @@ function makeXBridgesFixture(
 
 const DEFAULT_TOLERANCE = Object.freeze({ absolute: 1e-4, relative: 1e-4 });
 
+const FILTER_INPUT_SEQUENCE: readonly DifferentialScenarioStep[] = [
+  // Constant zero input; filter runs at t=0 using initial condition.
+  { kind: 'step', inputs: { u: 0 } },
+  { kind: 'step', inputs: { u: 0 } },
+  { kind: 'step', inputs: { u: 0 } },
+  { kind: 'step', inputs: { u: 0 } },
+  { kind: 'step', inputs: { u: 0 } },
+  // Step up to +10 (positive transition); filter internal sample still reads u=0.
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+  // t=0.1 s: filter runs again at u=10 (sample time boundary).
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+  // Step down to -5 (negative transition).
+  { kind: 'step', inputs: { u: -5 } },
+  { kind: 'step', inputs: { u: -5 } },
+  { kind: 'step', inputs: { u: -5 } },
+  { kind: 'step', inputs: { u: -5 } },
+  { kind: 'step', inputs: { u: -5 } },
+  // t=0.2 s: filter runs at u=-5.
+  { kind: 'step', inputs: { u: -5 } },
+  { kind: 'step', inputs: { u: -5 } },
+  { kind: 'step', inputs: { u: -5 } },
+  { kind: 'step', inputs: { u: -5 } },
+  { kind: 'step', inputs: { u: -5 } },
+  // Sinusoidal input variation.
+  { kind: 'step', inputs: { u: 5 * Math.sin(25) } },
+  { kind: 'step', inputs: { u: 5 * Math.sin(26) } },
+  { kind: 'step', inputs: { u: 5 * Math.sin(27) } },
+  { kind: 'step', inputs: { u: 5 * Math.sin(28) } },
+  { kind: 'step', inputs: { u: 5 * Math.sin(29) } },
+  // t=0.3 s: filter runs at sinusoidal sample.
+  { kind: 'step', inputs: { u: 5 * Math.sin(30) } },
+  { kind: 'step', inputs: { u: 5 * Math.sin(31) } },
+  { kind: 'step', inputs: { u: 5 * Math.sin(32) } },
+  { kind: 'step', inputs: { u: 5 * Math.sin(33) } },
+  { kind: 'step', inputs: { u: 5 * Math.sin(34) } },
+  // Reset to exercise reinitialization and buffer/index rollback.
+  { kind: 'reset' },
+  // After reset, constant zero input again; filter runs at first sample boundary.
+  { kind: 'step', inputs: { u: 0 } },
+  { kind: 'step', inputs: { u: 0 } },
+  { kind: 'step', inputs: { u: 0 } },
+  { kind: 'step', inputs: { u: 0 } },
+  { kind: 'step', inputs: { u: 0 } },
+  // Step up to +10 after reset.
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+  // t=0.1 s after reset: filter runs at u=10 from zero initial condition.
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+  { kind: 'step', inputs: { u: 10 } },
+];
+
+const filterFixture = (): DifferentialFixture => {
+  const fixture = makeXBridgesFixture(
+    [
+      createNode('inport', 'Inport', { smVarId: 'u' }),
+      createNode('lpf1', 'LOW_PASS_FILTER', { cutoff_frequency: 1, sample_time: 0.1, initial_condition: 0 }),
+      createNode('hpf1', 'HIGH_PASS_FILTER', { cutoff_frequency: 1, sample_time: 0.1, initial_condition: 0 }),
+      createNode('ma1', 'MOVING_AVERAGE', { window_size: 4, sample_time: 0.1, initial_condition: 0 }),
+    ],
+    [
+      { id: 'e1', sourceNodeId: 'inport', sourcePortId: 'out', targetNodeId: 'lpf1', targetPortId: 'u' },
+      { id: 'e2', sourceNodeId: 'inport', sourcePortId: 'out', targetNodeId: 'hpf1', targetPortId: 'u' },
+      { id: 'e3', sourceNodeId: 'inport', sourcePortId: 'out', targetNodeId: 'ma1', targetPortId: 'u' },
+    ],
+    [
+      { smVarId: 'u', blockId: 'inport', portId: 'in', direction: 'in' },
+    ],
+    FILTER_INPUT_SEQUENCE,
+  );
+  fixture.model.variables.push({
+    id: 'u',
+    name: 'u',
+    type: 'float',
+    initialValue: '0',
+    currentValue: 0,
+    visibleInScope: true,
+  });
+  const controller = fixture.model.states.find((state) => state.id === 'controller')!;
+  controller.xBridgesModel!.solver.stepSeconds = 0.01;
+  return fixture;
+};
+
 export const XB_EXECUTABLE_C_CASES: Readonly<
   Record<string, XBExecutableConformanceCase>
 > = Object.freeze({
@@ -228,6 +324,16 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
         { id: 'e1', sourceNodeId: 'c1', sourcePortId: 'out', targetNodeId: 't1', targetPortId: 'u' },
       ],
     ),
+    tolerance: DEFAULT_TOLERANCE,
+  },
+  'T10-C99-FILTERS': {
+    id: 'T10-C99-FILTERS',
+    coverage: [
+      scalarCoverage('LOW_PASS_FILTER'),
+      scalarCoverage('HIGH_PASS_FILTER'),
+      scalarCoverage('MOVING_AVERAGE'),
+    ],
+    fixture: filterFixture(),
     tolerance: DEFAULT_TOLERANCE,
   },
   'T14-C99-STATEFUL': {

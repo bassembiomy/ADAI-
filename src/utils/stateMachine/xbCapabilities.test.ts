@@ -163,4 +163,14 @@ describe('getXBBlockCapability', () => {
       }
     }
   });
+
+  it('registers Batch5C filters with a paired executable conformance case', () => {
+    for (const type of ['LOW_PASS_FILTER', 'HIGH_PASS_FILTER', 'MOVING_AVERAGE']) {
+      const cap = getXBBlockCapability(type);
+      expect(cap?.codegen).toBe(true);
+      expect(cap?.interpreterConformanceCaseIds).toContain('T10-INT-FILTERS');
+      expect(cap?.cConformanceCaseIds).toContain('T10-C99-FILTERS');
+      expect(cap?.pairedConformanceCaseIds).toContain('T10-PAIRED-FILTERS');
+    }
+  });
 });

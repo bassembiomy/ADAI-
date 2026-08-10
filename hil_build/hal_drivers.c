@@ -8,6 +8,7 @@
 #include "hal_drivers.h"
 #include "hal_config.h"
 #include "hil_interface.h"
+#include <string.h>
 #include "Arduino.h"
 #include <Wire.h>
 

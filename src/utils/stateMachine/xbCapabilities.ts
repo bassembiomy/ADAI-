@@ -21,6 +21,8 @@ export interface XBBlockCapability {
   interpreterConformanceCaseIds?: readonly string[];
   /** Stable executable strict-C99 conformance cases. */
   cConformanceCaseIds?: readonly string[];
+  /** Stable paired executable interpreter/C99 conformance cases. */
+  pairedConformanceCaseIds?: readonly string[];
 }
 
 export const XB_INTERPRETER_CONFORMANCE_CASE_IDS = [
@@ -30,6 +32,7 @@ export const XB_INTERPRETER_CONFORMANCE_CASE_IDS = [
   'T10-INT-DISCONTINUOUS', 'T14-INT-DISCONTINUOUS',
   'T14-INT-CORE-DIRECT', 'T14-INT-SHAPED-CONSTANT',
   'T14-INT-STATEFUL', 'T14-INT-CONTINUOUS', 'T14-INT-STEP',
+  'T10-INT-FILTERS',
 ] as const;
 
 export const XB_C_CONFORMANCE_CASE_IDS = [
@@ -38,6 +41,7 @@ export const XB_C_CONFORMANCE_CASE_IDS = [
   'T10-C99-DISCONTINUOUS', 'T14-C99-DISCONTINUOUS',
   'T14-C99-CORE-DIRECT', 'T14-C99-SHAPED-CONSTANT',
   'T14-C99-STATEFUL', 'T14-C99-CONTINUOUS', 'T14-C99-STEP',
+  'T10-C99-FILTERS',
 ] as const;
 
 export interface XBConformanceCoverage {
@@ -102,7 +106,7 @@ const DISCONTINUOUS_COVERAGE: readonly XBConformanceCoverage[] = [
 ];
 
 export const XB_INTERPRETER_CONFORMANCE_CASES: Readonly<Record<
-string, readonly XBConformanceCoverage[]
+  string, readonly XBConformanceCoverage[]
 >> = Object.freeze({
   'T10-INT-VECTOR-ELEMENTWISE': VECTOR_COVERAGE,
   'T10-INT-MATRIX-OPS': MATRIX_COVERAGE,
@@ -131,12 +135,17 @@ string, readonly XBConformanceCoverage[]
     scalarCoverage('Integrator'),
   ],
   'T14-INT-STEP': [shapedCoverage('Step', [], ['scalar'])],
+  'T10-INT-FILTERS': [
+    scalarCoverage('LOW_PASS_FILTER'),
+    scalarCoverage('HIGH_PASS_FILTER'),
+    scalarCoverage('MOVING_AVERAGE'),
+  ],
 });
 
 import { getExecutedCoverage, XB_EXECUTABLE_C_CASES } from './xbCConformanceCases';
 
 export const XB_C_CONFORMANCE_CASES: Readonly<Record<
-string, readonly XBConformanceCoverage[]
+  string, readonly XBConformanceCoverage[]
 >> = Object.freeze(
   Object.fromEntries(
     Object.entries(XB_EXECUTABLE_C_CASES).map(([id, c]) => [id, c.coverage]),
@@ -188,6 +197,24 @@ const stateful = (
   ...directionalShapes,
 });
 
+const statefulDirect = (
+  shapes: readonly XBSignalShape[] = allShapes,
+  requiredTargetCapabilities?: readonly XBTargetRequirement[],
+  interpreterConformanceCaseIds: readonly string[] = ['T14-INT-STATEFUL'],
+  cConformanceCaseIds: readonly string[] = ['T14-C99-STATEFUL'],
+  directionalShapes: Pick<XBBlockCapability, 'inputShapes' | 'outputShapes'> = {},
+  pairedConformanceCaseIds: readonly string[] = [],
+): XBCodegenCapability => ({
+  codegen: true,
+  directFeedthrough: true,
+  shapes,
+  requiredTargetCapabilities,
+  interpreterConformanceCaseIds,
+  cConformanceCaseIds,
+  pairedConformanceCaseIds,
+  ...directionalShapes,
+});
+
 const hostOnly = (reason: string): XBHostOnlyCapability => ({
   codegen: false,
   directFeedthrough: false,
@@ -211,7 +238,7 @@ const UNCLASSIFIED_HOST_ONLY = hostOnlySet([
   'SVPWM_CORE', 'SECTOR_SELECTOR', 'SWITCHING_TIME_CALCULATOR',
   'SVPWM_GATE_GENERATOR', 'ZERO_SEQUENCE_INJECTION', 'SVPWM_MODULATOR',
   'SWITCH_CASE', 'INTEGRATOR', 'DERIVATIVE', 'TRANSFER_FUNCTION',
-  'ZERO_POLE_GAIN', 'LAPLACE_TRANSFORM', 
+  'ZERO_POLE_GAIN', 'LAPLACE_TRANSFORM',
   'DISCRETE_IMPULSE',
   'EXTENDED_KALMAN_FILTER', 'MPC_CONTROLLER', 'DOE_MODULE',
   'AC_INDUCTION_MOTOR', 'IM_SCALAR_CONTROL', 'IM_FOC_CONTROL',
@@ -265,7 +292,6 @@ const UNCLASSIFIED_HOST_ONLY = hostOnlySet([
 
 const UNPAIRED_EMBEDDED_OPERATIONS = hostOnlySet([
   'VectorPow', 'SumElements', 'Mean', 'Max', 'IdentityMatrix',
-  'LOW_PASS_FILTER', 'HIGH_PASS_FILTER', 'MOVING_AVERAGE',
 ], 'The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage.');
 
 /**
@@ -320,10 +346,10 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   SUM_JUNCTION: direct(scalar),
   GAIN: direct(scalar),
   PRODUCT: direct(scalar),
-  VectorAdd: direct(['vector'], undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
-  VectorSub: direct(['vector'], undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
-  VectorMul: direct(['vector'], undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
-  VectorDiv: direct(['vector'], undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
+  VectorAdd: direct(allShapes, undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
+  VectorSub: direct(allShapes, undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
+  VectorMul: direct(allShapes, undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
+  VectorDiv: direct(allShapes, undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
   VectorPow: direct(allShapes),
   UnaryNeg: direct(scalar),
   Abs: direct(scalar),
@@ -387,19 +413,19 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
 
   // Bounded control and linear-system blocks. Each entry is enabled only with
   // paired interpreter and compiled-C conformance coverage (Task 10).
-  PID_BASIC: stateful(scalar, undefined, ['T10-INT-PID-BASIC'], ['T10-C99-PID-BASIC']),
-  PID_CONTROLLER: stateful(scalar, undefined, ['T10-INT-PID-CONTROLLER'], ['T10-C99-PID-CONTROLLER']),
-  LOW_PASS_FILTER: stateful(allShapes),
-  HIGH_PASS_FILTER: stateful(allShapes),
-  MOVING_AVERAGE: stateful(allShapes),
+  PID_BASIC: statefulDirect(scalar, undefined, ['T10-INT-PID-BASIC'], ['T10-C99-PID-BASIC']),
+  PID_CONTROLLER: statefulDirect(scalar, undefined, ['T10-INT-PID-CONTROLLER'], ['T10-C99-PID-CONTROLLER']),
+  LOW_PASS_FILTER: statefulDirect(allShapes, undefined, ['T10-INT-FILTERS'], ['T10-C99-FILTERS'], {}, ['T10-PAIRED-FILTERS']),
+  HIGH_PASS_FILTER: statefulDirect(allShapes, undefined, ['T10-INT-FILTERS'], ['T10-C99-FILTERS'], {}, ['T10-PAIRED-FILTERS']),
+  MOVING_AVERAGE: statefulDirect(allShapes, undefined, ['T10-INT-FILTERS'], ['T10-C99-FILTERS'], {}, ['T10-PAIRED-FILTERS']),
   DISCRETE_TRANSFER_FUNCTION: stateful(['vector'], undefined, ['T10-INT-DISCRETE-REALIZATION'], ['T10-C99-DISCRETE-REALIZATION']),
   STATE_SPACE: stateful(['vector'], undefined, ['T10-INT-DISCRETE-REALIZATION'], ['T10-C99-DISCRETE-REALIZATION']),
 
   // Discontinuities: saturation, dead zone, rate limiter, and relay.
-  SATURATION:   direct(scalar, ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
-  DEADZONE:     direct(scalar, ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
+  SATURATION: direct(scalar, ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
+  DEADZONE: direct(scalar, ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
   RATE_LIMITER: stateful(scalar, ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
-  RELAY:        stateful(scalar, undefined, ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
+  RELAY: stateful(scalar, undefined, ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
 
   // Motor-control transforms, covered against fixed reference vectors in both
   // the interpreter and generated C conformance suites (Task 10).

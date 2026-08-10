@@ -1,4 +1,5 @@
 import { getXBBlockCapability } from './xbCapabilities';
+import { getXBConformanceStatus } from './xbConformanceStatus';
 import { resolveGraphShapes } from './xbShapeResolver';
 import type { ModelDiagnostic } from './smModel';
 import type { SemanticVariable } from './smSemanticModel';
@@ -423,6 +424,15 @@ export const validateXBModel = (
           diagnostics.push(diagnostic(
             'XB_TARGET_CAPABILITY_MISSING',
             `Block '${node.id}' requires target math-library support.`,
+            node.id,
+          ));
+        }
+      }
+      for (const caseId of capability.pairedConformanceCaseIds ?? []) {
+        if (getXBConformanceStatus(caseId) !== 'PASS') {
+          diagnostics.push(diagnostic(
+            'XB_PROGRAM_CONFORMANCE_GATE_BLOCKED',
+            `BLOCKED BY PROGRAM CONFORMANCE GATE: paired conformance case '${caseId}' for block '${node.type}' has not passed.`,
             node.id,
           ));
         }

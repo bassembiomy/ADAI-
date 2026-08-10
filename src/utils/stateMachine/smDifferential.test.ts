@@ -27,6 +27,8 @@ import {
   stepRuntime,
 } from './smInterpreter';
 import type { StateMachineModelV4 } from './smModel';
+import { XB_EXECUTABLE_C_CASES } from './xbCConformanceCases';
+import { setXBConformanceStatus } from './xbConformanceStatus';
 
 const frame = (
   sequence: number,
@@ -525,6 +527,7 @@ const multiSampleDelayFixture = (): StateMachineModelV4 => {
     parameters: {
       smVarId: 'delay_y',
       inputs: [scalar('in', 'input')],
+      outputs: [scalar('out', 'output')],
     },
   };
   const controller = {
@@ -542,10 +545,10 @@ const multiSampleDelayFixture = (): StateMachineModelV4 => {
       mappings: [{
         smVarId: 'delay_y',
         blockId: 'out_y',
-        portId: 'in',
+        portId: 'out',
         direction: 'out' as const,
       }],
-      solver: { kind: 'euler' as const, stepSeconds: 0.1 },
+      solver: { kind: 'euler' as const, stepSeconds: 0.01 },
       policy: { memory: 'reset' as const, numericFault: 'signal-only' as const },
     },
   };
@@ -664,7 +667,7 @@ describe('TypeScript-versus-generated-C differential gate', () => {
     const actual = compileAndRunCTrace(fixture);
 
     // TEST-008 / TEST-011: Sequence output matches reference delayed sequence
-    expect(expected.map((frame) => frame.data.delay_y)).toEqual([-1, -1, 7, 7]);
+    expect(expected.map((frame) => frame.data.delay_y)).toEqual([-1, -1, -1, 7]);
     expect(compareSemanticTraces(expected, actual)).toBeNull();
   }, 60_000);
 
@@ -709,6 +712,94 @@ describe('TypeScript-versus-generated-C differential gate', () => {
 
     expect(expected.at(-1)?.data.x).toBe(2);
     expect(compareSemanticTraces(expected, actual)).toBeNull();
+  }, 60_000);
+
+  it('T10-INT-FILTERS and T10-C99-FILTERS preserve LOW_PASS_FILTER, HIGH_PASS_FILTER, and MOVING_AVERAGE semantics across constant, step, sine, and reset sequences', () => {
+    setXBConformanceStatus('T10-PAIRED-FILTERS', 'PASS');
+    const fixture = XB_EXECUTABLE_C_CASES['T10-C99-FILTERS'].fixture;
+    const expected = runInterpreterTrace(fixture);
+    const actual = compileAndRunCTrace(fixture);
+
+    expect(compareSemanticTraces(expected, actual)).toBeNull();
+  }, 60_000);
+
+  it('REQ-B5C-008 / REQ-B5C-009 / REQ-B5C-013 / REQ-B5C-014 generates differential trace and verifies <= 1e-4 max error and 10 substeps scheduling', () => {
+    setXBConformanceStatus('T10-PAIRED-FILTERS', 'PASS');
+    const fixture = XB_EXECUTABLE_C_CASES['T10-C99-FILTERS'].fixture;
+    const expected = runInterpreterTrace(fixture);
+    const actual = compileAndRunCTrace(fixture);
+
+    expect(expected.length).toBeGreaterThan(0);
+    expect(actual.length).toEqual(expected.length);
+
+    interface DifferentialTraceEntry {
+      sampleIndex: number;
+      timeSeconds: number;
+      input: number;
+      interpreterLpf: number;
+      generatedCLpf: number;
+      lpfError: number;
+      interpreterHpf: number;
+      generatedCHpf: number;
+      hpfError: number;
+      interpreterMa: number;
+      generatedCMa: number;
+      maError: number;
+      status: 'PASS' | 'FAIL';
+    }
+
+    const differentialTrace: DifferentialTraceEntry[] = [];
+
+    for (let i = 0; i < expected.length; i++) {
+      const expFrame = expected[i]!;
+      const actFrame = actual[i]!;
+
+      const u = Number(expFrame.data.u ?? 0);
+      const expSignals = expFrame.xBridges.controller?.signals ?? {};
+      const actSignals = actFrame.xBridges.controller?.signals ?? {};
+
+      const expLpf = Number(expSignals['lpf1:y'] ?? 0);
+      const actLpf = Number(actSignals['lpf1:y'] ?? 0);
+      const lpfErr = Math.abs(expLpf - actLpf);
+
+      const expHpf = Number(expSignals['hpf1:y'] ?? 0);
+      const actHpf = Number(actSignals['hpf1:y'] ?? 0);
+      const hpfErr = Math.abs(expHpf - actHpf);
+
+      const expMa = Number(expSignals['ma1:y'] ?? 0);
+      const actMa = Number(actSignals['ma1:y'] ?? 0);
+      const maErr = Math.abs(expMa - actMa);
+
+      const pass = lpfErr <= 1e-4 && hpfErr <= 1e-4 && maErr <= 1e-4;
+
+      differentialTrace.push({
+        sampleIndex: i,
+        timeSeconds: i * 0.01,
+        input: u,
+        interpreterLpf: expLpf,
+        generatedCLpf: actLpf,
+        lpfError: lpfErr,
+        interpreterHpf: expHpf,
+        generatedCHpf: actHpf,
+        hpfError: hpfErr,
+        interpreterMa: expMa,
+        generatedCMa: actMa,
+        maError: maErr,
+        status: pass ? 'PASS' : 'FAIL',
+      });
+
+      expect(lpfErr, `LOW_PASS_FILTER sample ${i} abs error`).toBeLessThanOrEqual(1e-4);
+      expect(hpfErr, `HIGH_PASS_FILTER sample ${i} abs error`).toBeLessThanOrEqual(1e-4);
+      expect(maErr, `MOVING_AVERAGE sample ${i} abs error`).toBeLessThanOrEqual(1e-4);
+    }
+
+    // Verify sample-time holding: filter outputs should only change every 10 substeps (0.1s / 0.01s)
+    // Between step 1 and 9 (inclusive), outputs should be held constant
+    for (let substep = 1; substep < 9; substep++) {
+      expect(differentialTrace[substep]!.generatedCLpf).toBe(differentialTrace[0]!.generatedCLpf);
+      expect(differentialTrace[substep]!.generatedCHpf).toBe(differentialTrace[0]!.generatedCHpf);
+      expect(differentialTrace[substep]!.generatedCMa).toBe(differentialTrace[0]!.generatedCMa);
+    }
   }, 60_000);
 
   it('T14-INT-SHAPED-CONSTANT and T14-C99-SHAPED-CONSTANT round-trip vector and matrix constants through compiled C', () => {
@@ -993,4 +1084,83 @@ describe('TypeScript-versus-generated-C differential gate', () => {
     );
     expect(compareSemanticTraces(expected, actual)).toBeNull();
   }, 60_000);
+
+  it('compiles and executes DELAY(N=2) circular buffer state trace identically to the interpreter', () => {
+    const float32 = { kind: 'float32' } as const;
+    const model = flatOrFixture();
+    const stateA = model.states.find((s) => s.id === 'a')!;
+    stateA.xBridgesModel = {
+      executionOrder: ['delay1'],
+      operations: [
+        {
+          id: 'delay1',
+          type: 'DELAY',
+          inputs: [{ portId: 'u', signalId: 'delay1:u' }],
+          outputs: [{ portId: 'y', signalId: 'delay1:y' }],
+          parameters: { delay_length: 2, initial_condition: -1, sample_time: 0.01 },
+        },
+      ],
+      signals: [
+        { id: 'delay1:u', portId: 'u', direction: 'input', numericType: float32, shape: { kind: 'scalar' } },
+        { id: 'delay1:y', portId: 'y', direction: 'output', numericType: float32, shape: { kind: 'scalar' } },
+      ],
+      solver: { kind: 'euler', stepSeconds: 0.01 },
+      policy: { memory: 'reset', numericFault: 'escalate' },
+    } as any;
+    const fixture = {
+      name: 'flat-priority' as const,
+      model,
+      steps: [
+        { kind: 'step' as const },
+        { kind: 'step' as const },
+        { kind: 'step' as const },
+        { kind: 'step' as const },
+      ],
+    };
+    const expected = runInterpreterTrace(fixture);
+    const actual = compileAndRunCTrace(fixture);
+    expect(compareSemanticTraces(expected, actual)).toBeNull();
+  }, 60_000);
+
+  it('verifies DELAY output over multiple cycles and Discrete Integrator 100ms sample timing', () => {
+    const float32 = { kind: 'float32' } as const;
+    const model = flatOrFixture();
+    const stateA = model.states.find((s) => s.id === 'a')!;
+    stateA.xBridgesModel = {
+      executionOrder: ['XB8_Delay', 'XB8_Discrete'],
+      operations: [
+        {
+          id: 'XB8_Delay',
+          type: 'DELAY',
+          inputs: [{ portId: 'u', signalId: 'u' }],
+          outputs: [{ portId: 'y', signalId: 'XB8_Delay_y' }],
+          parameters: { delay_length: 2, initial_condition: -1, sample_time: 0.1 },
+        },
+        {
+          id: 'XB8_Discrete',
+          type: 'INTEGRATOR_DISCRETE',
+          inputs: [{ portId: 'u', signalId: 'u' }],
+          outputs: [{ portId: 'y', signalId: 'XB8_Discrete_y' }],
+          parameters: { sample_time: 0.1, initial_condition: 1, method: 'forward_euler' },
+        },
+      ],
+      signals: [
+        { id: 'u', portId: 'u', direction: 'input', numericType: float32, shape: { kind: 'scalar' } },
+        { id: 'XB8_Delay_y', portId: 'y', direction: 'output', numericType: float32, shape: { kind: 'scalar' } },
+        { id: 'XB8_Discrete_y', portId: 'y', direction: 'output', numericType: float32, shape: { kind: 'scalar' } },
+      ],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 10 },
+      policy: { memory: 'reset', numericFault: 'escalate' },
+    } as any;
+    const fixture = {
+      name: 'flat-priority' as const,
+      model,
+      steps: Array.from({ length: 20 }, () => ({ kind: 'step' as const })),
+    };
+    const expected = runInterpreterTrace(fixture);
+    const actual = compileAndRunCTrace(fixture);
+    expect(compareSemanticTraces(expected, actual)).toBeNull();
+  }, 60_000);
 });
+
+

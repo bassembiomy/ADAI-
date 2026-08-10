@@ -157,6 +157,10 @@ const stateLayout = (state: SemanticState): XBStateLayout => {
     }
   }
 
+  if (Object.values(xb.operations).some((op) => op.type === 'Clock' || op.type === 'CLOCK')) {
+    declarations.push('    double sim_time;');
+  }
+
   return {
     declarations: declarations.length === 0
       ? ['    uint8_t reserved;']
@@ -468,39 +472,21 @@ const signalElementStorageExpression = (
   const sourceId = requested.sourceSignalId ?? requested.id;
   const source = requireSignal(state, sourceId);
 
-  const sourceOp = state.xBridges?.operations[source.nodeId];
-  if (sourceOp && (sourceOp.type === 'DELAY' || sourceOp.type === 'UNIT_DELAY')) {
-    const bufferSlot = sourceOp.state?.slots.find(
-      (s) => s.role === 'buffer' || s.storageCategory === 'array',
-    );
-    const indexSlot = sourceOp.state?.slots.find(
-      (s) => s.role === 'index' || s.storageCategory === 'integral_index',
-    );
-    if (bufferSlot && indexSlot) {
-      const bufferField = layout.slotFields.get(bufferSlot.id);
-      const indexField = layout.slotFields.get(indexSlot.id);
-      if (bufferField && indexField) {
-        const elementCount = source.elementCount;
-        return {
-          signal: source,
-          expression: `instance->${member}.${bufferField}[(uint32_t)instance->${member}.${indexField} * ${elementCount}U + (${index})]`,
-        };
-      }
-    }
-  }
+  const targetId = layout.signalFields.has(sourceId) ? sourceId : (layout.signalFields.has(requested.id) ? requested.id : sourceId);
+  const targetSignal = layout.signalFields.has(sourceId) ? source : (layout.signalFields.has(requested.id) ? requested : source);
 
-  const field = layout.signalFields.get(sourceId);
+  const field = layout.signalFields.get(targetId);
   if (field === undefined) {
-    throw new Error(`X-Bridges signal '${sourceId}' lacks generated storage`);
+    throw new Error(`X-Bridges signal '${targetId}' lacks generated storage`);
   }
   let expr = `instance->${member}.${field}`;
-  if (source.shape.kind === 'vector') {
+  if (targetSignal.shape.kind === 'vector') {
     expr = `instance->${member}.${field}[${index}]`;
-  } else if (source.shape.kind === 'matrix') {
-    expr = `instance->${member}.${field}[(${index}) / ${source.shape.columns}U][(${index}) % ${source.shape.columns}U]`;
+  } else if (targetSignal.shape.kind === 'matrix') {
+    expr = `instance->${member}.${field}[(${index}) / ${targetSignal.shape.columns}U][(${index}) % ${targetSignal.shape.columns}U]`;
   }
   return {
-    signal: source,
+    signal: targetSignal,
     expression: expr,
   };
 };
@@ -1567,6 +1553,14 @@ const OPERATION_EMITTERS: Readonly<Record<string, OperationEmitter>> = {
   KALMAN_FILTER: () => [],
   EXTENDED_KALMAN_FILTER: () => [],
   LMS_ADAPTIVE_FILTER: () => [],
+  Clock: () => [],
+  CLOCK: () => [],
+  SIX_STEP_COMMUTATION: () => [],
+  DFlipFlop: () => [],
+  JKFlipFlop: () => [],
+  Counter: () => [],
+  Register: () => [],
+  WaveformGen: () => [],
 };
 
 const renderEKFExpression = (
@@ -1912,6 +1906,37 @@ const renderStateOutputs = (
   member: string,
   expressions: readonly string[] | null = null,
 ): string[] => {
+  if (operation.type === 'DELAY' || operation.type === 'UNIT_DELAY') {
+    const bufferSlot = stateSlotForRole(operation, 'buffer') ?? operation.state?.slots.find((s) => s.role !== 'index');
+    const indexSlot = stateSlotForRole(operation, 'index');
+    const outputSignalId = bufferSlot?.signalId ?? operation.outputSignalIds[0];
+    if (bufferSlot && indexSlot && outputSignalId !== undefined) {
+      const bufferField = layout.slotFields.get(bufferSlot.id);
+      const indexField = layout.slotFields.get(indexSlot.id);
+      if (bufferField && indexField) {
+        const signal = requireSignal(state, outputSignalId);
+        const elementCount = signal.elementCount;
+        const lines: string[] = [];
+        for (let m = 0; m < elementCount; m++) {
+          const indexedExpr = `instance->${member}.${bufferField}[(uint32_t)instance->${member}.${indexField} * ${elementCount}U + ${m}U]`;
+          lines.push(
+            ...renderSignalElementWrite(
+              state,
+              operation,
+              operationIndex,
+              0,
+              outputSignalId,
+              `${m}U`,
+              indexedExpr,
+              layout,
+              member,
+            ),
+          );
+        }
+        return lines;
+      }
+    }
+  }
   if (operation.type === 'PID_BASIC') {
     const outputSignalId = operation.outputSignalIds.find((signalId) =>
       state.xBridges!.signals[signalId]?.portId === 'u');
@@ -1996,7 +2021,7 @@ const renderStateOutputs = (
           const prevFilter = stateSlotElementRealExpression(filterSlot, layout, member, '0U');
           const fc = cNumber(scalarParameter(operation, ['fc'], 1));
           const dt = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], state.xBridges!.solver.stepSeconds));
-          lines.push(`    double ${prefix}_fcCoeff = 1.0 - exp(-2.0 * 3.14159265358979323846 * (${fc}) * (${dt}));`);
+          lines.push(`    double ${prefix}_fcCoeff = (${dt}) / ((1.0 / (2.0 * 3.14159265358979323846 * (${fc}))) + (${dt}));`);
           lines.push(`    double ${prefix}_out = ${prevFilter} + ${prefix}_fcCoeff * (${prefix}_white - ${prevFilter});`);
           lines.push(...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `${prefix}_out`, layout, member));
         }
@@ -2005,6 +2030,39 @@ const renderStateOutputs = (
       }
       return lines;
     }
+  }
+  if (operation.type === 'Clock' || operation.type === 'CLOCK') {
+    const outputSignalId = operation.outputSignalIds[0];
+    if (outputSignalId !== undefined) {
+      const dt = cNumber(state.xBridges!.solver.stepSeconds);
+      return [
+        `    instance->${member}.sim_time += (${dt});`,
+        ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `instance->${member}.sim_time`, layout, member),
+      ];
+    }
+  }
+  if (operation.type === 'SIX_STEP_COMMUTATION') {
+    const h1 = signalElementRealExpression(state, operation.inputSignalIds[0] ?? '', layout, member, '0U');
+    const h2 = signalElementRealExpression(state, operation.inputSignalIds[1] ?? '', layout, member, '0U');
+    const h3 = signalElementRealExpression(state, operation.inputSignalIds[2] ?? '', layout, member, '0U');
+    const prefix = `comm_${operationIndex}`;
+    const lines = [
+      `    uint32_t ${prefix}_hall = ((${h1} != 0.0) ? 4U : 0U) | ((${h2} != 0.0) ? 2U : 0U) | ((${h3} != 0.0) ? 1U : 0U);`,
+      `    double ${prefix}_ah = 0.0, ${prefix}_al = 0.0, ${prefix}_bh = 0.0, ${prefix}_bl = 0.0, ${prefix}_ch = 0.0, ${prefix}_cl = 0.0;`,
+      `    if (${prefix}_hall == 5U) { ${prefix}_ah = 1.0; ${prefix}_bl = 1.0; }`,
+      `    else if (${prefix}_hall == 4U) { ${prefix}_ah = 1.0; ${prefix}_cl = 1.0; }`,
+      `    else if (${prefix}_hall == 6U) { ${prefix}_bh = 1.0; ${prefix}_cl = 1.0; }`,
+      `    else if (${prefix}_hall == 2U) { ${prefix}_bh = 1.0; ${prefix}_al = 1.0; }`,
+      `    else if (${prefix}_hall == 3U) { ${prefix}_ch = 1.0; ${prefix}_al = 1.0; }`,
+      `    else if (${prefix}_hall == 1U) { ${prefix}_ch = 1.0; ${prefix}_bl = 1.0; }`,
+      ...renderSignalWrite(state, operation, operationIndex, 0, operation.outputSignalIds[0] ?? '', `${prefix}_ah`, layout, member),
+      ...renderSignalWrite(state, operation, operationIndex, 1, operation.outputSignalIds[1] ?? '', `${prefix}_al`, layout, member),
+      ...renderSignalWrite(state, operation, operationIndex, 2, operation.outputSignalIds[2] ?? '', `${prefix}_bh`, layout, member),
+      ...renderSignalWrite(state, operation, operationIndex, 3, operation.outputSignalIds[3] ?? '', `${prefix}_bl`, layout, member),
+      ...renderSignalWrite(state, operation, operationIndex, 4, operation.outputSignalIds[4] ?? '', `${prefix}_ch`, layout, member),
+      ...renderSignalWrite(state, operation, operationIndex, 5, operation.outputSignalIds[5] ?? '', `${prefix}_cl`, layout, member),
+    ];
+    return lines;
   }
   if (operation.type === 'RELAY') {
     const onSlot = stateSlotForRole(operation, 'current_on');
@@ -2019,6 +2077,79 @@ const renderStateOutputs = (
       // We'll write an expression that evaluates to 1.0 or 0.0 based on the numeric type.
       const current_on = `(${u} >= ${switchOn} || (${prev_on} != 0.0 && ${u} > ${switchOff})) ? 1.0 : 0.0`;
       return [...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, current_on, layout, member)];
+    }
+  }
+  if (operation.type === 'LOW_PASS_FILTER') {
+    const prevYSlot = stateSlotForRole(operation, 'prev_y');
+    const outputSignalId = operation.outputSignalIds[0];
+    const inputSignalId = operation.inputSignalIds[0];
+    if (prevYSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
+      const u = signalElementRealExpression(state, inputSignalId, layout, member, '0U');
+      const prev_y = stateSlotElementRealExpression(prevYSlot, layout, member, '0U');
+      const fc = cNumber(scalarParameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
+      const dt = cNumber(scalarParameter(operation, ['sample_time', 'sampleTime', 'dt'], 0.1));
+      const prefix = `lpf_${operationIndex}`;
+      const lines: string[] = [
+        `    const double ${prefix}_fc = (${fc});`,
+        `    const double ${prefix}_dt = (${dt});`,
+        `    const double ${prefix}_tau = 1.0 / (2.0 * 3.14159265358979323846 * ${prefix}_fc);`,
+        `    const double ${prefix}_alpha = ${prefix}_dt / (${prefix}_tau + ${prefix}_dt);`,
+        `    const double ${prefix}_y = (1.0 - ${prefix}_alpha) * (${prev_y}) + ${prefix}_alpha * (${u});`,
+        ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `${prefix}_y`, layout, member),
+        ...renderStateSlotElementAssignment(state, prevYSlot, '0U', `${prefix}_y`, layout, member, `${operation.id}_prev_y_update`, layout.errorFields.get(operation.id), operation),
+      ];
+      return lines;
+    }
+  }
+  if (operation.type === 'HIGH_PASS_FILTER') {
+    const prevYSlot = stateSlotForRole(operation, 'prev_y');
+    const prevUSlot = stateSlotForRole(operation, 'prev_u');
+    const outputSignalId = operation.outputSignalIds[0];
+    const inputSignalId = operation.inputSignalIds[0];
+    if (prevYSlot !== undefined && prevUSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
+      const u = signalElementRealExpression(state, inputSignalId, layout, member, '0U');
+      const prev_y = stateSlotElementRealExpression(prevYSlot, layout, member, '0U');
+      const prev_u = stateSlotElementRealExpression(prevUSlot, layout, member, '0U');
+      const fc = cNumber(scalarParameter(operation, ['cutoff_frequency', 'cutoffFrequency', 'fc'], 1));
+      const dt = cNumber(scalarParameter(operation, ['sample_time', 'sampleTime', 'dt'], 0.1));
+      const prefix = `hpf_${operationIndex}`;
+      const lines: string[] = [
+        `    const double ${prefix}_fc = (${fc});`,
+        `    const double ${prefix}_dt = (${dt});`,
+        `    const double ${prefix}_tau = 1.0 / (2.0 * 3.14159265358979323846 * ${prefix}_fc);`,
+        `    const double ${prefix}_alpha = ${prefix}_tau / (${prefix}_tau + ${prefix}_dt);`,
+        `    const double ${prefix}_y = ${prefix}_alpha * ((${prev_y}) + (${u}) - (${prev_u}));`,
+        ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `${prefix}_y`, layout, member),
+        ...renderStateSlotElementAssignment(state, prevYSlot, '0U', `${prefix}_y`, layout, member, `${operation.id}_prev_y_update`, layout.errorFields.get(operation.id), operation),
+        ...renderStateSlotElementAssignment(state, prevUSlot, '0U', `${u}`, layout, member, `${operation.id}_prev_u_update`, layout.errorFields.get(operation.id), operation),
+      ];
+      return lines;
+    }
+  }
+  if (operation.type === 'MOVING_AVERAGE') {
+    const bufferSlot = stateSlotForRole(operation, 'buffer');
+    const indexSlot = stateSlotForRole(operation, 'index');
+    const outputSignalId = operation.outputSignalIds[0];
+    const inputSignalId = operation.inputSignalIds[0];
+    if (bufferSlot !== undefined && indexSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
+      const u = signalElementRealExpression(state, inputSignalId, layout, member, '0U');
+      const indexExpr = stateSlotElementRealExpression(indexSlot, layout, member, '0U');
+      const windowSize = bufferSlot.shape.kind === 'vector' ? bufferSlot.shape.length : 4;
+      const prefix = `ma_${operationIndex}`;
+      const lines: string[] = [
+        `    const uint32_t ${prefix}_idx = (uint32_t)(${indexExpr});`,
+        `    const double ${prefix}_u = (${u});`,
+        ...renderStateSlotElementAssignment(state, bufferSlot, `${prefix}_idx`, `${prefix}_u`, layout, member, `${operation.id}_buf_update`, layout.errorFields.get(operation.id), operation),
+        `    double ${prefix}_sum = 0.0;`,
+        `    for (uint32_t ${prefix}_i = 0U; ${prefix}_i < ${windowSize}U; ++${prefix}_i) {`,
+        `        ${prefix}_sum += ${stateSlotElementRealExpression(bufferSlot, layout, member, `${prefix}_i`)};`,
+        `    }`,
+        `    const double ${prefix}_y = ${prefix}_sum / ${windowSize}.0;`,
+        ...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `${prefix}_y`, layout, member),
+        `    const double ${prefix}_nextIdx = (double)((${prefix}_idx + 1U) % ${windowSize}U);`,
+        ...renderStateSlotElementAssignment(state, indexSlot, '0U', `${prefix}_nextIdx`, layout, member, `${operation.id}_idx_update`, layout.errorFields.get(operation.id), operation),
+      ];
+      return lines;
     }
   }
   if (operation.type === 'KALMAN_FILTER') {
@@ -2458,20 +2589,44 @@ const renderStateOutputs = (
 
     return lines;
   }
-  return (operation.state?.slots ?? []).flatMap((slot, slotIndex) => slot.signalId === null ? [] :
-  [...renderSignalWrite(
-    state,
-    operation,
-    operationIndex,
-    slotIndex,
-    slot.signalId,
-    expressions?.[slotIndex]
-      ?? (slot.numericType.kind === 'boolean'
-        ? `instance->${member}.${stateSlotField(slot, layout)}`
-        : stateSlotRealExpression(slot, layout, member)),
-    layout,
-    member,
-  )]);
+  return (operation.state?.slots ?? []).flatMap((slot, slotIndex) => {
+    if (slot.signalId === null) return [];
+    const signal = requireSignal(state, slot.signalId);
+    if (signal.shape.kind === 'scalar') {
+      return [...renderSignalWrite(
+        state,
+        operation,
+        operationIndex,
+        slotIndex,
+        slot.signalId,
+        expressions?.[slotIndex]
+          ?? (slot.numericType.kind === 'boolean'
+            ? `instance->${member}.${stateSlotField(slot, layout)}`
+            : stateSlotRealExpression(slot, layout, member)),
+        layout,
+        member,
+      )];
+    }
+    const lines: string[] = [];
+    for (let i = 0; i < signal.elementCount; i++) {
+      const elemExpr = expressions?.[slotIndex]
+        ?? stateSlotElementRealExpression(slot, layout, member, `${i}U`);
+      lines.push(
+        ...renderSignalElementWrite(
+          state,
+          operation,
+          operationIndex,
+          slotIndex,
+          slot.signalId,
+          `${i}U`,
+          elemExpr,
+          layout,
+          member,
+        ),
+      );
+    }
+    return lines;
+  });
 };
 
 const renderOperationFaultSignalSyncForOperation = (
@@ -2655,6 +2810,20 @@ const renderTransactionalStateUpdates = (
   ];
 };
 
+const renderTransactionalStateAndOutputs = (
+  state: SemanticState,
+  operation: XBSemanticOperation,
+  outputLines: readonly string[],
+  layout: XBStateLayout,
+  member: string,
+): string[] => renderTransactionalStateOutputs(
+  state,
+  operation,
+  renderTransactionalStateUpdates(operation, outputLines, layout, member),
+  layout,
+  member,
+);
+
 const renderOperationFaultReset = (
   xb: XBSemanticModel,
   layout: XBStateLayout,
@@ -2816,8 +2985,9 @@ const renderDiscreteStateUpdates = (
     }
     
     const block = ['    {', ...lines.map((line) => `      ${line}`), ...renderTransactionalStateUpdates(operation, noiseUpdates, layout, member).map((line) => `    ${line}`), '    }'];
-    if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) return withFaultSync(block);
-    return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...block.map((line) => `    ${line}`), '    }']);
+    const effectiveSubsteps = operation.schedule.periodSubsteps;
+    if (operation.schedule.hold === 'none' && effectiveSubsteps <= 1) return withFaultSync(block);
+    return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...block.map((line: string) => `    ${line}`), '    }']);
   }
   if (operation.type === 'KALMAN_FILTER') {
     return [];
@@ -2843,7 +3013,7 @@ const renderDiscreteStateUpdates = (
         updateLines.push(`        instance->${member}.${indexField} = (xb_delay_idx + 1U) % ${delayLength}U;`, '    }');
 
         const transactional = renderTransactionalStateUpdates(operation, updateLines, layout, member);
-        if (operation.schedule.periodSubsteps > 1) {
+        if (operation.schedule.hold === 'zero-order' || operation.schedule.periodSubsteps > 1) {
           return withFaultSync([`    if (instance->${member}.${counter} == UINT32_C(0)) {`, ...transactional.map((line) => `    ${line}`), '    }']);
         }
         return withFaultSync(transactional);
@@ -2925,6 +3095,33 @@ const renderDiscreteStateUpdates = (
           layout, member, `${operation.id}_${slotIndex}_update`, layout.errorFields.get(operation.id), operation,
         );
       }
+      case 'Inport':
+      case 'Outport':
+      case 'Step':
+      case 'Clock':
+      case 'CLOCK':
+      case 'SIX_STEP_COMMUTATION':
+      case 'DFlipFlop':
+      case 'JKFlipFlop':
+      case 'Counter':
+      case 'Register':
+      case 'WaveformGen':
+      case 'BAND_LIMITED_NOISE': {
+        const filterSlot = operation.state?.slots.find((s) => s.role === 'filter_state');
+        if (filterSlot && slot.id === filterSlot.id) {
+          const outputSignalId = operation.outputSignalIds[0];
+          if (outputSignalId !== undefined) {
+            const outExpr = signalElementRealExpression(state, outputSignalId, layout, member, '0U');
+            return renderStateSlotAssignment(
+              state, slot, outExpr, layout, member, `${operation.id}_${slotIndex}_update`, layout.errorFields.get(operation.id), operation,
+            );
+          }
+        }
+        return [];
+      }
+      case 'LOW_PASS_FILTER':
+      case 'HIGH_PASS_FILTER':
+      case 'MOVING_AVERAGE':
       case 'KALMAN_FILTER':
       case 'EXTENDED_KALMAN_FILTER':
       case 'LMS_ADAPTIVE_FILTER':
@@ -2937,7 +3134,8 @@ const renderDiscreteStateUpdates = (
   });
   if (updates.length === 0) return [];
   const transactional = renderTransactionalStateUpdates(operation, updates, layout, member);
-  if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) {
+  const effectiveSubsteps = operation.schedule.periodSubsteps * Math.max(1, state.xBridges!.solver.substepsPerTick ?? 1);
+  if (operation.schedule.hold === 'none' && effectiveSubsteps <= 1) {
     return withFaultSync(transactional);
   }
   return withFaultSync([
@@ -3118,13 +3316,14 @@ const renderScheduleAdvances = (
   const operation = xb.operations[operationId];
   if (operation === undefined) return [];
   const counter = layout.counterFields.get(operation.id);
-  if (counter === undefined || operation.schedule.periodSubsteps <= 1) {
+  const effectiveSubsteps = operation.schedule.periodSubsteps;
+  if (counter === undefined || effectiveSubsteps <= 1) {
     return counter === undefined ? [] : [`    instance->${member}.${counter} = UINT32_C(0);`];
   }
   return [
     `    instance->${member}.${counter} += ${operation.schedule.counterIncrement}U;`,
-    `    if (instance->${member}.${counter} >= ${operation.schedule.periodSubsteps}U) {`,
-    `        instance->${member}.${counter} -= ${operation.schedule.periodSubsteps}U;`,
+    `    if (instance->${member}.${counter} >= ${effectiveSubsteps}U) {`,
+    `        instance->${member}.${counter} -= ${effectiveSubsteps}U;`,
     '    }',
   ];
 });
@@ -3140,8 +3339,8 @@ const renderSolverSubstep = (
     '    (void)instance;',
     ...xb.executionOrder.flatMap((operationId, operationIndex) => {
       const operation = xb.operations[operationId];
-      if (!operation?.stateful) return [];
-      const outputs = renderTransactionalStateOutputs(
+      if (!operation?.stateful || operation.directFeedthrough) return [];
+      const outputs = renderTransactionalStateAndOutputs(
         state,
         operation,
         renderStateOutputs(state, operation, operationIndex, layout, member),
@@ -3176,6 +3375,30 @@ const renderSolverSubstep = (
       ];
     }),
     ...renderDirectEvaluation(state, xb, layout, member).map((line) => `    ${line}`),
+    ...xb.executionOrder.flatMap((operationId, operationIndex) => {
+      const operation = xb.operations[operationId];
+      if (!operation?.stateful || !operation.directFeedthrough) return [];
+      const outputs = renderTransactionalStateAndOutputs(
+        state,
+        operation,
+        renderStateOutputs(state, operation, operationIndex, layout, member),
+        layout,
+        member,
+      )
+        .map((line) => `    ${line}`);
+      if (operation.schedule.hold === 'none' || operation.schedule.periodSubsteps <= 1) {
+        return outputs;
+      }
+      const counter = layout.counterFields.get(operation.id);
+      if (counter === undefined) {
+        throw new Error(`X-Bridges operation '${operation.id}' lacks a schedule counter`);
+      }
+      return [
+        `    if (instance->${member}.${counter} == UINT32_C(0)) {`,
+        ...outputs.map((line) => `    ${line}`),
+        '    }',
+      ];
+    }),
     ...renderDiscreteStateUpdates(state, xb, layout, member).map((line) => `    ${line}`),
     ...renderContinuousStateUpdates(state, xb, layout, member).map((line) => `    ${line}`),
     ...renderScheduleAdvances(xb, layout, member).map((line) => `    ${line}`),
@@ -3239,7 +3462,7 @@ const renderStateLifecycle = (
   let inputMappingIndex = 0;
   for (const mapping of xb.mappings) {
     if (mapping.direction !== 'in') continue;
-    const varCId = mapping.variable?.cIdentifier ?? toCIdentifier(mapping.variableId);
+    const varCId = ir.variables[mapping.variableId]?.cName ?? mapping.variable?.cIdentifier ?? toCIdentifier(mapping.variableId);
     stepLines.push(...renderSignalWrite(
       state,
       {
@@ -3277,7 +3500,7 @@ const renderStateLifecycle = (
   stepLines.push(...renderOperationFaultSignalSync(state, xb, layout, member));
   for (const mapping of xb.mappings) {
     if (mapping.direction !== 'out') continue;
-    const varCId = mapping.variable?.cIdentifier ?? toCIdentifier(mapping.variableId);
+    const varCId = ir.variables[mapping.variableId]?.cName ?? mapping.variable?.cIdentifier ?? toCIdentifier(mapping.variableId);
     const op = xb.operations[mapping.blockId];
     const targetSignalId = (op?.type === 'Outport' && op.outputSignalIds[0])
       ? op.outputSignalIds[0]

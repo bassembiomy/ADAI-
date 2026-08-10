@@ -11,6 +11,7 @@ import {
   resetXBState,
   stepXBState,
 } from './xbInterpreter';
+import { buildXBSemanticModel } from './xbSemanticBuilder';
 
 const float32 = { kind: 'float32' } as const;
 const scalar = { kind: 'scalar' } as const;
@@ -1498,5 +1499,181 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.signals['kf:innovation'][0]).toBeCloseTo(1.0);
     // K should be approximately [0.909, 0] (actually P0 C' (C P0 C' + R)^-1 = [1,0]' * (1 + 0.1)^-1 = [1/1.1, 0]' = [0.90909, 0]')
     expect(runtime.signals['kf:K'][0]).toBeCloseTo(1.01 / 1.11, 2);
+  });
+
+  it('evaluates LOW_PASS_FILTER, HIGH_PASS_FILTER, and MOVING_AVERAGE correctly', () => {
+    const lpfNode = {
+      id: 'lpf',
+      type: 'LOW_PASS_FILTER',
+      parameters: {
+        cutoff_frequency: 1,
+        sample_time: 0.1,
+        initial_condition: 0,
+        inputs: [{ id: 'u', direction: 'input', dataType: 'float32', shape: 'scalar' }],
+        outputs: [{ id: 'y', direction: 'output', dataType: 'float32', shape: 'scalar' }],
+      },
+    };
+    const hpfNode = {
+      id: 'hpf',
+      type: 'HIGH_PASS_FILTER',
+      parameters: {
+        cutoff_frequency: 1,
+        sample_time: 0.1,
+        initial_condition: 0,
+        inputs: [{ id: 'u', direction: 'input', dataType: 'float32', shape: 'scalar' }],
+        outputs: [{ id: 'y', direction: 'output', dataType: 'float32', shape: 'scalar' }],
+      },
+    };
+    const maNode = {
+      id: 'ma',
+      type: 'MOVING_AVERAGE',
+      parameters: {
+        window_size: 4,
+        sample_time: 0.1,
+        initial_condition: 0,
+        inputs: [{ id: 'u', direction: 'input', dataType: 'float32', shape: 'scalar' }],
+        outputs: [{ id: 'y', direction: 'output', dataType: 'float32', shape: 'scalar' }],
+      },
+    };
+    const cNode = {
+      id: 'c',
+      type: 'Constant',
+      parameters: {
+        value: 10,
+        inputs: [],
+        outputs: [{ id: 'out', direction: 'output', dataType: 'float32', shape: 'scalar' }],
+      },
+    };
+
+    const result = buildXBSemanticModel({
+      stateId: 's1',
+      model: {
+        schemaVersion: 1,
+        nodes: [cNode, lpfNode, hpfNode, maNode],
+        edges: [
+          { id: 'e1', sourceNodeId: 'c', sourcePortId: 'out', targetNodeId: 'lpf', targetPortId: 'u' },
+          { id: 'e2', sourceNodeId: 'c', sourcePortId: 'out', targetNodeId: 'hpf', targetPortId: 'u' },
+          { id: 'e3', sourceNodeId: 'c', sourcePortId: 'out', targetNodeId: 'ma', targetPortId: 'u' },
+        ],
+        mappings: [],
+        solver: { kind: 'euler', stepSeconds: 0.1 },
+        policy: { memory: 'reset', numericFault: 'escalate' },
+      },
+      baseTickMs: 100,
+      target: { supportsFloat16: true, supportsFloat32: true, supportsFloat64: true, supportsFixedPoint: true },
+    });
+
+    expect(result.diagnostics).toHaveLength(0);
+    const runtime = createXBRuntime(result.ir!);
+
+    stepXBState(runtime, {});
+    // Step 1: statefulUpdate fills buffer[0]=10, ma:y on step 1 is 0
+    stepXBState(runtime, {});
+    // Step 2: lpf output = 6.2284, hpf output = 3.7716, ma buffer [10, 10, 0, 0] -> output = 5.0
+    expect(runtime.signals['lpf:y'][0]).toBeCloseTo(6.2284, 3);
+    expect(runtime.signals['hpf:y'][0]).toBeCloseTo(3.7716, 3);
+    expect(runtime.signals['ma:y'][0]).toBeCloseTo(5.0);
+
+    stepXBState(runtime, {});
+    // Step 3: ma buffer [10, 10, 10, 0] -> output = 7.5
+    expect(runtime.signals['ma:y'][0]).toBeCloseTo(7.5);
+
+    stepXBState(runtime, {});
+    // Step 4: ma buffer [10, 10, 10, 10] -> output = 10.0
+    expect(runtime.signals['ma:y'][0]).toBeCloseTo(10.0);
+  });
+
+  it('REQ-B5C-010 / REQ-B5C-011 / REQ-B5C-012 verifies initial conditions, prev_u/prev_y state tracking, and MOVING_AVERAGE buffer wraparound', () => {
+    const lpfNode = {
+      id: 'lpf',
+      type: 'LOW_PASS_FILTER',
+      parameters: {
+        cutoff_frequency: 2,
+        sample_time: 0.1,
+        initial_condition: 5.0,
+        inputs: [{ id: 'u', direction: 'input', dataType: 'float32', shape: 'scalar' }],
+        outputs: [{ id: 'y', direction: 'output', dataType: 'float32', shape: 'scalar' }],
+      },
+    };
+    const hpfNode = {
+      id: 'hpf',
+      type: 'HIGH_PASS_FILTER',
+      parameters: {
+        cutoff_frequency: 2,
+        sample_time: 0.1,
+        initial_condition: 5.0,
+        inputs: [{ id: 'u', direction: 'input', dataType: 'float32', shape: 'scalar' }],
+        outputs: [{ id: 'y', direction: 'output', dataType: 'float32', shape: 'scalar' }],
+      },
+    };
+    const maNode = {
+      id: 'ma',
+      type: 'MOVING_AVERAGE',
+      parameters: {
+        window_size: 3,
+        sample_time: 0.1,
+        initial_condition: 5.0,
+        inputs: [{ id: 'u', direction: 'input', dataType: 'float32', shape: 'scalar' }],
+        outputs: [{ id: 'y', direction: 'output', dataType: 'float32', shape: 'scalar' }],
+      },
+    };
+    const cNode = {
+      id: 'c',
+      type: 'Constant',
+      parameters: {
+        value: 5,
+        inputs: [],
+        outputs: [{ id: 'out', direction: 'output', dataType: 'float32', shape: 'scalar' }],
+      },
+    };
+
+    const result = buildXBSemanticModel({
+      stateId: 's1',
+      model: {
+        schemaVersion: 1,
+        nodes: [cNode, lpfNode, hpfNode, maNode],
+        edges: [
+          { id: 'e1', sourceNodeId: 'c', sourcePortId: 'out', targetNodeId: 'lpf', targetPortId: 'u' },
+          { id: 'e2', sourceNodeId: 'c', sourcePortId: 'out', targetNodeId: 'hpf', targetPortId: 'u' },
+          { id: 'e3', sourceNodeId: 'c', sourcePortId: 'out', targetNodeId: 'ma', targetPortId: 'u' },
+        ],
+        mappings: [],
+        solver: { kind: 'euler', stepSeconds: 0.1 },
+        policy: { memory: 'reset', numericFault: 'escalate' },
+      },
+      baseTickMs: 100,
+      target: { supportsFloat16: true, supportsFloat32: true, supportsFloat64: true, supportsFixedPoint: true },
+    });
+
+    expect(result.diagnostics).toHaveLength(0);
+    const runtime = createXBRuntime(result.ir!);
+
+    // Check initial condition values
+    expect(runtime.stateSlots['lpf:prev_y$state']).toEqual([5.0]);
+    expect(runtime.stateSlots['hpf:prev_y$state']).toEqual([5.0]);
+    expect(runtime.stateSlots['hpf:prev_u$state']).toEqual([5.0]);
+    expect(runtime.stateSlots['ma:buffer$state']).toEqual([5.0, 5.0, 5.0]);
+    expect(runtime.stateSlots['ma:index$state']).toEqual([0]);
+
+    // Step 1: Input u=5 (equal to IC 5) -> LPF = 5, HPF = 5.0, MA = 5
+    stepXBState(runtime, {});
+    expect(runtime.stateSlots['hpf:prev_u$state']).toEqual([5.0]);
+    expect(runtime.stateSlots['ma:buffer$state']).toEqual([5.0, 5.0, 5.0]);
+    expect(runtime.stateSlots['ma:index$state']).toEqual([1]);
+
+    // Step 2: Input u=5 -> MA stays 5.0 (buffer [5, 5, 5])
+    stepXBState(runtime, {});
+    expect(runtime.signals['ma:y'][0]).toBeCloseTo(5.0);
+    expect(runtime.stateSlots['ma:index$state']).toEqual([2]);
+
+    // Step 3: Input u=5 -> index rolls over to 0
+    stepXBState(runtime, {});
+    expect(runtime.stateSlots['ma:index$state']).toEqual([0]);
+
+    // Reinitialization/Reset check: create runtime again
+    const freshRuntime = createXBRuntime(result.ir!);
+    expect(freshRuntime.stateSlots['ma:buffer$state']).toEqual([5.0, 5.0, 5.0]);
+    expect(freshRuntime.stateSlots['ma:index$state']).toEqual([0]);
+    expect(freshRuntime.stateSlots['hpf:prev_u$state']).toEqual([5.0]);
   });
 });

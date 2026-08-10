@@ -37,6 +37,7 @@ interface PortDescriptor {
   readonly id: string;
   readonly direction: 'input' | 'output';
   readonly shape: XBShape | null;
+  readonly explicitShape: XBShape | null;
   readonly numericType: XBNumericType | null;
 }
 
@@ -374,6 +375,13 @@ const shapeFromPort = (port: UnknownRecord): XBShape | null => {
   return null;
 };
 
+const explicitPortShape = (port: UnknownRecord): XBShape | null => {
+  if (port.shape !== undefined || port.dimensions !== undefined) {
+    return shapeFromPort(port);
+  }
+  return null;
+};
+
 const parsePortValues = (
   values: unknown,
   direction: PortDescriptor['direction'],
@@ -388,6 +396,7 @@ const parsePortValues = (
       id: value.id as string,
       direction,
       shape: shapeFromPort(value),
+      explicitShape: explicitPortShape(value),
       numericType: explicitPortNumericType(value),
     }));
 };
@@ -428,9 +437,11 @@ const samplePeriodsIn = (
     return;
   }
   const record = value as UnknownRecord;
-  for (const key of ['sampleTime', 'sample_time']) {
+  for (const key of ['sampleTime', 'sample_time', 'samplePeriod', 'sample_period', 'Ts', 'ts', 'dt']) {
     if (Object.prototype.hasOwnProperty.call(record, key)) {
-      destination.push({ kind: 'seconds', value: record[key] });
+      const rawVal = record[key];
+      const parsedVal = typeof rawVal === 'string' ? parseFloat(rawVal) : rawVal;
+      destination.push({ kind: 'seconds', value: parsedVal });
     }
   }
   if (Object.prototype.hasOwnProperty.call(record, 'sampleRate')) {
@@ -475,11 +486,12 @@ const scheduleForNode = (
           denominator: persistedValue.numerator,
         }
         : persistedValue;
-    const ratio = samplePeriod === null
-      ? null
-      : exactPositiveIntegerRatio(samplePeriod, solverStep);
+    if (samplePeriod === null) {
+      timingInvalid = true;
+      continue;
+    }
+    const ratio = exactPositiveIntegerRatio(samplePeriod, solverStep);
     const conflicts = canonicalPeriod !== null
-      && samplePeriod !== null
       && canonicalPeriod.numerator * samplePeriod.denominator
         !== samplePeriod.numerator * canonicalPeriod.denominator;
     if (ratio === null || conflicts) {
@@ -858,6 +870,70 @@ const stateBoundaryForNode = (
     ]);
   }
 
+  if (node.type === 'LOW_PASS_FILTER') {
+    const output = outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
+    if (output === undefined) return boundary([]);
+    const ic = Number(firstPresentParameter(node.parameters as UnknownRecord, ['initial_condition', 'initialCondition', 'ic']) ?? 0);
+    return boundary([{
+      id: `${node.id}:prev_y$state`,
+      role: 'prev_y',
+      signalId: null,
+      numericType: output.numericType,
+      shape: { kind: 'scalar' },
+      initialValues: [ic],
+    }]);
+  }
+
+  if (node.type === 'HIGH_PASS_FILTER') {
+    const output = outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
+    if (output === undefined) return boundary([]);
+    const ic = Number(firstPresentParameter(node.parameters as UnknownRecord, ['initial_condition', 'initialCondition', 'ic']) ?? 0);
+    return boundary([
+      {
+        id: `${node.id}:prev_y$state`,
+        role: 'prev_y',
+        signalId: null,
+        numericType: output.numericType,
+        shape: { kind: 'scalar' },
+        initialValues: [ic],
+      },
+      {
+        id: `${node.id}:prev_u$state`,
+        role: 'prev_u',
+        signalId: null,
+        numericType: output.numericType,
+        shape: { kind: 'scalar' },
+        initialValues: [ic],
+      },
+    ]);
+  }
+
+  if (node.type === 'MOVING_AVERAGE') {
+    const output = outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
+    if (output === undefined) return boundary([]);
+    const windowSize = Math.max(1, Math.floor(Number(firstPresentParameter(node.parameters as UnknownRecord, ['window_size', 'windowSize', 'N']) ?? 4)));
+    const ic = Number(firstPresentParameter(node.parameters as UnknownRecord, ['initial_condition', 'initialCondition', 'ic']) ?? 0);
+    return boundary([
+      {
+        id: `${node.id}:buffer$state`,
+        role: 'buffer',
+        signalId: null,
+        numericType: output.numericType,
+        shape: { kind: 'vector', length: windowSize },
+        initialValues: Array.from({ length: windowSize }, () => ic),
+        storageCategory: 'array',
+      },
+      {
+        id: `${node.id}:index$state`,
+        role: 'index',
+        signalId: null,
+        numericType: { kind: 'fixed', signed: false, wordLength: 32, fractionLength: 0 },
+        shape: { kind: 'scalar' },
+        initialValues: [0],
+      },
+    ]);
+  }
+
   if (node.type === 'WHITE_NOISE' || node.type === 'BAND_LIMITED_NOISE') {
     const output = outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
     if (output === undefined) return boundary([]);
@@ -949,6 +1025,15 @@ const stateBoundaryForNode = (
     }
 
     return boundary(slots);
+  }
+
+  const FALLBACK_STATEFUL_TYPES = new Set([
+    'DELAY', 'UNIT_DELAY', 'MEMORY', 'Integrator', 'INTEGRATOR_CONTINUOUS',
+    'INTEGRATOR_DISCRETE', 'DiscreteIntegrator',
+  ]);
+
+  if (!FALLBACK_STATEFUL_TYPES.has(node.type)) {
+    return boundary([]);
   }
 
   return boundary(outputSignalIds.map((signalId) => {
@@ -1113,18 +1198,38 @@ export const buildXBSemanticModel = (
   const graphShapeResult = resolveGraphShapes(input.model);
 
   const resolveShape = (signalId: string): XBShape => {
-    const semShape = graphShapeResult.portShapes.get(signalId);
-    if (semShape && semShape.kind === 'vector') {
-      return { kind: 'vector', length: semShape.elementCount };
+    const nodeId = signalId.slice(0, signalId.indexOf(':'));
+    const portId = signalId.slice(signalId.indexOf(':') + 1);
+    const node = nodeById.get(nodeId);
+
+    if (node?.type === 'MUX') {
+      if (portId === 'out' || portId === 'y') {
+        const inputPorts = (portsByNode.get(nodeId) ?? []).filter((p) => p.direction === 'input');
+        let totalCount = 0;
+        for (const inputPort of inputPorts) {
+          const inputSignalId = `${nodeId}:${inputPort.id}`;
+          const sourceSignalId = sourceByInputSignalId.get(inputSignalId);
+          if (sourceSignalId) {
+            const srcShape = resolveShape(sourceSignalId);
+            totalCount += srcShape.kind === 'vector' ? srcShape.length : (srcShape.kind === 'matrix' ? srcShape.rows * srcShape.columns : 1);
+          } else {
+            totalCount += 1;
+          }
+        }
+        return totalCount > 1 ? { kind: 'vector', length: totalCount } : { kind: 'scalar' };
+      }
     }
-    if (semShape && semShape.kind === 'matrix') {
-      return {
-        kind: 'matrix',
-        rows: semShape.dimensions[0] ?? 1,
-        columns: semShape.dimensions[1] ?? 1,
-      };
+
+    if (node?.type === 'DEMUX') {
+      if (portId === 'in' || portId === 'u') {
+        const sourceSignalId = sourceByInputSignalId.get(signalId);
+        if (sourceSignalId) return resolveShape(sourceSignalId);
+      }
     }
-    return { kind: 'scalar' };
+
+    const port = portBySignalId.get(signalId);
+    if (port?.explicitShape) return port.explicitShape;
+    return port?.shape ?? { kind: 'scalar' };
   };
 
   const signals: Record<string, XBSemanticSignal> = {};
@@ -1208,10 +1313,11 @@ export const buildXBSemanticModel = (
       ));
       continue;
     }
-    const stateful = capability.directFeedthrough === false;
     const outputSignalIds = (portsByNode.get(node.id) ?? [])
       .filter((port) => port.direction === 'output')
       .map((port) => `${node.id}:${port.id}`);
+    const stateBoundary = stateBoundaryForNode(node, outputSignalIds, signals, diagnostics);
+    const isStateful = stateBoundary !== null && stateBoundary.slots.length > 0;
     operations[node.id] = {
       id: node.id,
       type: node.type,
@@ -1220,14 +1326,12 @@ export const buildXBSemanticModel = (
       outputSignalIds,
       parameters: cloneParameters(node.parameters),
       directFeedthrough: capability.directFeedthrough,
-      stateful,
+      stateful: isStateful,
       conversion: conversionForNode(node, diagnostics),
-      state: stateful
-        ? stateBoundaryForNode(node, outputSignalIds, signals, diagnostics)
-        : null,
-      schedule: scheduleForNode(node, solverStep!, stateful, diagnostics),
+      state: isStateful ? stateBoundary : null,
+      schedule: scheduleForNode(node, solverStep!, isStateful, diagnostics),
       numericFault: {
-        fallback: stateful ? 'previous-value' : 'zero',
+        fallback: isStateful ? 'previous-value' : 'zero',
         errorSignalId: outputSignalIds.find((signalId) => {
           const portId = signals[signalId]?.portId;
           return portId === 'error' || (
@@ -1262,9 +1366,9 @@ export const buildXBSemanticModel = (
     }
 
     if (node.type === 'Step') {
-      const stepTime = node.parameters.step_time ?? node.parameters.time;
-      const initialVal = node.parameters.initial_value ?? node.parameters.initial;
-      const finalVal = node.parameters.final_value ?? node.parameters.final;
+      const stepTime = node.parameters.step_time ?? node.parameters.time ?? node.parameters.stepTime ?? 0;
+      const initialVal = node.parameters.initial_value ?? node.parameters.initial ?? node.parameters.initialValue ?? 0;
+      const finalVal = node.parameters.final_value ?? node.parameters.final ?? node.parameters.finalValue ?? 1;
 
       if (stepTime === undefined || initialVal === undefined || finalVal === undefined) {
         diagnostics.push(diagnostic(

@@ -7,6 +7,7 @@ import type {
   XBTargetCapabilities,
 } from './xbModel';
 import { validateXBModel } from './xbSemanticValidator';
+import { resetXBConformanceStatus, setXBConformanceStatus } from './xbConformanceStatus';
 
 const target: XBTargetCapabilities = {
   supportsFloat16: false,
@@ -533,6 +534,45 @@ describe('validateXBModel', () => {
 
     const diagnostics = validateXBModel(batch4Model, variables, target);
     expect(diagnostics).toEqual([]);
+  });
+
+  it('validates Batch5C filter blocks as codegen capable with paired executable conformance', () => {
+    setXBConformanceStatus('T10-PAIRED-FILTERS', 'PASS');
+    const batch5cModel: XBPersistedModelV1 = {
+      schemaVersion: 1,
+      solver: { kind: 'euler', stepSeconds: 0.01 },
+      nodes: [
+        node('lpf1', 'LOW_PASS_FILTER', { cutoff_frequency: 1, sample_time: 0.1, initial_condition: 0 }),
+        node('hpf1', 'HIGH_PASS_FILTER', { cutoff_frequency: 1, sample_time: 0.1, initial_condition: 0 }),
+        node('ma1', 'MOVING_AVERAGE', { window_size: 4, sample_time: 0.1, initial_condition: 0 }),
+      ],
+      edges: [],
+      mappings: [],
+      policy: { memory: 'reset', numericFault: 'escalate' },
+    };
+
+    const diagnostics = validateXBModel(batch5cModel, variables, target);
+    expect(diagnostics.filter(d => d.code === 'XB_BLOCK_NOT_CODEGEN_CAPABLE')).toEqual([]);
+    expect(diagnostics.filter(d => d.code === 'XB_PROGRAM_CONFORMANCE_GATE_BLOCKED')).toEqual([]);
+  });
+
+  it('blocks Batch5C filter generation when paired conformance has not passed', () => {
+    resetXBConformanceStatus();
+    const batch5cModel: XBPersistedModelV1 = {
+      schemaVersion: 1,
+      solver: { kind: 'euler', stepSeconds: 0.01 },
+      nodes: [
+        node('lpf1', 'LOW_PASS_FILTER', { cutoff_frequency: 1, sample_time: 0.1, initial_condition: 0 }),
+      ],
+      edges: [],
+      mappings: [],
+      policy: { memory: 'reset', numericFault: 'escalate' },
+    };
+
+    const diagnostics = validateXBModel(batch5cModel, variables, target);
+    expect(diagnostics.map(d => d.code)).toContain('XB_PROGRAM_CONFORMANCE_GATE_BLOCKED');
+    const blocked = diagnostics.find(d => d.code === 'XB_PROGRAM_CONFORMANCE_GATE_BLOCKED')!;
+    expect(blocked.message).toContain('BLOCKED BY PROGRAM CONFORMANCE GATE');
   });
 });
 

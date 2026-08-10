@@ -23,7 +23,7 @@ import { generateCArtifacts } from './smCGenerator';
 import { flatOrFixture, hybridXBridgesFixture } from './smFixtures';
 import { compileGeneratedCSyntax } from './smCHarness';
 import { toCIdentifier } from './smExpressions';
-
+import { XB_EXECUTABLE_C_CASES } from './xbCConformanceCases';
 
 import type { StateMachineModelV4 } from './smModel';
 import { buildSemanticModel } from './smSemanticBuilder';
@@ -2799,7 +2799,7 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
 
     expect(allSource).not.toContain('malloc');
     expect(allSource).not.toContain('free');
-    expect(allSource).toContain('SM_XB_FAULT_SINGULAR_MATRIX');
+    expect(allSource).toContain('xb_pivot_failed');
   });
 
   it('generates exact float-formatted Step block evaluation with ceiling threshold and mapped Outport propagation (GEN-XB-STEP-002, 003, 004)', () => {
@@ -2840,7 +2840,7 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
 
     expect(coreSource).toContain('instance->state_timers[SM_ST_A_IDX] < 300U');
     expect(coreSource).not.toContain('state_timers[0U]');
-    expect(coreSource).toContain('instance->data.xb6_step_output = instance->xb_a.XB6_StepOut_out;');
+    expect(coreSource).toContain('instance->data.xb6_step_output = (double)(instance->xb_a.XB6_StepOut_out);');
     expect(coreSource).not.toContain('(float)((double)(instance->xb_a.XB6_StepOut_out))');
     expect(coreSource).not.toContain('instance->data.xb6_step_output = instance->xb_a.step1_out;');
 
@@ -2879,8 +2879,7 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     const artifacts = generateCArtifacts(ir!);
     const coreSource = artifacts.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
 
-    expect(coreSource).toContain('instance->data.xb6_step_output = instance->xb_a.XB6_StepOut_out;');
-    expect(coreSource).not.toContain('(float)((double)(instance->xb_a.XB6_StepOut_out))');
+    expect(coreSource).toContain('instance->data.xb6_step_output = (double)(instance->xb_a.XB6_StepOut_out);');
   });
 
   it('generates vector signal array and indexed assignments for MUX and DEMUX (GEN-XB-MUX-DEMUX-VECTOR)', () => {
@@ -2987,7 +2986,7 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
               { id: 'delay1:index$state', role: 'index', signalId: null, numericType: { kind: 'fixed', wordLength: 32, fractionLength: 0, signed: false }, shape: { kind: 'scalar' }, initialValues: [0] },
             ],
           },
-          schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'zero-order' },
+          schedule: { periodSubsteps: 10, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'zero-order' },
           delayParameters: { delayLength: 2, initialCondition: -1, samplePeriod: 0.1, isUnitDelay: false },
         },
       },
@@ -3006,6 +3005,97 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(cCode).toContain('uint32_t state_delay1_index_state;');
     expect(cCode).toContain('% 2U;');
     expect(cCode).toContain('state_delay1_buffer_state[(uint32_t)instance->');
+    expect(cCode).not.toContain('(double)(instance->xb_controller.state_delay1_buffer_state)');
+    expect(cCode).toContain('state_delay1_buffer_state[(uint32_t)instance->xb_controller.state_delay1_index_state * 1U + 0U]');
+    expect(cCode).toContain('if (instance->xb_controller.schedule_delay1 == UINT32_C(0))');
+    expect(cCode).toContain('instance->xb_controller.schedule_delay1 += 1U;');
+    expect(cCode).toContain('if (instance->xb_controller.schedule_delay1 >= 10U)');
+  });
+
+  it('verifies DELAY read-before-write sequence and Discrete Integrator 10U scheduler threshold', () => {
+    const float32 = { kind: 'float32' } as const;
+    const model = semanticModel();
+    model.states.controller.xBridges = {
+      stateId: 'controller',
+      ownerState: { stateId: 'controller', stateName: 'controller', cIndexSymbol: 'SM_ST_CONTROLLER_IDX', numericIndex: 0 },
+      executionOrder: ['XB8_Delay', 'XB8_Discrete'],
+      operations: {
+        XB8_Delay: {
+          id: 'XB8_Delay', type: 'DELAY', inputSignalIds: ['u'], outputSignalIds: ['XB8_Delay_y'],
+          parameters: { delay_length: 2, initial_condition: -1 }, directFeedthrough: false, stateful: true,
+          conversion: null,
+          state: {
+            outputPhase: 'read-before-update', updatePhase: 'after-direct-feedthrough',
+            slots: [
+              { id: 'XB8_Delay:buffer$state', role: 'buffer', signalId: 'XB8_Delay_y', numericType: float32, shape: { kind: 'vector', length: 2 }, initialValues: [-1, -1] },
+              { id: 'XB8_Delay:index$state', role: 'index', signalId: null, numericType: { kind: 'fixed', wordLength: 32, fractionLength: 0, signed: false }, shape: { kind: 'scalar' }, initialValues: [0] },
+            ],
+          },
+          schedule: { periodSubsteps: 10, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'zero-order' },
+          delayParameters: { delayLength: 2, initialCondition: -1, samplePeriod: 0.1, isUnitDelay: false },
+        },
+        XB8_Discrete: {
+          id: 'XB8_Discrete', type: 'INTEGRATOR_DISCRETE', inputSignalIds: ['u'], outputSignalIds: ['XB8_Discrete_y'],
+          parameters: { sample_time: 0.1, method: 'forward_euler' }, directFeedthrough: false, stateful: true,
+          conversion: null,
+          state: {
+            outputPhase: 'read-before-update', updatePhase: 'after-direct-feedthrough',
+            slots: [
+              { id: 'XB8_Discrete:value$state', role: 'value', signalId: 'XB8_Discrete_y', numericType: float32, shape: { kind: 'scalar' }, initialValues: [1] },
+            ],
+          },
+          schedule: { periodSubsteps: 10, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'zero-order' },
+        },
+      },
+      signals: {
+        u: { id: 'u', nodeId: 'u', portId: 'u', direction: 'input', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'scalar', numericType: float32, storage: 'native' },
+        XB8_Delay_y: { id: 'XB8_Delay_y', nodeId: 'XB8_Delay', portId: 'y', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'scalar', numericType: float32, storage: 'native' },
+        XB8_Discrete_y: { id: 'XB8_Discrete_y', nodeId: 'XB8_Discrete', portId: 'y', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'scalar', numericType: float32, storage: 'native' },
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 10 },
+      policy: { memory: 'reset', numericFault: 'escalate' },
+    };
+
+    const artifacts = generateCArtifacts(model);
+    const cCode = artifacts.files.map((f) => f.content).join('\n');
+
+    // REQ-INT-001 & REQ-INT-002: Threshold must be 10U and NOT 100U
+    expect(cCode).toContain('if (instance->xb_controller.schedule_XB8_Discrete >= 10U)');
+    expect(cCode).not.toContain('if (instance->xb_controller.schedule_XB8_Discrete >= 100U)');
+
+    // REQ-DELAY-001 & REQ-DELAY-006: DELAY output assigned to XB8_Delay_y from buffer before input buffer update
+    expect(cCode).toContain('instance->xb_controller.XB8_Delay_y =');
+    expect(cCode).toContain('state_XB8_Delay_buffer_state[(uint32_t)instance->xb_controller.state_XB8_Delay_index_state');
+
+    // Check read-before-write order in generated C source
+    const delayReadIdx = cCode.indexOf('instance->xb_controller.XB8_Delay_y =');
+    const delayWriteIdx = cCode.indexOf('state_XB8_Delay_buffer_state[xb_delay_idx');
+    expect(delayReadIdx).toBeGreaterThan(-1);
+    expect(delayWriteIdx).toBeGreaterThan(-1);
+    expect(delayReadIdx).toBeLessThan(delayWriteIdx);
+  });
+
+  it('REQ-B5C-004 / REQ-B5C-005 / REQ-B5C-006 generates valid C99 code for LOW_PASS_FILTER, HIGH_PASS_FILTER, and MOVING_AVERAGE', () => {
+    const fixture = XB_EXECUTABLE_C_CASES['T10-C99-FILTERS'].fixture;
+    const { ir } = buildSemanticModel(fixture.model);
+    expect(ir).toBeDefined();
+
+    const artifacts = generateCArtifacts(ir!);
+    const cCode = artifacts.files.map((f) => f.content).join('\n');
+
+    // Verify presence of filter structs and equations
+    expect(cCode).toContain('lpf_1_alpha');
+    expect(cCode).toContain('hpf_2_alpha');
+    expect(cCode).toContain('ma_3_sum');
+
+    // Verify syntax compilation
+    const syntax = compileGeneratedCSyntax(artifacts, true);
+    expect(syntax.success).toBe(true);
+    expect(syntax.errors).toHaveLength(0);
   });
 });
+
+
+
 
