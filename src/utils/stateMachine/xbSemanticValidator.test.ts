@@ -579,18 +579,21 @@ describe('validateXBModel', () => {
     const validModel = model({
       nodes: [node('id1', 'IdentityMatrix', {
         dimension: 4,
+        inputs: [],
         outputs: [port('y', 'output', { shape: 'matrix', dimensions: [4, 4] })],
       })],
     });
     const invalidNonSquareModel = model({
       nodes: [node('id2', 'IdentityMatrix', {
         dimension: 4,
+        inputs: [],
         outputs: [port('y', 'output', { shape: 'matrix', dimensions: [4, 3] })],
       })],
     });
     const invalidOversizedModel = model({
       nodes: [node('id3', 'IdentityMatrix', {
         dimension: 9,
+        inputs: [],
         outputs: [port('y', 'output', { shape: 'matrix', dimensions: [9, 9] })],
       })],
     });

@@ -3305,8 +3305,8 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     const cCase = XB_EXECUTABLE_C_CASES['T10-C99-WAVEFORMS'];
     expect(cCase).toBeDefined();
     expect(cCase.coverage).toEqual([
-      { blockType: 'Clock', inputShapes: ['scalar'], outputShapes: ['scalar'] },
-      { blockType: 'WaveformGen', inputShapes: ['scalar'], outputShapes: ['scalar'] },
+      { blockType: 'Clock', inputShapes: [], outputShapes: ['scalar'] },
+      { blockType: 'WaveformGen', inputShapes: [], outputShapes: ['scalar'] },
     ]);
   });
 

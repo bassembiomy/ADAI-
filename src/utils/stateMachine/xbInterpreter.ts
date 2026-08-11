@@ -225,8 +225,9 @@ const writeSignal = (
   const type = operation?.conversion?.destinationType ?? signal.numericType;
   const results = source.map((value) =>
     convertScalar(value, type, faults, operation));
+  const isFloatType = type.kind === 'float32' || type.kind === 'float64' || type.kind === 'float16';
   runtime.signals[signalId] = results.map((result) => (
-    operation === null && result.fault !== null
+    operation === null && result.fault !== null && !(isFloatType && result.fault === 'non-finite')
       ? defaultValue(type)
       : result.value
   ));

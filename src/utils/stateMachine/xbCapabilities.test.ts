@@ -62,6 +62,7 @@ describe('getXBBlockCapability', () => {
       'SIN', 'COS', 'TAN', 'COT', 'SEC', 'COSEC', 'ASIN', 'ACOS', 'ATAN',
       'ACOT', 'ASEC', 'ACOSEC', 'SINH', 'COSH', 'TANH', 'COTH', 'SECH',
       'COSECH', 'ASINH', 'ACOSH', 'ATANH', 'ACOTH', 'ASECH', 'ACOSECH',
+      'VectorPow', 'SumElements', 'Mean', 'Max', 'IdentityMatrix',
     ]) {
       const capability = getXBBlockCapability(type) as unknown as {
         readonly interpreterConformanceCaseIds?: readonly string[];
@@ -82,7 +83,7 @@ describe('getXBBlockCapability', () => {
     };
     expect(matrixDiag.inputShapes).toEqual(['vector']);
     expect(matrixDiag.outputShapes).toEqual(['matrix']);
-    expect(getXBBlockCapability('PID_CONTROLLER')?.codegen).toBe(false);
+    expect(getXBBlockCapability('PID_CONTROLLER')?.codegen).toBe(true);
   });
 
   it.each(['constructor', 'toString'])('treats inherited name %s as unknown', (type) => {

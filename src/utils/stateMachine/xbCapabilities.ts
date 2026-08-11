@@ -32,7 +32,9 @@ export const XB_INTERPRETER_CONFORMANCE_CASE_IDS = [
   'T10-INT-DISCONTINUOUS', 'T14-INT-DISCONTINUOUS',
   'T14-INT-CORE-DIRECT', 'T14-INT-SHAPED-CONSTANT',
   'T14-INT-STATEFUL', 'T14-INT-CONTINUOUS', 'T14-INT-STEP',
-  'T10-INT-FILTERS',
+  'T10-INT-FILTERS', 'T10-INT-REDUCTIONS', 'T10-INT-IDENTITY-MATRIX',
+  'T10-INT-PID-CONTROLLER', 'T10-INT-SIX-STEP', 'T10-INT-NOISE',
+  'T10-INT-FLIPFLOPS', 'T10-INT-REGISTER-COUNTER', 'T10-INT-WAVEFORMS',
 ] as const;
 
 export const XB_C_CONFORMANCE_CASE_IDS = [
@@ -41,7 +43,9 @@ export const XB_C_CONFORMANCE_CASE_IDS = [
   'T10-C99-DISCONTINUOUS', 'T14-C99-DISCONTINUOUS',
   'T14-C99-CORE-DIRECT', 'T14-C99-SHAPED-CONSTANT',
   'T14-C99-STATEFUL', 'T14-C99-CONTINUOUS', 'T14-C99-STEP',
-  'T10-C99-FILTERS',
+  'T10-C99-FILTERS', 'T10-C99-VECTOR-POW', 'T10-C99-REDUCTIONS', 'T10-C99-IDENTITY-MATRIX',
+  'T10-C99-PID-CONTROLLER', 'T10-C99-SIX-STEP', 'T10-C99-FLIPFLOPS', 'T10-C99-REGISTER-COUNTER',
+  'T10-C99-WAVEFORMS', 'XB-W5-NOISE',
 ] as const;
 
 export interface XBConformanceCoverage {
@@ -85,8 +89,14 @@ const TRIGONOMETRY_COVERAGE: readonly XBConformanceCoverage[] = [
 ].map(scalarCoverage);
 
 const VECTOR_COVERAGE: readonly XBConformanceCoverage[] =
-  ['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv']
-    .map((type) => shapedCoverage(type, ['vector']));
+  ['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow']
+    .map((type) => shapedCoverage(type, ['scalar', 'vector', 'matrix']));
+
+const REDUCTION_COVERAGE: readonly XBConformanceCoverage[] = [
+  shapedCoverage('SumElements', ['vector', 'matrix'], ['scalar']),
+  shapedCoverage('Mean', ['vector', 'matrix'], ['scalar']),
+  shapedCoverage('Max', ['vector', 'matrix'], ['scalar']),
+];
 
 const MATRIX_COVERAGE: readonly XBConformanceCoverage[] = [
   ...['MatrixMul', 'Transpose', 'MatrixConcat', 'SubMatrix', 'MatrixSolve']
@@ -109,6 +119,8 @@ export const XB_INTERPRETER_CONFORMANCE_CASES: Readonly<Record<
   string, readonly XBConformanceCoverage[]
 >> = Object.freeze({
   'T10-INT-VECTOR-ELEMENTWISE': VECTOR_COVERAGE,
+  'T10-INT-REDUCTIONS': REDUCTION_COVERAGE,
+  'T10-INT-IDENTITY-MATRIX': [shapedCoverage('IdentityMatrix', [], ['matrix'])],
   'T10-INT-MATRIX-OPS': MATRIX_COVERAGE,
   'T10-INT-PID-BASIC': [scalarCoverage('PID_BASIC')],
   'T10-INT-DISCRETE-REALIZATION': [
@@ -119,6 +131,12 @@ export const XB_INTERPRETER_CONFORMANCE_CASES: Readonly<Record<
   'T10-INT-LOGIC-BITWISE': LOGIC_BITWISE_COVERAGE,
   'T10-INT-SIGNAL-ROUTING': SIGNAL_ROUTING_COVERAGE,
   'T10-INT-TRIGONOMETRY': TRIGONOMETRY_COVERAGE,
+  'T10-INT-FLIPFLOPS': [scalarCoverage('DFlipFlop'), scalarCoverage('JKFlipFlop')],
+  'T10-INT-REGISTER-COUNTER': [scalarCoverage('Register'), scalarCoverage('Counter')],
+  'T10-INT-WAVEFORMS': [shapedCoverage('Clock', [], ['scalar']), shapedCoverage('WaveformGen', [], ['scalar'])],
+  'T10-INT-SIX-STEP': [scalarCoverage('SIX_STEP_COMMUTATION')],
+  'T10-INT-PID-CONTROLLER': [scalarCoverage('PID_CONTROLLER')],
+  'T10-INT-NOISE': [shapedCoverage('WHITE_NOISE', [], ['scalar']), shapedCoverage('BAND_LIMITED_NOISE', [], ['scalar'])],
   'T10-INT-DISCONTINUOUS': DISCONTINUOUS_COVERAGE,
   'T14-INT-DISCONTINUOUS': DISCONTINUOUS_COVERAGE,
   'T14-INT-CORE-DIRECT': CORE_SCALAR_COVERAGE,
@@ -136,9 +154,9 @@ export const XB_INTERPRETER_CONFORMANCE_CASES: Readonly<Record<
   ],
   'T14-INT-STEP': [shapedCoverage('Step', [], ['scalar'])],
   'T10-INT-FILTERS': [
-    scalarCoverage('LOW_PASS_FILTER'),
-    scalarCoverage('HIGH_PASS_FILTER'),
-    scalarCoverage('MOVING_AVERAGE'),
+    shapedCoverage('LOW_PASS_FILTER', ['scalar', 'vector', 'matrix']),
+    shapedCoverage('HIGH_PASS_FILTER', ['scalar', 'vector', 'matrix']),
+    shapedCoverage('MOVING_AVERAGE', ['scalar', 'vector', 'matrix']),
   ],
 });
 
@@ -290,7 +308,9 @@ const UNCLASSIFIED_HOST_ONLY = hostOnlySet([
 
 
 
-const UNPAIRED_EMBEDDED_OPERATIONS = hostOnlySet([], 'The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage.');
+const UNPAIRED_EMBEDDED_OPERATIONS = hostOnlySet([
+  'KALMAN_FILTER',
+], 'The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage.');
 
 /**
  * Embedded-safe X-Bridges block types. This registry is declarative and never
@@ -335,12 +355,12 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
 
   // Deterministic arithmetic and reductions.
   Sum: direct(scalar),
-  Clock: direct(scalar, undefined, undefined, ['T10-C99-WAVEFORMS'], { inputShapes: [], outputShapes: scalar }),
-  WaveformGen: direct(scalar, undefined, undefined, ['T10-C99-WAVEFORMS'], { inputShapes: [], outputShapes: scalar }),
-  DFlipFlop: stateful(scalar, undefined, undefined, ['T10-C99-FLIPFLOPS']),
-  JKFlipFlop: stateful(scalar, undefined, undefined, ['T10-C99-FLIPFLOPS']),
-  Register: stateful(scalar, undefined, undefined, ['T10-C99-REGISTER-COUNTER']),
-  Counter: stateful(scalar, undefined, undefined, ['T10-C99-REGISTER-COUNTER']),
+  Clock: direct(scalar, undefined, ['T10-INT-WAVEFORMS'], ['T10-C99-WAVEFORMS'], { inputShapes: [], outputShapes: scalar }),
+  WaveformGen: direct(scalar, undefined, ['T10-INT-WAVEFORMS'], ['T10-C99-WAVEFORMS'], { inputShapes: [], outputShapes: scalar }),
+  DFlipFlop: stateful(scalar, undefined, ['T10-INT-FLIPFLOPS'], ['T10-C99-FLIPFLOPS']),
+  JKFlipFlop: stateful(scalar, undefined, ['T10-INT-FLIPFLOPS'], ['T10-C99-FLIPFLOPS']),
+  Register: stateful(scalar, undefined, ['T10-INT-REGISTER-COUNTER'], ['T10-C99-REGISTER-COUNTER']),
+  Counter: stateful(scalar, undefined, ['T10-INT-REGISTER-COUNTER'], ['T10-C99-REGISTER-COUNTER']),
   SUM_JUNCTION: direct(scalar),
   GAIN: direct(scalar),
   PRODUCT: direct(scalar),

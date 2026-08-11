@@ -97,7 +97,7 @@ const VECTOR_COVERAGE: readonly XBConformanceCoverage[] = [
   'VectorSub',
   'VectorMul',
   'VectorDiv',
-].map((type) => shapedCoverage(type, ['vector']));
+].map((type) => shapedCoverage(type, ['scalar', 'vector', 'matrix']));
 
 const MATRIX_COVERAGE: readonly XBConformanceCoverage[] = [
   ...[
@@ -329,9 +329,9 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
   'T10-C99-FILTERS': {
     id: 'T10-C99-FILTERS',
     coverage: [
-      scalarCoverage('LOW_PASS_FILTER'),
-      scalarCoverage('HIGH_PASS_FILTER'),
-      scalarCoverage('MOVING_AVERAGE'),
+      shapedCoverage('LOW_PASS_FILTER', ['scalar', 'vector', 'matrix']),
+      shapedCoverage('HIGH_PASS_FILTER', ['scalar', 'vector', 'matrix']),
+      shapedCoverage('MOVING_AVERAGE', ['scalar', 'vector', 'matrix']),
     ],
     fixture: filterFixture(),
     tolerance: DEFAULT_TOLERANCE,
@@ -638,8 +638,8 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
   'T10-C99-WAVEFORMS': {
     id: 'T10-C99-WAVEFORMS',
     coverage: [
-      scalarCoverage('Clock'),
-      scalarCoverage('WaveformGen'),
+      shapedCoverage('Clock', [], ['scalar']),
+      shapedCoverage('WaveformGen', [], ['scalar']),
     ],
     fixture: makeXBridgesFixture(
       [
@@ -662,8 +662,8 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
   'XB-W5-NOISE': {
     id: 'XB-W5-NOISE',
     coverage: [
-      scalarCoverage('WHITE_NOISE'),
-      scalarCoverage('BAND_LIMITED_NOISE'),
+      shapedCoverage('WHITE_NOISE', [], ['scalar']),
+      shapedCoverage('BAND_LIMITED_NOISE', [], ['scalar']),
     ],
     fixture: makeXBridgesFixture(
       [
@@ -684,7 +684,7 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
   'T10-C99-VECTOR-POW': {
     id: 'T10-C99-VECTOR-POW',
     coverage: [
-      shapedCoverage('VectorPow', ['scalar', 'vector'], ['scalar', 'vector']),
+      shapedCoverage('VectorPow', ['scalar', 'vector', 'matrix']),
     ],
     fixture: makeXBridgesFixture(
       [
