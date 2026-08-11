@@ -449,6 +449,40 @@ export const validateXBModel = (
         ));
       }
     }
+    const ports = portsForNode(node, diagnostics);
+    portsByNode.set(node.id, ports);
+
+    if (node.type === 'IdentityMatrix') {
+      const dim = Number(parameters.dimension ?? parameters.matrixSize ?? 1);
+      const outPortMeta = ports.find((p) => p.direction === 'output');
+      if (!Number.isInteger(dim) || dim < 1 || dim > 8) {
+        diagnostics.push(diagnostic(
+          'XB_SHAPE_MISMATCH',
+          `IdentityMatrix '${node.id}' dimension must be an integer from 1 through 8.`,
+          node.id,
+        ));
+      }
+      if (outPortMeta && (outPortMeta.shape !== 'matrix' || (outPortMeta.dimensions && (outPortMeta.dimensions[0] !== outPortMeta.dimensions[1] || outPortMeta.dimensions[0] > 8)))) {
+        diagnostics.push(diagnostic(
+          'XB_SHAPE_MISMATCH',
+          `IdentityMatrix '${node.id}' requires a square N-by-N output matrix (N <= 8).`,
+          node.id,
+        ));
+      }
+    }
+    if (['SumElements', 'Mean', 'Max'].includes(node.type)) {
+      const inPortMeta = ports.find((p) => p.direction === 'input');
+      const inShape = shapeResult.portShapes.get(`${node.id}:${inPortMeta?.id ?? 'in'}`);
+      const isExplicitEmpty = inPortMeta && inPortMeta.dimensions && inPortMeta.dimensions.some((d) => d < 1);
+      const isResolvedEmpty = inShape && inShape.kind !== 'unresolved' && inShape.elementCount < 1;
+      if (isExplicitEmpty || isResolvedEmpty) {
+        diagnostics.push(diagnostic(
+          'XB_SHAPE_MISMATCH',
+          `Reduction '${node.id}' requires a non-empty vector or matrix input (N >= 1).`,
+          node.id,
+        ));
+      }
+    }
     if (node.type === 'PID_BASIC' && !(typeof parameters.sampleTime === 'number' && parameters.sampleTime > 0)) {
       diagnostics.push(diagnostic(
         'XB_DISCRETE_SAMPLE_TIME_REQUIRED',
@@ -464,8 +498,6 @@ export const validateXBModel = (
       ));
     }
 
-    const ports = portsForNode(node, diagnostics);
-    portsByNode.set(node.id, ports);
     if (capability?.codegen === true) {
       for (const port of ports) {
         const allowedShapes = port.direction === 'input'

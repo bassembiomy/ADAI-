@@ -164,4 +164,75 @@ describe('xbShapeResolver', () => {
     const result = resolveGraphShapes(model);
     expect(result.diagnostics.some((d) => d.code === 'XB_SHAPE_UNRESOLVED')).toBe(true);
   });
+
+  it('resolves VectorPow shapes for scalar, vector, and matrix bases', () => {
+    const model: XBPersistedModelV1 = {
+      ...createBaseModel(),
+      nodes: [
+        { id: 'base_vec', type: 'Constant', parameters: { outputs: [{ id: 'out', shape: 'vector', dimensions: [4] }] } },
+        { id: 'exp_scal', type: 'Constant', parameters: { value: 2 } },
+        { id: 'pow_node', type: 'VectorPow', parameters: {} },
+      ],
+      edges: [
+        { id: 'e1', sourceNodeId: 'base_vec', sourcePortId: 'out', targetNodeId: 'pow_node', targetPortId: 'in1' },
+        { id: 'e2', sourceNodeId: 'exp_scal', sourcePortId: 'out', targetNodeId: 'pow_node', targetPortId: 'in2' },
+      ],
+    };
+
+    const result = resolveGraphShapes(model);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.portShapes.get('pow_node:out')).toEqual<SemanticShape>({
+      kind: 'vector',
+      dimensions: [4],
+      elementCount: 4,
+    });
+  });
+
+  it('resolves SumElements, Mean, and Max to scalar outputs from vector inputs', () => {
+    const model: XBPersistedModelV1 = {
+      ...createBaseModel(),
+      nodes: [
+        { id: 'v', type: 'Constant', parameters: { outputs: [{ id: 'out', shape: 'vector', dimensions: [4] }] } },
+        { id: 'sum_node', type: 'SumElements', parameters: {} },
+        { id: 'mean_node', type: 'Mean', parameters: {} },
+        { id: 'max_node', type: 'Max', parameters: {} },
+      ],
+      edges: [
+        { id: 'e1', sourceNodeId: 'v', sourcePortId: 'out', targetNodeId: 'sum_node', targetPortId: 'in' },
+        { id: 'e2', sourceNodeId: 'v', sourcePortId: 'out', targetNodeId: 'mean_node', targetPortId: 'in' },
+        { id: 'e3', sourceNodeId: 'v', sourcePortId: 'out', targetNodeId: 'max_node', targetPortId: 'in' },
+      ],
+    };
+
+    const result = resolveGraphShapes(model);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.portShapes.get('sum_node:out')).toEqual<SemanticShape>({ kind: 'scalar', dimensions: [], elementCount: 1 });
+    expect(result.portShapes.get('mean_node:out')).toEqual<SemanticShape>({ kind: 'scalar', dimensions: [], elementCount: 1 });
+    expect(result.portShapes.get('max_node:out')).toEqual<SemanticShape>({ kind: 'scalar', dimensions: [], elementCount: 1 });
+  });
+
+  it('resolves IdentityMatrix to square matrix output', () => {
+    const model: XBPersistedModelV1 = {
+      ...createBaseModel(),
+      nodes: [
+        {
+          id: 'id_node',
+          type: 'IdentityMatrix',
+          parameters: {
+            dimension: 3,
+            outputs: [{ id: 'out', shape: 'matrix', dimensions: [3, 3] }],
+          },
+        },
+      ],
+      edges: [],
+    };
+
+    const result = resolveGraphShapes(model);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.portShapes.get('id_node:out')).toEqual<SemanticShape>({
+      kind: 'matrix',
+      dimensions: [3, 3],
+      elementCount: 9,
+    });
+  });
 });

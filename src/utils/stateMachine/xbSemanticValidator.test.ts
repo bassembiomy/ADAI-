@@ -574,5 +574,52 @@ describe('validateXBModel', () => {
     const blocked = diagnostics.find(d => d.code === 'XB_PROGRAM_CONFORMANCE_GATE_BLOCKED')!;
     expect(blocked.message).toContain('BLOCKED BY PROGRAM CONFORMANCE GATE');
   });
+
+  it('validates IdentityMatrix square matrix output and maximum static limit 8', () => {
+    const validModel = model({
+      nodes: [node('id1', 'IdentityMatrix', {
+        dimension: 4,
+        outputs: [port('y', 'output', { shape: 'matrix', dimensions: [4, 4] })],
+      })],
+    });
+    const invalidNonSquareModel = model({
+      nodes: [node('id2', 'IdentityMatrix', {
+        dimension: 4,
+        outputs: [port('y', 'output', { shape: 'matrix', dimensions: [4, 3] })],
+      })],
+    });
+    const invalidOversizedModel = model({
+      nodes: [node('id3', 'IdentityMatrix', {
+        dimension: 9,
+        outputs: [port('y', 'output', { shape: 'matrix', dimensions: [9, 9] })],
+      })],
+    });
+
+    setXBConformanceStatus('T10-C99-IDENTITY-MATRIX', 'PASS');
+    expect(codes(validModel)).not.toContain('XB_SHAPE_MISMATCH');
+    expect(codes(invalidNonSquareModel)).toContain('XB_SHAPE_MISMATCH');
+    expect(codes(invalidOversizedModel)).toContain('XB_SHAPE_MISMATCH');
+  });
+
+  it('validates reductions require non-empty vector or matrix input (N >= 1)', () => {
+    const validModel = model({
+      nodes: [
+        node('const1', 'Constant', { inputs: [], outputs: [port('out', 'output', { shape: 'vector', dimensions: [4] })] }),
+        node('sum1', 'SumElements', { inputs: [port('in', 'input', { shape: 'vector', dimensions: [4] })], outputs: [port('y', 'output')] }),
+      ],
+      edges: [{ id: 'e1', sourceNodeId: 'const1', sourcePortId: 'out', targetNodeId: 'sum1', targetPortId: 'in' }],
+    });
+    const emptyModel = model({
+      nodes: [
+        node('const1', 'Constant', { inputs: [], outputs: [port('out', 'output', { shape: 'vector', dimensions: [0] })] }),
+        node('sum1', 'SumElements', { inputs: [port('in', 'input', { shape: 'vector', dimensions: [0] })], outputs: [port('y', 'output')] }),
+      ],
+      edges: [{ id: 'e1', sourceNodeId: 'const1', sourcePortId: 'out', targetNodeId: 'sum1', targetPortId: 'in' }],
+    });
+
+    setXBConformanceStatus('T10-C99-REDUCTIONS', 'PASS');
+    expect(codes(validModel).filter(c => c === 'XB_SHAPE_MISMATCH')).toEqual([]);
+    expect(codes(emptyModel)).toContain('XB_SHAPE_MISMATCH');
+  });
 });
 

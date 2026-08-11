@@ -129,10 +129,15 @@ const extractPortMeta = (node: XBNodeV1): RawPortMeta[] => {
       ports.push({ id: 'in1', direction: 'input' }, { id: 'in2', direction: 'input' });
     }
     if (!hasOutput) ports.push({ id: 'out', direction: 'output' });
-  } else if (['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv'].includes(node.type)) {
+  } else if (['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow'].includes(node.type)) {
     if (!hasInput) {
       ports.push({ id: 'in1', direction: 'input' }, { id: 'in2', direction: 'input' });
     }
+    if (!hasOutput) ports.push({ id: 'out', direction: 'output' });
+  } else if (['SumElements', 'Mean', 'Max'].includes(node.type)) {
+    if (!hasInput) ports.push({ id: 'in', direction: 'input' });
+    if (!hasOutput) ports.push({ id: 'out', direction: 'output' });
+  } else if (node.type === 'IdentityMatrix') {
     if (!hasOutput) ports.push({ id: 'out', direction: 'output' });
   } else if (node.type === 'Constant' || node.type === 'Step') {
     if (!hasOutput) ports.push({ id: 'out', direction: 'output' });
@@ -221,7 +226,7 @@ export const resolveGraphShapes = (
           { id: 'in2', direction: 'input' },
           { id: 'out', direction: 'output' },
         ]);
-      } else if (['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv'].includes(node.type)) {
+      } else if (['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow'].includes(node.type)) {
         const in1 = `${node.id}:in1`;
         const in2 = `${node.id}:in2`;
         const out = `${node.id}:out`;
@@ -233,6 +238,21 @@ export const resolveGraphShapes = (
           { id: 'in2', direction: 'input' },
           { id: 'out', direction: 'output' },
         ]);
+      } else if (['SumElements', 'Mean', 'Max'].includes(node.type)) {
+        const inPort = `${node.id}:in`;
+        const outPort = `${node.id}:out`;
+        portShapes.set(inPort, UNRESOLVED_SHAPE);
+        portShapes.set(outPort, SCALAR_SHAPE);
+        nodePorts.set(node.id, [
+          { id: 'in', direction: 'input' },
+          { id: 'out', direction: 'output' },
+        ]);
+      } else if (node.type === 'IdentityMatrix') {
+        const outPort = `${node.id}:out`;
+        const dim = Number(node.parameters.dimension ?? node.parameters.matrixSize ?? 1);
+        const shape = Number.isInteger(dim) && dim > 0 ? matrixShape(dim, dim) : UNRESOLVED_SHAPE;
+        portShapes.set(outPort, shape);
+        nodePorts.set(node.id, [{ id: 'out', direction: 'output' }]);
       } else if (node.type === 'DEMUX') {
         const inPort = `${node.id}:in`;
         const out1 = `${node.id}:out1`;
@@ -330,24 +350,48 @@ export const resolveGraphShapes = (
             }
           }
         }
-      } else if (['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv'].includes(node.type)) {
-        // Preserves vector shape when input operands have compatible dimensions
+      } else if (['VectorAdd', 'VectorSub', 'VectorMul', 'VectorDiv', 'VectorPow'].includes(node.type)) {
+        // Preserves vector/matrix shape when input operands have compatible dimensions
         const resolvedInputShapes = inputPorts
           .map((p) => portShapes.get(`${node.id}:${p.id}`) ?? UNRESOLVED_SHAPE)
           .filter((s) => s.kind !== 'unresolved');
 
         if (resolvedInputShapes.length > 0) {
-          const firstVec = resolvedInputShapes.find((s) => s.kind === 'vector' || s.elementCount > 1);
-          if (firstVec !== undefined) {
+          const firstNonScalar = resolvedInputShapes.find((s) => s.kind !== 'scalar' || s.elementCount > 1) ?? resolvedInputShapes[0];
+          if (firstNonScalar !== undefined) {
             for (const outP of outputPorts) {
               const outKey = `${node.id}:${outP.id}`;
               if (!explicitPortKeys.has(outKey)) {
                 const cur = portShapes.get(outKey) ?? UNRESOLVED_SHAPE;
-                if (!shapesAreEqual(cur, firstVec)) {
-                  portShapes.set(outKey, firstVec);
+                if (!shapesAreEqual(cur, firstNonScalar)) {
+                  portShapes.set(outKey, firstNonScalar);
                   changed = true;
                 }
               }
+            }
+          }
+        }
+      } else if (['SumElements', 'Mean', 'Max'].includes(node.type)) {
+        for (const outP of outputPorts) {
+          const outKey = `${node.id}:${outP.id}`;
+          if (!explicitPortKeys.has(outKey)) {
+            const cur = portShapes.get(outKey) ?? UNRESOLVED_SHAPE;
+            if (!shapesAreEqual(cur, SCALAR_SHAPE)) {
+              portShapes.set(outKey, SCALAR_SHAPE);
+              changed = true;
+            }
+          }
+        }
+      } else if (node.type === 'IdentityMatrix') {
+        const dim = Number(node.parameters.dimension ?? node.parameters.matrixSize ?? 1);
+        const outShape = Number.isInteger(dim) && dim > 0 ? matrixShape(dim, dim) : UNRESOLVED_SHAPE;
+        for (const outP of outputPorts) {
+          const outKey = `${node.id}:${outP.id}`;
+          if (!explicitPortKeys.has(outKey)) {
+            const cur = portShapes.get(outKey) ?? UNRESOLVED_SHAPE;
+            if (!shapesAreEqual(cur, outShape)) {
+              portShapes.set(outKey, outShape);
+              changed = true;
             }
           }
         }
