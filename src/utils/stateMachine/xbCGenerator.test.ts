@@ -1126,6 +1126,48 @@ describe('X-Bridges C99 static storage', () => {
     } finally { workspace.cleanup(); }
   });
 
+  it('correctly maps INVERSE_PARK inputs by port name (vd, vq, theta) and generates correct equations', () => {
+    const ir = semanticModel();
+    const invParkOp: XBSemanticOperation = {
+      ...scalarOperation('invPark', 'INVERSE_PARK', ['invPark:theta', 'invPark:vd', 'invPark:vq'], ['invPark:alpha', 'invPark:beta']),
+      directFeedthrough: true,
+      stateful: false,
+    };
+    ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
+      stateId: 'controller',
+      executionOrder: ['invPark'],
+      operations: { invPark: invParkOp },
+      signals: {
+        'invPark:theta': { ...signal('invPark:theta', { kind: 'float64' }), portId: 'theta', direction: 'input' },
+        'invPark:vd': { ...signal('invPark:vd', { kind: 'float64' }), portId: 'vd', direction: 'input' },
+        'invPark:vq': { ...signal('invPark:vq', { kind: 'float64' }), portId: 'vq', direction: 'input' },
+        'invPark:alpha': { ...signal('invPark:alpha', { kind: 'float64' }), portId: 'alpha', direction: 'output' },
+        'invPark:beta': { ...signal('invPark:beta', { kind: 'float64' }), portId: 'beta', direction: 'output' },
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
+      policy: { memory: 'retain', numericFault: 'escalate' },
+    };
+
+    const artifacts = generateCArtifacts(ir);
+    const coreC = artifacts.files.find(f => f.name === 'sm_core.c')?.content ?? '';
+    expect(coreC).toContain('invPark_vd');
+    expect(coreC).toContain('invPark_vq');
+    expect(coreC).toContain('invPark_theta');
+    const line0 = coreC.split('\n').find(l => l.includes('xb_value_0_0')) ?? '';
+    expect(line0).toContain('invPark_vd');
+    expect(line0).toContain('cos');
+    expect(line0).toContain('invPark_theta');
+    expect(line0).toContain('invPark_vq');
+    expect(line0).toContain('sin');
+    // Ensure vd is multiplied by cos(theta) and not cos(vq)
+    expect(line0.indexOf('invPark_vd') < line0.indexOf('cos')).toBe(true);
+    expect(line0.indexOf('cos') < line0.indexOf('invPark_theta')).toBe(true);
+    expect(line0.indexOf('invPark_theta') < line0.indexOf('invPark_vq')).toBe(true);
+  });
+
+
   it('T10-C99-DISCRETE-REALIZATION executes a target-valid 9-state vector realization identically to the interpreter', { timeout: 60_000 }, () => {
     const ir = semanticModel(); const vector9 = { kind: 'vector', length: 9 } as const;
     const identity = Array.from({ length: 9 }, (_, row) => Array.from({ length: 9 }, (_, column) => row === column ? 1 : 0));
@@ -3411,6 +3453,16 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     expect(code).toContain('signbit(');
     expect(code).toContain('xb_row == xb_column ? 1.0 : 0.0');
 
+    compileGeneratedCSyntax(artifacts);
+  });
+
+  it('generates C code for a model containing Subsystem blocks', () => {
+    const caseDef = XB_EXECUTABLE_C_CASES['subsystem_gain_sum'];
+    expect(caseDef).toBeDefined();
+
+    const stateModel: StateMachineModelV4 = caseDef.fixture.model as unknown as StateMachineModelV4;
+    const ir = build(stateModel);
+    const artifacts = generateCArtifacts(ir);
     compileGeneratedCSyntax(artifacts);
   });
 });

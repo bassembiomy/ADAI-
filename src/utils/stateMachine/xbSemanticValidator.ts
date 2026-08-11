@@ -1,6 +1,7 @@
 import { getXBBlockCapability } from './xbCapabilities';
 import { getXBConformanceStatus } from './xbConformanceStatus';
 import { resolveGraphShapes } from './xbShapeResolver';
+import { flattenXBSubsystems } from './xbSubsystemFlattener';
 import type { ModelDiagnostic } from './smModel';
 import type { SemanticVariable } from './smSemanticModel';
 import type {
@@ -389,10 +390,11 @@ const hasAlgebraicCycle = (
 };
 
 export const validateXBModel = (
-  model: XBPersistedModelV1,
+  rawModel: XBPersistedModelV1,
   variables: Readonly<Record<string, SemanticVariable>>,
   target: XBTargetCapabilities,
 ): ModelDiagnostic[] => {
+  const model = flattenXBSubsystems(rawModel);
   const diagnostics: ModelDiagnostic[] = [];
   const shapeResult = resolveGraphShapes(model);
   diagnostics.push(...shapeResult.diagnostics);
@@ -610,6 +612,7 @@ export const validateXBModel = (
     const destination = targetPorts.find(
       (port) => port.id === edge.targetPortId && port.direction === 'input',
     );
+
     if (!nodesById.has(edge.sourceNodeId)
       || !nodesById.has(edge.targetNodeId)
       || source === undefined

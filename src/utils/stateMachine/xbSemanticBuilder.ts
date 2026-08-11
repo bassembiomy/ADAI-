@@ -29,6 +29,7 @@ import {
 import { normalizePidParameters } from './xbPidContract';
 import { compileEkfVectorExpressions } from './xbEkfExpressions';
 import { alignRuntimeThreshold, convertTime } from './smTiming';
+import { flattenXBSubsystems } from './xbSubsystemFlattener';
 
 
 type UnknownRecord = Record<string, unknown>;
@@ -766,10 +767,11 @@ const stateBoundaryForNode = (
   if (node.type === 'DISCRETE_TRANSFER_FUNCTION' || node.type === 'STATE_SPACE') {
     if (node.type === 'DISCRETE_TRANSFER_FUNCTION' && (node.parameters.A === undefined || node.parameters.C === undefined)) {
       const ss = synthesizeTransferFunctionStateSpace(node.parameters.numerator, node.parameters.denominator);
-      node.parameters.A = ss.A;
-      node.parameters.B = ss.B;
-      node.parameters.C = ss.C;
-      node.parameters.D = ss.D;
+      const params = node.parameters as Record<string, any>;
+      params.A = ss.A;
+      params.B = ss.B;
+      params.C = ss.C;
+      params.D = ss.D;
     }
     const exposedX = outputByPort('x');
     const fallback = exposedX ?? outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
@@ -1084,8 +1086,12 @@ const stateBoundaryForNode = (
 };
 
 export const buildXBSemanticModel = (
-  input: XBSemanticBuildInput,
+  rawInput: XBSemanticBuildInput,
 ): XBSemanticBuildResult => {
+  const input: XBSemanticBuildInput = {
+    ...rawInput,
+    model: flattenXBSubsystems(rawInput.model),
+  };
   const diagnostics: ModelDiagnostic[] = [];
   const solverStep = rationalFromFiniteNumber(input.model.solver.stepSeconds);
   const baseTick = rationalFromFiniteNumber(input.baseTickMs);
@@ -1264,10 +1270,11 @@ export const buildXBSemanticModel = (
     if (node?.type === 'STATE_SPACE' || node?.type === 'DISCRETE_TRANSFER_FUNCTION') {
       if (node.type === 'DISCRETE_TRANSFER_FUNCTION' && (node.parameters.A === undefined || node.parameters.C === undefined)) {
         const ss = synthesizeTransferFunctionStateSpace(node.parameters.numerator, node.parameters.denominator);
-        node.parameters.A = ss.A;
-        node.parameters.B = ss.B;
-        node.parameters.C = ss.C;
-        node.parameters.D = ss.D;
+        const params = node.parameters as Record<string, any>;
+        params.A = ss.A;
+        params.B = ss.B;
+        params.C = ss.C;
+        params.D = ss.D;
       }
       if (portId === 'y') {
         const cParam = node.parameters.C;
@@ -1362,6 +1369,45 @@ export const buildXBSemanticModel = (
       if (h1 && h2 && h3) {
         const rest = inputs.filter((p) => p !== h1 && p !== h2 && p !== h3);
         return [h1, h2, h3, ...rest];
+      }
+    } else if (node.type === 'INVERSE_PARK') {
+      const findPort = (kw: string[]) =>
+        inputs.find((p) => kw.some((k) => p.id.toLowerCase() === k));
+      const vd = findPort(['vd', 'd', 'id', 'u1', 'v_d']);
+      const vq = findPort(['vq', 'q', 'iq', 'u2', 'v_q']);
+      const theta = findPort(['theta', 'th', 'angle', 'u3']);
+      if (vd && vq && theta) {
+        const rest = inputs.filter((p) => p !== vd && p !== vq && p !== theta);
+        return [vd, vq, theta, ...rest];
+      }
+    } else if (node.type === 'PARK_TRANSFORM') {
+      const findPort = (kw: string[]) =>
+        inputs.find((p) => kw.some((k) => p.id.toLowerCase() === k));
+      const alpha = findPort(['alpha', 'ialpha', 'valpha', 'a', 'u1', 'i_alpha']);
+      const beta = findPort(['beta', 'ibeta', 'vbeta', 'b', 'u2', 'i_beta']);
+      const theta = findPort(['theta', 'th', 'angle', 'u3']);
+      if (alpha && beta && theta) {
+        const rest = inputs.filter((p) => p !== alpha && p !== beta && p !== theta);
+        return [alpha, beta, theta, ...rest];
+      }
+    } else if (node.type === 'CLARKE_TRANSFORM') {
+      const findPort = (kw: string[]) =>
+        inputs.find((p) => kw.some((k) => p.id.toLowerCase() === k));
+      const ia = findPort(['ia', 'a', 'u1', 'i_a']);
+      const ib = findPort(['ib', 'b', 'u2', 'i_b']);
+      const ic = findPort(['ic', 'c', 'u3', 'i_c']);
+      if (ia && ib && ic) {
+        const rest = inputs.filter((p) => p !== ia && p !== ib && p !== ic);
+        return [ia, ib, ic, ...rest];
+      }
+    } else if (node.type === 'INVERSE_CLARKE') {
+      const findPort = (kw: string[]) =>
+        inputs.find((p) => kw.some((k) => p.id.toLowerCase() === k));
+      const alpha = findPort(['alpha', 'valpha', 'a', 'u1', 'v_alpha']);
+      const beta = findPort(['beta', 'vbeta', 'b', 'u2', 'v_beta']);
+      if (alpha && beta) {
+        const rest = inputs.filter((p) => p !== alpha && p !== beta);
+        return [alpha, beta, ...rest];
       }
     }
     return [...inputs];

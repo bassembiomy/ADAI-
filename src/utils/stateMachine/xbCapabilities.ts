@@ -35,6 +35,7 @@ export const XB_INTERPRETER_CONFORMANCE_CASE_IDS = [
   'T10-INT-FILTERS', 'T10-INT-REDUCTIONS', 'T10-INT-IDENTITY-MATRIX',
   'T10-INT-PID-CONTROLLER', 'T10-INT-SIX-STEP', 'T10-INT-NOISE',
   'T10-INT-FLIPFLOPS', 'T10-INT-REGISTER-COUNTER', 'T10-INT-WAVEFORMS',
+  'subsystem_gain_sum',
 ] as const;
 
 export const XB_C_CONFORMANCE_CASE_IDS = [
@@ -45,7 +46,7 @@ export const XB_C_CONFORMANCE_CASE_IDS = [
   'T14-C99-STATEFUL', 'T14-C99-CONTINUOUS', 'T14-C99-STEP',
   'T10-C99-FILTERS', 'T10-C99-VECTOR-POW', 'T10-C99-REDUCTIONS', 'T10-C99-IDENTITY-MATRIX',
   'T10-C99-PID-CONTROLLER', 'T10-C99-SIX-STEP', 'T10-C99-FLIPFLOPS', 'T10-C99-REGISTER-COUNTER',
-  'T10-C99-WAVEFORMS', 'XB-W5-NOISE',
+  'T10-C99-WAVEFORMS', 'XB-W5-NOISE', 'subsystem_gain_sum',
 ] as const;
 
 export interface XBConformanceCoverage {
@@ -158,6 +159,11 @@ export const XB_INTERPRETER_CONFORMANCE_CASES: Readonly<Record<
     shapedCoverage('HIGH_PASS_FILTER', ['scalar', 'vector', 'matrix']),
     shapedCoverage('MOVING_AVERAGE', ['scalar', 'vector', 'matrix']),
   ],
+  'subsystem_gain_sum': [
+    shapedCoverage('Subsystem', ['scalar'], ['scalar']),
+    shapedCoverage('Inport', ['scalar'], ['scalar']),
+    shapedCoverage('Outport', ['scalar'], ['scalar']),
+  ],
 });
 
 import { getExecutedCoverage, XB_EXECUTABLE_C_CASES } from './xbCConformanceCases';
@@ -248,7 +254,7 @@ const hostOnlySet = (
 );
 
 const UNCLASSIFIED_HOST_ONLY = hostOnlySet([
-  'Inverse', 'Determinant', 'Subsystem', 'PWM_GENERATOR', 'THREE_PHASE_PWM',
+  'Inverse', 'Determinant', 'PWM_GENERATOR', 'THREE_PHASE_PWM',
   'SENSORLESS_SIX_STEP', 'THREE_PHASE_INVERTER',
   'SINGLE_PHASE_H_BRIDGE', 'VOLTAGE_REFERENCE_GENERATOR',
   'FIELD_ORIENTED_CONTROL', 'CURRENT_CONTROLLER_DQ', 'DOE_MODEL',
@@ -329,6 +335,9 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
     inputShapes: scalar, outputShapes: scalar,
   }),
   Outport: direct(scalar, undefined, undefined, undefined, {
+    inputShapes: scalar, outputShapes: scalar,
+  }),
+  Subsystem: direct(scalar, undefined, ['subsystem_gain_sum'], ['subsystem_gain_sum'], {
     inputShapes: scalar, outputShapes: scalar,
   }),
   Step: direct(

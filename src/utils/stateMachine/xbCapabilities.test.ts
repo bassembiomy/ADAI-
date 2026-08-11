@@ -14,6 +14,12 @@ describe('getXBBlockCapability', () => {
       }
     }
   });
+  it('marks Subsystem, Inport, and Outport as codegen capable', () => {
+    expect(getXBBlockCapability('Subsystem')?.codegen).toBe(true);
+    expect(getXBBlockCapability('Inport')?.codegen).toBe(true);
+    expect(getXBBlockCapability('Outport')?.codegen).toBe(true);
+  });
+
   it('marks deterministic arithmetic as codegen capable', () => {
     expect(getXBBlockCapability('GAIN')).toMatchObject({
       codegen: true,

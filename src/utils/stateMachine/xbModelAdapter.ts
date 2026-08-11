@@ -6,6 +6,7 @@ import type {
   XBParameterValue,
   XBPersistedModelV1,
 } from './xbModel';
+import { flattenXBSubsystems } from './xbSubsystemFlattener';
 
 export interface XBAdaptResult {
   readonly model: XBPersistedModelV1 | null;
@@ -186,10 +187,12 @@ const adaptNode = (
     }
 
     const label = nonEmptyString(data.label) ?? nonEmptyString(data.name);
+    const parentId = nonEmptyString(data.parentId);
     return {
       id,
       type,
       ...(label === null ? {} : { label }),
+      ...(parentId === null ? {} : { parentId }),
       parameters,
     };
   } catch (error) {
@@ -341,14 +344,14 @@ export const adaptXBModel = (input: unknown): XBAdaptResult => {
   }
 
   return {
-    model: {
+    model: flattenXBSubsystems({
       schemaVersion: 1,
       nodes: nodes as XBNodeV1[],
       edges: edges as XBEdgeV1[],
       mappings: mappings as XBMappingV1[],
       solver: solver as XBPersistedModelV1['solver'],
       policy: policy as XBPersistedModelV1['policy'],
-    },
+    }),
     diagnostics: [],
   };
 };

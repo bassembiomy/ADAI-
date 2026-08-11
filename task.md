@@ -1,19 +1,17 @@
-# Task Checklist – XBridge DELAY Schedule Progression Fix
+# Task Checklist – X-Bridges Subsystem C Code Generation
 
-- [x] **Step 1: Implementation Plan & Design Alignment**
-  - [x] Create implementation plan detailing `effectiveSubsteps` schedule counter logic
-  - [x] Obtain user approval for plan
+- [x] **Task 1: Model Pre-Flattening AST Transformation (`flattenXBSubsystems`)**
+  - [x] Implement pure transformation function `flattenXBSubsystems` in `xbSubsystemFlattener.ts` to recursively expand `Subsystem` nodes, promote contained child blocks to parent container scope, and rewire connected edges.
+  - [x] Create comprehensive unit tests in `xbSubsystemFlattener.test.ts` (100% PASS).
 
-- [x] **Step 2: Fix Discrete Schedule Counter Progression (`xbCGenerator.ts` & `xbSemanticBuilder.ts`)**
-  - [x] Update `renderScheduleAdvances` in `xbCGenerator.ts` to compute `effectiveSubsteps = periodSubsteps * substepsPerTick` and emit counter increment (`+= 1U`) and reset (`-= effectiveSubstepsU`) when `effectiveSubsteps > 1`
-  - [x] Update `renderDiscreteStateUpdates` in `xbCGenerator.ts` to enforce schedule counter gating `if (counter == 0)` for `zero-order` hold or `effectiveSubsteps > 1`
-  - [x] Update `samplePeriodsIn` in `xbSemanticBuilder.ts` to recognize lowercase `'ts'` and numeric string values in parameters
-  - [x] Confirm unit test suite green (GREEN)
+- [x] **Task 2: Capability & Model Adapter Integration**
+  - [x] Update `xbCapabilities.ts` to mark `Subsystem` block as `codegen: true`, shape `scalar`, and paired conformance case `subsystem_gain_sum`.
+  - [x] Integrate `flattenXBSubsystems` into `adaptXBModel` in `xbModelAdapter.ts`, `buildXBSemanticModel` in `xbSemanticBuilder.ts`, and `validateXBModel` in `xbSemanticValidator.ts`.
+  - [x] Update `xbCapabilities.test.ts` to assert `Subsystem` capability registration.
 
-- [x] **Step 3: Host C Compilation & Differential Verification (`smDifferential.test.ts`)**
-  - [x] Execute differential host C compilation and execution test for `DELAY(N=2)`
-  - [x] Confirm 100% trace equality between generated C executable and reference interpreter (`PASS`)
-  - [x] Confirm zero redundant buffer updates across solver substeps (`PASS`)
-
-- [x] **Step 4: Final Verification & Walkthrough**
-  - [x] Create `walkthrough.md` with verification evidence
+- [x] **Task 3: Conformance Case & C Codegen E2E Verification**
+  - [x] Add `subsystem_gain_sum` conformance case in `xbCConformanceCases.ts`.
+  - [x] Add `generates C code for a model containing Subsystem blocks` end-to-end unit test in `xbCGenerator.test.ts`.
+  - [x] Fix edge port handle mapping so rewired edges target `Inport` port `'in'` (`targetPortId: 'in'`) and `Outport` port `'out'` (`sourcePortId: 'out'`).
+  - [x] Fix `adaptNode` in `xbModelAdapter.ts` to preserve `parentId` on `XBNodeV1`.
+  - [x] Verify generated C code compiles and passes C host execution harness.

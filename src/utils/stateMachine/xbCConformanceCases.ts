@@ -754,6 +754,33 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
     ),
     tolerance: DEFAULT_TOLERANCE,
   },
+  'subsystem_gain_sum': {
+    id: 'subsystem_gain_sum',
+    coverage: [
+      shapedCoverage('Subsystem', ['scalar'], ['scalar']),
+      shapedCoverage('Inport', ['scalar'], ['scalar']),
+      shapedCoverage('Outport', ['scalar'], ['scalar']),
+    ],
+    fixture: makeXBridgesFixture(
+      [
+        createNode('c1', 'Constant', { value: 10 }),
+        createNode('sub1', 'Subsystem', {
+          name: 'GainSub',
+          inputs: [{ id: 'in1', direction: 'input', shape: 'scalar' }],
+          outputs: [{ id: 'out1', direction: 'output', shape: 'scalar' }],
+        }),
+        { ...createNode('in1', 'Inport', { name: 'in1' }), parentId: 'sub1' },
+        { ...createNode('gain1', 'GAIN', { gain: 3 }), parentId: 'sub1' },
+        { ...createNode('out1', 'Outport', { name: 'out1' }), parentId: 'sub1' },
+      ],
+      [
+        { id: 'e1', sourceNodeId: 'c1', sourcePortId: 'out', targetNodeId: 'sub1', targetPortId: 'in1' },
+        { id: 'e2', sourceNodeId: 'in1', sourcePortId: 'out', targetNodeId: 'gain1', targetPortId: 'u' },
+        { id: 'e3', sourceNodeId: 'gain1', sourcePortId: 'y', targetNodeId: 'out1', targetPortId: 'in' },
+      ],
+    ),
+    tolerance: DEFAULT_TOLERANCE,
+  },
 });
 
 export const getExecutedCoverage = (
