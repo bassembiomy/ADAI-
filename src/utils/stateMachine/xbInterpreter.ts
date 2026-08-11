@@ -17,6 +17,7 @@ import type {
   XBSemanticModel,
   XBSemanticOperation,
 } from './xbSemanticModel';
+import { synthesizeTransferFunctionStateSpace } from './xbSemanticBuilder';
 
 type XBScalar = number | boolean;
 
