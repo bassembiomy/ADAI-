@@ -927,14 +927,14 @@ const evaluateDirectOperation = (
       if (!input || input.length === 0) {
         throw new Error(`X-Bridges SumElements '${operation.id}' requires non-empty input vector`);
       }
-      return [[input.reduce((sum, val) => sum + Number(val), 0)]];
+      return [[input.reduce((sum: number, val) => sum + Number(val), 0)]];
     }
     case 'Mean': {
       const input = inputs[0];
       if (!input || input.length === 0) {
         throw new Error(`X-Bridges Mean '${operation.id}' requires non-empty input vector`);
       }
-      const sum = input.reduce((acc, val) => acc + Number(val), 0);
+      const sum = input.reduce((acc: number, val) => acc + Number(val), 0);
       return [[sum / input.length]];
     }
     case 'Max': {

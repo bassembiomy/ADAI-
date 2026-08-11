@@ -287,8 +287,10 @@ const filterFixture = (): DifferentialFixture => {
     currentValue: 0,
     visibleInScope: true,
   });
-  const controller = fixture.model.states.find((state) => state.id === 'controller')!;
-  controller.xBridgesModel!.solver.stepSeconds = 0.01;
+  const controller = fixture.model.states.find((state) => state.id === 'controller');
+  if (controller?.xBridgesModel?.solver) {
+    controller.xBridgesModel.solver.stepSeconds = 0.01;
+  }
   return fixture;
 };
 
