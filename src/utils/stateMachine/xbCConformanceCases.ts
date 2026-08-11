@@ -158,9 +158,9 @@ const createNode = (
     type,
     label: id,
     parameters: {
-      ...params,
       ...(block.inputs ? { inputs: block.inputs.map(transformPort) } : {}),
       ...(block.outputs ? { outputs: block.outputs.map(transformPort) } : {}),
+      ...params,
     },
   };
 };
@@ -678,6 +678,77 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
         { kind: 'step' },
         { kind: 'step' },
       ]
+    ),
+    tolerance: DEFAULT_TOLERANCE,
+  },
+  'T10-C99-VECTOR-POW': {
+    id: 'T10-C99-VECTOR-POW',
+    coverage: [
+      shapedCoverage('VectorPow', ['scalar', 'vector'], ['scalar', 'vector']),
+    ],
+    fixture: makeXBridgesFixture(
+      [
+        createNode('c_base', 'Constant', { value: [2, 3] }),
+        createNode('c_exp', 'Constant', { value: [3, 2] }),
+        createNode('pow1', 'VectorPow', {
+          inputs: [
+            { id: 'in1', direction: 'input', shape: 'vector', dimensions: [2] },
+            { id: 'in2', direction: 'input', shape: 'vector', dimensions: [2] },
+          ],
+          outputs: [{ id: 'y', direction: 'output', shape: 'vector', dimensions: [2] }],
+        }),
+      ],
+      [
+        { id: 'e1', sourceNodeId: 'c_base', sourcePortId: 'out', targetNodeId: 'pow1', targetPortId: 'in1' },
+        { id: 'e2', sourceNodeId: 'c_exp', sourcePortId: 'out', targetNodeId: 'pow1', targetPortId: 'in2' },
+      ],
+    ),
+    tolerance: DEFAULT_TOLERANCE,
+  },
+  'T10-C99-REDUCTIONS': {
+    id: 'T10-C99-REDUCTIONS',
+    coverage: [
+      shapedCoverage('SumElements', ['vector', 'matrix'], ['scalar']),
+      shapedCoverage('Mean', ['vector', 'matrix'], ['scalar']),
+      shapedCoverage('Max', ['vector', 'matrix'], ['scalar']),
+    ],
+    fixture: makeXBridgesFixture(
+      [
+        createNode('c_v', 'Constant', { value: [1, 2, 3, 4] }),
+        createNode('sum1', 'SumElements', {
+          inputs: [{ id: 'in', direction: 'input', shape: 'vector', dimensions: [4] }],
+          outputs: [{ id: 'y', direction: 'output', shape: 'scalar' }],
+        }),
+        createNode('mean1', 'Mean', {
+          inputs: [{ id: 'in', direction: 'input', shape: 'vector', dimensions: [4] }],
+          outputs: [{ id: 'y', direction: 'output', shape: 'scalar' }],
+        }),
+        createNode('max1', 'Max', {
+          inputs: [{ id: 'in', direction: 'input', shape: 'vector', dimensions: [4] }],
+          outputs: [{ id: 'y', direction: 'output', shape: 'scalar' }],
+        }),
+      ],
+      [
+        { id: 'e1', sourceNodeId: 'c_v', sourcePortId: 'out', targetNodeId: 'sum1', targetPortId: 'in' },
+        { id: 'e2', sourceNodeId: 'c_v', sourcePortId: 'out', targetNodeId: 'mean1', targetPortId: 'in' },
+        { id: 'e3', sourceNodeId: 'c_v', sourcePortId: 'out', targetNodeId: 'max1', targetPortId: 'in' },
+      ],
+    ),
+    tolerance: DEFAULT_TOLERANCE,
+  },
+  'T10-C99-IDENTITY-MATRIX': {
+    id: 'T10-C99-IDENTITY-MATRIX',
+    coverage: [
+      shapedCoverage('IdentityMatrix', [], ['matrix']),
+    ],
+    fixture: makeXBridgesFixture(
+      [
+        createNode('id1', 'IdentityMatrix', {
+          dimension: 2,
+          outputs: [{ id: 'y', direction: 'output', shape: 'matrix', dimensions: [2, 2] }],
+        }),
+      ],
+      [],
     ),
     tolerance: DEFAULT_TOLERANCE,
   },

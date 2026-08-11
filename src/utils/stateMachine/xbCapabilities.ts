@@ -290,9 +290,7 @@ const UNCLASSIFIED_HOST_ONLY = hostOnlySet([
 
 
 
-const UNPAIRED_EMBEDDED_OPERATIONS = hostOnlySet([
-  'VectorPow', 'SumElements', 'Mean', 'Max', 'IdentityMatrix',
-], 'The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage.');
+const UNPAIRED_EMBEDDED_OPERATIONS = hostOnlySet([], 'The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage.');
 
 /**
  * Embedded-safe X-Bridges block types. This registry is declarative and never
@@ -350,12 +348,12 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   VectorSub: direct(allShapes, undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
   VectorMul: direct(allShapes, undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
   VectorDiv: direct(allShapes, undefined, ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-MATRIX']),
-  VectorPow: direct(allShapes),
+  VectorPow: direct(allShapes, ['math-library'], ['T10-INT-VECTOR-ELEMENTWISE'], ['T10-C99-VECTOR-POW']),
   UnaryNeg: direct(scalar),
   Abs: direct(scalar),
-  SumElements: direct(vectorOrMatrix),
-  Mean: direct(vectorOrMatrix),
-  Max: direct(vectorOrMatrix),
+  SumElements: direct(vectorOrMatrix, undefined, ['T10-INT-REDUCTIONS'], ['T10-C99-REDUCTIONS'], { inputShapes: ['vector', 'matrix'], outputShapes: ['scalar'] }),
+  Mean: direct(vectorOrMatrix, undefined, ['T10-INT-REDUCTIONS'], ['T10-C99-REDUCTIONS'], { inputShapes: ['vector', 'matrix'], outputShapes: ['scalar'] }),
+  Max: direct(vectorOrMatrix, undefined, ['T10-INT-REDUCTIONS'], ['T10-C99-REDUCTIONS'], { inputShapes: ['vector', 'matrix'], outputShapes: ['scalar'] }),
 
   // Statically bounded linear algebra. Each entry has interpreter and C99
   // conformance coverage in xbInterpreter/xbCGenerator tests (Task 10).
@@ -365,7 +363,7 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   MatrixDiag: direct(vectorOrMatrix, undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX'], {
     inputShapes: ['vector'], outputShapes: ['matrix'],
   }),
-  IdentityMatrix: direct(vectorOrMatrix),
+  IdentityMatrix: direct(['matrix'], undefined, ['T10-INT-IDENTITY-MATRIX'], ['T10-C99-IDENTITY-MATRIX'], { inputShapes: [], outputShapes: ['matrix'] }),
   SubMatrix: direct(['matrix'], undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX']),
   MatrixSolve: direct(['matrix'], undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX']),
 
