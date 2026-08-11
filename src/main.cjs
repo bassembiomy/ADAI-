@@ -5,6 +5,7 @@ const { validateString, validateUrl, validateFilename, sanitizeShellArg, validat
 const { evaluateBuildRequest } = require('./security/hilBuildPolicy.cjs');
 const { evaluateFlashRequest } = require('./security/hilFlashPolicy.cjs');
 const asarGuard = require('./security/asarGuard.cjs');
+const { verifyToolchainHash } = require('./security/toolchainVerifier.cjs');
 
 // Allowlist of trusted hosts for toolchain download redirects
 const ALLOWED_DOWNLOAD_HOSTS = [
@@ -264,7 +265,14 @@ function downloadAndExtractToolchain(key) {
         broadcastLog(`[SYSTEM] Download progress for '${key}': ${pct}% (${mbReceived}MB / ${mbTotal}MB)`);
       });
 
-      broadcastLog(`[SYSTEM] Download completed. Extracting to ${destDir}...`);
+      broadcastLog(`[SYSTEM] Download completed. Verifying SHA-256 checksum...`);
+      const fileBuffer = fs.readFileSync(zipPath);
+      const hashCheck = verifyToolchainHash(key, fileBuffer);
+      if (!hashCheck.valid) {
+        try { fs.unlinkSync(zipPath); } catch (_) {}
+        throw new Error(`Integrity check failed: ${hashCheck.message}`);
+      }
+      broadcastLog(`[SYSTEM] SHA-256 checksum verified. Extracting to ${destDir}...`);
       await extractZip(zipPath, destDir);
       broadcastLog(`[SYSTEM] Extraction complete.`);
 
@@ -400,6 +408,9 @@ function createWindow() {
   // In production, we load the bundled index.html from the dist folder
   // In development, we could load from localhost:3000 if vite is running
   if (app.isPackaged) {
+    win.webContents.on('devtools-opened', () => {
+      win.webContents.closeDevTools();
+    });
     win.loadFile(path.join(__dirname, '../dist/index.html')).catch(err => {
       console.error('Failed to load file:', err);
     });

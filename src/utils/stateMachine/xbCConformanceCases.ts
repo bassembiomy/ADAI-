@@ -670,7 +670,7 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
     fixture: makeXBridgesFixture(
       [
         createNode('n1', 'WHITE_NOISE', { seed: 1831565813, mean: 0, variance: 1 }),
-        createNode('n2', 'BAND_LIMITED_NOISE', { seed: 1831565813, mean: 0, variance: 1, fc: 10, sampleTime: 0.1 }),
+        createNode('XBNOISE10A-BandLimited', 'BAND_LIMITED_NOISE', { seed: 1831565814, mean: 0, variance: 1, fc: 10, sampleTime: 0.1 }),
       ],
       [],
       [],

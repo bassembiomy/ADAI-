@@ -1395,26 +1395,48 @@ const emitMatrixSolve: OperationEmitter = (state, operation, operationIndex, lay
     ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId, `xb_row * ${output.columns}U + xb_column`, `(xb_pivot_failed ? 0.0 : xb_solve_b[xb_row * SM_XB_MAX_SOLVE_DIMENSION + xb_column])`, layout, member).map((line) => `    ${line}`), '        }', '    }'];
 };
 
+const resolveInputExpression = (
+  state: SemanticState,
+  operation: XBSemanticOperation,
+  keywords: string[],
+  fallbackIndex: number,
+  layout: XBStateLayout,
+  member: string,
+): string => {
+  const matchedId = operation.inputSignalIds.find((id) => {
+    const portId = state.xBridges!.signals[id]?.portId?.toLowerCase();
+    return portId !== undefined && keywords.includes(portId);
+  });
+  const targetId = matchedId ?? operation.inputSignalIds[fallbackIndex];
+  return targetId !== undefined ? signalRealExpression(state, targetId, layout, member) : '0.0';
+};
+
 const emitClarke: OperationEmitter = (state, operation, operationIndex, layout, member) => {
-  const inputs = inputExpressions(state, operation, layout, member);
-  const ia = inputs[0] ?? '0.0'; const ib = inputs[1] ?? '0.0'; const ic = inputs[2] ?? '0.0';
+  const ia = resolveInputExpression(state, operation, ['ia', 'a', 'u1', 'i_a'], 0, layout, member);
+  const ib = resolveInputExpression(state, operation, ['ib', 'b', 'u2', 'i_b'], 1, layout, member);
+  const ic = resolveInputExpression(state, operation, ['ic', 'c', 'u3', 'i_c'], 2, layout, member);
   const powerInvariant = operation.parameters.mode === 'power_invariant';
   const alpha = powerInvariant ? `(sqrt(2.0 / 3.0) * ((${ia}) - 0.5 * (${ib}) - 0.5 * (${ic})))` : ia;
   const beta = powerInvariant ? `(sqrt(2.0 / 3.0) * sqrt(3.0) * ((${ib}) - (${ic})) / 2.0)` : `(((${ia}) + 2.0 * (${ib})) / sqrt(3.0))`;
   return operation.outputSignalIds.flatMap((id, index) => renderSignalWrite(state, operation, operationIndex, index, id, index === 0 ? alpha : beta, layout, member));
 };
 const emitPark: OperationEmitter = (state, operation, operationIndex, layout, member) => {
-  const inputs = inputExpressions(state, operation, layout, member); const alpha = inputs[0] ?? '0.0'; const beta = inputs[1] ?? '0.0'; const theta = inputs[2] ?? '0.0';
+  const alpha = resolveInputExpression(state, operation, ['alpha', 'ialpha', 'valpha', 'a', 'u1', 'i_alpha'], 0, layout, member);
+  const beta = resolveInputExpression(state, operation, ['beta', 'ibeta', 'vbeta', 'b', 'u2', 'i_beta'], 1, layout, member);
+  const theta = resolveInputExpression(state, operation, ['theta', 'th', 'angle', 'u3'], 2, layout, member);
   const values = [`((${alpha}) * cos(${theta}) + (${beta}) * sin(${theta}))`, `(-(${alpha}) * sin(${theta}) + (${beta}) * cos(${theta}))`];
   return operation.outputSignalIds.flatMap((id, index) => renderSignalWrite(state, operation, operationIndex, index, id, values[index] ?? '0.0', layout, member));
 };
 const emitInversePark: OperationEmitter = (state, operation, operationIndex, layout, member) => {
-  const inputs = inputExpressions(state, operation, layout, member); const d = inputs[0] ?? '0.0'; const q = inputs[1] ?? '0.0'; const theta = inputs[2] ?? '0.0';
+  const d = resolveInputExpression(state, operation, ['vd', 'd', 'id', 'u1', 'v_d'], 0, layout, member);
+  const q = resolveInputExpression(state, operation, ['vq', 'q', 'iq', 'u2', 'v_q'], 1, layout, member);
+  const theta = resolveInputExpression(state, operation, ['theta', 'th', 'angle', 'u3'], 2, layout, member);
   const values = [`((${d}) * cos(${theta}) - (${q}) * sin(${theta}))`, `((${d}) * sin(${theta}) + (${q}) * cos(${theta}))`];
   return operation.outputSignalIds.flatMap((id, index) => renderSignalWrite(state, operation, operationIndex, index, id, values[index] ?? '0.0', layout, member));
 };
 const emitInverseClarke: OperationEmitter = (state, operation, operationIndex, layout, member) => {
-  const inputs = inputExpressions(state, operation, layout, member); const alpha = inputs[0] ?? '0.0'; const beta = inputs[1] ?? '0.0';
+  const alpha = resolveInputExpression(state, operation, ['alpha', 'valpha', 'a', 'u1', 'v_alpha'], 0, layout, member);
+  const beta = resolveInputExpression(state, operation, ['beta', 'vbeta', 'b', 'u2', 'v_beta'], 1, layout, member);
   const values = [alpha, `(-0.5 * (${alpha}) + sqrt(3.0) * (${beta}) / 2.0)`, `(-0.5 * (${alpha}) - sqrt(3.0) * (${beta}) / 2.0)`];
   return operation.outputSignalIds.flatMap((id, index) => renderSignalWrite(state, operation, operationIndex, index, id, values[index] ?? '0.0', layout, member));
 };
@@ -2275,7 +2297,7 @@ const renderStateOutputs = (
       const mean = cNumber(scalarParameter(operation, ['mean'], 0));
       const variance = cNumber(scalarParameter(operation, ['variance'], 1));
       
-      const prefix = `${operation.id}_${operationIndex}`;
+      const prefix = `${toCIdentifier(operation.id)}_${operationIndex}`;
       const lines = [
         `    double ${prefix}_normal = 0.0;`,
         `    if (${hasSpare} != 0.0) {`,
@@ -3255,7 +3277,8 @@ const renderDiscreteStateUpdates = (
     const hasSpare = stateSlotRealExpression(hasSpareSlot, layout, member);
     const mean = cNumber(scalarParameter(operation, ['mean'], 0));
     const variance = cNumber(scalarParameter(operation, ['variance'], 1));
-    const prefix = `${operation.id}_update`;
+    const opCId = toCIdentifier(operation.id);
+    const prefix = `${opCId}_update`;
     
     const lines = [
       `double ${prefix}_nextRng = ${rng};`,
@@ -3282,18 +3305,18 @@ const renderDiscreteStateUpdates = (
     ];
     
     const noiseUpdates = [
-      ...renderStateSlotAssignment(state, rngSlot, `${prefix}_nextRng`, layout, member, `${operation.id}_rng_state_update`, layout.errorFields.get(operation.id), operation),
-      ...renderStateSlotAssignment(state, spareSlot, `${prefix}_nextSpare`, layout, member, `${operation.id}_spare_normal_update`, layout.errorFields.get(operation.id), operation),
-      ...renderStateSlotAssignment(state, hasSpareSlot, `${prefix}_nextHasSpare`, layout, member, `${operation.id}_has_spare_normal_update`, layout.errorFields.get(operation.id), operation),
+      ...renderStateSlotAssignment(state, rngSlot, `${prefix}_nextRng`, layout, member, `${opCId}_rng_state_update`, layout.errorFields.get(operation.id), operation),
+      ...renderStateSlotAssignment(state, spareSlot, `${prefix}_nextSpare`, layout, member, `${opCId}_spare_normal_update`, layout.errorFields.get(operation.id), operation),
+      ...renderStateSlotAssignment(state, hasSpareSlot, `${prefix}_nextHasSpare`, layout, member, `${opCId}_has_spare_normal_update`, layout.errorFields.get(operation.id), operation),
     ];
     
     if (operation.type === 'BAND_LIMITED_NOISE' && filterSlot !== undefined) {
       const prevFilter = stateSlotRealExpression(filterSlot, layout, member);
       const fc = cNumber(scalarParameter(operation, ['fc'], 1));
       const dt = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], state.xBridges!.solver.stepSeconds));
-      lines.push(`double ${prefix}_fcCoeff = 1.0 - exp(-2.0 * 3.14159265358979323846 * (${fc}) * (${dt}));`);
+      lines.push(`double ${prefix}_fcCoeff = (${dt}) / ((1.0 / (2.0 * 3.14159265358979323846 * (${fc}))) + (${dt}));`);
       lines.push(`double ${prefix}_nextFilter = ${prevFilter} + ${prefix}_fcCoeff * (${prefix}_white - ${prevFilter});`);
-      noiseUpdates.push(...renderStateSlotAssignment(state, filterSlot, `${prefix}_nextFilter`, layout, member, `${operation.id}_filter_state_update`, layout.errorFields.get(operation.id), operation));
+      noiseUpdates.push(...renderStateSlotAssignment(state, filterSlot, `${prefix}_nextFilter`, layout, member, `${opCId}_filter_state_update`, layout.errorFields.get(operation.id), operation));
     }
     
     const block = ['    {', ...lines.map((line) => `      ${line}`), ...renderTransactionalStateUpdates(operation, noiseUpdates, layout, member).map((line) => `    ${line}`), '    }'];

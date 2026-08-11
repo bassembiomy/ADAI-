@@ -976,8 +976,16 @@ const stateBoundaryForNode = (
     const float64 = { kind: 'float64' } as const;
     const boolean = { kind: 'boolean' } as const;
     const scalar = { kind: 'scalar' } as const;
+    const defaultSeedForNode = (nodeId: string): number => {
+      let hash = 1831565813;
+      for (let i = 0; i < nodeId.length; i++) {
+        hash = Math.imul(hash ^ nodeId.charCodeAt(i), 16777619);
+      }
+      const uval = (hash >>> 0);
+      return uval === 0 ? 1831565813 : uval;
+    };
     const seedRaw = node.parameters.seed;
-    const seed = Number(seedRaw !== undefined ? seedRaw : 1831565813);
+    const seed = Number(seedRaw !== undefined ? seedRaw : defaultSeedForNode(node.id));
     const slots = [
       { id: `${node.id}:rng_state$state`, role: 'rng_state', signalId: null, numericType: float64, shape: scalar, initialValues: [seed] },
       { id: `${node.id}:spare_normal$state`, role: 'spare_normal', signalId: null, numericType: float64, shape: scalar, initialValues: [0] },

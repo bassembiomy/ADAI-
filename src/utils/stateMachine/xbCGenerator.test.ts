@@ -3465,6 +3465,24 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     const artifacts = generateCArtifacts(ir);
     compileGeneratedCSyntax(artifacts);
   });
+
+  it('Batch 10A: generates valid C identifiers and matching filter coeffs for WHITE_NOISE and BAND_LIMITED_NOISE with hyphenated block IDs', () => {
+    const caseDef = XB_EXECUTABLE_C_CASES['XB-W5-NOISE'];
+    expect(caseDef).toBeDefined();
+
+    const stateModel: StateMachineModelV4 = caseDef.fixture.model as unknown as StateMachineModelV4;
+    const ir = build(stateModel);
+    const artifacts = generateCArtifacts(ir);
+    const code = artifacts.files.map((f) => f.content).join('\n');
+
+    expect(code).not.toContain('XBNOISE10A-BandLimited');
+    expect(code).toContain('XBNOISE10A_BandLimited');
+    expect(code).not.toContain('1.0 - exp(-2.0 * 3.14159265358979323846');
+    expect(code).toContain('_fcCoeff =');
+    expect(code).toContain('1.0 / (2.0 * 3.14159265358979323846');
+
+    compileGeneratedCSyntax(artifacts);
+  });
 });
 
 

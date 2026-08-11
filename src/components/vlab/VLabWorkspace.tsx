@@ -28,6 +28,7 @@ import { Settings2, Play, Pause, Square, Send, ChevronLeft, ChevronDown, Chevron
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
 import { isInputFocused } from '../../utils/domUtils';
+import { getVLabSignalInfo, exportScopeToCSV, VLAB_SIGNAL_COLORS } from '../../utils/scopeUtils';
 
 interface LabNode {
   id: string;
@@ -1874,11 +1875,11 @@ const getSignalColor = (index: number) => {
 };
 
 const ScopeView = ({
-  data, title, isPaused, onExpand, onAutoScale, params
+  data, title, isPaused, onExpand, onAutoScale, params, signalInfos
 }: {
-  data: any[], title?: string, isPaused?: boolean, onExpand?: () => void, onAutoScale?: () => void, params?: any
+  data: any[], title?: string, isPaused?: boolean, onExpand?: () => void, onAutoScale?: () => void, params?: any, signalInfos?: any[]
 }) => {
-  const keys = data.length > 0 ? Object.keys(data[0]).filter(k => k !== 'time') : ['value'];
+  const keys = data.length > 0 ? Object.keys(data[0]).filter(k => k !== 'time' && k !== 't') : ['in1'];
   const lastPoint = data.length > 0 ? data[data.length - 1] : {};
   const lastVal = lastPoint.value !== undefined ? lastPoint.value : (keys.length > 0 ? lastPoint[keys[0]] : 0) ?? 0;
   const [scaleKey, setScaleKey] = useState(0);
@@ -1892,8 +1893,8 @@ const ScopeView = ({
     if (timeRange === 'auto' || data.length === 0) return data;
     const limit = Number(timeRange);
     if (isNaN(limit)) return data;
-    const maxTime = data[data.length - 1].time;
-    return data.filter(pt => pt.time >= maxTime - limit);
+    const maxTime = data[data.length - 1].time !== undefined ? data[data.length - 1].time : (data[data.length - 1].t || 0);
+    return data.filter(pt => (pt.time !== undefined ? pt.time : pt.t || 0) >= maxTime - limit);
   }, [data, timeRange]);
 
   const handleAutoScale = () => {
@@ -1917,20 +1918,25 @@ const ScopeView = ({
           <div className="flex flex-col">
             <span className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] leading-tight">{title || 'Signal Monitor'}</span>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-sm font-mono font-black text-white/90 tabular-nums">{lastVal.toFixed(4)}</span>
+              <span className="text-sm font-mono font-black text-white/90 tabular-nums">{typeof lastVal === 'number' ? lastVal.toFixed(4) : String(lastVal)}</span>
               <span className="text-[9px] text-gray-600 font-bold uppercase tracking-widest">Units</span>
             </div>
           </div>
         </div>
 
         {showLegend && (
-          <div className="flex gap-4 pr-2">
-            {keys.map((k, i) => (
-              <div key={k} className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getSignalColor(i) }} />
-                <span className="text-[8px] text-gray-500 font-black uppercase tracking-tighter">{k}</span>
-              </div>
-            ))}
+          <div className="flex flex-wrap gap-3 pr-2 max-w-[60%] justify-end">
+            {keys.map((k, i) => {
+              const info = signalInfos?.[i];
+              const color = VLAB_SIGNAL_COLORS[i % VLAB_SIGNAL_COLORS.length];
+              const labelText = info?.connected ? `${info.blockLabel}.${info.portName} (${info.dataType})` : (info?.fullName || k);
+              return (
+                <div key={k} className="flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
+                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                  <span className="text-[9px] text-gray-300 font-mono font-semibold truncate max-w-[140px]" title={labelText}>{labelText}</span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1955,26 +1961,29 @@ const ScopeView = ({
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart key={scaleKey} data={displayData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
             <defs>
-              {keys.map((k, i) => (
-                <linearGradient key={k} id={`grad-${k}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={getSignalColor(i)} stopOpacity={0.2} />
-                  <stop offset="95%" stopColor={getSignalColor(i)} stopOpacity={0} />
-                </linearGradient>
-              ))}
+              {keys.map((k, i) => {
+                const color = VLAB_SIGNAL_COLORS[i % VLAB_SIGNAL_COLORS.length];
+                return (
+                  <linearGradient key={k} id={`grad-${k}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={color} stopOpacity={0.25} />
+                    <stop offset="95%" stopColor={color} stopOpacity={0} />
+                  </linearGradient>
+                );
+              })}
             </defs>
-            {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="#ffffff03" vertical={false} />}
+            {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />}
             <XAxis
               dataKey="time"
-              stroke="#ffffff10"
+              stroke="#ffffff20"
               fontSize={10}
-              tickFormatter={(v) => v.toFixed(1)}
+              tickFormatter={(v) => typeof v === 'number' ? v.toFixed(1) : String(v)}
               axisLine={false}
               tickLine={false}
             />
             <YAxis
-              stroke="#ffffff10"
+              stroke="#ffffff20"
               fontSize={10}
-              tickFormatter={(v) => v.toFixed(1)}
+              tickFormatter={(v) => typeof v === 'number' ? v.toFixed(1) : String(v)}
               axisLine={false}
               tickLine={false}
               domain={([min, max]: [number, number]) => {
@@ -1998,20 +2007,22 @@ const ScopeView = ({
               itemStyle={{ fontWeight: 'bold' }}
               cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 1 }}
             />
-            {keys.map((k, i) => (
-              <Area
-                key={k}
-                type="monotone"
-                dataKey={k}
-                stroke={getSignalColor(i)}
-                strokeWidth={k === 'target' ? 1 : 3}
-                strokeDasharray={k === 'target' ? '5 5' : '0'}
-                fillOpacity={1}
-                fill={`url(#grad-${k})`}
-                isAnimationActive={false}
-                className={k === 'target' ? '' : `drop-shadow-[0_0_10px_${getSignalColor(i)}44]`}
-              />
-            ))}
+            {keys.map((k, i) => {
+              const color = VLAB_SIGNAL_COLORS[i % VLAB_SIGNAL_COLORS.length];
+              return (
+                <Area
+                  key={k}
+                  type="monotone"
+                  dataKey={k}
+                  stroke={color}
+                  strokeWidth={2.5}
+                  fillOpacity={1}
+                  fill={`url(#grad-${k})`}
+                  isAnimationActive={false}
+                  className={`drop-shadow-[0_0_8px_${color}44]`}
+                />
+              );
+            })}
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -2026,8 +2037,8 @@ const ScopeView = ({
             </span>
           </div>
           <div className="flex flex-col">
-            <span className="text-[8px] text-gray-600 font-black uppercase">Timebase</span>
-            <span className="text-[10px] font-mono text-gray-400">50ms/div</span>
+            <span className="text-[8px] text-gray-600 font-black uppercase">Channels</span>
+            <span className="text-[10px] font-mono text-gray-400">{keys.length} active</span>
           </div>
         </div>
 
@@ -2057,9 +2068,6 @@ const ScopeView = ({
           >
             <RefreshCcw size={14} className="group-hover:rotate-180 transition-transform duration-500" />
           </button>
-          <button className="p-2 hover:bg-white/10 rounded-xl text-gray-500 hover:text-white transition-all" title="Scope Settings">
-            <Settings size={14} />
-          </button>
           {onExpand && (
             <button
               onClick={(e) => { e.stopPropagation(); e.preventDefault(); onExpand(); }}
@@ -2075,12 +2083,32 @@ const ScopeView = ({
   );
 };
 
-const VLabScopeWindow = ({ id, data, onClose, title, isPaused, params, onUpdate }: { id: string, data: any[], onClose: () => void, title: string, isPaused: boolean, params: any, onUpdate?: (data: any) => void }) => {
+const VLabScopeWindow = ({
+  id, data, onClose, title, isPaused, params, onUpdate, nodes = [], edges = []
+}: {
+  id: string, data: any[], onClose: () => void, title: string, isPaused: boolean, params: any, onUpdate?: (data: any) => void, nodes?: any[], edges?: any[]
+}) => {
   const [pos, setPos] = useState({ x: 100 + Math.random() * 50, y: 100 + Math.random() * 50 });
   const [isDragging, setIsDragging] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+
+  const numChannels = params?.numSignals?.value || 1;
+  const signalInfos = useMemo(() => {
+    return Array.from({ length: numChannels }, (_, i) => getVLabSignalInfo(id, i, nodes, edges, data));
+  }, [id, numChannels, nodes, edges, data]);
+
+  const handleExportCSV = () => {
+    const csvContent = exportScopeToCSV(title || 'VLabScope', data, signalInfos);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title || 'scope'}_data_${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     const handleMove = (e: MouseEvent) => {
@@ -2099,7 +2127,7 @@ const VLabScopeWindow = ({ id, data, onClose, title, isPaused, params, onUpdate 
 
   return (
     <div
-      className={`fixed z-[9999] bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col backdrop-blur-xl transition-all duration-300 ${isMaximized ? 'inset-0 !rounded-none' : isMinimized ? 'w-64 h-10' : 'w-[600px] h-[400px]'
+      className={`fixed z-[9999] bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col backdrop-blur-xl transition-all duration-300 ${isMaximized ? 'inset-0 !rounded-none' : isMinimized ? 'w-64 h-10' : 'w-[680px] h-[450px]'
         }`}
       style={isMaximized ? { left: 0, top: 0, width: '100vw', height: '100vh' } : { left: pos.x, top: pos.y }}
     >
@@ -2110,9 +2138,16 @@ const VLabScopeWindow = ({ id, data, onClose, title, isPaused, params, onUpdate 
       >
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 shadow-[0_0_8px_#10b981]'} animate-pulse`} />
-          <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] truncate max-w-[120px]">{title}</span>
+          <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] truncate max-w-[150px]">{title}</span>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={handleExportCSV}
+            className="p-1.5 hover:bg-emerald-500/20 hover:text-emerald-400 rounded-md transition-all text-gray-500"
+            title="Export CSV Data"
+          >
+            <Download size={14} />
+          </button>
           {onUpdate && (
             <button
               onClick={() => setShowSettings(!showSettings)}
@@ -2147,9 +2182,25 @@ const VLabScopeWindow = ({ id, data, onClose, title, isPaused, params, onUpdate 
       {!isMinimized && (
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {showSettings && onUpdate && (
-            <div className="w-48 border-r border-white/5 bg-black/40 p-4 space-y-3 flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
+            <div className="w-52 border-r border-white/5 bg-black/40 p-4 space-y-3 flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
               <div className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Settings</div>
               
+              {/* Number of Input Channels */}
+              <div className="space-y-1">
+                <label className="block text-[8px] font-bold text-gray-400 uppercase">Input Channels (Ports)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="8"
+                  value={params.numSignals?.value || 1}
+                  onChange={(e) => {
+                    const val = Math.max(1, Math.min(8, parseInt(e.target.value) || 1));
+                    onUpdate({ numSignals: { ...params.numSignals, value: val } });
+                  }}
+                  className="w-full text-xs px-1.5 py-0.5 border border-[#333] bg-[#111] text-white rounded outline-none font-mono"
+                />
+              </div>
+
               {/* Time Range */}
               <div className="space-y-1">
                 <label className="block text-[8px] font-bold text-gray-400 uppercase">Time Range</label>
@@ -2247,7 +2298,7 @@ const VLabScopeWindow = ({ id, data, onClose, title, isPaused, params, onUpdate 
             </div>
           )}
           <div className="flex-1 min-h-0">
-            <ScopeView data={data} title={title} isPaused={isPaused} params={params} />
+            <ScopeView data={data} title={title} isPaused={isPaused} params={params} signalInfos={signalInfos} />
           </div>
         </div>
       )}
@@ -4523,6 +4574,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             data={scopeData}
             isPaused={isPaused}
             params={scopeNode.data.params || {}}
+            nodes={nodes}
+            edges={edges}
             onUpdate={(newData) => {
               setNodes(nds => nds.map(n => {
                 if (n.id === scopeId) {
