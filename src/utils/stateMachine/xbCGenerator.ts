@@ -1081,8 +1081,173 @@ const emitVectorElementwiseSubtract: OperationEmitter = (...args) =>
   emitElementwise((inputs) => `((${inputs[0] ?? '0.0'}) - (${inputs[1] ?? '0.0'}))`)(...args);
 const emitVectorElementwiseDivide: OperationEmitter = (...args) =>
   emitElementwise((inputs) => `((${inputs[0] ?? '0.0'}) / (${inputs[1] ?? '1.0'}))`)(...args);
-const emitVectorElementwisePower: OperationEmitter = (...args) =>
-  emitElementwise((inputs) => `pow((${inputs[0] ?? '0.0'}), (${inputs[1] ?? '0.0'}))`)(...args);
+const emitVectorElementwisePower: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const outputId = operation.outputSignalIds[0];
+  if (outputId === undefined) return [];
+  const output = requireSignal(state, outputId);
+  const isFloat = output.numericType.kind === 'float32' || output.numericType.kind === 'float16';
+  const powFunc = isFloat ? 'powf' : 'pow';
+  const hasExponentInput = operation.inputSignalIds.length > 1;
+
+  if (output.shape.kind === 'scalar') {
+    const baseExpr = signalElementRealExpression(state, operation.inputSignalIds[0], layout, member, '0U');
+    const expExpr = hasExponentInput
+      ? signalElementRealExpression(state, operation.inputSignalIds[1], layout, member, '0U')
+      : cNumber(scalarParameter(operation, ['exponent', 'power'], 1.0));
+    return renderSignalWrite(
+      state,
+      operation,
+      operationIndex,
+      0,
+      outputId,
+      `${powFunc}(${baseExpr}, ${expExpr})`,
+      layout,
+      member,
+    );
+  }
+
+  const count = output.elementCount;
+  const baseInputSignal = requireSignal(state, operation.inputSignalIds[0]);
+  const baseExpr = signalElementRealExpression(
+    state,
+    operation.inputSignalIds[0],
+    layout,
+    member,
+    baseInputSignal.elementCount === 1 ? '0U' : 'xb_i',
+  );
+
+  let expExpr: string;
+  if (hasExponentInput) {
+    const expInputSignal = requireSignal(state, operation.inputSignalIds[1]);
+    expExpr = signalElementRealExpression(
+      state,
+      operation.inputSignalIds[1],
+      layout,
+      member,
+      expInputSignal.elementCount === 1 ? '0U' : 'xb_i',
+    );
+  } else {
+    expExpr = cNumber(scalarParameter(operation, ['exponent', 'power'], 1.0));
+  }
+
+  return [
+    '    {',
+    `        for (uint32_t xb_i = 0U; xb_i < ${count}U; ++xb_i) {`,
+    ...renderSignalElementWrite(
+      state,
+      operation,
+      operationIndex,
+      0,
+      outputId,
+      'xb_i',
+      `${powFunc}(${baseExpr}, ${expExpr})`,
+      layout,
+      member,
+    ).map((line) => `    ${line}`),
+    '        }',
+    '    }',
+  ];
+};
+
+const emitSumElements: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputId = operation.inputSignalIds[0];
+  const outputId = operation.outputSignalIds[0];
+  if (inputId === undefined || outputId === undefined) return [];
+  const input = requireSignal(state, inputId);
+  const count = input.elementCount;
+  if (count < 1) {
+    throw new Error(`X-Bridges SumElements '${operation.id}' requires non-empty input vector`);
+  }
+  const inputExpr = signalElementRealExpression(state, inputId, layout, member, 'xb_i');
+  return [
+    '    {',
+    '        double xb_sum = 0.0;',
+    `        for (uint32_t xb_i = 0U; xb_i < ${count}U; ++xb_i) {`,
+    `            xb_sum += (${inputExpr});`,
+    '        }',
+    ...renderSignalWrite(state, operation, operationIndex, 0, outputId, 'xb_sum', layout, member),
+    '    }',
+  ];
+};
+
+const emitMean: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputId = operation.inputSignalIds[0];
+  const outputId = operation.outputSignalIds[0];
+  if (inputId === undefined || outputId === undefined) return [];
+  const input = requireSignal(state, inputId);
+  const count = input.elementCount;
+  if (count < 1) {
+    throw new Error(`X-Bridges Mean '${operation.id}' requires non-empty input vector`);
+  }
+  const inputExpr = signalElementRealExpression(state, inputId, layout, member, 'xb_i');
+  return [
+    '    {',
+    '        double xb_sum = 0.0;',
+    `        for (uint32_t xb_i = 0U; xb_i < ${count}U; ++xb_i) {`,
+    `            xb_sum += (${inputExpr});`,
+    '        }',
+    ...renderSignalWrite(state, operation, operationIndex, 0, outputId, `(xb_sum / ${count}.0)`, layout, member),
+    '    }',
+  ];
+};
+
+const emitMax: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const inputId = operation.inputSignalIds[0];
+  const outputId = operation.outputSignalIds[0];
+  if (inputId === undefined || outputId === undefined) return [];
+  const input = requireSignal(state, inputId);
+  const output = requireSignal(state, outputId);
+  const count = input.elementCount;
+  if (count < 1) {
+    throw new Error(`X-Bridges Max '${operation.id}' requires non-empty input vector`);
+  }
+  const isFloat = output.numericType.kind === 'float32' || output.numericType.kind === 'float16';
+  const cType = isFloat ? 'float' : 'double';
+  const zeroConst = isFloat ? '0.0f' : '0.0';
+  const initExpr = signalElementRealExpression(state, inputId, layout, member, '0U');
+  const loopExpr = signalElementRealExpression(state, inputId, layout, member, 'xb_i');
+  return [
+    '    {',
+    `        ${cType} xb_max_val = ((${cType})(${initExpr}));`,
+    `        for (uint32_t xb_i = 1U; xb_i < ${count}U; ++xb_i) {`,
+    `            const ${cType} xb_val = ((${cType})(${loopExpr}));`,
+    `            if (isnan(xb_val) || xb_val > xb_max_val || (xb_val == ${zeroConst} && xb_max_val == ${zeroConst} && !signbit(xb_val) && signbit(xb_max_val))) {`,
+    '                xb_max_val = xb_val;',
+    '            }',
+    '        }',
+    ...renderSignalWrite(state, operation, operationIndex, 0, outputId, 'xb_max_val', layout, member),
+    '    }',
+  ];
+};
+
+const emitIdentityMatrix: OperationEmitter = (state, operation, operationIndex, layout, member) => {
+  const outputId = operation.outputSignalIds[0];
+  if (outputId === undefined) return [];
+  const output = matrixSignal(state, outputId);
+  if (output.rows !== output.columns || output.rows > 8) {
+    throw new Error(`X-Bridges IdentityMatrix '${operation.id}' requires square output matrix (N <= 8)`);
+  }
+  const N = output.rows;
+  return [
+    '    {',
+    `        for (uint32_t xb_row = 0U; xb_row < ${N}U; ++xb_row) {`,
+    `            for (uint32_t xb_column = 0U; xb_column < ${N}U; ++xb_column) {`,
+    ...renderSignalElementWrite(
+      state,
+      operation,
+      operationIndex,
+      0,
+      outputId,
+      `xb_row * ${N}U + xb_column`,
+      '(xb_row == xb_column ? 1.0 : 0.0)',
+      layout,
+      member,
+    ).map((line) => `    ${line}`),
+    '            }',
+    '        }',
+    '    }',
+  ];
+};
 
 const matrixSignal = (
   state: SemanticState,
@@ -1579,6 +1744,10 @@ const OPERATION_EMITTERS: Readonly<Record<string, OperationEmitter>> = {
   VectorMul: emitVectorElementwiseProduct,
   VectorDiv: emitVectorElementwiseDivide,
   VectorPow: emitVectorElementwisePower,
+  SumElements: emitSumElements,
+  Mean: emitMean,
+  Max: emitMax,
+  IdentityMatrix: emitIdentityMatrix,
   UnaryNeg: emitNegate,
   Abs: emitAbsolute,
   SATURATION: emitSaturation,

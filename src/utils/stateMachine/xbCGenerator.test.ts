@@ -3309,6 +3309,110 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
       { blockType: 'WaveformGen', inputShapes: ['scalar'], outputShapes: ['scalar'] },
     ]);
   });
+
+  it('generates valid C99 code for VectorPow, SumElements, Mean, Max, and IdentityMatrix', () => {
+    const ir = semanticModel();
+    ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
+      stateId: 'controller',
+      executionOrder: ['c_u', 'pow_op', 'sum_op', 'mean_op', 'max_op', 'id_op'],
+      operations: {
+        c_u: {
+          id: 'c_u',
+          type: 'Constant',
+          parameters: { value: [1.0, 2.0, 3.0, 4.0] },
+          directFeedthrough: true,
+          stateful: false,
+          inputSignalIds: [],
+          outputSignalIds: ['u'],
+          conversion: null,
+          state: null,
+          schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+        },
+        pow_op: {
+          id: 'pow_op',
+          type: 'VectorPow',
+          parameters: { exponent: 2.0 },
+          directFeedthrough: true,
+          stateful: false,
+          inputSignalIds: ['u'],
+          outputSignalIds: ['y_pow'],
+          conversion: null,
+          state: null,
+          schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+        },
+        sum_op: {
+          id: 'sum_op',
+          type: 'SumElements',
+          parameters: {},
+          directFeedthrough: true,
+          stateful: false,
+          inputSignalIds: ['u'],
+          outputSignalIds: ['y_sum'],
+          conversion: null,
+          state: null,
+          schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+        },
+        mean_op: {
+          id: 'mean_op',
+          type: 'Mean',
+          parameters: {},
+          directFeedthrough: true,
+          stateful: false,
+          inputSignalIds: ['u'],
+          outputSignalIds: ['y_mean'],
+          conversion: null,
+          state: null,
+          schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+        },
+        max_op: {
+          id: 'max_op',
+          type: 'Max',
+          parameters: {},
+          directFeedthrough: true,
+          stateful: false,
+          inputSignalIds: ['u'],
+          outputSignalIds: ['y_max'],
+          conversion: null,
+          state: null,
+          schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+        },
+        id_op: {
+          id: 'id_op',
+          type: 'IdentityMatrix',
+          parameters: { dimension: 2 },
+          directFeedthrough: true,
+          stateful: false,
+          inputSignalIds: [],
+          outputSignalIds: ['y_id'],
+          conversion: null,
+          state: null,
+          schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+        },
+      },
+      signals: {
+        u: { id: 'u', nodeId: 'c_u', portId: 'u', direction: 'output', sourceSignalId: null, shape: { kind: 'vector', length: 4 }, dimensions: [4], elementCount: 4, layout: 'contiguous', numericType: { kind: 'float32' }, storage: 'native' },
+        y_pow: { id: 'y_pow', nodeId: 'pow_op', portId: 'y_pow', direction: 'output', sourceSignalId: null, shape: { kind: 'vector', length: 4 }, dimensions: [4], elementCount: 4, layout: 'contiguous', numericType: { kind: 'float32' }, storage: 'native' },
+        y_sum: { id: 'y_sum', nodeId: 'sum_op', portId: 'y_sum', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'scalar', numericType: { kind: 'float32' }, storage: 'native' },
+        y_mean: { id: 'y_mean', nodeId: 'mean_op', portId: 'y_mean', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'scalar', numericType: { kind: 'float32' }, storage: 'native' },
+        y_max: { id: 'y_max', nodeId: 'max_op', portId: 'y_max', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'scalar', numericType: { kind: 'float32' }, storage: 'native' },
+        y_id: { id: 'y_id', nodeId: 'id_op', portId: 'y_id', direction: 'output', sourceSignalId: null, shape: { kind: 'matrix', rows: 2, columns: 2 }, dimensions: [2, 2], elementCount: 4, layout: 'row-major', numericType: { kind: 'float32' }, storage: 'native' },
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
+      policy: { memory: 'reset', numericFault: 'escalate' },
+    };
+
+    const artifacts = generateCArtifacts(ir);
+    const code = artifacts.files.map((f) => f.content).join('\n');
+
+    expect(code).toContain('powf(');
+    expect(code).toContain('xb_sum +=');
+    expect(code).toContain('signbit(');
+    expect(code).toContain('xb_row == xb_column ? 1.0 : 0.0');
+
+    compileGeneratedCSyntax(artifacts);
+  });
 });
 
 
