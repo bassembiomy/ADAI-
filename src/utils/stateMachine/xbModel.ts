@@ -12,6 +12,7 @@ export interface XBNodeV1 {
   id: string;
   type: string;
   label?: string;
+  parentId?: string;
   parameters: Readonly<Record<string, XBParameterValue>>;
 }
 

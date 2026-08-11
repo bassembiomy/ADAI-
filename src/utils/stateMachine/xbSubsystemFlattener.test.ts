@@ -3,12 +3,16 @@ import type { XBPersistedModelV1 } from './xbModel';
 import { flattenXBSubsystems } from './xbSubsystemFlattener';
 import { XB_EXECUTABLE_C_CASES } from './xbCConformanceCases';
 import { validateXBModel } from './xbSemanticValidator';
+import { adaptXBModel } from './xbModelAdapter';
+import { STATE_MACHINE_XB_TARGET_CAPABILITIES } from './smSemanticValidator';
 
 describe('flattenXBSubsystems', () => {
   it('flattens a single-level subsystem and rewires edges to Inport/Outport', () => {
     const model: XBPersistedModelV1 = {
-      version: 1,
+      schemaVersion: 1,
       solver: { kind: 'euler', stepSeconds: 0.01 },
+      policy: { memory: 'reset', numericFault: 'escalate' },
+      mappings: [],
       nodes: [
         { id: 'const1', type: 'Constant', parameters: { value: 5 }, parentId: 'root' },
         { id: 'sub1', type: 'Subsystem', parameters: { name: 'MySub' }, parentId: 'root' },
@@ -40,17 +44,11 @@ describe('flattenXBSubsystems', () => {
 
   it('validates a model containing subsystems without diagnostics', () => {
     const caseDef = XB_EXECUTABLE_C_CASES['subsystem_gain_sum'];
-    const model = caseDef.fixture.model.states.find(s => s.id === 'controller')?.xBridgesModel;
-    expect(model).toBeDefined();
-    const flattened = flattenXBSubsystems(model!);
-    const diagnostics = validateXBModel(flattened, {}, {
-      supportsMathLibrary: true,
-      maxVectorLength: 64,
-      maxMatrixDimension: 64,
-      supportsFloat16: false,
-      supportsFloat32: true,
-      supportsFloat64: true,
-    });
+    const rawModel = caseDef.fixture.model.states.find(s => s.id === 'controller')?.xBridgesModel;
+    expect(rawModel).toBeDefined();
+    const adapted = adaptXBModel(rawModel);
+    expect(adapted.model).not.toBeNull();
+    const diagnostics = validateXBModel(adapted.model!, {}, STATE_MACHINE_XB_TARGET_CAPABILITIES);
     expect(diagnostics).toEqual([]);
   });
 });
