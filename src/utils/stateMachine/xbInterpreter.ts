@@ -86,7 +86,9 @@ const convertScalar = (
     supportsFloat16: true,
     supportsFloat64: true,
   });
-  if (result.fault !== null) faults.push(result.fault);
+  if (result.fault !== null && !(result.fault === 'non-finite' && (type.kind === 'float32' || type.kind === 'float64' || type.kind === 'float16'))) {
+    faults.push(result.fault);
+  }
   return result;
 };
 
@@ -905,6 +907,60 @@ const evaluateDirectOperation = (
       else if (hall === 3) { ch = 1; al = 1; } // 011: Sector 5 (CH, AL)
       else if (hall === 1) { ch = 1; bl = 1; } // 001: Sector 6 (CH, BL)
       return [[ah], [al], [bh], [bl], [ch], [cl]];
+    }
+    case 'VectorPow': {
+      const baseInput = inputs[0];
+      if (!baseInput || baseInput.length === 0) {
+        throw new Error(`X-Bridges VectorPow '${operation.id}' requires non-empty base input`);
+      }
+      const hasExponentInput = operation.inputSignalIds.length > 1;
+      const exponentInput = hasExponentInput ? inputs[1] : undefined;
+      if (hasExponentInput && (!exponentInput || exponentInput.length === 0)) {
+        throw new Error(`X-Bridges VectorPow '${operation.id}' connected exponent input is empty`);
+      }
+      const expValues = exponentInput ?? [Number(parameter(operation, ['exponent', 'power'], 1))];
+      return [binary(baseInput, expValues, (base, exp) => Math.pow(Number(base), Number(exp)))];
+    }
+    case 'SumElements': {
+      const input = inputs[0];
+      if (!input || input.length === 0) {
+        throw new Error(`X-Bridges SumElements '${operation.id}' requires non-empty input vector`);
+      }
+      return [[input.reduce((sum, val) => sum + Number(val), 0)]];
+    }
+    case 'Mean': {
+      const input = inputs[0];
+      if (!input || input.length === 0) {
+        throw new Error(`X-Bridges Mean '${operation.id}' requires non-empty input vector`);
+      }
+      const sum = input.reduce((acc, val) => acc + Number(val), 0);
+      return [[sum / input.length]];
+    }
+    case 'Max': {
+      const values = inputs[0];
+      if (!values || values.length === 0) {
+        throw new Error(`X-Bridges Max '${operation.id}' requires non-empty input vector`);
+      }
+      let maxValue = Number(values[0]);
+      for (let i = 1; i < values.length; i += 1) {
+        const value = Number(values[i]);
+        if (
+          Number.isNaN(value) ||
+          value > maxValue ||
+          (value === 0 && maxValue === 0 && Object.is(value, +0) && Object.is(maxValue, -0))
+        ) {
+          maxValue = value;
+        }
+      }
+      return [[maxValue]];
+    }
+    case 'IdentityMatrix': {
+      const outputId = operation.outputSignalIds[0];
+      const dimParam = Number(parameter(operation, ['dimension', 'matrixSize'], 1));
+      const shape = outputId ? shapeFor(runtime, outputId) : undefined;
+      const N = shape?.kind === 'matrix' ? shape.rows : dimParam;
+      const flatResult = Array.from({ length: N * N }, (_, idx) => Math.floor(idx / N) === idx % N ? 1 : 0);
+      return [flatResult];
     }
     case 'Clock':
     case 'CLOCK':

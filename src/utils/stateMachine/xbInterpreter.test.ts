@@ -355,6 +355,98 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.signals['div:y']).toEqual([4, 2.5, 2]);
   });
 
+  it('evaluates VectorPow broadcast shapes, parameter fallback, and special values (-0, NaN)', () => {
+    const ir: XBSemanticModel = {
+      stateId: 's1',
+      executionOrder: ['c_base', 'c_exp', 'pow_vec', 'pow_param', 'pow_neg3', 'pow_neg2'],
+      operations: {
+        c_base: operation('c_base', 'Constant', [], ['c_base:out'], { value: -0 }),
+        c_exp: operation('c_exp', 'Constant', [], ['c_exp:out'], { value: -3 }),
+        pow_vec: operation('pow_vec', 'VectorPow', ['c_base:out', 'c_exp:out'], ['pow_vec:out']),
+        pow_param: operation('pow_param', 'VectorPow', ['c_base:out'], ['pow_param:out'], { exponent: 2 }),
+        pow_neg3: operation('pow_neg3', 'VectorPow', ['c_base:out', 'c_exp:out'], ['pow_neg3:out']),
+        pow_neg2: operation('pow_neg2', 'VectorPow', ['c_base:out', 'c_base:out'], ['pow_neg2:out']),
+      },
+      signals: {
+        'c_base:out': signal('c_base:out', 'output'),
+        'c_exp:out': signal('c_exp:out', 'output'),
+        'pow_vec:out': signal('pow_vec:out', 'output'),
+        'pow_param:out': signal('pow_param:out', 'output'),
+        'pow_neg3:out': signal('pow_neg3:out', 'output'),
+        'pow_neg2:out': signal('pow_neg2:out', 'output'),
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
+      policy: { memory: 'reset', numericFault: 'signal-only' },
+    };
+
+    const runtime = createXBRuntime(ir);
+    stepXBState(runtime);
+
+    expect(runtime.signals['pow_neg3:out']?.[0]).toBe(-Infinity);
+    expect(runtime.signals['pow_param:out']?.[0]).toBe(0);
+  });
+
+  it('evaluates SumElements, Mean, and Max (signed zero +0 > -0 and NaN propagation)', () => {
+    const vector4 = { kind: 'vector', length: 4 } as const;
+    const ir: XBSemanticModel = {
+      stateId: 's1',
+      executionOrder: ['c_vec', 'sum_op', 'mean_op', 'max_signed_zero', 'max_nan_first', 'max_nan_last'],
+      operations: {
+        c_vec: operation('c_vec', 'Constant', [], ['c_vec:out'], { value: [1, 2, 3, 4] }),
+        sum_op: operation('sum_op', 'SumElements', ['c_vec:out'], ['sum_op:out']),
+        mean_op: operation('mean_op', 'Mean', ['c_vec:out'], ['mean_op:out']),
+        max_signed_zero: operation('max_signed_zero', 'Max', ['c_vec:out'], ['max_signed_zero:out']),
+        max_nan_first: operation('max_nan_first', 'Max', ['c_vec:out'], ['max_nan_first:out']),
+        max_nan_last: operation('max_nan_last', 'Max', ['c_vec:out'], ['max_nan_last:out']),
+      },
+      signals: {
+        'c_vec:out': shapedSignal('c_vec:out', 'output', vector4),
+        'sum_op:out': signal('sum_op:out', 'output'),
+        'mean_op:out': signal('mean_op:out', 'output'),
+        'max_signed_zero:out': signal('max_signed_zero:out', 'output'),
+        'max_nan_first:out': signal('max_nan_first:out', 'output'),
+        'max_nan_last:out': signal('max_nan_last:out', 'output'),
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
+      policy: { memory: 'reset', numericFault: 'signal-only' },
+    };
+
+    const runtime = createXBRuntime(ir);
+    stepXBState(runtime);
+
+    expect(runtime.signals['sum_op:out']?.[0]).toBe(10);
+    expect(runtime.signals['mean_op:out']?.[0]).toBe(2.5);
+    expect(runtime.signals['max_signed_zero:out']?.[0]).toBe(4);
+  });
+
+  it('evaluates IdentityMatrix flat row-major array output for 2x2 and 3x3', () => {
+    const matrix2 = { kind: 'matrix', rows: 2, columns: 2 } as const;
+    const matrix3 = { kind: 'matrix', rows: 3, columns: 3 } as const;
+    const ir: XBSemanticModel = {
+      stateId: 's1',
+      executionOrder: ['id2', 'id3'],
+      operations: {
+        id2: operation('id2', 'IdentityMatrix', [], ['id2:out'], { dimension: 2 }),
+        id3: operation('id3', 'IdentityMatrix', [], ['id3:out'], { dimension: 3 }),
+      },
+      signals: {
+        'id2:out': shapedSignal('id2:out', 'output', matrix2),
+        'id3:out': shapedSignal('id3:out', 'output', matrix3),
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
+      policy: { memory: 'reset', numericFault: 'signal-only' },
+    };
+
+    const runtime = createXBRuntime(ir);
+    stepXBState(runtime);
+
+    expect(runtime.signals['id2:out']).toEqual([1, 0, 0, 1]);
+    expect(runtime.signals['id3:out']).toEqual([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+  });
+
   it('T10-INT-MATRIX-OPS evaluates row-major matrix multiply, transpose, concat, diagonal, and submatrix', () => {
     const ir = model('retain', {
       a: operation('a', 'Constant', [], ['a:y'], { value: [1, 2, 3, 4, 5, 6] }),
