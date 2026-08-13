@@ -838,7 +838,7 @@ const evaluateDirectOperation = (
       const uSig = inputs[0] ?? [0];
       const prevSig = (prevSlot ? (runtime.stateSlots[prevSlot.id] ?? prevSlot.initialValues) : [0]).map(Number);
       const rising = Number(parameter(operation, ['risingSlewRate', 'risingLimit'], 1));
-      const falling = parameter(operation, ['fallingSlewRate']) !== undefined
+      const falling = operation.parameters.fallingSlewRate !== undefined
         ? Number(parameter(operation, ['fallingSlewRate'], -1))
         : -Math.abs(Number(parameter(operation, ['fallingLimit'], 1)));
       const dt = typeof operation.parameters.sampleTime === 'number' && operation.parameters.sampleTime > 0
@@ -1544,7 +1544,7 @@ function writeStateOutputs(
       const uSig = signalValues(runtime, operation.inputSignalIds[0] ?? '');
       const prevSig = (runtime.stateSlots[prevSlot.id] ?? prevSlot.initialValues).map(Number);
       const rising = Number(parameter(operation, ['risingSlewRate', 'risingLimit'], 1));
-      const falling = parameter(operation, ['fallingSlewRate']) !== undefined
+      const falling = operation.parameters.fallingSlewRate !== undefined
         ? Number(parameter(operation, ['fallingSlewRate'], -1))
         : -Math.abs(Number(parameter(operation, ['fallingLimit'], 1)));
       const dt = typeof operation.parameters.sampleTime === 'number' && operation.parameters.sampleTime > 0
@@ -1676,7 +1676,7 @@ const statefulUpdate = (
     const uSig = signalValues(runtime, operation.inputSignalIds[0] ?? '');
     const prevSig = (runtime.stateSlots[prevSlot.id] ?? prevSlot.initialValues).map(Number);
     const rising = Number(parameter(operation, ['risingSlewRate', 'risingLimit'], 1));
-    const falling = parameter(operation, ['fallingSlewRate']) !== undefined
+    const falling = operation.parameters.fallingSlewRate !== undefined
       ? Number(parameter(operation, ['fallingSlewRate'], -1))
       : -Math.abs(Number(parameter(operation, ['fallingLimit'], 1)));
     const dt = typeof operation.parameters.sampleTime === 'number' && operation.parameters.sampleTime > 0
