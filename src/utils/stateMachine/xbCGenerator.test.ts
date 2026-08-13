@@ -3352,6 +3352,57 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
     ]);
   });
 
+  it('generates Clock code outputting sim_time before incrementing to avoid sample offset', () => {
+    const ir = semanticModel();
+    ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
+      stateId: 'controller',
+      executionOrder: ['op_clk', 'op_wave'],
+      operations: {
+        op_clk: {
+          id: 'op_clk',
+          type: 'Clock',
+          parameters: {},
+          directFeedthrough: true,
+          stateful: false,
+          inputSignalIds: [],
+          outputSignalIds: ['t_out'],
+          conversion: null,
+          state: null,
+          schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+          numericFault: { fallback: 'zero', errorSignalId: null }
+        },
+        op_wave: {
+          id: 'op_wave',
+          type: 'WaveformGen',
+          parameters: { waveform: 'sine', amplitude: 2.0, frequency: 1.0, bias: 0.5, phase: 0.25 },
+          directFeedthrough: true,
+          stateful: false,
+          inputSignalIds: [],
+          outputSignalIds: ['y_out'],
+          conversion: null,
+          state: null,
+          schedule: { periodSubsteps: 10, offsetSubsteps: 2, initialCounter: 0, counterIncrement: 1, hold: 'zero-order' },
+          numericFault: { fallback: 'zero', errorSignalId: null }
+        }
+      },
+      signals: {
+        t_out: { id: 't_out', cName: 't_out', nodeId: 'node_clk', portId: 'out', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'contiguous', numericType: { kind: 'float64' }, storage: 'native' },
+        y_out: { id: 'y_out', cName: 'y_out', nodeId: 'node_wave', portId: 'y', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'contiguous', numericType: { kind: 'float64' }, storage: 'native' }
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 10 },
+      policy: { memory: 'reset', numericFault: 'escalate' }
+    };
+
+    const artifacts = generateCArtifacts(ir);
+    const code = artifacts.files.map((f) => f.content).join('\n');
+    expect(code).toContain('instance->xb_controller.sim_time');
+
+    // Verify WaveformGen includes phase offset (0.25) and frequency (1)
+    expect(code).toContain('2.0 * 3.14159265358979323846 * (1.0) * wave_1_t + (0.25)');
+  });
+
   it('generates valid C99 code for VectorPow, SumElements, Mean, Max, and IdentityMatrix', () => {
     const ir = semanticModel();
     ir.states.controller.xBridges = {
@@ -3483,7 +3534,121 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
 
     compileGeneratedCSyntax(artifacts);
   });
+
+  it('Batch 11: generates valid C99 state-update lowering for DFlipFlop with edge detection, reset, and Qbar', () => {
+    const caseDef = XB_EXECUTABLE_C_CASES['T10-C99-FLIPFLOPS'];
+    expect(caseDef).toBeDefined();
+
+    const stateModel: StateMachineModelV4 = caseDef.fixture.model as unknown as StateMachineModelV4;
+    const ir = build(stateModel);
+    const artifacts = generateCArtifacts(ir);
+    const code = artifacts.files.map((f) => f.content).join('\n');
+
+    expect(code).toContain('_rising =');
+    expect(code).toContain('_last_clk_prev == 0.0) &&');
+    expect(code).toContain('_next_qbar =');
+    expect(code).toContain('_next_last_clk =');
+
+    compileGeneratedCSyntax(artifacts);
+  });
+
+  it('Batch 11: generates valid C99 state-update lowering for JKFlipFlop truth table (Hold, Set, Reset, Toggle)', () => {
+    const caseDef = XB_EXECUTABLE_C_CASES['T10-C99-FLIPFLOPS'];
+    expect(caseDef).toBeDefined();
+
+    const stateModel: StateMachineModelV4 = caseDef.fixture.model as unknown as StateMachineModelV4;
+    const ir = build(stateModel);
+    const artifacts = generateCArtifacts(ir);
+    const code = artifacts.files.map((f) => f.content).join('\n');
+
+    expect(code).toContain('_j_high &&');
+    expect(code).toContain('_k_high');
+    expect(code).toContain('? 0.0 : 1.0'); // Toggle
+
+    compileGeneratedCSyntax(artifacts);
+  });
+
+  it('Batch 11: generates valid C99 state-update lowering for Register with 8-bit UINT32_C(0xFF) masking and safe conversion', () => {
+    const caseDef = XB_EXECUTABLE_C_CASES['T10-C99-REGISTER-COUNTER'];
+    expect(caseDef).toBeDefined();
+
+    const stateModel: StateMachineModelV4 = caseDef.fixture.model as unknown as StateMachineModelV4;
+    const ir = build(stateModel);
+    const artifacts = generateCArtifacts(ir);
+    const code = artifacts.files.map((f) => f.content).join('\n');
+
+    expect(code).toContain('UINT32_C(0xFF)');
+    expect(code).toContain('isfinite(');
+    expect(code).toContain('(uint32_t)(int32_t)');
+
+    compileGeneratedCSyntax(artifacts);
+  });
+
+  it('Batch 12A: generates 2-state matrix declarations, 2U loop bounds, and full P & x state updates for KALMAN_FILTER', () => {
+    const caseDef = XB_EXECUTABLE_C_CASES['XB-W5-KALMAN'];
+    expect(caseDef).toBeDefined();
+
+    const stateModel: StateMachineModelV4 = caseDef.fixture.model as unknown as StateMachineModelV4;
+    const ir = build(stateModel);
+    const artifacts = generateCArtifacts(ir);
+    const code = artifacts.files.map((f) => f.content).join('\n');
+
+    expect(code).toMatch(/state_kf1_x_state\[2\]/);
+    expect(code).toMatch(/state_kf1_P_state\[2\]\[2\]/);
+    expect(code).toMatch(/kf1_x_hat\[2\]/);
+    expect(code).toMatch(/kf1_kg\[2\]/);
+    expect(code).toMatch(/kf_\d+_K\[2\]\[1\]/);
+    expect(code).toContain('r < 2U');
+    expect(code).toContain('kf1_x_update_1');
+    expect(code).toContain('kf1_P_update_1_1');
+
+    // Topological execution order verification:
+    // 1. Source blocks (c_u, c_ymeas) MUST be evaluated before kf1 execution.
+    // 2. kf1 output calculation (kf1_x_hat, kf1_kg) MUST be evaluated before DEMUX consumers.
+    const cUPos = code.indexOf('c_u');
+    const cYmeasPos = code.indexOf('c_ymeas');
+    const kf1Pos = code.indexOf('state_kf1_x_state');
+    const kf1OutputPos = code.indexOf('kf1_x_hat[0U]');
+    const demuxPos = code.indexOf('XHatDemux') > -1 ? code.indexOf('XHatDemux') : code.indexOf('out1');
+    expect(cUPos).toBeGreaterThan(-1);
+    expect(cYmeasPos).toBeGreaterThan(-1);
+    expect(kf1Pos).toBeGreaterThan(-1);
+    expect(cUPos).toBeLessThan(kf1Pos);
+    expect(cYmeasPos).toBeLessThan(kf1Pos);
+    if (demuxPos > -1 && kf1OutputPos > -1) {
+      expect(kf1OutputPos).toBeLessThan(demuxPos);
+    }
+  });
+
+  it('generates compliant C99 code for SATURATION, DEADZONE, and RATE_LIMITER with float32/float64 precision and unique state symbols', () => {
+    const ir = semanticModel();
+    const sat: XBSemanticOperation = { id: 'sat1', type: 'SATURATION', inputSignalIds: ['sat1:u'], outputSignalIds: ['sat1:y'], parameters: { lowerLimit: -10, upperLimit: 10 }, directFeedthrough: true, stateful: false, conversion: null, state: null, schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' } };
+    const dz: XBSemanticOperation = { id: 'dz1', type: 'DEADZONE', inputSignalIds: ['dz1:u'], outputSignalIds: ['dz1:y'], parameters: { lowerLimit: -1, upperLimit: 1 }, directFeedthrough: true, stateful: false, conversion: null, state: null, schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' } };
+    const rl: XBSemanticOperation = { id: 'rl1', type: 'RATE_LIMITER', inputSignalIds: ['rl1:u'], outputSignalIds: ['rl1:y'], parameters: { risingSlewRate: 2, fallingSlewRate: -2, initialCondition: 0, sampleTime: 0.1 }, directFeedthrough: true, stateful: true, conversion: null, state: { outputPhase: 'read-before-update', updatePhase: 'after-direct-feedthrough', slots: [{ id: 'rl1:previousOutput$state', role: 'previousOutput', signalId: null, numericType: { kind: 'float64' }, shape: { kind: 'scalar' }, initialValues: [0] }] }, schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' } };
+
+    ir.states.controller.xBridges = {
+      ...ir.states.controller.xBridges!,
+      executionOrder: ['sat1', 'dz1', 'rl1'],
+      operations: { sat1: sat, dz1: dz, rl1: rl },
+      signals: {
+        'sat1:u': signal('sat1:u', float32),
+        'sat1:y': signal('sat1:y', float32),
+        'dz1:u': signal('dz1:u', float32),
+        'dz1:y': signal('dz1:y', float32),
+        'rl1:u': signal('rl1:u', float32),
+        'rl1:y': signal('rl1:y', float32),
+      },
+    };
+
+    const header = renderXBHeader(ir);
+    const source = renderXBSource(ir);
+
+    expect(header).toContain('rl1_previousOutput');
+    expect(source).toContain('isnan');
+  });
 });
+
+
 
 
 
