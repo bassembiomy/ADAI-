@@ -624,5 +624,19 @@ describe('validateXBModel', () => {
     expect(codes(validModel).filter(c => c === 'XB_SHAPE_MISMATCH')).toEqual([]);
     expect(codes(emptyModel)).toContain('XB_SHAPE_MISMATCH');
   });
+
+  it('validates SATURATION, DEADZONE, and RATE_LIMITER parameters and produces actionable diagnostics', () => {
+    const invalidSat = model({
+      nodes: [node('sat', 'SATURATION', { lowerLimit: 5, upperLimit: 2 })],
+    });
+    setXBConformanceStatus('T10-C99-DISCONTINUOUS', 'PASS');
+    expect(codes(invalidSat)).toContain('XB_PARAMETER_INVALID');
+
+    const invalidRl = model({
+      nodes: [node('rl', 'RATE_LIMITER', { risingSlewRate: -1, fallingSlewRate: 1, sampleTime: 0 })],
+    });
+    expect(codes(invalidRl)).toContain('XB_PARAMETER_INVALID');
+  });
 });
+
 

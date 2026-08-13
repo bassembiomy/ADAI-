@@ -500,6 +500,50 @@ export const validateXBModel = (
       ));
     }
 
+    if (node.type === 'SATURATION' || node.type === 'DEADZONE') {
+      const lower = parameters.lowerLimit ?? (node.type === 'SATURATION' ? parameters.lower : parameters.end) ?? (node.type === 'SATURATION' ? -1 : -0.5);
+      const upper = parameters.upperLimit ?? (node.type === 'SATURATION' ? parameters.upper : parameters.start) ?? (node.type === 'SATURATION' ? 1 : 0.5);
+      const lowerArr = Array.isArray(lower) ? lower : [lower];
+      const upperArr = Array.isArray(upper) ? upper : [upper];
+      
+      let valid = true;
+      for (let k = 0; k < Math.max(lowerArr.length, upperArr.length); k++) {
+        const lVal = Number(lowerArr[k % lowerArr.length]);
+        const uVal = Number(upperArr[k % upperArr.length]);
+        if (!Number.isFinite(lVal) || !Number.isFinite(uVal) || lVal > uVal) {
+          valid = false;
+          break;
+        }
+      }
+      if (!valid) {
+        diagnostics.push(diagnostic(
+          'XB_PARAMETER_INVALID',
+          `${node.type} '${node.id}' lowerLimit must be finite and <= upperLimit.`,
+          node.id,
+        ));
+      }
+    }
+
+    if (node.type === 'RATE_LIMITER') {
+      const rising = Number(parameters.risingSlewRate ?? parameters.risingLimit ?? 1);
+      const falling = parameters.fallingSlewRate !== undefined ? Number(parameters.fallingSlewRate) : (parameters.fallingLimit !== undefined ? -Math.abs(Number(parameters.fallingLimit)) : -1);
+      const initCond = parameters.initialCondition ?? 0;
+      const st = parameters.sampleTime ?? parameters.dt;
+
+      const initArr = Array.isArray(initCond) ? initCond : [initCond];
+      const initValid = initArr.every((val) => Number.isFinite(Number(val)));
+
+      const stNum = typeof st === 'number' ? st : (st === 'inherited' ? 0.1 : Number(st));
+
+      if (!Number.isFinite(rising) || rising < 0 || !Number.isFinite(falling) || falling > 0 || !initValid || !Number.isFinite(stNum) || stNum <= 0) {
+        diagnostics.push(diagnostic(
+          'XB_PARAMETER_INVALID',
+          `RATE_LIMITER '${node.id}' parameters invalid: risingSlewRate must be >= 0, fallingSlewRate <= 0, initialCondition finite, and sampleTime > 0.`,
+          node.id,
+        ));
+      }
+    }
+
     if (capability?.codegen === true) {
       for (const port of ports) {
         const allowedShapes = port.direction === 'input'
@@ -587,6 +631,22 @@ export const validateXBModel = (
             node.id,
           ));
         }
+      }
+    }
+    if (node.type === 'Register') {
+      const bitWidth = node.parameters.bitWidth;
+      if (
+        bitWidth !== undefined &&
+        (typeof bitWidth !== 'number' ||
+          !Number.isInteger(bitWidth) ||
+          bitWidth < 1 ||
+          bitWidth > 32)
+      ) {
+        diagnostics.push(diagnostic(
+          'XB_REGISTER_BITWIDTH_INVALID',
+          `Register block '${node.id}' requires bitWidth to be an integer between 1 and 32, got '${String(bitWidth)}'.`,
+          node.id,
+        ));
       }
     }
     validateFixedAndTargetTypes(node, target, diagnostics);
