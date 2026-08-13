@@ -488,6 +488,7 @@ const matrixParameter = (
 const evaluateDirectOperation = (
   runtime: XBRuntime,
   operation: XBSemanticOperation,
+  faults: XBNumericFault[] = [],
 ): readonly (readonly XBScalar[])[] => {
   const inputs = operation.inputSignalIds.map((signalId) =>
     signalValues(runtime, signalId));
@@ -797,17 +798,66 @@ const evaluateDirectOperation = (
     case 'TERMINATOR':
       return [];
     case 'SATURATION': {
-      const u = Number(inputs[0]?.[0] ?? 0);
-      const upper = Number(parameter(operation, ['upper'], 1));
-      const lower = Number(parameter(operation, ['lower'], -1));
-      return [[Math.max(lower, Math.min(upper, u))]];
+      const inputs0 = inputs[0] ?? [0];
+      const lower = parameter(operation, ['lowerLimit', 'lower'], -1);
+      const upper = parameter(operation, ['upperLimit', 'upper'], 1);
+      const lowerArr = Array.isArray(lower) ? lower.map(Number) : [Number(lower)];
+      const upperArr = Array.isArray(upper) ? upper.map(Number) : [Number(upper)];
+
+      const res = inputs0.map((uVal, idx) => {
+        const u = Number(uVal);
+        if (Number.isNaN(u)) return NaN;
+        const l = lowerArr[idx % lowerArr.length];
+        const h = upperArr[idx % upperArr.length];
+        if (u > h) return h;
+        if (u < l) return l;
+        return u;
+      });
+      return [res];
     }
     case 'DEADZONE': {
-      const u = Number(inputs[0]?.[0] ?? 0);
-      const start = Number(parameter(operation, ['start'], 0.5));
-      const end = Number(parameter(operation, ['end'], -0.5));
-      const y = u > start ? (u - start) : (u < end ? (u - end) : 0);
-      return [[y]];
+      const inputs0 = inputs[0] ?? [0];
+      const lower = parameter(operation, ['lowerLimit', 'end'], -0.5);
+      const upper = parameter(operation, ['upperLimit', 'start'], 0.5);
+      const lowerArr = Array.isArray(lower) ? lower.map(Number) : [Number(lower)];
+      const upperArr = Array.isArray(upper) ? upper.map(Number) : [Number(upper)];
+
+      const res = inputs0.map((uVal, idx) => {
+        const u = Number(uVal);
+        if (Number.isNaN(u)) return NaN;
+        const l = lowerArr[idx % lowerArr.length];
+        const h = upperArr[idx % upperArr.length];
+        if (u > h) return u - h;
+        if (u < l) return u - l;
+        return 0;
+      });
+      return [res];
+    }
+    case 'RATE_LIMITER': {
+      const prevSlot = stateSlotForRole(operation, 'previousOutput') ?? stateSlotForRole(operation, 'prev_y');
+      const uSig = inputs[0] ?? [0];
+      const prevSig = (prevSlot ? (runtime.stateSlots[prevSlot.id] ?? prevSlot.initialValues) : [0]).map(Number);
+      const rising = Number(parameter(operation, ['risingSlewRate', 'risingLimit'], 1));
+      const falling = parameter(operation, ['fallingSlewRate']) !== undefined
+        ? Number(parameter(operation, ['fallingSlewRate'], -1))
+        : -Math.abs(Number(parameter(operation, ['fallingLimit'], 1)));
+      const dt = typeof operation.parameters.sampleTime === 'number' && operation.parameters.sampleTime > 0
+        ? operation.parameters.sampleTime
+        : Number(parameter(operation, ['sampleTime', 'dt'], 1));
+
+      const maxIncrease = rising * dt;
+      const maxDecrease = falling * dt;
+
+      const yVec = uSig.map((uVal, idx) => {
+        const u = Number(uVal);
+        const prev = prevSig[idx % prevSig.length] ?? 0;
+        if (Number.isNaN(u) || Number.isNaN(prev)) return NaN;
+        const delta = u - prev;
+        if (delta > maxIncrease) return prev + maxIncrease;
+        if (delta < maxDecrease) return prev + maxDecrease;
+        return u;
+      });
+      return [yVec];
     }
     case 'LOW_PASS_FILTER': {
       const prevYSlot = stateSlotForRole(operation, 'prev_y');
@@ -896,19 +946,68 @@ const evaluateDirectOperation = (
         : t < stepTime;
       return [[beforeThreshold ? initial : final]];
     }
+    case 'Counter': {
+      const countSlot = stateSlotForRole(operation, 'count');
+      const val = countSlot ? (runtime.stateSlots[countSlot.id] ?? countSlot.initialValues)[0] ?? 0 : 0;
+      return [[val]];
+    }
+    case 'DFlipFlop':
+    case 'JKFlipFlop': {
+      const qSlot = stateSlotForRole(operation, 'q');
+      const qbarSlot = stateSlotForRole(operation, 'qbar');
+      const q = qSlot ? (runtime.stateSlots[qSlot.id] ?? qSlot.initialValues)[0] ?? 0 : 0;
+      const qbar = qbarSlot ? (runtime.stateSlots[qbarSlot.id] ?? qbarSlot.initialValues)[0] ?? 1 : (q ? 0 : 1);
+      return operation.outputSignalIds.map((signalId) => {
+        const portId = runtime.ir.signals[signalId]?.portId;
+        if (portId === 'qbar') return [qbar];
+        return [q];
+      });
+    }
+    case 'Register': {
+      const valSlot = stateSlotForRole(operation, 'value');
+      const val = valSlot ? (runtime.stateSlots[valSlot.id] ?? valSlot.initialValues)[0] ?? 0 : 0;
+      return [[val]];
+    }
     case 'SIX_STEP_COMMUTATION': {
-      const h1 = Boolean(inputs[0]?.[0] ?? 0);
-      const h2 = Boolean(inputs[1]?.[0] ?? 0);
-      const h3 = Boolean(inputs[2]?.[0] ?? 0);
+      const h1Id = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'h1') ?? operation.inputSignalIds[0];
+      const h2Id = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'h2') ?? operation.inputSignalIds[1];
+      const h3Id = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'h3') ?? operation.inputSignalIds[2];
+      const h1 = Boolean(h1Id ? (runtime.signals[h1Id]?.[0] ?? 0) : (inputs[0]?.[0] ?? 0));
+      const h2 = Boolean(h2Id ? (runtime.signals[h2Id]?.[0] ?? 0) : (inputs[1]?.[0] ?? 0));
+      const h3 = Boolean(h3Id ? (runtime.signals[h3Id]?.[0] ?? 0) : (inputs[2]?.[0] ?? 0));
       const hall = (h1 ? 4 : 0) | (h2 ? 2 : 0) | (h3 ? 1 : 0);
       let ah = 0, al = 0, bh = 0, bl = 0, ch = 0, cl = 0;
       if (hall === 5) { ah = 1; bl = 1; }      // 101: Sector 1 (AH, BL)
-      else if (hall === 4) { ah = 1; cl = 1; } // 100: Sector 2 (AH, CL)
-      else if (hall === 6) { bh = 1; cl = 1; } // 110: Sector 3 (BH, CL)
+      else if (hall === 1) { ah = 1; cl = 1; } // 001: Sector 2 (AH, CL)
+      else if (hall === 3) { bh = 1; cl = 1; } // 011: Sector 3 (BH, CL)
       else if (hall === 2) { bh = 1; al = 1; } // 010: Sector 4 (BH, AL)
-      else if (hall === 3) { ch = 1; al = 1; } // 011: Sector 5 (CH, AL)
-      else if (hall === 1) { ch = 1; bl = 1; } // 001: Sector 6 (CH, BL)
+      else if (hall === 6) { ch = 1; al = 1; } // 110: Sector 5 (CH, AL)
+      else if (hall === 4) { ch = 1; bl = 1; } // 100: Sector 6 (CH, BL)
       return [[ah], [al], [bh], [bl], [ch], [cl]];
+    }
+    case 'WaveformGen': {
+      const rawType = operation.parameters.type ?? operation.parameters.waveform ?? operation.parameters.shape ?? 'sine';
+      const type = String(rawType).toLowerCase();
+      const freq = Number(parameter(operation, ['freq', 'frequency'], 1));
+      const amp = Number(parameter(operation, ['amp', 'amplitude'], 1));
+      const phase = Number(parameter(operation, ['phase'], 0));
+      const bias = Number(parameter(operation, ['bias', 'offset'], 0));
+      const t = runtime.simTime ?? 0;
+      const arg = 2.0 * Math.PI * freq * t + phase;
+      let val = bias;
+      if (type === 'sine' || type === 'sin') {
+        val += amp * Math.sin(arg);
+      } else if (type === 'square') {
+        val += amp * (Math.sin(arg) >= 0 ? 1 : -1);
+      } else if (type === 'triangle') {
+        val += amp * (2.0 / Math.PI) * Math.asin(Math.sin(arg));
+      } else if (type === 'sawtooth') {
+        const u = freq * t + phase / (2.0 * Math.PI);
+        val += amp * (2.0 * (u - Math.floor(u)) - 1);
+      } else {
+        val += amp * Math.sin(arg);
+      }
+      return [[val]];
     }
     case 'VectorPow': {
       const baseInput = inputs[0];
@@ -967,8 +1066,10 @@ const evaluateDirectOperation = (
     case 'Clock':
     case 'CLOCK':
       return [[runtime.simTime ?? 0]];
-    case 'WaveformGen':
-      return [[0]];
+    case 'KALMAN_FILTER':
+    case 'EXTENDED_KALMAN_FILTER':
+      writeStateOutputs(runtime, operation, faults);
+      return operation.outputSignalIds.map((id) => runtime.signals[id] ?? [0]);
     default:
       throw new Error(
         `X-Bridges operation '${operation.id}' has unsupported type `
@@ -1142,14 +1243,11 @@ const pidValues = (
   return { output, iState: nextI, dState: nextD, lastE: error };
 };
 
-const writeStateOutputs = (
+function writeStateOutputs(
   runtime: XBRuntime,
   operation: XBSemanticOperation,
   faults: XBNumericFault[],
-): void => {
-  if (operation.id === 'ekf') {
-    throw new Error("Reached writeStateOutputs for EKF");
-  }
+): void {
   if (operation.type === 'WHITE_NOISE' || operation.type === 'BAND_LIMITED_NOISE') {
     const rngSlot = stateSlotForRole(operation, 'rng_state');
     const spareSlot = stateSlotForRole(operation, 'spare_normal');
@@ -1222,13 +1320,18 @@ const writeStateOutputs = (
     const xHatId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'x_hat');
     const yHatId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'y_hat');
     const innovationId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'innovation');
-    const kId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'K');
+    const kId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'K' || runtime.ir.signals[id]?.portId === 'kg');
     if (xSlot !== undefined && pSlot !== undefined) {
       const uId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'u');
       const yMeasId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'y_meas');
       const u = uId ? signalValues(runtime, uId) : [0];
       const yMeas = yMeasId ? signalValues(runtime, yMeasId) : [0];
-      const xLength = runtime.ir.signals[xSlot.signalId ?? xHatId ?? '']?.elementCount ?? 1;
+      const xLength = xSlot.shape.kind === 'vector'
+        ? xSlot.shape.length
+        : (xSlot.shape.kind === 'matrix'
+          ? xSlot.shape.rows
+          : (runtime.ir.signals[xSlot.signalId ?? xHatId ?? '']?.elementCount ?? 1));
+
       const xPrevFlat = runtime.stateSlots[xSlot.id] ?? xSlot.initialValues;
       const pPrevFlat = runtime.stateSlots[pSlot.id] ?? pSlot.initialValues;
       const type = xSlot.numericType;
@@ -1314,7 +1417,12 @@ const writeStateOutputs = (
       const yMeasId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'y_meas');
       const u = uId ? signalValues(runtime, uId).map(Number) : [0];
       const yMeas = yMeasId ? signalValues(runtime, yMeasId).map(Number) : [0];
-      const xLength = runtime.ir.signals[xSlot.signalId ?? xHatId ?? '']?.elementCount ?? 1;
+      const xLength = xSlot.shape.kind === 'vector'
+        ? xSlot.shape.length
+        : (xSlot.shape.kind === 'matrix'
+          ? xSlot.shape.rows
+          : (runtime.ir.signals[xSlot.signalId ?? xHatId ?? '']?.elementCount ?? 1));
+
       const xPrevFlat = runtime.stateSlots[xSlot.id] ?? xSlot.initialValues;
       const pPrevFlat = runtime.stateSlots[pSlot.id] ?? pSlot.initialValues;
       const type = xSlot.numericType;
@@ -1344,7 +1452,9 @@ const writeStateOutputs = (
       };
 
       const evalVec = (exprs: string | string[], xVal: number[], uVal: number[]): number[] => {
-        const scope: Record<string, number> = {};
+        const scope: Record<string, number> = {
+          dt: runtime.ir.solver.stepSeconds ?? 0.002,
+        };
         for (let i = 0; i < xVal.length; i++) scope[`x${i + 1}`] = xVal[i];
         for (let i = 0; i < uVal.length; i++) scope[`u${i + 1}`] = uVal[i];
         const arr = Array.isArray(exprs) ? exprs : [exprs];
@@ -1428,16 +1538,32 @@ const writeStateOutputs = (
     return;
   }
   if (operation.type === 'RATE_LIMITER') {
-    const prevSlot = stateSlotForRole(operation, 'prev_y');
+    const prevSlot = stateSlotForRole(operation, 'previousOutput') ?? stateSlotForRole(operation, 'prev_y');
     const outputId = operation.outputSignalIds[0];
     if (prevSlot !== undefined && outputId !== undefined) {
-      const u = Number(signalValues(runtime, operation.inputSignalIds[0] ?? '')[0] ?? 0);
-      const rising = Number(parameter(operation, ['risingLimit'], 1));
-      const falling = Number(parameter(operation, ['fallingLimit'], 1));
-      const dt = Number(parameter(operation, ['sampleTime', 'dt'], 1));
-      const prev_y = Number((runtime.stateSlots[prevSlot.id] ?? prevSlot.initialValues)[0] ?? 0);
-      const y = Math.max(prev_y - falling * dt, Math.min(prev_y + rising * dt, u));
-      writeSignal(runtime, outputId, [y], faults, operation);
+      const uSig = signalValues(runtime, operation.inputSignalIds[0] ?? '');
+      const prevSig = (runtime.stateSlots[prevSlot.id] ?? prevSlot.initialValues).map(Number);
+      const rising = Number(parameter(operation, ['risingSlewRate', 'risingLimit'], 1));
+      const falling = parameter(operation, ['fallingSlewRate']) !== undefined
+        ? Number(parameter(operation, ['fallingSlewRate'], -1))
+        : -Math.abs(Number(parameter(operation, ['fallingLimit'], 1)));
+      const dt = typeof operation.parameters.sampleTime === 'number' && operation.parameters.sampleTime > 0
+        ? operation.parameters.sampleTime
+        : Number(parameter(operation, ['sampleTime', 'dt'], 1));
+
+      const maxIncrease = rising * dt;
+      const maxDecrease = falling * dt;
+
+      const yVec = uSig.map((uVal, idx) => {
+        const u = Number(uVal);
+        const prev = prevSig[idx % prevSig.length] ?? 0;
+        if (Number.isNaN(u) || Number.isNaN(prev)) return NaN;
+        const delta = u - prev;
+        if (delta > maxIncrease) return prev + maxIncrease;
+        if (delta < maxDecrease) return prev + maxDecrease;
+        return u;
+      });
+      writeSignal(runtime, outputId, yVec, faults, operation);
     }
     return;
   }
@@ -1545,15 +1671,32 @@ const statefulUpdate = (
     };
   }
   if (operation.type === 'RATE_LIMITER') {
-    const prevSlot = stateSlotForRole(operation, 'prev_y');
-    if (prevSlot === undefined) throw new Error(`X-Bridges RATE_LIMITER '${operation.id}' requires a prev_y state slot`);
-    const u = Number(signalValues(runtime, operation.inputSignalIds[0] ?? '')[0] ?? 0);
-    const rising = Number(parameter(operation, ['risingLimit'], 1));
-    const falling = Number(parameter(operation, ['fallingLimit'], 1));
-    const dt = Number(parameter(operation, ['sampleTime', 'dt'], 1));
-    const prev_y = Number((runtime.stateSlots[prevSlot.id] ?? prevSlot.initialValues)[0] ?? 0);
-    const y = Math.max(prev_y - falling * dt, Math.min(prev_y + rising * dt, u));
-    return { [prevSlot.id]: [convertValue(y, prevSlot.numericType, faults, operation)] };
+    const prevSlot = stateSlotForRole(operation, 'previousOutput') ?? stateSlotForRole(operation, 'prev_y');
+    if (prevSlot === undefined) throw new Error(`X-Bridges RATE_LIMITER '${operation.id}' requires a previousOutput state slot`);
+    const uSig = signalValues(runtime, operation.inputSignalIds[0] ?? '');
+    const prevSig = (runtime.stateSlots[prevSlot.id] ?? prevSlot.initialValues).map(Number);
+    const rising = Number(parameter(operation, ['risingSlewRate', 'risingLimit'], 1));
+    const falling = parameter(operation, ['fallingSlewRate']) !== undefined
+      ? Number(parameter(operation, ['fallingSlewRate'], -1))
+      : -Math.abs(Number(parameter(operation, ['fallingLimit'], 1)));
+    const dt = typeof operation.parameters.sampleTime === 'number' && operation.parameters.sampleTime > 0
+      ? operation.parameters.sampleTime
+      : Number(parameter(operation, ['sampleTime', 'dt'], 1));
+
+    const maxIncrease = rising * dt;
+    const maxDecrease = falling * dt;
+
+    const nextPrev = uSig.map((uVal, idx) => {
+      const u = Number(uVal);
+      const prev = prevSig[idx % prevSig.length] ?? 0;
+      if (Number.isNaN(u) || Number.isNaN(prev)) return NaN;
+      const delta = u - prev;
+      let y = u;
+      if (delta > maxIncrease) y = prev + maxIncrease;
+      else if (delta < maxDecrease) y = prev + maxDecrease;
+      return convertValue(y, prevSlot.numericType, faults, operation);
+    });
+    return { [prevSlot.id]: nextPrev };
   }
   if (operation.type === 'RELAY') {
     const onSlot = stateSlotForRole(operation, 'current_on');
@@ -1640,6 +1783,147 @@ const statefulUpdate = (
       return updates;
     }
   }
+  if (operation.type === 'DFlipFlop') {
+    const qSlot = stateSlotForRole(operation, 'q');
+    const lastClkSlot = stateSlotForRole(operation, 'lastClk');
+    const qbarSlot = stateSlotForRole(operation, 'qbar');
+    if (!qSlot || !lastClkSlot) throw new Error(`X-Bridges DFlipFlop '${operation.id}' requires q and lastClk state slots`);
+
+    const dSigId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'd') ?? operation.inputSignalIds[0];
+    const clkSigId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'clk') ?? operation.inputSignalIds[1];
+    const rstSigId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'rst') ?? operation.inputSignalIds[2];
+
+    const d = dSigId ? Boolean(signalValues(runtime, dSigId)[0]) : false;
+    const clk = clkSigId ? Boolean(signalValues(runtime, clkSigId)[0]) : false;
+    const rst = rstSigId ? Boolean(signalValues(runtime, rstSigId)[0]) : false;
+
+    const prevQ = Number((runtime.stateSlots[qSlot.id] ?? qSlot.initialValues)[0] ?? 0);
+    const prevLastClk = Boolean((runtime.stateSlots[lastClkSlot.id] ?? lastClkSlot.initialValues)[0] ?? false);
+
+    const rising = !prevLastClk && clk;
+    let nextQ = prevQ;
+    if (rst) {
+      nextQ = 0;
+    } else if (rising) {
+      nextQ = d ? 1 : 0;
+    }
+    const nextQbar = nextQ ? 0 : 1;
+    const updates: Record<string, XBScalar[]> = {
+      [qSlot.id]: [convertValue(nextQ, qSlot.numericType, faults, operation)],
+      [lastClkSlot.id]: [convertValue(clk ? 1 : 0, lastClkSlot.numericType, faults, operation)],
+    };
+    if (qbarSlot) {
+      updates[qbarSlot.id] = [convertValue(nextQbar, qbarSlot.numericType, faults, operation)];
+    }
+    return updates;
+  }
+  if (operation.type === 'JKFlipFlop') {
+    const qSlot = stateSlotForRole(operation, 'q');
+    const lastClkSlot = stateSlotForRole(operation, 'lastClk');
+    const qbarSlot = stateSlotForRole(operation, 'qbar');
+    if (!qSlot || !lastClkSlot) throw new Error(`X-Bridges JKFlipFlop '${operation.id}' requires q and lastClk state slots`);
+
+    const jSigId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'j') ?? operation.inputSignalIds[0];
+    const kSigId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'k') ?? operation.inputSignalIds[1];
+    const clkSigId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'clk') ?? operation.inputSignalIds[2];
+    const rstSigId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'rst') ?? operation.inputSignalIds[3];
+
+    const j = jSigId ? Boolean(signalValues(runtime, jSigId)[0]) : false;
+    const k = kSigId ? Boolean(signalValues(runtime, kSigId)[0]) : false;
+    const clk = clkSigId ? Boolean(signalValues(runtime, clkSigId)[0]) : false;
+    const rst = rstSigId ? Boolean(signalValues(runtime, rstSigId)[0]) : false;
+
+    const prevQ = Number((runtime.stateSlots[qSlot.id] ?? qSlot.initialValues)[0] ?? 0);
+    const prevLastClk = Boolean((runtime.stateSlots[lastClkSlot.id] ?? lastClkSlot.initialValues)[0] ?? false);
+
+    const rising = !prevLastClk && clk;
+    let nextQ = prevQ;
+    if (rst) {
+      nextQ = 0;
+    } else if (rising) {
+      if (j && k) nextQ = prevQ ? 0 : 1;
+      else if (j) nextQ = 1;
+      else if (k) nextQ = 0;
+    }
+    const nextQbar = nextQ ? 0 : 1;
+    const updates: Record<string, XBScalar[]> = {
+      [qSlot.id]: [convertValue(nextQ, qSlot.numericType, faults, operation)],
+      [lastClkSlot.id]: [convertValue(clk ? 1 : 0, lastClkSlot.numericType, faults, operation)],
+    };
+    if (qbarSlot) {
+      updates[qbarSlot.id] = [convertValue(nextQbar, qbarSlot.numericType, faults, operation)];
+    }
+    return updates;
+  }
+  if (operation.type === 'Register') {
+    const valSlot = stateSlotForRole(operation, 'value');
+    const lastClkSlot = stateSlotForRole(operation, 'lastClk');
+    if (!valSlot || !lastClkSlot) throw new Error(`X-Bridges Register '${operation.id}' requires value and lastClk state slots`);
+
+    const dataSigId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'in' || runtime.ir.signals[id]?.portId === 'data') ?? operation.inputSignalIds[0];
+    const clkSigId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'clk') ?? operation.inputSignalIds[1];
+    const enSigId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'en') ?? operation.inputSignalIds[2];
+    const rstSigId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'rst') ?? operation.inputSignalIds[3];
+
+    const data = dataSigId ? Number(signalValues(runtime, dataSigId)[0] ?? 0) : 0;
+    const clk = clkSigId ? Boolean(signalValues(runtime, clkSigId)[0]) : false;
+    const en = enSigId ? Boolean(signalValues(runtime, enSigId)[0]) : true;
+    const rst = rstSigId ? Boolean(signalValues(runtime, rstSigId)[0]) : false;
+
+    const prevVal = Number((runtime.stateSlots[valSlot.id] ?? valSlot.initialValues)[0] ?? 0);
+    const prevLastClk = Boolean((runtime.stateSlots[lastClkSlot.id] ?? lastClkSlot.initialValues)[0] ?? false);
+
+    const bitWidth = Number(operation.parameters.bitWidth ?? 8);
+    const mask = bitWidth >= 32 ? 0xFFFFFFFF : ((1 << bitWidth) - 1);
+
+    const dataNorm = Number.isFinite(data) ? data : 0;
+    const rawData = (dataNorm | 0) >>> 0;
+
+    const rising = !prevLastClk && clk;
+    let nextVal = prevVal;
+    if (rst) {
+      nextVal = 0;
+    } else if (rising && en) {
+      nextVal = (rawData & mask) >>> 0;
+    }
+    return {
+      [valSlot.id]: [convertValue(nextVal, valSlot.numericType, faults, operation)],
+      [lastClkSlot.id]: [convertValue(clk ? 1 : 0, lastClkSlot.numericType, faults, operation)],
+    };
+  }
+  if (operation.type === 'Counter') {
+    const countSlot = stateSlotForRole(operation, 'count');
+    const lastClkSlot = stateSlotForRole(operation, 'lastClk');
+    if (!countSlot || !lastClkSlot) throw new Error(`X-Bridges Counter '${operation.id}' requires count and lastClk state slots`);
+
+    const clkSigId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'clk') ?? operation.inputSignalIds[0];
+    const enSigId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'en') ?? operation.inputSignalIds[1];
+    const rstSigId = operation.inputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'rst') ?? operation.inputSignalIds[2];
+
+    const clk = clkSigId ? Boolean(signalValues(runtime, clkSigId)[0]) : false;
+    const en = enSigId ? Boolean(signalValues(runtime, enSigId)[0]) : true;
+    const rst = rstSigId ? Boolean(signalValues(runtime, rstSigId)[0]) : false;
+
+    const prevCount = Number((runtime.stateSlots[countSlot.id] ?? countSlot.initialValues)[0] ?? 0);
+    const prevLastClk = Boolean((runtime.stateSlots[lastClkSlot.id] ?? lastClkSlot.initialValues)[0] ?? false);
+
+    const maxValue = Number(operation.parameters.maxValue ?? operation.parameters.max ?? 255);
+    const initialVal = Number(operation.parameters.initialValue ?? operation.parameters.initial ?? 0);
+    const stepVal = Number(operation.parameters.step ?? operation.parameters.stepValue ?? 1);
+
+    const rising = !prevLastClk && clk;
+    let nextCount = prevCount;
+    if (rst) {
+      nextCount = initialVal;
+    } else if (rising && en) {
+      nextCount = prevCount + stepVal;
+      if (nextCount > maxValue) nextCount = initialVal;
+    }
+    return {
+      [countSlot.id]: [convertValue(nextCount, countSlot.numericType, faults, operation)],
+      [lastClkSlot.id]: [convertValue(clk ? 1 : 0, lastClkSlot.numericType, faults, operation)],
+    };
+  }
   if (operation.inputSignalIds.length === 0 || operation.inputSignalIds[0] === undefined) return {};
   const input = signalValues(runtime, operation.inputSignalIds[0]);
   const updates: Record<string, XBScalar[]> = {};
@@ -1647,6 +1931,21 @@ const statefulUpdate = (
     const previous = runtime.stateSlots[slot.id] ?? [...slot.initialValues];
     const values = broadcast(input, previous.length, operation.id);
     switch (operation.type) {
+      case 'Counter':
+      case 'Inport':
+      case 'Outport':
+      case 'Step':
+      case 'Clock':
+      case 'CLOCK':
+      case 'SIX_STEP_COMMUTATION':
+      case 'WaveformGen':
+      case 'BAND_LIMITED_NOISE':
+      case 'KALMAN_FILTER':
+      case 'EXTENDED_KALMAN_FILTER':
+      case 'LOW_PASS_FILTER':
+      case 'HIGH_PASS_FILTER':
+      case 'MOVING_AVERAGE':
+        break;
       case 'DELAY':
       case 'UNIT_DELAY':
       case 'MEMORY':

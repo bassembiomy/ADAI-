@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import type { SemanticVariable } from './smSemanticModel';
+import { STATE_MACHINE_XB_TARGET_CAPABILITIES } from './smSemanticValidator';
 import type {
   XBSemanticModel,
   XBSemanticOperation,
@@ -358,6 +360,7 @@ describe('X-Bridges interpreter', () => {
   it('evaluates VectorPow broadcast shapes, parameter fallback, and special values (-0, NaN)', () => {
     const ir: XBSemanticModel = {
       stateId: 's1',
+      ownerState: { stateId: 's1', stateName: 's1', cIndexSymbol: 'SM_ST_S1_IDX', numericIndex: 0 },
       executionOrder: ['c_base', 'c_exp', 'pow_vec', 'pow_param', 'pow_neg3', 'pow_neg2'],
       operations: {
         c_base: operation('c_base', 'Constant', [], ['c_base:out'], { value: -0 }),
@@ -381,7 +384,7 @@ describe('X-Bridges interpreter', () => {
     };
 
     const runtime = createXBRuntime(ir);
-    stepXBState(runtime);
+    stepXBState(runtime, {});
 
     expect(runtime.signals['pow_neg3:out']?.[0]).toBe(-Infinity);
     expect(runtime.signals['pow_param:out']?.[0]).toBe(0);
@@ -391,6 +394,7 @@ describe('X-Bridges interpreter', () => {
     const vector4 = { kind: 'vector', length: 4 } as const;
     const ir: XBSemanticModel = {
       stateId: 's1',
+      ownerState: { stateId: 's1', stateName: 's1', cIndexSymbol: 'SM_ST_S1_IDX', numericIndex: 0 },
       executionOrder: ['c_vec', 'sum_op', 'mean_op', 'max_signed_zero', 'max_nan_first', 'max_nan_last'],
       operations: {
         c_vec: operation('c_vec', 'Constant', [], ['c_vec:out'], { value: [1, 2, 3, 4] }),
@@ -414,7 +418,7 @@ describe('X-Bridges interpreter', () => {
     };
 
     const runtime = createXBRuntime(ir);
-    stepXBState(runtime);
+    stepXBState(runtime, {});
 
     expect(runtime.signals['sum_op:out']?.[0]).toBe(10);
     expect(runtime.signals['mean_op:out']?.[0]).toBe(2.5);
@@ -426,6 +430,7 @@ describe('X-Bridges interpreter', () => {
     const matrix3 = { kind: 'matrix', rows: 3, columns: 3 } as const;
     const ir: XBSemanticModel = {
       stateId: 's1',
+      ownerState: { stateId: 's1', stateName: 's1', cIndexSymbol: 'SM_ST_S1_IDX', numericIndex: 0 },
       executionOrder: ['id2', 'id3'],
       operations: {
         id2: operation('id2', 'IdentityMatrix', [], ['id2:out'], { dimension: 2 }),
@@ -441,7 +446,7 @@ describe('X-Bridges interpreter', () => {
     };
 
     const runtime = createXBRuntime(ir);
-    stepXBState(runtime);
+    stepXBState(runtime, {});
 
     expect(runtime.signals['id2:out']).toEqual([1, 0, 0, 1]);
     expect(runtime.signals['id3:out']).toEqual([1, 0, 0, 0, 1, 0, 0, 0, 1]);
@@ -1347,12 +1352,12 @@ describe('X-Bridges interpreter', () => {
   it('instantiates Batch 1 discontinuities blocks with defaults', async () => {
     const { BLOCK_LIBRARY } = await import('../../engine/xbridges/BlockDefinitions');
     const sat = BLOCK_LIBRARY.SATURATION('sat', {});
-    expect(sat.params).toMatchObject({ upper: 1, lower: -1 });
+    expect(sat.params).toMatchObject({ lowerLimit: -1, upperLimit: 1 });
     const dz = BLOCK_LIBRARY.DEADZONE('dz', {});
-    expect(dz.params).toMatchObject({ start: 0.5, end: -0.5 });
+    expect(dz.params).toMatchObject({ lowerLimit: -0.5, upperLimit: 0.5 });
     const rl = BLOCK_LIBRARY.RATE_LIMITER('rl', {});
     expect(rl.isStateful).toBe(true);
-    expect(rl.params).toMatchObject({ risingLimit: 1, fallingLimit: 1, sampleTime: 1 });
+    expect(rl.params).toMatchObject({ risingSlewRate: 1, fallingSlewRate: -1, sampleTime: 'inherited' });
     const relay = BLOCK_LIBRARY.RELAY('relay', {});
     expect(relay.isStateful).toBe(true);
     expect(relay.params).toMatchObject({ switchOn: 1, switchOff: 0, initialState: false });
@@ -1385,15 +1390,42 @@ describe('X-Bridges interpreter', () => {
     expect(runtime.signals['dz:y']).toEqual([-1.5]);
   });
 
+  it('evaluates SATURATION and DEADZONE NaN, Infinity, and vector semantics', () => {
+    const sat = operation('sat', 'SATURATION', ['sat:u'], ['sat:y'], { lowerLimit: -2, upperLimit: 2 });
+    const dz = operation('dz', 'DEADZONE', ['dz:u'], ['dz:y'], { lowerLimit: -1, upperLimit: 1 });
+    const ir = model('reset', { sat, dz }, {
+      'sat:u': shapedSignal('sat:u', 'input', { kind: 'vector', length: 4 }),
+      'sat:y': shapedSignal('sat:y', 'output', { kind: 'vector', length: 4 }),
+      'dz:u': shapedSignal('dz:u', 'input', { kind: 'vector', length: 4 }),
+      'dz:y': shapedSignal('dz:y', 'output', { kind: 'vector', length: 4 }),
+    }, ['sat', 'dz']);
+
+    const runtime = createXBRuntime(ir);
+    // Vector input: [NaN, Infinity, -Infinity, 0]
+    runtime.signals['sat:u'] = [NaN, Infinity, -Infinity, 0];
+    runtime.signals['dz:u'] = [NaN, Infinity, -Infinity, 0];
+    stepXBState(runtime, {});
+
+    expect(Number.isNaN(runtime.signals['sat:y'][0])).toBe(true);
+    expect(runtime.signals['sat:y'][1]).toBe(2);
+    expect(runtime.signals['sat:y'][2]).toBe(-2);
+    expect(runtime.signals['sat:y'][3]).toBe(0);
+
+    expect(Number.isNaN(runtime.signals['dz:y'][0])).toBe(true);
+    expect(runtime.signals['dz:y'][1]).toBe(Infinity);
+    expect(runtime.signals['dz:y'][2]).toBe(-Infinity);
+    expect(runtime.signals['dz:y'][3]).toBe(0);
+  });
+
   it('T10-INT-DISCONTINUOUS evaluates RateLimiter with state', () => {
     const rl: XBSemanticOperation = {
-      ...operation('rl', 'RATE_LIMITER', ['rl:u'], ['rl:y'], { risingLimit: 1, fallingLimit: 1, sampleTime: 0.1 }),
-      directFeedthrough: false,
+      ...operation('rl', 'RATE_LIMITER', ['rl:u'], ['rl:y'], { risingSlewRate: 2, fallingSlewRate: -2, initialCondition: 1, sampleTime: 0.1 }),
+      directFeedthrough: true,
       stateful: true,
       state: {
         outputPhase: 'read-before-update',
         updatePhase: 'after-direct-feedthrough',
-        slots: [{ id: 'rl:prev_y$state', role: 'prev_y', signalId: null, numericType: { kind: 'float64' }, shape: { kind: 'scalar' }, initialValues: [0] }],
+        slots: [{ id: 'rl:previousOutput$state', role: 'previousOutput', signalId: null, numericType: { kind: 'float64' }, shape: { kind: 'scalar' }, initialValues: [1] }],
       },
       schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
     };
@@ -1402,15 +1434,29 @@ describe('X-Bridges interpreter', () => {
       'rl:y': signal('rl:y', 'output', null, { kind: 'float64' }),
     }, ['rl']);
     const runtime = createXBRuntime(ir);
-    runtime.signals['rl:u'] = [100];
+
+    // Initial state is 1. Input is 10. Max increase = 2 * 0.1 = 0.2. Output = 1.2
+    runtime.signals['rl:u'] = [10];
     stepXBState(runtime, {});
-    expect(runtime.signals['rl:y'][0]).toBeCloseTo(0.1, 10);
-    runtime.signals['rl:u'] = [100];
+    expect(runtime.signals['rl:y'][0]).toBeCloseTo(1.2, 10);
+    expect(runtime.stateSlots['rl:previousOutput$state']).toEqual([1.2]);
+
+    // Next step: state is 1.2. Input is 10. Output = 1.4
+    runtime.signals['rl:u'] = [10];
     stepXBState(runtime, {});
-    expect(runtime.signals['rl:y'][0]).toBeCloseTo(0.2, 10);
-    runtime.signals['rl:u'] = [0];
+    expect(runtime.signals['rl:y'][0]).toBeCloseTo(1.4, 10);
+    expect(runtime.stateSlots['rl:previousOutput$state']).toEqual([1.4]);
+
+    // Infinity input tests: +Infinity rises by maxIncrease from prior state (1.4 + 0.2 = 1.6)
+    runtime.signals['rl:u'] = [Infinity];
     stepXBState(runtime, {});
-    expect(runtime.signals['rl:y'][0]).toBeCloseTo(0.1, 10);
+    expect(runtime.signals['rl:y'][0]).toBeCloseTo(1.6, 10);
+
+    // NaN input tests: NaN commits NaN state
+    runtime.signals['rl:u'] = [NaN];
+    stepXBState(runtime, {});
+    expect(Number.isNaN(runtime.signals['rl:y'][0])).toBe(true);
+    expect(Number.isNaN((runtime.stateSlots['rl:previousOutput$state'] as number[])[0])).toBe(true);
   });
 
   it('T10-INT-DISCONTINUOUS evaluates Relay hysteresis', () => {
@@ -1677,6 +1723,7 @@ describe('X-Bridges interpreter', () => {
 
     const result = buildXBSemanticModel({
       stateId: 's1',
+      variables: {},
       model: {
         schemaVersion: 1,
         nodes: [cNode, lpfNode, hpfNode, maNode],
@@ -1690,7 +1737,7 @@ describe('X-Bridges interpreter', () => {
         policy: { memory: 'reset', numericFault: 'escalate' },
       },
       baseTickMs: 100,
-      target: { supportsFloat16: true, supportsFloat32: true, supportsFloat64: true, supportsFixedPoint: true },
+      target: STATE_MACHINE_XB_TARGET_CAPABILITIES,
     });
 
     expect(result.diagnostics).toHaveLength(0);
@@ -1759,6 +1806,7 @@ describe('X-Bridges interpreter', () => {
 
     const result = buildXBSemanticModel({
       stateId: 's1',
+      variables: {},
       model: {
         schemaVersion: 1,
         nodes: [cNode, lpfNode, hpfNode, maNode],
@@ -1772,7 +1820,7 @@ describe('X-Bridges interpreter', () => {
         policy: { memory: 'reset', numericFault: 'escalate' },
       },
       baseTickMs: 100,
-      target: { supportsFloat16: true, supportsFloat32: true, supportsFloat64: true, supportsFixedPoint: true },
+      target: STATE_MACHINE_XB_TARGET_CAPABILITIES,
     });
 
     expect(result.diagnostics).toHaveLength(0);
@@ -1805,5 +1853,285 @@ describe('X-Bridges interpreter', () => {
     expect(freshRuntime.stateSlots['ma:buffer$state']).toEqual([5.0, 5.0, 5.0]);
     expect(freshRuntime.stateSlots['ma:index$state']).toEqual([0]);
     expect(freshRuntime.stateSlots['hpf:prev_u$state']).toEqual([5.0]);
+  });
+
+  it('evaluates DFlipFlop state-update lowering, rising edge, reset priority, and Qbar derivation', () => {
+    const varDef = (name: string): SemanticVariable => ({ id: name, name, cName: name, type: 'double', initialValue: 0 });
+    const result = buildXBSemanticModel({
+      stateId: 's1',
+      model: {
+        schemaVersion: 1,
+        nodes: [
+          {
+            id: 'dff',
+            type: 'DFlipFlop',
+            parameters: {
+              initialCondition: 0,
+              inputs: [
+                { id: 'd', direction: 'input', dataType: 'float32', shape: 'scalar' },
+                { id: 'clk', direction: 'input', dataType: 'float32', shape: 'scalar' },
+                { id: 'rst', direction: 'input', dataType: 'float32', shape: 'scalar' },
+              ],
+              outputs: [
+                { id: 'q', direction: 'output', dataType: 'float32', shape: 'scalar' },
+                { id: 'qbar', direction: 'output', dataType: 'float32', shape: 'scalar' },
+              ],
+            },
+          },
+        ],
+        edges: [],
+        mappings: [
+          { blockId: 'dff', portId: 'd', direction: 'in', smVarId: 'd' },
+          { blockId: 'dff', portId: 'clk', direction: 'in', smVarId: 'clk' },
+          { blockId: 'dff', portId: 'rst', direction: 'in', smVarId: 'rst' },
+          { blockId: 'dff', portId: 'q', direction: 'out', smVarId: 'q' },
+          { blockId: 'dff', portId: 'qbar', direction: 'out', smVarId: 'qbar' },
+        ],
+        solver: { kind: 'euler', stepSeconds: 0.1 },
+        policy: { memory: 'reset', numericFault: 'escalate' },
+      },
+      variables: {
+        d: varDef('d'),
+        clk: varDef('clk'),
+        rst: varDef('rst'),
+        q: varDef('q'),
+        qbar: varDef('qbar'),
+      },
+      baseTickMs: 100,
+      target: STATE_MACHINE_XB_TARGET_CAPABILITIES,
+    });
+    expect(result.diagnostics).toHaveLength(0);
+    const runtime = createXBRuntime(result.ir!);
+    const state = { d: 1, clk: 0, rst: 0, q: -1, qbar: -1 };
+
+    // Initial tick: clk=0 -> outputs initial Q=0, Qbar=1
+    stepXBState(runtime, state);
+    expect(state.q).toBe(0);
+    expect(state.qbar).toBe(1);
+
+    // Rising edge: clk 0 -> 1 with d=1. Output at this step is pre-update state (0, 1)
+    state.clk = 1;
+    stepXBState(runtime, state);
+    expect(state.q).toBe(0);
+    expect(state.qbar).toBe(1);
+
+    // Next tick: Q updated to 1, Qbar to 0. Clock remains 1, d changes to 0 -> hold (no rising edge)
+    state.d = 0;
+    stepXBState(runtime, state);
+    expect(state.q).toBe(1);
+    expect(state.qbar).toBe(0);
+
+    // Falling edge: clk 1 -> 0
+    state.clk = 0;
+    stepXBState(runtime, state);
+    expect(state.q).toBe(1);
+    expect(state.qbar).toBe(0);
+
+    // Rising edge with d=0: Q updated to 0
+    state.clk = 1;
+    stepXBState(runtime, state); // pre-update output is 1
+    expect(state.q).toBe(1);
+    stepXBState(runtime, state); // next step reveals Q=0
+    expect(state.q).toBe(0);
+    expect(state.qbar).toBe(1);
+
+    // Reset assertion priority
+    state.clk = 0;
+    stepXBState(runtime, state);
+    state.clk = 1;
+    state.d = 1;
+    state.rst = 1; // reset active during rising edge
+    stepXBState(runtime, state);
+    stepXBState(runtime, state);
+    expect(state.q).toBe(0);
+    expect(state.qbar).toBe(1);
+  });
+
+  it('evaluates JKFlipFlop full truth table (Hold, Set, Reset, Toggle) and reset priority', () => {
+    const varDef = (name: string): SemanticVariable => ({ id: name, name, cName: name, type: 'double', initialValue: 0 });
+    const result = buildXBSemanticModel({
+      stateId: 's1',
+      model: {
+        schemaVersion: 1,
+        nodes: [
+          {
+            id: 'jk',
+            type: 'JKFlipFlop',
+            parameters: {
+              initialCondition: 0,
+              inputs: [
+                { id: 'j', direction: 'input', dataType: 'float32', shape: 'scalar' },
+                { id: 'k', direction: 'input', dataType: 'float32', shape: 'scalar' },
+                { id: 'clk', direction: 'input', dataType: 'float32', shape: 'scalar' },
+                { id: 'rst', direction: 'input', dataType: 'float32', shape: 'scalar' },
+              ],
+              outputs: [
+                { id: 'q', direction: 'output', dataType: 'float32', shape: 'scalar' },
+                { id: 'qbar', direction: 'output', dataType: 'float32', shape: 'scalar' },
+              ],
+            },
+          },
+        ],
+        edges: [],
+        mappings: [
+          { blockId: 'jk', portId: 'j', direction: 'in', smVarId: 'j' },
+          { blockId: 'jk', portId: 'k', direction: 'in', smVarId: 'k' },
+          { blockId: 'jk', portId: 'clk', direction: 'in', smVarId: 'clk' },
+          { blockId: 'jk', portId: 'rst', direction: 'in', smVarId: 'rst' },
+          { blockId: 'jk', portId: 'q', direction: 'out', smVarId: 'q' },
+          { blockId: 'jk', portId: 'qbar', direction: 'out', smVarId: 'qbar' },
+        ],
+        solver: { kind: 'euler', stepSeconds: 0.1 },
+        policy: { memory: 'reset', numericFault: 'escalate' },
+      },
+      variables: {
+        j: varDef('j'),
+        k: varDef('k'),
+        clk: varDef('clk'),
+        rst: varDef('rst'),
+        q: varDef('q'),
+        qbar: varDef('qbar'),
+      },
+      baseTickMs: 100,
+      target: STATE_MACHINE_XB_TARGET_CAPABILITIES,
+    });
+    expect(result.diagnostics).toHaveLength(0);
+    const runtime = createXBRuntime(result.ir!);
+    const data = { j: 1, k: 0, clk: 0, rst: 0, q: 0, qbar: 1 };
+
+    // Set (J=1, K=0) on rising edge
+    stepXBState(runtime, data);
+    data.clk = 1;
+    stepXBState(runtime, data); // pre-update Q=0
+    stepXBState(runtime, data); // committed Q=1
+    expect(data.q).toBe(1);
+    expect(data.qbar).toBe(0);
+
+    // Toggle (J=1, K=1) on rising edge -> Q becomes 0
+    data.clk = 0;
+    data.k = 1;
+    stepXBState(runtime, data);
+    data.clk = 1;
+    stepXBState(runtime, data);
+    stepXBState(runtime, data);
+    expect(data.q).toBe(0);
+    expect(data.qbar).toBe(1);
+
+    // Hold (J=0, K=0) on rising edge -> Q remains 0
+    data.clk = 0;
+    data.j = 0;
+    data.k = 0;
+    stepXBState(runtime, data);
+    data.clk = 1;
+    stepXBState(runtime, data);
+    stepXBState(runtime, data);
+    expect(data.q).toBe(0);
+    expect(data.qbar).toBe(1);
+
+    // Reset (J=0, K=1) while Q=1
+    data.clk = 0;
+    data.j = 1; // first Set to 1
+    stepXBState(runtime, data);
+    data.clk = 1;
+    stepXBState(runtime, data);
+    stepXBState(runtime, data);
+    expect(data.q).toBe(1);
+
+    data.clk = 0;
+    data.j = 0;
+    data.k = 1; // Reset
+    stepXBState(runtime, data);
+    data.clk = 1;
+    stepXBState(runtime, data);
+    stepXBState(runtime, data);
+    expect(data.q).toBe(0);
+    expect(data.qbar).toBe(1);
+  });
+
+  it('evaluates Register bitWidth=8 masking, 85 capture, enable, and reset priority', () => {
+    const varDef = (name: string): SemanticVariable => ({ id: name, name, cName: name, type: 'double', initialValue: 0 });
+    const result = buildXBSemanticModel({
+      stateId: 's1',
+      model: {
+        schemaVersion: 1,
+        nodes: [
+          {
+            id: 'reg',
+            type: 'Register',
+            parameters: {
+              bitWidth: 8,
+              initialValue: 0,
+              inputs: [
+                { id: 'in', direction: 'input', dataType: 'float32', shape: 'scalar' },
+                { id: 'clk', direction: 'input', dataType: 'float32', shape: 'scalar' },
+                { id: 'en', direction: 'input', dataType: 'float32', shape: 'scalar' },
+                { id: 'rst', direction: 'input', dataType: 'float32', shape: 'scalar' },
+              ],
+              outputs: [
+                { id: 'out', direction: 'output', dataType: 'float32', shape: 'scalar' },
+              ],
+            },
+          },
+        ],
+        edges: [],
+        mappings: [
+          { blockId: 'reg', portId: 'in', direction: 'in', smVarId: 'data' },
+          { blockId: 'reg', portId: 'clk', direction: 'in', smVarId: 'clk' },
+          { blockId: 'reg', portId: 'en', direction: 'in', smVarId: 'en' },
+          { blockId: 'reg', portId: 'rst', direction: 'in', smVarId: 'rst' },
+          { blockId: 'reg', portId: 'out', direction: 'out', smVarId: 'out' },
+        ],
+        solver: { kind: 'euler', stepSeconds: 0.1 },
+        policy: { memory: 'reset', numericFault: 'escalate' },
+      },
+      variables: {
+        data: varDef('data'),
+        clk: varDef('clk'),
+        en: varDef('en'),
+        rst: varDef('rst'),
+        out: varDef('out'),
+      },
+      baseTickMs: 100,
+      target: STATE_MACHINE_XB_TARGET_CAPABILITIES,
+    });
+    expect(result.diagnostics).toHaveLength(0);
+    const runtime = createXBRuntime(result.ir!);
+    const state = { data: 85, clk: 0, en: 1, rst: 0, out: -1 };
+
+    // Step 1: clk=0 -> outputs initial value 0
+    stepXBState(runtime, state);
+    expect(state.out).toBe(0);
+
+    // Step 2: Rising edge with data=85, en=1 -> captures 85
+    state.clk = 1;
+    stepXBState(runtime, state);
+    stepXBState(runtime, state);
+    expect(state.out).toBe(85);
+
+    // Step 3: Disabled (en=0) during rising edge with data=200 -> holds 85
+    state.clk = 0;
+    stepXBState(runtime, state);
+    state.en = 0;
+    state.data = 200;
+    state.clk = 1;
+    stepXBState(runtime, state);
+    stepXBState(runtime, state);
+    expect(state.out).toBe(85);
+
+    // Step 4: Enabled with 0x155 (341) -> masked by 0xFF to 0x55 (85)
+    state.clk = 0;
+    stepXBState(runtime, state);
+    state.en = 1;
+    state.data = 0x155; // 341
+    state.clk = 1;
+    stepXBState(runtime, state);
+    stepXBState(runtime, state);
+    expect(state.out).toBe(85); // 0x155 & 0xFF == 85
+
+    // Step 5: Reset priority -> value=0
+    state.rst = 1;
+    stepXBState(runtime, state);
+    stepXBState(runtime, state);
+    expect(state.out).toBe(0);
   });
 });
