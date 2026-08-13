@@ -145,6 +145,15 @@ export const XBRIDGES_CATEGORIES = [
     ]
   },
   {
+    name: 'Discontinuities',
+    blocks: [
+      { type: 'SATURATION', label: 'Saturation', icon: 'activity' },
+      { type: 'DEADZONE', label: 'Dead Zone', icon: 'activity' },
+      { type: 'RATE_LIMITER', label: 'Rate Limiter', icon: 'trending-up' },
+      { type: 'RELAY', label: 'Relay', icon: 'toggle-left' }
+    ]
+  },
+  {
     name: 'Logic Gates',
     blocks: [
       { type: 'AND', label: 'AND Gate', icon: 'plus' },
