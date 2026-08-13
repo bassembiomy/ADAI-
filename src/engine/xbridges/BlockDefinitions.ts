@@ -4308,47 +4308,66 @@ return block;
       };
     },
 
-      'SATURATION': (id, params) => ({
-        id, type: 'SATURATION',
-        params: { upper: params.upper ?? 1, lower: params.lower ?? -1 },
-        inputs: [createPort('u', 'u', 'input')],
-        outputs: [createPort('y', 'y', 'output')],
-        execute: (ins: any[], p: any) => ({
-          outputs: [Math.max(p.lower, Math.min(p.upper, Number(ins[0])))]
-        })
-      }),
-
-        'DEADZONE': (id, params) => ({
-          id, type: 'DEADZONE',
-          params: { start: params.start ?? 0.5, end: params.end ?? -0.5 },
+      'SATURATION': (id, params) => {
+        const lowerLimit = params.lowerLimit ?? params.lower ?? -1;
+        const upperLimit = params.upperLimit ?? params.upper ?? 1;
+        return {
+          id, type: 'SATURATION',
+          params: { lowerLimit, upperLimit },
           inputs: [createPort('u', 'u', 'input')],
           outputs: [createPort('y', 'y', 'output')],
           execute: (ins: any[], p: any) => {
             const u = Number(ins[0]);
-            const y = u > p.start ? (u - p.start) : (u < p.end ? (u - p.end) : 0);
+            if (Number.isNaN(u)) return { outputs: [NaN] };
+            return { outputs: [Math.max(p.lowerLimit, Math.min(p.upperLimit, u))] };
+          }
+        };
+      },
+
+      'DEADZONE': (id, params) => {
+        const lowerLimit = params.lowerLimit ?? params.end ?? -0.5;
+        const upperLimit = params.upperLimit ?? params.start ?? 0.5;
+        return {
+          id, type: 'DEADZONE',
+          params: { lowerLimit, upperLimit },
+          inputs: [createPort('u', 'u', 'input')],
+          outputs: [createPort('y', 'y', 'output')],
+          execute: (ins: any[], p: any) => {
+            const u = Number(ins[0]);
+            if (Number.isNaN(u)) return { outputs: [NaN] };
+            const y = u > p.upperLimit ? (u - p.upperLimit) : (u < p.lowerLimit ? (u - p.lowerLimit) : 0);
             return { outputs: [y] };
           }
-        }),
+        };
+      },
 
-          'RATE_LIMITER': (id, params) => ({
-            id, type: 'RATE_LIMITER',
-            isStateful: true,
-            params: {
-              risingLimit: params.risingLimit ?? 1,
-              fallingLimit: params.fallingLimit ?? 1,
-              sampleTime: params.sampleTime ?? params.dt ?? 1,
-            },
-            inputs: [createPort('u', 'u', 'input')],
-            outputs: [createPort('y', 'y', 'output')],
-            state: { prev_y: 0 },
-            execute: (ins: any[], p: any, state: any) => {
-              const dt = Number(p.sampleTime);
-              const u = Number(ins[0]);
-              const y = Math.max(state.prev_y - p.fallingLimit * dt,
-                Math.min(state.prev_y + p.risingLimit * dt, u));
-              return { outputs: [y], nextState: { prev_y: y } };
-            }
-          }),
+      'RATE_LIMITER': (id, params) => {
+        const risingSlewRate = params.risingSlewRate ?? params.risingLimit ?? 1;
+        const fallingSlewRate = params.fallingSlewRate ?? (params.fallingLimit !== undefined ? -Math.abs(params.fallingLimit) : -1);
+        const initialCondition = params.initialCondition ?? 0;
+        const sampleTime = params.sampleTime ?? params.dt ?? 'inherited';
+        return {
+          id, type: 'RATE_LIMITER',
+          isStateful: true,
+          params: { risingSlewRate, fallingSlewRate, initialCondition, sampleTime },
+          inputs: [createPort('u', 'u', 'input')],
+          outputs: [createPort('y', 'y', 'output')],
+          state: { previousOutput: initialCondition },
+          execute: (ins: any[], p: any, state: any) => {
+            const dt = Number(p.sampleTime) || 1;
+            const u = Number(ins[0]);
+            const prev = state.previousOutput ?? initialCondition;
+            if (Number.isNaN(u) || Number.isNaN(prev)) return { outputs: [NaN], nextState: { previousOutput: NaN } };
+            const maxIncrease = p.risingSlewRate * dt;
+            const maxDecrease = p.fallingSlewRate * dt;
+            const delta = u - prev;
+            let y = u;
+            if (delta > maxIncrease) y = prev + maxIncrease;
+            else if (delta < maxDecrease) y = prev + maxDecrease;
+            return { outputs: [y], nextState: { previousOutput: y } };
+          }
+        };
+      },
 
             'RELAY': (id, params) => ({
               id, type: 'RELAY',

@@ -2358,4 +2358,28 @@ describe('X-Bridges Learning Models Block Tests', () => {
     });
   });
 
+  describe('Nonlinear Discontinuity Blocks (SATURATION, DEADZONE, RATE_LIMITER)', () => {
+    it('defines SATURATION, DEADZONE, and RATE_LIMITER with canonical default parameters and legacy fallbacks', () => {
+      const sat = BLOCK_LIBRARY.SATURATION('sat', {});
+      expect(sat.params).toEqual({ lowerLimit: -1, upperLimit: 1 });
+
+      const dz = BLOCK_LIBRARY.DEADZONE('dz', {});
+      expect(dz.params).toEqual({ lowerLimit: -0.5, upperLimit: 0.5 });
+
+      const rl = BLOCK_LIBRARY.RATE_LIMITER('rl', {});
+      expect(rl.params).toEqual({ risingSlewRate: 1, fallingSlewRate: -1, initialCondition: 0, sampleTime: 'inherited' });
+
+      // Legacy fallback parameters
+      const satLegacy = BLOCK_LIBRARY.SATURATION('sat_leg', { lower: -2, upper: 2 });
+      expect(satLegacy.params).toEqual({ lowerLimit: -2, upperLimit: 2 });
+
+      const dzLegacy = BLOCK_LIBRARY.DEADZONE('dz_leg', { start: 0.8, end: -0.8 });
+      expect(dzLegacy.params).toEqual({ lowerLimit: -0.8, upperLimit: 0.8 });
+
+      const rlLegacy = BLOCK_LIBRARY.RATE_LIMITER('rl_leg', { risingLimit: 2, fallingLimit: 3, dt: 0.05 });
+      expect(rlLegacy.params).toEqual({ risingSlewRate: 2, fallingSlewRate: -3, initialCondition: 0, sampleTime: 0.05 });
+    });
+  });
+
 });
+
