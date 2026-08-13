@@ -235,4 +235,32 @@ describe('xbShapeResolver', () => {
       elementCount: 9,
     });
   });
+
+  it('infers output shape and broadcasts scalar parameters to vector shape for SATURATION, DEADZONE, and RATE_LIMITER', () => {
+    const model: XBPersistedModelV1 = {
+      ...createBaseModel(),
+      nodes: [
+        {
+          id: 'vec_in',
+          type: 'Constant',
+          parameters: { outputs: [{ id: 'out', shape: 'vector', dimensions: [4] }] },
+        },
+        { id: 'sat', type: 'SATURATION', parameters: { lowerLimit: -1, upperLimit: 1 } },
+        { id: 'dz', type: 'DEADZONE', parameters: { lowerLimit: -0.5, upperLimit: 0.5 } },
+        { id: 'rl', type: 'RATE_LIMITER', parameters: { risingSlewRate: 1, fallingSlewRate: -1, initialCondition: 0, sampleTime: 0.1 } },
+      ],
+      edges: [
+        { id: 'e1', sourceNodeId: 'vec_in', sourcePortId: 'out', targetNodeId: 'sat', targetPortId: 'u' },
+        { id: 'e2', sourceNodeId: 'vec_in', sourcePortId: 'out', targetNodeId: 'dz', targetPortId: 'u' },
+        { id: 'e3', sourceNodeId: 'vec_in', sourcePortId: 'out', targetNodeId: 'rl', targetPortId: 'u' },
+      ],
+    };
+
+    const result = resolveGraphShapes(model);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.portShapes.get('sat:y')).toEqual<SemanticShape>({ kind: 'vector', dimensions: [4], elementCount: 4 });
+    expect(result.portShapes.get('dz:y')).toEqual<SemanticShape>({ kind: 'vector', dimensions: [4], elementCount: 4 });
+    expect(result.portShapes.get('rl:y')).toEqual<SemanticShape>({ kind: 'vector', dimensions: [4], elementCount: 4 });
+  });
 });
+

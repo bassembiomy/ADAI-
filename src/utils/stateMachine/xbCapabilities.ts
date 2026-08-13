@@ -35,7 +35,7 @@ export const XB_INTERPRETER_CONFORMANCE_CASE_IDS = [
   'T10-INT-FILTERS', 'T10-INT-REDUCTIONS', 'T10-INT-IDENTITY-MATRIX',
   'T10-INT-PID-CONTROLLER', 'T10-INT-SIX-STEP', 'T10-INT-NOISE',
   'T10-INT-FLIPFLOPS', 'T10-INT-REGISTER-COUNTER', 'T10-INT-WAVEFORMS',
-  'subsystem_gain_sum',
+  'XB-W5-KALMAN', 'subsystem_gain_sum',
 ] as const;
 
 export const XB_C_CONFORMANCE_CASE_IDS = [
@@ -46,7 +46,7 @@ export const XB_C_CONFORMANCE_CASE_IDS = [
   'T14-C99-STATEFUL', 'T14-C99-CONTINUOUS', 'T14-C99-STEP',
   'T10-C99-FILTERS', 'T10-C99-VECTOR-POW', 'T10-C99-REDUCTIONS', 'T10-C99-IDENTITY-MATRIX',
   'T10-C99-PID-CONTROLLER', 'T10-C99-SIX-STEP', 'T10-C99-FLIPFLOPS', 'T10-C99-REGISTER-COUNTER',
-  'T10-C99-WAVEFORMS', 'XB-W5-NOISE', 'subsystem_gain_sum',
+  'T10-C99-WAVEFORMS', 'XB-W5-NOISE', 'XB-W5-KALMAN', 'subsystem_gain_sum',
 ] as const;
 
 export interface XBConformanceCoverage {
@@ -138,6 +138,7 @@ export const XB_INTERPRETER_CONFORMANCE_CASES: Readonly<Record<
   'T10-INT-SIX-STEP': [scalarCoverage('SIX_STEP_COMMUTATION')],
   'T10-INT-PID-CONTROLLER': [scalarCoverage('PID_CONTROLLER')],
   'T10-INT-NOISE': [shapedCoverage('WHITE_NOISE', [], ['scalar']), shapedCoverage('BAND_LIMITED_NOISE', [], ['scalar'])],
+  'XB-W5-KALMAN': [shapedCoverage('KALMAN_FILTER', ['vector', 'matrix'])],
   'T10-INT-DISCONTINUOUS': DISCONTINUOUS_COVERAGE,
   'T14-INT-DISCONTINUOUS': DISCONTINUOUS_COVERAGE,
   'T14-INT-CORE-DIRECT': CORE_SCALAR_COVERAGE,
@@ -314,9 +315,7 @@ const UNCLASSIFIED_HOST_ONLY = hostOnlySet([
 
 
 
-const UNPAIRED_EMBEDDED_OPERATIONS = hostOnlySet([
-  'KALMAN_FILTER',
-], 'The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage.');
+const UNPAIRED_EMBEDDED_OPERATIONS = hostOnlySet([], 'The canonical interpreter and generated-C paths do not yet have paired executable conformance coverage.');
 
 /**
  * Embedded-safe X-Bridges block types. This registry is declarative and never
@@ -433,7 +432,7 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   INTEGRATOR_DISCRETE: stateful(scalar, undefined, ['T14-INT-STATEFUL'], ['T14-C99-STATEFUL']),
   INTEGRATOR_CONTINUOUS: stateful(scalar, undefined, ['T14-INT-CONTINUOUS'], ['T14-C99-CONTINUOUS']),
   Integrator: stateful(scalar, undefined, ['T14-INT-CONTINUOUS'], ['T14-C99-CONTINUOUS']),
-  KALMAN_FILTER: stateful(
+  KALMAN_FILTER: statefulDirect(
     vectorOrMatrix, undefined,
     ['XB-W5-KALMAN'], ['XB-W5-KALMAN']
   ),
@@ -449,9 +448,9 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   STATE_SPACE: stateful(['vector'], undefined, ['T10-INT-DISCRETE-REALIZATION'], ['T10-C99-DISCRETE-REALIZATION']),
 
   // Discontinuities: saturation, dead zone, rate limiter, and relay.
-  SATURATION: direct(scalar, ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
-  DEADZONE: direct(scalar, ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
-  RATE_LIMITER: stateful(scalar, ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
+  SATURATION: direct(['scalar', 'vector'], ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
+  DEADZONE: direct(['scalar', 'vector'], ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
+  RATE_LIMITER: stateful(['scalar', 'vector'], ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
   RELAY: stateful(scalar, undefined, ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
 
   // Motor-control transforms, covered against fixed reference vectors in both

@@ -141,6 +141,9 @@ const extractPortMeta = (node: XBNodeV1): RawPortMeta[] => {
     if (!hasOutput) ports.push({ id: 'out', direction: 'output' });
   } else if (node.type === 'Constant' || node.type === 'Step') {
     if (!hasOutput) ports.push({ id: 'out', direction: 'output' });
+  } else if (['SATURATION', 'DEADZONE', 'RATE_LIMITER'].includes(node.type)) {
+    if (!hasInput) ports.push({ id: 'u', direction: 'input' });
+    if (!hasOutput) ports.push({ id: 'y', direction: 'output' });
   }
 
   return ports;
