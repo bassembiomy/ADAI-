@@ -110,9 +110,9 @@ const TRANSFORM_COVERAGE: readonly XBConformanceCoverage[] =
     .map(scalarCoverage);
 
 const DISCONTINUOUS_COVERAGE: readonly XBConformanceCoverage[] = [
-  scalarCoverage('SATURATION'),
-  scalarCoverage('DEADZONE'),
-  scalarCoverage('RATE_LIMITER'),
+  shapedCoverage('SATURATION', ['scalar', 'vector']),
+  shapedCoverage('DEADZONE', ['scalar', 'vector']),
+  shapedCoverage('RATE_LIMITER', ['scalar', 'vector']),
   scalarCoverage('RELAY'),
 ];
 
@@ -196,6 +196,7 @@ const direct = (
   interpreterConformanceCaseIds: readonly string[] = ['T14-INT-CORE-DIRECT'],
   cConformanceCaseIds: readonly string[] = ['T14-C99-CORE-DIRECT'],
   directionalShapes: Pick<XBBlockCapability, 'inputShapes' | 'outputShapes'> = {},
+  pairedConformanceCaseIds: readonly string[] = [],
 ): XBCodegenCapability => ({
   codegen: true,
   directFeedthrough: true,
@@ -203,6 +204,7 @@ const direct = (
   requiredTargetCapabilities,
   interpreterConformanceCaseIds,
   cConformanceCaseIds,
+  pairedConformanceCaseIds,
   ...directionalShapes,
 });
 
@@ -448,9 +450,9 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   STATE_SPACE: stateful(['vector'], undefined, ['T10-INT-DISCRETE-REALIZATION'], ['T10-C99-DISCRETE-REALIZATION']),
 
   // Discontinuities: saturation, dead zone, rate limiter, and relay.
-  SATURATION: direct(['scalar', 'vector'], ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
-  DEADZONE: direct(['scalar', 'vector'], ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
-  RATE_LIMITER: stateful(['scalar', 'vector'], ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
+  SATURATION: direct(['scalar', 'vector'], ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS'], {}, ['T10-PAIRED-DISCONTINUOUS']),
+  DEADZONE: direct(['scalar', 'vector'], ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS'], {}, ['T10-PAIRED-DISCONTINUOUS']),
+  RATE_LIMITER: statefulDirect(['scalar', 'vector'], ['math-library'], ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS'], {}, ['T10-PAIRED-DISCONTINUOUS']),
   RELAY: stateful(scalar, undefined, ['T10-INT-DISCONTINUOUS'], ['T10-C99-DISCONTINUOUS']),
 
   // Motor-control transforms, covered against fixed reference vectors in both

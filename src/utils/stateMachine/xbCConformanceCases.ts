@@ -118,9 +118,9 @@ const TRANSFORM_COVERAGE: readonly XBConformanceCoverage[] = [
 ].map(scalarCoverage);
 
 const DISCONTINUOUS_COVERAGE: readonly XBConformanceCoverage[] = [
-  scalarCoverage('SATURATION'),
-  scalarCoverage('DEADZONE'),
-  scalarCoverage('RATE_LIMITER'),
+  shapedCoverage('SATURATION', ['scalar', 'vector']),
+  shapedCoverage('DEADZONE', ['scalar', 'vector']),
+  shapedCoverage('RATE_LIMITER', ['scalar', 'vector']),
   scalarCoverage('RELAY'),
 ];
 
@@ -407,12 +407,30 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
     coverage: DISCONTINUOUS_COVERAGE,
     fixture: makeXBridgesFixture(
       [
-        createNode('c1', 'Constant', { value: -0.5 }),
-        createNode('dz1', 'DEADZONE', { lowerLimit: -1, upperLimit: 1 }),
+        createNode('c_s', 'Constant', { value: 1.5 }),
+        createNode('c_v', 'Constant', { value: [1.5, -2.0] }),
+        createNode('sat1', 'SATURATION', { lowerLimit: -1, upperLimit: 1 }),
+        createNode('sat2', 'SATURATION', { lowerLimit: -1, upperLimit: 1 }),
+        createNode('dz1', 'DEADZONE', { lowerLimit: -0.5, upperLimit: 0.5 }),
+        createNode('dz2', 'DEADZONE', { lowerLimit: -0.5, upperLimit: 0.5 }),
+        createNode('rl1', 'RATE_LIMITER', { risingSlewRate: 2, fallingSlewRate: -2, initialCondition: 0, sampleTime: 0.1 }),
+        createNode('rl2', 'RATE_LIMITER', { risingSlewRate: 2, fallingSlewRate: -2, initialCondition: 0, sampleTime: 0.1 }),
+        createNode('relay1', 'RELAY', { switchOn: 1, switchOff: 0 }),
       ],
       [
-        { id: 'e1', sourceNodeId: 'c1', sourcePortId: 'out', targetNodeId: 'dz1', targetPortId: 'u' },
+        { id: 'e1', sourceNodeId: 'c_s', sourcePortId: 'out', targetNodeId: 'sat1', targetPortId: 'u' },
+        { id: 'e2', sourceNodeId: 'c_v', sourcePortId: 'out', targetNodeId: 'sat2', targetPortId: 'u' },
+        { id: 'e3', sourceNodeId: 'c_s', sourcePortId: 'out', targetNodeId: 'dz1', targetPortId: 'u' },
+        { id: 'e4', sourceNodeId: 'c_v', sourcePortId: 'out', targetNodeId: 'dz2', targetPortId: 'u' },
+        { id: 'e5', sourceNodeId: 'c_s', sourcePortId: 'out', targetNodeId: 'rl1', targetPortId: 'u' },
+        { id: 'e6', sourceNodeId: 'c_v', sourcePortId: 'out', targetNodeId: 'rl2', targetPortId: 'u' },
+        { id: 'e7', sourceNodeId: 'c_s', sourcePortId: 'out', targetNodeId: 'relay1', targetPortId: 'u' },
       ],
+      [],
+      [
+        { kind: 'step' },
+        { kind: 'step' },
+      ]
     ),
     tolerance: DEFAULT_TOLERANCE,
   },
@@ -683,6 +701,51 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
     ),
     tolerance: DEFAULT_TOLERANCE,
   },
+  'XB-W5-KALMAN': {
+    id: 'XB-W5-KALMAN',
+    coverage: [
+      shapedCoverage('KALMAN_FILTER', ['vector', 'matrix']),
+    ],
+    fixture: makeXBridgesFixture(
+      [
+        createNode('c_u', 'Constant', { value: [0.0] }),
+        createNode('c_ymeas', 'Constant', { value: [0.0] }),
+        createNode('kf1', 'KALMAN_FILTER', {
+          A: [[1.0, 0.1], [0.0, 1.0]],
+          B: [[0.005], [0.1]],
+          C: [[1.0, 0.0]],
+          D: [[0.0]],
+          Q: [[0.01, 0.0], [0.0, 0.01]],
+          R: [[0.1]],
+          P0: [[1.0, 0.0], [0.0, 1.0]],
+          x0: [0.0, 0.0],
+          inputs: [
+            { id: 'u', direction: 'input', shape: 'vector', dimensions: [1] },
+            { id: 'y_meas', direction: 'input', shape: 'vector', dimensions: [1] },
+          ],
+          outputs: [
+            { id: 'x_hat', direction: 'output', shape: 'vector', dimensions: [2] },
+            { id: 'y_hat', direction: 'output', shape: 'vector', dimensions: [1] },
+            { id: 'innovation', direction: 'output', shape: 'vector', dimensions: [1] },
+            { id: 'kg', direction: 'output', shape: 'vector', dimensions: [2] },
+          ],
+        }),
+      ],
+      [
+        { id: 'e1', sourceNodeId: 'c_u', sourcePortId: 'out', targetNodeId: 'kf1', targetPortId: 'u' },
+        { id: 'e2', sourceNodeId: 'c_ymeas', sourcePortId: 'out', targetNodeId: 'kf1', targetPortId: 'y_meas' },
+      ],
+      [],
+      [
+        { kind: 'step' },
+        { kind: 'step' },
+        { kind: 'step' },
+        { kind: 'step' },
+        { kind: 'step' },
+      ],
+    ),
+    tolerance: DEFAULT_TOLERANCE,
+  },
   'T10-C99-VECTOR-POW': {
     id: 'T10-C99-VECTOR-POW',
     coverage: [
@@ -778,6 +841,31 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
         { id: 'e2', sourceNodeId: 'in1', sourcePortId: 'out', targetNodeId: 'gain1', targetPortId: 'u' },
         { id: 'e3', sourceNodeId: 'gain1', sourcePortId: 'y', targetNodeId: 'out1', targetPortId: 'in' },
       ],
+    ),
+    tolerance: DEFAULT_TOLERANCE,
+  },
+
+  'T10-PAIRED-DISCONTINUOUS': {
+    id: 'T10-PAIRED-DISCONTINUOUS',
+    coverage: DISCONTINUOUS_COVERAGE,
+    fixture: makeXBridgesFixture(
+      [
+        createNode('c_in', 'Constant', { value: 2.0 }),
+        createNode('sat1', 'SATURATION', { lowerLimit: -1.0, upperLimit: 1.0 }),
+        createNode('dz1', 'DEADZONE', { lowerLimit: -0.5, upperLimit: 0.5 }),
+        createNode('rl1', 'RATE_LIMITER', { risingSlewRate: 1.0, fallingSlewRate: -1.0, initialCondition: 0.0, sampleTime: 0.1 }),
+      ],
+      [
+        { id: 'e1', sourceNodeId: 'c_in', sourcePortId: 'out', targetNodeId: 'sat1', targetPortId: 'u' },
+        { id: 'e2', sourceNodeId: 'c_in', sourcePortId: 'out', targetNodeId: 'dz1', targetPortId: 'u' },
+        { id: 'e3', sourceNodeId: 'c_in', sourcePortId: 'out', targetNodeId: 'rl1', targetPortId: 'u' },
+      ],
+      [],
+      [
+        { kind: 'step' },
+        { kind: 'step' },
+        { kind: 'step' },
+      ]
     ),
     tolerance: DEFAULT_TOLERANCE,
   },
