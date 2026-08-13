@@ -138,7 +138,7 @@ describe('buildXBSemanticModel', () => {
     expect(result.ir!.ownerState).toEqual(ownerState);
     expect(result.ir!.mappings).toHaveLength(1);
     expect(result.ir!.mappings[0].sourceVariableId).toBe('xb_output');
-    expect(result.ir!.mappings[0].variable.cIdentifier).toBe('xb_output');
+    expect(result.ir!.mappings[0].variable?.cIdentifier).toBe('xb_output');
   });
 
   it('does not invent an Outport mapping for an unknown state-machine variable', () => {
@@ -493,7 +493,9 @@ describe('buildXBSemanticModel', () => {
   it('T14-INT-DISCONTINUOUS adds Semantic State Slots for Stateful Blocks (RateLimiter and Relay)', () => {
     const xbModel = model({
       nodes: [
-        node('rl', 'RATE_LIMITER', [port('u', 'input')], [port('y', 'output')]),
+        node('rl', 'RATE_LIMITER', [port('u', 'input')], [port('y', 'output')], { risingLimit: 2, fallingLimit: 3, initialCondition: 5, sampleTime: 0.1 }),
+        node('sat', 'SATURATION', [port('u', 'input')], [port('y', 'output')], { lower: -3, upper: 3 }),
+        node('dz', 'DEADZONE', [port('u', 'input')], [port('y', 'output')], { start: 0.8, end: -0.8 }),
         node('relay', 'RELAY', [port('u', 'input')], [port('y', 'output', { dataType: 'boolean' })], { initialState: false }),
       ],
       edges: [],
@@ -501,16 +503,30 @@ describe('buildXBSemanticModel', () => {
 
     const result = build(xbModel);
     expect(result.diagnostics).toEqual([]);
-    const rlState = result.ir?.operations.rl.state;
+
+    const rlOp = result.ir?.operations.rl;
+    expect(rlOp?.parameters.risingSlewRate).toBe(2);
+    expect(rlOp?.parameters.fallingSlewRate).toBe(-3);
+    expect(rlOp?.parameters.initialCondition).toBe(5);
+
+    const rlState = rlOp?.state;
     expect(rlState).toBeDefined();
     expect(rlState?.slots).toEqual([{
-      id: 'rl:prev_y$state',
-      role: 'prev_y',
+      id: 'rl:previousOutput$state',
+      role: 'previousOutput',
       signalId: null,
-      numericType: { kind: 'float64' },
+      numericType: { kind: 'float32' },
       shape: { kind: 'scalar' },
-      initialValues: [0],
+      initialValues: [5],
     }]);
+
+    const satOp = result.ir?.operations.sat;
+    expect(satOp?.parameters.lowerLimit).toBe(-3);
+    expect(satOp?.parameters.upperLimit).toBe(3);
+
+    const dzOp = result.ir?.operations.dz;
+    expect(dzOp?.parameters.lowerLimit).toBe(-0.8);
+    expect(dzOp?.parameters.upperLimit).toBe(0.8);
 
     const relayState = result.ir?.operations.relay.state;
     expect(relayState).toBeDefined();
@@ -1018,7 +1034,83 @@ describe('buildXBSemanticModel', () => {
         expect.objectContaining({ code: 'XB_DELAY_LENGTH_INVALID' }),
       );
     });
+
+    it('infers 2-state vector/matrix shapes for KALMAN_FILTER', () => {
+      const xbModel = model({
+        nodes: [
+          node(
+            'kf1',
+            'KALMAN_FILTER',
+            [
+              port('u', 'input'),
+              port('y_meas', 'input'),
+            ],
+            [
+              port('x_hat', 'output'),
+              port('y_hat', 'output'),
+              port('innovation', 'output'),
+              port('kg', 'output'),
+            ],
+            {
+              A: [[1.0, 0.1], [0.0, 1.0]],
+              B: [[0.005], [0.1]],
+              C: [[1.0, 0.0]],
+              D: [[0.0]],
+              Q: [[0.01, 0.0], [0.0, 0.01]],
+              R: [[0.1]],
+              P0: [[1.0, 0.0], [0.0, 1.0]],
+              x0: [0.0, 0.0],
+            },
+          ),
+        ],
+      });
+
+      const result = build(xbModel);
+      expect(result.diagnostics).toEqual([]);
+      expect(result.ir).toBeDefined();
+
+      const op = result.ir!.operations.kf1;
+      const xSlot = op.state?.slots.find((s) => s.role === 'x');
+      const pSlot = op.state?.slots.find((s) => s.role === 'P');
+
+      expect(xSlot).toBeDefined();
+      expect(xSlot!.shape).toEqual({ kind: 'vector', length: 2 });
+      expect(pSlot).toBeDefined();
+      expect(pSlot!.shape).toEqual({ kind: 'matrix', rows: 2, columns: 2 });
+
+      const xHatSig = result.ir!.signals['kf1:x_hat'];
+      expect(xHatSig).toBeDefined();
+      expect(xHatSig.elementCount).toBe(2);
+
+      const kgSig = result.ir!.signals['kf1:kg'];
+      expect(kgSig).toBeDefined();
+      expect(kgSig.elementCount).toBe(2);
+    });
+
+    it('emits diagnostic if KALMAN_FILTER parameters have mismatched dimensions', () => {
+      const xbModel = model({
+        nodes: [
+          node(
+            'kf1',
+            'KALMAN_FILTER',
+            [port('u', 'input'), port('y_meas', 'input')],
+            [port('x_hat', 'output')],
+            {
+              A: [[1.0, 0.1], [0.0, 1.0]], // 2x2
+              P0: [[1.0]], // 1x1 -> mismatch!
+            },
+          ),
+        ],
+      });
+
+      const result = build(xbModel);
+      expect(result.ir).toBeUndefined();
+      expect(result.diagnostics).toContainEqual(
+        expect.objectContaining({ code: 'XB_KALMAN_DIMENSION_MISMATCH' }),
+      );
+    });
   });
 });
+
 
 

@@ -64,6 +64,88 @@ const diagnostic = (
   severity: 'error',
 });
 
+interface KalmanDimensions {
+  readonly nStates: number;
+  readonly nMeas: number;
+  readonly nInputs: number;
+  readonly error?: string;
+}
+
+const resolveKalmanDimensions = (node: XBNodeV1): KalmanDimensions => {
+  const p = node.parameters;
+  let nStates: number | null = null;
+  let nMeas: number | null = null;
+  let nInputs: number | null = null;
+
+  if (node.type === 'KALMAN_FILTER') {
+    if (Array.isArray(p.A) && p.A.length > 0) {
+      nStates = p.A.length;
+      if (Array.isArray(p.A[0]) && p.A[0].length !== nStates) {
+        return { nStates: 1, nMeas: 1, nInputs: 1, error: `Kalman Filter '${node.id}' matrix A must be square ${nStates}x${nStates}` };
+      }
+    }
+    if (Array.isArray(p.P0) && p.P0.length > 0) {
+      const p0Rows = p.P0.length;
+      if (nStates !== null && p0Rows !== nStates) {
+        return { nStates: 1, nMeas: 1, nInputs: 1, error: `Kalman Filter '${node.id}' matrix P0 dimension ${p0Rows} mismatch with state dimension ${nStates}` };
+      }
+      nStates ??= p0Rows;
+    }
+    if (Array.isArray(p.x0) && p.x0.length > 0) {
+      const x0Len = p.x0.length;
+      if (nStates !== null && x0Len !== nStates) {
+        return { nStates: 1, nMeas: 1, nInputs: 1, error: `Kalman Filter '${node.id}' vector x0 dimension ${x0Len} mismatch with state dimension ${nStates}` };
+      }
+      nStates ??= x0Len;
+    }
+    if (Array.isArray(p.Q) && p.Q.length > 0) {
+      const qRows = p.Q.length;
+      if (nStates !== null && qRows !== nStates) {
+        return { nStates: 1, nMeas: 1, nInputs: 1, error: `Kalman Filter '${node.id}' matrix Q dimension ${qRows} mismatch with state dimension ${nStates}` };
+      }
+      nStates ??= qRows;
+    }
+
+    if (Array.isArray(p.C) && p.C.length > 0) {
+      nMeas = p.C.length;
+    }
+    if (Array.isArray(p.R) && p.R.length > 0) {
+      const rRows = p.R.length;
+      if (nMeas !== null && rRows !== nMeas) {
+        return { nStates: 1, nMeas: 1, nInputs: 1, error: `Kalman Filter '${node.id}' matrix R dimension ${rRows} mismatch with measurement dimension ${nMeas}` };
+      }
+      nMeas ??= rRows;
+    }
+
+    if (Array.isArray(p.B) && p.B.length > 0) {
+      if (Array.isArray(p.B[0])) {
+        nInputs = p.B[0].length;
+      }
+    }
+  } else if (node.type === 'EXTENDED_KALMAN_FILTER') {
+    if (Array.isArray(p.f) && p.f.length > 0) {
+      nStates = p.f.length;
+    }
+    if (Array.isArray(p.P0) && p.P0.length > 0) {
+      const p0Rows = p.P0.length;
+      if (nStates !== null && p0Rows !== nStates) {
+        return { nStates: 1, nMeas: 1, nInputs: 1, error: `EKF '${node.id}' matrix P0 dimension ${p0Rows} mismatch with state dimension ${nStates}` };
+      }
+      nStates ??= p0Rows;
+    }
+    if (Array.isArray(p.h) && p.h.length > 0) {
+      nMeas = p.h.length;
+    }
+  }
+
+  return {
+    nStates: nStates ?? 1,
+    nMeas: nMeas ?? 1,
+    nInputs: nInputs ?? 1,
+  };
+};
+
+
 const cloneParameterValue = (value: XBParameterValue): XBParameterValue => {
   if (Array.isArray(value)) return value.map(cloneParameterValue);
   if (isRecord(value)) {
@@ -722,47 +804,57 @@ const stateBoundaryForNode = (
     })));
   }
 
-  if (node.type === 'KALMAN_FILTER') {
+  if (node.type === 'KALMAN_FILTER' || node.type === 'EXTENDED_KALMAN_FILTER') {
+    const dims = resolveKalmanDimensions(node);
+    if (dims.error) {
+      diagnostics.push(diagnostic('XB_KALMAN_DIMENSION_MISMATCH', dims.error, node.id));
+      return boundary([]);
+    }
+    const { nStates } = dims;
     const exposedX = outputByPort('x_hat');
     const fallback = exposedX ?? outputByPort('y_hat') ?? signals[outputSignalIds[0] ?? ''];
     if (fallback === undefined) return boundary([]);
-    const a = node.parameters.A;
-    const dimension = Array.isArray(a) && a.length > 0 ? a.length : 1;
-    const x = exposedX ?? {
+
+    const xShape: XBShape = nStates > 1 ? { kind: 'vector' as const, length: nStates } : { kind: 'scalar' as const };
+    const pShape: XBShape = nStates > 1 ? { kind: 'matrix' as const, rows: nStates, columns: nStates } : { kind: 'scalar' as const };
+
+    const xSignal = {
       ...fallback,
       id: `${node.id}:x$hidden`,
-      shape: { kind: 'vector' as const, length: dimension },
-      elementCount: dimension,
-      dimensions: [dimension],
-      layout: 'contiguous' as const,
+      shape: xShape,
+      elementCount: nStates,
+      dimensions: [nStates],
+      layout: nStates > 1 ? ('contiguous' as const) : ('scalar' as const),
     };
     const pMatrix = {
       ...fallback,
       id: `${node.id}:p$hidden`,
-      shape: { kind: 'matrix' as const, rows: dimension, columns: dimension },
-      elementCount: dimension * dimension,
-      dimensions: [dimension, dimension],
-      layout: 'row-major' as const,
+      shape: pShape,
+      elementCount: nStates * nStates,
+      dimensions: [nStates, nStates],
+      layout: nStates > 1 ? ('row-major' as const) : ('scalar' as const),
     };
+
     return boundary([
       {
         id: `${node.id}:x$state`,
         role: 'x',
         signalId: exposedX?.id ?? null,
-        numericType: x.numericType,
-        shape: x.shape,
-        initialValues: initialValuesForSignal(node, x, diagnostics, ['x0']),
+        numericType: xSignal.numericType,
+        shape: xShape,
+        initialValues: initialValuesForSignal(node, xSignal, diagnostics, ['x0']),
       },
       {
         id: `${node.id}:P$state`,
         role: 'P',
         signalId: null,
         numericType: pMatrix.numericType,
-        shape: pMatrix.shape,
+        shape: pShape,
         initialValues: initialValuesForSignal(node, pMatrix, diagnostics, ['P0']),
-      }
+      },
     ]);
   }
+
 
   if (node.type === 'DISCRETE_TRANSFER_FUNCTION' || node.type === 'STATE_SPACE') {
     if (node.type === 'DISCRETE_TRANSFER_FUNCTION' && (node.parameters.A === undefined || node.parameters.C === undefined)) {
@@ -799,13 +891,21 @@ const stateBoundaryForNode = (
   if (node.type === 'RATE_LIMITER') {
     const control = outputByPort('u') ?? outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
     if (control === undefined) return boundary([]);
+    const initCond = node.parameters.initialCondition ?? 0;
+    const elemCount = control.elementCount || 1;
+    let initialValues: number[] = [];
+    if (Array.isArray(initCond)) {
+      initialValues = initCond.map(Number);
+    } else {
+      initialValues = Array(elemCount).fill(Number(initCond));
+    }
     return boundary([{
-      id: `${node.id}:prev_y$state`,
-      role: 'prev_y',
+      id: `${node.id}:previousOutput$state`,
+      role: 'previousOutput',
       signalId: null,
-      numericType: { kind: 'float64' },
-      shape: { kind: 'scalar' },
-      initialValues: [0],
+      numericType: control.numericType ?? { kind: 'float32' },
+      shape: control.shape,
+      initialValues: initialValues,
     }]);
   }
 
@@ -1308,6 +1408,29 @@ export const buildXBSemanticModel = (
       }
     }
 
+    if (node?.type === 'KALMAN_FILTER' || node?.type === 'EXTENDED_KALMAN_FILTER') {
+      const dims = resolveKalmanDimensions(node);
+      const { nStates, nMeas, nInputs } = dims;
+
+      if (portId === 'x_hat' || portId === 'x') {
+        return nStates > 1 ? { kind: 'vector', length: nStates } : { kind: 'scalar' };
+      }
+      if (portId === 'y_hat' || portId === 'innovation' || portId === 'y_meas') {
+        return nMeas > 1 ? { kind: 'vector', length: nMeas } : { kind: 'scalar' };
+      }
+      if (portId === 'u') {
+        return nInputs > 1 ? { kind: 'vector', length: nInputs } : { kind: 'scalar' };
+      }
+      if (portId === 'K' || portId === 'kg') {
+        const total = nStates * nMeas;
+        return total > 1 ? { kind: 'vector', length: total } : { kind: 'scalar' };
+      }
+      if (portId === 'P') {
+        const total = nStates * nStates;
+        return total > 1 ? { kind: 'matrix', rows: nStates, columns: nStates } : { kind: 'scalar' };
+      }
+    }
+
     const port = portBySignalId.get(signalId);
     if (port?.explicitShape) return port.explicitShape;
     return port?.shape ?? { kind: 'scalar' };
@@ -1438,13 +1561,31 @@ export const buildXBSemanticModel = (
       .map((port) => `${node.id}:${port.id}`);
     const stateBoundary = stateBoundaryForNode(node, outputSignalIds, signals, diagnostics);
     const isStateful = stateBoundary !== null && stateBoundary.slots.length > 0;
+    const clonedParams = cloneParameters(node.parameters);
+    if (node.type === 'SATURATION') {
+      clonedParams.lowerLimit ??= clonedParams.lower ?? -1;
+      clonedParams.upperLimit ??= clonedParams.upper ?? 1;
+    } else if (node.type === 'DEADZONE') {
+      clonedParams.lowerLimit ??= clonedParams.end ?? -0.5;
+      clonedParams.upperLimit ??= clonedParams.start ?? 0.5;
+    } else if (node.type === 'RATE_LIMITER') {
+      clonedParams.risingSlewRate ??= clonedParams.risingLimit ?? 1;
+      if (clonedParams.fallingSlewRate === undefined) {
+        clonedParams.fallingSlewRate = clonedParams.fallingLimit !== undefined
+          ? -Math.abs(Number(clonedParams.fallingLimit))
+          : -1;
+      }
+      clonedParams.initialCondition ??= 0;
+      clonedParams.sampleTime ??= clonedParams.dt ?? 'inherited';
+    }
+
     operations[node.id] = {
       id: node.id,
       type: node.type,
       inputSignalIds: orderedInputPorts(node, portsByNode.get(node.id) ?? [])
         .map((port) => `${node.id}:${port.id}`),
       outputSignalIds,
-      parameters: cloneParameters(node.parameters),
+      parameters: clonedParams,
       directFeedthrough: capability.directFeedthrough,
       stateful: isStateful,
       conversion: conversionForNode(node, diagnostics),
