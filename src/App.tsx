@@ -4149,7 +4149,8 @@ const WorkspaceFileDialog = ({
   openTabIds,
   onOpenFile,
   onDeleteFile,
-  onImportFile
+  onImportFile,
+  onValidationError
 }: {
   onClose: () => void;
   onCreateFile: (name: string, type: string) => void;
@@ -4159,6 +4160,7 @@ const WorkspaceFileDialog = ({
   onOpenFile: (fileId: string) => void;
   onDeleteFile: (fileId: string) => void;
   onImportFile: (name: string, type: string, data: any) => void;
+  onValidationError?: (validation: ValidationResult) => void;
 }) => {
   const [activeTab, setActiveTab] = useState<'create' | 'manage' | 'import'>('create');
   const [selectedType, setSelectedType] = useState<string>('xbridges');
@@ -4207,7 +4209,7 @@ const WorkspaceFileDialog = ({
         const json = JSON.parse(evt.target?.result as string);
         const validation = validateImportedJson(json);
         if (!validation.isValid) {
-          setImportValidationError(validation);
+          if (onValidationError) onValidationError(validation);
           setImportedJson(null);
           return;
         }
@@ -4216,11 +4218,13 @@ const WorkspaceFileDialog = ({
           setDetectedType(validation.detectedType);
         }
       } catch (err) {
-        setImportValidationError({
-          isValid: false,
-          errorTitle: 'JSON Syntax Error',
-          errors: [`Failed to parse JSON file: ${err instanceof Error ? err.message : 'Invalid JSON format'}`]
-        });
+        if (onValidationError) {
+          onValidationError({
+            isValid: false,
+            errorTitle: 'JSON Syntax Error',
+            errors: [`Failed to parse JSON file: ${err instanceof Error ? err.message : 'Invalid JSON format'}`]
+          });
+        }
         setImportedJson(null);
       }
     };
@@ -17239,6 +17243,7 @@ const ADIA = () => {
               setOpenTabIds(prev => prev.filter(tid => tid !== id));
             }}
             onImportFile={handleImportFile}
+            onValidationError={setImportValidationError}
           />
         )}
 
