@@ -1,8 +1,9 @@
 {
   "name": "adia",
+  "productName": "ADIA",
   "private": true,
   "version": "1.0.0",
-  "description": "ADIA Stateflow Application",
+  "description": "ADIA Engineering Suite",
   "author": "ADIA Team",
   "type": "module",
   "main": "dist-electron/index.cjs",

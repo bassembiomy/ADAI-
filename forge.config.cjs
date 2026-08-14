@@ -1,5 +1,6 @@
 module.exports = {
   packagerConfig: {
+    executableName: 'ADIA',
     asar: true,
     // ASAR integrity checking: embeds file hashes into the package for tamper detection
     asarIntegrity: true,
@@ -44,6 +45,8 @@ module.exports = {
       name: '@electron-forge/maker-squirrel',
       config: {
         name: 'adia',
+        setupExe: 'ADIA Setup.exe',
+        exe: 'ADIA.exe',
         // setupIcon: './icon.png'
       },
     },

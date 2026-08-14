@@ -543,8 +543,6 @@ if (hasSingleInstanceLock) {
     console.error('App startup failed:', err);
   });
 }
-  console.error('App failed to start:', err);
-});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
