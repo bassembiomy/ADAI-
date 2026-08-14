@@ -30,6 +30,10 @@ import { IntroStandbyOverlay } from './components/IntroStandbyOverlay';
 import { 
   VariableType, VariableDef, StateData, JunctionData, TransitionData, Layer, ErrorItem 
 } from './types/sm_types';
+import type {
+  PortData, ValuePropertyData, BlockData, RelationshipData, PartData,
+  ConnectorData, InterfaceRealizationData, HmiComponentType, HmiComponent
+} from './types/sysml_types';
 import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineClipboardData } from './utils/stateMachineClipboard';
 import { pruneStateHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
@@ -282,135 +286,6 @@ interface ManagedWindowState {
   pos: { x: number; y: number };
   size: { width: number; height: number };
   zIndex: number;
-}
-
-interface PortData {
-  id: string;
-  name: string;
-  type: string; // e.g. 'int', 'float', 'signal'
-  kind?: 'standard' | 'flow' | 'proxy';
-  direction?: 'in' | 'out' | 'inout';
-  unit?: string;
-  side?: 'top' | 'bottom' | 'left' | 'right';
-  offset?: number;
-}
-
-interface ValuePropertyData {
-  id: string;
-  name: string;
-  type: string;
-  defaultValue?: string;
-}
-
-interface BlockData {
-  id: string;
-  name: string;
-  stereotype: string; // 'block', 'requirement', 'interface', 'valueType'
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  properties: ValuePropertyData[];
-  operations: string[];
-  constraints: string[];
-  classes: string[]; // Nested classes/parts definitions
-  ports: PortData[];
-  reqId?: string;
-  description?: string;
-  status?: string;
-  priority?: string;
-  satisfiedReqIds?: string[];
-  risk?: string;
-  verificationMethod?: string;
-  source?: string;
-  ibdX?: number;
-  ibdY?: number;
-  ibdWidth?: number;
-  ibdHeight?: number;
-  attachedFiles?: { name: string; content: string }[];
-  assignedTo?: string;
-  layerId?: string; // Which requirements layer this block belongs to ('root' or a block id)
-}
-
-interface RelationshipData {
-  id: string;
-  sourceId: string;
-  targetId: string;
-  type: 'association' | 'generalization' | 'composition' | 'aggregation' | 'allocation' | 'derive' | 'deriveReqt' | 'refine' | 'satisfy' | 'verify' | 'trace' | 'binding' | 'dependency';
-  label: string;
-  sourceMultiplicity?: string;
-  targetMultiplicity?: string;
-}
-
-interface PartData {
-  id: string;
-  name: string;
-  blockId: string | null;
-  typeId?: string | null;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  satisfiedReqIds?: string[];
-  multiplicity?: string;
-  portLayouts?: Record<string, { side: 'top' | 'bottom' | 'left' | 'right', offset: number }>;
-}
-
-interface ConnectorData {
-  id: string;
-  sourcePartId: string;
-  sourcePortId: string;
-  targetPartId: string;
-  targetPortId: string;
-  itemFlow?: string;
-  label?: string;
-}
-
-interface InterfaceRealizationData {
-  id: string;
-  partId: string;
-  portId: string;
-  interfaceId: string;
-}
-
-type HmiComponentType = 'toggle' | 'button' | 'slider' | 'input' | 'lamp' | 'led' | 'lcd' | 'gauge' | 'rotary' | 'hybrid-rotary' | 'buzzer' | 'oled' | 'encoder' | 'mode-selector' | 'mode-icon';
-
-interface HmiComponent {
-  id: string;
-  type: HmiComponentType;
-  name: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  variableId: string | null;
-  min?: number;
-  max?: number;
-  variableIds?: string[];
-  hybridValues?: string[];
-  soundType?: 'sine' | 'square' | 'sawtooth' | 'triangle';
-  icon?: 'none' | 'power' | 'play' | 'light';
-  color?: 'orange' | 'green' | 'red' | 'blue' | 'yellow' | 'grey';
-  cursorVariableId?: string | null;
-  pressVariableId?: string | null;
-  oledModeVarId?: string | null;
-  oledTempVarId?: string | null;
-  oledTimeVarId?: string | null;
-  oledStateVarId?: string | null;
-  oledSteamVarId?: string | null;
-  oledHeatVarId?: string | null;
-  oledFanVarId?: string | null;
-  oledLightVarId?: string | null;
-  oledDuoVarId?: string | null;
-  oledProgressVarId?: string | null;
-  iconEmoji?: string;
-  targetValue?: string;
-  oledModeNames?: string;
-  oledIndicatorEmojis?: string[];
-  oledIndicatorVarIds?: (string | null)[];
-  oledIndicatorLabels?: string[];
-  oledTitle?: string;
-  encoderValues?: string[];
 }
 
 // =============================================================================
@@ -7004,8 +6879,17 @@ const ADIA = () => {
         };
       case 'bdd':
         return { blocks: blocks.filter(b => b.stereotype !== 'requirement'), relationships, customStereotypes };
-      case 'requirements':
-        return { blocks: blocks.filter(b => b.stereotype === 'requirement'), relationships };
+      case 'requirements': {
+        const reqRelEndpoints = new Set(
+          relationships
+            .filter(r => r.type === 'satisfy' || r.type === 'deriveReqt' || r.type === 'verify' || r.type === 'refine')
+            .flatMap(r => [r.sourceId, r.targetId])
+        );
+        return {
+          blocks: blocks.filter(b => b.stereotype === 'requirement' || reqRelEndpoints.has(b.id)),
+          relationships,
+        };
+      }
       case 'ibd':
         return { parts, connectors, interfaceRealizations };
       case 'xbridges':
@@ -7135,6 +7019,17 @@ const ADIA = () => {
         if (d.parts) setParts(d.parts);
         if (d.connectors) setConnectors(d.connectors);
         if (d.interfaceRealizations) setInterfaceRealizations(d.interfaceRealizations);
+        if (d.parts && d.parts.length > 0) {
+          const firstBlockId = d.parts[0].blockId;
+          if (firstBlockId && d.parts.every((p: any) => p.blockId === firstBlockId)) {
+            const targetBlock = blocks.find((b: any) => b.id === firstBlockId);
+            if (targetBlock) {
+              setCurrentLayerId(firstBlockId);
+              setLayerStack([firstBlockId]);
+              setLayerPath(['Root', targetBlock.name]);
+            }
+          }
+        }
         break;
       case 'xbridges':
         setGlobalXBridgesNodes(d.globalXBridgesNodes || []);
@@ -8065,7 +7960,13 @@ const ADIA = () => {
       if (importedData.transitions) setTransitions(importedData.transitions);
       if (importedData.layers) setLayers(importedData.layers);
       if (importedData.variables) setVariables(importedData.variables);
-      if (importedData.view) setView(importedData.view);
+      if (importedData.view) {
+        const v = importedData.view;
+        const scale = typeof v.scale === 'number' && Number.isFinite(v.scale) && v.scale > 0 ? v.scale : (typeof v.zoom === 'number' && Number.isFinite(v.zoom) && v.zoom > 0 ? v.zoom : 1);
+        const offsetX = typeof v.offsetX === 'number' && Number.isFinite(v.offsetX) ? v.offsetX : (typeof v.x === 'number' && Number.isFinite(v.x) ? v.x : 0);
+        const offsetY = typeof v.offsetY === 'number' && Number.isFinite(v.offsetY) ? v.offsetY : (typeof v.y === 'number' && Number.isFinite(v.y) ? v.y : 0);
+        setView({ scale, offsetX, offsetY });
+      }
       if (importedData.tickMs) setTickMs(importedData.tickMs);
 
       // SysML & Requirements — always migrate to ensure layerId is set
@@ -8142,7 +8043,16 @@ const ADIA = () => {
             name: 'Main Requirements',
             type: 'requirements',
             data: {
-              blocks: (importedData.blocks || []).filter((b: any) => b.stereotype === 'requirement'),
+              blocks: (() => {
+                const reqRelEndpoints = new Set<string>();
+                (importedData.relationships || []).forEach((r: any) => {
+                  if (r.type === 'satisfy' || r.type === 'deriveReqt' || r.type === 'verify' || r.type === 'refine') {
+                    reqRelEndpoints.add(r.sourceId);
+                    reqRelEndpoints.add(r.targetId);
+                  }
+                });
+                return (importedData.blocks || []).filter((b: any) => b.stereotype === 'requirement' || reqRelEndpoints.has(b.id));
+              })(),
               relationships: importedData.relationships || []
             }
           },
@@ -8253,9 +8163,33 @@ const ADIA = () => {
       setTraceHistory([]);
       setScopeData([]);
       setSimulationTime(0);
-      setCurrentLayerId('root');
-      setLayerStack([]);
-      setLayerPath(['Root']);
+
+      // Auto-resolve initial IBD context if parts exist and share a single blockId (IBD-001, IBD-002)
+      const importedParts = importedData.parts || [];
+      const importedBlocks = importedData.blocks || [];
+      if (importedParts.length > 0) {
+        const firstBlockId = importedParts[0].blockId;
+        if (firstBlockId && importedParts.every((p: any) => p.blockId === firstBlockId)) {
+          const targetBlock = importedBlocks.find((b: any) => b.id === firstBlockId);
+          if (targetBlock) {
+            setCurrentLayerId(firstBlockId);
+            setLayerStack([firstBlockId]);
+            setLayerPath(['Root', targetBlock.name]);
+          } else {
+            setCurrentLayerId('root');
+            setLayerStack([]);
+            setLayerPath(['Root']);
+          }
+        } else {
+          setCurrentLayerId('root');
+          setLayerStack([]);
+          setLayerPath(['Root']);
+        }
+      } else {
+        setCurrentLayerId('root');
+        setLayerStack([]);
+        setLayerPath(['Root']);
+      }
       setSelectedIds([]);
       setHistory([]);
       setHistoryIndex(-1);
