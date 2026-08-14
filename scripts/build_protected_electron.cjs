@@ -32,7 +32,7 @@ async function buildProtectedElectron() {
   const bundlePath = path.join(DIST_ELECTRON_DIR, 'main_bundled.js');
 
   await esbuild.build({
-    entryPoints: [path.join(SRC_DIR, 'main.cjs')],
+    entryPoints: [path.join(SRC_DIR, 'bootstrap.cjs')],
     bundle: true,
     outfile: bundlePath,
     platform: 'node',
@@ -110,19 +110,19 @@ const path = require('path');
 const fs = require('fs');
 
 const jscPath = path.join(__dirname, 'main.jsc');
-const srcMainPath = path.join(__dirname, '../src/main.cjs');
+const srcBootstrapPath = path.join(__dirname, '../src/bootstrap.cjs');
 
 try {
   if (fs.existsSync(jscPath)) {
     require(jscPath);
-  } else if (fs.existsSync(srcMainPath)) {
-    require(srcMainPath);
+  } else if (fs.existsSync(srcBootstrapPath)) {
+    require(srcBootstrapPath);
   }
 } catch (err) {
   const isV8Mismatch = err.code === 'ERR_CACHED_DATA_REJECTED' || (err.message && err.message.includes('cachedDataRejected'));
-  if (isV8Mismatch && fs.existsSync(srcMainPath)) {
-    console.warn('[Bytenode Loader] V8 version mismatch in dev mode — falling back to src/main.cjs...');
-    require(srcMainPath);
+  if (isV8Mismatch && fs.existsSync(srcBootstrapPath)) {
+    console.warn('[Bytenode Loader] V8 version mismatch in dev mode — falling back to src/bootstrap.cjs...');
+    require(srcBootstrapPath);
   } else {
     throw err;
   }
