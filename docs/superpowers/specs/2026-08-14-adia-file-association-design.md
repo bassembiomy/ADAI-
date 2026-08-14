@@ -58,9 +58,10 @@ The preload allowlist will add only the channels required for:
 - `project-open-dialog`;
 - `project-save`;
 - `project-save-as`; and
+- `project-accept-open`; and
 - the main-to-renderer `project-open-requested` event.
 
-The renderer never receives direct filesystem access. The main process validates the path and reads the file, then sends the parsed payload and normalized path. The renderer runs structural validation before calling `hydrateProject`.
+The renderer never receives direct filesystem access. The main process validates the path and reads the file, then sends the parsed payload, normalized path, and an opaque request token. The renderer runs structural validation before calling `hydrateProject`, then invokes `project-accept-open` with that token. Only this acknowledgement changes the main process's active project path; declined, stale, or invalid tokens do nothing.
 
 ### 4.4 Single-instance file opening
 
