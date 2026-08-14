@@ -38,6 +38,7 @@ import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineCl
 import { pruneStateHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
 import { isInputFocused } from './utils/domUtils';
+import { validateImportedJson, ValidationResult } from './utils/jsonImportValidator';
 import {
   applyPersistedAppSimulationModel,
   commitAppOutputRequest,
@@ -4204,25 +4205,23 @@ const WorkspaceFileDialog = ({
     reader.onload = (evt) => {
       try {
         const json = JSON.parse(evt.target?.result as string);
-        setImportedJson(json);
-        
-        // Auto-detect type
-        let type = 'xbridges';
-        if (json.globalXBridgesNodes || json.globalXBridgesEdges) type = 'xbridges';
-        else if (json.vlabNodes || json.vlabEdges) type = 'vlab';
-        else if (json.states || json.junctions || json.transitions) type = 'statemachine';
-        else if (json.entropyNodes || json.entropyEdges) type = 'entropy';
-        else if (json.hmiComponents) type = 'hmi';
-        else if (json.headers || json.activeModel) type = 'doe';
-        else if (json.target || json.clockSpeed) type = 'hil';
-        else if (json.parts || json.connectors) type = 'ibd';
-        else if (json.blocks) {
-          const hasReq = json.blocks.some((b: any) => b.stereotype === 'requirement');
-          type = hasReq ? 'requirements' : 'bdd';
+        const validation = validateImportedJson(json);
+        if (!validation.isValid) {
+          setImportValidationError(validation);
+          setImportedJson(null);
+          return;
         }
-        setDetectedType(type);
+        setImportedJson(validation.sanitizedData || json);
+        if (validation.detectedType) {
+          setDetectedType(validation.detectedType);
+        }
       } catch (err) {
-        alert("Failed to parse JSON file.");
+        setImportValidationError({
+          isValid: false,
+          errorTitle: 'JSON Syntax Error',
+          errors: [`Failed to parse JSON file: ${err instanceof Error ? err.message : 'Invalid JSON format'}`]
+        });
+        setImportedJson(null);
       }
     };
     reader.readAsText(file);
@@ -7557,6 +7556,7 @@ const ADIA = () => {
   }, []);
 
   const projectImportRef = useRef<HTMLInputElement>(null);
+  const [importValidationError, setImportValidationError] = useState<ValidationResult | null>(null);
 
   const calculateChecksum = useCallback((str: string): string => {
     let hash = 0;
@@ -10627,14 +10627,23 @@ const ADIA = () => {
     reader.onload = (event) => {
       try {
         const importedData = JSON.parse(event.target?.result as string);
-        hydrateProject(importedData);
+        const validation = validateImportedJson(importedData);
+        if (!validation.isValid) {
+          setImportValidationError(validation);
+          return;
+        }
+        hydrateProject(validation.sanitizedData || importedData);
       } catch (error) {
-        addError('error', 'Failed to parse project file JSON.');
+        setImportValidationError({
+          isValid: false,
+          errorTitle: 'JSON Syntax Error',
+          errors: [`Failed to parse project file JSON: ${error instanceof Error ? error.message : 'Invalid JSON format'}`]
+        });
       }
     };
     reader.readAsText(file);
     if (projectImportRef.current) projectImportRef.current.value = '';
-  }, [hydrateProject, addError]);
+  }, [hydrateProject]);
 
   const handleImportProject = useCallback(async () => {
     try {
@@ -10642,7 +10651,12 @@ const ADIA = () => {
         const { ipcRenderer } = (window as any).require('electron');
         const importedData = await ipcRenderer.invoke('import-json');
         if (importedData) {
-          hydrateProject(importedData);
+          const validation = validateImportedJson(importedData);
+          if (!validation.isValid) {
+            setImportValidationError(validation);
+            return;
+          }
+          hydrateProject(validation.sanitizedData || importedData);
         } else {
           addError('info', 'Import cancelled or file could not be read.');
         }
@@ -14556,6 +14570,43 @@ const ADIA = () => {
         plotFactors={plotFactors} 
         holdValues={holdValues} 
       />
+      {importValidationError && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] animate-in fade-in duration-200" onMouseDown={() => setImportValidationError(null)}>
+          <div className="bg-[#121212] border-2 border-red-500/80 rounded-2xl w-[600px] max-h-[80vh] flex flex-col shadow-2xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 bg-red-950/40 border-b border-red-500/30 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">⚠️</span>
+                <div>
+                  <h2 className="text-base font-bold text-red-400 uppercase tracking-wider">{importValidationError.errorTitle || 'Import Failed: Invalid File'}</h2>
+                  <p className="text-xs text-slate-400">File import refused to prevent application crash</p>
+                </div>
+              </div>
+              <button onClick={() => setImportValidationError(null)} className="text-slate-400 hover:text-white text-lg">✕</button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-3 font-mono text-xs">
+              <p className="text-slate-300 font-sans text-sm">The selected JSON file contains structural errors and cannot be imported:</p>
+              <div className="bg-[#080808] border border-red-900/40 p-4 rounded-xl space-y-2 text-red-300 max-h-60 overflow-y-auto no-scrollbar">
+                {importValidationError.errors.map((err, idx) => (
+                  <div key={idx} className="flex gap-2">
+                    <span className="text-red-500 font-bold">•</span>
+                    <span>{err}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-[#181818] border-t border-[#222] flex justify-end">
+              <button
+                onClick={() => setImportValidationError(null)}
+                className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+              >
+                Dismiss & Refuse File
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div
         className="flex flex-col bg-[#0a0a0a] text-[#e0e0e0] font-sans overflow-hidden"
         style={{
