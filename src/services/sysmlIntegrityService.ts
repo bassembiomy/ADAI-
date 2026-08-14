@@ -99,7 +99,7 @@ export function previewDeletionImpact(elementId: string, state: SysMLDiagramStat
   const isBlock = state.blocks.some(b => b.id === elementId);
   const isPort = state.ports.some(p => p.id === elementId);
   const isPart = state.parts.some(pt => pt.id === elementId);
-  const isReq = state.requirements.some(r => r.id === elementId);
+  const isReq = (state.requirements ?? []).some(r => r.id === elementId);
 
   const elementType = isBlock ? 'block' : isPort ? 'port' : isPart ? 'part' : 'requirement';
   const affectedParts: Set<string> = new Set();
@@ -114,11 +114,11 @@ export function previewDeletionImpact(elementId: string, state: SysMLDiagramStat
       }
     });
     state.connectors.forEach(c => {
-      if (blockPortIds.has(c.sourcePortId) || blockPortIds.has(c.targetPortId)) {
+      if ((c.sourcePortId && blockPortIds.has(c.sourcePortId)) || (c.targetPortId && blockPortIds.has(c.targetPortId))) {
         affectedConnectors.add(c.id);
       }
     });
-    state.relations.forEach(r => {
+    (state.relations ?? []).forEach(r => {
       if (r.sourceId === elementId || r.targetId === elementId ||
           blockPortIds.has(r.sourceId) || blockPortIds.has(r.targetId) ||
           affectedParts.has(r.sourceId) || affectedParts.has(r.targetId)) {
@@ -131,7 +131,7 @@ export function previewDeletionImpact(elementId: string, state: SysMLDiagramStat
         affectedConnectors.add(c.id);
       }
     });
-    state.relations.forEach(r => {
+    (state.relations ?? []).forEach(r => {
       if (r.sourceId === elementId || r.targetId === elementId) {
         affectedRelations.add(r.id);
       }
@@ -142,13 +142,13 @@ export function previewDeletionImpact(elementId: string, state: SysMLDiagramStat
         affectedParts.add(pt.id);
       }
     });
-    state.relations.forEach(r => {
+    (state.relations ?? []).forEach(r => {
       if (r.sourceId === elementId || r.targetId === elementId) {
         affectedRelations.add(r.id);
       }
     });
   } else if (isReq) {
-    state.relations.forEach(r => {
+    (state.relations ?? []).forEach(r => {
       if (r.sourceId === elementId || r.targetId === elementId) {
         affectedRelations.add(r.id);
       }
@@ -176,8 +176,8 @@ export function cascadeDeleteBlock(blockId: string, state: SysMLDiagramState): S
     ports: state.ports.filter(p => !blockPorts.has(p.id)),
     parts: state.parts.filter(pt => !affectedParts.has(pt.id)),
     connectors: state.connectors.filter(c => !affectedConnectors.has(c.id)),
-    requirements: state.requirements,
-    relations: state.relations.filter(r => !affectedRelations.has(r.id)),
+    requirements: state.requirements ?? [],
+    relations: (state.relations ?? []).filter(r => !affectedRelations.has(r.id)),
   };
 }
 
@@ -189,13 +189,13 @@ export function cascadeDeletePort(portId: string, state: SysMLDiagramState): Sys
   return {
     blocks: state.blocks.map(b => ({
       ...b,
-      ports: b.ports.filter(pid => pid !== portId),
+      ports: (b.ports ?? []).filter(p => (typeof p === 'string' ? p : p.id) !== portId),
     })),
     ports: state.ports.filter(p => p.id !== portId),
     parts: state.parts,
     connectors: state.connectors.filter(c => !affectedConnectors.has(c.id)),
-    requirements: state.requirements,
-    relations: state.relations.filter(r => !affectedRelations.has(r.id)),
+    requirements: state.requirements ?? [],
+    relations: (state.relations ?? []).filter(r => !affectedRelations.has(r.id)),
   };
 }
 
@@ -242,8 +242,8 @@ export function validateTraceabilityRelation(
   relationType: string,
   state: SysMLDiagramState
 ): ValidationResult {
-  const isSourceReq = state.requirements.some(r => r.id === sourceId);
-  const isTargetReq = state.requirements.some(r => r.id === targetId);
+  const isSourceReq = (state.requirements ?? []).some(r => r.id === sourceId);
+  const isTargetReq = (state.requirements ?? []).some(r => r.id === targetId);
 
   const isSourceBlockOrPart =
     state.blocks.some(b => b.id === sourceId) || state.parts.some(p => p.id === sourceId);
@@ -276,6 +276,7 @@ export function validateTraceabilityRelation(
 export function validateUniqueRequirementIds(requirements: SysMLRequirement[]): ValidationResult {
   const seen = new Set<string>();
   for (const req of requirements) {
+    if (!req.reqId) continue;
     const normalizedReqId = req.reqId.trim().toUpperCase();
     if (seen.has(normalizedReqId)) {
       return {

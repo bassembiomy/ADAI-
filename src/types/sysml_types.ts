@@ -71,8 +71,8 @@ export interface PartData {
   satisfiedReqIds?: string[];
   multiplicity?: string;
   portLayouts?: Record<string, { side: 'top' | 'bottom' | 'left' | 'right', offset: number }>;
-  parentPartId?: string;
-  parentBlockId?: string;
+  parentPartId?: string | null;
+  parentBlockId?: string | null;
   typeBlockId?: string | null;
 }
 
@@ -93,36 +93,36 @@ export interface InterfaceRealizationData {
   interfaceId: string;
 }
 
-// Aliases for sysmlIntegrityService compatibility
-export type SysMLPort = PortData;
-export type SysMLBlock = BlockData;
-export type SysMLRequirement = BlockData;
-export type SysMLRelation = RelationshipData;
-export type RelationType = RelationshipData['type'];
-export type SysMLPart = PartData;
-export type SysMLConnector = ConnectorData;
+// Interfaces for sysmlIntegrityService compatibility
+export type SysMLPort = PortData | { id: string; name?: string; type?: string; kind?: string; direction?: string; unit?: string; side?: string; offset?: number; blockId?: string };
+export type SysMLBlock = BlockData | { id: string; name?: string; stereotype?: string; x?: number; y?: number; width?: number; height?: number; properties?: any[]; operations?: any[]; constraints?: any[]; classes?: any[]; ports?: (SysMLPort | string)[]; parts?: (SysMLPart | string)[]; text?: string; reqId?: string; description?: string; status?: string; priority?: string; satisfiedReqIds?: string[]; risk?: string; verificationMethod?: string; source?: string; ibdX?: number; ibdY?: number; ibdWidth?: number; ibdHeight?: number; attachedFiles?: any[]; assignedTo?: string; layerId?: string };
+export type SysMLRelation = RelationshipData | { id: string; sourceId: string; targetId: string; type: string; label?: string; sourceMultiplicity?: string; targetMultiplicity?: string };
+export type RelationType = RelationshipData['type'] | string;
+export type SysMLPart = { id: string; name?: string; blockId?: string | null; typeId?: string | null; x?: number; y?: number; width?: number; height?: number; satisfiedReqIds?: string[]; multiplicity?: string; portLayouts?: any; parentPartId?: string | null; parentBlockId?: string | null; typeBlockId?: string | null } | PartData;
+export type SysMLConnector = ConnectorData | { id: string; sourcePartId?: string; sourcePortId?: string; targetPartId?: string; targetPortId?: string; itemFlow?: string; label?: string };
+export type SysMLRequirement = SysMLBlock;
 
 export interface SysMLDiagramState {
-  blocks: BlockData[];
-  ports: PortData[];
-  parts: PartData[];
-  connectors: ConnectorData[];
-  relationships: RelationshipData[];
-  requirements?: BlockData[];
-  relations?: RelationshipData[];
+  blocks: SysMLBlock[];
+  ports: SysMLPort[];
+  parts: SysMLPart[];
+  connectors: SysMLConnector[];
+  relationships?: SysMLRelation[];
+  requirements: SysMLRequirement[];
+  relations: SysMLRelation[];
   interfaceRealizations?: InterfaceRealizationData[];
   customStereotypes?: string[];
 }
 
 export interface DeletionImpact {
-  targetId: string;
-  targetType: 'block' | 'port' | 'part' | 'connector' | 'relation';
-  cascadeDeletedConnectors: string[];
-  cascadeDeletedRelations: string[];
-  danglingPorts: string[];
-  affectedParts: string[];
+  targetId?: string;
+  targetType?: string;
   elementId?: string;
   elementType?: string;
+  cascadeDeletedConnectors?: string[];
+  cascadeDeletedRelations?: string[];
+  danglingPorts?: string[];
+  affectedParts?: string[];
   affectedConnectors?: string[];
   affectedRelations?: string[];
 }
