@@ -19,7 +19,7 @@ import {
   MousePointer2, Upload, FileText, Download,
   Activity, Zap, Database, Cpu, Layout, Maximize2, X,
   LayoutGrid, Rows, Network, Flame, RefreshCcw, Wind, Cloud,
-  Eye, Paperclip, FlaskConical, AlertTriangle
+  Eye, Paperclip, FlaskConical, AlertTriangle, FolderOpen
 } from 'lucide-react';
 import { FactoryIOGateway } from './components/FactoryIOGateway';
 import { ThreeDXGateway } from './components/ThreeDXGateway';
@@ -39,6 +39,12 @@ import { pruneStateHierarchy, countDescendants } from './utils/stateMachine/smSt
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
 import { isInputFocused } from './utils/domUtils';
 import { validateImportedJson, ValidationResult } from './utils/jsonImportValidator';
+import {
+  createUnifiedProjectPayload,
+  createProjectSnapshot,
+  hasUnsavedProjectChanges,
+  shouldConfirmProjectReplacement,
+} from './utils/adiaProjectPersistence';
 import {
   applyPersistedAppSimulationModel,
   commitAppOutputRequest,
@@ -6103,6 +6109,8 @@ const ADIA = () => {
     const params = new URLSearchParams(window.location.search);
     return params.get('projectName') || 'Main Project';
   });
+  const [activeProjectPath, setActiveProjectPath] = useState<string | null>(null);
+  const lastSavedSnapshotRef = useRef<string | null>(null);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [showSaveSelectionModal, setShowSaveSelectionModal] = useState(false);
   const [showWelcome, setShowWelcome] = useState(() => !window.location.search.includes('projectName'));
@@ -7935,6 +7943,223 @@ const ADIA = () => {
     entropyNodes, entropyEdges, currentProjectName, openTabs,
     workspaceFiles, openTabIds, activeFileId, saveCurrentFileState
   ]);
+
+  const buildUnifiedProjectPayload = useCallback(() => {
+    return createUnifiedProjectPayload({
+      projectName: currentProjectName,
+      tickMs,
+      states,
+      junctions,
+      transitions,
+      layers,
+      variables,
+      safetyMode,
+      hilConfig,
+      blocks,
+      relationships,
+      parts,
+      connectors,
+      interfaceRealizations,
+      customStereotypes,
+      hmiComponents,
+      vlabNodes,
+      vlabEdges,
+      globalXBridgesNodes,
+      globalXBridgesEdges,
+      entropyNodes,
+      entropyEdges,
+      doe: {
+        headers,
+        data,
+        activeModel,
+        taguchiConfig,
+        results,
+      },
+      managedWindows,
+      workspaceFiles,
+      openTabIds,
+      activeFileId,
+    });
+  }, [
+    currentProjectName,
+    tickMs,
+    states,
+    junctions,
+    transitions,
+    layers,
+    variables,
+    safetyMode,
+    hilConfig,
+    blocks,
+    relationships,
+    parts,
+    connectors,
+    interfaceRealizations,
+    customStereotypes,
+    hmiComponents,
+    vlabNodes,
+    vlabEdges,
+    globalXBridgesNodes,
+    globalXBridgesEdges,
+    entropyNodes,
+    entropyEdges,
+    headers,
+    data,
+    activeModel,
+    taguchiConfig,
+    results,
+    managedWindows,
+    workspaceFiles,
+    openTabIds,
+    activeFileId,
+  ]);
+
+  const saveUnifiedProject = useCallback(async (saveAs: boolean = false) => {
+    try {
+      const payload = buildUnifiedProjectPayload();
+      if ((window as any).electronAPI) {
+        const result = saveAs
+          ? await (window as any).electronAPI.projectSaveAs(payload)
+          : await (window as any).electronAPI.projectSave(payload);
+
+        if (result && result.success && result.filePath) {
+          setActiveProjectPath(result.filePath);
+          lastSavedSnapshotRef.current = createProjectSnapshot(payload);
+          
+          const fileName = result.filePath.split(/[/\\]/).pop() || '';
+          const nameWithoutExt = fileName.replace(/\.adia$/i, '').replace(/\.json$/i, '');
+          if (nameWithoutExt) {
+            setCurrentProjectName(nameWithoutExt);
+          }
+          addError('info', `Project saved successfully: ${result.filePath}`);
+        } else if (result && result.canceled) {
+          // User canceled save dialog
+        } else {
+          addError('error', `Failed to save project: ${result?.error || 'Unknown error'}`);
+        }
+      } else {
+        // Web / Browser Fallback
+        const jsonStr = JSON.stringify(payload, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentProjectName.replace(/[^a-zA-Z0-9_-]/g, '_')}.adia`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        lastSavedSnapshotRef.current = createProjectSnapshot(payload);
+        addError('info', 'Project downloaded as .adia file.');
+      }
+    } catch (err: any) {
+      console.error('Save failed:', err);
+      addError('error', `Failed to save project: ${err?.message || String(err)}`);
+    }
+  }, [buildUnifiedProjectPayload, currentProjectName, addError]);
+
+  const confirmProjectReplacementIfDirty = useCallback((): boolean => {
+    const currentSnapshot = createProjectSnapshot(buildUnifiedProjectPayload());
+    const isDirty = hasUnsavedProjectChanges(currentSnapshot, lastSavedSnapshotRef.current);
+    return shouldConfirmProjectReplacement(isDirty, (msg) => window.confirm(msg));
+  }, [buildUnifiedProjectPayload]);
+
+  const handleOpenProjectDialog = useCallback(async () => {
+    try {
+      if (!confirmProjectReplacementIfDirty()) {
+        return;
+      }
+
+      if ((window as any).electronAPI) {
+        const result = await (window as any).electronAPI.projectOpenDialog();
+        if (result && !result.canceled && result.projectData) {
+          const validation = validateImportedJson(result.projectData);
+          if (!validation.isValid) {
+            setImportValidationError(validation);
+            return;
+          }
+          const dataToHydrate = validation.sanitizedData || result.projectData;
+          hydrateProject(dataToHydrate);
+          if (result.filePath) {
+            setActiveProjectPath(result.filePath);
+            const fileName = result.filePath.split(/[/\\]/).pop() || '';
+            const nameWithoutExt = fileName.replace(/\.adia$/i, '').replace(/\.json$/i, '');
+            if (nameWithoutExt) {
+              setCurrentProjectName(nameWithoutExt);
+            }
+          }
+          setTimeout(() => {
+            lastSavedSnapshotRef.current = createProjectSnapshot(buildUnifiedProjectPayload());
+          }, 50);
+          addError('info', `Opened project: ${result.filePath || 'Unified Project'}`);
+        }
+      } else {
+        projectImportRef.current?.click();
+      }
+    } catch (err: any) {
+      console.error('Open dialog failed:', err);
+      addError('error', `Failed to open project: ${err?.message || String(err)}`);
+    }
+  }, [confirmProjectReplacementIfDirty, hydrateProject, buildUnifiedProjectPayload, addError]);
+
+  useEffect(() => {
+    if (!(window as any).electronAPI?.onProjectOpenRequested) return;
+
+    const unsubscribe = (window as any).electronAPI.onProjectOpenRequested(
+      async (eventData: { token: string; filePath: string; projectData: any }) => {
+        const { token, filePath, projectData } = eventData;
+        try {
+          const currentSnapshot = createProjectSnapshot(buildUnifiedProjectPayload());
+          const isDirty = hasUnsavedProjectChanges(currentSnapshot, lastSavedSnapshotRef.current);
+          const userApproved = shouldConfirmProjectReplacement(isDirty, (msg) => window.confirm(msg));
+
+          if (!userApproved) {
+            if ((window as any).electronAPI?.projectAcceptOpen) {
+              await (window as any).electronAPI.projectAcceptOpen({ token, success: false });
+            }
+            return;
+          }
+
+          const validation = validateImportedJson(projectData);
+          if (!validation.isValid) {
+            setImportValidationError(validation);
+            if ((window as any).electronAPI?.projectAcceptOpen) {
+              await (window as any).electronAPI.projectAcceptOpen({ token, success: false });
+            }
+            return;
+          }
+
+          const dataToHydrate = validation.sanitizedData || projectData;
+          hydrateProject(dataToHydrate);
+          setActiveProjectPath(filePath);
+          const fileName = filePath.split(/[/\\]/).pop() || '';
+          const nameWithoutExt = fileName.replace(/\.adia$/i, '').replace(/\.json$/i, '');
+          if (nameWithoutExt) {
+            setCurrentProjectName(nameWithoutExt);
+          }
+
+          if ((window as any).electronAPI?.projectAcceptOpen) {
+            await (window as any).electronAPI.projectAcceptOpen({ token, success: true });
+          }
+
+          setTimeout(() => {
+            lastSavedSnapshotRef.current = createProjectSnapshot(buildUnifiedProjectPayload());
+          }, 50);
+
+          addError('info', `Opened external project: ${filePath}`);
+        } catch (err: any) {
+          console.error('Failed to accept external open requested:', err);
+          if ((window as any).electronAPI?.projectAcceptOpen) {
+            await (window as any).electronAPI.projectAcceptOpen({ token, success: false });
+          }
+        }
+      }
+    );
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [buildUnifiedProjectPayload, hydrateProject, addError]);
 
   const handleExportProject = useCallback(() => {
     setShowSaveSelectionModal(true);
@@ -10650,29 +10875,8 @@ const ADIA = () => {
   }, [hydrateProject]);
 
   const handleImportProject = useCallback(async () => {
-    try {
-      if ((window as any).require) {
-        const { ipcRenderer } = (window as any).require('electron');
-        const importedData = await ipcRenderer.invoke('import-json');
-        if (importedData) {
-          const validation = validateImportedJson(importedData);
-          if (!validation.isValid) {
-            setImportValidationError(validation);
-            return;
-          }
-          hydrateProject(validation.sanitizedData || importedData);
-        } else {
-          addError('info', 'Import cancelled or file could not be read.');
-        }
-      } else {
-        // Web/Mobile Fallback
-        projectImportRef.current?.click();
-      }
-    } catch (error) {
-      console.error('Import failed:', error);
-      addError('error', `Failed to import project: ${error instanceof Error ? error.message : 'Unknown error'}. Tip: Ensure the file is a valid ADIA project JSON file.`);
-    }
-  }, [addError, hydrateProject]);
+    await handleOpenProjectDialog();
+  }, [handleOpenProjectDialog]);
 
   const handleGenerateReport = useCallback((projectName: string, author: string) => {
     const style = `
@@ -13053,7 +13257,7 @@ const ADIA = () => {
       if (isInput) {
         if (e.ctrlKey && (e.key === 's' || e.key === 'S')) {
           e.preventDefault();
-          handleExportProject();
+          saveUnifiedProject(e.shiftKey);
         }
         return;
       }
@@ -13249,7 +13453,7 @@ const ADIA = () => {
         }
         if (e.key === 's' || e.key === 'S') {
           e.preventDefault();
-          handleExportProject();
+          saveUnifiedProject(e.shiftKey);
         }
       }
 
@@ -14802,29 +15006,43 @@ const ADIA = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={handleExportProject}
+            onClick={() => saveUnifiedProject(false)}
             className="border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10"
+            title="Save ADIA project (.adia)"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            Export
+            <Save size={14} className="mr-1.5" />
+            Save
           </Button>
 
           <Button
             variant="outline"
             size="sm"
-            onClick={handleImportProject}
+            onClick={() => saveUnifiedProject(true)}
             className="border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10"
+            title="Save ADIA project as new file (.adia)"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-            Import
+            Save As
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleOpenProjectDialog}
+            className="border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10"
+            title="Open ADIA project (.adia)"
+          >
+            <FolderOpen size={14} className="mr-1.5" />
+            Open
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportProject}
+            className="border-[#888] text-[#aaa] hover:bg-[#222]"
+            title="Export individual module files (.json)"
+          >
+            Export Modules
           </Button>
 
           <Button

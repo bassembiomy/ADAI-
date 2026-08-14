@@ -21,3 +21,11 @@ export function hasUnsavedProjectChanges(
 ): boolean {
   return cleanSnapshot !== null && createProjectSnapshot(current) !== cleanSnapshot;
 }
+
+export function shouldConfirmProjectReplacement(
+  current: Record<string, unknown>,
+  cleanSnapshot: string | null,
+): boolean {
+  return hasUnsavedProjectChanges(current, cleanSnapshot);
+}
+

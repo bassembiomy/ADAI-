@@ -3,6 +3,7 @@ import {
   createProjectSnapshot,
   createUnifiedProjectPayload,
   hasUnsavedProjectChanges,
+  shouldConfirmProjectReplacement,
 } from './adiaProjectPersistence';
 
 describe('ADIA unified project persistence', () => {
@@ -25,5 +26,14 @@ describe('ADIA unified project persistence', () => {
     const clean = createProjectSnapshot(first);
     expect(hasUnsavedProjectChanges({ ...first, timestamp: 'two' }, clean)).toBe(false);
     expect(hasUnsavedProjectChanges({ ...first, states: [{ id: 's1' }] }, clean)).toBe(true);
+  });
+
+  it('determines project replacement confirmation correctly', () => {
+    const current = { version: '1.0', timestamp: 't1', states: [] };
+    const clean = createProjectSnapshot(current);
+
+    expect(shouldConfirmProjectReplacement(current, clean)).toBe(false);
+    expect(shouldConfirmProjectReplacement({ ...current, states: [{ id: 's1' }] }, clean)).toBe(true);
+    expect(shouldConfirmProjectReplacement(current, null)).toBe(false);
   });
 });
