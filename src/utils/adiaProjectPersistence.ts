@@ -23,9 +23,14 @@ export function hasUnsavedProjectChanges(
 }
 
 export function shouldConfirmProjectReplacement(
-  current: Record<string, unknown>,
-  cleanSnapshot: string | null,
+  currentOrIsDirty: Record<string, unknown> | boolean,
+  cleanSnapshotOrConfirm?: string | null | ((message: string) => boolean),
 ): boolean {
-  return hasUnsavedProjectChanges(current, cleanSnapshot);
+  if (typeof currentOrIsDirty === 'boolean') {
+    if (!currentOrIsDirty) return true;
+    const confirmFn = typeof cleanSnapshotOrConfirm === 'function' ? cleanSnapshotOrConfirm : () => true;
+    return confirmFn('You have unsaved changes in your current project. Opening another project will replace all unsaved changes. Continue?');
+  }
+  return hasUnsavedProjectChanges(currentOrIsDirty, cleanSnapshotOrConfirm as string | null);
 }
 

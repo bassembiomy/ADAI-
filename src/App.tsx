@@ -7944,226 +7944,7 @@ const ADIA = () => {
     workspaceFiles, openTabIds, activeFileId, saveCurrentFileState
   ]);
 
-  const buildUnifiedProjectPayload = useCallback(() => {
-    return createUnifiedProjectPayload({
-      projectName: currentProjectName,
-      tickMs,
-      states,
-      junctions,
-      transitions,
-      layers,
-      variables,
-      safetyMode,
-      hilConfig,
-      blocks,
-      relationships,
-      parts,
-      connectors,
-      interfaceRealizations,
-      customStereotypes,
-      hmiComponents,
-      vlabNodes,
-      vlabEdges,
-      globalXBridgesNodes,
-      globalXBridgesEdges,
-      entropyNodes,
-      entropyEdges,
-      doe: {
-        headers,
-        data,
-        activeModel,
-        taguchiConfig,
-        results,
-      },
-      managedWindows,
-      workspaceFiles,
-      openTabIds,
-      activeFileId,
-    });
-  }, [
-    currentProjectName,
-    tickMs,
-    states,
-    junctions,
-    transitions,
-    layers,
-    variables,
-    safetyMode,
-    hilConfig,
-    blocks,
-    relationships,
-    parts,
-    connectors,
-    interfaceRealizations,
-    customStereotypes,
-    hmiComponents,
-    vlabNodes,
-    vlabEdges,
-    globalXBridgesNodes,
-    globalXBridgesEdges,
-    entropyNodes,
-    entropyEdges,
-    headers,
-    data,
-    activeModel,
-    taguchiConfig,
-    results,
-    managedWindows,
-    workspaceFiles,
-    openTabIds,
-    activeFileId,
-  ]);
 
-  const saveUnifiedProject = useCallback(async (saveAs: boolean = false) => {
-    try {
-      const payload = buildUnifiedProjectPayload();
-      if ((window as any).electronAPI) {
-        const result = saveAs
-          ? await (window as any).electronAPI.projectSaveAs(payload)
-          : await (window as any).electronAPI.projectSave(payload);
-
-        if (result && result.success && result.filePath) {
-          setActiveProjectPath(result.filePath);
-          lastSavedSnapshotRef.current = createProjectSnapshot(payload);
-          
-          const fileName = result.filePath.split(/[/\\]/).pop() || '';
-          const nameWithoutExt = fileName.replace(/\.adia$/i, '').replace(/\.json$/i, '');
-          if (nameWithoutExt) {
-            setCurrentProjectName(nameWithoutExt);
-          }
-          addError('info', `Project saved successfully: ${result.filePath}`);
-        } else if (result && result.canceled) {
-          // User canceled save dialog
-        } else {
-          addError('error', `Failed to save project: ${result?.error || 'Unknown error'}`);
-        }
-      } else {
-        // Web / Browser Fallback
-        const jsonStr = JSON.stringify(payload, null, 2);
-        const blob = new Blob([jsonStr], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${currentProjectName.replace(/[^a-zA-Z0-9_-]/g, '_')}.adia`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        lastSavedSnapshotRef.current = createProjectSnapshot(payload);
-        addError('info', 'Project downloaded as .adia file.');
-      }
-    } catch (err: any) {
-      console.error('Save failed:', err);
-      addError('error', `Failed to save project: ${err?.message || String(err)}`);
-    }
-  }, [buildUnifiedProjectPayload, currentProjectName, addError]);
-
-  const confirmProjectReplacementIfDirty = useCallback((): boolean => {
-    const currentSnapshot = createProjectSnapshot(buildUnifiedProjectPayload());
-    const isDirty = hasUnsavedProjectChanges(currentSnapshot, lastSavedSnapshotRef.current);
-    return shouldConfirmProjectReplacement(isDirty, (msg) => window.confirm(msg));
-  }, [buildUnifiedProjectPayload]);
-
-  const handleOpenProjectDialog = useCallback(async () => {
-    try {
-      if (!confirmProjectReplacementIfDirty()) {
-        return;
-      }
-
-      if ((window as any).electronAPI) {
-        const result = await (window as any).electronAPI.projectOpenDialog();
-        if (result && !result.canceled && result.projectData) {
-          const validation = validateImportedJson(result.projectData);
-          if (!validation.isValid) {
-            setImportValidationError(validation);
-            return;
-          }
-          const dataToHydrate = validation.sanitizedData || result.projectData;
-          hydrateProject(dataToHydrate);
-          if (result.filePath) {
-            setActiveProjectPath(result.filePath);
-            const fileName = result.filePath.split(/[/\\]/).pop() || '';
-            const nameWithoutExt = fileName.replace(/\.adia$/i, '').replace(/\.json$/i, '');
-            if (nameWithoutExt) {
-              setCurrentProjectName(nameWithoutExt);
-            }
-          }
-          setTimeout(() => {
-            lastSavedSnapshotRef.current = createProjectSnapshot(buildUnifiedProjectPayload());
-          }, 50);
-          addError('info', `Opened project: ${result.filePath || 'Unified Project'}`);
-        }
-      } else {
-        projectImportRef.current?.click();
-      }
-    } catch (err: any) {
-      console.error('Open dialog failed:', err);
-      addError('error', `Failed to open project: ${err?.message || String(err)}`);
-    }
-  }, [confirmProjectReplacementIfDirty, hydrateProject, buildUnifiedProjectPayload, addError]);
-
-  useEffect(() => {
-    if (!(window as any).electronAPI?.onProjectOpenRequested) return;
-
-    const unsubscribe = (window as any).electronAPI.onProjectOpenRequested(
-      async (eventData: { token: string; filePath: string; projectData: any }) => {
-        const { token, filePath, projectData } = eventData;
-        try {
-          const currentSnapshot = createProjectSnapshot(buildUnifiedProjectPayload());
-          const isDirty = hasUnsavedProjectChanges(currentSnapshot, lastSavedSnapshotRef.current);
-          const userApproved = shouldConfirmProjectReplacement(isDirty, (msg) => window.confirm(msg));
-
-          if (!userApproved) {
-            if ((window as any).electronAPI?.projectAcceptOpen) {
-              await (window as any).electronAPI.projectAcceptOpen({ token, success: false });
-            }
-            return;
-          }
-
-          const validation = validateImportedJson(projectData);
-          if (!validation.isValid) {
-            setImportValidationError(validation);
-            if ((window as any).electronAPI?.projectAcceptOpen) {
-              await (window as any).electronAPI.projectAcceptOpen({ token, success: false });
-            }
-            return;
-          }
-
-          const dataToHydrate = validation.sanitizedData || projectData;
-          hydrateProject(dataToHydrate);
-          setActiveProjectPath(filePath);
-          const fileName = filePath.split(/[/\\]/).pop() || '';
-          const nameWithoutExt = fileName.replace(/\.adia$/i, '').replace(/\.json$/i, '');
-          if (nameWithoutExt) {
-            setCurrentProjectName(nameWithoutExt);
-          }
-
-          if ((window as any).electronAPI?.projectAcceptOpen) {
-            await (window as any).electronAPI.projectAcceptOpen({ token, success: true });
-          }
-
-          setTimeout(() => {
-            lastSavedSnapshotRef.current = createProjectSnapshot(buildUnifiedProjectPayload());
-          }, 50);
-
-          addError('info', `Opened external project: ${filePath}`);
-        } catch (err: any) {
-          console.error('Failed to accept external open requested:', err);
-          if ((window as any).electronAPI?.projectAcceptOpen) {
-            await (window as any).electronAPI.projectAcceptOpen({ token, success: false });
-          }
-        }
-      }
-    );
-
-    return () => {
-      if (typeof unsubscribe === 'function') unsubscribe();
-    };
-  }, [buildUnifiedProjectPayload, hydrateProject, addError]);
-
-  const handleExportProject = useCallback(() => {
-    setShowSaveSelectionModal(true);
-  }, []);
 
   const handleXBridgesSave = useCallback((nodes: any[], edges: any[], mappings: readonly XBMappingV1[]) => {
     const prunedMappings = pruneXBBoundaryMappings(mappings, nodes);
@@ -8437,6 +8218,228 @@ const ADIA = () => {
     setSelectedIds, setHistory, setHistoryIndex, setCurrentLayerId, setLayerStack, setLayerPath, addError,
     setCurrentProjectName, setOpenTabs, setWorkspaceFiles, setOpenTabIds, setActiveFileId, setDiagramModeState
   ]);
+
+  const buildUnifiedProjectPayload = useCallback(() => {
+    return createUnifiedProjectPayload({
+      version: VERSION,
+      projectName: currentProjectName,
+      tickMs,
+      states,
+      junctions,
+      transitions,
+      layers,
+      variables,
+      safetyMode,
+      hilConfig,
+      blocks,
+      relationships,
+      parts,
+      connectors,
+      interfaceRealizations,
+      customStereotypes,
+      hmiComponents,
+      vlabNodes,
+      vlabEdges,
+      globalXBridgesNodes,
+      globalXBridgesEdges,
+      entropyNodes,
+      entropyEdges,
+      doe: {
+        headers,
+        data,
+        activeModel,
+        taguchiConfig,
+        results,
+      },
+      managedWindows,
+      workspaceFiles,
+      openTabIds,
+      activeFileId,
+    });
+  }, [
+    currentProjectName,
+    tickMs,
+    states,
+    junctions,
+    transitions,
+    layers,
+    variables,
+    safetyMode,
+    hilConfig,
+    blocks,
+    relationships,
+    parts,
+    connectors,
+    interfaceRealizations,
+    customStereotypes,
+    hmiComponents,
+    vlabNodes,
+    vlabEdges,
+    globalXBridgesNodes,
+    globalXBridgesEdges,
+    entropyNodes,
+    entropyEdges,
+    headers,
+    data,
+    activeModel,
+    taguchiConfig,
+    results,
+    managedWindows,
+    workspaceFiles,
+    openTabIds,
+    activeFileId,
+  ]);
+
+  const saveUnifiedProject = useCallback(async (saveAs: boolean = false) => {
+    try {
+      const payload = buildUnifiedProjectPayload();
+      if ((window as any).electronAPI) {
+        const result = saveAs
+          ? await (window as any).electronAPI.projectSaveAs(payload)
+          : await (window as any).electronAPI.projectSave(payload);
+
+        if (result && result.success && result.filePath) {
+          setActiveProjectPath(result.filePath);
+          lastSavedSnapshotRef.current = createProjectSnapshot(payload);
+          
+          const fileName = result.filePath.split(/[/\\]/).pop() || '';
+          const nameWithoutExt = fileName.replace(/\.adia$/i, '').replace(/\.json$/i, '');
+          if (nameWithoutExt) {
+            setCurrentProjectName(nameWithoutExt);
+          }
+          addError('info', `Project saved successfully: ${result.filePath}`);
+        } else if (result && result.canceled) {
+          // User canceled save dialog
+        } else {
+          addError('error', `Failed to save project: ${result?.error || 'Unknown error'}`);
+        }
+      } else {
+        // Web / Browser Fallback
+        const jsonStr = JSON.stringify(payload, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentProjectName.replace(/[^a-zA-Z0-9_-]/g, '_')}.adia`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        lastSavedSnapshotRef.current = createProjectSnapshot(payload);
+        addError('info', 'Project downloaded as .adia file.');
+      }
+    } catch (err: any) {
+      console.error('Save failed:', err);
+      addError('error', `Failed to save project: ${err?.message || String(err)}`);
+    }
+  }, [buildUnifiedProjectPayload, currentProjectName, addError]);
+
+  const confirmProjectReplacementIfDirty = useCallback((): boolean => {
+    const currentPayload = buildUnifiedProjectPayload();
+    const isDirty = hasUnsavedProjectChanges(currentPayload, lastSavedSnapshotRef.current);
+    return shouldConfirmProjectReplacement(isDirty, (msg: string) => window.confirm(msg));
+  }, [buildUnifiedProjectPayload]);
+
+  const handleOpenProjectDialog = useCallback(async () => {
+    try {
+      if (!confirmProjectReplacementIfDirty()) {
+        return;
+      }
+
+      if ((window as any).electronAPI) {
+        const result = await (window as any).electronAPI.projectOpenDialog();
+        if (result && !result.canceled && result.projectData) {
+          const validation = validateImportedJson(result.projectData);
+          if (!validation.isValid) {
+            setImportValidationError(validation);
+            return;
+          }
+          const dataToHydrate = validation.sanitizedData || result.projectData;
+          hydrateProject(dataToHydrate);
+          if (result.filePath) {
+            setActiveProjectPath(result.filePath);
+            const fileName = result.filePath.split(/[/\\]/).pop() || '';
+            const nameWithoutExt = fileName.replace(/\.adia$/i, '').replace(/\.json$/i, '');
+            if (nameWithoutExt) {
+              setCurrentProjectName(nameWithoutExt);
+            }
+          }
+          setTimeout(() => {
+            lastSavedSnapshotRef.current = createProjectSnapshot(buildUnifiedProjectPayload());
+          }, 50);
+          addError('info', `Opened project: ${result.filePath || 'Unified Project'}`);
+        }
+      } else {
+        projectImportRef.current?.click();
+      }
+    } catch (err: any) {
+      console.error('Open dialog failed:', err);
+      addError('error', `Failed to open project: ${err?.message || String(err)}`);
+    }
+  }, [confirmProjectReplacementIfDirty, hydrateProject, buildUnifiedProjectPayload, addError]);
+
+  useEffect(() => {
+    if (!(window as any).electronAPI?.onProjectOpenRequested) return;
+
+    const unsubscribe = (window as any).electronAPI.onProjectOpenRequested(
+      async (eventData: { token: string; filePath: string; projectData: any }) => {
+        const { token, filePath, projectData } = eventData;
+        try {
+          const currentPayload = buildUnifiedProjectPayload();
+          const isDirty = hasUnsavedProjectChanges(currentPayload, lastSavedSnapshotRef.current);
+          const userApproved = shouldConfirmProjectReplacement(isDirty, (msg: string) => window.confirm(msg));
+
+          if (!userApproved) {
+            if ((window as any).electronAPI?.projectAcceptOpen) {
+              await (window as any).electronAPI.projectAcceptOpen({ token, success: false });
+            }
+            return;
+          }
+
+          const validation = validateImportedJson(projectData);
+          if (!validation.isValid) {
+            setImportValidationError(validation);
+            if ((window as any).electronAPI?.projectAcceptOpen) {
+              await (window as any).electronAPI.projectAcceptOpen({ token, success: false });
+            }
+            return;
+          }
+
+          const dataToHydrate = validation.sanitizedData || projectData;
+          hydrateProject(dataToHydrate);
+          setActiveProjectPath(filePath);
+          const fileName = filePath.split(/[/\\]/).pop() || '';
+          const nameWithoutExt = fileName.replace(/\.adia$/i, '').replace(/\.json$/i, '');
+          if (nameWithoutExt) {
+            setCurrentProjectName(nameWithoutExt);
+          }
+
+          if ((window as any).electronAPI?.projectAcceptOpen) {
+            await (window as any).electronAPI.projectAcceptOpen({ token, success: true });
+          }
+
+          setTimeout(() => {
+            lastSavedSnapshotRef.current = createProjectSnapshot(buildUnifiedProjectPayload());
+          }, 50);
+
+          addError('info', `Opened external project: ${filePath}`);
+        } catch (err: any) {
+          console.error('Failed to accept external open requested:', err);
+          if ((window as any).electronAPI?.projectAcceptOpen) {
+            await (window as any).electronAPI.projectAcceptOpen({ token, success: false });
+          }
+        }
+      }
+    );
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [buildUnifiedProjectPayload, hydrateProject, addError]);
+
+  const handleExportProject = useCallback(() => {
+    setShowSaveSelectionModal(true);
+  }, []);
 
   // Computed values
   const selectedState = useMemo(() => selectedIds.length === 1 ? states.find(s => s.id === selectedIds[0]) : null, [selectedIds, states]);
