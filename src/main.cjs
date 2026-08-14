@@ -482,32 +482,67 @@ function createWindow() {
   } else {
     // Optionally open DevTools in dev: win.webContents.openDevTools();
   }
+
+  projectFiles.setWindow(win);
+
+  win.webContents.on('did-finish-load', () => {
+    if (initialProjectPath) {
+      projectFiles.openExternal(initialProjectPath, win);
+    }
+  });
+
+  return win;
 }
 
-app.whenReady().then(async () => {
-  // ASAR integrity check must run before creating any window
-  const integrityResult = asarGuard.verifyAsarIntegrity();
-  if (!integrityResult.ok) {
-    // Show error dialog and refuse to start if ASAR has been tampered with
-    const { dialog: electronDialog } = require('electron');
-    await electronDialog.showMessageBox({
-      type: 'error',
-      title: 'Security Error — Application Tampered',
-      message: 'ADIA detected that the application files have been modified after installation.',
-      detail: integrityResult.error + '\n\nPlease reinstall from the official source.',
-      buttons: ['Quit'],
-    });
-    app.quit();
-    return;
-  }
+const { extractAdiaPath } = require('./projectFiles/projectFileService.cjs');
+const { createProjectFileController } = require('./projectFiles/projectFileController.cjs');
+const projectFiles = createProjectFileController({ ipcMain, dialog });
+projectFiles.registerIpc();
 
-  createWindow();
-  setTimeout(() => {
-    verifyAndPreInstallToolchains().catch(err => {
-      console.error('Failed to preinstall toolchains:', err);
-    });
-  }, 5000);
-}).catch(err => {
+app.setAppUserModelId('com.squirrel.adia.adia');
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+const initialProjectPath = extractAdiaPath(process.argv);
+
+if (!hasSingleInstanceLock) app.quit();
+
+app.on('second-instance', (_event, argv) => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) {
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  }
+  const requestedPath = extractAdiaPath(argv);
+  if (requestedPath && win) projectFiles.openExternal(requestedPath, win);
+});
+
+if (hasSingleInstanceLock) {
+  app.whenReady().then(async () => {
+    // ASAR integrity check must run before creating any window
+    const integrityResult = asarGuard.verifyAsarIntegrity();
+    if (!integrityResult.ok) {
+      // Show error dialog and refuse to start if ASAR has been tampered with
+      const { dialog: electronDialog } = require('electron');
+      await electronDialog.showMessageBox({
+        type: 'error',
+        title: 'Security Error — Application Tampered',
+        message: 'ADIA detected that the application files have been modified after installation.',
+        detail: integrityResult.error + '\n\nPlease reinstall from the official source.',
+        buttons: ['Quit'],
+      });
+      app.quit();
+      return;
+    }
+
+    createWindow();
+    setTimeout(() => {
+      verifyAndPreInstallToolchains().catch(err => {
+        console.error('Failed to preinstall toolchains:', err);
+      });
+    }, 5000);
+  }).catch(err => {
+    console.error('App startup failed:', err);
+  });
+}
   console.error('App failed to start:', err);
 });
 

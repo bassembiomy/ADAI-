@@ -13,11 +13,13 @@ const ALLOWED_INVOKE_CHANNELS = [
   '3dx-dashboard-open', '3dx-dashboard-close',
   'store-api-key', 'load-api-key', 'openai-chat-completion',
   'sm-verify-generated-c',
+  'project-open-dialog', 'project-save', 'project-save-as', 'project-accept-open',
 ];
 
 const ALLOWED_ON_CHANNELS = [
   '3dx-oauth-complete', '3dx-browser-state-update',
   'hil-on-data', 'hil-compiler-log-line', 'hil-flasher-log-line',
+  'project-open-requested',
 ];
 
 const createIpcBridge = () => Object.freeze({

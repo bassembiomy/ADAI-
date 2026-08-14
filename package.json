@@ -18,7 +18,7 @@
     "audit:security": "npm audit --audit-level=high",
     "audit:security:full": "npm audit",
     "test:security": "node src/security/inputValidator.test.cjs && node src/security/roleSecurity.test.cjs && node src/security/generatedCodeVerifier.test.cjs && node src/security/hilBuildPolicy.test.cjs && node src/security/hilFlashPolicy.test.cjs && node src/security/hilBuildRecipes.test.cjs && node src/security/hilBuildService.test.cjs && node src/security/elfInspector.test.cjs && node src/security/hilProbeService.test.cjs && node src/security/hilFlashRecipes.test.cjs && node src/security/hilFlashService.test.cjs && node src/security/toolchainHashVerifier.test.cjs",
-    "test:project-files": "node src/projectFiles/projectFileService.test.cjs && node src/projectFiles/windowsFileAssociation.test.cjs && node src/projectFiles/squirrelLifecycle.test.cjs",
+    "test:project-files": "node src/projectFiles/projectFileService.test.cjs && node src/projectFiles/windowsFileAssociation.test.cjs && node src/projectFiles/squirrelLifecycle.test.cjs && node src/projectFiles/projectFileController.test.cjs",
     "test:vlab": "vitest run src/engine/vlab/vlab_validation.test.ts src/engine/vlab/vlab.test.ts src/engine/vlab/labs_sim.test.ts src/engine/vlab/check_missing_math.test.ts",
     "test:vlab:connected": "vitest run src/engine/vlab/vlab_connected_models.test.ts --reporter=verbose",
     "test:vlab:all-blocks": "vitest run src/engine/vlab/test_all_blocks_scope.test.ts --reporter=dot",
