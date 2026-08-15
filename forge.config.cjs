@@ -1,10 +1,19 @@
+const path = require('path');
+const fs = require('fs');
+
 module.exports = {
   packagerConfig: {
     executableName: 'ADIA',
     asar: true,
     // ASAR integrity checking: embeds file hashes into the package for tamper detection
     asarIntegrity: true,
-    icon: './icon.ico',
+    icon: path.resolve(__dirname, 'icon.ico'),
+    win32metadata: {
+      CompanyName: 'ADIA Team',
+      FileDescription: 'ADIA Engineering Suite',
+      ProductName: 'ADIA',
+      InternalName: 'ADIA',
+    },
     // Anti-Extraction Rule: Exclude all raw source code, build scripts, docs, and scratch directories
     // Only compiled V8 bytecode (dist-electron/) and minified web application (dist/) are shipped in app.asar
     ignore: (filePath) => {
@@ -30,16 +39,27 @@ module.exports = {
       if (filePath.startsWith('/.') && filePath !== '/.kilo') return true;
       return false;
     },
-    // Code signing configuration placeholders for enterprise server builds
-    ...(process.env.ADIA_SIGN_CERT ? {
-      win32metadata: {
-        CompanyName: 'Your Company Name',
-        FileDescription: 'ADIA Engineering Suite',
-        ProductName: 'ADIA',
-      },
-    } : {}),
   },
   rebuildConfig: {},
+  hooks: {
+    postPackage: async (forgeConfig, options) => {
+      if (process.platform !== 'win32' || !options || !options.outputPaths) return;
+      const rceditPath = path.resolve(__dirname, 'node_modules/electron-winstaller/vendor/rcedit.exe');
+      const iconPath = path.resolve(__dirname, 'icon.ico');
+      for (const outDir of options.outputPaths) {
+        const targetExe = path.resolve(outDir, 'ADIA.exe');
+        if (fs.existsSync(rceditPath) && fs.existsSync(targetExe) && fs.existsSync(iconPath)) {
+          const { execFileSync } = require('child_process');
+          try {
+            execFileSync(rceditPath, [targetExe, '--set-icon', iconPath]);
+            console.log(`[Forge Hook] Successfully injected custom icon into: ${targetExe}`);
+          } catch (e) {
+            console.warn('[Forge Hook] rcedit postPackage warning:', e.message);
+          }
+        }
+      }
+    },
+  },
   makers: [
     {
       name: '@electron-forge/maker-squirrel',
@@ -48,7 +68,7 @@ module.exports = {
         name: 'adia',
         setupExe: 'ADIA Setup.exe',
         exe: 'ADIA.exe',
-        setupIcon: './icon.ico',
+        setupIcon: path.resolve(__dirname, 'icon.ico'),
       },
     },
     {
