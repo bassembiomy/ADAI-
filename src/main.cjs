@@ -496,6 +496,7 @@ function createWindow() {
 
 const { extractAdiaPath } = require('./projectFiles/projectFileService.cjs');
 const { createProjectFileController } = require('./projectFiles/projectFileController.cjs');
+const { registerAdiaAssociation } = require('./projectFiles/windowsFileAssociation.cjs');
 const projectFiles = createProjectFileController({ ipcMain, dialog });
 projectFiles.registerIpc();
 
@@ -517,6 +518,13 @@ app.on('second-instance', (_event, argv) => {
 
 if (hasSingleInstanceLock) {
   app.whenReady().then(async () => {
+    // Auto-register .adia file association on Windows
+    if (process.platform === 'win32') {
+      registerAdiaAssociation(process.execPath).catch(err => {
+        console.warn('[STARTUP] Could not auto-register .adia file association:', err.message);
+      });
+    }
+
     // ASAR integrity check must run before creating any window
     const integrityResult = asarGuard.verifyAsarIntegrity();
     if (!integrityResult.ok) {
