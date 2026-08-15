@@ -150,7 +150,9 @@ try {
   console.log(`   Protected preload: ${path.join(DIST_ELECTRON_DIR, 'preload.cjs')}`);
 }
 
-buildProtectedElectron().catch((err) => {
+buildProtectedElectron().then(() => {
+  process.exit(0);
+}).catch((err) => {
   console.error('❌ Build protected electron failed:', err);
   process.exit(1);
 });
