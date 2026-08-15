@@ -8293,12 +8293,20 @@ const ADIA = () => {
   const saveUnifiedProject = useCallback(async (saveAs: boolean = false) => {
     try {
       const payload = buildUnifiedProjectPayload();
-      if ((window as any).electronAPI) {
-        const result = saveAs
-          ? await (window as any).electronAPI.projectSaveAs(payload)
-          : await (window as any).electronAPI.projectSave(payload);
+      const electron = (window as any).electronAPI;
+      if (electron) {
+        let result: any;
+        if (saveAs) {
+          result = typeof electron.projectSaveAs === 'function'
+            ? await electron.projectSaveAs(payload)
+            : await electron.invoke('project-save-as', payload);
+        } else {
+          result = typeof electron.projectSave === 'function'
+            ? await electron.projectSave(payload)
+            : await electron.invoke('project-save', payload);
+        }
 
-        if (result && result.success && result.filePath) {
+        if (result && (result.status === 'saved' || result.success) && result.filePath) {
           setActiveProjectPath(result.filePath);
           lastSavedSnapshotRef.current = createProjectSnapshot(payload);
           
@@ -8308,10 +8316,10 @@ const ADIA = () => {
             setCurrentProjectName(nameWithoutExt);
           }
           addError('info', `Project saved successfully: ${result.filePath}`);
-        } else if (result && result.canceled) {
+        } else if (result && (result.status === 'cancelled' || result.canceled)) {
           // User canceled save dialog
         } else {
-          addError('error', `Failed to save project: ${result?.error || 'Unknown error'}`);
+          addError('error', `Failed to save project: ${result?.message || result?.error || 'Unknown error'}`);
         }
       } else {
         // Web / Browser Fallback
@@ -8346,15 +8354,20 @@ const ADIA = () => {
         return;
       }
 
-      if ((window as any).electronAPI) {
-        const result = await (window as any).electronAPI.projectOpenDialog();
-        if (result && !result.canceled && result.projectData) {
-          const validation = validateImportedJson(result.projectData);
+      const electron = (window as any).electronAPI;
+      if (electron) {
+        const result = typeof electron.projectOpenDialog === 'function'
+          ? await electron.projectOpenDialog()
+          : (typeof electron.invoke === 'function' ? await electron.invoke('project-open-dialog') : null);
+
+        if (result && (result.status === 'opened' || result.success) && (result.data || result.projectData)) {
+          const projectData = result.data || result.projectData;
+          const validation = validateImportedJson(projectData);
           if (!validation.isValid) {
             setImportValidationError(validation);
             return;
           }
-          const dataToHydrate = validation.sanitizedData || result.projectData;
+          const dataToHydrate = validation.sanitizedData || projectData;
           hydrateProject(dataToHydrate);
           if (result.filePath) {
             setActiveProjectPath(result.filePath);
@@ -8364,10 +8377,19 @@ const ADIA = () => {
               setCurrentProjectName(nameWithoutExt);
             }
           }
+          if (result.token) {
+            if (typeof electron.projectAcceptOpen === 'function') {
+              await electron.projectAcceptOpen({ token: result.token });
+            } else if (typeof electron.invoke === 'function') {
+              await electron.invoke('project-accept-open', { token: result.token });
+            }
+          }
           setTimeout(() => {
             lastSavedSnapshotRef.current = createProjectSnapshot(buildUnifiedProjectPayload());
           }, 50);
           addError('info', `Opened project: ${result.filePath || 'Unified Project'}`);
+        } else if (result && result.status === 'error') {
+          addError('error', result.message || 'Failed to open project');
         }
       } else {
         projectImportRef.current?.click();
@@ -8379,62 +8401,70 @@ const ADIA = () => {
   }, [confirmProjectReplacementIfDirty, hydrateProject, buildUnifiedProjectPayload, addError]);
 
   useEffect(() => {
-    if (!(window as any).electronAPI?.onProjectOpenRequested) return;
+    const electron = (window as any).electronAPI;
+    if (!electron) return;
 
-    const unsubscribe = (window as any).electronAPI.onProjectOpenRequested(
-      async (eventData: { token: string; filePath: string; projectData: any }) => {
-        const { token, filePath, projectData } = eventData;
-        try {
-          const currentPayload = buildUnifiedProjectPayload();
-          const isDirty = hasUnsavedProjectChanges(currentPayload, lastSavedSnapshotRef.current);
-          const userApproved = shouldConfirmProjectReplacement(isDirty, (msg: string) => window.confirm(msg));
+    const handleOpenReq = async (eventData: any) => {
+      const token = eventData?.token;
+      const filePath = eventData?.filePath;
+      const projectData = eventData?.data || eventData?.projectData;
+      if (!projectData) return;
 
-          if (!userApproved) {
-            if ((window as any).electronAPI?.projectAcceptOpen) {
-              await (window as any).electronAPI.projectAcceptOpen({ token, success: false });
-            }
-            return;
-          }
+      try {
+        const currentPayload = buildUnifiedProjectPayload();
+        const isDirty = hasUnsavedProjectChanges(currentPayload, lastSavedSnapshotRef.current);
+        const userApproved = shouldConfirmProjectReplacement(isDirty, (msg: string) => window.confirm(msg));
 
-          const validation = validateImportedJson(projectData);
-          if (!validation.isValid) {
-            setImportValidationError(validation);
-            if ((window as any).electronAPI?.projectAcceptOpen) {
-              await (window as any).electronAPI.projectAcceptOpen({ token, success: false });
-            }
-            return;
-          }
+        if (!userApproved) {
+          return;
+        }
 
-          const dataToHydrate = validation.sanitizedData || projectData;
-          hydrateProject(dataToHydrate);
+        const validation = validateImportedJson(projectData);
+        if (!validation.isValid) {
+          setImportValidationError(validation);
+          return;
+        }
+
+        const dataToHydrate = validation.sanitizedData || projectData;
+        hydrateProject(dataToHydrate);
+        if (filePath) {
           setActiveProjectPath(filePath);
           const fileName = filePath.split(/[/\\]/).pop() || '';
           const nameWithoutExt = fileName.replace(/\.adia$/i, '').replace(/\.json$/i, '');
           if (nameWithoutExt) {
             setCurrentProjectName(nameWithoutExt);
           }
+        }
 
-          if ((window as any).electronAPI?.projectAcceptOpen) {
-            await (window as any).electronAPI.projectAcceptOpen({ token, success: true });
-          }
-
-          setTimeout(() => {
-            lastSavedSnapshotRef.current = createProjectSnapshot(buildUnifiedProjectPayload());
-          }, 50);
-
-          addError('info', `Opened external project: ${filePath}`);
-        } catch (err: any) {
-          console.error('Failed to accept external open requested:', err);
-          if ((window as any).electronAPI?.projectAcceptOpen) {
-            await (window as any).electronAPI.projectAcceptOpen({ token, success: false });
+        if (token) {
+          if (typeof electron.projectAcceptOpen === 'function') {
+            await electron.projectAcceptOpen({ token });
+          } else if (typeof electron.invoke === 'function') {
+            await electron.invoke('project-accept-open', { token });
           }
         }
-      }
-    );
 
-    return () => {
-      if (typeof unsubscribe === 'function') unsubscribe();
+        setTimeout(() => {
+          lastSavedSnapshotRef.current = createProjectSnapshot(buildUnifiedProjectPayload());
+        }, 50);
+
+        addError('info', `Opened external project: ${filePath || 'Unified Project'}`);
+      } catch (err: any) {
+        console.error('Failed to accept external open requested:', err);
+      }
     };
+
+    if (typeof electron.onProjectOpenRequested === 'function') {
+      const unsubscribe = electron.onProjectOpenRequested(handleOpenReq);
+      return () => {
+        if (typeof unsubscribe === 'function') unsubscribe();
+      };
+    } else if (typeof electron.on === 'function') {
+      const unsubscribe = electron.on('project-open-requested', (_event: any, data: any) => handleOpenReq(data));
+      return () => {
+        if (typeof unsubscribe === 'function') unsubscribe();
+      };
+    }
   }, [buildUnifiedProjectPayload, hydrateProject, addError]);
 
   const handleExportProject = useCallback(() => {

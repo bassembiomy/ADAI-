@@ -57,6 +57,16 @@ const createIpcBridge = () => Object.freeze({
   },
   removeListener: (channel, func) => ipcRenderer.removeListener(channel, func),
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
+  // Project file helpers
+  projectOpenDialog: () => ipcRenderer.invoke('project-open-dialog'),
+  projectSave: (data) => ipcRenderer.invoke('project-save', data),
+  projectSaveAs: (data) => ipcRenderer.invoke('project-save-as', data),
+  projectAcceptOpen: (payload) => ipcRenderer.invoke('project-accept-open', payload),
+  onProjectOpenRequested: (callback) => {
+    const subscription = (_event, data) => callback(data);
+    ipcRenderer.on('project-open-requested', subscription);
+    return () => ipcRenderer.removeListener('project-open-requested', subscription);
+  },
 });
 
 // Primary secure bridge: window.electronAPI
