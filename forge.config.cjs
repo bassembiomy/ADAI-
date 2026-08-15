@@ -4,7 +4,7 @@ module.exports = {
     asar: true,
     // ASAR integrity checking: embeds file hashes into the package for tamper detection
     asarIntegrity: true,
-    icon: './icon.png',
+    icon: './icon.ico',
     // Anti-Extraction Rule: Exclude all raw source code, build scripts, docs, and scratch directories
     // Only compiled V8 bytecode (dist-electron/) and minified web application (dist/) are shipped in app.asar
     ignore: (filePath) => {
@@ -48,7 +48,7 @@ module.exports = {
         name: 'adia',
         setupExe: 'ADIA Setup.exe',
         exe: 'ADIA.exe',
-        // setupIcon: './icon.png'
+        setupIcon: './icon.ico',
       },
     },
     {

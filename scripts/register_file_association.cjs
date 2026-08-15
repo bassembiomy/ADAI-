@@ -44,9 +44,22 @@ async function main() {
     isPackaged: false,
   });
 
+  const iconPath = path.resolve(__dirname, '../icon.ico');
+  const hasIcon = fs.existsSync(iconPath);
+
   console.log(`Registering .adia file association for executable: ${targetExe}`);
-  await registerAdiaAssociation(targetExe);
+  if (hasIcon) {
+    console.log(`Using application icon at: ${iconPath}`);
+  }
+
+  await registerAdiaAssociation(targetExe, hasIcon ? { iconPath } : {});
   console.log('Successfully registered .adia file association in HKCU\\Software\\Classes.');
+
+  // Refresh Windows Explorer icon cache
+  try {
+    const { execSync } = require('child_process');
+    execSync('powershell.exe -NoProfile -Command "try { $code = @\'\nusing System;\nusing System.Runtime.InteropServices;\npublic class Shell { [DllImport(\\\"shell32.dll\\\")] public static extern void SHChangeNotify(int eventId, int flags, IntPtr item1, IntPtr item2); }\n\'@; Add-Type $code; [Shell]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero); } catch {}"', { stdio: 'ignore' });
+  } catch {}
 }
 
 if (require.main === module) {

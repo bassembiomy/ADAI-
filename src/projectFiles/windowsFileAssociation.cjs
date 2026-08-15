@@ -4,11 +4,14 @@ const EXTENSION_KEY = 'HKCU\\Software\\Classes\\.adia';
 const PROG_ID = 'ADIA.Project';
 const PROG_ID_KEY = `HKCU\\Software\\Classes\\${PROG_ID}`;
 
-function buildAssociationValues(execPath) {
+function buildAssociationValues(execPath, options = {}) {
+  const icon = (options && options.iconPath)
+    ? `"${options.iconPath}"`
+    : `"${execPath}",0`;
   return {
     extensionKey: EXTENSION_KEY,
     progIdKey: PROG_ID_KEY,
-    icon: `"${execPath}",0`,
+    icon,
     command: `"${execPath}" "%1"`,
   };
 }
@@ -25,7 +28,7 @@ function createRegRunner(execFileImpl = require('child_process').execFile) {
 
 async function registerAdiaAssociation(execPath, deps = {}) {
   const runReg = deps.runReg || createRegRunner();
-  const values = buildAssociationValues(execPath);
+  const values = buildAssociationValues(execPath, deps);
 
   // 1. Set HKCU\Software\Classes\.adia (Default) -> ADIA.Project
   await runReg(['ADD', values.extensionKey, '/ve', '/d', PROG_ID, '/f']);

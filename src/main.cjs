@@ -390,6 +390,10 @@ function createWindow() {
     });
   }
 
+  const appIconPath = (process.platform === 'win32' && fs.existsSync(path.join(__dirname, '../icon.ico')))
+    ? path.join(__dirname, '../icon.ico')
+    : path.join(__dirname, '../icon.png');
+
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -402,7 +406,7 @@ function createWindow() {
     },
     title: "ADIA Engineering Suite",
     backgroundColor: "#181818",
-    icon: path.join(__dirname, '../icon.png'),
+    icon: appIconPath,
   });
 
   // In production, we load the bundled index.html from the dist folder
@@ -462,6 +466,7 @@ function createWindow() {
                 preload: path.join(__dirname, 'preload.cjs'),
               },
               backgroundColor: "#181818",
+              icon: appIconPath,
             }
           };
         }
