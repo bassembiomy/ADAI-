@@ -11141,7 +11141,7 @@ const ADIA = () => {
         });
 
       } else if (type === 'bdd' || type === 'req') {
-        // ── Tree layout for BDD / Requirements ──
+        // ── Hierarchical Layered Tree Layout for BDD / Requirements ──
         const { children, roots } = buildAdjacency();
 
         // Assign levels via BFS
@@ -11182,30 +11182,37 @@ const ADIA = () => {
         const sortedLevels = Array.from(levelGroups.keys()).sort((a, b) => a - b);
         let curY = 0;
 
+        // Order nodes within level using parent position to minimize crossings
+        const nodeXPos = new Map<string, number>();
+
         sortedLevels.forEach(level => {
           const levelNodes = levelGroups.get(level)!;
-          
-          // Let's wrap level nodes into rows of max 4 nodes for better page fitting
-          const MAX_NODES_PER_ROW = 4;
-          const rows: any[][] = [];
-          for (let i = 0; i < levelNodes.length; i += MAX_NODES_PER_ROW) {
-            rows.push(levelNodes.slice(i, i + MAX_NODES_PER_ROW));
+
+          if (level > 0) {
+            // Sort by average parent X position
+            levelNodes.sort((a, b) => {
+              const parentsA = edges.filter((e: any) => (e.targetId || e.targetPartId) === a.id).map((e: any) => nodeXPos.get(e.sourceId || e.sourcePartId) ?? 0);
+              const parentsB = edges.filter((e: any) => (e.targetId || e.targetPartId) === b.id).map((e: any) => nodeXPos.get(e.sourceId || e.sourcePartId) ?? 0);
+              const avgA = parentsA.length ? parentsA.reduce((s, v) => s + v, 0) / parentsA.length : 0;
+              const avgB = parentsB.length ? parentsB.reduce((s, v) => s + v, 0) / parentsB.length : 0;
+              return avgA - avgB;
+            });
           }
 
-          rows.forEach(rowNodes => {
-            const totalWidth = rowNodes.reduce((sum, n) => sum + (n.width || 140) + NODE_GAP_X, -NODE_GAP_X);
-            const startX = Math.max(0, (MAX_ROW_WIDTH - totalWidth) / 2);
-            let curX = startX;
-            const maxH = Math.max(...rowNodes.map(n => n.height || 80));
+          const nodeW = type === 'req' ? 160 : 140;
+          const totalWidth = levelNodes.reduce((sum, n) => sum + (n.width || nodeW) + NODE_GAP_X, -NODE_GAP_X);
+          const startX = Math.max(0, (MAX_ROW_WIDTH - totalWidth) / 2);
+          let curX = startX;
+          const maxH = Math.max(...levelNodes.map(n => n.height || 80));
 
-            rowNodes.forEach(n => {
-              n.displayX = curX;
-              n.displayY = curY;
-              curX += (n.width || 140) + NODE_GAP_X;
-            });
-
-            curY += maxH + NODE_GAP_Y;
+          levelNodes.forEach(n => {
+            n.displayX = curX;
+            n.displayY = curY;
+            nodeXPos.set(n.id, curX + (n.width || nodeW) / 2);
+            curX += (n.width || nodeW) + NODE_GAP_X;
           });
+
+          curY += maxH + NODE_GAP_Y + 24;
         });
 
       } else if (type === 'ibd') {
@@ -11278,9 +11285,7 @@ const ADIA = () => {
       }
 
       // ── AUTO-LAYOUT: reposition nodes for report readability ──
-      if (type !== 'bdd' && type !== 'ibd') {
-        autoLayoutForReport(displayNodes, edgesCopy, type);
-      }
+      autoLayoutForReport(displayNodes, edgesCopy, type);
 
       // Rebuild the map after layout (positions changed)
       displayNodes.forEach(n => displayNodesMap.set(n.id, n));
@@ -11335,63 +11340,13 @@ const ADIA = () => {
 
       const viewBox = `${minX - padding} ${minY - padding} ${rawWidth} ${rawHeight}`;
 
-      // ── PAGINATION: split large diagrams into pages ──
-      const MAX_NODES_PER_PAGE = 20;
-      if (displayNodes.length > MAX_NODES_PER_PAGE) {
-        // Sort nodes by Y then X for logical page grouping
-        const sortedNodes = [...displayNodes].sort((a, b) => a.displayY - b.displayY || a.displayX - b.displayX);
-        const pages: any[][] = [];
-        for (let i = 0; i < sortedNodes.length; i += MAX_NODES_PER_PAGE) {
-          pages.push(sortedNodes.slice(i, i + MAX_NODES_PER_PAGE));
-        }
-
-        let allSvg = '';
-        pages.forEach((pageNodes, pageIdx) => {
-          const pageNodeIds = new Set(pageNodes.map(n => n.id));
-          const pageEdges = edgesCopy.filter((e: any) => {
-            const srcId = e.sourceId || e.sourcePartId;
-            const tgtId = e.targetId || e.targetPartId;
-            return pageNodeIds.has(srcId) || pageNodeIds.has(tgtId);
-          });
-
-          // Calculate page bounds
-          let pMinX = Infinity, pMinY = Infinity, pMaxX = -Infinity, pMaxY = -Infinity;
-          pageNodes.forEach(n => {
-            pMinX = Math.min(pMinX, n.displayX);
-            pMinY = Math.min(pMinY, n.displayY);
-            pMaxX = Math.max(pMaxX, n.displayX + n.width);
-            pMaxY = Math.max(pMaxY, n.displayY + n.height);
-          });
-
-          const pFramePadding = type === 'ibd' ? 80 : 0;
-          const pMinX_adjusted = type === 'ibd' ? pMinX - pFramePadding : pMinX;
-          const pMinY_adjusted = type === 'ibd' ? pMinY - pFramePadding : pMinY;
-          const pMaxX_adjusted = type === 'ibd' ? pMaxX + pFramePadding : pMaxX;
-          const pMaxY_adjusted = type === 'ibd' ? pMaxY + pFramePadding : pMaxY;
-
-          const pPad = 50;
-          const pW = Math.max(200, pMaxX_adjusted - pMinX_adjusted + pPad * 2);
-          const pH = Math.max(150, pMaxY_adjusted - pMinY_adjusted + pPad * 2);
-          const pDispW = Math.min(pW, MAX_SVG_WIDTH);
-          const pScale = pW > MAX_SVG_WIDTH ? MAX_SVG_WIDTH / pW : 1;
-          const pDispH = pH * pScale;
-          const pVB = `${pMinX_adjusted - pPad} ${pMinY_adjusted - pPad} ${pW} ${pH}`;
-
-          allSvg += `<div style="margin: 12px 0; border: 1px solid #ddd; padding: 12px; background: #fcfcfc; page-break-inside: avoid;">`;
-          allSvg += `<div style="font-size: 10px; color: #999; margin-bottom: 6px; text-align: right;">Page ${pageIdx + 1} of ${pages.length} (${displayNodes.length} elements)</div>`;
-          allSvg += renderSingleSVG(pageNodes, pageEdges, type, pVB, pDispW, pDispH, displayNodesMap, contextId);
-          allSvg += `</div>`;
-        });
-        return allSvg;
-      }
-
       let svgResult = `<div style="margin: 16px 0; border: 1px solid #ddd; padding: 12px; background: #fcfcfc; page-break-inside: avoid;">`;
       svgResult += renderSingleSVG(displayNodes, edgesCopy, type, viewBox, displayWidth, displayHeight, displayNodesMap, contextId);
       svgResult += `</div>`;
       return svgResult;
     };
 
-    // Single SVG rendering helper (used by renderDiagramSVG and pagination)
+    // Single SVG rendering helper (used by renderDiagramSVG)
     const renderSingleSVG = (displayNodes: any[], edges: any[], type: string, viewBox: string, svgWidth: number, svgHeight: number, displayNodesMap: Map<string, any>, contextId?: string) => {
       const contextBlock = contextId ? blocks.find(b => b.id === contextId) : null;
 
@@ -11598,6 +11553,18 @@ const ADIA = () => {
         svg += `</g>`;
       });
 
+      // Precompute incoming and outgoing edge counts per node to spread ports
+      const outEdgeMap = new Map<string, any[]>();
+      const inEdgeMap = new Map<string, any[]>();
+      edges.forEach((e: any) => {
+        const sId = e.sourceId || e.sourcePartId;
+        const tId = e.targetId || e.targetPartId;
+        if (!outEdgeMap.has(sId)) outEdgeMap.set(sId, []);
+        outEdgeMap.get(sId)!.push(e);
+        if (!inEdgeMap.has(tId)) inEdgeMap.set(tId, []);
+        inEdgeMap.get(tId)!.push(e);
+      });
+
       // Render Edges
       edges.forEach((e: any) => {
         let sp, tp;
@@ -11629,6 +11596,26 @@ const ADIA = () => {
             } else if (source.nodeType === 'junction' && target.nodeType === 'junction') {
               sp = getJunctionEdgePoint(getCenter(source), getCenter(target));
               tp = getJunctionEdgePoint(getCenter(target), getCenter(source));
+            } else {
+              sp = getEdgePoint(getBox(source), getBox(target));
+              tp = getEdgePoint(getBox(target), getBox(source));
+            }
+          }
+        } else if (type === 'req' || type === 'bdd') {
+          if (source && target) {
+            const outList = outEdgeMap.get(source.id) || [e];
+            const inList = inEdgeMap.get(target.id) || [e];
+            const outIdx = Math.max(0, outList.indexOf(e));
+            const inIdx = Math.max(0, inList.indexOf(e));
+
+            if (target.displayY >= source.displayY + source.height) {
+              // Top-to-bottom hierarchy: spread ports along source bottom and target top
+              const spX = source.displayX + (source.width / (outList.length + 1)) * (outIdx + 1);
+              const spY = source.displayY + source.height;
+              const tpX = target.displayX + (target.width / (inList.length + 1)) * (inIdx + 1);
+              const tpY = target.displayY;
+              sp = { x: spX, y: spY };
+              tp = { x: tpX, y: tpY };
             } else {
               sp = getEdgePoint(getBox(source), getBox(target));
               tp = getEdgePoint(getBox(target), getBox(source));
@@ -11695,6 +11682,23 @@ const ADIA = () => {
           if (type === 'statemachine' && cp) {
             const dPath = `M ${sp.x} ${sp.y} Q ${cp.x} ${cp.y} ${tp.x} ${tp.y}`;
             svg += `<path d="${dPath}" fill="none" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" marker-end="${markerEnd}" />`;
+          } else if ((type === 'req' || type === 'bdd') && target && source && target.displayY >= source.displayY + source.height) {
+            // Smooth vertical S-curve avoiding crossing through middle nodes
+            const midY = (sp.y + tp.y) / 2;
+            const dPath = `M ${sp.x} ${sp.y} C ${sp.x} ${midY}, ${tp.x} ${midY}, ${tp.x} ${tp.y}`;
+            svg += `<path d="${dPath}" fill="none" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" />`;
+            
+            // Downward pointing arrowhead
+            const relType = e.type;
+            if (relType === 'generalization') {
+              svg += `<polygon points="${tp.x},${tp.y} ${tp.x - 6},${tp.y - 10} ${tp.x + 6},${tp.y - 10}" fill="#fff" stroke="${strokeColor}" stroke-width="1.5" />`;
+            } else if (relType === 'composition') {
+              svg += `<polygon points="${sp.x},${sp.y} ${sp.x - 5},${sp.y + 8} ${sp.x},${sp.y + 16} ${sp.x + 5},${sp.y + 8}" fill="${strokeColor}" stroke="${strokeColor}" stroke-width="1.5" />`;
+            } else if (relType === 'aggregation') {
+              svg += `<polygon points="${sp.x},${sp.y} ${sp.x - 5},${sp.y + 8} ${sp.x},${sp.y + 16} ${sp.x + 5},${sp.y + 8}" fill="#fff" stroke="${strokeColor}" stroke-width="1.5" />`;
+            } else if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'allocation'].includes(relType)) {
+              svg += `<path d="M ${tp.x - 5} ${tp.y - 8} L ${tp.x} ${tp.y} L ${tp.x + 5} ${tp.y - 8}" fill="none" stroke="${strokeColor}" stroke-width="1.5" />`;
+            }
           } else {
             svg += `<line x1="${sp.x}" y1="${sp.y}" x2="${tp.x}" y2="${tp.y}" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" marker-start="${markerStart}" marker-end="${markerEnd}" />`;
             
@@ -11720,12 +11724,16 @@ const ADIA = () => {
             if (type === 'statemachine' && cp) {
               midX = cp.x;
               midY = cp.y - 5;
+            } else if ((type === 'req' || type === 'bdd') && target && source && target.displayY >= source.displayY + source.height) {
+              // Position label cleanly above target node in clear channel
+              midX = tp.x;
+              midY = tp.y - 14;
             }
 
             const txt = (middleLabel ? middleLabel + ' ' : '') + (e.label || '');
-            const txtW = txt.length * 6.5 + 12;
-            svg += `<rect x="${midX - txtW / 2}" y="${midY - 9}" width="${txtW}" height="16" fill="#fcfcfc" opacity="0.92" rx="2" />`;
-            svg += `<text x="${midX}" y="${midY + 3}" text-anchor="middle" font-size="11" fill="#000">${escapeHtml(txt)}</text>`;
+            const txtW = txt.length * 6.5 + 14;
+            svg += `<rect x="${midX - txtW / 2}" y="${midY - 8}" width="${txtW}" height="15" fill="#ffffff" stroke="#ddd" stroke-width="0.8" rx="3" />`;
+            svg += `<text x="${midX}" y="${midY + 3}" text-anchor="middle" font-size="9" font-weight="600" fill="#f97316" font-family="sans-serif">${escapeHtml(txt)}</text>`;
           }
 
           if (type === 'bdd' && (e.sourceMultiplicity || e.targetMultiplicity)) {
