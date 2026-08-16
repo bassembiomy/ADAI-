@@ -40,6 +40,10 @@ import type {
   PortData, ValuePropertyData, BlockData, RelationshipData, PartData,
   ConnectorData, InterfaceRealizationData, HmiComponentType, HmiComponent
 } from './types/sysml_types';
+import {
+  calculateSeparatedRelationshipPath,
+  calculateOrthogonalConnectorPath,
+} from './utils/sysmlConnectionRouting';
 import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineClipboardData } from './utils/stateMachineClipboard';
 import { pruneStateHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
@@ -14350,6 +14354,13 @@ const ADIA = () => {
   }, [blocks, parts, selectedIds, isCreatingTransition, handleBlockMouseDown, diagramMode, currentLayerId, connectorSource, handlePortClick, handlePortMouseDown, enterBlock, enterRequirement, handleResizeMouseDown, interfaceRealizations, transitionSourceId]);
 
   const renderRelationships = useCallback((): React.ReactNode => {
+    const pairGroups = new Map<string, string[]>();
+    relationships.forEach(rel => {
+      const pairKey = [rel.sourceId, rel.targetId].sort().join(':::');
+      if (!pairGroups.has(pairKey)) pairGroups.set(pairKey, []);
+      pairGroups.get(pairKey)!.push(rel.id);
+    });
+
     return relationships.map(rel => {
       const source = blocks.find(b => b.id === rel.sourceId);
       const target = blocks.find(b => b.id === rel.targetId);
@@ -14371,48 +14382,64 @@ const ADIA = () => {
       const tgtW = target.width || 150;
       const tgtH = target.height || 100;
 
-      const sp = getEdgePoint({ x: source.x, y: source.y, width: srcW, height: srcH }, { x: target.x, y: target.y, width: tgtW, height: tgtH });
-      const tp = getEdgePoint({ x: target.x, y: target.y, width: tgtW, height: tgtH }, { x: source.x, y: source.y, width: srcW, height: srcH });
+      const pairKey = [rel.sourceId, rel.targetId].sort().join(':::');
+      const group = pairGroups.get(pairKey) || [rel.id];
+      const edgeIndex = group.indexOf(rel.id);
+      const totalEdges = group.length;
+
+      const route = calculateSeparatedRelationshipPath(
+        { x: source.x, y: source.y, width: srcW, height: srcH },
+        { x: target.x, y: target.y, width: tgtW, height: tgtH },
+        edgeIndex,
+        totalEdges
+      );
+
       const isSelected = selectedIds.includes(rel.id);
       const strokeColor = isSelected ? '#f97316' : '#888';
       const strokeDash = rel.type === 'allocation' ? '5,5' : undefined;
       const isTrace = ['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace'].includes(rel.type);
+      const { sp, tp, labelPos, angle } = route;
 
       return (
-        <g key={rel.id} onClick={(e) => { e.stopPropagation(); setSelectedIds([rel.id]); }}>
-          <line x1={sp.x} y1={sp.y} x2={tp.x} y2={tp.y} stroke={strokeColor} strokeWidth={2} strokeDasharray={isTrace ? '4,2' : strokeDash} />
+        <g key={rel.id} onClick={(e) => { e.stopPropagation(); setSelectedIds([rel.id]); }} style={{ cursor: 'pointer' }}>
+          {/* Broad click target */}
+          <path d={route.path} fill="none" stroke="transparent" strokeWidth={14} />
 
-          {/* Arrowheads */}
+          {/* Rendered line/curve */}
+          <path d={route.path} fill="none" stroke={strokeColor} strokeWidth={2} strokeDasharray={isTrace ? '4,2' : strokeDash} />
+
+          {/* Arrowheads & Markers */}
           {rel.type === 'generalization' && (
-            <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="#0a0a0a" stroke={strokeColor} transform={`rotate(${Math.atan2(tp.y - sp.y, tp.x - sp.x) * 180 / Math.PI}, ${tp.x}, ${tp.y})`} />
+            <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="#1a1a1a" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
           {rel.type === 'composition' && (
-            <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill={strokeColor} stroke={strokeColor} transform={`rotate(${Math.atan2(tp.y - sp.y, tp.x - sp.x) * 180 / Math.PI}, ${sp.x}, ${sp.y})`} />
+            <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill={strokeColor} stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${sp.x}, ${sp.y})`} />
           )}
           {rel.type === 'aggregation' && (
-            <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill="#0a0a0a" stroke={strokeColor} transform={`rotate(${Math.atan2(tp.y - sp.y, tp.x - sp.x) * 180 / Math.PI}, ${sp.x}, ${sp.y})`} />
+            <polygon points={`${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}`} fill="#1a1a1a" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${sp.x}, ${sp.y})`} />
           )}
           {rel.type === 'allocation' && (
-            <g>
-              <text x={(sp.x + tp.x) / 2} y={(sp.y + tp.y) / 2 - 10} textAnchor="middle" fill={strokeColor} fontSize={10}>«allocate»</text>
-              <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="none" stroke={strokeColor} transform={`rotate(${Math.atan2(tp.y - sp.y, tp.x - sp.x) * 180 / Math.PI}, ${tp.x}, ${tp.y})`} />
-            </g>
+            <polygon points={`${tp.x},${tp.y} ${tp.x - 10},${tp.y - 5} ${tp.x - 10},${tp.y + 5}`} fill="none" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
           )}
           {isTrace && (
-            <g>
-              <text x={(sp.x + tp.x) / 2} y={(sp.y + tp.y) / 2 - 10} textAnchor="middle" fill={strokeColor} fontSize={10}>«{rel.type}»</text>
-              <path d={`M ${tp.x - 8} ${tp.y - 4} L ${tp.x} ${tp.y} L ${tp.x - 8} ${tp.y + 4}`} fill="none" stroke={strokeColor} transform={`rotate(${Math.atan2(tp.y - sp.y, tp.x - sp.x) * 180 / Math.PI}, ${tp.x}, ${tp.y})`} />
+            <path d={`M ${tp.x - 8} ${tp.y - 4} L ${tp.x} ${tp.y} L ${tp.x - 8} ${tp.y + 4}`} fill="none" stroke={strokeColor} strokeWidth={1.5} transform={`rotate(${angle}, ${tp.x}, ${tp.y})`} />
+          )}
+
+          {/* Stereotype / Label Badge with background to prevent overlapping text */}
+          {(isTrace || rel.type === 'allocation' || rel.label) && (
+            <g transform={`translate(${labelPos.x}, ${labelPos.y})`}>
+              <rect x={-32} y={-10} width={64} height={16} rx={3} fill="#141414" stroke="#333" strokeWidth={0.8} />
+              <text x={0} y={2} textAnchor="middle" fill={strokeColor} fontSize={9} fontWeight="600">
+                {rel.label || `«${rel.type === 'allocation' ? 'allocate' : rel.type}»`}
+              </text>
             </g>
           )}
 
-          {rel.label && (
-            <text x={(sp.x + tp.x) / 2} y={(sp.y + tp.y) / 2 - 5} textAnchor="middle" fill={strokeColor} fontSize={10} dy={-5}>{rel.label}</text>
-          )}
           {rel.sourceMultiplicity && (
-            <text x={sp.x + (tp.x > sp.x ? 10 : -10)} y={sp.y + 10} fill={strokeColor} fontSize={10} textAnchor={tp.x > sp.x ? 'start' : 'end'}>{rel.sourceMultiplicity}</text>
+            <text x={sp.x + (tp.x > sp.x ? 12 : -12)} y={sp.y + 12} fill={strokeColor} fontSize={10} textAnchor={tp.x > sp.x ? 'start' : 'end'}>{rel.sourceMultiplicity}</text>
           )}
           {rel.targetMultiplicity && (
-            <text x={tp.x + (sp.x > tp.x ? 10 : -10)} y={tp.y - 10} fill={strokeColor} fontSize={10} textAnchor={sp.x > tp.x ? 'start' : 'end'}>{rel.targetMultiplicity}</text>
+            <text x={tp.x + (sp.x > tp.x ? 12 : -12)} y={tp.y - 12} fill={strokeColor} fontSize={10} textAnchor={sp.x > tp.x ? 'start' : 'end'}>{rel.targetMultiplicity}</text>
           )}
         </g>
       );
@@ -14526,7 +14553,7 @@ const ADIA = () => {
 
     const visibleConnectors = connectors.filter(c => currentPartIds.has(c.sourcePartId) && currentPartIds.has(c.targetPartId));
 
-    return visibleConnectors.map(conn => {
+    return visibleConnectors.map((conn, connIdx) => {
       const getPortPos = (partId: string, portId: string) => {
         if (partId === currentLayerId) {
           const block = blocks.find(b => b.id === partId);
@@ -14534,58 +14561,54 @@ const ADIA = () => {
           const index = block?.ports?.findIndex(p => p.id === portId) ?? 0;
           const frame = { x: block?.ibdX ?? 50, y: block?.ibdY ?? 50, w: block?.ibdWidth ?? 1200, h: block?.ibdHeight ?? 800 };
           if (port?.side && port.offset != null) {
-            if (port.side === 'top') return { x: frame.x + frame.w * port.offset, y: frame.y };
-            if (port.side === 'bottom') return { x: frame.x + frame.w * port.offset, y: frame.y + frame.h };
-            if (port.side === 'left') return { x: frame.x, y: frame.y + frame.h * port.offset };
-            return { x: frame.x + frame.w, y: frame.y + frame.h * port.offset };
+            if (port.side === 'top') return { x: frame.x + frame.w * port.offset, y: frame.y, side: 'top' as const };
+            if (port.side === 'bottom') return { x: frame.x + frame.w * port.offset, y: frame.y + frame.h, side: 'bottom' as const };
+            if (port.side === 'left') return { x: frame.x, y: frame.y + frame.h * port.offset, side: 'left' as const };
+            return { x: frame.x + frame.w, y: frame.y + frame.h * port.offset, side: 'right' as const };
           }
           const isLeft = index % 2 === 0;
-          return { x: isLeft ? frame.x : frame.x + frame.w, y: frame.y + 60 + Math.floor(index / 2) * 40 };
+          return { x: isLeft ? frame.x : frame.x + frame.w, y: frame.y + 60 + Math.floor(index / 2) * 40, side: isLeft ? 'left' as const : 'right' as const };
         } else {
           const part = parts.find(p => p.id === partId);
           const block = blocks.find(b => b.id === part?.typeId);
           const port = block?.ports?.find(p => p.id === portId);
           const index = block?.ports?.findIndex(p => p.id === portId) ?? 0;
-          if (!part) return { x: 0, y: 0 };
+          if (!part) return { x: 0, y: 0, side: 'right' as const };
           const layout = part.portLayouts?.[portId];
           const side = layout?.side || port?.side;
           const offset = layout?.offset ?? port?.offset;
 
           if (side && offset != null) {
-            if (side === 'top') return { x: part.x + part.width * offset, y: part.y };
-            if (side === 'bottom') return { x: part.x + part.width * offset, y: part.y + part.height };
-            if (side === 'left') return { x: part.x, y: part.y + part.height * offset };
-            return { x: part.x + part.width, y: part.y + part.height * offset };
+            if (side === 'top') return { x: part.x + part.width * offset, y: part.y, side: 'top' as const };
+            if (side === 'bottom') return { x: part.x + part.width * offset, y: part.y + part.height, side: 'bottom' as const };
+            if (side === 'left') return { x: part.x, y: part.y + part.height * offset, side: 'left' as const };
+            return { x: part.x + part.width, y: part.y + part.height * offset, side: 'right' as const };
           }
           const isLeft = index % 2 === 0;
-          return { x: part.x + (isLeft ? 0 : part.width), y: part.y + 20 + Math.floor(index / 2) * 20 + 5 };
+          return { x: part.x + (isLeft ? 0 : part.width), y: part.y + 20 + Math.floor(index / 2) * 20 + 5, side: isLeft ? 'left' as const : 'right' as const };
         }
       };
 
       const p1 = getPortPos(conn.sourcePartId, conn.sourcePortId);
       const p2 = getPortPos(conn.targetPartId, conn.targetPortId);
 
+      const route = calculateOrthogonalConnectorPath(p1, p2, connIdx);
       const isSelected = selectedIds.includes(conn.id);
 
-      const midX = (p1.x + p2.x) / 2;
-      const midY = (p1.y + p2.y) / 2;
-      const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
-
       return (
-        <g key={conn.id} onClick={(e) => { e.stopPropagation(); setSelectedIds([conn.id]); }}>
-          <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="transparent" strokeWidth={10} style={{ cursor: 'pointer' }} />
-          <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={isSelected ? '#f97316' : '#888'} strokeWidth={2} pointerEvents="none" />
+        <g key={conn.id} onClick={(e) => { e.stopPropagation(); setSelectedIds([conn.id]); }} style={{ cursor: 'pointer' }}>
+          <path d={route.path} fill="none" stroke="transparent" strokeWidth={12} />
+          <path d={route.path} fill="none" stroke={isSelected ? '#f97316' : '#888'} strokeWidth={2} pointerEvents="none" />
           {(conn.itemFlow || conn.label) && (
-            <g>
+            <g transform={`translate(${route.midX}, ${route.midY})`}>
               <polygon
                 points="0,0 -6,-3 -6,3"
                 fill="#f97316"
-                transform={`translate(${midX}, ${midY}) rotate(${angle})`}
+                transform={`rotate(${route.angle})`}
               />
-              {conn.itemFlow && <text x={midX} y={midY - 15} textAnchor="middle" fill="#f97316" fontSize={8}>«itemFlow»</text>}
-              <text x={midX} y={midY - 5} textAnchor="middle" fill="#e0e0e0" fontSize={10}>
-                {conn.itemFlow || ''}
-                {conn.label ? (conn.itemFlow ? ` : ${conn.label}` : conn.label) : ''}
+              <rect x={-36} y={-20} width={72} height={16} rx={3} fill="#141414" stroke="#333" strokeWidth={0.8} />
+              <text x={0} y={-8} textAnchor="middle" fill="#f97316" fontSize={8} fontWeight="bold">
+                {conn.itemFlow ? `«${conn.itemFlow}»` : conn.label}
               </text>
             </g>
           )}
@@ -15951,10 +15974,10 @@ const ADIA = () => {
                     ) : (diagramMode === 'bdd' || diagramMode === 'requirements') ? (
                       <>
                         <g style={{ pointerEvents: 'all' }}>
-                          {renderRelationships()}
+                          {renderBlocks()}
                         </g>
                         <g style={{ pointerEvents: 'all' }}>
-                          {renderBlocks()}
+                          {renderRelationships()}
                         </g>
                       </>
                     ) : (
@@ -15964,13 +15987,13 @@ const ADIA = () => {
                             {renderBlocks()}
                           </g>
                           <g style={{ pointerEvents: 'all' }}>
-                            {renderInterfaceRealizations()}
+                            {renderParts()}
                           </g>
                           <g style={{ pointerEvents: 'all' }}>
                             {renderConnectors()}
                           </g>
                           <g style={{ pointerEvents: 'all' }}>
-                            {renderParts()}
+                            {renderInterfaceRealizations()}
                           </g>
                         </>
                       ) : null

@@ -138,7 +138,8 @@ export function routeEdgePath(source: DiagramRect, target: DiagramRect, opts: Ro
   }
   if (tx >= sx) {
     const dx = Math.max(24, (tx - sx) / 2);
-    return `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
+    const curveOffset = (opts.index ?? 0) * 16;
+    return `M ${sx} ${sy} C ${sx + dx} ${sy + curveOffset}, ${tx - dx} ${ty + curveOffset}, ${tx} ${ty}`;
   }
   const below = Math.max(source.y + source.height, target.y + target.height) + 20 + (opts.index ?? 0) * 14;
   return `M ${sx} ${sy} L ${sx + 16} ${sy} L ${sx + 16} ${below} L ${tx - 16} ${below} L ${tx - 16} ${ty} L ${tx} ${ty}`;
