@@ -8029,12 +8029,13 @@ const ADIA = () => {
       if (importedData.managedWindows) setManagedWindows(importedData.managedWindows);
 
       // Re-populate workspace files list
+      let restoredFiles: WorkspaceFile[] = [];
       if (importedData.workspaceFiles && Array.isArray(importedData.workspaceFiles)) {
         setWorkspaceFiles(importedData.workspaceFiles);
       } else {
         // Fallback for older saved projects (or unified projects saved without workspaceFiles):
         // We construct the default workspace files, but populate their `data` fields with the loaded state.
-        const restoredFiles: WorkspaceFile[] = [
+        restoredFiles = [
           {
             id: 'default_sm',
             name: 'Main State Machine',
@@ -8158,16 +8159,22 @@ const ADIA = () => {
         setWorkspaceFiles(restoredFiles);
       }
 
+      const effectiveFiles = (importedData.workspaceFiles && Array.isArray(importedData.workspaceFiles))
+        ? importedData.workspaceFiles
+        : restoredFiles;
+      const validFileIds = new Set(effectiveFiles.map((f: any) => f.id));
+
       if (importedData.openTabIds && Array.isArray(importedData.openTabIds)) {
-        setOpenTabIds(importedData.openTabIds);
+        const validOpenTabs = importedData.openTabIds.filter((id: string) => validFileIds.has(id));
+        setOpenTabIds(validOpenTabs.length > 0 ? validOpenTabs : (validFileIds.has('default_sm') ? ['default_sm'] : Array.from(validFileIds).slice(0, 3)));
       } else {
-        setOpenTabIds(['default_sm', 'default_xbridges', 'default_vlab']);
+        setOpenTabIds(['default_sm', 'default_bdd', 'default_requirements', 'default_hmi']);
       }
 
-      if (importedData.activeFileId) {
+      if (importedData.activeFileId && validFileIds.has(importedData.activeFileId)) {
         setActiveFileId(importedData.activeFileId);
-        const activeFile = (importedData.workspaceFiles || []).find((f: any) => f.id === importedData.activeFileId);
-        if (activeFile) {
+        const activeFile = effectiveFiles.find((f: any) => f.id === importedData.activeFileId);
+        if (activeFile && activeFile.type) {
           setDiagramModeState(activeFile.type as DiagramMode);
         } else {
           setDiagramModeState('statemachine');
