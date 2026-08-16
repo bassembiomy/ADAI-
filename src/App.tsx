@@ -30,6 +30,12 @@ import { IntroStandbyOverlay } from './components/IntroStandbyOverlay';
 import { 
   VariableType, VariableDef, StateData, JunctionData, TransitionData, Layer, ErrorItem 
 } from './types/sm_types';
+import {
+  calculateControlPointFromMidpoint,
+  screenToWorld,
+  isDragThresholdExceeded,
+  getDefaultControlPoint
+} from './utils/transitionGeometry';
 import type {
   PortData, ValuePropertyData, BlockData, RelationshipData, PartData,
   ConnectorData, InterfaceRealizationData, HmiComponentType, HmiComponent
@@ -6634,6 +6640,7 @@ const ADIA = () => {
 
   // Selection state (supports multiple items)
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [hoveredTransitionId, setHoveredTransitionId] = useState<string | null>(null);
 
   const [isCreatingTransition, setIsCreatingTransition] = useState(false);
   const [transitionSourceId, setTransitionSourceId] = useState<string | null>(null);
@@ -10854,31 +10861,106 @@ const ADIA = () => {
     }
   }, []);
 
-  const startControlPointDrag = useCallback((transitionId: string, e: MouseEvent<SVGCircleElement>) => {
+  const startTransitionDrag = useCallback((
+    transitionId: string,
+    e: MouseEvent<SVGElement>,
+    mode: 'curve' | 'handle'
+  ) => {
     e.stopPropagation();
     const transition = transitions.find(t => t.id === transitionId);
     if (!transition) return;
 
+    const startClientX = e.clientX;
+    const startClientY = e.clientY;
+    const ctrlPressed = e.ctrlKey;
+    let isDragging = false;
+
+    // Calculate source and target points for curve mode
+    const sourceState = states.find(s => s.id === transition.sourceId);
+    const sourceJunction = junctions.find(j => j.id === transition.sourceId);
+    const targetState = states.find(s => s.id === transition.targetId);
+    const targetJunction = junctions.find(j => j.id === transition.targetId);
+
+    let sp: Point = { x: 0, y: 0 };
+    let tp: Point = { x: 0, y: 0 };
+
+    if (sourceState && targetState) {
+      if (sourceState.id === targetState.id) {
+        sp = { x: sourceState.x + sourceState.width / 2 - 15, y: sourceState.y };
+        tp = { x: sourceState.x + sourceState.width / 2 + 15, y: sourceState.y };
+      } else {
+        sp = getEdgePoint(sourceState, targetState);
+        tp = getEdgePoint(targetState, sourceState);
+      }
+    } else if (sourceState && targetJunction) {
+      sp = getEdgePoint(sourceState, { x: targetJunction.x - 8, y: targetJunction.y - 8, width: 16, height: 16 });
+      tp = getJunctionEdgePoint(targetJunction, { x: sourceState.x, y: sourceState.y });
+    } else if (sourceJunction && targetState) {
+      sp = getJunctionEdgePoint(sourceJunction, { x: targetState.x, y: targetState.y });
+      tp = getEdgePoint(targetState, { x: sourceJunction.x - 8, y: sourceJunction.y - 8, width: 16, height: 16 });
+    } else if (sourceJunction && targetJunction) {
+      sp = getJunctionEdgePoint(sourceJunction, targetJunction);
+      tp = getJunctionEdgePoint(targetJunction, sourceJunction);
+    }
+
     const handleMouseMove = (moveEvent: any) => {
+      const dx = moveEvent.clientX - startClientX;
+      const dy = moveEvent.clientY - startClientY;
+
+      if (!isDragging) {
+        if (mode === 'handle' || isDragThresholdExceeded(dx, dy, 3)) {
+          isDragging = true;
+          setSelectedIds(prev => prev.includes(transitionId) ? prev : [transitionId]);
+        } else {
+          return;
+        }
+      }
+
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const worldX = ((moveEvent.clientX - rect.left) / uiZoom - view.offsetX) / view.scale;
-      const worldY = ((moveEvent.clientY - rect.top) / uiZoom - view.offsetY) / view.scale;
+
+      const cursorWorld = screenToWorld(moveEvent.clientX, moveEvent.clientY, rect, view, uiZoom);
+
+      let newControlPoint: Point;
+      if (mode === 'handle') {
+        newControlPoint = cursorWorld;
+      } else {
+        newControlPoint = calculateControlPointFromMidpoint(sp, tp, cursorWorld);
+      }
 
       updateTransition(transitionId, {
-        controlPoint: { x: worldX, y: worldY },
+        controlPoint: newControlPoint,
         hasControlPoint: true
       });
     };
 
     const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove as any);
+      document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+
+      if (isDragging) {
+        addToHistory();
+      } else if (mode === 'curve') {
+        if (ctrlPressed) {
+          setSelectedIds(prev => prev.includes(transitionId) ? prev.filter(id => id !== transitionId) : [...prev, transitionId]);
+        } else {
+          setSelectedIds([transitionId]);
+        }
+      }
     };
 
-    document.addEventListener('mousemove', handleMouseMove as any);
+    document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-  }, [transitions, view, updateTransition, uiZoom]);
+  }, [transitions, states, junctions, view, updateTransition, uiZoom, addToHistory]);
+
+  const resetTransitionCurve = useCallback((transitionId: string) => {
+    updateTransition(transitionId, {
+      controlPoint: undefined,
+      hasControlPoint: false
+    });
+    addToHistory();
+    addError('info', 'Reset transition curve');
+  }, [updateTransition, addToHistory, addError]);
 
 
 
@@ -13902,20 +13984,19 @@ const ADIA = () => {
         return null;
       }
 
-      const cp = transition.controlPoint || {
-        x: (sp.x + tp.x) / 2 + (tp.y - sp.y) * 0.3,
-        y: (sp.y + tp.y) / 2 + (sp.x - tp.x) * 0.3,
-      };
+      const isSelfLoop = !!(sourceState && targetState && sourceState.id === targetState.id);
+      const cp = transition.controlPoint || getDefaultControlPoint(sp, tp, isSelfLoop);
 
       const path = `M ${sp.x} ${sp.y} Q ${cp.x} ${cp.y} ${tp.x} ${tp.y}`;
       const isSelected = selectedIds.includes(transition.id);
+      const isHovered = hoveredTransitionId === transition.id;
       const isFired = !!firedTransitions[transition.id];
 
-      // CRITICAL FIX: Scale stroke width with zoom level
+      // Scale stroke width and hit areas with zoom level
       const strokeWidth = isSelected ? 3 / view.scale : 2 / view.scale;
-      const hitAreaWidth = 15 / view.scale;
-      const handleRadius = 8 / view.scale;
-      const handleStrokeWidth = 2 / view.scale;
+      const hitAreaWidth = Math.max(16, 20 / view.scale);
+      const handleRadius = Math.max(6, 8 / view.scale);
+      const handleStrokeWidth = Math.max(1.5, 2 / view.scale);
 
       // Build label
       const parts: string[] = [];
@@ -13931,56 +14012,50 @@ const ADIA = () => {
 
       return (
         <g key={transition.id}>
-          {/* Hit area - scaled for zoom */}
+          {/* Hit area - enlarged for free grabbing & smooth dragging */}
           <path
             d={path}
             fill="none"
             stroke="transparent"
             strokeWidth={hitAreaWidth}
             onMouseDown={(e: MouseEvent<SVGPathElement>) => {
-              e.stopPropagation();
-              handleTransitionClick(e, transition.id);
+              startTransitionDrag(transition.id, e, 'curve');
             }}
-            style={{ cursor: 'pointer' }}
+            onDoubleClick={(e: MouseEvent<SVGPathElement>) => {
+              e.stopPropagation();
+              resetTransitionCurve(transition.id);
+            }}
+            onMouseEnter={() => setHoveredTransitionId(transition.id)}
+            onMouseLeave={() => setHoveredTransitionId(prev => prev === transition.id ? null : prev)}
+            style={{ cursor: 'grab' }}
           />
 
-          {/* Main path - scaled for zoom */}
+          {/* Main path - scaled for zoom with responsive highlight */}
           <path
             d={path}
             fill="none"
-            stroke={isFired ? '#ffffff' : (isSelected ? '#f97316' : '#666')}
-            strokeWidth={isFired ? strokeWidth * 2 : strokeWidth}
+            stroke={isFired ? '#ffffff' : (isSelected ? '#f97316' : (isHovered ? '#fb923c' : '#666'))}
+            strokeWidth={isFired ? strokeWidth * 2 : (isSelected || isHovered ? strokeWidth * 1.3 : strokeWidth)}
             strokeDasharray={transition.condition === 'true' && !transition.afterTicks ? '5,3' : undefined}
-            style={{ transition: 'stroke 0.1s, stroke-width 0.1s' }}
+            style={{ transition: 'stroke 0.1s, stroke-width 0.1s', pointerEvents: 'none' }}
           />
 
           {/* Arrowhead - scaled with transform */}
           <path
             d={`M ${tp.x} ${tp.y} L ${tp.x - 10} ${tp.y - 4} L ${tp.x - 10} ${tp.y + 4} Z`}
-            fill={isSelected ? '#f97316' : '#666'}
+            fill={isSelected ? '#f97316' : (isHovered ? '#fb923c' : '#666')}
             transform={`rotate(${Math.atan2(tp.y - sp.y, tp.x - sp.x) * 180 / Math.PI}, ${tp.x}, ${tp.y})`}
-            style={{ transition: 'fill 0.1s' }}
+            style={{ transition: 'fill 0.1s', pointerEvents: 'none' }}
           />
 
-          {/* Control point handle (only when selected) - scaled for zoom */}
-          {isSelected && (
-            <circle
-              cx={cp.x}
-              cy={cp.y}
-              r={handleRadius}
-              fill="#f97316"
-              stroke="#0a0a0a"
-              strokeWidth={handleStrokeWidth}
-              cursor="move"
-              onMouseDown={(e: MouseEvent<SVGCircleElement>) => {
-                e.stopPropagation();
-                startControlPointDrag(transition.id, e);
-              }}
-            />
-          )}
-
-          {/* Transition label - not scaled (remains readable) */}
-          <foreignObject x={cp.x - 75} y={cp.y - 15} width="150" height="30">
+          {/* Transition label - non-blocking pointer events */}
+          <foreignObject
+            x={cp.x - 75}
+            y={cp.y - 15}
+            width="150"
+            height="30"
+            style={{ pointerEvents: 'none' }}
+          >
             {(() => {
               const hasWarning = errors.some(e => e.elementId === transition.id && e.source === 'Validation' && e.type === 'warning');
               const hasError = errors.some(e => e.elementId === transition.id && e.source === 'Validation' && e.type === 'error');
@@ -13996,10 +14071,43 @@ const ADIA = () => {
               );
             })()}
           </foreignObject>
+
+          {/* Control point handle (when selected or hovered) */}
+          {(isSelected || isHovered) && (
+            <g>
+              <circle
+                cx={cp.x}
+                cy={cp.y}
+                r={handleRadius * 1.6}
+                fill="none"
+                stroke="#f97316"
+                strokeWidth={1 / view.scale}
+                opacity={0.4}
+                style={{ pointerEvents: 'none' }}
+              />
+              <circle
+                cx={cp.x}
+                cy={cp.y}
+                r={handleRadius}
+                fill="#f97316"
+                stroke="#0a0a0a"
+                strokeWidth={handleStrokeWidth}
+                cursor="grab"
+                onMouseDown={(e: MouseEvent<SVGCircleElement>) => {
+                  startTransitionDrag(transition.id, e, 'handle');
+                }}
+                onDoubleClick={(e: MouseEvent<SVGCircleElement>) => {
+                  e.stopPropagation();
+                  resetTransitionCurve(transition.id);
+                }}
+                onMouseEnter={() => setHoveredTransitionId(transition.id)}
+              />
+            </g>
+          )}
         </g>
       );
     });
-  }, [currentTransitions, states, junctions, view, selectedIds, firedTransitions, handleTransitionClick, startControlPointDrag, errors]);
+  }, [currentTransitions, states, junctions, view, selectedIds, hoveredTransitionId, firedTransitions, startTransitionDrag, resetTransitionCurve, errors]);
 
   const renderBlocks = useCallback((): React.ReactNode => {
     // In BDD mode, always treat as root level (ignore currentLayerId from IBD navigation)
