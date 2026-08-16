@@ -10997,7 +10997,7 @@ const ADIA = () => {
     await handleOpenProjectDialog();
   }, [handleOpenProjectDialog]);
 
-  const handleGenerateReport = useCallback((projectName: string, author: string) => {
+  const handleGenerateReport = useCallback((projectName: string = 'My Project', author: string = 'Engineer') => {
     const style = `
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fff; color: #333; padding: 40px; line-height: 1.6; max-width: 900px; margin: 0 auto; }
         h1 { color: #f97316; border-bottom: 2px solid #f97316; padding-bottom: 10px; margin-bottom: 20px; }
@@ -13393,6 +13393,8 @@ const ADIA = () => {
           })();
         </script>
       `;
+    }
+
     html += `
       <!-- High-Resolution Interactive Diagram Modal Viewer -->
       <div id="diagram-modal" onclick="closeDiagramModal()">
