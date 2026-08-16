@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateSeparatedRelationshipPath, calculateOrthogonalConnectorPath, type Rect } from './sysmlConnectionRouting';
+import { calculateSeparatedRelationshipPath, calculateOrthogonalConnectorPath, type Rect } from '@/utils/sysmlConnectionRouting';
 
 describe('sysmlConnectionRouting', () => {
   const blockA: Rect = { x: 100, y: 100, width: 150, height: 100 };
