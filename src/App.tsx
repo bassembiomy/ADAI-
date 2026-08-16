@@ -11011,6 +11011,20 @@ const ADIA = () => {
         .tag { background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }
         .diagram-container { margin: 16px 0; }
         .diagram-cell { break-inside: avoid; page-break-inside: avoid; margin-bottom: 16px; }
+        .diagram-card { margin: 20px 0; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.04); overflow: hidden; page-break-inside: avoid; }
+        .diagram-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-size: 12px; font-weight: 600; color: #334155; }
+        .diagram-link-btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; background: #fff; color: #ea580c; border: 1px solid #fed7aa; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; text-decoration: none; transition: all 0.15s ease; }
+        .diagram-link-btn:hover { background: #ea580c; color: #ffffff; border-color: #ea580c; box-shadow: 0 2px 6px rgba(234, 88, 12, 0.25); }
+        .diagram-preview-body { padding: 16px; display: flex; justify-content: center; align-items: center; cursor: zoom-in; background: #fafafa; overflow-x: auto; transition: background 0.15s ease; }
+        .diagram-preview-body:hover { background: #f1f5f9; }
+        .diagram-hint { text-align: center; padding: 6px; font-size: 11px; color: #94a3b8; border-top: 1px dashed #e2e8f0; background: #ffffff; }
+        #diagram-modal { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px); z-index: 999999; flex-direction: column; }
+        #diagram-modal.active { display: flex; }
+        #diagram-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; background: #0f172a; border-bottom: 1px solid #334155; color: #f8fafc; }
+        #diagram-modal-body { flex: 1; overflow: auto; display: flex; justify-content: center; align-items: center; padding: 24px; background: #1e293b; cursor: grab; }
+        #diagram-modal-body:active { cursor: grabbing; }
+        .modal-ctrl-btn { background: #334155; color: #f8fafc; border: 1px solid #475569; border-radius: 4px; padding: 6px 12px; font-size: 12px; font-weight: bold; cursor: pointer; margin-left: 8px; transition: all 0.15s; }
+        .modal-ctrl-btn:hover { background: #ea580c; border-color: #ea580c; }
         svg { max-width: 100%; height: auto; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 15px; font-size: 0.9em; }
         th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
@@ -11020,7 +11034,9 @@ const ADIA = () => {
         .badge-warning { background-color: #fef3c7; color: #92400e; }
         .badge-info { background-color: #e0f2fe; color: #075985; }
         @media print {
+          .diagram-link-btn, .diagram-hint, #diagram-modal { display: none !important; }
           .diagram-cell { page-break-inside: avoid; }
+          .diagram-card { border: 1px solid #ddd; box-shadow: none; }
           svg { max-width: 100% !important; height: auto !important; }
         }
     `;
@@ -11340,8 +11356,22 @@ const ADIA = () => {
 
       const viewBox = `${minX - padding} ${minY - padding} ${rawWidth} ${rawHeight}`;
 
-      let svgResult = `<div style="margin: 16px 0; border: 1px solid #ddd; padding: 12px; background: #fcfcfc; page-break-inside: avoid;">`;
+      const title = type === 'req' ? 'Requirements Traceability Diagram' :
+                    type === 'bdd' ? 'Block Definition Diagram (BDD)' :
+                    type === 'ibd' ? `Internal Block Diagram (IBD) · ${contextBlock?.name || 'System'}` :
+                    type === 'statemachine' ? 'State Machine Architecture' : 'System Diagram';
+
+      const diagId = `diag-${Math.random().toString(36).substring(2, 9)}`;
+
+      let svgResult = `<div class="diagram-card">`;
+      svgResult += `<div class="diagram-header">`;
+      svgResult += `<span>📊 ${escapeHtml(title)} <span style="font-weight:normal;color:#94a3b8;">(${displayNodes.length} elements, ${edgesCopy.length} connections)</span></span>`;
+      svgResult += `<button class="diagram-link-btn" onclick="openDiagramModal('${diagId}', '${escapeHtml(title)}')">🔍 Open Full Diagram</button>`;
+      svgResult += `</div>`;
+      svgResult += `<div id="${diagId}" class="diagram-preview-body" onclick="openDiagramModal('${diagId}', '${escapeHtml(title)}')">`;
       svgResult += renderSingleSVG(displayNodes, edgesCopy, type, viewBox, displayWidth, displayHeight, displayNodesMap, contextId);
+      svgResult += `</div>`;
+      svgResult += `<div class="diagram-hint">💡 Tip: Click anywhere on the diagram or use "Open Full Diagram" to view in high resolution with interactive zoom & pan.</div>`;
       svgResult += `</div>`;
       return svgResult;
     };
@@ -13363,9 +13393,125 @@ const ADIA = () => {
           })();
         </script>
       `;
-    }
+    html += `
+      <!-- High-Resolution Interactive Diagram Modal Viewer -->
+      <div id="diagram-modal" onclick="closeDiagramModal()">
+        <div id="diagram-modal-header" onclick="event.stopPropagation()">
+          <div id="diagram-modal-title" style="font-weight:bold; font-size:14px; color:#f97316;">📊 SysML Diagram Viewer</div>
+          <div>
+            <button class="modal-ctrl-btn" onclick="zoomDiagram(1.25)">➕ Zoom In</button>
+            <button class="modal-ctrl-btn" onclick="zoomDiagram(0.8)">➖ Zoom Out</button>
+            <button class="modal-ctrl-btn" onclick="resetDiagramZoom()">↺ Reset 100%</button>
+            <button class="modal-ctrl-btn" onclick="openDiagramInNewTab()">⧉ Open in New Tab</button>
+            <button class="modal-ctrl-btn" style="background:#dc2626;border-color:#dc2626;" onclick="closeDiagramModal()">✕ Close</button>
+          </div>
+        </div>
+        <div id="diagram-modal-body" onclick="event.stopPropagation()">
+          <div id="diagram-modal-content" style="transform-origin: center center; transition: transform 0.08s ease-out; width: 100%; display: flex; justify-content: center; align-items: center;"></div>
+        </div>
+      </div>
+      <script>
+        let currentZoom = 1;
+        let currentSvgHtml = '';
+        let isPanning = false;
+        let startX = 0, startY = 0;
+        let panX = 0, panY = 0;
 
-    html += `</body></html>`;
+        function openDiagramModal(diagId, title) {
+          const container = document.getElementById(diagId);
+          if (!container) return;
+          const svgEl = container.querySelector('svg');
+          if (!svgEl) return;
+
+          currentSvgHtml = svgEl.outerHTML;
+          const modal = document.getElementById('diagram-modal');
+          const modalTitle = document.getElementById('diagram-modal-title');
+          const modalContent = document.getElementById('diagram-modal-content');
+          
+          if (modalTitle) modalTitle.textContent = '📊 ' + (title || 'SysML Diagram Viewer');
+          if (modalContent) {
+            modalContent.innerHTML = currentSvgHtml;
+            const newSvg = modalContent.querySelector('svg');
+            if (newSvg) {
+              newSvg.style.maxWidth = 'none';
+              newSvg.style.width = '100%';
+              newSvg.style.height = 'auto';
+              newSvg.style.display = 'block';
+              newSvg.style.background = '#ffffff';
+              newSvg.style.borderRadius = '8px';
+              newSvg.style.padding = '20px';
+              newSvg.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
+            }
+          }
+          currentZoom = 1;
+          panX = 0;
+          panY = 0;
+          updateModalTransform();
+          if (modal) modal.classList.add('active');
+        }
+
+        function closeDiagramModal() {
+          const modal = document.getElementById('diagram-modal');
+          if (modal) modal.classList.remove('active');
+        }
+
+        function zoomDiagram(factor) {
+          currentZoom = Math.max(0.2, Math.min(5, currentZoom * factor));
+          updateModalTransform();
+        }
+
+        function resetDiagramZoom() {
+          currentZoom = 1;
+          panX = 0;
+          panY = 0;
+          updateModalTransform();
+        }
+
+        function updateModalTransform() {
+          const content = document.getElementById('diagram-modal-content');
+          if (content) {
+            content.style.transform = "translate(" + panX + "px, " + panY + "px) scale(" + currentZoom + ")";
+          }
+        }
+
+        function openDiagramInNewTab() {
+          if (!currentSvgHtml) return;
+          const blob = new Blob([currentSvgHtml], { type: 'image/svg+xml' });
+          const url = URL.createObjectURL(blob);
+          window.open(url, '_blank');
+        }
+
+        // Modal Pan & Mouse Wheel Zoom
+        document.addEventListener('DOMContentLoaded', () => {
+          const modalBody = document.getElementById('diagram-modal-body');
+          if (modalBody) {
+            modalBody.addEventListener('mousedown', (e) => {
+              isPanning = true;
+              startX = e.clientX - panX;
+              startY = e.clientY - panY;
+            });
+            window.addEventListener('mousemove', (e) => {
+              if (!isPanning) return;
+              panX = e.clientX - startX;
+              panY = e.clientY - startY;
+              updateModalTransform();
+            });
+            window.addEventListener('mouseup', () => {
+              isPanning = false;
+            });
+            modalBody.addEventListener('wheel', (e) => {
+              e.preventDefault();
+              const factor = e.deltaY < 0 ? 1.15 : 0.85;
+              zoomDiagram(factor);
+            }, { passive: false });
+          }
+        });
+
+        window.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') closeDiagramModal();
+        });
+      </script>
+    </body></html>`;
 
     setGlobalReportData({ html, projectName });
     setShowGlobalReportPreview(true);
