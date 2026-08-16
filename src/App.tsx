@@ -10974,13 +10974,27 @@ const ADIA = () => {
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const importedData = JSON.parse(event.target?.result as string);
+        let raw = (event.target?.result as string) || '';
+        if (raw.charCodeAt(0) === 0xFEFF) {
+          raw = raw.slice(1);
+        }
+        const text = raw.trim();
+        if (!text) {
+          setImportValidationError({
+            isValid: false,
+            errorTitle: 'Empty File',
+            errors: ['The selected project file is empty (0 bytes).']
+          });
+          return;
+        }
+        const importedData = JSON.parse(text);
         const validation = validateImportedJson(importedData);
         if (!validation.isValid) {
           setImportValidationError(validation);
           return;
         }
         hydrateProject(validation.sanitizedData || importedData);
+        addError('info', `Imported project: ${file.name}`);
       } catch (error) {
         setImportValidationError({
           isValid: false,
@@ -10991,7 +11005,7 @@ const ADIA = () => {
     };
     reader.readAsText(file);
     if (projectImportRef.current) projectImportRef.current.value = '';
-  }, [hydrateProject]);
+  }, [hydrateProject, addError]);
 
   const handleImportProject = useCallback(async () => {
     await handleOpenProjectDialog();
@@ -15144,7 +15158,7 @@ const ADIA = () => {
         }}
       >
         {/* Hidden input for project import */}
-        <input type="file" ref={projectImportRef} onChange={handleProjectFileChange} className="hidden" accept=".json" />
+        <input type="file" ref={projectImportRef} onChange={handleProjectFileChange} className="hidden" accept=".adia,.json" />
 
         {/* Top Toolbar - WITH VISIBLE SIMULATION CONTROLS */}
         <header className="h-14 bg-[#1a1a1a] border-b border-[#222] flex items-center px-4 gap-4 shrink-0 overflow-x-auto no-scrollbar">

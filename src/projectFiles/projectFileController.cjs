@@ -86,7 +86,7 @@ function createProjectFileController(deps = {}) {
     if (!windowToUse || !windowToUse.webContents) return false;
 
     try {
-      const { filePath: resolved, data } = readProjectFile(filePath);
+      const { filePath: resolved, data } = readProjectFile(filePath, { allowLegacyJson: true });
       const token = randomUUID();
       pendingTokens.set(token, resolved);
       windowToUse.webContents.send('project-open-requested', {

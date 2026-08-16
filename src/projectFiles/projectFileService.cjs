@@ -39,8 +39,15 @@ function readProjectFile(filePath, options = {}) {
   if (!allowed) throw new Error('Unsupported ADIA project extension');
   const stats = fsImpl.statSync(resolved);
   if (!stats.isFile()) throw new Error('Project path is not a regular file');
+  if (stats.size === 0) throw new Error('Project file is empty (0 bytes)');
   if (stats.size > MAX_PROJECT_BYTES) throw new Error('Project file exceeds the 50 MB limit');
-  return { filePath: resolved, data: JSON.parse(fsImpl.readFileSync(resolved, 'utf8')) };
+  let raw = fsImpl.readFileSync(resolved, 'utf8');
+  if (raw.charCodeAt(0) === 0xFEFF) {
+    raw = raw.slice(1);
+  }
+  const content = raw.trim();
+  if (!content) throw new Error('Project file content is empty');
+  return { filePath: resolved, data: JSON.parse(content) };
 }
 
 function writeProjectFile(filePath, data, deps = {}) {
