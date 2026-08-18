@@ -2508,45 +2508,93 @@ const DoeWorkspace = ({
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#050505] text-[#e0e0e0] font-sans">
+    <div className="flex flex-col h-full w-full bg-[#0a0a0c] text-[#e0e0e0] font-sans">
       {/* Top Control Bar */}
-      <div className="h-14 border-b border-[#222] bg-[#0a0a0a] flex items-center justify-between px-6">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2">
-            <Layers size={18} className="text-[#f97316]" />
-            <h2 className="text-sm font-black uppercase tracking-tighter text-[#f97316]">DOE ANALYZER Pro</h2>
+      <div className="h-14 border-b border-[#222228] bg-[#111114] flex items-center justify-between px-5 gap-4 shrink-0">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/30 text-orange-400">
+              <Layers size={16} />
+            </div>
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-white">DOE ANALYZER PRO</h2>
+              <span className="text-[10px] text-zinc-500 font-mono">Response Surface & Optimization</span>
+            </div>
           </div>
-          <div className="h-4 w-px bg-[#222]" />
-          <div className="flex gap-2">
-            <Button size="sm" variant={activeModel === 'RSM' ? 'default' : 'secondary'} onClick={calculateRSM}>
-              Run RSM
-            </Button>
-            <Button size="sm" variant={activeModel === 'GMDH' ? 'default' : 'secondary'} onClick={calculateGMDH}>
-              Run GMDH
-            </Button>
-            <Button size="sm" variant={activeModel === 'Taguchi' ? 'default' : 'secondary'} onClick={calculateTaguchi}>
-              Run Taguchi
-            </Button>
-            {activeModel === 'Taguchi' && (
-              <Button size="sm" variant="outline" onClick={() => setShowDesignBuilder(true)}>
-                Create Taguchi Design
-              </Button>
-            )}
+
+          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
+
+          {/* Model Switcher Segment */}
+          <div className="flex bg-[#18181c] rounded-lg border border-[#27272f] p-0.5">
+            {[
+              { id: 'RSM', label: 'Run RSM', action: calculateRSM },
+              { id: 'GMDH', label: 'Run GMDH', action: calculateGMDH },
+              { id: 'Taguchi', label: 'Run Taguchi', action: calculateTaguchi },
+            ].map(m => (
+              <button
+                key={m.id}
+                onClick={m.action}
+                className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
+                  activeModel === m.id
+                    ? 'bg-zinc-800 text-white shadow-sm font-semibold'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
           </div>
+
+          {activeModel === 'Taguchi' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDesignBuilder(true)}
+              className="h-7 px-2.5 text-xs font-medium bg-[#18181c] border-[#27272f] text-zinc-300 hover:text-white hover:bg-zinc-800 whitespace-nowrap"
+            >
+              Create Taguchi Design
+            </Button>
+          )}
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Top Actions Capsule */}
+        <div className="flex items-center gap-1 bg-[#18181c] border border-[#27272f] rounded-lg p-1">
           <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.csv" onChange={handleFileUpload} />
-          <Button variant="outline" size="sm" onClick={handleExportProject} title="Ctrl+S">
-            <Save size={14} className="mr-2" /> Save
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleExportProject}
+            className="h-7 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+            title="Ctrl+S"
+          >
+            <Save size={13} className="mr-1.5 text-zinc-400" /> Save
           </Button>
-          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-            <Upload size={14} className="mr-2" /> Upload Data
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            className="h-7 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+          >
+            <Upload size={13} className="mr-1.5 text-zinc-400" /> Upload Data
           </Button>
-          <Button variant="outline" size="sm" onClick={generateReport}>
-            <FileText size={14} className="mr-2" /> Report
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={generateReport}
+            className="h-7 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+          >
+            <FileText size={13} className="mr-1.5 text-zinc-400" /> Report
           </Button>
-          <Button variant="ghost" size="sm" onClick={onClose} className="text-red-500">Close</Button>
+          <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="h-7 px-2 text-xs text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 whitespace-nowrap"
+            title="Close DOE Analyzer"
+          >
+            <X size={14} className="mr-1" /> Close
+          </Button>
         </div>
       </div>
 
@@ -2555,24 +2603,24 @@ const DoeWorkspace = ({
         <div className="w-80 border-r border-[#222] bg-[#0a0a0a] flex flex-col p-4 overflow-y-auto custom-scrollbar">
           {results ? (
             <div className="space-y-6">
-              <section className="bg-white/5 p-3 rounded-xl border border-white/10 shadow-2xl">
-                <h3 className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em] mb-3">Model Deployment</h3>
+              <section className="bg-[#18181c] p-3 rounded-xl border border-[#27272f]">
+                <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2.5">Model Deployment</h3>
                 <div className="grid grid-cols-2 gap-2">
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    className="h-8 text-[10px] font-black border-sky-500/30 text-sky-400 hover:bg-sky-500 hover:text-white transition-all duration-300"
+                    className="h-7 text-xs font-medium border-sky-500/30 bg-sky-500/5 text-sky-400 hover:bg-sky-500/20 hover:text-sky-300 transition-colors whitespace-nowrap"
                     onClick={handleExportToXBridges}
                   >
-                    <Network size={12} className="mr-2" /> X-Bridges
+                    <Network size={12} className="mr-1.5" /> X-Bridges
                   </Button>
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    className="h-8 text-[10px] font-black border-purple-500/30 text-purple-400 hover:bg-purple-500 hover:text-white transition-all duration-300"
+                    className="h-7 text-xs font-medium border-purple-500/30 bg-purple-500/5 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 transition-colors whitespace-nowrap"
                     onClick={handleExportToVLab}
                   >
-                    <FlaskConical size={12} className="mr-2" /> V-Lab
+                    <FlaskConical size={12} className="mr-1.5" /> V-Lab
                   </Button>
                 </div>
               </section>
@@ -2769,22 +2817,22 @@ const DoeWorkspace = ({
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      className="h-6 text-[9px] border-[#f97316] text-[#f97316] hover:bg-[#f97316] hover:text-white"
+                      className="h-6 px-2 text-[10px] font-medium border-purple-500/30 bg-purple-500/5 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 whitespace-nowrap"
                       onClick={handleExportToVLab}
                     >
-                      Export to V-Lab
+                      <FlaskConical size={10} className="mr-1" /> V-Lab
                     </Button>
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      className="h-6 text-[9px] border-sky-500 text-sky-500 hover:bg-sky-500 hover:text-white"
+                      className="h-6 px-2 text-[10px] font-medium border-sky-500/30 bg-sky-500/5 text-sky-400 hover:bg-sky-500/20 hover:text-sky-300 whitespace-nowrap"
                       onClick={handleExportToXBridges}
                     >
-                      Export to X-Bridges
+                      <Network size={10} className="mr-1" /> X-Bridges
                     </Button>
-                    <div className="w-2" />
-                    <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setEqFontSize(p => Math.max(8, p - 1))}><span className="text-[8px]">A-</span></Button>
-                    <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setEqFontSize(p => Math.min(32, p + 1))}><span className="text-[10px]">A+</span></Button>
+                    <div className="w-1" />
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-400 hover:text-white" onClick={() => setEqFontSize(p => Math.max(8, p - 1))}><span className="text-[9px]">A-</span></Button>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-400 hover:text-white" onClick={() => setEqFontSize(p => Math.min(32, p + 1))}><span className="text-[11px]">A+</span></Button>
                   </div>
                 </div>
                 <div
@@ -2842,56 +2890,30 @@ const DoeWorkspace = ({
                   )}
 
                   <div>
-                    <Label className="mb-2 block">Plot Type</Label>
-                    <div className="grid grid-cols-2 gap-1">
-                      <Button
-                        size="sm"
-                        variant={plotType === 'surface' ? 'default' : 'outline'}
-                        onClick={() => setPlotType('surface')}
-                        className="text-[10px]"
-                      >
-                        Surface
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={plotType === 'contour' ? 'default' : 'outline'}
-                        onClick={() => setPlotType('contour')}
-                        className="text-[10px]"
-                      >
-                        Contour
-                      </Button>
-                      {results?.type === 'Taguchi' && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant={plotType === 'taguchi_main_sn' ? 'default' : 'outline'}
-                            onClick={() => setPlotType('taguchi_main_sn')}
-                            className="text-[10px]"
-                          >
-                            Main Effects (S/N)
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={plotType === 'taguchi_main_mean' ? 'default' : 'outline'}
-                            onClick={() => setPlotType('taguchi_main_mean')}
-                            className="text-[10px]"
-                          >
-                            Main Effects (Means)
-                          </Button>
-                        </>
-                      )}
-                      {(results?.type === 'RSM' || results?.type === 'Taguchi') && (
-                        <>
-                          {results?.type === 'RSM' && <Button size="sm" variant={plotType === 'pareto' ? 'default' : 'outline'} onClick={() => setPlotType('pareto')} className="text-[10px]">Pareto</Button>}
-                          <Button size="sm" variant={plotType === 'residuals' ? 'default' : 'outline'} onClick={() => setPlotType('residuals')} className="text-[10px]">Residuals</Button>
-                        </>
-                      )}
-                      {results?.type === 'Taguchi' && (
-                        <Button size="sm" variant={plotType === 'taguchi_delta' ? 'default' : 'outline'} onClick={() => setPlotType('taguchi_delta')} className="text-[10px]">Rank/Delta</Button>
-                      )}
-                      {(results?.type === 'RSM' || results?.type === 'GMDH' || results?.type === 'Taguchi') && (
-                        <Button size="sm" variant={plotType === 'pred_vs_act' ? 'default' : 'outline'} onClick={() => setPlotType('pred_vs_act')} className="text-[10px]">Pred vs Act</Button>
-                      )}
+                    <Label className="mb-2 block text-xs text-zinc-400">Plot Type</Label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {[
+                        { id: 'surface', label: 'Surface', show: true },
+                        { id: 'contour', label: 'Contour', show: true },
+                        { id: 'taguchi_main_sn', label: 'Main Effects (S/N)', show: results?.type === 'Taguchi' },
+                        { id: 'taguchi_main_mean', label: 'Main Effects (Means)', show: results?.type === 'Taguchi' },
+                        { id: 'pareto', label: 'Pareto', show: results?.type === 'RSM' },
+                        { id: 'residuals', label: 'Residuals', show: results?.type === 'RSM' || results?.type === 'Taguchi' },
+                        { id: 'taguchi_delta', label: 'Rank/Delta', show: results?.type === 'Taguchi' },
+                        { id: 'pred_vs_act', label: 'Pred vs Act', show: results?.type === 'RSM' || results?.type === 'GMDH' || results?.type === 'Taguchi' },
+                      ].filter(p => p.show).map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => setPlotType(p.id as any)}
+                          className={`h-7 px-2 text-xs font-medium rounded-md whitespace-nowrap transition-colors border ${
+                            plotType === p.id
+                              ? 'bg-orange-500/15 border-orange-500/40 text-orange-400 font-semibold'
+                              : 'bg-[#18181c] border-[#27272f] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -3119,21 +3141,35 @@ const DoeWorkspace = ({
                     <h3 className="text-lg font-bold text-white">Taguchi Design of Experiments</h3>
                     <p className="text-xs max-w-sm mx-auto mt-1">Configure your factors and levels to generate a coded orthogonal design matrix, or paste your experimental data below.</p>
                   </div>
-                  <Button onClick={() => setShowDesignBuilder(true)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowDesignBuilder(true)}
+                    className="h-8 px-4 text-xs font-semibold bg-[#18181c] border-orange-500/30 text-orange-400 hover:bg-orange-500/20"
+                  >
                     Create Taguchi Design Wizard
                   </Button>
                 </div>
               ) : (
-                <div className="flex-1 relative border-b border-[#222] min-h-[300px]">
-                  <div className="absolute top-4 left-4 z-10 flex gap-1">
-                    <Button size="sm" variant={plotType === 'surface' ? 'default' : 'secondary'} onClick={() => setPlotType('surface')}>3D Surface</Button>
-                    <Button size="sm" variant={plotType === 'contour' ? 'default' : 'secondary'} onClick={() => setPlotType('contour')}>Contour</Button>
-                    {results?.type === 'Taguchi' && (
-                      <>
-                        <Button size="sm" variant={plotType === 'taguchi_main_sn' ? 'default' : 'secondary'} onClick={() => setPlotType('taguchi_main_sn')}>Main Effects (SN)</Button>
-                        <Button size="sm" variant={plotType === 'taguchi_main_mean' ? 'default' : 'secondary'} onClick={() => setPlotType('taguchi_main_mean')}>Main Effects (Means)</Button>
-                      </>
-                    )}
+                <div className="flex-1 relative border-b border-[#222228] min-h-[300px]">
+                  <div className="absolute top-4 left-4 z-10 flex bg-[#111114]/90 backdrop-blur border border-[#27272f] rounded-lg p-0.5 gap-1 shadow-lg">
+                    {[
+                      { id: 'surface', label: '3D Surface', show: true },
+                      { id: 'contour', label: 'Contour', show: true },
+                      { id: 'taguchi_main_sn', label: 'Main Effects (SN)', show: results?.type === 'Taguchi' },
+                      { id: 'taguchi_main_mean', label: 'Main Effects (Means)', show: results?.type === 'Taguchi' },
+                    ].filter(p => p.show).map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => setPlotType(p.id as any)}
+                        className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
+                          plotType === p.id
+                            ? 'bg-zinc-800 text-white shadow-sm font-semibold'
+                            : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
                   </div>
                   <PlotlyPlots
                     type={plotType}
@@ -4741,12 +4777,26 @@ const ManualEntryTable = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#0a0a0a] border border-[#222] rounded overflow-hidden">
-      <div className="flex items-center justify-between p-2 border-b border-[#222] bg-[#1a1a1a]">
-        <span className="text-xs font-bold uppercase tracking-wider text-[#888]">Experiment Data</span>
+    <div className="flex flex-col h-full bg-[#0d0d10] border border-[#27272f] rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[#27272f] bg-[#141417]">
+        <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Experiment Data</span>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={addFactor}>+ Factor</Button>
-          <Button size="sm" variant="outline" onClick={addRow}>+ Row</Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={addFactor}
+            className="h-7 px-2.5 text-xs font-medium bg-[#18181c] border border-[#27272f] text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-md"
+          >
+            <Plus size={12} className="mr-1 text-zinc-400" /> Factor
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={addRow}
+            className="h-7 px-2.5 text-xs font-medium bg-[#18181c] border border-[#27272f] text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-md"
+          >
+            <Plus size={12} className="mr-1 text-zinc-400" /> Row
+          </Button>
         </div>
       </div>
       <div className="flex-1 overflow-auto custom-scrollbar" onPaste={handlePaste}>
