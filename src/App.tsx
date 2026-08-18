@@ -15167,323 +15167,377 @@ const ADIA = () => {
         {/* Hidden input for project import */}
         <input type="file" ref={projectImportRef} onChange={handleProjectFileChange} className="hidden" accept=".adia,.json" />
 
-        {/* Top Toolbar - WITH VISIBLE SIMULATION CONTROLS */}
-        <header className="h-14 bg-[#1a1a1a] border-b border-[#222] flex items-center px-4 gap-4 shrink-0 overflow-x-auto no-scrollbar">
-          <div className="flex items-center gap-3">
+        {/* Top Toolbar - Modernized & Unified Dark Header */}
+        <header className="h-14 bg-[#111114] border-b border-[#222228] flex items-center px-4 gap-3 shrink-0 overflow-x-auto no-scrollbar">
+          {/* Brand & Project Identity Group */}
+          <div className="flex items-center gap-2.5 shrink-0">
             <button
               onClick={() => setShowWorkspaceFileDialog(true)}
-              className="p-1 hover:bg-[#2a2a2a] rounded-lg transition-all duration-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316]/50 group"
+              className="p-1.5 hover:bg-[#1f1f26] rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316]/50 text-[#f97316] group"
               title="Create/Open Workspace Asset File"
             >
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" className="group-hover:scale-110 transition-transform duration-200">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="group-hover:scale-110 transition-transform">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
             </button>
             <div>
-              <div className="font-bold text-2xl tracking-tight text-white flex items-center gap-2">
+              <div className="font-bold text-lg tracking-tight text-white flex items-center gap-2">
                 <span>ADIA</span>
                 <input
                   type="text"
                   value={currentProjectName}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentProjectName(e.target.value)}
-                  className="bg-[#222] text-[#888] hover:text-[#fff] focus:text-[#fff] text-xs font-normal px-2 py-0.5 rounded border border-[#333] focus:border-[#f97316]/50 focus:outline-none tracking-normal w-32 focus:w-48 transition-all text-center cursor-pointer focus:cursor-text"
+                  className="bg-[#18181c] text-zinc-300 hover:text-white focus:text-white text-xs font-medium px-2 py-0.5 rounded border border-[#2e2e38] focus:border-[#f97316]/60 focus:outline-none tracking-normal w-28 focus:w-44 transition-all text-center cursor-pointer focus:cursor-text"
                   title="Click to rename project"
                 />
               </div>
-              <div className="text-xs text-[#888] mt-[-3px]">{VERSION}</div>
+              <div className="text-[10px] text-zinc-500 font-mono mt-[-2px]">{VERSION}</div>
             </div>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#333]" />
+          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
 
           {/* DIAGRAM MODE SWITCHER */}
-          <div className="flex bg-[#1a1a1a] rounded border border-[#333] p-0.5">
-            <button onClick={() => setDiagramMode('statemachine')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'statemachine' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
-              State Machine
-            </button>
-            <button onClick={() => setDiagramMode('bdd')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'bdd' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
-              SysML BDD
-            </button>
-            <button onClick={() => setDiagramMode('requirements')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'requirements' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
-              Requirements
-            </button>
-            <button onClick={() => setDiagramMode('ibd')} className={`px-3 py-1 text-xs rounded ${diagramMode === 'ibd' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
-              SysML IBD
-            </button>
-            <button onClick={() => setDiagramMode('xbridges')} className={`px-3 py-1 text-xs rounded ${(diagramMode as DiagramMode) === 'xbridges' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
-              X-Bridges
-            </button>
-            <button onClick={() => setDiagramMode('vlab')} className={`px-3 py-1 text-xs rounded ${(diagramMode as DiagramMode) === 'vlab' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
-              V-Lab
-            </button>
-            <button onClick={() => setDiagramMode('hil')} className={`px-3 py-1 text-xs rounded ${(diagramMode as DiagramMode) === 'hil' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
-              HIL
-            </button>
-            <button onClick={() => setDiagramMode('entropy')} className={`px-3 py-1 text-xs rounded ${(diagramMode as DiagramMode) === 'entropy' ? 'bg-[#333] text-[#e0e0e0]' : 'text-[#888] hover:text-[#ccc]'}`}>
-              ENTROPY OPM
-            </button>
+          <div className="flex bg-[#18181c] rounded-lg border border-[#27272f] p-0.5 shrink-0">
+            {[
+              { id: 'statemachine', label: 'State Machine' },
+              { id: 'bdd', label: 'SysML BDD' },
+              { id: 'requirements', label: 'Requirements' },
+              { id: 'ibd', label: 'SysML IBD' },
+              { id: 'xbridges', label: 'X-Bridges' },
+              { id: 'vlab', label: 'V-Lab' },
+              { id: 'hil', label: 'HIL' },
+              { id: 'entropy', label: 'ENTROPY OPM' },
+            ].map(mode => (
+              <button
+                key={mode.id}
+                onClick={() => setDiagramMode(mode.id as DiagramMode)}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
+                  diagramMode === mode.id
+                    ? 'bg-zinc-800 text-white shadow-sm font-semibold'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+                }`}
+              >
+                {mode.label}
+              </button>
+            ))}
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#333]" />
+          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
 
-          {/* Sim tick rate control - always visible in the header */}
-          <div className="flex items-center gap-1.5 bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-1.5">
-            <span className="text-xs text-[#888] whitespace-nowrap">Tick Rate:</span>
-            <TickRateInput value={tickMs} onChange={setTickMs} />
-            <span className="text-[10px] text-[#666]">ms</span>
-          </div>
+          {/* SIMULATION & VALIDATION GROUP */}
+          <div className="flex items-center gap-1.5 bg-[#18181c] border border-[#27272f] rounded-lg p-1 shrink-0">
+            {/* Sim tick rate control */}
+            <div className="flex items-center gap-1 px-1.5 text-xs text-zinc-400">
+              <span className="text-[11px] whitespace-nowrap">Tick:</span>
+              <TickRateInput value={tickMs} onChange={setTickMs} />
+              <span className="text-[10px] text-zinc-500">ms</span>
+            </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#333]" />
+            {(diagramMode as DiagramMode) !== 'xbridges' && (diagramMode as DiagramMode) !== 'hil' && (
+              <>
+                <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
 
-          {/* SIMULATION CONTROLS - PROMINENT AND FUNCTIONAL */}
-          {(diagramMode as DiagramMode) !== 'xbridges' && (diagramMode as DiagramMode) !== 'hil' && (
-            <div className="flex items-center gap-2 bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-1.5">
-              <Button
-                variant={isRunning ? "destructive" : "default"}
-                size="sm"
-                onClick={isRunning ? pauseSimulation : startSimulation}
-                className={isRunning ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"}
-              >
-                {isRunning ? (
-                  <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                      <rect x="6" y="4" width="4" height="16" />
-                      <rect x="14" y="4" width="4" height="16" />
-                    </svg>
-                    Pause
-                  </>
-                ) : (
-                  <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                      <polygon points="5 3 19 12 5 21 5 3" />
-                    </svg>
-                    Start
-                  </>
-                )}
-              </Button>
+                <Button
+                  size="sm"
+                  onClick={isRunning ? pauseSimulation : startSimulation}
+                  className={`h-7 px-2.5 text-xs font-semibold whitespace-nowrap rounded-md ${
+                    isRunning
+                      ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                  }`}
+                >
+                  {isRunning ? (
+                    <>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="mr-1">
+                        <rect x="6" y="4" width="4" height="16" />
+                        <rect x="14" y="4" width="4" height="16" />
+                      </svg>
+                      Pause
+                    </>
+                  ) : (
+                    <>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="mr-1">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                      </svg>
+                      Start
+                    </>
+                  )}
+                </Button>
 
-              <Button variant="outline" size="sm" onClick={stepSimulation}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                  <line x1="12" y1="4" x2="12" y2="20" />
-                </svg>
-                Step
-              </Button>
-
-              <Button variant="outline" size="sm" onClick={resetSimulation}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                  <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0" />
-                  <polyline points="3 4 3 12 11 12" />
-                </svg>
-                Reset
-              </Button>
-
-              <Separator orientation="vertical" className="h-4 bg-[#333]" />
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => { if (validateModel()) addError('info', 'Model validation passed.'); }}
-                className="text-[#e0e0e0] hover:bg-[#222]"
-                title="Check for errors"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                Validate
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={validateWithAI}
-                disabled={isAiValidating}
-                className="text-[#f97316] border-[#f97316]/50 hover:bg-[#f97316]/10"
-                title="Validate logic with AI"
-              >
-                {isAiValidating ? (
-                  <svg className="animate-spin mr-1.5 h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={stepSimulation}
+                  className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+                  title="Step single cycle"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                    <polygon points="5 3 19 12 5 21 5 3" />
+                    <line x1="12" y1="4" x2="12" y2="20" />
                   </svg>
-                ) : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-                    <path d="M12 2a10 10 0 1 0 10 10H12V2z" />
-                    <path d="M12 2a10 10 0 0 1 10 10" opacity="0.5" />
-                    <circle cx="12" cy="12" r="2" />
+                  Step
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetSimulation}
+                  className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+                  title="Reset simulation"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                    <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0" />
+                    <polyline points="3 4 3 12 11 12" />
                   </svg>
-                )}
-                {isAiValidating ? 'Analyzing...' : 'AI Check'}
-              </Button>
+                  Reset
+                </Button>
+
+                <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { if (validateModel()) addError('info', 'Model validation passed.'); }}
+                  className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+                  title="Check for errors"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-emerald-400">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                  </svg>
+                  Validate
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={validateWithAI}
+                  disabled={isAiValidating}
+                  className="h-7 px-2 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 whitespace-nowrap"
+                  title="Validate logic with AI"
+                >
+                  {isAiValidating ? (
+                    <svg className="animate-spin mr-1 h-3.5 w-3.5 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  ) : (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                      <path d="M12 2a10 10 0 1 0 10 10H12V2z" />
+                      <path d="M12 2a10 10 0 0 1 10 10" opacity="0.5" />
+                      <circle cx="12" cy="12" r="2" />
+                    </svg>
+                  )}
+                  {isAiValidating ? 'Analyzing...' : 'AI Check'}
+                </Button>
+              </>
+            )}
+
+            <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
+
+            <div className="flex items-center gap-1.5 px-1.5 py-0.5">
+              <Checkbox
+                checked={safetyMode}
+                onCheckedChange={(c) => setSafetyMode(c as boolean)}
+                id="safety-mode"
+                className="h-3.5 w-3.5 rounded border-zinc-600 data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
+              />
+              <Label htmlFor="safety-mode" className={`text-xs cursor-pointer select-none whitespace-nowrap ${safetyMode ? "text-red-400 font-semibold" : "text-zinc-400"}`}>
+                Safety
+              </Label>
             </div>
-          )}
-
-          <Separator orientation="vertical" className="h-6 bg-[#333]" />
-
-          <div className="flex items-center gap-2 bg-[#1a1a1a] border border-[#333] rounded px-2 py-1">
-            <Checkbox
-              checked={safetyMode}
-              onCheckedChange={(c) => setSafetyMode(c as boolean)}
-              id="safety-mode"
-            />
-            <Label htmlFor="safety-mode" className={safetyMode ? "text-red-400 font-bold" : "text-[#888]"}>Safety Mode</Label>
           </div>
 
-          <Separator orientation="vertical" className="h-6 bg-[#333]" />
+          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
 
-          {/* CODE GENERATION BUTTON - FULLY FUNCTIONAL */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={generateCode}
-            disabled={isGenerating}
-            className="border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10 disabled:opacity-50 disabled:cursor-wait"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-              <polyline points="16 18 22 12 16 6" />
-              <polyline points="8 6 2 12 8 18" />
-            </svg>
-            {isGenerating ? 'Generating...' : 'Generate C/H'}
-          </Button>
+          {/* CODE GENERATION & PROJECT I/O GROUP */}
+          <div className="flex items-center gap-1 bg-[#18181c] border border-[#27272f] rounded-lg p-1 shrink-0">
+            {/* Generate C/H Button - Primary Accent */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={generateCode}
+              disabled={isGenerating}
+              className="h-7 px-2.5 text-xs font-semibold whitespace-nowrap bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300 disabled:opacity-50 disabled:cursor-wait"
+              title="Generate C/H Embedded Code"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
+                <polyline points="16 18 22 12 16 6" />
+                <polyline points="8 6 2 12 8 18" />
+              </svg>
+              {isGenerating ? 'Generating...' : 'Generate C/H'}
+            </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => saveUnifiedProject(false)}
-            className="border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10"
-            title="Save ADIA project (.adia)"
-          >
-            <Save size={14} className="mr-1.5" />
-            Save
-          </Button>
+            <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => saveUnifiedProject(true)}
-            className="border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10"
-            title="Save ADIA project as new file (.adia)"
-          >
-            Save As
-          </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => saveUnifiedProject(false)}
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              title="Save ADIA project (.adia)"
+            >
+              <Save size={13} className="mr-1 text-zinc-400" />
+              Save
+            </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleOpenProjectDialog}
-            className="border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10"
-            title="Open ADIA project (.adia)"
-          >
-            <FolderOpen size={14} className="mr-1.5" />
-            Open
-          </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => saveUnifiedProject(true)}
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              title="Save ADIA project as new file (.adia)"
+            >
+              Save As
+            </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExportProject}
-            className="border-[#888] text-[#aaa] hover:bg-[#222]"
-            title="Export individual module files (.json)"
-          >
-            Export Modules
-          </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleOpenProjectDialog}
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              title="Open ADIA project (.adia)"
+            >
+              <FolderOpen size={13} className="mr-1 text-zinc-400" />
+              Open
+            </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowReportDialog(true)}
-            className="border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10"
-          >
-            Report
-          </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleExportProject}
+              className="h-7 px-2 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 whitespace-nowrap"
+              title="Export individual module files (.json)"
+            >
+              Export
+            </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => toggleWindow('hmi')}
-            className="border-[#f97316] text-[#f97316] hover:bg-[#f97316]/10"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-            HMI Panel
-          </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowReportDialog(true)}
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              title="Generate Engineering Report"
+            >
+              Report
+            </Button>
+          </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => toggleWindow('pid')}
-            className="border-[#6c9ac6] text-[#6c9ac6] hover:bg-[#6c9ac6]/10"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-              <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="15"></line>
-            </svg>
-            PID Tuner
-          </Button>
+          <Separator orientation="vertical" className="h-6 bg-[#27272f]" />
 
+          {/* ENGINEERING TOOLS & GATEWAYS GROUP */}
+          <div className="flex items-center gap-1 bg-[#18181c] border border-[#27272f] rounded-lg p-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => toggleWindow('hmi')}
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              title="Open HMI Dashboard Panel"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-orange-400">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+                <line x1="12" y1="17" x2="12" y2="21"></line>
+              </svg>
+              HMI Panel
+            </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => toggleWindow('doe')}
-            className="border-[#c96c8a] text-[#c96c8a] hover:bg-[#c96c8a]/10"
-          >
-            DOE (RSM)
-          </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => toggleWindow('pid')}
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              title="PID Controller Tuner"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-sky-400">
+                <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path>
+                <line x1="16" y1="8" x2="2" y2="22"></line>
+                <line x1="17.5" y1="15" x2="9" y2="15"></line>
+              </svg>
+              PID Tuner
+            </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowHelpModal(true)}
-            className="border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            Help
-          </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => toggleWindow('doe')}
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              title="Design of Experiments (Response Surface Methodology)"
+            >
+              DOE (RSM)
+            </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowFactoryIOGateway(true)}
-            className={`border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/10 ${factoryIOEnabled ? 'border-indigo-400 shadow-[0_0_10px_rgba(99,102,241,0.3)]' : ''}`}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1.5">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-              <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-              <line x1="12" y1="22.08" x2="12" y2="12" />
-            </svg>
-            Factory I/O
-          </Button>
+            <Separator orientation="vertical" className="h-4 bg-[#2e2e38]" />
 
-          {/* 3DEXPERIENCE Gateway Button */}
-          <Button
-            id="3dx-toolbar-btn"
-            variant="outline"
-            size="sm"
-            onClick={() => setShow3DXGateway(true)}
-            className="border-[#0056b3]/60 text-[#4da6ff] hover:bg-[#0056b3]/10"
-            title="Connect to 3DEXPERIENCE Platform"
-          >
-            <Cloud size={14} className="mr-1.5" />
-            3DEXPERIENCE
-          </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowFactoryIOGateway(true)}
+              className={`h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap ${
+                factoryIOEnabled ? 'text-indigo-400 bg-indigo-500/10' : ''
+              }`}
+              title="Factory I/O Gateway Connection"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`mr-1 ${factoryIOEnabled ? 'text-indigo-400' : 'text-zinc-400'}`}>
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                <line x1="12" y1="22.08" x2="12" y2="12" />
+              </svg>
+              Factory I/O
+              {factoryIOEnabled && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 ml-1"></span>}
+            </Button>
 
-          <div className="flex-1" />
+            <Button
+              id="3dx-toolbar-btn"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShow3DXGateway(true)}
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              title="Connect to 3DEXPERIENCE Platform"
+            >
+              <Cloud size={13} className="mr-1 text-cyan-400" />
+              3DEXPERIENCE
+            </Button>
+          </div>
 
-          {/* Status indicators */}
-          <div className="flex items-center gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className={`w-2.5 h-2.5 rounded-full ${isRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
-              <span className="text-[#888] font-medium">{isRunning ? 'RUNNING' : 'STOPPED'}</span>
-            </div>
-            <div className="text-[#666]">
-              Time: <span className="text-[#f97316] font-mono font-medium">{simulationTime.toFixed(2)}s</span>
-            </div>
-            <div className="text-[#666]">
-              States: <span className="text-[#f97316] font-mono font-medium">{currentStates.length}</span>
-            </div>
-            <div className="text-[#666]">
-              Vars: <span className="text-[#f97316] font-mono font-medium">{variables.length}</span>
+          <div className="flex-1 min-w-4" />
+
+          {/* HELP & STATUS GROUP */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowHelpModal(true)}
+              className="h-7 px-2 text-xs text-zinc-400 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              title="Help & Documentation"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-emerald-400">
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              Help
+            </Button>
+
+            {/* Status indicators */}
+            <div className="flex items-center gap-3 bg-[#18181c] border border-[#27272f] rounded-lg px-2.5 py-1 text-xs">
+              <div className="flex items-center gap-1.5">
+                <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
+                <span className={`font-mono text-[11px] font-semibold ${isRunning ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                  {isRunning ? 'RUN' : 'STOP'}
+                </span>
+              </div>
+              <Separator orientation="vertical" className="h-3.5 bg-[#2e2e38]" />
+              <div className="text-zinc-500 font-mono text-[11px]">
+                T: <span className="text-zinc-300 font-semibold">{simulationTime.toFixed(1)}s</span>
+              </div>
+              <div className="text-zinc-500 font-mono text-[11px]">
+                S: <span className="text-zinc-300 font-semibold">{currentStates.length}</span>
+              </div>
+              <div className="text-zinc-500 font-mono text-[11px]">
+                V: <span className="text-zinc-300 font-semibold">{variables.length}</span>
+              </div>
             </div>
           </div>
         </header>
