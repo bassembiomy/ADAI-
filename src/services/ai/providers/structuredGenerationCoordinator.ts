@@ -58,7 +58,7 @@ export class StructuredGenerationCoordinator {
           };
         }
 
-        const issues = zodCheck.error.issues || zodCheck.error.errors || [];
+        const issues = zodCheck.error.issues;
         const errSummary = issues.map((e: any) => `${e.path.join('.')}: ${e.message}`).join('; ');
         currentPrompt = `${request.userPrompt}\n\n[ERROR: Your previous JSON failed schema validation: ${errSummary}. Previous output was: ${lastRawText}. Please correct invalid fields and return valid JSON.]`;
       } catch (err: any) {

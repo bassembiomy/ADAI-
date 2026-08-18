@@ -14,7 +14,7 @@ export class PlanValidator {
       return {
         isValid: false,
         sortedActionIds: [],
-        diagnostics: parseResult.error.errors.map(e => ({
+        diagnostics: parseResult.error.issues.map((e: any) => ({
           code: 'SCHEMA_PARSE_ERROR',
           severity: 'ERROR',
           message: e.message,
@@ -51,7 +51,7 @@ export class PlanValidator {
 
       const payloadCheck = cap.payloadSchema.safeParse(action.payload);
       if (!payloadCheck.success) {
-        payloadCheck.error.errors.forEach(e => {
+        payloadCheck.error.issues.forEach((e: any) => {
           diagnostics.push({
             code: 'INVALID_ACTION_PAYLOAD',
             severity: 'ERROR',
