@@ -157,34 +157,41 @@ export async function getLocalAiResponse(
   history: any[],
   currentContext: any
 ): Promise<string> {
-  const url = baseUrl.trim() || "http://localhost:1234/api/v1/chat";
-  
-  // Format conversation history and context into 'input'
-  let inputContent = "";
-  if (history && history.length > 1) {
-    inputContent += "Previous conversation history:\n";
-    for (let i = 0; i < history.length - 1; i++) {
-      const role = history[i].role === 'user' ? 'User' : 'Assistant';
-      inputContent += `${role}: ${history[i].content}\n`;
-    }
-    inputContent += "\n";
-  }
-  
+  let cleanBase = (baseUrl.trim() || "http://localhost:1234").replace(/\/+$/, '');
+  cleanBase = cleanBase.replace(/\/api\/v1\/chat\/?$/, '').replace(/\/v1\/chat\/completions\/?$/, '').replace(/\/v1\/?$/, '');
+
+  const endpoint = `${cleanBase}/v1/chat/completions`;
+  const selectedModel = model || "google/gemma-4-e4b";
+
+  const messages: any[] = [
+    { role: 'system', content: SYSTEM_PROMPT }
+  ];
+
   if (currentContext) {
-    inputContent += `Current Project Context:\n${JSON.stringify(currentContext, null, 2)}\n\n`;
+    messages.push({
+      role: 'system',
+      content: `Current Project Context:\n${JSON.stringify(currentContext, null, 2)}`
+    });
   }
-  
-  inputContent += `User Request: ${history[history.length - 1].content}`;
 
-  console.log("Calling Local LLM at", url, "with model", model || "qwen3-8b");
+  if (history && history.length > 0) {
+    for (const msg of history) {
+      messages.push({
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      });
+    }
+  }
 
-  const response = await fetch(url, {
+  console.log("Calling Local LLM at", endpoint, "with model", selectedModel);
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: model || "qwen3-8b",
-      system_prompt: SYSTEM_PROMPT,
-      input: inputContent
+      model: selectedModel,
+      messages,
+      temperature: 0.7
     })
   });
 
@@ -196,18 +203,12 @@ export async function getLocalAiResponse(
   const data = await response.json();
   console.log("Local AI Response Data:", data);
 
+  if (data.choices && data.choices[0]?.message?.content) {
+    return data.choices[0].message.content;
+  }
   if (typeof data === 'string') return data;
   if (data.response) return data.response;
-  if (data.message) {
-    if (typeof data.message === 'string') return data.message;
-    if (data.message.content) return data.message.content;
-  }
-  if (data.choices && data.choices[0]) {
-    const choice = data.choices[0];
-    if (choice.message && choice.message.content) return choice.message.content;
-    if (choice.text) return choice.text;
-  }
-  if (data.text) return data.text;
+  if (data.message?.content) return data.message.content;
   return JSON.stringify(data);
 }
 

@@ -32,8 +32,8 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
   const [openaiApiKey, setOpenaiApiKey] = useState('');
   const [openaiBaseUrl, setOpenaiBaseUrl] = useState(localStorage.getItem('openai_base_url') || 'https://api.openai.com/v1');
   const [openaiModel, setOpenaiModel] = useState(localStorage.getItem('openai_model') || 'gpt-4o-mini');
-  const [localBaseUrl, setLocalBaseUrl] = useState(localStorage.getItem('local_llm_base_url') || 'http://localhost:1234/api/v1/chat');
-  const [localModel, setLocalModel] = useState(localStorage.getItem('local_llm_model') || 'qwen3-8b');
+  const [localBaseUrl, setLocalBaseUrl] = useState(localStorage.getItem('local_llm_base_url') || 'http://localhost:1234');
+  const [localModel, setLocalModel] = useState(localStorage.getItem('local_llm_model') || 'google/gemma-4-e4b');
   const [localModels, setLocalModels] = useState<string[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [showSettings, setShowSettings] = useState(aiEngine === 'gemini' || aiEngine === 'openai');
