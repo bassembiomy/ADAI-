@@ -102,9 +102,10 @@ export class XBridgesModuleAdapter {
     }
 
     if (action.type === 'XB_CONNECT_PORTS') {
-      const conn = { ...action.payload };
+      const connId = action.payload.id || action.payload.connectionId;
+      const conn = { ...action.payload, id: connId };
       this.model.addConnection(conn);
-      return { type: 'CONNECTION_CREATED', id: conn.connectionId };
+      return { type: 'CONNECTION_CREATED', id: connId };
     }
 
     throw new Error(`Unsupported action ${action.type}`);
@@ -118,9 +119,10 @@ export class XBridgesModuleAdapter {
       }
     }
     if (action.type === 'XB_CONNECT_PORTS') {
-      const conn = this.model.connections.find(c => c.id === action.payload.connectionId);
+      const connId = action.payload.id || action.payload.connectionId;
+      const conn = this.model.connections.find(c => c.id === connId);
       if (!conn || conn.sourceBlockId !== action.payload.sourceBlockId || conn.targetBlockId !== action.payload.targetBlockId) {
-        return { isVerified: false, diagnostics: [{ code: 'CONNECTION_NOT_VERIFIED', severity: 'ERROR', message: `Connection ${action.payload.connectionId} verification failed.` }] };
+        return { isVerified: false, diagnostics: [{ code: 'CONNECTION_NOT_VERIFIED', severity: 'ERROR', message: `Connection ${connId} verification failed.` }] };
       }
     }
     return { isVerified: true, diagnostics: [] };
