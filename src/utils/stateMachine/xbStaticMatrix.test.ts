@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { matrixInverseGaussJordan } from './xbStaticMatrix';
-import { type XBNumericType } from './xbSemanticModel';
+import { type XBNumericType } from './xbNumeric';
 
 const f32: XBNumericType = { kind: 'float32' };
 

@@ -28,6 +28,15 @@ import type { XBNumericType } from './xbNumeric';
 const float32: XBNumericType = { kind: 'float', bytes: 4, name: 'float32', precision: 'float32' } as any;
 const scalar: any = { kind: 'scalar' };
 
+import type { XBOwnerState } from './smSemanticModel';
+
+const defaultOwnerState: XBOwnerState = {
+  stateId: 'controller',
+  stateName: 'controller',
+  cIndexSymbol: 'SM_ST_CONTROLLER_IDX',
+  numericIndex: 0,
+};
+
 const operation = (
   id: string,
   type: string,
@@ -42,7 +51,7 @@ const operation = (
   parameters,
   stateful: false,
   directFeedthrough: true,
-  schedule: { hold: 'none', periodSubsteps: 1, counterIncrement: 1, initialCounter: 0 },
+  schedule: { hold: 'none', periodSubsteps: 1, offsetSubsteps: 0, counterIncrement: 1, initialCounter: 0 },
   conversion: null,
   state: null,
   numericFault: { fallback: 'zero', errorSignalId: null },
@@ -78,18 +87,19 @@ const model = (
   mappings: import('./xbSemanticModel').XBSemanticModel['mappings'] = [],
 ): import('./xbSemanticModel').XBSemanticModel => ({
   stateId: 'controller',
+  ownerState: defaultOwnerState,
   executionOrder,
   operations,
   signals,
   mappings,
-  solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
+  solver: { kind: 'euler', stepSeconds: 1.0, substepsPerTick: 1 },
   policy: { memory, numericFault: 'escalate' },
 });
 
 describe('EXTENDED_KALMAN_FILTER interpreter', () => {
   it('matches a nonlinear scalar case with finite differences', () => {
     const ir = model(
-      'ekf1',
+      'reset',
       {
         ekf: {
           ...operation(
@@ -98,10 +108,10 @@ describe('EXTENDED_KALMAN_FILTER interpreter', () => {
             ['ekf:u', 'ekf:y_meas'],
             ['ekf:x_hat', 'ekf:y_hat', 'ekf:innovation', 'ekf:K'],
             {
-              f: ['x0 + dt * u0'],
-              h: ['x0 * x0'],
-              fAst: compileEkfVectorExpressions(['x0 + dt * u0'], new Set(['x0', 'u0', 'dt']), { maxNodes: 100, maxExpressions: 10 }),
-              hAst: compileEkfVectorExpressions(['x0 * x0'], new Set(['x0', 'u0', 'dt']), { maxNodes: 100, maxExpressions: 10 }),
+              f: ['x1 + dt * u1'],
+              h: ['x1 * x1'],
+              fAst: compileEkfVectorExpressions(['x1 + dt * u1'], new Set(['x1', 'u1', 'dt']), { maxNodes: 100, maxExpressions: 10 }),
+              hAst: compileEkfVectorExpressions(['x1 * x1'], new Set(['x1', 'u1', 'dt']), { maxNodes: 100, maxExpressions: 10 }),
               Q: [[0.01]], R: [[0.1]], P0: [[1]], x0: [[2]]
             }
           ),
@@ -145,7 +155,6 @@ describe('EXTENDED_KALMAN_FILTER interpreter', () => {
     // Let's assume dt = 1 for the test context (since time logic sets dt variable).
     
     const data = { u: 1, y_meas: 8 };
-    runtime.data = { dt: 1.0 };
     
     console.log("executionOrder", runtime.ir.executionOrder);
     for (const operationId of runtime.ir.executionOrder) {

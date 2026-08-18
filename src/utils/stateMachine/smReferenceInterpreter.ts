@@ -36,11 +36,12 @@ export function runReferenceInterpreter(
 
   const variables: Record<string, number | boolean> = {};
   for (const v of Object.values(ir.variables)) {
-    variables[v.name] = v.initialValue === true || v.initialValue === 'true'
+    const rawVal = v.initialValue as unknown;
+    variables[v.name] = rawVal === true || rawVal === 'true'
       ? true
-      : v.initialValue === false || v.initialValue === 'false'
+      : rawVal === false || rawVal === 'false'
         ? false
-        : Number(v.initialValue) || 0;
+        : Number(rawVal) || 0;
   }
 
   const steps: SMTraceStep[] = [];
@@ -87,8 +88,10 @@ export function runReferenceInterpreter(
           const val = stateTimerMs < thresholdMs ? initialVal : finalVal;
 
           for (const m of currentState.xBridges.mappings) {
-            const varName = m.variable.modelName;
-            variables[varName] = val;
+            const varName = m.variable?.modelName ?? m.sourceVariableId ?? m.variableId;
+            if (varName) {
+              variables[varName] = val;
+            }
           }
 
         }

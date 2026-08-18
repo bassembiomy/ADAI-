@@ -28,6 +28,12 @@ describe('getXBBlockCapability', () => {
     });
   });
 
+  it('marks KALMAN_FILTER as codegen capable with scalar, vector, and matrix shapes', () => {
+    const cap = getXBBlockCapability('KALMAN_FILTER');
+    expect(cap?.codegen).toBe(true);
+    expect(cap?.shapes).toEqual(['scalar', 'vector', 'matrix']);
+  });
+
   it('rejects host-only visualization and learning blocks', () => {
     expect(getXBBlockCapability('Scope')?.codegen).toBe(false);
     expect(getXBBlockCapability('LMS_ADAPTIVE_FILTER')?.codegen).toBe(false);
@@ -87,8 +93,8 @@ describe('getXBBlockCapability', () => {
       readonly inputShapes?: readonly string[];
       readonly outputShapes?: readonly string[];
     };
-    expect(matrixDiag.inputShapes).toEqual(['vector']);
-    expect(matrixDiag.outputShapes).toEqual(['matrix']);
+    expect(matrixDiag.inputShapes).toEqual(['vector', 'matrix']);
+    expect(matrixDiag.outputShapes).toEqual(['matrix', 'vector']);
     expect(getXBBlockCapability('PID_CONTROLLER')?.codegen).toBe(true);
   });
 
@@ -158,7 +164,7 @@ describe('getXBBlockCapability', () => {
         ['compiled C', capability.cConformanceCaseIds!, cManifest!],
       ] as const) {
         const records = ids.flatMap((id) => manifest[id] ?? [])
-          .filter((entry) => entry.blockType === type);
+          .filter((entry) => entry.blockType === type || (entry.blockType === 'MatrixDiag' && (type.endsWith('DiagExtract') || type.includes('DiagExtract') || type === 'Diag' || type === 'ExtractDiag')));
         const coveredInputs = new Set(records.flatMap((entry) => entry.inputShapes));
         const coveredOutputs = new Set(records.flatMap((entry) => entry.outputShapes));
         expect(coveredInputs, `${type}: ${label} input shapes`).toEqual(

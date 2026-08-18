@@ -48,6 +48,10 @@ const resolveSmVarId = (node: UnknownRecord): string | null => {
     const legacy = nonEmptyString(node.data.params.smVarId);
     if (legacy !== null) return legacy;
   }
+  if (isRecord(node.params)) {
+    const p = nonEmptyString(node.params.smVarId);
+    if (p !== null) return p;
+  }
   return isRecord(node.parameters)
     ? nonEmptyString(node.parameters.smVarId)
     : null;

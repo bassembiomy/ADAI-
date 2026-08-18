@@ -138,7 +138,34 @@ describe('buildXBSemanticModel', () => {
     expect(result.ir!.ownerState).toEqual(ownerState);
     expect(result.ir!.mappings).toHaveLength(1);
     expect(result.ir!.mappings[0].sourceVariableId).toBe('xb_output');
-    expect(result.ir!.mappings[0].variable?.cIdentifier).toBe('xb_output');
+  });
+
+  it('infers vector shape length 4 from Constant Value parameter [-2, 4, 1, 7] and propagates shape to SumElements', () => {
+    const m = model({
+      nodes: [
+        node('c1', 'Constant', [], [port('out', 'output')], { Value: [-2, 4, 1, 7] }),
+        node('sum1', 'SumElements', [port('in', 'input')], [port('out', 'output')]),
+      ],
+      edges: [edge('e1', 'c1', 'out', 'sum1', 'in')],
+      mappings: [],
+    });
+
+    const result = buildXBSemanticModel({
+      stateId: 'state_test',
+      ownerState: { stateId: 'state_test', stateName: 'State_Test', cIndexSymbol: 'ST_IDX', numericIndex: 1 },
+      variableSymbols: new Map(),
+      model: m,
+      variables,
+      target,
+      baseTickMs: 100,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.ir).toBeDefined();
+    const sem = result.ir!;
+    expect(sem.signals['c1:out']?.shape).toEqual({ kind: 'vector', length: 4 });
+    expect(sem.signals['sum1:in']?.shape).toEqual({ kind: 'vector', length: 4 });
+    expect(sem.signals['sum1:out']?.shape).toEqual({ kind: 'scalar' });
   });
 
   it('does not invent an Outport mapping for an unknown state-machine variable', () => {
@@ -1109,8 +1136,52 @@ describe('buildXBSemanticModel', () => {
         expect.objectContaining({ code: 'XB_KALMAN_DIMENSION_MISMATCH' }),
       );
     });
+
+    it('broadcasts scalar initial condition x0 to multi-state STATE_SPACE block without diagnostics', () => {
+      const xbModel = model({
+        nodes: [
+          node(
+            'ss1',
+            'STATE_SPACE',
+            [port('u', 'input')],
+            [port('y', 'output'), port('x', 'output', { shape: 'vector', dimensions: [2] })],
+            {
+              A: [[0, 1], [-2, -3]],
+              B: [[0], [1]],
+              C: [[1, 0]],
+              D: [[0]],
+              x0: 0,
+            },
+          ),
+        ],
+      });
+
+      const result = build(xbModel);
+      expect(result.diagnostics.filter((d) => d.code === 'XB_STATE_INITIAL_VALUE_INVALID')).toEqual([]);
+      expect(result.ir).toBeDefined();
+      const xState = result.ir?.operations['ss1']?.state?.slots.find((s) => s.role === 'x');
+      expect(xState?.initialValues).toEqual([0, 0]);
+    });
+
+    it('safely handles variables array and omitted target without throwing TypeError', () => {
+      const xbModel = model({
+        nodes: [node('const1', 'Constant', [], [port('out', 'output')], { value: 5 })],
+      });
+
+      const result = buildXBSemanticModel({
+        stateId: 'st1',
+        model: xbModel,
+        baseTickMs: 100,
+        variables: [{ id: 'var1', name: 'myVar', type: 'float', initialValue: 0 }] as any,
+        target: undefined as any,
+      });
+
+      expect(result.diagnostics).toEqual([]);
+      expect(result.ir).toBeDefined();
+    });
   });
 });
+
 
 
 

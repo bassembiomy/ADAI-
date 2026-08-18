@@ -1181,7 +1181,11 @@ export const XbridgesPropertiesPanel: React.FC<Props> = ({
                         if (trimmedRaw !== '' && !isNaN(Number(trimmedRaw))) {
                           val = Number(trimmedRaw);
                         } else if (trimmedRaw.startsWith('[') || trimmedRaw.startsWith('{')) {
-                           val = VectorUtils.parseMatlabArray(trimmedRaw);
+                           try {
+                             val = VectorUtils.parseMatlabArray(trimmedRaw);
+                           } catch {
+                             val = raw;
+                           }
                         }
                         let finalVal = val;
                         if (isObjectParam) {

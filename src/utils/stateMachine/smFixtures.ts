@@ -897,7 +897,7 @@ export const xb6StepFixture = (): StateMachineModelV4 => ({
   junctions: [],
   transitions: [],
   variables: [
-    { id: 'v1', name: 'xb6_step_output', type: 'double', initialValue: '0' },
+    { id: 'v1', name: 'xb6_step_output', type: 'double', initialValue: '0', currentValue: 0, visibleInScope: true },
   ],
 });
 

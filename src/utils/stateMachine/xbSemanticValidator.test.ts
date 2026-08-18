@@ -123,7 +123,7 @@ describe('validateXBModel', () => {
   it('enforces Task 10 bounds, discrete controls, math support, and directional matrix shapes', () => {
     const matrixDiagShapeCodes = codes(model({
       nodes: [node('diag', 'MatrixDiag', {
-        inputs: [port('u', 'input', { shape: 'vector', dimensions: [2] })],
+        inputs: [port('u', 'input', { shape: 'scalar' })],
         outputs: [port('y', 'output', { shape: 'vector', dimensions: [2] })],
       })],
     }));
@@ -637,6 +637,362 @@ describe('validateXBModel', () => {
     });
     expect(codes(invalidRl)).toContain('XB_PARAMETER_INVALID');
   });
+
+  it('validates 1D scalar KALMAN_FILTER model with zero shape errors', () => {
+    setXBConformanceStatus('XB-W5-KALMAN', 'PASS');
+    const validScalarKf = model({
+      nodes: [
+        node('c_u', 'Constant', { inputs: [], outputs: [port('out', 'output', { shape: 'scalar', dimensions: [] })] }),
+        node('c_y', 'Constant', { inputs: [], outputs: [port('out', 'output', { shape: 'scalar', dimensions: [] })] }),
+        node('XBKF12A_Kalman', 'KALMAN_FILTER', {
+          A: [[0.9]],
+          B: [[0.1]],
+          C: [[1.0]],
+          D: [[0.0]],
+          Q: [[0.01]],
+          R: [[0.05]],
+          P0: [[1.0]],
+          x0: [0.0],
+          inputs: [
+            port('u', 'input', { shape: 'scalar', dimensions: [] }),
+            port('y_meas', 'input', { shape: 'scalar', dimensions: [] }),
+          ],
+          outputs: [
+            port('x_hat', 'output', { shape: 'scalar', dimensions: [] }),
+            port('y_hat', 'output', { shape: 'scalar', dimensions: [] }),
+          ],
+        }),
+      ],
+      edges: [
+        { id: 'e1', sourceNodeId: 'c_u', sourcePortId: 'out', targetNodeId: 'XBKF12A_Kalman', targetPortId: 'u' },
+        { id: 'e2', sourceNodeId: 'c_y', sourcePortId: 'out', targetNodeId: 'XBKF12A_Kalman', targetPortId: 'y_meas' },
+      ],
+    });
+
+    const result = validateXBModel(validScalarKf, variables, target);
+    const shapeErrors = result.filter(d => d.code === 'XB_SHAPE_MISMATCH' || d.code === 'XB_BLOCK_NOT_CODEGEN_CAPABLE');
+    expect(shapeErrors).toEqual([]);
+  });
+
+  it('rejects multi-input KALMAN_FILTER model when scalar u input is connected with XB_SHAPE_MISMATCH', () => {
+    setXBConformanceStatus('XB-W5-KALMAN', 'PASS');
+    const invalidMultiKf = model({
+      nodes: [
+        node('c_u', 'Constant', { inputs: [], outputs: [port('out', 'output', { shape: 'scalar', dimensions: [] })] }),
+        node('c_y', 'Constant', { inputs: [], outputs: [port('out', 'output', { shape: 'scalar', dimensions: [] })] }),
+        node('kf_multi', 'KALMAN_FILTER', {
+          A: [[0.9, 0.0], [0.0, 0.9]],
+          B: [[0.1, 0.2], [0.3, 0.4]],
+          C: [[1.0, 0.0]],
+          D: [[0.0, 0.0]],
+          Q: [[0.01, 0.0], [0.0, 0.01]],
+          R: [[0.05]],
+          P0: [[1.0, 0.0], [0.0, 1.0]],
+          x0: [0.0, 0.0],
+          inputs: [
+            port('u', 'input', { shape: 'vector', dimensions: [2] }),
+            port('y_meas', 'input', { shape: 'scalar', dimensions: [] }),
+          ],
+          outputs: [
+            port('x_hat', 'output', { shape: 'vector', dimensions: [2] }),
+          ],
+        }),
+      ],
+      edges: [
+        { id: 'e1', sourceNodeId: 'c_u', sourcePortId: 'out', targetNodeId: 'kf_multi', targetPortId: 'u' },
+        { id: 'e2', sourceNodeId: 'c_y', sourcePortId: 'out', targetNodeId: 'kf_multi', targetPortId: 'y_meas' },
+      ],
+    });
+
+    const result = validateXBModel(invalidMultiKf, variables, target);
+    expect(result.some(d => d.code === 'XB_SHAPE_MISMATCH')).toBe(true);
+  });
+
+  it('accepts XB6-DiagExtract block with matrix input shape without diagnostics', () => {
+    const diagModel: XBPersistedModelV1 = {
+      schemaVersion: 1,
+      solver: { kind: 'euler', stepSeconds: 0.01 },
+      nodes: [
+        node('constMat', 'Constant', {
+          outputs: [port('y', 'output', { shape: 'matrix', dimensions: [3, 3] })],
+          value: [[1, 0, 0], [0, 2, 0], [0, 0, 3]],
+        }),
+        node('diagExt', 'XB6-DiagExtract', {
+          inputs: [port('in', 'input', { shape: 'matrix', dimensions: [3, 3] })],
+          outputs: [port('out', 'output', { shape: 'vector', dimensions: [3] })],
+        }),
+      ],
+      edges: [
+        { id: 'e1', sourceNodeId: 'constMat', sourcePortId: 'y', targetNodeId: 'diagExt', targetPortId: 'in' },
+      ],
+      mappings: [],
+      policy: { memory: 'reset', numericFault: 'escalate' },
+    };
+
+    const diagnostics = validateXBModel(diagModel, variables, target);
+    const shapeErrors = diagnostics.filter((d) => d.code === 'XB_PORT_SHAPE_UNSUPPORTED' || d.code === 'XB_SHAPE_MISMATCH');
+    expect(shapeErrors).toEqual([]);
+  });
+
+  it('accepts various DiagExtract/MatrixDiag block type aliases (XB6-MatrixDiag, DIAG_EXTRACT, Diag_Extract) with matrix input shape', () => {
+    for (const blockType of ['XB6-MatrixDiag', 'XB6-ExtractDiag', 'XB6-Diag', 'DIAG_EXTRACT', 'Diag_Extract', 'diag_extract']) {
+      const model: XBPersistedModelV1 = {
+        schemaVersion: 1,
+        solver: { kind: 'euler', stepSeconds: 0.01 },
+        nodes: [
+          node('constMat', 'Constant', {
+            outputs: [port('y', 'output', { shape: 'matrix', dimensions: [3, 3] })],
+            value: [[1, 0, 0], [0, 2, 0], [0, 0, 3]],
+          }),
+          node('diagExt', blockType, {
+            inputs: [{ id: 'in', direction: 'input', dataType: 'auto' }],
+            outputs: [{ id: 'out', direction: 'output', dataType: 'auto' }],
+          }),
+        ],
+        edges: [
+          { id: 'e1', sourceNodeId: 'constMat', sourcePortId: 'y', targetNodeId: 'diagExt', targetPortId: 'in' },
+        ],
+        mappings: [],
+        policy: { memory: 'reset', numericFault: 'escalate' },
+      };
+
+      const diagnostics = validateXBModel(model, variables, target);
+      const shapeErrors = diagnostics.filter((d) => d.code === 'XB_PORT_SHAPE_UNSUPPORTED' || d.code === 'XB_SHAPE_MISMATCH');
+      expect(shapeErrors, `Failed for blockType ${blockType}`).toEqual([]);
+    }
+  });
+
+
+  it('accepts XB6-MatrixSolve block with vector in2 shape without shape diagnostics', () => {
+    const solveModel: XBPersistedModelV1 = {
+      schemaVersion: 1,
+      solver: { kind: 'euler', stepSeconds: 0.01 },
+      nodes: [
+        node('matA', 'Constant', {
+          outputs: [port('y', 'output', { shape: 'matrix', dimensions: [2, 2] })],
+          value: [[1, 0], [0, 1]],
+        }),
+        node('vecB', 'Constant', {
+          outputs: [port('y', 'output', { shape: 'vector', dimensions: [2] })],
+          value: [3, 4],
+        }),
+        node('solveBlock', 'XB6-MatrixSolve', {
+          inputs: [
+            port('in1', 'input', { shape: 'matrix', dimensions: [2, 2] }),
+            port('in2', 'input', { shape: 'vector', dimensions: [2] }),
+          ],
+          outputs: [port('out', 'output', { shape: 'vector', dimensions: [2] })],
+          maxDimension: 4,
+        }),
+      ],
+      edges: [
+        { id: 'e1', sourceNodeId: 'matA', sourcePortId: 'y', targetNodeId: 'solveBlock', targetPortId: 'in1' },
+        { id: 'e2', sourceNodeId: 'vecB', sourcePortId: 'y', targetNodeId: 'solveBlock', targetPortId: 'in2' },
+      ],
+      mappings: [],
+      policy: { memory: 'reset', numericFault: 'escalate' },
+    };
+
+    const diagnostics = validateXBModel(solveModel, variables, target);
+    const shapeErrors = diagnostics.filter((d) => d.code === 'XB_PORT_SHAPE_UNSUPPORTED' || d.code === 'XB_SHAPE_MISMATCH');
+    expect(shapeErrors).toEqual([]);
+  });
+
+  describe('STATE_SPACE matrix validation and initial state inference', () => {
+    const makeSSModel = (ssParams: Record<string, unknown>): XBPersistedModelV1 => {
+      const uDim = (Array.isArray(ssParams.B) && Array.isArray((ssParams.B as any)[0])) ? (ssParams.B as any)[0].length : 1;
+      const yDim = (Array.isArray(ssParams.C)) ? (ssParams.C as any).length : 1;
+      const xDim = (Array.isArray(ssParams.A)) ? (ssParams.A as any).length : 1;
+      return {
+        schemaVersion: 1,
+        solver: { kind: 'euler', stepSeconds: 0.01 },
+        nodes: [
+          node('driver', 'Constant', {
+            inputs: [],
+            outputs: [port('out', 'output', { shape: 'vector', dimensions: [uDim] })],
+            value: Array(uDim).fill(1),
+          }),
+          node('ssBlock', 'STATE_SPACE', {
+            representation: 'discrete',
+            inputs: [port('u', 'input', { shape: 'vector', dimensions: [uDim] })],
+            outputs: [
+              port('y', 'output', { shape: 'vector', dimensions: [yDim] }),
+              port('x', 'output', { shape: 'vector', dimensions: [xDim] }),
+            ],
+            ...ssParams,
+          }),
+        ],
+        edges: [
+          { id: 'e1', sourceNodeId: 'driver', sourcePortId: 'out', targetNodeId: 'ssBlock', targetPortId: 'u' },
+        ],
+        mappings: [],
+        policy: { memory: 'reset', numericFault: 'escalate' },
+      };
+    };
+
+    it('AC-1 (MIMO): passes for valid one-state 2-input 2-output MIMO model', () => {
+      const model = makeSSModel({
+        A: [[0.5]],
+        B: [[1, 1]],
+        C: [[1], [0.5]],
+        D: [[0, 0], [0, 0]],
+        x0: [0],
+      });
+      const diags = validateXBModel(model, variables, target);
+      expect(diags).toEqual([]);
+    });
+
+    it('AC-1 (SISO): passes for valid one-state 1-input 1-output SISO model', () => {
+      const model = makeSSModel({
+        A: [[0.5]],
+        B: [[1]],
+        C: [[1]],
+        D: [[0]],
+        x0: [0],
+      });
+      const diags = validateXBModel(model, variables, target);
+      expect(diags).toEqual([]);
+    });
+
+    it('AC-2: malformed 3D C matrix reports C error and does NOT report x0 mismatch', () => {
+      const model = makeSSModel({
+        A: [[0.5]],
+        B: [[1, 1]],
+        C: [[[1]], [[0.5]]],
+        D: [[0, 0], [0, 0]],
+        x0: [0],
+      });
+      const diags = validateXBModel(model, variables, target);
+      expect(diags.length).toBeGreaterThan(0);
+      const cDiag = diags.find((d) => d.message.includes("parameter 'C'"));
+      expect(cDiag).toBeDefined();
+      expect(cDiag?.message).toContain('nested value at C[0][0]');
+      const x0Diag = diags.find((d) => d.message.includes("parameter 'x0'"));
+      expect(x0Diag).toBeUndefined();
+    });
+
+    it('AC-3: x0 count derived exclusively from A when x0 has wrong length', () => {
+      const model = makeSSModel({
+        A: [[0.5]],
+        B: [[1, 1]],
+        C: [[1], [0.5]],
+        D: [[0, 0], [0, 0]],
+        x0: [0, 0],
+      });
+      const diags = validateXBModel(model, variables, target);
+      expect(diags.length).toBe(1);
+      expect(diags[0].message).toContain("parameter 'x0' must contain exactly 1 finite numeric value(s), as determined by A (1×1); received 2");
+    });
+
+    it('AC-4: 2-state model with x0 [0, 0] passes validation', () => {
+      const model = makeSSModel({
+        A: [[1, 0.1], [0, 1]],
+        B: [[0], [0.1]],
+        C: [[1, 0]],
+        D: [[0]],
+        x0: [0, 0],
+      });
+      const diags = validateXBModel(model, variables, target);
+      expect(diags).toEqual([]);
+    });
+
+    it('AC-5: inconsistent D dimensions is rejected', () => {
+      const model = makeSSModel({
+        A: [[0.5]],
+        B: [[1, 1]],
+        C: [[1], [0.5]],
+        D: [[0], [0]],
+        x0: [0],
+      });
+      const diags = validateXBModel(model, variables, target);
+      expect(diags.length).toBe(1);
+      expect(diags[0].message).toContain("parameter 'D' must have dimensions 2×2; received 2×1");
+    });
+
+    it('rejects non-square A (FR-3)', () => {
+      const model = makeSSModel({
+        A: [[1, 0, 0], [0, 1, 0]],
+        B: [[1], [1]],
+        C: [[1, 0]],
+        D: [[0]],
+        x0: [0, 0],
+      });
+      const diags = validateXBModel(model, variables, target);
+      expect(diags.length).toBe(1);
+      expect(diags[0].message).toContain("parameter 'A' must be square; received 2×3");
+    });
+
+    it('rejects 2D nested array x0: [[0]] and non-array scalar x0: 0', () => {
+      const model2D = makeSSModel({
+        A: [[0.5]],
+        B: [[1]],
+        C: [[1]],
+        D: [[0]],
+        x0: [[0]],
+      });
+      const diags2D = validateXBModel(model2D, variables, target);
+      expect(diags2D.length).toBe(1);
+      expect(diags2D[0].message).toContain("parameter 'x0'");
+
+      const modelScalar = makeSSModel({
+        A: [[0.5]],
+        B: [[1]],
+        C: [[1]],
+        D: [[0]],
+        x0: 0,
+      });
+      const diagsScalar = validateXBModel(modelScalar, variables, target);
+      expect(diagsScalar.length).toBe(1);
+      expect(diagsScalar[0].message).toContain("parameter 'x0'");
+    });
+
+    it('isolates error to invalid STATE_SPACE node and continues validating independent valid node', () => {
+      const modelWithTwoNodes: XBPersistedModelV1 = {
+        schemaVersion: 1,
+        solver: { kind: 'euler', stepSeconds: 0.01 },
+        nodes: [
+          node('driver1', 'Constant', {
+            inputs: [],
+            outputs: [port('out', 'output', { shape: 'vector', dimensions: [1] })],
+            value: [1],
+          }),
+          node('invalidSS', 'STATE_SPACE', {
+            representation: 'discrete',
+            inputs: [port('u', 'input', { shape: 'vector', dimensions: [1] })],
+            outputs: [port('y', 'output', { shape: 'vector', dimensions: [1] }), port('x', 'output', { shape: 'vector', dimensions: [1] })],
+            A: [[0.5]],
+            B: [[1]],
+            C: [[[1]]],
+            D: [[0]],
+            x0: [0],
+          }),
+          node('driver2', 'Constant', {
+            inputs: [],
+            outputs: [port('out', 'output', { shape: 'scalar' })],
+            value: 2,
+          }),
+          node('validGain', 'GAIN', {
+            inputs: [port('u', 'input', { shape: 'scalar' })],
+            outputs: [port('y', 'output', { shape: 'scalar' })],
+            gain: 2,
+          }),
+        ],
+        edges: [
+          { id: 'e1', sourceNodeId: 'driver1', sourcePortId: 'out', targetNodeId: 'invalidSS', targetPortId: 'u' },
+          { id: 'e2', sourceNodeId: 'driver2', sourcePortId: 'out', targetNodeId: 'validGain', targetPortId: 'u' },
+        ],
+        mappings: [],
+        policy: { memory: 'reset', numericFault: 'escalate' },
+      };
+      const diags = validateXBModel(modelWithTwoNodes, variables, target);
+      const ssDiags = diags.filter((d) => d.elementId === 'invalidSS');
+      const gainDiags = diags.filter((d) => d.elementId === 'validGain');
+      expect(ssDiags.length).toBe(1);
+      expect(ssDiags[0].message).toContain("parameter 'C'");
+      expect(gainDiags).toEqual([]);
+    });
+  });
 });
+
 
 

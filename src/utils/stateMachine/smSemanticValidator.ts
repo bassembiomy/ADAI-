@@ -109,18 +109,25 @@ const inferExpressionType = (
     }
     return operand === 'number' ? 'number' : null;
   }
-  const left = inferExpressionType(expression.left, symbolTypes);
-  const right = inferExpressionType(expression.right, symbolTypes);
-  if (['+', '-', '*', '/', '%'].includes(expression.operator)) {
-    return left === 'number' && right === 'number' ? 'number' : null;
+  if (expression.kind === 'call') {
+    const arg = inferExpressionType(expression.argument, symbolTypes);
+    return arg === 'number' ? 'number' : null;
   }
-  if (['<', '<=', '>', '>='].includes(expression.operator)) {
-    return left === 'number' && right === 'number' ? 'boolean' : null;
+  if (expression.kind === 'binary') {
+    const left = inferExpressionType(expression.left, symbolTypes);
+    const right = inferExpressionType(expression.right, symbolTypes);
+    if (['+', '-', '*', '/', '%'].includes(expression.operator)) {
+      return left === 'number' && right === 'number' ? 'number' : null;
+    }
+    if (['<', '<=', '>', '>='].includes(expression.operator)) {
+      return left === 'number' && right === 'number' ? 'boolean' : null;
+    }
+    if (expression.operator === '&&' || expression.operator === '||') {
+      return left === 'boolean' && right === 'boolean' ? 'boolean' : null;
+    }
+    return left !== null && left === right ? 'boolean' : null;
   }
-  if (expression.operator === '&&' || expression.operator === '||') {
-    return left === 'boolean' && right === 'boolean' ? 'boolean' : null;
-  }
-  return left !== null && left === right ? 'boolean' : null;
+  return null;
 };
 
 const duplicateIds = <T extends { id: string }>(

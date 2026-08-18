@@ -28,3 +28,5 @@ dist-electron/
 out.c
 out.txt
 test_bool.*
+.superpowers/
+scratch_pdf/

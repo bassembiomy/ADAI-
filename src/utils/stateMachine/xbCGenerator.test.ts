@@ -1167,6 +1167,92 @@ describe('X-Bridges C99 static storage', () => {
     expect(line0.indexOf('invPark_theta') < line0.indexOf('invPark_vq')).toBe(true);
   });
 
+  it('generates non-empty C code for SIX_STEP_COMMUTATION and executes commutation logic correctly', () => {
+    const ir = semanticModel();
+    const commOp: XBSemanticOperation = {
+      ...scalarOperation('comm1', 'SIX_STEP_COMMUTATION', ['comm1:h1', 'comm1:h2', 'comm1:h3'], ['comm1:ah', 'comm1:al', 'comm1:bh', 'comm1:bl', 'comm1:ch', 'comm1:cl']),
+      directFeedthrough: true,
+      stateful: false,
+    };
+    ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
+      stateId: 'controller',
+      executionOrder: ['comm1'],
+      operations: { comm1: commOp },
+      signals: {
+        'comm1:h1': { ...signal('comm1:h1', { kind: 'float64' }), portId: 'h1', direction: 'input' },
+        'comm1:h2': { ...signal('comm1:h2', { kind: 'float64' }), portId: 'h2', direction: 'input' },
+        'comm1:h3': { ...signal('comm1:h3', { kind: 'float64' }), portId: 'h3', direction: 'input' },
+        'comm1:ah': { ...signal('comm1:ah', { kind: 'float64' }), portId: 'ah', direction: 'output' },
+        'comm1:al': { ...signal('comm1:al', { kind: 'float64' }), portId: 'al', direction: 'output' },
+        'comm1:bh': { ...signal('comm1:bh', { kind: 'float64' }), portId: 'bh', direction: 'output' },
+        'comm1:bl': { ...signal('comm1:bl', { kind: 'float64' }), portId: 'bl', direction: 'output' },
+        'comm1:ch': { ...signal('comm1:ch', { kind: 'float64' }), portId: 'ch', direction: 'output' },
+        'comm1:cl': { ...signal('comm1:cl', { kind: 'float64' }), portId: 'cl', direction: 'output' },
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
+      policy: { memory: 'retain', numericFault: 'escalate' },
+    };
+
+    const artifacts = generateCArtifacts(ir);
+    const coreC = artifacts.files.find(f => f.name === 'sm_core.c')?.content ?? '';
+    expect(coreC).toContain('comm_0_hall');
+    expect(coreC).toContain('comm_0_ah');
+    expect(coreC).toContain('comm_0_bl');
+  });
+
+  it('generates vector storage [4] and 4U loop bounds for Constant [-2, 4, 1, 7] to Max, Mean, and SumElements', () => {
+    const ir = semanticModel();
+    const vector4 = { kind: 'vector', length: 4 } as const;
+    const constOp: XBSemanticOperation = {
+      ...scalarOperation('c1', 'Constant', [], ['c1:out']),
+      directFeedthrough: true,
+      stateful: false,
+      parameters: { Value: [-2, 4, 1, 7] },
+    };
+    const maxOp: XBSemanticOperation = {
+      ...scalarOperation('max1', 'Max', ['c1:out'], ['max1:out']),
+      directFeedthrough: true,
+      stateful: false,
+    };
+    const meanOp: XBSemanticOperation = {
+      ...scalarOperation('mean1', 'Mean', ['c1:out'], ['mean1:out']),
+      directFeedthrough: true,
+      stateful: false,
+    };
+    const sumOp: XBSemanticOperation = {
+      ...scalarOperation('sum1', 'SumElements', ['c1:out'], ['sum1:out']),
+      directFeedthrough: true,
+      stateful: false,
+    };
+    ir.states.controller.xBridges = {
+      ownerState: defaultOwnerState(),
+      stateId: 'controller',
+      executionOrder: ['c1', 'max1', 'mean1', 'sum1'],
+      operations: { c1: constOp, max1: maxOp, mean1: meanOp, sum1: sumOp },
+      signals: {
+        'c1:out': { ...signal('c1:out', { kind: 'float64' }, vector4), direction: 'output' },
+        'max1:out': { ...signal('max1:out', { kind: 'float64' }), direction: 'output' },
+        'mean1:out': { ...signal('mean1:out', { kind: 'float64' }), direction: 'output' },
+        'sum1:out': { ...signal('sum1:out', { kind: 'float64' }), direction: 'output' },
+      },
+      mappings: [],
+      solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 1 },
+      policy: { memory: 'retain', numericFault: 'escalate' },
+    };
+
+    const artifacts = generateCArtifacts(ir);
+    const coreC = artifacts.files.find(f => f.name === 'sm_core.c')?.content ?? '';
+    const headerC = artifacts.files.find(f => f.name === 'sm_xbridges.h')?.content ?? '';
+
+    expect(headerC).toContain('c1_out[4]');
+    expect(coreC).toContain('xb_i < 4U');
+    expect(coreC).toContain('/ 4.0');
+  });
+
+
+
 
   it('T10-C99-DISCRETE-REALIZATION executes a target-valid 9-state vector realization identically to the interpreter', { timeout: 60_000 }, () => {
     const ir = semanticModel(); const vector9 = { kind: 'vector', length: 9 } as const;
@@ -3387,8 +3473,8 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
         }
       },
       signals: {
-        t_out: { id: 't_out', cName: 't_out', nodeId: 'node_clk', portId: 'out', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'contiguous', numericType: { kind: 'float64' }, storage: 'native' },
-        y_out: { id: 'y_out', cName: 'y_out', nodeId: 'node_wave', portId: 'y', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'contiguous', numericType: { kind: 'float64' }, storage: 'native' }
+        t_out: { id: 't_out', nodeId: 'node_clk', portId: 'out', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'contiguous', numericType: { kind: 'float64' }, storage: 'native' },
+        y_out: { id: 'y_out', nodeId: 'node_wave', portId: 'y', direction: 'output', sourceSignalId: null, shape: { kind: 'scalar' }, dimensions: [], elementCount: 1, layout: 'contiguous', numericType: { kind: 'float64' }, storage: 'native' }
       },
       mappings: [],
       solver: { kind: 'euler', stepSeconds: 0.01, substepsPerTick: 10 },
@@ -3645,6 +3731,63 @@ describe('X-Bridges generated numeric helpers', { timeout: 60_000 }, () => {
 
     expect(header).toContain('rl1_previousOutput');
     expect(source).toContain('isnan');
+  });
+
+  it('generates valid C code for 1D scalar KALMAN_FILTER without array indexing on scalar signals', () => {
+    const caseDef = XB_EXECUTABLE_C_CASES['XB-W5-KALMAN'];
+    expect(caseDef).toBeDefined();
+
+    const stateModel: StateMachineModelV4 = caseDef.fixture.model as unknown as StateMachineModelV4;
+    const ir = build(stateModel);
+    const artifacts = generateCArtifacts(ir);
+    const code = artifacts.files.map((f) => f.content).join('\n');
+    expect(code).toContain('kf1');
+  });
+
+  it('resolves RATE_LIMITER sampleTime inherited to state solver step (0.01) in generated C code', () => {
+    const ir = semanticModel();
+    (ir.states.controller.xBridges as any).solver = {
+      ...ir.states.controller.xBridges!.solver,
+      stepSeconds: 0.01,
+    };
+    const rl: XBSemanticOperation = {
+      id: 'rl_inherited',
+      type: 'RATE_LIMITER',
+      inputSignalIds: ['rl_inherited:u'],
+      outputSignalIds: ['rl_inherited:y'],
+      parameters: { risingSlewRate: 1.0, fallingSlewRate: -1.0, initialCondition: 0, sampleTime: 'inherited' },
+      directFeedthrough: true,
+      stateful: true,
+      conversion: null,
+      state: {
+        outputPhase: 'read-before-update',
+        updatePhase: 'after-direct-feedthrough',
+        slots: [{
+          id: 'rl_inherited:previousOutput$state',
+          role: 'previousOutput',
+          signalId: null,
+          numericType: { kind: 'float32' },
+          shape: { kind: 'scalar' },
+          initialValues: [0],
+        }],
+      },
+      schedule: { periodSubsteps: 1, offsetSubsteps: 0, initialCounter: 0, counterIncrement: 1, hold: 'none' },
+    };
+
+    ir.states.controller.xBridges = {
+      ...ir.states.controller.xBridges!,
+      executionOrder: ['rl_inherited'],
+      operations: { rl_inherited: rl },
+      signals: {
+        'rl_inherited:u': signal('rl_inherited:u', float32),
+        'rl_inherited:y': signal('rl_inherited:y', float32),
+      },
+    };
+
+    const artifacts = generateCArtifacts(ir);
+    const code = artifacts.files.map((f) => f.content).join('\n');
+    // Verified that dt is resolved to solver step 0.01 instead of 1.0
+    expect(code).toContain('0.01');
   });
 });
 

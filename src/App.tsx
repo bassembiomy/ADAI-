@@ -19,8 +19,10 @@ import {
   MousePointer2, Upload, FileText, Download,
   Activity, Zap, Database, Cpu, Layout, Maximize2, X,
   LayoutGrid, Rows, Network, Flame, RefreshCcw, Wind, Cloud,
-  Eye, Paperclip, FlaskConical, AlertTriangle, FolderOpen
+  Eye, Paperclip, FlaskConical, AlertTriangle, FolderOpen,
+  Sun, Moon
 } from 'lucide-react';
+import { getStoredTheme, applyThemeToDOM, toggleTheme, AppTheme } from './utils/themeManager';
 import { FactoryIOGateway } from './components/FactoryIOGateway';
 import { ThreeDXGateway } from './components/ThreeDXGateway';
 import type { AdiaExportItem } from './types/threeDX_types';
@@ -6166,6 +6168,12 @@ const GlobalReportPreviewModal = ({
 };
 
 const ADIA = () => {
+  const [currentTheme, setCurrentTheme] = useState<AppTheme>(getStoredTheme);
+
+  useEffect(() => {
+    applyThemeToDOM(currentTheme);
+  }, [currentTheme]);
+
   const [currentProjectName, setCurrentProjectName] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('projectName') || 'Main Project';
@@ -15571,6 +15579,35 @@ const ADIA = () => {
               Help
             </Button>
 
+            {/* Theme Switcher Button */}
+            <button
+              id="adia-theme-toggle-btn"
+              type="button"
+              title={currentTheme === 'dark' ? 'Switch to Emerald & Champagne Light Mode' : 'Switch to Dark Mode'}
+              onClick={() => {
+                const next = toggleTheme();
+                setCurrentTheme(next);
+              }}
+              className="h-7 px-2.5 flex items-center gap-1.5 text-xs font-semibold rounded-md border transition-all duration-200 shadow-sm cursor-pointer"
+              style={{
+                backgroundColor: currentTheme === 'light' ? '#E5D5B2' : '#18181c',
+                borderColor: currentTheme === 'light' ? '#C9AF84' : '#27272f',
+                color: currentTheme === 'light' ? '#022C22' : '#F8E7C9',
+              }}
+            >
+              {currentTheme === 'dark' ? (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden sm:inline font-mono font-bold">Light</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-[#022C22]" />
+                  <span className="hidden sm:inline font-mono font-bold">Dark</span>
+                </>
+              )}
+            </button>
+
             {/* Status indicators */}
             <div className="flex items-center gap-3 bg-[#18181c] border border-[#27272f] rounded-lg px-2.5 py-1 text-xs">
               <div className="flex items-center gap-1.5">
@@ -16218,7 +16255,7 @@ const ADIA = () => {
                       height={GRID_SIZE}
                       patternUnits="userSpaceOnUse"
                     >
-                      <path d={`M ${GRID_SIZE} 0 L 0 0 0 ${GRID_SIZE}`} fill="none" stroke="#1a1a1a" strokeWidth="1" />
+                      <path d={`M ${GRID_SIZE} 0 L 0 0 0 ${GRID_SIZE}`} fill="none" stroke="var(--canvas-grid-dot)" strokeWidth="1" />
                     </pattern>
                   </defs>
 

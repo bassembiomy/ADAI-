@@ -19,8 +19,9 @@ export function computeRollingAverageFps(history: number[]): number {
 }
 
 export function calculateSparklineY(fps: number, maxFps: number, height: number): number {
-  const clampedFps = Math.max(0, Math.min(maxFps, fps));
-  const normalized = clampedFps / maxFps;
+  const safeMax = Math.max(60, maxFps);
+  const clampedFps = Math.max(0, Math.min(safeMax, fps));
+  const normalized = clampedFps / safeMax;
   // Map normalized (0..1) to y coordinate (bottom to top padding)
   return height - 2 - normalized * (height - 4);
 }
@@ -33,11 +34,12 @@ export interface LiveFpsMonitorProps {
 
 export const LiveFpsMonitor: React.FC<LiveFpsMonitorProps> = ({
   className = '',
-  maxFps = 60,
+  maxFps,
   historyLength = 30,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [displayFps, setDisplayFps] = useState<number>(60);
+  const detectedMaxFpsRef = useRef<number>(maxFps || 60);
   const fpsHistoryRef = useRef<number[]>(new Array(historyLength).fill(60));
   const lastTimeRef = useRef<number>(typeof performance !== 'undefined' ? performance.now() : Date.now());
   const lastTextUpdateRef = useRef<number>(typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -54,7 +56,17 @@ export const LiveFpsMonitor: React.FC<LiveFpsMonitorProps> = ({
       lastTimeRef.current = now;
 
       if (delta > 0 && delta < 500) {
-        const instantFps = Math.min(maxFps, Math.round(1000 / delta));
+        // Calculate raw instant FPS from delta frame time
+        const rawFps = Math.round(1000 / delta);
+        
+        // Auto-expand detected refresh ceiling if higher native refresh is observed (e.g. 120Hz, 144Hz, 240Hz)
+        if (!maxFps && rawFps > detectedMaxFpsRef.current) {
+          detectedMaxFpsRef.current = Math.min(360, Math.max(60, rawFps));
+        }
+
+        const effectiveMax = maxFps || detectedMaxFpsRef.current;
+        const instantFps = Math.min(effectiveMax * 1.5, rawFps);
+        
         fpsHistoryRef.current.push(instantFps);
         if (fpsHistoryRef.current.length > historyLength) {
           fpsHistoryRef.current.shift();
@@ -82,8 +94,9 @@ export const LiveFpsMonitor: React.FC<LiveFpsMonitorProps> = ({
           if (len > 1) {
             const currentFps = history[len - 1];
             const strokeColor = getFpsStrokeColor(currentFps);
+            const activeCeiling = maxFps || detectedMaxFpsRef.current;
 
-            // Target 60 FPS reference ceiling guideline
+            // Target reference ceiling guideline
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
             ctx.lineWidth = 1;
             ctx.setLineDash([2, 2]);
@@ -102,7 +115,7 @@ export const LiveFpsMonitor: React.FC<LiveFpsMonitorProps> = ({
 
             for (let i = 0; i < len; i++) {
               const x = (i / (len - 1)) * width;
-              const y = calculateSparklineY(history[i], maxFps, height);
+              const y = calculateSparklineY(history[i], activeCeiling, height);
               if (i === 0) {
                 ctx.moveTo(x, y);
               } else {

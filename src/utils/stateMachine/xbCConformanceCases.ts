@@ -105,9 +105,9 @@ const MATRIX_COVERAGE: readonly XBConformanceCoverage[] = [
     'Transpose',
     'MatrixConcat',
     'SubMatrix',
-    'MatrixSolve',
   ].map((type) => shapedCoverage(type, ['matrix'])),
-  shapedCoverage('MatrixDiag', ['vector'], ['matrix']),
+  shapedCoverage('MatrixSolve', ['matrix', 'vector'], ['matrix', 'vector']),
+  shapedCoverage('MatrixDiag', ['vector', 'matrix'], ['matrix', 'vector']),
 ];
 
 const TRANSFORM_COVERAGE: readonly XBConformanceCoverage[] = [
@@ -704,7 +704,7 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
   'XB-W5-KALMAN': {
     id: 'XB-W5-KALMAN',
     coverage: [
-      shapedCoverage('KALMAN_FILTER', ['vector', 'matrix']),
+      shapedCoverage('KALMAN_FILTER', ['scalar', 'vector', 'matrix']),
     ],
     fixture: makeXBridgesFixture(
       [

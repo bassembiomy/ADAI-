@@ -85,38 +85,54 @@ const evaluateExpression = (
     return -Number(operand);
   }
 
-  if (expression.operator === '&&') {
-    return Boolean(evaluateExpression(runtime, expression.left))
-      && Boolean(evaluateExpression(runtime, expression.right));
-  }
-  if (expression.operator === '||') {
-    return Boolean(evaluateExpression(runtime, expression.left))
-      || Boolean(evaluateExpression(runtime, expression.right));
+  if (expression.kind === 'call') {
+    const arg = Number(evaluateExpression(runtime, expression.argument));
+    switch (expression.functionName) {
+      case 'sin': return Math.sin(arg);
+      case 'cos': return Math.cos(arg);
+      case 'exp': return Math.exp(arg);
+      case 'sqrt': return Math.sqrt(arg);
+      case 'abs': return Math.abs(arg);
+      default: throw new Error(`unsupported function '${expression.functionName}'`);
+    }
   }
 
-  const left = evaluateExpression(runtime, expression.left);
-  const right = evaluateExpression(runtime, expression.right);
-  switch (expression.operator) {
-    case '==': return left === right;
-    case '!=': return left !== right;
-    case '<': return left < right;
-    case '<=': return left <= right;
-    case '>': return left > right;
-    case '>=': return left >= right;
-    case '+': return Number(left) + Number(right);
-    case '-': return Number(left) - Number(right);
-    case '*': return Number(left) * Number(right);
-    case '/': {
-      const divisor = Number(right);
-      if (divisor === 0) throw new Error('division by zero');
-      return Number(left) / divisor;
+  if (expression.kind === 'binary') {
+    if (expression.operator === '&&') {
+      return Boolean(evaluateExpression(runtime, expression.left))
+        && Boolean(evaluateExpression(runtime, expression.right));
     }
-    case '%': {
-      const divisor = Number(right);
-      if (divisor === 0) throw new Error('remainder by zero');
-      return Number(left) % divisor;
+    if (expression.operator === '||') {
+      return Boolean(evaluateExpression(runtime, expression.left))
+        || Boolean(evaluateExpression(runtime, expression.right));
+    }
+
+    const left = evaluateExpression(runtime, expression.left);
+    const right = evaluateExpression(runtime, expression.right);
+    switch (expression.operator) {
+      case '==': return left === right;
+      case '!=': return left !== right;
+      case '<': return left < right;
+      case '<=': return left <= right;
+      case '>': return left > right;
+      case '>=': return left >= right;
+      case '+': return Number(left) + Number(right);
+      case '-': return Number(left) - Number(right);
+      case '*': return Number(left) * Number(right);
+      case '/': {
+        const divisor = Number(right);
+        if (divisor === 0) throw new Error('division by zero');
+        return Number(left) / divisor;
+      }
+      case '%': {
+        const divisor = Number(right);
+        if (divisor === 0) throw new Error('remainder by zero');
+        return Number(left) % divisor;
+      }
     }
   }
+
+  throw new Error(`unhandled expression kind '${(expression as ExpressionNode).kind}'`);
 };
 
 export const coerceSemanticValue = (
@@ -742,7 +758,6 @@ const executeState = (
     const faults = stepXBState(
       xBridges,
       context.runtime.data,
-      context.runtime.stateTimersMs[state.activityIndex],
     );
     if (
       faults.length > 0

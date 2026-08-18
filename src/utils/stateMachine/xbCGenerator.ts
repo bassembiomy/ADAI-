@@ -849,11 +849,27 @@ const reduceExpression = (
   ? identity
   : `(${inputs.map((input) => `(${input})`).join(` ${operator} `)})`;
 
-const constantValues = (value: unknown): number[] => Array.isArray(value)
-  ? value.flatMap((item) => constantValues(item))
-  : typeof value === 'number' || typeof value === 'boolean'
+const constantValues = (value: unknown): number[] => {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => constantValues(item));
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.flatMap((item) => constantValues(item));
+      }
+    } catch {
+      // ignore
+    }
+    const num = Number(value);
+    if (!isNaN(num) && value.trim() !== '') return [num];
+  }
+  return typeof value === 'number' || typeof value === 'boolean'
     ? [Number(value)]
     : [];
+};
+
 
 const emitConstant: OperationEmitter = (
   state,
@@ -1298,7 +1314,18 @@ const emitTranspose: OperationEmitter = (state, operation, operationIndex, layou
 const emitMatrixDiag: OperationEmitter = (state, operation, operationIndex, layout, member) => {
   const inputId = operation.inputSignalIds[0]; const outputId = operation.outputSignalIds[0];
   if (inputId === undefined || outputId === undefined) return [];
-  const input = requireSignal(state, inputId); const output = matrixSignal(state, outputId);
+  const input = requireSignal(state, inputId);
+  if (input.shape.kind === 'matrix') {
+    const rows = input.shape.rows;
+    const cols = input.shape.columns;
+    const minDim = Math.min(rows, cols);
+    return ['    {', `        for (uint32_t xb_i = 0U; xb_i < ${minDim}U; ++xb_i) {`,
+      ...renderSignalElementWrite(state, operation, operationIndex, 0, outputId,
+        'xb_i',
+        signalElementRealExpression(state, inputId, layout, member, `xb_i * ${cols}U + xb_i`), layout, member).map((line) => `    ${line}`),
+      '        }', '    }'];
+  }
+  const output = matrixSignal(state, outputId);
   if (input.shape.kind !== 'vector' || output.rows !== input.shape.length || output.columns !== input.shape.length) throw new Error(`X-Bridges MatrixDiag '${operation.id}' requires vector to N-by-N static shapes`);
   return ['    {', `        for (uint32_t xb_row = 0U; xb_row < ${output.rows}U; ++xb_row) {`,
     `            for (uint32_t xb_column = 0U; xb_column < ${output.columns}U; ++xb_column) {`,
@@ -1364,7 +1391,12 @@ const emitMatrixConcat: OperationEmitter = (state, operation, operationIndex, la
 const emitMatrixSolve: OperationEmitter = (state, operation, operationIndex, layout, member) => {
   const [matrixId, rightId] = operation.inputSignalIds; const outputId = operation.outputSignalIds[0];
   if (matrixId === undefined || rightId === undefined || outputId === undefined) return [];
-  const matrix = matrixSignal(state, matrixId); const right = matrixSignal(state, rightId); const output = matrixSignal(state, outputId);
+  const matrixSig = requireSignal(state, matrixId);
+  const rightSig = requireSignal(state, rightId);
+  const outputSig = requireSignal(state, outputId);
+  const matrix = matrixSig.shape.kind === 'matrix' ? matrixSig.shape : { rows: matrixSig.elementCount, columns: matrixSig.elementCount };
+  const right = rightSig.shape.kind === 'matrix' ? rightSig.shape : { rows: rightSig.elementCount, columns: 1 };
+  const output = outputSig.shape.kind === 'matrix' ? outputSig.shape : { rows: outputSig.elementCount, columns: 1 };
   const configuredMaximum = Number(scalarParameter(operation, ['maxDimension', 'maximumDimension'], 8));
   if (!Number.isSafeInteger(configuredMaximum) || configuredMaximum < 1 || configuredMaximum > 8 || matrix.rows !== matrix.columns || right.rows !== matrix.rows || output.rows !== matrix.rows || output.columns !== right.columns || matrix.rows > configuredMaximum || right.columns > configuredMaximum) throw new Error(`X-Bridges MatrixSolve '${operation.id}' exceeds static solve bounds`);
   const matrixValue = signalElementRealExpression(state, matrixId, layout, member, `xb_row * ${matrix.columns}U + xb_column`);
@@ -1441,6 +1473,60 @@ const emitInverseClarke: OperationEmitter = (state, operation, operationIndex, l
   const values = [alpha, `(-0.5 * (${alpha}) + sqrt(3.0) * (${beta}) / 2.0)`, `(-0.5 * (${alpha}) - sqrt(3.0) * (${beta}) / 2.0)`];
   return operation.outputSignalIds.flatMap((id, index) => renderSignalWrite(state, operation, operationIndex, index, id, values[index] ?? '0.0', layout, member));
 };
+
+const resolveOutputSignalId = (
+  state: SemanticState,
+  operation: XBSemanticOperation,
+  portIdKeyword: string,
+  fallbackIndex: number,
+): string | undefined => {
+  const matchedId = operation.outputSignalIds.find((id) => {
+    const portId = state.xBridges!.signals[id]?.portId?.toLowerCase();
+    return portId === portIdKeyword.toLowerCase();
+  });
+  return matchedId ?? operation.outputSignalIds[fallbackIndex];
+};
+
+const emitSixStepCommutation: OperationEmitter = (
+  state,
+  operation,
+  operationIndex,
+  layout,
+  member,
+) => {
+  const h1 = resolveInputExpression(state, operation, ['h1', 'u1', 'h_1', '1'], 0, layout, member);
+  const h2 = resolveInputExpression(state, operation, ['h2', 'u2', 'h_2', '2'], 1, layout, member);
+  const h3 = resolveInputExpression(state, operation, ['h3', 'u3', 'h_3', '3'], 2, layout, member);
+  const prefix = `comm_${operationIndex}`;
+
+  const ahId = resolveOutputSignalId(state, operation, 'ah', 0);
+  const alId = resolveOutputSignalId(state, operation, 'al', 1);
+  const bhId = resolveOutputSignalId(state, operation, 'bh', 2);
+  const blId = resolveOutputSignalId(state, operation, 'bl', 3);
+  const chId = resolveOutputSignalId(state, operation, 'ch', 4);
+  const clId = resolveOutputSignalId(state, operation, 'cl', 5);
+
+  const lines: string[] = [
+    `    uint32_t ${prefix}_hall = ((${h1} != 0.0) ? 4U : 0U) | ((${h2} != 0.0) ? 2U : 0U) | ((${h3} != 0.0) ? 1U : 0U);`,
+    `    double ${prefix}_ah = 0.0, ${prefix}_al = 0.0, ${prefix}_bh = 0.0, ${prefix}_bl = 0.0, ${prefix}_ch = 0.0, ${prefix}_cl = 0.0;`,
+    `    if (${prefix}_hall == 5U) { ${prefix}_ah = 1.0; ${prefix}_bl = 1.0; }`,
+    `    else if (${prefix}_hall == 1U) { ${prefix}_ah = 1.0; ${prefix}_cl = 1.0; }`,
+    `    else if (${prefix}_hall == 3U) { ${prefix}_bh = 1.0; ${prefix}_cl = 1.0; }`,
+    `    else if (${prefix}_hall == 2U) { ${prefix}_bh = 1.0; ${prefix}_al = 1.0; }`,
+    `    else if (${prefix}_hall == 6U) { ${prefix}_ch = 1.0; ${prefix}_al = 1.0; }`,
+    `    else if (${prefix}_hall == 4U) { ${prefix}_ch = 1.0; ${prefix}_bl = 1.0; }`,
+  ];
+
+  if (ahId !== undefined) lines.push(...renderSignalWrite(state, operation, operationIndex, 0, ahId, `${prefix}_ah`, layout, member));
+  if (alId !== undefined) lines.push(...renderSignalWrite(state, operation, operationIndex, 1, alId, `${prefix}_al`, layout, member));
+  if (bhId !== undefined) lines.push(...renderSignalWrite(state, operation, operationIndex, 2, bhId, `${prefix}_bh`, layout, member));
+  if (blId !== undefined) lines.push(...renderSignalWrite(state, operation, operationIndex, 3, blId, `${prefix}_bl`, layout, member));
+  if (chId !== undefined) lines.push(...renderSignalWrite(state, operation, operationIndex, 4, chId, `${prefix}_ch`, layout, member));
+  if (clId !== undefined) lines.push(...renderSignalWrite(state, operation, operationIndex, 5, clId, `${prefix}_cl`, layout, member));
+
+  return lines;
+};
+
 
 const signalBooleanExpression = (
   state: SemanticState,
@@ -1779,6 +1865,9 @@ const OPERATION_EMITTERS: Readonly<Record<string, OperationEmitter>> = {
   Transpose: emitTranspose,
   MatrixConcat: emitMatrixConcat,
   MatrixDiag: emitMatrixDiag,
+  DiagExtract: emitMatrixDiag,
+  ExtractDiag: emitMatrixDiag,
+  Diag: emitMatrixDiag,
   SubMatrix: emitSubMatrix,
   MatrixSolve: emitMatrixSolve,
   CLARKE_TRANSFORM: emitClarke,
@@ -1850,7 +1939,7 @@ const OPERATION_EMITTERS: Readonly<Record<string, OperationEmitter>> = {
   LMS_ADAPTIVE_FILTER: () => [],
   Clock: emitClock,
   CLOCK: emitClock,
-  SIX_STEP_COMMUTATION: () => [],
+  SIX_STEP_COMMUTATION: emitSixStepCommutation,
   DFlipFlop: () => [],
   JKFlipFlop: () => [],
   Counter: () => [],
@@ -2283,14 +2372,16 @@ const renderStateOutputs = (
       const nanVal = 'NAN';
 
       const rising = cNumber(scalarParameter(operation, ['risingSlewRate', 'risingLimit'], 1));
-      const fallingParam = scalarParameter(operation, ['fallingSlewRate'], undefined);
+      const fallingParam = operation.parameters.fallingSlewRate !== undefined ? scalarParameter(operation, ['fallingSlewRate'], 1) : undefined;
       const falling = fallingParam !== undefined
         ? cNumber(fallingParam)
         : `(-fabs(${cNumber(scalarParameter(operation, ['fallingLimit'], 1))}))`;
-      const dt = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], 1));
+      const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
+      const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
+      const dt = cNumber(Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (state.xBridges?.solver?.stepSeconds ?? 0.01));
 
       const count = outputSignal.elementCount;
-      const sanitizedId = sanitizeIdentifier(operation.id);
+      const sanitizedId = toCIdentifier(operation.id);
       const lines: string[] = [
         '    {',
         `        const double ${sanitizedId}_max_inc = (${rising}) * (${dt});`,
@@ -2418,29 +2509,6 @@ const renderStateOutputs = (
       lines.push(...renderSignalWrite(state, operation, operationIndex, 0, outputSignalId, `${prefix}_val`, layout, member));
       return lines;
     }
-  }
-  if (operation.type === 'SIX_STEP_COMMUTATION') {
-    const h1 = signalElementRealExpression(state, operation.inputSignalIds[0] ?? '', layout, member, '0U');
-    const h2 = signalElementRealExpression(state, operation.inputSignalIds[1] ?? '', layout, member, '0U');
-    const h3 = signalElementRealExpression(state, operation.inputSignalIds[2] ?? '', layout, member, '0U');
-    const prefix = `comm_${operationIndex}`;
-    const lines = [
-      `    uint32_t ${prefix}_hall = ((${h1} != 0.0) ? 4U : 0U) | ((${h2} != 0.0) ? 2U : 0U) | ((${h3} != 0.0) ? 1U : 0U);`,
-      `    double ${prefix}_ah = 0.0, ${prefix}_al = 0.0, ${prefix}_bh = 0.0, ${prefix}_bl = 0.0, ${prefix}_ch = 0.0, ${prefix}_cl = 0.0;`,
-      `    if (${prefix}_hall == 5U) { ${prefix}_ah = 1.0; ${prefix}_bl = 1.0; }`,
-      `    else if (${prefix}_hall == 4U) { ${prefix}_ah = 1.0; ${prefix}_cl = 1.0; }`,
-      `    else if (${prefix}_hall == 6U) { ${prefix}_bh = 1.0; ${prefix}_cl = 1.0; }`,
-      `    else if (${prefix}_hall == 2U) { ${prefix}_bh = 1.0; ${prefix}_al = 1.0; }`,
-      `    else if (${prefix}_hall == 3U) { ${prefix}_ch = 1.0; ${prefix}_al = 1.0; }`,
-      `    else if (${prefix}_hall == 1U) { ${prefix}_ch = 1.0; ${prefix}_bl = 1.0; }`,
-      ...renderSignalWrite(state, operation, operationIndex, 0, operation.outputSignalIds[0] ?? '', `${prefix}_ah`, layout, member),
-      ...renderSignalWrite(state, operation, operationIndex, 1, operation.outputSignalIds[1] ?? '', `${prefix}_al`, layout, member),
-      ...renderSignalWrite(state, operation, operationIndex, 2, operation.outputSignalIds[2] ?? '', `${prefix}_bh`, layout, member),
-      ...renderSignalWrite(state, operation, operationIndex, 3, operation.outputSignalIds[3] ?? '', `${prefix}_bl`, layout, member),
-      ...renderSignalWrite(state, operation, operationIndex, 4, operation.outputSignalIds[4] ?? '', `${prefix}_ch`, layout, member),
-      ...renderSignalWrite(state, operation, operationIndex, 5, operation.outputSignalIds[5] ?? '', `${prefix}_cl`, layout, member),
-    ];
-    return lines;
   }
   if (operation.type === 'RELAY') {
     const onSlot = stateSlotForRole(operation, 'current_on');
@@ -3687,11 +3755,13 @@ const renderDiscreteStateUpdates = (
         const nanVal = 'NAN';
 
         const rising = cNumber(scalarParameter(operation, ['risingSlewRate', 'risingLimit'], 1));
-        const fallingParam = scalarParameter(operation, ['fallingSlewRate'], undefined);
+        const fallingParam = operation.parameters.fallingSlewRate !== undefined ? scalarParameter(operation, ['fallingSlewRate'], 1) : undefined;
         const falling = fallingParam !== undefined
           ? cNumber(fallingParam)
           : `(-fabs(${cNumber(scalarParameter(operation, ['fallingLimit'], 1))}))`;
-        const dt = cNumber(scalarParameter(operation, ['sampleTime', 'dt'], 1));
+        const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
+        const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
+        const dt = cNumber(Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (state.xBridges?.solver?.stepSeconds ?? 0.01));
         const prev_y = stateSlotRealExpression(slot, layout, member);
 
         const expr = `(${isnanFn}(${input}) || ${isnanFn}(${prev_y})) ? ${nanVal} : (((${input}) - (${prev_y}) > (${rising}) * (${dt})) ? (${prev_y}) + (${rising}) * (${dt}) : (((${input}) - (${prev_y}) < (${falling}) * (${dt})) ? (${prev_y}) + (${falling}) * (${dt}) : (${input})))`;

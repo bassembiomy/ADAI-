@@ -60,6 +60,7 @@
     "bytenode": "^1.6.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "docx": "^9.7.1",
     "dompurify": "^3.4.11",
     "electron-squirrel-startup": "^1.0.1",
     "gsap": "^3.12.5",

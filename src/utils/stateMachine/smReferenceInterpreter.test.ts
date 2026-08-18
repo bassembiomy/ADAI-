@@ -40,7 +40,7 @@ describe('smReferenceInterpreter', () => {
         { smVarId: 'xb6_step_output', blockId: 'XB6-StepOut', portId: 'out', direction: 'out' },
       ],
     };
-    model.variables.push({ id: 'v_step', name: 'xb6_step_output', type: 'number', initialValue: '0' });
+    model.variables.push({ id: 'v_step', name: 'xb6_step_output', type: 'double', initialValue: '0', currentValue: 0, visibleInScope: true });
 
     const { ir } = buildSemanticModel(model);
     const vectors = [

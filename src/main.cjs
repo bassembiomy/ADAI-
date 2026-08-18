@@ -13,8 +13,10 @@ const ALLOWED_DOWNLOAD_HOSTS = [
   'codeload.github.com', 'developer.arm.com', 'lucasg.github.io'
 ];
 
-// Disable hardware acceleration if not needed
-// app.disableHardwareAcceleration();
+// High-performance GPU & high-refresh rate rendering switches
+app.commandLine.appendSwitch('disable-frame-rate-limit');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
 
 // Prevent protocol handler registration hijacking
 app.setAsDefaultProtocolClient = () => {};
@@ -355,7 +357,7 @@ function createWindow() {
         `default-src 'self'${devSources};`,
         `script-src 'self'${scriptInline}${devScriptSources} https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com;`,
         // AI provider origins added — Gemini, OpenAI, n8n (webhook), local LLM
-        `connect-src 'self' https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com http://127.0.0.1:7410 https://generativelanguage.googleapis.com https://api.openai.com${devSources};`,
+        `connect-src 'self' https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com http://127.0.0.1:7410 http://127.0.0.1:1234 https://generativelanguage.googleapis.com https://api.openai.com${devSources};`,
         `img-src 'self' data: https://*.3dexperience.3ds.com https://iam.3dexperience.3ds.com${isPackaged ? '' : ' http://localhost:3000 http://127.0.0.1:3000'};`,
         `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com${isPackaged ? '' : ' http://localhost:3000 http://127.0.0.1:3000'};`,
         `font-src 'self' data: https://fonts.gstatic.com${isPackaged ? '' : ' http://localhost:3000 http://127.0.0.1:3000'};`,
@@ -420,7 +422,15 @@ function createWindow() {
     });
   } else {
     win.loadURL('http://localhost:3000').catch(err => {
-      console.error('Failed to load URL:', err);
+      console.warn('[ADIA] Vite dev server not detected on http://localhost:3000. Attempting fallback to dist/index.html...');
+      const distIndexPath = path.join(__dirname, '../dist/index.html');
+      if (fs.existsSync(distIndexPath)) {
+        win.loadFile(distIndexPath).catch(fileErr => {
+          console.error('[ADIA] Failed to load fallback dist/index.html:', fileErr);
+        });
+      } else {
+        console.error('[ADIA] Failed to load http://localhost:3000 and no build found in dist/index.html. Run "npm run dev" or "npm run build" first.', err);
+      }
     });
   }
 

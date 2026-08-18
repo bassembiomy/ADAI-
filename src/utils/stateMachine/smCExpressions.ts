@@ -27,6 +27,7 @@ const variableType = (
     return variableType(node.left, variables)
       ?? variableType(node.right, variables);
   }
+  if (node.kind === 'call') return variableType(node.argument, variables);
   return undefined;
 };
 
@@ -72,6 +73,13 @@ const renderNode = (
         node.operand,
         variables,
         variableType(node.operand, variables) ?? expectedType,
+        resolveVariable,
+      )})`;
+    case 'call':
+      return `${node.functionName}(${renderNode(
+        node.argument,
+        variables,
+        variableType(node.argument, variables) ?? expectedType,
         resolveVariable,
       )})`;
   }

@@ -1,4 +1,5 @@
-import { getXBBlockCapability } from './xbCapabilities';
+import { validateStateSpaceNode } from './stateSpaceValidation';
+import { getXBBlockCapability, isMatrixSolveBlockType } from './xbCapabilities';
 import { getXBConformanceStatus } from './xbConformanceStatus';
 import { resolveGraphShapes } from './xbShapeResolver';
 import { flattenXBSubsystems } from './xbSubsystemFlattener';
@@ -319,9 +320,22 @@ const validateSampleTimes = (
       for (const key of ['sampleTime', 'sample_time', 'sampleRate']) {
         if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
         const sampleTime = value[key];
-        const ratio = typeof sampleTime === 'number' ? sampleTime / step : Number.NaN;
+        const isInherited =
+          sampleTime === -1
+          || sampleTime === 0
+          || sampleTime === 'inherited'
+          || sampleTime === 'auto'
+          || sampleTime === '-1'
+          || sampleTime === '0'
+          || (typeof sampleTime === 'number' && (sampleTime <= 0 || Number.isNaN(sampleTime)))
+          || (typeof sampleTime === 'string' && (sampleTime === 'inherited' || sampleTime === 'auto' || Number.isNaN(parseFloat(sampleTime))));
+        if (isInherited) {
+          continue;
+        }
+        const sampleTimeNum = typeof sampleTime === 'number' ? sampleTime : Number(sampleTime);
+        const ratio = Number.isFinite(sampleTimeNum) ? sampleTimeNum / step : Number.NaN;
         if (!Number.isFinite(ratio)
-          || sampleTime as number <= 0
+          || sampleTimeNum <= 0
           || Math.abs(ratio - Math.round(ratio)) > 1e-9) {
           diagnostics.push(diagnostic(
             'XB_SAMPLE_TIME_INVALID',
@@ -441,7 +455,7 @@ export const validateXBModel = (
       }
     }
     const parameters = node.parameters as Record<string, unknown>;
-    if (node.type === 'MatrixSolve') {
+    if (isMatrixSolveBlockType(node.type)) {
       const maximum = parameters.maxDimension ?? parameters.maximumDimension ?? 8;
       if (!Number.isSafeInteger(maximum) || (maximum as number) < 1 || (maximum as number) > 8) {
         diagnostics.push(diagnostic(
@@ -492,12 +506,22 @@ export const validateXBModel = (
         node.id,
       ));
     }
-    if (node.type === 'STATE_SPACE' && parameters.representation !== 'discrete') {
-      diagnostics.push(diagnostic(
-        'XB_DISCRETE_REPRESENTATION_REQUIRED',
-        `STATE_SPACE '${node.id}' requires representation: 'discrete' for embedded generation.`,
-        node.id,
-      ));
+    if (node.type === 'STATE_SPACE') {
+      if (parameters.representation !== 'discrete') {
+        diagnostics.push(diagnostic(
+          'XB_DISCRETE_REPRESENTATION_REQUIRED',
+          `STATE_SPACE '${node.id}' requires representation: 'discrete' for embedded generation.`,
+          node.id,
+        ));
+      }
+      const ssRes = validateStateSpaceNode(node);
+      if (!ssRes.ok) {
+        diagnostics.push(diagnostic(
+          ssRes.error.code,
+          ssRes.error.reason,
+          node.id,
+        ));
+      }
     }
 
     if (node.type === 'SATURATION' || node.type === 'DEADZONE') {
@@ -581,6 +605,40 @@ export const validateXBModel = (
         diagnostics.push(diagnostic(
           'XB_TARGET_CAPABILITY_MISSING',
           `Port '${node.id}:${port.id}' requires unsupported ${numericType}.`,
+          node.id,
+        ));
+      }
+    }
+    if (node.type === 'Constant') {
+      const val = parameters.value ?? parameters.Value ?? parameters.constant;
+      let valLength = 0;
+      if (Array.isArray(val)) {
+        valLength = val.length;
+      } else if (typeof val === 'string') {
+        try {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed)) valLength = parsed.length;
+        } catch {
+          // ignore
+        }
+      }
+      if (valLength > 1) {
+        const outputPort = ports.find((p) => p.direction === 'output');
+        if (outputPort !== undefined && outputPort.explicitShape === 'scalar') {
+          diagnostics.push(diagnostic(
+            'XB_DIMENSION_MISMATCH',
+            `Constant block '${node.id}' has vector value of length ${valLength}, but output port '${outputPort.id}' is declared as scalar.`,
+            node.id,
+          ));
+        }
+      }
+    }
+    if (['SumElements', 'Mean', 'Max'].includes(node.type)) {
+      const inputPort = ports.find((p) => p.direction === 'input');
+      if (inputPort !== undefined && inputPort.explicitShape === 'scalar') {
+        diagnostics.push(diagnostic(
+          'XB_DIMENSION_MISMATCH',
+          `${node.type} block '${node.id}' reduces vector elements, but input port '${inputPort.id}' is declared as scalar.`,
           node.id,
         ));
       }

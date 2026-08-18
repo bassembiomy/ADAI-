@@ -11,8 +11,10 @@ describe('LiveFpsMonitor Utility and Logic', () => {
   it('assigns emerald colors for FPS >= 55', () => {
     expect(getFpsColorClass(60)).toBe('text-emerald-400');
     expect(getFpsColorClass(55)).toBe('text-emerald-400');
+    expect(getFpsColorClass(120)).toBe('text-emerald-400');
+    expect(getFpsColorClass(144)).toBe('text-emerald-400');
     expect(getFpsStrokeColor(60)).toBe('#10b981');
-    expect(getFpsStrokeColor(55)).toBe('#10b981');
+    expect(getFpsStrokeColor(144)).toBe('#10b981');
   });
 
   it('assigns amber colors for 30 <= FPS < 55', () => {
@@ -32,22 +34,27 @@ describe('LiveFpsMonitor Utility and Logic', () => {
   it('computes rolling average FPS correctly', () => {
     expect(computeRollingAverageFps([60, 60, 60])).toBe(60);
     expect(computeRollingAverageFps([30, 60])).toBe(45);
+    expect(computeRollingAverageFps([120, 120, 120])).toBe(120);
+    expect(computeRollingAverageFps([144, 144])).toBe(144);
     expect(computeRollingAverageFps([])).toBe(60);
   });
 
-  it('calculates sparkline Y coordinates within bounds', () => {
+  it('calculates sparkline Y coordinates within bounds for 60, 144, and 240 maxFps', () => {
     const height = 14;
     // maxFps (60) should map to top (y = 2)
-    const yTop = calculateSparklineY(60, 60, height);
-    expect(yTop).toBe(2);
-
+    expect(calculateSparklineY(60, 60, height)).toBe(2);
     // 0 fps should map to bottom (y = height - 2 = 12)
-    const yBottom = calculateSparklineY(0, 60, height);
-    expect(yBottom).toBe(12);
-
+    expect(calculateSparklineY(0, 60, height)).toBe(12);
     // 30 fps (50%) should map to middle (y = 7)
-    const yMid = calculateSparklineY(30, 60, height);
-    expect(yMid).toBe(7);
+    expect(calculateSparklineY(30, 60, height)).toBe(7);
+
+    // High refresh rate 144Hz
+    expect(calculateSparklineY(144, 144, height)).toBe(2);
+    expect(calculateSparklineY(72, 144, height)).toBe(7);
+
+    // High refresh rate 240Hz
+    expect(calculateSparklineY(240, 240, height)).toBe(2);
+    expect(calculateSparklineY(120, 240, height)).toBe(7);
   });
 
   it('exports LiveFpsMonitor as a React component function', () => {

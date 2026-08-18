@@ -168,13 +168,16 @@ export function renderCMatrixInverseGaussJordan(
   faultVar: string,
   n: number,
   threshold = PIVOT_THRESHOLD_F32,
+  is2DArray = true,
 ): string[] {
+  const readInput = is2DArray ? `${inputVar}[r][c]` : `${inputVar}[r * ${n}U + c]`;
+  const writeOutput = is2DArray ? `${outputVar}[r][c]` : `${outputVar}[r * ${n}U + c]`;
   return [
     `    {`,
     `        double aug_${outputVar}[${n}][${2 * n}];`,
     `        for (uint32_t r = 0U; r < ${n}U; ++r) {`,
     `            for (uint32_t c = 0U; c < ${n}U; ++c) {`,
-    `                aug_${outputVar}[r][c] = (double)(${inputVar}[r * ${n}U + c]);`,
+    `                aug_${outputVar}[r][c] = (double)(${readInput});`,
     `                aug_${outputVar}[r][c + ${n}U] = (r == c) ? 1.0 : 0.0;`,
     `            }`,
     `        }`,
@@ -186,13 +189,13 @@ export function renderCMatrixInverseGaussJordan(
     `                double val = fabs(aug_${outputVar}[r][i]);`,
     `                if (val > maxVal) { maxVal = val; maxRow = r; }`,
     `            }`,
-    `            double row_scale = 0.0;
-            for (uint32_t c = 0U; c < ${n}U; ++c) {
-                double abs_c = fabs(aug_${outputVar}[i][c]);
-                if (abs_c > row_scale) row_scale = abs_c;
-            }
-            double eff_thresh = (SM_XB_ABS_EPSILON > (SM_XB_REL_EPSILON * row_scale) ? SM_XB_ABS_EPSILON : (SM_XB_REL_EPSILON * row_scale));
-            if (maxVal <= eff_thresh || isnan(maxVal) || isinf(maxVal)) { inv_failed = true; break; }`,
+    `            double row_scale = 0.0;`,
+    `            for (uint32_t c = 0U; c < ${n}U; ++c) {`,
+    `                double abs_c = fabs(aug_${outputVar}[i][c]);`,
+    `                if (abs_c > row_scale) row_scale = abs_c;`,
+    `            }`,
+    `            double eff_thresh = (${threshold} > (1e-9 * row_scale) ? ${threshold} : (1e-9 * row_scale));`,
+    `            if (maxVal <= eff_thresh || isnan(maxVal) || isinf(maxVal)) { inv_failed = true; break; }`,
     `            if (maxRow != i) {`,
     `                for (uint32_t c = 0U; c < ${2 * n}U; ++c) {`,
     `                    double tmp = aug_${outputVar}[i][c];`,
@@ -214,7 +217,7 @@ export function renderCMatrixInverseGaussJordan(
     `        } else {`,
     `            for (uint32_t r = 0U; r < ${n}U; ++r) {`,
     `                for (uint32_t c = 0U; c < ${n}U; ++c) {`,
-    `                    ${outputVar}[r * ${n}U + c] = aug_${outputVar}[r][c + ${n}U];`,
+    `                    ${writeOutput} = aug_${outputVar}[r][c + ${n}U];`,
     `                }`,
     `            }`,
     `        }`,

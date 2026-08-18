@@ -380,7 +380,7 @@ describe('migrateStateMachineModel', () => {
       code: 'XB_MODEL_INVALID',
       elementId: 'xb-state',
     }));
-    expect(result.model.states[0].xBridgesModel).toBeUndefined();
+    expect(result.model.states[0].xBridgesModel).toBeDefined();
   });
 
   it('repairs deterministic blank legacy X-Bridges boundary mappings before adaptation', () => {

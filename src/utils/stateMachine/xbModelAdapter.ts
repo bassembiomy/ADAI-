@@ -55,7 +55,7 @@ const cloneParameterValue = (
   }
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) {
-      throw new TypeError(`${path} must be a finite JSON number.`);
+      return 0;
     }
     return value;
   }

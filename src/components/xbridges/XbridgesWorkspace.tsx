@@ -89,7 +89,39 @@ import { PremiumEdge } from './PremiumEdge';
 import { PremiumConnectionLine } from './PremiumConnectionLine';
 import { WorkspaceContext } from './context';
 
-const nodeTypes = { xblock: XBlockNode };
+class XBlockErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("XBlockNode rendering error:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-3 border-2 border-red-500/80 bg-red-950/90 text-red-200 text-xs rounded-md shadow-lg min-w-[140px]">
+          <div className="font-bold flex items-center gap-1 text-red-400">
+            <span>⚠ Block Parameter Error</span>
+          </div>
+          <div className="text-[10px] text-red-300 mt-1 font-mono">{this.state.error?.message || 'Invalid block parameters'}</div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const SafeXBlockNode: React.FC<any> = (props) => (
+  <XBlockErrorBoundary>
+    <XBlockNode {...props} />
+  </XBlockErrorBoundary>
+);
+
+const nodeTypes = { xblock: SafeXBlockNode };
 const edgeTypes = {
   default: PremiumEdge,
   straight: PremiumEdge,

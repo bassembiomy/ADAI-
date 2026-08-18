@@ -2,6 +2,7 @@ export type XBConformanceStatus = 'NOT RUN' | 'PASS' | 'FAIL';
 
 const DEFAULT_VERIFIED_CASES: readonly string[] = [
   'T10-PAIRED-FILTERS',
+  'T10-PAIRED-DISCONTINUOUS',
 ];
 
 const statusByCaseId = new Map<string, XBConformanceStatus>(

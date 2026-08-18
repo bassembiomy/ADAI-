@@ -18,6 +18,7 @@ import type {
   XBSemanticOperation,
 } from './xbSemanticModel';
 import { synthesizeTransferFunctionStateSpace } from './xbSemanticBuilder';
+import { isDiagBlockType, isMatrixSolveBlockType } from './xbCapabilities';
 
 type XBScalar = number | boolean;
 
@@ -333,7 +334,7 @@ const intrinsicOperationFault = (
 ): XBNumericFault | null => {
   const inputs = operation.inputSignalIds.map((id) => signalValues(runtime, id));
   if (operation.type === 'VectorDiv' && inputs[1]?.some((value) => Number(value) === 0)) return 'division-by-zero';
-  if (operation.type === 'MatrixSolve') {
+  if (isMatrixSolveBlockType(operation.type)) {
     const shape = shapeFor(runtime, operation.inputSignalIds[0] ?? '');
     if (shape?.kind === 'matrix' && hasSolvePivotFailure(inputs[0] ?? [], shape.rows)) return 'solve-pivot-failure';
   }
@@ -613,10 +614,22 @@ const evaluateDirectOperation = (
         return 0;
       })];
     }
-    case 'MatrixDiag': {
+    case 'MatrixDiag':
+    case 'DiagExtract':
+    case 'ExtractDiag':
+    case 'Diag': {
       const inputId = operation.inputSignalIds[0];
       const outputId = operation.outputSignalIds[0];
       if (inputId === undefined || outputId === undefined) return [[0]];
+      const inSignal = runtime.ir.signals[inputId];
+      if (inSignal?.shape?.kind === 'matrix') {
+        const rows = inSignal.shape.rows;
+        const cols = inSignal.shape.columns;
+        const minDim = Math.min(rows, cols);
+        const inputVals = inputs[0] ?? [];
+        const result = Array.from({ length: minDim }, (_, i) => Number(inputVals[i * cols + i] ?? 0));
+        return [result];
+      }
       const inputShape = vectorShape(runtime, inputId);
       const outputShape = matrixShape(runtime, outputId);
       if (outputShape.rows !== inputShape.length || outputShape.columns !== inputShape.length) {
@@ -650,14 +663,15 @@ const evaluateDirectOperation = (
       const rightId = operation.inputSignalIds[1];
       const outputId = operation.outputSignalIds[0];
       if (matrixId === undefined || rightId === undefined || outputId === undefined) return [[0]];
-      const matrix = matrixShape(runtime, matrixId);
-      const right = matrixShape(runtime, rightId);
-      const output = matrixShape(runtime, outputId);
-      if (matrix.rows !== matrix.columns || right.rows !== matrix.rows
-        || output.rows !== matrix.rows || output.columns !== right.columns) {
+      const matrixSig = runtime.ir.signals[matrixId];
+      const rightSig = runtime.ir.signals[rightId];
+      const matrixRows = matrixSig?.shape.kind === 'matrix' ? matrixSig.shape.rows : (matrixSig ? matrixSig.elementCount : 1);
+      const rightCols = rightSig?.shape.kind === 'matrix' ? rightSig.shape.columns : 1;
+      const rightRows = rightSig?.shape.kind === 'matrix' ? rightSig.shape.rows : (rightSig ? rightSig.elementCount : 1);
+      if (rightRows !== matrixRows) {
         throw new Error(`X-Bridges MatrixSolve '${operation.id}' has incompatible static shapes`);
       }
-      return [boundedSolve(inputs[0], inputs[1], matrix.rows, right.columns,
+      return [boundedSolve(inputs[0] ?? [], inputs[1] ?? [], matrixRows, rightCols,
         Number(parameter(operation, ['maxDimension', 'maximumDimension'], 8)))];
     }
     case 'CLARKE_TRANSFORM': {
@@ -841,9 +855,9 @@ const evaluateDirectOperation = (
       const falling = operation.parameters.fallingSlewRate !== undefined
         ? Number(parameter(operation, ['fallingSlewRate'], -1))
         : -Math.abs(Number(parameter(operation, ['fallingLimit'], 1)));
-      const dt = typeof operation.parameters.sampleTime === 'number' && operation.parameters.sampleTime > 0
-        ? operation.parameters.sampleTime
-        : Number(parameter(operation, ['sampleTime', 'dt'], 1));
+      const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
+      const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
+      const dt = Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (runtime.ir.solver?.stepSeconds ?? 0.01);
 
       const maxIncrease = rising * dt;
       const maxDecrease = falling * dt;
@@ -917,7 +931,9 @@ const evaluateDirectOperation = (
       const xSlot = stateSlotForRole(effectiveOp, 'x');
       const c = matrixParameter(effectiveOp, 'C', [[1]]);
       const d = matrixParameter(effectiveOp, 'D', [[0]]);
-      const x = (xSlot ? (runtime.stateSlots[xSlot.id] ?? xSlot.initialValues) : [0]).map(Number);
+      const nStates = Array.isArray(effectiveOp.parameters.A) ? effectiveOp.parameters.A.length : (xSlot?.initialValues.length ?? 1);
+      const rawX = xSlot ? runtime.stateSlots[xSlot.id] : undefined;
+      const x = (rawX && rawX.length === nStates ? rawX : (xSlot?.initialValues ?? Array(nStates).fill(0))).map(Number);
       const u = (inputs[0] ?? [0]).map(Number);
       const y = c.map((cRow, row) =>
         cRow.reduce((sum, val, col) => sum + val * (x[col] ?? 0), 0)
@@ -1301,7 +1317,9 @@ function writeStateOutputs(
     const xSlot = stateSlotForRole(operation, 'x');
     const ySignalId = operation.outputSignalIds.find((id) => runtime.ir.signals[id]?.portId === 'y');
     if (xSlot !== undefined && ySignalId !== undefined) {
-      const x = runtime.stateSlots[xSlot.id] ?? xSlot.initialValues;
+      const nStates = Array.isArray(operation.parameters.A) ? operation.parameters.A.length : xSlot.initialValues.length;
+      const rawX = runtime.stateSlots[xSlot.id];
+      const x = (rawX && rawX.length === nStates ? rawX : xSlot.initialValues).map(Number);
       const input = signalValues(runtime, operation.inputSignalIds[0] ?? '');
       const c = matrixParameter(operation, 'C', [[]]);
       const d = matrixParameter(operation, 'D', [[]]);
@@ -1547,9 +1565,9 @@ function writeStateOutputs(
       const falling = operation.parameters.fallingSlewRate !== undefined
         ? Number(parameter(operation, ['fallingSlewRate'], -1))
         : -Math.abs(Number(parameter(operation, ['fallingLimit'], 1)));
-      const dt = typeof operation.parameters.sampleTime === 'number' && operation.parameters.sampleTime > 0
-        ? operation.parameters.sampleTime
-        : Number(parameter(operation, ['sampleTime', 'dt'], 1));
+      const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
+      const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
+      const dt = Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (runtime.ir.solver?.stepSeconds ?? 0.01);
 
       const maxIncrease = rising * dt;
       const maxDecrease = falling * dt;
@@ -1660,7 +1678,9 @@ const statefulUpdate = (
     if (xSlot === undefined) throw new Error(`X-Bridges ${effectiveOp.type} '${effectiveOp.id}' requires an x state slot`);
     const a = matrixParameter(effectiveOp, 'A', [[0]]);
     const b = matrixParameter(effectiveOp, 'B', [[1]]);
-    const state = (runtime.stateSlots[xSlot.id] ?? xSlot.initialValues).map(Number);
+    const nStates = Array.isArray(effectiveOp.parameters.A) ? effectiveOp.parameters.A.length : xSlot.initialValues.length;
+    const rawState = runtime.stateSlots[xSlot.id];
+    const state = (rawState && rawState.length === nStates ? rawState : xSlot.initialValues).map(Number);
     const inputValues = signalValues(runtime, effectiveOp.inputSignalIds[0] ?? '').map(Number);
     return {
       [xSlot.id]: state.map((_, row) => convertValue(
@@ -1679,9 +1699,9 @@ const statefulUpdate = (
     const falling = operation.parameters.fallingSlewRate !== undefined
       ? Number(parameter(operation, ['fallingSlewRate'], -1))
       : -Math.abs(Number(parameter(operation, ['fallingLimit'], 1)));
-    const dt = typeof operation.parameters.sampleTime === 'number' && operation.parameters.sampleTime > 0
-      ? operation.parameters.sampleTime
-      : Number(parameter(operation, ['sampleTime', 'dt'], 1));
+    const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
+    const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
+    const dt = Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (runtime.ir.solver?.stepSeconds ?? 0.01);
 
     const maxIncrease = rising * dt;
     const maxDecrease = falling * dt;
@@ -2278,15 +2298,24 @@ export const stepXBState = (
   for (const mapping of runtime.ir.mappings) {
     if (mapping.direction !== 'in') continue;
     const varId = mapping.variableId ?? mapping.sourceVariableId ?? mapping.variable?.id;
-    if (!Object.prototype.hasOwnProperty.call(data, varId)) {
-      throw new Error(
-        `X-Bridges input mapping variable '${varId}' is absent`,
-      );
+    const possibleKeys = [
+      varId,
+      mapping.variable?.modelName,
+      mapping.variable?.cIdentifier,
+      mapping.variableId,
+      mapping.sourceVariableId,
+    ].filter((k): k is string => typeof k === 'string' && k.length > 0);
+
+    let val = 0;
+    const foundKey = possibleKeys.find((k) => Object.prototype.hasOwnProperty.call(data, k));
+    if (foundKey !== undefined) {
+      const raw = data[foundKey];
+      val = typeof raw === 'boolean' ? (raw ? 1 : 0) : (typeof raw === 'number' ? raw : 0);
     }
     writeSignal(
       runtime,
       mapping.signalId,
-      [data[varId]],
+      [val],
       faults,
     );
   }

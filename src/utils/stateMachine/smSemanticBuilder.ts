@@ -14,8 +14,11 @@ import type {
   SemanticModel,
   SemanticState,
   SemanticTransition,
+  SemanticType,
   SemanticVariable,
+  SemanticVariableSymbol,
   TraceableElement,
+  XBOwnerState,
 } from './smSemanticModel';
 import { adaptXBModel } from './xbModelAdapter';
 import { buildXBSemanticModel } from './xbSemanticBuilder';
@@ -550,16 +553,16 @@ export const buildSemanticModel = (
     const cIdentifier = toCIdentifier(variable.name);
     let semanticType: SemanticType = 'float64';
     let cType = 'double';
-    switch (variable.type) {
-      case 'boolean': semanticType = 'boolean'; cType = 'bool'; break;
+    switch (variable.type as string) {
+      case 'bool': case 'boolean': semanticType = 'boolean'; cType = 'bool'; break;
       case 'int8': semanticType = 'int8'; cType = 'int8_t'; break;
       case 'uint8': semanticType = 'uint8'; cType = 'uint8_t'; break;
       case 'int16': semanticType = 'int16'; cType = 'int16_t'; break;
       case 'uint16': semanticType = 'uint16'; cType = 'uint16_t'; break;
-      case 'int32': semanticType = 'int32'; cType = 'int32_t'; break;
-      case 'uint32': semanticType = 'uint32'; cType = 'uint32_t'; break;
-      case 'float32': semanticType = 'float32'; cType = 'float'; break;
-      case 'float64': semanticType = 'float64'; cType = 'double'; break;
+      case 'int32': case 'int': semanticType = 'int32'; cType = 'int32_t'; break;
+      case 'uint32': case 'uint': semanticType = 'uint32'; cType = 'uint32_t'; break;
+      case 'float': case 'single': case 'float32': semanticType = 'float32'; cType = 'float'; break;
+      case 'double': case 'float64': default: semanticType = 'float64'; cType = 'double'; break;
     }
     const varSymbol: SemanticVariableSymbol = {
       id: variable.id,

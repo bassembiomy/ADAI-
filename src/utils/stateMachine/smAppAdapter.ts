@@ -115,30 +115,46 @@ const evaluateConversion = (
     return -Number(operand);
   }
 
-  if (expression.operator === '&&') {
-    return Boolean(evaluateConversion(expression.left, input))
-      && Boolean(evaluateConversion(expression.right, input));
-  }
-  if (expression.operator === '||') {
-    return Boolean(evaluateConversion(expression.left, input))
-      || Boolean(evaluateConversion(expression.right, input));
+  if (expression.kind === 'call') {
+    const arg = Number(evaluateConversion(expression.argument, input));
+    switch (expression.functionName) {
+      case 'sin': return Math.sin(arg);
+      case 'cos': return Math.cos(arg);
+      case 'exp': return Math.exp(arg);
+      case 'sqrt': return Math.sqrt(arg);
+      case 'abs': return Math.abs(arg);
+      default: throw new Error(`Unsupported function call '${expression.functionName}'`);
+    }
   }
 
-  const left = evaluateConversion(expression.left, input);
-  const right = evaluateConversion(expression.right, input);
-  switch (expression.operator) {
-    case '+': return Number(left) + Number(right);
-    case '-': return Number(left) - Number(right);
-    case '*': return Number(left) * Number(right);
-    case '/': return Number(left) / Number(right);
-    case '%': return Number(left) % Number(right);
-    case '<': return Number(left) < Number(right);
-    case '<=': return Number(left) <= Number(right);
-    case '>': return Number(left) > Number(right);
-    case '>=': return Number(left) >= Number(right);
-    case '==': return left === right;
-    case '!=': return left !== right;
+  if (expression.kind === 'binary') {
+    if (expression.operator === '&&') {
+      return Boolean(evaluateConversion(expression.left, input))
+        && Boolean(evaluateConversion(expression.right, input));
+    }
+    if (expression.operator === '||') {
+      return Boolean(evaluateConversion(expression.left, input))
+        || Boolean(evaluateConversion(expression.right, input));
+    }
+
+    const left = evaluateConversion(expression.left, input);
+    const right = evaluateConversion(expression.right, input);
+    switch (expression.operator) {
+      case '+': return Number(left) + Number(right);
+      case '-': return Number(left) - Number(right);
+      case '*': return Number(left) * Number(right);
+      case '/': return Number(left) / Number(right);
+      case '%': return Number(left) % Number(right);
+      case '<': return Number(left) < Number(right);
+      case '<=': return Number(left) <= Number(right);
+      case '>': return Number(left) > Number(right);
+      case '>=': return Number(left) >= Number(right);
+      case '==': return left === right;
+      case '!=': return left !== right;
+    }
   }
+
+  throw new Error(`Unhandled expression kind '${(expression as ExpressionNode).kind}'`);
 };
 
 const coerceVariableValue = (

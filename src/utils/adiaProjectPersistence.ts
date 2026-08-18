@@ -22,6 +22,9 @@ export function hasUnsavedProjectChanges(
   return cleanSnapshot !== null && createProjectSnapshot(current) !== cleanSnapshot;
 }
 
+/**
+ * Determines whether replacing the current project requires user confirmation due to unsaved changes.
+ */
 export function shouldConfirmProjectReplacement(
   currentOrIsDirty: Record<string, unknown> | boolean,
   cleanSnapshotOrConfirm?: string | null | ((message: string) => boolean),

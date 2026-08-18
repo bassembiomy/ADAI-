@@ -100,9 +100,10 @@ const REDUCTION_COVERAGE: readonly XBConformanceCoverage[] = [
 ];
 
 const MATRIX_COVERAGE: readonly XBConformanceCoverage[] = [
-  ...['MatrixMul', 'Transpose', 'MatrixConcat', 'SubMatrix', 'MatrixSolve']
+  ...['MatrixMul', 'Transpose', 'MatrixConcat', 'SubMatrix']
     .map((type) => shapedCoverage(type, ['matrix'])),
-  shapedCoverage('MatrixDiag', ['vector'], ['matrix']),
+  shapedCoverage('MatrixSolve', ['matrix', 'vector'], ['matrix', 'vector']),
+  shapedCoverage('MatrixDiag', ['vector', 'matrix'], ['matrix', 'vector']),
 ];
 
 const TRANSFORM_COVERAGE: readonly XBConformanceCoverage[] =
@@ -138,7 +139,7 @@ export const XB_INTERPRETER_CONFORMANCE_CASES: Readonly<Record<
   'T10-INT-SIX-STEP': [scalarCoverage('SIX_STEP_COMMUTATION')],
   'T10-INT-PID-CONTROLLER': [scalarCoverage('PID_CONTROLLER')],
   'T10-INT-NOISE': [shapedCoverage('WHITE_NOISE', [], ['scalar']), shapedCoverage('BAND_LIMITED_NOISE', [], ['scalar'])],
-  'XB-W5-KALMAN': [shapedCoverage('KALMAN_FILTER', ['vector', 'matrix'])],
+  'XB-W5-KALMAN': [shapedCoverage('KALMAN_FILTER', ['scalar', 'vector', 'matrix'])],
   'T10-INT-DISCONTINUOUS': DISCONTINUOUS_COVERAGE,
   'T14-INT-DISCONTINUOUS': DISCONTINUOUS_COVERAGE,
   'T14-INT-CORE-DIRECT': CORE_SCALAR_COVERAGE,
@@ -391,11 +392,13 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   Transpose: direct(['matrix'], undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX']),
   MatrixConcat: direct(['matrix'], undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX']),
   MatrixDiag: direct(vectorOrMatrix, undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX'], {
-    inputShapes: ['vector'], outputShapes: ['matrix'],
+    inputShapes: ['vector', 'matrix'], outputShapes: ['matrix', 'vector'],
   }),
   IdentityMatrix: direct(['matrix'], undefined, ['T10-INT-IDENTITY-MATRIX'], ['T10-C99-IDENTITY-MATRIX'], { inputShapes: [], outputShapes: ['matrix'] }),
   SubMatrix: direct(['matrix'], undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX']),
-  MatrixSolve: direct(['matrix'], undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX']),
+  MatrixSolve: direct(vectorOrMatrix, undefined, ['T10-INT-MATRIX-OPS'], ['T10-C99-VECTOR-MATRIX'], {
+    inputShapes: ['matrix', 'vector'], outputShapes: ['matrix', 'vector'],
+  }),
 
   // Logic and bitwise operations.
   AND: direct(scalar, undefined, ['T10-INT-LOGIC-BITWISE'], ['T10-C99-LOGIC-BITWISE']),
@@ -435,7 +438,7 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   INTEGRATOR_CONTINUOUS: stateful(scalar, undefined, ['T14-INT-CONTINUOUS'], ['T14-C99-CONTINUOUS']),
   Integrator: stateful(scalar, undefined, ['T14-INT-CONTINUOUS'], ['T14-C99-CONTINUOUS']),
   KALMAN_FILTER: statefulDirect(
-    vectorOrMatrix, undefined,
+    allShapes, undefined,
     ['XB-W5-KALMAN'], ['XB-W5-KALMAN']
   ),
 
@@ -502,10 +505,52 @@ export const XB_CAPABILITIES: Readonly<Record<string, XBBlockCapability>> = {
   ...UNPAIRED_EMBEDDED_OPERATIONS,
 };
 
+const DIAG_EXTRACT_CAPABILITY: XBBlockCapability = {
+  ...XB_CAPABILITIES.MatrixDiag,
+  inputShapes: ['vector', 'matrix'],
+  outputShapes: ['matrix', 'vector'],
+};
+
+export const isDiagBlockType = (type: string): boolean => {
+  if (type === 'MatrixDiag' || type === 'DiagExtract' || type === 'ExtractDiag' || type === 'Diag') {
+    return true;
+  }
+  const clean = type.replace(/^XB\d*[-_]?/i, '').replace(/_/g, '').toLowerCase();
+  return (
+    clean === 'matrixdiag' ||
+    clean === 'diagextract' ||
+    clean === 'extractdiag' ||
+    clean === 'diag' ||
+    clean.endsWith('diagextract') ||
+    clean.includes('diagextract') ||
+    clean.endsWith('matrixdiag') ||
+    clean.includes('matrixdiag')
+  );
+};
+
+export const isMatrixSolveBlockType = (type: string): boolean => {
+  if (type === 'MatrixSolve') {
+    return true;
+  }
+  const clean = type.replace(/^XB\d*[-_]?/i, '').replace(/_/g, '').toLowerCase();
+  return clean === 'matrixsolve' || clean.endsWith('matrixsolve') || clean.includes('matrixsolve');
+};
+
 export const getXBBlockCapability = (
   type: string,
-): XBBlockCapability | null => (
-  Object.prototype.hasOwnProperty.call(XB_CAPABILITIES, type)
-    ? XB_CAPABILITIES[type]
-    : null
-);
+): XBBlockCapability | null => {
+  if (Object.prototype.hasOwnProperty.call(XB_CAPABILITIES, type)) {
+    return XB_CAPABILITIES[type] ?? null;
+  }
+  if (isDiagBlockType(type)) {
+    return DIAG_EXTRACT_CAPABILITY;
+  }
+  if (isMatrixSolveBlockType(type)) {
+    return XB_CAPABILITIES.MatrixDiag ? {
+      ...XB_CAPABILITIES.MatrixDiag,
+      inputShapes: ['matrix', 'vector'],
+      outputShapes: ['matrix', 'vector'],
+    } : null;
+  }
+  return null;
+};

@@ -8,6 +8,7 @@ import {
   type XBConversionPolicy,
   type XBNumericType,
 } from '../../utils/stateMachine/xbNumeric';
+import { parseMatrixEditorValue } from '../../utils/stateMachine/stateSpaceValidation';
 
 export function polyToString(coeffs: number[], variable = 's'): string {
   if (!coeffs || coeffs.length === 0) return '0';
@@ -2358,6 +2359,30 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
     execute: (ins) => ({ outputs: [VectorUtils.diag(ins[0])] })
   }),
 
+  'DiagExtract': (id, params) => ({
+    id, type: 'DiagExtract',
+    params: { diagMode: params.diagMode ?? 'extract' },
+    inputs: [createPort('in', 'In', 'input')],
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [VectorUtils.diag(ins[0])] })
+  }),
+
+  'ExtractDiag': (id, params) => ({
+    id, type: 'ExtractDiag',
+    params: { diagMode: params.diagMode ?? 'extract' },
+    inputs: [createPort('in', 'In', 'input')],
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [VectorUtils.diag(ins[0])] })
+  }),
+
+  'Diag': (id, params) => ({
+    id, type: 'Diag',
+    params: { diagMode: params.diagMode ?? 'extract' },
+    inputs: [createPort('in', 'In', 'input')],
+    outputs: [createPort('out', 'Out', 'output')],
+    execute: (ins) => ({ outputs: [VectorUtils.diag(ins[0])] })
+  }),
+
   'IdentityMatrix': (id, params) => ({
     id, type: 'IdentityMatrix',
     params: { dim: params.dim ?? 3 },
@@ -4417,11 +4442,41 @@ return block;
                 'STATE_SPACE': (id, params) => {
                   const representation = params.representation || 'continuous';
                   const sampleTime = params.sampleTime !== undefined ? Number(params.sampleTime) : -1;
-                  const A = params.A || [[-1]];
-                  const B = params.B || [[1]];
-                  const C = params.C || [[1]];
-                  const D = params.D || [[0]];
-                  const x0 = params.x0 || new Array(A.length).fill(0);
+                  
+                  const to2DMatrix = (val: any, fallback: number[][]): number[][] => {
+                    const unwrapped = parseMatrixEditorValue(val);
+                    if (!Array.isArray(unwrapped) || unwrapped.length === 0) return fallback;
+                    if (Array.isArray(unwrapped[0])) {
+                      return unwrapped as number[][];
+                    }
+                    return [unwrapped as number[]];
+                  };
+
+                  const A = to2DMatrix(params.A, [[-1]]);
+                  const B = to2DMatrix(params.B, [[1]]);
+                  const C = to2DMatrix(params.C, [[1]]);
+                  const D = to2DMatrix(params.D, [[0]]);
+
+                  const rawX0 = params.x0 !== undefined ? params.x0 : (params.initialCondition !== undefined ? params.initialCondition : params.initial_condition);
+                  let x0: number[] = [];
+                  if (Array.isArray(rawX0)) {
+                    x0 = rawX0.flat(Infinity).map((v: any) => Number(v) || 0);
+                  } else if (typeof rawX0 === 'number' && Number.isFinite(rawX0)) {
+                    x0 = new Array(A.length).fill(rawX0);
+                  } else if (typeof rawX0 === 'string' && rawX0.trim() !== '') {
+                    try {
+                      const parsed = VectorUtils.parseMatlabArray(rawX0);
+                      if (Array.isArray(parsed)) x0 = parsed.flat(Infinity).map((v: any) => Number(v) || 0);
+                      else if (typeof parsed === 'number' && Number.isFinite(parsed)) x0 = new Array(A.length).fill(parsed);
+                    } catch {
+                      x0 = new Array(A.length).fill(0);
+                    }
+                  }
+                  if (x0.length === 0) {
+                    x0 = new Array(A.length).fill(0);
+                  }
+                  while (x0.length < A.length) x0.push(0);
+                  if (x0.length > A.length) x0 = x0.slice(0, A.length);
 
                   const block: XBlock = {
                     id, type: 'STATE_SPACE',
@@ -4436,23 +4491,32 @@ return block;
                       createPort('x', 'x', 'output', 0, 'top', 'vector')
                     ],
                     state: {
-                      x: x0.length === A.length ? [...x0] : new Array(A.length).fill(0),
+                      x: [...x0],
                       lastTime: 0
                     },
                     execute: (ins, p, state, time) => {
-                      const u = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
-                      const x = state.x as number[];
+                      const uRaw = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0]) || 0];
+                      const u = uRaw.flat(Infinity).map((v: any) => Number(v) || 0);
+                      const stateX = Array.isArray(state?.x) ? (state.x as number[]).map((v: any) => Number(v) || 0) : x0;
+                      const x = stateX.length === A.length ? stateX : x0;
 
-                      const y = p.C.map((row: number[]) => {
-                        const cx = row.reduce((sum, val, j) => sum + val * (Number(x[j]) || 0), 0);
-                        const du = p.D[0].reduce((sum: number, _: any, j: number) => sum + (Number(p.D[0][j]) || 0) * (Number(u[j]) || 0), 0);
+                      const matC = to2DMatrix(p.C, C);
+                      const matD = to2DMatrix(p.D, D);
+                      const matA = to2DMatrix(p.A, A);
+                      const matB = to2DMatrix(p.B, B);
+
+                      const y = matC.map((row: number[], i: number) => {
+                        const cx = row.reduce((sum, val, j) => sum + (Number(val) || 0) * (Number(x[j]) || 0), 0);
+                        const dRow = matD[i] || matD[0] || [];
+                        const du = dRow.reduce((sum: number, val: number, j: number) => sum + (Number(val) || 0) * (Number(u[j]) || 0), 0);
                         return cx + du;
                       });
 
                       if (p.representation === 'discrete') {
-                        const nextX = p.A.map((row: number[], i: number) => {
-                          const ax = row.reduce((sum, val, j) => sum + val * (Number(x[j]) || 0), 0);
-                          const bu = p.B[i].reduce((sum: number, val: number, j: number) => sum + val * (Number(u[j]) || 0), 0);
+                        const nextX = matA.map((row: number[], i: number) => {
+                          const ax = row.reduce((sum, val, j) => sum + (Number(val) || 0) * (Number(x[j]) || 0), 0);
+                          const bRow = matB[i] || matB[0] || [];
+                          const bu = bRow.reduce((sum: number, val: number, j: number) => sum + (Number(val) || 0) * (Number(u[j]) || 0), 0);
                           return ax + bu;
                         });
                         return { outputs: [y, x], nextState: { x: nextX, lastTime: time } };
@@ -4464,11 +4528,18 @@ return block;
 
                   if (representation === 'continuous' && sampleTime <= 0) {
                     block.evaluateDerivatives = (ins, p, state) => {
-                      const u = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0])];
-                      const x = state.x as number[];
-                      const dx = p.A.map((row: number[], i: number) => {
-                        const ax = row.reduce((sum, val, j) => sum + val * (Number(x[j]) || 0), 0);
-                        const bu = p.B[i].reduce((sum: number, val: number, j: number) => sum + val * (Number(u[j]) || 0), 0);
+                      const uRaw = Array.isArray(ins[0]) ? ins[0] : [Number(ins[0]) || 0];
+                      const u = uRaw.flat(Infinity).map((v: any) => Number(v) || 0);
+                      const stateX = Array.isArray(state?.x) ? (state.x as number[]).map((v: any) => Number(v) || 0) : x0;
+                      const x = stateX.length === A.length ? stateX : x0;
+
+                      const matA = to2DMatrix(p.A, A);
+                      const matB = to2DMatrix(p.B, B);
+
+                      const dx = matA.map((row: number[], i: number) => {
+                        const ax = row.reduce((sum, val, j) => sum + (Number(val) || 0) * (Number(x[j]) || 0), 0);
+                        const bRow = matB[i] || matB[0] || [];
+                        const bu = bRow.reduce((sum: number, val: number, j: number) => sum + (Number(val) || 0) * (Number(u[j]) || 0), 0);
                         return ax + bu;
                       });
                       return { x: dx };

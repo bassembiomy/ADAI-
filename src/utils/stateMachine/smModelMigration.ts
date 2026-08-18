@@ -44,8 +44,10 @@ const normalizeEmbeddedXBModels = (
       elementId: state.id,
       message: `State '${state.id}': ${entry.message}`,
     })));
-    const { xBridgesModel: _invalidModel, ...stateWithoutXBModel } = state;
-    return stateWithoutXBModel as StateData;
+    return {
+      ...state,
+      xBridgesModel: (repaired.model ?? state.xBridgesModel) as StateData['xBridgesModel'],
+    };
   });
   return { states: normalizedStates, diagnostics };
 };

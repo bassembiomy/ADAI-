@@ -1752,10 +1752,11 @@ export const generateCArtifacts = (
   ];
 
   const structCheck = verifyGeneratedCStructure(allFiles);
-  const errors: ErrorItem[] = structCheck.diagnostics.map((diag) => ({
-    code: diag.code,
+  const errors: ErrorItem[] = structCheck.diagnostics.map((diag, index) => ({
+    id: `cgen-struct-${index}`,
+    type: 'error',
     message: diag.message,
-    severity: 'error',
+    timestamp: new Date(),
   }));
 
   return {

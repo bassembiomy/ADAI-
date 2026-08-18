@@ -9,8 +9,42 @@
   --bg-main-rgb: 24, 24, 24;
   --bg-panel: #242424;
   --bg-panel-rgb: 36, 36, 36;
+  --bg-panel-secondary: #1f1f1f;
+  --text-primary: #ffffff;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
   --border-dark: #323232;
   --border-med: #424242;
+  --accent-emerald: #10b981;
+  --accent-emerald-hover: #059669;
+  --accent-emerald-glow: rgba(16, 185, 129, 0.2);
+  --node-bg: #242424;
+  --wire-color: #444444;
+  --canvas-grid-dot: #2a2a2a;
+  --scrollbar-thumb: rgba(201, 168, 108, 0.5);
+  --scrollbar-thumb-hover: rgba(201, 168, 108, 0.9);
+}
+
+[data-theme="light"], .light {
+  color-scheme: light;
+  --bg-main: #F8E7C9;
+  --bg-main-rgb: 248, 231, 201;
+  --bg-panel: #EFE0BF;
+  --bg-panel-rgb: 239, 224, 191;
+  --bg-panel-secondary: #E5D5B2;
+  --text-primary: #022C22;
+  --text-secondary: #064E3B;
+  --text-muted: #1B5E4B;
+  --border-dark: #C9AF84;
+  --border-med: #BBA072;
+  --accent-emerald: #064E3B;
+  --accent-emerald-hover: #022C22;
+  --accent-emerald-glow: rgba(6, 78, 59, 0.2);
+  --node-bg: #FCF8F0;
+  --wire-color: #064E3B;
+  --canvas-grid-dot: rgba(6, 78, 59, 0.2);
+  --scrollbar-thumb: rgba(6, 78, 59, 0.45);
+  --scrollbar-thumb-hover: rgba(6, 78, 59, 0.8);
 }
 
 body {
@@ -21,8 +55,9 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--bg-main);
-  color: white;
+  color: var(--text-primary);
   overflow: hidden;
+  transition: background-color 0.25s ease, color 0.2s ease, border-color 0.25s ease;
 }
 
 * {
@@ -48,35 +83,55 @@ body {
   background: var(--border-med);
 }
 
+/* React Flow Theming */
 .react-flow__node {
   border-radius: 8px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-med);
-  color: white;
+  background: var(--node-bg);
+  border: 1.5px solid var(--border-dark);
+  color: var(--text-primary);
   font-size: 12px;
+  box-shadow: 0 4px 14px rgba(6, 78, 59, 0.08);
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .react-flow__handle {
-  width: 8px;
-  height: 8px;
-  background: #666;
-  border: 2px solid var(--bg-panel);
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 2px !important;
+  background: var(--accent-emerald) !important;
+  border: 2px solid var(--bg-main) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+  cursor: crosshair !important;
 }
 
 .react-flow__edge-path {
-  stroke: #444;
-  stroke-width: 2;
+  stroke: var(--wire-color);
+  stroke-width: 2.2;
+  transition: stroke 0.25s ease;
 }
 
 .react-flow__controls {
   background: var(--bg-panel);
-  border: 1px solid var(--border-med);
+  border: 1px solid var(--border-dark);
 }
 
 .react-flow__controls-button {
-  background: var(--border-dark);
-  border-bottom: 1px solid var(--border-med);
-  fill: #fff;
+  background: var(--bg-panel-secondary);
+  border-bottom: 1px solid var(--border-dark);
+  fill: var(--text-primary);
+}
+
+.react-flow__background {
+  background-color: var(--bg-main) !important;
+}
+
+.react-flow__background-pattern line,
+.react-flow__background-pattern circle,
+.react-flow__background-pattern dot,
+.react-flow__background-pattern path {
+  stroke: var(--canvas-grid-dot) !important;
+  fill: var(--canvas-grid-dot) !important;
 }
 
 /* Range Input Styling */
@@ -102,9 +157,9 @@ input[type=range]::-webkit-slider-thumb {
   height: 14px;
   width: 14px;
   border-radius: 50%;
-  background: #f97316;
-  margin-top: -5px; /* Centers thumb on track */
-  box-shadow: 0 0 5px rgba(0,0,0,0.5);
+  background: var(--accent-emerald);
+  margin-top: -5px;
+  box-shadow: 0 0 5px rgba(0,0,0,0.3);
 }
 
 input[type=range]::-moz-range-track {
@@ -117,7 +172,7 @@ input[type=range]::-moz-range-thumb {
   height: 14px;
   width: 14px;
   border-radius: 50%;
-  background: #f97316;
+  background: var(--accent-emerald);
   border: none;
 }
 
@@ -128,51 +183,39 @@ input[type=range]::-moz-range-thumb {
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.1);
   border-radius: 5px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(201, 168, 108, 0.5); /* Premium gold-copper thumb */
+  background: var(--scrollbar-thumb);
   border-radius: 5px;
-  border: 2px solid var(--bg-main); /* Inset padding effect matches background */
+  border: 2px solid var(--bg-main);
   transition: background 0.3s;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(201, 168, 108, 0.9);
+  background: var(--scrollbar-thumb-hover);
 }
 
-/* Custom Pulse Highlight for Tutorial Target Blocks */
+/* Custom Pulse Highlight */
 @keyframes block-pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(201, 168, 108, 0.7);
-    border-color: rgba(201, 168, 108, 0.8);
+    box-shadow: 0 0 0 0 rgba(6, 78, 59, 0.7);
+    border-color: rgba(6, 78, 59, 0.8);
   }
   70% {
-    box-shadow: 0 0 0 15px rgba(201, 168, 108, 0);
-    border-color: rgba(201, 168, 108, 1);
+    box-shadow: 0 0 0 15px rgba(6, 78, 59, 0);
+    border-color: rgba(6, 78, 59, 1);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(201, 168, 108, 0);
-    border-color: rgba(201, 168, 108, 0.8);
+    box-shadow: 0 0 0 0 rgba(6, 78, 59, 0);
+    border-color: rgba(6, 78, 59, 0.8);
   }
 }
 .block-pulse-highlight {
   animation: block-pulse 2s infinite ease-in-out !important;
-  border-color: #c9a86c !important;
-}
-
-/* Styling for ReactFlow Handles in X-Bridges */
-.react-flow__handle {
-  position: relative;
-  width: 10px !important;
-  height: 10px !important;
-  border-radius: 2px !important;
-  border: 2px solid var(--bg-main) !important;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
-  cursor: crosshair !important;
+  border-color: var(--accent-emerald) !important;
 }
 
 /* Hover target enlarger */
@@ -233,33 +276,191 @@ input[type=range]::-moz-range-thumb {
   }
 }
 
-/* Tailwind Compiled Utility Selector Overrides for Global Theming */
-.bg-\[\#0a0a0a\] {
-  background-color: var(--bg-main) !important;
-}
-.bg-\[\#1a1a1a\] {
+/* Global Theming Overrides for Tailwind Utilities */
+.bg-\[\#0a0a0a\],
+.bg-\[\#0a0a0c\],
+.bg-\[\#0c0c10\],
+.bg-\[\#0e121b\],
+.bg-\[\#121214\],
+.bg-\[\#141416\],
+.bg-\[\#141417\],
+.bg-\[\#18181c\],
+.bg-\[\#181818\],
+.bg-\[\#1a1a1a\],
+.bg-zinc-900,
+.bg-zinc-950 {
   background-color: var(--bg-panel) !important;
 }
-.bg-\[\#0a0a0a\]\/80 {
+
+.bg-\[\#0a0a0a\]\/80,
+.bg-\[\#18181c\]\/80,
+.bg-\[\#111114\]\/80 {
   background-color: rgba(var(--bg-main-rgb), 0.8) !important;
 }
-.bg-\[\#1a1a1a\]\/95 {
+
+.bg-\[\#1a1a1a\]\/95,
+.bg-\[\#18181c\]\/95,
+.bg-\[\#111114\]\/95 {
   background-color: rgba(var(--bg-panel-rgb), 0.95) !important;
 }
-.border-\[\#222\] {
+
+.border-\[\#222\],
+.border-\[\#222228\],
+.border-\[\#27272f\],
+.border-\[\#2e2e38\],
+.border-\[\#323232\],
+.border-\[\#333\],
+.border-zinc-800,
+.border-zinc-700 {
   border-color: var(--border-dark) !important;
 }
-.border-\[\#333\] {
-  border-color: var(--border-med) !important;
+
+/* =========================================================================
+   LIGHT MODE HIGH-CONTRAST VISUAL SYSTEM (Emerald Ink & Champagne)
+   ========================================================================= */
+
+[data-theme="light"] {
+  color: var(--text-primary);
 }
-.text-\[\#0a0a0a\] {
-  color: var(--bg-main) !important;
+
+/* Text Overrides for High Legibility on Champagne */
+[data-theme="light"] .text-white,
+[data-theme="light"] .text-zinc-100,
+[data-theme="light"] .text-zinc-200,
+[data-theme="light"] .text-\[\#e0e0e0\],
+[data-theme="light"] .text-\[\#ffffff\] {
+  color: var(--text-primary) !important;
 }
-.hover\:bg-\[\#1a1a1a\]:hover {
+
+[data-theme="light"] .text-zinc-300,
+[data-theme="light"] .text-zinc-400,
+[data-theme="light"] .text-gray-300,
+[data-theme="light"] .text-gray-400,
+[data-theme="light"] .text-\[\#aaa\],
+[data-theme="light"] .text-\[\#888\],
+[data-theme="light"] .text-\[\#a0a0a0\] {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="light"] .text-zinc-500,
+[data-theme="light"] .text-zinc-600,
+[data-theme="light"] .text-gray-500,
+[data-theme="light"] .text-gray-600,
+[data-theme="light"] .text-gray-700,
+[data-theme="light"] .text-\[\#666\],
+[data-theme="light"] .text-\[\#777\] {
+  color: var(--text-muted) !important;
+}
+
+/* Color Accents Adaptation for Optimal Contrast on Champagne */
+[data-theme="light"] .text-emerald-400,
+[data-theme="light"] .text-emerald-300,
+[data-theme="light"] .text-emerald-500,
+[data-theme="light"] .text-green-400,
+[data-theme="light"] .text-green-500,
+[data-theme="light"] .text-\[\#4caf50\] {
+  color: #064E3B !important;
+}
+
+[data-theme="light"] .text-amber-400,
+[data-theme="light"] .text-amber-300,
+[data-theme="light"] .text-yellow-400,
+[data-theme="light"] .text-yellow-500 {
+  color: #92400E !important;
+}
+
+[data-theme="light"] .text-orange-400,
+[data-theme="light"] .text-orange-500,
+[data-theme="light"] .text-\[\#f97316\] {
+  color: #B45309 !important;
+}
+
+[data-theme="light"] .text-sky-400,
+[data-theme="light"] .text-cyan-400,
+[data-theme="light"] .text-blue-400,
+[data-theme="light"] .text-\[\#6c9ac6\],
+[data-theme="light"] .text-\[\#4da6ff\] {
+  color: #0369A1 !important;
+}
+
+[data-theme="light"] .text-purple-400,
+[data-theme="light"] .text-indigo-400,
+[data-theme="light"] .text-violet-400 {
+  color: #4338CA !important;
+}
+
+[data-theme="light"] .text-rose-400,
+[data-theme="light"] .text-red-400,
+[data-theme="light"] .text-red-500,
+[data-theme="light"] .text-\[\#c96c8a\] {
+  color: #B91C1C !important;
+}
+
+/* Backgrounds for Panels, Secondary Containers, and Form Controls */
+[data-theme="light"] .bg-zinc-800,
+[data-theme="light"] .bg-zinc-800\/60,
+[data-theme="light"] .bg-zinc-800\/40,
+[data-theme="light"] .bg-\[\#1f1f1f\],
+[data-theme="light"] .bg-\[\#242424\],
+[data-theme="light"] .bg-\[\#1f1f26\] {
+  background-color: var(--bg-panel-secondary) !important;
+}
+
+[data-theme="light"] .bg-black,
+[data-theme="light"] .bg-\[\#000000\],
+[data-theme="light"] .bg-\[\#0d0d0d\],
+[data-theme="light"] .bg-\[\#0d0d10\],
+[data-theme="light"] .bg-\[\#111114\],
+[data-theme="light"] .bg-\[\#111\] {
   background-color: var(--bg-panel) !important;
 }
-.hover\:bg-\[\#222\]:hover {
-  background-color: var(--border-dark) !important;
+
+[data-theme="light"] .bg-black\/60,
+[data-theme="light"] .bg-black\/80,
+[data-theme="light"] .bg-black\/50,
+[data-theme="light"] .bg-black\/90 {
+  background-color: rgba(6, 78, 59, 0.3) !important;
+}
+
+[data-theme="light"] .bg-white\/5,
+[data-theme="light"] .bg-white\/10,
+[data-theme="light"] .bg-white\/\[0\.02\],
+[data-theme="light"] .bg-white\/\[0\.03\] {
+  background-color: rgba(6, 78, 59, 0.08) !important;
+}
+
+[data-theme="light"] .border-white\/5,
+[data-theme="light"] .border-white\/10,
+[data-theme="light"] .border-white\/20 {
+  border-color: var(--border-dark) !important;
+}
+
+/* Hover States with Polished Emerald Tints */
+[data-theme="light"] .hover\:bg-zinc-800:hover,
+[data-theme="light"] .hover\:bg-zinc-800\/60:hover,
+[data-theme="light"] .hover\:bg-zinc-700:hover,
+[data-theme="light"] .hover\:bg-\[\#1a1a1a\]:hover,
+[data-theme="light"] .hover\:bg-\[\#222\]:hover,
+[data-theme="light"] .hover\:bg-\[\#1f1f26\]:hover,
+[data-theme="light"] .hover\:bg-white\/5:hover,
+[data-theme="light"] .hover\:bg-white\/10:hover {
+  background-color: rgba(6, 78, 59, 0.12) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Inputs, Selects, and Textareas */
+[data-theme="light"] input,
+[data-theme="light"] select,
+[data-theme="light"] textarea {
+  background-color: var(--bg-panel-secondary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-dark) !important;
+}
+
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 0.75;
 }
 
 /* Hide React Flow Attribution Badge */

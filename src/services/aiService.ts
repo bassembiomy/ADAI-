@@ -205,10 +205,17 @@ export async function getLocalAiResponse(
         apiKey: token
       });
       if (res.success) return res.content;
+      // IPC is available but the call failed — throw immediately instead of
+      // falling through to a direct fetch that CSP will block anyway.
       throw new Error(res.error || 'IPC Local LLM call failed');
     }
   } catch (ipcErr: any) {
-    console.warn("IPC local-llm-chat fallback to fetch:", ipcErr.message);
+    // If IPC was available (i.e. we got a structured error from main process),
+    // propagate the error. Only fall through to fetch when IPC bridge itself is missing.
+    if (ipcErr.message && !ipcErr.message.includes('require is not a function')) {
+      throw ipcErr;
+    }
+    console.warn("IPC local-llm-chat unavailable, falling back to direct fetch:", ipcErr.message);
   }
 
   // 2. Direct fetch fallback

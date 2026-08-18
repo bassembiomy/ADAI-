@@ -1,5 +1,6 @@
 import { getXBBlockCapability } from './xbCapabilities';
 import { resolveGraphShapes } from './xbShapeResolver';
+import { validateStateSpaceNode } from './stateSpaceValidation';
 import type { ModelDiagnostic } from './smModel';
 import type { SemanticVariable, SemanticVariableSymbol, XBOwnerState } from './smSemanticModel';
 import type {
@@ -27,6 +28,7 @@ import {
   type XBSemanticStateSlot,
 } from './xbSemanticModel';
 import { normalizePidParameters } from './xbPidContract';
+import { STATE_MACHINE_XB_TARGET_CAPABILITIES } from './smSemanticValidator';
 import { compileEkfVectorExpressions } from './xbEkfExpressions';
 import { alignRuntimeThreshold, convertTime } from './smTiming';
 import { flattenXBSubsystems } from './xbSubsystemFlattener';
@@ -523,8 +525,7 @@ const samplePeriodsIn = (
   for (const key of ['sampleTime', 'sample_time', 'samplePeriod', 'sample_period', 'Ts', 'ts', 'dt']) {
     if (Object.prototype.hasOwnProperty.call(record, key)) {
       const rawVal = record[key];
-      const parsedVal = typeof rawVal === 'string' ? parseFloat(rawVal) : rawVal;
-      destination.push({ kind: 'seconds', value: parsedVal });
+      destination.push({ kind: 'seconds', value: rawVal });
     }
   }
   if (Object.prototype.hasOwnProperty.call(record, 'sampleRate')) {
@@ -557,8 +558,24 @@ const scheduleForNode = (
   let canonicalPeriod: Rational | null = null;
   let timingInvalid = false;
   for (const samplePeriodSource of samplePeriodSources) {
-    const persistedValue = typeof samplePeriodSource.value === 'number'
-      ? rationalFromFiniteNumber(samplePeriodSource.value)
+    const rawVal = samplePeriodSource.value;
+    if (samplePeriodSource.kind === 'seconds') {
+      const isInherited =
+        rawVal === -1
+        || rawVal === 0
+        || rawVal === 'inherited'
+        || rawVal === 'auto'
+        || rawVal === '-1'
+        || rawVal === '0'
+        || (typeof rawVal === 'number' && (rawVal <= 0 || Number.isNaN(rawVal)))
+        || (typeof rawVal === 'string' && (rawVal === 'inherited' || rawVal === 'auto' || Number.isNaN(parseFloat(rawVal))));
+      if (isInherited) {
+        continue;
+      }
+    }
+    const numVal = typeof rawVal === 'number' ? rawVal : typeof rawVal === 'string' ? parseFloat(rawVal) : NaN;
+    const persistedValue = typeof numVal === 'number' && Number.isFinite(numVal) && numVal > 0
+      ? rationalFromFiniteNumber(numVal)
       : null;
     const samplePeriod = persistedValue === null
       || persistedValue.numerator <= 0n
@@ -704,11 +721,15 @@ const initialValuesForSignal = (
   signal: XBSemanticSignal,
   diagnostics: ModelDiagnostic[],
   names: readonly string[] = [
-    'initialValue',
+    'x0',
+    'X0',
     'initialCondition',
     'initial_condition',
     'initial_state',
+    'initialValue',
     'initial',
+    'InitialCondition',
+    'InitialState',
   ],
 ): readonly (number | boolean)[] => {
   const parameters = node.parameters as UnknownRecord;
@@ -723,6 +744,11 @@ const initialValuesForSignal = (
   const expectsBoolean = signal.numericType.kind === 'boolean';
   const typesValid = values.every((value) =>
     expectsBoolean ? typeof value === 'boolean' : typeof value === 'number');
+
+  if (!Array.isArray(source) && structurallyValid && values.length === 1 && signal.elementCount > 1 && typesValid) {
+    return Array.from({ length: signal.elementCount }, () => values[0]);
+  }
+
   if (!structurallyValid
     || values.length !== signal.elementCount
     || !typesValid) {
@@ -865,26 +891,27 @@ const stateBoundaryForNode = (
       params.C = ss.C;
       params.D = ss.D;
     }
+    const ssRes = validateStateSpaceNode(node);
+    const nStates = ssRes.ok ? ssRes.value.dimensions.nStates : (Array.isArray(node.parameters.A) && node.parameters.A.length > 0 ? node.parameters.A.length : 1);
     const exposedX = outputByPort('x');
     const fallback = exposedX ?? outputByPort('y') ?? signals[outputSignalIds[0] ?? ''];
     if (fallback === undefined) return boundary([]);
-    const a = node.parameters.A;
-    const dimension = Array.isArray(a) && a.length > 0 ? a.length : 1;
-    const x = exposedX ?? {
+    const xSignal: XBSemanticSignal = exposedX ?? {
       ...fallback,
       id: `${node.id}:x$hidden`,
-      shape: { kind: 'vector' as const, length: dimension },
-      elementCount: dimension,
-      dimensions: [dimension],
+      numericType: { kind: 'float64' },
+      shape: { kind: 'vector' as const, length: nStates },
+      elementCount: nStates,
+      dimensions: [nStates],
       layout: 'contiguous' as const,
     };
     return boundary([{
       id: `${node.id}:x$state`,
       role: 'x',
       signalId: exposedX?.id ?? null,
-      numericType: x.numericType,
-      shape: x.shape,
-      initialValues: initialValuesForSignal(node, x, diagnostics, ['x0']),
+      numericType: xSignal.numericType,
+      shape: xSignal.shape,
+      initialValues: initialValuesForSignal(node, xSignal, diagnostics, ['x0']),
     }]);
   }
 
@@ -1196,11 +1223,27 @@ const stateBoundaryForNode = (
 export const buildXBSemanticModel = (
   rawInput: XBSemanticBuildInput,
 ): XBSemanticBuildResult => {
+  let variablesRecord: Record<string, SemanticVariable> = {};
+  if (rawInput.variables) {
+    if (Array.isArray(rawInput.variables)) {
+      for (const v of rawInput.variables as any[]) {
+        if (v && v.id) variablesRecord[v.id] = v;
+        if (v && v.name) variablesRecord[v.name] = v;
+      }
+    } else if (typeof rawInput.variables === 'object') {
+      variablesRecord = rawInput.variables as Record<string, SemanticVariable>;
+    }
+  }
+  const target = rawInput.target ?? STATE_MACHINE_XB_TARGET_CAPABILITIES;
+
   const input: XBSemanticBuildInput = {
     ...rawInput,
     model: flattenXBSubsystems(rawInput.model),
+    variables: variablesRecord,
+    target,
   };
   const diagnostics: ModelDiagnostic[] = [];
+
   const solverStep = rationalFromFiniteNumber(input.model.solver.stepSeconds);
   const baseTick = rationalFromFiniteNumber(input.baseTickMs);
   const solverStepMs = solverStep === null
@@ -1305,7 +1348,7 @@ export const buildXBSemanticModel = (
     }
     const mapping = inputMappingBySignalId.get(signalId);
     if (resolved === null && mapping !== undefined) {
-      resolved = variableNumericType(input.variables[mapping.smVarId]);
+      resolved = variableNumericType(input.variables?.[mapping.smVarId]);
     }
     if (resolved === null && port?.direction === 'output' && node !== undefined) {
       if (node.type === 'IF_ELSE' || node.type === 'SWITCH') {
@@ -1346,7 +1389,25 @@ export const buildXBSemanticModel = (
   const graphShapeResult = resolveGraphShapes(input.model);
 
   const resolveShape = (signalId: string): XBShape => {
+    const graphShape = graphShapeResult.portShapes.get(signalId);
+    if (graphShape !== undefined && graphShape.kind !== 'unresolved') {
+      if (graphShape.kind === 'vector') {
+        return { kind: 'vector', length: graphShape.elementCount };
+      }
+      if (graphShape.kind === 'matrix') {
+        return {
+          kind: 'matrix',
+          rows: graphShape.dimensions[0] ?? 1,
+          columns: graphShape.dimensions[1] ?? 1,
+        };
+      }
+      if (graphShape.kind === 'scalar') {
+        return { kind: 'scalar' };
+      }
+    }
+
     const nodeId = signalId.slice(0, signalId.indexOf(':'));
+
     const portId = signalId.slice(signalId.indexOf(':') + 1);
     const node = nodeById.get(nodeId);
 
@@ -1384,26 +1445,17 @@ export const buildXBSemanticModel = (
         params.C = ss.C;
         params.D = ss.D;
       }
-      if (portId === 'y') {
-        const cParam = node.parameters.C;
-        const dParam = node.parameters.D;
-        let numOutputs = 1;
-        if (Array.isArray(cParam) && cParam.length > 0) {
-          numOutputs = cParam.length;
-        } else if (Array.isArray(dParam) && dParam.length > 0) {
-          numOutputs = dParam.length;
+      const ssRes = validateStateSpaceNode(node);
+      if (ssRes.ok) {
+        const { nStates, nInputs, nOutputs } = ssRes.value.dimensions;
+        if (portId === 'y') {
+          return { kind: 'vector', length: nOutputs };
         }
-        if (numOutputs > 1) {
-          return { kind: 'vector', length: numOutputs };
+        if (portId === 'x') {
+          return { kind: 'vector', length: nStates };
         }
-      } else if (portId === 'x') {
-        const aParam = node.parameters.A;
-        let numStates = 1;
-        if (Array.isArray(aParam) && aParam.length > 0) {
-          numStates = aParam.length;
-        }
-        if (numStates > 1) {
-          return { kind: 'vector', length: numStates };
+        if (portId === 'u' || portId === 'in') {
+          return { kind: 'vector', length: nInputs };
         }
       }
     }
@@ -1576,7 +1628,13 @@ export const buildXBSemanticModel = (
           : -1;
       }
       clonedParams.initialCondition ??= 0;
-      clonedParams.sampleTime ??= clonedParams.dt ?? 'inherited';
+      const rawDt = clonedParams.sampleTime ?? clonedParams.dt;
+      const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
+      if (Number.isFinite(parsedDt) && parsedDt > 0) {
+        clonedParams.sampleTime = parsedDt;
+      } else {
+        clonedParams.sampleTime = input.model.solver.stepSeconds;
+      }
     }
 
     operations[node.id] = {
