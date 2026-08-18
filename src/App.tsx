@@ -27,6 +27,7 @@ import type { AdiaExportItem } from './types/threeDX_types';
 import { AiArchitectSidebar } from './components/AiArchitectSidebar';
 import { executeAiActions } from './utils/aiActionProcessor';
 import { IntroStandbyOverlay } from './components/IntroStandbyOverlay';
+import { LiveFpsMonitor } from './components/LiveFpsMonitor';
 import { 
   VariableType, VariableDef, StateData, JunctionData, TransitionData, Layer, ErrorItem 
 } from './types/sm_types';
@@ -15578,6 +15579,8 @@ const ADIA = () => {
                   {isRunning ? 'RUN' : 'STOP'}
                 </span>
               </div>
+              <Separator orientation="vertical" className="h-3.5 bg-[#2e2e38]" />
+              <LiveFpsMonitor />
               <Separator orientation="vertical" className="h-3.5 bg-[#2e2e38]" />
               <div className="text-zinc-500 font-mono text-[11px]">
                 T: <span className="text-zinc-300 font-semibold">{simulationTime.toFixed(1)}s</span>
