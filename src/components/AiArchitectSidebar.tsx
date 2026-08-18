@@ -352,6 +352,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                             className="w-full bg-black border border-[#333] rounded-lg px-3 py-1.5 text-xs text-white focus:border-purple-500/50 outline-none"
                             placeholder="google/gemma-4-e4b"
                           />
+                        )}
                       </div>
                     </div>
                   </div>
