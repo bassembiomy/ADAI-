@@ -167,7 +167,8 @@ export async function getLocalAiResponse(
     cleanBase = 'http://localhost:1234';
   }
 
-  cleanBase = (cleanBase || "http://localhost:1234").replace(/\/+$/, '');
+  cleanBase = (cleanBase || "http://127.0.0.1:1234").replace(/\/+$/, '');
+  cleanBase = cleanBase.replace('localhost', '127.0.0.1');
   cleanBase = cleanBase.replace(/\/api\/v1\/chat\/?$/, '').replace(/\/v1\/chat\/completions\/?$/, '').replace(/\/v1\/?$/, '');
 
   const endpoint = `${cleanBase}/v1/chat/completions`;
@@ -230,7 +231,7 @@ export async function getLocalAiResponse(
 // Fetch list of models from LM Studio / Local LLM Endpoint
 export async function fetchLocalModels(baseUrl: string): Promise<string[]> {
   try {
-    let cleanUrl = baseUrl.trim();
+    let cleanUrl = baseUrl.trim().replace('localhost', '127.0.0.1') || "http://127.0.0.1:1234";
     // Remove the chat endpoint suffix if present to find the base path
     cleanUrl = cleanUrl.replace(/\/api\/v1\/chat\/?$/, '');
     cleanUrl = cleanUrl.replace(/\/v1\/chat\/completions\/?$/, '');
