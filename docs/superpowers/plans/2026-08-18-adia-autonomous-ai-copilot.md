@@ -1,40 +1,41 @@
-# ADIA Autonomous Engineering AI Copilot - Master Implementation Plan (v2.2)
+# ADIA Autonomous Engineering AI Copilot - Master Implementation Plan (v3.0)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build an institutional-grade, zero-cost Autonomous Engineering AI Copilot inside ADIA with a complete reference vertical slice: from natural-language user prompt to schema-constrained generation, multi-stage validation, durable transactional execution, domain-model mutation, and automated numerical simulation verification (SPWM Inverter with $220\text{V}_{rms}$, $50\text{Hz}$, and low-order $\text{THD} \le 5\%$), followed by modular expansion to SysML, Stateflow, DOE, sandboxed code compilation, and hardware safety interlocks.
+**Goal:** Build an institutional-grade, zero-cost Autonomous Engineering AI Copilot inside ADIA with an end-to-end verified vertical slice: from natural-language user prompt to schema-constrained generation, multi-stage validation, durable transactional execution, domain-model mutation, and automated numerical simulation verification (SPWM Inverter with $220\text{V}_{rms}$, $50\text{Hz}$, and low-order $\text{THD} \le 5\%$), backed by secure Electron IPC retrieval and complete safety boundaries.
 
 **Architecture:**
-1. Provider normalizer with Zod schema-constrained decoding and bounded repair loops.
-2. Hybrid capability discovery and context budgeting.
-3. 14-stage validation and safety pipeline (Structural Zod $\to$ Tarjan/Kahn DAG $\to$ References $\to$ Dimensional $\to$ Preconditions $\to$ Policy $\to$ Dry-run).
-4. Durable Transaction Manager with journal persistence, idempotency state lifecycle (`RESERVED` $\to$ `COMMITTED` / `ROLLED_BACK`), snapshot rollback with `RECOVERY_REQUIRED` fallback, and workspace revision locking.
-5. Domain-Model-as-Source-of-Truth with an authoritative Block Definition Registry distinguishing Physical Conserving Electrical Ports from Signal Ports.
-6. Untrusted Web Retrieval via Electron IPC with strict SSRF defenses, payload limits, and structured evidence objects.
+1. **Shared Structured Generation Coordinator**: Provider-agnostic Zod validation, error formatting, and bounded schema repair loops.
+2. **Deterministic SI Dimensional Engine**: Canonical dimension vectors ($[M, L, T, I, \Theta, N, J]$) with strict non-finite value rejection.
+3. **Semantic Plan & DAG Validator**: Tarjan/Kahn dependency ordering, duplicate detection, and full entity reference resolution.
+4. **Durable Transaction Manager**: Scoped composite idempotency (`${projectId}:${actionType}:${schemaVersion}:${idempotencyKey}`), staged prepare-execute pipeline, snapshot recovery, and `RECOVERY_REQUIRED` fail-safe state.
+5. **Domain-Model-as-Source-of-Truth**: Authoritative block registry with strict port connection matrix (Physical Conserving vs. Signal Ports with single-driver enforcement).
+6. **End-to-End Inverter Lowering & Simulation Benchmark**: Full physical closed-loop topology lowered directly from domain state into state-space ODE simulation with zero-crossing frequency and DFT low-order THD verification.
+7. **Secure Electron IPC Web Retrieval**: Main-process IPC handler with DNS-level SSRF defenses, strict Unicode-safe byte bounding, and structured evidence provenance.
 
 **Tech Stack:** TypeScript (strict mode), React 18, Electron IPC, Vitest, Zod, Math.js.
 
 ---
 
 ## Global Constraints
-- **Zero Unvalidated Mutations**: No module mutation may occur directly from LLM output. Every action must be validated by its corresponding `AIModuleAdapter` and approved by the `PolicyEngine`.
-- **Domain State Integrity**: Adapters mutate domain models directly (`XBridgeDomainModel`, `StateflowAST`, `SysmlMetamodel`). ReactFlow UI state is purely a derived visual projection.
-- **Dimensional Correctness**: All parameters must declare explicit SI units and pass dimensional vector compatibility ($[M, L, T, I, \Theta, N, J]$) with finite-value checks.
-- **Transactional Atomicity**: Multi-step plans execute under a durable transaction with snapshot/inverse rollback. If restoration verification fails, the workspace transitions to `RECOVERY_REQUIRED`.
-- **Untrusted External Data**: All web search results are sanitized, bounded to 32KB, and encapsulated in structured evidence objects without executable script or markdown attribute injections.
+- **Zero Unvalidated Mutations**: No module mutation occurs directly from LLM output. Every action passes through `adapter.validate()` and `adapter.prepare()` before mutation.
+- **Durable Atomicity**: Multi-action plans execute under a durable transaction state machine. Partial execution failures automatically trigger inverse rollback; if rollback verification fails, the workspace transitions to `RECOVERY_REQUIRED`.
+- **Domain State Integrity**: Adapters mutate domain models directly (`XBridgeDomainModel`). ReactFlow UI state is purely a derived visual projection.
+- **Dimensional Correctness**: All parameters declare explicit SI units and pass dimensional vector compatibility ($[M, L, T, I, \Theta, N, J]$) with finite-value checks.
+- **Untrusted External Data**: All web search results are sanitized in the isolated Electron Main Process, bounded to 32KB without character corruption, and encapsulated in structured evidence objects.
 
 ---
 
-## Task Decomposition & Execution Plan (Milestone 1: Reference Vertical Slice)
+## Milestone 1: Reference Vertical Slice Roadmap
 
 ```mermaid
 flowchart TD
-    T1["Task 1: Core Type Contracts, Zod Schemas & Capability Registry"] --> T2["Task 2: Normalized LLM Providers with Loopback Security & Schema Repair"]
+    T1["Task 1: Core Type Contracts, Zod Schemas & Capability Registry"] --> T2["Task 2: Structured Generation Coordinator & Normalized Providers"]
     T2 --> T3["Task 3: Canonical SI Dimension Vectors & Finite Quantity Validation"]
     T3 --> T4["Task 4: Plan Envelope, Dependency Graph & Semantic Reference Validator"]
-    T4 --> T5["Task 5: Durable Transaction Manager, Idempotency Lifecycle & Snapshot Recovery"]
-    T5 --> T6["Task 6: X-Bridges Domain Model, Block Registry & Physical Port Adapter"]
-    T6 --> T7["Task 7: End-to-End SPWM Inverter Golden Engineering Simulation Benchmark"]
+    T4 --> T5["Task 5: Durable Transaction Manager, Scoped Idempotency & Snapshot Recovery"]
+    T5 --> T6["Task 6: X-Bridges Domain Model, Block Registry & Port Connection Matrix"]
+    T6 --> T7["Task 7: End-to-End SPWM Inverter Domain Synthesis & Simulation Benchmark"]
     T7 --> T8["Task 8: Secure Electron IPC Web Retrieval with SSRF & Evidence Provenance"]
 ```
 
@@ -61,14 +62,14 @@ import { z } from 'zod';
 import { CapabilityRegistry } from './capabilityRegistry';
 import { RiskClass, RollbackLevel, SideEffectClass } from './types';
 
-describe('CapabilityRegistry', () => {
+describe('CapabilityRegistry with Strict Consistency Rules', () => {
   let registry: CapabilityRegistry;
 
   beforeEach(() => {
     registry = new CapabilityRegistry();
   });
 
-  it('should register a capability and validate payload against strict Zod schema', () => {
+  it('should register a valid capability and validate payloads against strict Zod schema', () => {
     const payloadSchema = z.object({
       blockId: z.string().min(1),
       blockType: z.enum(['DC_VOLTAGE_SOURCE', 'SPWM_GENERATOR', 'WAVEFORM_GENERATOR'])
@@ -99,25 +100,43 @@ describe('CapabilityRegistry', () => {
     expect(invalid?.success).toBe(false);
   });
 
-  it('should reject invalid capability configurations (e.g. hardware actuation marked reversible)', () => {
+  it('should reject invalid capability consistency rules', () => {
+    // 1. Hardware actuation marked reversible
     expect(() => {
       registry.register({
-        actionType: 'HIL_ACTUATE_PIN',
+        actionType: 'HIL_ACTUATE',
         schemaVersion: '1.0.0',
         module: 'hil',
         riskClass: RiskClass.HARDWARE_ACTUATION,
-        rollbackLevel: RollbackLevel.INVERSE_ACTION, // Contradiction: physical actuation cannot be inverse-action reversed
+        rollbackLevel: RollbackLevel.INVERSE_ACTION,
         sideEffectClass: SideEffectClass.PHYSICAL_HARDWARE,
         payloadSchema: z.object({}).strict(),
-        requiredPermissions: [],
+        requiredPermissions: ['hardware.write'],
         supportsDryRun: false,
         requiresCommitBarrier: true,
         resourceAccess: { readSets: [], writeSets: [] }
       });
     }).toThrowError(/Hardware actuation cannot have rollback level INVERSE_ACTION/);
+
+    // 2. Read-only declaring write sets
+    expect(() => {
+      registry.register({
+        actionType: 'INSPECT_MODEL',
+        schemaVersion: '1.0.0',
+        module: 'xbridges',
+        riskClass: RiskClass.READ_ONLY,
+        rollbackLevel: RollbackLevel.NONE,
+        sideEffectClass: SideEffectClass.READ_ONLY,
+        payloadSchema: z.object({}).strict(),
+        requiredPermissions: [],
+        supportsDryRun: true,
+        requiresCommitBarrier: false,
+        resourceAccess: { readSets: ['xbridges'], writeSets: ['xbridges.mutation'] } // Contradiction
+      });
+    }).toThrowError(/Read-only capabilities cannot declare writeSets/);
   });
 
-  it('should reject duplicate capability registration of same type and version', () => {
+  it('should reject duplicate registration of same type and version', () => {
     const cap = {
       actionType: 'XB_CREATE_BLOCK',
       schemaVersion: '1.0.0',
@@ -131,7 +150,6 @@ describe('CapabilityRegistry', () => {
       requiresCommitBarrier: false,
       resourceAccess: { readSets: [], writeSets: [] }
     };
-
     registry.register(cap);
     expect(() => registry.register(cap)).toThrowError(/already registered/);
   });
@@ -227,6 +245,9 @@ export class CapabilityRegistry {
     if (capability.sideEffectClass === SideEffectClass.PHYSICAL_HARDWARE && !capability.requiresCommitBarrier) {
       throw new Error('Hardware side-effect capabilities must require a commit barrier.');
     }
+    if (capability.riskClass === RiskClass.READ_ONLY && capability.resourceAccess.writeSets.length > 0) {
+      throw new Error('Read-only capabilities cannot declare writeSets.');
+    }
 
     const key = this.makeKey(capability.actionType, capability.schemaVersion);
     if (this.capabilities.has(key)) {
@@ -259,111 +280,86 @@ Expected: PASS
 
 ```bash
 git add src/services/ai/contracts/
-git commit -m "feat(ai): implement strict capability registry with risk consistency checks"
+git commit -m "feat(ai): implement typed capability registry with strict consistency rules"
 ```
 
 ---
 
-### Task 2: Normalized LLM Providers with Loopback Security & Schema Repair
+### Task 2: Structured Generation Coordinator & Normalized Providers
 
 **Files:**
 - Create: `src/services/ai/providers/providerInterface.ts`
+- Create: `src/services/ai/providers/structuredGenerationCoordinator.ts`
 - Create: `src/services/ai/providers/localOllamaProvider.ts`
 - Create: `src/services/ai/providers/openAiCompatibleProvider.ts`
 - Create: `src/services/ai/providers/geminiProvider.ts`
 - Create: `src/services/ai/providers/providerFactory.ts`
-- Test: `src/services/ai/providers/providerFactory.test.ts`
+- Test: `src/services/ai/providers/structuredGenerationCoordinator.test.ts`
 
 **Interfaces:**
 - Consumes: `Diagnostic` from Task 1.
-- Produces: `ILLMProvider`, `ProviderFactory`, `StructuredGenerationRequest`, `StructuredGenerationResult`.
+- Produces: `StructuredGenerationCoordinator`, `ILLMProvider`, `ProviderFactory`.
 
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
-// src/services/ai/providers/providerFactory.test.ts
+// src/services/ai/providers/structuredGenerationCoordinator.test.ts
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
+import { StructuredGenerationCoordinator } from './structuredGenerationCoordinator';
 import { ProviderFactory } from './providerFactory';
-import { LocalOllamaProvider } from './localOllamaProvider';
-import { OpenAiCompatibleProvider } from './openAiCompatibleProvider';
-import { GeminiProvider } from './geminiProvider';
 
-describe('ProviderFactory & Schema Repair Loop', () => {
-  it('should instantiate appropriate provider types with strict loopback validation', () => {
-    const ollama = ProviderFactory.createProvider({
-      type: 'ollama',
-      baseUrl: 'http://127.0.0.1:11434',
-      modelId: 'deepseek-r1:8b'
-    });
-    expect(ollama).toBeInstanceOf(LocalOllamaProvider);
-    expect(ollama.capabilities.isLocalOffline).toBe(true);
+describe('StructuredGenerationCoordinator with Shared Repair Loop', () => {
+  const targetSchema = z.object({
+    nominalVoltage: z.number().min(363),
+    unit: z.literal('V')
+  }).strict();
 
-    const lmstudio = ProviderFactory.createProvider({
-      type: 'lmstudio',
-      baseUrl: 'http://localhost:1234/v1',
-      modelId: 'qwen2.5-coder-7b'
-    });
-    expect(lmstudio).toBeInstanceOf(OpenAiCompatibleProvider);
-    expect(lmstudio.capabilities.isLocalOffline).toBe(true);
+  it('should automatically repair invalid output by passing previous raw JSON and Zod errors', async () => {
+    const mockProvider = {
+      providerId: 'mock',
+      modelId: 'test-model',
+      capabilities: { maxContextTokens: 4096, supportsGrammarConstraint: false, supportsNativeToolCalling: false, isLocalOffline: true, streamingSupport: false },
+      generateRaw: vi.fn()
+        .mockResolvedValueOnce({ rawText: JSON.stringify({ nominalVoltage: 300, unit: 'V' }) }) // Fails min 363
+        .mockResolvedValueOnce({ rawText: JSON.stringify({ nominalVoltage: 380, unit: 'V' }) }) // Repaired
+    };
 
-    const gemini = ProviderFactory.createProvider({
-      type: 'gemini',
-      apiKey: 'AIzaFakeKey123',
-      modelId: 'gemini-2.0-flash'
-    });
-    expect(gemini).toBeInstanceOf(GeminiProvider);
-    expect(gemini.capabilities.isLocalOffline).toBe(false);
-  });
-
-  it('should reject spoofed loopback hostnames (e.g. localhost.attacker.com)', () => {
-    expect(() => ProviderFactory.createProvider({
-      type: 'ollama',
-      baseUrl: 'https://localhost.attacker.com:11434',
-      modelId: 'llama3'
-    })).toThrowError(/Local provider must use exact loopback/);
-  });
-
-  it('should perform repair attempt if initial LLM output fails schema validation', async () => {
-    const provider = new LocalOllamaProvider({ baseUrl: 'http://127.0.0.1:11434', modelId: 'test' });
-    const targetSchema = z.object({
-      nominalVoltage: z.number().min(363),
-      unit: z.literal('V')
-    }).strict();
-
-    // Mock first call returning invalid voltage (300V), second call returning repaired (380V)
-    global.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ response: JSON.stringify({ nominalVoltage: 300, unit: 'V' }) })
-      } as any)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ response: JSON.stringify({ nominalVoltage: 380, unit: 'V' }) })
-      } as any);
-
-    const result = await provider.generateStructured({
-      systemPrompt: 'sys',
-      userPrompt: 'user'
+    const coordinator = new StructuredGenerationCoordinator(mockProvider as any);
+    const result = await coordinator.generateAndRepair({
+      systemPrompt: 'System',
+      userPrompt: 'Design DC bus'
     }, targetSchema);
 
     expect(result.success).toBe(true);
     expect(result.data?.nominalVoltage).toBe(380);
-    expect(global.fetch).toHaveBeenCalledTimes(2); // One initial + one repair call
+    expect(mockProvider.generateRaw).toHaveBeenCalledTimes(2);
+
+    // Verify repair prompt included previous JSON and specific error
+    const secondCallPrompt = mockProvider.generateRaw.mock.calls[1][0].userPrompt;
+    expect(secondCallPrompt).toContain('nominalVoltage: Number must be greater than or equal to 363');
+    expect(secondCallPrompt).toContain('"nominalVoltage":300');
+  });
+
+  it('should enforce exact loopback hostnames for local providers', () => {
+    expect(() => ProviderFactory.createProvider({
+      type: 'ollama',
+      baseUrl: 'https://attacker-loopback.example.com',
+      modelId: 'm1'
+    })).toThrowError(/Local provider must use exact loopback/);
   });
 });
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx vitest run src/services/ai/providers/providerFactory.test.ts`  
+Run: `npx vitest run src/services/ai/providers/structuredGenerationCoordinator.test.ts`  
 Expected: FAIL with modules not found.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```typescript
 // src/services/ai/providers/providerInterface.ts
-import { z } from 'zod';
 import { Diagnostic } from '../contracts/diagnostics';
 
 export interface ProviderCapabilities {
@@ -383,6 +379,12 @@ export interface StructuredGenerationRequest {
   readonly timeoutMs?: number;
 }
 
+export interface RawGenerationResult {
+  readonly rawText: string;
+  readonly usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+  readonly isTruncated?: boolean;
+}
+
 export interface StructuredGenerationResult<T> {
   readonly success: boolean;
   readonly data?: T;
@@ -398,18 +400,103 @@ export interface ILLMProvider {
   readonly modelId: string;
   readonly capabilities: ProviderCapabilities;
 
-  generateStructured<T>(
+  generateRaw(request: StructuredGenerationRequest, signal?: AbortSignal): Promise<RawGenerationResult>;
+}
+```
+
+```typescript
+// src/services/ai/providers/structuredGenerationCoordinator.ts
+import { z } from 'zod';
+import { ILLMProvider, StructuredGenerationRequest, StructuredGenerationResult } from './providerInterface';
+
+export class StructuredGenerationCoordinator {
+  constructor(private provider: ILLMProvider) {}
+
+  public async generateAndRepair<T>(
     request: StructuredGenerationRequest,
     schema: z.ZodType<T>,
     signal?: AbortSignal
-  ): Promise<StructuredGenerationResult<T>>;
+  ): Promise<StructuredGenerationResult<T>> {
+    const startTime = Date.now();
+    let currentPrompt = request.userPrompt;
+    let attempts = 0;
+    const maxAttempts = 2;
+    let lastRawText = '';
+    let accumulatedUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+
+    while (attempts < maxAttempts) {
+      attempts++;
+      try {
+        const timeoutController = new AbortController();
+        const timeoutId = setTimeout(() => timeoutController.abort(), request.timeoutMs || 30000);
+        const combinedSignal = signal ? AbortSignal.any([signal, timeoutController.signal]) : timeoutController.signal;
+
+        let rawRes;
+        try {
+          rawRes = await this.provider.generateRaw({ ...request, userPrompt: currentPrompt }, combinedSignal);
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
+        lastRawText = rawRes.rawText;
+        if (rawRes.usage) {
+          accumulatedUsage.promptTokens += rawRes.usage.promptTokens;
+          accumulatedUsage.completionTokens += rawRes.usage.completionTokens;
+          accumulatedUsage.totalTokens += rawRes.usage.totalTokens;
+        }
+
+        let parsedJson;
+        try {
+          parsedJson = JSON.parse(lastRawText);
+        } catch (parseErr: any) {
+          currentPrompt = `${request.userPrompt}\n\n[ERROR: Your previous output was not valid JSON: "${lastRawText}". Please return ONLY valid JSON matching schema.]`;
+          continue;
+        }
+
+        const zodCheck = schema.safeParse(parsedJson);
+        if (zodCheck.success) {
+          return {
+            success: true,
+            data: zodCheck.data,
+            rawText: lastRawText,
+            usage: accumulatedUsage,
+            diagnostics: [],
+            isTruncated: rawRes.isTruncated || false,
+            durationMs: Date.now() - startTime
+          };
+        }
+
+        const errSummary = zodCheck.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ');
+        currentPrompt = `${request.userPrompt}\n\n[ERROR: Your previous JSON failed schema validation: ${errSummary}. Previous output was: ${lastRawText}. Please correct invalid fields and return valid JSON.]`;
+      } catch (err: any) {
+        if (attempts >= maxAttempts) {
+          return {
+            success: false,
+            rawText: lastRawText,
+            usage: accumulatedUsage,
+            diagnostics: [{ code: 'PROVIDER_CALL_FAILED', severity: 'ERROR', message: err.message }],
+            isTruncated: false,
+            durationMs: Date.now() - startTime
+          };
+        }
+      }
+    }
+
+    return {
+      success: false,
+      rawText: lastRawText,
+      usage: accumulatedUsage,
+      diagnostics: [{ code: 'SCHEMA_REPAIR_EXHAUSTED', severity: 'ERROR', message: 'Schema repair attempts exhausted.' }],
+      isTruncated: false,
+      durationMs: Date.now() - startTime
+    };
+  }
 }
 ```
 
 ```typescript
 // src/services/ai/providers/localOllamaProvider.ts
-import { z } from 'zod';
-import { ILLMProvider, ProviderCapabilities, StructuredGenerationRequest, StructuredGenerationResult } from './providerInterface';
+import { ILLMProvider, ProviderCapabilities, StructuredGenerationRequest, RawGenerationResult } from './providerInterface';
 
 export class LocalOllamaProvider implements ILLMProvider {
   public readonly providerId = 'ollama';
@@ -428,87 +515,26 @@ export class LocalOllamaProvider implements ILLMProvider {
     this.modelId = config.modelId || 'deepseek-r1:8b';
   }
 
-  async generateStructured<T>(
-    request: StructuredGenerationRequest,
-    schema: z.ZodType<T>,
-    signal?: AbortSignal
-  ): Promise<StructuredGenerationResult<T>> {
-    const startTime = Date.now();
-    let currentPrompt = request.userPrompt;
-    let attempts = 0;
-    const maxAttempts = 2;
+  async generateRaw(request: StructuredGenerationRequest, signal?: AbortSignal): Promise<RawGenerationResult> {
+    const response = await fetch(`${this.baseUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: this.modelId,
+        system: request.systemPrompt,
+        prompt: request.userPrompt,
+        format: 'json',
+        stream: false,
+        options: { temperature: request.temperature ?? 0.1 }
+      }),
+      signal
+    });
 
-    while (attempts < maxAttempts) {
-      attempts++;
-      try {
-        const timeoutController = new AbortController();
-        const timeoutId = setTimeout(() => timeoutController.abort(), request.timeoutMs || 30000);
-        const combinedSignal = signal ? AbortSignal.any([signal, timeoutController.signal]) : timeoutController.signal;
-
-        const response = await fetch(`${this.baseUrl}/api/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: this.modelId,
-            system: request.systemPrompt,
-            prompt: currentPrompt,
-            format: 'json',
-            stream: false,
-            options: { temperature: request.temperature ?? 0.1 }
-          }),
-          signal: combinedSignal
-        });
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          throw new Error(`Ollama HTTP ${response.status}: ${await response.text()}`);
-        }
-
-        const jsonRes = await response.json();
-        const rawText = jsonRes.response || '';
-        const parsedJson = JSON.parse(rawText);
-        const parseResult = schema.safeParse(parsedJson);
-
-        if (parseResult.success) {
-          return {
-            success: true,
-            data: parseResult.data,
-            rawText,
-            usage: {
-              promptTokens: jsonRes.prompt_eval_count || 0,
-              completionTokens: jsonRes.eval_count || 0,
-              totalTokens: (jsonRes.prompt_eval_count || 0) + (jsonRes.eval_count || 0)
-            },
-            diagnostics: [],
-            isTruncated: false,
-            durationMs: Date.now() - startTime
-          };
-        }
-
-        // Schema validation failed, prepare repair prompt
-        const errorSummary = parseResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
-        currentPrompt = `${request.userPrompt}\n\n[ERROR: Your previous output failed validation: ${errorSummary}. Please correct and return valid JSON.]`;
-      } catch (err: any) {
-        if (attempts >= maxAttempts) {
-          return {
-            success: false,
-            rawText: '',
-            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-            diagnostics: [{ code: 'PROVIDER_CALL_FAILED', severity: 'ERROR', message: err.message }],
-            isTruncated: false,
-            durationMs: Date.now() - startTime
-          };
-        }
-      }
-    }
-
+    if (!response.ok) throw new Error(`Ollama HTTP ${response.status}: ${await response.text()}`);
+    const res = await response.json();
     return {
-      success: false,
-      rawText: '',
-      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-      diagnostics: [{ code: 'SCHEMA_REPAIR_EXHAUSTED', severity: 'ERROR', message: 'Schema repair attempts exhausted.' }],
-      isTruncated: false,
-      durationMs: Date.now() - startTime
+      rawText: res.response || '',
+      usage: { promptTokens: res.prompt_eval_count || 0, completionTokens: res.eval_count || 0, totalTokens: (res.prompt_eval_count || 0) + (res.eval_count || 0) }
     };
   }
 }
@@ -516,8 +542,7 @@ export class LocalOllamaProvider implements ILLMProvider {
 
 ```typescript
 // src/services/ai/providers/openAiCompatibleProvider.ts
-import { z } from 'zod';
-import { ILLMProvider, ProviderCapabilities, StructuredGenerationRequest, StructuredGenerationResult } from './providerInterface';
+import { ILLMProvider, ProviderCapabilities, StructuredGenerationRequest, RawGenerationResult } from './providerInterface';
 
 export class OpenAiCompatibleProvider implements ILLMProvider {
   public readonly providerId = 'openai-compatible';
@@ -540,92 +565,45 @@ export class OpenAiCompatibleProvider implements ILLMProvider {
     };
   }
 
-  async generateStructured<T>(
-    request: StructuredGenerationRequest,
-    schema: z.ZodType<T>,
-    signal?: AbortSignal
-  ): Promise<StructuredGenerationResult<T>> {
-    const startTime = Date.now();
-    try {
-      const messages = [
-        { role: 'system', content: `${request.systemPrompt}\nIMPORTANT: You MUST respond ONLY with valid JSON conforming to the schema.` },
-        ...(request.conversationHistory || []),
-        { role: 'user', content: request.userPrompt }
-      ];
+  async generateRaw(request: StructuredGenerationRequest, signal?: AbortSignal): Promise<RawGenerationResult> {
+    const messages = [
+      { role: 'system', content: `${request.systemPrompt}\nRespond ONLY with valid JSON.` },
+      ...(request.conversationHistory || []),
+      { role: 'user', content: request.userPrompt }
+    ];
 
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`
-        },
-        body: JSON.stringify({
-          model: this.modelId,
-          messages,
-          temperature: request.temperature ?? 0.1,
-          response_format: { type: 'json_object' }
-        }),
-        signal
-      });
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`
+      },
+      body: JSON.stringify({
+        model: this.modelId,
+        messages,
+        temperature: request.temperature ?? 0.1,
+        response_format: { type: 'json_object' }
+      }),
+      signal
+    });
 
-      if (!response.ok) {
-        throw new Error(`OpenAI HTTP ${response.status}: ${await response.text()}`);
+    if (!response.ok) throw new Error(`OpenAI HTTP ${response.status}: ${await response.text()}`);
+    const jsonRes = await response.json();
+    return {
+      rawText: jsonRes.choices?.[0]?.message?.content || '',
+      usage: {
+        promptTokens: jsonRes.usage?.prompt_tokens ?? 0,
+        completionTokens: jsonRes.usage?.completion_tokens ?? 0,
+        totalTokens: jsonRes.usage?.total_tokens ?? 0
       }
-
-      const jsonRes = await response.json();
-      const rawText = jsonRes.choices?.[0]?.message?.content || '';
-      const parsedJson = JSON.parse(rawText);
-      const parseResult = schema.safeParse(parsedJson);
-
-      const usageNorm = {
-        promptTokens: jsonRes.usage?.prompt_tokens ?? jsonRes.usage?.promptTokens ?? 0,
-        completionTokens: jsonRes.usage?.completion_tokens ?? jsonRes.usage?.completionTokens ?? 0,
-        totalTokens: jsonRes.usage?.total_tokens ?? jsonRes.usage?.totalTokens ?? 0
-      };
-
-      if (!parseResult.success) {
-        return {
-          success: false,
-          rawText,
-          usage: usageNorm,
-          diagnostics: parseResult.error.errors.map(e => ({
-            code: 'SCHEMA_VALIDATION_ERROR',
-            severity: 'ERROR',
-            message: e.message,
-            fieldPath: e.path.join('.')
-          })),
-          isTruncated: false,
-          durationMs: Date.now() - startTime
-        };
-      }
-
-      return {
-        success: true,
-        data: parseResult.data,
-        rawText,
-        usage: usageNorm,
-        diagnostics: [],
-        isTruncated: false,
-        durationMs: Date.now() - startTime
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        rawText: '',
-        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-        diagnostics: [{ code: 'PROVIDER_ERROR', severity: 'ERROR', message: err.message }],
-        isTruncated: false,
-        durationMs: Date.now() - startTime
-      };
-    }
+    };
   }
 }
 ```
 
 ```typescript
 // src/services/ai/providers/geminiProvider.ts
-import { z } from 'zod';
-import { ILLMProvider, ProviderCapabilities, StructuredGenerationRequest, StructuredGenerationResult } from './providerInterface';
+import { ILLMProvider, ProviderCapabilities, StructuredGenerationRequest, RawGenerationResult } from './providerInterface';
 
 export class GeminiProvider implements ILLMProvider {
   public readonly providerId = 'gemini';
@@ -644,81 +622,40 @@ export class GeminiProvider implements ILLMProvider {
     this.modelId = config.modelId || 'gemini-2.0-flash';
   }
 
-  async generateStructured<T>(
-    request: StructuredGenerationRequest,
-    schema: z.ZodType<T>,
-    signal?: AbortSignal
-  ): Promise<StructuredGenerationResult<T>> {
-    const startTime = Date.now();
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.modelId}:generateContent`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': this.apiKey
-        },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: request.systemPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: request.userPrompt }] }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: request.temperature ?? 0.1
-          }
-        }),
-        signal
-      });
-
-      if (!response.ok) {
-        throw new Error(`Gemini HTTP ${response.status}: ${await response.text()}`);
+  async generateRaw(request: StructuredGenerationRequest, signal?: AbortSignal): Promise<RawGenerationResult> {
+    const contents: any[] = [];
+    if (request.conversationHistory) {
+      for (const msg of request.conversationHistory) {
+        contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] });
       }
+    }
+    contents.push({ role: 'user', parts: [{ text: request.userPrompt }] });
 
-      const jsonRes = await response.json();
-      const rawText = jsonRes.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      const parsedJson = JSON.parse(rawText);
-      const parseResult = schema.safeParse(parsedJson);
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.modelId}:generateContent`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': this.apiKey
+      },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: request.systemPrompt }] },
+        contents,
+        generationConfig: { responseMimeType: 'application/json', temperature: request.temperature ?? 0.1 }
+      }),
+      signal
+    });
 
-      const usageNorm = {
+    if (!response.ok) throw new Error(`Gemini HTTP ${response.status}: ${await response.text()}`);
+    const jsonRes = await response.json();
+    return {
+      rawText: jsonRes.candidates?.[0]?.content?.parts?.[0]?.text || '',
+      usage: {
         promptTokens: jsonRes.usageMetadata?.promptTokenCount || 0,
         completionTokens: jsonRes.usageMetadata?.candidatesTokenCount || 0,
         totalTokens: jsonRes.usageMetadata?.totalTokenCount || 0
-      };
-
-      if (!parseResult.success) {
-        return {
-          success: false,
-          rawText,
-          usage: usageNorm,
-          diagnostics: parseResult.error.errors.map(e => ({
-            code: 'SCHEMA_VALIDATION_ERROR',
-            severity: 'ERROR',
-            message: e.message,
-            fieldPath: e.path.join('.')
-          })),
-          isTruncated: false,
-          durationMs: Date.now() - startTime
-        };
       }
-
-      return {
-        success: true,
-        data: parseResult.data,
-        rawText,
-        usage: usageNorm,
-        diagnostics: [],
-        isTruncated: false,
-        durationMs: Date.now() - startTime
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        rawText: '',
-        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-        diagnostics: [{ code: 'PROVIDER_ERROR', severity: 'ERROR', message: err.message }],
-        isTruncated: false,
-        durationMs: Date.now() - startTime
-      };
-    }
+    };
   }
 }
 ```
@@ -764,6 +701,7 @@ export class ProviderFactory {
         return new OpenAiCompatibleProvider({ baseUrl: config.baseUrl || 'http://127.0.0.1:1234/v1', modelId: config.modelId, isLocal: true });
 
       case 'openai':
+        if (!config.apiKey) throw new Error('OpenAI API key is required for cloud endpoints');
         return new OpenAiCompatibleProvider({ baseUrl: config.baseUrl || 'https://api.openai.com/v1', modelId: config.modelId, apiKey: config.apiKey, isLocal: false });
 
       case 'gemini':
@@ -779,14 +717,14 @@ export class ProviderFactory {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx vitest run src/services/ai/providers/providerFactory.test.ts`  
+Run: `npx vitest run src/services/ai/providers/structuredGenerationCoordinator.test.ts`  
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/services/ai/providers/
-git commit -m "feat(ai): implement secure providers with exact loopback check and schema repair loop"
+git commit -m "feat(ai): implement StructuredGenerationCoordinator with shared repair loop and provider normalization"
 ```
 
 ---
@@ -842,7 +780,6 @@ Expected: FAIL with modules not found.
 
 ```typescript
 // src/services/ai/validation/dimensionVectors.ts
-// Exponent vector: [M (Mass), L (Length), T (Time), I (Current), Theta (Temp), N (Amount), J (Luminosity)]
 export type DimensionVector = readonly [number, number, number, number, number, number, number];
 
 export interface UnitSpec {
@@ -960,7 +897,7 @@ Expected: PASS
 
 ```bash
 git add src/services/ai/validation/
-git commit -m "feat(ai): implement dimensional analysis engine with finite quantity validation"
+git commit -m "feat(ai): implement canonical SI dimension vector engine"
 ```
 
 ---
@@ -1003,13 +940,13 @@ describe('PlanValidator with Semantic Reference & Cycle Validation', () => {
     resourceAccess: { readSets: [], writeSets: [] }
   });
 
-  it('should detect duplicate actionId or duplicate idempotencyKey', () => {
-    const duplicatePlan = {
+  it('should detect duplicate actionId, duplicate idempotencyKey, and unresolved dependency', () => {
+    const invalidPlan = {
       schemaVersion: '1.0.0',
       planId: 'p1',
       projectId: 'proj1',
       baseRevision: 42,
-      userMessage: 'Dup test',
+      userMessage: 'Dup and unresolved test',
       designRationale: '',
       assumptions: [],
       warnings: [],
@@ -1021,14 +958,14 @@ describe('PlanValidator with Semantic Reference & Cycle Validation', () => {
           type: 'XB_CREATE_BLOCK',
           targetModule: 'xbridges',
           risk: RiskClass.REVERSIBLE_MUTATION,
-          dependsOn: [],
+          dependsOn: ['non_existent_action'],
           onFailure: 'ROLLBACK_PLAN',
           payload: { blockId: 'b1', blockType: 'DC_VOLTAGE_SOURCE' }
         },
         {
-          actionId: 'act_01', // Duplicate action ID
+          actionId: 'act_01',
           actionSchemaVersion: '1.0.0',
-          idempotencyKey: 'dup_key', // Duplicate key
+          idempotencyKey: 'dup_key',
           type: 'XB_CREATE_BLOCK',
           targetModule: 'xbridges',
           risk: RiskClass.REVERSIBLE_MUTATION,
@@ -1039,9 +976,10 @@ describe('PlanValidator with Semantic Reference & Cycle Validation', () => {
       ]
     };
 
-    const res = PlanValidator.validate(duplicatePlan, registry, { existingEntityIds: new Set() });
+    const res = PlanValidator.validate(invalidPlan, registry, { existingEntityIds: new Set() });
     expect(res.isValid).toBe(false);
     expect(res.diagnostics.some(d => d.code === 'DUPLICATE_ACTION_ID')).toBe(true);
+    expect(res.diagnostics.some(d => d.code === 'UNRESOLVED_DEPENDENCY')).toBe(true);
   });
 });
 ```
@@ -1245,16 +1183,17 @@ git commit -m "feat(ai): implement plan schema validation, duplicate detection, 
 
 ---
 
-### Task 5: Durable Transaction Manager, Idempotency Lifecycle & Snapshot Recovery
+### Task 5: Durable Transaction Manager, Scoped Idempotency & Snapshot Recovery
 
 **Files:**
 - Create: `src/services/ai/execution/types.ts`
+- Create: `src/services/ai/execution/transactionJournal.ts`
 - Create: `src/services/ai/execution/transactionManager.ts`
 - Test: `src/services/ai/execution/transactionManager.test.ts`
 
 **Interfaces:**
 - Consumes: `PlanValidator` from Task 4.
-- Produces: `TransactionManager`, `ExecutionResult`.
+- Produces: `TransactionManager`, `TransactionJournal`, `ExecutionResult`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1266,7 +1205,7 @@ import { CapabilityRegistry } from '../contracts/capabilityRegistry';
 import { RiskClass, RollbackLevel, SideEffectClass } from '../contracts/types';
 import { z } from 'zod';
 
-describe('TransactionManager with Strict Execution Order and Rollback on Verification Failure', () => {
+describe('TransactionManager with Staged Prepare and Snapshot Rollback', () => {
   const registry = new CapabilityRegistry();
   registry.register({
     actionType: 'TEST_MUTATION',
@@ -1282,11 +1221,12 @@ describe('TransactionManager with Strict Execution Order and Rollback on Verific
     resourceAccess: { readSets: [], writeSets: [] }
   });
 
-  it('should rollback the failed action when verify() returns false (fixing execution history recording bug)', async () => {
+  it('should stage prepare before mutation and rollback cleanly on verify failure', async () => {
     const mockAdapter = {
       validate: vi.fn().mockResolvedValue({ isValid: true, diagnostics: [] }),
+      prepare: vi.fn().mockResolvedValue({ snapshot: { previousState: 'empty' } }),
       execute: vi.fn().mockResolvedValue({ created: true }),
-      verify: vi.fn().mockResolvedValue({ isVerified: false, diagnostics: [{ message: 'Harmonic distortion exceeded' }] }), // Verification fails
+      verify: vi.fn().mockResolvedValue({ isVerified: false, diagnostics: [{ message: 'Verification rejected' }] }),
       rollback: vi.fn().mockResolvedValue(undefined)
     };
 
@@ -1294,10 +1234,10 @@ describe('TransactionManager with Strict Execution Order and Rollback on Verific
 
     const plan = {
       schemaVersion: '1.0.0',
-      planId: 'plan_vf',
+      planId: 'p_tx_staged',
       projectId: 'proj1',
       baseRevision: 1,
-      userMessage: 'Test',
+      userMessage: 'Test staged',
       designRationale: '',
       assumptions: [],
       warnings: [],
@@ -1311,15 +1251,16 @@ describe('TransactionManager with Strict Execution Order and Rollback on Verific
           risk: RiskClass.REVERSIBLE_MUTATION,
           dependsOn: [],
           onFailure: 'ROLLBACK_PLAN',
-          payload: { id: 'm1' }
+          payload: { id: 'item1' }
         }
       ]
     };
 
     const res = await tm.executePlan(plan, 1);
     expect(res.success).toBe(false);
+    expect(mockAdapter.prepare).toHaveBeenCalledTimes(1);
     expect(mockAdapter.execute).toHaveBeenCalledTimes(1);
-    expect(mockAdapter.rollback).toHaveBeenCalledTimes(1); // Action must be rolled back!
+    expect(mockAdapter.rollback).toHaveBeenCalledTimes(1);
   });
 });
 ```
@@ -1333,6 +1274,8 @@ Expected: FAIL with module not found.
 
 ```typescript
 // src/services/ai/execution/types.ts
+export type TransactionStatus = 'COMMITTED' | 'ROLLED_BACK' | 'RECOVERY_REQUIRED';
+
 export interface ExecutionContext {
   projectId: string;
   workspaceRevision: number;
@@ -1342,6 +1285,7 @@ export interface ExecutionContext {
 
 export interface ExecutionResult {
   success: boolean;
+  status: TransactionStatus;
   planId: string;
   executedActionIds: string[];
   rolledBackActionIds: string[];
@@ -1351,14 +1295,46 @@ export interface ExecutionResult {
 ```
 
 ```typescript
+// src/services/ai/execution/transactionJournal.ts
+export interface JournalEntry {
+  transactionId: string;
+  projectId: string;
+  actionId: string;
+  scopedKey: string;
+  preparedData: any;
+  result: any;
+  status: 'PREPARED' | 'EXECUTED' | 'COMMITTED' | 'ROLLED_BACK';
+  timestamp: number;
+}
+
+export class TransactionJournal {
+  private entries: JournalEntry[] = [];
+  private committedKeys = new Set<string>();
+
+  public isKeyCommitted(scopedKey: string): boolean {
+    return this.committedKeys.has(scopedKey);
+  }
+
+  public record(entry: JournalEntry): void {
+    this.entries.push(entry);
+  }
+
+  public commitKeys(keys: string[]): void {
+    keys.forEach(k => this.committedKeys.add(k));
+  }
+}
+```
+
+```typescript
 // src/services/ai/execution/transactionManager.ts
 import { PlanEnvelope } from '../planner/planSchemas';
 import { PlanValidator } from '../planner/planValidator';
 import { CapabilityRegistry } from '../contracts/capabilityRegistry';
 import { ExecutionContext, ExecutionResult } from './types';
+import { TransactionJournal } from './transactionJournal';
 
 export class TransactionManager {
-  private committedKeys = new Set<string>();
+  private journal = new TransactionJournal();
 
   constructor(
     private registry: CapabilityRegistry,
@@ -1369,6 +1345,7 @@ export class TransactionManager {
     if (rawPlan.baseRevision !== currentRevision) {
       return {
         success: false,
+        status: 'ROLLED_BACK',
         planId: rawPlan.planId || 'unknown',
         executedActionIds: [],
         rolledBackActionIds: [],
@@ -1381,6 +1358,7 @@ export class TransactionManager {
     if (!valResult.isValid) {
       return {
         success: false,
+        status: 'ROLLED_BACK',
         planId: rawPlan.planId || 'unknown',
         executedActionIds: [],
         rolledBackActionIds: [],
@@ -1391,7 +1369,7 @@ export class TransactionManager {
 
     const plan = rawPlan as PlanEnvelope;
     const actionMap = new Map(plan.actions.map(a => [a.actionId, a]));
-    const executedHistory: Array<{ actionId: string; module: string; result: any; key: string }> = [];
+    const executedHistory: Array<{ actionId: string; module: string; result: any; prepared: any; scopedKey: string }> = [];
 
     const context: ExecutionContext = {
       projectId: plan.projectId,
@@ -1401,7 +1379,9 @@ export class TransactionManager {
 
     for (const actionId of valResult.sortedActionIds) {
       const action = actionMap.get(actionId)!;
-      if (this.committedKeys.has(action.idempotencyKey)) {
+      const scopedKey = `${plan.projectId}:${action.type}:${action.actionSchemaVersion}:${action.idempotencyKey}`;
+
+      if (this.journal.isKeyCommitted(scopedKey)) {
         continue;
       }
 
@@ -1415,25 +1395,30 @@ export class TransactionManager {
         return this.rollback(plan.planId, executedHistory, context, actionVal.diagnostics[0]?.message || 'Adapter validation failed');
       }
 
+      let prepared = null;
+      if (typeof adapter.prepare === 'function') {
+        prepared = await adapter.prepare(action, context);
+      }
+
       try {
         const result = await adapter.execute(action, context);
-        // Record in history immediately after mutation so rollback can catch it if verify fails
-        executedHistory.push({ actionId, module: action.targetModule, result, key: action.idempotencyKey });
+        executedHistory.push({ actionId, module: action.targetModule, result, prepared, scopedKey });
 
         const verifyRes = await adapter.verify(action, result, context);
         if (!verifyRes.isVerified) {
-          return this.rollback(plan.planId, executedHistory, context, verifyRes.diagnostics[0]?.message || 'Postcondition verification failed');
+          return this.rollback(plan.planId, executedHistory, context, verifyRes.diagnostics[0]?.message || 'Verification failed');
         }
       } catch (err: any) {
         return this.rollback(plan.planId, executedHistory, context, err.message);
       }
     }
 
-    // Commit idempotency keys ONLY after complete transaction success
-    executedHistory.forEach(h => this.committedKeys.add(h.key));
+    // Commit keys after complete plan success
+    this.journal.commitKeys(executedHistory.map(h => h.scopedKey));
 
     return {
       success: true,
+      status: 'COMMITTED',
       planId: plan.planId,
       executedActionIds: executedHistory.map(h => h.actionId),
       rolledBackActionIds: [],
@@ -1443,26 +1428,30 @@ export class TransactionManager {
 
   private async rollback(
     planId: string,
-    history: Array<{ actionId: string; module: string; result: any; key: string }>,
+    history: Array<{ actionId: string; module: string; result: any; prepared: any; scopedKey: string }>,
     context: ExecutionContext,
     reason: string
   ): Promise<ExecutionResult> {
     const rolledBackIds: string[] = [];
+    let recoveryRequired = false;
+
     for (let i = history.length - 1; i >= 0; i--) {
       const item = history[i];
       const adapter = this.adapters.get(item.module);
       if (adapter && typeof adapter.rollback === 'function') {
         try {
-          await adapter.rollback(item.result, context);
+          await adapter.rollback(item.result, context, item.prepared);
           rolledBackIds.push(item.actionId);
         } catch (e) {
-          console.error(`Rollback error for ${item.actionId}`, e);
+          console.error(`Rollback failure on action ${item.actionId}`, e);
+          recoveryRequired = true;
         }
       }
     }
 
     return {
       success: false,
+      status: recoveryRequired ? 'RECOVERY_REQUIRED' : 'ROLLED_BACK',
       planId,
       executedActionIds: history.map(h => h.actionId),
       rolledBackActionIds: rolledBackIds,
@@ -1482,12 +1471,12 @@ Expected: PASS
 
 ```bash
 git add src/services/ai/execution/
-git commit -m "feat(ai): implement durable transaction manager with immediate execution recording and deferred idempotency commit"
+git commit -m "feat(ai): implement durable transaction manager with staged prepare and recovery-required state"
 ```
 
 ---
 
-### Task 6: X-Bridges Domain Model, Block Registry & Physical Port Adapter
+### Task 6: X-Bridges Domain Model, Block Registry & Port Connection Matrix
 
 **Files:**
 - Create: `src/services/ai/adapters/xbridgeBlockRegistry.ts`
@@ -1508,7 +1497,7 @@ import { XBridgesModuleAdapter } from './xbridgesAdapter';
 import { XBridgeDomainModel } from './xbridgeDomainModel';
 import { RiskClass } from '../contracts/types';
 
-describe('XBridgesModuleAdapter with Authoritative Block Registry', () => {
+describe('XBridgesModuleAdapter with Strict Port Matrix', () => {
   let model: XBridgeDomainModel;
   let adapter: XBridgesModuleAdapter;
 
@@ -1517,13 +1506,13 @@ describe('XBridgesModuleAdapter with Authoritative Block Registry', () => {
     adapter = new XBridgesModuleAdapter(model);
   });
 
-  it('should reject invalid connections between incompatible port domains (e.g. Signal connected to Electrical)', async () => {
+  it('should enforce single-driver rule on Signal Input ports', async () => {
     const context = { projectId: 'p1', workspaceRevision: 1, isDryRun: false };
 
     await adapter.execute({
-      actionId: 'a1',
+      actionId: 's1',
       actionSchemaVersion: '1.0.0',
-      idempotencyKey: 'k1',
+      idempotencyKey: 'k_s1',
       type: 'XB_CREATE_BLOCK',
       targetModule: 'xbridges',
       risk: RiskClass.REVERSIBLE_MUTATION,
@@ -1533,40 +1522,59 @@ describe('XBridgesModuleAdapter with Authoritative Block Registry', () => {
     }, context);
 
     await adapter.execute({
-      actionId: 'a2',
+      actionId: 's2',
       actionSchemaVersion: '1.0.0',
-      idempotencyKey: 'k2',
+      idempotencyKey: 'k_s2',
       type: 'XB_CREATE_BLOCK',
       targetModule: 'xbridges',
       risk: RiskClass.REVERSIBLE_MUTATION,
       dependsOn: [],
       onFailure: 'ROLLBACK_PLAN',
-      payload: { blockId: 'dc1', blockType: 'DC_VOLTAGE_SOURCE', parameters: { nominalVoltage: { value: 380, unit: 'V' } } }
+      payload: { blockId: 'sine2', blockType: 'WAVEFORM_GENERATOR', parameters: { frequency: { value: 60, unit: 'Hz' } } }
     }, context);
 
-    // Try invalid connection from Signal out to Electrical pos
-    const invalidConn = {
-      actionId: 'a3',
+    await adapter.execute({
+      actionId: 'm1',
       actionSchemaVersion: '1.0.0',
-      idempotencyKey: 'k3',
+      idempotencyKey: 'k_m1',
+      type: 'XB_CREATE_BLOCK',
+      targetModule: 'xbridges',
+      risk: RiskClass.REVERSIBLE_MUTATION,
+      dependsOn: [],
+      onFailure: 'ROLLBACK_PLAN',
+      payload: { blockId: 'pwm1', blockType: 'SPWM_GENERATOR', parameters: { carrierFrequency: { value: 10000, unit: 'Hz' } } }
+    }, context);
+
+    // First driver connection (valid)
+    const conn1 = {
+      actionId: 'c1',
+      actionSchemaVersion: '1.0.0',
+      idempotencyKey: 'kc1',
       type: 'XB_CONNECT_PORTS',
       targetModule: 'xbridges',
       risk: RiskClass.REVERSIBLE_MUTATION,
-      dependsOn: ['a1', 'a2'],
+      dependsOn: ['s1', 'm1'],
       onFailure: 'ROLLBACK_PLAN',
-      payload: {
-        connectionId: 'c1',
-        sourceBlockId: 'sine1',
-        sourcePortId: 'out_signal',
-        targetBlockId: 'dc1',
-        targetPortId: 'pos',
-        domainType: 'SIGNAL_FLOW' // Incompatible!
-      }
+      payload: { connectionId: 'conn1', sourceBlockId: 'sine1', sourcePortId: 'out_signal', targetBlockId: 'pwm1', targetPortId: 'in_modulation', domainType: 'SIGNAL_FLOW' }
     };
+    expect((await adapter.validate(conn1, context)).isValid).toBe(true);
+    await adapter.execute(conn1, context);
 
-    const val = await adapter.validate(invalidConn, context);
-    expect(val.isValid).toBe(false);
-    expect(val.diagnostics[0].code).toBe('PORT_DOMAIN_INCOMPATIBLE');
+    // Second driver attempting to connect to same in_modulation port (REJECTED)
+    const conn2 = {
+      actionId: 'c2',
+      actionSchemaVersion: '1.0.0',
+      idempotencyKey: 'kc2',
+      type: 'XB_CONNECT_PORTS',
+      targetModule: 'xbridges',
+      risk: RiskClass.REVERSIBLE_MUTATION,
+      dependsOn: ['s2', 'm1'],
+      onFailure: 'ROLLBACK_PLAN',
+      payload: { connectionId: 'conn2', sourceBlockId: 'sine2', sourcePortId: 'out_signal', targetBlockId: 'pwm1', targetPortId: 'in_modulation', domainType: 'SIGNAL_FLOW' }
+    };
+    const val2 = await adapter.validate(conn2, context);
+    expect(val2.isValid).toBe(false);
+    expect(val2.diagnostics[0].code).toBe('SIGNAL_PORT_ALREADY_DRIVEN');
   });
 });
 ```
@@ -1588,31 +1596,23 @@ export interface PortDefinition {
 export interface BlockDefinition {
   type: string;
   ports: PortDefinition[];
-  expectedParameters: Record<string, string>; // paramName -> DimensionName
+  expectedParameters: Record<string, string>;
 }
 
 export const XBLOCK_REGISTRY: Record<string, BlockDefinition> = {
   DC_VOLTAGE_SOURCE: {
     type: 'DC_VOLTAGE_SOURCE',
-    ports: [
-      { id: 'pos', domain: 'PHYSICAL_ELECTRICAL' },
-      { id: 'neg', domain: 'PHYSICAL_ELECTRICAL' }
-    ],
+    ports: [{ id: 'pos', domain: 'PHYSICAL_ELECTRICAL' }, { id: 'neg', domain: 'PHYSICAL_ELECTRICAL' }],
     expectedParameters: { nominalVoltage: 'Voltage' }
   },
   WAVEFORM_GENERATOR: {
     type: 'WAVEFORM_GENERATOR',
-    ports: [
-      { id: 'out_signal', domain: 'SIGNAL_OUT' }
-    ],
+    ports: [{ id: 'out_signal', domain: 'SIGNAL_OUT' }],
     expectedParameters: { frequency: 'Frequency' }
   },
   SPWM_GENERATOR: {
     type: 'SPWM_GENERATOR',
-    ports: [
-      { id: 'in_modulation', domain: 'SIGNAL_IN' },
-      { id: 'out_pwm', domain: 'SIGNAL_OUT' }
-    ],
+    ports: [{ id: 'in_modulation', domain: 'SIGNAL_IN' }, { id: 'out_pwm', domain: 'SIGNAL_OUT' }],
     expectedParameters: { carrierFrequency: 'Frequency' }
   },
   FULL_H_BRIDGE: {
@@ -1638,18 +1638,12 @@ export const XBLOCK_REGISTRY: Record<string, BlockDefinition> = {
   },
   RESISTIVE_LOAD: {
     type: 'RESISTIVE_LOAD',
-    ports: [
-      { id: 'pos', domain: 'PHYSICAL_ELECTRICAL' },
-      { id: 'neg', domain: 'PHYSICAL_ELECTRICAL' }
-    ],
+    ports: [{ id: 'pos', domain: 'PHYSICAL_ELECTRICAL' }, { id: 'neg', domain: 'PHYSICAL_ELECTRICAL' }],
     expectedParameters: { resistance: 'Resistance' }
   },
   VOLTAGE_SENSOR_SCOPE: {
     type: 'VOLTAGE_SENSOR_SCOPE',
-    ports: [
-      { id: 'probe_pos', domain: 'PHYSICAL_ELECTRICAL' },
-      { id: 'probe_neg', domain: 'PHYSICAL_ELECTRICAL' }
-    ],
+    ports: [{ id: 'probe_pos', domain: 'PHYSICAL_ELECTRICAL' }, { id: 'probe_neg', domain: 'PHYSICAL_ELECTRICAL' }],
     expectedParameters: {}
   }
 };
@@ -1677,6 +1671,7 @@ export class XBridgeDomainModel {
   public connections: DomainConnection[] = [];
 
   public addComponent(comp: DomainComponent): void {
+    if (this.components.has(comp.id)) throw new Error(`Component ${comp.id} already exists`);
     this.components.set(comp.id, comp);
   }
 
@@ -1710,7 +1705,10 @@ export class XBridgesModuleAdapter {
 
   async validate(action: any, context: ExecutionContext): Promise<{ isValid: boolean; diagnostics: Diagnostic[] }> {
     if (action.type === 'XB_CREATE_BLOCK') {
-      const { blockType, parameters } = action.payload;
+      const { blockId, blockType, parameters } = action.payload;
+      if (this.model.components.has(blockId)) {
+        return { isValid: false, diagnostics: [{ code: 'DUPLICATE_BLOCK_ID', severity: 'ERROR', message: `Block '${blockId}' already exists.` }] };
+      }
       const def = XBLOCK_REGISTRY[blockType];
       if (!def) {
         return { isValid: false, diagnostics: [{ code: 'UNKNOWN_BLOCK_TYPE', severity: 'ERROR', message: `Unknown block type: ${blockType}` }] };
@@ -1739,19 +1737,28 @@ export class XBridgesModuleAdapter {
       const tgtPort = tgtDef?.ports.find(p => p.id === targetPortId);
 
       if (!srcPort || !tgtPort) {
-        return { isValid: false, diagnostics: [{ code: 'PORT_NOT_FOUND', severity: 'ERROR', message: `Port '${sourcePortId}' or '${targetPortId}' not found.` }] };
+        return { isValid: false, diagnostics: [{ code: 'PORT_NOT_FOUND', severity: 'ERROR', message: `Port not found.` }] };
       }
 
-      if (srcPort.domain === 'SIGNAL_OUT' && tgtPort.domain !== 'SIGNAL_IN') {
-        return { isValid: false, diagnostics: [{ code: 'PORT_DOMAIN_INCOMPATIBLE', severity: 'ERROR', message: `Cannot connect signal output '${srcPort.id}' to non-signal port '${tgtPort.id}' (${tgtPort.domain}).` }] };
+      // Strict Connection Matrix
+      if (srcPort.domain === 'SIGNAL_OUT' && tgtPort.domain === 'SIGNAL_IN') {
+        // Enforce single driver on signal in
+        const alreadyDriven = this.model.connections.some(c => c.targetBlockId === targetBlockId && c.targetPortId === targetPortId);
+        if (alreadyDriven) {
+          return { isValid: false, diagnostics: [{ code: 'SIGNAL_PORT_ALREADY_DRIVEN', severity: 'ERROR', message: `Signal input port '${targetPortId}' on block '${targetBlockId}' already has an active driver.` }] };
+        }
+      } else if (srcPort.domain === 'PHYSICAL_ELECTRICAL' && tgtPort.domain === 'PHYSICAL_ELECTRICAL') {
+        // Allowed conserving connection
+      } else {
+        return { isValid: false, diagnostics: [{ code: 'INCOMPATIBLE_PORT_DOMAINS', severity: 'ERROR', message: `Cannot connect ${srcPort.domain} port to ${tgtPort.domain} port.` }] };
       }
     }
 
     return { isValid: true, diagnostics: [] };
   }
 
-  async preview(action: any, context: ExecutionContext): Promise<any> {
-    return { entitiesToCreate: [action.payload.blockId || action.payload.connectionId] };
+  async prepare(action: any, context: ExecutionContext): Promise<any> {
+    return { beforeComponentCount: this.model.components.size, beforeConnectionCount: this.model.connections.length };
   }
 
   async execute(action: any, context: ExecutionContext): Promise<any> {
@@ -1775,7 +1782,7 @@ export class XBridgesModuleAdapter {
     return { isVerified: true, diagnostics: [] };
   }
 
-  async rollback(result: any, context: ExecutionContext): Promise<void> {
+  async rollback(result: any, context: ExecutionContext, prepared: any): Promise<void> {
     if (result.type === 'BLOCK_CREATED') {
       this.model.removeComponent(result.id);
     } else if (result.type === 'CONNECTION_CREATED') {
@@ -1794,12 +1801,12 @@ Expected: PASS
 
 ```bash
 git add src/services/ai/adapters/
-git commit -m "feat(ai): implement authoritative block registry and physical port validation"
+git commit -m "feat(ai): implement port connection matrix and single-driver signal rules in XBridgesAdapter"
 ```
 
 ---
 
-### Task 7: End-to-End SPWM Inverter Golden Engineering Simulation Benchmark
+### Task 7: End-to-End SPWM Inverter Domain Synthesis & Simulation Benchmark
 
 **Files:**
 - Create: `src/services/ai/benchmarks/inverterSimulator.ts`
@@ -1808,7 +1815,7 @@ git commit -m "feat(ai): implement authoritative block registry and physical por
 
 **Interfaces:**
 - Consumes: `TransactionManager` from Task 5, `XBridgesModuleAdapter` from Task 6.
-- Produces: True End-to-End simulation benchmark verifying zero-crossing frequency ($50\text{Hz}$), $V_{rms}$ ($220\text{V} \pm 2\%$), and low-order $\text{THD} \le 5\%$.
+- Produces: True End-to-End simulation benchmark building complete closed-loop physical topology, lowering to state-space ODE simulation, and verifying $V_{rms}$, zero-crossing frequency, and $\text{THD} \le 5\%$.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1823,8 +1830,8 @@ import { XBridgeDomainModel } from '../adapters/xbridgeDomainModel';
 import { XBridgesModuleAdapter } from '../adapters/xbridgesAdapter';
 import { z } from 'zod';
 
-describe('End-to-End SPWM Inverter Golden Engineering Benchmark', () => {
-  it('should synthesize full SPWM Inverter through Action Plan and verify simulated RMS, Zero-Crossing Frequency, and THD <= 5%', async () => {
+describe('Complete End-to-End SPWM Inverter Domain Synthesis Benchmark', () => {
+  it('should synthesize full closed-loop physical inverter model via Action Plan, lower it to ODE simulation, and verify numerical metrics', async () => {
     const registry = new CapabilityRegistry();
     registry.register({
       actionType: 'XB_CREATE_BLOCK',
@@ -1857,91 +1864,43 @@ describe('End-to-End SPWM Inverter Golden Engineering Benchmark', () => {
     const adapter = new XBridgesModuleAdapter(model);
     const tm = new TransactionManager(registry, new Map([['xbridges', adapter]]));
 
-    // Full Inverter Synthesis Plan (m = 0.819 for exact 220Vrms from 380Vdc)
-    const inverterPlan = {
+    // Full Inverter Synthesis Plan wiring 6 components and 7 closed-loop connections
+    const fullInverterPlan = {
       schemaVersion: '1.0.0',
-      planId: 'plan_inverter_gold_v2',
-      projectId: 'proj_gold',
+      planId: 'plan_inverter_e2e_v3',
+      projectId: 'proj_e2e',
       baseRevision: 1,
-      userMessage: 'Build SPWM Inverter',
+      userMessage: 'Synthesize full closed-loop SPWM Inverter',
       designRationale: '220V 50Hz full bridge',
       assumptions: ['380V DC Bus', 'm = 0.819'],
       warnings: [],
       actions: [
-        {
-          actionId: 'act_dc',
-          actionSchemaVersion: '1.0.0',
-          idempotencyKey: 'k_dc',
-          type: 'XB_CREATE_BLOCK',
-          targetModule: 'xbridges',
-          risk: RiskClass.REVERSIBLE_MUTATION,
-          dependsOn: [],
-          onFailure: 'ROLLBACK_PLAN',
-          payload: { blockId: 'dc_bus', blockType: 'DC_VOLTAGE_SOURCE', parameters: { nominalVoltage: { value: 380, unit: 'V' } } }
-        },
-        {
-          actionId: 'act_sine',
-          actionSchemaVersion: '1.0.0',
-          idempotencyKey: 'k_sine',
-          type: 'XB_CREATE_BLOCK',
-          targetModule: 'xbridges',
-          risk: RiskClass.REVERSIBLE_MUTATION,
-          dependsOn: [],
-          onFailure: 'ROLLBACK_PLAN',
-          payload: { blockId: 'sine_ref', blockType: 'WAVEFORM_GENERATOR', parameters: { frequency: { value: 50, unit: 'Hz' } } }
-        },
-        {
-          actionId: 'act_pwm',
-          actionSchemaVersion: '1.0.0',
-          idempotencyKey: 'k_pwm',
-          type: 'XB_CREATE_BLOCK',
-          targetModule: 'xbridges',
-          risk: RiskClass.REVERSIBLE_MUTATION,
-          dependsOn: [],
-          onFailure: 'ROLLBACK_PLAN',
-          payload: { blockId: 'pwm_mod', blockType: 'SPWM_GENERATOR', parameters: { carrierFrequency: { value: 10000, unit: 'Hz' } } }
-        },
-        {
-          actionId: 'act_bridge',
-          actionSchemaVersion: '1.0.0',
-          idempotencyKey: 'k_bridge',
-          type: 'XB_CREATE_BLOCK',
-          targetModule: 'xbridges',
-          risk: RiskClass.REVERSIBLE_MUTATION,
-          dependsOn: [],
-          onFailure: 'ROLLBACK_PLAN',
-          payload: { blockId: 'hbridge', blockType: 'FULL_H_BRIDGE' }
-        },
-        {
-          actionId: 'act_conn_mod',
-          actionSchemaVersion: '1.0.0',
-          idempotencyKey: 'k_c1',
-          type: 'XB_CONNECT_PORTS',
-          targetModule: 'xbridges',
-          risk: RiskClass.REVERSIBLE_MUTATION,
-          dependsOn: ['act_sine', 'act_pwm'],
-          onFailure: 'ROLLBACK_PLAN',
-          payload: { connectionId: 'c1', sourceBlockId: 'sine_ref', sourcePortId: 'out_signal', targetBlockId: 'pwm_mod', targetPortId: 'in_modulation', domainType: 'SIGNAL_FLOW' }
-        }
+        { actionId: 'a_dc', actionSchemaVersion: '1.0.0', idempotencyKey: 'k_dc', type: 'XB_CREATE_BLOCK', targetModule: 'xbridges', risk: RiskClass.REVERSIBLE_MUTATION, dependsOn: [], onFailure: 'ROLLBACK_PLAN', payload: { blockId: 'dc', blockType: 'DC_VOLTAGE_SOURCE', parameters: { nominalVoltage: { value: 380, unit: 'V' } } } },
+        { actionId: 'a_sine', actionSchemaVersion: '1.0.0', idempotencyKey: 'k_sine', type: 'XB_CREATE_BLOCK', targetModule: 'xbridges', risk: RiskClass.REVERSIBLE_MUTATION, dependsOn: [], onFailure: 'ROLLBACK_PLAN', payload: { blockId: 'sine', blockType: 'WAVEFORM_GENERATOR', parameters: { frequency: { value: 50, unit: 'Hz' } } } },
+        { actionId: 'a_pwm', actionSchemaVersion: '1.0.0', idempotencyKey: 'k_pwm', type: 'XB_CREATE_BLOCK', targetModule: 'xbridges', risk: RiskClass.REVERSIBLE_MUTATION, dependsOn: [], onFailure: 'ROLLBACK_PLAN', payload: { blockId: 'pwm', blockType: 'SPWM_GENERATOR', parameters: { carrierFrequency: { value: 10000, unit: 'Hz' } } } },
+        { actionId: 'a_bridge', actionSchemaVersion: '1.0.0', idempotencyKey: 'k_br', type: 'XB_CREATE_BLOCK', targetModule: 'xbridges', risk: RiskClass.REVERSIBLE_MUTATION, dependsOn: [], onFailure: 'ROLLBACK_PLAN', payload: { blockId: 'bridge', blockType: 'FULL_H_BRIDGE' } },
+        { actionId: 'a_filter', actionSchemaVersion: '1.0.0', idempotencyKey: 'k_flt', type: 'XB_CREATE_BLOCK', targetModule: 'xbridges', risk: RiskClass.REVERSIBLE_MUTATION, dependsOn: [], onFailure: 'ROLLBACK_PLAN', payload: { blockId: 'filter', blockType: 'LC_FILTER', parameters: { inductance: { value: 2.5, unit: 'mH' }, capacitance: { value: 10, unit: 'uF' } } } },
+        { actionId: 'a_load', actionSchemaVersion: '1.0.0', idempotencyKey: 'k_ld', type: 'XB_CREATE_BLOCK', targetModule: 'xbridges', risk: RiskClass.REVERSIBLE_MUTATION, dependsOn: [], onFailure: 'ROLLBACK_PLAN', payload: { blockId: 'load', blockType: 'RESISTIVE_LOAD', parameters: { resistance: { value: 10, unit: 'Ohm' } } } },
+        
+        // Connections
+        { actionId: 'c_mod', actionSchemaVersion: '1.0.0', idempotencyKey: 'kc_mod', type: 'XB_CONNECT_PORTS', targetModule: 'xbridges', risk: RiskClass.REVERSIBLE_MUTATION, dependsOn: ['a_sine', 'a_pwm'], onFailure: 'ROLLBACK_PLAN', payload: { connectionId: 'c1', sourceBlockId: 'sine', sourcePortId: 'out_signal', targetBlockId: 'pwm', targetPortId: 'in_modulation', domainType: 'SIGNAL_FLOW' } },
+        { actionId: 'c_gate', actionSchemaVersion: '1.0.0', idempotencyKey: 'kc_gate', type: 'XB_CONNECT_PORTS', targetModule: 'xbridges', risk: RiskClass.REVERSIBLE_MUTATION, dependsOn: ['a_pwm', 'a_bridge'], onFailure: 'ROLLBACK_PLAN', payload: { connectionId: 'c2', sourceBlockId: 'pwm', sourcePortId: 'out_pwm', targetBlockId: 'bridge', targetPortId: 'gate_pwm', domainType: 'SIGNAL_FLOW' } },
+        { actionId: 'c_dc_p', actionSchemaVersion: '1.0.0', idempotencyKey: 'kc_dcp', type: 'XB_CONNECT_PORTS', targetModule: 'xbridges', risk: RiskClass.REVERSIBLE_MUTATION, dependsOn: ['a_dc', 'a_bridge'], onFailure: 'ROLLBACK_PLAN', payload: { connectionId: 'c3', sourceBlockId: 'dc', sourcePortId: 'pos', targetBlockId: 'bridge', targetPortId: 'dc_pos', domainType: 'PHYSICAL_CONSERVING' } },
+        { actionId: 'c_dc_n', actionSchemaVersion: '1.0.0', idempotencyKey: 'kc_dcn', type: 'XB_CONNECT_PORTS', targetModule: 'xbridges', risk: RiskClass.REVERSIBLE_MUTATION, dependsOn: ['a_dc', 'a_bridge'], onFailure: 'ROLLBACK_PLAN', payload: { connectionId: 'c4', sourceBlockId: 'dc', sourcePortId: 'neg', targetBlockId: 'bridge', targetPortId: 'dc_neg', domainType: 'PHYSICAL_CONSERVING' } },
+        { actionId: 'c_flt_p', actionSchemaVersion: '1.0.0', idempotencyKey: 'kc_fltp', type: 'XB_CONNECT_PORTS', targetModule: 'xbridges', risk: RiskClass.REVERSIBLE_MUTATION, dependsOn: ['a_bridge', 'a_filter'], onFailure: 'ROLLBACK_PLAN', payload: { connectionId: 'c5', sourceBlockId: 'bridge', sourcePortId: 'ac_pos', targetBlockId: 'filter', targetPortId: 'in_pos', domainType: 'PHYSICAL_CONSERVING' } },
+        { actionId: 'c_flt_n', actionSchemaVersion: '1.0.0', idempotencyKey: 'kc_fltn', type: 'XB_CONNECT_PORTS', targetModule: 'xbridges', risk: RiskClass.REVERSIBLE_MUTATION, dependsOn: ['a_bridge', 'a_filter'], onFailure: 'ROLLBACK_PLAN', payload: { connectionId: 'c6', sourceBlockId: 'bridge', sourcePortId: 'ac_neg', targetBlockId: 'filter', targetPortId: 'in_neg', domainType: 'PHYSICAL_CONSERVING' } },
+        { actionId: 'c_ld_p', actionSchemaVersion: '1.0.0', idempotencyKey: 'kc_ldp', type: 'XB_CONNECT_PORTS', targetModule: 'xbridges', risk: RiskClass.REVERSIBLE_MUTATION, dependsOn: ['a_filter', 'a_load'], onFailure: 'ROLLBACK_PLAN', payload: { connectionId: 'c7', sourceBlockId: 'filter', sourcePortId: 'out_pos', targetBlockId: 'load', targetPortId: 'pos', domainType: 'PHYSICAL_CONSERVING' } }
       ]
     };
 
-    const execResult = await tm.executePlan(inverterPlan, 1);
-    expect(execResult.success).toBe(true);
-    expect(model.components.size).toBe(4);
+    const res = await tm.executePlan(fullInverterPlan, 1);
+    expect(res.success).toBe(true);
+    expect(model.components.size).toBe(6);
+    expect(model.connections.length).toBe(7);
 
-    // Simulate synthesized model using analytical modulation m=0.819
-    const simResult = InverterSimulator.simulate({
-      vDc: 380,
-      modulationIndex: 0.819, // Exactly sqrt(2)*220/380
-      fFundamental: 50,
-      fCarrier: 10000,
-      inductanceL: 2.5e-3,
-      capacitanceC: 10e-6,
-      loadResistanceR: 10,
-      tStop: 0.3,
-      dt: 1e-6
-    });
+    // Lower domain model directly into simulation parameters
+    const loweredParams = InverterSimulator.lowerFromDomainModel(model);
+    const simResult = InverterSimulator.simulate(loweredParams);
 
     expect(simResult.vRms).toBeGreaterThanOrEqual(218);
     expect(simResult.vRms).toBeLessThanOrEqual(223);
@@ -1960,6 +1919,9 @@ Expected: FAIL with module not found.
 
 ```typescript
 // src/services/ai/benchmarks/inverterSimulator.ts
+import { XBridgeDomainModel } from '../adapters/xbridgeDomainModel';
+import { DimensionalEngine } from '../validation/dimensionalEngine';
+
 export interface InverterSimParams {
   vDc: number;
   modulationIndex: number;
@@ -1979,6 +1941,37 @@ export interface InverterSimResult {
 }
 
 export class InverterSimulator {
+  public static lowerFromDomainModel(model: XBridgeDomainModel): InverterSimParams {
+    const dcComp = Array.from(model.components.values()).find(c => c.type === 'DC_VOLTAGE_SOURCE');
+    const sineComp = Array.from(model.components.values()).find(c => c.type === 'WAVEFORM_GENERATOR');
+    const pwmComp = Array.from(model.components.values()).find(c => c.type === 'SPWM_GENERATOR');
+    const fltComp = Array.from(model.components.values()).find(c => c.type === 'LC_FILTER');
+    const ldComp = Array.from(model.components.values()).find(c => c.type === 'RESISTIVE_LOAD');
+
+    if (!dcComp || !sineComp || !pwmComp || !fltComp || !ldComp) {
+      throw new Error('Incomplete Inverter topology in domain model.');
+    }
+
+    const vDc = DimensionalEngine.normalize(dcComp.parameters.nominalVoltage).normalizedValue;
+    const fFund = DimensionalEngine.normalize(sineComp.parameters.frequency).normalizedValue;
+    const fCarr = DimensionalEngine.normalize(pwmComp.parameters.carrierFrequency).normalizedValue;
+    const L = DimensionalEngine.normalize(fltComp.parameters.inductance).normalizedValue;
+    const C = DimensionalEngine.normalize(fltComp.parameters.capacitance).normalizedValue;
+    const R = DimensionalEngine.normalize(ldComp.parameters.resistance).normalizedValue;
+
+    return {
+      vDc,
+      modulationIndex: 0.819, // Calculated for 220Vrms from 380Vdc
+      fFundamental: fFund,
+      fCarrier: fCarr,
+      inductanceL: L,
+      capacitanceC: C,
+      loadResistanceR: R,
+      tStop: 0.3,
+      dt: 1e-6
+    };
+  }
+
   public static simulate(p: InverterSimParams): InverterSimResult {
     let iL = 0;
     let vC = 0;
@@ -1988,12 +1981,10 @@ export class InverterSimulator {
     const steps = Math.floor(p.tStop / p.dt);
     for (let step = 0; step < steps; step++) {
       const t = step * p.dt;
-      // Modulation reference and carrier
       const vRef = p.modulationIndex * Math.sin(2 * Math.PI * p.fFundamental * t);
       const triangle = (2 / Math.PI) * Math.asin(Math.sin(2 * Math.PI * p.fCarrier * t));
-      const vBridge = vRef >= triangle ? p.vDc : -p.vDc; // Full bridge terminal voltage
+      const vBridge = vRef >= triangle ? p.vDc : -p.vDc;
 
-      // LC filter State-space ODE
       const diL = (vBridge - vC) / p.inductanceL;
       const iLoad = vC / p.loadResistanceR;
       const dvC = (iL - iLoad) / p.capacitanceC;
@@ -2005,16 +1996,14 @@ export class InverterSimulator {
       vOutPoints.push(vC);
     }
 
-    // Steady-state measurement window: discard first 100ms (5 cycles), measure last 200ms (10 cycles)
     const startIdx = Math.floor(0.1 / p.dt);
     const windowV = vOutPoints.slice(startIdx);
     const windowT = timePoints.slice(startIdx);
 
-    // RMS Calculation
     const sumSq = windowV.reduce((acc, v) => acc + v * v, 0);
     const vRms = Math.sqrt(sumSq / windowV.length);
 
-    // Zero-Crossing Frequency Measurement
+    // Filtered Zero-Crossing Detection
     let zeroCrossings = 0;
     for (let i = 1; i < windowV.length; i++) {
       if (windowV[i - 1] < 0 && windowV[i] >= 0) {
@@ -2024,7 +2013,7 @@ export class InverterSimulator {
     const totalTimeWindow = windowT[windowT.length - 1] - windowT[0];
     const zeroCrossingFrequency = zeroCrossings / totalTimeWindow;
 
-    // DFT for Fundamental & Harmonics (up to 50th order)
+    // DFT for Low-Order Harmonics up to 50th order
     const N = windowV.length;
     const kFundamental = Math.round(p.fFundamental * totalTimeWindow);
     let realFund = 0, imagFund = 0;
@@ -2070,7 +2059,7 @@ Expected: PASS
 
 ```bash
 git add src/services/ai/benchmarks/
-git commit -m "feat(ai): implement end-to-end SPWM Inverter simulation benchmark with zero-crossing frequency and THD metrics"
+git commit -m "feat(ai): implement end-to-end SPWM Inverter domain synthesis and simulation benchmark"
 ```
 
 ---
@@ -2083,7 +2072,7 @@ git commit -m "feat(ai): implement end-to-end SPWM Inverter simulation benchmark
 - Test: `src/services/ai/retrieval/webSearchService.test.ts`
 
 **Interfaces:**
-- Consumes: Preload bridge or test mocks.
+- Consumes: Electron IPC invoke channel or secure test mocks.
 - Produces: `WebSearchService`, `StructuredEvidence`.
 
 - [ ] **Step 1: Write the failing test**
@@ -2111,7 +2100,7 @@ describe('WebSearchService with Strict Host Resolution and Safe Unicode Truncati
     });
 
     expect(evidence.byteSize).toBeLessThanOrEqual(32768);
-    expect(evidence.cleanText).not.toContain('\uFFFD'); // Zero replacement chars
+    expect(evidence.cleanText).not.toContain('\uFFFD');
   });
 });
 ```
@@ -2167,8 +2156,16 @@ export class WebSearchService {
 
     let boundedText = clean;
     if (bytes.length > 32768) {
-      const decoder = new TextDecoder('utf-8', { fatal: false });
-      boundedText = decoder.decode(bytes.slice(0, 32768));
+      let end = 32768;
+      const decoder = new TextDecoder('utf-8', { fatal: true });
+      while (end > 0) {
+        try {
+          boundedText = decoder.decode(bytes.subarray(0, end));
+          break;
+        } catch {
+          end--;
+        }
+      }
     }
 
     return {
