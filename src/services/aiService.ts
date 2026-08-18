@@ -155,9 +155,19 @@ export async function getLocalAiResponse(
   baseUrl: string,
   model: string,
   history: any[],
-  currentContext: any
+  currentContext: any,
+  apiKey?: string
 ): Promise<string> {
-  let cleanBase = (baseUrl.trim() || "http://localhost:1234").replace(/\/+$/, '');
+  let cleanBase = baseUrl.trim();
+  let token = apiKey?.trim();
+
+  // If user pasted an API token into the URL box
+  if (cleanBase.startsWith('sk-') || cleanBase.startsWith('lm-')) {
+    token = cleanBase;
+    cleanBase = 'http://localhost:1234';
+  }
+
+  cleanBase = (cleanBase || "http://localhost:1234").replace(/\/+$/, '');
   cleanBase = cleanBase.replace(/\/api\/v1\/chat\/?$/, '').replace(/\/v1\/chat\/completions\/?$/, '').replace(/\/v1\/?$/, '');
 
   const endpoint = `${cleanBase}/v1/chat/completions`;
@@ -185,9 +195,14 @@ export async function getLocalAiResponse(
 
   console.log("Calling Local LLM at", endpoint, "with model", selectedModel);
 
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       model: selectedModel,
       messages,

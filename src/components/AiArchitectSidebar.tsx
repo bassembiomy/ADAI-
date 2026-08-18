@@ -318,7 +318,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                         value={localBaseUrl}
                         onChange={(e) => setLocalBaseUrl(e.target.value)}
                         className="w-full bg-black border border-[#333] rounded-lg px-3 py-1.5 text-xs text-white focus:border-purple-500/50 outline-none"
-                        placeholder="http://localhost:1234/api/v1/chat"
+                        placeholder="http://localhost:1234"
                       />
                     </div>
                     <div>
@@ -338,7 +338,7 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                           <select
                             value={localModel}
                             onChange={(e) => setLocalModel(e.target.value)}
-                            className="flex-1 bg-black border border-[#333] rounded-lg px-3 py-1.5 text-xs text-white focus:border-purple-500/50 outline-none"
+                            className="w-full bg-black border border-[#333] rounded-lg px-3 py-1.5 text-xs text-white focus:border-purple-500/50 outline-none"
                           >
                             {localModels.map((m) => (
                               <option key={m} value={m}>{m}</option>
@@ -349,10 +349,9 @@ export const AiArchitectSidebar: React.FC<AiArchitectSidebarProps> = ({
                             type="text"
                             value={localModel}
                             onChange={(e) => setLocalModel(e.target.value)}
-                            className="flex-1 bg-black border border-[#333] rounded-lg px-3 py-1.5 text-xs text-white focus:border-purple-500/50 outline-none"
-                            placeholder="e.g. qwen3-8b"
+                            className="w-full bg-black border border-[#333] rounded-lg px-3 py-1.5 text-xs text-white focus:border-purple-500/50 outline-none"
+                            placeholder="google/gemma-4-e4b"
                           />
-                        )}
                       </div>
                     </div>
                   </div>
