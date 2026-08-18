@@ -164,14 +164,13 @@ export async function getLocalAiResponse(
   // If user pasted an API token into the URL box
   if (cleanBase.startsWith('sk-') || cleanBase.startsWith('lm-')) {
     token = cleanBase;
-    cleanBase = 'http://localhost:1234';
+    cleanBase = 'http://127.0.0.1:1234';
   }
 
   cleanBase = (cleanBase || "http://127.0.0.1:1234").replace(/\/+$/, '');
   cleanBase = cleanBase.replace('localhost', '127.0.0.1');
   cleanBase = cleanBase.replace(/\/api\/v1\/chat\/?$/, '').replace(/\/v1\/chat\/completions\/?$/, '').replace(/\/v1\/?$/, '');
 
-  const endpoint = `${cleanBase}/v1/chat/completions`;
   const selectedModel = model || "google/gemma-4-e4b";
 
   const messages: any[] = [
@@ -194,6 +193,26 @@ export async function getLocalAiResponse(
     }
   }
 
+  // 1. Try Electron IPC (bypasses browser CORS completely)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const electron = (window as any).require?.('electron');
+    if (electron?.ipcRenderer) {
+      const res = await electron.ipcRenderer.invoke('local-llm-chat', {
+        baseUrl: cleanBase,
+        model: selectedModel,
+        messages,
+        apiKey: token
+      });
+      if (res.success) return res.content;
+      throw new Error(res.error || 'IPC Local LLM call failed');
+    }
+  } catch (ipcErr: any) {
+    console.warn("IPC local-llm-chat fallback to fetch:", ipcErr.message);
+  }
+
+  // 2. Direct fetch fallback
+  const endpoint = `${cleanBase}/v1/chat/completions`;
   console.log("Calling Local LLM at", endpoint, "with model", selectedModel);
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -217,8 +236,6 @@ export async function getLocalAiResponse(
   }
 
   const data = await response.json();
-  console.log("Local AI Response Data:", data);
-
   if (data.choices && data.choices[0]?.message?.content) {
     return data.choices[0].message.content;
   }
@@ -232,13 +249,24 @@ export async function getLocalAiResponse(
 export async function fetchLocalModels(baseUrl: string): Promise<string[]> {
   try {
     let cleanUrl = baseUrl.trim().replace('localhost', '127.0.0.1') || "http://127.0.0.1:1234";
-    // Remove the chat endpoint suffix if present to find the base path
-    cleanUrl = cleanUrl.replace(/\/api\/v1\/chat\/?$/, '');
-    cleanUrl = cleanUrl.replace(/\/v1\/chat\/completions\/?$/, '');
-    cleanUrl = cleanUrl.replace(/\/+$/, '');
-    
-    // Try common endpoints to fetch models list
-    for (const path of ['/api/v1/models', '/v1/models', '/models']) {
+    cleanUrl = cleanUrl.replace(/\/api\/v1\/chat\/?$/, '').replace(/\/v1\/chat\/completions\/?$/, '').replace(/\/+$/, '');
+
+    // Try Electron IPC first
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const electron = (window as any).require?.('electron');
+      if (electron?.ipcRenderer) {
+        const res = await electron.ipcRenderer.invoke('local-llm-models', { baseUrl: cleanUrl });
+        if (res.success && Array.isArray(res.models) && res.models.length > 0) {
+          return res.models;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // Direct fetch fallback
+    for (const path of ['/v1/models', '/api/v1/models', '/models']) {
       try {
         const response = await fetch(`${cleanUrl}${path}`);
         if (!response.ok) continue;
@@ -246,7 +274,7 @@ export async function fetchLocalModels(baseUrl: string): Promise<string[]> {
         if (data && Array.isArray(data.data)) {
           return data.data.map((m: any) => m.id);
         }
-      } catch (e) {
+      } catch {
         // Try next path
       }
     }

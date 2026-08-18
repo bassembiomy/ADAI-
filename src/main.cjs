@@ -2107,6 +2107,58 @@ ipcMain.handle('openai-chat-completion', async (_, { apiKey, messages, baseUrl, 
   }
 });
 
+ipcMain.handle('local-llm-chat', async (_, { baseUrl, model, messages, apiKey }) => {
+  try {
+    let cleanBase = (baseUrl || "http://127.0.0.1:1234").trim().replace(/\/+$/, '');
+    cleanBase = cleanBase.replace('localhost', '127.0.0.1');
+    cleanBase = cleanBase.replace(/\/api\/v1\/chat\/?$/, '').replace(/\/v1\/chat\/completions\/?$/, '').replace(/\/v1\/?$/, '');
+
+    const endpoint = `${cleanBase}/v1/chat/completions`;
+    const selectedModel = model || "google/gemma-4-e4b";
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: selectedModel,
+        messages,
+        temperature: 0.7
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return { success: false, error: `Local LLM HTTP ${response.status}: ${errText}` };
+    }
+
+    const data = await response.json();
+    if (data.choices && data.choices[0]?.message?.content) {
+      return { success: true, content: data.choices[0].message.content };
+    }
+    if (data.response) return { success: true, content: data.response };
+    return { success: true, content: JSON.stringify(data) };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('local-llm-models', async (_, { baseUrl }) => {
+  try {
+    let cleanBase = (baseUrl || "http://127.0.0.1:1234").trim().replace('localhost', '127.0.0.1');
+    cleanBase = cleanBase.replace(/\/api\/v1\/chat\/?$/, '').replace(/\/v1\/chat\/completions\/?$/, '').replace(/\/+$/, '');
+    const response = await fetch(`${cleanBase}/v1/models`);
+    if (!response.ok) return { success: false, models: [] };
+    const data = await response.json();
+    const models = Array.isArray(data.data) ? data.data.map(m => m.id) : [];
+    return { success: true, models };
+  } catch (err) {
+    return { success: false, models: [], error: err.message };
+  }
+});
+
 ipcMain.handle('sm-verify-generated-c', async (_, payload) => {
   const role = await getCurrentRole();
   const perm = checkPermission(role, 'codegen', 'verify');
