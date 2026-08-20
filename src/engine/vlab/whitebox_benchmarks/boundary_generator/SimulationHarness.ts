@@ -19,16 +19,34 @@ export class SimulationHarness {
       const currentTime = (step + 1) * boundary.dt;
       time.push(currentTime);
 
+      const sys = (engine as any)['currentSystem'];
+
       boundary.probes.forEach((probe) => {
         let val = 0;
         let found = false;
 
-        // 1. Check scopeValues
-        if (state?.scopeValues !== undefined && state?.scopeValues !== null) {
-          if (typeof state.scopeValues === 'number') {
-            val = state.scopeValues;
+        // 1. Check exact match in system.variableNames first
+        if (state?.x && sys?.variableNames) {
+          let varIdx = sys.variableNames.findIndex((name: string) => name === probe.variableName);
+          if (varIdx === -1) {
+            varIdx = sys.variableNames.findIndex((name: string) => name.includes(probe.variableName));
+          }
+          if (varIdx === -1) {
+            varIdx = sys.variableNames.findIndex(
+              (name: string) =>
+                name.startsWith(`${probe.sourceNodeId}_`) ||
+                name.includes(`Across_${probe.sourceNodeId}_`)
+            );
+          }
+          if (varIdx !== -1) {
+            val = state.x[varIdx];
             found = true;
-          } else if (typeof state.scopeValues === 'object') {
+          }
+        }
+
+        // 2. Check scopeValues if not resolved directly
+        if (!found && state?.scopeValues !== undefined && state?.scopeValues !== null) {
+          if (typeof state.scopeValues === 'object') {
             if (probe.variableName in state.scopeValues) {
               val = Number(state.scopeValues[probe.variableName]);
               found = true;
@@ -39,20 +57,8 @@ export class SimulationHarness {
               val = Number(state.scopeValues.value);
               found = true;
             }
-          }
-        }
-
-        // 2. Check currentSystem variable names & state.x
-        if (!found && state?.x && (engine as any)['currentSystem']) {
-          const sys = (engine as any)['currentSystem'];
-          const varIdx = sys.variableNames.findIndex(
-            (name: string) =>
-              name.includes(probe.variableName) ||
-              name.includes(probe.sourceNodeId) ||
-              (probe.sourceHandle && name.includes(probe.sourceHandle))
-          );
-          if (varIdx !== -1) {
-            val = state.x[varIdx];
+          } else if (typeof state.scopeValues === 'number') {
+            val = state.scopeValues;
             found = true;
           }
         }
