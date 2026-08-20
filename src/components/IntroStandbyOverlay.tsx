@@ -109,67 +109,59 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
       {/* 3D Particle Galaxy Canvas */}
       <GalaxyStandbyCanvas />
 
-      {/* Atmospheric Vignette and Lighting */}
+      {/* Subtle atmospheric ambient glow */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,0,0,0.45)_0%,rgba(2,2,4,0.75)_55%,rgba(2,2,4,0.95)_100%)]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-orange-500/10 rounded-full blur-[140px] pointer-events-none animate-pulse" style={{ animationDuration: '4s' }} />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-orange-600/10 rounded-full blur-[160px] pointer-events-none animate-pulse" style={{ animationDuration: '4s' }} />
       </div>
 
-      <div className="relative z-10 flex flex-col items-center justify-center text-center px-6 max-w-xl select-none">
+      <div className="relative z-10 flex flex-col items-center justify-center text-center px-6 max-w-lg select-none -translate-y-10 sm:-translate-y-16">
         
-        {/* Cinematic Title & Tagline Card with Frosted Backdrop */}
-        <div className="mb-8 px-8 py-6 rounded-3xl bg-black/35 backdrop-blur-md border border-white/5 shadow-[0_20px_60px_rgba(0,0,0,0.7)] flex flex-col items-center">
-          
-          <h1 className="text-7xl sm:text-8xl md:text-9xl font-black tracking-[0.25em] text-transparent bg-clip-text bg-gradient-to-b from-white via-[#fff7ed] to-[#fcd34d] drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] drop-shadow-[0_12px_45px_rgba(249,115,22,0.45)] mb-2 animate-fade-in-up pl-[0.25em]">
+        {/* Floating Typography Raised Upwards */}
+        <div className="mb-12">
+          <h1 className="text-7xl sm:text-8xl font-black tracking-[0.25em] text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-amber-200 drop-shadow-[0_10px_35px_rgba(249,115,22,0.4)] mb-3 animate-fade-in-up pl-[0.25em]">
             ADIA
           </h1>
-
-          <div className="flex items-center gap-3 w-full justify-center animate-fade-in-delayed mt-1">
-            <span className="h-[1px] w-8 sm:w-16 bg-gradient-to-r from-transparent to-amber-500/60" />
-            <p className="text-xs sm:text-sm font-semibold text-amber-400 tracking-[0.55em] uppercase pl-[0.55em] drop-shadow-[0_2px_12px_rgba(249,115,22,0.5)]">
-              GO BEYOND
-            </p>
-            <span className="h-[1px] w-8 sm:w-16 bg-gradient-to-l from-transparent to-amber-500/60" />
-          </div>
-
+          <p className="text-sm sm:text-base font-light text-orange-400 tracking-[0.7em] lowercase pl-[0.7em] drop-shadow-[0_2px_10px_rgba(249,115,22,0.3)] animate-fade-in-delayed">
+            go beyond
+          </p>
         </div>
 
         {mode === 'intro' ? (
           <div className="flex flex-col items-center gap-4 w-full animate-fade-in-delayed-more" onClick={(e) => e.stopPropagation()}>
             {/* Terminal Log Container */}
-            <div className="w-84 max-w-full h-32 bg-black/60 border border-orange-500/20 rounded-xl p-3.5 font-mono text-[11px] text-left text-orange-400/90 overflow-y-auto flex flex-col justify-end gap-1 shadow-2xl backdrop-blur-md">
+            <div className="w-80 max-w-full h-32 bg-black/40 border border-orange-500/15 rounded-xl p-3.5 font-mono text-[10px] text-left text-orange-400/85 overflow-y-auto flex flex-col justify-end gap-1 shadow-inner backdrop-blur-sm">
               {logs.map((log, idx) => (
-                <div key={idx} className="flex items-center gap-1.5 opacity-70">
-                  <span className="text-amber-500 font-bold">&gt;</span>
+                <div key={idx} className="flex items-center gap-1.5 opacity-65">
+                  <span className="text-amber-500/80 font-bold">&gt;</span>
                   <span>{log}</span>
                 </div>
               ))}
               {logIndex < bootLogs.length && (
-                <div className="flex items-center gap-1.5 text-amber-300 font-semibold">
+                <div className="flex items-center gap-1.5 text-orange-400 font-medium">
                   <span className="text-amber-400 font-bold animate-pulse">&gt;</span>
                   <span>
                     {currentLine}
-                    <span className="inline-block w-1.5 h-3.5 bg-amber-400 animate-pulse ml-0.5" />
+                    <span className="inline-block w-1.5 h-3.5 bg-orange-400 animate-pulse ml-0.5" />
                   </span>
                 </div>
               )}
             </div>
 
             {/* Click to skip indicator */}
-            <span className="text-[9px] font-mono text-white/40 uppercase tracking-[0.15em] mt-1 animate-pulse">
+            <span className="text-[8px] font-mono text-white/30 uppercase tracking-[0.12em] mt-1 animate-pulse">
               Click anywhere or press any key to skip
             </span>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-4 animate-fade-in-delayed-more">
-            <div className="flex items-center gap-2.5 bg-black/50 backdrop-blur-md border border-amber-500/30 px-5 py-2 rounded-full mb-1 shadow-lg shadow-amber-950/40">
-              <Activity className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-              <span className="text-[11px] font-mono font-medium text-amber-300 tracking-[0.25em] uppercase">
+            <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 px-4 py-1.5 rounded-full mb-1">
+              <Activity className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+              <span className="text-[10px] font-mono text-amber-400 tracking-widest uppercase">
                 STANDBY MODE ACTIVE
               </span>
             </div>
 
-            <p className="text-xs font-mono text-white/70 tracking-[0.3em] uppercase drop-shadow-md animate-pulse" style={{ animationDuration: '2.5s' }}>
+            <p className="text-xs font-mono text-white/50 tracking-[0.25em] uppercase animate-pulse" style={{ animationDuration: '2.5s' }}>
               Click or press any key to resume
             </p>
           </div>
