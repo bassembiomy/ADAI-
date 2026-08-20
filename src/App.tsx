@@ -15273,7 +15273,7 @@ const ADIA = () => {
                 className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
                   diagramMode === mode.id
                     ? 'bg-zinc-800 text-white shadow-sm font-semibold'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+                    : 'text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/40'
                 }`}
               >
                 {mode.label}
@@ -15327,7 +15327,7 @@ const ADIA = () => {
                   variant="ghost"
                   size="sm"
                   onClick={stepSimulation}
-                  className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+                  className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
                   title="Step single cycle"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
@@ -15341,7 +15341,7 @@ const ADIA = () => {
                   variant="ghost"
                   size="sm"
                   onClick={resetSimulation}
-                  className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+                  className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
                   title="Reset simulation"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1">
@@ -15357,7 +15357,7 @@ const ADIA = () => {
                   variant="ghost"
                   size="sm"
                   onClick={() => { if (validateModel()) addError('info', 'Model validation passed.'); }}
-                  className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+                  className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
                   title="Check for errors"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-emerald-400">
@@ -15433,7 +15433,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => saveUnifiedProject(false)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
               title="Save ADIA project (.adia)"
             >
               <Save size={13} className="mr-1 text-zinc-400" />
@@ -15444,7 +15444,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => saveUnifiedProject(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
               title="Save ADIA project as new file (.adia)"
             >
               Save As
@@ -15454,7 +15454,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={handleOpenProjectDialog}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
               title="Open ADIA project (.adia)"
             >
               <FolderOpen size={13} className="mr-1 text-zinc-400" />
@@ -15465,7 +15465,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={handleExportProject}
-              className="h-7 px-2 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 whitespace-nowrap"
+              className="h-7 px-2 text-xs text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
               title="Export individual module files (.json)"
             >
               Export
@@ -15475,7 +15475,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => setShowReportDialog(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
               title="Generate Engineering Report"
             >
               Report
@@ -15490,7 +15490,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('hmi')}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
               title="Open HMI Dashboard Panel"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-orange-400">
@@ -15505,7 +15505,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('pid')}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
               title="PID Controller Tuner"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-sky-400">
@@ -15520,7 +15520,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => toggleWindow('doe')}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
               title="Design of Experiments (Response Surface Methodology)"
             >
               DOE (RSM)
@@ -15532,7 +15532,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => setShowFactoryIOGateway(true)}
-              className={`h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap ${
+              className={`h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors ${
                 factoryIOEnabled ? 'text-indigo-400 bg-indigo-500/10' : ''
               }`}
               title="Factory I/O Gateway Connection"
@@ -15551,7 +15551,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => setShow3DXGateway(true)}
-              className="h-7 px-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              className="h-7 px-2 text-xs text-zinc-300 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
               title="Connect to 3DEXPERIENCE Platform"
             >
               <Cloud size={13} className="mr-1 text-cyan-400" />
@@ -15567,7 +15567,7 @@ const ADIA = () => {
               variant="ghost"
               size="sm"
               onClick={() => setShowHelpModal(true)}
-              className="h-7 px-2 text-xs text-zinc-400 hover:text-white hover:bg-zinc-800/60 whitespace-nowrap"
+              className="h-7 px-2 text-xs text-zinc-400 hover:text-orange-400 hover:bg-zinc-800/60 whitespace-nowrap transition-colors"
               title="Help & Documentation"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-1 text-emerald-400">

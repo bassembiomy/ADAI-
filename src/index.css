@@ -467,3 +467,11 @@ input[type=range]::-moz-range-thumb {
 .react-flow__attribution {
   display: none !important;
 }
+
+/* Upper Toolbar Button Hover Styling (Warm Orange Text Accent) */
+header button:not(.bg-emerald-600):not(.bg-rose-600):not(.bg-red-600):hover,
+header button:not(.bg-emerald-600):not(.bg-rose-600):not(.bg-red-600):hover span,
+header button:not(.bg-emerald-600):not(.bg-rose-600):not(.bg-red-600):hover svg {
+  color: #fb923c !important;
+  transition: color 0.15s ease-in-out;
+}
