@@ -6199,10 +6199,9 @@ const ADIA = () => {
     };
 
     const handleActivity = () => {
-      if (showStandby) {
-        setShowStandby(false);
+      if (!showStandby) {
+        resetTimer();
       }
-      resetTimer();
     };
 
     // Activity triggers

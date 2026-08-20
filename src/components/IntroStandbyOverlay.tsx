@@ -239,6 +239,29 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
     };
   }, [mode]);
 
+  // Standby mode wakeup listeners
+  useEffect(() => {
+    if (mode !== 'standby') return;
+
+    let mountedTime = Date.now();
+
+    const handleWake = () => {
+      // 300ms grace period after mounting to avoid catching the idle trigger event
+      if (Date.now() - mountedTime < 300) return;
+      handleExit();
+    };
+
+    window.addEventListener('keydown', handleWake);
+    window.addEventListener('mousedown', handleWake);
+    window.addEventListener('touchstart', handleWake);
+
+    return () => {
+      window.removeEventListener('keydown', handleWake);
+      window.removeEventListener('mousedown', handleWake);
+      window.removeEventListener('touchstart', handleWake);
+    };
+  }, [mode]);
+
   useEffect(() => {
     if (mode !== 'intro') return;
 
@@ -330,10 +353,8 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
 
   return (
     <div
-      onClick={mode === 'intro' ? handleExit : undefined}
-      className={`fixed inset-0 z-[9999] bg-[#030305] flex items-center justify-center overflow-hidden transition-all duration-700 ease-in-out ${
-        mode === 'intro' ? 'cursor-pointer' : ''
-      } ${
+      onClick={handleExit}
+      className={`fixed inset-0 z-[9999] bg-[#030305] flex items-center justify-center overflow-hidden transition-all duration-700 ease-in-out cursor-pointer ${
         isExiting ? 'opacity-0 scale-105 pointer-events-none' : 'opacity-100 scale-100'
       }`}
     >
