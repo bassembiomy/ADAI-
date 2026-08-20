@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Sparkles, Activity } from 'lucide-react';
+import { GalaxyStandbyCanvas } from './standby/GalaxyStandbyCanvas';
 
 interface IntroStandbyOverlayProps {
   mode: 'intro' | 'standby';
@@ -239,6 +240,8 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
   }, [mode]);
 
   useEffect(() => {
+    if (mode !== 'intro') return;
+
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -263,7 +266,7 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    const particleCount = mode === 'standby' ? 400 : 300;
+    const particleCount = 300;
     const particles: GoldenParticle[] = [];
     for (let i = 0; i < particleCount; i++) {
       particles.push(new GoldenParticle(width, height));
@@ -334,7 +337,11 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
         isExiting ? 'opacity-0 scale-105 pointer-events-none' : 'opacity-100 scale-100'
       }`}
     >
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
+      {mode === 'standby' ? (
+        <GalaxyStandbyCanvas />
+      ) : (
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
+      )}
 
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff02_1px,transparent_1px),linear-gradient(to_bottom,#ffffff02_1px,transparent_1px)] bg-[size:3rem_3rem]" />
