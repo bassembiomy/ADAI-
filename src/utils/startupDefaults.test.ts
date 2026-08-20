@@ -38,6 +38,7 @@ describe('Startup Defaults Invariants', () => {
 
   it('creates an empty project payload when all workspaces are empty', () => {
     const project = createUnifiedProjectPayload({
+      version: '1.0.0',
       projectName: 'Main Project',
       activeModule: 'statemachine',
       stateMachine: {
@@ -73,8 +74,11 @@ describe('Startup Defaults Invariants', () => {
       },
     });
 
-    expect(project.stateMachine.variables).toEqual([]);
-    expect(project.stateMachine.states).toEqual([]);
-    expect(project.xbridges.globalXBridgesNodes).toEqual([]);
+    const sm = project.stateMachine as Record<string, unknown>;
+    const xb = project.xbridges as Record<string, unknown>;
+
+    expect(sm.variables).toEqual([]);
+    expect(sm.states).toEqual([]);
+    expect(xb.globalXBridgesNodes).toEqual([]);
   });
 });

@@ -5795,7 +5795,7 @@ const ReportPreviewModal = ({
     const header = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
     <head><meta charset='utf-8'><title>ADIA DOE Report</title></head><body style="background-color: #1a1a1a; color: #e0e0e0;">`;
     const footer = "</body></html>";
-    const sourceHTML = header + clone.innerHTML + footer;
+    const sourceHTML = header + DOMPurify.sanitize(clone.innerHTML) + footer;
     
     const blob = new Blob(['\ufeff', sourceHTML], { type: 'application/msword' });
     const url = URL.createObjectURL(blob);
@@ -6014,7 +6014,7 @@ const GlobalReportPreviewModal = ({
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'>
       <head><meta charset='utf-8'><title>${reportData.projectName} Report</title></head>
       <body style="font-family: 'Calibri', 'Segoe UI', sans-serif; font-size: 11pt; line-height: 1.5; background-color: #ffffff; color: #333333; margin: 0 auto; max-width: 800px;">
-        ${clone.innerHTML}
+        ${DOMPurify.sanitize(clone.innerHTML)}
       </body>
       </html>
     `;
@@ -6222,17 +6222,13 @@ const ADIA = () => {
     };
   }, [showWelcome, showStandby]);
   // STATE HOOKS
-  const [variables, setVariables] = useState<VariableDef[]>([
-    { id: uuidv4(), name: 'counter', type: 'int32', initialValue: '0', currentValue: 0, visibleInScope: true },
-    { id: uuidv4(), name: 'flag', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true },
-    { id: uuidv4(), name: 'value', type: 'float', initialValue: '0.0', currentValue: 0, visibleInScope: true },
-  ]);
+  const [variables, setVariables] = useState<VariableDef[]>([]);
 
   // DOE STATE (Lifted)
   const [activeModel, setActiveModel] = useState<'RSM' | 'GMDH' | 'Taguchi'>('RSM');
   const [taguchiConfig, setTaguchiConfig] = useState<{ objective: 'larger' | 'smaller' | 'nominal' | 'target', targetValue?: number }>({ objective: 'larger', targetValue: 10 });
-  const [data, setData] = useState<number[][]>([[0, 0, 0], [1, 0, 1], [0, 1, 1], [1, 1, 4]]);
-  const [headers, setHeaders] = useState<string[]>(['X1', 'X2', 'Y']);
+  const [data, setData] = useState<number[][]>([]);
+  const [headers, setHeaders] = useState<string[]>([]);
   const [results, setResults] = useState<any | null>(null);
   const [plotFactors, setPlotFactors] = useState<{ x: number, y: number }>({ x: 0, y: 1 });
   const [holdValues, setHoldValues] = useState<number[]>([]);
@@ -6595,8 +6591,8 @@ const ADIA = () => {
     id: 'root',
     name: 'Root',
     parentStateId: null,
-    stateIds: ['s1', 's2', 'slp'],
-    transitionIds: ['t1', 't2'],
+    stateIds: [],
+    transitionIds: [],
     junctionIds: []
   }]);
   const [currentLayerId, setCurrentLayerId] = useState('root');
@@ -6609,93 +6605,9 @@ const ADIA = () => {
     hasChildren: boolean;
   } | null>(null);
 
-  const [states, setStates] = useState<StateData[]>([
-    {
-      id: 's1',
-      name: 'State_1',
-      x: 100,
-      y: 100,
-      width: DEFAULT_STATE_WIDTH,
-      height: DEFAULT_STATE_HEIGHT,
-      entry: '',
-      during: '',
-      exit: '',
-      isActive: false,
-      color: STATE_COLORS[0],
-      parentId: 'root',
-      children: [],
-      priority: 10,
-      isParallel: false,
-      regionId: null,
-      autostart: true,
-      internalTransitions: ''
-    },
-    {
-      id: 's2',
-      name: 'State_2',
-      x: 400,
-      y: 100,
-      width: DEFAULT_STATE_WIDTH,
-      height: DEFAULT_STATE_HEIGHT,
-      entry: '',
-      during: '',
-      exit: '',
-      isActive: false,
-      color: STATE_COLORS[1],
-      parentId: 'root',
-      children: [],
-      priority: 20,
-      isParallel: false,
-      regionId: null,
-      autostart: false,
-      internalTransitions: ''
-    },
-    {
-      id: 'slp',
-      name: 'Low_Power',
-      x: 400,
-      y: 300,
-      width: DEFAULT_STATE_WIDTH,
-      height: DEFAULT_STATE_HEIGHT,
-      entry: '/* Low Power Mode */',
-      during: '',
-      exit: '',
-      isActive: false,
-      color: STATE_COLORS[2],
-      parentId: 'root',
-      children: [],
-      priority: 30,
-      isParallel: false,
-      regionId: null,
-      autostart: false,
-      internalTransitions: ''
-    }
-  ]);
+  const [states, setStates] = useState<StateData[]>([]);
   const [junctions, setJunctions] = useState<JunctionData[]>([]);
-  const [transitions, setTransitions] = useState<TransitionData[]>([
-    {
-      id: 't1',
-      sourceId: 's1',
-      targetId: 's2',
-      condition: 'true',
-      action: '',
-      afterTicks: null,
-      type: 'condition',
-      hasControlPoint: false,
-      order: 0
-    },
-    {
-      id: 't2',
-      sourceId: 's2',
-      targetId: 'slp',
-      condition: '',
-      action: '',
-      afterTicks: 50,
-      type: 'after',
-      hasControlPoint: false,
-      order: 0
-    }
-  ]);
+  const [transitions, setTransitions] = useState<TransitionData[]>([]);
   const [view, setView] = useState({ scale: 1, offsetX: 0, offsetY: 0 });
   const [gridEnabled, setGridEnabled] = useState(true);
   const [snapEnabled, setSnapEnabled] = useState(true);
@@ -6790,134 +6702,8 @@ const ADIA = () => {
   const [draggedPort, setDraggedPort] = useState<{ elementId: string, portId: string } | null>(null);
 
   // Global X-Bridges persistence
-  const defaultXBridgesNodes = [
-    {
-      id: 'w_ref_const',
-      type: 'xblock',
-      position: { x: 80, y: 120 },
-      data: {
-        id: 'w_ref_const',
-        type: 'Constant',
-        label: 'Speed Ref (rad/s)',
-        params: { value: 157 },
-        inputs: [],
-        outputs: [
-          { id: 'out', name: 'Out', type: 'auto', direction: 'output', value: 157, position: 'right' }
-        ],
-        parentId: 'root',
-        selected: false
-      }
-    },
-    {
-      id: 'tl_const',
-      type: 'xblock',
-      position: { x: 80, y: 280 },
-      data: {
-        id: 'tl_const',
-        type: 'Constant',
-        label: 'Load Torque (N-m)',
-        params: { value: 2 },
-        inputs: [],
-        outputs: [
-          { id: 'out', name: 'Out', type: 'auto', direction: 'output', value: 2, position: 'right' }
-        ],
-        parentId: 'root',
-        selected: false
-      }
-    },
-    {
-      id: 'ac_motor_controller',
-      type: 'xblock',
-      position: { x: 350, y: 160 },
-      data: {
-        id: 'ac_motor_controller',
-        type: 'AC_MOTOR_PID_CONTROL',
-        label: 'AC Motor PID Control',
-        params: { Kp: 2.5, Ki: 1.2, Kd: 0.1, w_ref: 157, tl: 2 },
-        inputs: [
-          { id: 'w_ref', name: 'ω*', type: 'control', direction: 'input', value: 157, position: 'left' },
-          { id: 'tl', name: 'Tl', type: 'load', direction: 'input', value: 2, position: 'bottom' }
-        ],
-        outputs: [
-          { id: 'omega', name: 'ω', type: 'measurement', direction: 'output', value: 0, position: 'right' },
-          { id: 'error', name: 'Error', type: 'measurement', direction: 'output', value: 0, position: 'top' },
-          { id: 'te', name: 'Torque', type: 'measurement', direction: 'output', value: 0, position: 'top' }
-        ],
-        parentId: 'root',
-        selected: false
-      }
-    },
-    {
-      id: 'motor_scope',
-      type: 'xblock',
-      position: { x: 680, y: 160 },
-      data: {
-        id: 'motor_scope',
-        type: 'Scope',
-        label: 'Motor Scope',
-        params: { numSignals: 3, bufferSize: 1000 },
-        inputs: [
-          { id: 'in1', name: 'In 1', type: 'auto', direction: 'input', value: 0, position: 'left' },
-          { id: 'in2', name: 'In 2', type: 'auto', direction: 'input', value: 0, position: 'left' },
-          { id: 'in3', name: 'In 3', type: 'auto', direction: 'input', value: 0, position: 'left' }
-        ],
-        outputs: [],
-        parentId: 'root',
-        selected: false
-      }
-    }
-  ];
-
-  const defaultXBridgesEdges = [
-    {
-      id: 'e_w_ref',
-      source: 'w_ref_const',
-      sourceHandle: 'out',
-      target: 'ac_motor_controller',
-      targetHandle: 'w_ref',
-      style: { stroke: '#4caf50', strokeWidth: 3 },
-      animated: false
-    },
-    {
-      id: 'e_tl',
-      source: 'tl_const',
-      sourceHandle: 'out',
-      target: 'ac_motor_controller',
-      targetHandle: 'tl',
-      style: { stroke: '#4caf50', strokeWidth: 3 },
-      animated: false
-    },
-    {
-      id: 'e_omega',
-      source: 'ac_motor_controller',
-      sourceHandle: 'omega',
-      target: 'motor_scope',
-      targetHandle: 'in1',
-      style: { stroke: '#4caf50', strokeWidth: 3 },
-      animated: false
-    },
-    {
-      id: 'e_error',
-      source: 'ac_motor_controller',
-      sourceHandle: 'error',
-      target: 'motor_scope',
-      targetHandle: 'in2',
-      style: { stroke: '#4caf50', strokeWidth: 3 },
-      animated: false
-    },
-    {
-      id: 'e_te',
-      source: 'ac_motor_controller',
-      sourceHandle: 'te',
-      target: 'motor_scope',
-      targetHandle: 'in3',
-      style: { stroke: '#4caf50', strokeWidth: 3 },
-      animated: false
-    }
-  ];
-
-  const [globalXBridgesNodes, setGlobalXBridgesNodes] = useState<any[]>(defaultXBridgesNodes);
-  const [globalXBridgesEdges, setGlobalXBridgesEdges] = useState<any[]>(defaultXBridgesEdges);
+  const [globalXBridgesNodes, setGlobalXBridgesNodes] = useState<any[]>([]);
+  const [globalXBridgesEdges, setGlobalXBridgesEdges] = useState<any[]>([]);
 
   // V-Lab STATE
   const [vlabNodes, setVlabNodes] = useState<any[]>([]);
@@ -7491,7 +7277,7 @@ const ADIA = () => {
           name: target.name,
           type: 'xbridges',
           data: {
-            globalXBridgesNodes: [...(defaultXBridgesNodes || []), newNode],
+            globalXBridgesNodes: [...(globalXBridgesNodes || []), newNode],
             globalXBridgesEdges: []
           }
         };
@@ -13511,7 +13297,7 @@ const ADIA = () => {
           
           if (modalTitle) modalTitle.textContent = '📊 ' + (title || 'SysML Diagram Viewer');
           if (modalContent) {
-            modalContent.innerHTML = currentSvgHtml;
+            modalContent.replaceChildren(svgEl.cloneNode(true));
             const newSvg = modalContent.querySelector('svg');
             if (newSvg) {
               newSvg.style.maxWidth = 'none';
