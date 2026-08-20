@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 
 // ==========================================
 // 1. C-Code AST Parser Helpers (Zero Dependency)
@@ -315,7 +315,7 @@ export function validateTR06(outputDir: string): { success: boolean; errors: str
   let availableCompiler: string | null = null;
   for (const c of compilers) {
     try {
-      execSync(`"${c}" --version`, { stdio: 'ignore' });
+      execFileSync(c, ['--version'], { stdio: 'ignore' });
       availableCompiler = c;
       break;
     } catch {
@@ -333,7 +333,7 @@ export function validateTR06(outputDir: string): { success: boolean; errors: str
 
   try {
     const syntaxFlag = availableCompiler === 'avr-gcc' ? '-c' : '-fsyntax-only';
-    execSync(`"${availableCompiler}" ${syntaxFlag} -Wall -Wextra -Werror -I"${outputDir}" "${cPath}"`, { stdio: 'pipe' });
+    execFileSync(availableCompiler, [syntaxFlag, '-Wall', '-Wextra', '-Werror', `-I${outputDir}`, cPath], { stdio: 'pipe' });
   } catch (err: any) {
     errors.push(`Compiler dry-run failed using ${availableCompiler}: ${err.stderr?.toString() || err.message}`);
   }

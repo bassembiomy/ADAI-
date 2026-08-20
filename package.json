@@ -18,6 +18,7 @@
     "make": "npm run build && electron-forge make",
     "audit:security": "npm audit --audit-level=high",
     "audit:security:full": "npm audit",
+    "scan:sast": "node scripts/security_sast_scan.cjs",
     "test:security": "node src/security/inputValidator.test.cjs && node src/security/roleSecurity.test.cjs && node src/security/generatedCodeVerifier.test.cjs && node src/security/hilBuildPolicy.test.cjs && node src/security/hilFlashPolicy.test.cjs && node src/security/hilBuildRecipes.test.cjs && node src/security/hilBuildService.test.cjs && node src/security/elfInspector.test.cjs && node src/security/hilProbeService.test.cjs && node src/security/hilFlashRecipes.test.cjs && node src/security/hilFlashService.test.cjs && node src/security/toolchainHashVerifier.test.cjs",
     "test:project-files": "node src/projectFiles/projectFileService.test.cjs && node src/projectFiles/windowsFileAssociation.test.cjs && node src/projectFiles/squirrelLifecycle.test.cjs && node src/projectFiles/projectFileController.test.cjs",
     "register-associations": "node scripts/register_file_association.cjs",
@@ -26,7 +27,7 @@
     "test:vlab:all-blocks": "vitest run src/engine/vlab/test_all_blocks_scope.test.ts --reporter=dot",
     "test:vlab:professional": "tsx scripts/run_vlab_math_test.ts",
     "zero-g": "tsx scripts/zero_g_ci.ts",
-    "audit:prebuild": "npm audit --audit-level=critical || echo [WARNING] Unfixable audit vulnerabilities detected (tar, tmp, xlsx have no upstream fix). Review before production release.",
+    "audit:prebuild": "npm audit --audit-level=critical || echo [WARNING] Unfixable audit vulnerabilities detected (tar, tmp have no upstream fix). Review before production release.",
     "prebuild": "npm run build:sm-runtime && npm run audit:prebuild"
   },
   "engines": {
@@ -34,7 +35,11 @@
     "npm": ">=10.0.0"
   },
   "overrides": {
-    "tar": ">=6.2.1"
+    "tar": ">=6.2.1",
+    "brace-expansion": ">=1.1.18",
+    "jspdf": {
+      "dompurify": "^3.4.14"
+    }
   },
   "config": {
     "forge": "./forge.config.cjs"
@@ -61,7 +66,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "docx": "^9.7.1",
-    "dompurify": "^3.4.11",
+    "dompurify": "^3.4.14",
     "electron-squirrel-startup": "^1.0.1",
     "gsap": "^3.12.5",
     "html2canvas": "^1.4.1",
@@ -78,8 +83,8 @@
     "recharts": "^2.15.4",
     "serialport": "^12.0.0",
     "tailwind-merge": "^3.4.0",
-    "uuid": "^13.0.0",
-    "xlsx": "^0.18.5"
+    "uuid": "^14.0.2",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.11.2",

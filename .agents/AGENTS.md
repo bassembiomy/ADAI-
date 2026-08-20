@@ -11,3 +11,6 @@ We have adopted the [Superpowers](https://github.com/obra/superpowers) agentic s
    - Maintain a task checklist (`task.md`) to track todos step-by-step.
 4. **Transition Flows**:
    - Brainstorming & Design -> `writing-plans` (to write implementation plan) -> `subagent-driven-development` (to execute plan task-by-task with specialized implementer subagents and reviewer subagents).
+5. **Security Policy & Pre-Deployment Gatekeeper**:
+   - Strictly follow the [desktop security guidelines](file:///g:/adia%20project/.agents/rules/desktop-security.md) across all code changes, reviews, IPC handlers, storage layers, and build configurations.
+   - Enforce the [pre-deployment security review gate](file:///g:/adia%20project/.agents/rules/pre-deployment-security-gate.md) before approving builds or releasing code to ensure an evidence-backed Go / No-Go deployment decision.

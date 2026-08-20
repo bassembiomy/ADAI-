@@ -57,8 +57,9 @@ async function main() {
 
   // Refresh Windows Explorer icon cache
   try {
-    const { execSync } = require('child_process');
-    execSync('powershell.exe -NoProfile -Command "try { $code = @\'\nusing System;\nusing System.Runtime.InteropServices;\npublic class Shell { [DllImport(\\\"shell32.dll\\\")] public static extern void SHChangeNotify(int eventId, int flags, IntPtr item1, IntPtr item2); }\n\'@; Add-Type $code; [Shell]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero); } catch {}"', { stdio: 'ignore' });
+    const { execFileSync } = require('child_process');
+    const psScript = 'try { $code = @\'\nusing System;\nusing System.Runtime.InteropServices;\npublic class Shell { [DllImport("shell32.dll")] public static extern void SHChangeNotify(int eventId, int flags, IntPtr item1, IntPtr item2); }\n\'@; Add-Type $code; [Shell]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero); } catch {}';
+    execFileSync('powershell.exe', ['-NoProfile', '-Command', psScript], { stdio: 'ignore' });
   } catch {}
 }
 
