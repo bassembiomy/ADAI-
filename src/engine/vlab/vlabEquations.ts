@@ -1480,7 +1480,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     return [branch[0] - mdot];
   },
   gas_pressure_source: ({ across, branch, params }) => {
-    const P = across[2] !== undefined ? across[2] : (params.P || 200000);
+    const P = params.P !== undefined ? params.P : (across[2] !== undefined && across[2] !== 0 ? across[2] : 200000);
     return [(across[1] - across[0]) - P];
   },
   gas_properties: () => [],
