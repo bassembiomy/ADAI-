@@ -7,170 +7,7 @@ interface IntroStandbyOverlayProps {
   onClose: () => void;
 }
 
-class GoldenParticle {
-  x: number = 0;
-  y: number = 0;
-  z: number = 0;
-  vx: number = 0;
-  vy: number = 0;
-  vz: number = 0;
-  life: number = 0;
-  maxLife: number = 0;
-  size: number = 0;
-  color: string = '';
-  type: 'spark' | 'disk' | 'ember' = 'spark';
-  angle: number = 0;
-  radius: number = 0;
-  speed: number = 0;
-  prevX: number = 0;
-  prevY: number = 0;
-
-  constructor(width: number, height: number, type?: 'spark' | 'disk' | 'ember') {
-    this.reset(width, height, true, type);
-  }
-
-  reset(width: number, height: number, initial = false, type?: 'spark' | 'disk' | 'ember') {
-    const rType = Math.random();
-    if (type) {
-      this.type = type;
-    } else {
-      if (rType < 0.35) this.type = 'spark';
-      else if (rType < 0.75) this.type = 'disk';
-      else this.type = 'ember';
-    }
-
-    this.maxLife = Math.random() * 100 + 50;
-    this.life = initial ? Math.random() * this.maxLife : 0;
-    
-    const colorVal = Math.random();
-    if (colorVal < 0.15) {
-      this.color = '255, 255, 255'; // White core sparks
-    } else if (colorVal < 0.45) {
-      this.color = '251, 191, 36'; // Amber-400
-    } else if (colorVal < 0.8) {
-      this.color = '249, 115, 22'; // Orange-500
-    } else {
-      this.color = '254, 240, 138'; // Yellow-200
-    }
-
-    if (this.type === 'spark') {
-      const angle = Math.random() * Math.PI * 2;
-      const pitch = (Math.random() - 0.5) * Math.PI;
-      const speed = Math.random() * 4 + 1.5;
-      
-      this.x = 0;
-      this.y = 0;
-      this.z = 0;
-      this.vx = Math.cos(angle) * Math.cos(pitch) * speed;
-      this.vy = Math.sin(pitch) * speed;
-      this.vz = Math.sin(angle) * Math.cos(pitch) * speed;
-      this.size = Math.random() * 1.5 + 0.6;
-    } else if (this.type === 'disk') {
-      this.radius = Math.random() * 180 + 50;
-      this.angle = Math.random() * Math.PI * 2;
-      this.speed = (0.35 / (this.radius + 10)) + Math.random() * 0.005;
-      this.speed *= Math.random() < 0.5 ? 1 : -1;
-
-      this.x = Math.cos(this.angle) * this.radius;
-      this.z = Math.sin(this.angle) * this.radius;
-      this.y = (Math.random() - 0.5) * 8;
-
-      this.vx = 0;
-      this.vy = 0;
-      this.vz = 0;
-      this.size = Math.random() * 1.8 + 0.4;
-    } else {
-      this.x = (Math.random() - 0.5) * 200;
-      this.z = (Math.random() - 0.5) * 200;
-      this.y = (Math.random() - 0.3) * 60;
-      
-      this.vx = (Math.random() - 0.5) * 0.4;
-      this.vy = -(Math.random() * 0.8 + 0.4);
-      this.vz = (Math.random() - 0.5) * 0.4;
-      this.size = Math.random() * 2.5 + 0.8;
-    }
-
-    this.prevX = 0;
-    this.prevY = 0;
-  }
-
-  update(width: number, height: number, time: number) {
-    this.life++;
-    if (this.life >= this.maxLife) {
-      this.reset(width, height);
-      return;
-    }
-
-    if (this.type === 'spark') {
-      this.x += this.vx;
-      this.y += this.vy;
-      this.z += this.vz;
-      this.vx *= 0.97;
-      this.vy *= 0.97;
-      this.vz *= 0.97;
-    } else if (this.type === 'disk') {
-      this.angle += this.speed;
-      this.x = Math.cos(this.angle) * this.radius;
-      this.z = Math.sin(this.angle) * this.radius;
-      this.y += Math.sin(time * 3 + this.radius) * 0.08;
-    } else {
-      this.x += this.vx + Math.sin(time + this.maxLife) * 0.15;
-      this.y += this.vy;
-      this.z += this.vz;
-    }
-  }
-
-  draw(ctx: CanvasRenderingContext2D, width: number, height: number, focalLength: number) {
-    const angleTiltX = 0.55;
-    const angleTiltY = 0.25;
-
-    let y1 = this.y * Math.cos(angleTiltX) - this.z * Math.sin(angleTiltX);
-    let z1 = this.y * Math.sin(angleTiltX) + this.z * Math.cos(angleTiltX);
-
-    let x2 = this.x * Math.cos(angleTiltY) + z1 * Math.sin(angleTiltY);
-    let z2 = -this.x * Math.sin(angleTiltY) + z1 * Math.cos(angleTiltY);
-
-    const scale = focalLength / (focalLength + z2);
-    const px = x2 * scale + width / 2;
-    const py = y1 * scale + height / 2;
-
-    let alpha = 1.0;
-    if (this.life < 15) {
-      alpha = this.life / 15;
-    } else {
-      alpha = 1.0 - (this.life / this.maxLife);
-    }
-    
-    alpha = Math.max(0, Math.min(1, alpha));
-
-    if (this.type === 'spark' && this.life > 1) {
-      ctx.strokeStyle = `rgba(${this.color}, ${alpha * 0.55})`;
-      ctx.lineWidth = this.size * scale;
-      ctx.beginPath();
-      ctx.moveTo(this.prevX, this.prevY);
-      ctx.lineTo(px, py);
-      ctx.stroke();
-    } else {
-      ctx.fillStyle = `rgba(${this.color}, ${alpha * 0.85})`;
-      ctx.beginPath();
-      ctx.arc(px, py, this.size * scale, 0, Math.PI * 2);
-      ctx.fill();
-      
-      if (this.size > 1.8 && Math.random() < 0.2) {
-        ctx.fillStyle = `rgba(${this.color}, ${alpha * 0.25})`;
-        ctx.beginPath();
-        ctx.arc(px, py, this.size * scale * 2.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    this.prevX = px;
-    this.prevY = py;
-  }
-}
-
 export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, onClose }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isExiting, setIsExiting] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [currentLine, setCurrentLine] = useState('');
@@ -226,6 +63,7 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
     return () => clearTimeout(timer);
   }, [mode, logIndex, charIndex]);
 
+  // Intro skip keydown
   useEffect(() => {
     if (mode !== 'intro') return;
     
@@ -243,10 +81,9 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
   useEffect(() => {
     if (mode !== 'standby') return;
 
-    let mountedTime = Date.now();
+    const mountedTime = Date.now();
 
     const handleWake = () => {
-      // 300ms grace period after mounting to avoid catching the idle trigger event
       if (Date.now() - mountedTime < 300) return;
       handleExit();
     };
@@ -262,205 +99,108 @@ export const IntroStandbyOverlay: React.FC<IntroStandbyOverlayProps> = ({ mode, 
     };
   }, [mode]);
 
-  useEffect(() => {
-    if (mode !== 'intro') return;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let animationFrameId: number;
-    let width = canvas.width;
-    let height = canvas.height;
-    const focalLength = 300;
-
-    const resizeCanvas = () => {
-      const rect = canvas.getBoundingClientRect();
-      width = rect.width;
-      height = rect.height;
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
-      ctx.scale(dpr, dpr);
-    };
-
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-
-    const particleCount = 300;
-    const particles: GoldenParticle[] = [];
-    for (let i = 0; i < particleCount; i++) {
-      particles.push(new GoldenParticle(width, height));
-    }
-
-    let time = 0;
-
-    const animate = () => {
-      time += 0.01;
-      
-      ctx.fillStyle = 'rgba(3, 3, 5, 0.16)';
-      ctx.fillRect(0, 0, width, height);
-
-      const pulseGlow = Math.sin(time * 2) * 30 + 180;
-      const radGlow = ctx.createRadialGradient(
-        width / 2, height / 2, 0,
-        width / 2, height / 2, pulseGlow
-      );
-      radGlow.addColorStop(0, 'rgba(249, 115, 22, 0.22)');
-      radGlow.addColorStop(0.4, 'rgba(251, 191, 36, 0.08)');
-      radGlow.addColorStop(1, 'rgba(249, 115, 22, 0)');
-      ctx.fillStyle = radGlow;
-      ctx.beginPath();
-      ctx.arc(width / 2, height / 2, pulseGlow, 0, Math.PI * 2);
-      ctx.fill();
-
-      particles.forEach((p) => {
-        p.update(width, height, time);
-        p.draw(ctx, width, height, focalLength);
-      });
-
-      const pulseCore = Math.sin(time * 4) * 2.5 + 24;
-      const radCore = ctx.createRadialGradient(
-        width / 2, height / 2, 0,
-        width / 2, height / 2, pulseCore
-      );
-      radCore.addColorStop(0, '#ffffff');
-      radCore.addColorStop(0.2, '#fff1a8');
-      radCore.addColorStop(0.5, 'rgba(249, 115, 22, 0.85)');
-      radCore.addColorStop(1, 'rgba(249, 115, 22, 0)');
-      ctx.fillStyle = radCore;
-      ctx.beginPath();
-      ctx.arc(width / 2, height / 2, pulseCore, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(width / 2, height / 2, 5 + Math.sin(time * 8) * 0.5, 0, Math.PI * 2);
-      ctx.fill();
-
-      animationFrameId = requestAnimationFrame(animate);
-    };
-
-    animate();
-
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-      window.removeEventListener('resize', resizeCanvas);
-    };
-  }, [mode]);
-
   return (
     <div
       onClick={handleExit}
-      className={`fixed inset-0 z-[9999] bg-[#030305] flex items-center justify-center overflow-hidden transition-all duration-700 ease-in-out cursor-pointer ${
+      className={`fixed inset-0 z-[9999] bg-[#020204] flex items-center justify-center overflow-hidden transition-all duration-700 ease-in-out cursor-pointer ${
         isExiting ? 'opacity-0 scale-105 pointer-events-none' : 'opacity-100 scale-100'
       }`}
     >
-      {mode === 'standby' ? (
-        <GalaxyStandbyCanvas />
-      ) : (
-        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
-      )}
+      {/* 3D Particle Galaxy Canvas */}
+      <GalaxyStandbyCanvas />
 
+      {/* Atmospheric Vignette and Lighting */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff02_1px,transparent_1px),linear-gradient(to_bottom,#ffffff02_1px,transparent_1px)] bg-[size:3rem_3rem]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-orange-600/10 rounded-full blur-[150px] animate-pulse" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,0,0,0.45)_0%,rgba(2,2,4,0.75)_55%,rgba(2,2,4,0.95)_100%)]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-orange-500/10 rounded-full blur-[140px] pointer-events-none animate-pulse" style={{ animationDuration: '4s' }} />
       </div>
 
-      <div className="relative z-10 flex flex-col items-center justify-center text-center px-6 max-w-lg select-none">
+      <div className="relative z-10 flex flex-col items-center justify-center text-center px-6 max-w-xl select-none">
         
-        <div className="mb-10">
-          <h1 className="text-7xl sm:text-8xl font-black tracking-[0.25em] text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-amber-200 drop-shadow-[0_10px_35px_rgba(249,115,22,0.35)] mb-3 animate-fade-in-up pl-[0.25em]">
+        {/* Cinematic Title & Tagline Card with Frosted Backdrop */}
+        <div className="mb-8 px-8 py-6 rounded-3xl bg-black/35 backdrop-blur-md border border-white/5 shadow-[0_20px_60px_rgba(0,0,0,0.7)] flex flex-col items-center">
+          
+          <h1 className="text-7xl sm:text-8xl md:text-9xl font-black tracking-[0.25em] text-transparent bg-clip-text bg-gradient-to-b from-white via-[#fff7ed] to-[#fcd34d] drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] drop-shadow-[0_12px_45px_rgba(249,115,22,0.45)] mb-2 animate-fade-in-up pl-[0.25em]">
             ADIA
           </h1>
-          <p className="text-sm sm:text-base font-light text-orange-400 tracking-[0.7em] lowercase pl-[0.7em] drop-shadow-[0_2px_10px_rgba(249,115,22,0.25)] animate-fade-in-delayed">
-            go beyond
-          </p>
+
+          <div className="flex items-center gap-3 w-full justify-center animate-fade-in-delayed mt-1">
+            <span className="h-[1px] w-8 sm:w-16 bg-gradient-to-r from-transparent to-amber-500/60" />
+            <p className="text-xs sm:text-sm font-semibold text-amber-400 tracking-[0.55em] uppercase pl-[0.55em] drop-shadow-[0_2px_12px_rgba(249,115,22,0.5)]">
+              GO BEYOND
+            </p>
+            <span className="h-[1px] w-8 sm:w-16 bg-gradient-to-l from-transparent to-amber-500/60" />
+          </div>
+
         </div>
 
         {mode === 'intro' ? (
           <div className="flex flex-col items-center gap-4 w-full animate-fade-in-delayed-more" onClick={(e) => e.stopPropagation()}>
             {/* Terminal Log Container */}
-            <div className="w-80 h-32 bg-black/40 border border-orange-500/10 rounded-lg p-3.5 font-mono text-[10px] text-left text-orange-500/80 overflow-y-auto flex flex-col justify-end gap-1 shadow-inner backdrop-blur-sm">
+            <div className="w-84 max-w-full h-32 bg-black/60 border border-orange-500/20 rounded-xl p-3.5 font-mono text-[11px] text-left text-orange-400/90 overflow-y-auto flex flex-col justify-end gap-1 shadow-2xl backdrop-blur-md">
               {logs.map((log, idx) => (
-                <div key={idx} className="flex items-center gap-1.5 opacity-60">
-                  <span className="text-amber-500/50">&gt;</span>
+                <div key={idx} className="flex items-center gap-1.5 opacity-70">
+                  <span className="text-amber-500 font-bold">&gt;</span>
                   <span>{log}</span>
                 </div>
               ))}
               {logIndex < bootLogs.length && (
-                <div className="flex items-center gap-1.5 text-orange-400">
+                <div className="flex items-center gap-1.5 text-amber-300 font-semibold">
                   <span className="text-amber-400 font-bold animate-pulse">&gt;</span>
                   <span>
                     {currentLine}
-                    <span className="inline-block w-1.5 h-3.5 bg-orange-400 animate-pulse ml-0.5" />
+                    <span className="inline-block w-1.5 h-3.5 bg-amber-400 animate-pulse ml-0.5" />
                   </span>
                 </div>
               )}
             </div>
 
             {/* Click to skip indicator */}
-            <span className="text-[8px] font-mono text-white/20 uppercase tracking-[0.1em] mt-1 animate-pulse">
+            <span className="text-[9px] font-mono text-white/40 uppercase tracking-[0.15em] mt-1 animate-pulse">
               Click anywhere or press any key to skip
             </span>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-4 animate-fade-in-delayed-more">
-            <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 px-4 py-1.5 rounded-full mb-2">
-              <Activity className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-              <span className="text-[10px] font-mono text-amber-400 tracking-widest uppercase">
+            <div className="flex items-center gap-2.5 bg-black/50 backdrop-blur-md border border-amber-500/30 px-5 py-2 rounded-full mb-1 shadow-lg shadow-amber-950/40">
+              <Activity className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+              <span className="text-[11px] font-mono font-medium text-amber-300 tracking-[0.25em] uppercase">
                 STANDBY MODE ACTIVE
               </span>
             </div>
 
-            <p className="text-xs font-mono text-white/50 tracking-[0.25em] uppercase animate-pulse" style={{ animationDuration: '2.5s' }}>
-              Move mouse or press any key to resume
+            <p className="text-xs font-mono text-white/70 tracking-[0.3em] uppercase drop-shadow-md animate-pulse" style={{ animationDuration: '2.5s' }}>
+              Click or press any key to resume
             </p>
           </div>
         )}
       </div>
 
-      <div className="absolute top-6 left-6 flex items-center gap-2 pointer-events-none font-mono text-[9px] text-white/20">
-        <Sparkles size={12} className="text-orange-500" />
+      <div className="absolute top-6 left-6 flex items-center gap-2 pointer-events-none font-mono text-[10px] text-white/30">
+        <Sparkles size={13} className="text-orange-400" />
         <span>ADIA_OS_v2.5</span>
       </div>
       
-      <div className="absolute bottom-6 right-6 pointer-events-none font-mono text-[9px] text-white/20">
-        <span>GPU: ENABLED | FPS: 60</span>
+      <div className="absolute bottom-6 right-6 pointer-events-none font-mono text-[10px] text-white/30">
+        <span>GPU: THREE.JS VORTEX | FPS: 60</span>
       </div>
 
       <style>{`
-        @keyframes shimmer {
-          100% { transform: translateX(100%); }
-        }
-        @keyframes loading-slide {
-          0% { transform: translateX(-100%); }
-          50% { transform: translateX(0%); }
-          100% { transform: translateX(100%); }
-        }
         @keyframes fade-in-up {
           0% { opacity: 0; transform: translateY(20px); }
           100% { opacity: 1; transform: translateY(0); }
-        }
-        .animate-shimmer {
-          animation: shimmer 1.5s infinite;
-        }
-        .animate-loading-slide {
-          animation: loading-slide 3.5s infinite ease-in-out;
         }
         .animate-fade-in-up {
           animation: fade-in-up 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
         .animate-fade-in-delayed {
           animation: fade-in-up 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          animation-delay: 0.4s;
+          animation-delay: 0.3s;
           opacity: 0;
         }
         .animate-fade-in-delayed-more {
           animation: fade-in-up 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          animation-delay: 0.8s;
+          animation-delay: 0.6s;
           opacity: 0;
         }
       `}</style>
