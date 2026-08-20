@@ -16,23 +16,25 @@ export class MetricsComparator {
     let sumSq = 0;
     let minRef = Infinity;
     let maxRef = -Infinity;
+    let sumRef = 0;
 
     for (let i = 0; i < yRef.length; i++) {
       const err = ySim[i] - yRef[i];
       sumSq += err * err;
       if (yRef[i] < minRef) minRef = yRef[i];
       if (yRef[i] > maxRef) maxRef = yRef[i];
+      sumRef += yRef[i];
     }
     const rmse = Math.sqrt(sumSq / yRef.length);
     const range = maxRef - minRef;
-    if (Math.abs(range) < 1e-9) {
-      return rmse < 1e-7 ? 0 : 100;
-    }
-    return (rmse / range) * 100;
+    const meanRef = Math.abs(sumRef / yRef.length);
+    const scale = range > 1e-6 ? range : meanRef > 1e-6 ? meanRef : 1.0;
+
+    return (rmse / scale) * 100;
   }
 
-  static calculateTimeConstant(time: number[], signal: number[], finalValue: number): number {
-    const target = (1 - Math.exp(-1)) * finalValue; // 63.2%
+  static calculateTimeConstant(time: number[], signal: number[], asymptoticSteadyState: number): number {
+    const target = (1 - Math.exp(-1)) * asymptoticSteadyState; // 63.2% of steady-state
     for (let i = 0; i < signal.length - 1; i++) {
       if ((signal[i] <= target && signal[i + 1] >= target) || (signal[i] >= target && signal[i + 1] <= target)) {
         const t0 = time[i];
@@ -51,21 +53,23 @@ export class MetricsComparator {
     ySim: number[],
     yRef: number[],
     profile: ToleranceProfile,
-    refTau?: number
+    refTau?: number,
+    asymptoticSteadyState?: number
   ): JudgmentVerdict {
     const diagnostics: string[] = [];
     const nrmsePercent = this.calculateNRMSE(ySim, yRef);
 
     const simFinal = ySim[ySim.length - 1] ?? 0;
     const refFinal = yRef[yRef.length - 1] ?? 0;
-    const ssDenom = Math.abs(refFinal) > 1e-9 ? Math.abs(refFinal) : 1.0;
+    const steadyStateTarget = asymptoticSteadyState ?? refFinal;
+    const ssDenom = Math.abs(steadyStateTarget) > 1e-9 ? Math.abs(steadyStateTarget) : 1.0;
     const steadyStateErrorPercent = (Math.abs(simFinal - refFinal) / ssDenom) * 100;
 
     let tauSim: number | undefined;
     let tauErrorPercent: number | undefined;
 
     if (refTau && refTau > 0) {
-      tauSim = this.calculateTimeConstant(time, ySim, refFinal);
+      tauSim = this.calculateTimeConstant(time, ySim, steadyStateTarget);
       tauErrorPercent = (Math.abs(tauSim - refTau) / refTau) * 100;
       if (tauErrorPercent > profile.maxTauErrorPercent) {
         diagnostics.push(`Tau error ${tauErrorPercent.toFixed(2)}% exceeds limit ${profile.maxTauErrorPercent}%`);
