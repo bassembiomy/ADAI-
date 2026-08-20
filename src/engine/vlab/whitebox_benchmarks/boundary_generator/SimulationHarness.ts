@@ -25,19 +25,39 @@ export class SimulationHarness {
         let val = 0;
         let found = false;
 
-        // 1. Check exact match in system.variableNames first
+        // 1. Check exact variable name in system.variableNames
         if (state?.x && sys?.variableNames) {
           let varIdx = sys.variableNames.findIndex((name: string) => name === probe.variableName);
-          if (varIdx === -1) {
-            varIdx = sys.variableNames.findIndex((name: string) => name.includes(probe.variableName));
-          }
-          if (varIdx === -1) {
+
+          // 2. Check signal branch for the specific port handle
+          if (varIdx === -1 && probe.sourceHandle) {
+            const cleanHandle = probe.sourceHandle.replace(/_[st]$/, '');
             varIdx = sys.variableNames.findIndex(
-              (name: string) =>
-                name.startsWith(`${probe.sourceNodeId}_`) ||
-                name.includes(`Across_${probe.sourceNodeId}_`)
+              (name: string) => name === `${probe.sourceNodeId}_branch_signal_${cleanHandle}`
             );
           }
+
+          // 3. Check general branch output
+          if (varIdx === -1) {
+            varIdx = sys.variableNames.findIndex((name: string) =>
+              name.startsWith(`${probe.sourceNodeId}_branch_`)
+            );
+          }
+
+          // 4. Check state variable
+          if (varIdx === -1) {
+            varIdx = sys.variableNames.findIndex((name: string) =>
+              name.startsWith(`${probe.sourceNodeId}_state_`)
+            );
+          }
+
+          // 5. Check across potential
+          if (varIdx === -1) {
+            varIdx = sys.variableNames.findIndex((name: string) =>
+              name.includes(`Across_${probe.sourceNodeId}_`)
+            );
+          }
+
           if (varIdx !== -1) {
             val = state.x[varIdx];
             found = true;
