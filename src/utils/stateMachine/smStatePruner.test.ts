@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pruneStateHierarchy, countDescendants } from './smStatePruner';
+import { pruneStateHierarchy, pruneMultipleStatesHierarchy, countDescendants } from './smStatePruner';
 import { StateData, Layer, JunctionData, TransitionData } from '../../types/sm_types';
 
 describe('smStatePruner', () => {
@@ -8,11 +8,13 @@ describe('smStatePruner', () => {
 
   const s1: StateData = { id: 's1', name: 'State_1', x: 0, y: 0, width: 100, height: 100, entry: '', during: '', exit: '', isActive: false, color: '#fff', parentId: 'root', children: [], priority: 10, isParallel: false, regionId: null, autostart: false, historyType: 'none', internalTransitions: '' };
   const s2: StateData = { id: 's2', name: 'State_2', x: 200, y: 0, width: 100, height: 100, entry: '', during: '', exit: '', isActive: false, color: '#fff', parentId: 'root', children: [], priority: 20, isParallel: false, regionId: null, autostart: false, historyType: 'none', internalTransitions: '' };
+  const s3: StateData = { id: 's3', name: 'State_3', x: 400, y: 0, width: 100, height: 100, entry: '', during: '', exit: '', isActive: false, color: '#fff', parentId: 'root', children: [], priority: 30, isParallel: false, regionId: null, autostart: false, historyType: 'none', internalTransitions: '' };
   const s1_sub1: StateData = { id: 's1_sub1', name: 'Sub_1', x: 10, y: 10, width: 80, height: 80, entry: '', during: '', exit: '', isActive: false, color: '#fff', parentId: 'l_child', children: [], priority: 10, isParallel: false, regionId: null, autostart: false, historyType: 'none', internalTransitions: '' };
 
   const j1: JunctionData = { id: 'j1', name: 'J1', color: '#fff', x: 50, y: 50, type: 'junction', autostart: false, parentId: 'l_child' };
   const t1: TransitionData = { id: 't1', sourceId: 's1', targetId: 's2', condition: '', action: '', afterTicks: null, type: 'condition', hasControlPoint: false, order: 1 };
   const t2: TransitionData = { id: 't2', sourceId: 'j1', targetId: 's1_sub1', condition: '', action: '', afterTicks: null, type: 'condition', hasControlPoint: false, order: 1 };
+  const t3: TransitionData = { id: 't3', sourceId: 's2', targetId: 's3', condition: '', action: '', afterTicks: null, type: 'condition', hasControlPoint: false, order: 1 };
 
   it('correctly counts descendant states and sub-layers', () => {
     const counts = countDescendants('s1', [s1, s2, s1_sub1], [rootLayer, childLayer]);
@@ -40,6 +42,29 @@ describe('smStatePruner', () => {
     expect(result.navigation.currentLayerId).toBe('root');
     expect(result.navigation.layerStack).toEqual(['root']);
     expect(result.navigation.layerPath).toEqual(['Root']);
+  });
+
+  it('prunes multiple states simultaneously with all descendants and transitions (e.g. Ctrl+A delete)', () => {
+    const multiRootLayer: Layer = { id: 'root', name: 'Root', parentStateId: null, stateIds: ['s1', 's2', 's3'], transitionIds: ['t1', 't3'], junctionIds: [] };
+    const result = pruneMultipleStatesHierarchy(['s1', 's2'], {
+      states: [s1, s2, s3, s1_sub1],
+      layers: [multiRootLayer, childLayer],
+      junctions: [j1],
+      transitions: [t1, t2, t3]
+    }, {
+      currentLayerId: 'root',
+      layerStack: ['root'],
+      layerPath: ['Root']
+    });
+
+    expect(result.states.map(s => s.id)).toEqual(['s3']);
+    expect(result.layers.map(l => l.id)).toEqual(['root']);
+    expect(result.layers[0].stateIds).toEqual(['s3']);
+    expect(result.junctions).toEqual([]);
+    expect(result.transitions).toEqual([]);
+    expect(result.deletedStateIds).toContain('s1');
+    expect(result.deletedStateIds).toContain('s2');
+    expect(result.deletedStateIds).toContain('s1_sub1');
   });
 
   it('removes only the pruned state X-Bridges model without mutating a retained one', () => {

@@ -6,3 +6,4 @@ export * from './exportReportToPdf';
 export * from './exportReportToDocx';
 export * from './generators/createStateMachineVerificationReport';
 export * from './generators/createMotorDriveTestReport';
+export * from './reportHierarchyEngine';

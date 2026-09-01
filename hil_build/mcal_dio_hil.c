@@ -10,14 +10,14 @@
 
 bool MCAL_Dio_ReadChannel(uint32_t channel) {
     switch (channel) {
-    case 1U: return (bool)(HAL_GPIO_Read(PIN_CH_2, "ch_2"));
+
     default: return false;
     }
 }
 
 double MCAL_ReadChannelValue(uint32_t channel) {
     switch (channel) {
-    case 1U: return (double)(HAL_GPIO_Read(PIN_CH_2, "ch_2"));
+
     default: return 0.0;
     }
 }

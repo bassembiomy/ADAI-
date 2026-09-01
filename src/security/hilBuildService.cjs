@@ -38,11 +38,12 @@ class HilBuildService {
     try {
       const buildDir = fs.mkdtempSync(path.join(os.tmpdir(), 'adia-build-'));
 
-      // Copy source files from savedWorkspace if workspace directory exists
+      // Copy source files and headers from savedWorkspace if workspace directory exists
       if (savedWorkspace && savedWorkspace.dir && fs.existsSync(savedWorkspace.dir)) {
-        for (const fileName of evaluation.sourceFiles) {
+        const workspaceFiles = fs.readdirSync(savedWorkspace.dir);
+        for (const fileName of workspaceFiles) {
           const srcFile = path.join(savedWorkspace.dir, fileName);
-          if (fs.existsSync(srcFile)) {
+          if (fs.statSync(srcFile).isFile()) {
             fs.copyFileSync(srcFile, path.join(buildDir, fileName));
           }
         }
@@ -73,12 +74,7 @@ class HilBuildService {
       }
 
       const elfPath = path.join(buildDir, 'firmware.elf');
-      const inspection = await inspectElf(elfPath, opts.pack || {
-        memoryRegions: [
-          { name: 'FLASH', start: 0x08000000, size: 1048576 },
-          { name: 'RAM', start: 0x20000000, size: 131072 },
-        ],
-      }, opts);
+      const inspection = await inspectElf(elfPath, request.targetSelection.targetId, opts);
 
       const status = (spawnResult.exitCode === 0 && inspection.valid)
         ? 'LINKED_IMAGE_VERIFIED'

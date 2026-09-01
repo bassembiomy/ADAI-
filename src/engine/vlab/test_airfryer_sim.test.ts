@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { VLabPhysicsEngine } from './vlabPhysics';
-import { Node, Edge } from 'reactflow';
+import { Node, Edge } from '@xyflow/react';
 
 const reconstructLabNodes = (nodes: any[]): Node[] => {
   return nodes.map(n => ({
@@ -17,7 +17,7 @@ const reconstructLabNodes = (nodes: any[]): Node[] => {
 };
 
 describe('Air Fryer Simulation debug', () => {
-  it('simulates air fryer for 100 steps and prints temperature profile', () => {
+  it('simulates air fryer for 100 steps and prints temperature profile', { timeout: 30000 }, () => {
     const lab = {
       id: 'air_fryer_thermal',
       nodes: [

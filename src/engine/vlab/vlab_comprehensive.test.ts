@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { VLabPhysicsEngine } from './vlabPhysics';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
-import { Node, Edge } from 'reactflow';
+import { Node, Edge } from '@xyflow/react';
 
 // ============================================================================
 // Helpers

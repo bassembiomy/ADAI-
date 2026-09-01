@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { SparseLinearSolver } from './SparseLinearSolver';
 import { DAEAssembler } from './DAEAssembler';
 import { VLabPhysicsEngine } from './vlabPhysics';
-import { Node, Edge } from 'reactflow';
+import { Node, Edge } from '@xyflow/react';
 
 describe('V-Lab Solver Certification Suite', () => {
   it('certifies sparse linear solver pivot stability, residual norm, and non-mutating behavior', () => {

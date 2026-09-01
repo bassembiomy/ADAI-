@@ -1,6 +1,6 @@
 // src/components/xbridges/PremiumConnectionLine.tsx
 import React, { useEffect, useState, useRef } from 'react';
-import { getBezierPath, getSmoothStepPath, getStraightPath, useReactFlow } from 'reactflow';
+import { getBezierPath, getSmoothStepPath, getStraightPath, useReactFlow } from '@xyflow/react';
 import { getColor } from './XBlockNode';
 
 export const PremiumConnectionLine = ({

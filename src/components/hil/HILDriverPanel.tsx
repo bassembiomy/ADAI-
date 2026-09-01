@@ -91,8 +91,17 @@ export const TARGET_PIN_MAPS: Record<TargetMCU, Record<PeripheralType, string[]>
   }
 };
 
+import { validatePinAssignments, PinValidationIssue } from '../../engine/hil/pinValidator';
+
 export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChange, target = 'Generic' }) => {
   const mcuTarget = target || 'Generic';
+
+  const issues: PinValidationIssue[] = React.useMemo(
+    () => validatePinAssignments(channels, { targetLegacy: target }),
+    [channels, target]
+  );
+  const errors = issues.filter(i => i.level === 'error');
+  const warnings = issues.filter(i => i.level === 'warning');
 
   const addChannel = () => {
     const allPins = TARGET_PIN_MAPS[mcuTarget]?.GPIO || TARGET_PIN_MAPS.Generic.GPIO;
@@ -145,6 +154,17 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
           <Plus size={14} /> Add Channel
         </button>
       </div>
+
+      {errors.length > 0 && (
+        <div className="mb-3 rounded border border-red-700 bg-red-900/40 p-2 text-xs text-red-300 space-y-1">
+          {errors.map((i, idx) => <p key={idx}>PIN ERROR: {i.message}</p>)}
+        </div>
+      )}
+      {warnings.length > 0 && (
+        <div className="mb-3 rounded border border-yellow-600 bg-yellow-900/30 p-2 text-xs text-yellow-200 space-y-1">
+          {warnings.map((i, idx) => <p key={idx}>PIN WARN: {i.message}</p>)}
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto pr-1 no-scrollbar">
         {channels.length === 0 ? (

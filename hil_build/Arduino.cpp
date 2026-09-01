@@ -16,3 +16,16 @@ SPIImpl SPI;
 
 #include "Wire.h"
 TwoWire Wire;
+
+/* Bare-metal compile helper: define ADIA_BARE_ARDUINO_MAIN when building
+ * without the Arduino core (e.g. host/CI verification). On real Arduino
+ * builds the core provides its own main(). */
+#ifdef ADIA_BARE_ARDUINO_MAIN
+extern void setup(void);
+extern void loop(void);
+int main(void) {
+    setup();
+    while (1) { loop(); }
+    return 0;
+}
+#endif

@@ -75,4 +75,35 @@ describe('renderStateMachineDiagrams', () => {
   it('renders a formal empty figure for layers with no states', () => {
     expect(renderStateMachineDiagrams({ layers, states, junctions, transitions })[1]).toContain('No states in layer Safety Region');
   });
+
+  it('renders an initial pseudostate filled circle for the autostart state', () => {
+    const figures = renderStateMachineDiagrams({ layers, states, junctions, transitions });
+    expect(figures[0]).toContain('initial-pseudostate');
+    expect(figures[0]).toContain('<circle');
+  });
+
+  it('renders transitions that target parent composite states', () => {
+    const parentTransitions = [
+      transition({ id: 't4', sourceId: 'cool', targetId: 'op', condition: 'restart' }),
+      transition({ id: 't5', sourceId: 'heat', targetId: 'op', condition: 'abort' }),
+    ];
+    const figures = renderStateMachineDiagrams({
+      layers: [{
+        id: 'l3', name: 'With Parent Target', parentStateId: null,
+        stateIds: ['idle', 'op', 'heat', 'cool'],
+        transitionIds: ['t1', 't2', 't3', 't4', 't5'],
+        junctionIds: [],
+      }],
+      states,
+      junctions: [],
+      transitions: [...transitions, ...parentTransitions],
+    });
+    expect(figures[0]).toContain('edge-t4');
+    expect(figures[0]).toContain('[restart]');
+    expect(figures[0]).toContain('edge-t5');
+    expect(figures[0]).toContain('[abort]');
+  });
 });
+
+
+

@@ -71,13 +71,13 @@ export function countDescendants(
   };
 }
 
-export function pruneStateHierarchy(
-  targetStateId: string,
+export function pruneMultipleStatesHierarchy(
+  targetStateIds: string[],
   model: StateMachineModel,
   navigation: NavigationState
 ): PruneResult {
-  const targetState = model.states.find(s => s.id === targetStateId);
-  if (!targetState) {
+  const validStateIds = targetStateIds.filter(id => model.states.some(s => s.id === id));
+  if (validStateIds.length === 0) {
     return {
       states: model.states,
       layers: model.layers,
@@ -91,10 +91,15 @@ export function pruneStateHierarchy(
     };
   }
 
-  const { descendantStateIds, descendantLayerIds } = countDescendants(targetStateId, model.states, model.layers);
+  const deletedStateIds = new Set<string>();
+  const deletedLayerIds = new Set<string>();
 
-  const deletedStateIds = new Set<string>([targetStateId, ...descendantStateIds]);
-  const deletedLayerIds = new Set<string>(descendantLayerIds);
+  for (const stateId of validStateIds) {
+    deletedStateIds.add(stateId);
+    const { descendantStateIds, descendantLayerIds } = countDescendants(stateId, model.states, model.layers);
+    descendantStateIds.forEach(id => deletedStateIds.add(id));
+    descendantLayerIds.forEach(id => deletedLayerIds.add(id));
+  }
 
   const deletedJunctionIds = new Set<string>();
   model.junctions.forEach(j => {
@@ -141,7 +146,7 @@ export function pruneStateHierarchy(
 
   let nextCurrentLayerId = navigation.currentLayerId;
   if (deletedLayerIds.has(navigation.currentLayerId)) {
-    const parentLayerOfDeletedState = remainingLayers.find(l => l.stateIds.includes(targetStateId)) ||
+    const parentLayerOfDeletedState = remainingLayers.find(l => validStateIds.some(sid => l.stateIds.includes(sid))) ||
       remainingLayers.find(l => l.id === 'root') ||
       remainingLayers[0];
     nextCurrentLayerId = parentLayerOfDeletedState ? parentLayerOfDeletedState.id : 'root';
@@ -168,4 +173,12 @@ export function pruneStateHierarchy(
     deletedJunctionIds: Array.from(deletedJunctionIds),
     deletedTransitionIds: Array.from(deletedTransitionIds)
   };
+}
+
+export function pruneStateHierarchy(
+  targetStateId: string,
+  model: StateMachineModel,
+  navigation: NavigationState
+): PruneResult {
+  return pruneMultipleStatesHierarchy([targetStateId], model, navigation);
 }

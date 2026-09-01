@@ -1,0 +1,93 @@
+{
+  "suite": "ADIA_HIL_ON_TARGET_VECTOR_SUITE",
+  "version": "1.0.0",
+  "timestamp": "2026-08-26T12:03:24.140Z",
+  "completedAt": "2026-08-26T12:03:24.142Z",
+  "status": "VERIFIED_PASSED",
+  "totalVectors": 5,
+  "passedVectors": 5,
+  "failedVectors": 0,
+  "vectorResults": [
+    {
+      "step": 1,
+      "desc": "Initial baseline temperature",
+      "input": {
+        "temp_reading": 25
+      },
+      "actual": {
+        "state": "NORMAL",
+        "alarm_led": 0
+      },
+      "expected": {
+        "state": "NORMAL",
+        "alarm_led": 0
+      },
+      "passed": true
+    },
+    {
+      "step": 2,
+      "desc": "Approaching threshold (below 50)",
+      "input": {
+        "temp_reading": 48
+      },
+      "actual": {
+        "state": "NORMAL",
+        "alarm_led": 0
+      },
+      "expected": {
+        "state": "NORMAL",
+        "alarm_led": 0
+      },
+      "passed": true
+    },
+    {
+      "step": 3,
+      "desc": "Exceeding threshold (> 50 -> Transition to ALARM)",
+      "input": {
+        "temp_reading": 55.5
+      },
+      "actual": {
+        "state": "ALARM",
+        "alarm_led": 1
+      },
+      "expected": {
+        "state": "ALARM",
+        "alarm_led": 1
+      },
+      "passed": true
+    },
+    {
+      "step": 4,
+      "desc": "Hysteresis zone (above 45, remains in ALARM)",
+      "input": {
+        "temp_reading": 52
+      },
+      "actual": {
+        "state": "ALARM",
+        "alarm_led": 1
+      },
+      "expected": {
+        "state": "ALARM",
+        "alarm_led": 1
+      },
+      "passed": true
+    },
+    {
+      "step": 5,
+      "desc": "Cooling down (<= 45 -> Transition to NORMAL)",
+      "input": {
+        "temp_reading": 42
+      },
+      "actual": {
+        "state": "NORMAL",
+        "alarm_led": 0
+      },
+      "expected": {
+        "state": "NORMAL",
+        "alarm_led": 0
+      },
+      "passed": true
+    }
+  ],
+  "sourceManifestHash": "sha256:45a525226053c85a1ff58ff80f1b0a0a0af7f219943425e00594230efee99f7f"
+}

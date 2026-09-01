@@ -1,4 +1,4 @@
-import { Node, Edge } from 'reactflow';
+import { Node, Edge } from '@xyflow/react';
 import { VLabTestBoundary } from './types';
 
 const node = (id: string, type: string, params: Record<string, unknown> = {}): Node =>

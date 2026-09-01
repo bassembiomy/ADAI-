@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BlockData, RelationshipData } from '../../types/sysml_types';
+import { BlockData, PartData, RelationshipData } from '../../types/sysml_types';
 import { renderBddDiagram, renderRequirementsDiagram } from './reportDiagrams';
 
 function block(partial: Partial<BlockData> & { id: string }): BlockData {
@@ -44,6 +44,28 @@ describe('renderRequirementsDiagram', () => {
   });
 });
 
+describe('renderRequirementsDiagram — cross-diagram relationships', () => {
+  const reqBlocks = [
+    block({ id: 'r1', name: 'Temp Limit', stereotype: 'requirement', reqId: 'REQ-001' }),
+    block({ id: 'r2', name: 'Fan Control', stereotype: 'requirement', reqId: 'REQ-002' }),
+    block({ id: 'b1', name: 'Engine', stereotype: 'block' }),
+  ];
+  const reqRels = [
+    rel({ id: 'sr1', sourceId: 'b1', targetId: 'r1', type: 'satisfy' }),
+    rel({ id: 'vr1', sourceId: 'b1', targetId: 'r2', type: 'verify' }),
+    rel({ id: 'dr1', sourceId: 'r1', targetId: 'r2', type: 'deriveReqt' }),
+  ];
+
+  it('includes satisfy/verify edges from blocks to requirements', () => {
+    const html = renderRequirementsDiagram({ blocks: reqBlocks, relationships: reqRels });
+    expect(html).toContain('edge-sr1');
+    expect(html).toContain('edge-vr1');
+    expect(html).toContain('edge-dr1');
+    expect(html).toContain('3 requirements');
+  });
+});
+
+
 describe('renderBddDiagram', () => {
   const bddBlocks = [
     block({ id: 'root', name: 'ThermalSystem' }),
@@ -74,3 +96,49 @@ describe('renderBddDiagram', () => {
     expect(renderBddDiagram({ blocks: [], relationships: [] })).toContain('No blocks defined');
   });
 });
+
+describe('renderBddDiagram — cross-diagram relationships', () => {
+  const sysBlocks = [
+    block({ id: 'b1', name: 'Engine' }),
+    block({ id: 'b2', name: 'Sensor' }),
+    block({ id: 'req1', name: 'Temp Limit', stereotype: 'requirement', reqId: 'REQ-001' }),
+  ];
+  const sysRels = [
+    rel({ id: 'sr1', sourceId: 'b1', targetId: 'req1', type: 'satisfy', label: 'satisfies' }),
+    rel({ id: 'vr1', sourceId: 'b1', targetId: 'req1', type: 'verify', label: 'verified by test' }),
+  ];
+
+  it('includes satisfy and verify edges from blocks to requirements', () => {
+    const html = renderBddDiagram({ blocks: sysBlocks, relationships: sysRels });
+    expect(html).toContain('edge-sr1');
+    expect(html).toContain('edge-vr1');
+    expect(html).toContain('«satisfy»');
+    expect(html).toContain('«verify»');
+    expect(html).toContain('3 blocks');
+  });
+});
+
+describe('renderBddDiagram — interactive drilldown affordance', () => {
+  const blocks = [
+    block({ id: 'b1', name: 'Engine' }),
+    block({ id: 'b2', name: 'Sensor' }),
+  ];
+  const parts = [
+    { id: 'p1', name: 'piston', blockId: 'b1', typeId: 'b1', x: 0, y: 0, width: 100, height: 50 } as PartData,
+  ];
+
+  it('renders interactive double-click attributes and IBD badge for blocks with parts', () => {
+    const html = renderBddDiagram({
+      blocks,
+      relationships: [],
+      parts,
+      containerId: 'diag-main',
+    });
+    expect(html).toContain('has-child-layer');
+    expect(html).toContain('cursor: pointer');
+    expect(html).toContain('ondblclick="window.ADIA_DIAGRAM_NAV.drillDown(\'diag-main\', \'ibd-b1\', \'IBD · Engine\')"');
+    expect(html).toContain('⤓ [IBD]');
+  });
+});
+
+

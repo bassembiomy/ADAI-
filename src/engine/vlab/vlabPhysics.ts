@@ -1,4 +1,4 @@
-import { Node, Edge } from 'reactflow';
+import { Node, Edge } from '@xyflow/react';
 import { DAEAssembler } from './DAEAssembler';
 import { ImplicitSolver } from './ImplicitSolver';
 import { EquationContext, AssembledSystem, PhysicalDomain } from './types';
@@ -67,7 +67,7 @@ export class VLabPhysicsEngine {
           if (stateParts.length === 2) {
             const nodeId = stateParts[0];
             const node = nodes.find(n => n.id === nodeId);
-            const ambientParam = node?.data?.params?.ambient_temp;
+            const ambientParam = (node?.data as any)?.params?.ambient_temp;
             if (ambientParam !== undefined) {
               const raw = typeof ambientParam === 'object' && 'value' in ambientParam ? ambientParam.value : ambientParam;
               const numeric = Number(raw);
@@ -411,8 +411,8 @@ export class VLabPhysicsEngine {
     };
 
     // Extract scope outputs (evaluated at final xCurrent)
-    let scopeValues: any = 0;
-    
+    const perScopeValues: Record<string, any> = {};
+
     // 1. Check if we are running one of the 6 predefined learning labs to return matching data structures
     const hasAirChamber = nodes.some(n => n.id === 'air_chamber');
     const hasBlenderMotor = nodes.some(n => n.id === 'blender_motor');
@@ -426,14 +426,14 @@ export class VLabPhysicsEngine {
       const indices = system.scopeOutputs.get('thermal_scope') || [];
       const tempK = indices.length > 0 ? xCurrent[indices[0]] : 293.15;
       const cel = Math.max(0.0, tempK - 293.15);
-      scopeValues = createSingleScopeValue(cel, "Air Fryer Temperature (°C)");
+      perScopeValues['thermal_scope'] = createSingleScopeValue(cel, "Air Fryer Temperature (°C)");
     } 
     else if (hasBlenderMotor) {
       // ── Blender Lab ──
       const indices = system.scopeOutputs.get('blender_scope') || [];
       const omega = indices.length > 0 ? xCurrent[indices[0]] : 0;
       const rpm = omega * (60 / (2 * Math.PI));
-      scopeValues = createSingleScopeValue(rpm, "Blender Speed (RPM)");
+      perScopeValues['blender_scope'] = createSingleScopeValue(rpm, "Blender Speed (RPM)");
     } 
     else if (hasSpeedPID) {
       // ── PID Speed Control Lab ──
@@ -443,7 +443,7 @@ export class VLabPhysicsEngine {
       const ref = refIdx !== -1 ? xCurrent[refIdx] : 157;
       const speed = omega * (60 / (2 * Math.PI));
       const target = ref * (60 / (2 * Math.PI));
-      scopeValues = createMultiScopeValues(
+      perScopeValues['scope'] = createMultiScopeValues(
         {
           "Motor Speed (RPM)": speed,
           "Target Speed (RPM)": target
@@ -461,7 +461,7 @@ export class VLabPhysicsEngine {
       const iIdx = system.variableNames.findIndex(name => name.includes('wash_motor_branch_ia') || name.includes('inverter_branch_current_a'));
       const amps = iIdx !== -1 ? Math.abs(xCurrent[iIdx]) : 0;
       const speed = omega * (60 / (2 * Math.PI));
-      scopeValues = createMultiScopeValues(
+      perScopeValues['wash_scope'] = createMultiScopeValues(
         {
           "Drum Speed (RPM)": speed,
           "Motor Current (A)": amps
@@ -479,7 +479,7 @@ export class VLabPhysicsEngine {
       const refIdx = system.variableNames.findIndex(name => name.includes('ref_speed'));
       const ref = refIdx !== -1 ? xCurrent[refIdx] : 0;
       const speed = omega * (60 / (2 * Math.PI));
-      scopeValues = createMultiScopeValues(
+      perScopeValues['vfd_scope'] = createMultiScopeValues(
         {
           "Motor Speed (RPM)": speed,
           "Target Speed (RPM)": ref
@@ -495,32 +495,37 @@ export class VLabPhysicsEngine {
       const indices = system.scopeOutputs.get('mw_scope') || [];
       const tempK = indices.length > 0 ? xCurrent[indices[0]] : 298.15;
       const cel = tempK - 273.15;
-      scopeValues = createSingleScopeValue(cel, "Cavity Temp (°C)");
+      perScopeValues['mw_scope'] = createSingleScopeValue(cel, "Cavity Temp (°C)");
     } 
-    else {
-      // ── Generic Scope Output Mapping ──
-      const scopeNodes = nodes.filter(n => (n.data as any)?.type === 'scope' || (n.data as any)?.blockId === 'scope');
-      if (scopeNodes.length > 0) {
-        const scopeId = scopeNodes[0].id;
-        const indices = system.scopeOutputs.get(scopeId);
-        if (indices && indices.length > 0) {
-          if (indices.length === 1) {
-            const friendlyName = getFriendlyVariableName(indices[0]);
-            scopeValues = createSingleScopeValue(xCurrent[indices[0]], friendlyName);
-          } else {
-            const values: Record<string, number> = {};
-            const aliases: Record<string, string> = {};
-            indices.forEach((idx, i) => {
-              const friendlyName = getFriendlyVariableName(idx);
-              values[friendlyName] = xCurrent[idx];
-              if (i === 0) aliases['value'] = friendlyName;
-              if (i === 1) aliases['target'] = friendlyName;
-            });
-            scopeValues = createMultiScopeValues(values, aliases);
-          }
+
+    // 2. Generic Scope Output Mapping for all scope blocks
+    const allScopeNodes = nodes.filter(n => (n.data as any)?.type === 'scope' || (n.data as any)?.blockId === 'scope' || n.type === 'scope');
+    for (const scopeNode of allScopeNodes) {
+      // If already populated by predefined lab rule, skip
+      if (perScopeValues[scopeNode.id] !== undefined) continue;
+
+      const indices = system.scopeOutputs.get(scopeNode.id);
+      if (indices && indices.length > 0) {
+        if (indices.length === 1) {
+          const friendlyName = getFriendlyVariableName(indices[0]);
+          perScopeValues[scopeNode.id] = createSingleScopeValue(xCurrent[indices[0]], friendlyName);
+        } else {
+          const values: Record<string, number> = {};
+          const aliases: Record<string, string> = {};
+          indices.forEach((idx, i) => {
+            const friendlyName = getFriendlyVariableName(idx);
+            values[friendlyName] = xCurrent[idx];
+            if (i === 0) aliases['value'] = friendlyName;
+            if (i === 1) aliases['target'] = friendlyName;
+          });
+          perScopeValues[scopeNode.id] = createMultiScopeValues(values, aliases);
         }
       }
     }
+
+    // Backward-compat: scopeValues = first scope value or 0
+    const firstScopeId = Object.keys(perScopeValues)[0];
+    const scopeValues = firstScopeId ? perScopeValues[firstScopeId] : 0;
 
     return {
       x: xCurrent,
@@ -529,6 +534,7 @@ export class VLabPhysicsEngine {
       time: tTarget,
       systemSize: system.systemSize,
       scopeValues,
+      perScopeValues,
       useSdirk
     };
   }

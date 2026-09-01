@@ -7,6 +7,7 @@ describe('Reporting module facade', () => {
     expect(reporting.renderBddDiagram).toBeTypeOf('function');
     expect(reporting.renderIbdDiagram).toBeTypeOf('function');
     expect(reporting.renderStateMachineDiagrams).toBeTypeOf('function');
+    expect(reporting.renderTraceabilityDiagram).toBeTypeOf('function');
     expect(reporting.renderXbridgesDiagram).toBeTypeOf('function');
     expect(reporting.renderHmiDiagram).toBeTypeOf('function');
     expect(reporting.escapeHtml).toBeTypeOf('function');
@@ -18,5 +19,6 @@ describe('Reporting module facade', () => {
     expect(reporting.saveReportAsDocx).toBeTypeOf('function');
     expect(reporting.createStateMachineVerificationReport).toBeTypeOf('function');
     expect(reporting.createMotorDriveTestReport).toBeTypeOf('function');
+    expect(reporting.renderInteractiveDiagramHierarchy).toBeTypeOf('function');
   });
 });

@@ -1,6 +1,6 @@
 // src/components/xbridges/PremiumEdge.tsx
 import React, { useContext } from 'react';
-import { getBezierPath, getSmoothStepPath, getStraightPath, EdgeProps, useReactFlow } from 'reactflow';
+import { getBezierPath, getSmoothStepPath, getStraightPath, EdgeProps, Edge, useReactFlow } from '@xyflow/react';
 import { WorkspaceContext } from './context';
 
 const getDistanceToSegment = (
@@ -34,12 +34,12 @@ export const PremiumEdge = ({
   data = {},
   selected,
   type
-}: EdgeProps & { type?: string }) => {
+}: EdgeProps<Edge<Record<string, any>>> & { type?: string }) => {
   const { setEdges, screenToFlowPosition, getNode } = useReactFlow();
   const workspaceContext = useContext(WorkspaceContext);
   
   let edgePath = '';
-  const vertices = data?.vertices || [];
+  const vertices = (data as any)?.vertices || [];
 
   if (vertices.length > 0) {
     edgePath = `M ${sourceX} ${sourceY}`;
@@ -48,19 +48,19 @@ export const PremiumEdge = ({
     }
     edgePath += ` L ${targetX} ${targetY}`;
   } else {
-    // Basic paths depending on type
-    if (type === 'smoothstep') {
-      [edgePath] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
-    } else if (type === 'straight') {
+    // Basic paths depending on type (defaulting to smoothstep for clean orthogonal block-diagram wiring)
+    if (type === 'straight') {
       [edgePath] = getStraightPath({ sourceX, sourceY, targetX, targetY });
-    } else {
+    } else if (type === 'bezier') {
       [edgePath] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+    } else {
+      [edgePath] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, borderRadius: 8 });
     }
   }
 
   const sourceNode = getNode(id.split('-')[0]) || getNode(id.replace(/^e-?([^-]+)-.*$/, '$1')); // Try to find source node if possible
-  const color = data?.color || (sourceNode && workspaceContext?.getColor ? workspaceContext.getColor(sourceNode.data?.type) : '#4caf50');
-  const isSimulating = data?.isSimulating ?? workspaceContext?.isSimulating ?? false;
+  const color = (data as any)?.color || (sourceNode && workspaceContext?.getColor ? workspaceContext.getColor((sourceNode.data as any)?.type) : '#4caf50');
+  const isSimulating = (data as any)?.isSimulating ?? workspaceContext?.isSimulating ?? false;
 
   const handleEdgeDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -75,7 +75,7 @@ export const PremiumEdge = ({
     setEdges((eds) =>
       eds.map((edge) => {
         if (edge.id === id) {
-          const currentVertices = edge.data?.vertices || [];
+          const currentVertices = (edge.data as any)?.vertices || [];
           const points = [
             { x: sourceX, y: sourceY },
             ...currentVertices,
@@ -123,7 +123,7 @@ export const PremiumEdge = ({
       setEdges((eds) =>
         eds.map((edge) => {
           if (edge.id === id) {
-            const currentVertices = edge.data?.vertices || [];
+            const currentVertices = (edge.data as any)?.vertices || [];
             const updatedVertices = currentVertices.map((v: any, idx: number) =>
               idx === index ? flowPos : v
             );
@@ -160,7 +160,7 @@ export const PremiumEdge = ({
     setEdges((eds) =>
       eds.map((edge) => {
         if (edge.id === id) {
-          const currentVertices = edge.data?.vertices || [];
+          const currentVertices = (edge.data as any)?.vertices || [];
           const updatedVertices = currentVertices.filter((_: any, idx: number) => idx !== index);
           return {
             ...edge,

@@ -361,7 +361,7 @@ const taskFourVariables = (): VariableDef[] => [
   },
 ];
 
-const parallelShell = (): StateMachineModelV4 => ({
+const parallelSkeletonFixture = (): StateMachineModelV4 => ({
   schemaVersion: CURRENT_SM_SCHEMA_VERSION,
   tickMs: 10,
   states: [
@@ -432,7 +432,7 @@ export const parallelHistoryFixture = (
     };
   }
 
-  const model = parallelShell();
+  const model = parallelSkeletonFixture();
   if (name === 'parallel-parent-exit') {
     model.transitions.push(
       transition('leave_parent', 'R1', 'OUTSIDE', { condition: 'leave' }),

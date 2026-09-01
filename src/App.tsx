@@ -48,7 +48,7 @@ import {
   calculateOrthogonalConnectorPath,
 } from './utils/sysmlConnectionRouting';
 import { createStateMachineClipboard, pasteStateMachineClipboard, StateMachineClipboardData } from './utils/stateMachineClipboard';
-import { pruneStateHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
+import { pruneStateHierarchy, pruneMultipleStatesHierarchy, countDescendants } from './utils/stateMachine/smStatePruner';
 import { generateMISRACCode, getCTimeType, validateInitialValue } from './utils/stateMachineCodeGenerator';
 import { isInputFocused } from './utils/domUtils';
 import { validateImportedJson, ValidationResult } from './utils/jsonImportValidator';
@@ -90,6 +90,7 @@ import { HELP_DATA } from './HelpData';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
 import JSZip from 'jszip';
+import { buildReportHierarchy, generateDiagramScript } from './features/reporting';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -4232,7 +4233,7 @@ const WorkspaceFileDialog = ({
     { id: 'xbridges', name: 'X-Bridges', desc: 'Control block diagram suite', color: '#c9a86c', icon: '🖧' },
     { id: 'vlab', name: 'V-Lab', desc: '3D physical plant mechanics', color: '#a855f7', icon: <FlaskConical size={18} /> },
     { id: 'hil', name: 'HIL Config', desc: 'Hardware-in-the-Loop setups', color: '#3b82f6', icon: '⚙' },
-    { id: 'entropy', name: 'ENTROPY OPM', desc: 'Object-Process conceptual modeling', color: '#ec4899', icon: '➿' },
+    { id: 'entropy', name: 'OPM (ISO 19450)', desc: 'Single-model architecture: structure, behavior & requirements', color: '#e8b74a', icon: '🌐' },
     { id: 'statemachine', name: 'State Machine', desc: 'Behavioral state logic simulation', color: '#f97316', icon: '⚡' },
     { id: 'bdd', name: 'SysML BDD', desc: 'Block Definition Diagram layout', color: '#6c9ac6', icon: '🗂' },
     { id: 'ibd', name: 'SysML IBD', desc: 'Internal Block Diagram port wiring', color: '#6cc9a8', icon: '🖥' },
@@ -5364,6 +5365,8 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
   const [searchQuery, setSearchQuery] = useState("");
   const [showBlockRef, setShowBlockRef] = useState(false);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [selectedDomainFilter, setSelectedDomainFilter] = useState<string>("All");
+  const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>("All");
   
   if (!isOpen) return null;
 
@@ -5402,64 +5405,84 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
   });
 
   const allBlocks = [...vlabBlocks, ...xbridgesBlocks];
-  const filteredBlocks = allBlocks.filter(b => 
-    b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    b.domain.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  
+  const domainsList = ["All", ...Array.from(new Set(allBlocks.map(b => b.domain)))];
+
+  const filteredBlocks = allBlocks.filter(b => {
+    const matchesSearch = b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      b.domain.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (b.description && b.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (b.equation && b.equation.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesDomain = selectedDomainFilter === "All" || b.domain.toLowerCase() === selectedDomainFilter.toLowerCase();
+    const matchesSource = selectedSourceFilter === "All" || b.source.toLowerCase() === selectedSourceFilter.toLowerCase();
+    return matchesSearch && matchesDomain && matchesSource;
+  });
 
   const selectedBlock = allBlocks.find(b => b.id === selectedBlockId);
 
+  const getDomainColor = (domain: string) => {
+    const d = domain.toLowerCase();
+    if (d.includes('electr')) return 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30';
+    if (d.includes('mechanic') || d.includes('rotat') || d.includes('translat')) return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
+    if (d.includes('therm')) return 'text-red-400 bg-red-500/10 border-red-500/30';
+    if (d.includes('magnet')) return 'text-purple-400 bg-purple-500/10 border-purple-500/30';
+    if (d.includes('gas') || d.includes('fluid') || d.includes('air')) return 'text-sky-400 bg-sky-500/10 border-sky-500/30';
+    if (d.includes('control')) return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
+    return 'text-orange-400 bg-orange-500/10 border-orange-500/30';
+  };
+
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 backdrop-blur-3xl p-10 text-white font-sans">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 backdrop-blur-3xl p-6 md:p-10 text-white font-sans">
       <div className="bg-[#0f0f0f] rounded-3xl border border-white/10 w-full h-full max-w-7xl flex flex-col shadow-[0_0_150px_rgba(0,0,0,0.8)] overflow-hidden">
         
         {/* TOP HEADER */}
-        <header className="h-20 border-b border-white/5 flex items-center justify-between px-10 bg-[#151515]/50 backdrop-blur-xl">
-          <div className="flex items-center gap-8">
+        <header className="h-20 border-b border-white/5 flex items-center justify-between px-8 md:px-10 bg-[#151515]/50 backdrop-blur-xl shrink-0">
+          <div className="flex items-center gap-6 md:gap-8">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center font-black text-xl shadow-[0_0_20px_rgba(249,115,22,0.3)]">A</div>
               <div className="flex flex-col">
                 <span className="font-black tracking-tight text-xl leading-none">ADIA <span className="text-orange-500">DOCS</span></span>
-                <span className="text-[9px] text-gray-500 font-bold uppercase tracking-[0.2em] mt-1">Advanced Engineering Reference</span>
+                <span className="text-[9px] text-gray-500 font-bold uppercase tracking-[0.2em] mt-1">Multi-Domain MBD & HIL Reference</span>
               </div>
             </div>
             
-            <div className="h-10 w-[1px] bg-white/10"></div>
+            <div className="h-10 w-[1px] bg-white/10 hidden sm:block"></div>
             
             <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
               <button 
                 onClick={() => setShowBlockRef(false)}
-                className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!showBlockRef ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:text-white'}`}
+                className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!showBlockRef ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:text-white'}`}
               >
-                User Guide
+                User Guide & Modules
               </button>
               <button 
                 onClick={() => setShowBlockRef(true)}
-                className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${showBlockRef ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:text-white'}`}
+                className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${showBlockRef ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:text-white'}`}
               >
-                Block Reference
+                Illustrated Block Reference ({allBlocks.length})
               </button>
             </div>
           </div>
           
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 md:gap-6">
             <div className="relative group">
               <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-orange-500 transition-colors">
                 <Search size={16} />
               </div>
               <input 
                 type="text" 
-                placeholder={showBlockRef ? "Search components..." : "Search documentation..."}
-                className="bg-black/60 border border-white/10 rounded-full py-3 pl-12 pr-6 text-xs w-80 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-all font-medium"
+                placeholder={showBlockRef ? "Search 250+ blocks, equations, ports..." : "Search documentation topics & guides..."}
+                className="bg-black/60 border border-white/10 rounded-full py-2.5 pl-12 pr-6 text-xs w-64 md:w-80 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-all font-medium"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             <button 
               onClick={onClose}
-              className="w-12 h-12 rounded-full bg-white/5 hover:bg-red-500/20 hover:text-red-500 flex items-center justify-center transition-all group"
+              className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/5 hover:bg-red-500/20 hover:text-red-500 flex items-center justify-center transition-all group shrink-0"
+              title="Close Help"
             >
-              <X size={24} className="group-hover:rotate-90 transition-transform" />
+              <X size={22} className="group-hover:rotate-90 transition-transform" />
             </button>
           </div>
         </header>
@@ -5467,7 +5490,37 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
         <div className="flex flex-1 overflow-hidden">
           
           {/* SIDEBAR */}
-          <aside className="w-80 border-r border-white/5 bg-[#0a0a0a] flex flex-col">
+          <aside className="w-80 border-r border-white/5 bg-[#0a0a0a] flex flex-col shrink-0">
+            {showBlockRef && (
+              <div className="p-4 border-b border-white/5 bg-[#121212]/80 space-y-3 shrink-0">
+                {/* Engine Filter */}
+                <div className="flex items-center gap-1.5 bg-black/50 p-1 rounded-lg border border-white/5 text-[9px] font-bold">
+                  {["All", "V-Lab", "X-Bridges"].map(src => (
+                    <button
+                      key={src}
+                      onClick={() => setSelectedSourceFilter(src)}
+                      className={`flex-1 py-1 rounded text-center transition-all ${selectedSourceFilter === src ? 'bg-orange-500 text-black font-black' : 'text-gray-400 hover:text-white'}`}
+                    >
+                      {src}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Domain Selector */}
+                <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar pb-1">
+                  {domainsList.slice(0, 8).map(d => (
+                    <button
+                      key={d}
+                      onClick={() => setSelectedDomainFilter(d)}
+                      className={`px-2 py-1 rounded text-[8px] font-bold uppercase whitespace-nowrap transition-all ${selectedDomainFilter === d ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40' : 'bg-white/5 text-gray-500 hover:text-gray-300'}`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
               {!showBlockRef ? (
                 /* DOCUMENTATION TREE */
@@ -5475,7 +5528,7 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
                   {Object.keys(topicCategories).map(cat => (
                     <div key={cat}>
                       <h4 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                        <div className="w-1 h-1 rounded-full bg-orange-500"></div>
+                        <div className="w-1.5 h-1.5 rounded-full bg-orange-500"></div>
                         {cat}
                       </h4>
                       <ul className="space-y-1">
@@ -5497,91 +5550,101 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
               ) : (
                 /* BLOCK LIBRARY TREE */
                 <div className="space-y-2">
-                  <h4 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.2em] mb-4">Available Components</h4>
+                  <div className="flex items-center justify-between mb-3 text-[10px] font-black text-gray-600 uppercase tracking-[0.2em]">
+                    <span>Components ({filteredBlocks.length})</span>
+                    {selectedDomainFilter !== "All" && (
+                      <button onClick={() => setSelectedDomainFilter("All")} className="text-orange-500 hover:underline">Reset</button>
+                    )}
+                  </div>
                   {filteredBlocks.map(block => (
                     <button 
                       key={block.id}
                       onClick={() => setSelectedBlockId(block.id)}
-                      className={`w-full text-left px-4 py-2 rounded-xl text-[11px] transition-all flex items-center justify-between group ${selectedBlockId === block.id ? 'bg-orange-500 text-black font-black' : 'text-gray-500 hover:bg-white/5'}`}
+                      className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[11px] transition-all flex items-center justify-between group ${selectedBlockId === block.id ? 'bg-orange-500 text-black font-black shadow-md shadow-orange-500/20' : 'text-gray-400 hover:bg-white/5'}`}
                     >
-                      <div className="flex items-center gap-3">
-                        <Box size={14} className={selectedBlockId === block.id ? 'text-black' : 'text-gray-700'} />
-                        {block.name}
+                      <div className="flex items-center gap-2.5 truncate">
+                        <Box size={13} className={selectedBlockId === block.id ? 'text-black' : 'text-gray-600'} />
+                        <span className="truncate">{block.name}</span>
                       </div>
-                      <span className={`text-[8px] uppercase font-bold px-1.5 py-0.5 rounded ${selectedBlockId === block.id ? 'bg-black/20 text-black' : 'bg-white/5 text-gray-600'}`}>
-                        {block.source}
+                      <span className={`text-[8px] uppercase font-black px-1.5 py-0.5 rounded shrink-0 ml-2 ${selectedBlockId === block.id ? 'bg-black/20 text-black' : 'bg-white/5 text-gray-500'}`}>
+                        {block.domain}
                       </span>
                     </button>
                   ))}
+                  {filteredBlocks.length === 0 && (
+                    <div className="p-6 text-center text-xs text-gray-600 italic">
+                      No blocks match your search or filter.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </aside>
 
           {/* MAIN CONTENT AREA */}
-          <main className="flex-1 overflow-y-auto bg-[#0a0a0a] p-16 custom-scrollbar relative">
+          <main className="flex-1 overflow-y-auto bg-[#0a0a0a] p-10 md:p-14 custom-scrollbar relative">
             {!showBlockRef ? (
               /* TOPIC VIEW */
               <div className="max-w-4xl mx-auto">
-                <div className="mb-16">
+                <div className="mb-14">
                   <nav className="flex items-center gap-3 text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-6">
-                    <span className="hover:text-orange-500 cursor-pointer">ADIA Docs</span>
+                    <span className="hover:text-orange-500 cursor-pointer" onClick={() => setActiveTopic("getting-started")}>ADIA Docs</span>
                     <ChevronRight size={10} />
                     <span className="text-gray-400">{topic.category}</span>
                     <ChevronRight size={10} />
                     <span className="text-white">{topic.title}</span>
                   </nav>
                   
-                  <h1 className="text-6xl font-black text-white tracking-tighter mb-6 leading-none">
+                  <h1 className="text-5xl font-black text-white tracking-tighter mb-4 leading-tight">
                     {topic.title}
                   </h1>
-                  <p className="text-xl text-gray-400 leading-relaxed font-light max-w-2xl">
+                  <p className="text-lg text-gray-400 leading-relaxed font-light max-w-3xl">
                     {topic.description}
                   </p>
                 </div>
 
                 {topic.image && (
-                  <div className="mb-16 rounded-3xl overflow-hidden border border-white/10 shadow-2xl group relative">
-                    <img src={topic.image} alt={topic.title} className="w-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                    <div className="absolute bottom-8 left-8 flex items-center gap-3">
+                  <div className="mb-14 rounded-3xl overflow-hidden border border-white/10 shadow-2xl group relative bg-black/40">
+                    <img src={topic.image} alt={topic.title} className="w-full object-cover group-hover:scale-105 transition-transform duration-700 max-h-[380px]" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
+                    <div className="absolute bottom-6 left-6 flex items-center gap-3">
                       <div className="p-2 bg-orange-500 rounded-lg text-black"><Activity size={16} /></div>
-                      <span className="text-xs font-black uppercase tracking-widest text-white shadow-sm">Module Overview Diagram</span>
+                      <span className="text-xs font-black uppercase tracking-widest text-white shadow-sm">Illustrated Architecture Diagram</span>
                     </div>
                   </div>
                 )}
 
                 <div className="prose prose-invert max-w-none">
-                  <div className="text-gray-300 leading-relaxed text-lg mb-16 font-light">
+                  <div className="text-gray-300 leading-relaxed text-base mb-14 font-light bg-white/[0.02] p-8 rounded-3xl border border-white/5">
                     {topic.content}
                   </div>
 
-                  <div className="space-y-20">
+                  <div className="space-y-16">
                     {topic.sections?.map((section, idx) => (
-                      <section key={idx} className="relative pl-12 border-l border-white/10 group">
-                        <div className="absolute left-[-6px] top-0 w-3 h-3 rounded-full bg-white/10 group-hover:bg-orange-500 transition-colors shadow-[0_0_15px_rgba(255,255,255,0.1)] group-hover:shadow-orange-500/50"></div>
-                        <h2 className="text-2xl font-black text-white mb-6 tracking-tight flex items-center gap-4">
+                      <section key={idx} className="relative pl-10 border-l-2 border-white/10 group">
+                        <div className="absolute left-[-7px] top-1 w-3 h-3 rounded-full bg-white/20 group-hover:bg-orange-500 transition-colors shadow-[0_0_15px_rgba(255,255,255,0.1)] group-hover:shadow-orange-500/50"></div>
+                        <h2 className="text-2xl font-black text-white mb-4 tracking-tight flex items-center gap-3">
                           {section.title}
                         </h2>
-                        <div className="text-gray-400 leading-relaxed mb-8 whitespace-pre-wrap font-light">
+                        <div className="text-gray-400 leading-relaxed mb-6 whitespace-pre-wrap font-light text-sm">
                           {section.body}
                         </div>
                         
                         {section.list && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
                             {section.list.map((item, i) => (
                               <div key={i} className="flex items-start gap-3 p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
                                 <div className="w-1.5 h-1.5 rounded-full bg-orange-500 mt-1.5 shrink-0"></div>
-                                <span className="text-sm text-gray-300 font-light">{renderFormattedHelpText(item)}</span>
+                                <span className="text-xs text-gray-300 font-light leading-relaxed">{renderFormattedHelpText(item)}</span>
                               </div>
                             ))}
                           </div>
                         )}
 
                         {section.code && (
-                          <div className="relative group/code mt-8">
-                            <div className="absolute right-4 top-4 text-[10px] font-black text-white/20 uppercase tracking-widest">Mathematical Model</div>
-                            <div className="bg-black/80 rounded-2xl border border-white/10 p-8 font-mono text-sm text-orange-400 overflow-x-auto shadow-inner">
+                          <div className="relative group/code mt-6">
+                            <div className="absolute right-4 top-3 text-[9px] font-black text-white/30 uppercase tracking-widest">Mathematical / Code Formulation</div>
+                            <div className="bg-black/90 rounded-2xl border border-white/10 p-6 font-mono text-xs text-orange-400 overflow-x-auto shadow-inner">
                               <pre className="m-0">{section.code}</pre>
                             </div>
                           </div>
@@ -5591,19 +5654,19 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
                   </div>
 
                   {topic.related && (
-                    <div className="mt-32 pt-16 border-t border-white/5">
-                      <h3 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] mb-10">Expand Your Learning</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="mt-24 pt-12 border-t border-white/5">
+                      <h3 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] mb-8">Related Modules & Deep Dives</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {topic.related.map(key => (
                           <button 
                             key={key}
                             onClick={() => setActiveTopic(key)}
-                            className="p-8 bg-[#151515] border border-white/5 rounded-3xl hover:border-orange-500/40 transition-all text-left group hover:-translate-y-1"
+                            className="p-6 bg-[#151515] border border-white/5 rounded-3xl hover:border-orange-500/40 transition-all text-left group hover:-translate-y-1"
                           >
-                            <span className="text-[9px] text-orange-500 uppercase font-black block mb-2 tracking-widest">{HELP_DATA[key]?.category}</span>
-                            <span className="text-lg font-bold text-white group-hover:text-orange-500 transition-colors block leading-tight">{HELP_DATA[key]?.title}</span>
-                            <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-gray-500 group-hover:text-gray-300 transition-colors">
-                              View Tutorial <ChevronRight size={10} />
+                            <span className="text-[9px] text-orange-500 uppercase font-black block mb-1.5 tracking-widest">{HELP_DATA[key]?.category}</span>
+                            <span className="text-sm font-bold text-white group-hover:text-orange-500 transition-colors block leading-tight">{HELP_DATA[key]?.title}</span>
+                            <div className="mt-3 flex items-center gap-1.5 text-[9px] font-bold text-gray-500 group-hover:text-gray-300 transition-colors">
+                              Explore Guide <ChevronRight size={10} />
                             </div>
                           </button>
                         ))}
@@ -5617,113 +5680,178 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
               <div className="max-w-4xl mx-auto">
                 {selectedBlock ? (
                   <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <div className="flex items-start justify-between mb-16">
+                    {/* Header */}
+                    <div className="flex items-start justify-between mb-12 border-b border-white/5 pb-8">
                       <div className="flex flex-col">
-                        <div className="flex items-center gap-4 mb-4">
-                          <div className="p-4 bg-orange-500 rounded-2xl text-black shadow-2xl shadow-orange-500/20">
-                            <DynamicIcon name={selectedBlock.icon} size={32} />
+                        <div className="flex items-center gap-4 mb-3">
+                          <div className="p-3.5 bg-orange-500 rounded-2xl text-black shadow-xl shadow-orange-500/20">
+                            <DynamicIcon name={selectedBlock.icon} size={28} />
                           </div>
                           <div>
-                            <h1 className="text-5xl font-black text-white tracking-tighter">{selectedBlock.name}</h1>
-                            <div className="flex items-center gap-3 mt-2">
-                              <span className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-[10px] font-black text-gray-400 uppercase tracking-widest">{selectedBlock.source} Component</span>
-                              <span className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-[10px] font-black text-orange-500 uppercase tracking-widest">{selectedBlock.domain} Domain</span>
+                            <h1 className="text-4xl font-black text-white tracking-tighter">{selectedBlock.name}</h1>
+                            <div className="flex items-center gap-2.5 mt-1.5">
+                              <span className="px-3 py-0.5 bg-white/5 border border-white/10 rounded-full text-[9px] font-black text-gray-400 uppercase tracking-widest">{selectedBlock.source} Component</span>
+                              <span className={`px-3 py-0.5 border rounded-full text-[9px] font-black uppercase tracking-widest ${getDomainColor(selectedBlock.domain)}`}>
+                                {selectedBlock.domain} Domain
+                              </span>
                             </div>
                           </div>
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-[10px] font-black text-gray-600 uppercase tracking-widest mb-1">Status</div>
-                        <div className="text-emerald-500 font-bold text-xs flex items-center gap-2 justify-end">
-                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                          Fully Documented
+                        <div className="text-[9px] font-black text-gray-600 uppercase tracking-widest mb-1">Catalog Status</div>
+                        <div className="text-emerald-400 font-bold text-xs flex items-center gap-1.5 justify-end">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+                          Full Physics & Port Verified
                         </div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                      <div className="space-y-10">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                      {/* Left Column: Pinout & Parameters */}
+                      <div className="space-y-8">
                         <section>
-                          <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.2em] mb-6">Component Interface</h3>
-                          <div className="bg-black/40 rounded-3xl border border-white/5 p-8 relative flex items-center justify-center min-h-[300px]">
+                          <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                            <Box size={14} className="text-orange-500" />
+                            Schematic Terminal Interface
+                          </h3>
+                          <div className="bg-black/60 rounded-3xl border border-white/5 p-6 relative flex flex-col items-center justify-center min-h-[260px] shadow-inner">
                             {/* Block Visualization */}
-                            <div className="w-40 h-40 bg-orange-500/5 border-2 border-orange-500/30 rounded-3xl flex items-center justify-center relative shadow-[0_0_50px_rgba(249,115,22,0.1)]">
-                              <DynamicIcon name={selectedBlock.icon} size={48} className="text-orange-500" />
+                            <div className="w-36 h-36 bg-orange-500/5 border-2 border-orange-500/30 rounded-3xl flex flex-col items-center justify-center relative shadow-[0_0_50px_rgba(249,115,22,0.1)] group">
+                              <DynamicIcon name={selectedBlock.icon} size={40} className="text-orange-500 mb-1" />
+                              <span className="text-[10px] font-black text-white/80 max-w-[100px] text-center truncate px-1">{selectedBlock.name}</span>
                               
-                              {/* Port Labels */}
-                              {selectedBlock.ports?.map((p: any, i: number) => (
-                                <div key={i} className={`absolute text-[8px] font-black uppercase text-gray-400 p-2 ${p.position === 'left' ? '-left-12' : p.position === 'right' ? '-right-12' : p.position === 'top' ? '-top-10' : '-bottom-10'}`}>
-                                  {p.label || p.name}
-                                  <div className={`absolute w-2 h-2 rounded-full border-2 border-orange-500 bg-black ${p.position === 'left' ? 'right-[-4px] top-1/2 -translate-y-1/2' : p.position === 'right' ? 'left-[-4px] top-1/2 -translate-y-1/2' : p.position === 'top' ? 'bottom-[-4px] left-1/2 -translate-x-1/2' : 'top-[-4px] left-1/2 -translate-x-1/2'}`}></div>
-                                </div>
-                              ))}
+                              {/* Port Pins */}
+                              {selectedBlock.ports?.map((p: any, i: number) => {
+                                const pos = p.position || (i % 2 === 0 ? 'left' : 'right');
+                                return (
+                                  <div 
+                                    key={i} 
+                                    className={`absolute text-[8px] font-black uppercase text-gray-400 flex items-center gap-1 ${pos === 'left' ? '-left-14' : pos === 'right' ? '-right-14' : pos === 'top' ? '-top-8' : '-bottom-8'}`}
+                                  >
+                                    <span className="px-1 py-0.5 bg-black/80 rounded border border-white/10 text-orange-400/90">{p.label || p.name || `Pin ${i+1}`}</span>
+                                    <div className={`w-2.5 h-2.5 rounded-full border-2 border-orange-500 bg-black ${pos === 'left' ? 'order-last' : 'order-first'}`}></div>
+                                  </div>
+                                );
+                              })}
                             </div>
+                            <span className="text-[9px] text-gray-600 font-bold uppercase tracking-widest mt-6">
+                              {selectedBlock.ports?.length || 2} Connected Terminals ({selectedBlock.source === 'V-Lab' ? 'Acausal Energy Ports' : 'Causal Signal Ports'})
+                            </span>
                           </div>
                         </section>
 
                         <section>
-                          <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.2em] mb-6">Configurable Parameters</h3>
-                          <div className="space-y-3">
+                          <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4">
+                            Configurable Parameters
+                          </h3>
+                          <div className="space-y-2.5">
                             {Object.entries(selectedBlock.params || {}).map(([key, p]: [string, any]) => (
-                              <div key={key} className="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl group hover:bg-white/[0.04] transition-colors">
+                              <div key={key} className="flex items-center justify-between p-3.5 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] transition-colors">
                                 <div className="flex flex-col">
-                                  <span className="text-[10px] font-black text-white uppercase">{p.label || key}</span>
+                                  <span className="text-[11px] font-bold text-white">{p.label || key}</span>
                                   <span className="text-[9px] text-gray-600 font-mono">{key}</span>
                                 </div>
                                 <div className="text-right">
-                                  <span className="text-xs font-bold text-orange-500">{p.value}</span>
-                                  <span className="text-[9px] text-gray-500 ml-1 uppercase">{p.unit}</span>
+                                  <span className="text-xs font-bold text-orange-400 font-mono">{String(p.value ?? p.default ?? '0')}</span>
+                                  <span className="text-[9px] text-gray-500 ml-1.5 uppercase font-bold">{p.unit || ''}</span>
                                 </div>
                               </div>
                             ))}
                             {Object.keys(selectedBlock.params || {}).length === 0 && (
-                              <div className="p-8 text-center text-xs text-gray-600 italic bg-white/[0.01] border border-dashed border-white/10 rounded-2xl">
-                                No configurable parameters for this component.
+                              <div className="p-6 text-center text-xs text-gray-600 italic bg-white/[0.01] border border-dashed border-white/10 rounded-2xl">
+                                Standard ideal component with fixed internal characteristics.
                               </div>
                             )}
                           </div>
                         </section>
                       </div>
 
-                      <div className="space-y-10">
+                      {/* Right Column: Execution, Equations, and How-To-Use */}
+                      <div className="space-y-8">
                         <section>
-                          <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.2em] mb-6">Execution Logic</h3>
-                          <div className="bg-black/60 rounded-3xl border border-white/5 p-8">
-                            <p className="text-sm text-gray-400 leading-relaxed font-light mb-6">
-                              {selectedBlock.description || "This block performs real-time computation of its internal transfer function during each simulation step (fixed-step solver)."}
+                          <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4">
+                            Governing Physics & Transfer Equations
+                          </h3>
+                          <div className="bg-black/60 rounded-3xl border border-white/5 p-6">
+                            <p className="text-xs text-gray-400 leading-relaxed font-light mb-4">
+                              {selectedBlock.description || "This component participates in continuous simulation through simultaneous differential-algebraic equations solved by the numerical solver."}
                             </p>
-                            <div className="bg-orange-500/5 p-6 rounded-2xl border border-orange-500/20">
-                              <h4 className="text-[9px] font-black text-orange-500 uppercase tracking-widest mb-4">Physics Equation</h4>
-                              <div className="font-mono text-sm text-white/90 italic whitespace-pre-wrap">
-                                {selectedBlock.equation || (selectedBlock.domain === 'Electrical' ? 'V = I * Z(s)' : selectedBlock.domain === 'Mechanical' ? 'F = m * dv/dt' : 'Y = f(U)')}
+                            <div className="bg-orange-500/5 p-5 rounded-2xl border border-orange-500/20">
+                              <h4 className="text-[9px] font-black text-orange-500 uppercase tracking-widest mb-2">Mathematical Formulation</h4>
+                              <div className="font-mono text-xs text-white/90 italic whitespace-pre-wrap leading-relaxed">
+                                {selectedBlock.equation || (selectedBlock.domain === 'Electrical' ? 'V_p - V_n = I * R' : selectedBlock.domain === 'Mechanical' ? 'F = m * dv/dt + B * v' : 'Y = f(U)')}
                               </div>
                             </div>
                           </div>
                         </section>
 
                         <section>
-                          <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.2em] mb-6">Usage Example</h3>
-                          <div className="p-8 bg-gradient-to-br from-orange-500/10 to-transparent border border-orange-500/10 rounded-3xl">
-                            <p className="text-xs text-gray-400 leading-relaxed mb-6 font-light italic">
-                              "Connect the {selectedBlock.name} to a <b>Scope</b> to visualize its dynamics in real-time. Ensure the input signal type matches the expected physical domain."
-                            </p>
-                            <button className="flex items-center gap-2 text-[10px] font-black text-orange-500 uppercase tracking-widest hover:text-orange-400 transition-colors">
-                              Open Learning Lab <ChevronRight size={12} />
-                            </button>
+                          <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4">
+                            How to Use & Button Steps in Canvas
+                          </h3>
+                          <div className="p-6 bg-gradient-to-br from-white/[0.03] to-transparent border border-white/10 rounded-3xl space-y-3 text-xs text-gray-300 font-light">
+                            <div className="flex items-start gap-2.5">
+                              <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[10px] shrink-0">1</span>
+                              <span>Click and drag <b>{selectedBlock.name}</b> from the left component panel onto the canvas.</span>
+                            </div>
+                            <div className="flex items-start gap-2.5">
+                              <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[10px] shrink-0">2</span>
+                              <span>Drag connection wires between terminal pins matching the <b>{selectedBlock.domain}</b> domain.</span>
+                            </div>
+                            <div className="flex items-start gap-2.5">
+                              <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[10px] shrink-0">3</span>
+                              <span>Double-click the block on the canvas to open the sidebar parameters editor.</span>
+                            </div>
+                            <div className="flex items-start gap-2.5">
+                              <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[10px] shrink-0">4</span>
+                              <span>Click <b>Start Simulation</b> in the top toolbar to execute real-time solver steps.</span>
+                            </div>
                           </div>
+                        </section>
+
+                        <section>
+                          <button 
+                            onClick={() => {
+                              setShowBlockRef(false);
+                              if (selectedBlock.source === 'V-Lab') {
+                                setActiveTopic('vlab-fundamentals');
+                              } else {
+                                setActiveTopic('xbridges-ref');
+                              }
+                            }}
+                            className="w-full py-3.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all group"
+                          >
+                            <span>Read Full {selectedBlock.source} Theory Guide</span>
+                            <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                          </button>
                         </section>
                       </div>
                     </div>
                   </div>
                 ) : (
                   <div className="h-[60vh] flex flex-col items-center justify-center text-center">
-                    <div className="w-24 h-24 bg-white/[0.03] rounded-full flex items-center justify-center mb-8 border border-white/5">
-                      <Search size={40} className="text-gray-700" />
+                    <div className="w-20 h-20 bg-white/[0.03] rounded-full flex items-center justify-center mb-6 border border-white/5">
+                      <Search size={32} className="text-gray-600" />
                     </div>
-                    <h2 className="text-3xl font-black text-white tracking-tighter mb-4">Explore the Block Library</h2>
-                    <p className="text-gray-500 max-w-sm leading-relaxed text-sm font-light">
-                      Select a component from the sidebar to view its mathematical model, electrical ports, and configuration parameters.
+                    <h2 className="text-2xl font-black text-white tracking-tight mb-2">Explore the Multi-Domain Block Catalog</h2>
+                    <p className="text-gray-500 max-w-md leading-relaxed text-xs font-light mb-6">
+                      Select any physical component or control block from the sidebar to inspect its electrical/mechanical pinouts, transfer equations, parameters, and step-by-step canvas usage.
                     </p>
+                    <div className="flex flex-wrap gap-2 justify-center max-w-lg">
+                      {["Resistor", "Capacitor", "Inertia", "DC Voltage Source", "PID Controller", "Clarke Transform", "BLDC Motor"].map(sample => {
+                        const target = allBlocks.find(b => b.name.toLowerCase().includes(sample.toLowerCase()));
+                        return target ? (
+                          <button
+                            key={sample}
+                            onClick={() => setSelectedBlockId(target.id)}
+                            className="px-3 py-1.5 bg-white/5 hover:bg-orange-500/10 hover:text-orange-400 border border-white/10 rounded-xl text-[10px] font-bold text-gray-400 transition-colors"
+                          >
+                            {sample}
+                          </button>
+                        ) : null;
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
@@ -5732,25 +5860,19 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
         </div>
 
         {/* FOOTER */}
-        <footer className="h-14 border-t border-white/5 bg-[#111] flex items-center justify-between px-10">
+        <footer className="h-14 border-t border-white/5 bg-[#111] flex items-center justify-between px-8 md:px-10 shrink-0">
           <div className="flex items-center gap-6">
-            <span className="text-[9px] text-gray-600 font-black uppercase tracking-widest">ADIA Engineering Suite v2.4</span>
+            <span className="text-[9px] text-gray-600 font-black uppercase tracking-widest">ADIA Model-Based Design Engineering Suite</span>
             <div className="h-4 w-[1px] bg-white/5"></div>
             <div className="flex gap-4">
-              <button className="text-[9px] text-gray-500 font-bold uppercase hover:text-white transition-colors">Safety Standard</button>
-              <button className="text-[9px] text-gray-500 font-bold uppercase hover:text-white transition-colors">Compliance Record</button>
+              <span className="text-[9px] text-gray-500 font-bold uppercase">250+ Multi-Domain Blocks Verified</span>
+              <span className="text-[9px] text-gray-500 font-bold uppercase">HIL Real-Time Driver Ready</span>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex -space-x-2">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="w-6 h-6 rounded-full border-2 border-[#111] bg-gray-800 flex items-center justify-center text-[8px] font-bold text-gray-500">U{i}</div>
-              ))}
-            </div>
-            <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Join the Community</span>
+          <div className="flex items-center gap-3">
+            <span className="text-[9px] text-gray-600 font-bold">Press <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white font-mono text-[8px]">Esc</kbd> to exit</span>
           </div>
         </footer>
-
       </div>
     </div>
   );
@@ -5947,102 +6069,93 @@ const GlobalReportPreviewModal = ({
   reportData: { html: string, projectName: string } | null 
 }) => {
   const [layout, setLayout] = useState<'1-col' | '2-col'>('1-col');
-  const previewRef = useRef<HTMLDivElement>(null);
 
-  // Safe report modal — scripts inside report previews are stripped by DOMPurify and not executed on main DOM
   if (!isOpen || !reportData) return null;
 
   const exportToWord = async () => {
-    if (!previewRef.current) return;
-    
-    const clone = previewRef.current.cloneNode(true) as HTMLDivElement;
-    const svgs = clone.querySelectorAll('svg');
-    const images: { id: string, data: string }[] = [];
-    
-    // Convert SVGs to images and collect them
-    for (let i = 0; i < svgs.length; i++) {
-      try {
-        const svg = svgs[i];
-        if (!svg.getAttribute('xmlns')) {
-          svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(reportData.html, 'text/html');
+      const bodyContent = doc.body;
+      const svgs = Array.from(bodyContent.querySelectorAll('svg'));
+      const images: { id: string, data: string }[] = [];
+
+      for (let i = 0; i < svgs.length; i++) {
+        try {
+          const svg = svgs[i];
+          if (!svg.getAttribute('xmlns')) {
+            svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+          }
+          const svgData = new XMLSerializer().serializeToString(svg);
+          const canvas = document.createElement("canvas");
+          const scale = 2;
+          const width = parseInt(svg.getAttribute("width") || "800");
+          const height = parseInt(svg.getAttribute("height") || "600");
+          canvas.width = width * scale;
+          canvas.height = height * scale;
+          const ctx = canvas.getContext("2d");
+          const img = document.createElement("img");
+          img.setAttribute("src", "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData))));
+
+          await new Promise((resolve) => {
+            img.onload = () => {
+              if (ctx) {
+                ctx.fillStyle = "white";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.scale(scale, scale);
+                ctx.drawImage(img, 0, 0);
+              }
+              resolve(true);
+            };
+            img.onerror = resolve;
+          });
+
+          const imgData = canvas.toDataURL("image/png");
+          const base64Content = imgData.split(',')[1];
+          const imageId = `img_${i}`;
+          images.push({ id: imageId, data: base64Content });
+
+          const newImg = document.createElement('img');
+          newImg.src = `cid:${imageId}`;
+          const MAX_WORD_WIDTH = 650;
+          const displayWidth = width > MAX_WORD_WIDTH ? MAX_WORD_WIDTH : width;
+          newImg.setAttribute('width', displayWidth.toString());
+          svg.parentNode?.replaceChild(newImg, svg);
+        } catch (e) {
+          console.error('Failed to capture SVG for Word export', e);
         }
-        
-        const svgData = new XMLSerializer().serializeToString(svg);
-        const canvas = document.createElement("canvas");
-        const scale = 2;
-        const width = parseInt(svg.getAttribute("width") || "800");
-        const height = parseInt(svg.getAttribute("height") || "600");
-        
-        canvas.width = width * scale;
-        canvas.height = height * scale;
-        const ctx = canvas.getContext("2d");
-        
-        const img = document.createElement("img");
-        img.setAttribute("src", "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData))));
-        
-        await new Promise((resolve) => {
-          img.onload = () => {
-            if (ctx) {
-              ctx.fillStyle = "white";
-              ctx.fillRect(0, 0, canvas.width, canvas.height);
-              ctx.scale(scale, scale);
-              ctx.drawImage(img, 0, 0);
-            }
-            resolve(true);
-          };
-          img.onerror = resolve;
-        });
+      }
 
-        const imgData = canvas.toDataURL("image/png");
-        const base64Content = imgData.split(',')[1];
-        const imageId = `img_${i}`;
-        images.push({ id: imageId, data: base64Content });
+      const htmlContent = `
+        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'>
+        <head><meta charset='utf-8'><title>${reportData.projectName} Report</title></head>
+        <body style="font-family: 'Calibri', 'Segoe UI', sans-serif; font-size: 11pt; line-height: 1.5; background-color: #ffffff; color: #333333; margin: 0 auto; max-width: 800px;">
+          ${bodyContent.innerHTML}
+        </body>
+        </html>
+      `;
 
-        const newImg = document.createElement('img');
-        newImg.src = `cid:${imageId}`; // Use Content-ID for MHTML
-        
-        // Cap the display width so it doesn't overflow Word's page margins, keeping font scale reasonable
-        const MAX_WORD_WIDTH = 650;
-        const displayWidth = width > MAX_WORD_WIDTH ? MAX_WORD_WIDTH : width;
-        newImg.setAttribute('width', displayWidth.toString());
-        
-        svg.parentNode?.replaceChild(newImg, svg);
-      } catch (e) { console.error('Failed to capture SVG', e); }
+      const boundary = "----=_NextPart_" + Math.random().toString(36).substring(2);
+      let mhtml = `MIME-Version: 1.0\nContent-Type: multipart/related; boundary="${boundary}"\n\n`;
+      mhtml += `--${boundary}\nContent-Type: text/html; charset="utf-8"\nContent-Transfer-Encoding: 8bit\n\n`;
+      mhtml += htmlContent + `\n\n`;
+      images.forEach(img => {
+        mhtml += `--${boundary}\nContent-Type: image/png\nContent-Transfer-Encoding: base64\nContent-ID: <${img.id}>\n\n`;
+        mhtml += img.data + `\n\n`;
+      });
+      mhtml += `--${boundary}--`;
+
+      const blob = new Blob([mhtml], { type: 'application/msword' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${reportData.projectName.replace(/\s+/g, '_')}_Report.doc`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Failed to export report to Word', err);
     }
-
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'>
-      <head><meta charset='utf-8'><title>${reportData.projectName} Report</title></head>
-      <body style="font-family: 'Calibri', 'Segoe UI', sans-serif; font-size: 11pt; line-height: 1.5; background-color: #ffffff; color: #333333; margin: 0 auto; max-width: 800px;">
-        ${DOMPurify.sanitize(clone.innerHTML)}
-      </body>
-      </html>
-    `;
-
-    // Construct MHTML
-    const boundary = "----=_NextPart_" + Math.random().toString(36).substring(2);
-    let mhtml = `MIME-Version: 1.0\nContent-Type: multipart/related; boundary="${boundary}"\n\n`;
-    
-    // HTML Part
-    mhtml += `--${boundary}\nContent-Type: text/html; charset="utf-8"\nContent-Transfer-Encoding: 8bit\n\n`;
-    mhtml += htmlContent + `\n\n`;
-
-    // Image Parts
-    images.forEach(img => {
-      mhtml += `--${boundary}\nContent-Type: image/png\nContent-Transfer-Encoding: base64\nContent-ID: <${img.id}>\n\n`;
-      mhtml += img.data + `\n\n`;
-    });
-
-    mhtml += `--${boundary}--`;
-
-    const blob = new Blob([mhtml], { type: 'application/msword' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${reportData.projectName.replace(/\s+/g, '_')}_Report.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   const exportToHTML = () => {
@@ -6059,11 +6172,11 @@ const GlobalReportPreviewModal = ({
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-[#1a1a1a] border border-[#333] rounded-xl w-full max-w-6xl h-full max-h-[90vh] flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between p-4 border-b border-[#222]">
+      <div className="bg-[#1a1a1a] border border-[#333] rounded-xl w-full max-w-6xl h-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-[#222] bg-[#141414]">
           <div className="flex items-center gap-2">
             <FileText size={20} className="text-[#f97316]" />
-            <h2 className="text-lg font-bold text-white">Global Project Report</h2>
+            <h2 className="text-lg font-bold text-white">{reportData.projectName} — Interactive Report</h2>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1 bg-[#1a1a1a] rounded-lg p-1 border border-[#333]">
@@ -6095,70 +6208,13 @@ const GlobalReportPreviewModal = ({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8 bg-[#0a0a0a] flex justify-center custom-scrollbar">
-          <div 
-            ref={previewRef} 
-            className="bg-white w-full max-w-[210mm] min-h-[297mm] shadow-2xl p-10 text-black border border-[#333] global-report-content"
-            style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}
-          >
-            <style>{`
-              .global-report-content h1 { color: #f97316; border-bottom: 2px solid #f97316; padding-bottom: 10px; margin-bottom: 20px; }
-              .global-report-content h2 { color: #222; border-bottom: 1px solid #eee; margin-top: 40px; padding-bottom: 5px; }
-              .global-report-content h3 { color: #444; margin-top: 25px; font-size: 1.1em; }
-              .global-report-content .meta { color: #666; font-size: 0.9em; margin-bottom: 40px; }
-              .global-report-content .tree { margin-left: 20px; border-left: 1px solid #ddd; padding-left: 15px; }
-              .global-report-content .item { margin-bottom: 15px; }
-              .global-report-content .item-header { font-weight: bold; color: #000; }
-              .global-report-content .props { font-size: 0.9em; color: #555; margin-left: 10px; }
-              .global-report-content .tag { background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }
-              
-              /* Layout styles */
-              .global-report-content .diagram-container {
-                 display: ${layout === '2-col' ? 'grid' : 'block'};
-                 grid-template-columns: ${layout === '2-col' ? '1fr 1fr' : '1fr'};
-                 gap: 20px;
-                 margin: 16px 0;
-              }
-              .global-report-content .diagram-cell {
-                 break-inside: avoid;
-                 page-break-inside: avoid;
-                 margin-bottom: 16px;
-              }
-              .global-report-content svg {
-                 max-width: 100%;
-                 height: auto;
-                 display: block;
-              }
-              
-              /* Print styles for clean PDF output */
-              @media print {
-                .global-report-content .diagram-container {
-                   display: block;
-                }
-                .global-report-content .diagram-cell {
-                   page-break-inside: avoid;
-                   margin-bottom: 20px;
-                }
-                .global-report-content svg {
-                   max-width: 100% !important;
-                   height: auto !important;
-                }
-                .global-report-content h2 {
-                   page-break-after: avoid;
-                }
-              }
-            `}</style>
-            <div 
-              dangerouslySetInnerHTML={{ 
-                __html: DOMPurify.sanitize(reportData.html.replace(/.*?<body>/s, '').replace(/<\/body>.*?/s, ''), {
-                  ALLOWED_TAGS: [
-                    'h1','h2','h3','h4','p','span','div','table','tr','td','th','thead','tbody','b','i','strong','em','br','hr','ul','ol','li','img','svg','path','rect','circle','text','line','g','polygon','defs','marker'
-                  ],
-                  ALLOWED_ATTR: [
-                    'class','style','width','height','viewBox','xmlns','d','cx','cy','r','x','y','fill','stroke','stroke-width','transform','text-anchor','dominant-baseline','src','alt','x1','y1','x2','y2','points','stroke-dasharray','marker-start','marker-end','markerWidth','markerHeight','refX','refY','orient','opacity','font-size','font-family','font-weight'
-                  ]
-                })
-              }} 
+        <div className="flex-1 p-4 bg-[#0a0a0a] flex justify-center overflow-hidden">
+          <div className={`w-full ${layout === '2-col' ? 'max-w-[280mm]' : 'max-w-[220mm]'} h-full bg-white rounded-sm shadow-2xl overflow-hidden flex flex-col`}>
+            <iframe
+              srcDoc={reportData.html}
+              title="Report Preview"
+              className="w-full flex-1 border-0 h-full bg-white"
+              sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
             />
           </div>
         </div>
@@ -6166,6 +6222,7 @@ const GlobalReportPreviewModal = ({
     </div>
   );
 };
+
 
 const ADIA = () => {
   const [currentTheme, setCurrentTheme] = useState<AppTheme>(getStoredTheme);
@@ -6599,10 +6656,13 @@ const ADIA = () => {
   const [layerStack, setLayerStack] = useState<string[]>([]);
   const [layerPath, setLayerPath] = useState(['Root']);
   const [deleteConfirmState, setDeleteConfirmState] = useState<{
-    id: string;
+    id?: string;
+    ids: string[];
     name: string;
     parts: string;
     hasChildren: boolean;
+    totalStates: number;
+    otherDeletedIds?: string[];
   } | null>(null);
 
   const [states, setStates] = useState<StateData[]>([]);
@@ -8547,10 +8607,11 @@ const ADIA = () => {
     const uintVars = new Set(variables.filter(v => v.type.startsWith('uint')).map(v => v.name));
     const checkUnsafeArithmetic = (code: string, context: string, id?: string) => {
       if (!code) return;
-      uintVars.forEach(v => {
-        const decrementRegex = new RegExp(`\\b${v}\\s*--|--\\s*\\b${v}\\b`);
-        if (decrementRegex.test(code)) {
-          newErrors.push({ id: uuidv4(), type: 'error', message: `Unsafe arithmetic in ${context}: Potential underflow for unsigned variable '${v}'. Avoid using '--'. Use '${v} = ${v} - 1U;' inside a check.`, timestamp: new Date(), source: 'Validation', elementId: id });
+      const matches = Array.from(code.matchAll(/\b([a-zA-Z_]\w*)\s*--|--\s*\b([a-zA-Z_]\w*)\b/g));
+      matches.forEach(m => {
+        const varName = m[1] || m[2];
+        if (varName && uintVars.has(varName)) {
+          newErrors.push({ id: uuidv4(), type: 'error', message: `Unsafe arithmetic in ${context}: Potential underflow for unsigned variable '${varName}'. Avoid using '--'. Use '${varName} = ${varName} - 1U;' inside a check.`, timestamp: new Date(), source: 'Validation', elementId: id });
         }
       });
     };
@@ -8574,10 +8635,11 @@ const ADIA = () => {
         }
       }
 
+      const propertyWords = new Set(Array.from(code.matchAll(/\.\s*([a-zA-Z_]\w*)\b/g)).map(m => m[1]));
       const words = code.match(/\b[a-zA-Z_]\w*\b/g) || [];
       for (const word of words) {
         if (!declaredVarNames.has(word) && !jsKeywords.has(word)) {
-          const isProperty = new RegExp(`\\.\\s*${word}\\b`).test(code);
+          const isProperty = propertyWords.has(word);
           if (!isProperty) {
             newErrors.push({
               id: uuidv4(),
@@ -8620,10 +8682,11 @@ const ADIA = () => {
     const checkConditionSyntax = (code: string, context: string, id?: string) => {
       if (!code || !code.trim() || code === 'true') return;
 
+      const propertyWords = new Set(Array.from(code.matchAll(/\.\s*([a-zA-Z_]\w*)\b/g)).map(m => m[1]));
       const words = code.match(/\b[a-zA-Z_]\w*\b/g) || [];
       for (const word of words) {
         if (!declaredVarNames.has(word) && !jsKeywords.has(word)) {
-          const isProperty = new RegExp(`\\.\\s*${word}\\b`).test(code);
+          const isProperty = propertyWords.has(word);
           if (!isProperty) {
             newErrors.push({
               id: uuidv4(),
@@ -8871,9 +8934,11 @@ const ADIA = () => {
         if (boolVarsInCondition.length > 0) {
           const targetState = states.find(s => s.id === t.targetId);
           const combinedActions = t.action + (targetState ? targetState.entry : '');
+          const resetVars = new Set(
+            Array.from(combinedActions.matchAll(/\b([a-zA-Z_]\w*)\s*=\s*(?:false|0)\b/g)).map(m => m[1])
+          );
           boolVarsInCondition.forEach(v => {
-            const resetRegex = new RegExp(`\\b${v}\\s*=\\s*(false|0)\\b`);
-            if (!resetRegex.test(combinedActions)) {
+            if (!resetVars.has(v)) {
               newErrors.push({ id: uuidv4(), type: 'warning', message: `Level-triggered event '${v}' is used in a transition from '${sourceName}' but is not reset to false. This may cause repeated, immediate transitions.`, timestamp: new Date(), source: 'Validation', elementId: t.id });
             }
           });
@@ -9528,52 +9593,164 @@ const ADIA = () => {
     }
   }, [layers, states]);
 
-  const deleteState = useCallback((id: string) => {
-    const state = states.find(s => s.id === id);
-    if (!state) return;
+  const deleteNonStateElements = useCallback((ids: string[]) => {
+    const idSet = new Set(ids);
+    if (idSet.size === 0) return;
 
-    const { stateCount, layerCount } = countDescendants(id, states, layers);
-    const hasChildren = stateCount > 0 || layerCount > 0;
+    addToHistory();
+    setJunctions(prev => prev.filter(j => !idSet.has(j.id)));
+    setTransitions(prev => prev.filter(t => !idSet.has(t.id) && !idSet.has(t.sourceId) && !idSet.has(t.targetId)));
+    setLayers(prev => prev.map(l => ({
+      ...l,
+      junctionIds: l.junctionIds.filter(jid => !idSet.has(jid)),
+      transitionIds: l.transitionIds.filter(tid => !idSet.has(tid))
+    })));
+    setBlocks(prev => prev.filter(b => !idSet.has(b.id)));
+    setRelationships(prev => prev.filter(r => !idSet.has(r.id) && !idSet.has(r.sourceId) && !idSet.has(r.targetId)));
+    setParts(prev => prev.filter(p => !idSet.has(p.id)));
+    setConnectors(prev => prev.filter(c => !idSet.has(c.id) && !idSet.has(c.sourcePartId) && !idSet.has(c.targetPartId)));
+    setInterfaceRealizations(prev => prev.filter(ir => !idSet.has(ir.id) && !idSet.has(ir.partId) && !idSet.has(ir.interfaceId)));
+    setSelectedIds(prev => prev.filter(sid => !idSet.has(sid)));
+  }, [addToHistory]);
 
-    let parts = '';
-    if (hasChildren) {
-      const stateMsg = stateCount > 0 ? `${stateCount} child state(s)` : '';
-      const layerMsg = layerCount > 0 ? `${layerCount} sub-layer(s)` : '';
-      parts = [stateMsg, layerMsg].filter(Boolean).join(' and ');
+  const deleteStates = useCallback((targetIds: string | string[], otherDeletedIds: string[] = []) => {
+    const rawIds = Array.isArray(targetIds) ? targetIds : [targetIds];
+    const targetStateIds = rawIds.filter(id => states.some(s => s.id === id));
+    if (targetStateIds.length === 0) {
+      if (otherDeletedIds.length > 0) {
+        deleteNonStateElements(otherDeletedIds);
+      }
+      return;
     }
 
-    setDeleteConfirmState({
-      id,
-      name: state.name,
-      parts,
-      hasChildren
-    });
-  }, [states, layers]);
+    if (targetStateIds.length === 1) {
+      const state = states.find(s => s.id === targetStateIds[0]);
+      if (!state) return;
 
-  const executeDeleteState = useCallback((id: string) => {
-    const state = states.find(s => s.id === id);
+      const { stateCount, layerCount } = countDescendants(state.id, states, layers);
+      const hasChildren = stateCount > 0 || layerCount > 0;
+
+      let parts = '';
+      if (hasChildren) {
+        const stateMsg = stateCount > 0 ? `${stateCount} child state(s)` : '';
+        const layerMsg = layerCount > 0 ? `${layerCount} sub-layer(s)` : '';
+        parts = [stateMsg, layerMsg].filter(Boolean).join(' and ');
+      }
+
+      setDeleteConfirmState({
+        id: state.id,
+        ids: [state.id],
+        name: state.name,
+        parts,
+        hasChildren,
+        totalStates: 1,
+        otherDeletedIds
+      });
+    } else {
+      let totalNestedStates = 0;
+      let totalNestedLayers = 0;
+      for (const sid of targetStateIds) {
+        const { stateCount, layerCount } = countDescendants(sid, states, layers);
+        totalNestedStates += stateCount;
+        totalNestedLayers += layerCount;
+      }
+      const hasChildren = totalNestedStates > 0 || totalNestedLayers > 0;
+      let parts = '';
+      if (hasChildren) {
+        const stateMsg = totalNestedStates > 0 ? `${totalNestedStates} child state(s)` : '';
+        const layerMsg = totalNestedLayers > 0 ? `${totalNestedLayers} sub-layer(s)` : '';
+        parts = [stateMsg, layerMsg].filter(Boolean).join(' and ');
+      }
+
+      setDeleteConfirmState({
+        ids: targetStateIds,
+        name: `${targetStateIds.length} states`,
+        parts,
+        hasChildren,
+        totalStates: targetStateIds.length,
+        otherDeletedIds
+      });
+    }
+  }, [states, layers, deleteNonStateElements]);
+
+  const deleteState = useCallback((id: string) => {
+    deleteStates([id]);
+  }, [deleteStates]);
+
+  const executeDeleteState = useCallback((targetIds?: string | string[], otherDeletedIds: string[] = []) => {
     setDeleteConfirmState(null);
-    if (!state) return;
+    const resolvedIds = targetIds
+      ? (Array.isArray(targetIds) ? targetIds : [targetIds])
+      : (deleteConfirmState ? deleteConfirmState.ids : []);
+    const resolvedOtherIds = otherDeletedIds.length > 0
+      ? otherDeletedIds
+      : (deleteConfirmState?.otherDeletedIds || []);
+
+    if (resolvedIds.length === 0 && resolvedOtherIds.length === 0) return;
 
     addToHistory();
 
-    const result = pruneStateHierarchy(
-      id,
-      { states, layers, junctions, transitions },
-      { currentLayerId, layerStack, layerPath }
-    );
+    let nextStates = states;
+    let nextLayers = layers;
+    let nextJunctions = junctions;
+    let nextTransitions = transitions;
+    let nextCurrentLayerId = currentLayerId;
+    let nextLayerStack = layerStack;
+    let nextLayerPath = layerPath;
 
-    setStates(result.states);
-    setLayers(result.layers);
-    setJunctions(result.junctions);
-    setTransitions(result.transitions);
-    setCurrentLayerId(result.navigation.currentLayerId);
-    setLayerStack(result.navigation.layerStack);
-    setLayerPath(result.navigation.layerPath);
-    setSelectedIds(prev => prev.filter(sid => !result.deletedStateIds.includes(sid) && !result.deletedJunctionIds.includes(sid)));
+    if (resolvedIds.length > 0) {
+      const result = pruneMultipleStatesHierarchy(
+        resolvedIds,
+        { states, layers, junctions, transitions },
+        { currentLayerId, layerStack, layerPath }
+      );
 
-    addError('info', `Deleted state: ${state.name}`);
-  }, [states, layers, junctions, transitions, currentLayerId, layerStack, layerPath, addError, addToHistory]);
+      nextStates = result.states;
+      nextLayers = result.layers;
+      nextJunctions = result.junctions;
+      nextTransitions = result.transitions;
+      nextCurrentLayerId = result.navigation.currentLayerId;
+      nextLayerStack = result.navigation.layerStack;
+      nextLayerPath = result.navigation.layerPath;
+    }
+
+    if (resolvedOtherIds.length > 0) {
+      const otherSet = new Set(resolvedOtherIds);
+      nextJunctions = nextJunctions.filter(j => !otherSet.has(j.id));
+      nextTransitions = nextTransitions.filter(t => !otherSet.has(t.id) && !otherSet.has(t.sourceId) && !otherSet.has(t.targetId));
+      nextLayers = nextLayers.map(l => ({
+        ...l,
+        junctionIds: l.junctionIds.filter(jid => !otherSet.has(jid)),
+        transitionIds: l.transitionIds.filter(tid => !otherSet.has(tid))
+      }));
+      setBlocks(prev => prev.filter(b => !otherSet.has(b.id)));
+      setRelationships(prev => prev.filter(r => !otherSet.has(r.id) && !otherSet.has(r.sourceId) && !otherSet.has(r.targetId)));
+      setParts(prev => prev.filter(p => !otherSet.has(p.id)));
+      setConnectors(prev => prev.filter(c => !otherSet.has(c.id) && !otherSet.has(c.sourcePartId) && !otherSet.has(c.targetPartId)));
+      setInterfaceRealizations(prev => prev.filter(ir => !otherSet.has(ir.id) && !otherSet.has(ir.partId) && !otherSet.has(ir.interfaceId)));
+    }
+
+    setStates(nextStates);
+    setLayers(nextLayers);
+    setJunctions(nextJunctions);
+    setTransitions(nextTransitions);
+    setCurrentLayerId(nextCurrentLayerId);
+    setLayerStack(nextLayerStack);
+    setLayerPath(nextLayerPath);
+
+    const allDeletedIds = new Set([...resolvedIds, ...resolvedOtherIds]);
+    setSelectedIds(prev => prev.filter(sid => !allDeletedIds.has(sid)));
+
+    const deletedStateCount = resolvedIds.length;
+    if (deletedStateCount === 1) {
+      const stateObj = states.find(s => s.id === resolvedIds[0]);
+      addError('info', `Deleted state: ${stateObj?.name || resolvedIds[0]}`);
+    } else if (deletedStateCount > 1) {
+      addError('info', `Deleted ${deletedStateCount} states`);
+    } else {
+      addError('info', 'Deleted selected elements');
+    }
+  }, [deleteConfirmState, states, layers, junctions, transitions, currentLayerId, layerStack, layerPath, addError, addToHistory]);
 
   const createXBridgesState = useCallback((x: number, y: number) => {
     addToHistory();
@@ -11126,6 +11303,18 @@ const ADIA = () => {
     };
 
     // Helper to generate SVG for report
+    const reportHierarchy = buildReportHierarchy({
+      blocks,
+      parts,
+      connectors,
+      relationships,
+      states,
+      layers,
+      transitions,
+      junctions
+    });
+
+    // Helper to generate SVG for report
     const renderDiagramSVG = (nodes: any[], edges: any[], type: 'req' | 'bdd' | 'ibd' | 'statemachine' | 'xbridges', contextId?: string) => {
       if (nodes.length === 0) return '';
 
@@ -11228,21 +11417,122 @@ const ADIA = () => {
 
       const diagId = `diag-${Math.random().toString(36).substring(2, 9)}`;
 
+      // Render root SVG
+      const rootSvg = renderSingleSVG(displayNodes, edgesCopy, type, viewBox, displayWidth, displayHeight, displayNodesMap, contextId, diagId);
+
+      // Render child drill-down layers if any element inside has sub-layers
+      let childLayersHtml = '';
+      displayNodes.forEach(node => {
+        if (reportHierarchy.hasChildLayer(node.id)) {
+          const childInfo = reportHierarchy.getChildLayerInfo(node.id)!;
+          if (childInfo.type === 'ibd') {
+            const targetBlockId = node.typeId || node.id;
+            const targetBlock = blocks.find(b => b.id === targetBlockId);
+            const childParts = parts.filter(p => p.blockId === targetBlockId);
+            const childConns = connectors.filter(c => {
+              const s = parts.find(p => p.id === c.sourcePartId);
+              const t = parts.find(p => p.id === c.targetPartId);
+              return (s && s.blockId === targetBlockId) || (t && t.blockId === targetBlockId);
+            });
+
+            if (childParts.length > 0) {
+              const childDisplayNodes = childParts.map(p => ({ ...p, displayX: p.x || 0, displayY: p.y || 0 }));
+              const childEdgesCopy = childConns.map(c => ({ ...c }));
+              autoLayoutForReport(childDisplayNodes, childEdgesCopy, 'ibd');
+
+              let cMinX = Infinity, cMinY = Infinity, cMaxX = -Infinity, cMaxY = -Infinity;
+              childDisplayNodes.forEach(n => {
+                cMinX = Math.min(cMinX, n.displayX);
+                cMinY = Math.min(cMinY, n.displayY);
+                cMaxX = Math.max(cMaxX, n.displayX + n.width);
+                cMaxY = Math.max(cMaxY, n.displayY + n.height);
+              });
+              const cPad = 60;
+              const cRawW = Math.max(200, cMaxX - cMinX + cPad * 2 + 160);
+              const cRawH = Math.max(150, cMaxY - cMinY + cPad * 2 + 160);
+              const cScale = cRawW > MAX_SVG_WIDTH ? MAX_SVG_WIDTH / cRawW : 1;
+              const cDispW = Math.min(cRawW, MAX_SVG_WIDTH);
+              const cDispH = cRawH * cScale;
+              const cViewBox = `${cMinX - cPad - 80} ${cMinY - cPad - 80} ${cRawW} ${cRawH}`;
+              const cMap = new Map<string, any>();
+              childDisplayNodes.forEach(n => cMap.set(n.id, n));
+
+              const childSvg = renderSingleSVG(childDisplayNodes, childEdgesCopy, 'ibd', cViewBox, cDispW, cDispH, cMap, targetBlockId, diagId);
+              childLayersHtml += `<div id="layer-${childInfo.layerId}" class="diagram-layer-view" style="display:none; width:100%;">${childSvg}</div>`;
+            }
+          } else if (childInfo.type === 'statemachine') {
+            const childLayer = layers.find(l => l.parentStateId === node.id);
+            if (childLayer) {
+              const childStates = states.filter(s => childLayer.stateIds.includes(s.id));
+              const childJuncs = junctions.filter(j => childLayer.junctionIds.includes(j.id));
+              const childTrans = transitions.filter(t => childLayer.transitionIds.includes(t.id));
+
+              const childNodes: any[] = [
+                ...childStates.map(s => ({ ...s, nodeType: 'state' })),
+                ...childJuncs.map(j => ({ ...j, nodeType: 'junction', width: 20, height: 20, x: j.x - 10, y: j.y - 10 }))
+              ];
+              const childDisplayNodes = childNodes.map(n => ({ ...n, displayX: n.x || 0, displayY: n.y || 0 }));
+              const childEdgesCopy = childTrans.map(t => ({ ...t }));
+              autoLayoutForReport(childDisplayNodes, childEdgesCopy, 'statemachine');
+
+              let cMinX = Infinity, cMinY = Infinity, cMaxX = -Infinity, cMaxY = -Infinity;
+              childDisplayNodes.forEach(n => {
+                cMinX = Math.min(cMinX, n.displayX);
+                cMinY = Math.min(cMinY, n.displayY);
+                cMaxX = Math.max(cMaxX, n.displayX + n.width);
+                cMaxY = Math.max(cMaxY, n.displayY + n.height);
+              });
+              const cPad = 60;
+              const cRawW = Math.max(200, cMaxX - cMinX + cPad * 2);
+              const cRawH = Math.max(150, cMaxY - cMinY + cPad * 2);
+              const cScale = cRawW > MAX_SVG_WIDTH ? MAX_SVG_WIDTH / cRawW : 1;
+              const cDispW = Math.min(cRawW, MAX_SVG_WIDTH);
+              const cDispH = cRawH * cScale;
+              const cViewBox = `${cMinX - cPad} ${cMinY - cPad} ${cRawW} ${cRawH}`;
+              const cMap = new Map<string, any>();
+              childDisplayNodes.forEach(n => cMap.set(n.id, n));
+
+              const childSvg = renderSingleSVG(childDisplayNodes, childEdgesCopy, 'statemachine', cViewBox, cDispW, cDispH, cMap, undefined, diagId);
+              childLayersHtml += `<div id="layer-${childInfo.layerId}" class="diagram-layer-view" style="display:none; width:100%;">${childSvg}</div>`;
+            }
+          }
+        }
+      });
+
       let svgResult = `<div class="diagram-card">`;
       svgResult += `<div class="diagram-header">`;
-      svgResult += `<span>📊 ${escapeHtml(title)} <span style="font-weight:normal;color:#94a3b8;">(${displayNodes.length} elements, ${edgesCopy.length} connections)</span></span>`;
-      svgResult += `<button class="diagram-link-btn" onclick="openDiagramModal('${diagId}', '${escapeHtml(title)}')">🔍 Open Full Diagram</button>`;
+      svgResult += `<div id="bc-${diagId}" class="diagram-breadcrumbs"></div>`;
+      svgResult += `<div class="diagram-controls">`;
+      svgResult += `<button class="modal-ctrl-btn" onclick="window.ADIA_DIAGRAM_NAV.zoom('${diagId}', 1.25)">➕ Zoom In</button>`;
+      svgResult += `<button class="modal-ctrl-btn" onclick="window.ADIA_DIAGRAM_NAV.zoom('${diagId}', 0.8)">➖ Zoom Out</button>`;
+      svgResult += `<button class="modal-ctrl-btn" onclick="window.ADIA_DIAGRAM_NAV.resetZoom('${diagId}')">↺ Reset</button>`;
+      svgResult += `<button class="diagram-link-btn" onclick="openDiagramModal('${diagId}', '${escapeHtml(title)}')">🔍 Fullscreen</button>`;
       svgResult += `</div>`;
-      svgResult += `<div id="${diagId}" class="diagram-preview-body" onclick="openDiagramModal('${diagId}', '${escapeHtml(title)}')">`;
-      svgResult += renderSingleSVG(displayNodes, edgesCopy, type, viewBox, displayWidth, displayHeight, displayNodesMap, contextId);
       svgResult += `</div>`;
-      svgResult += `<div class="diagram-hint">💡 Tip: Click anywhere on the diagram or use "Open Full Diagram" to view in high resolution with interactive zoom & pan.</div>`;
+      svgResult += `<div id="${diagId}" class="diagram-preview-body">`;
+      svgResult += `<div id="layer-root-${diagId}" class="diagram-layer-view" style="display:block; width:100%;">`;
+      svgResult += rootSvg;
       svgResult += `</div>`;
+      svgResult += childLayersHtml;
+      svgResult += `</div>`;
+      svgResult += `<div class="diagram-hint">💡 <b>Interactive Diagram:</b> Double-click any element marked with ⧉ to explore its nested architecture layer. Use breadcrumbs above to navigate back.</div>`;
+      svgResult += `</div>`;
+      svgResult += `<script>window.ADIA_DIAGRAM_NAV.initContainer('${diagId}', 'root-${diagId}', '${escapeHtml(title)}');</script>`;
       return svgResult;
     };
 
     // Single SVG rendering helper (used by renderDiagramSVG)
-    const renderSingleSVG = (displayNodes: any[], edges: any[], type: string, viewBox: string, svgWidth: number, svgHeight: number, displayNodesMap: Map<string, any>, contextId?: string) => {
+    const renderSingleSVG = (
+      displayNodes: any[],
+      edges: any[],
+      type: string,
+      viewBox: string,
+      svgWidth: number,
+      svgHeight: number,
+      displayNodesMap: Map<string, any>,
+      contextId?: string,
+      diagId?: string
+    ) => {
       const contextBlock = contextId ? blocks.find(b => b.id === contextId) : null;
 
       // Calculate bounds for this page's nodes to render local context frame
@@ -11319,11 +11609,11 @@ const ADIA = () => {
 
       // Defs for markers
       svg += `<defs>
-          <marker id="m-arrow-${type}" markerWidth="10" markerHeight="10" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#333" /></marker>
-          <marker id="m-arrow-filled-${type}" markerWidth="10" markerHeight="10" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#333" stroke="#333" /></marker>
-          <marker id="m-diamond-${type}" markerWidth="16" markerHeight="10" refX="16" refY="5" orient="auto"><path d="M0,5 L8,0 L16,5 L8,10 Z" fill="#fff" stroke="#333" /></marker>
-          <marker id="m-diamond-fill-${type}" markerWidth="16" markerHeight="10" refX="16" refY="5" orient="auto"><path d="M0,5 L8,0 L16,5 L8,10 Z" fill="#333" stroke="#333" /></marker>
-          <marker id="m-triangle-${type}" markerWidth="12" markerHeight="10" refX="12" refY="5" orient="auto"><path d="M0,0 L12,5 L0,10 Z" fill="#fff" stroke="#333" /></marker>
+          <marker id="m-arrow-${type}" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#546e7a" stroke-width="1.2" /></marker>
+          <marker id="m-arrow-filled-${type}" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#333" stroke="#333" /></marker>
+          <marker id="m-diamond-${type}" markerWidth="16" markerHeight="10" refX="1" refY="5" orient="auto"><path d="M1,5 L8,1 L15,5 L8,9 Z" fill="#fff" stroke="#333" stroke-width="1.2" /></marker>
+          <marker id="m-diamond-fill-${type}" markerWidth="16" markerHeight="10" refX="1" refY="5" orient="auto"><path d="M1,5 L8,1 L15,5 L8,9 Z" fill="#333" stroke="#333" /></marker>
+          <marker id="m-triangle-${type}" markerWidth="14" markerHeight="12" refX="13" refY="6" orient="auto"><path d="M1,1 L13,6 L1,11 Z" fill="#fff" stroke="#333" stroke-width="1.2" /></marker>
         </defs>`;
 
       // If IBD, render the outer context block boundary and its ports
@@ -11354,6 +11644,12 @@ const ADIA = () => {
       displayNodes.forEach(n => {
         const fill = type === 'req' ? '#fff' : '#f0f0f0';
         const stroke = type === 'req' ? '#f97316' : '#333';
+        const hasChild = reportHierarchy.hasChildLayer(n.id);
+        const childInfo = hasChild ? reportHierarchy.getChildLayerInfo(n.id) : undefined;
+        const dblClickAttr = (hasChild && childInfo && diagId)
+          ? `ondblclick="window.ADIA_DIAGRAM_NAV.drillDown('${diagId}', '${childInfo.layerId}', '${escapeHtml(childInfo.title)}'); event.stopPropagation();"`
+          : '';
+        const nodeClass = `diagram-node${hasChild ? ' has-child-layer' : ''}`;
 
         if (type === 'statemachine') {
           if (n.nodeType === 'junction') {
@@ -11365,10 +11661,14 @@ const ADIA = () => {
             svg += `</g>`;
           } else {
             // State
-            svg += `<g transform="translate(${n.displayX}, ${n.displayY})">`;
+            svg += `<g class="${nodeClass}" transform="translate(${n.displayX}, ${n.displayY})" ${dblClickAttr}>`;
             svg += `<rect width="${n.width}" height="${n.height}" rx="8" fill="#fcfcfc" stroke="#333" stroke-width="2" />`;
             svg += `<path d="M0 26 h${n.width}" stroke="#ddd" stroke-width="1" />`;
             svg += `<text x="${n.width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="bold" fill="#000" font-family="sans-serif">${escapeHtml(n.name)}</text>`;
+
+            if (hasChild) {
+              svg += `<g class="diagram-drill-badge"><rect x="${n.width - 24}" y="5" width="18" height="15" rx="3" fill="#ea580c" /><text x="${n.width - 15}" y="16" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">⧉</text></g>`;
+            }
 
             if (n.entry || n.during || n.exit) {
               let yTxt = 36;
@@ -11398,7 +11698,7 @@ const ADIA = () => {
           return;
         }
 
-        svg += `<g transform="translate(${n.displayX}, ${n.displayY})">`;
+        svg += `<g class="${nodeClass}" transform="translate(${n.displayX}, ${n.displayY})" ${dblClickAttr}>`;
         svg += `<rect width="${n.width}" height="${n.height}" fill="${fill}" stroke="${stroke}" stroke-width="1" rx="4" />`;
 
         if (type === 'req') {
@@ -11415,6 +11715,10 @@ const ADIA = () => {
           svg += `<line x1="0" y1="38" x2="${n.width}" y2="38" stroke="#888" stroke-width="0.5" />`;
         }
 
+        if (hasChild) {
+          svg += `<g class="diagram-drill-badge"><rect x="${n.width - 24}" y="5" width="18" height="15" rx="3" fill="#ea580c" /><text x="${n.width - 15}" y="16" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">⧉</text></g>`;
+        }
+
         if (type === 'bdd' && n.properties?.length > 0) {
           n.properties.slice(0, 3).forEach((p: any, i: number) => {
             svg += `<text x="5" y="${48 + i * 12}" font-size="9" font-family="monospace" fill="#555">${escapeHtml(p.name)}:${escapeHtml(p.type)}</text>`;
@@ -11424,7 +11728,7 @@ const ADIA = () => {
         // Render Ports
         let block = type === 'ibd' ? blocks.find(b => b.id === n.typeId) : n;
         if (block && block.ports && type === 'ibd') {
-          block.ports.forEach((p: any, i: number) => {
+          block.ports.forEach((p: any) => {
             const portPos = getPortPos(n, p.id);
             const px = portPos.x - n.displayX;
             const py = portPos.y - n.displayY;
@@ -11535,6 +11839,7 @@ const ADIA = () => {
           if (type === 'ibd') {
             if (e.itemFlow) middleLabel = `«${e.itemFlow}»`;
             strokeColor = '#333';
+            markerEnd = `url(#m-arrow-filled-${type})`;
           } else if (type === 'statemachine') {
             markerEnd = `url(#m-arrow-filled-${type})`;
             strokeColor = '#333';
@@ -11550,66 +11855,40 @@ const ADIA = () => {
             };
           } else {
             const relType = e.type;
-            if (type === 'bdd' || type === 'req') {
-              if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace'].includes(relType)) {
-                strokeDash = '4,2';
-                middleLabel = `«${relType}»`;
-              } else if (relType === 'allocation') {
-                strokeDash = '5,5';
-                middleLabel = '«allocate»';
-              }
-            } else {
-              if (relType === 'composition') markerStart = `url(#m-diamond-fill-${type})`;
-              else if (relType === 'aggregation') markerStart = `url(#m-diamond-${type})`;
-              else if (relType === 'generalization') markerEnd = `url(#m-triangle-${type})`;
-              else if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace'].includes(relType)) {
-                strokeDash = '4,2';
-                middleLabel = `«${relType}»`;
-                markerEnd = `url(#m-arrow-${type})`;
-              } else if (relType === 'allocation') {
-                strokeDash = '5,5';
-                middleLabel = '«allocate»';
-                markerEnd = `url(#m-arrow-${type})`;
-              }
+            if (relType === 'composition') {
+              markerStart = `url(#m-diamond-fill-${type})`;
+            } else if (relType === 'aggregation') {
+              markerStart = `url(#m-diamond-${type})`;
+            } else if (relType === 'generalization') {
+              markerEnd = `url(#m-triangle-${type})`;
+            } else if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace'].includes(relType)) {
+              strokeDash = '4,2';
+              middleLabel = `«${relType}»`;
+              markerEnd = `url(#m-arrow-${type})`;
+              strokeColor = '#546e7a';
+            } else if (relType === 'allocation') {
+              strokeDash = '5,5';
+              middleLabel = '«allocate»';
+              markerEnd = `url(#m-arrow-${type})`;
+              strokeColor = '#546e7a';
             }
           }
 
           if (type === 'statemachine' && cp) {
             const dPath = `M ${sp.x} ${sp.y} Q ${cp.x} ${cp.y} ${tp.x} ${tp.y}`;
             svg += `<path d="${dPath}" fill="none" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" marker-end="${markerEnd}" />`;
+          } else if (type === 'ibd') {
+            // Manhattan orthogonal path
+            const midX = (sp.x + tp.x) / 2;
+            const dPath = `M ${sp.x} ${sp.y} L ${midX} ${sp.y} L ${midX} ${tp.y} L ${tp.x} ${tp.y}`;
+            svg += `<path d="${dPath}" fill="none" stroke="${strokeColor}" stroke-width="1.5" marker-end="${markerEnd}" />`;
           } else if ((type === 'req' || type === 'bdd') && target && source && target.displayY >= source.displayY + source.height) {
             // Smooth vertical S-curve avoiding crossing through middle nodes
             const midY = (sp.y + tp.y) / 2;
             const dPath = `M ${sp.x} ${sp.y} C ${sp.x} ${midY}, ${tp.x} ${midY}, ${tp.x} ${tp.y}`;
-            svg += `<path d="${dPath}" fill="none" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" />`;
-            
-            // Downward pointing arrowhead
-            const relType = e.type;
-            if (relType === 'generalization') {
-              svg += `<polygon points="${tp.x},${tp.y} ${tp.x - 6},${tp.y - 10} ${tp.x + 6},${tp.y - 10}" fill="#fff" stroke="${strokeColor}" stroke-width="1.5" />`;
-            } else if (relType === 'composition') {
-              svg += `<polygon points="${sp.x},${sp.y} ${sp.x - 5},${sp.y + 8} ${sp.x},${sp.y + 16} ${sp.x + 5},${sp.y + 8}" fill="${strokeColor}" stroke="${strokeColor}" stroke-width="1.5" />`;
-            } else if (relType === 'aggregation') {
-              svg += `<polygon points="${sp.x},${sp.y} ${sp.x - 5},${sp.y + 8} ${sp.x},${sp.y + 16} ${sp.x + 5},${sp.y + 8}" fill="#fff" stroke="${strokeColor}" stroke-width="1.5" />`;
-            } else if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'allocation'].includes(relType)) {
-              svg += `<path d="M ${tp.x - 5} ${tp.y - 8} L ${tp.x} ${tp.y} L ${tp.x + 5} ${tp.y - 8}" fill="none" stroke="${strokeColor}" stroke-width="1.5" />`;
-            }
+            svg += `<path d="${dPath}" fill="none" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" marker-start="${markerStart}" marker-end="${markerEnd}" />`;
           } else {
             svg += `<line x1="${sp.x}" y1="${sp.y}" x2="${tp.x}" y2="${tp.y}" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="${strokeDash}" marker-start="${markerStart}" marker-end="${markerEnd}" />`;
-            
-            if (type === 'bdd' || type === 'req') {
-              const relType = e.type;
-              const angle = Math.atan2(tp.y - sp.y, tp.x - sp.x) * 180 / Math.PI;
-              if (relType === 'generalization') {
-                svg += `<polygon points="${tp.x},${tp.y} ${tp.x - 12},${tp.y - 6} ${tp.x - 12},${tp.y + 6}" fill="#fff" stroke="${strokeColor}" stroke-width="1.5" transform="rotate(${angle}, ${tp.x}, ${tp.y})" />`;
-              } else if (relType === 'composition') {
-                svg += `<polygon points="${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}" fill="${strokeColor}" stroke="${strokeColor}" stroke-width="1.5" transform="rotate(${angle}, ${sp.x}, ${sp.y})" />`;
-              } else if (relType === 'aggregation') {
-                svg += `<polygon points="${sp.x},${sp.y} ${sp.x + 10},${sp.y - 5} ${sp.x + 20},${sp.y} ${sp.x + 10},${sp.y + 5}" fill="#fff" stroke="${strokeColor}" stroke-width="1.5" transform="rotate(${angle}, ${sp.x}, ${sp.y})" />`;
-              } else if (['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'allocation'].includes(relType)) {
-                svg += `<path d="M ${tp.x - 10} ${tp.y - 5} L ${tp.x} ${tp.y} L ${tp.x - 10} ${tp.y + 5}" fill="none" stroke="${strokeColor}" stroke-width="1.5" transform="rotate(${angle}, ${tp.x}, ${tp.y})" />`;
-              }
-            }
           }
 
           if (middleLabel || e.label) {
@@ -11620,7 +11899,6 @@ const ADIA = () => {
               midX = cp.x;
               midY = cp.y - 5;
             } else if ((type === 'req' || type === 'bdd') && target && source && target.displayY >= source.displayY + source.height) {
-              // Position label cleanly above target node in clear channel
               midX = tp.x;
               midY = tp.y - 14;
             }
@@ -11641,6 +11919,7 @@ const ADIA = () => {
       svg += `</svg>`;
       return svg;
     };
+
 
     // Helper to generate SVG for HMI
     const renderHmiSVG = (components: HmiComponent[]) => {
@@ -11773,12 +12052,15 @@ const ADIA = () => {
 
     // 1. Requirements
     const reqs = blocks.filter(b => b.stereotype === 'requirement');
+    console.log('[REPORT DEBUG] Total blocks:', blocks.length, 'Total relationships:', relationships.length);
+    console.log('[REPORT DEBUG] Requirement blocks:', reqs.length);
     if (reqs.length > 0) {
       const reqRels = relationships.filter(r => {
         const s = blocks.find(b => b.id === r.sourceId);
         const t = blocks.find(b => b.id === r.targetId);
         return s?.stereotype === 'requirement' && t?.stereotype === 'requirement';
       });
+      console.log('[REPORT DEBUG] Requirement relationships:', reqRels.length, reqRels.map(r => `${r.sourceId}->${r.targetId} (${r.type})`));
       html += renderDiagramSVG(reqs, reqRels, 'req');
 
       html += `<h2>1. Requirements</h2>`;
@@ -11861,6 +12143,8 @@ const ADIA = () => {
         if (!s || !t) return false;
         return s.stereotype !== 'requirement' && t.stereotype !== 'requirement';
       });
+      console.log('[REPORT DEBUG] BDD blocks:', bddBlocks.length, bddBlocks.map(b => `${b.id}:${b.name}`));
+      console.log('[REPORT DEBUG] BDD relationships:', bddRels.length, bddRels.map(r => `${r.sourceId}->${r.targetId} (${r.type})`));
 
       html += `<h2>2. System Architecture (BDD)</h2>`;
       html += `<div class="diagram-container"><div class="diagram-cell">` + renderDiagramSVG(bddBlocks, bddRels, 'bdd') + `</div></div>`;
@@ -13378,13 +13662,14 @@ const ADIA = () => {
           if (e.key === 'Escape') closeDiagramModal();
         });
       </script>
+      ${generateDiagramScript(reportHierarchy)}
     </body></html>`;
 
     setGlobalReportData({ html, projectName });
     setShowGlobalReportPreview(true);
     setShowReportDialog(false);
     addError('info', 'Report preview ready');
-  }, [blocks, parts, connectors, states, transitions, junctions, hmiComponents, variables, addError, setShowReportDialog, layers, tickMs, safetyMode]);
+  }, [blocks, parts, connectors, relationships, states, transitions, junctions, hmiComponents, variables, addError, setShowReportDialog, layers, tickMs, safetyMode]);
 
   // KEYBOARD SHORTCUTS
   useEffect(() => {
@@ -13561,17 +13846,9 @@ const ADIA = () => {
           );
           setClipboard(clipData);
           // Delete logic
-          selectedIds.forEach(id => {
-            if (states.some(s => s.id === id)) deleteState(id);
-            else if (junctions.some(j => j.id === id)) deleteJunction(id);
-            else if (transitions.some(t => t.id === id)) deleteTransition(id);
-            else if (blocks.some(b => b.id === id)) deleteBlock(id);
-            else if (relationships.some(r => r.id === id)) deleteRelationship(id);
-            else if (parts.some(p => p.id === id)) deletePart(id);
-            else if (connectors.some(c => c.id === id)) deleteConnector(id);
-            else if (interfaceRealizations.some(ir => ir.id === id)) deleteInterfaceRealization(id);
-          });
-          setSelectedIds([]);
+          const selectedStateIds = selectedIds.filter(id => states.some(s => s.id === id));
+          const otherSelectedIds = selectedIds.filter(id => !states.some(s => s.id === id));
+          executeDeleteState(selectedStateIds, otherSelectedIds);
           addError('info', 'Cut items');
         }
         if (e.key === 'a' || e.key === 'A') {
@@ -13597,20 +13874,16 @@ const ADIA = () => {
         }
       }
 
-      if (e.key === 'Delete' && !xBridgesStateId) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !xBridgesStateId) {
         if (selectedIds.length > 0) {
-          addToHistory();
-          selectedIds.forEach(id => {
-            if (states.some(s => s.id === id)) deleteState(id);
-            else if (junctions.some(j => j.id === id)) deleteJunction(id);
-            else if (transitions.some(t => t.id === id)) deleteTransition(id);
-            else if (blocks.some(b => b.id === id)) deleteBlock(id);
-            else if (relationships.some(r => r.id === id)) deleteRelationship(id);
-            else if (parts.some(p => p.id === id)) deletePart(id);
-            else if (connectors.some(c => c.id === id)) deleteConnector(id);
-            else if (interfaceRealizations.some(ir => ir.id === id)) deleteInterfaceRealization(id);
-          });
-          setSelectedIds([]);
+          const selectedStateIds = selectedIds.filter(id => states.some(s => s.id === id));
+          const otherSelectedIds = selectedIds.filter(id => !states.some(s => s.id === id));
+
+          if (selectedStateIds.length > 0) {
+            deleteStates(selectedStateIds, otherSelectedIds);
+          } else {
+            deleteNonStateElements(otherSelectedIds);
+          }
         }
       }
 
@@ -13636,7 +13909,7 @@ const ADIA = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedIds, view, deleteState, deleteJunction, deleteTransition, deleteBlock, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, addToHistory, undo, redo, addError, handleExportProject, diagramMode, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
+  }, [selectedIds, view, deleteState, deleteStates, deleteNonStateElements, executeDeleteState, deleteJunction, deleteTransition, deleteBlock, deleteRelationship, deletePart, deleteConnector, deleteInterfaceRealization, states, junctions, transitions, blocks, relationships, parts, connectors, interfaceRealizations, clipboard, currentLayerId, currentStates, currentJunctions, currentTransitions, addToHistory, undo, redo, addError, handleExportProject, diagramMode, startSimulation, pauseSimulation, resetSimulation, isHierarchyCollapsed, isVariablesCollapsed, isPropertiesCollapsed, isScopeCollapsed]);
 
   // CODE GENERATION (FULLY FUNCTIONAL WITH USER FEEDBACK)
   const generateCode = useCallback(async () => {
@@ -15715,6 +15988,15 @@ const ADIA = () => {
                     setEntropyEdges(edges);
                   }}
                   onAddError={addError}
+                  sysmlState={{
+                    blocks: blocks.filter(b => b.stereotype !== 'requirement'),
+                    requirements: blocks.filter(b => b.stereotype === 'requirement'),
+                    relations: relationships,
+                    relationships,
+                    parts,
+                    connectors,
+                    ports: blocks.flatMap(b => b.ports || []),
+                  }}
                 />
               )}
 
@@ -16810,12 +17092,19 @@ const ADIA = () => {
                       onChange={(e) => updateBlock(selectedBlock.id, { stereotype: e.target.value })}
                       className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1"
                     >
+                      {selectedBlock.stereotype === 'requirement' && (
+                        <option value="requirement">Requirement</option>
+                      )}
                       <option value="block">Block</option>
-                      <option value="requirement">Requirement</option>
                       <option value="interface">Interface</option>
                       <option value="interfaceBlock">Interface Block</option>
                       <option value="valueType">ValueType</option>
                       <option value="enumeration">Enumeration</option>
+                      {customStereotypes
+                        ?.filter(s => s !== 'requirement' && !['block', 'interface', 'interfaceBlock', 'valueType', 'enumeration'].includes(s))
+                        .map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
                     </select>
                   </div>
                   {selectedBlock.stereotype === 'requirement' && (
@@ -17023,7 +17312,7 @@ const ADIA = () => {
                           <div>
                             <span className="text-[10px] text-[#888] uppercase font-bold tracking-wider">Quick Team Assignment</span>
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
-                              {["Control Team", "Hardware Team", "Software Team", "Safety Engineer", "QA Team", "System Architect"].map(team => (
+                              {["Control Team", "Hardware Team", "Software Team", "Mechanical Design", "Safety Engineer", "QA Team", "System Architect"].map(team => (
                                 <button
                                   key={team}
                                   onClick={() => updateBlock(selectedBlock.id, { assignedTo: team })}
@@ -17741,7 +18030,9 @@ const ADIA = () => {
             <div className="bg-[#1a1a1a] border border-[#f97316]/60 rounded-xl w-[480px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative" onMouseDown={e => e.stopPropagation()}>
               <div className="h-14 flex items-center px-6 border-b border-[#2a2a2a] bg-[#141414]">
                 <Trash2 className="w-5 h-5 text-[#f97316] mr-3 shrink-0" />
-                <h2 className="text-base font-bold text-[#e0e0e0]">Confirm Delete State</h2>
+                <h2 className="text-base font-bold text-[#e0e0e0]">
+                  {deleteConfirmState.totalStates > 1 ? 'Confirm Delete States' : 'Confirm Delete State'}
+                </h2>
                 <button
                   onClick={() => setDeleteConfirmState(null)}
                   className="ml-auto text-[#888] hover:text-[#fff] p-1 rounded transition-colors"
@@ -17754,18 +18045,26 @@ const ADIA = () => {
                 {deleteConfirmState.hasChildren ? (
                   <>
                     <p className="text-sm text-[#cccccc] leading-relaxed">
-                      State <span className="font-semibold text-[#f97316]">{deleteConfirmState.name}</span> contains <span className="font-semibold text-[#f97316]">{deleteConfirmState.parts}</span>.
+                      {deleteConfirmState.totalStates > 1 ? (
+                        <>Selected <span className="font-semibold text-[#f97316]">{deleteConfirmState.totalStates} states</span> contain <span className="font-semibold text-[#f97316]">{deleteConfirmState.parts}</span>.</>
+                      ) : (
+                        <>State <span className="font-semibold text-[#f97316]">{deleteConfirmState.name}</span> contains <span className="font-semibold text-[#f97316]">{deleteConfirmState.parts}</span>.</>
+                      )}
                     </p>
                     <div className="p-3.5 bg-[#2a1a14] rounded-lg border border-[#f97316]/30 flex items-start gap-3">
                       <AlertTriangle className="w-5 h-5 text-[#f97316] shrink-0 mt-0.5" />
                       <p className="text-xs text-[#e8b595] leading-relaxed">
-                        Deleting this state will permanently remove all of its child states, sub-layers, junctions, and transitions from both the workspace canvas and tree hierarchy.
+                        Deleting {deleteConfirmState.totalStates > 1 ? 'these states' : 'this state'} will permanently remove all child states, sub-layers, junctions, and transitions from both the workspace canvas and tree hierarchy.
                       </p>
                     </div>
                   </>
                 ) : (
                   <p className="text-sm text-[#cccccc]">
-                    Are you sure you want to delete state <span className="font-semibold text-[#f97316]">{deleteConfirmState.name}</span> from the workspace and state tree?
+                    {deleteConfirmState.totalStates > 1 ? (
+                      <>Are you sure you want to delete <span className="font-semibold text-[#f97316]">{deleteConfirmState.totalStates} states</span> from the workspace and state tree?</>
+                    ) : (
+                      <>Are you sure you want to delete state <span className="font-semibold text-[#f97316]">{deleteConfirmState.name}</span> from the workspace and state tree?</>
+                    )}
                   </p>
                 )}
               </div>
@@ -17779,11 +18078,11 @@ const ADIA = () => {
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => executeDeleteState(deleteConfirmState.id)}
+                  onClick={() => executeDeleteState(deleteConfirmState.ids, deleteConfirmState.otherDeletedIds)}
                   className="bg-red-600 hover:bg-red-700 text-white px-5 text-xs h-9 font-medium shadow-md flex items-center gap-1.5"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  Delete State
+                  {deleteConfirmState.totalStates > 1 ? `Delete ${deleteConfirmState.totalStates} States` : 'Delete State'}
                 </Button>
               </div>
             </div>

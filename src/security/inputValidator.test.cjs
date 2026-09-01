@@ -93,6 +93,9 @@ test('accepts Arduino', () => {
 test('accepts STM32', () => {
   assert.strictEqual(validateToolchainKey('STM32'), 'STM32');
 });
+test('accepts ESP32', () => {
+  assert.strictEqual(validateToolchainKey('ESP32'), 'ESP32');
+});
 test('rejects shell injection in toolchain key', () => {
   assert.throws(() => validateToolchainKey('evil; rm -rf /'), /Invalid toolchain key/);
 });

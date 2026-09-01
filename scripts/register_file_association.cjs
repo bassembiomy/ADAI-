@@ -7,7 +7,7 @@ function resolveTargetExecutable(options = {}) {
   if (options.execPath && options.isPackaged) {
     return options.execPath;
   }
-  if (options.targetPath && fs.existsSync(options.targetPath)) {
+  if (typeof options.targetPath === 'string' && options.targetPath.trim() !== '' && !options.targetPath.includes('\0') && fs.existsSync(options.targetPath)) {
     return path.resolve(options.targetPath);
   }
 

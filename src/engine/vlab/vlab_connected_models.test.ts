@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Edge, Node } from 'reactflow';
+import { Edge, Node } from '@xyflow/react';
 import { VLabPhysicsEngine } from './vlabPhysics';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 
@@ -174,6 +174,58 @@ describe('V-Lab connected reference models', () => {
       ],
     });
     expect(result.readings.at(-1)).toBeCloseTo(10, 6);
+  });
+
+  it('routes distinct signals to separate scopes on the same model', () => {
+    // Two scopes: one reads voltage, the other reads current
+    const engine = new VLabPhysicsEngine();
+    const testNodes: Node[] = [
+      node('source', 'ac_voltage', { Vpk: 100, f: 50 }),
+      node('load', 'resistor', { R: 50 }),
+      node('ground', 'ground'),
+      node('v_sensor', 'v_sensor'),
+      node('i_sensor', 'i_sensor'),
+      node('scope_v', 'scope'),
+      node('scope_i', 'scope'),
+    ];
+    const testEdges: Edge[] = [
+      // source -> load -> ground
+      edge('source-isensor', 'source', 'p_s', 'i_sensor', 'p_t'),
+      edge('isensor-load', 'i_sensor', 'n_s', 'load', 'p_t'),
+      edge('load-ground', 'load', 'n_s', 'ground', 'a_t'),
+      edge('source-ground', 'source', 'n_s', 'ground', 'a_t'),
+      // voltage sensor across load
+      edge('load-vsensor-p', 'load', 'p_s', 'v_sensor', 'p_t'),
+      edge('vsensor-ground', 'v_sensor', 'n_s', 'ground', 'a_t'),
+      edge('vsensor-scope', 'v_sensor', 'v_s', 'scope_v', 'in1_t'),
+      // current sensor to current scope
+      edge('isensor-scope', 'i_sensor', 'i_s', 'scope_i', 'in1_t'),
+    ];
+
+    let state: any = null;
+    for (let i = 0; i < 8; i++) {
+      state = engine.simulateStep(testNodes, testEdges, state, 0.0025);
+    }
+
+    // perScopeValues must exist and have entries for both scopes
+    expect(state.perScopeValues).toBeDefined();
+    expect(state.perScopeValues['scope_v']).toBeDefined();
+    expect(state.perScopeValues['scope_i']).toBeDefined();
+
+    // The two scopes must read DIFFERENT values (voltage vs current)
+    const vReading = typeof state.perScopeValues['scope_v'] === 'number'
+      ? state.perScopeValues['scope_v']
+      : Number(state.perScopeValues['scope_v']?.value ?? state.perScopeValues['scope_v']);
+    const iReading = typeof state.perScopeValues['scope_i'] === 'number'
+      ? state.perScopeValues['scope_i']
+      : Number(state.perScopeValues['scope_i']?.value ?? state.perScopeValues['scope_i']);
+
+    expect(Number.isFinite(vReading)).toBe(true);
+    expect(Number.isFinite(iReading)).toBe(true);
+    expect(Math.abs(vReading)).toBeGreaterThan(1);
+    expect(Math.abs(iReading)).toBeGreaterThan(0.01);
+    // V ≈ 100 * sin(ωt), I ≈ V / 50 -> V and I are quantitatively different numbers
+    expect(Math.abs(vReading)).not.toBeCloseTo(Math.abs(iReading), 0.5);
   });
 
   it('keeps the catalog testable: every library block is assigned to a connected-model family', () => {

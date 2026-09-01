@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <string.h>
 #include "sm_core.h"
+#include "sm_mapping.h"
 #include "sm_safety.h"
 #include "sm_user_logic.h"
 #include "mcal_dio.h"
@@ -50,8 +51,8 @@ static void SM_Record_Layer_History(ADIA_Instance_t *instance, uint32_t layer)
     switch (layer) {
         case SM_LYR_ROOT_IDX:
             instance->history_states[0U] = instance->active_states[0U];
-            instance->deep_history[SM_LYR_ROOT_IDX][SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8_IDX] = instance->state_active[SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8_IDX];
-            instance->deep_history[SM_LYR_ROOT_IDX][SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_IDX] = instance->state_active[SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_IDX];
+            instance->deep_history[SM_LYR_ROOT_IDX][SM_ST__265D4F7C_6336_4720_A143_E009C1002387_IDX] = instance->state_active[SM_ST__265D4F7C_6336_4720_A143_E009C1002387_IDX];
+            instance->deep_history[SM_LYR_ROOT_IDX][SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_IDX] = instance->state_active[SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_IDX];
             break;
         default: break;
     }
@@ -74,27 +75,27 @@ static void SM_Exit_State(ADIA_Instance_t *instance, SM_Node_t state, bool recor
 {
     if (record_containing_layer) {
         switch (state) {
-            case SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8: SM_Record_Layer_History(instance, SM_LYR_ROOT_IDX); break;
-            case SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705: SM_Record_Layer_History(instance, SM_LYR_ROOT_IDX); break;
+            case SM_ST__265D4F7C_6336_4720_A143_E009C1002387: SM_Record_Layer_History(instance, SM_LYR_ROOT_IDX); break;
+            case SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691: SM_Record_Layer_History(instance, SM_LYR_ROOT_IDX); break;
             default: break;
         }
     }
     switch (state) {
-        case SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8:
-            if (!instance->state_active[SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8_IDX]) { break; }
-            SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8_Exit(instance);
-            instance->state_active[SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8_IDX] = false;
-            instance->state_timers[SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8_IDX] = 0U;
-            if (instance->active_states[0U] == SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8) {
+        case SM_ST__265D4F7C_6336_4720_A143_E009C1002387:
+            if (!instance->state_active[SM_ST__265D4F7C_6336_4720_A143_E009C1002387_IDX]) { break; }
+            SM_ST__265D4F7C_6336_4720_A143_E009C1002387_Exit(instance);
+            instance->state_active[SM_ST__265D4F7C_6336_4720_A143_E009C1002387_IDX] = false;
+            instance->state_timers[SM_ST__265D4F7C_6336_4720_A143_E009C1002387_IDX] = 0U;
+            if (instance->active_states[0U] == SM_ST__265D4F7C_6336_4720_A143_E009C1002387) {
                 instance->active_states[0U] = SM_NODE_INVALID;
             }
             break;
-        case SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705:
-            if (!instance->state_active[SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_IDX]) { break; }
-            SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_Exit(instance);
-            instance->state_active[SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_IDX] = false;
-            instance->state_timers[SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_IDX] = 0U;
-            if (instance->active_states[0U] == SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705) {
+        case SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691:
+            if (!instance->state_active[SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_IDX]) { break; }
+            SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_Exit(instance);
+            instance->state_active[SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_IDX] = false;
+            instance->state_timers[SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_IDX] = 0U;
+            if (instance->active_states[0U] == SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691) {
                 instance->active_states[0U] = SM_NODE_INVALID;
             }
             break;
@@ -116,68 +117,84 @@ static void SM_Enter_Layer_Default_0(ADIA_Instance_t *instance)
 
 static void SM_Enter_Deep_1(ADIA_Instance_t *instance)
 {
-    instance->state_active[SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8_IDX] = true;
-    instance->state_timers[SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8_IDX] = 0U;
-    instance->active_states[0U] = SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8;
-    SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8_Entry(instance);
+    instance->state_active[SM_ST__265D4F7C_6336_4720_A143_E009C1002387_IDX] = true;
+    instance->state_timers[SM_ST__265D4F7C_6336_4720_A143_E009C1002387_IDX] = 0U;
+    instance->active_states[0U] = SM_ST__265D4F7C_6336_4720_A143_E009C1002387;
+    SM_ST__265D4F7C_6336_4720_A143_E009C1002387_Entry(instance);
 }
 
 static void SM_Restore_State_1(ADIA_Instance_t *instance, uint32_t snapshot_layer)
 {
     (void)snapshot_layer;
-    instance->state_active[SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8_IDX] = true;
-    instance->state_timers[SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8_IDX] = 0U;
-    instance->active_states[0U] = SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8;
-    SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8_Entry(instance);
+    instance->state_active[SM_ST__265D4F7C_6336_4720_A143_E009C1002387_IDX] = true;
+    instance->state_timers[SM_ST__265D4F7C_6336_4720_A143_E009C1002387_IDX] = 0U;
+    instance->active_states[0U] = SM_ST__265D4F7C_6336_4720_A143_E009C1002387;
+    SM_ST__265D4F7C_6336_4720_A143_E009C1002387_Entry(instance);
 }
 
 static void SM_Enter_Deep_2(ADIA_Instance_t *instance)
 {
-    instance->state_active[SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_IDX] = true;
-    instance->state_timers[SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_IDX] = 0U;
-    instance->active_states[0U] = SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705;
-    SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_Entry(instance);
+    instance->state_active[SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_IDX] = true;
+    instance->state_timers[SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_IDX] = 0U;
+    instance->active_states[0U] = SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691;
+    SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_Entry(instance);
 }
 
 static void SM_Restore_State_2(ADIA_Instance_t *instance, uint32_t snapshot_layer)
 {
     (void)snapshot_layer;
-    instance->state_active[SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_IDX] = true;
-    instance->state_timers[SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_IDX] = 0U;
-    instance->active_states[0U] = SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705;
-    SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_Entry(instance);
+    instance->state_active[SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_IDX] = true;
+    instance->state_timers[SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_IDX] = 0U;
+    instance->active_states[0U] = SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691;
+    SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_Entry(instance);
 }
 
 static bool SM_Execute_Layer_0(ADIA_Instance_t *instance)
 {
     switch (instance->active_states[0U]) {
-        case SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8:
+        case SM_ST__265D4F7C_6336_4720_A143_E009C1002387:
             return SM_Execute_State_1(instance);
-        case SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705:
+        case SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691:
             return SM_Execute_State_2(instance);
         default: return false;
     }
 }
 
+/* TRACE-BEGIN: traceId=TRACE-STATE-_265D4F7C_6336_4720_A143_E009C1002387 symbol=SM_ST__265D4F7C_6336_4720_A143_E009C1002387 */
 static bool SM_Execute_State_1(ADIA_Instance_t *instance)
 {
-    if (instance->data.x == 1) {
-        SM_Exit_State(instance, SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8, true);
-        instance->state_active[SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_IDX] = true;
-        instance->state_timers[SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_IDX] = 0U;
-        instance->active_states[0U] = SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705;
-        SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_Entry(instance);
+    /* TRACE-BEGIN: traceId=TRACE-TRANS-_5AB29C58_A51A_4A43_9B5B_55D7DFCC262B symbol=sm_trans__5ab29c58_a51a_4a43_9b5b_55d7dfcc262b */
+    if (instance->state_timers[SM_ST__265D4F7C_6336_4720_A143_E009C1002387_IDX] >= 500U) {
+        SM_Exit_State(instance, SM_ST__265D4F7C_6336_4720_A143_E009C1002387, true);
+        instance->state_active[SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_IDX] = true;
+        instance->state_timers[SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_IDX] = 0U;
+        instance->active_states[0U] = SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691;
+        SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_Entry(instance);
         return true;
     }
-    SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8_During(instance);
+    /* TRACE-END: traceId=TRACE-TRANS-_5AB29C58_A51A_4A43_9B5B_55D7DFCC262B */
+    SM_ST__265D4F7C_6336_4720_A143_E009C1002387_During(instance);
     return false;
 }
+/* TRACE-END: traceId=TRACE-STATE-_265D4F7C_6336_4720_A143_E009C1002387 */
 
+/* TRACE-BEGIN: traceId=TRACE-STATE-_480C2BB1_273C_4C96_A72C_29B0644F4691 symbol=SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691 */
 static bool SM_Execute_State_2(ADIA_Instance_t *instance)
 {
-    SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_During(instance);
+    /* TRACE-BEGIN: traceId=TRACE-TRANS-_2FAA2BA2_2593_42FF_B854_71C8016F1F5D symbol=sm_trans__2faa2ba2_2593_42ff_b854_71c8016f1f5d */
+    if (instance->state_timers[SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_IDX] >= 1000U) {
+        SM_Exit_State(instance, SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691, true);
+        instance->state_active[SM_ST__265D4F7C_6336_4720_A143_E009C1002387_IDX] = true;
+        instance->state_timers[SM_ST__265D4F7C_6336_4720_A143_E009C1002387_IDX] = 0U;
+        instance->active_states[0U] = SM_ST__265D4F7C_6336_4720_A143_E009C1002387;
+        SM_ST__265D4F7C_6336_4720_A143_E009C1002387_Entry(instance);
+        return true;
+    }
+    /* TRACE-END: traceId=TRACE-TRANS-_2FAA2BA2_2593_42FF_B854_71C8016F1F5D */
+    SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_During(instance);
     return false;
 }
+/* TRACE-END: traceId=TRACE-STATE-_480C2BB1_273C_4C96_A72C_29B0644F4691 */
 
 static void SM_Exit_All(ADIA_Instance_t *instance)
 {
@@ -202,6 +219,7 @@ static void SM_Enter_Fault(ADIA_Instance_t *instance)
 SM_Error_t SM_Init(ADIA_Instance_t *instance)
 {
     uint32_t layer_index;
+    uint32_t slot_index;
     uint32_t state_index;
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
@@ -215,11 +233,10 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     (void)SM_Restore_State_1;
     (void)SM_Enter_Deep_2;
     (void)SM_Restore_State_2;
-    instance->data.x = (int32_t)(0);
-    instance->data.y = (int32_t)(0);
-    for (layer_index = 0U; layer_index < SM_NUM_ACTIVE_SLOTS; ++layer_index) {
-        instance->active_states[layer_index] = SM_NODE_INVALID;
-        instance->history_states[layer_index] = SM_NODE_INVALID;
+    instance->data.x = (bool)(false);
+    for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {
+        instance->active_states[slot_index] = SM_NODE_INVALID;
+        instance->history_states[slot_index] = SM_NODE_INVALID;
     }
     for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
         for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
@@ -232,6 +249,10 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
     }
     instance->error_status = SM_ERR_NONE;
     instance->fault_latched = false;
+    instance->error_status = SM_Validate_Mapping_Configuration();
+    if (instance->error_status != SM_ERR_NONE) {
+        return SM_ERR_CONFIGURATION;
+    }
     SM_Enter_Layer_Default_0(instance);
     return SM_ERR_NONE;
 }
@@ -239,16 +260,16 @@ SM_Error_t SM_Init(ADIA_Instance_t *instance)
 SM_Error_t SM_Reset(ADIA_Instance_t *instance)
 {
     uint32_t layer_index;
+    uint32_t slot_index;
     uint32_t state_index;
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
     }
     SM_Exit_Layer(instance, SM_LYR_ROOT_IDX);
-    instance->data.x = (int32_t)(0);
-    instance->data.y = (int32_t)(0);
-    for (layer_index = 0U; layer_index < SM_NUM_ACTIVE_SLOTS; ++layer_index) {
-        instance->active_states[layer_index] = SM_NODE_INVALID;
-        instance->history_states[layer_index] = SM_NODE_INVALID;
+    instance->data.x = (bool)(false);
+    for (slot_index = 0U; slot_index < SM_NUM_ACTIVE_SLOTS; ++slot_index) {
+        instance->active_states[slot_index] = SM_NODE_INVALID;
+        instance->history_states[slot_index] = SM_NODE_INVALID;
     }
     for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
         for (state_index = 0U; state_index <= SM_NUM_STATES; ++state_index) {
@@ -270,7 +291,7 @@ SM_Error_t SM_ReadInputs(ADIA_Instance_t *instance)
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
     }
-    instance->data.x = (int32_t)(MCAL_Dio_ReadChannel(MCAL_CH_F0B3089A_1426_4D8A_ADD0_6A146A51378E));
+    (void)instance;
     return SM_ERR_NONE;
 }
 
@@ -331,7 +352,7 @@ SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance)
         SM_Enter_Fault(instance);
         return instance->error_status;
     }
-    MCAL_WriteChannelValue(MCAL_CH__9B4C84B5_D1BA_413C_83BC_E11F567B19CF, (double)(instance->data.y));
+    MCAL_Dio_WriteChannel(MCAL_CH__6B8AF776_C9CA_4C37_B295_88950BE006D5, (bool)(instance->data.x));
     MCAL_Watchdog_Kick();
     return SM_ERR_NONE;
 }
@@ -345,12 +366,40 @@ SM_Error_t SM_Sync_IO(ADIA_Instance_t *instance)
     return error;
 }
 
-SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t group)
+SM_Node_t SM_GetActiveSlot(const ADIA_Instance_t *instance, uint32_t slot)
 {
-    if ((instance == NULL) || (group >= SM_NUM_ACTIVE_SLOTS)) {
+    if ((instance == NULL) || (slot >= SM_NUM_ACTIVE_SLOTS)) {
         return SM_NODE_INVALID;
     }
-    return instance->active_states[group];
+    return instance->active_states[slot];
+}
+
+SM_Node_t SM_GetLayerActive(const ADIA_Instance_t *instance, uint32_t layer)
+{
+    int32_t slot;
+    if ((instance == NULL) || (layer >= SM_NUM_LAYERS)) {
+        return SM_NODE_INVALID;
+    }
+    slot = SM_Layer_Active_Slot_Map[layer];
+    if (slot < 0) {
+        return SM_NODE_INVALID;
+    }
+    return SM_GetActiveSlot(instance, (uint32_t)slot);
+}
+
+bool SM_IsStateActive(const ADIA_Instance_t *instance, SM_Node_t state)
+{
+    if ((instance == NULL)
+        || (state <= SM_NODE_INVALID)
+        || ((uint32_t)state > SM_NUM_STATES)) {
+        return false;
+    }
+    return instance->state_active[(uint32_t)state];
+}
+
+SM_Node_t SM_GetActive(const ADIA_Instance_t *instance, SM_Group_t slot)
+{
+    return SM_GetActiveSlot(instance, (uint32_t)slot);
 }
 
 SM_Error_t SM_GetError(const ADIA_Instance_t *instance)

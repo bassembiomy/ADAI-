@@ -1,6 +1,6 @@
-import { Node, Edge } from 'reactflow';
+import { Node, Edge } from '@xyflow/react';
 
-export type OPMNodeType = 'object' | 'process' | 'state';
+export type OPMNodeType = 'object' | 'process' | 'state' | 'requirement';
 
 export type OPMLinkType =
   // Structural Links
@@ -14,12 +14,16 @@ export type OPMLinkType =
   | 'result'
   | 'effect'
   | 'trigger'
-  | 'condition';
+  | 'condition'
+  // Requirement traceability (extension to ISO 19450 — see module docs)
+  | 'satisfies'
+  | 'verifies';
 
 export interface OPMState {
   id: string;
   name: string;
   isActive: boolean;
+  isInitial?: boolean;
   value?: string;
 }
 
@@ -31,26 +35,32 @@ export interface OPMPort {
   position: 'left' | 'right' | 'top' | 'bottom';
 }
 
-export interface OPMNodeData {
+export interface OPMNodeData extends Record<string, unknown> {
   name: string;
   type: OPMNodeType;
   physical: boolean;
   states?: OPMState[];
   attributes?: { key: string; value: string }[];
+  // Requirement nodes only: the natural-language requirement statement
+  requirementText?: string;
+  // State nodes only: true for the first state of an object (ISO initial-state marker)
+  isInitial?: boolean;
   parentId?: string | null;
   // For hierarchical refinement:
   zoomedIn?: boolean;
   inputs?: OPMPort[];
   outputs?: OPMPort[];
+  [key: string]: unknown;
 }
 
-export interface OPMEdgeData {
-  type: OPMLinkType;
+export interface OPMEdgeData extends Record<string, unknown> {
+  type?: OPMLinkType;
   label?: string;
   // Conditions or specifications
   conditionText?: string;
   isSimulating?: boolean;
   isActiveFlow?: boolean;
+  [key: string]: unknown;
 }
 
 export interface SimulationLog {
@@ -60,6 +70,13 @@ export interface SimulationLog {
 }
 
 export interface OPMProjectData {
-  nodes: Node<OPMNodeData>[];
-  edges: Edge<OPMEdgeData>[];
+  nodes: AppNode[];
+  edges: AppEdge[];
 }
+
+export type AppNode = Node<
+  OPMNodeData,
+  'opmObject' | 'opmProcess' | 'opmState'
+>;
+
+export type AppEdge = Edge<OPMEdgeData, OPMLinkType | 'opmEdge'>;

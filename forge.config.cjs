@@ -8,6 +8,9 @@ module.exports = {
     // ASAR integrity checking: embeds file hashes into the package for tamper detection
     asarIntegrity: true,
     icon: path.resolve(__dirname, 'icon.ico'),
+    extraResource: [
+      path.resolve(__dirname, 'toolchains'),
+    ],
     win32metadata: {
       CompanyName: 'ADIA Team',
       FileDescription: 'ADIA Engineering Suite',

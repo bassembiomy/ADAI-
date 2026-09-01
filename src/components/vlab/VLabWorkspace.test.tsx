@@ -1,0 +1,109 @@
+// src/components/vlab/VLabWorkspace.test.tsx
+import { describe, it, expect } from 'vitest';
+import { SolverConfiguration } from '../../engine/vlab/kernel/types';
+
+describe('VLabWorkspace Solver Configuration Inspector', () => {
+  it('should contain valid default parameters for solver_config block', () => {
+    const defaultConfig: SolverConfiguration = {
+      id: 'sc_default',
+      solver: 'auto',
+      startTime: 0,
+      stopTime: 10,
+      initialStep: 'auto',
+      minimumStep: 1e-6,
+      maximumStep: 'auto',
+      relativeTolerance: 1e-3,
+      absoluteTolerance: 1e-6,
+      maximumIterations: 50,
+      nonlinearTolerance: 1e-8,
+      enableDiagnostics: true,
+      enableLogging: true
+    };
+    expect(defaultConfig.solver).toBe('auto');
+    expect(defaultConfig.maximumIterations).toBe(50);
+    expect(defaultConfig.relativeTolerance).toBe(1e-3);
+  });
+
+  it('routes distinct time series data per scope ID without cross-talk', () => {
+    // Simulate multiple scope data maps
+    const perScopeData: Record<string, any[]> = {
+      'scope_voltage': [
+        { time: 0.0, in1: 0, value: 0 },
+        { time: 0.05, in1: 100, value: 100 }
+      ],
+      'scope_current': [
+        { time: 0.0, in1: 0, value: 0 },
+        { time: 0.05, in1: 2, value: 2 }
+      ]
+    };
+
+    expect(perScopeData['scope_voltage']).toHaveLength(2);
+    expect(perScopeData['scope_current']).toHaveLength(2);
+    expect(perScopeData['scope_voltage'][1].in1).toBe(100);
+    expect(perScopeData['scope_current'][1].in1).toBe(2);
+    expect(perScopeData['scope_voltage'][1].in1).not.toEqual(perScopeData['scope_current'][1].in1);
+  });
+
+  describe('Simulation End Time & Stepping Limit Resolution', () => {
+    const resolveEffectiveLimit = (
+      topBarLimit: number | null,
+      nodes: Array<{ id: string; data: any }>
+    ): number | null => {
+      if (topBarLimit !== null && !isNaN(topBarLimit) && topBarLimit > 0) {
+        return topBarLimit;
+      }
+      const scNode = nodes.find(n => n.data?.type === 'solver_config' || n.data?.type === 'solver_configuration');
+      if (scNode) {
+        const st = scNode.data?.params?.stopTime?.value ?? scNode.data?.params?.stop_time?.value;
+        const parsed = typeof st === 'number' ? st : parseFloat(st);
+        if (!isNaN(parsed) && parsed > 0) {
+          return parsed;
+        }
+      }
+      return null;
+    };
+
+    it('resolves effective limit from top bar input if specified', () => {
+      const nodes = [
+        { id: 'sc1', data: { type: 'solver_config', params: { stopTime: { value: 10 } } } }
+      ];
+      expect(resolveEffectiveLimit(5.0, nodes)).toBe(5.0);
+      expect(resolveEffectiveLimit(null, nodes)).toBe(10);
+      expect(resolveEffectiveLimit(null, [])).toBeNull();
+    });
+
+    it('clamps last simulation step to hit exact end time without overshooting', () => {
+      const DT = 0.05;
+      const limit = 0.08;
+      let currentT = 0;
+      const timeSteps: number[] = [currentT];
+
+      while (currentT < limit - 1e-9) {
+        const dt = Math.min(DT, Math.max(0, limit - currentT));
+        currentT = parseFloat((currentT + dt).toFixed(6));
+        timeSteps.push(currentT);
+      }
+
+      expect(timeSteps).toEqual([0, 0.05, 0.08]);
+      expect(currentT).toBe(0.08);
+      expect(currentT <= limit).toBe(true);
+    });
+
+    it('terminates immediately once currentT reaches limit', () => {
+      const limit = 1.0;
+      const DT = 0.05;
+      let currentT = 0;
+      let iterations = 0;
+
+      while (currentT < limit - 1e-9 && iterations < 100) {
+        const dt = Math.min(DT, Math.max(0, limit - currentT));
+        currentT = parseFloat((currentT + dt).toFixed(6));
+        iterations++;
+      }
+
+      expect(iterations).toBe(20);
+      expect(currentT).toBe(1.0);
+    });
+  });
+});
+

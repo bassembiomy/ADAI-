@@ -1,6 +1,6 @@
 import { VLabPhysicsEngine } from './src/engine/vlab/vlabPhysics.ts';
 import { DAEAssembler } from './src/engine/vlab/DAEAssembler.ts';
-import { Node, Edge } from 'reactflow';
+import { Node, Edge } from '@xyflow/react';
 
 const reconstructLabNodes = (nodes: any[]): Node[] => {
   return nodes.map(n => ({

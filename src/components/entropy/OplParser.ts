@@ -1,6 +1,6 @@
-import { Node, Edge } from 'reactflow';
-import { OPMNodeData, OPMEdgeData, OPMNodeType, OPMLinkType, OPMState, OPMPort } from './EntropyTypes';
+import { OPMNodeData, OPMEdgeData, OPMNodeType, OPMLinkType, OPMState, OPMPort, type AppNode, type AppEdge } from './EntropyTypes';
 import { v4 as uuidv4 } from 'uuid';
+import { layoutOpmGraph } from './OpmAutoLayout';
 
 export interface OplSyntaxError {
   line: number;
@@ -9,23 +9,25 @@ export interface OplSyntaxError {
 }
 
 // Generate OPL text from nodes and edges (OPD -> OPL)
-export function generateOpl(nodes: Node<OPMNodeData>[], edges: Edge<OPMEdgeData>[]): string {
+export function generateOpl(nodes: AppNode[], edges: AppEdge[]): string {
   const sentences: string[] = [];
 
   // Group nodes
   const objects = nodes.filter(n => n.data.type === 'object');
   const processes = nodes.filter(n => n.data.type === 'process');
   const states = nodes.filter(n => n.data.type === 'state');
+  const requirements = nodes.filter(n => n.data.type === 'requirement');
+  const nonRequirementObjects = objects.filter(o => o.data.type !== 'requirement');
 
   // 1. Declarations of Objects, physical attributes, states
-  objects.forEach(obj => {
+  nonRequirementObjects.forEach(obj => {
     const objName = obj.data.name;
     if (obj.data.physical) {
       sentences.push(`Object ${objName} is physical.`);
     }
     
     // Find child states
-    const childStates = states.filter(s => s.parentNode === obj.id || s.data.parentId === obj.id);
+    const childStates = states.filter(s => s.parentId === obj.id || s.data.parentId === obj.id);
     if (childStates.length > 0) {
       const stateNames = childStates.map(s => s.data.name).join(', ');
       sentences.push(`Object ${objName} has states ${stateNames}.`);
@@ -35,6 +37,11 @@ export function generateOpl(nodes: Node<OPMNodeData>[], edges: Edge<OPMEdgeData>
       const attrNames = obj.data.attributes.map(a => `${a.key} = ${a.value}`).join(', ');
       sentences.push(`Object ${objName} exhibits attributes: ${attrNames}.`);
     }
+  });
+
+  // 1b. Requirement declarations (extension to ISO 19450)
+  requirements.forEach(req => {
+    sentences.push(`Requirement ${req.data.name}.`);
   });
 
   // 2. Declarations of Processes
@@ -52,7 +59,7 @@ export function generateOpl(nodes: Node<OPMNodeData>[], edges: Edge<OPMEdgeData>
     const node = nodes.find(n => n.id === id);
     if (!node) return '';
     if (node.data.type === 'state') {
-      const parent = nodes.find(n => n.id === (node.parentNode || node.data.parentId));
+      const parent = nodes.find(n => n.id === (node.parentId || node.data.parentId));
       return parent ? `${parent.data.name} in state ${node.data.name}` : node.data.name;
     }
     return node.data.name;
@@ -106,7 +113,7 @@ export function generateOpl(nodes: Node<OPMNodeData>[], edges: Edge<OPMEdgeData>
         break;
       case 'trigger':
         if (srcNode.data.type === 'state') {
-          const parent = nodes.find(n => n.id === (srcNode.parentNode || srcNode.data.parentId));
+          const parent = nodes.find(n => n.id === (srcNode.parentId || srcNode.data.parentId));
           const parentName = parent ? parent.data.name : 'Object';
           sentences.push(`${parentName} in state ${srcName} triggers ${tgtName}.`);
         } else {
@@ -115,12 +122,18 @@ export function generateOpl(nodes: Node<OPMNodeData>[], edges: Edge<OPMEdgeData>
         break;
       case 'condition':
         if (srcNode.data.type === 'state') {
-          const parent = nodes.find(n => n.id === (srcNode.parentNode || srcNode.data.parentId));
+          const parent = nodes.find(n => n.id === (srcNode.parentId || srcNode.data.parentId));
           const parentName = parent ? parent.data.name : 'Object';
           sentences.push(`${parentName} in state ${srcName} conditions ${tgtName}.`);
         } else {
           sentences.push(`${srcName} conditions ${tgtName}.`);
         }
+        break;
+      case 'satisfies':
+        sentences.push(`${srcName} satisfies ${tgtName}.`);
+        break;
+      case 'verifies':
+        sentences.push(`${srcName} verifies ${tgtName}.`);
         break;
       default:
         break;
@@ -131,21 +144,21 @@ export function generateOpl(nodes: Node<OPMNodeData>[], edges: Edge<OPMEdgeData>
 }
 
 // Parse OPL text into React Flow nodes and edges (OPL -> OPD)
-export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []): {
-  nodes: Node<OPMNodeData>[];
-  edges: Edge<OPMEdgeData>[];
+export function parseOpl(text: string, existingNodes: AppNode[] = []): {
+  nodes: AppNode[];
+  edges: AppEdge[];
   errors: OplSyntaxError[];
 } {
-  const nodes: Node<OPMNodeData>[] = [];
-  const edges: Edge<OPMEdgeData>[] = [];
+  const nodes: AppNode[] = [];
+  const edges: AppEdge[] = [];
   const errors: OplSyntaxError[] = [];
 
   const lines = text.split('\n');
-  const nodeMap = new Map<string, Node<OPMNodeData>>(); // key: lowercase node name, value: Node
-  const stateMap = new Map<string, Node<OPMNodeData>>(); // key: lowercase "objectname:statename", value: Node
+  const nodeMap = new Map<string, AppNode>(); // key: lowercase node name, value: Node
+  const stateMap = new Map<string, AppNode>(); // key: lowercase "objectname:statename", value: Node
 
   // Helper to find or create a node
-  const getOrCreateNode = (name: string, type: OPMNodeType, parentNodeId?: string | null): Node<OPMNodeData> => {
+  const getOrCreateNode = (name: string, type: OPMNodeType, parentNodeId?: string | null): AppNode => {
     const cleaned = name.replace(/^(object|process|state)\s+/i, '').trim();
     const key = cleaned.toLowerCase();
     
@@ -205,7 +218,7 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
         inputs: existing ? (existing.data.inputs || defaultInputs) : defaultInputs,
         outputs: existing ? (existing.data.outputs || defaultOutputs) : defaultOutputs,
       },
-      parentNode: parentNodeId || undefined,
+      parentId: parentNodeId || undefined,
       extent: parentNodeId ? 'parent' : undefined
     };
 
@@ -262,10 +275,23 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
           isActive: false
         });
         
+        if (sIdx === 0) {
+          (stateNode.data as any).isInitial = true;
+        }
+
         stateMap.set(stateKey, stateNode);
       });
 
       objNode.data.states = opmStates;
+      return;
+    }
+
+    // Requirement declaration
+    // Requirement [Name].
+    match = line.match(/^Requirement\s+(.+?)\.$/i);
+    if (match) {
+      const node = getOrCreateNode(match[1], 'requirement');
+      node.type = 'opmObject'; // rendered by opmObject; data.type distinguishes
       return;
     }
 
@@ -572,8 +598,26 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
       return;
     }
 
+    // 11. Satisfies / verifies traceability links
+    match = line.match(/^(.+?)\s+(satisfies|verifies)\s+(.+?)\.$/i);
+    if (match) {
+      matched = true;
+      const src = getOrCreateNode(match[1], 'requirement');
+      src.type = 'opmObject';
+      const target = getOrCreateNode(match[3], 'object');
+      edges.push({
+        id: `e-${src.id}-${target.id}`,
+        source: src.id,
+        target: target.id,
+        sourceHandle: 'std-out',
+        targetHandle: 'res-in',
+        data: { type: match[2].toLowerCase() as 'satisfies' | 'verifies' }
+      });
+      return;
+    }
+
     // If we've made declarations like "Object X." or "Process Y.", skip flagging them
-    if (line.match(/^Object\s+[^.]+\.$/i) || line.match(/^Process\s+[^.]+\.$/i)) {
+    if (line.match(/^Object\s+[^.]+\.$/i) || line.match(/^Process\s+[^.]+\.$/i) || line.match(/^Requirement\s+[^.]+\.$/i)) {
       matched = true;
       return;
     }
@@ -588,5 +632,6 @@ export function parseOpl(text: string, existingNodes: Node<OPMNodeData>[] = []):
     }
   });
 
-  return { nodes, edges, errors };
+  const finalNodes = layoutOpmGraph(nodes, edges);
+  return { nodes: finalNodes, edges, errors };
 }

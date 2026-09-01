@@ -1,4 +1,4 @@
-import { Node, Edge } from 'reactflow';
+import { Node, Edge } from '@xyflow/react';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { EquationContext, AssembledSystem, PhysicalDomain, ComponentEquation } from './types';
 import { blockEquations } from './vlabEquations';

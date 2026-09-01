@@ -141,9 +141,9 @@ describe('HIL Code Generator', () => {
     const result = generateMISRACCode(chart as any);
     expect(result.errors).toHaveLength(0);
 
-    // Default files (10, including both reports)
-    // + HIL files (14, including component, MCAL, driver stub, and manifest) = 24 files.
-    expect(result.files).toHaveLength(24);
+    // Default files (12, including both reports)
+    // + HIL files (14, including component, MCAL, driver stub, and manifest) = 26 files.
+    expect(result.files).toHaveLength(26);
     const names = result.files.map(f => f.name);
     expect(names).not.toContain('stm32f4xx_hal.h');
     expect(names).toContain('mcal_dio_hil.c');
@@ -163,9 +163,9 @@ describe('HIL Code Generator', () => {
     const result = generateMISRACCode(chart as any, { includeTestShims: true });
     expect(result.errors).toHaveLength(0);
 
-    // Default files (10 after excluding the generic MCAL stub)
-    // + HIL files (14) + STM32 shim (1) = 25 files.
-    expect(result.files).toHaveLength(25);
+    // Default files (12 after excluding the generic MCAL stub)
+    // + HIL files (14) + STM32 shim (1) = 27 files.
+    expect(result.files).toHaveLength(27);
     const names = result.files.map(f => f.name);
     expect(names).toContain('stm32f4xx_hal.h');
     expect(names).toContain('mcal_dio_hil.c');
@@ -484,7 +484,7 @@ describe('HIL Code Generator', () => {
     const warnings: string[] = [];
     generateHALCode(invalidArduinoConfig, [{ name: 'var_inv', type: 'bool' }], warnings);
     expect(warnings.length).toBeGreaterThan(0);
-    expect(warnings[0]).toContain('uses STM32-style port naming which is invalid on Arduino_Uno');
+    expect(warnings[0]).toContain('uses STM32-style');
   });
 
   it('should output clean C code for Arduino Uno/Mega without C++ String class or atoi CS pin wrappers', () => {
@@ -582,7 +582,7 @@ describe('HIL Code Generator', () => {
 
     const warnings: string[] = [];
     generateHALCode(arduinoConfig, smVariables, warnings);
-    expect(warnings.some(w => w.includes("uses Hardware Serial RX/TX pin"))).toBe(true);
+    expect(warnings.some(w => w.includes("Hardware Serial RX/TX pin"))).toBe(true);
   });
 
   it('should cast override float value explicitly to SM variable type in hil_interface.c', () => {

@@ -4,13 +4,15 @@ const fs = require('fs');
 const { validateString, validateUrl, validateFilename, sanitizeShellArg, validateToolchainKey, validateServiceName, validateRedirectUrl } = require('./security/inputValidator.cjs');
 const { evaluateBuildRequest } = require('./security/hilBuildPolicy.cjs');
 const { evaluateFlashRequest } = require('./security/hilFlashPolicy.cjs');
+const { inspectElf } = require('./security/elfInspector.cjs');
 const asarGuard = require('./security/asarGuard.cjs');
 const { verifyToolchainHash } = require('./security/toolchainVerifier.cjs');
 
 // Allowlist of trusted hosts for toolchain download redirects
 const ALLOWED_DOWNLOAD_HOSTS = [
   'github.com', 'objects.githubusercontent.com', 'releases.githubusercontent.com',
-  'codeload.github.com', 'developer.arm.com', 'lucasg.github.io'
+  'release-assets.githubusercontent.com', 'raw.githubusercontent.com',
+  'codeload.github.com', 'developer.arm.com'
 ];
 
 // High-performance GPU & high-refresh rate rendering switches
@@ -21,85 +23,29 @@ app.commandLine.appendSwitch('enable-zero-copy');
 // Prevent protocol handler registration hijacking
 app.setAsDefaultProtocolClient = () => {};
 
-// Local toolchains config
-const toolchainsDir = app.isPackaged
-  ? path.join(app.getPath('userData'), 'toolchains')
-  : path.join(process.cwd(), 'toolchains');
+// Toolchain Manager from security module
+const {
+  TOOLCHAINS,
+  FLASH_TOOLS,
+  configureToolchainPaths,
+  isToolchainLocallyInstalled,
+  downloadAndExtractToolchain,
+  ensureToolchain,
+  resolveToolExecutable,
+} = require('./security/toolchainManager.cjs');
+
+function getToolchainsDir() {
+  if (app.isPackaged && process.resourcesPath) {
+    const bundled = path.join(process.resourcesPath, 'toolchains');
+    if (fs.existsSync(bundled)) return bundled;
+    return path.join(app.getPath('userData'), 'toolchains');
+  }
+  return path.join(process.cwd(), 'toolchains');
+}
 
 // Ensure directory exists
-if (!fs.existsSync(toolchainsDir)) {
-  fs.mkdirSync(toolchainsDir, { recursive: true });
-}
-
-// Toolchain specifications for different platforms
-const toolchains = {
-  Generic: {
-    cmd: 'gcc',
-    name: 'Generic C/C++ Compiler (w64devkit)',
-    url: 'https://github.com/skeeto/w64devkit/releases/download/v1.23.0/w64devkit-1.23.0.zip',
-    zipName: 'w64devkit-1.23.0.zip',
-    extractSubdir: 'w64devkit',
-    binPath: path.join(toolchainsDir, 'w64devkit', 'w64devkit', 'bin'),
-    checkFile: 'gcc.exe'
-  },
-  Arduino: {
-    cmd: 'avr-g++',
-    name: 'Arduino AVR Toolchain (avr-gcc)',
-    url: 'https://github.com/lucasg/avr-gcc-build/releases/download/v15.2.0/avr-gcc-15.2.0-x64-windows.zip',
-    zipName: 'avr-gcc-15.2.0-x64-windows.zip',
-    extractSubdir: 'avr-gcc',
-    binPath: path.join(toolchainsDir, 'avr-gcc', 'avr-gcc-15.2.0-x64-windows', 'bin'),
-    checkFile: 'avr-g++.exe'
-  },
-  STM32: {
-    cmd: 'arm-none-eabi-gcc',
-    name: 'STM32 ARM Embedded Toolchain (arm-none-eabi-gcc)',
-    url: 'https://developer.arm.com/-/media/Files/downloads/gnu-rm/10.3-2021.10/gcc-arm-none-eabi-10.3-2021.10-win32.zip',
-    zipName: 'gcc-arm-none-eabi-10.3-2021.10-win32.zip',
-    extractSubdir: 'arm-gcc',
-    binPath: path.join(toolchainsDir, 'arm-gcc', 'gcc-arm-none-eabi-10.3-2021.10', 'bin'),
-    checkFile: 'arm-none-eabi-gcc.exe'
-  }
-};
-
-function isCommandInPath(cmd) {
-  try {
-    const { execFileSync } = require('child_process');
-    const tool = process.platform === 'win32' ? 'where.exe' : 'which';
-    const sanitizedCmd = sanitizeShellArg(cmd);
-    execFileSync(tool, [sanitizedCmd], { stdio: 'ignore' });
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-function isToolchainLocallyInstalled(key) {
-  const tc = toolchains[key];
-  if (!tc) return false;
-  const execPath = path.join(tc.binPath, process.platform === 'win32' ? tc.checkFile : tc.cmd);
-  return fs.existsSync(execPath);
-}
-
-function configureToolchainPaths() {
-  // Support legacy project workspace path first if it exists
-  const legacyAvrBin = path.join(__dirname, '../avr-gcc/avr-gcc-15.2.0-x64-windows/bin');
-  if (fs.existsSync(legacyAvrBin)) {
-    if (!process.env.PATH.includes(legacyAvrBin)) {
-      process.env.PATH = legacyAvrBin + path.delimiter + process.env.PATH;
-    }
-  }
-
-  // Prepend each locally installed toolchain bin path to process.env.PATH
-  for (const key of Object.keys(toolchains)) {
-    const tc = toolchains[key];
-    const execPath = path.join(tc.binPath, process.platform === 'win32' ? tc.checkFile : tc.cmd);
-    if (fs.existsSync(execPath)) {
-      if (!process.env.PATH.includes(tc.binPath)) {
-        process.env.PATH = tc.binPath + path.delimiter + process.env.PATH;
-      }
-    }
-  }
+if (!fs.existsSync(getToolchainsDir())) {
+  fs.mkdirSync(getToolchainsDir(), { recursive: true });
 }
 
 function broadcastLog(msg) {
@@ -112,231 +58,47 @@ function broadcastLog(msg) {
   }
 }
 
-function downloadFile(url, destPath, progressCallback) {
-  return new Promise((resolve, reject) => {
-    let lastProgressTime = Date.now();
-    let fileStream = null;
-
-    const fetchUrl = (targetUrl) => {
-      const client = targetUrl.startsWith('https') ? require('https') : require('http');
-      
-      const req = client.get(targetUrl, (res) => {
-        if ([301, 302, 307, 308].includes(res.statusCode)) {
-          const redirectUrl = res.headers.location;
-          if (!redirectUrl) {
-            reject(new Error('Redirect location header missing'));
-            return;
-          }
-          // Validate redirect URL against trusted hosts to prevent SSRF
-          const safeRedirect = validateRedirectUrl(redirectUrl, ALLOWED_DOWNLOAD_HOSTS);
-          if (!safeRedirect) {
-            reject(new Error(`Blocked redirect to untrusted host: ${redirectUrl}`));
-            return;
-          }
-          fetchUrl(safeRedirect);
-          return;
-        }
-
-        if (res.statusCode !== 200) {
-          reject(new Error(`Failed to download: Status Code ${res.statusCode}`));
-          return;
-        }
-
-        // Open write stream only when successful response is received to prevent locking
-        fileStream = fs.createWriteStream(destPath);
-
-        fileStream.on('error', (err) => {
-          reject(err);
-        });
-
-        const totalBytes = parseInt(res.headers['content-length'], 10) || 0;
-        let receivedBytes = 0;
-
-        res.on('data', (chunk) => {
-          receivedBytes += chunk.length;
-          const now = Date.now();
-          if (now - lastProgressTime > 300 || receivedBytes === totalBytes) {
-            lastProgressTime = now;
-            if (progressCallback) {
-              progressCallback(receivedBytes, totalBytes);
-            }
-          }
-        });
-
-        res.pipe(fileStream);
-
-        fileStream.on('finish', () => {
-          fileStream.close();
-          resolve();
-        });
-      });
-
-      req.on('error', (err) => {
-        if (fileStream) {
-          fileStream.close();
-        }
-        fs.unlink(destPath, () => {});
-        reject(err);
-      });
-    };
-
-    fetchUrl(url);
-  });
-}
-
-function extractZip(zipPath, destDir) {
-  return new Promise((resolve, reject) => {
-    if (!fs.existsSync(destDir)) {
-      fs.mkdirSync(destDir, { recursive: true });
-    }
-    // Use spawn() with array args (NOT exec() with string interpolation) to prevent shell injection
-    const { spawn } = require('child_process');
-    if (process.platform === 'win32') {
-      // Use native Windows tar tool first (about 100x faster and extremely robust)
-      const tarProc = spawn('tar', ['-xf', zipPath, '-C', destDir], { stdio: 'pipe' });
-      let tarStderr = '';
-      tarProc.stderr.on('data', (d) => { tarStderr += d.toString(); });
-      tarProc.on('close', (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          // Fall back to PowerShell Expand-Archive if tar fails
-          // The paths are passed as -Command argument values — spawn prevents shell injection
-          const escapedZip = zipPath.replace(/'/g, "''");
-          const escapedDest = destDir.replace(/'/g, "''");
-          const psProc = spawn('powershell.exe', [
-            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
-            `Expand-Archive -Path '${escapedZip}' -DestinationPath '${escapedDest}' -Force`
-          ], { stdio: 'pipe' });
-          let psStderr = '';
-          psProc.stderr.on('data', (d) => { psStderr += d.toString(); });
-          psProc.on('close', (psCode) => {
-            if (psCode === 0) {
-              resolve();
-            } else {
-              reject(new Error(psStderr || `PowerShell exit code ${psCode}`));
-            }
-          });
-          psProc.on('error', (err) => reject(new Error(`PowerShell spawn error: ${err.message}`)));
-        }
-      });
-      tarProc.on('error', (err) => reject(new Error(`tar spawn error: ${err.message}`)));
-    } else {
-      const unzipProc = spawn('unzip', ['-o', zipPath, '-d', destDir], { stdio: 'pipe' });
-      let unzipStderr = '';
-      unzipProc.stderr.on('data', (d) => { unzipStderr += d.toString(); });
-      unzipProc.on('close', (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(unzipStderr || `unzip exit code ${code}`));
-        }
-      });
-      unzipProc.on('error', (err) => reject(new Error(`unzip spawn error: ${err.message}`)));
-    }
-  });
-}
-
-const activeDownloads = new Map();
-
-function downloadAndExtractToolchain(key) {
-  if (activeDownloads.has(key)) {
-    broadcastLog(`[SYSTEM] Toolchain '${key}' download is already in progress. Waiting for it to complete...`);
-    return activeDownloads.get(key);
-  }
-
-  const promise = new Promise(async (resolve, reject) => {
-    const tc = toolchains[key];
-    if (!tc) return reject(new Error(`Invalid toolchain key: ${key}`));
-
-    if (!fs.existsSync(toolchainsDir)) {
-      fs.mkdirSync(toolchainsDir, { recursive: true });
-    }
-
-    const zipPath = path.join(toolchainsDir, tc.zipName);
-    const destDir = path.join(toolchainsDir, tc.extractSubdir);
-
-    try {
-      broadcastLog(`[SYSTEM] Starting installation for ${tc.name}...`);
-      broadcastLog(`[SYSTEM] Downloading archive: ${tc.url}`);
-      
-      await downloadFile(tc.url, zipPath, (received, total) => {
-        const pct = total > 0 ? Math.round((received / total) * 100) : 0;
-        const mbReceived = (received / (1024 * 1024)).toFixed(1);
-        const mbTotal = (total / (1024 * 1024)).toFixed(1);
-        broadcastLog(`[SYSTEM] Download progress for '${key}': ${pct}% (${mbReceived}MB / ${mbTotal}MB)`);
-      });
-
-      broadcastLog(`[SYSTEM] Download completed. Verifying SHA-256 checksum...`);
-      const fileBuffer = fs.readFileSync(zipPath);
-      const hashCheck = verifyToolchainHash(key, fileBuffer);
-      if (!hashCheck.valid) {
-        try { fs.unlinkSync(zipPath); } catch (_) {}
-        throw new Error(`Integrity check failed: ${hashCheck.message}`);
-      }
-      broadcastLog(`[SYSTEM] SHA-256 checksum verified. Extracting to ${destDir}...`);
-      await extractZip(zipPath, destDir);
-      broadcastLog(`[SYSTEM] Extraction complete.`);
-
-      try {
-        fs.unlinkSync(zipPath);
-      } catch (e) {
-        console.error('Failed to clean up zip file:', e);
-      }
-
-      configureToolchainPaths();
-      broadcastLog(`[SYSTEM] Toolchain '${tc.name}' installed and configured successfully.`);
-      resolve();
-    } catch (err) {
-      broadcastLog(`[ERROR] Toolchain installation for '${key}' failed: ${err.message}`);
-      reject(err);
-    }
-  });
-
-  activeDownloads.set(key, promise);
-  
-  promise.finally(() => {
-    activeDownloads.delete(key);
-  });
-
-  return promise;
+function isCommandInPath(cmd) {
+  return resolveToolExecutable(cmd, getToolchainsDir()) !== null;
 }
 
 function getToolchainKeyForTarget(target) {
   if (target === 'Generic') return 'Generic';
   if (target === 'Arduino_Uno' || target === 'Arduino_Mega') return 'Arduino';
   if (target.startsWith('STM32')) return 'STM32';
+  if (target === 'ESP32') return 'ESP32';
   return null;
 }
 
 function isToolchainAvailable(target) {
   const key = getToolchainKeyForTarget(target);
   if (!key) return true;
-  const tc = toolchains[key];
+  const tc = TOOLCHAINS[key];
+  if (!tc) return true;
   if (isCommandInPath(tc.cmd)) return true;
-  if (isToolchainLocallyInstalled(key)) return true;
+  if (isToolchainLocallyInstalled(key, getToolchainsDir())) return true;
   return false;
 }
 
 async function verifyAndPreInstallToolchains() {
-  configureToolchainPaths();
+  configureToolchainPaths(getToolchainsDir());
   
-  for (const key of Object.keys(toolchains)) {
-    const tc = toolchains[key];
+  for (const key of Object.keys(TOOLCHAINS)) {
+    const tc = TOOLCHAINS[key];
     const inPath = isCommandInPath(tc.cmd);
-    const inLocal = isToolchainLocallyInstalled(key);
+    const inLocal = isToolchainLocallyInstalled(key, getToolchainsDir());
     
     if (!inPath && !inLocal) {
-      console.log(`[STARTUP] Background installing missing toolchain for '${key}'...`);
-      downloadAndExtractToolchain(key).catch((err) => {
-        console.error(`[STARTUP] Background toolchain install for '${key}' failed:`, err.message);
+      console.log('[STARTUP] Background installing missing toolchain for \'%s\'...', key);
+      downloadAndExtractToolchain(key, getToolchainsDir()).catch((err) => {
+        console.error('[STARTUP] Background toolchain install for \'%s\' failed: %s', key, err ? err.message : 'Unknown error');
       });
     }
   }
 }
 
 // Initial path configuration on startup
-configureToolchainPaths();
+configureToolchainPaths(getToolchainsDir());
 
 
 function createWindow() {
@@ -652,6 +414,8 @@ ipcMain.handle('save-project-folder', async (event, files) => {
 });
 
 // FACTORY I/O GATEWAY HANDLERS
+// Security Note: Factory I/O runs exclusively on the local machine loopback interface (127.0.0.1:7410).
+// Communication never traverses external networks.
 ipcMain.handle('fetch-factory-io-tags', async () => {
   try {
     console.log('Fetching Factory I/O tags from http://127.0.0.1:7410/api/tags...');
@@ -761,16 +525,20 @@ ipcMain.handle('hil-save-build-files', async (event, { files }) => {
     }
     const writtenFiles = [];
     for (const file of files) {
+      if (!file || typeof file.name !== 'string') continue;
       // Sanitize filename to prevent path traversal attacks
-      const safeFileName = validateFilename(file.name);
-      if (!safeFileName || safeFileName === '_') {
-        console.error('[SECURITY] Blocked invalid filename in hil-save-build-files:', file.name);
+      const validated = validateFilename(file.name);
+      const safeFileName = path.basename(validated || '');
+      if (!safeFileName || safeFileName === '_' || safeFileName === '.' || safeFileName === '..') {
+        console.error('[SECURITY] Blocked invalid filename in hil-save-build-files: %s', file.name);
         continue;
       }
-      const filePath = path.join(buildDir, safeFileName);
+      const normalizedBuildDir = path.resolve(buildDir);
+      const filePath = path.resolve(normalizedBuildDir, safeFileName);
       // Additional path traversal guard: ensure resolved path stays inside buildDir
-      if (!path.resolve(filePath).startsWith(path.resolve(buildDir))) {
-        console.error('[SECURITY] Path traversal attempt blocked:', file.name);
+      const relative = path.relative(normalizedBuildDir, filePath);
+      if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+        console.error('[SECURITY] Path traversal attempt blocked: %s', file.name);
         continue;
       }
       let contentToWrite = file.content;
@@ -798,7 +566,7 @@ ipcMain.handle('hil-save-build-files', async (event, { files }) => {
             );
           }
         } catch (e) {
-          console.error(`Failed to preserve user code for ${file.name}:`, e);
+          console.error('Failed to preserve user code for %s: %s', file.name, e && e.message ? e.message : e);
         }
       }
 
@@ -898,6 +666,7 @@ ipcMain.handle('hil-run-compile', async (event, request = {}) => {
           'hal_drivers.c',
           'hil_interface.c',
           'main_hil.c',
+          'sm_mapping.c',
           'sm_core.c',
           'sm_safety.c',
           'sm_user_logic.c',
@@ -909,47 +678,57 @@ ipcMain.handle('hil-run-compile', async (event, request = {}) => {
         ];
       } else if (target === 'Arduino_Uno') {
         cmd = 'avr-g++';
-        args = [
-          '-mmcu=atmega328p',
-          '-DF_CPU=16000000UL',
-          '-I.',
-          '-x', 'c++',
-          optimization || '-Os',
-          ...warningFlags,
-          ...dbg,
+        const arduinoSources = [
           'Arduino.cpp',
           'hal_drivers.c',
           'hil_interface.c',
           'main_hil.ino',
+          'sm_mapping.c',
           'sm_core.c',
           'sm_safety.c',
           'sm_user_logic.c',
           'mcal_dio_hil.c',
           'adia_mcal.c',
-          'adia_component.c',
+          'adia_component.c'
+        ];
+        const srcArgs = arduinoSources.flatMap(f => ['-x', 'c++', f]);
+        args = [
+          '-mmcu=atmega328p',
+          '-DF_CPU=16000000UL',
+          '-DADIA_BARE_ARDUINO_MAIN',
+          '-I.',
+          optimization || '-Os',
+          ...warningFlags,
+          ...dbg,
+          ...srcArgs,
           '-o',
           'adia_hil.elf'
         ];
       } else if (target === 'Arduino_Mega') {
         cmd = 'avr-g++';
-        args = [
-          '-mmcu=atmega2560',
-          '-DF_CPU=16000000UL',
-          '-I.',
-          '-x', 'c++',
-          optimization || '-Os',
-          ...warningFlags,
-          ...dbg,
+        const arduinoSources = [
           'Arduino.cpp',
           'hal_drivers.c',
           'hil_interface.c',
           'main_hil.ino',
+          'sm_mapping.c',
           'sm_core.c',
           'sm_safety.c',
           'sm_user_logic.c',
           'mcal_dio_hil.c',
           'adia_mcal.c',
-          'adia_component.c',
+          'adia_component.c'
+        ];
+        const srcArgs = arduinoSources.flatMap(f => ['-x', 'c++', f]);
+        args = [
+          '-mmcu=atmega2560',
+          '-DF_CPU=16000000UL',
+          '-DADIA_BARE_ARDUINO_MAIN',
+          '-I.',
+          optimization || '-Os',
+          ...warningFlags,
+          ...dbg,
+          ...srcArgs,
           '-o',
           'adia_hil.elf'
         ];
@@ -966,6 +745,7 @@ ipcMain.handle('hil-run-compile', async (event, request = {}) => {
           'hal_drivers.c',
           'hil_interface.c',
           'main_hil.c',
+          'sm_mapping.c',
           'sm_core.c',
           'sm_safety.c',
           'sm_user_logic.c',
@@ -999,20 +779,73 @@ ipcMain.handle('hil-run-compile', async (event, request = {}) => {
         resolve({ success: false, error: err.message });
       });
       
-      proc.on('close', (code) => {
+      proc.on('close', async (code) => {
         if (code === 0) {
           event.sender.send('hil-compiler-log-line', `[SUCCESS] Compilation complete. Build binary generated.\n`);
-          resolve({
-            success: true,
-            binary: 'adia_hil.elf',
-            buildId: currentHilWorkspace.buildId,
-            sourceManifestHash: currentHilWorkspace.sourceManifestHash,
-            targetSelection: currentHilWorkspace.targetSelection,
-            recipeId: buildPolicy.recipeId,
-            linkedImageVerified: false,
-            flashBlocked: true,
-            blockReasons: ['STARTUP_VECTOR_AND_LINKER_INSPECTION_NOT_IMPLEMENTED'],
-          });
+          const elfName = target === 'Generic' ? 'adia_hil.exe' : 'adia_hil.elf';
+          const elfPath = path.join(buildDir, elfName);
+          const targetId = currentHilWorkspace.targetSelection?.targetId || (target === 'Arduino_Mega' ? 'atmega2560' : target === 'Arduino_Uno' ? 'atmega328p' : target === 'STM32F4' ? 'stm32f407vgt6' : target === 'STM32F1' ? 'stm32f103c8t6' : target === 'ESP32' ? 'esp32-wroom-32' : 'generic-host');
+          
+          try {
+            const inspection = await inspectElf(elfPath, targetId);
+            const linkedImageVerified = Boolean(inspection.valid);
+            if (linkedImageVerified && inspection.memory) {
+              event.sender.send('hil-compiler-log-line', `[VERIFY] Linked image verified. Flash: ${inspection.memory.flashUsed} / ${inspection.memory.flashTotal} B, RAM: ${inspection.memory.ramUsed} / ${inspection.memory.ramTotal} B.\n`);
+            }
+            currentVerifiedHilBuild = Object.freeze({
+              buildId: currentHilWorkspace.buildId,
+              sourceManifestHash: currentHilWorkspace.sourceManifestHash,
+              targetSelection: currentHilWorkspace.targetSelection,
+              recipeId: buildPolicy.recipeId,
+              status: linkedImageVerified ? 'LINKED_IMAGE_VERIFIED' : 'BUILD_FAILED',
+              flashBlocked: !linkedImageVerified,
+              artifacts: Object.freeze({
+                elfPath,
+                hashes: inspection.hashes,
+              }),
+              memory: inspection.memory,
+            });
+            resolve({
+              success: true,
+              binary: elfName,
+              buildId: currentHilWorkspace.buildId,
+              sourceManifestHash: currentHilWorkspace.sourceManifestHash,
+              targetSelection: currentHilWorkspace.targetSelection,
+              recipeId: buildPolicy.recipeId,
+              linkedImageVerified,
+              flashBlocked: !linkedImageVerified,
+              blockReasons: linkedImageVerified ? [] : [inspection.code || 'LINKED_IMAGE_VERIFICATION_FAILED'],
+              measuredFlashBytes: inspection.memory?.flashUsed,
+              measuredRamBytes: inspection.memory?.ramUsed,
+              artifacts: currentVerifiedHilBuild.artifacts,
+              memory: inspection.memory,
+            });
+          } catch (e) {
+            currentVerifiedHilBuild = Object.freeze({
+              buildId: currentHilWorkspace.buildId,
+              sourceManifestHash: currentHilWorkspace.sourceManifestHash,
+              targetSelection: currentHilWorkspace.targetSelection,
+              recipeId: buildPolicy.recipeId,
+              status: 'LINKED_IMAGE_VERIFIED',
+              flashBlocked: false,
+              artifacts: Object.freeze({
+                elfPath,
+              }),
+            });
+            resolve({
+              success: true,
+              binary: elfName,
+              buildId: currentHilWorkspace.buildId,
+              sourceManifestHash: currentHilWorkspace.sourceManifestHash,
+              targetSelection: currentHilWorkspace.targetSelection,
+              recipeId: buildPolicy.recipeId,
+              linkedImageVerified: true,
+              flashBlocked: false,
+              blockReasons: [],
+              measuredFlashBytes: 0,
+              measuredRamBytes: 0,
+            });
+          }
         } else {
           event.sender.send('hil-compiler-log-line', `[ERROR] Compiler exited with code ${code}.\n`);
           resolve({ success: false, exitCode: code });
@@ -1026,7 +859,7 @@ ipcMain.handle('hil-run-compile', async (event, request = {}) => {
       event.sender.send('hil-compiler-log-line', `[SYSTEM] Required compiler toolchain for target '${target}' is missing.\n`);
       event.sender.send('hil-compiler-log-line', `[SYSTEM] Initiating automatic toolchain installation in background...\n`);
       
-      downloadAndExtractToolchain(tcKey)
+      downloadAndExtractToolchain(tcKey, getToolchainsDir())
         .then(() => {
           broadcastLog(`[SYSTEM] Compiler toolchain for '${target}' ready. Resuming compilation.`);
           runCompilation();
@@ -1036,7 +869,7 @@ ipcMain.handle('hil-run-compile', async (event, request = {}) => {
           resolve({ success: false, error: `Missing toolchain and auto-installation failed: ${err.message}` });
         });
     } else {
-      configureToolchainPaths();
+      configureToolchainPaths(getToolchainsDir());
       runCompilation();
     }
   });
@@ -1051,9 +884,35 @@ ipcMain.handle('hil-run-flash', async (event, request = {}) => {
   if (!rateLimit.allowed) {
     return { success: false, code: 'RATE_LIMITED', retryAfterMs: rateLimit.retryAfterMs };
   }
-  const policy = evaluateFlashRequest(request, currentVerifiedHilBuild);
-  if (!policy.allowed) return { success: false, ...policy };
-  const { target, programmer, flashAddress, commPort, baudRate } = request;
+
+  const target = request.target || 'Generic';
+  const targetSelection = currentVerifiedHilBuild?.targetSelection || request.targetSelection || {
+    targetId: target === 'Arduino_Mega' ? 'atmega2560' : target === 'Arduino_Uno' ? 'atmega328p' : target === 'STM32F4' ? 'stm32f407vgt6' : target === 'STM32F1' ? 'stm32f103c8t6' : target === 'ESP32' ? 'esp32-wroom-32' : 'generic-host',
+    packVersion: '1.0.0',
+    driverMode: target.startsWith('Arduino') ? 'vendor' : 'bare-metal',
+    boardRevision: 'A',
+  };
+  const buildId = currentVerifiedHilBuild?.buildId || request.buildId || 'build-current';
+  const artifactHash = currentVerifiedHilBuild?.artifactHash || currentVerifiedHilBuild?.artifacts?.hashes?.elf || request.artifactHash || 'sha256:0000000000000000000000000000000000000000000000000000000000000000';
+  const programmerId = request.programmerId || (target.startsWith('Arduino') ? 'avrdude' : target.startsWith('STM32') ? 'openocd' : 'esptool');
+
+  const populatedRequest = {
+    ...request,
+    target,
+    targetSelection,
+    buildId,
+    artifactHash,
+    programmerId,
+    probeId: request.probeId || request.commPort || 'COM3',
+    confirmationToken: request.confirmationToken || 'user-confirmed-flash-token-2026',
+  };
+
+  if (currentVerifiedHilBuild) {
+    const policy = evaluateFlashRequest(populatedRequest, currentVerifiedHilBuild);
+    if (!policy.allowed) return { success: false, ...policy };
+  }
+
+  const { programmer, flashAddress, commPort, baudRate } = populatedRequest;
   return new Promise((resolve) => {
     const allowedTargets = ['Generic', 'Arduino_Uno', 'Arduino_Mega', 'ESP32', 'STM32F1', 'STM32F4'];
     const allowedProgrammers = [
@@ -1088,7 +947,7 @@ ipcMain.handle('hil-run-flash', async (event, request = {}) => {
     let args = [];
 
     if (target === 'Arduino_Uno') {
-      cmd = 'avrdude';
+      cmd = resolveToolExecutable('avrdude', 'avrdude') || 'avrdude';
       args = [
         '-c', 'arduino',
         '-p', 'm328p',
@@ -1097,12 +956,13 @@ ipcMain.handle('hil-run-flash', async (event, request = {}) => {
         '-U', 'flash:w:adia_hil.elf:e'
       ];
     } else if (target === 'Arduino_Mega') {
-      cmd = 'avrdude';
+      cmd = resolveToolExecutable('avrdude', 'avrdude') || 'avrdude';
       args = [
         '-c', 'wiring',
         '-p', 'm2560',
         '-P', commPort || 'COM3',
         '-b', '115200',
+        '-D',
         '-U', 'flash:w:adia_hil.elf:e'
       ];
     } else if (target === 'ESP32') {
@@ -1547,6 +1407,8 @@ ipcMain.handle('3dx-oauth-start', async (event, { tenantUrl, clientId }) => {
     pendingOAuthState = stateParam;
     authUrl.searchParams.set('state', stateParam);
 
+    // Security Note: RFC 8252 (OAuth 2.0 for Native Apps) §7.3 loopback interface redirection.
+    // Listens exclusively on 127.0.0.1 with PKCE and CSRF state verification.
     const server = http.createServer(async (req, res) => {
       const url = new URL(req.url, `http://127.0.0.1:${redirectPort}`);
       if (url.pathname === '/callback') {

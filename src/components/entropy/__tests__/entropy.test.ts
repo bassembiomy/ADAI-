@@ -1,30 +1,32 @@
 import { describe, test, expect } from 'vitest';
 import { generateOpl, parseOpl } from '../OplParser';
-import { Node, Edge } from 'reactflow';
-import { OPMNodeData, OPMEdgeData } from '../EntropyTypes';
+import type { AppNode, AppEdge, OPMNodeType, OPMLinkType, OPMNodeData } from '../EntropyTypes';
 
 describe('ENTROPY OPM Bimodal Syncer Tests', () => {
   // Test OPL Generation
   test('generateOpl should generate correct sentences from OPM nodes and edges', () => {
-    const nodes: Node<OPMNodeData>[] = [
+    const nodes: AppNode[] = [
       {
         id: 'obj-1',
+        type: 'opmObject',
         position: { x: 0, y: 0 },
         data: { name: 'Home_System', type: 'object', physical: false }
       },
       {
         id: 'obj-2',
+        type: 'opmObject',
         position: { x: 0, y: 0 },
         data: { name: 'Sensor', type: 'object', physical: true }
       },
       {
         id: 'proc-1',
+        type: 'opmProcess',
         position: { x: 0, y: 0 },
         data: { name: 'Monitor', type: 'process', physical: false }
       }
     ];
 
-    const edges: Edge<OPMEdgeData>[] = [
+    const edges: AppEdge[] = [
       {
         id: 'e-1',
         source: 'obj-1',
@@ -98,7 +100,7 @@ describe('ENTROPY OPM Bimodal Syncer Tests', () => {
 
     const emptyStateNode = nodes.find(n => n.data.name === 'Empty' && n.data.type === 'state');
     expect(emptyStateNode).toBeDefined();
-    expect(emptyStateNode?.parentNode).toBe(kettleNode?.id);
+    expect(emptyStateNode?.parentId).toBe(kettleNode?.id);
 
     const boilProc = nodes.find(n => n.data.name === 'Boil_Water');
     expect(boilProc).toBeDefined();
@@ -120,5 +122,23 @@ describe('ENTROPY OPM Bimodal Syncer Tests', () => {
     
     expect(errors.length).toBeGreaterThan(0);
     expect(errors[0].message).toContain('Syntax Error');
+  });
+});
+
+describe('ENTROPY requirement extensions', () => {
+  test('requirement node type and satisfies link are assignable to OPM types', () => {
+    const nodeType: OPMNodeType = 'requirement';
+    const linkType: OPMLinkType = 'satisfies';
+    const verifyType: OPMLinkType = 'verifies';
+    const data: OPMNodeData = {
+      name: 'Response_Time_Under_2s',
+      type: 'requirement',
+      physical: false,
+      requirementText: 'System shall respond in under 2 seconds.',
+    };
+    expect(nodeType).toBe('requirement');
+    expect(linkType).toBe('satisfies');
+    expect(verifyType).toBe('verifies');
+    expect(data.requirementText).toContain('2 seconds');
   });
 });

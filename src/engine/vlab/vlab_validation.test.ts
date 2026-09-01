@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Edge, Node } from 'reactflow';
+import { Edge, Node } from '@xyflow/react';
 import { SparseLinearSolver } from './SparseLinearSolver';
 import { blockEquations } from './vlabEquations';
 import { VLabPhysicsEngine } from './vlabPhysics';

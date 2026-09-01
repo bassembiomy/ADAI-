@@ -1,4 +1,4 @@
-@import 'reactflow/dist/style.css';
+@import '@xyflow/react/dist/style.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -84,6 +84,12 @@ body {
 }
 
 /* React Flow Theming */
+.react-flow {
+  background-color: var(--bg-main) !important;
+  --xy-background-color: var(--bg-main) !important;
+  --xy-background-color-default: var(--bg-main) !important;
+}
+
 .react-flow__node {
   border-radius: 8px;
   background: var(--node-bg);
@@ -474,4 +480,50 @@ header button:not(.bg-emerald-600):not(.bg-rose-600):not(.bg-red-600):hover span
 header button:not(.bg-emerald-600):not(.bg-rose-600):not(.bg-red-600):hover svg {
   color: #fb923c !important;
   transition: color 0.15s ease-in-out;
+}
+
+/* VLab Schematic Node Presentation: Pure floating symbols without outer boxes/cards */
+.react-flow__node:has(.vlab-node),
+.react-flow__node.react-flow__node-default:has(.vlab-node),
+.react-flow__node.react-flow__node-doe_custom:has(.vlab-node),
+.vlab-node {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.react-flow__node:has(.vlab-node)[data-selected="true"],
+.react-flow__node:has(.vlab-node).selected {
+  box-shadow: none !important;
+  border: none !important;
+  background: transparent !important;
+}
+
+/* VLab Refined Schematic symbols */
+.vlab-symbol svg, .vlab-symbol svg * { stroke-linecap: round; stroke-linejoin: round; }
+.vlab-symbol { filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.55)); }
+.vlab-node .symbol-bright { filter: brightness(1.3) drop-shadow(0 0 10px rgba(168, 85, 247, 0.35)); }
+
+/* VLab boundary-pinned port rings (scoped override of global .react-flow__handle chrome) */
+.vlab-node .react-flow__handle {
+  width: 100% !important;
+  height: 100% !important;
+  padding: 0 !important;
+  border-radius: 9999px !important;
+  background: #0f0f13 !important;
+  border: 2px solid var(--pc, #3b82f6) !important;
+  box-shadow: none !important;
+  transition: all 0.15s ease !important;
+}
+.vlab-node .react-flow__handle.vlab-handle-connected {
+  background: var(--pc, #3b82f6) !important;
+}
+.vlab-node[data-selected="true"] .react-flow__handle {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--pc, #3b82f6) 22%, transparent) !important;
+}
+.vlab-node .react-flow__handle:hover {
+  transform: scale(1.25) !important;
+  box-shadow: 0 0 10px var(--pc, #3b82f6) !important;
+  border-color: var(--pc, #3b82f6) !important;
 }

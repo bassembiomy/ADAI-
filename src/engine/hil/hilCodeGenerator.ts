@@ -2,13 +2,16 @@ import { HILConfig } from './hilTypes';
 import { hilDriverTemplates } from './hilDriverTemplates';
 import { resolveTargetSelection } from './hilTypes';
 import { generateEmbeddedLayers } from '../embedded/embeddedLayerGenerator';
+import { validatePinAssignments } from './pinValidator';
+import { defaultTargetPackFor } from '../targetPacks/defaultTargetPacks';
 
 const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9_]/g, '_');
 
 export function generateHALCode(
   config: HILConfig,
   smVariables: Array<{ name: string; type: string }>,
-  warnings?: string[]
+  warnings?: string[],
+  errors?: string[]
 ): Array<{ name: string; content: string }> {
   if (!config || !config.enabled) {
     return [];
@@ -18,24 +21,24 @@ export function generateHALCode(
   const targetSelection = resolveTargetSelection(config);
   const mcu = hilDriverTemplates[target] || hilDriverTemplates.Generic;
 
-  /* Surface unsupported-peripheral channels as user-visible diagnostics instead
-   * of silently skipping their driver initialization. */
-  config.channels.forEach(ch => {
-    if (!mcu.peripherals[ch.peripheral]) {
-      warnings?.push(`[HIL] Channel '${ch.name}': peripheral '${ch.peripheral}' is not supported by target '${target}'. Its driver initialization was skipped.`);
-    }
+  const pinIssues = validatePinAssignments(config.channels, {
+    targetLegacy: target,
+    pack: defaultTargetPackFor(targetSelection?.targetId ?? ''),
   });
-
-  /* Warning for STM32-style pins on Arduino/ESP32 targets */
-  if (target.startsWith('Arduino') || target === 'ESP32') {
-    config.channels.forEach(ch => {
-      if (/^P[A-L]\d+$/i.test(ch.pin)) {
-        warnings?.push(`[HIL] Channel '${ch.name}': pin '${ch.pin}' uses STM32-style port naming which is invalid on ${target}. Use numeric pins (e.g. '13') or analog pins (e.g. 'A0').`);
+  for (const issue of pinIssues) {
+    const line = `[HIL] Channel '${issue.channelId}': ${issue.message}`;
+    if (issue.level === 'error') {
+      if (errors) {
+        errors.push(line);
+      } else {
+        warnings?.push(line);
       }
-      if (target.startsWith('Arduino') && (ch.pin.trim() === '0' || ch.pin.trim() === '1')) {
-        warnings?.push(`[HIL] Channel '${ch.name}': pin '${ch.pin}' uses Hardware Serial RX/TX pin (0/1) on ${target}, which conflicts with HIL Serial communication. Remap to another pin (e.g. '4' or '22').`);
-      }
-    });
+    } else {
+      warnings?.push(line);
+    }
+  }
+  if (errors && errors.length > 0) {
+    return [];
   }
 
 
@@ -264,7 +267,7 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance);
   // Define override states for input channels
   const inputChannels = config.channels.filter(ch => ch.direction === 'In');
   const overrideGlobals = inputChannels
-    .map(ch => `static float override_val_${sanitize(ch.name)} = 0.0f;\nstatic bool override_active_${sanitize(ch.name)} = false;`)
+    .map(ch => `static volatile float override_val_${sanitize(ch.name)} = 0.0f;\nstatic volatile bool override_active_${sanitize(ch.name)} = false;`)
     .join('\n');
 
   // Input synchronization logic

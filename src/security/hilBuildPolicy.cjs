@@ -23,18 +23,26 @@ const RECIPES = Object.freeze({
   }),
   atmega328p: Object.freeze({
     recipeId: 'avr-gcc-atmega328p-v1',
-    compilerFlags: Object.freeze(['-mmcu=atmega328p', '-DF_CPU=16000000UL', '-Os', '-Wall', '-Wextra', '-Werror']),
+    compilerFlags: Object.freeze(['-mmcu=atmega328p', '-DF_CPU=16000000UL', '-DADIA_BARE_ARDUINO_MAIN', '-Os', '-Wall', '-Wextra', '-Werror']),
     main: 'main_hil.ino',
+    extraSources: Object.freeze(['Arduino.cpp']),
   }),
   atmega2560: Object.freeze({
     recipeId: 'avr-gcc-atmega2560-v1',
-    compilerFlags: Object.freeze(['-mmcu=atmega2560', '-DF_CPU=16000000UL', '-Os', '-Wall', '-Wextra', '-Werror']),
+    compilerFlags: Object.freeze(['-mmcu=atmega2560', '-DF_CPU=16000000UL', '-DADIA_BARE_ARDUINO_MAIN', '-Os', '-Wall', '-Wextra', '-Werror']),
     main: 'main_hil.ino',
+    extraSources: Object.freeze(['Arduino.cpp']),
   }),
   'esp32-wroom-32': Object.freeze({
     recipeId: 'esp-idf-esp32-wroom-32-v1',
-    compilerFlags: Object.freeze(['-Os', '-Wall', '-Wextra', '-Werror']),
+    compilerFlags: Object.freeze(['-DADIA_BARE_ARDUINO_MAIN', '-Os', '-Wall', '-Wextra', '-Werror']),
     main: 'main_hil.ino',
+    extraSources: Object.freeze(['Arduino.cpp']),
+  }),
+  'generic-host': Object.freeze({
+    recipeId: 'gcc-generic-host-v1',
+    compilerFlags: Object.freeze(['-std=c99', '-Os', '-Wall', '-Wextra']),
+    main: 'main_hil.c',
   }),
 });
 
@@ -80,13 +88,14 @@ function evaluateBuildRequest(request, workspace) {
   const recipe = RECIPES[request.targetSelection.targetId];
   if (!recipe) return denied('NO_TRUSTED_RECIPE', 'No application-owned build recipe exists for this exact target');
   const present = new Set(Array.isArray(workspace.files) ? workspace.files : []);
-  const missing = [...COMMON_SOURCES, recipe.main].filter(name => !present.has(name));
+  const targetSources = [...COMMON_SOURCES, ...(recipe.extraSources || []), recipe.main];
+  const missing = targetSources.filter(name => !present.has(name));
   if (missing.length > 0) return denied('INCOMPLETE_SOURCE_SET', `Missing required generated files: ${missing.join(', ')}`);
   return Object.freeze({
     allowed: true,
     recipeId: recipe.recipeId,
     compilerFlags: recipe.compilerFlags,
-    sourceFiles: Object.freeze([...COMMON_SOURCES, recipe.main]),
+    sourceFiles: Object.freeze(targetSources),
   });
 }
 

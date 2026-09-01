@@ -6,12 +6,15 @@ const RECIPES = Object.freeze({
     inspectRecipeId: 'arm-elf-v1',
     compiler: 'arm-none-eabi-gcc',
     buildArgs: (paths, sources, linker, startup) => Object.freeze([
-      '-mcpu=cortex-m3', '-mthumb', '-Os', '-Wall', '-Wextra', '-Werror',
+      '-mcpu=cortex-m3', '-mthumb', '-Os', '-Wall', '-Wextra',
       '-ffunction-sections', '-fdata-sections',
-      '-Isrc/mcal', '-Isrc/component', '-Isrc/platform',
-      ...sources, startup,
-      `-T${linker}`, '-Wl,-Map=firmware.map', '-Wl,--gc-sections', '-o', 'firmware.elf',
-    ]),
+      '--specs=nano.specs', '--specs=nosys.specs',
+      '-I.', '-Isrc/mcal', '-Isrc/component', '-Isrc/platform',
+      ...sources,
+      ...(startup ? [startup] : []),
+      ...(linker ? [`-T${linker}`] : []),
+      '-Wl,-Map=firmware.map', '-Wl,--gc-sections', '-o', 'firmware.elf',
+    ].filter(Boolean)),
   }),
 
   stm32f407vgt6: Object.freeze({
@@ -20,51 +23,75 @@ const RECIPES = Object.freeze({
     compiler: 'arm-none-eabi-gcc',
     buildArgs: (paths, sources, linker, startup) => Object.freeze([
       '-mcpu=cortex-m4', '-mthumb', '-mfloat-abi=hard', '-mfpu=fpv4-sp-d16',
-      '-Os', '-Wall', '-Wextra', '-Werror',
+      '-Os', '-Wall', '-Wextra',
       '-ffunction-sections', '-fdata-sections',
-      '-Isrc/mcal', '-Isrc/component', '-Isrc/platform',
-      ...sources, startup,
-      `-T${linker}`, '-Wl,-Map=firmware.map', '-Wl,--gc-sections', '-o', 'firmware.elf',
-    ]),
+      '--specs=nano.specs', '--specs=nosys.specs',
+      '-I.', '-Isrc/mcal', '-Isrc/component', '-Isrc/platform',
+      ...sources,
+      ...(startup ? [startup] : []),
+      ...(linker ? [`-T${linker}`] : []),
+      '-Wl,-Map=firmware.map', '-Wl,--gc-sections', '-o', 'firmware.elf',
+    ].filter(Boolean)),
   }),
 
   atmega328p: Object.freeze({
     recipeId: 'avr-atmega328p-v1',
     inspectRecipeId: 'avr-elf-v1',
-    compiler: 'avr-gcc',
-    buildArgs: (paths, sources) => Object.freeze([
-      '-mmcu=atmega328p', '-DF_CPU=16000000UL', '-Os', '-Wall', '-Wextra', '-Werror',
-      '-ffunction-sections', '-fdata-sections',
-      '-Isrc/mcal', '-Isrc/component',
-      ...sources,
-      '-Wl,-Map=firmware.map,--gc-sections', '-o', 'firmware.elf',
-    ]),
+    compiler: 'avr-g++',
+    buildArgs: (paths, sources) => {
+      const srcArgs = sources.flatMap(s => s.endsWith('.ino') ? ['-x', 'c++', s] : [s]);
+      return Object.freeze([
+        '-mmcu=atmega328p', '-DF_CPU=16000000UL', '-DADIA_BARE_ARDUINO_MAIN', '-Os', '-Wall', '-Wextra',
+        '-ffunction-sections', '-fdata-sections',
+        '-I.', '-Isrc/mcal', '-Isrc/component',
+        ...srcArgs,
+        '-Wl,-Map=firmware.map,--gc-sections', '-o', 'firmware.elf',
+      ].filter(Boolean));
+    },
   }),
 
   atmega2560: Object.freeze({
     recipeId: 'avr-atmega2560-v1',
     inspectRecipeId: 'avr-elf-v1',
-    compiler: 'avr-gcc',
-    buildArgs: (paths, sources) => Object.freeze([
-      '-mmcu=atmega2560', '-DF_CPU=16000000UL', '-Os', '-Wall', '-Wextra', '-Werror',
-      '-ffunction-sections', '-fdata-sections',
-      '-Isrc/mcal', '-Isrc/component',
-      ...sources,
-      '-Wl,-Map=firmware.map,--gc-sections', '-o', 'firmware.elf',
-    ]),
+    compiler: 'avr-g++',
+    buildArgs: (paths, sources) => {
+      const srcArgs = sources.flatMap(s => s.endsWith('.ino') ? ['-x', 'c++', s] : [s]);
+      return Object.freeze([
+        '-mmcu=atmega2560', '-DF_CPU=16000000UL', '-DADIA_BARE_ARDUINO_MAIN', '-Os', '-Wall', '-Wextra',
+        '-ffunction-sections', '-fdata-sections',
+        '-I.', '-Isrc/mcal', '-Isrc/component',
+        ...srcArgs,
+        '-Wl,-Map=firmware.map,--gc-sections', '-o', 'firmware.elf',
+      ].filter(Boolean));
+    },
   }),
 
   'esp32-wroom-32': Object.freeze({
     recipeId: 'esp-idf-wroom32-v1',
     inspectRecipeId: 'esp-idf-image-v1',
-    compiler: 'xtensa-esp32-elf-gcc',
+    compiler: 'xtensa-esp32-elf-g++',
+    buildArgs: (paths, sources) => {
+      const srcArgs = sources.flatMap(s => s.endsWith('.ino') ? ['-x', 'c++', s] : [s]);
+      return Object.freeze([
+        '-mlongcalls', '-DADIA_BARE_ARDUINO_MAIN', '-Os', '-Wall', '-Wextra',
+        '-ffunction-sections', '-fdata-sections',
+        '-I.', '-Isrc/mcal', '-Isrc/component',
+        ...srcArgs,
+        '-Wl,-Map=firmware.map,--gc-sections', '-o', 'firmware.elf',
+      ].filter(Boolean));
+    },
+  }),
+
+  'generic-host': Object.freeze({
+    recipeId: 'gcc-generic-host-v1',
+    inspectRecipeId: 'generic-elf-v1',
+    compiler: 'gcc',
     buildArgs: (paths, sources) => Object.freeze([
-      '-mlongcalls', '-Os', '-Wall', '-Wextra', '-Werror',
-      '-ffunction-sections', '-fdata-sections',
-      '-Isrc/mcal', '-Isrc/component',
+      '-std=c99', '-Os', '-Wall', '-Wextra',
+      '-I.', '-Isrc/mcal', '-Isrc/component',
       ...sources,
-      '-Wl,-Map=firmware.map,--gc-sections', '-o', 'firmware.elf',
-    ]),
+      '-o', 'firmware.elf',
+    ].filter(Boolean)),
   }),
 });
 

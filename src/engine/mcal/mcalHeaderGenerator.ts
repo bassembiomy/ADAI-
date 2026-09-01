@@ -54,6 +54,7 @@ export function generateMcalHeader(model: McalHeaderModel): string {
   lines.push('');
   lines.push('#include <stdbool.h>');
   lines.push('#include <stdint.h>');
+  lines.push('#include <stddef.h>');
   lines.push('');
   lines.push('typedef enum {');
   for (const [name, value] of STATUS_CODES) {

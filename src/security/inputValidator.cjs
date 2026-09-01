@@ -1,7 +1,7 @@
 // src/security/inputValidator.cjs
 // Centralized inputs/arguments validation to mitigate injection & directory traversal
 
-const ALLOWED_TOOLCHAIN_KEYS = ['Generic', 'Arduino', 'STM32'];
+const ALLOWED_TOOLCHAIN_KEYS = ['Generic', 'Arduino', 'STM32', 'ESP32'];
 const ALLOWED_SERVICE_NAMES = ['gemini', 'openai', 'local', 'n8n'];
 
 function validateString(value, maxLength = 1000) {

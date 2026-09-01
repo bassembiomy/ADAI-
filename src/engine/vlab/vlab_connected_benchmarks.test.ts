@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { VLabPhysicsEngine } from './vlabPhysics';
-import { Node, Edge } from 'reactflow';
+import { Node, Edge } from '@xyflow/react';
 
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 
@@ -156,14 +156,16 @@ describe('V-Lab Connected Model Benchmarks (10 Major System Topologies)', () => 
   it('benchmark 6: gas storage chamber with pneumatic restriction', () => {
     const nodes: Node[] = [
       makeNode('src', 'gas_pressure_source', { P: 200000 }),
-      makeNode('valve', 'gas_valve', { Cd: 0.7 }),
+      makeNode('valve', 'gas_restriction', { area: 1e-4, Cd: 0.7 }),
       makeNode('chamber', 'gas_chamber', { V: 0.05 }),
-      makeNode('ref', 'gas_reference', {}),
+      makeNode('cap', 'gas_cap', {}),
+      makeNode('ref', 'gas_ref', {}),
     ];
     const edges: Edge[] = [
-      makeEdge('e1', 'src', 'valve', 'p', 'p'),
-      makeEdge('e2', 'valve', 'chamber', 'n', 'p'),
-      makeEdge('e3', 'chamber', 'ref', 'n', 'gnd'),
+      makeEdge('e1', 'src', 'valve', 'b', 'a'),
+      makeEdge('e2', 'valve', 'chamber', 'b', 'a'),
+      makeEdge('e3', 'chamber', 'cap', 'b', 'a'),
+      makeEdge('e4', 'src', 'ref', 'a', 'g'),
     ];
 
     let state: any = null;

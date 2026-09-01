@@ -1,0 +1,1798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ADIA Advanced Engineering Architecture, Solvers, Control Loops & DOE Master Suite</title>
+
+  <!-- Google Fonts & Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,600;0,700;1,400&family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- KaTeX for High-Precision Mathematical Equations -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="renderMathInDocument()"></script>
+
+  <!-- Mermaid.js for Dynamic Architecture & Flow Diagrams -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+
+  <!-- Three.js r128 for Liquid Glass Shader & Particle Bead Field -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- Chart.js for Live Interactive Engineering Simulations -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    :root {
+      --bg-space: #05070f;
+      --bg-dark: #090d1a;
+      --bg-card: rgba(13, 20, 38, 0.72);
+      --bg-glass: rgba(18, 28, 54, 0.55);
+      --border-glass: rgba(99, 133, 255, 0.18);
+      --border-highlight: rgba(99, 133, 255, 0.45);
+      --primary: #4f7eff;
+      --primary-glow: rgba(79, 126, 255, 0.4);
+      --cyan: #00f2fe;
+      --cyan-glow: rgba(0, 242, 254, 0.35);
+      --purple: #9d4edd;
+      --purple-glow: rgba(157, 78, 221, 0.35);
+      --amber: #ffaa00;
+      --emerald: #10b981;
+      --rose: #f43f5e;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-heading: 'Outfit', sans-serif;
+      --font-code: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-space);
+      color: var(--text-main);
+      font-family: var(--font-main);
+      overflow-x: hidden;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* WebGL Canvas Background */
+    #webgl-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* Liquid Glass Top Dock Styles */
+    .top-dock-container {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .liquid-glass-dock {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      background: rgba(10, 16, 32, 0.68);
+      backdrop-filter: blur(28px) saturate(210%);
+      -webkit-backdrop-filter: blur(28px) saturate(210%);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 9999px;
+      box-shadow: 
+        0 20px 50px -10px rgba(0, 0, 0, 0.85),
+        0 0 0 1px rgba(79, 126, 255, 0.15),
+        inset 0 1px 1px rgba(255, 255, 255, 0.25),
+        inset 0 -1px 1px rgba(0, 0, 0, 0.5);
+      position: relative;
+    }
+
+    .dock-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      font-family: var(--font-heading);
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: 0.5px;
+      color: #fff;
+      border-right: 1px solid rgba(255, 255, 255, 0.12);
+      margin-right: 4px;
+    }
+
+    .dock-logo span {
+      background: linear-gradient(135deg, #00f2fe, #4f7eff, #9d4edd);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .dock-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 14px;
+      font-family: var(--font-heading);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-decoration: none;
+      background: transparent;
+      border: none;
+      border-radius: 9999px;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      white-space: nowrap;
+    }
+
+    .dock-btn:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 16px rgba(79, 126, 255, 0.2);
+    }
+
+    .dock-btn.active {
+      color: #ffffff;
+      background: linear-gradient(135deg, rgba(79, 126, 255, 0.35), rgba(157, 78, 221, 0.35));
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      box-shadow: 0 0 20px rgba(79, 126, 255, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+    }
+
+    .dock-btn i, .dock-btn svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    /* Main Container */
+    .content-wrapper {
+      position: relative;
+      z-index: 10;
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 110px 28px 80px 28px;
+    }
+
+    /* Hero Banner */
+    .hero-section {
+      text-align: center;
+      padding: 60px 20px 40px 20px;
+      position: relative;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: rgba(79, 126, 255, 0.12);
+      border: 1px solid rgba(79, 126, 255, 0.3);
+      border-radius: 9999px;
+      font-family: var(--font-code);
+      font-size: 12px;
+      color: var(--cyan);
+      letter-spacing: 0.5px;
+      margin-bottom: 24px;
+      box-shadow: 0 0 20px rgba(0, 242, 254, 0.15);
+    }
+
+    .hero-title {
+      font-family: var(--font-heading);
+      font-size: clamp(36px, 5.5vw, 64px);
+      font-weight: 900;
+      line-height: 1.1;
+      letter-spacing: -1.5px;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, #ffffff 30%, #b4c6ef 70%, #688bf5 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-subtitle {
+      font-size: clamp(16px, 2vw, 20px);
+      color: var(--text-muted);
+      max-width: 900px;
+      margin: 0 auto 36px auto;
+      font-weight: 400;
+    }
+
+    /* Metrics Grid */
+    .metrics-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 50px;
+    }
+
+    .metric-card {
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-glass);
+      border-radius: 18px;
+      padding: 20px;
+      text-align: left;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .metric-card:hover {
+      border-color: var(--border-highlight);
+      transform: translateY(-3px);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .metric-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+    }
+
+    .metric-val {
+      font-family: var(--font-heading);
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .metric-val.cyan { color: var(--cyan); }
+    .metric-val.purple { color: #c084fc; }
+    .metric-val.emerald { color: var(--emerald); }
+    .metric-val.amber { color: var(--amber); }
+
+    .metric-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      font-weight: 500;
+    }
+
+    /* Section Cards */
+    .section-block {
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border-glass);
+      border-radius: 24px;
+      padding: 40px;
+      margin-bottom: 48px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+      position: relative;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .section-title-group {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .section-icon-badge {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, rgba(79, 126, 255, 0.2), rgba(157, 78, 221, 0.2));
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+
+    .section-title {
+      font-family: var(--font-heading);
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: #fff;
+    }
+
+    .section-subtitle {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    /* Grid Layouts */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 24px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+    }
+
+    .sub-card {
+      background: rgba(10, 16, 32, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      padding: 24px;
+      transition: all 0.3s ease;
+    }
+
+    .sub-card:hover {
+      border-color: rgba(99, 133, 255, 0.35);
+      background: rgba(14, 22, 44, 0.75);
+    }
+
+    .sub-card-title {
+      font-family: var(--font-heading);
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Interactive Diagrams & Mermaid Containers */
+    .diagram-container {
+      background: #070b16;
+      border: 1px solid rgba(99, 133, 255, 0.2);
+      border-radius: 16px;
+      padding: 24px;
+      margin: 20px 0;
+      overflow-x: auto;
+      text-align: center;
+    }
+
+    .diagram-container .mermaid {
+      display: inline-block;
+      text-align: left;
+    }
+
+    /* Step By Step Button Guide Box */
+    .btn-guide-box {
+      background: rgba(15, 23, 42, 0.85);
+      border-left: 4px solid var(--cyan);
+      border-radius: 0 14px 14px 0;
+      padding: 18px 22px;
+      margin: 16px 0;
+    }
+
+    .btn-guide-header {
+      font-family: var(--font-code);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--cyan);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 13.5px;
+      color: var(--text-main);
+    }
+
+    .btn-step:last-child {
+      margin-bottom: 0;
+    }
+
+    .btn-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      font-family: var(--font-code);
+      font-size: 11px;
+      color: #38bdf8;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    /* Math Formula Block */
+    .math-block {
+      background: rgba(13, 20, 36, 0.9);
+      border: 1px solid rgba(157, 78, 221, 0.25);
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin: 16px 0;
+      color: #e2e8f0;
+      font-size: 15px;
+      overflow-x: auto;
+    }
+
+    /* Code Snippets */
+    .code-box {
+      background: #04060d;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 16px;
+      font-family: var(--font-code);
+      font-size: 12.5px;
+      color: #a5f3fc;
+      overflow-x: auto;
+      line-height: 1.5;
+    }
+
+    /* Interactive Simulation Canvas & Controls */
+    .sim-panel {
+      background: #090e1d;
+      border: 1px solid var(--border-glass);
+      border-radius: 20px;
+      padding: 24px;
+      margin: 20px 0;
+    }
+
+    .sim-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .sim-control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .sim-control-group label {
+      font-family: var(--font-code);
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    .sim-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 140px;
+      height: 6px;
+      background: #1e293b;
+      border-radius: 3px;
+      outline: none;
+    }
+
+    .sim-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--primary);
+      cursor: pointer;
+      box-shadow: 0 0 10px var(--primary-glow);
+    }
+
+    .sim-btn {
+      padding: 8px 18px;
+      background: linear-gradient(135deg, var(--primary), var(--purple));
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 15px rgba(79, 126, 255, 0.3);
+    }
+
+    .sim-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(79, 126, 255, 0.5);
+    }
+
+    /* Tables */
+    .custom-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 13.5px;
+    }
+
+    .custom-table th {
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+      font-family: var(--font-heading);
+      font-weight: 700;
+      text-align: left;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .custom-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      color: var(--text-muted);
+    }
+
+    .custom-table tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text-main);
+    }
+
+    /* Pinout Visualizer */
+    .pinout-svg-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      background: #060913;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      margin: 16px 0;
+    }
+
+    /* Tags & Pills */
+    .pill {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--font-code);
+    }
+    .pill-blue { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+    .pill-purple { background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+    .pill-green { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .pill-amber { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 40px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-dim);
+      font-size: 13px;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 900px) {
+      .top-dock-container {
+        width: 95%;
+        top: 10px;
+      }
+      .liquid-glass-dock {
+        overflow-x: auto;
+        padding: 6px 10px;
+      }
+      .dock-btn {
+        padding: 6px 10px;
+        font-size: 11.5px;
+      }
+      .content-wrapper {
+        padding-top: 90px;
+      }
+      .section-block {
+        padding: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- WebGL Backdrop Canvas for Liquid Glass Refraction Bead Field -->
+  <canvas id="webgl-backdrop"></canvas>
+
+  <!-- Animated Top Dock (Liquid Glass Variant) -->
+  <div class="top-dock-container">
+    <nav class="liquid-glass-dock" id="main-dock">
+      <div class="dock-logo">
+        <i data-lucide="layers"></i>
+        <span>ADIA</span>
+      </div>
+      <button class="dock-btn active" onclick="scrollToSection('sec-overview')">
+        <i data-lucide="layout-grid"></i> Overview
+      </button>
+      <button class="dock-btn" onclick="scrollToSection('sec-modules')">
+        <i data-lucide="cpu"></i> Modules
+      </button>
+      <button class="dock-btn" onclick="scrollToSection('sec-solvers')">
+        <i data-lucide="calculator"></i> Solvers
+      </button>
+      <button class="dock-btn" onclick="scrollToSection('sec-control')">
+        <i data-lucide="activity"></i> Controls
+      </button>
+      <button class="dock-btn" onclick="scrollToSection('sec-doe')">
+        <i data-lucide="flask-conical"></i> DOE & AI
+      </button>
+      <button class="dock-btn" onclick="scrollToSection('sec-hil')">
+        <i data-lucide="radio"></i> HIL & Twin
+      </button>
+      <button class="dock-btn" onclick="scrollToSection('sec-sim')">
+        <i data-lucide="play-circle"></i> Live Lab
+      </button>
+    </nav>
+  </div>
+
+  <!-- Main Content Wrapper -->
+  <div class="content-wrapper">
+
+    <!-- Hero Section -->
+    <header class="hero-section" id="sec-overview">
+      <div class="hero-badge">
+        <i data-lucide="sparkles"></i> MULTI-DOMAIN MODEL-BASED DESIGN & CONTROL SUITE
+      </div>
+      <h1 class="hero-title">ADIA Architecture, Solvers,<br>Control Loops & DOE Master System</h1>
+      <p class="hero-subtitle">
+        Exhaustive engineering specification, mathematical foundations, interactive block diagrams, solver Butcher tableaus, acausal physical modeling, and live simulation experiments.
+      </p>
+
+      <!-- High-Level Engineering Metrics Bar -->
+      <div class="metrics-bar">
+        <div class="metric-card">
+          <div class="metric-val cyan"><i data-lucide="boxes"></i> 250+</div>
+          <div class="metric-label">Physical & Signal Blocks</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val purple"><i data-lucide="cpu"></i> 9+</div>
+          <div class="metric-label">Solvers (ODE1-8, ODE45, BDF, MNA)</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val emerald"><i data-lucide="refresh-cw"></i> 100%</div>
+          <div class="metric-label">Deterministic C99 Code Gen</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val amber"><i data-lucide="zap"></i> &lt;100 µs</div>
+          <div class="metric-label">Real-Time HIL Hardware Latency</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- ========================================================================= -->
+    <!-- SECTION 1: SYSTEM MODULES & PROCESS PIPELINE ARCHITECTURE                -->
+    <!-- ========================================================================= -->
+    <section class="section-block" id="sec-modules">
+      <div class="section-header">
+        <div class="section-title-group">
+          <div class="section-icon-badge"><i data-lucide="git-branch"></i></div>
+          <div>
+            <h2 class="section-title">1. System Modules & Execution Pipeline</h2>
+            <p class="section-subtitle">Full end-to-end architecture from SysML requirements to physical plant co-simulation and embedded MCU deployment.</p>
+          </div>
+        </div>
+        <span class="pill pill-blue">Architecture Pipeline</span>
+      </div>
+
+      <!-- Master Architecture Flow Diagram -->
+      <div class="diagram-container">
+        <div class="mermaid">
+graph TD
+    subgraph SysML_OPM ["1. System Architecture & Requirements (SysML & ISO 19450 OPM)"]
+        REQ["Requirements Management<br/>(INCOSE 'Shall' Rule & RTM)"] --> BDD["Block Definition Diagram (BDD)<br/>(Stereotypes, ValueTypes, Operations)"]
+        BDD --> IBD["Internal Block Diagram (IBD)<br/>(Ports, Flow Properties & Connectors)"]
+        IBD --> OPM["Object-Process Methodology<br/>(OPL Auto-Generation)"]
+    end
+
+    subgraph Stateflow_Suite ["2. Hierarchical State Machine & Decision Logic"]
+        OPM --> SM["Stateflow Engine<br/>(OR/AND Decomposition, History H/H*)"]
+        SM --> TRANS["Guarded Transitions<br/>(Trigger [Guard] / Action)"]
+        TRANS --> SCHED["MCU Scheduler Loop<br/>SM_ReadInputs() &rarr; SM_Step() &rarr; SM_WriteOutputs()"]
+    end
+
+    subgraph Dual_Physics_Engine ["3. Multi-Domain Modeling & Controls Engines"]
+        SCHED --> VLAB["V-Lab: Acausal Physical Plant<br/>(MNA, Across/Through DAEs, BDF-1/2)"]
+        SCHED --> XBRIDGES["X-Bridges: Causal Signal Flow<br/>(Continuous ODE45, Discrete Multirate, MPC, FOC)"]
+        VLAB <-->|Bi-Directional Co-Simulation| XBRIDGES
+    end
+
+    subgraph Execution_Deployment ["4. Verification, HIL & Code Deployment"]
+        XBRIDGES --> HIL["Real-Time HIL Engine<br/>(Signal Mapper, Fault Injection, HAL Drivers)"]
+        VLAB --> TWIN["3D Digital Twin Gateway<br/>(LiDAR Vacuum, Steam Airfryer, Factory I/O)"]
+        HIL --> C99["Deterministic ANSI C99 Code Gen<br/>(STM32, Arduino, ESP32, Generic MCU)"]
+        C99 --> GATE["Pre-Deployment Security Gate<br/>(Static Analysis, Bounds Checking, ASAR)"]
+    end
+
+    style SysML_OPM fill:#0d1829,stroke:#3b82f6,stroke-width:2px,color:#fff
+    style Stateflow_Suite fill:#190e29,stroke:#9333ea,stroke-width:2px,color:#fff
+    style Dual_Physics_Engine fill:#0c2420,stroke:#10b981,stroke-width:2px,color:#fff
+    style Execution_Deployment fill:#29180c,stroke:#f59e0b,stroke-width:2px,color:#fff
+        </div>
+      </div>
+
+      <!-- Detailed Breakdown of Each Module -->
+      <div class="grid-2">
+        <!-- Module 1: SysML & OPM -->
+        <div class="sub-card">
+          <div class="sub-card-title"><i data-lucide="file-text" style="color:var(--cyan);"></i> 1.1 SysML & OPM Architecture</div>
+          <p style="color:var(--text-muted); font-size:14px; margin-bottom:14px;">
+            Enforces strict systems engineering discipline based on INCOSE standards and ISO 19450 Object-Process Methodology.
+          </p>
+          <div class="btn-guide-box">
+            <div class="btn-guide-header"><i data-lucide="mouse-pointer"></i> UI Workflow & Exact Buttons to Click</div>
+            <div class="btn-step">
+              <span class="btn-badge">+ Add Block</span> Click in BDD Canvas &rarr; Select Stereotype (<span class="btn-badge">Block</span>, <span class="btn-badge">Interface</span>, <span class="btn-badge">ValueType</span>).
+            </div>
+            <div class="btn-step">
+              <span class="btn-badge">Add Port</span> Choose Kind (<span class="btn-badge">Flow</span>, <span class="btn-badge">Proxy</span>), Direction (<span class="btn-badge">In</span>, <span class="btn-badge">Out</span>, <span class="btn-badge">I/O</span>), and physical unit.
+            </div>
+            <div class="btn-step">
+              <span class="btn-badge">Double Click</span> Open IBD internal layer &rarr; Wire connectors between part ports.
+            </div>
+            <div class="btn-step">
+              <span class="btn-badge">Open RTM</span> View live Requirements Traceability Matrix verifying all satisfied links.
+            </div>
+          </div>
+        </div>
+
+        <!-- Module 2: Stateflow Hierarchical State Machine -->
+        <div class="sub-card">
+          <div class="sub-card-title"><i data-lucide="git-commit" style="color:#c084fc;"></i> 1.2 Stateflow & Hierarchical Logic</div>
+          <p style="color:var(--text-muted); font-size:14px; margin-bottom:14px;">
+            Deterministic execution model for complex discrete event logic, hierarchical nesting, and superstates.
+          </p>
+          <div class="btn-guide-box">
+            <div class="btn-guide-header"><i data-lucide="mouse-pointer"></i> UI Workflow & Execution Contract</div>
+            <div class="btn-step">
+              <span class="btn-badge">Add State</span> Drag state into canvas &rarr; Define <span class="btn-badge">entry:</span>, <span class="btn-badge">during:</span>, and <span class="btn-badge">exit:</span> actions.
+            </div>
+            <div class="btn-step">
+              <span class="btn-badge">Draw Transition</span> Drag arrow between states &rarr; Enter expression <span class="btn-badge">Trigger [Condition] / Action</span> with priority order.
+            </div>
+            <div class="btn-step">
+              <span class="btn-badge">Add History (H / H*)</span> Add shallow or deep history junction for resuming state memories.
+            </div>
+            <div class="btn-step">
+              <span class="btn-badge">Start Simulation</span> Real-time execution visualizes active states with neon glowing borders.
+            </div>
+          </div>
+        </div>
+
+        <!-- Module 3: V-Lab Multi-Domain Physical Engine -->
+        <div class="sub-card">
+          <div class="sub-card-title"><i data-lucide="cpu" style="color:var(--emerald);"></i> 1.3 V-Lab Physical Multi-Domain Plant</div>
+          <p style="color:var(--text-muted); font-size:14px; margin-bottom:14px;">
+            Acausal physical modeling based on Differential-Algebraic Equations (DAEs) and conservation of energy laws across 7 physical domains.
+          </p>
+          <div class="btn-guide-box">
+            <div class="btn-guide-header"><i data-lucide="mouse-pointer"></i> Physics Formulation & UI Actions</div>
+            <div class="btn-step">
+              <span class="btn-badge">Add Component</span> Drag components from Library (Electrical, Thermal, Rotational, Magnetic, Fluid).
+            </div>
+            <div class="btn-step">
+              <span class="btn-badge">Across & Through</span> Across variables (Voltage $V$, Temp $T$, Velocity $\omega$) equate at nodes; Through variables (Current $I$, Heat flow $Q$, Torque $\tau$) sum to zero ($\sum f_i = 0$).
+            </div>
+            <div class="btn-step">
+              <span class="btn-badge">Set Reference</span> Place Reference/Ground block (essential zero-potential datum for solving MNA matrix).
+            </div>
+          </div>
+        </div>
+
+        <!-- Module 4: X-Bridges Signal Flow & Controls -->
+        <div class="sub-card">
+          <div class="sub-card-title"><i data-lucide="activity" style="color:var(--amber);"></i> 1.4 X-Bridges Causal Control System</div>
+          <p style="color:var(--text-muted); font-size:14px; margin-bottom:14px;">
+            Simulink-grade directed block diagram engine with Kahn's topological sort and algebraic loop break algorithms.
+          </p>
+          <div class="btn-guide-box">
+            <div class="btn-guide-header"><i data-lucide="mouse-pointer"></i> UI Workflow & Solver Selection</div>
+            <div class="btn-step">
+              <span class="btn-badge">Add Block</span> Place PID, MPC, Transfer Function, FOC Clarke/Park, Neural Network, or Filter blocks.
+            </div>
+            <div class="btn-step">
+              <span class="btn-badge">Wire Connections</span> Connect output terminals directly to inputs; engine validates data types automatically.
+            </div>
+            <div class="btn-step">
+              <span class="btn-badge">Select Solver</span> Switch dynamically between Continuous ODE45, Fixed RK4, or Multi-Rate Discrete.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SECTION 2: SOLVERS CONCEPTS, TYPES & MATHEMATICAL FOUNDATIONS             -->
+    <!-- ========================================================================= -->
+    <section class="section-block" id="sec-solvers">
+      <div class="section-header">
+        <div class="section-title-group">
+          <div class="section-icon-badge"><i data-lucide="calculator"></i></div>
+          <div>
+            <h2 class="section-title">2. Solvers: Concepts, Types & Mathematical Formulations</h2>
+            <p class="section-subtitle">Rigorous derivation of explicit, adaptive Runge-Kutta, implicit BDF, and Newton-Raphson non-linear DAE solvers.</p>
+          </div>
+        </div>
+        <span class="pill pill-purple">Mathematical Engines</span>
+      </div>
+
+      <!-- Solver Comparison Overview Table -->
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th>Solver Name</th>
+            <th>Type / Method</th>
+            <th>Order</th>
+            <th>Stability Property</th>
+            <th>Best Suited For</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong style="color:var(--cyan);">ODE1 (Euler)</strong></td>
+            <td>Explicit 1-step</td>
+            <td>1st Order</td>
+            <td>Conditionally Stable ($|1 + h\lambda| \le 1$)</td>
+            <td>Low-overhead microcontrollers, fixed sample clocks (1ms)</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--cyan);">ODE2 (Heun / Improved Euler)</strong></td>
+            <td>Explicit 2-stage Runge-Kutta</td>
+            <td>2nd Order</td>
+            <td>Moderate stability region</td>
+            <td>Fast real-time HIL simulations with second-order dynamics</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--cyan);">ODE4 (Classic RK4)</strong></td>
+            <td>Explicit 4-stage Runge-Kutta</td>
+            <td>4th Order</td>
+            <td>Robust 4th-order polynomial stability</td>
+            <td>High-accuracy continuous dynamics, motor drives & kinematics</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--purple);">ODE45 (Dormand-Prince)</strong></td>
+            <td>Adaptive 7-stage RK with FSAL</td>
+            <td>5th (4th) Embedded</td>
+            <td>A-Stable / Adaptive Step Control</td>
+            <td>General purpose non-stiff ODEs, event handling & zero-crossing</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--emerald);">BDF-1 (Backward Euler)</strong></td>
+            <td>Implicit 1-step DAE</td>
+            <td>1st Order</td>
+            <td>L-Stable (Unconditionally Stable)</td>
+            <td>Extremely stiff physical systems, switching converters & power grids</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--emerald);">BDF-2 (2nd Order BDF)</strong></td>
+            <td>Implicit multi-step DAE</td>
+            <td>2nd Order</td>
+            <td>A-Stable ($A(\alpha) \approx 90^\circ$)</td>
+            <td>Thermal diffusion, hydraulic transients & multi-body friction</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--amber);">Newton-Raphson + Line Search</strong></td>
+            <td>Non-Linear Algebraic Solver</td>
+            <td>Quadratic Conv.</td>
+            <td>Globalized via Backtracking Damping</td>
+            <td>Solving non-linear algebraic loops and diode/MOSFET V-I curves</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Deep Dive 1: Explicit Runge-Kutta & Butcher Tableau -->
+      <div class="sub-card" style="margin-top: 24px;">
+        <div class="sub-card-title"><i data-lucide="binary" style="color:var(--cyan);"></i> 2.1 Explicit Runge-Kutta Family (ODE1, ODE2, ODE4, ODE8)</div>
+        <p style="color:var(--text-muted); font-size:14px;">
+          For an Initial Value Problem (IVP) defined as $\frac{dx}{dt} = f(t, x)$ with initial condition $x(t_0) = x_0$:
+        </p>
+
+        <div class="math-block">
+          $$\begin{aligned}
+          \text{\textbf{ODE1 (Forward Euler):}} \quad & x_{n+1} = x_n + h \cdot f(t_n, x_n) \\
+          \text{\textbf{ODE2 (Heun's Predictor-Corrector):}} \quad & k_1 = f(t_n, x_n) \\
+          & k_2 = f(t_n + h, \, x_n + h k_1) \\
+          & x_{n+1} = x_n + \frac{h}{2}(k_1 + k_2) \\
+          \text{\textbf{ODE4 (Classic 4th Order RK):}} \quad & k_1 = f(t_n, x_n) \\
+          & k_2 = f\left(t_n + \frac{h}{2}, \, x_n + \frac{h}{2} k_1\right) \\
+          & k_3 = f\left(t_n + \frac{h}{2}, \, x_n + \frac{h}{2} k_2\right) \\
+          & k_4 = f(t_n + h, \, x_n + h k_3) \\
+          & x_{n+1} = x_n + \frac{h}{6}(k_1 + 2k_2 + 2k_3 + k_4)
+          \end{aligned}$$
+        </div>
+      </div>
+
+      <!-- Deep Dive 2: Adaptive Step ODE45 (Dormand-Prince) with FSAL & Kahan Summation -->
+      <div class="sub-card" style="margin-top: 24px;">
+        <div class="sub-card-title"><i data-lucide="sliders" style="color:#c084fc;"></i> 2.2 Adaptive ODE45 (Dormand-Prince) & Error Control Math</div>
+        <p style="color:var(--text-muted); font-size:14px;">
+          Dormand-Prince uses an embedded pair of 5th-order ($x_{n+1}$) and 4th-order ($\hat{x}_{n+1}$) estimators with First-Same-As-Last (FSAL) property to minimize derivative evaluations:
+        </p>
+
+        <div class="math-block">
+          $$\begin{aligned}
+          k_i &= f\left(t_n + c_i h, \, x_n + h \sum_{j=1}^{i-1} a_{ij} k_j\right), \quad i = 1, \dots, 7 \\
+          x_{n+1} &= x_n + h \sum_{i=1}^{7} b_i k_i \quad \text{(5th-Order Solution)} \\
+          \hat{x}_{n+1} &= x_n + h \sum_{i=1}^{7} \hat{b}_i k_i \quad \text{(4th-Order Embedded Estimator)} \\
+          e_{n+1} &= x_{n+1} - \hat{x}_{n+1} = h \sum_{i=1}^{7} (b_i - \hat{b}_i) k_i \quad \text{(Local Truncation Error Vector)}
+          \end{aligned}$$
+        </div>
+
+        <p style="color:var(--text-muted); font-size:14px; margin-top:10px;">
+          The adaptive step-size adaptation rule scales step $h$ using tolerance scaling factor $\text{Scale}$:
+        </p>
+
+        <div class="math-block">
+          $$\text{LTE}_{\text{norm}} = \sqrt{\frac{1}{N} \sum_{k=1}^{N} \left( \frac{e_{n+1, k}}{\text{AbsTol} + \text{RelTol} \cdot \max(|x_{n, k}|, |x_{n+1, k}|)} \right)^2}$$
+          $$h_{\text{new}} = h_{\text{curr}} \cdot \min\left( \text{facmax}, \, \max\left( \text{facmin}, \, \text{safety} \cdot \left( \frac{1}{\text{LTE}_{\text{norm}}} \right)^{\frac{1}{q+1}} \right) \right)$$
+        </div>
+      </div>
+
+      <!-- Deep Dive 3: Implicit DAE Solvers (BDF-1 / BDF-2) & Modified Nodal Analysis -->
+      <div class="sub-card" style="margin-top: 24px;">
+        <div class="sub-card-title"><i data-lucide="git-merge" style="color:var(--emerald);"></i> 2.3 Implicit DAE Solvers (BDF-1/2) & Modified Nodal Analysis (MNA)</div>
+        <p style="color:var(--text-muted); font-size:14px;">
+          Physical multi-domain networks formulated via Modified Nodal Analysis (MNA) produce non-linear DAEs of index 1:
+        </p>
+
+        <div class="math-block">
+          $$F(x, \dot{x}, t) = \mathbf{C} \dot{x}(t) + \mathbf{G} x(t) + f_{\text{nl}}(x(t)) - u(t) = \mathbf{0}$$
+        </div>
+
+        <p style="color:var(--text-muted); font-size:14px;">
+          Using <strong>BDF-2 (2nd-Order Backward Differentiation Formula)</strong>, derivatives are discretized as:
+        </p>
+
+        <div class="math-block">
+          $$\dot{x}_{n+1} = \frac{3 x_{n+1} - 4 x_n + x_{n-1}}{2 h}$$
+          $$\text{Residual: } \mathbf{R}(x_{n+1}) = \mathbf{C} \left( \frac{3 x_{n+1} - 4 x_n + x_{n-1}}{2 h} \right) + \mathbf{G} x_{n+1} + f_{\text{nl}}(x_{n+1}) - u_{n+1} = \mathbf{0}$$
+        </div>
+
+        <p style="color:var(--text-muted); font-size:14px;">
+          At each time step, the non-linear residual $\mathbf{R}(x) = \mathbf{0}$ is solved via <strong>Damped Newton-Raphson</strong>:
+        </p>
+
+        <div class="math-block">
+          $$\mathbf{J}(x^{(k)}) = \frac{\partial \mathbf{R}}{\partial x} = \frac{3}{2h}\mathbf{C} + \mathbf{G} + \frac{\partial f_{\text{nl}}}{\partial x}(x^{(k)})$$
+          $$\mathbf{J}(x^{(k)}) \cdot \Delta x = -\mathbf{R}(x^{(k)}) \implies x^{(k+1)} = x^{(k)} + \alpha \Delta x \quad (\alpha \in (0, 1] \text{ via Line-Search})$$
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SECTION 3: CONTROL LOOPS, BLOCKS & ADVANCED CONTROLLER THEORY             -->
+    <!-- ========================================================================= -->
+    <section class="section-block" id="sec-control">
+      <div class="section-header">
+        <div class="section-title-group">
+          <div class="section-icon-badge"><i data-lucide="sliders-horizontal"></i></div>
+          <div>
+            <h2 class="section-title">3. Control Loops, Blocks & Mathematical Concepts</h2>
+            <p class="section-subtitle">Deep dive into PID anti-windup, Feedforward, Cascaded Loops, State-Space, MPC, and Field-Oriented Motor Control.</p>
+          </div>
+        </div>
+        <span class="pill pill-green">Controls Engineering</span>
+      </div>
+
+      <!-- Control Loop Architecture Diagram -->
+      <div class="diagram-container">
+        <div class="mermaid">
+graph LR
+    R[Reference / Setpoint r] --> SUM1((+ -))
+    SUM1 --> PID[PID Controller<br/>Kp + Ki/s + Kd s/(1+Tf s)]
+    PID --> FF_SUM((+ +))
+    FF[Feedforward Block<br/>Gff s = -Gd s / Gp s] --> FF_SUM
+    FF_SUM --> SAT[Actuator Saturation<br/>& Anti-Windup Clamping]
+    SAT --> PLANT[Physical Plant Gp s<br/>Thermal / Motor / Fluid]
+    DIST[Disturbance d] --> PLANT
+    PLANT --> SENSOR[Sensor Filter<br/>1 / 1 + Ts s]
+    SENSOR --> SUM1
+    SAT -.->|Back-Calculation Feedback Kw| PID
+
+    style PID fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#fff
+    style PLANT fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#fff
+    style SAT fill:#7c2d12,stroke:#f97316,stroke-width:2px,color:#fff
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <!-- Topic 1: Advanced 2-DoF PID Controller with Anti-Windup & Derivative Filter -->
+        <div class="sub-card">
+          <div class="sub-card-title"><i data-lucide="gauge" style="color:var(--cyan);"></i> 3.1 Advanced 2-DoF PID Controller Formulation</div>
+          <p style="color:var(--text-muted); font-size:13.5px;">
+            Standard ISA/Parallel PID controller with setpoint weighting ($b, c$), 1st-order derivative filter pole $N$, and conditional integration anti-windup:
+          </p>
+          <div class="math-block">
+            $$u(t) = K_p \left( b \cdot r(t) - y(t) \right) + K_i \int_0^t e(\tau) d\tau + K_d \frac{d}{dt} \left( c \cdot r(t) - y(t) \right) * \mathcal{L}^{-1}\left\{ \frac{N}{s + N} \right\}$$
+          </div>
+          <div class="btn-guide-box">
+            <div class="btn-guide-header"><i data-lucide="terminal"></i> Anti-Windup Back-Calculation Math</div>
+            <div style="font-size:13px; color:var(--text-muted);">
+              When actuator saturates ($u_{\text{raw}} \ne u_{\text{sat}}$), error feedback compensates integrator:
+              $$\frac{dx_i}{dt} = e(t) + K_w \cdot (u_{\text{sat}} - u_{\text{raw}}), \quad K_w = \sqrt{\frac{K_i}{K_d}} \text{ or } \frac{1}{T_i}$$
+            </div>
+          </div>
+        </div>
+
+        <!-- Topic 2: Cascaded Velocity / Position Control -->
+        <div class="sub-card">
+          <div class="sub-card-title"><i data-lucide="layers" style="color:#c084fc;"></i> 3.2 Cascaded Multi-Loop Control & Bandwidth Rules</div>
+          <p style="color:var(--text-muted); font-size:13.5px;">
+            Cascaded architecture uses nested control loops to reject inner disturbances before they affect primary output:
+          </p>
+          <div class="math-block">
+            $$\text{Bandwidth Separation Rule: } \omega_{\text{current}} \ge 5 \sim 10 \times \omega_{\text{velocity}} \ge 5 \sim 10 \times \omega_{\text{position}}$$
+          </div>
+          <div class="btn-guide-box">
+            <div class="btn-guide-header"><i data-lucide="mouse-pointer"></i> How to Connect in ADIA Canvas</div>
+            <div class="btn-step"><span class="btn-badge">Outer Loop</span> Position PID block calculates velocity setpoint $\omega^*$.</div>
+            <div class="btn-step"><span class="btn-badge">Inner Loop</span> Velocity PID block calculates torque/current setpoint $I_q^*$.</div>
+            <div class="btn-step"><span class="btn-badge">Motor Core</span> Current FOC block drives inverter PWM directly.</div>
+          </div>
+        </div>
+
+        <!-- Topic 3: State-Space, LQR & Kalman Filter Observer -->
+        <div class="sub-card">
+          <div class="sub-card-title"><i data-lucide="network" style="color:var(--emerald);"></i> 3.3 State-Space, Linear Quadratic Regulator (LQR) & Kalman Filter</div>
+          <p style="color:var(--text-muted); font-size:13.5px;">
+            Continuous Linear Time-Invariant (LTI) state-space representation with full-state feedback and observer:
+          </p>
+          <div class="math-block">
+            $$\begin{aligned}
+            \dot{x}(t) &= \mathbf{A} x(t) + \mathbf{B} u(t) + w(t), \quad y(t) = \mathbf{C} x(t) + \mathbf{D} u(t) + v(t) \\
+            \text{\textbf{LQR Gain:}} \quad & u(t) = -\mathbf{K} x(t), \quad \mathbf{K} = \mathbf{R}^{-1} \mathbf{B}^T \mathbf{P} \\
+            \text{\textbf{Riccati Eq:}} \quad & \mathbf{A}^T \mathbf{P} + \mathbf{P} \mathbf{A} - \mathbf{P} \mathbf{B} \mathbf{R}^{-1} \mathbf{B}^T \mathbf{P} + \mathbf{Q} = \mathbf{0} \\
+            \text{\textbf{Kalman Filter:}} \quad & \dot{\hat{x}} = \mathbf{A}\hat{x} + \mathbf{B}u + \mathbf{L}(y - \mathbf{C}\hat{x})
+            \end{aligned}$$
+          </div>
+        </div>
+
+        <!-- Topic 4: Field-Oriented Control (FOC) & Space Vector PWM -->
+        <div class="sub-card">
+          <div class="sub-card-title"><i data-lucide="compass" style="color:var(--amber);"></i> 3.4 Field-Oriented Control (FOC Clarke & Park Transforms)</div>
+          <p style="color:var(--text-muted); font-size:13.5px;">
+            Decouples three-phase stator currents ($i_a, i_b, i_c$) into orthogonal torque ($i_q$) and flux ($i_d$) components:
+          </p>
+          <div class="math-block">
+            $$\begin{aligned}
+            \text{\textbf{Clarke:}} \quad & \begin{bmatrix} i_\alpha \\ i_\beta \end{bmatrix} = \frac{2}{3} \begin{bmatrix} 1 & -\frac{1}{2} & -\frac{1}{2} \\ 0 & \frac{\sqrt{3}}{2} & -\frac{\sqrt{3}}{2} \end{bmatrix} \begin{bmatrix} i_a \\ i_b \\ i_c \end{bmatrix} \\
+            \text{\textbf{Park:}} \quad & \begin{bmatrix} i_d \\ i_q \end{bmatrix} = \begin{bmatrix} \cos\theta_e & \sin\theta_e \\ -\sin\theta_e & \cos\theta_e \end{bmatrix} \begin{bmatrix} i_\alpha \\ i_\beta \end{bmatrix} \\
+            \text{\textbf{Electromagnetic Torque:}} \quad & T_e = \frac{3}{2} p \left( \lambda_{pm} i_q + (L_d - L_q) i_d i_q \right)
+            \end{aligned}$$
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SECTION 4: DESIGN OF EXPERIMENTS (DOE) & AI SURROGATE MODELING            -->
+    <!-- ========================================================================= -->
+    <section class="section-block" id="sec-doe">
+      <div class="section-header">
+        <div class="section-title-group">
+          <div class="section-icon-badge"><i data-lucide="flask-conical"></i></div>
+          <div>
+            <h2 class="section-title">4. Design of Experiments (DOE) & AI Model Discovery</h2>
+            <p class="section-subtitle">Factorial design matrices, Response Surface Methodology (RSM), Latin Hypercube space-filling, and GMDH Polynomial Neural Networks.</p>
+          </div>
+        </div>
+        <span class="pill pill-purple">DOE & Surrogate AI</span>
+      </div>
+
+      <!-- DOE Methodologies Comparison Table -->
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th>Sampling Methodology</th>
+            <th>Type / Formula</th>
+            <th>Design Points ($N$)</th>
+            <th>Mathematical Goal</th>
+            <th>Usage in ADIA</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong style="color:var(--cyan);">Full Factorial ($2^k, 3^k$)</strong></td>
+            <td>Orthogonal Grid</td>
+            <td>$N = L^k$ ($L$ levels, $k$ factors)</td>
+            <td>Estimates all main effects and high-order interaction terms</td>
+            <td>Exhaustive sensitivity analysis of critical plant parameters</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--cyan);">Fractional Factorial ($2^{k-p}$)</strong></td>
+            <td>Confounded Generators</td>
+            <td>$N = 2^{k-p}$</td>
+            <td>Screening major factors using Resolution III, IV, V designs</td>
+            <td>High-dimensional parameter screening before physical testing</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--purple);">Central Composite Design (CCD)</strong></td>
+            <td>Response Surface (RSM)</td>
+            <td>$N = 2^k + 2k + n_0$</td>
+            <td>Fits full quadratic response surface curvature: $y = \beta_0 + \sum \beta_i x_i + \sum \beta_{ii} x_i^2 + \sum \beta_{ij} x_i x_j$</td>
+            <td>PID gain optimization & maximum efficiency operating point search</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--emerald);">Latin Hypercube Sampling (LHS)</strong></td>
+            <td>Stochastic Space-Filling</td>
+            <td>$N = \text{User Specified}$</td>
+            <td>Evenly distributes $N$ sample points across multidimensional hypercube</td>
+            <td>Monte Carlo uncertainty analysis & digital twin calibration</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--amber);">Taguchi Orthogonal Arrays</strong></td>
+            <td>Robust Design ($L_4, L_8, L_9$)</td>
+            <td>Minimal matrix</td>
+            <td>Maximizes Signal-to-Noise ($S/N$) ratio against environmental noise</td>
+            <td>HIL robustness testing against MCU clock jitter and sensor noise</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Deep Dive: GMDH Polynomial Neural Network (Group Method of Data Handling) -->
+      <div class="sub-card" style="margin-top: 24px;">
+        <div class="sub-card-title"><i data-lucide="brain-circuit" style="color:var(--purple);"></i> 4.1 GMDH Polynomial Neural Network (Ivakhnenko Algorithm)</div>
+        <p style="color:var(--text-muted); font-size:14px;">
+          GMDH self-organizes a multi-layered network of quadratic Kolmogorov-Gabor polynomial neurons without requiring manual backpropagation or architecture tuning:
+        </p>
+
+        <div class="math-block">
+          $$y = a_0 + \sum_{i=1}^M a_i x_i + \sum_{i=1}^M \sum_{j=1}^M a_{ij} x_i x_j + \dots$$
+          $$\text{Pairwise Neuron Polynomial: } z_k = c_0 + c_1 x_i + c_2 x_j + c_3 x_i^2 + c_4 x_j^2 + c_5 x_i x_j$$
+        </div>
+
+        <div class="diagram-container">
+          <div class="mermaid">
+graph LR
+    subgraph Inputs ["Input Factor Layer"]
+        X1["x1: Motor Inductance L"]
+        X2["x2: DC Bus Voltage Vdc"]
+        X3["x3: Ambient Temp Ta"]
+        X4["x4: Load Torque Tl"]
+    end
+
+    subgraph Layer1 ["Layer 1 (Pairwise Quadratic Neurons)"]
+        N1["Neuron 1: f(x1, x2)"]
+        N2["Neuron 2: f(x1, x3)"]
+        N3["Neuron 3: f(x2, x4)"]
+        N4["Neuron 4: f(x3, x4)"]
+    end
+
+    subgraph Layer2 ["Layer 2 (Surrogate Synthesis)"]
+        Z1["Neuron 5: f(N1, N2)"]
+        Z2["Neuron 6: f(N3, N4)"]
+    end
+
+    subgraph Output ["Target Response"]
+        Y["y*: Optimized Settling Time & Energy"]
+    end
+
+    X1 --> N1; X2 --> N1
+    X1 --> N2; X3 --> N2
+    X2 --> N3; X4 --> N3
+    X3 --> N4; X4 --> N4
+
+    N1 --> Z1; N2 --> Z1
+    N3 --> Z2; N4 --> Z2
+
+    Z1 --> Y; Z2 --> Y
+
+    style Layer1 fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#fff
+    style Layer2 fill:#3b0764,stroke:#c084fc,stroke-width:2px,color:#fff
+    style Output fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#fff
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SECTION 5: HARDWARE-IN-THE-LOOP (HIL) & DIGITAL TWIN LABS                 -->
+    <!-- ========================================================================= -->
+    <section class="section-block" id="sec-hil">
+      <div class="section-header">
+        <div class="section-title-group">
+          <div class="section-icon-badge"><i data-lucide="radio"></i></div>
+          <div>
+            <h2 class="section-title">5. Real-Time HIL Suite & Digital Twin Laboratories</h2>
+            <p class="section-subtitle">Real-time driver binding, Signal Mapper formulas, Fault Injection engine, and physics-certified Digital Twins.</p>
+          </div>
+        </div>
+        <span class="pill pill-amber">Real-Time Embedded</span>
+      </div>
+
+      <div class="grid-2">
+        <!-- HIL Signal Mapper & Drivers -->
+        <div class="sub-card">
+          <div class="sub-card-title"><i data-lucide="cpu" style="color:var(--cyan);"></i> 5.1 Signal Mapper & Inline Formula Conversion</div>
+          <p style="color:var(--text-muted); font-size:13.5px; margin-bottom:12px;">
+            Binds physical MCU hardware peripherals (ADC, DAC, GPIO, PWM) to Stateflow variables with arbitrary math scaling formulas:
+          </p>
+          <div class="code-box">
+// Signal Mapper Rule Example
+ADC_Raw (0..4095) --> Stateflow.V_sense
+Conversion Formula: x * (3.3 / 4095.0) * ((100.0 + 10.0) / 10.0)
+
+PWM_Duty (0..100%) --> HAL_TIM_SetCompare(TIM1, (uint32_t)(x * 10.0))
+          </div>
+          <div class="btn-guide-box" style="margin-top:14px;">
+            <div class="btn-guide-header"><i data-lucide="zap"></i> Fault Injection Capabilities</div>
+            <div class="btn-step"><span class="btn-badge">Signal Override</span> Force arbitrary float/bool values live during execution.</div>
+            <div class="btn-step"><span class="btn-badge">Gaussian Jitter</span> Inject sensor variance: $y_{\text{corrupt}} = y + \mathcal{N}(0, \sigma^2)$.</div>
+            <div class="btn-step"><span class="btn-badge">Clamping / Stuck-at</span> Simulate broken sensors stuck at $V_{cc}$ or $GND$.</div>
+          </div>
+        </div>
+
+        <!-- 6 Canonical Digital Twins -->
+        <div class="sub-card">
+          <div class="sub-card-title"><i data-lucide="bot" style="color:var(--emerald);"></i> 5.2 Six Pre-Built Multi-Domain Digital Twins</div>
+          <p style="color:var(--text-muted); font-size:13.5px; margin-bottom:12px;">
+            Certified end-to-end multi-physics demonstrator systems included out-of-the-box in ADIA:
+          </p>
+          <ul style="list-style:none; padding-left:0; font-size:13.5px; color:var(--text-muted); line-height:1.9;">
+            <li>🤖 <strong style="color:#fff;">LiDAR Robot Vacuum:</strong> 3DoF kinematics, 8-beam raycasting LiDAR, SLAM occupancy grid & obstacle avoidance.</li>
+            <li>🔥 <strong style="color:#fff;">Steam Air Fryer:</strong> Conjugate heat transfer, non-linear thermal radiation, PWM heating element & rotary blower.</li>
+            <li>⚡ <strong style="color:#fff;">VFD Induction Motor:</strong> 3-Phase inverter, Field-Oriented Control (FOC), MTPA & field-weakening algorithms.</li>
+            <li>🌀 <strong style="color:#fff;">Washing Machine Drum:</strong> 4-spring suspension, unbalanced load centrifugal dynamics & fluid sloshing damping.</li>
+            <li>📡 <strong style="color:#fff;">Microwave Inverter:</strong> High-voltage resonant inverter, magnetron emission curve & thermal cavity.</li>
+            <li>🌪️ <strong style="color:#fff;">High-Speed Food Blender:</strong> Non-linear fluid drag, vortex torque load & active current-limiting safety loop.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SECTION 6: LIVE INTERACTIVE ENGINEERING LAB & SIMULATOR                   -->
+    <!-- ========================================================================= -->
+    <section class="section-block" id="sec-sim">
+      <div class="section-header">
+        <div class="section-title-group">
+          <div class="section-icon-badge"><i data-lucide="play-circle"></i></div>
+          <div>
+            <h2 class="section-title">6. Live Interactive Simulator & Block Explorer</h2>
+            <p class="section-subtitle">Real-time dynamic step-response simulator, Butcher tableau stability inspector, and interactive multi-domain block catalog.</p>
+          </div>
+        </div>
+        <span class="pill pill-blue">Interactive Lab</span>
+      </div>
+
+      <!-- Live PID & Solver Step Response Simulator Panel -->
+      <div class="sim-panel">
+        <h3 style="font-family:var(--font-heading); font-size:18px; font-weight:700; color:#fff; margin-bottom:14px; display:flex; align-items:center; gap:8px;">
+          <i data-lucide="activity" style="color:var(--cyan);"></i> Real-Time 2nd-Order Closed-Loop Step Response Simulator
+        </h3>
+        
+        <div class="sim-controls">
+          <div class="sim-control-group">
+            <label>Kp (Proportional): <span id="val-kp" style="color:var(--cyan); font-weight:bold;">2.5</span></label>
+            <input type="range" min="0.1" max="10" step="0.1" value="2.5" class="sim-slider" id="slider-kp" oninput="updateSimulation()">
+          </div>
+          <div class="sim-control-group">
+            <label>Ki (Integral): <span id="val-ki" style="color:#c084fc; font-weight:bold;">1.2</span></label>
+            <input type="range" min="0.0" max="5" step="0.1" value="1.2" class="sim-slider" id="slider-ki" oninput="updateSimulation()">
+          </div>
+          <div class="sim-control-group">
+            <label>Kd (Derivative): <span id="val-kd" style="color:var(--emerald); font-weight:bold;">0.4</span></label>
+            <input type="range" min="0.0" max="2" step="0.05" value="0.4" class="sim-slider" id="slider-kd" oninput="updateSimulation()">
+          </div>
+          <div class="sim-control-group">
+            <label>Plant Damping ($\zeta$): <span id="val-zeta" style="color:var(--amber); font-weight:bold;">0.35</span></label>
+            <input type="range" min="0.05" max="1.5" step="0.05" value="0.35" class="sim-slider" id="slider-zeta" oninput="updateSimulation()">
+          </div>
+          <div class="sim-control-group">
+            <label>Active Solver:</label>
+            <select id="sim-solver-select" onchange="updateSimulation()" style="background:#1e293b; color:#fff; border:1px solid rgba(255,255,255,0.2); border-radius:8px; padding:6px 12px; font-size:12px; outline:none;">
+              <option value="rk4">ODE4 (Classic RK4)</option>
+              <option value="euler">ODE1 (Forward Euler)</option>
+              <option value="heun">ODE2 (Heun's Method)</option>
+              <option value="bdf1">BDF-1 (Backward Euler)</option>
+            </select>
+          </div>
+          <button class="sim-btn" onclick="randomizeStep()"><i data-lucide="refresh-cw"></i> Perturb Step</button>
+        </div>
+
+        <div style="height: 320px; width: 100%; position: relative;">
+          <canvas id="stepResponseChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Interactive Multi-Domain Pinout Visualizer & Block Symbol Explorer -->
+      <div class="sub-card" style="margin-top:24px;">
+        <div class="sub-card-title"><i data-lucide="box" style="color:var(--amber);"></i> 6.2 Illustrated Multi-Domain Block Pinout Explorer</div>
+        <p style="color:var(--text-muted); font-size:13.5px; margin-bottom:16px;">
+          Select any physical or signal-flow block below to dynamically inspect its SVG terminal pinout, conservation equations, and parameter schema:
+        </p>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+          <button class="btn-badge" onclick="renderBlockPinout('resistor')" style="cursor:pointer;">Electrical: Resistor</button>
+          <button class="btn-badge" onclick="renderBlockPinout('pmsm')" style="cursor:pointer;">Motor: PMSM Motor</button>
+          <button class="btn-badge" onclick="renderBlockPinout('thermal_mass')" style="cursor:pointer;">Thermal: Thermal Mass</button>
+          <button class="btn-badge" onclick="renderBlockPinout('foc_block')" style="cursor:pointer;">Controls: FOC Park/Clarke</button>
+          <button class="btn-badge" onclick="renderBlockPinout('gmdh_node')" style="cursor:pointer;">AI: GMDH Neural Node</button>
+        </div>
+
+        <div class="pinout-svg-container" id="pinout-viewer">
+          <!-- Dynamic SVG renders here -->
+        </div>
+        <div id="pinout-math-desc" style="font-size:13.5px; color:var(--text-muted); margin-top:10px;"></div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <p style="margin-bottom:8px;"><strong>ADIA — Advanced Digital Automation & Intelligent Architecture</strong></p>
+      <p>Multi-Domain Physical Plant & Embedded Control Suite · Certified ISO 19450 / INCOSE / IEC 61508 Ready</p>
+    </footer>
+
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- JAVASCRIPT: THREE.JS LIQUID GLASS SHADER, CHART.JS & INTERACTIVE LOGIC   -->
+  <!-- ========================================================================= -->
+  <script>
+    // Initialize Lucide Icons & Mermaid
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: 'dark',
+        themeVariables: {
+          darkMode: true,
+          background: '#070b16',
+          primaryColor: '#3b82f6',
+          primaryTextColor: '#fff',
+          primaryBorderColor: '#60a5fa',
+          lineColor: '#93c5fd',
+          secondaryColor: '#9333ea',
+          tertiaryColor: '#10b981'
+        }
+      });
+      initThreeJSLiquidGlass();
+      initSimulationChart();
+      renderBlockPinout('pmsm');
+    });
+
+    // KaTeX Auto Render Configuration
+    function renderMathInDocument() {
+      if (window.renderMathInElement) {
+        renderMathInElement(document.body, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false }
+          ],
+          throwOnError: false
+        });
+      }
+    }
+
+    // Smooth Scroll to Section with active dock state
+    function scrollToSection(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      const buttons = document.querySelectorAll('.dock-btn');
+      buttons.forEach(b => b.classList.remove('active'));
+      const activeBtn = Array.from(buttons).find(b => b.getAttribute('onclick').includes(id));
+      if (activeBtn) activeBtn.classList.add('active');
+    }
+
+    // =========================================================================
+    // THREE.JS R128 LIQUID GLASS & REFRACTIVE BEAD FIELD SHADER
+    // Variant: Liquid Glass (glass) with Proximity Refraction & Specular Rim
+    // =========================================================================
+    function initThreeJSLiquidGlass() {
+      const canvas = document.getElementById('webgl-backdrop');
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.z = 24;
+
+      const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      // Configured Liquid Glass Bead Field Props:
+      // particles: 22, thickness: 0.115, dispersion: 0.050, specular: 0.85, rim: 0.50, drift: 1.00, proximity: 44
+      const particleCount = 22;
+      const beads = [];
+      const sphereGeo = new THREE.SphereGeometry(1.2, 32, 32);
+
+      // Custom Refraction & Dispersion Shader Material
+      const glassMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0x4f7eff,
+        emissive: 0x111c38,
+        roughness: 0.08,
+        metalness: 0.15,
+        transmission: 0.92, // Glass refraction
+        ior: 1.52,          // Index of refraction (crown glass)
+        thickness: 0.115,
+        specularIntensity: 0.85,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.05,
+        transparent: true,
+        opacity: 0.88
+      });
+
+      for (let i = 0; i < particleCount; i++) {
+        const bead = new THREE.Mesh(sphereGeo, glassMaterial.clone());
+        bead.position.x = (Math.random() - 0.5) * 36;
+        bead.position.y = (Math.random() - 0.5) * 22;
+        bead.position.z = (Math.random() - 0.5) * 14 - 2;
+        
+        const scale = 0.6 + Math.random() * 0.9;
+        bead.scale.set(scale, scale, scale);
+
+        bead.userData = {
+          baseX: bead.position.x,
+          baseY: bead.position.y,
+          baseZ: bead.position.z,
+          speed: 0.3 + Math.random() * 0.7,
+          phase: Math.random() * Math.PI * 2,
+          radius: 1.5 + Math.random() * 2.5
+        };
+        scene.add(bead);
+        beads.push(bead);
+      }
+
+      // Lights for Specular Rim & Chromatic Glow
+      const ambientLight = new THREE.AmbientLight(0x0a1024, 2.5);
+      scene.add(ambientLight);
+
+      const cyanPoint = new THREE.PointLight(0x00f2fe, 3.5, 50);
+      cyanPoint.position.set(-15, 12, 10);
+      scene.add(cyanPoint);
+
+      const purplePoint = new THREE.PointLight(0x9d4edd, 4.0, 50);
+      purplePoint.position.set(15, -10, 12);
+      scene.add(purplePoint);
+
+      const rimLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      rimLight.position.set(0, 20, 15);
+      scene.add(rimLight);
+
+      // Mouse Proximity Interaction
+      const mouse = { x: 0, y: 0, targetX: 0, targetY: 0 };
+      window.addEventListener('mousemove', (e) => {
+        mouse.targetX = (e.clientX / window.innerWidth - 0.5) * 20;
+        mouse.targetY = -(e.clientY / window.innerHeight - 0.5) * 12;
+      });
+
+      // Resize Handler
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      // Animation Loop
+      let clock = new THREE.Clock();
+      function animate() {
+        requestAnimationFrame(animate);
+        const t = clock.getElapsedTime() * 0.7;
+
+        mouse.x += (mouse.targetX - mouse.x) * 0.05;
+        mouse.y += (mouse.targetY - mouse.y) * 0.05;
+
+        beads.forEach((bead, idx) => {
+          const ud = bead.userData;
+          const orbitTime = t * ud.speed + ud.phase;
+          
+          // Y-axis proximity drift and organic wave motion
+          bead.position.x = ud.baseX + Math.cos(orbitTime) * ud.radius + (mouse.x * 0.15);
+          bead.position.y = ud.baseY + Math.sin(orbitTime * 1.3) * ud.radius + (mouse.y * 0.15);
+          bead.position.z = ud.baseZ + Math.sin(orbitTime * 0.8) * 1.5;
+
+          bead.rotation.x += 0.005;
+          bead.rotation.y += 0.008;
+        });
+
+        renderer.render(scene, camera);
+      }
+      animate();
+    }
+
+    // =========================================================================
+    // REAL-TIME STEP RESPONSE SIMULATOR ENGINE (Chart.js + RK4 / Euler / BDF)
+    // =========================================================================
+    let stepChart;
+    function initSimulationChart() {
+      const ctx = document.getElementById('stepResponseChart').getContext('2d');
+      stepChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Setpoint r(t)',
+              data: [],
+              borderColor: '#64748b',
+              borderDash: [5, 5],
+              borderWidth: 2,
+              pointRadius: 0,
+              fill: false
+            },
+            {
+              label: 'Closed-Loop Output y(t)',
+              data: [],
+              borderColor: '#00f2fe',
+              backgroundColor: 'rgba(0, 242, 254, 0.1)',
+              borderWidth: 2.5,
+              pointRadius: 0,
+              fill: true,
+              tension: 0.2
+            },
+            {
+              label: 'Control Effort u(t)',
+              data: [],
+              borderColor: '#c084fc',
+              borderWidth: 1.5,
+              pointRadius: 0,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 250 },
+          plugins: {
+            legend: {
+              labels: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 11 } }
+            }
+          },
+          scales: {
+            x: {
+              title: { display: true, text: 'Time (seconds)', color: '#64748b', font: { size: 11 } },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+            },
+            y: {
+              title: { display: true, text: 'Magnitude', color: '#64748b', font: { size: 11 } },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+            }
+          }
+        }
+      });
+      updateSimulation();
+    }
+
+    function updateSimulation() {
+      const Kp = parseFloat(document.getElementById('slider-kp').value);
+      const Ki = parseFloat(document.getElementById('slider-ki').value);
+      const Kd = parseFloat(document.getElementById('slider-kd').value);
+      const zeta = parseFloat(document.getElementById('slider-zeta').value);
+      const solver = document.getElementById('sim-solver-select').value;
+
+      document.getElementById('val-kp').innerText = Kp.toFixed(1);
+      document.getElementById('val-ki').innerText = Ki.toFixed(1);
+      document.getElementById('val-kd').innerText = Kd.toFixed(2);
+      document.getElementById('val-zeta').innerText = zeta.toFixed(2);
+
+      // Simulation parameters: 2nd Order Plant: Gp(s) = wn^2 / (s^2 + 2*zeta*wn*s + wn^2)
+      const wn = 3.0;
+      const dt = 0.02;
+      const tEnd = 6.0;
+      const steps = Math.floor(tEnd / dt);
+
+      const labels = [];
+      const rVals = [];
+      const yVals = [];
+      const uVals = [];
+
+      let y = 0.0;
+      let dy = 0.0;
+      let integralErr = 0.0;
+      let prevErr = 0.0;
+
+      for (let i = 0; i <= steps; i++) {
+        const t = (i * dt);
+        labels.push(t.toFixed(2));
+        const r = t >= 0.5 ? 1.0 : 0.0;
+        rVals.push(r);
+
+        const error = r - y;
+        integralErr += error * dt;
+        // Conditional Anti-windup clamping
+        integralErr = Math.max(-5.0, Math.min(5.0, integralErr));
+        const derivErr = (error - prevErr) / dt;
+        prevErr = error;
+
+        // PID Control Effort
+        let u = Kp * error + Ki * integralErr + Kd * derivErr;
+        u = Math.max(-10.0, Math.min(10.0, u)); // Actuator Saturation
+        uVals.push(u);
+
+        // Plant Derivatives: d2y = wn^2 * (u - y) - 2*zeta*wn*dy
+        if (solver === 'rk4') {
+          // 4th-Order Runge-Kutta
+          const f_dy = (v) => v;
+          const f_d2y = (pos, vel) => (wn * wn * (u - pos) - 2 * zeta * wn * vel);
+
+          const k1_y = dy;
+          const k1_v = f_d2y(y, dy);
+
+          const k2_y = dy + 0.5 * dt * k1_v;
+          const k2_v = f_d2y(y + 0.5 * dt * k1_y, dy + 0.5 * dt * k1_v);
+
+          const k3_y = dy + 0.5 * dt * k2_v;
+          const k3_v = f_d2y(y + 0.5 * dt * k2_y, dy + 0.5 * dt * k2_v);
+
+          const k4_y = dy + dt * k3_v;
+          const k4_v = f_d2y(y + dt * k3_y, dy + dt * k3_v);
+
+          y += (dt / 6) * (k1_y + 2 * k2_y + 2 * k3_y + k4_y);
+          dy += (dt / 6) * (k1_v + 2 * k2_v + 2 * k3_v + k4_v);
+        } else if (solver === 'heun') {
+          // ODE2 Heun
+          const d2y_1 = (wn * wn * (u - y) - 2 * zeta * wn * dy);
+          const y_pred = y + dt * dy;
+          const dy_pred = dy + dt * d2y_1;
+          const d2y_2 = (wn * wn * (u - y_pred) - 2 * zeta * wn * dy_pred);
+
+          y += 0.5 * dt * (dy + dy_pred);
+          dy += 0.5 * dt * (d2y_1 + d2y_2);
+        } else {
+          // ODE1 Forward Euler
+          const d2y = (wn * wn * (u - y) - 2 * zeta * wn * dy);
+          y += dt * dy;
+          dy += dt * d2y;
+        }
+
+        yVals.push(y);
+      }
+
+      if (stepChart) {
+        stepChart.data.labels = labels;
+        stepChart.data.datasets[0].data = rVals;
+        stepChart.data.datasets[1].data = yVals;
+        stepChart.data.datasets[2].data = uVals;
+        stepChart.update();
+      }
+    }
+
+    function randomizeStep() {
+      document.getElementById('slider-kp').value = (Math.random() * 6 + 1).toFixed(1);
+      document.getElementById('slider-ki').value = (Math.random() * 3).toFixed(1);
+      document.getElementById('slider-kd').value = (Math.random() * 1).toFixed(2);
+      document.getElementById('slider-zeta').value = (Math.random() * 0.8 + 0.1).toFixed(2);
+      updateSimulation();
+    }
+
+    // =========================================================================
+    // DYNAMIC SVG BLOCK PINOUT & SCHEMATIC VISUALIZER
+    // =========================================================================
+    const blockCatalog = {
+      pmsm: {
+        name: 'Permanent Magnet Synchronous Motor (PMSM)',
+        domain: 'Electromechanical / Rotational',
+        equation: 'v_{dq} = R i_{dq} + L_{dq} \\frac{d i_{dq}}{dt} + \\omega_e \\begin{bmatrix} -L_q i_q \\\\ L_d i_d + \\lambda_{pm} \\end{bmatrix}',
+        svg: `
+          <svg width="340" height="180" viewBox="0 0 340 180" xmlns="http://www.w3.org/2000/svg">
+            <rect x="70" y="25" width="200" height="130" rx="14" fill="#0d1428" stroke="#38bdf8" stroke-width="2.5" />
+            <text x="170" y="80" fill="#ffffff" font-family="Outfit" font-size="16" font-weight="bold" text-anchor="middle">PMSM Motor</text>
+            <text x="170" y="102" fill="#94a3b8" font-family="JetBrains Mono" font-size="11" text-anchor="middle">3-Phase &bull; Rotor J, B</text>
+            <!-- Terminals Left (Electrical) -->
+            <circle cx="70" cy="50" r="6" fill="#3b82f6" stroke="#fff" stroke-width="1.5"/>
+            <text x="82" y="54" fill="#60a5fa" font-family="JetBrains Mono" font-size="10">Phase A</text>
+            <circle cx="70" cy="90" r="6" fill="#3b82f6" stroke="#fff" stroke-width="1.5"/>
+            <text x="82" y="94" fill="#60a5fa" font-family="JetBrains Mono" font-size="10">Phase B</text>
+            <circle cx="70" cy="130" r="6" fill="#3b82f6" stroke="#fff" stroke-width="1.5"/>
+            <text x="82" y="134" fill="#60a5fa" font-family="JetBrains Mono" font-size="10">Phase C</text>
+            <!-- Terminals Right (Mechanical Flange & Sensor) -->
+            <circle cx="270" cy="65" r="6" fill="#10b981" stroke="#fff" stroke-width="1.5"/>
+            <text x="235" y="69" fill="#34d399" font-family="JetBrains Mono" font-size="10">Shaft &tau;</text>
+            <circle cx="270" cy="115" r="6" fill="#f59e0b" stroke="#fff" stroke-width="1.5"/>
+            <text x="228" y="119" fill="#fbbf24" font-family="JetBrains Mono" font-size="10">&theta;_enc</text>
+          </svg>
+        `
+      },
+      resistor: {
+        name: 'Linear & Thermal Electrical Resistor',
+        domain: 'Electrical & Thermal Domain',
+        equation: 'V(t) = R(T) \\cdot I(t), \\quad R(T) = R_0 \\cdot (1 + \\alpha(T - T_0))',
+        svg: `
+          <svg width="340" height="160" viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg">
+            <rect x="80" y="30" width="180" height="100" rx="12" fill="#0d1428" stroke="#60a5fa" stroke-width="2" />
+            <path d="M 40 80 L 100 80 L 110 60 L 130 100 L 150 60 L 170 100 L 190 60 L 210 100 L 220 80 L 300 80" fill="none" stroke="#38bdf8" stroke-width="3"/>
+            <circle cx="40" cy="80" r="6" fill="#3b82f6" stroke="#fff" stroke-width="1.5"/>
+            <text x="25" y="70" fill="#93c5fd" font-family="JetBrains Mono" font-size="10">p (+)</text>
+            <circle cx="300" cy="80" r="6" fill="#3b82f6" stroke="#fff" stroke-width="1.5"/>
+            <text x="295" y="70" fill="#93c5fd" font-family="JetBrains Mono" font-size="10">n (-)</text>
+          </svg>
+        `
+      },
+      thermal_mass: {
+        name: 'Lumped Capacitive Thermal Mass',
+        domain: 'Thermal Domain',
+        equation: 'Q(t) = C_{th} \\frac{dT}{dt}, \\quad C_{th} = m \\cdot c_p',
+        svg: `
+          <svg width="340" height="160" viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg">
+            <rect x="80" y="25" width="180" height="110" rx="12" fill="#180e29" stroke="#c084fc" stroke-width="2" />
+            <text x="170" y="75" fill="#ffffff" font-family="Outfit" font-size="15" font-weight="bold" text-anchor="middle">Thermal Mass</text>
+            <text x="170" y="98" fill="#c084fc" font-family="JetBrains Mono" font-size="11" text-anchor="middle">Cth = m &bull; cp</text>
+            <circle cx="80" cy="80" r="6" fill="#f43f5e" stroke="#fff" stroke-width="1.5"/>
+            <text x="92" y="84" fill="#fb7185" font-family="JetBrains Mono" font-size="10">Heat Port Q, T</text>
+          </svg>
+        `
+      },
+      foc_block: {
+        name: 'Field-Oriented Control (FOC) Clarke & Park Transform',
+        domain: 'Controls & Signal Routing',
+        equation: 'i_d = i_\\alpha \\cos\\theta + i_\\beta \\sin\\theta, \\quad i_q = -i_\\alpha \\sin\\theta + i_\\beta \\cos\\theta',
+        svg: `
+          <svg width="340" height="180" viewBox="0 0 340 180" xmlns="http://www.w3.org/2000/svg">
+            <rect x="70" y="20" width="200" height="140" rx="14" fill="#0c2420" stroke="#34d399" stroke-width="2.5" />
+            <text x="170" y="80" fill="#ffffff" font-family="Outfit" font-size="16" font-weight="bold" text-anchor="middle">FOC Vector Core</text>
+            <text x="170" y="104" fill="#6ee7b7" font-family="JetBrains Mono" font-size="11" text-anchor="middle">Clarke & Park</text>
+            <circle cx="70" cy="50" r="6" fill="#10b981" stroke="#fff" stroke-width="1.5"/>
+            <text x="82" y="54" fill="#34d399" font-family="JetBrains Mono" font-size="10">Ia, Ib, Ic</text>
+            <circle cx="70" cy="110" r="6" fill="#fbbf24" stroke="#fff" stroke-width="1.5"/>
+            <text x="82" y="114" fill="#fbbf24" font-family="JetBrains Mono" font-size="10">&theta;_rotor</text>
+            <circle cx="270" cy="50" r="6" fill="#38bdf8" stroke="#fff" stroke-width="1.5"/>
+            <text x="230" y="54" fill="#38bdf8" font-family="JetBrains Mono" font-size="10">Id (Flux)</text>
+            <circle cx="270" cy="110" r="6" fill="#38bdf8" stroke="#fff" stroke-width="1.5"/>
+            <text x="215" y="114" fill="#38bdf8" font-family="JetBrains Mono" font-size="10">Iq (Torque)</text>
+          </svg>
+        `
+      },
+      gmdh_node: {
+        name: 'GMDH Quadratic Polynomial Neural Node',
+        domain: 'AI & Surrogate Discovery',
+        equation: 'y = c_0 + c_1 x_1 + c_2 x_2 + c_3 x_1^2 + c_4 x_2^2 + c_5 x_1 x_2',
+        svg: `
+          <svg width="340" height="160" viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg">
+            <rect x="80" y="25" width="180" height="110" rx="14" fill="#29180c" stroke="#f59e0b" stroke-width="2" />
+            <text x="170" y="70" fill="#ffffff" font-family="Outfit" font-size="15" font-weight="bold" text-anchor="middle">GMDH Neuron</text>
+            <text x="170" y="92" fill="#fbbf24" font-family="JetBrains Mono" font-size="10" text-anchor="middle">Pairwise 2nd-Order</text>
+            <circle cx="80" cy="55" r="6" fill="#f59e0b" stroke="#fff" stroke-width="1.5"/>
+            <text x="92" y="59" fill="#fde68a" font-family="JetBrains Mono" font-size="10">x_i In</text>
+            <circle cx="80" cy="105" r="6" fill="#f59e0b" stroke="#fff" stroke-width="1.5"/>
+            <text x="92" y="109" fill="#fde68a" font-family="JetBrains Mono" font-size="10">x_j In</text>
+            <circle cx="260" cy="80" r="6" fill="#10b981" stroke="#fff" stroke-width="1.5"/>
+            <text x="220" y="84" fill="#34d399" font-family="JetBrains Mono" font-size="10">y Out</text>
+          </svg>
+        `
+      }
+    };
+
+    function renderBlockPinout(key) {
+      const data = blockCatalog[key];
+      if (!data) return;
+      document.getElementById('pinout-viewer').innerHTML = data.svg;
+      document.getElementById('pinout-math-desc').innerHTML = `
+        <div style="font-weight:bold; color:#fff; font-size:15px; margin-bottom:4px;">${data.name} &bull; <span class="pill pill-blue">${data.domain}</span></div>
+        <div class="math-block">$$${data.equation}$$</div>
+      `;
+      renderMathInDocument();
+    }
+  </script>
+</body>
+</html>

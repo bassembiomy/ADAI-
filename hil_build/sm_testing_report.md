@@ -13,7 +13,7 @@
 - Layers: 1 (1 OR, 0 AND)
 - Active configuration slots: 1
 - Static AST reachability: 100.0%
-- Reachable state IDs: f250e7aa-b1cb-41f0-8e88-74ba0068c2b8, 9ec22ae9-b1db-4ec4-8fac-5712a1840705
+- Reachable state IDs: 265d4f7c-6336-4720-a143-e009c1002387, 480c2bb1-273c-4c96-a72c-29b0644f4691
 - Unreachable state IDs: None
 - Terminal state IDs: None
 
@@ -55,10 +55,10 @@ Evidence labels describe only the checks actually recorded for this generated pa
 
 | State name | Model ID | C enum | Layer | X-Bridges |
 |---|---|---|---|---|
-| State_1 | f250e7aa-b1cb-41f0-8e88-74ba0068c2b8 | SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8 | root | no |
-| State_2 | 9ec22ae9-b1db-4ec4-8fac-5712a1840705 | SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705 | root | no |
+| State_1 | 265d4f7c-6336-4720-a143-e009c1002387 | SM_ST__265D4F7C_6336_4720_A143_E009C1002387 | root | no |
+| State_2 | 480c2bb1-273c-4c96-a72c-29b0644f4691 | SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691 | root | no |
 
 ## 8. HIL Driver Mapping Report
 
 - **Target Microcontroller:** Arduino_Mega
-- Explicit mappings: 2
+- Explicit mappings: 1

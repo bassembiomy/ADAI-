@@ -18,837 +18,714 @@ export const HELP_DATA: Record<string, {
   "getting-started": {
     title: "Getting Started with ADIA",
     category: "Fundamentals",
-    description: "Learn the basics of the ADIA engineering suite, from system architecture to physical simulation.",
-    content: "ADIA is a comprehensive Model-Based Design (MBD) environment. It integrates structural architecture (SysML), behavioral logic (Stateflow), signal-flow control (X-Bridges), and physical plant modeling (V-Lab).",
+    description: "Master the complete ADIA Model-Based Design (MBD) engineering suite, from system architecture and state machines to physical plant modeling, signal-flow control, and Hardware-in-the-Loop (HIL) deployment.",
+    content: "ADIA is an integrated, next-generation Model-Based Design (MBD) environment for multi-disciplinary systems engineering. It bridges structural SysML architecture, hierarchical Stateflow behavior, causal signal-flow controls (X-Bridges), multi-domain acausal physical plant dynamics (V-Lab), and real-time Hardware-in-the-Loop (HIL) testing into a single unified canvas.",
     sections: [
       {
-        title: "The ADIA Workflow",
-        body: "1. **Architect**: Define your system hierarchy in the Architecture module.\n2. **Design Logic**: Implement reactive behavior using hierarchical state machines.\n3. **Model the Plant**: Build high-fidelity physical models in V-Lab.\n4. **Control**: Design feedback loops in X-Bridges.\n5. **Analyze**: Use DOE to optimize parameters and identify system bottlenecks."
+        title: "The Unified ADIA Engineering Workflow",
+        body: "ADIA structures systems engineering into a continuous 6-phase V-model development lifecycle:\n\n```\n  [ 1. ARCHITECTURE (SysML) ]  ---------------------->  [ 6. HIL & VERIFICATION ]\n     BDD / IBD / Requirements                               Hardware Validation / C99\n           │                                                           ▲\n           ▼                                                           │\n  [ 2. BEHAVIOR (Stateflow) ]  ───►  [ 3. CONTROLS (X-Bridges) ]  ───►  [ 4. PLANT (V-Lab) ]\n     Hierarchical State Logic          Feedback Loops & MPC               Acausal DAE Physics\n```\n\n1. **Architect**: Capture system requirements, decompose system blocks (BDD), and route internal parts and flows (IBD).\n2. **Design Logic**: Construct hierarchical reactive logic, discrete states, guards, and temporal timers in Stateflow.\n3. **Model the Plant**: Assemble multi-domain acausal physical networks (electrical, mechanical, thermal, fluid) in V-Lab.\n4. **Design Control Loops**: Implement feedback controllers (PID, FOC, MPC) and signal filters in X-Bridges.\n5. **Analyze & Optimize**: Run Design of Experiments (DOE) and GMDH polynomial neural network discovery.\n6. **Validate on Hardware (HIL)**: Map variables to MCU pins, stream live telemetry, inject faults, and deploy deterministic C99 firmware."
+      },
+      {
+        title: "Top Navigation Bar & Module Switcher",
+        body: "The top navigation bar allows you to switch between engineering workspaces with a single click. Every module maintains persistent bidirectional synchronization with the shared variable table:",
+        list: [
+          "**Architecture**: Opens SysML diagrams (BDD, IBD, Requirements, and OPM).",
+          "**Stateflow**: Opens the hierarchical State Machine designer, visual simulator, and transition editor.",
+          "**V-Lab**: Opens the acausal physical plant modeling canvas, solver settings, and multi-channel scopes.",
+          "**X-Bridges**: Opens the causal block-diagram signal-flow simulator and control system workspace.",
+          "**HIL**: Opens the Hardware-in-the-Loop configuration, Signal Mapper, live oscilloscope telemetry, and fault injector.",
+          "**DOE**: Opens Design of Experiments sampling tools and AI model discovery engines.",
+          "**Reports**: Opens automated verification reporting, traceability matrices (RTM), and C99 code generators.",
+          "**Help (Docs)**: Click the **Help** button (book icon) or press `F1` at any time to open this comprehensive guide and block reference."
+        ]
+      },
+      {
+        title: "Global Keyboard Shortcuts & Productivity Controls",
+        body: "Speed up your workflow using these primary hotkeys and editor actions:",
+        list: [
+          "**Space + Drag / Middle Mouse**: Pan the canvas smoothly in any direction.",
+          "**Ctrl + Scroll / Pinch**: Zoom in and zoom out of the active diagram.",
+          "**Ctrl + Z / Ctrl + Y**: Undo and Redo diagram modifications.",
+          "**Ctrl + S**: Save the active project file (`.adia` format with all domains).",
+          "**Delete / Backspace**: Remove selected blocks, states, or connection wires.",
+          "**Double Click on Block**: Opens the internal layer (e.g., opens IBD for a BDD block, or opens sub-diagram for an X-Bridges state).",
+          "**Right Click on Canvas**: Opens the quick-add component and context menu."
+        ]
       }
     ],
-    related: ["architecture-guide", "air-fryer-sysml"]
+    related: ["architecture-guide", "state-machine-fundamentals", "vlab-fundamentals", "xbridges-ref", "hil-fundamentals"]
   },
+
   "architecture-guide": {
-    title: "System Architecture (SysML)",
+    title: "System Architecture (SysML & OPM)",
     category: "Architecture",
-    description: "Structural design using Block Definition Diagrams (BDD), Internal Block Diagrams (IBD), and Requirements Diagrams.",
-    content: "The Architecture module implements key SysML (Systems Modeling Language) diagrams to define the structural hierarchy, internal connectivity, constraints, and requirements of a complex system. Use BDD to model classifications and block definitions, IBD to connect system parts, and Requirements Diagrams to trace functional constraints.",
+    description: "Structural design using Block Definition Diagrams (BDD), Internal Block Diagrams (IBD), Requirements Diagrams, Traceability Matrices (RTM), and Object-Process Methodology (OPM).",
+    content: "The Architecture module is built on ENTROPY — a native OPM (Object-Process Methodology, ISO 19450) modeling environment. Instead of authoring SysML BDD, IBD, State Machine, and Requirements diagrams separately, you author a single OPM model of objects, processes, and states; the Smart Show panel derives the structure view (BDD-equivalent), internal view (IBD-equivalent), behavior view (state-machine-equivalent), and requirements traceability view automatically, and the event-driven simulation engine executes the model with trigger/condition/enabler semantics, conflict resolution, and animation detection. Existing SysML models can be migrated with one click via 'Import SysML → OPM'.",
     image: adia_architecture_diagram,
     sections: [
       {
         title: "Block Definition Diagram (BDD) - Elements & Properties",
-        body: "A BDD defines block types, classifications, and system hierarchies. Select any block in the diagram to configure these detailed property settings in the sidebar panel:",
+        body: "A BDD models the structural taxonomy, type definitions, and composition hierarchies of your system. To build a BDD, follow these step-by-step UI actions:\n\n1. Click **+ Add Block** in the architecture toolbar or drag from the left sidebar.\n2. Select the block on the canvas to open the **Properties Panel** on the right sidebar:\n\n```\n┌────────────────────────────────────────┐\n│         «Block» MotorDrive             │\n├────────────────────────────────────────┤\n│  - maxRpm: float = 3000.0              │\n│  - ratedPower: float = 1500.0          │\n├────────────────────────────────────────┤\n│  + setSpeed(rpm: float): void          │\n│  + emergencyStop(): void               │\n├────────────────────────────────────────┤\n│  constraints:                          │\n│    torque <= maxTorque                 │\n└────────────────────────────────────────┘\n```",
         list: [
-          "**Stereotype Selector**: Determines the block's classification: (1) `Block` - structural component, (2) `Requirement` - text-based design target, (3) `Interface` - software port contract, (4) `Interface Block` - reusable port definition, (5) `ValueType` - physical dimension (e.g., speed, voltage), and (6) `Enumeration` - set of constant tags.",
-          "**Block Name**: Unique name defining the block type class.",
-          "**Ports Manager**: Add and configure ports of three kinds: (1) `Std` (Standard) - service-based interaction points, (2) `Flow` - represents material/energy flow (requires direction `In`, `Out`, `I/O`, and physical `Unit`), and (3) `Proxy` - interfaces pointing to external block contracts.",
-          "**Value Properties**: Attributes or parameters specified as name:type=defaultValue (comma/newline separated, e.g., `mass:float=12.5`, `voltage:int=24`).",
-          "**Operations**: Callable block functions (one per line, e.g., `readSensor(pin:int):float`).",
-          "**Constraints**: Parametric rules and mathematical equations (one per line, e.g., `force = mass * accel`).",
-          "**Nested Classes / Parts**: Sub-components or inner classifications nested under this block.",
-          "**Satisfied Requirements**: Links this block to specific Requirement elements it fulfills."
+          "**Stereotype Selector**: Choose the block classification: (1) `Block` - structural component, (2) `Interface` - software port contract, (3) `Interface Block` - reusable port definition, (4) `ValueType` - physical dimension (e.g. speed in rad/s, voltage in V), and (5) `Enumeration` - set of named constants.",
+          "**Block Name**: Enter a unique PascalCase name for the block class.",
+          "**Add Port (+ Button)**: Define interface ports: (1) `Std` (Standard) - service invocation ports, (2) `Flow` - physical energy/matter flow (specify Direction `In`, `Out`, `I/O`, and physical `Unit`), and (3) `Proxy` - interfaces pointing to external block contracts.",
+          "**Value Properties**: Add typed properties with default values (e.g. `mass:float=12.5`, `supplyVoltage:float=24.0`).",
+          "**Operations**: Define callable member methods (e.g. `startPump(pressure:float):bool`).",
+          "**Constraints**: Define mathematical parametric constraints (e.g. `power == voltage * current`).",
+          "**Satisfied Requirements**: Multi-select requirements from the project pool that this structural block fulfills."
         ]
       },
       {
-        title: "BDD Structural Relationships",
-        body: "Select relationship connectors in BDD to model structural dependencies and specify the following details:",
+        title: "BDD Structural Relationships & Connectors",
+        body: "To connect blocks in BDD, select the **Relationship Tool** in the top toolbar, click the source block anchor, and drag to the target block. In the connection dialog, select the relationship type:",
         list: [
-          "**Relationship Type**: Choose from: (1) `Association` - standard bidirectional link, (2) `Generalization` - inheritance (child inherits ports/properties), (3) `Composition` - strong part-whole (part cannot exist without whole), (4) `Aggregation` - weak part-whole (shared part can exist independently), and (5) `Allocation` - maps logical blocks to hardware.",
-          "**Label**: Custom descriptive text displayed along the relationship line.",
-          "**Multiplicities**: Define cardinality on both ends (Source and Target Multiplicities, e.g., `0..1` to `*`)."
+          "**Association**: Standard bidirectional or directed reference between independent blocks.",
+          "**Generalization (Inheritance)**: Sub-block inherits all value properties, operations, constraints, and ports from the super-block.",
+          "**Composition (Strong Part-Whole)**: Black diamond connector. The child part belongs exclusively to the parent whole; deleting the parent deletes the child.",
+          "**Aggregation (Weak Part-Whole)**: White diamond connector. The child part is shared and can exist independently of the parent.",
+          "**Allocation**: Dashed arrow with `«allocate»` stereotype mapping logical functions to hardware execution units.",
+          "**Multiplicity Settings**: Set cardinality on source and target ends (e.g., `1`, `0..1`, `1..*`, `*`)."
         ]
       },
       {
-        title: "Internal Block Diagram (IBD) - Parts & Connections",
-        body: "An IBD models how instances of blocks (parts) connect internally within a parent block context. Double-click a block on a BDD to open its internal layer and use IBD elements:",
+        title: "Internal Block Diagram (IBD) - Parts & Flow Routing",
+        body: "An IBD models the internal topology and interconnected part instances encapsulated inside a parent BDD block.\n\n**How to Use IBD**:\n1. **Double-click** any BDD block on the canvas to drill down into its internal IBD layer.\n2. Click **+ Add Part** to instantiate internal subsystem blocks.\n3. In the Part Properties panel, assign its **Block Definition** (the part automatically inherits all ports defined on its type).\n4. Drag connector lines between port pins of different parts to route signals, energy, or fluids.\n5. Click on the connector line to specify the **Item Flow** (e.g. `PWM_Control_Signal`, `Coolant_Flow`) and set the transmission protocol.",
         list: [
-          "**Parts**: Instances of blocks in this context. Specify: (1) `Part Name` - instance label, (2) `Block Definition` - typing BDD block (part inherits all ports defined on the block type), and (3) `Multiplicity` - concurrent part count.",
-          "**Connectors**: Signal, energy, or material paths linking ports. Set `Item Flow` to define what flows (e.g., `PWM_Signal`) and `Label` for descriptive text.",
-          "**Interface Realization**: Direct connection bindings mapping a generic interface block to a specific part port."
+          "**Part Instances**: Named instances of block types with multiplicity bounds (e.g. `motorLeft: MotorDrive [1]`, `motorRight: MotorDrive [1]`).",
+          "**Port Connectors**: Signal and physical flow channels linking matching port types.",
+          "**Interface Realization**: Binds abstract interface ports to concrete internal part pins."
         ]
       },
       {
-        title: "Requirements Diagrams & Writing Rules",
-        body: "Requirements Diagrams define the functional, behavioral, and physical constraints of a system. To write a well-formed, verifiable requirement, follow these standards (IEEE 29148 / INCOSE):",
+        title: "Requirements Diagrams & Strict Writing Rules (IEEE 29148 / INCOSE)",
+        body: "Requirements Diagrams define the functional, safety, and physical specifications of the system. To create a requirement:\n1. Click **+ Add Requirement** in the toolbar.\n2. Enter the unique **ID** (e.g., `REQ-PUMP-01`) and select the **Verify Method** (`Test`, `Analysis`, `Inspection`, `Demonstration`).\n3. Write the specification text according to standard active-voice rules:\n\n```\n[Condition/Trigger] + [Subject/System] + SHALL + [Action/Verb] + [Object/Response] + [Constraint/Tolerance]\n```\n*Example*: *'When the coolant temperature exceeds 95°C, the safety supervisor SHALL de-energize the heater within 50 milliseconds.'*",
         list: [
-          "**The Binding 'Shall' Rule**: Mandatory requirements MUST use the word **shall** (e.g., 'The system shall...'). Avoid weaker words like 'should', 'must', 'will', or 'may' in functional specifications.",
-          "**Sentence Structure Template**: Use the standard active voice formula: `[Condition/Trigger] + [Subject/System] + shall + [Action/Verb] + [Object/Response] + [Constraint/Refinement]`.",
-          "**Structure Example**: *'When the temperature exceeds 200°C, the controller shall disable the heater output within 100 milliseconds.'*",
-          "**Singular & Atomic**: A requirement should express exactly one contract. Avoid using conjunctions like 'and', 'or', 'but' to couple separate requirements.",
-          "**Unambiguous & Quantifiable**: Avoid subjective words (e.g., 'fast', 'safe', 'efficient', 'user-friendly'). Use exact metrics (e.g., 'within 5 seconds', 'with efficiency >= 95%').",
-          "**Verify Method**: Every requirement must specify how it is tested: `Test` (physical HIL/run-time tests), `Analysis` (using math or simulation engines), `Inspection` (visual review of code/drawings), or `Demonstration` (walkthrough of basic operations)."
+          "**The Binding 'SHALL' Rule**: Mandatory requirements MUST use the keyword **shall**. Never use ambiguous words like 'should', 'might', 'will', or 'user-friendly'.",
+          "**Singular & Atomic**: Exactly one requirement contract per block. Do not combine multiple behaviors with 'and' or 'or'.",
+          "**Quantifiable Metrics**: Always include verifiable numbers, tolerances, and time bounds (e.g. `within ±0.5°C`, `<= 100ms`).",
+          "**Verification Method**: Select `Test` (HIL or software test runner), `Analysis` (simulation solver), `Inspection` (code/circuit review), or `Demonstration`."
         ]
       },
       {
-        title: "Requirements Traceability & Mapping",
-        body: "Traceability links requirements to structural design blocks, verification tests, and other requirements. Use the properties panel or connect nodes via relationship lines to build a bidirectional matrix:",
+        title: "Requirements Traceability & RTM Grid",
+        body: "Traceability guarantees that every requirement is satisfied by architectural blocks and validated by tests:\n1. Drag a relationship line from a requirement to a target element, and select the relationship type:\n   - **Satisfy (`«satisfy»`)**: Links a Requirement to a BDD Block or IBD Part that implements it.\n   - **Verify (`«verify»`)**: Links a Requirement to a Test Script, Simulation Benchmark, or HIL Test Case.\n   - **Derive (`«deriveReqt»`)**: Relates a low-level child requirement to a high-level system requirement.\n   - **Refine (`«refine»`)**: Connects a requirement to a state machine diagram detailing its behavior.\n2. Click the **RTM (Requirements Traceability Matrix)** button in the top bar to open the full matrix view. Green cells confirm satisfied & verified requirements; amber/red cells highlight orphaned or untested requirements.",
         list: [
-          "**Satisfy (Satisfies)**: Links a structural block (BDD Block or IBD Part) to the requirement it fulfills. For example, a PID Controller block satisfies a 'Temp Stability' requirement.",
-          "**Verify (Verifies)**: Links a test case, test script, or HIL configuration to the requirement it validates.",
-          "**Derive (Derives)**: Relates a low-level, detailed requirement to a high-level parent system requirement from which it originates.",
-          "**Refine (Refines)**: Connects a requirement to another model element (like a state machine or use case) that provides a more detailed, behavior-specific specification.",
-          "**Trace (Traces)**: A general evolutionary or dependency relationship between design elements showing historical or logical correlation.",
-          "**Requirements Traceability Matrix (RTM)**: Select the **RTM** window from the dashboard to view a complete grid of all requirement IDs mapped directly to their satisfying Blocks, verifying Test Cases, and statuses."
+          "**Bidirectional Navigation**: Click any requirement ID in the RTM table to jump directly to its satisfying block on the canvas.",
+          "**Export Matrix**: Click **Export RTM** to download the traceability matrix in CSV, HTML, or PDF formats."
         ]
+      },
+      {
+        title: "Object-Process Methodology (OPM / ISO 19450)",
+        body: "OPM provides a dual conceptual modeling approach using Object-Process Diagrams (OPD) and Object-Process Language (OPL) text:\n\n1. Click **+ Add Object** (rectangular node) to represent physical or informatical entities.\n2. Click **+ Add Process** (oval node) to represent transformations that create, consume, or change the state of objects.\n3. Connect objects and processes using procedural links (consumption, effect, instrument, agent) or structural links.\n4. Click **View OPL** to inspect automatically generated formal English specifications matching ISO 19450 standards."
       }
     ],
-    related: ["getting-started", "air-fryer-sysml"]
+    related: ["getting-started", "air-fryer-sysml", "state-machine-fundamentals"]
   },
+
   "air-fryer-sysml": {
-    title: "Air Fryer System Design",
+    title: "Tutorial: SysML Air Fryer System Design",
     category: "Tutorials",
-    description: "A complete SysML walkthrough for a modern forced-air cooking system.",
-    content: "This tutorial illustrates how to model a complex consumer appliance using a requirement-driven architecture approach.",
+    description: "A complete, step-by-step walkthrough modeling a multi-physics consumer appliance from requirements to BDD, IBD, and physical plant allocation.",
+    content: "This tutorial illustrates how to model an intelligent forced-air cooking appliance using a rigorous requirement-driven systems engineering approach in ADIA.",
     image: air_fryer_sysml,
     sections: [
       {
-        title: "1. Defining Requirements",
-        body: "Start by capturing the essential performance targets for the Air Fryer. These are represented in the **Requirement Diagram**.",
-        list: [
-          "**[REQ-01] Temp Stability**: The system shall maintain temperature within ±2°C of the setpoint.",
-          "**[REQ-02] Safety Interlock**: The heater shall be disabled if the basket is removed.",
-          "**[REQ-03] Rapid Preheat**: Reach 200°C in less than 180 seconds."
-        ]
+        title: "Step 1: Capture Requirements",
+        body: "1. Navigate to the **Architecture** tab.\n2. Click **+ Add Requirement** three times and configure:\n   - `[REQ-AF-01]`: *'The system shall maintain basket air temperature within ±2.5°C of user setpoint.'* (Verify: `Test`).\n   - `[REQ-AF-02]`: *'When the cooking basket is removed, the controller shall disable the heater element within 20 milliseconds.'* (Verify: `Test`).\n   - `[REQ-AF-03]`: *'The preheat cycle shall heat the chamber from 25°C to 200°C in less than 180 seconds.'* (Verify: `Analysis`)."
       },
       {
-        title: "2. Structural Breakdown (BDD)",
-        body: "The **Block Definition Diagram** decomposes the Air Fryer into its logical and physical parts.",
-        list: [
-          "**Control Unit**: The brain of the system, running the PID and safety logic.",
-          "**Heating Element**: A high-wattage resistive load (modeled in V-Lab).",
-          "**Fan System**: Provides forced convection for even heat distribution.",
-          "**User Interface**: Touch panel for time/temp settings."
-        ]
+        title: "Step 2: Structural Decomposition (BDD)",
+        body: "1. Click **+ Add Block** to create the top-level block: `AirFryerSystem`.\n2. Create 4 sub-blocks: `ControlUnit`, `HeatingElement`, `ConvectionBlower`, and `UserInterface`.\n3. Connect `AirFryerSystem` to the sub-blocks using **Composition** connectors with multiplicity `1`.\n4. Add ports to `ControlUnit`:\n   - `tempSensorIn`: Flow Port (In, Unit: °C)\n   - `basketInterlock`: Flow Port (In, Unit: bool)\n   - `heaterPwm`: Flow Port (Out, Unit: PWM%)\n   - `fanEnable`: Flow Port (Out, Unit: bool)"
       },
       {
-        title: "3. Connectivity & Flow (IBD)",
-        body: "The **Internal Block Diagram** shows how these parts interact. We use Proxy Ports for signals (Control Unit to Fan) and Full Ports for physical energy flow (Power Supply to Heater).",
-        list: [
-          "**PWM Signal**: From Controller to Heater Driver.",
-          "**Temperature Feedback**: From Thermocouple to Controller.",
-          "**Air Flow**: From Fan to Cavity."
-        ]
+        title: "Step 3: Internal Connectivity (IBD)",
+        body: "1. Double-click the `AirFryerSystem` block to open its **IBD**.\n2. Instantiate parts for each block.\n3. Draw connections between ports:\n   - Connect `ControlUnit.heaterPwm` to `HeatingElement.powerCommand` (Item Flow: `PWM_Duty`).\n   - Connect `ConvectionBlower.airOutlet` to `CookingChamber.airInlet` (Item Flow: `Forced_Air_m3s`).\n   - Connect `CookingChamber.tempSensor` to `ControlUnit.tempSensorIn` (Item Flow: `Temp_Feedback`)."
       },
       {
-        title: "4. Assigning Requirements (Satisfy)",
-        body: "Finally, we map our requirements to the architectural blocks using the **Satisfy** relationship. This ensures traceability.",
-        list: [
-          "**Control Unit** satisfies **[REQ-01] Temp Stability** (via PID logic).",
-          "**Door Sensor** satisfies **[REQ-02] Safety Interlock**.",
-          "**1500W Heater** satisfies **[REQ-03] Rapid Preheat**."
-        ]
+        title: "Step 4: Trace Requirements (Satisfy)",
+        body: "1. Return to the BDD view.\n2. Draw a **Satisfy** relationship from `[REQ-AF-01]` to `ControlUnit` (PID controller satisfies temperature stability).\n3. Draw a **Satisfy** relationship from `[REQ-AF-02]` to `SafetyInterlock` state logic.\n4. Draw a **Satisfy** relationship from `[REQ-AF-03]` to `HeatingElement` (1800W rated element)."
       }
     ],
-    related: ["architecture-guide", "vlab-physics"]
+    related: ["architecture-guide", "vlab-fundamentals", "learning-labs"]
   },
-  "vlab-fundamentals": {
-    title: "V-Lab Plant Modeling",
-    category: "V-Lab (Plant Modeling)",
-    description: "Learn the principles of acausal physical modeling, across and through variables, conservation laws, and multi-domain routing.",
-    content: "V-Lab is an advanced physical plant modeling environment built on the principle of acausal physical modeling. Unlike causal signal-flow environments (where outputs are computed directly from inputs, like in X-Bridges), acausal networks model physical connections where energy flows in both directions. The engine determines the system-wide distribution of energy by solving a set of simultaneous Differential Algebraic Equations (DAEs) that satisfy conservation laws at every node.",
-    image: adia_vlab_simulation,
-    sections: [
-      {
-        title: "Acausal vs. Causal Modeling",
-        body: "In causal modeling, signals are directional: a block reads an input, computes a function, and writes an output. In acausal physical modeling, components are connected by terminals (ports) representing physical interfaces. There is no predefined direction of calculation. Instead, connections enforce physical constraints:",
-        list: [
-          "**Across Variables**: Potentials or states measured between a node and a reference (e.g., voltage, angular velocity, translational velocity, temperature, pressure). Across variables must be equal at any connected junction.",
-          "**Through Variables**: Rates of flow or forces acting through a branch (e.g., current, torque, force, heat flow, mass flow). The sum of all through variables entering any junction must equal zero (Kirchhoff's Current Law equivalent)."
-        ]
-      },
-      {
-        title: "The Physical Domains",
-        body: "V-Lab supports multiple coupled physical domains. Each domain specifies its unique Across and Through variables:",
-        list: [
-          "**Electrical**: Across = Voltage (V), Through = Current (I). Equations model electrical potential differences, charge conservation, and magnetic coupling.",
-          "**Mechanical Rotational**: Across = Angular Velocity (rad/s), Through = Torque (N-m). Equations conserve angular momentum and model shaft dynamics.",
-          "**Mechanical Translational**: Across = Linear Velocity (m/s), Through = Force (N). Equations follow Newton's laws to conserve linear momentum.",
-          "**Thermal**: Across = Temperature (K), Through = Heat Flow (W). Equations govern heat conduction, convection, radiation, and thermal storage.",
-          "**Magnetic**: Across = Magnetomotive Force (A-t), Through = Magnetic Flux (Wb). Reluctance circuits direct magnetic flux.",
-          "**Fluid / Moist Air**: Across = Pressure (Pa), Temperature (K), Humidity Ratio (H); Through = Mass flow (kg/s), Heat flow (W), Water vapor flow (kg/s). Models pneumatics and moist air thermodynamics."
-        ]
-      },
-      {
-        title: "Acausal Connection Rules",
-        body: "To build valid physical networks in V-Lab, you must adhere to these structural constraints:",
-        list: [
-          "**Reference Node (Ground)**: Every independent network must contain at least one reference node (e.g., Electrical Ground, Rotational/Translational Reference, Gas Reference, or Absolute Reference (MA)) representing the zero-potential benchmark.",
-          "**Compatible Connections**: Connect ports of the same domain type. You cannot connect an electrical port directly to a mechanical port; instead, use a coupling block (such as an electromechanical converter) that implements cross-domain physics."
-        ]
-      }
-    ],
-    related: ["vlab-physics", "vlab-fluid-dynamics", "vlab-blocks-reference", "motor-models"]
-  },
-  "vlab-physics": {
-    title: "V-Lab Physics Engine & Solver",
-    category: "V-Lab (Plant Modeling)",
-    description: "Understand the mathematical mechanics of the V-Lab solver, including Modified Nodal Analysis (MNA), BDF implicit integration, Newton-Raphson iterations, and zero-crossing detection.",
-    content: "V-Lab simulates physical networks in real-time by assembling a coupled system of Differential Algebraic Equations (DAEs) in the general implicit form: f(x, dx/dt, t) = 0. The solver uses state-of-the-art numerical integration methods to guarantee stability, even when modeling stiff systems.",
-    sections: [
-      {
-        title: "System Assembly: Modified Nodal Analysis (MNA)",
-        body: "Before the simulation starts, the DAE Assembler processes the diagram topology (nodes and edges) to construct the mathematical system. Using Modified Nodal Analysis (MNA), it defines a state vector x containing node potentials (across variables) and selected branch flows (through variables). It then constructs a residual function vector f(x, dx/dt, t) representing:",
-        list: [
-          "**Conserving Equations**: Node-balance equations enforcing that the sum of through variables entering each junction is zero (sum of current, force, or mass flow is zero).",
-          "**Constitutive Equations**: Element-specific equations (e.g., V - I * R = 0 for resistors, I - C * dV/dt = 0 for capacitors, or T - J * dw/dt - B * w = 0 for inertia)."
-        ]
-      },
-      {
-        title: "Implicit Numerical Integration (BDF-1 and BDF-2)",
-        body: "To solve the differential equations, the solver approximates derivatives (dx/dt) using Backward Differentiation Formulas (BDF), converting the DAEs into algebraic equations at each time step:",
-        list: [
-          "**BDF-1 (Backward Euler)**: A first-order implicit method used for initialization and immediately after discontinuities. The derivative is approximated as: dx/dt = (x_k - x_{k-1}) / h (where h is the time step).",
-          "**BDF-2**: A second-order implicit method used during smooth continuous execution to achieve high accuracy. It uses the current and two previous steps: dx/dt = a0 * x_k + a1 * x_{k-1} + a2 * x_{k-2}, where the coefficients depend on the current and previous time steps."
-        ]
-      },
-      {
-        title: "Implicit Non-linear Solver: Newton-Raphson with Damping",
-        body: "At each step, the implicit algebraic equations are solved iteratively using the Newton-Raphson method:",
-        code: "x^(k+1) = x^(k) - alpha * J^(-1) * f(x^(k))",
-        list: [
-          "**Numerical Jacobian (J)**: Computed at each iteration by perturbing the state vector: J_ij = df_i/dx_j.",
-          "**Backtracking Line Search**: A damping factor alpha is dynamically scaled (halved) if a trial step increases the residual error. This prevents divergence when dealing with sharp non-linearities (such as switches or hard stops)."
-        ]
-      },
-      {
-        title: "Adaptive Step-Size & Zero-Crossing Event Detection",
-        body: "To optimize execution speed and capture events accurately, the engine utilizes adaptive time-stepping and zero-crossing monitoring:",
-        list: [
-          "**Local Truncation Error (LTE)**: The solver compares the BDF-2 solution with a candidate BDF-1 step. If the estimated LTE exceeds the tolerance, the step is rejected, the time step h is halved, and the solver retries.",
-          "**Zero-Crossing Detectors**: Blocks like switches, saturation, and hard stops define indicator functions (e.g., g(x) = v_ctrl - v_thresh). The solver checks if the indicator changes sign during a step.",
-          "**Rewind & Restart**: If an event is triggered, the solver rewinds time to the exact fraction when g(x) = 0, processes the discrete transition (e.g., switch status), and restarts integration using BDF-1 to avoid step failure."
-        ]
-      }
-    ],
-    related: ["vlab-fundamentals", "vlab-blocks-reference", "vlab-fluid-dynamics", "motor-models"]
-  },
-  "vlab-fluid-dynamics": {
-    title: "V-Lab Fluid Dynamics & Moist Air Flow",
-    category: "V-Lab (Plant Modeling)",
-    description: "Master the simulation of Gas networks and Moist Air (MA) flow systems. Learn the physical equations and how to model fluid chambers, pipes, and psychrometric properties.",
-    content: "V-Lab provides dual domains for modeling fluid dynamics: the Gas (G) domain for pure gas networks (e.g., compressed air or pneumatics) and the Moist Air (MA) domain for modeling atmospheric mixtures of dry air and water vapor. These acausal domains solve conservation of mass, energy, and moisture species, enabling high-fidelity modeling of heating, ventilation, and thermodynamic systems (such as the Air Fryer preheat or convective heat transfer).",
-    sections: [
-      {
-        title: "Gas Domain Physics",
-        body: "The Gas domain uses Pressure (P in Pascals) and Temperature (T in Kelvin) as Across variables, and Mass Flow Rate (mdot in kg/s) as the Through variable. It assumes an ideal gas model:",
-        code: "P = rho * R * T\nmdot = (P * D / (R * T)) * omega",
-        list: [
-          "**Gas Constant (R)**: Characterizes the fluid medium (default is 287 J/kg/K for air), configured in the Gas Properties block.",
-          "**Conservation of Mass**: In a constant volume gas chamber, pressure changes depend on net mass flow: dP/dt = (R * T / V) * sum(mdot_in)."
-        ]
-      },
-      {
-        title: "Moist Air Domain Physics",
-        body: "The Moist Air domain extends fluid simulation by tracking psychrometric mixtures. It tracks three across potentials at each node: Pressure (P), Temperature (T), and Humidity Ratio (H or phi, representing kg water vapor per kg dry air). The through flows are Mixture Mass Flow (mdot), Heat Flow (Q), and Water Vapor Flow (mdot_w):",
-        list: [
-          "**Mass Balance**: Total mixture mass and individual vapor mass are conserved at each node: sum(mdot) = 0 and sum(mdot_w) = 0.",
-          "**Energy Balance**: Heat flow is coupled to fluid flow: Q_in - Q_out = C_chamber * dT/dt, where the thermal capacity depends on moist air density and volume: C_chamber = rho * Cp * V.",
-          "**Moisture Tracking**: Trace moisture separator blocks remove vapor based on efficiency: mdot_w,rem = efficiency * mdot_w,in."
-        ]
-      },
-      {
-        title: "How to Use V-Lab Fluid/Flow Effectively",
-        body: "To build stable and physically correct fluid networks, follow these design rules:",
-        list: [
-          "**1. Set Properties**: Place a Gas Properties (G) or Moist Air Properties (MA) block in each independent network. This block sets the standard atmospheric constants (e.g., standard pressure P_std = 101325 Pa, standard temperature T_std = 293.15 K).",
-          "**2. Establish Potential Reference**: Every circuit must be connected to a reference node (Gas Reference or Absolute Reference (MA)). This acts as the mathematical reference (P = 0, T = 0, H = 0). Without a reference, the pressure values will float, leading to a singular Jacobian error.",
-          "**3. Use Chambers for Storage**: Connect flow paths to a Constant Volume Chamber (ma_chamber or gas_chamber) to model storage volume. Chambers provide the necessary differential states (dP/dt and dT/dt) that buffer pressures; direct connection of two flow sources will cause simulation failure.",
-          "**4. Handle Boundary Dynamics**: Use Controlled Reservoirs to set boundary pressures, and Convective Heat blocks to exchange thermal energy between the gas and pipe walls or external heating components (such as a heater element in an air fryer)."
-        ]
-      }
-    ],
-    related: ["vlab-fundamentals", "vlab-physics", "vlab-blocks-reference", "air-fryer-sysml"]
-  },
-  "vlab-blocks-reference": {
-    title: "V-Lab Block Catalog & Mathematical Reference",
-    category: "V-Lab (Plant Modeling)",
-    description: "A complete catalog of all physical and control blocks in the V-Lab library, detailing their equations, variables, and parameters.",
-    content: "This reference provides the physical governing equations and parameters for all blocks across the electrical, mechanical, thermal, magnetic, gas, moist air, and control libraries in V-Lab.",
-    sections: [
-      {
-        title: "Electrical Domain Blocks",
-        body: "Passive, active, and source blocks for electrical circuits. Connect these components by matching electrical terminal pins (V+ and V-):",
-        list: [
-          "**Resistor**: Governing equation: Vp - Vn = I * R. Models linear electrical resistance and energy dissipation. Use to limit current, model internal wire/winding losses, or form passive dividers.",
-          "**Variable Resistor**: Governing equation: Vp - Vn = I * R_ctrl, where R_ctrl >= R_min to prevent numerical division by zero. Use to model physical temperature-sensitive thermistors, sensors, or sliding potentiometers modulated by a control signal.",
-          "**Capacitor**: Governing equation: I = C * d(Vp - Vn)/dt. Models transient charge accumulation and electric field energy storage. Use to smooth DC bus ripples, filter high-frequency noise, or model thermal/leakage capacitance.",
-          "**Inductor**: Governing equation: Vp - Vn = L * dI/dt. Models magnetic field energy storage and current inertia. Use in LC filters, switching regulator models, or to represent motor windings.",
-          "**Memristor**: Governing equation: V = M(w) * I where M(w) = M0 + 10 * w and dw/dt = I. Models non-volatile memory and resistive state storage. Use to simulate resistive RAM (ReRAM) or neuromorphic synaptic components.",
-          "**Transformer**: Governing equations: V2 = N * V1 and I1 = -N * I2. Models mutual magnetic coupling between two circuits. Use to step up/down AC voltages or provide galvanic isolation between high-power and low-power circuits.",
-          "**Gyrator**: Governing equations: I1 = g * V2 and I2 = -g * V1. Converts an impedance to its dual (e.g., converts a capacitor into an inductor). Use to model active filters, transducer couplings, or non-reciprocal networks.",
-          "**Op-Amp**: Governing equation: Vout = clamp(Gain * (Vp - Vn), -Vsat, Vsat). Models operational amplifier voltage amplification with saturation clipping. Use to build active summers, integrators, amplifiers, and buffers.",
-          "**Switch**: Governing equation: V = I * R_sw, where R_sw = Ron if V_ctrl > Threshold else Roff. Models ideal gate-controlled switching. Use to build power converter topologies such as buck, boost, or inverter bridges.",
-          "**DC Voltage Source**: Governing equation: Vp - Vn = V_const. Provides a stable voltage potential. Use to represent battery cells, DC buses, or stable reference voltages.",
-          "**AC Voltage Source**: Governing equation: Vp - Vn = Vpk * sin(2*pi*f*t + pi/4) + I * R_int. Shifted by pi/4 to prevent discrete sampling phase aliasing. Use to represent grid mains or AC generator outputs with internal resistance.",
-          "**Three-Phase Source**: Governing equations: Va = Vpk * sin(w*t + pi/4), Vb = Vpk * sin(w*t - 2*pi/3 + pi/4), Vc = Vpk * sin(w*t + 2*pi/3 + pi/4). Models balanced three-phase potential. Use to feed multi-phase rectifiers and three-phase motor drives."
-        ]
-      },
-      {
-        title: "Mechanical Domain Blocks",
-        body: "Elements for modeling linear (translational) and rotational motion. Ensure torque/force variables are properly referenced:",
-        list: [
-          "**Inertia**: Governing equation: Torque = J * d(omega)/dt + B * omega. Models rotational mass and viscous damping. Use for motor rotors, gear shafts, and high-speed mechanical loads.",
-          "**Mass**: Governing equation: Force = m * dv/dt + B * v. Models translational mass inertia and viscous resistance. Use for moving pistons, linear actuators, or vehicle dynamics.",
-          "**Rotational Spring**: Governing equations: Torque = k * theta and dtheta/dt = omega_r - omega_c. Models compliance and torsional springback. Use for flexible drive shafts, couplings, or torsion bars.",
-          "**Translational Spring**: Governing equations: Force = k * (x_r - x_c) and dx/dt = v_r - v_c. Models linear stiffness. Use for mechanical suspensions, structural spring mounts, or elastic bumpers.",
-          "**Rotational Friction**: Governing equation: Torque = Ts * tanh(10 * omega) + Tv * omega. Models Coulomb and viscous friction characteristics. Use to simulate motor bearing drag or mechanical transmission losses.",
-          "**Hard Stop (Rot & Trans)**: Restricts compliance range: Force/Torque spikes dramatically using spring-damping penalty equations when position exceeds [lower, upper] boundaries. Use to model physical cylinder ends, stop-pins, or mechanical constraints.",
-          "**Gear Box**: Governing equations: omega2 = ratio * omega1 and Torque1 = ratio * Torque2. Models torque amplification and speed scaling. Use for mechanical gear reduction or matching motor output to loads.",
-          "**Lever**: Governing equations: va = -(L2/L1) * vb and Fa = (L2/L1) * Fb. Models rigid force amplification arm. Use to model brake linkages, pivots, and mechanical hand-controls."
-        ]
-      },
-      {
-        title: "Magnetic & Thermal Domain Blocks",
-        body: "Blocks coupling mechanical, electrical, magnetic, and thermal energy domains:",
-        list: [
-          "**Reluctance**: Governing equation: MMF = Phi * R. Represents magnetic resistance to flux propagation. Use for modeling core paths, transformer laminations, or variable-reluctance sensors.",
-          "**Permanent Magnet**: Governing equation: MMF = Hc * L. Constant Magnetomotive Force source. Use for permanent magnet rotors (BLDC/PMSM) or magnetic latches.",
-          "**Electromagnetic Converter**: Governing equations: V = N * dPhi/dt and MMF = N * I. Bridges electrical and magnetic networks. Use to model solenoids, relay coils, or stator winding flux coupling.",
-          "**Reluctance Force**: Governing equations: MMF = Phi * R(x) and Force = 0.5 * Phi^2 * dR/dx. Converts magnetic flux into linear mechanical pull. Use to model relays, solenoids, or magnetic actuators.",
-          "**Thermal Conduction / Convection**: Governing equations: Conduction Q = k * dT; Convection Q = h * A * dT. Models thermal energy flow. Use for heatsinks, enclosure losses, or convective air heating.",
-          "**Thermal Radiation**: Governing equation: Q = eps * sigma * A * (Ta^4 - Tb^4). Models Stefan-Boltzmann radiative transfer. Use for high-temperature radiation modeling (e.g., microwave cavities, industrial ovens).",
-          "**Thermal Mass**: Governing equation: Q = C * dT/dt. Models heat storage capacity. Use to represent heating elements, air chambers, or load items (e.g., food) in thermal networks."
-        ]
-      },
-      {
-        title: "Gas & Fluid Domain Blocks",
-        body: "Governing physics for pneumatic, psychrometric, and air flow modeling:",
-        list: [
-          "**Constant Volume Chamber (MA & Gas)**: Gas: dP/dt = (R * T / V) * sum(mdot). Moist Air: models mixture mass, vapor mass, and energy balances (Q - Q_loss = C_chamber * dT/dt). Use for pressure tanks, manifold volumes, or oven cavities.",
-          "**Flow Resistance & Restrictions**: Gas Flow: mdot = k * (Pa - Pb). Restriction: mdot = Cd * A * dP / sqrt(T). Models orifice restriction. Use for valves, exhaust ports, or flow control limits.",
-          "**Gas Pipe**: Governing equation: Delta P = R_friction * mdot where R_friction = (f * L / D) * 10. Models pipeline friction pressure drop. Use for pneumatic routing.",
-          "**Moisture Separator**: Governing equation: mdot_w,rem = efficiency * mdot_w,in. Removes water vapor. Use to model condensers or air dryers.",
-          "**Rotational & Translational Converters**: Governing equations: mdot = (P * D / (R * T)) * omega and torque = D * (Pa - Ph). Converts fluid potential to mechanical motion. Use to simulate air motors or pneumatic pistons."
-        ]
-      },
-      {
-        title: "Physical Signals (PS) & Math Block Library",
-        body: "Manipulate physical signals (causal control values) within the V-Lab diagram:",
-        list: [
-          "**PS Sources (Constant, Step, Ramp, Sine)**: Generates control signals: y = C, y = step(t), y = slope * (t - start), y = A * sin(2*pi*f*t). Use to specify setpoints, test steps, or disturbance profiles.",
-          "**PS Math Operators**: Sum (y = u1 + u2), Subtract (y = u1 - u2), Gain (y = K * u), Product (y = u1 * u2), Divide (y = u1 / u2), Abs (y = |u|). Use for basic signal arithmetic.",
-          "**PS Saturation / Dead Zone**: Saturation clips y inside [lower, upper]. Dead Zone outputs 0 if input lies inside [lower, upper]. Use to model physical limits or friction dead-bands.",
-          "**PS Integrator / Transfer Function**: Integrator: dy/dt = u. Transfer Function: T * dy/dt + y = u. Models signal dynamics. Use for sensors, lag elements, or custom controller filters.",
-          "**PS Lookup Table (1D)**: Interpolates y = f(x). Use for empirical data, motor maps, or calibration curves.",
-          "**PS RMS Estimator**: Computes sliding RMS: y = sqrt(avg(u^2)). Use for measuring AC signal magnitudes."
-        ]
-      },
-      {
-        title: "Control Systems Library Blocks",
-        body: "Common control and signal processing blocks used for closed-loop regulation:",
-        list: [
-          "**Discrete PI / PID Controllers**: Governing equation: u = Kp * e + Ki * integral(e) + Kd * deriv, with anti-windup clamping to prevent integrator saturation. Use to control motor speed, voltage outputs, or heating levels.",
-          "**Low-Pass Filter (LPF)**: Discrete lag: y_k = alpha * u_k + (1 - alpha) * y_{k-1} where alpha = dt / (T + dt). Use to suppress high-frequency noise from sensors (e.g., ADCs).",
-          "**Clarke & Park Transforms**: Clarke: abc to alpha-beta-0. Park: alpha-beta to dq. Use for Field-Oriented Control (FOC) motor vector control.",
-          "**Motor Drives (DC & BLDC)**: Regulates motor phase currents using discrete PI speed loops and six-step Hall commutation. Use for low-voltage brushless drives.",
-          "**PMSM Control & MTPA**: Speed-torque control for Permanent Magnet Synchronous Motors using Maximum Torque Per Ampere (MTPA) vector mapping. Use for high-efficiency electric vehicle powertrains.",
-          "**Induction Motor (AC) Control**: Implements V/f scalar speed control or high-performance Direct Torque Control (DTC). Use for heavy industrial fan, pump, and conveyor controllers.",
-          "**Observers**: Luenberger Observer: dx_hat/dt = A * x_hat + u + L * (y - C * x_hat) and Rotor Flux Observer. Use to estimate internal states that cannot be physically measured (e.g., rotor flux angle)."
-        ]
-      },
-      {
-        title: "Advanced Special Components & AI Blocks",
-        body: "Pedagogical system demonstrators and online learning models:",
-        list: [
-          "**Washing Machine Drum & Fluid Slosh**: Basket inertia J = J_basket + (load_mass + unbalance) * radius^2. Sloshing torque: Torque = drag_coeff * (water_level/10) * omega^2. Use to simulate imbalance dynamics and vibration control.",
-          "**Microwave Magnetron & Inverter**: Inverter: V_hv = V_ac * (v_out / v_in) * V_ctrl. Magnetron: Q_heat = V * I * efficiency. Use to model microwave high-voltage drive and heating output.",
-          "**Microwave Cavity**: Governing equation: d(Temp)/dt = (Q_in - Q_loss) / (volume * Cp). Models oven cavity thermal characteristics. Use for cooking simulation.",
-          "**LMS Adaptive Filter**: 2-tap online LMS filter: dw1/dt = lr * error * x, dw2/dt = lr * error * x_prev. Use for active noise cancellation or online system identification (requires dt < 2 / (R * lr) for stability).",
-          "**Online Neural Neuron**: Single-neuron gradient descent: dw_i/dt = lr * error * (1 - y^2) * x_i. Use to teach backpropagation concepts and fit basic curves online.",
-          "**Reinforcement Learning (Q-learning)**: Online Q-table agent: Q(s, a) += alpha * (reward + gamma * max_q(s') - Q(s, a)). Use for adaptive decision-making control under high plant model uncertainty (requires slower sampling times, e.g., 20ms to 100ms)."
-        ]
-      }
-    ],
-    related: ["vlab-fundamentals", "vlab-physics", "vlab-fluid-dynamics", "motor-models"]
-  },
-  "motor-models": {
-    title: "Electric Machine Reference",
-    category: "V-Lab (Plant Modeling)",
-    description: "Detailed documentation for AC, DC, and BLDC machine models.",
-    content: "ADIA includes high-fidelity machine models with parameterization for industrial applications.",
-    sections: [
-      {
-        title: "Induction Motor (AC Motor)",
-        body: "Models a 3-phase squirrel-cage motor. Inputs are A-B-C phases; output is a rotational mechanical port.",
-        code: "Vs = Rs*Is + d(Psi_s)/dt"
-      },
-      {
-        title: "BLDC Motor",
-        body: "Models a brushless DC motor with trapezoidal back-EMF. Requires a commutation controller.",
-        code: "Te = sum(E_i * I_i) / omega"
-      }
-    ],
-    related: ["vfd-control", "vlab-physics"]
-  },
-  "vfd-control": {
-    title: "VFD & Control Systems",
-    category: "Control Systems",
-    description: "Control strategies for motor drives and power converters.",
-    content: "Design and test control loops for industrial drives using X-Bridges and V-Lab.",
-    sections: [
-      {
-        title: "Field Oriented Control (FOC)",
-        body: "Uses Clarke and Park transforms to control torque and flux independently.",
-        list: [
-          "**Clarke Transform**: abc to alpha-beta.",
-          "**Park Transform**: alpha-beta to dq.",
-          "**DQ Controllers**: PI regulators for current loops."
-        ]
-      }
-    ],
-    related: ["motor-models", "xbridges-ref"]
-  },
-  "xbridges-ref": {
-    title: "X-Bridges Signal-Flow & Solver Reference",
-    category: "Control Systems",
-    description: "Causal signal-flow model design, continuous & discrete solver integration, and advanced control blocks library.",
-    content: "X-Bridges is the primary signal-flow modeling and simulation environment in ADIA. Unlike V-Lab's physical, acausal networks (where energy flows dynamically based on conservation laws), X-Bridges is a causal (directed signal) block-diagram simulator. Each block receives explicit input values, computes equations, and drives output signals. The X-Bridges engine compiles diagrams by sorting blocks topologically and solves continuous and discrete equations in real time.",
-    sections: [
-      {
-        title: "Module Architecture & Compilation",
-        body: "Signals flow along directed links from output ports to input ports. Before simulating, the compiler flattens subsystems and constructs an execution list using Kahn's topological sorting algorithm:",
-        list: [
-          "**Topological Sorting**: Kahn's algorithm resolves dependent computations. Stateful blocks (e.g., Integrators, Unit Delays) act as boundaries to break algebraic dependencies.",
-          "**Signal Type Mismatch (Warning)**: The compiler warns if incompatible ports (e.g., power vs. logical, matrix vs. continuous) are directly connected.",
-          "**Algebraic Loops (Error)**: A cyclic dependency without a stateful block to break it prevents execution ordering. Introduce a Unit Delay or Integrator to break the loop.",
-          "**Closed-Loop Co-Simulation**: Seamlessly integrates with Stateflow (via X-Bridges States running models during `during` steps) and V-Lab (driving actuators and reading plant sensors)."
-        ]
-      },
-      {
-        title: "Continuous and Discrete Solvers",
-        body: "X-Bridges uses fixed-step integration methods to simulate continuous states, alongside a discrete state updating loop:",
-        list: [
-          "**Euler Integration (ODE1)**: A first-order explicit integration method: x(t + dt) = x(t) + dt * dx/dt. It provides high execution speed but can become unstable for stiff systems.",
-          "**Runge-Kutta 4th Order (ODE4/RK4)**: A high-precision four-step numerical integrator. Computes four slope estimates (k1, k2, k3, k4) per time step to minimize local truncation error.",
-          "**Discrete State Updating**: Non-continuous block states (like D flip-flops, registers, counters, delays) are evaluated once per simulation step inside the discrete execution loop."
-        ]
-      },
-      {
-        title: "Advanced Model Predictive Control (MPC) Solver",
-        body: "The MPC Controller block uses an online solver to compute optimal control inputs in real-time:",
-        code: "U(k+1) = Y(k) - (1/L) * (H * Y(k) + f)\nY(k) = U(k) + ((t-1)/(t_next)) * (U(k) - U(k-1))",
-        list: [
-          "**Predictive Optimization**: Formulates predictions using discrete state-space matrices (A, B, C, D) to compute output trajectories over prediction horizon Np and control horizon Nc.",
-          "**Fast Gradient Method (FGM)**: Employs a real-time iterative optimization loop (typically 20 iterations) to solve the quadratic cost minimization problem with state weighting Q and input effort weighting R.",
-          "**Physical Constraints**: Projects/clamps candidate inputs U at each iteration to satisfy physical safety bounds [u_min, u_max] configured in the block parameters."
-        ]
-      },
-      {
-        title: "Core Control & Modulation Blocks",
-        body: "Industrial feedback loop and inverter modulation components:",
-        list: [
-          "**PI/PID Controllers**: Basic and advanced controllers with anti-windup clamping to prevent integrator saturation, and derivative filtering.",
-          "**Space Vector PWM (SVPWM)**: Integrates SVPWM Core, Sector Selector, and Switching Time Calculators to generate optimized duty cycles and gate drive signals.",
-          "**Reference Frame Transforms**: Clarke (abc to alpha-beta), Park (alpha-beta to dq), and their inverse transforms to map three-phase physical variables to rotating d-q coordinates."
-        ]
-      },
-      {
-        title: "Motor Control & Torque Optimization Blocks",
-        body: "High-performance motor drive and efficiency management algorithms:",
-        list: [
-          "**Induction Motor Scalar & FOC**: Implements speed/current regulation and Field-Oriented Control (FOC) for three-phase AC induction motors.",
-          "**Torque Maximization (MTPA)**: Maximum Torque Per Ampere speed-torque trajectory managers to maximize stator current efficiency.",
-          "**Field Weakening**: Decreases flux current (id) at high speeds to keep stator voltage within inverter voltage bounds (vMax).",
-          "**Flux & Position Observers**: Luenberger flux observers and rotor position/speed estimators."
-        ]
-      },
-      {
-        title: "Machine Learning & Adaptive Blocks",
-        body: "Pedagogical and intelligent learning systems with online adaptation. The choice of sampling rate (dt) is critical to prevent weight divergence or poor convergence:",
-        list: [
-          "**LMS Adaptive Filter**: 2-tap Least Mean Squares filter that updates weights dynamically online. Suggested sampling rate: 100 Hz to 1 kHz (dt = 1ms to 10ms).",
-          "**Neural Neuron Learner**: Online gradient descent neuron using tanh activation and backpropagation to learn weights and bias. Suggested sampling rate: 50 Hz to 500 Hz (dt = 2ms to 20ms).",
-          "**RL Q-Learning Controller**: Discrete Q-table update agent with epsilon-greedy exploration. Suggested sampling rate: 10 Hz to 50 Hz (dt = 20ms to 100ms). Too high of a frequency results in poor credit assignment."
-        ]
-      },
-      {
-        title: "Core Math & Sequential Library",
-        body: "Standard signal-routing and mathematical components:",
-        list: [
-          "**Bitwise & Logic Gates**: Boolean (AND, OR, NOT, NAND, NOR, XOR) and Bitwise operations.",
-          "**Reductions & Linear Algebra**: Matrix multiplication, matrix transpose, determinant, matrix inversion, and vector/array reductions (Sum, Mean, Max).",
-          "**Sequential Elements**: D Flip-Flop, JK Flip-Flop, Counters, Registers, and unit delays."
-        ]
-      }
-    ],
-    related: ["vfd-control", "code-generation", "motor-models"]
-  },
-  "doe-discovery": {
-    title: "DOE & AI Model Discovery",
-    category: "DOE & Analysis",
-    description: "Advanced system identification and statistical analysis.",
-    content: "The DOE module automates the process of characterizing complex systems.",
-    image: adia_doe_analysis,
-    sections: [
-      {
-        title: "GMDH Neural Networks",
-        body: "Group Method of Data Handling for inductive model generation.",
-        code: "y = a + b*x1 + c*x2 + d*x1*x2 + ..."
-      },
-      {
-        title: "Sampling Methods",
-        body: "Full Factorial, Latin Hypercube (LHS), and Taguchi designs."
-      }
-    ],
-    related: ["getting-started", "reporting"]
-  },
-  "code-generation": {
-    title: "Embedded C Code Generation",
-    category: "Software Engineering",
-    description: "Export validated state-machine designs to deterministic C99 for MCU integration.",
-    content: "ADIA generates C99 from one validated semantic model. Generated reports identify exactly which structural, semantic, host, differential, embedded, and target-hardware checks were run; they do not claim MISRA compliance or safety certification.",
-    sections: [
-      {
-        title: "Model Migration & Semantic Validation",
-        body: "Older project schemas are migrated before analysis, simulation, or code generation. Migration warnings describe deterministic compatibility choices; ambiguous OR/AND decomposition, invalid hierarchy, unsupported expressions, and other errors block generation instead of being guessed."
-      },
-      {
-        title: "Runtime Integration Contract",
-        body: "Integrate the generated lifecycle in the fixed scheduler order `SM_ReadInputs(&instance)` -> `SM_Step(&instance, delta_ms)` -> `SM_WriteOutputs(&instance)`. Only variables explicitly connected in the HIL Signal Mapper are read from or written to MCAL channels."
-      },
-      {
-        title: "Verification Evidence Labels",
-        body: "Structural PASS means the model and generated structure passed automated checks. Semantic PASS means generation consumed validated IR. Host compilation/runtime and differential PASS apply only when those gates were run. Embedded compilation NOT RUN and Target hardware PENDING mean those activities still belong to the MCU integration and validation team."
-      }
-    ],
-    related: ["getting-started", "industrial-automation"]
-  },
-  "industrial-automation": {
-    title: "Factory I/O & Automation",
-    category: "Industrial Integration",
-    description: "Connecting virtual models to real-time industrial 3D simulators.",
-    content: "Synchronize ADIA variables with Factory I/O for full system HIL/SIL testing.",
-    sections: [
-      {
-        title: "Automation Gateway",
-        body: "Handles TCP/UDP communication between ADIA and external simulations."
-      }
-    ],
-    related: ["getting-started", "code-generation"]
-  },
-  "learning-labs": {
-    title: "Tutorials & Examples",
-    category: "Tutorials",
-    description: "Hands-on projects to master the ADIA suite.",
-    content: "Detailed walkthroughs of pre-built learning labs.",
-    sections: [
-      {
-        title: "Air Fryer System",
-        body: "Coupled thermal, electrical, and pneumatic modeling."
-      },
-      {
-        title: "VFD Drive Control",
-        body: "Implementing FOC for an induction motor."
-      },
-      {
-        title: "Differential Drive LiDAR Robot Vacuum Twin",
-        body: "A complete, modular co-simulation of a differential-drive robot vacuum. The system is split into 9 separate connected blocks (similar to Simulink): \n1. **Robot Vacuum Navigation**: Selects targets, executes waypoints, and reacts to obstacles.\n2. **Inverse Kinematics**: Translates linear/angular reference velocities to wheel speed references.\n3. **Wheel Speed PI**: Implements closed-loop speed control for left/right motors.\n4. **Robot Vacuum Motor**: Simulates the DC motor armature winding and rotor inertia (instantiated twice: Left and Right).\n5. **Robot Dynamics (Plant)**: Computes 3DoF continuous chassis kinematics: dX/dt = V * cos(θ), dY/dt = V * sin(θ), dθ/dt = ω.\n6. **Simulation Environment (Canvas)**: Models the physical room boundary walls, 3 circle obstacles, and 2 box obstacles, calculates mathematically precise 8-beam LiDAR raycasting, checks for physical collisions (within 15cm radius), and renders the live visual digital twin.\n7. **Odometry**: Tracks encoder counts to estimate raw robot coordinates.\n8. **Sensor Fusion**: Implements a complementary filter to correct odometry drift with true references.\n9. **SLAM Map**: Integrates LiDAR range vectors to build a 2D occupancy grid."
-      }
-    ],
-    related: ["vlab-fundamentals", "vfd-control", "robot-vacuum-digital-twin"]
-  },
-  "robot-vacuum-digital-twin": {
-    title: "LiDAR Robot Vacuum Digital Twin Reference",
-    category: "Tutorials",
-    description: "Comprehensive subsystem reference and mathematical models for the modular differential-drive robot vacuum.",
-    content: "The LiDAR Robot Vacuum Digital Twin is a modular signal-flow co-simulation demonstrating feedback control, motor dynamics, dead reckoning, sensor fusion, and occupancy grid SLAM mapping.",
-    sections: [
-      {
-        title: "1. Block Diagram Architecture",
-        body: "Unlike standard black-box simulations, the digital twin is fully transparent, consisting of separate blocks connected in a feedback loop:\n- **Navigation Planner** -> **Inverse Kinematics** -> **Wheel speed PID** -> **Left/Right Motor Plants** -> **Robot Dynamics (Plant)** -> **Simulation Environment (Canvas)** -> **Encoder Odometry** -> **Sensor Fusion Filter** -> **SLAM Map Builder**."
-      },
-      {
-        title: "2. Physical Dynamics & Motors",
-        body: "The **Robot Dynamics (Plant)** block solves continuous equations representing 3DoF chassis kinematics: dX/dt = V * cos(θ), dY/dt = V * sin(θ), dθ/dt = ω. The motor blocks simulate DC winding inductance L_m and resistance R_m: di/dt = (V_in - R_m * i - K_e * ω_wheel) / L_m, and rotor acceleration: dω/dt = (K_t * i - damping * ω) / J."
-      },
-      {
-        title: "3. Spatial Simulation Environment",
-        body: "The **Simulation Environment (Canvas)** block models the physical space containing 3 circle obstacles and 2 box obstacles within a 5.7m x 5.7m room. It performs mathematically rigorous 2D intersection calculations to simulate 8 LiDAR distance sensors raycasting outward from the robot chassis. It also checks if the robot's physical boundary (15cm radius) intersects with any walls or obstacles, generating a binary `collision` signal and incrementing the total collision count."
-      },
-      {
-        title: "4. Odometry, Fusion & SLAM",
-        body: "The **Odometry** block integrates encoder pulses, which simulates slippage and drift. The **Sensor Fusion** block applies a complementary filter (gain = 0.06) to drift-correct the estimate towards the true position. The **SLAM** block projects the 8 raycasted LiDAR ranges from the estimated pose to update a 30x30 occupancy probability grid."
-      }
-    ],
-    related: ["learning-labs", "xbridges-ref"]
-  },
+
   "state-machine-fundamentals": {
     title: "State Machine (Stateflow) Fundamentals",
     category: "Stateflow (State Machine)",
-    description: "Learn the core elements of hierarchical state machines, entry/during/exit actions, and execution rules in ADIA.",
-    content: "A State Machine (Stateflow) is used to design reactive systems that transition between discrete states (or modes of operation) based on input events or logical conditions. In ADIA, state machine logic coordinates control algorithms, manages safety limits, and schedules sequential processes.",
+    description: "Build deterministic, hierarchical, and parallel state machines with entry/during/exit actions, orthogonal regions, and variable management.",
+    content: "The ADIA Stateflow module implements hierarchical finite state machines (Statecharts). It is designed to model reactive event-driven supervisory logic, mode managers, and sequential control algorithms that seamlessly integrate with continuous physical plants.",
     image: state_machine_guide_diagram,
     sections: [
       {
-        title: "Anatomy of a State",
-        body: "States define a specific behavior or mode of the system (e.g., Idle, Running, Fault). While a state is active, it runs its associated actions. States can have three types of action blocks:",
+        title: "Anatomy of a State & Action Blocks",
+        body: "A State represents an operating condition or operational mode (e.g., `Idle`, `Preheating`, `Cooking`, `Fault`). To add and configure a state:\n\n1. Click **+ Add State** on the Stateflow toolbar, or drag a state box onto the canvas.\n2. Double-click the state header to set its name.\n3. Click inside the state body or open the right sidebar to configure its three lifecycle action blocks:\n\n```\n┌────────────────────────────────────────┐\n│               Preheating               │\n├────────────────────────────────────────┤\n│  entry:                                │\n│    heaterPower = 100;                  │\n│    fanSpeed = 80;                      │\n│  during:                               │\n│    heatTimer = heatTimer + 1;          │\n│    error = targetTemp - currentTemp;   │\n│  exit:                                 │\n│    heaterPower = 0;                    │\n└────────────────────────────────────────┘\n```",
         list: [
-          "**Entry Action (entry: <statement>;)**: Executed once when the state becomes active.",
-          "**During Action (during: <statement>;)**: Executed on every simulation tick while the state remains active.",
-          "**Exit Action (exit: <statement>;)**: Executed once when the state is transitioned out of."
+          "**Entry Action (`entry: <statement>;`)**: Executes exactly once on the simulation step when the state is entered.",
+          "**During Action (`during: <statement>;`)**: Executes on every simulation tick as long as the state remains active and no outgoing transition fires.",
+          "**Exit Action (`exit: <statement>;`)**: Executes exactly once when the state is exited before entering the destination state."
         ]
       },
       {
-        title: "Hierarchical & Parallel States",
-        body: "Every layer has explicit decomposition. OR layers keep exactly one active child; AND layers activate and schedule every orthogonal region in deterministic order:",
+        title: "Hierarchical (Nested) & Parallel (Orthogonal) Decomposition",
+        body: "Stateflow supports structured nested states and multi-threaded parallel state logic:\n\n1. **Hierarchical (Nested) States**: Drag sub-states inside a parent state container. Entering the parent state automatically activates its child **Autostart** state. If an outer transition leaves the parent, all active child states execute their `exit` actions recursively.\n2. **Decomposition Modes (OR vs. AND)**:\n   - **OR Decomposition (Exclusive)**: Exactly one child state can be active at any given time.\n   - **AND Decomposition (Parallel/Orthogonal)**: Sub-regions are separated by dashed boundary lines. Every orthogonal region is active concurrently and scheduled in deterministic priority order (Region 1, Region 2, Region 3)."
+      },
+      {
+        title: "Special State Properties & Controls",
+        body: "Select any state on the canvas to toggle these specialized properties in the sidebar panel:",
         list: [
-          "**Hierarchical (Nested) States**: A parent state can enclose sub-states. Entering a parent state enters its autostart sub-state. If an outer transition fires, all child states exit recursively.",
-          "**Parallel (Orthogonal) States**: Multiple states can be active simultaneously in different regions, allowing parallel execution of concurrent tasks."
+          "**Autostart State (Initial)**: Click the **Set Initial** toggle to designate the default state entered when the chart or parent layer activates.",
+          "**Safe State (`isSafeState: true`)**: Designates an emergency fallback state. If any runtime exception (e.g., division by zero, invalid sensor read) occurs in any action, the simulator immediately halts normal execution and redirects safely into this state.",
+          "**X-Bridges State (`isXBridges: true`)**: Embeds a continuous signal-flow block diagram model inside the state. When active, the sub-diagram executes during the state's `during` phase for hybrid control.",
+          "**Terminal State (Quiescent)**: Designates a final state. Once entered, the state remains active indefinitely, executes no `during` actions, and generates no implicit resets."
+        ]
+      },
+      {
+        title: "Variables Manager (Inputs, Outputs & Locals)",
+        body: "Click the **Variables** button in the left sidebar to manage the state machine's context memory table:\n\n1. Click **+ Add Variable**.\n2. Specify the **Name**, **Data Type** (`bool`, `int`, `float`, `enum`), **Initial Value**, and **Scope**:\n   - **Input (Read-Only)**: Read from physical sensors, V-Lab plant signals, X-Bridges controllers, or HIL hardware pins.\n   - **Output (Write-Only)**: Drives physical actuators, PWM channels, indicator LEDs, or plant inputs.\n   - **Local (Read/Write)**: Internal state machine variables used for counters, elapsed timers, and intermediate calculations."
+      }
+    ],
+    related: ["state-machine-transitions", "state-machine-simulation", "state-machine-tutorial", "code-generation"]
+  },
+
+  "state-machine-transitions": {
+    title: "Transitions, Triggers & Junctions",
+    category: "Stateflow (State Machine)",
+    description: "Master transition syntax, condition guards, temporal logic after(N), execution priorities, connective junctions, and history junctions.",
+    content: "Transitions are directed paths that define how and when the system moves from an active state to a new state or decision junction.",
+    sections: [
+      {
+        title: "Transition Syntax & Configuration",
+        body: "To create a transition, hover over the border of a source state, click on the **Port Anchor**, and drag an arrow to the target state or junction. Click the transition label on the canvas to edit its standard syntax:\n\n```\nTrigger [Condition] / Action\n```\n*Example*: `after(50) [tempSensor > 180 && doorClosed == true] / alarmBeep = 1; fanSpeed = 100;`",
+        list: [
+          "**Trigger**: An event name or temporal logic operator (e.g., `after(50)`, `btnPressEvent`).",
+          "**Condition (Guard)**: A Boolean expression enclosed in square brackets `[ ... ]`. The transition will only fire if this expression evaluates to `true`.",
+          "**Action**: Imperative assignment statements written after a forward slash `/`. Executes instantaneously when the transition fires."
+        ]
+      },
+      {
+        title: "Temporal Logic Operators: after(N) & every(N)",
+        body: "ADIA provides built-in temporal operators that monitor time spent inside the source state without requiring manual timers:\n\n1. **`after(N)`**: Evaluates to `true` once the source state has been continuously active for at least `N` simulation ticks (where `1 tick = tickMs` milliseconds). Example: `after(100)` at a 10ms tick rate creates an exact 1.0-second delay.\n2. **`every(N)`**: Fires periodically on every $N$-th tick while remaining in the state.",
+        code: "after(50) [batteryLevel < 20] / lowBatteryWarning = true;"
+      },
+      {
+        title: "Deterministic Execution Priorities (1..N)",
+        body: "When multiple transitions depart from the same state, ADIA guarantees deterministic behavior by assigning an explicit integer priority to each transition:\n\n1. Click on a transition to open its properties in the right sidebar.\n2. Set the **Priority** number (e.g. `1`, `2`, `3`).\n3. The simulator evaluates outgoing transitions in ascending priority order. The first transition whose guard evaluates to `true` immediately fires; subsequent transitions are ignored for that step.",
+        list: [
+          "**Priority 1**: Reserved for emergency safety interlocks and fault escapes.",
+          "**Priority 2+**: Sequential normal operation branches."
         ]
       },
       {
         title: "Connective & History Junctions",
-        body: "Junctions are decision nodes that route transitions dynamically without creating persistent states:",
-        list: [
-          "**Connective Junction**: A node to branch paths. It evaluates conditions and executes target actions instantaneously.",
-          "**Shallow History Junction (H)**: Remembers the last active child state at its current hierarchical level when the parent state is exited, resuming it upon re-entry.",
-          "**Deep History Junction (H*)**: Recursively remembers and restores the active states at all descendant levels of the hierarchy."
-        ]
+        body: "Junctions act as dynamic decision nodes that route execution without creating persistent states:\n\n1. Click **+ Add Junction** on the toolbar and select the type:\n   - **Connective Junction (Circle Node)**: Used to build multi-way branch decisions (if/else if/else). Evaluated instantaneously in zero simulation time.\n   - **Shallow History Junction (H)**: Placed inside a parent state. When the parent state is re-entered, it restores the exact child state that was active when previously exited.\n   - **Deep History Junction (H*)**: Recursively restores active states at all descendant sub-levels of the hierarchy."
       },
       {
-        title: "Terminal State Semantics",
-        body: "A terminal state is quiescent: after entry it remains active, does not execute `during` or internal transitions, and never resets the chart implicitly. In an AND layer, a terminal region remains quiescent while sibling regions continue. Call `SM_Reset` explicitly when the application requires a new run."
-      },
-      {
-        title: "State Machine Variables",
-        body: "Variables store the state machine's context. They can be defined as:",
-        list: [
-          "**Inputs (Read-Only)**: Linked to X-Bridges or V-Lab sensors to control transition logic.",
-          "**Outputs (Write-Only)**: Drive physical outputs (actuators, HIL pins, display values).",
-          "**Local (Read/Write)**: Internal variables for counters, timers, and intermediate calculations."
-        ]
+        title: "Internal State Transitions",
+        body: "Internal transitions execute actions while keeping the state active, without triggering the state's `exit` or `entry` actions:\n1. Select a state on the canvas.\n2. In the sidebar, click **+ Add Internal Transition**.\n3. Format as `[Condition] / Action`. Example: `[tickCount > 10] / tickCount = 0; pingHeartbeat();`."
       }
     ],
-    related: ["state-machine-transitions", "state-machine-simulation", "code-generation"]
+    related: ["state-machine-fundamentals", "state-machine-simulation", "code-generation"]
   },
-  "state-machine-transitions": {
-    title: "Transitions & Trigger Rules",
-    category: "Stateflow (State Machine)",
-    description: "Master transition guards, temporal operators, execution priorities, and internal state loops.",
-    content: "Transitions are directed lines connecting a source state to a target state (or junction). They define the path of execution through the model when triggers or conditions are met.",
-    sections: [
-      {
-        title: "Transition Labels Syntax",
-        body: "Transition labels format: `Trigger [Condition] / Action`. All parts are optional. The simulator parses these segments as follows:",
-        list: [
-          "**Trigger**: An event or temporal logic expression (e.g., `after(50)`).",
-          "**Condition (Guard)**: A Boolean expression enclosed in brackets (e.g., `[temperature > 200]`). Must evaluate to true for the transition to fire.",
-          "**Action**: Action code executed when the transition fires, written after a slash (e.g., `/ fanSpeed = 100;`)."
-        ]
-      },
-      {
-        title: "Temporal Logic: after(N)",
-        body: "Temporal triggers track state duration in simulation ticks. The operator `after(N)` returns true if the source state has been active for at least `N` ticks (where `1 tick = tickMs` milliseconds). This is ideal for timeout limits, delays, and state scheduling.",
-        code: "after(50) [btnPressed == true] / counter = 0;"
-      },
-      {
-        title: "Transition Execution Order",
-        body: "Multiple transitions can depart from a single state. To ensure deterministic behavior, each transition has a unique execution order (priority, e.g., 1, 2, 3). The simulator evaluates transitions in order, and the first valid transition fires, ignoring the rest.",
-        list: [
-          "**Priority 1**: Evaluated first. Usually reserved for safety overrides or high-priority interrupts.",
-          "**Priority 2+**: Evaluated sequentially if preceding conditions are false."
-        ]
-      },
-      {
-        title: "Internal Transitions",
-        body: "Internal transitions are evaluated while remaining inside a state. They execute actions without triggers, entry/exit executions, or changing the active state. Formatted as `[Condition] / Action` in the internal transitions property of a state.",
-        code: "[tickCount > 10] / tickCount = 0; logStatus();"
-      }
-    ],
-    related: ["state-machine-fundamentals", "state-machine-simulation", "vfd-control"]
-  },
+
   "state-machine-simulation": {
-    title: "Simulator Execution & Solvers",
+    title: "Stateflow Simulation & Execution Solvers",
     category: "Stateflow (State Machine)",
-    description: "Learn how the simulation loop evaluates state machine actions, updates variables, and integrates with other domains.",
-    content: "The ADIA State Machine Simulator runs on a deterministic fixed-step execution loop. In each step (tick), the simulator evaluates active states, processes incoming and outgoing signals, and updates the physical plant.",
+    description: "Run live deterministic simulations, monitor state activations, inspect variables, co-simulate with X-Bridges and V-Lab, and verify scheduler contracts.",
+    content: "The ADIA State Machine Simulator runs on a deterministic fixed-step execution engine that coordinates state updates, signal routing, and physical plant solvers.",
     image: state_machine_simulation_diagram,
     sections: [
       {
-        title: "The Step Execution Loop",
-        body: "At each simulation step (tick), the engine performs these operations in order:",
+        title: "Top Simulation Controls & Toolbar",
+        body: "Control simulation execution using the dedicated top playback toolbar:\n\n```\n[ ▶ Start ]   [ ❚❚ Pause ]   [ ⏭ Step (1 Tick) ]   [ ↺ Reset ]   [ Speed: 100ms ──────●── ]\n```",
         list: [
-          "**1. Synchronize Inputs**: Read the latest variables from Factory I/O, V-Lab, or X-Bridges.",
-          "**2. Increment State Timers**: Add 1 tick to the active timers of all currently active states.",
-          "**3. Evaluate Transitions**: Check outgoing transitions from active states in priority order. If a transition fires: (a) Execute source state's `exit` action, (b) Execute transition action, (c) Enter target state and execute its `entry` action.",
-          "**4. Execute During Actions**: If no transitions fire, execute the `during` action of the active state.",
-          "**5. Process Internal Transitions**: Check and execute any valid internal state transitions.",
-          "**6. Synchronize Outputs**: Write updated variable values back to drivers, X-Bridges, and V-Lab."
+          "**Start (Play Icon)**: Starts continuous real-time simulation at the configured tick rate.",
+          "**Pause (Pause Icon)**: Freezes execution to inspect active states and variable values.",
+          "**Step (Step Icon)**: Advances the simulation by exactly one single clock tick ($1\\Delta t$).",
+          "**Reset (Reset Icon)**: Restores all variables to default initial values and returns the state machine to initial autostart states.",
+          "**Tick Rate Slider**: Adjust simulation step time dynamically from 1ms up to 1000ms."
         ]
       },
       {
-        title: "Generated MCU Scheduler",
-        body: "The generated MCU contract is explicit and matches simulation boundaries: call `SM_ReadInputs`, then `SM_Step`, then `SM_WriteOutputs`. Do not call the combined synchronization helper around `SM_Step`, because outputs must be committed only after the step succeeds."
+        title: "The 6-Phase Simulation Execution Step Loop",
+        body: "At every simulation step (tick), the engine executes the following fixed sequence:\n\n1. **Synchronize Inputs**: Sample external input values from Factory I/O, V-Lab sensors, X-Bridges outputs, and HIL hardware pins.\n2. **Increment Timers**: Advance active state duration timers by 1 tick (evaluating `after(N)`).\n3. **Evaluate Transitions**: Check outgoing transitions from active states in priority order. If valid: (a) Execute source state `exit` action, (b) Execute transition `/ action`, (c) Activate target state and execute its `entry` action.\n4. **Execute During Actions**: If no transition fires, execute the `during` action of all currently active states.\n5. **Process Internal Transitions**: Check and execute any valid internal state transitions.\n6. **Synchronize Outputs**: Write updated output variables to physical plant actuators, scopes, and HIL MCU output pins."
       },
       {
-        title: "Safe States & Error Catching",
-        body: "If a runtime error occurs during action evaluation (such as a variable reference error or mathematical division by zero), the simulator immediately logs an error message. If a state has the `isSafeState` flag enabled, the simulation automatically redirects to this state to halt the process safely."
+        title: "Live Visual State Inspection & Breakpoints",
+        body: "During active simulation:\n- Currently active states glow with an animated orange/emerald border.\n- The **Variables Table** on the left displays live real-time values, color-coded by variable type.\n- You can manually override any input variable value in real-time to test edge cases."
       },
       {
-        title: "X-Bridges State Integration",
-        body: "A state in ADIA can be designated as an **X-Bridges State** (`isXBridges: true`). When active, this state executes a local block diagram model (a signal flow model) during its `during` phase, enabling hybrid co-simulation of state logic and feedback loop controls."
-      },
-      {
-        title: "Hardware-in-the-Loop (HIL) Binding",
-        body: "Variables reach hardware only through explicit HIL Signal Mapper entries. Names such as `sensor_x`, `x`, or `led_out` do not create implicit driver access. Read mappings sample physical inputs before the step; write mappings commit outputs after a successful step."
+        title: "MCU Scheduler Integration Contract",
+        body: "When exporting to embedded C99 firmware, the generated scheduler strictly replicates the simulation step loop:\n\n```c\n/* Deterministic Embedded Execution Contract */\nSM_ReadInputs(&instance);    /* 1. Sample ADC / GPIO / MCAL channels */\nSM_Step(&instance, 10U);     /* 2. Advance state logic by 10ms */\nSM_WriteOutputs(&instance);  /* 3. Commit PWM / DAC / Actuator commands */\n```"
       }
     ],
-    related: ["state-machine-fundamentals", "state-machine-transitions", "learning-labs"]
+    related: ["state-machine-fundamentals", "state-machine-transitions", "hil-fundamentals", "code-generation"]
   },
+
   "state-machine-tutorial": {
-    title: "Tutorial: Building a Timer Switch",
+    title: "Tutorial: Building a Smart Timer Switch",
     category: "Stateflow (State Machine)",
-    description: "A step-by-step tutorial to create a smart push-button light switch that turns off automatically after 5 seconds.",
-    content: "This hands-on guide will take you through creating a simple state machine with variables, transitions, actions, and temporal logic.",
+    description: "Step-by-step hands-on guide to create a push-button smart light switch that automatically powers off after 5 seconds.",
+    content: "This tutorial takes you through creating states, variables, transitions, temporal logic triggers, and verifying execution in the simulator.",
     sections: [
       {
-        title: "Step 1: Set Up Variables",
-        body: "Open the Variables workspace on the left and create the following variables:",
-        list: [
-          "**btnPress** (Type: `bool`, Initial: `false`) - Simulation button input.",
-          "**lightMode** (Type: `int`, Initial: `0`) - Output mode (0 = Off, 1 = On).",
-          "**counter** (Type: `int`, Initial: `0`) - Internal tick counter."
-        ]
+        title: "Step 1: Create Variables",
+        body: "1. Open the **Variables** panel on the left sidebar.\n2. Click **+ Add Variable** three times and create:\n   - `btnPress` (Type: `bool`, Initial: `false`, Scope: `Input`)\n   - `lightState` (Type: `int`, Initial: `0`, Scope: `Output`)\n   - `onCounter` (Type: `int`, Initial: `0`, Scope: `Local`)"
       },
       {
-        title: "Step 2: Create the States",
-        body: "Drag two states onto the workspace:",
-        list: [
-          "**State 1**: Name it `Off`. Set its actions:\n`entry: lightMode = 0;`",
-          "**State 2**: Name it `On`. Set its actions:\n`entry: lightMode = 1;`"
-        ]
+        title: "Step 2: Add States",
+        body: "1. Click **+ Add State** on the toolbar and name it `Off`.\n   - Set `entry: lightState = 0;`\n   - Click **Set Initial** to make `Off` the autostart state.\n2. Click **+ Add State** again and name it `On`.\n   - Set `entry: lightState = 1; onCounter = 0;`\n   - Set `during: onCounter = onCounter + 1;`\n   - Set `exit: lightState = 0;`"
       },
       {
-        title: "Step 3: Add Transitions & Conditions",
-        body: "Draw transitions between the states and configure their triggers:",
-        list: [
-          "**Off to On Transition**: Draw a line from `Off` to `On`. Double-click and set condition: `[btnPress == true]`",
-          "**On to Off Transition**: Draw a line from `On` to `Off`. Double-click and set condition: `after(50)` (Assuming tick rate is 100ms, this creates a 5-second delay)."
-        ]
+        title: "Step 3: Connect Transitions",
+        body: "1. Drag a transition from `Off` to `On`.\n   - Double-click the label and enter: `[btnPress == true]`\n2. Drag a return transition from `On` to `Off`.\n   - Double-click the label and enter: `after(50)` (50 ticks at 100ms = 5.0 seconds)."
       },
       {
-        title: "Step 4: Simulate and Monitor",
-        body: "Click the **Start** button in the top toolbar to run the simulator. In the Variables panel, manually toggle `btnPress` to `true`. Observe the state transition to `On`. After 50 ticks (5 seconds), watch the state return to `Off` automatically."
+        title: "Step 4: Run and Test",
+        body: "1. Click **Start** in the top simulation toolbar.\n2. In the Variables panel, click `btnPress` to toggle it to `true`.\n3. Observe the active state transition to `On` and `lightState` switch to `1`.\n4. Watch `onCounter` increment on each tick.\n5. After 5 seconds, watch the state return automatically to `Off`."
       }
     ],
     related: ["state-machine-fundamentals", "state-machine-transitions", "state-machine-simulation"]
   },
+
+  "vlab-fundamentals": {
+    title: "V-Lab Physical Plant Modeling",
+    category: "V-Lab (Plant Modeling)",
+    description: "Learn the principles of acausal physical modeling, across and through variables, conservation laws, multi-domain routing, and reference grounds.",
+    content: "V-Lab is a high-fidelity physical plant modeling environment built on the principle of acausal physical modeling. Unlike causal signal-flow simulators where blocks compute unidirectional output values from inputs, acausal components represent physical devices connected by bidirectional energy terminals.",
+    image: adia_vlab_simulation,
+    sections: [
+      {
+        title: "Acausal vs. Causal Modeling Principles",
+        body: "In acausal networks, connections enforce physical conservation laws at every junction, assembling a simultaneous system of Differential Algebraic Equations (DAEs):\n\n```\n           Acausal Terminal Junction\n                     │\n      ┌──────────────┼──────────────┐\n      ▼              ▼              ▼\n  Component A    Component B    Component C\n\n  1. Across Potential:  V_A = V_B = V_C (Equal at junction)\n  2. Through Flow:      I_A + I_B + I_C = 0 (Conserved to zero)\n```",
+        list: [
+          "**Across Variables (Potentials)**: Measured between a node and reference ground. Equal at every connected pin (e.g. Voltage $V$, Angular Velocity $\\omega$, Translational Velocity $v$, Temperature $T$, Pressure $P$).",
+          "**Through Variables (Flows)**: Rates of flow passing through a branch. Conserved so the sum entering any junction is zero (e.g. Current $I$, Torque $\\tau$, Force $F$, Heat Flow $Q$, Mass Flow $\\dot{m}$)."
+        ]
+      },
+      {
+        title: "The 7 Coupled Physical Domains in V-Lab",
+        body: "V-Lab seamlessly couples 7 physical domains across shared electromechanical and thermodynamic boundaries:",
+        list: [
+          "**Electrical**: Across = Voltage ($V$), Through = Current ($A$). Circuit components, transformers, switched bridges.",
+          "**Mechanical Rotational**: Across = Angular Velocity (rad/s), Through = Torque (N-m). Shafts, inertia, gearboxes.",
+          "**Mechanical Translational**: Across = Velocity (m/s), Through = Force (N). Mass, linear springs, dampers.",
+          "**Thermal**: Across = Temperature (K), Through = Heat Flow (W). Conduction, convection, Stefan-Boltzmann radiation.",
+          "**Magnetic Reluctance**: Across = Magnetomotive Force (A-t), Through = Magnetic Flux (Wb). Reluctance paths, coils.",
+          "**Gas Network**: Across = Pressure (Pa), Temperature (K); Through = Mass Flow (kg/s). Compressible pneumatic air.",
+          "**Moist Air (MA)**: Across = Pressure (Pa), Temp (K), Humidity Ratio (kg/kg); Through = Mixture Mass Flow, Moisture Flow."
+        ]
+      },
+      {
+        title: "Acausal Connection Rules & Mandatory Reference Grounds",
+        body: "To build valid physical circuits in V-Lab without singular matrix errors, follow these structural rules:\n\n1. **Mandatory Ground / Reference Node**: Every independent physical network MUST connect to at least one reference node (e.g. `Electrical Ground`, `Rotational Reference`, `Translational Reference`, `Gas Reference`, `Moist Air Reference`) to define the zero-potential benchmark ($V=0$, $\\omega=0$, $P=0$).\n2. **Domain Port Matching**: Connect ports of identical physical domain types. Use cross-domain converter blocks (e.g. `Rotational Electromechanical Converter`, `Reluctance Force`, `Convective Heat Transfer`) to bridge domains."
+      },
+      {
+        title: "Step-by-Step: Assembling a Circuit in V-Lab",
+        body: "1. Navigate to the **V-Lab** tab.\n2. In the left component library, expand the desired domain (e.g. `Electrical`).\n3. Click and drag a `DC Voltage Source`, `Resistor`, `Capacitor`, and `Electrical Ground` onto the canvas.\n4. Hover over port pins (orange/blue circles) and drag connection wires between matching terminals.\n5. Double-click any component to configure parameters (e.g., set `R = 1000 Ohms`, `C = 10uF`).\n6. Click the **Scope** button on a component to view real-time across/through variable plots.\n7. Click **Start Simulation** in the top bar to run the physical solver."
+      }
+    ],
+    related: ["vlab-physics", "vlab-fluid-dynamics", "vlab-blocks-reference", "motor-models"]
+  },
+
+  "vlab-physics": {
+    title: "V-Lab Physics Engine & Numerical Solvers",
+    category: "V-Lab (Plant Modeling)",
+    description: "Detailed mathematical mechanics of the V-Lab solver: Modified Nodal Analysis (MNA), BDF implicit integration, Newton-Raphson line-search, and zero-crossing detection.",
+    content: "V-Lab solves stiff, non-linear physical Differential Algebraic Equations (DAEs) in the general implicit form: $f(x, \\dot{x}, t) = 0$ using industrial-grade numerical integration methods.",
+    sections: [
+      {
+        title: "Modified Nodal Analysis (MNA) Topology Assembly",
+        body: "Before simulation begins, the DAE Assembler processes the diagram topology to construct the state vector $x$ (node potentials and branch flows) and assembles the residual equations vector $f(x, \\dot{x}, t)$:\n\n1. **Conserving Equations**: Node balance enforcing $\\sum Through = 0$ at all electrical, mechanical, and fluid junctions.\n2. **Constitutive Equations**: Component governing equations (e.g., $V_p - V_n - I \\cdot R = 0$ for resistors; $I - C \\cdot \\frac{dV}{dt} = 0$ for capacitors; $\\tau - J \\cdot \\frac{d\\omega}{dt} - B\\omega = 0$ for mechanical inertia)."
+      },
+      {
+        title: "Implicit Multi-Step Integration (BDF-1 & BDF-2)",
+        body: "To solve continuous state derivatives $\\dot{x} = \\frac{dx}{dt}$ with unconditional stability for stiff networks, V-Lab utilizes Backward Differentiation Formulas:\n\n1. **BDF-1 (Backward Euler)**: 1st-order implicit method used during startup initialization and immediately after discontinuities:\n   $$\\dot{x}_k = \\frac{x_k - x_{k-1}}{h}$$\n2. **BDF-2**: 2nd-order high-precision implicit method used during smooth continuous execution:\n   $$\\dot{x}_k = a_0 x_k + a_1 x_{k-1} + a_2 x_{k-2}$$"
+      },
+      {
+        title: "Newton-Raphson Non-linear Solver with Line Search",
+        body: "At each time step, non-linear algebraic equations are solved iteratively using Newton-Raphson with backtracking line search damping:\n\n$$x^{(k+1)} = x^{(k)} - \\alpha \\cdot J^{-1} \\cdot f(x^{(k)})$$\n\n- **Numerical Jacobian ($J$)**: Evaluated by perturbing state vector components: $J_{ij} = \\frac{\\partial f_i}{\\partial x_j}$.\n- **Backtracking Line Search ($\\alpha$)**: The step damping factor $\\alpha \\in (0, 1]$ is dynamically scaled down if a candidate step increases the residual norm $\\|f(x)\\|$, preventing divergence on sharp non-linearities (e.g. diodes, switches, hard stops)."
+      },
+      {
+        title: "Adaptive Time-Stepping & Zero-Crossing Event Rewind",
+        body: "1. **Local Truncation Error (LTE)**: The solver computes error estimates between candidate BDF-2 and BDF-1 solutions. If LTE exceeds tolerance, the step is rejected, step size $h$ is halved, and the solver retries.\n2. **Zero-Crossing Event Detection**: For components with discrete switching states (e.g. saturation limits, hard stops, ideal switches), indicator functions $g(x) = v_{ctrl} - v_{thresh}$ are monitored for sign changes. When detected, the solver rewinds time to the exact root $g(x) = 0$, commits the discrete transition, and restarts BDF-1 integration smoothly."
+      }
+    ],
+    related: ["vlab-fundamentals", "vlab-blocks-reference", "vlab-fluid-dynamics"]
+  },
+
+  "vlab-fluid-dynamics": {
+    title: "V-Lab Fluid Dynamics & Moist Air Flow",
+    category: "V-Lab (Plant Modeling)",
+    description: "Simulate Gas networks and Moist Air (MA) psychrometric mixtures, constant volume chambers, pneumatic pipes, and convective heat transfer.",
+    content: "V-Lab provides specialized acausal domains for compressible pure Gas (G) networks and Moist Air (MA) psychrometric mixtures for HVAC, pneumatic actuators, and appliance thermal management.",
+    sections: [
+      {
+        title: "Gas (G) Domain Fundamentals",
+        body: "The Gas domain models compressible ideal gas flow where Across variables are Pressure ($P$ in Pa) and Temperature ($T$ in K), and the Through variable is Mass Flow Rate ($\\dot{m}$ in kg/s):\n\n$$P = \\rho R T, \\quad \\dot{m} = \\frac{P \\cdot D}{R \\cdot T} \\omega$$\n\n- **Ideal Gas Constant ($R$)**: Configured in the `Gas Properties (G)` block (default 287 J/kg/K for air).\n- **Conservation of Mass**: In a constant volume gas chamber: $\\frac{dP}{dt} = \\frac{R T}{V} \\sum \\dot{m}_{in}$."
+      },
+      {
+        title: "Moist Air (MA) Psychrometric Mixtures",
+        body: "The Moist Air domain tracks psychrometric mixtures of dry air and water vapor, solving 3 simultaneous potential balances:\n\n1. **Pressure ($P$)**: Governs total bulk mixture mass flow $\\dot{m}$.\n2. **Temperature ($T$)**: Governs thermal enthalpy and convective heat transfer: $Q_{in} - Q_{out} = C_{chamber} \\frac{dT}{dt}$.\n3. **Humidity Ratio ($H = \\frac{m_w}{m_a}$)**: Governs water vapor species mass balance: $\\sum \\dot{m}_w = 0$."
+      },
+      {
+        title: "Step-by-Step: Building a Fluid / Pneumatic System",
+        body: "1. Place a `Gas Properties (G)` or `Moist Air Properties (MA)` block in your network to establish atmospheric baseline constants ($P_{std} = 101325$ Pa, $T_{std} = 293.15$ K).\n2. Connect a `Gas Reference` or `Absolute Reference (MA)` to define the $P=0$ potential.\n3. Connect flow lines to a `Constant Volume Chamber` (provides volume buffering states $\\frac{dP}{dt}$).\n4. Connect valves, pipes, and convective heat exchangers to model heating, pressure drops, or air blowers."
+      }
+    ],
+    related: ["vlab-fundamentals", "vlab-physics", "vlab-blocks-reference", "air-fryer-sysml"]
+  },
+
+  "vlab-blocks-reference": {
+    title: "V-Lab Complete Physical Catalog Reference",
+    category: "V-Lab (Plant Modeling)",
+    description: "Exhaustive catalog of physical components across electrical, mechanical, thermal, magnetic, gas, moist air, and control libraries.",
+    content: "This reference details the governing differential and algebraic equations, terminal ports, and configurable parameters for all acausal blocks in the V-Lab library.",
+    sections: [
+      {
+        title: "Electrical Domain Library",
+        body: "Passive, active, switching, and source components:",
+        list: [
+          "**Resistor**: $V_p - V_n = I \\cdot R$. Linear electrical dissipation. Params: `resistance` (Ohms).",
+          "**Variable Resistor**: $V_p - V_n = I \\cdot \\max(R_{ctrl}, R_{min})$. Controlled thermistor or potentiometer.",
+          "**Capacitor**: $I = C \\cdot \\frac{d(V_p - V_n)}{dt}$. Electric charge accumulation and energy storage. Params: `capacitance` (Farads).",
+          "**Inductor**: $V_p - V_n = L \\cdot \\frac{dI}{dt}$. Magnetic field storage and current inertia. Params: `inductance` (Henries).",
+          "**Transformer**: $V_2 = N \\cdot V_1, \\; I_1 = -N \\cdot I_2$. Ideal mutual magnetic coupling. Params: `turnsRatio`.",
+          "**Switch**: $V = I \\cdot (V_{ctrl} > V_{thresh} ? R_{on} : R_{off})$. Power converter semiconductor switch.",
+          "**DC Voltage Source**: $V_p - V_n = V_{const}$. Constant voltage battery cell / power supply.",
+          "**AC Voltage Source**: $V_p - V_n = V_{pk} \\sin(2\\pi f t + \\phi) + I \\cdot R_{int}$. Grid mains generator.",
+          "**Three-Phase Source**: Balanced 3-phase AC voltage with 120° phase displacements for motor drives."
+        ]
+      },
+      {
+        title: "Mechanical Rotational & Translational Libraries",
+        body: "Newtonian mechanical dynamics and kinematics:",
+        list: [
+          "**Inertia**: $\\tau = J \\frac{d\\omega}{dt} + B\\omega$. Rotational rotor mass and damping. Params: `inertia` ($kg\\cdot m^2$), `damping` ($N\\cdot m\\cdot s/rad$).",
+          "**Mass**: $F = m \\frac{dv}{dt} + Bv$. Translational mass inertia. Params: `mass` (kg), `damping` (N-s/m).",
+          "**Rotational / Linear Spring**: $\\tau = k \\theta$, $F = k(x_r - x_c)$. Elastic compliance and springback.",
+          "**Rotational / Linear Damper**: $\\tau = D \\cdot \\Delta\\omega$, $F = D \\cdot \\Delta v$. Viscous shock absorption.",
+          "**Gear Box**: $\\omega_2 = N \\cdot \\omega_1, \\; \\tau_1 = N \\cdot \\tau_2$. Mechanical speed scaling and torque multiplication.",
+          "**Hard Stop**: Non-linear spring-damper barrier preventing mechanical position from exceeding $[x_{min}, x_{max}]$.",
+          "**Lever**: Rigid force amplification linkage arm: $v_a = -\\frac{L_2}{L_1} v_b, \\; F_a = \\frac{L_2}{L_1} F_b$."
+        ]
+      },
+      {
+        title: "Thermal & Magnetic Libraries",
+        body: "Thermodynamic heat transfer and electromagnetic reluctance:",
+        list: [
+          "**Thermal Mass**: $Q = C \\frac{dT}{dt}$. Heat storage capacity. Params: `mass` (kg), `specificHeat` (J/kg/K).",
+          "**Thermal Conduction**: $Q = \\frac{k \\cdot A}{L} (T_a - T_b)$. Fourier heat conduction through solids.",
+          "**Thermal Convection**: $Q = h \\cdot A (T_a - T_b)$. Newton convective heat transfer to fluid boundary.",
+          "**Thermal Radiation**: $Q = \\epsilon \\sigma A (T_a^4 - T_b^4)$. Stefan-Boltzmann high-temperature radiation.",
+          "**Reluctance**: $\\mathcal{F} = \\Phi \\cdot \\mathcal{R}$. Magnetic reluctance path in ferromagnetic cores.",
+          "**Permanent Magnet**: Constant magnetomotive force source $\\mathcal{F} = H_c \\cdot L$.",
+          "**Electromechanical Converter**: $V = N \\frac{d\\Phi}{dt}, \\; \\mathcal{F} = N \\cdot I$. Bridges electrical circuits to magnetic coils."
+        ]
+      },
+      {
+        title: "Control & Physical Signals (PS Math)",
+        body: "Causal-to-physical signal bridges, feedback loops, and signal math:",
+        list: [
+          "**Discrete PI / PID Controller**: $u = K_p e + K_i \\int e \\, dt + K_d \\frac{de}{dt}$ with anti-windup clamping.",
+          "**Clarke & Park Transforms**: 3-phase $abc$ to stationary $\\alpha\\beta$ and rotating $dq0$ coordinates for FOC.",
+          "**Space Vector PWM (SVPWM)**: Inverter gate switching time calculations.",
+          "**PS Math Operators**: Sum, Subtract, Gain, Product, Divide, Saturation, Integrator, Transfer Function, Dead Zone."
+        ]
+      }
+    ],
+    related: ["vlab-fundamentals", "vlab-physics", "motor-models", "vfd-control"]
+  },
+
+  "motor-models": {
+    title: "Electric Machine Reference",
+    category: "V-Lab (Plant Modeling)",
+    description: "Detailed documentation and mathematical formulations for AC Induction Motors, BLDC Motors, and DC Machine drives.",
+    content: "ADIA provides industrial-grade electromechanical machine models parameterized for automotive, robotics, and industrial appliance applications.",
+    sections: [
+      {
+        title: "Three-Phase Induction Motor (AC Motor)",
+        body: "Models a squirrel-cage induction motor in $dq$ stationary/rotating reference frames:\n\n$$V_{ds} = R_s I_{ds} + \\frac{d\\psi_{ds}}{dt} - \\omega_e \\psi_{qs}$$\n$$V_{qs} = R_s I_{qs} + \\frac{d\\psi_{qs}}{dt} + \\omega_e \\psi_{ds}$$\n$$T_e = \\frac{3}{2} p (\\psi_{ds} I_{qs} - \\psi_{qs} I_{ds})$$",
+        list: [
+          "**Inputs**: 3-Phase electrical terminals ($A, B, C$).",
+          "**Outputs**: Mechanical rotational shaft port ($R$ - angular velocity $\\omega$, torque $\\tau$).",
+          "**Parameters**: Stator resistance $R_s$, Rotor resistance $R_r$, Stator inductance $L_s$, Rotor inductance $L_r$, Mutual inductance $L_m$, Pole pairs $p$."
+        ]
+      },
+      {
+        title: "Brushless DC (BLDC) Motor",
+        body: "Models a permanent-magnet brushless motor with trapezoidal back-EMF waveform:\n\n$$V_{abc} = R_s I_{abc} + L_s \\frac{dI_{abc}}{dt} + E_{abc}(\\theta)$$\n$$T_e = \\frac{E_a I_a + E_b I_b + E_c I_c}{\\omega}$$\n\nRequires Hall sensor feedback or sensorless observer for six-step electronic commutation."
+      },
+      {
+        title: "Permanent Magnet Synchronous Motor (PMSM)",
+        body: "High-efficiency sinusoidal PMSM for Field-Oriented Control:\n\n$$T_e = \\frac{3}{2} p [\\psi_{pm} I_q + (L_d - L_q) I_d I_q]$$\n\nSupports Maximum Torque Per Ampere (MTPA) and Field Weakening algorithms for high-speed operation."
+      }
+    ],
+    related: ["vfd-control", "vlab-fundamentals", "xbridges-ref"]
+  },
+
+  "vfd-control": {
+    title: "Variable Frequency Drive (VFD) & FOC Control",
+    category: "Control Systems",
+    description: "Design and validate Field-Oriented Control (FOC), Space Vector PWM (SVPWM), and closed-loop speed/current control.",
+    content: "Variable Frequency Drives (VFD) regulate AC motor speed and torque with optimal efficiency using decoupled vector control in ADIA.",
+    sections: [
+      {
+        title: "Field-Oriented Control (FOC) Architecture",
+        body: "FOC transforms 3-phase AC stator currents into two DC orthogonal components ($I_d$ for magnetic flux, $I_q$ for torque):\n\n```\n  [ Stator Currents Ia, Ib, Ic ] ──► [ Clarke Transform (α, β) ] ──► [ Park Transform (d, q) ]\n                                                                           │\n                                    [ Desired Id, Iq Setpoints ] ──────────┤\n                                                                           ▼\n  [ Gate Drive Signals ] ◄── [ SVPWM ] ◄── [ Inv. Park ] ◄── [ PI Current Regulators ]\n```"
+      },
+      {
+        title: "Space Vector PWM (SVPWM) Modulation",
+        body: "SVPWM synthesizes continuous voltage space vectors by switching between 8 discrete inverter voltage states (6 active vectors $V_1..V_6$, 2 zero vectors $V_0, V_7$), maximizing DC bus voltage utilization by 15.5% compared to sinusoidal PWM."
+      },
+      {
+        title: "Step-by-Step: Setting Up FOC in ADIA",
+        body: "1. Navigate to **X-Bridges**.\n2. Add `Clarke Transform`, `Park Transform`, two `PI Controller` blocks (for $I_d$ and $I_q$), `Inverse Park Transform`, and `SVPWM`.\n3. Feed motor phase currents to Clarke, motor angle $\\theta$ to Park.\n4. Connect PI outputs to Inverse Park, and Inverse Park outputs to SVPWM.\n5. Route SVPWM gate duty cycles to the V-Lab Inverter Bridge component."
+      }
+    ],
+    related: ["motor-models", "xbridges-ref", "vlab-blocks-reference"]
+  },
+
+  "xbridges-ref": {
+    title: "X-Bridges Signal-Flow & Control Solver",
+    category: "Control Systems",
+    description: "Causal block-diagram design, Kahn's topological compilation, continuous/discrete solvers, Model Predictive Control (MPC), and online AI.",
+    content: "X-Bridges is the primary causal signal-flow modeling environment in ADIA. Unlike acausal V-Lab networks, X-Bridges is a directed block simulator where blocks compute explicit output signals from input signals in topologically sorted order.",
+    sections: [
+      {
+        title: "Topological Compilation & Algebraic Loop Resolution",
+        body: "Before execution, the X-Bridges compiler flattens subsystems and constructs an execution list using Kahn's topological sorting algorithm:\n\n1. **Topological Execution Ordering**: Computes block outputs sequentially from inputs.\n2. **Algebraic Loops (Error)**: A direct cyclic connection without a stateful memory block (e.g. `Unit Delay`, `Integrator`) prevents ordering. To fix, insert a `Unit Delay` ($z^{-1}$) or `Integrator` ($\\frac{1}{s}$) into the feedback branch."
+      },
+      {
+        title: "Continuous & Discrete Solvers",
+        body: "1. **Euler Explicit (ODE1)**: First-order fixed-step integration: $x(t + dt) = x(t) + dt \\cdot \\dot{x}(t)$.\n2. **Runge-Kutta 4th Order (ODE4/RK4)**: High-precision four-stage continuous numerical integrator computing weighted slope estimates $(k_1, k_2, k_3, k_4)$ per step.\n3. **Discrete Multi-rate Updating**: Evaluates discrete registers, counters, and digital filters at designated sample periods."
+      },
+      {
+        title: "Model Predictive Control (MPC) Solver",
+        body: "The `MPC Controller` block implements an online quadratic programming solver using the Fast Gradient Method (FGM) to solve constrained optimal control trajectories in real time:\n\n$$U(k+1) = \\text{clamp}\\left(Y(k) - \\frac{1}{L} (H Y(k) + f), \\, u_{min}, \\, u_{max}\\right)$$\n\n- Predicts system response over prediction horizon $N_p$ and control horizon $N_c$.\n- Clamps candidate controls within physical actuator limits $[u_{min}, u_{max}]$."
+      },
+      {
+        title: "Online Adaptive Learning & Neural Blocks",
+        body: "1. **LMS Adaptive Filter**: Least Mean Squares online weight update for active noise cancellation: $w(k+1) = w(k) + \\mu \\cdot e(k) \\cdot x(k)$.\n2. **Online Neural Neuron**: Single-neuron gradient descent using tanh activation.\n3. **Q-Learning RL Controller**: Discrete Q-table agent with $\\epsilon$-greedy exploration for adaptive control under model uncertainty."
+      }
+    ],
+    related: ["vfd-control", "code-generation", "motor-models", "hil-fundamentals"]
+  },
+
   "hil-fundamentals": {
     title: "Hardware-in-the-Loop (HIL) Fundamentals",
     category: "Hardware-in-the-Loop (HIL)",
-    description: "Learn the core concepts of HIL testing in ADIA, including target microcontrollers, serial communication, and peripheral drivers.",
-    content: "Hardware-in-the-Loop (HIL) simulation is a technique used in the development and test of complex real-time embedded systems. By connecting the ADIA design suite directly to a physical microcontroller target, you can validate your state machines and control logic on real hardware pins under real-time constraints.",
+    description: "Learn core HIL principles, supported MCU hardware architectures, real-time serial co-simulation, and verification workflows.",
+    content: "Hardware-in-the-Loop (HIL) simulation connects ADIA directly to physical microcontroller targets (MCUs) via high-speed serial links, executing state machines on real hardware clock cycles while validating electrical I/O, noise tolerances, and safety interlocks.",
     image: hil_architecture_diagram,
     sections: [
       {
-        title: "What is HIL Testing?",
-        body: "Instead of running your state machine entirely in a virtual computer simulation, HIL runs the compiled state machine directly on physical hardware (e.g. a microcontroller) while the PC monitors inputs, outputs, and telemetry. This provides several critical advantages:",
+        title: "What is HIL Simulation & Why Use It?",
+        body: "Instead of running purely in a software simulation, HIL runs the compiled state machine directly on physical silicon (e.g. ARM Cortex-M or ESP32) while the ADIA PC host monitors inputs, drives virtual plant signals, and graphs real-time telemetry:\n\n```\n  ┌─────────────────────────────────┐        USB / UART Serial        ┌─────────────────────────────────┐\n  │         ADIA PC HOST            │ ◄─────────────────────────────► │        PHYSICAL MCU TARGET      │\n  │  - Virtual Plant Simulation     │       115200 / 921600 Baud      │  - Compiled C99 State Machine   │\n  │  - Live Telemetry & Scope       │                                 │  - Real GPIO / ADC / PWM Pins   │\n  │  - Real-Time Fault Injection    │ ── Overrides / Virtual Sensors ─►│  - Hardware Clock Cycles (10ms) │\n  │  - Signal Mapper Scaling Math   │ ◄── Telemetry / Pin Readings ───│  - Emergency Hardware Shutdown  │\n  └─────────────────────────────────┘                                 └─────────────────────────────────┘\n```",
         list: [
-          "**Real-Time Execution**: Verifies that the logic executes within the MCU's hardware clock cycles.",
-          "**Electrical I/O Validation**: Tests the actual physical interfaces (voltage levels, pull-ups/pull-downs, ADC noise).",
-          "**Safety Critical Logic**: Validates failure handling and emergency states on real hardware before final deployment."
+          "**Real Hardware Timing Validation**: Verifies that state execution steps finish within strict hardware timer interrupt periods without watchdog timeouts.",
+          "**Electrical Pin I/O Validation**: Tests real ADC quantization noise, pull-up/pull-down resistors, and DAC/PWM driver characteristics.",
+          "**Safety Verification**: Validates emergency shutdown states under injected physical faults before deploying to full production machinery."
         ]
       },
       {
-        title: "Supported MCU Targets",
-        body: "ADIA includes built-in hardware abstraction layers (HAL) and drivers for several popular MCU architectures:",
+        title: "Supported MCU Target Platforms",
+        body: "ADIA provides automated Hardware Abstraction Layer (HAL) generation for 4 primary target families:",
         list: [
-          "**STM32F4 / STM32F1**: ARM Cortex-M microcontrollers. Standard for automotive and industrial safety-critical applications.",
-          "**Arduino Uno / Mega**: Simple 8-bit AVR microcontrollers. Excellent for rapid prototyping and educational labs.",
-          "**ESP32**: Dual-core Tensilica MCUs with integrated Wi-Fi and Bluetooth, ideal for IoT and wireless control designs.",
-          "**Generic**: Standard ANSI C abstraction suitable for integration with any custom MCU SDK."
+          "**STM32F4 / STM32F1 (ARM Cortex-M)**: Industry standard for automotive and safety-critical industrial controls. Generates STM32 HAL drivers.",
+          "**Arduino Uno / Mega (AVR 8-bit)**: Ideal for educational labs and rapid hardware prototyping. Generates standard Arduino C++ code.",
+          "**ESP32 (Tensilica Xtensa)**: Dual-core 240MHz MCU with Wi-Fi/BLE for IoT control applications. Generates ESP-IDF / Arduino ESP32 code.",
+          "**Generic ANSI C99**: Portable HAL abstraction designed for integration into any custom MCU SDK, RTOS (FreeRTOS/Zephyr), or DSP."
         ]
-      },
-      {
-        title: "HIL Co-Simulation Loop",
-        body: "In an ADIA HIL setup, the PC and MCU operate in a tight, synchronized serial communication loop (typically UART over USB). The PC streams virtual inputs and override actions, while the MCU runs the state machine steps, drives its physical pins, and sends back real-time pin telemetry."
       }
     ],
-    related: ["state-machine-simulation", "hil-configuration", "hil-dashboard"]
+    related: ["hil-configuration", "hil-dashboard", "hil-code-generation", "state-machine-simulation"]
   },
+
   "hil-configuration": {
-    title: "Configuring HIL & Signal Mapping",
+    title: "Configuring HIL Channels & Signal Mapper",
     category: "Hardware-in-the-Loop (HIL)",
-    description: "Step-by-step instructions to configure hardware driver channels and map variables to physical microcontroller pins.",
-    content: "To establish a HIL connection, you must define the hardware channels (pins) available on your target MCU, and map them to variables inside the ADIA State Machine.",
+    description: "Step-by-step guide to configure physical MCU driver channels, map state variables to hardware pins, and define inline scaling math.",
+    content: "The HIL Configuration and Signal Mapper tools establish explicit bindings between physical microcontroller pins and ADIA state machine variables.",
     sections: [
       {
-        title: "Defining Driver Channels",
-        body: "In the HIL Workspace Configuration, define each physical channel by specifying:",
+        title: "Step 1: Define Driver Channels",
+        body: "1. Navigate to the **HIL** tab in the top navigation bar.\n2. In the **Hardware Configuration** panel, select your **Target MCU** (e.g., `STM32F401RE`, `ESP32`, `Arduino Uno`).\n3. Click **+ Add Driver Channel** to declare a physical pin interface:\n\n```\n┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐\n│ Peripheral   │ Pin ID       │ Direction    │ Data Type    │ Sampling     │\n├──────────────┼──────────────┼──────────────┼──────────────┼──────────────┤\n│ ADC          │ PA0 (A0)     │ In           │ uint16_t     │ 10 ms        │\n│ GPIO         │ PA5 (D13)    │ Out          │ bool         │ Event        │\n│ PWM          │ PB6 (TIM4)   │ Out          │ uint16_t     │ 10 ms        │\n└──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘\n```",
         list: [
-          "**Peripheral Type**: Choose from GPIO (Digital Input/Output), ADC (Analog Input), DAC (Analog Output), or PWM (Pulse-Width Modulated Output).",
-          "**Pin ID**: Specify the physical pin identifier relative to the target MCU (e.g., `A0`, `D13`, `PA5`, `GPIO25`).",
-          "**Direction**: `In` (sensor read, input to state machine) or `Out` (actuator drive, output from state machine).",
-          "**Data Type**: Select the C variable type (e.g., `bool`, `uint16_t`, `float`)."
+          "**Peripheral Type**: Select `GPIO` (Digital Pin), `ADC` (Analog In), `DAC` (Analog Out), or `PWM` (Pulse-Width Modulation Out).",
+          "**Pin ID**: Enter the target hardware pin identifier (e.g., `A0`, `PA0`, `D13`, `GPIO25`).",
+          "**Direction**: `In` (read from sensor into state machine) or `Out` (driven by state machine to actuator).",
+          "**Data Type**: Select the C data type (`bool`, `uint8_t`, `uint16_t`, `int32_t`, `float`)."
         ]
       },
       {
-        title: "Mapping Signals to Variables",
-        body: "Use the **Signal Mapper** to create explicit bindings between defined Driver Channels and State Machine Variables. Unmapped variables remain internal model data, regardless of their names. A mapping operates in one of two directions:",
-        list: [
-          "**Read Binding (Hardware -> SM)**: The physical MCU reads a pin (e.g., ADC sensor) and automatically writes the value to a State Machine input variable before the step ticks.",
-          "**Write Binding (SM -> Hardware)**: The State Machine writes a value to an output variable, which the MCU automatically translates to a physical pin output (e.g., PWM signal)."
-        ]
+        title: "Step 2: Bind Signals in the Signal Mapper",
+        body: "1. Switch to the **Signal Mapper** tab.\n2. Click **+ Add Mapping Binding**.\n3. Select the **Driver Channel** and map it to a **State Machine Variable**:\n   - **Read Binding (Hardware $\\to$ SM)**: Physical pin reads are transferred to the input variable prior to every state step.\n   - **Write Binding (SM $\\to$ Hardware)**: State machine output variables are committed to physical output pins after every step."
       },
       {
-        title: "Signal Scaling & Conversion Expressions",
-        body: "Physical sensors and logical state variables often use different scales. ADIA supports custom math conversion expressions to scale values inline. For example, to map a 10-bit Arduino ADC read (0-1023) to a temperature variable in Celsius (0-100°C), you can write: `x * (5.0 / 1023.0) * 20.0` where `x` represents the raw hardware read."
+        title: "Step 3: Inline Signal Scaling Math Expressions",
+        body: "Sensors and software variables frequently use different units and scaling. In the Signal Mapper, enter an inline conversion expression using variable `x` (representing the raw hardware reading):\n\n- **10-bit ADC (0-1023) to Voltage (0-5V)**: `x * (5.0 / 1023.0)`\n- **12-bit ADC (0-4095) to Temperature (°C)**: `x * (3.3 / 4095.0) * 100.0`\n- **PWM Duty (0-100%) to 16-bit Timer Register (0-65535)**: `x * (65535.0 / 100.0)`\n- **ADC with Offset Calibration**: `(x - 512) * 0.25`"
       }
     ],
-    related: ["state-machine-fundamentals", "hil-fundamentals", "hil-code-generation"]
+    related: ["hil-fundamentals", "hil-dashboard", "hil-code-generation"]
   },
+
   "hil-dashboard": {
-    title: "Live Control, Telemetry & Fault Injection",
+    title: "HIL Live Telemetry & Real-Time Fault Injection",
     category: "Hardware-in-the-Loop (HIL)",
-    description: "Monitor live MCU signals, analyze real-time plots, and inject faults to validate system robustness.",
-    content: "Once your MCU is programmed and connected, the HIL Dashboard acts as the mission control center to monitor execution, stream telemetry, and stress-test the system.",
+    description: "Stream live MCU telemetry, plot multi-channel oscilloscope waveforms, and inject real-time sensor faults to test safety resilience.",
+    content: "The HIL Dashboard provides a real-time mission control center to monitor hardware execution, log telemetry packets, and stress-test safety logic.",
     sections: [
       {
-        title: "Connecting and Telemetry Streaming",
-        body: "Select your target serial COM port and baud rate (e.g. `115200`), and click **Connect**. Once established, the dashboard will display live gauges and a rolling chart plotting all mapped analog and digital channels in real-time."
+        title: "Connecting to Hardware & Streaming Telemetry",
+        body: "1. Connect your MCU to your computer using a USB cable.\n2. In the HIL Dashboard, select the detected **Serial COM Port** (e.g. `COM3` on Windows or `/dev/ttyUSB0` on Linux).\n3. Set the **Baud Rate** (default `115200`).\n4. Click **Connect** (green button).\n5. The status indicator changes to **CONNECTED**, and the live multi-channel oscilloscope starts plotting incoming pin and variable waveforms in real-time."
       },
       {
-        title: "Fault Injection Engine",
-        body: "To verify that your safety logic works under hardware failure conditions, you can inject faults directly from the dashboard into any active input channel without modifying your physical wiring:",
-        list: [
-          "**Manual Override**: Force an input variable to a fixed static value, ignoring the actual physical sensor reading.",
-          "**Noise Injection**: Add random Gaussian or uniform noise to a sensor channel to test filter stability (e.g., testing PID responsiveness to noisy thermocouple readings).",
-          "**Clamping**: Cap the channel values within a specific range to simulate sensor saturation or a degraded physical component."
-        ]
-      },
-      {
-        title: "Safety Verification Example",
-        body: "To test a heating chamber's safety interlock: while running the system, use Fault Injection to force the `temperature` input to a dangerous value (e.g., 250°C). Verify that the state machine immediately transitions to the `Fault` state and shuts off the physical heater PWM pin."
+        title: "Real-Time Fault Injection Engine",
+        body: "Verify that safety interlocks trigger under hardware failure conditions without modifying physical wiring using the **Fault Injection** panel:\n\n1. In the active channels list, locate the target input channel (e.g., `tempSensor_ADC`).\n2. Select the fault injection mode:\n   - **Manual Override**: Force the channel value to a static override number (e.g. force temperature to `250.0°C`).\n   - **Noise Injection**: Add random Gaussian or uniform noise (adjust amplitude slider) to test filter stability against electromagnetic interference.\n   - **Signal Clamping**: Restrict channel values to simulate sensor saturation or a degraded resistor.\n3. Click **Inject Fault** and verify that the state machine immediately transitions to its `Fault` safe state and disables physical PWM outputs."
       }
     ],
-    related: ["state-machine-simulation", "hil-fundamentals", "hil-configuration"]
+    related: ["hil-fundamentals", "hil-configuration", "hil-code-generation"]
   },
+
   "hil-code-generation": {
-    title: "Embedded C Driver Generation",
+    title: "HIL Embedded C Driver Code Generation",
     category: "Hardware-in-the-Loop (HIL)",
-    description: "Export and deploy deterministic HIL C99 integration code to run the state machine directly on target microcontrollers.",
-    content: "ADIA generates deterministic C99 and target integration scaffolding from validated HIL mappings. The output is intended for embedded-engineer review and target-toolchain validation; no MISRA or safety-certification claim is implied.",
+    description: "Generate deterministic C99 HAL firmware packages for STM32, Arduino, ESP32, or Generic MCU toolchains.",
+    content: "ADIA automatically exports validated HIL configurations as a clean, deterministic C99 firmware project ready to build and flash to your microcontroller.",
     sections: [
       {
-        title: "Generated File Structure",
-        body: "When you click **Generate HIL Code**, ADIA creates a set of C/C++ files designed to be compiled in your target MCU IDE (such as STM32CubeIDE, Arduino IDE, or VS Code):",
-        list: [
-          "**hal_config.h**: Defines peripheral pin names, system clock speed, and UART baud rates.",
-          "**hal_drivers.h / .c**: Implements hardware-specific pin configuration and serial communication handlers.",
-          "**hil_interface.h / .c**: Manages telemetry packets, serial override commands, and scales/maps signals to the state machine instance variables.",
-          "**main_hil.c**: Implements the main real-time loop executing the tick scheduler."
-        ]
+        title: "Step 1: Generate & Download Firmware Package",
+        body: "1. In the HIL workspace, click the **Generate HIL Code** button in the toolbar.\n2. ADIA generates and packages the complete embedded source code into a `.zip` archive:\n   - `hal_config.h`: Pin definitions, clock speeds, and baud rates.\n   - `hal_drivers.c / .h`: Peripheral initialization (GPIO, ADC, PWM, UART).\n   - `hil_interface.c / .h`: Telemetry serial packet serialization and signal scaling.\n   - `main_hil.c`: The real-time deterministic scheduler loop."
       },
       {
-        title: "The HIL Main Loop Protocol",
-        body: "The generated `main_hil.c` runs a deterministic scheduling loop:",
-        code: "void main(void) {\n    HAL_Drivers_Init();\n    SM_Init(&sm_instance);\n    while (1) {\n        HIL_Receive_Poll();\n        if (SM_ReadInputs(&sm_instance) == SM_ERR_NONE) {\n            if (SM_Step(&sm_instance, 10U) == SM_ERR_NONE) {\n                (void)SM_WriteOutputs(&sm_instance);\n            }\n        }\n        HIL_SendTelemetry(&sm_instance);\n        HAL_Delay_Ms(10U);\n    }\n}"
+        title: "Step 2: The Generated Deterministic Main Loop",
+        body: "The generated `main_hil.c` runs a strict, non-blocking periodic scheduler loop:\n\n```c\nint main(void) {\n    HAL_Drivers_Init();          /* 1. Initialize clock, GPIO, ADC, PWM, UART */\n    SM_Init(&sm_instance);       /* 2. Initialize Stateflow variables & autostart states */\n    \n    while (1) {\n        HIL_Receive_Poll();      /* Process incoming host override packets */\n        \n        if (SM_ReadInputs(&sm_instance) == SM_ERR_NONE) {\n            if (SM_Step(&sm_instance, 10U) == SM_ERR_NONE) {\n                (void)SM_WriteOutputs(&sm_instance);\n            }\n        }\n        \n        HIL_SendTelemetry(&sm_instance);  /* Stream packet back to ADIA PC host */\n        HAL_Delay_Ms(10U);                /* Enforce 10ms real-time tick period */\n    }\n}\n```"
       },
       {
-        title: "Deployment Workflow",
-        body: "1. Click **Generate HIL Code** and download the ZIP package.\n2. Copy the files into your MCU firmware project folder.\n3. Build the firmware using your target compiler.\n4. Flash the binary to the microcontroller.\n5. Keep the board connected via USB, return to the ADIA HIL Dashboard, and click **Connect** to begin testing."
+        title: "Step 3: Flashing to Target MCU",
+        body: "1. **STM32**: Open the generated folder in STM32CubeIDE, click **Build Project**, then click **Run / Flash**.\n2. **Arduino**: Open `main_hil.ino` in Arduino IDE, select board & COM port, and click **Upload**.\n3. **ESP32**: Build and flash using ESP-IDF or PlatformIO (`pio run --target upload`).\n4. Once flashed, return to the ADIA HIL Dashboard and click **Connect** to start real-time testing."
       }
     ],
-    related: ["code-generation", "hil-fundamentals", "hil-dashboard"]
+    related: ["hil-fundamentals", "hil-configuration", "hil-dashboard", "code-generation"]
+  },
+
+  "doe-discovery": {
+    title: "Design of Experiments (DOE) & AI Model Discovery",
+    category: "DOE & Analysis",
+    description: "Perform parameter sweeps, Latin Hypercube sampling, Taguchi designs, and discover inductive GMDH polynomial neural network models.",
+    content: "The DOE & AI Model Discovery module automates the identification and optimization of complex system behaviors through statistical sampling and polynomial neural networks.",
+    image: adia_doe_analysis,
+    sections: [
+      {
+        title: "Statistical Sampling Methods",
+        body: "1. **Full Factorial**: Evaluates all combinations of parameter discrete levels.\n2. **Latin Hypercube Sampling (LHS)**: Multi-dimensional stratified random sampling ensuring uniform space-filling coverage with minimal sample runs.\n3. **Taguchi Orthogonal Arrays**: Robust design method minimizing variance against environmental noise factors."
+      },
+      {
+        title: "GMDH Polynomial Neural Networks",
+        body: "Group Method of Data Handling (GMDH) is an inductive self-organizing learning algorithm that discovers optimal mathematical models from simulation data without predefined assumptions:\n\n$$y = a + \\sum_{i=1}^n b_i x_i + \\sum_{i=1}^n \\sum_{j=1}^n c_{ij} x_i x_j$$\n\n- Automatically builds polynomial layers, eliminates non-significant terms, and prevents overfitting using external validation criteria."
+      },
+      {
+        title: "Step-by-Step: Running DOE in ADIA",
+        body: "1. Navigate to the **DOE** tab.\n2. Click **Select Parameters** to pick plant or controller variables to sweep.\n3. Choose the **Sampling Method** (e.g. Latin Hypercube) and set the sample count (e.g. 50 runs).\n4. Click **Run DOE Batch**.\n5. Click **Train GMDH Model** to generate a polynomial surrogate function.\n6. Click **Export Surrogate Function** to integrate the learned equation directly into X-Bridges or V-Lab."
+      }
+    ],
+    related: ["getting-started", "vlab-fundamentals", "xbridges-ref"]
+  },
+
+  "code-generation": {
+    title: "Embedded C Code Generation & Verification Gatekeeper",
+    category: "Software Engineering",
+    description: "Export validated state-machine designs to deterministic C99 with structural checks, semantic validation, and evidence labels.",
+    content: "ADIA generates MISRA-aligned, deterministic C99 source code from validated semantic intermediate representations (IR), providing strict integration contracts and automated verification evidence.",
+    sections: [
+      {
+        title: "Model Validation Gatekeeper",
+        body: "Before code generation, the engine executes automated structural and semantic validation checks:\n\n- **Structural Check**: Verifies that every state has valid entry points, no dangling transitions exist, and all orthogonal regions have valid initial states.\n- **Semantic Validation**: Verifies variable types, resolves expression syntax, and guarantees deterministic transition priority ordering.\n- Any critical structural or semantic defect blocks code generation immediately."
+      },
+      {
+        title: "Runtime Integration Scheduler Contract",
+        body: "The generated C code is strictly modular and free of dynamic memory allocation (`malloc`):\n\n```c\n/* Initialize State Machine */\nSM_Init(&sm_instance);\n\n/* Main Cyclic Task (e.g., 10ms timer interrupt) */\nvoid Task_10ms(void) {\n    SM_ReadInputs(&sm_instance);\n    if (SM_Step(&sm_instance, 10U) == SM_ERR_NONE) {\n        SM_WriteOutputs(&sm_instance);\n    }\n}\n```"
+      },
+      {
+        title: "Verification Evidence Labels",
+        body: "Generated reports clearly categorize verification statuses:\n- **Structural PASS**: Topology and hierarchy validated.\n- **Semantic PASS**: IR expressions and state behaviors validated.\n- **Host Runtime PASS**: Verified in local PC test harness.\n- **Embedded Target PENDING**: Target MCU validation required on physical hardware."
+      }
+    ],
+    related: ["getting-started", "state-machine-simulation", "hil-code-generation"]
+  },
+
+  "industrial-automation": {
+    title: "3D Industrial Simulator & Factory I/O Gateway",
+    category: "Industrial Integration",
+    description: "Connect ADIA state machines and control models to external 3D real-time industrial factory simulators.",
+    content: "The Industrial Automation Gateway connects ADIA via TCP/UDP communication to Factory I/O and industrial 3D digital twins for virtual commissioning (SIL/HIL).",
+    sections: [
+      {
+        title: "Real-Time Automation Gateway",
+        body: "1. Navigate to **Industrial Gateway** in the navigation bar.\n2. Enter the **Host IP Address** and **Port** of the external Factory I/O instance.\n3. Click **Auto-Discover Tags** to fetch all digital sensors (conveyor photo-eyes, push buttons) and actuator coils (motors, pneumatic pushers).\n4. Click **Connect & Synchronize** to run live co-simulation."
+      }
+    ],
+    related: ["getting-started", "state-machine-simulation", "hil-fundamentals"]
+  },
+
+  "learning-labs": {
+    title: "Digital Twin Learning Labs & Demonstrators",
+    category: "Tutorials",
+    description: "Explore pre-built interactive multiphysics digital twins and industrial control learning labs.",
+    content: "ADIA includes a library of complete, open-box digital twin demonstrators demonstrating cross-domain engineering.",
+    sections: [
+      {
+        title: "1. Differential Drive LiDAR Robot Vacuum Twin",
+        body: "A complete 9-block modular co-simulation of a differential-drive robot vacuum with 3DoF chassis kinematics, 8-beam LiDAR raycasting, collision boundary physics, encoder odometry drift, complementary sensor fusion, and 30x30 occupancy grid SLAM."
+      },
+      {
+        title: "2. Multiphysics Air Fryer Oven",
+        body: "Coupled acausal thermal, electrical heating element, forced convection air blower, and PID safety logic."
+      },
+      {
+        title: "3. Three-Phase VFD Induction Motor Drive",
+        body: "Field-Oriented Control (FOC), Clarke/Park transformations, Space Vector PWM (SVPWM), and closed-loop speed regulation."
+      },
+      {
+        title: "4. Industrial Washing Machine",
+        body: "Drum rotational inertia with unbalance mass, fluid sloshing drag equations, and multi-speed spin cycle control."
+      },
+      {
+        title: "5. Microwave Inverter & Cavity",
+        body: "High-voltage inverter drive, magnetron tube power output, and cavity thermal dissipation."
+      },
+      {
+        title: "6. High-Speed Food Blender",
+        body: "Universal motor dynamics coupled to non-linear fluid vortex resistance and pulse control."
+      }
+    ],
+    related: ["robot-vacuum-digital-twin", "air-fryer-sysml", "vfd-control"]
+  },
+
+  "robot-vacuum-digital-twin": {
+    title: "LiDAR Robot Vacuum Digital Twin Reference",
+    category: "Tutorials",
+    description: "Mathematical models, 9-block architecture, and subsystem equations for the modular differential-drive robot vacuum digital twin.",
+    content: "The LiDAR Robot Vacuum Digital Twin demonstrates feedback control, motor dynamics, dead reckoning, sensor fusion, and occupancy grid SLAM mapping.",
+    sections: [
+      {
+        title: "1. 9-Block System Architecture",
+        body: "The system is structured into 9 modular connected blocks in a closed-loop co-simulation:\n\n```\n[ Navigation Planner ] ──► [ Inverse Kinematics ] ──► [ Wheel Speed PI ] ──► [ Left & Right DC Motors ]\n        ▲                                                                                │\n        │                                                                                ▼\n[ SLAM 2D Grid ] ◄── [ Sensor Fusion ] ◄── [ Odometry ] ◄── [ Simulation Canvas ] ◄── [ 3DoF Robot Dynamics ]\n```"
+      },
+      {
+        title: "2. Continuous 3DoF Chassis Kinematics & Motor Dynamics",
+        body: "The **Robot Dynamics** block solves continuous kinematic equations:\n\n$$\\frac{dX}{dt} = V \\cos(\\theta), \\quad \\frac{dY}{dt} = V \\sin(\\theta), \\quad \\frac{d\\theta}{dt} = \\omega$$\n\nThe DC motor blocks solve electrical armature dynamics and rotor acceleration:\n\n$$L_m \\frac{di}{dt} = V_{in} - R_m i - K_e \\omega_{wheel}, \\quad J \\frac{d\\omega}{dt} = K_t i - B \\omega$$"
+      },
+      {
+        title: "3. Spatial Canvas & 8-Beam LiDAR Raycasting",
+        body: "The **Simulation Canvas** simulates a 5.7m x 5.7m room with 3 circle and 2 box obstacles, calculates 8-beam LiDAR raycasting intersections, and detects 15cm chassis collisions."
+      },
+      {
+        title: "4. Encoder Odometry, Sensor Fusion & SLAM",
+        body: "The **Odometry** block integrates wheel encoder pulses with simulated drift. The **Sensor Fusion** complementary filter ($gain = 0.06$) corrects pose estimates, and the **SLAM** block maps LiDAR range returns into a 30x30 occupancy probability grid."
+      }
+    ],
+    related: ["learning-labs", "xbridges-ref", "vlab-fundamentals"]
   }
 };

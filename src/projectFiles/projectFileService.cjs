@@ -10,9 +10,13 @@ function normalizeAdiaPath(inputPath) {
   if (typeof inputPath !== 'string' || inputPath.trim() === '') {
     throw new TypeError('Project path must be a non-empty string');
   }
+  if (inputPath.includes('\0')) {
+    throw new Error('Project path cannot contain null bytes');
+  }
   const parsed = path.parse(inputPath);
   if (parsed.ext.toLowerCase() === PROJECT_EXTENSION) return inputPath;
-  return path.join(parsed.dir, `${parsed.name || parsed.base}${PROJECT_EXTENSION}`);
+  const fileName = `${parsed.name || parsed.base}${PROJECT_EXTENSION}`;
+  return parsed.dir ? path.join(parsed.dir, fileName) : fileName;
 }
 
 function extractAdiaPath(argv, deps = {}) {
@@ -20,7 +24,7 @@ function extractAdiaPath(argv, deps = {}) {
   const existsSync = deps.existsSync || fs.existsSync;
   const statSync = deps.statSync || fs.statSync;
   for (const raw of Array.isArray(argv) ? argv : []) {
-    if (typeof raw !== 'string' || raw.startsWith('--')) continue;
+    if (typeof raw !== 'string' || raw.startsWith('--') || raw.includes('\0')) continue;
     const candidate = raw.replace(/^"|"$/g, '');
     if (path.extname(candidate).toLowerCase() !== PROJECT_EXTENSION) continue;
     const resolved = resolvePath(candidate);
@@ -32,6 +36,9 @@ function extractAdiaPath(argv, deps = {}) {
 }
 
 function readProjectFile(filePath, options = {}) {
+  if (typeof filePath !== 'string' || filePath.trim() === '' || filePath.includes('\0')) {
+    throw new Error('Project path must be a valid non-empty string');
+  }
   const fsImpl = options.fsImpl || fs;
   const resolved = path.resolve(filePath);
   const extension = path.extname(resolved).toLowerCase();
@@ -51,8 +58,12 @@ function readProjectFile(filePath, options = {}) {
 }
 
 function writeProjectFile(filePath, data, deps = {}) {
+  if (typeof filePath !== 'string' || filePath.trim() === '' || filePath.includes('\0')) {
+    throw new Error('Project path must be a valid non-empty string');
+  }
   const fsImpl = deps.fsImpl || fs;
-  const target = normalizeAdiaPath(path.resolve(filePath));
+  const resolved = path.resolve(filePath);
+  const target = normalizeAdiaPath(resolved);
   const temporary = `${target}.tmp-${process.pid}-${deps.randomId ? deps.randomId() : Date.now()}`;
   try {
     fsImpl.writeFileSync(temporary, `${JSON.stringify(data, null, 2)}\n`, 'utf8');

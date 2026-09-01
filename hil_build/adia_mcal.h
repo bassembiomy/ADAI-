@@ -5,6 +5,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 typedef enum {
   ADIA_MCAL_OK = 0,
@@ -17,8 +18,7 @@ typedef enum {
 } adia_mcal_status_t;
 
 typedef enum adia_mcal_gpio_channel_t {
-  ADIA_MCAL_GPIO_9B4C84B5_D1BA_413C_83BC_E11F567B19CF,
-  ADIA_MCAL_GPIO_F0B3089A_1426_4D8A_ADD0_6A146A51378E,
+  ADIA_MCAL_GPIO_6B8AF776_C9CA_4C37_B295_88950BE006D5,
 } adia_mcal_gpio_channel_t;
 
 #ifdef __cplusplus
@@ -29,7 +29,6 @@ adia_mcal_status_t adia_mcal_gpio_init(void);
 adia_mcal_status_t adia_mcal_gpio_deinit(void);
 adia_mcal_status_t adia_mcal_gpio_health(void);
 adia_mcal_status_t adia_mcal_gpio_safe_state(void);
-adia_mcal_status_t adia_mcal_gpio_read(adia_mcal_gpio_channel_t ch, int32_t *out_value);
 adia_mcal_status_t adia_mcal_gpio_write(adia_mcal_gpio_channel_t ch, int32_t value);
 
 #ifdef __cplusplus

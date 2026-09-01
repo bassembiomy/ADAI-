@@ -1,6 +1,6 @@
 // src/components/xbridges/XBlockNode.tsx
 import React from 'react';
-import { Handle, Position, useUpdateNodeInternals, NodeResizer } from 'reactflow';
+import { Handle, Position, useUpdateNodeInternals, NodeResizer } from '@xyflow/react';
 import { gsap } from 'gsap';
 import { useGSAP } from '@gsap/react';
 import { 

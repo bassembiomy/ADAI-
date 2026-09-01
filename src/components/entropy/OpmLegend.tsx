@@ -1,0 +1,107 @@
+import React, { useState } from 'react';
+import { BookOpen, ChevronDown } from 'lucide-react';
+
+interface LegendRow {
+  label: string;
+  kind:
+    | 'solid-filled' | 'solid-hollow' | 'double-filled'
+    | 'dashed-filled' | 'dashed-hollow'
+    | 'tri-filled' | 'tri-hollow' | 'circle';
+}
+
+const Glyph: React.FC<{ kind: LegendRow['kind'] }> = ({ kind }) => {
+  const c = '#9ca3af';
+  const dashed = kind.startsWith('dashed') ? '4 3' : undefined;
+  let head: React.ReactNode;
+  if (kind === 'solid-filled' || kind === 'dashed-filled') {
+    head = <polygon points="26 4.5, 33 8, 26 11.5" fill={c} />;
+  } else if (kind === 'solid-hollow' || kind === 'dashed-hollow') {
+    head = <polygon points="26 4.5, 33 8, 26 11.5" fill="#141414" stroke={c} strokeWidth="1.2" />;
+  } else if (kind === 'double-filled') {
+    head = (
+      <>
+        <polygon points="26 4.5, 33 8, 26 11.5" fill={c} />
+        <polygon points="8 4.5, 1 8, 8 11.5" fill={c} />
+      </>
+    );
+  } else if (kind === 'tri-filled') {
+    head = <polygon points="8 2, 1 8, 8 14" fill={c} />;
+  } else if (kind === 'tri-hollow') {
+    head = <polygon points="8 2, 1 8, 8 14" fill="#141414" stroke={c} strokeWidth="1.2" />;
+  } else {
+    head = <circle cx="4.5" cy="8" r="3.5" fill={c} />;
+  }
+  return (
+    <svg width="34" height="16" className="shrink-0">
+      <line x1="6" y1="8" x2="26" y2="8" stroke={c} strokeWidth="1.5" strokeDasharray={dashed} />
+      {head}
+    </svg>
+  );
+};
+
+const SECTIONS: { title: string; rows: LegendRow[] }[] = [
+  {
+    title: 'Procedural',
+    rows: [
+      { label: 'Agent — executes', kind: 'solid-filled' },
+      { label: 'Instrument — uses', kind: 'solid-hollow' },
+      { label: 'Consumption', kind: 'solid-filled' },
+      { label: 'Result', kind: 'solid-filled' },
+      { label: 'Effect — changes', kind: 'double-filled' },
+    ],
+  },
+  {
+    title: 'Event',
+    rows: [
+      { label: 'Trigger', kind: 'dashed-filled' },
+      { label: 'Condition', kind: 'dashed-hollow' },
+    ],
+  },
+  {
+    title: 'Structural',
+    rows: [
+      { label: 'Aggregation (whole)', kind: 'tri-filled' },
+      { label: 'Generalization', kind: 'tri-hollow' },
+      { label: 'Exhibition', kind: 'circle' },
+      { label: 'Satisfies / Verifies', kind: 'dashed-filled' },
+    ],
+  },
+];
+
+export const OpmLegend: React.FC = () => {
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="absolute bottom-3 left-3 z-10 flex items-center gap-1.5 bg-[#161616]/90 border border-[#2d2d2d] rounded-md px-2 py-1 text-[10px] text-[#999] hover:text-white shadow-lg"
+        title="ISO 19450 OPD notation legend"
+      >
+        <BookOpen size={11} /> ISO 19450 Notation
+      </button>
+    );
+  }
+
+  return (
+    <div className="absolute bottom-3 left-3 z-10 w-56 bg-[#141414]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-2.5 shadow-xl">
+      <button
+        onClick={() => setOpen(false)}
+        className="w-full flex items-center justify-between text-[10px] uppercase font-extrabold tracking-wider text-orange-400 mb-1.5"
+      >
+        ISO 19450 Notation <ChevronDown size={12} />
+      </button>
+      {SECTIONS.map(s => (
+        <div key={s.title} className="mb-1.5">
+          <div className="text-[8px] uppercase text-[#666] font-bold mb-0.5">{s.title}</div>
+          {s.rows.map(r => (
+            <div key={r.label} className="flex items-center gap-1.5 py-[1px]">
+              <Glyph kind={r.kind} />
+              <span className="text-[9px] text-[#bbb]">{r.label}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+};

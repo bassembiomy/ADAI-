@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { VLabPhysicsEngine } from './vlabPhysics';
-import { Node, Edge } from 'reactflow';
+import { Node, Edge } from '@xyflow/react';
 
 describe('VLab Mathematical Model & Precision Suite', () => {
   const engine = new VLabPhysicsEngine();

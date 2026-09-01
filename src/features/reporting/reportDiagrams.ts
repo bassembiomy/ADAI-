@@ -11,7 +11,12 @@ export interface ReportRequirementSource {
   relationships: readonly RelationshipData[];
 }
 
-export type ReportBlockSource = ReportRequirementSource;
+export interface ReportBlockSource {
+  blocks: readonly BlockData[];
+  relationships: readonly RelationshipData[];
+  parts?: readonly PartData[];
+  containerId?: string;
+}
 
 const NODE_FILL = '#ffffff';
 const NODE_STROKE = '#0b3445';
@@ -19,13 +24,38 @@ const REQ_STROKE = '#f97316';
 const EDGE_STROKE = '#546e7a';
 const TEXT_COLOR = '#182231';
 
-export function drawLabeledNode(node: SizedNode, pos: PositionedNode, stroke = NODE_STROKE): string {
+export interface LabeledNodeOptions {
+  stroke?: string;
+  isInteractive?: boolean;
+  childLayerId?: string;
+  childLayerTitle?: string;
+  containerId?: string;
+}
+
+export function drawLabeledNode(
+  node: SizedNode,
+  pos: PositionedNode,
+  optionsOrStroke: string | LabeledNodeOptions = NODE_STROKE,
+): string {
+  const opts: LabeledNodeOptions = typeof optionsOrStroke === 'string'
+    ? { stroke: optionsOrStroke }
+    : optionsOrStroke;
+  const stroke = opts.stroke ?? NODE_STROKE;
+
   const lines = node.lines.map((line, i) => {
     const weight = i === 0 ? ' font-weight="600"' : '';
     const fill = i === 0 ? TEXT_COLOR : '#44515e';
     return `<text x="${pos.x + pos.width / 2}" y="${pos.y + 18 + i * 15}" text-anchor="middle" font-size="11"${weight} fill="${fill}">${escapeHtml(line)}</text>`;
   }).join('');
-  return `<rect x="${pos.x}" y="${pos.y}" width="${pos.width}" height="${pos.height}" rx="6" fill="${NODE_FILL}" stroke="${stroke}" stroke-width="1.2"/>${lines}`;
+  const rect = `<rect x="${pos.x}" y="${pos.y}" width="${pos.width}" height="${pos.height}" rx="6" fill="${NODE_FILL}" stroke="${stroke}" stroke-width="1.2"/>${lines}`;
+
+  if (opts.isInteractive && opts.childLayerId) {
+    const containerId = opts.containerId ?? 'diag-container';
+    const escapedTitle = escapeHtml(opts.childLayerTitle ?? node.id);
+    return `<g class="diagram-node has-child-layer" data-node-id="${escapeHtml(node.id)}" style="cursor: pointer" ondblclick="window.ADIA_DIAGRAM_NAV.drillDown('${escapeHtml(containerId)}', '${escapeHtml(opts.childLayerId)}', '${escapedTitle}')">${rect}</g>`;
+  }
+
+  return rect;
 }
 
 const DASHED_REL_TYPES = new Set(['derive', 'deriveReqt', 'refine', 'satisfy', 'verify', 'trace', 'dependency', 'allocation', 'binding']);
@@ -68,17 +98,29 @@ export function renderRequirementsDiagram(source: ReportRequirementSource): stri
   const reqs = source.blocks.filter(b => b.stereotype === 'requirement');
   if (reqs.length === 0) return renderEmptyFigure('No requirements defined.');
   const reqIds = new Set(reqs.map(r => r.id));
+  const connectedBlockIds = new Set(source.relationships
+    .filter(r => reqIds.has(r.targetId) || reqIds.has(r.sourceId))
+    .flatMap(r => [r.sourceId, r.targetId]));
+  const allNodes = source.blocks.filter(b => reqIds.has(b.id) || connectedBlockIds.has(b.id));
+  const nodeIds = new Set(allNodes.map(n => n.id));
   const edges: DiagramEdgeInput[] = source.relationships
-    .filter(r => reqIds.has(r.sourceId) && reqIds.has(r.targetId))
+    .filter(r => nodeIds.has(r.sourceId) && nodeIds.has(r.targetId))
     .map(r => ({ id: r.id, sourceId: r.sourceId, targetId: r.targetId, label: `«${r.type}»`, kind: r.type }));
-  const pages = chunkItems(reqs, MAX_NODES_PER_FIGURE);
+  const pages = chunkItems(allNodes, MAX_NODES_PER_FIGURE);
   return pages.map((page, pageIndex) => {
     const sized = new Map(page.map(r => [r.id, measureNode(r.id,
-      [r.reqId ?? 'REQ', r.name ?? '', r.status ? `status: ${r.status}` : ''], 'req')]));
+      r.stereotype === 'requirement'
+        ? [r.reqId ?? 'REQ', r.name ?? '', r.status ? `status: ${r.status}` : '']
+        : [`«${r.stereotype ?? 'block'}»`, r.name ?? ''],
+      r.stereotype === 'requirement' ? 'req' : 'bdd')]));
     const { edges: pageEdges, placed } = layoutPage(page, sized, edges);
     const inner = [
       ...pageEdges.map(e => drawStyledEdge(e, routeEdgePath(nodeById(placed, e.sourceId)!, nodeById(placed, e.targetId)!))),
-      ...placed.map(pos => drawLabeledNode(sized.get(pos.id)!, pos, REQ_STROKE)),
+      ...placed.map(pos => {
+        const node = allNodes.find(n => n.id === pos.id);
+        const isReq = node?.stereotype === 'requirement';
+        return drawLabeledNode(sized.get(pos.id)!, pos, isReq ? REQ_STROKE : NODE_STROKE);
+      }),
     ].join('');
     const viewNote = pages.length > 1 ? ` · view ${pageIndex + 1} of ${pages.length}` : '';
     return wrapFigure(inner, `Requirements diagram${viewNote} (${page.length} requirements, ${pageEdges.length} relationships)`, boundsOf(placed, 24));
@@ -88,19 +130,34 @@ export function renderRequirementsDiagram(source: ReportRequirementSource): stri
 export function renderBddDiagram(source: ReportBlockSource): string {
   const bddBlocks = source.blocks.filter(b => b.stereotype !== 'requirement');
   if (bddBlocks.length === 0) return renderEmptyFigure('No blocks defined.');
-  const blockIds = new Set(bddBlocks.map(b => b.id));
+  const bddBlockIds = new Set(bddBlocks.map(b => b.id));
+  const connectedReqIds = new Set(source.relationships
+    .filter(r => bddBlockIds.has(r.sourceId) || bddBlockIds.has(r.targetId))
+    .flatMap(r => [r.sourceId, r.targetId]));
+  const allNodes = source.blocks.filter(b => bddBlockIds.has(b.id) || connectedReqIds.has(b.id));
+  const nodeIds = new Set(allNodes.map(n => n.id));
   const edges: DiagramEdgeInput[] = source.relationships
-    .filter(r => blockIds.has(r.sourceId) && blockIds.has(r.targetId))
+    .filter(r => nodeIds.has(r.sourceId) && nodeIds.has(r.targetId))
     .map(r => ({
       id: r.id, sourceId: r.sourceId, targetId: r.targetId,
       label: DASHED_REL_TYPES.has(r.type) ? `«${r.type}»` : (r.label ?? ''), kind: r.type,
     }));
-  const pages = chunkItems(bddBlocks, MAX_NODES_PER_FIGURE);
+  const pages = chunkItems(allNodes, MAX_NODES_PER_FIGURE);
   return pages.map((page, pageIndex) => {
-    const sized = new Map(page.map(b => [b.id, measureNode(b.id, [
-      `«${b.stereotype ?? 'block'}»`, b.name ?? '',
-      ...(b.properties ?? []).slice(0, 3).map(p => `${p.name}: ${p.type}${p.defaultValue ? ` = ${p.defaultValue}` : ''}`),
-    ], 'bdd', 96)]));
+    const sized = new Map(page.map(b => {
+      const isReq = b.stereotype === 'requirement';
+      const hasIbd = !isReq && (source.parts ?? []).some(p => p.blockId === b.id);
+      const stereotypeLabel = isReq
+        ? '«requirement»'
+        : hasIbd
+          ? `«${b.stereotype ?? 'block'}» ⤓ [IBD]`
+          : `«${b.stereotype ?? 'block'}»`;
+      return [b.id, measureNode(b.id, [
+        stereotypeLabel,
+        b.name ?? '',
+        ...(b.properties ?? []).slice(0, 3).map(p => `${p.name}: ${p.type}${p.defaultValue ? ` = ${p.defaultValue}` : ''}`),
+      ], isReq ? 'req' : 'bdd', 96)];
+    }));
     const { edges: pageEdges, placed } = layoutPage(page, sized, edges);
     const edgeEls = pageEdges.map(e => {
       const src = nodeById(placed, e.sourceId)!;
@@ -110,7 +167,19 @@ export function renderBddDiagram(source: ReportBlockSource): string {
         + multiplicityLabel(rel?.sourceMultiplicity ?? '', src.x + src.width - 4, src.y - 6)
         + multiplicityLabel(rel?.targetMultiplicity ?? '', tgt.x + 4, tgt.y - 6);
     });
-    const inner = [...edgeEls, ...placed.map(pos => drawLabeledNode(sized.get(pos.id)!, pos))].join('');
+    const inner = [...edgeEls, ...placed.map(pos => {
+      const node = allNodes.find(n => n.id === pos.id);
+      const isReq = node?.stereotype === 'requirement';
+      const hasIbd = !isReq && node && (source.parts ?? []).some(p => p.blockId === node.id);
+      const nodeOpts: LabeledNodeOptions = {
+        stroke: isReq ? REQ_STROKE : NODE_STROKE,
+        isInteractive: Boolean(hasIbd),
+        childLayerId: hasIbd ? `ibd-${node!.id}` : undefined,
+        childLayerTitle: hasIbd ? `IBD · ${node!.name}` : undefined,
+        containerId: source.containerId,
+      };
+      return drawLabeledNode(sized.get(pos.id)!, pos, nodeOpts);
+    })].join('');
     const viewNote = pages.length > 1 ? ` · view ${pageIndex + 1} of ${pages.length}` : '';
     return wrapFigure(inner, `Block definition diagram${viewNote} (${page.length} blocks, ${pageEdges.length} relationships)`, boundsOf(placed, 24));
   }).join('\n');
@@ -121,6 +190,8 @@ export interface ReportIbdSource {
   parts: readonly PartData[];
   connectors: readonly ConnectorData[];
   blocks: readonly BlockData[];
+  allParts?: readonly PartData[];
+  containerId?: string;
 }
 
 const IBD_FRAME_PADDING = 28;
@@ -145,6 +216,10 @@ export function renderIbdDiagram(source: ReportIbdSource): string {
     const typeBlock = part.typeId ? blockById.get(part.typeId) : undefined;
     const ports = typeBlock?.ports ?? [];
     const rect = placedById.get(part.id)!;
+    if (!rect) continue;
+
+    portPositions.set(`${part.id}:__center`, { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, name: '' });
+
     ports.forEach((port, i) => {
       const leftSide = i % 2 === 0;
       const slot = Math.floor(i / 2);
@@ -158,17 +233,49 @@ export function renderIbdDiagram(source: ReportIbdSource): string {
     });
   }
 
+  const contentBounds = boundsOf([...placed, ...[...portPositions.values()].map(p => ({ x: p.x, y: p.y, width: 1, height: 1 }))], IBD_FRAME_PADDING);
+
+  // Register context block boundary environment ports
+  (source.contextBlock.ports ?? []).forEach((port, i) => {
+    const isLeft = port.side !== 'right';
+    const x = isLeft ? contentBounds.x : contentBounds.x + contentBounds.width;
+    const y = contentBounds.y + 35 + i * 25;
+    portPositions.set(`:${port.id}`, { x, y, name: port.name });
+    portPositions.set(`${source.contextBlock.id}:${port.id}`, { x, y, name: port.name });
+    portEls.push(
+      `<rect x="${x - 4}" y="${y - 4}" width="8" height="8" fill="#ffffff" stroke="${NODE_STROKE}" stroke-width="1.2"/>`,
+      `<text x="${isLeft ? x + 10 : x - 10}" y="${y + 3}" font-size="9" fill="#44515e" text-anchor="${isLeft ? 'start' : 'end'}">${escapeHtml(port.name)}</text>`,
+    );
+  });
+
   const connectorEls = source.connectors.map((conn, index) => {
-    const from = portPositions.get(`${conn.sourcePartId}:${conn.sourcePortId}`);
-    const to = portPositions.get(`${conn.targetPartId}:${conn.targetPortId}`);
+    const from = portPositions.get(`${conn.sourcePartId}:${conn.sourcePortId}`)
+      ?? portPositions.get(`:${conn.sourcePortId}`)
+      ?? (source.contextBlock.id ? portPositions.get(`${source.contextBlock.id}:${conn.sourcePortId}`) : undefined)
+      ?? portPositions.get(`${conn.sourcePartId}:__center`);
+    const to = portPositions.get(`${conn.targetPartId}:${conn.targetPortId}`)
+      ?? portPositions.get(`:${conn.targetPortId}`)
+      ?? (source.contextBlock.id ? portPositions.get(`${source.contextBlock.id}:${conn.targetPortId}`) : undefined)
+      ?? portPositions.get(`${conn.targetPartId}:__center`);
     if (!from || !to) return '';
     const label = conn.itemFlow ?? conn.label ?? '';
     return `<path id="edge-${conn.id}" d="${routeManhattan(from, to, index)}" fill="none" stroke="${EDGE_STROKE}" stroke-width="1.1" marker-end="url(#rf-arrow)"/>`
       + (label ? `<text font-size="9" fill="#65717e" text-anchor="middle"><textPath href="#edge-${conn.id}" startOffset="50%">${escapeHtml(label)}</textPath></text>` : '');
   });
 
-  const partEls = placed.map(pos => drawLabeledNode(sized.get(pos.id)!, pos));
-  const contentBounds = boundsOf([...placed, ...[...portPositions.values()].map(p => ({ x: p.x, y: p.y, width: 1, height: 1 }))], IBD_FRAME_PADDING);
+  const partEls = placed.map(pos => {
+    const part = source.parts.find(p => p.id === pos.id);
+    const typeBlock = part?.typeId ? blockById.get(part.typeId) : undefined;
+    const hasSubParts = Boolean(part?.typeId && (source.allParts ?? []).some(p => p.blockId === part.typeId));
+    const typeName = typeBlock?.name ?? '';
+    const nodeOpts: LabeledNodeOptions = {
+      isInteractive: hasSubParts,
+      childLayerId: hasSubParts ? `ibd-${part!.typeId}` : undefined,
+      childLayerTitle: hasSubParts ? `Internal Sub-Structure · ${part!.name}${typeName ? ` (${typeName})` : ''}` : undefined,
+      containerId: source.containerId,
+    };
+    return drawLabeledNode(sized.get(pos.id)!, pos, nodeOpts);
+  });
   const frame = `<rect x="${contentBounds.x}" y="${contentBounds.y}" width="${contentBounds.width}" height="${contentBounds.height + IBD_TITLE_HEIGHT}" fill="none" stroke="${NODE_STROKE}" stroke-width="1.2" stroke-dasharray="6 4"/>`
     + `<text x="${contentBounds.x + 8}" y="${contentBounds.y + 16}" font-size="11" font-weight="600" fill="${TEXT_COLOR}">ibd [Block] ${escapeHtml(source.contextBlock.name)}</text>`;
   const shifted = (els: string[]) => els.join('');
@@ -201,6 +308,84 @@ function transitionLabel(t: TransitionData): string {
   const guard = t.condition ? `[${t.condition}]` : t.afterTicks != null ? `after(${t.afterTicks})` : '';
   return [guard, t.action ? `/ ${t.action}` : ''].filter(Boolean).join(' ');
 }
+
+export interface ReportTraceabilitySource {
+  blocks: readonly BlockData[];
+  requirements: readonly BlockData[];
+  states: readonly StateData[];
+  relationships: readonly RelationshipData[];
+  transitions: readonly TransitionData[];
+}
+
+export function renderTraceabilityDiagram(source: ReportTraceabilitySource): string {
+  const allNodes: BlockData[] = [
+    ...source.blocks.filter(b => b.stereotype !== 'requirement'),
+    ...source.requirements.filter(b => b.stereotype === 'requirement'),
+  ];
+  if (allNodes.length === 0 && source.states.length === 0) {
+    return renderEmptyFigure('No traceability data available.');
+  }
+
+  const stateNodes: SizedNode[] = source.states
+    .filter(s => !(s.parentId && source.states.some(p => p.id === s.parentId && (p.children ?? []).includes(s.id))))
+    .map(s => measureNode(s.id, [s.name, '«state»'], 'state', 80));
+
+  const blockNodes: SizedNode[] = allNodes.map(n => {
+    const isReq = n.stereotype === 'requirement';
+    return measureNode(n.id, [
+      isReq ? '«requirement»' : `«${n.stereotype ?? 'block'}»`,
+      n.name ?? '',
+      n.reqId ?? '',
+    ].filter(Boolean), isReq ? 'req' : 'bdd', 90);
+  });
+
+  const sized = new Map<string, SizedNode>(
+    [...blockNodes, ...stateNodes].map(n => [n.id, n]),
+  );
+
+  const relEdges: DiagramEdgeInput[] = source.relationships
+    .filter(r => sized.has(r.sourceId) && sized.has(r.targetId))
+    .map(r => ({
+      id: r.id,
+      sourceId: r.sourceId,
+      targetId: r.targetId,
+      label: `«${r.type}»`,
+      kind: r.type,
+    }));
+
+  const smEdges: DiagramEdgeInput[] = source.transitions
+    .filter(t => sized.has(t.sourceId) && sized.has(t.targetId))
+    .map(t => ({
+      id: t.id,
+      sourceId: t.sourceId,
+      targetId: t.targetId,
+      label: transitionLabel(t),
+      kind: 'transition',
+    }));
+
+  const allEdges = [...relEdges, ...smEdges];
+  const allSized = [...sized.values()];
+  const placed = layoutLayered(allSized, allEdges);
+
+  const edgeEls = allEdges.map(e => {
+    const src = nodeById(placed, e.sourceId)!;
+    const tgt = nodeById(placed, e.targetId)!;
+    if (!src || !tgt) return '';
+    return drawStyledEdge(e, routeEdgePath(src, tgt));
+  });
+
+  const nodeEls = allSized.map(s => {
+    const pos = nodeById(placed, s.id);
+    if (!pos) return '';
+    const isReq = source.requirements.some(r => r.id === s.id);
+    return drawLabeledNode(s, pos, isReq ? REQ_STROKE : NODE_STROKE);
+  });
+
+  const inner = [...edgeEls, ...nodeEls].join('');
+  const totalNodes = allNodes.length + source.states.length;
+  return wrapFigure(inner, `Traceability diagram (${totalNodes} elements, ${allEdges.length} relationships)`, boundsOf(placed, 24));
+}
+
 
 function renderStateMachineLayer(layer: Layer, source: ReportStateMachineSource): string {
   const layerStates = source.states.filter(s => layer.stateIds.includes(s.id));
@@ -236,14 +421,41 @@ function renderStateMachineLayer(layer: Layer, source: ReportStateMachineSource)
   }
 
   const allPlaced = [...placedById.values()];
+  const autostartState = layerStates.find(s => s.autostart);
+  let initialPseudostateEls = '';
+  if (autostartState) {
+    const asRect = placedById.get(autostartState.id);
+    if (asRect) {
+      const psSize = 14;
+      const psX = asRect.x - 50;
+      const psY = asRect.y + asRect.height / 2 - psSize / 2;
+      initialPseudostateEls = `<circle class="initial-pseudostate" cx="${psX + psSize / 2}" cy="${psY + psSize / 2}" r="${psSize / 2}" fill="#182231" stroke="#182231" stroke-width="1.2"/>`
+        + `<path d="M ${psX + psSize} ${psY + psSize / 2} L ${asRect.x} ${asRect.y + asRect.height / 2}" fill="none" stroke="${EDGE_STROKE}" stroke-width="1.1" marker-end="url(#rf-arrow)"/>`;
+      allPlaced.push({ id: '__initial_pseudostate', x: psX, y: psY, width: psSize, height: psSize });
+    }
+  }
+
   const rectOf = (id: string): DiagramRect | undefined => placedById.get(id);
   const edgeEls = layerTransitions.map((t, index) => {
     const src = rectOf(t.sourceId);
     const tgt = rectOf(t.targetId);
     if (!src || !tgt) return '';
+    const isParentTarget = tgt !== src && placedById.has(t.targetId) &&
+      layerStates.some(s => s.id === t.targetId && ((s.children ?? []).includes(t.sourceId) ||
+        (src.x >= tgt.x && src.y >= tgt.y && src.x + src.width <= tgt.x + tgt.width && src.y + src.height <= tgt.y + tgt.height)));
+    let edgePath: string;
+    if (isParentTarget) {
+      const sx2 = src.x + src.width / 2;
+      const sy2 = src.y;
+      const tx2 = tgt.x + tgt.width / 2;
+      const ty2 = tgt.y;
+      edgePath = `M ${sx2} ${sy2} C ${sx2} ${sy2 - 20}, ${tx2} ${ty2 + 20}, ${tx2} ${ty2}`;
+    } else {
+      edgePath = routeEdgePath(src, tgt, { index });
+    }
     return drawStyledEdge(
       { id: t.id, sourceId: t.sourceId, targetId: t.targetId, label: transitionLabel(t), kind: 'transition' },
-      routeEdgePath(src, tgt, { index }),
+      edgePath,
     );
   });
 
@@ -264,7 +476,7 @@ function renderStateMachineLayer(layer: Layer, source: ReportStateMachineSource)
       + (label ? `<text x="${cx}" y="${cy + 3.5}" text-anchor="middle" font-size="9" fill="${TEXT_COLOR}">${label}</text>` : '');
   });
 
-  const inner = [...containerEls, ...edgeEls, ...stateEls, ...junctionEls].join('');
+  const inner = [initialPseudostateEls, ...containerEls, ...edgeEls, ...stateEls, ...junctionEls].join('');
   const caption = `State machine · ${layer.name} (${layerStates.length} states, ${layerTransitions.length} transitions)`;
   return wrapFigure(inner, caption, boundsOf(allPlaced, 24));
 }

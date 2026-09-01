@@ -12,7 +12,7 @@ import { DEFAULT_TOLERANCE_PROFILES } from './oracle_judge/ToleranceProfiles';
 import { WhiteboxReporter } from './WhiteboxReporter';
 
 describe('VLab Multi-Domain White-Box Master Certification', () => {
-  it('Certifies all 6 physics domain batches pass Oracle Judge thresholds', () => {
+  it('Certifies all 6 physics domain batches pass Oracle Judge thresholds', { timeout: 30000 }, () => {
     WhiteboxReporter.clear();
 
     // 1. Electrical (Ohm's law)

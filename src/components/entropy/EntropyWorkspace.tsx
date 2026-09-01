@@ -1,23 +1,35 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import ReactFlow, {
+import {
+  ReactFlow,
   Background,
   Controls,
   MiniMap,
-  Node,
-  Edge,
   addEdge,
   Connection,
   useNodesState,
   useEdgesState,
   useReactFlow,
   getBezierPath,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 
 import { OPMObjectNode, OPMProcessNode, OPMStateNode } from './OPMNodeComponents';
 import { OPMEdge } from './OPMEdgeComponents';
-import { OPMNodeData, OPMEdgeData, OPMLinkType, SimulationLog, OPMState, OPMPort } from './EntropyTypes';
+import { OPMNodeData, OPMEdgeData, OPMLinkType, SimulationLog, OPMState, OPMPort, type AppNode, type AppEdge } from './EntropyTypes';
 import { generateOpl, parseOpl, OplSyntaxError } from './OplParser';
+import {
+  OpmSimulationState,
+  createSimulationState,
+  initializeSimulation,
+  stepSimulation,
+  applySimResultToNodes,
+} from './OpmSimulationEngine';
+import { SmartShowPanel } from './SmartShowPanel';
+import { OpmLegend } from './OpmLegend';
+import { importSysmlToOpm } from './SysmlToOpmImporter';
+import { validateOpmConnection } from './OpmLinkRules';
+import { layoutOpmGraph } from './OpmAutoLayout';
+import type { SysMLDiagramState } from '../../types/sysml_types';
 import { Play, Pause, RotateCcw, ArrowRight, Layout, Download, Upload, ZoomIn, ZoomOut, Check, X, Plus, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { OPM_EXAMPLES } from './EntropyExamples';
@@ -134,15 +146,16 @@ const OPMConnectionLine = ({
 };
 
 interface EntropyWorkspaceProps {
-  initialNodes?: Node<OPMNodeData>[];
-  initialEdges?: Edge<OPMEdgeData>[];
+  initialNodes?: AppNode[];
+  initialEdges?: AppEdge[];
   availableVariables: any[];
   onVariablesChange: (vars: any[]) => void;
   tickMs: number;
   onTickMsChange?: (tickMs: number) => void;
   onBack: () => void;
-  onSave?: (nodes: Node<OPMNodeData>[], edges: Edge<OPMEdgeData>[]) => void;
+  onSave?: (nodes: AppNode[], edges: AppEdge[]) => void;
   onAddError?: (type: 'error' | 'warning' | 'info', message: string, source?: string) => void;
+  sysmlState?: SysMLDiagramState;
 }
 
 export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
@@ -155,10 +168,11 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   onBack,
   onSave,
   onAddError,
+  sysmlState,
 }) => {
   // --- States ---
-  const [nodes, setNodes, onNodesChange] = useNodesState<OPMNodeData>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<OPMEdgeData>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<AppEdge>([]);
   
   // Breadcrumb / Nesting path: ['root', 'proc-1', etc.]
   const [zoomPath, setZoomPath] = useState<string[]>(['root']);
@@ -167,8 +181,9 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   }, [zoomPath]);
 
   // Selected tool / link types
-  const [activeTool, setActiveTool] = useState<'select' | 'object' | 'process' | 'state'>('select');
+  const [activeTool, setActiveTool] = useState<'select' | 'object' | 'process' | 'state' | 'requirement'>('select');
   const [activeLinkType, setActiveLinkType] = useState<OPMLinkType>('consumption');
+  const reactFlowInstanceRef = useRef<any>(null);
 
   // Text editor integration (bimodal)
   const [oplText, setOplText] = useState<string>('');
@@ -177,16 +192,17 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const [textVersion, setTextVersion] = useState<string>('');
 
   // Undo/Redo Stacks
-  const [undoStack, setUndoStack] = useState<{ nodes: Node<OPMNodeData>[]; edges: Edge<OPMEdgeData>[] }[]>([]);
-  const [redoStack, setRedoStack] = useState<{ nodes: Node<OPMNodeData>[]; edges: Edge<OPMEdgeData>[] }[]>([]);
+  const [undoStack, setUndoStack] = useState<{ nodes: AppNode[]; edges: AppEdge[] }[]>([]);
+  const [redoStack, setRedoStack] = useState<{ nodes: AppNode[]; edges: AppEdge[] }[]>([]);
 
   // Simulation Runner
   const [simRunning, setSimRunning] = useState<boolean>(false);
   const [simLogs, setSimLogs] = useState<SimulationLog[]>([]);
   const [firingProcesses, setFiringProcesses] = useState<Set<string>>(new Set());
+  const simStateRef = useRef<OpmSimulationState>(createSimulationState());
   
   // Selected Node Details
-  const [selectedNode, setSelectedNode] = useState<Node<OPMNodeData> | null>(null);
+  const [selectedNode, setSelectedNode] = useState<AppNode | null>(null);
 
   // New Port Manager States
   const [newPortName, setNewPortName] = useState('');
@@ -195,7 +211,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const [newPortType, setNewPortType] = useState<OPMPort['type']>('standard');
 
   // Right Sidebar active tab
-  const [rightTab, setRightTab] = useState<'simControl' | 'opl'>('simControl');
+  const [rightTab, setRightTab] = useState<'simControl' | 'opl' | 'smartShow'>('simControl');
 
   // --- Initialize canvas ---
   useEffect(() => {
@@ -205,7 +221,9 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       // Default smart home template if empty
       const smartHomeEx = OPM_EXAMPLES.smartHome;
       const { nodes: parsedNodes, edges: parsedEdges, errors } = parseOpl(smartHomeEx.oplText);
-      setNodes(parsedNodes);
+      simStateRef.current = initializeSimulation(parsedNodes);
+      const initializedNodes = applySimResultToNodes(parsedNodes, simStateRef.current, []);
+      setNodes(initializedNodes);
       setEdges(parsedEdges);
       setOplText(smartHomeEx.oplText);
       setOplErrors(errors);
@@ -230,34 +248,20 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     const parentNodes = nodes.filter(n => n.type === 'opmObject');
     let nodesChanged = false;
 
+    const STATE_WIDTH = 95;
+    const STATE_GAP_X = 12;
+    const STATE_START_X = 18;
+    const STATE_START_Y = 56;
+
     const updatedNodes = nodes.map(node => {
-      if (node.type === 'opmState' && node.parentNode) {
-        const parent = parentNodes.find(p => p.id === node.parentNode);
+      if (node.type === 'opmState' && node.parentId) {
+        const parent = parentNodes.find(p => p.id === node.parentId);
         if (parent) {
-          const siblingStates = nodes.filter(n => n.type === 'opmState' && n.parentNode === parent.id);
+          const siblingStates = nodes.filter(n => n.type === 'opmState' && n.parentId === parent.id);
           const index = siblingStates.findIndex(n => n.id === node.id);
           if (index !== -1) {
-            const pW = parent.width || (siblingStates.length > 0 ? 180 : 130);
-            const pH = parent.height || (siblingStates.length > 0 ? 120 : 75);
-
-            const stateWidth = 80;
-            const stateHeight = 28;
-            const gapX = 8;
-            const gapY = 6;
-
-            const startY = 66; // position grid inside the states area box
-
-            // Calculate grid dimensions
-            const cols = Math.max(1, Math.floor((pW - 32 + gapX) / (stateWidth + gapX)));
-            const col = index % cols;
-            const row = Math.floor(index / cols);
-
-            // Center the grid inside the parent width
-            const gridWidth = Math.min(siblingStates.length, cols) * (stateWidth + gapX) - gapX;
-            const offsetX = (pW - gridWidth) / 2;
-
-            const targetX = offsetX + col * (stateWidth + gapX);
-            const targetY = startY + row * (stateHeight + gapY);
+            const targetX = STATE_START_X + index * (STATE_WIDTH + STATE_GAP_X);
+            const targetY = STATE_START_Y;
 
             if (Math.abs(node.position.x - targetX) > 1 || Math.abs(node.position.y - targetY) > 1) {
               nodesChanged = true;
@@ -278,7 +282,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   }, [nodes, setNodes]);
 
   // --- Record History for Undo ---
-  const saveHistory = useCallback((currentNodes: Node<OPMNodeData>[], currentEdges: Edge<OPMEdgeData>[]) => {
+  const saveHistory = useCallback((currentNodes: AppNode[], currentEdges: AppEdge[]) => {
     setUndoStack(prev => [...prev.slice(-49), { nodes: JSON.parse(JSON.stringify(currentNodes)), edges: JSON.parse(JSON.stringify(currentEdges)) }]);
     setRedoStack([]); // Clear redo
   }, []);
@@ -307,9 +311,9 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const filteredNodes = useMemo(() => {
     return nodes.filter(n => {
       if (n.data.type === 'state') {
-        // States are rendered inside objects. React Flow nodes with parentNode:
+        // States are rendered inside objects. React Flow nodes with parentId:
         // We only render them if their parent object node is visible.
-        const parent = nodes.find(p => p.id === n.parentNode);
+        const parent = nodes.find(p => p.id === n.parentId);
         if (!parent) return false;
         return parent.data.parentId === activeParentId;
       }
@@ -331,18 +335,163 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     });
   }, [edges, nodes, activeParentId]);
 
-  // --- Add Elements visually ---
-  const handleCanvasClick = useCallback((event: React.MouseEvent) => {
-    if (activeTool === 'select') return;
+  // --- Add State inside Object ---
+  const handleAddStateToObject = useCallback((objectId: string, customName?: string) => {
+    saveHistory(nodes, edges);
+    const targetObject = nodes.find(n => n.id === objectId);
+    if (!targetObject || targetObject.data.type !== 'object') return;
 
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - bounds.left;
-    const y = event.clientY - bounds.top;
+    const existingStates = targetObject.data.states || [];
+    const stateId = uuidv4();
+    const stateName = customName?.trim() || `State_${existingStates.length + 1}`;
+
+    const STATE_WIDTH = 95;
+    const STATE_GAP_X = 12;
+    const STATE_START_X = 18;
+    const STATE_START_Y = 56;
+    const newIdx = existingStates.length;
+    const isInitial = existingStates.length === 0;
+
+    const newStateNode: AppNode = {
+      id: stateId,
+      type: 'opmState',
+      parentId: targetObject.id,
+      extent: 'parent',
+      position: {
+        x: STATE_START_X + newIdx * (STATE_WIDTH + STATE_GAP_X),
+        y: STATE_START_Y,
+      },
+      data: {
+        name: stateName,
+        type: 'state',
+        physical: false,
+        states: [],
+        attributes: [],
+        parentId: targetObject.id,
+        isInitial,
+        isActive: isInitial,
+        inputs: [],
+        outputs: [
+          { id: `val-out-${stateId}`, name: 'Val', type: 'standard', direction: 'output', position: 'right' }
+        ],
+      },
+    };
+
+    const newStatesList: OPMState[] = [
+      ...existingStates,
+      { id: stateId, name: stateName, isInitial, isActive: isInitial }
+    ];
+
+    setNodes(prev => {
+      const updated = prev.map(n => {
+        if (n.id === objectId) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              states: newStatesList,
+            }
+          };
+        }
+        return n;
+      });
+      return [...updated, newStateNode];
+    });
+
+    if (isInitial) {
+      simStateRef.current = {
+        ...simStateRef.current,
+        objectActiveState: {
+          ...simStateRef.current.objectActiveState,
+          [objectId]: stateId,
+        }
+      };
+    }
+
+    // Refresh selectedNode if it's the target object
+    setSelectedNode(prev => {
+      if (prev && prev.id === objectId) {
+        return {
+          ...prev,
+          data: {
+            ...prev.data,
+            states: newStatesList,
+          }
+        };
+      }
+      return prev;
+    });
+
+    logSim('success', `Added state [${stateName}] inside Object [${targetObject.data.name}].`);
+  }, [nodes, edges, saveHistory]);
+
+  const handleDeleteState = useCallback((stateId: string, parentObjectId: string) => {
+    saveHistory(nodes, edges);
+    setNodes(prev => {
+      const filtered = prev.filter(n => n.id !== stateId);
+      return filtered.map(n => {
+        if (n.id === parentObjectId) {
+          const remainingStates = (n.data.states || []).filter(s => s.id !== stateId);
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              states: remainingStates,
+            }
+          };
+        }
+        return n;
+      });
+    });
+
+    setEdges(prev => prev.filter(e => e.source !== stateId && e.target !== stateId));
+
+    setSelectedNode(prev => {
+      if (prev && prev.id === parentObjectId) {
+        const remainingStates = (prev.data.states || []).filter(s => s.id !== stateId);
+        return {
+          ...prev,
+          data: {
+            ...prev.data,
+            states: remainingStates,
+          }
+        };
+      }
+      return prev;
+    });
+
+    logSim('info', `Removed state from Object.`);
+  }, [nodes, edges, saveHistory]);
+
+  // --- Add Elements visually via Canvas Pane Click ---
+  const handlePaneClick = useCallback((event: React.MouseEvent) => {
+    if (activeTool === 'select') {
+      setSelectedNode(null);
+      return;
+    }
+
+    if (activeTool === 'state') {
+      logSim('info', 'Click directly on an Object rectangle to add a State inside it.');
+      return;
+    }
 
     saveHistory(nodes, edges);
 
+    // Calculate accurate flow position from screen coordinates
+    let flowPos = { x: 200, y: 200 };
+    if (reactFlowInstanceRef.current?.screenToFlowPosition) {
+      flowPos = reactFlowInstanceRef.current.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+    }
+
     const id = uuidv4();
-    const nodeName = `${activeTool.charAt(0).toUpperCase() + activeTool.slice(1)}_${id.substring(0, 4)}`;
+    const isReq = activeTool === 'requirement';
+    const isProc = activeTool === 'process';
+    const nodeName = isReq
+      ? `REQ_${id.substring(0, 4).toUpperCase()}`
+      : `${activeTool.charAt(0).toUpperCase() + activeTool.slice(1)}_${id.substring(0, 4)}`;
 
     const defaultInputs: OPMPort[] = [];
     const defaultOutputs: OPMPort[] = [];
@@ -357,7 +506,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         { id: 'agt-out', name: 'Agent', type: 'agent', direction: 'output', position: 'bottom' },
         { id: 'inst-out', name: 'Instrument', type: 'instrument', direction: 'output', position: 'bottom' }
       );
-    } else if (activeTool === 'process') {
+    } else if (isProc) {
       defaultInputs.push(
         { id: 'con-in', name: 'Consume', type: 'consumption', direction: 'input', position: 'left' },
         { id: 'agt-in', name: 'Agent', type: 'agent', direction: 'input', position: 'left' },
@@ -369,83 +518,50 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         { id: 'res-out', name: 'Result', type: 'result', direction: 'output', position: 'right' },
         { id: 'eff-out', name: 'Effect', type: 'effect', direction: 'output', position: 'right' }
       );
-    } else if (activeTool === 'state') {
-      defaultOutputs.push(
-        { id: 'val-out', name: 'Val', type: 'standard', direction: 'output', position: 'right' }
-      );
     }
 
-    const newNode: Node<OPMNodeData> = {
+    const newNode: AppNode = {
       id,
-      type: activeTool === 'object' ? 'opmObject' : activeTool === 'process' ? 'opmProcess' : 'opmState',
-      position: { x, y },
+      type: isProc ? 'opmProcess' : 'opmObject',
+      position: { x: Math.round(flowPos.x), y: Math.round(flowPos.y) },
       data: {
         name: nodeName,
-        type: activeTool as any,
+        type: isReq ? 'requirement' : (activeTool as any),
         physical: false,
         states: [],
         attributes: [],
         parentId: activeParentId,
+        requirementText: isReq ? `The system shall perform function [${nodeName}].` : undefined,
         inputs: defaultInputs,
         outputs: defaultOutputs,
       },
     };
 
-    if (activeTool === 'state') {
-      // Find object under cursor to assign parentNode
-      const clickedObject = nodes.find(n => {
-        if (n.data.type !== 'object') return false;
-        const width = 150; // approximated width
-        const height = 80;
-        return (
-          x >= n.position.x &&
-          x <= n.position.x + width &&
-          y >= n.position.y &&
-          y <= n.position.y + height &&
-          n.data.parentId === activeParentId
-        );
-      });
-
-      if (clickedObject) {
-        newNode.parentNode = clickedObject.id;
-        newNode.extent = 'parent';
-        newNode.position = { x: 15, y: 45 };
-        newNode.data.parentId = clickedObject.id;
-
-        // Add state to parent object structure
-        setNodes(prev => prev.map(n => {
-          if (n.id === clickedObject.id) {
-            const currentStates = n.data.states || [];
-            return {
-              ...n,
-              data: {
-                ...n.data,
-                states: [...currentStates, { id: newNode.id, name: nodeName, isActive: false }]
-              }
-            };
-          }
-          return n;
-        }).concat(newNode));
-        
-        logSim('info', `State ${nodeName} added to Object ${clickedObject.data.name}`);
-      } else {
-        if (onAddError) onAddError('warning', 'States must be placed inside an Object rectangle.', 'ENTROPY');
-      }
-    } else {
-      setNodes(prev => [...prev, newNode]);
-      logSim('info', `${activeTool.toUpperCase()} ${nodeName} created at (${Math.round(x)}, ${Math.round(y)})`);
-    }
-
+    setNodes(prev => [...prev, newNode]);
+    setSelectedNode(newNode);
     setActiveTool('select');
-  }, [activeTool, activeParentId, nodes, edges, saveHistory, onAddError]);
+    logSim('success', `Created ${isReq ? 'Requirement' : activeTool.toUpperCase()} [${nodeName}] at (${Math.round(flowPos.x)}, ${Math.round(flowPos.y)}).`);
+  }, [activeTool, activeParentId, nodes, edges, saveHistory]);
 
   // --- Connect nodes (draw OPM links) ---
   const onConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return;
 
+    const src = nodes.find(n => n.id === connection.source);
+    const tgt = nodes.find(n => n.id === connection.target);
+    if (!src || !tgt) return;
+
+    // ISO 19450 link-role validation (OpmLinkRules.ts)
+    const verdict = validateOpmConnection(activeLinkType, src.data.type, tgt.data.type);
+    if (!verdict.allowed) {
+      if (onAddError) onAddError('error', `OPM link rejected: ${verdict.reason}`, 'ENTROPY');
+      logSim('error', `Link rejected [${activeLinkType}]: ${verdict.reason}`);
+      return;
+    }
+
     saveHistory(nodes, edges);
 
-    const newEdge: Edge<OPMEdgeData> = {
+    const newEdge: AppEdge = {
       id: `e-${connection.source}-${connection.sourceHandle || 'std-out'}-${connection.target}-${connection.targetHandle || 'res-in'}`,
       source: connection.source,
       target: connection.target,
@@ -458,8 +574,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     };
 
     setEdges(prev => addEdge(newEdge, prev));
-    logSim('info', `Link [${activeLinkType}] connected: ${connection.source}:${connection.sourceHandle || 'std-out'} → ${connection.target}:${connection.targetHandle || 'res-in'}`);
-  }, [activeLinkType, nodes, edges, saveHistory]);
+    logSim('info', `Link [${activeLinkType}] connected: ${src.data.name} → ${tgt.data.name}`);
+  }, [activeLinkType, nodes, edges, saveHistory, onAddError]);
 
   // --- Dynamic Port Handlers ---
   const handleAddPort = (name: string, direction: 'input' | 'output', position: 'left' | 'right' | 'top' | 'bottom', type: any) => {
@@ -548,32 +664,21 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     const parentObjName = parentObj.data.name;
     const stateName = targetState.data.name;
 
-    // Update nodes
-    setNodes(prevNodes => prevNodes.map(n => {
-      if (n.parentNode === parentObjId && n.data.type === 'state') {
-        return {
-          ...n,
-          data: {
-            ...n.data,
-            isActive: n.id === stateId
-          }
-        };
-      }
-      if (n.id === parentObjId) {
-        const updatedStates = (n.data.states || []).map(s => ({
-          ...s,
-          isActive: s.id === stateId
-        }));
-        return {
-          ...n,
-          data: {
-            ...n.data,
-            states: updatedStates
-          }
-        };
-      }
-      return n;
-    }));
+    // Latch state in the simulation engine ref
+    simStateRef.current = {
+      ...simStateRef.current,
+      objectActiveState: {
+        ...simStateRef.current.objectActiveState,
+        [parentObjId]: stateId,
+      },
+      pendingEvents: [
+        ...simStateRef.current.pendingEvents,
+        { stateId, objectId: parentObjId, tick: simStateRef.current.tick },
+      ],
+    };
+
+    // Update nodes immutably using applySimResultToNodes
+    setNodes(prevNodes => applySimResultToNodes(prevNodes, simStateRef.current, []));
 
     // Update global variables
     onVariablesChange(availableVariables.map(v => {
@@ -586,7 +691,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       return v;
     }));
 
-    logSim('success', `Manual Override: Set state of Object [${parentObjName}] to [${stateName}]`);
+    logSim('success', `Manual Override: Latched state of [${parentObjName}] to [${stateName}]`);
   }, [nodes, edges, availableVariables, onVariablesChange, saveHistory]);
 
   const handleManualTriggerProcess = useCallback((processId: string) => {
@@ -597,162 +702,72 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
 
     logSim('info', `Manual Trigger: Firing Process [${processNode.data.name}]`);
 
-    // Set the process to isFiring: true
-    setNodes(prevNodes => prevNodes.map(n => {
-      if (n.id === processId) {
-        return {
-          ...n,
-          data: {
-            ...n.data,
-            isFiring: true
-          } as any
-        };
-      }
-      return n;
-    }));
-
     // Find result / effect edges where this process is the source
     const targetEdges = edges.filter(e => e.source === processId && (e.data?.type === 'result' || e.data?.type === 'effect'));
-    
-    const targetStateIds = new Set<string>();
-    const parentToTargetState = new Map<string, string>(); // parentObjId -> stateId
+    const consumptionEdges = edges.filter(e => e.target === processId && e.data?.type === 'consumption');
+
+    const nextActive = { ...simStateRef.current.objectActiveState };
+    const newEvents = [...simStateRef.current.pendingEvents];
 
     targetEdges.forEach(edge => {
       const tgtNode = nodes.find(n => n.id === edge.target);
-      if (tgtNode && tgtNode.data.type === 'state' && tgtNode.parentNode) {
-        targetStateIds.add(tgtNode.id);
-        parentToTargetState.set(tgtNode.parentNode, tgtNode.id);
+      if (tgtNode && tgtNode.data.type === 'state' && tgtNode.parentId) {
+        nextActive[tgtNode.parentId] = tgtNode.id;
+        newEvents.push({ stateId: tgtNode.id, objectId: tgtNode.parentId, tick: simStateRef.current.tick });
       }
     });
 
-    if (targetStateIds.size > 0) {
-      setNodes(prevNodes => prevNodes.map(n => {
-        if (n.parentNode && parentToTargetState.has(n.parentNode) && n.data.type === 'state') {
-          const targetActiveId = parentToTargetState.get(n.parentNode);
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              isActive: n.id === targetActiveId
-            }
-          };
+    consumptionEdges.forEach(edge => {
+      const srcNode = nodes.find(n => n.id === edge.source);
+      if (srcNode && srcNode.data.type === 'state' && srcNode.parentId) {
+        if (nextActive[srcNode.parentId] === srcNode.id) {
+          nextActive[srcNode.parentId] = null;
         }
-        if (parentToTargetState.has(n.id)) {
-          const targetActiveId = parentToTargetState.get(n.id);
-          const updatedStates = (n.data.states || []).map(s => ({
-            ...s,
-            isActive: s.id === targetActiveId
-          }));
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              states: updatedStates
-            }
-          };
-        }
-        return n;
-      }));
+      }
+    });
 
-      // Sync variables
+    simStateRef.current = {
+      ...simStateRef.current,
+      objectActiveState: nextActive,
+      pendingEvents: newEvents,
+    };
+
+    // Apply firing state to nodes
+    setNodes(prevNodes => applySimResultToNodes(prevNodes, simStateRef.current, [processId]));
+
+    // Sync global variables
+    const varsToUpdate = Object.entries(nextActive);
+    if (varsToUpdate.length > 0) {
       onVariablesChange(availableVariables.map(v => {
-        for (const [parentId, stateId] of parentToTargetState.entries()) {
+        const match = varsToUpdate.find(([parentId, stateId]) => {
           const parentObj = nodes.find(n => n.id === parentId);
-          const stateNode = nodes.find(n => n.id === stateId);
-          if (parentObj && stateNode && v.name.toLowerCase() === parentObj.data.name.toLowerCase()) {
-            const stateName = stateNode.data.name;
-            let val: number | boolean | string = stateName;
-            if (stateName.toLowerCase() === 'on' || stateName.toLowerCase() === 'high' || stateName.toLowerCase() === 'active') val = 1;
-            if (stateName.toLowerCase() === 'off' || stateName.toLowerCase() === 'low' || stateName.toLowerCase() === 'inactive') val = 0;
-            logSim('success', `System Sync: Object [${parentObj.data.name}] transitioned to state [${stateName}] via manual process execution`);
-            return { ...v, currentValue: val };
-          }
-        }
-        return v;
-      }));
-    }
-
-    // Reset process isFiring after 800ms
-    setTimeout(() => {
-      setNodes(prevNodes => prevNodes.map(n => {
-        if (n.id === processId) {
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              isFiring: false
-            } as any
-          };
-        }
-        return n;
-      }));
-    }, 800);
-
-  }, [nodes, edges, availableVariables, onVariablesChange, saveHistory]);
-
-  const handleAutoInitializeStates = useCallback(() => {
-    saveHistory(nodes, edges);
-
-    const objects = nodes.filter(n => n.data.type === 'object');
-    if (objects.length === 0) return;
-
-    const objectToFirstStateId = new Map<string, string>();
-    const stateIdToName = new Map<string, string>();
-
-    objects.forEach(obj => {
-      const childStates = nodes.filter(sn => sn.parentNode === obj.id && sn.data.type === 'state');
-      if (childStates.length > 0) {
-        objectToFirstStateId.set(obj.id, childStates[0].id);
-        stateIdToName.set(childStates[0].id, childStates[0].data.name);
-      }
-    });
-
-    if (objectToFirstStateId.size === 0) return;
-
-    setNodes(prevNodes => prevNodes.map(n => {
-      if (n.parentNode && objectToFirstStateId.has(n.parentNode) && n.data.type === 'state') {
-        const targetActiveId = objectToFirstStateId.get(n.parentNode);
-        return {
-          ...n,
-          data: {
-            ...n.data,
-            isActive: n.id === targetActiveId
-          }
-        };
-      }
-      if (objectToFirstStateId.has(n.id)) {
-        const targetActiveId = objectToFirstStateId.get(n.id);
-        const updatedStates = (n.data.states || []).map(s => ({
-          ...s,
-          isActive: s.id === targetActiveId
-        }));
-        return {
-          ...n,
-          data: {
-            ...n.data,
-            states: updatedStates
-          }
-        };
-      }
-      return n;
-    }));
-
-    onVariablesChange(availableVariables.map(v => {
-      for (const [objId, stateId] of objectToFirstStateId.entries()) {
-        const parentObj = nodes.find(n => n.id === objId);
-        const stateName = stateIdToName.get(stateId);
-        if (parentObj && stateName && v.name.toLowerCase() === parentObj.data.name.toLowerCase()) {
+          return parentObj && v.name.toLowerCase() === parentObj.data.name.toLowerCase();
+        });
+        if (match && match[1]) {
+          const stateNode = nodes.find(n => n.id === match[1]);
+          const stateName = stateNode ? stateNode.data.name : '';
           let val: number | boolean | string = stateName;
           if (stateName.toLowerCase() === 'on' || stateName.toLowerCase() === 'high' || stateName.toLowerCase() === 'active') val = 1;
           if (stateName.toLowerCase() === 'off' || stateName.toLowerCase() === 'low' || stateName.toLowerCase() === 'inactive') val = 0;
           return { ...v, currentValue: val };
         }
-      }
-      return v;
-    }));
+        return v;
+      }));
+    }
 
-    logSim('success', `Initialized all objects in scope to their default (first) state.`);
+    // Reset process isFiring after 600ms
+    setTimeout(() => {
+      setNodes(prevNodes => applySimResultToNodes(prevNodes, simStateRef.current, []));
+    }, 600);
+
   }, [nodes, edges, availableVariables, onVariablesChange, saveHistory]);
+
+  const handleAutoInitializeStates = useCallback(() => {
+    saveHistory(nodes, edges);
+    simStateRef.current = initializeSimulation(nodes);
+    setNodes(prevNodes => applySimResultToNodes(prevNodes, simStateRef.current, []));
+    logSim('success', 'Auto-initialized all stateful objects to their initial state.');
+  }, [nodes, edges, saveHistory]);
 
   // --- OPL Text Sync (Sync to Canvas) ---
   const applyOplChanges = () => {
@@ -775,107 +790,14 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   // --- Auto-Layout Algorithms ---
   const triggerAutoLayout = (type: 'force' | 'hierarchy') => {
     saveHistory(nodes, edges);
-    let updatedNodes = [...nodes];
-
-    if (type === 'force') {
-      // Simple force-directed physics layout
-      const width = 800;
-      const height = 500;
-      const k = 120; // spring constant rest length
-      const cRepulsion = 6000;
-      const cAttraction = 0.04;
-      const iterations = 50;
-
-      // Position initialized
-      const nodePos = new Map<string, { x: number; y: number }>();
-      updatedNodes.forEach(n => {
-        nodePos.set(n.id, { x: n.position.x, y: n.position.y });
-      });
-
-      for (let step = 0; step < iterations; step++) {
-        // Calculate repulsion forces between all nodes
-        updatedNodes.forEach(n1 => {
-          let fx = 0;
-          let fy = 0;
-          const pos1 = nodePos.get(n1.id)!;
-
-          updatedNodes.forEach(n2 => {
-            if (n1.id === n2.id) return;
-            const pos2 = nodePos.get(n2.id)!;
-            const dx = pos1.x - pos2.x;
-            const dy = pos1.y - pos2.y;
-            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-
-            if (dist < 300) {
-              const force = cRepulsion / (dist * dist);
-              fx += (dx / dist) * force;
-              fy += (dy / dist) * force;
-            }
-          });
-
-          // Attraction forces along edges
-          edges.forEach(e => {
-            if (e.source === n1.id) {
-              const pos2 = nodePos.get(e.target);
-              if (pos2) {
-                const dx = pos2.x - pos1.x;
-                const dy = pos2.y - pos1.y;
-                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-                const force = cAttraction * (dist - k);
-                fx += (dx / dist) * force;
-                fy += (dy / dist) * force;
-              }
-            } else if (e.target === n1.id) {
-              const pos2 = nodePos.get(e.source);
-              if (pos2) {
-                const dx = pos2.x - pos1.x;
-                const dy = pos2.y - pos1.y;
-                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-                const force = cAttraction * (dist - k);
-                fx += (dx / dist) * force;
-                fy += (dy / dist) * force;
-              }
-            }
-          });
-
-          // Apply displacement with damping
-          const newX = Math.max(50, Math.min(width - 50, pos1.x + fx * 0.5));
-          const newY = Math.max(50, Math.min(height - 50, pos1.y + fy * 0.5));
-          nodePos.set(n1.id, { x: newX, y: newY });
-        });
-      }
-
-      updatedNodes = updatedNodes.map(n => {
-        if (n.data.type === 'state') return n; // Skip nested state coordinates displacement
-        const pos = nodePos.get(n.id);
-        return pos ? { ...n, position: pos } : n;
-      });
-    } else {
-      // Hierarchical placement: Objects at top, Processes middle, output objects bottom
-      let objCount = 0;
-      let procCount = 0;
-      updatedNodes = updatedNodes.map(n => {
-        if (n.data.parentId !== activeParentId) return n;
-        
-        if (n.data.type === 'object') {
-          objCount++;
-          return {
-            ...n,
-            position: { x: objCount * 180 - 80, y: 80 }
-          };
-        } else if (n.data.type === 'process') {
-          procCount++;
-          return {
-            ...n,
-            position: { x: procCount * 180 - 80, y: 260 }
-          };
-        }
-        return n;
-      });
-    }
-
+    const updatedNodes = layoutOpmGraph(nodes, edges, {
+      columnGap: type === 'hierarchy' ? 420 : 360,
+      rowGap: type === 'hierarchy' ? 55 : 40,
+      startX: 80,
+      startY: 80,
+    });
     setNodes(updatedNodes);
-    logSim('info', `Auto-layout (${type === 'force' ? 'Force-Directed' : 'Hierarchical'}) applied to canvas.`);
+    logSim('success', `Collision-free ${type === 'force' ? 'force-balanced' : 'hierarchical'} layout applied.`);
   };
 
   // --- Zoom In/Out hierarchical navigation ---
@@ -900,176 +822,11 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
 
   // --- Simulation Runner Engine ---
   const runSimTick = useCallback(() => {
-    // 1. Gather all enablers and triggers first using current node values
-    // Find all processes and evaluate if they should fire
-    const processesToFire = new Set<string>();
-    
-    nodes.forEach(n => {
-      if (n.data.type === 'process') {
-        // Condition links point to the process
-        const conditionLinks = edges.filter(e => e.target === n.id && e.data?.type === 'condition');
-        const conditionsMet = conditionLinks.length === 0 || conditionLinks.every(link => {
-          const srcNode = nodes.find(pn => pn.id === link.source);
-          if (!srcNode) return false;
-          if (srcNode.data.type === 'state') {
-            return (srcNode.data as any).isActive === true;
-          }
-          const matchingVar = availableVariables.find(v => v.name.toLowerCase() === srcNode.data.name.toLowerCase());
-          return matchingVar ? !!matchingVar.currentValue : true;
-        });
-
-        // Trigger links point to the process
-        const triggerLinks = edges.filter(e => e.target === n.id && e.data?.type === 'trigger');
-        const triggersMet = triggerLinks.length === 0 || triggerLinks.some(link => {
-          const srcNode = nodes.find(pn => pn.id === link.source);
-          if (!srcNode) return false;
-          return srcNode.data.type === 'state' ? (srcNode.data as any).isActive === true : false;
-        });
-
-        if (conditionsMet && (triggerLinks.length === 0 || triggersMet)) {
-          processesToFire.add(n.id);
-        }
-      }
-    });
-
-    if (processesToFire.size === 0) {
-      // If no processes are firing, we should check if any process was firing and needs to be set to false
-      const hasFiringProcess = nodes.some(n => n.data.type === 'process' && (n.data as any).isFiring);
-      if (hasFiringProcess) {
-        setNodes(prev => prev.map(n => {
-          if (n.data.type === 'process' && (n.data as any).isFiring) {
-            return {
-              ...n,
-              data: { ...n.data, isFiring: false }
-            };
-          }
-          return n;
-        }));
-      }
-      return;
-    }
-
-    // 2. Determine state changes from firing processes
-    // Map of parentObjId -> targetActiveStateId
-    const nextActiveStates = new Map<string, string>();
-    const statesToDeactivate = new Set<string>(); // For consumption
-
-    processesToFire.forEach(procId => {
-      const procNode = nodes.find(n => n.id === procId);
-      if (!procNode) return;
-      
-      logSim('info', `Process [${procNode.data.name}] fires! Conditions met.`);
-
-      // Result and Effect links pointing from process to state
-      const resultOrEffectLinks = edges.filter(
-        e => e.source === procId && (e.data?.type === 'result' || e.data?.type === 'effect')
-      );
-      
-      resultOrEffectLinks.forEach(link => {
-        const targetState = nodes.find(pn => pn.id === link.target && pn.data.type === 'state');
-        if (targetState && targetState.parentNode) {
-          nextActiveStates.set(targetState.parentNode, targetState.id);
-        }
-      });
-
-      // Consumption links pointing from state to process
-      const consumptionLinks = edges.filter(
-        e => e.target === procId && e.data?.type === 'consumption'
-      );
-      
-      consumptionLinks.forEach(link => {
-        const srcState = nodes.find(pn => pn.id === link.source && pn.data.type === 'state');
-        if (srcState) {
-          statesToDeactivate.add(srcState.id);
-        }
-      });
-    });
-
-    // 3. Perform immutable updates to nodes
-    const variablesToUpdate: { name: string; value: any }[] = [];
-    
-    setNodes(prevNodes => {
-      return prevNodes.map(n => {
-        // Update Process firing status
-        if (n.data.type === 'process') {
-          const isFiring = processesToFire.has(n.id);
-          if (isFiring !== (n.data as any).isFiring) {
-            return {
-              ...n,
-              data: { ...n.data, isFiring }
-            };
-          }
-        }
-        
-        // Update State active status
-        if (n.data.type === 'state' && n.parentNode) {
-          const parentId = n.parentNode;
-          let isActive = (n.data as any).isActive;
-          
-          if (nextActiveStates.has(parentId)) {
-            isActive = (n.id === nextActiveStates.get(parentId));
-          } else if (statesToDeactivate.has(n.id)) {
-            isActive = false;
-          }
-          
-          if (isActive !== (n.data as any).isActive) {
-            return {
-              ...n,
-              data: { ...n.data, isActive }
-            };
-          }
-        }
-
-        // Update Parent Object's states array if needed
-        if (n.data.type === 'object') {
-          const hasChildStateChange = nextActiveStates.has(n.id) || 
-            (n.data.states || []).some(s => statesToDeactivate.has(s.id));
-            
-          if (hasChildStateChange) {
-            const updatedStates = (n.data.states || []).map(s => {
-              let isActive = s.isActive;
-              if (nextActiveStates.has(n.id)) {
-                isActive = (s.id === nextActiveStates.get(n.id));
-              } else if (statesToDeactivate.has(s.id)) {
-                isActive = false;
-              }
-              return { ...s, isActive };
-            });
-            
-            // Sync with global variables
-            const activeState = updatedStates.find(s => s.isActive);
-            const activeStateName = activeState ? activeState.name : '';
-            let val: number | boolean | string = activeStateName;
-            if (activeStateName.toLowerCase() === 'on' || activeStateName.toLowerCase() === 'high' || activeStateName.toLowerCase() === 'active') val = 1;
-            else if (activeStateName.toLowerCase() === 'off' || activeStateName.toLowerCase() === 'low' || activeStateName.toLowerCase() === 'inactive') val = 0;
-            
-            variablesToUpdate.push({ name: n.data.name, value: val });
-            
-            if (activeState) {
-              logSim('success', `System Sync: Object [${n.data.name}] transitioned to state [${activeStateName}]`);
-            } else {
-              logSim('success', `System Sync: Object [${n.data.name}] state cleared (consumed)`);
-            }
-
-            return {
-              ...n,
-              data: { ...n.data, states: updatedStates }
-            };
-          }
-        }
-
-        return n;
-      });
-    });
-
-    // 4. Sync variables back to the workspace environment
-    if (variablesToUpdate.length > 0) {
-      onVariablesChange(availableVariables.map(v => {
-        const update = variablesToUpdate.find(u => u.name.toLowerCase() === v.name.toLowerCase());
-        return update ? { ...v, currentValue: update.value } : v;
-      }));
-    }
-  }, [nodes, edges, availableVariables, onVariablesChange]);
+    const result = stepSimulation(nodes, edges, simStateRef.current);
+    simStateRef.current = result.state;
+    setNodes(prev => applySimResultToNodes(prev, result.state, result.firingProcessIds));
+    result.logs.forEach(l => logSim(l.type, l.message));
+  }, [nodes, edges]);
 
   // Handle simulation timer
   useEffect(() => {
@@ -1083,24 +840,22 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   }, [simRunning, tickMs, runSimTick]);
 
   const toggleSimulation = () => {
+    if (!simRunning && simStateRef.current.tick === 0) {
+      simStateRef.current = initializeSimulation(nodes);
+      setNodes(prev => applySimResultToNodes(prev, simStateRef.current, []));
+    }
     setSimRunning(!simRunning);
     logSim('info', simRunning ? 'Simulation paused.' : 'Simulation running...');
   };
 
   const resetSimulation = () => {
     setSimRunning(false);
-    setNodes(prev => prev.map(n => ({
-      ...n,
-      data: {
-        ...n.data,
-        isFiring: false,
-        isActive: false
-      } as any
-    })));
-    logSim('info', 'Simulation state reset.');
+    simStateRef.current = initializeSimulation(nodes);
+    setNodes(prev => applySimResultToNodes(prev, simStateRef.current, []));
+    logSim('info', 'Simulation reset: objects initialized to their first state.');
   };
 
-  const stepSimulation = () => {
+  const handleStepClick = () => {
     runSimTick();
     logSim('info', 'Single-step tick executed.');
   };
@@ -1111,9 +866,20 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   };
 
   // --- Properties Panel Interactions ---
-  const handleNodeClick = useCallback((_: any, node: Node) => {
+  const handleNodeClick = useCallback((_: any, node: AppNode) => {
+    // If state creation tool is active and user clicks an Object
+    if (activeTool === 'state' && node.data.type === 'object') {
+      handleAddStateToObject(node.id);
+      setActiveTool('select');
+      setSelectedNode(node);
+      return;
+    }
+
     setSelectedNode(node);
-  }, []);
+    if (node.data.type === 'state' && node.parentId) {
+      handleManualActivateState(node.id, node.parentId);
+    }
+  }, [activeTool, handleAddStateToObject, handleManualActivateState]);
 
   const handleUpdateNodeProp = (key: string, value: any) => {
     if (!selectedNode) return;
@@ -1148,7 +914,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     if (!selectedNode) return;
     saveHistory(nodes, edges);
 
-    setNodes(prev => prev.filter(n => n.id !== selectedNode.id && n.parentNode !== selectedNode.id));
+    setNodes(prev => prev.filter(n => n.id !== selectedNode.id && n.parentId !== selectedNode.id));
     setEdges(prev => prev.filter(e => e.source !== selectedNode.id && e.target !== selectedNode.id));
     setSelectedNode(null);
     logSim('warning', `Element ${selectedNode.data.name} deleted.`);
@@ -1261,13 +1027,15 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 if (val && OPM_EXAMPLES[val]) {
                   const selectedExample = OPM_EXAMPLES[val];
                   const { nodes: parsedNodes, edges: parsedEdges, errors } = parseOpl(selectedExample.oplText);
+                  simStateRef.current = initializeSimulation(parsedNodes);
+                  const initializedNodes = applySimResultToNodes(parsedNodes, simStateRef.current, []);
                   saveHistory(nodes, edges);
-                  setNodes(parsedNodes);
+                  setNodes(initializedNodes);
                   setEdges(parsedEdges);
                   setOplText(selectedExample.oplText);
                   setOplErrors(errors);
                   logSim('success', `Loaded example model: ${selectedExample.name}`);
-                  if (onSave) onSave(parsedNodes, parsedEdges);
+                  if (onSave) onSave(initializedNodes, parsedEdges);
                 }
               }}
               defaultValue=""
@@ -1278,6 +1046,24 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 <option key={key} value={key}>{ex.name}</option>
               ))}
             </select>
+            {sysmlState && (
+              <button
+                onClick={() => {
+                  const { nodes: impNodes, edges: impEdges, warnings } = importSysmlToOpm(sysmlState);
+                  saveHistory(nodes, edges);
+                  setNodes(impNodes);
+                  setEdges(impEdges);
+                  setOplText('');
+                  warnings.forEach(w => logSim('warning', w));
+                  logSim('success', `Imported ${impNodes.length} OPM elements from the SysML model.`);
+                  if (onSave) onSave(impNodes, impEdges);
+                }}
+                className="px-2.5 py-1 text-[10px] border border-purple-700 text-purple-300 rounded hover:bg-purple-950/40 ml-1 font-semibold"
+                title="Migrate the SysML BDD/IBD/Requirements model into this OPM workspace"
+              >
+                Import SysML → OPM
+              </button>
+            )}
           </div>
 
           {/* Simulation Tools */}
@@ -1290,7 +1076,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               {simRunning ? <Pause size={14} /> : <Play size={14} />}
             </button>
             <button
-              onClick={stepSimulation}
+              onClick={runSimTick}
               className="p-1 text-sky-400 hover:bg-sky-950/40 rounded transition-colors"
               title="Step Simulation"
             >
@@ -1363,43 +1149,52 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         {/* Workspace core body */}
         <div className="flex-1 flex overflow-hidden relative">
           {/* Tool Dock (Left floating bar) */}
-          <div className="absolute left-3 top-3 z-10 bg-[#161616]/90 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-2 flex flex-col gap-2 shadow-lg">
-            <span className="text-[8px] uppercase tracking-wider font-extrabold text-orange-400/80 mb-1 text-center">Tools</span>
+          <div className="absolute left-3 top-3 z-10 bg-[#161616]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-2 flex flex-col gap-2 shadow-xl">
+            <span className="text-[8px] uppercase tracking-wider font-extrabold text-orange-400/80 mb-0.5 text-center">Tools</span>
             <button
               onClick={() => setActiveTool('select')}
               className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
-                activeTool === 'select' ? 'bg-[#f97316]/20 border border-[#f97316] text-[#f97316]' : 'hover:bg-[#222] text-[#999]'
+                activeTool === 'select' ? 'bg-[#f97316]/20 border border-[#f97316] text-[#f97316] font-bold shadow' : 'hover:bg-[#222] text-[#999]'
               }`}
-              title="Select / Move"
+              title="Select / Move elements"
             >
               🖱️ <span className="text-[8px]">Select</span>
             </button>
             <button
               onClick={() => setActiveTool('object')}
               className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
-                activeTool === 'object' ? 'bg-emerald-950/50 border border-emerald-500 text-emerald-400' : 'hover:bg-[#222] text-[#999]'
+                activeTool === 'object' ? 'bg-emerald-950/60 border border-emerald-400 text-emerald-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
               }`}
-              title="Add Object (Rectangle)"
+              title="Click canvas to place an Object"
             >
               🟢 <span className="text-[8px]">Object</span>
             </button>
             <button
               onClick={() => setActiveTool('process')}
               className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
-                activeTool === 'process' ? 'bg-sky-950/50 border border-sky-400 text-sky-400' : 'hover:bg-[#222] text-[#999]'
+                activeTool === 'process' ? 'bg-sky-950/60 border border-sky-400 text-sky-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
               }`}
-              title="Add Process (Ellipse)"
+              title="Click canvas to place a Process"
             >
               🔵 <span className="text-[8px]">Process</span>
             </button>
             <button
               onClick={() => setActiveTool('state')}
               className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
-                activeTool === 'state' ? 'bg-orange-950/50 border border-orange-500 text-orange-400' : 'hover:bg-[#222] text-[#999]'
+                activeTool === 'state' ? 'bg-orange-950/60 border border-orange-400 text-orange-300 font-bold shadow animate-pulse' : 'hover:bg-[#222] text-[#999]'
               }`}
-              title="Add State inside Object"
+              title="Click an Object to add a State inside it"
             >
               🔶 <span className="text-[8px]">State</span>
+            </button>
+            <button
+              onClick={() => setActiveTool('requirement')}
+              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
+                activeTool === 'requirement' ? 'bg-purple-950/60 border border-purple-400 text-purple-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
+              }`}
+              title="Click canvas to place a Requirement"
+            >
+              📜 <span className="text-[8px]">Req</span>
             </button>
 
             <div className="h-px bg-[#333] my-1"></div>
@@ -1424,11 +1219,15 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 <option value="generalization">Generalization</option>
                 <option value="exhibition">Exhibition</option>
               </optgroup>
+              <optgroup label="Traceability" className="bg-[#141414]">
+                <option value="satisfies">Satisfies</option>
+                <option value="verifies">Verifies</option>
+              </optgroup>
             </select>
           </div>
 
           {/* React Flow Canvas */}
-          <div className="flex-1 h-full" onClick={handleCanvasClick}>
+          <div className="flex-1 h-full">
             <ReactFlow
               proOptions={{ hideAttribution: true }}
               nodes={filteredNodes}
@@ -1438,8 +1237,11 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               onConnect={onConnect}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
+              onInit={(inst) => { reactFlowInstanceRef.current = inst; }}
+              onPaneClick={handlePaneClick}
               onNodeClick={handleNodeClick}
               connectionLineComponent={OPMConnectionLine}
+              colorMode="dark"
               minZoom={0.01}
               maxZoom={15}
               fitView
@@ -1450,12 +1252,14 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 nodeColor={(node) => {
                   if (node.data?.type === 'object') return '#10b981';
                   if (node.data?.type === 'process') return '#0284c7';
+                  if (node.data?.type === 'requirement') return '#c084fc';
                   return '#f59e0b';
                 }}
                 maskColor="rgba(0, 0, 0, 0.7)"
                 className="bg-[#141414] border border-[#2d2d2d] rounded-md"
               />
             </ReactFlow>
+            <OpmLegend />
           </div>
 
           {/* Selected Node Properties Panel (Floating bottom-left) */}
@@ -1495,6 +1299,73 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   />
                 </div>
               </div>
+
+              {/* States Manager (For Objects) */}
+              {selectedNode.data.type === 'object' && (
+                <div className="border-t border-[#2d2d2d] pt-2 space-y-2 shrink-0">
+                  <div className="text-[10px] text-[#777] uppercase font-bold tracking-wider mb-1 flex items-center justify-between">
+                    <span>States</span>
+                    <span className="text-[8px] text-orange-400 font-mono">
+                      {(selectedNode.data.states || []).length} States
+                    </span>
+                  </div>
+
+                  {/* List of States */}
+                  <div className="space-y-1.5 text-xs">
+                    {(selectedNode.data.states || []).map((st) => (
+                      <div key={st.id} className="flex items-center justify-between bg-[#191008] border border-orange-950/60 px-2 py-1 rounded">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.isActive ? 'bg-orange-500 shadow-[0_0_6px_#f97316]' : 'bg-orange-900/60'}`} />
+                          <span className="font-semibold text-orange-200 text-[10px] truncate">{st.name}</span>
+                          {st.isInitial && <span className="text-[7px] px-1 bg-amber-950 text-amber-300 rounded border border-amber-800/60 font-bold shrink-0">Init</span>}
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => handleManualActivateState(st.id, selectedNode.id)}
+                            className={`text-[8px] px-1.5 py-0.5 rounded font-bold uppercase ${st.isActive ? 'bg-orange-600 text-black' : 'bg-[#222] text-orange-300 hover:bg-[#333]'}`}
+                          >
+                            {st.isActive ? 'Active' : 'Set'}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteState(st.id, selectedNode.id)}
+                            className="text-gray-500 hover:text-red-400 p-0.5 transition-colors"
+                            title="Delete State"
+                          >
+                            <Trash2 size={10} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Add State form */}
+                    <div className="flex gap-1.5 mt-2">
+                      <input
+                        placeholder="State name (e.g. Active)"
+                        id="new-state-name-input"
+                        className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none flex-1 text-xs text-white focus:border-orange-500/50"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                            handleAddStateToObject(selectedNode.id, e.currentTarget.value.trim());
+                            e.currentTarget.value = '';
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          const inputEl = document.getElementById('new-state-name-input') as HTMLInputElement;
+                          if (inputEl && inputEl.value.trim()) {
+                            handleAddStateToObject(selectedNode.id, inputEl.value.trim());
+                            inputEl.value = '';
+                          }
+                        }}
+                        className="px-2 py-1 bg-orange-600 hover:bg-orange-500 text-black font-extrabold rounded text-[10px] flex items-center gap-0.5 shrink-0 transition-colors"
+                      >
+                        <Plus size={10} /> Add
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Attributes Section (For Objects) */}
               {selectedNode.data.type === 'object' && (
@@ -1712,29 +1583,39 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* 2. Right Tabbed Panel (Simulation Monitor & OPL Editor) */}
+      {/* 2. Right Tabbed Panel (Simulation Monitor & OPL Editor & Smart Show) */}
       <div className="w-96 flex flex-col h-full bg-[#141414] overflow-hidden border-l border-[#222]">
         {/* Tab Header */}
         <div className="h-12 border-b border-[#222] flex shrink-0 bg-[#181818]">
           <button
             onClick={() => setRightTab('simControl')}
-            className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 ${
+            className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors border-b-2 ${
               rightTab === 'simControl'
                 ? 'border-orange-500 text-orange-400 bg-orange-950/10'
                 : 'border-transparent text-gray-500 hover:text-gray-300'
             }`}
           >
-            ⚡ Sim Control
+            ⚡ Sim
           </button>
           <button
             onClick={() => setRightTab('opl')}
-            className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 ${
+            className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors border-b-2 ${
               rightTab === 'opl'
                 ? 'border-sky-500 text-sky-400 bg-sky-950/10'
                 : 'border-transparent text-gray-500 hover:text-gray-300'
             }`}
           >
-            📝 OPL Specs
+            📝 OPL
+          </button>
+          <button
+            onClick={() => setRightTab('smartShow')}
+            className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors border-b-2 ${
+              rightTab === 'smartShow'
+                ? 'border-sky-500 text-sky-300 bg-sky-950/20'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            🌐 Smart Show
           </button>
         </div>
 
@@ -1759,7 +1640,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   {simRunning ? <Pause size={12} /> : <Play size={12} />}
                 </button>
                 <button
-                  onClick={stepSimulation}
+                  onClick={runSimTick}
                   className="p-1.5 text-sky-400 hover:bg-sky-950/40 rounded transition-all"
                   title="Step Simulation"
                 >
@@ -1797,7 +1678,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               
               <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
                 {nodes.filter(n => n.data.type === 'object' && n.data.parentId === activeParentId).map(obj => {
-                  const childStates = nodes.filter(sn => sn.parentNode === obj.id && sn.data.type === 'state');
+                  const childStates = nodes.filter(sn => sn.parentId === obj.id && sn.data.type === 'state');
                   
                   return (
                     <div key={obj.id} className="bg-[#161616]/75 border border-emerald-900/20 rounded-lg p-2.5 space-y-2 hover:border-emerald-600/30 transition-all">
@@ -2004,6 +1885,22 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Tab Content 3: Smart Show Panel */}
+        {rightTab === 'smartShow' && (
+          <div className="flex-1 flex flex-col overflow-hidden p-3 min-h-0">
+            <SmartShowPanel
+              nodes={nodes}
+              edges={edges}
+              simState={simStateRef.current}
+              simRunning={simRunning}
+              onSelectProcess={(pid) => {
+                const p = nodes.find(n => n.id === pid);
+                if (p) setSelectedNode(p);
+              }}
+            />
           </div>
         )}
       </div>

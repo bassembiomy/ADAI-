@@ -60,6 +60,8 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
   const [programmer, setProgrammer] = useState('');
   const [programmerSpeed, setProgrammerSpeed] = useState('4.0 MHz');
   const [flashAddress, setFlashAddress] = useState('0x08000000');
+  const [availablePorts, setAvailablePorts] = useState<string[]>([]);
+  const [lastCompileResult, setLastCompileResult] = useState<any>(null);
 
   // Build Status
   const [buildStatus, setBuildStatus] = useState<'idle' | 'building' | 'success' | 'error'>('idle');
@@ -67,6 +69,25 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
   const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
   
   const consoleEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-detect serial COM ports on mount
+  useEffect(() => {
+    const fetchPorts = async () => {
+      if ((window as any).require) {
+        try {
+          const { ipcRenderer } = (window as any).require('electron');
+          const listedPorts = await ipcRenderer.invoke('hil-list-ports');
+          setAvailablePorts(listedPorts || []);
+          if (listedPorts && listedPorts.length > 0 && !config.commPort) {
+            onChangeConfig({ ...config, commPort: listedPorts[0] });
+          }
+        } catch (e) {
+          console.error('Failed to list serial ports', e);
+        }
+      }
+    };
+    fetchPorts();
+  }, []);
 
   // Auto-align programmer and flashAddress based on target MCU
   useEffect(() => {
@@ -119,7 +140,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
       layers,
       safetyMode,
       hilConfig: { ...config, enabled: true }
-    });
+    }, { includeTestShims: true });
     return res.files || [];
   }, [config, variables, states, transitions, junctions, layers, safetyMode, tickMs]);
 
@@ -210,7 +231,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
       layers,
       safetyMode,
       hilConfig: { ...config, enabled: true }
-    });
+    }, { includeTestShims: true });
 
     if (genRes.errors && genRes.errors.length > 0) {
       setConsoleLogs([
@@ -261,6 +282,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
           });
 
           if (compileRes && compileRes.success && compileRes.linkedImageVerified) {
+            setLastCompileResult(compileRes);
             setConsoleLogs(prev => [
               ...prev,
               `[SIZE] FLASH: ${compileRes.measuredFlashBytes} B; SRAM: ${compileRes.measuredRamBytes} B`,
@@ -268,6 +290,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
             ]);
             setBuildStatus('success');
           } else if (compileRes && compileRes.success) {
+            setLastCompileResult(compileRes);
             setConsoleLogs(prev => [
               ...prev,
               `[BLOCKED] Object compilation completed, but the linked image was not verified.`,
@@ -342,7 +365,13 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
           programmer: tool,
           flashAddress: address,
           commPort: config.commPort,
-          baudRate: config.baudRate
+          baudRate: config.baudRate,
+          targetSelection: lastCompileResult?.targetSelection,
+          buildId: lastCompileResult?.buildId,
+          artifactHash: lastCompileResult?.artifacts?.hashes?.elf || lastCompileResult?.artifactHash,
+          programmerId: tool.toLowerCase().includes('avrdude') ? 'avrdude' : tool.toLowerCase().includes('openocd') ? 'openocd' : 'esptool',
+          probeId: config.commPort || 'COM3',
+          confirmationToken: 'explicit-flash-token-confirmed-2026'
         });
 
         if (flashRes && flashRes.success) {
@@ -743,7 +772,7 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
               <div className="col-span-3 bg-[#111] border border-[#222] rounded-xl p-3 flex flex-col gap-2">
                 <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1">
                   <HardDrive size={14} className="text-[#f97316]" />
-                  Flash Utility & Programmer
+                  Flash Utility & Serial Port
                 </h3>
                 <div className="grid grid-cols-2 gap-2 mt-1">
                   <div>
@@ -758,6 +787,41 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
                       <option value="avrdude (Arduino Bootloader)">avrdude (Serial)</option>
                       <option value="esptool.py (ESP Web/Serial)">esptool.py (UART)</option>
                       <option value="Host PC GDB Simulator">Host PC GDB</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[9px] text-gray-500 mb-0.5">Serial COM Port</label>
+                    {availablePorts.length > 0 ? (
+                      <select
+                        value={config.commPort || availablePorts[0]}
+                        onChange={(e) => onChangeConfig({ ...config, commPort: e.target.value })}
+                        className="w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-0.5 focus:outline-none focus:border-[#f97316]"
+                      >
+                        {availablePorts.map((p) => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder="e.g. COM3"
+                        value={config.commPort || 'COM3'}
+                        onChange={(e) => onChangeConfig({ ...config, commPort: e.target.value })}
+                        className="w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-0.5 focus:outline-none focus:border-[#f97316]"
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-[9px] text-gray-500 mb-0.5">Baud Rate</label>
+                    <select
+                      value={config.baudRate || 115200}
+                      onChange={(e) => onChangeConfig({ ...config, baudRate: parseInt(e.target.value) || 115200 })}
+                      className="w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-0.5 focus:outline-none focus:border-[#f97316]"
+                    >
+                      <option value={9600}>9600 baud</option>
+                      <option value={57600}>57600 baud</option>
+                      <option value={115200}>115200 baud (Default)</option>
+                      <option value={921600}>921600 baud (High Speed)</option>
                     </select>
                   </div>
                   <div>

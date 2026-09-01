@@ -101,6 +101,7 @@ function renderMcalImplementation(config: HILConfig, channels: readonly McalChan
     '/* Generated MCAL adapters. Unsupported providers fail closed. */',
     '#include "adia_mcal.h"',
     '#include "hal_drivers.h"',
+    '#include <stddef.h>',
     '',
   ];
   for (const peripheral of peripherals) {

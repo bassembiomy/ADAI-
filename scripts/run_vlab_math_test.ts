@@ -1,5 +1,5 @@
 import { VLabPhysicsEngine } from '../src/engine/vlab/vlabPhysics.js';
-import { Node, Edge } from 'reactflow';
+import { Node, Edge } from '@xyflow/react';
 import * as fs from 'fs';
 import * as path from 'path';
 

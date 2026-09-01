@@ -1,0 +1,2067 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#141721">
+  <meta
+    name="description"
+    content="ADAI Engineering Suite — Interactive 3D presentation and technical volumes for Model-Based Systems Engineering, Stateflow, Control Systems, Multiphysics Simulation, HIL, DOE, and Digital Twins."
+  >
+  <title>ADAI Engineering Suite — Seven Working Volumes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap"
+    rel="stylesheet"
+  >
+  <style>
+    :root {
+      color-scheme: dark;
+      --paper: #12141c;
+      --paper-deep: #0b0d13;
+      --paper-pale: #f0ebe1;
+      --ink: #f7f3ec;
+      --ink-soft: #aba59c;
+      --walnut: #2b1812;
+      --walnut-deep: #160a07;
+      --rule: rgba(247, 243, 236, 0.18);
+      --accent: #c87046;
+      --accent-glow: rgba(200, 112, 70, 0.35);
+      --serif: "Newsreader", "Cinzel", "Iowan Old Style", "Baskerville", serif;
+      --mono: "JetBrains Mono", "SF Mono", monospace;
+      --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      min-height: 100%;
+      overflow: hidden;
+      background: var(--paper-deep);
+      color: var(--ink);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      user-select: none;
+    }
+
+    button {
+      color: inherit;
+      font: inherit;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--ink);
+      outline-offset: 4px;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    .experience {
+      position: fixed;
+      inset: 0;
+      isolation: isolate;
+      overflow: hidden;
+      background: var(--paper-deep);
+      transition: background-color 720ms var(--ease-out), color 520ms var(--ease-out);
+    }
+
+    .scene-shell {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+
+    #scene {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      cursor: grab;
+    }
+
+    #scene.is-dragging {
+      cursor: grabbing;
+    }
+
+    #scene.has-hover {
+      cursor: pointer;
+    }
+
+    /* Ambient Vignette & Scrim */
+    .experience::after {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      background:
+        radial-gradient(ellipse at 50% 40%, transparent 40%, rgba(6, 7, 10, 0.75) 100%),
+        linear-gradient(180deg, rgba(8, 10, 14, 0.5) 0%, transparent 20%, transparent 80%, rgba(8, 10, 14, 0.7) 100%);
+      content: "";
+      pointer-events: none;
+    }
+
+    /* Editorial Header */
+    .editorial-header {
+      position: absolute;
+      top: 28px;
+      right: 36px;
+      left: 36px;
+      z-index: 10;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      color: var(--ink);
+      pointer-events: none;
+      transition: opacity 520ms var(--ease-out), transform 680ms var(--ease-out);
+    }
+
+    .editorial-identity {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3px 8px;
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      background: rgba(200, 112, 70, 0.15);
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .editorial-identity strong {
+      font-family: var(--serif);
+      font-size: clamp(1.3rem, 2vw, 1.85rem);
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+
+    .editorial-identity span {
+      color: var(--ink-soft);
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .editorial-index {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      text-align: right;
+    }
+
+    .editorial-index span:first-child {
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+    }
+
+    .editorial-index span:last-child {
+      color: var(--ink-soft);
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    /* Floating Pointer Label */
+    .pointer-label {
+      position: fixed;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 6px;
+      background: rgba(14, 17, 24, 0.88);
+      box-shadow: 0 16px 32px rgba(0, 0, 0, 0.6), inset 0 1px rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(12px);
+      pointer-events: none;
+      opacity: 0;
+      transform: translate(-50%, -130%) scale(0.95);
+      transition: opacity 220ms ease, transform 220ms ease;
+    }
+
+    .pointer-label.is-visible {
+      opacity: 1;
+      transform: translate(-50%, -130%) scale(1);
+    }
+
+    .pointer-label span {
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 0.58rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .pointer-label strong {
+      color: var(--ink);
+      font-family: var(--serif);
+      font-size: 0.95rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+
+    /* Bottom Shelf Navigation UI */
+    .browse-ui {
+      position: absolute;
+      right: 36px;
+      bottom: 30px;
+      left: 36px;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) auto minmax(280px, 1fr);
+      align-items: end;
+      gap: 28px;
+      pointer-events: auto;
+      transition: opacity 480ms var(--ease-out), transform 640ms var(--ease-out);
+    }
+
+    .selection {
+      display: grid;
+      grid-template-columns: 54px minmax(0, 1fr);
+      align-items: start;
+      gap: 16px;
+    }
+
+    .counter {
+      padding-top: 8px;
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+    }
+
+    .selection__title {
+      font-family: var(--serif);
+      font-size: clamp(2.2rem, 3.8vw, 3.8rem);
+      font-weight: 400;
+      letter-spacing: -0.04em;
+      line-height: 0.92;
+      color: var(--ink);
+    }
+
+    .selection__note {
+      max-width: 480px;
+      margin-top: 10px;
+      color: var(--ink-soft);
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    .browse-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 6px;
+    }
+
+    .round-button,
+    .text-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--rule);
+      border-radius: 999px;
+      background: rgba(22, 26, 36, 0.7);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(16px);
+      color: var(--ink);
+      transition: all 260ms var(--ease-out);
+    }
+
+    .round-button {
+      width: 44px;
+      height: 44px;
+    }
+
+    .round-button svg {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .text-button {
+      min-height: 44px;
+      padding: 0 24px;
+      font-family: var(--sans);
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      gap: 8px;
+    }
+
+    .text-button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      box-shadow: 0 8px 24px var(--accent-glow);
+    }
+
+    .round-button:hover,
+    .text-button:hover {
+      border-color: var(--ink);
+      background: rgba(40, 48, 66, 0.9);
+      transform: translateY(-2px);
+    }
+
+    .text-button.primary:hover {
+      background: color-mix(in srgb, var(--accent) 85%, white);
+      border-color: color-mix(in srgb, var(--accent) 85%, white);
+      box-shadow: 0 12px 30px var(--accent-glow);
+    }
+
+    .index-nav {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+      padding-bottom: 8px;
+    }
+
+    .markers {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .marker {
+      position: relative;
+      width: 32px;
+      height: 28px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .marker::before {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 20px;
+      height: 2px;
+      border-radius: 1px;
+      background: var(--rule);
+      content: "";
+      transform: translate(-50%, -50%);
+      transition: all 280ms var(--ease-out);
+    }
+
+    .marker:hover::before {
+      background: var(--ink-soft);
+      width: 26px;
+    }
+
+    .marker[aria-current="true"]::before {
+      width: 32px;
+      height: 3px;
+      background: var(--accent);
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    .microcopy {
+      color: var(--ink-soft);
+      font-family: var(--mono);
+      font-size: 0.58rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    /* Detail Drawer Panel */
+    .detail-panel {
+      position: absolute;
+      top: 50%;
+      right: clamp(36px, 5.5vw, 84px);
+      z-index: 15;
+      width: min(38vw, 500px);
+      max-height: 84vh;
+      display: flex;
+      flex-direction: column;
+      padding: 36px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 14px;
+      background: rgba(14, 17, 24, 0.88);
+      box-shadow: 0 32px 64px -16px rgba(0, 0, 0, 0.8), inset 0 1px rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(24px) saturate(140%);
+      color: var(--ink);
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(-50%) translateX(40px);
+      transition: opacity 560ms var(--ease-out), transform 640ms var(--ease-out);
+      overflow-y: auto;
+    }
+
+    .mode-detail .detail-panel {
+      pointer-events: auto;
+      opacity: 1;
+      transform: translateY(-50%) translateX(0);
+    }
+
+    .mode-detail .browse-ui {
+      opacity: 0.2;
+      transform: translateY(20px);
+      pointer-events: none;
+    }
+
+    .mode-detail .editorial-header {
+      opacity: 0.45;
+    }
+
+    .close-button {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--rule);
+      border-radius: 50%;
+      color: var(--ink-soft);
+      transition: all 220ms ease;
+    }
+
+    .close-button svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+    }
+
+    .close-button:hover {
+      color: var(--ink);
+      border-color: var(--ink);
+      transform: rotate(90deg);
+    }
+
+    .eyebrow {
+      display: inline-block;
+      margin-bottom: 12px;
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .detail-title {
+      font-family: var(--serif);
+      font-size: clamp(2.8rem, 4.5vw, 4.4rem);
+      font-weight: 400;
+      letter-spacing: -0.045em;
+      line-height: 0.88;
+      margin-bottom: 18px;
+    }
+
+    .detail-deck {
+      font-family: var(--serif);
+      font-size: 1.15rem;
+      line-height: 1.55;
+      color: var(--ink);
+      margin-bottom: 24px;
+    }
+
+    .meta-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px 20px;
+      padding: 20px 0;
+      border-top: 1px solid var(--rule);
+      border-bottom: 1px solid var(--rule);
+      margin-bottom: 24px;
+    }
+
+    .meta-list dt {
+      color: var(--ink-soft);
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .meta-list dd {
+      font-size: 0.85rem;
+      font-weight: 500;
+      line-height: 1.4;
+      color: var(--ink);
+    }
+
+    .page-nav-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 14px 18px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      margin-bottom: 24px;
+    }
+
+    .page-nav-status {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      text-align: center;
+    }
+
+    .page-nav-status strong {
+      font-family: var(--serif);
+      font-size: 1.05rem;
+      font-weight: 500;
+    }
+
+    .page-nav-status span {
+      color: var(--ink-soft);
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .page-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--rule);
+      border-radius: 50%;
+      transition: all 200ms ease;
+    }
+
+    .page-button:hover:not(:disabled) {
+      border-color: var(--ink);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .page-button:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .page-button svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+    }
+
+    .detail-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Full Technical Manual Modal */
+    .manual-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: grid;
+      place-items: center;
+      padding: 40px;
+      background: rgba(8, 10, 15, 0.85);
+      backdrop-filter: blur(28px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 360ms var(--ease-out);
+    }
+
+    .manual-modal.is-open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .manual-content {
+      position: relative;
+      width: min(960px, 94vw);
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      padding: 48px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 18px;
+      background: #0f121a;
+      box-shadow: 0 40px 90px rgba(0, 0, 0, 0.9), inset 0 1px rgba(255, 255, 255, 0.15);
+      overflow-y: auto;
+    }
+
+    .manual-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--rule);
+      margin-bottom: 32px;
+    }
+
+    .manual-header h2 {
+      font-family: var(--serif);
+      font-size: 2.6rem;
+      font-weight: 400;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin-top: 6px;
+    }
+
+    .manual-section {
+      margin-bottom: 36px;
+    }
+
+    .manual-section h3 {
+      font-family: var(--serif);
+      font-size: 1.5rem;
+      font-weight: 500;
+      color: var(--accent);
+      margin-bottom: 14px;
+    }
+
+    .manual-section p {
+      font-size: 0.95rem;
+      line-height: 1.7;
+      color: #d1cbd4;
+      margin-bottom: 14px;
+    }
+
+    .manual-section ul,
+    .manual-section ol {
+      padding-left: 24px;
+      margin-bottom: 16px;
+      color: #d1cbd4;
+      font-size: 0.92rem;
+      line-height: 1.7;
+    }
+
+    .manual-section li {
+      margin-bottom: 8px;
+    }
+
+    .code-block {
+      position: relative;
+      padding: 18px 22px;
+      border-radius: 8px;
+      background: #090b10;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      line-height: 1.55;
+      color: #8ed0f8;
+      overflow-x: auto;
+      margin: 16px 0;
+    }
+
+    .equation-box {
+      padding: 16px 20px;
+      border-left: 3px solid var(--accent);
+      background: rgba(200, 112, 70, 0.08);
+      border-radius: 0 8px 8px 0;
+      font-family: var(--serif);
+      font-size: 1.18rem;
+      font-style: italic;
+      color: #fff;
+      margin: 16px 0;
+    }
+
+    /* Loading Overlay */
+    .loading-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      background: var(--paper-deep);
+      transition: opacity 600ms var(--ease-out), visibility 600ms;
+    }
+
+    .loading-screen.is-hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    .loading-mark {
+      width: 48px;
+      height: 48px;
+      border: 2px solid var(--rule);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    .loading-screen p {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Responsive Queries */
+    @media (max-width: 960px) {
+      .editorial-header {
+        top: 20px;
+        right: 22px;
+        left: 22px;
+      }
+      .browse-ui {
+        right: 22px;
+        bottom: 20px;
+        left: 22px;
+        grid-template-columns: 1fr auto;
+      }
+      .selection {
+        grid-column: 1 / -1;
+      }
+      .detail-panel {
+        top: auto;
+        right: 18px;
+        bottom: 18px;
+        left: 18px;
+        width: auto;
+        max-height: 48vh;
+        transform: translateY(30px);
+      }
+      .mode-detail .detail-panel {
+        transform: translateY(0);
+      }
+    }
+  </style>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main class="experience" id="experience">
+    <!-- WebGL 3D Canvas -->
+    <div class="scene-shell">
+      <canvas id="scene" aria-label="3D ADAI Bookshelf"></canvas>
+    </div>
+
+    <!-- Editorial Header -->
+    <header class="editorial-header">
+      <div class="editorial-identity">
+        <div class="brand-row">
+          <strong>ADAI Suite</strong>
+          <span class="brand-badge">MBD · Industrial</span>
+        </div>
+        <span>Automated Design & Industrial Architecture</span>
+      </div>
+      <div class="editorial-index">
+        <span>Edition 2026 · Technical Corpus</span>
+        <span id="palette-label">Prussian Blue · Satin Copper</span>
+      </div>
+    </header>
+
+    <!-- Floating Pointer Hover Label -->
+    <div class="pointer-label" id="pointer-label">
+      <span id="pointer-label-index">Volume I</span>
+      <strong id="pointer-label-title">Architecture</strong>
+    </div>
+
+    <!-- Shelf Browsing Bar -->
+    <section class="browse-ui" id="browse-ui">
+      <div class="selection">
+        <span class="counter" id="counter">01 / 07</span>
+        <div class="selection__copy">
+          <h1 class="selection__title" id="selection-title">Architecture</h1>
+          <p class="selection__note" id="selection-note">Model-Based Systems Engineering, BDD/IBD hierarchies, and requirement traceability.</p>
+        </div>
+      </div>
+
+      <div class="browse-actions">
+        <button class="round-button" id="prev-btn" type="button" aria-label="Previous Module">
+          <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <button class="text-button primary" id="open-btn" type="button">Inspect Volume</button>
+        <button class="round-button" id="next-btn" type="button" aria-label="Next Module">
+          <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+      </div>
+
+      <nav class="index-nav" aria-label="Volume index">
+        <div class="markers" id="markers"></div>
+        <span class="microcopy">Scroll · Arrow Keys · Click to Orbit</span>
+      </nav>
+    </section>
+
+    <!-- Detail Drawer Panel -->
+    <aside class="detail-panel" id="detail-panel" aria-hidden="true">
+      <button class="close-button" id="close-detail-btn" type="button" aria-label="Close detail panel">
+        <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+      <span class="eyebrow" id="detail-eyebrow">Volume I · SysML Architecture</span>
+      <h2 class="detail-title" id="detail-title">Architecture</h2>
+      <p class="detail-deck" id="detail-deck">
+        Structural modeling using SysML Block Definition Diagrams (BDD) and Internal Block Diagrams (IBD). Defines system components, port contracts, value properties, and requirement satisfaction trees.
+      </p>
+
+      <dl class="meta-list">
+        <div>
+          <dt>Discipline</dt>
+          <dd id="detail-discipline">MBSE & System Architecture</dd>
+        </div>
+        <div>
+          <dt>Binding & Foil</dt>
+          <dd id="detail-binding">Prussian Blue Cloth · Satin Copper Foil</dd>
+        </div>
+        <div>
+          <dt>Core Logic</dt>
+          <dd id="detail-logic">Typed Port Flow & Hierarchy Allocation</dd>
+        </div>
+        <div>
+          <dt>Code Generation</dt>
+          <dd id="detail-codegen">Interface Headers & C Structs</dd>
+        </div>
+      </dl>
+
+      <!-- 3D Sample Page Turner -->
+      <div class="page-nav-row">
+        <button class="page-button" id="prev-page-btn" type="button" disabled aria-label="Previous Page">
+          <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="page-nav-status">
+          <strong id="page-nav-title">Cover & Title</strong>
+          <span id="page-nav-count">Page 1 of 4</span>
+        </div>
+        <button class="page-button" id="next-page-btn" type="button" aria-label="Next Page">
+          <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+      </div>
+
+      <div class="detail-actions">
+        <button class="text-button primary" id="read-manual-btn" type="button" style="flex:1;">Full Technical Manual</button>
+        <button class="text-button" id="toggle-book-btn" type="button">Open 3D Book</button>
+      </div>
+    </aside>
+
+    <!-- Comprehensive Technical Manual Modal -->
+    <div class="manual-modal" id="manual-modal" aria-hidden="true">
+      <div class="manual-content">
+        <div class="manual-header">
+          <div>
+            <span class="eyebrow" id="modal-eyebrow">Technical Reference Guide</span>
+            <h2 id="modal-title">SysML Architecture Engine</h2>
+          </div>
+          <button class="close-button" id="close-modal-btn" type="button" aria-label="Close manual">
+            <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div id="modal-body">
+          <!-- Dynamic Module Specific In-Depth Guide Injected Here -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loading-screen">
+      <div class="loading-mark"></div>
+      <p>Binding ADAI Technical Corpus</p>
+    </div>
+  </main>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+    import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+    import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+
+    RectAreaLightUniformsLib.init();
+
+    // ─────────────────────────────────────────────────────────────
+    // 7 VOLUMES DATASET
+    // ─────────────────────────────────────────────────────────────
+    const VOLUMES = [
+      {
+        id: "architecture",
+        roman: "I",
+        title: "Architecture",
+        subtitle: "System Architecture (SysML)",
+        discipline: "Model-Based Systems Engineering (MBSE)",
+        color: "#14243b",
+        foil: "#c87046",
+        paletteLabel: "Prussian Blue · Satin Copper",
+        note: "Model-Based Systems Engineering, BDD/IBD hierarchies, and requirement traceability.",
+        deck: "Structural modeling using SysML Block Definition Diagrams (BDD) and Internal Block Diagrams (IBD). Defines system components, port contracts, value properties, and requirement satisfaction trees.",
+        binding: "Prussian Blue Cloth · Satin Copper Foil",
+        logic: "Typed Port Flow & Hierarchy Allocation",
+        codegen: "Interface Headers & C Structs",
+        equations: [
+          "\\text{Allocation: } \\mathcal{A}: \\text{LogicalBlock} \\to \\text{TargetUnit}",
+          "\\text{Flow Compatibility: } \\mathrm{Type}(p_{out}) \\equiv \\mathrm{Type}(p_{in}) \\land \\mathrm{Unit}(p_{out}) = \\mathrm{Unit}(p_{in})"
+        ],
+        pages: [
+          { title: "Architecture Blueprint", desc: "SysML Block Definition Diagram (BDD) structural hierarchy and stereotype classifications." },
+          { title: "Internal Connections", desc: "Flow Port directional routing and Proxy Port interface contracts in IBD." },
+          { title: "Parametric Constraints", desc: "Mathematical equality and inequality assertions binding block value properties." },
+          { title: "Requirement Trace", desc: "Automated satisfiability verification linking functional specs to physical blocks." }
+        ],
+        manual: {
+          overview: "The Architecture module implements key SysML (Systems Modeling Language) diagrams to define the structural hierarchy, internal connectivity, constraints, and requirements of complex multi-domain systems.",
+          logic: "System decomposition is modeled via Block Definition Diagrams (BDD). Each Block encapsulates Value Properties (e.g. `mass: float = 12.5`), Operations, Constraints, and Typed Ports (Standard, Flow, and Proxy). In the Internal Block Diagram (IBD), parts and ports are interconnected through verified connectors that validate unit dimensions (e.g., kW, bar, RPM) and directional flow contracts.",
+          howToUse: [
+            "1. **Create Structural Blocks**: In BDD view, drag new Block components, assign stereotypes (`Block`, `Requirement`, `Interface`, `ValueType`).",
+            "2. **Define Value Properties & Ports**: Configure flow ports (In, Out, I/O) with physical units (Volts, Amperes, Pascals).",
+            "3. **Wire System in IBD**: Switch to Internal Block Diagram to instantiate parts and connect ports using orthogonal routing.",
+            "4. **Trace Requirements**: Attach Requirement elements to system blocks to establish full auditability and verification matrices."
+          ],
+          codeSnippet: `// SysML Block Contract Export Definition\ntypedef struct {\n  float32_t target_temperature_degC;\n  float32_t current_pressure_bar;\n  uint8_t   blower_state_active;\n} SysML_AirFryer_FlowPorts_t;`
+        }
+      },
+      {
+        id: "stateflow",
+        roman: "II",
+        title: "Stateflow",
+        subtitle: "Deterministic Logic Engine",
+        discipline: "Hierarchical State Machines & Formal Verification",
+        color: "#3b1419",
+        foil: "#e8b949",
+        paletteLabel: "Royal Crimson · Radiant Gold",
+        note: "Hierarchical state machines, formal transition guards, and MISRA-C 2012 code generation.",
+        deck: "Deterministic reactive control logic authored through hierarchical state charts with event triggers, Boolean guards, transition action payloads, condition tables, and certified C source generation.",
+        binding: "Royal Crimson Cloth · Radiant Gold Foil",
+        logic: "Semantic Execution Cycle & Guard Evaluation",
+        codegen: "MISRA-C:2012 Compliant Code (sm_core.c)",
+        equations: [
+          "S_{k+1} = \\delta(S_k, e, G(x)), \\quad \\text{where } G(x) \\in \\{\\text{true}, \\text{false}\\}",
+          "\\text{Execution Order: Entry} \\to \\text{During} \\to \\text{Condition Check} \\to \\text{Exit} \\to \\text{Action}"
+        ],
+        pages: [
+          { title: "State Machine Topology", desc: "Hierarchical parent-child states, default transitions, and history junctions." },
+          { title: "Guards & Actions", desc: "Deterministic priority ordering: [guard] / action; execution semantics." },
+          { title: "Interactive Debugger", desc: "Semantic state trace recording with step-forward/backward time-travel replay." },
+          { title: "MISRA-C Generator", desc: "Direct export of certified, zero-heap embedded C state machine firmware." }
+        ],
+        manual: {
+          overview: "The Stateflow module provides a full hierarchical state chart environment with deterministic execution semantics, live time-travel debugging, and automated MISRA-C:2012 code generation.",
+          logic: "At every simulation step $t_k$, the active state evaluates outgoing transitions in strict graphical and numbered priority order. A transition executes only when its associated event matches and its Boolean guard evaluates to true. State entry actions (`en:`), during actions (`du:`), and exit actions (`ex:`) execute deterministically.",
+          howToUse: [
+            "1. **Construct State Hierarchy**: Drag States and Decision Junctions into the canvas. Group nested child states inside parent states.",
+            "2. **Draw Transitions**: Connect states with directed transition arrows. Specify syntax: `EVENT [guard_condition] / action_code;`.",
+            "3. **Simulate & Trace**: Click 'Run Simulation' to observe live state illumination, variable inspection, and breakpoint triggers.",
+            "4. **Generate C Code**: Click 'Export MISRA-C' to produce clean, portable embedded C files (`sm_core.c` & `sm_core.h`)."
+          ],
+          codeSnippet: `/* Auto-generated MISRA-C State Machine Handler */\nvoid SM_Step(SM_Context_t *const ctx) {\n  switch(ctx->currentState) {\n    case STATE_HEATING:\n      if (ctx->temperature >= ctx->targetTemp) {\n        ctx->heater_pwm = 0.0f;\n        ctx->currentState = STATE_MAINTAIN_TEMP;\n      }\n      break;\n  }\n}`
+        }
+      },
+      {
+        id: "xbridges",
+        roman: "III",
+        title: "X-Bridges",
+        subtitle: "Signal & Feedback Control Studio",
+        discipline: "Continuous & Discrete Control Systems",
+        color: "#11291f",
+        foil: "#d4af37",
+        paletteLabel: "Evergreen · Polished Brass",
+        note: "Transfer functions, anti-windup PID tuning, digital filters, and closed-loop control integration.",
+        deck: "Block-diagram signal processing environment supporting continuous transfer functions, discrete filters, anti-windup PID loops, look-up tables, and hybrid analog/digital control topologies.",
+        binding: "Evergreen Cloth · Polished Brass Foil",
+        logic: "Laplace Transform & Discrete State-Space",
+        codegen: "Digital Filter Coefficients & C Routines",
+        equations: [
+          "u(t) = K_p e(t) + K_i \\int_0^t e(\\tau)d\\tau + K_d \\frac{de(t)}{dt}",
+          "H(s) = \\frac{N(s)}{D(s)} = \\frac{b_m s^m + \\dots + b_0}{a_n s^n + \\dots + a_0}"
+        ],
+        pages: [
+          { title: "Control Block Canvas", desc: "Signal routing, summing junctions, transfer functions, and gain stages." },
+          { title: "PID Loop Tuning", desc: "Interactive Ziegler-Nichols and pole-placement tuning with anti-windup clamp." },
+          { title: "Signal Analysis", desc: "Real-time oscilloscope, Bode magnitude/phase plots, and step response curves." },
+          { title: "Inter-Module Bus", desc: "Bidirectional bridge mapping control outputs to Stateflow and physical plants." }
+        ],
+        manual: {
+          overview: "X-Bridges is ADAI's continuous and discrete signal-flow control modeling engine. It enables rapid prototyping of closed-loop controllers, DSP filters, and sensor signal conditioning.",
+          logic: "Calculates system response using numerical solvers with configurable sample rates $T_s$. Continuous transfer functions $H(s)$ are discretized using Bilinear (Tustin) transformation or Zero-Order Hold (ZOH). The PID controller block features integrated anti-windup back-calculation and derivative low-pass filtering.",
+          howToUse: [
+            "1. **Place Function Blocks**: Add Setpoint Generators, Subtractors, PID Controllers, and Saturation limiters.",
+            "2. **Configure Parameters**: Set Proportional Gain ($K_p$), Integral Gain ($K_i$), and Derivative Time Constant ($T_d$).",
+            "3. **Connect to Sensors & Actuators**: Route physical telemetry from V-Lab into X-Bridges feedback inputs.",
+            "4. **Analyze Response**: Run closed-loop step response analysis to optimize rise time, overshoot, and settling time."
+          ],
+          codeSnippet: `// Discrete Anti-Windup PID Execution Routine\nfloat32_t PID_Update(PID_t *pid, float32_t setpoint, float32_t measurement) {\n  float32_t error = setpoint - measurement;\n  pid->integral += pid->Ki * error * pid->dt;\n  float32_t derivative = (error - pid->prev_error) / pid->dt;\n  float32_t output = (pid->Kp * error) + pid->integral + (pid->Kd * derivative);\n  return CLAMP(output, pid->min_out, pid->max_out);\n}`
+        }
+      },
+      {
+        id: "vlab",
+        roman: "IV",
+        title: "V-Lab Simulator",
+        subtitle: "Multiphysics Plant Dynamics",
+        discipline: "Multiphysics Dynamic Plant Modeling",
+        color: "#3b2214",
+        foil: "#e0e4e8",
+        paletteLabel: "Burnt Terracotta · Antique Silver",
+        note: "First-principles ODE physics modeling: thermal, fluid, rotary mechanics, and pneumatic plants.",
+        deck: "First-principles physical modeling of thermal dissipation, fluid dynamics, rotary inertia, pneumatic systems, and electromagnetic heating using numerical ordinary differential equation (ODE) solvers.",
+        binding: "Burnt Terracotta Cloth · Antique Silver Foil",
+        logic: "Runge-Kutta 4th Order Multiphysics ODEs",
+        codegen: "Real-Time Plant Dynamic C Models",
+        equations: [
+          "C_{th} \\frac{dT}{dt} = Q_{in} - h A (T - T_{amb}) - \\sigma \\epsilon A (T^4 - T_{amb}^4)",
+          "J \\frac{d\\omega}{dt} = \\tau_{motor} - \\tau_{load} - b \\omega"
+        ],
+        pages: [
+          { title: "Physical Plant Builder", desc: "Component library of thermal elements, rotary motors, pumps, and fluid conduits." },
+          { title: "Multiphysics ODE Solver", desc: "Adaptive step-size Runge-Kutta 4th order numerical integration engine." },
+          { title: "Environmental Disturbances", desc: "Ambient temperature gradients, load friction surges, and pressure shocks." },
+          { title: "Virtual Sensor Probes", desc: "Calibrated thermocouple, tachometer, and pressure transducer simulation." }
+        ],
+        manual: {
+          overview: "V-Lab is ADAI's high-fidelity physical plant simulation engine. It allows engineers to build virtual testbeds of real physical hardware before physical prototypes are manufactured.",
+          logic: "Employs lumped-parameter differential equation models for thermal systems (conduction, convection, radiation), fluid networks (Darcy-Weisbach friction, Bernoulli head loss), and electromechanical systems (Lorentz back-EMF, rotor inertia, viscous damping).",
+          howToUse: [
+            "1. **Select Plant Components**: Drag Heaters, Chambers, Blowers, or Rotary Actuators onto the V-Lab stage.",
+            "2. **Set Physical Parameters**: Configure thermal resistance ($R_{th}$), heat capacity ($C_{th}$), and fluid flow coefficients.",
+            "3. **Attach Virtual Sensors**: Place temperature, speed, or pressure probes at measurement nodes.",
+            "4. **Execute Co-Simulation**: Run simultaneous closed-loop co-simulation with X-Bridges and Stateflow."
+          ],
+          codeSnippet: `// 4th-Order Runge-Kutta ODE Thermal Integration Step\nvoid RK4_Thermal_Step(ThermalPlant_t *plant, float32_t Qin, float32_t dt) {\n  float32_t k1 = Thermal_dTdt(plant->T, Qin, plant);\n  float32_t k2 = Thermal_dTdt(plant->T + 0.5f*dt*k1, Qin, plant);\n  float32_t k3 = Thermal_dTdt(plant->T + 0.5f*dt*k2, Qin, plant);\n  float32_t k4 = Thermal_dTdt(plant->T + dt*k3, Qin, plant);\n  plant->T += (dt / 6.0f) * (k1 + 2.0f*k2 + 2.0f*k3 + k4);\n}`
+        }
+      },
+      {
+        id: "hil",
+        roman: "V",
+        title: "HIL Studio",
+        subtitle: "Hardware-in-the-Loop Toolchain",
+        discipline: "Embedded Cross-Compilation & Hardware In-The-Loop",
+        color: "#11141c",
+        foil: "#38dcd6",
+        paletteLabel: "Obsidian Midnight · Electric Cyan",
+        note: "Offline cross-compilation, target flashing, and deterministic serial/CAN real-time HIL bridge.",
+        deck: "Complete end-to-end embedded toolchain: automated C code generation, cross-compilation (AVR-GCC, ARM-GCC), binary packaging, target flashing, and deterministic serial/CAN communication protocols for real-time HIL verification.",
+        binding: "Obsidian Midnight Cloth · Electric Cyan Foil",
+        logic: "Deterministic Serial Protocol & Hardware Clock Sync",
+        codegen: "ELF / HEX Embedded Microcontroller Binaries",
+        equations: [
+          "\\text{Packet Structure: } [\\mathrm{SYNC}(0xAA55) \\mid \\mathrm{SEQ} \\mid \\mathrm{LEN} \\mid \\mathrm{PAYLOAD} \\mid \\mathrm{CRC16} \\mid \\mathrm{TAIL}]",
+          "\\Delta t_{\\text{jitter}} < 50\\,\\mu\\mathrm{s}, \\quad \\text{Deterministic Cycle Lock}"
+        ],
+        pages: [
+          { title: "Target MCU Toolchain", desc: "Bundled offline GCC cross-compilers for AVR, ARM Cortex-M, and ESP32." },
+          { title: "Firmware Build Pipeline", desc: "Automated compilation of state machine logic into optimized flashable binaries." },
+          { title: "Real-Time Serial Bridge", desc: "High-speed 115200/921600 baud packet streaming with CRC16 validation." },
+          { title: "Fault Injection Testing", desc: "Automated hardware-in-the-loop validation, wire disconnects, and brownout tests." }
+        ],
+        manual: {
+          overview: "The HIL (Hardware-in-the-Loop) Studio bridges ADAI's software simulations with physical embedded hardware microcontrollers, executing deterministic real-time validation testbenches.",
+          logic: "Compiles generated C state machines using target-specific toolchains (e.g. `avr-gcc` for ATmega328P). A high-speed deterministic binary serial protocol streams live physical plant outputs from V-Lab to the MCU's inputs, while reading back physical actuator GPIO/PWM outputs in lockstep.",
+          howToUse: [
+            "1. **Select Target Architecture**: Choose your target microcontroller platform from the HIL Target Pack menu.",
+            "2. **Compile Firmware**: Click 'Build Binary' to trigger offline cross-compilation and generate `.hex` or `.elf` output.",
+            "3. **Flash Target**: Connect your board over USB/Serial and click 'Flash Hardware'.",
+            "4. **Run Live HIL Test**: Engage the real-time bridge to verify physical MCU responses against virtual plant dynamics."
+          ],
+          codeSnippet: `// HIL Frame Protocol Parser with CRC16 Checksum\nuint16_t Calculate_CRC16(const uint8_t *data, uint16_t len) {\n  uint16_t crc = 0xFFFF;\n  for (uint16_t i = 0; i < len; i++) {\n    crc ^= (uint16_t)data[i];\n    for (uint8_t j = 0; j < 8; j++) {\n      if (crc & 0x0001) crc = (crc >> 1) ^ 0xA001;\n      else crc = (crc >> 1);\n    }\n  }\n  return crc;\n}`
+        }
+      },
+      {
+        id: "doe",
+        roman: "VI",
+        title: "DOE & GMDH",
+        subtitle: "Intelligent Optimization Studio",
+        discipline: "Parametric Exploration & Metamodeling",
+        color: "#281636",
+        foil: "#f2a29b",
+        paletteLabel: "Royal Amethyst · Rose Gold",
+        note: "Design of Experiments, GMDH polynomial neural networks, sensitivity analysis, and optimization.",
+        deck: "Parametric exploration, Full Factorial & Latin Hypercube design of experiments, and self-organizing polynomial neural networks (Group Method of Data Handling) for nonlinear system identification and parameter optimization.",
+        binding: "Royal Amethyst Cloth · Rose Gold Foil",
+        logic: "Ivakhnenko Polynomial Metamodels & Regularized Least Squares",
+        codegen: "Optimized Analytical Polynomial Formulas",
+        equations: [
+          "y = a_0 + \\sum a_i x_i + \\sum a_{ij} x_i x_j + \\sum a_{ii} x_i^2",
+          "\\text{External Criterion: } \\mathrm{RRSE} = \\sqrt{\\frac{\\sum (y_k - \\hat{y}_k)^2}{\\sum (y_k - \\bar{y})^2}}"
+        ],
+        pages: [
+          { title: "Design of Experiments", desc: "Full factorial, fractional factorial, and Latin Hypercube sampling spaces." },
+          { title: "Automated Batch Runs", desc: "Parallel simulation sweeps collecting response datasets across operating points." },
+          { title: "GMDH Neural Discovery", desc: "Self-organizing polynomial network synthesis with regularized least squares." },
+          { title: "Pareto Frontier Analysis", desc: "Multi-objective parameter optimization for minimal energy and maximum speed." }
+        ],
+        manual: {
+          overview: "The DOE & GMDH Optimization module automates system identification, sensitivity discovery, and optimal parameter calibration across complex nonlinear physical systems.",
+          logic: "Combines Design of Experiments (DOE) sampling matrices with the Group Method of Data Handling (GMDH). GMDH iteratively builds layers of quadratic polynomial pairs, eliminating unpromising candidate models via an external validation criterion to generate optimal metamodels without overfitting.",
+          howToUse: [
+            "1. **Define Parameter Matrix**: Select independent variables (e.g. heater wattage, airflow velocity) and boundary limits.",
+            "2. **Run Batch DOE**: Click 'Execute Experiment' to automatically run batch co-simulations across all sample nodes.",
+            "3. **Train GMDH Network**: Train the polynomial neural network to discover algebraic relationships governing system performance.",
+            "4. **Extract Optimal Profile**: Identify the Pareto-optimal operating setpoint minimizing power consumption and settling time."
+          ],
+          codeSnippet: `// Self-Organizing GMDH Pairwise Polynomial Evaluator\nfloat64_t GMDH_EvaluatePair(const GMDH_Neuron_t *neuron, float64_t u1, float64_t u2) {\n  return neuron->a0 + \n         (neuron->a1 * u1) + (neuron->a2 * u2) +\n         (neuron->a3 * u1 * u2) +\n         (neuron->a4 * u1 * u1) + (neuron->a5 * u2 * u2);\n}`
+        }
+      },
+      {
+        id: "digital-twin",
+        roman: "VII",
+        title: "Industrial Twin",
+        subtitle: "Factory I/O & Digital Gateways",
+        discipline: "Factory Automation & Spatial Co-Simulation",
+        color: "#1e2024",
+        foil: "#ffffff",
+        paletteLabel: "Industrial Slate · Platinum White",
+        note: "Factory I/O digital twin gateway, OPC UA / Modbus TCP, and 3D Experience spatial coordination.",
+        deck: "Seamless bidirectional bridging to industrial virtual environments (Factory I/O), 3D Experience (ThreeDX) visualization engines, and standard automation protocols (OPC UA, Modbus TCP) for full factory digital twinning.",
+        binding: "Industrial Slate Cloth · Platinum White Foil",
+        logic: "Shared Memory Tag Mapping & Multi-Rate Co-Simulation",
+        codegen: "OPC UA Nodeset & Modbus Register Maps",
+        equations: [
+          "\\text{Co-Simulation Sync: } t_{\\text{Twin}}(k) = t_{\\text{ADAI}}(k) \\pm \\epsilon_{\\text{skew}}",
+          "\\mathrm{TagMap}: \\text{PLC\\_Register}[0x4001] \\iff \\text{Stateflow.MotorRun}"
+        ],
+        pages: [
+          { title: "Virtual Factory Floor", desc: "Bidirectional linkage to Factory I/O 3D conveyors, sorting arms, and sensors." },
+          { title: "Industrial Protocols", desc: "OPC UA, Modbus TCP, and WebSocket high-throughput industrial tag mapping." },
+          { title: "3D Experience Gateway", desc: "Real-time spatial coordinate synchronization and physical collision feeds." },
+          { title: "Virtual Commissioning", desc: "Full software-in-the-loop factory commissioning before physical floor installation." }
+        ],
+        manual: {
+          overview: "The Industrial Twin module connects ADAI's engineering models to full-scale virtual factory environments (Factory I/O) and 3D Experience digital twins, enabling complete virtual commissioning.",
+          logic: "Establishes low-latency memory-mapped tag synchronization over OPC UA / Modbus TCP. Multi-rate solver synchronization guarantees that physics steps in the virtual plant align with the discrete scan-cycle execution of ADAI's state controllers.",
+          howToUse: [
+            "1. **Launch Digital Twin Scene**: Open your Factory I/O scene or ThreeDX digital twin layout.",
+            "2. **Map Tags**: In the Gateway panel, link sensor input registers to Stateflow variables and actuator outputs to coils.",
+            "3. **Engage Bridge**: Click 'Connect Gateway' to initiate live high-speed data exchange.",
+            "4. **Commission System**: Run virtual factory workflows to detect collision hazards and logic bugs before deployment."
+          ],
+          codeSnippet: `// Factory I/O & Modbus TCP Register Mapping Table\nconst ModbusRegisterMap_t FACTORY_IO_MAP = {\n  .conveyor_run_coil   = 0x0001,\n  .optical_sensor_di   = 0x1001,\n  .analog_weight_scale = 0x3001,\n  .diverter_angle_ao   = 0x4001\n};`
+        }
+      }
+    ];
+
+    // ─────────────────────────────────────────────────────────────
+    // PROCEDURAL TEXTURE GENERATION ENGINE
+    // ─────────────────────────────────────────────────────────────
+    function createClothNormalTexture() {
+      const size = 512;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+
+      const imgData = ctx.createImageData(size, size);
+      const data = imgData.data;
+
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const idx = (y * size + x) * 4;
+          const weaveX = Math.sin(x * 0.8) * Math.cos(y * 0.8);
+          const weaveY = Math.cos(x * 0.8) * Math.sin(y * 0.8);
+          const noise = (Math.random() - 0.5) * 0.15;
+          
+          const nx = (weaveX + noise) * 0.5 + 0.5;
+          const ny = (weaveY + noise) * 0.5 + 0.5;
+
+          data[idx] = Math.floor(nx * 255);
+          data[idx + 1] = Math.floor(ny * 255);
+          data[idx + 2] = 255;
+          data[idx + 3] = 255;
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(6, 9);
+      return texture;
+    }
+
+    function createBookCoverTexture(vol) {
+      const width = 1024;
+      const height = 1536;
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+
+      // Base Cloth Background with Subtle Radial Gradient
+      const grad = ctx.createRadialGradient(width/2, height/2, 100, width/2, height/2, width);
+      grad.addColorStop(0, vol.color);
+      grad.addColorStop(1, '#0a0d14');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, width, height);
+
+      // Fine Border Framing
+      ctx.strokeStyle = vol.foil;
+      ctx.lineWidth = 4;
+      ctx.strokeRect(48, 48, width - 96, height - 96);
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(60, 60, width - 120, height - 120);
+
+      // Corner Rosettes / Brackets
+      const corners = [[60, 60], [width - 60, 60], [60, height - 60], [width - 60, height - 60]];
+      ctx.fillStyle = vol.foil;
+      corners.forEach(([cx, cy]) => {
+        ctx.beginPath();
+        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Volume Roman Numeral
+      ctx.fillStyle = vol.foil;
+      ctx.font = '600 36px "Cinzel", "Newsreader", serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`VOLUME ${vol.roman}`, width / 2, 220);
+
+      // Main Book Title
+      ctx.font = '400 82px "Cinzel", "Newsreader", serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = vol.foil;
+      ctx.shadowBlur = 12;
+      ctx.fillText(vol.title.toUpperCase(), width / 2, 340);
+      ctx.shadowBlur = 0;
+
+      // Subtitle / Discipline
+      ctx.fillStyle = vol.foil;
+      ctx.font = '500 24px "JetBrains Mono", monospace';
+      ctx.letterSpacing = '4px';
+      ctx.fillText(vol.discipline.toUpperCase(), width / 2, 400);
+
+      // Procedural Geometric Foil Motif in Center
+      ctx.save();
+      ctx.translate(width / 2, 780);
+      ctx.strokeStyle = vol.foil;
+      ctx.lineWidth = 3;
+
+      // Draw specialized motif per module
+      drawModuleMotif(ctx, vol.id);
+      ctx.restore();
+
+      // Bottom Publishing Stamp
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+      ctx.font = '400 22px "JetBrains Mono", monospace';
+      ctx.fillText("ADAI ENGINEERING CORPUS", width / 2, 1380);
+      ctx.font = '400 18px "JetBrains Mono", monospace';
+      ctx.fillStyle = vol.foil;
+      ctx.fillText("MBD · VERIFICATION · SIMULATION", width / 2, 1420);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.anisotropy = 8;
+      return texture;
+    }
+
+    function drawModuleMotif(ctx, id) {
+      switch(id) {
+        case 'architecture':
+          // SysML BDD block topology
+          ctx.strokeRect(-180, -160, 360, 100);
+          ctx.strokeRect(-240, 60, 180, 100);
+          ctx.strokeRect(60, 60, 180, 100);
+          ctx.beginPath();
+          ctx.moveTo(0, -60); ctx.lineTo(0, 0);
+          ctx.lineTo(-150, 0); ctx.lineTo(-150, 60);
+          ctx.moveTo(0, 0); ctx.lineTo(150, 0); ctx.lineTo(150, 60);
+          ctx.stroke();
+          break;
+        case 'stateflow':
+          // State nodes and guarded arrows
+          ctx.beginPath();
+          ctx.arc(-130, 0, 70, 0, Math.PI*2);
+          ctx.arc(130, 0, 70, 0, Math.PI*2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(0, -60, 140, Math.PI * 1.2, Math.PI * 1.8);
+          ctx.arc(0, 60, 140, Math.PI * 0.2, Math.PI * 0.8);
+          ctx.stroke();
+          break;
+        case 'xbridges':
+          // Signal curves and summation node
+          ctx.beginPath();
+          ctx.arc(0, 0, 80, 0, Math.PI*2);
+          ctx.stroke();
+          ctx.beginPath();
+          for(let t = -220; t <= 220; t += 5) {
+            const y = Math.sin(t * 0.04) * 50;
+            if(t === -220) ctx.moveTo(t, y);
+            else ctx.lineTo(t, y);
+          }
+          ctx.stroke();
+          break;
+        case 'vlab':
+          // Multiphysics thermal fluid mesh
+          for (let r = 30; r <= 150; r += 30) {
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, Math.PI*2);
+            ctx.stroke();
+          }
+          for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(a) * 150, Math.sin(a) * 150);
+            ctx.stroke();
+          }
+          break;
+        case 'hil':
+          // MCU chip and bus trace pins
+          ctx.strokeRect(-90, -90, 180, 180);
+          for(let i = -60; i <= 60; i += 30) {
+            ctx.beginPath();
+            ctx.moveTo(-90, i); ctx.lineTo(-170, i);
+            ctx.moveTo(90, i); ctx.lineTo(170, i);
+            ctx.moveTo(i, -90); ctx.lineTo(i, -170);
+            ctx.moveTo(i, 90); ctx.lineTo(i, 170);
+            ctx.stroke();
+          }
+          break;
+        case 'doe':
+          // 3D Response surface contours
+          for(let i = 1; i <= 5; i++) {
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 35 * i, 20 * i, Math.PI / 6, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          break;
+        case 'digital-twin':
+          // 3D Isometric factory grid
+          ctx.beginPath();
+          for(let x = -150; x <= 150; x += 50) {
+            ctx.moveTo(x, -100); ctx.lineTo(x, 100);
+          }
+          for(let y = -100; y <= 100; y += 40) {
+            ctx.moveTo(-150, y); ctx.lineTo(150, y);
+          }
+          ctx.stroke();
+          break;
+      }
+    }
+
+    function createSpineTexture(vol) {
+      const width = 256;
+      const height = 1536;
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = vol.color;
+      ctx.fillRect(0, 0, width, height);
+
+      // Spine gold ribs
+      ctx.fillStyle = vol.foil;
+      [160, 180, 1340, 1360].forEach(y => {
+        ctx.fillRect(20, y, width - 40, 4);
+      });
+
+      // Volume Title along spine (vertical text)
+      ctx.save();
+      ctx.translate(width / 2, height / 2);
+      ctx.rotate(Math.PI / 2);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '500 48px "Cinzel", "Newsreader", serif';
+      ctx.fillText(vol.title.toUpperCase(), 0, 16);
+      ctx.restore();
+
+      // Roman Numeral at top of spine
+      ctx.fillStyle = vol.foil;
+      ctx.font = '600 36px "Cinzel", serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(vol.roman, width / 2, 100);
+
+      // ADAI logo at bottom of spine
+      ctx.font = '600 24px "JetBrains Mono", monospace';
+      ctx.fillText("ADAI", width / 2, 1450);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.anisotropy = 8;
+      return texture;
+    }
+
+    function createPageTexture(vol, pageIndex) {
+      const width = 1024;
+      const height = 1536;
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+
+      // Antique parchment paper tone
+      ctx.fillStyle = '#f6f1e8';
+      ctx.fillRect(0, 0, width, height);
+
+      // Subtle paper border rule
+      ctx.strokeStyle = 'rgba(80, 70, 60, 0.25)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(60, 60, width - 120, height - 120);
+
+      const pageData = vol.pages[pageIndex] || vol.pages[0];
+
+      // Page Header
+      ctx.fillStyle = '#655a50';
+      ctx.font = '500 20px "JetBrains Mono", monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(`ADAI CORPUS · VOL ${vol.roman} · ${vol.title.toUpperCase()}`, 90, 110);
+      ctx.textAlign = 'right';
+      ctx.fillText(`PAGE ${pageIndex + 1}`, width - 90, 110);
+
+      // Page Title
+      ctx.fillStyle = '#221e1a';
+      ctx.font = '600 52px "Cinzel", "Newsreader", serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(pageData.title, 90, 220);
+
+      // Divider Line
+      ctx.strokeStyle = vol.foil;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(90, 250);
+      ctx.lineTo(width - 90, 250);
+      ctx.stroke();
+
+      // Description Paragraph
+      ctx.fillStyle = '#3a342f';
+      ctx.font = '400 32px "Newsreader", serif';
+      wrapText(ctx, pageData.desc, 90, 320, width - 180, 48);
+
+      // Equations Box
+      if (vol.equations && vol.equations.length > 0) {
+        ctx.fillStyle = 'rgba(200, 112, 70, 0.08)';
+        ctx.fillRect(90, 520, width - 180, 220);
+        ctx.strokeStyle = vol.foil;
+        ctx.strokeRect(90, 520, width - 180, 220);
+
+        ctx.fillStyle = '#201b16';
+        ctx.font = '600 24px "JetBrains Mono", monospace';
+        ctx.fillText("GOVERNING MATHEMATICAL MODEL:", 120, 570);
+
+        ctx.font = 'italic 400 28px "Newsreader", serif';
+        ctx.fillText(vol.equations[0] || "", 120, 630);
+        if (vol.equations[1]) {
+          ctx.fillText(vol.equations[1], 120, 690);
+        }
+      }
+
+      // Code / Contract Snippet Box
+      ctx.fillStyle = '#1e1c1a';
+      ctx.fillRect(90, 800, width - 180, 420);
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.strokeRect(90, 800, width - 180, 420);
+
+      ctx.fillStyle = vol.foil;
+      ctx.font = '600 22px "JetBrains Mono", monospace';
+      ctx.fillText("// ADAI AUTOMATED VERIFICATION CONTRACT", 120, 850);
+
+      ctx.fillStyle = '#9cdcfe';
+      ctx.font = '400 20px "JetBrains Mono", monospace';
+      const lines = vol.manual.codeSnippet.split('\n');
+      lines.slice(0, 9).forEach((line, i) => {
+        ctx.fillText(line, 120, 900 + (i * 32));
+      });
+
+      // Footer
+      ctx.fillStyle = '#7a7065';
+      ctx.font = '400 18px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText("Automated Design & Industrial Architecture · ISO/IEC 26262 & MISRA-C Ready", width / 2, 1430);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.anisotropy = 8;
+      return texture;
+    }
+
+    function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+      const words = text.split(' ');
+      let line = '';
+      for(let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && n > 0) {
+          ctx.fillText(line, x, y);
+          line = words[n] + ' ';
+          y += lineHeight;
+        } else {
+          line = testLine;
+        }
+      }
+      ctx.fillText(line, x, y);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // THREE.JS SCENE SETUP
+    // ─────────────────────────────────────────────────────────────
+    const container = document.getElementById('experience');
+    const canvas = document.getElementById('scene');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0e1118);
+
+    const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 0.4, 7.8);
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    // Room Environment for Rich PBR Reflections
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+
+    // Studio Lighting Rig
+    const keyLight = new THREE.SpotLight(0xfff1e0, 28);
+    keyLight.position.set(4, 7, 6);
+    keyLight.angle = Math.PI / 4;
+    keyLight.penumbra = 0.8;
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.width = 2048;
+    keyLight.shadow.mapSize.height = 2048;
+    scene.add(keyLight);
+
+    const fillLight = new THREE.DirectionalLight(0x7ea8d6, 4);
+    fillLight.position.set(-6, 3, 4);
+    scene.add(fillLight);
+
+    const shelfTopLight = new THREE.RectAreaLight(0xffecd6, 12, 10, 1.5);
+    shelfTopLight.position.set(0, 3.2, 0.5);
+    shelfTopLight.lookAt(0, 0, 0);
+    scene.add(shelfTopLight);
+
+    // Orbit Controls
+    const controls = new OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2 + 0.05;
+    controls.minDistance = 2.5;
+    controls.maxDistance = 12;
+
+    // ─────────────────────────────────────────────────────────────
+    // BOOKSHELF & ENVIRONMENT
+    // ─────────────────────────────────────────────────────────────
+    const shelfGroup = new THREE.Group();
+    scene.add(shelfGroup);
+
+    // Walnut Wooden Shelf Plank
+    const shelfGeometry = new RoundedBoxGeometry(11, 0.26, 2.2, 8, 0.03);
+    const shelfMaterial = new THREE.MeshStandardMaterial({
+      color: 0x1f120c,
+      roughness: 0.65,
+      metalness: 0.08
+    });
+    const shelfPlank = new THREE.Mesh(shelfGeometry, shelfMaterial);
+    shelfPlank.position.set(0, -1.05, 0);
+    shelfPlank.receiveShadow = true;
+    shelfGroup.add(shelfPlank);
+
+    // Back Panel Wall
+    const wallGeometry = new THREE.PlaneGeometry(30, 20);
+    const wallMaterial = new THREE.MeshStandardMaterial({
+      color: 0x0c0f16,
+      roughness: 0.9,
+      metalness: 0.05
+    });
+    const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+    wall.position.set(0, 2, -1.1);
+    wall.receiveShadow = true;
+    scene.add(wall);
+
+    // ─────────────────────────────────────────────────────────────
+    // BOOK INSTANCES CREATION
+    // ─────────────────────────────────────────────────────────────
+    const clothNormalMap = createClothNormalTexture();
+    const books = [];
+    const bookSpacing = 1.15;
+    const startX = -((VOLUMES.length - 1) * bookSpacing) / 2;
+
+    const bookWidth = 0.96;
+    const bookHeight = 1.62;
+    const bookDepth = 0.28;
+
+    VOLUMES.forEach((vol, idx) => {
+      const bookPivot = new THREE.Group();
+      bookPivot.position.set(startX + idx * bookSpacing, -0.92 + (bookHeight / 2), 0);
+      shelfGroup.add(bookPivot);
+
+      const coverTexture = createBookCoverTexture(vol);
+      const spineTexture = createSpineTexture(vol);
+
+      // Book Body (Paper Pages Block)
+      const pagesGeo = new RoundedBoxGeometry(bookWidth * 0.94, bookHeight * 0.96, bookDepth * 0.85, 4, 0.02);
+      const pagesMat = new THREE.MeshStandardMaterial({
+        color: 0xf2ede2,
+        roughness: 0.8,
+        metalness: 0.02
+      });
+      const pagesMesh = new THREE.Mesh(pagesGeo, pagesMat);
+      pagesMesh.position.set(0.02, 0, 0);
+      pagesMesh.castShadow = true;
+      pagesMesh.receiveShadow = true;
+      bookPivot.add(pagesMesh);
+
+      // Book Spine
+      const spineGeo = new RoundedBoxGeometry(0.04, bookHeight, bookDepth, 4, 0.02);
+      const spineMat = new THREE.MeshStandardMaterial({
+        map: spineTexture,
+        normalMap: clothNormalMap,
+        normalScale: new THREE.Vector2(0.3, 0.3),
+        roughness: 0.45,
+        metalness: 0.25
+      });
+      const spineMesh = new THREE.Mesh(spineGeo, spineMat);
+      spineMesh.position.set(-bookWidth / 2, 0, 0);
+      bookPivot.add(spineMesh);
+
+      // Front Cover (Animated Hinge)
+      const frontCoverHinge = new THREE.Group();
+      frontCoverHinge.position.set(-bookWidth / 2, 0, bookDepth / 2);
+      bookPivot.add(frontCoverHinge);
+
+      const coverGeo = new RoundedBoxGeometry(bookWidth, bookHeight, 0.025, 4, 0.008);
+      const coverFrontMat = new THREE.MeshStandardMaterial({
+        map: coverTexture,
+        normalMap: clothNormalMap,
+        normalScale: new THREE.Vector2(0.4, 0.4),
+        roughness: 0.4,
+        metalness: 0.28
+      });
+      const coverInsideMat = new THREE.MeshStandardMaterial({
+        color: 0xf5eedf,
+        roughness: 0.85
+      });
+      const frontCoverMesh = new THREE.Mesh(coverGeo, [
+        coverInsideMat, coverInsideMat, coverInsideMat, coverInsideMat, coverFrontMat, coverInsideMat
+      ]);
+      frontCoverMesh.position.set(bookWidth / 2, 0, 0);
+      frontCoverMesh.castShadow = true;
+      frontCoverHinge.add(frontCoverMesh);
+
+      // Back Cover
+      const backCoverGeo = new RoundedBoxGeometry(bookWidth, bookHeight, 0.025, 4, 0.008);
+      const backCoverMat = new THREE.MeshStandardMaterial({
+        color: vol.color,
+        normalMap: clothNormalMap,
+        normalScale: new THREE.Vector2(0.4, 0.4),
+        roughness: 0.45,
+        metalness: 0.2
+      });
+      const backCoverMesh = new THREE.Mesh(backCoverGeo, backCoverMat);
+      backCoverMesh.position.set(0, 0, -bookDepth / 2);
+      backCoverMesh.castShadow = true;
+      bookPivot.add(backCoverMesh);
+
+      // Internal Turnable Page
+      const pageHinge = new THREE.Group();
+      pageHinge.position.set(-bookWidth / 2 + 0.04, 0, bookDepth / 2 - 0.02);
+      bookPivot.add(pageHinge);
+
+      const pageTexture = createPageTexture(vol, 0);
+      const singlePageGeo = new THREE.PlaneGeometry(bookWidth * 0.92, bookHeight * 0.94);
+      const singlePageMat = new THREE.MeshStandardMaterial({
+        map: pageTexture,
+        roughness: 0.75,
+        side: THREE.DoubleSide
+      });
+      const pageMesh = new THREE.Mesh(singlePageGeo, singlePageMat);
+      pageMesh.position.set(bookWidth * 0.46, 0, 0);
+      pageHinge.add(pageMesh);
+
+      books.push({
+        index: idx,
+        data: vol,
+        pivot: bookPivot,
+        frontCoverHinge,
+        pageHinge,
+        pageMesh,
+        singlePageMat,
+        restPosition: bookPivot.position.clone(),
+        isOpen: false,
+        currentPage: 0,
+        targetCoverAngle: 0,
+        targetPageAngle: 0,
+        targetZ: 0
+      });
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // UI CONTROLLER & INTERACTION
+    // ─────────────────────────────────────────────────────────────
+    let activeIndex = 0;
+    let isDetailMode = false;
+
+    // DOM Elements
+    const counterEl = document.getElementById('counter');
+    const selectionTitleEl = document.getElementById('selection-title');
+    const selectionNoteEl = document.getElementById('selection-note');
+    const paletteLabelEl = document.getElementById('palette-label');
+    const markersEl = document.getElementById('markers');
+    const detailPanel = document.getElementById('detail-panel');
+    const detailEyebrowEl = document.getElementById('detail-eyebrow');
+    const detailTitleEl = document.getElementById('detail-title');
+    const detailDeckEl = document.getElementById('detail-deck');
+    const detailDisciplineEl = document.getElementById('detail-discipline');
+    const detailBindingEl = document.getElementById('detail-binding');
+    const detailLogicEl = document.getElementById('detail-logic');
+    const detailCodegenEl = document.getElementById('detail-codegen');
+    const pageNavTitleEl = document.getElementById('page-nav-title');
+    const pageNavCountEl = document.getElementById('page-nav-count');
+    const prevPageBtn = document.getElementById('prev-page-btn');
+    const nextPageBtn = document.getElementById('next-page-btn');
+    const toggleBookBtn = document.getElementById('toggle-book-btn');
+    const pointerLabel = document.getElementById('pointer-label');
+    const pointerLabelIndex = document.getElementById('pointer-label-index');
+    const pointerLabelTitle = document.getElementById('pointer-label-title');
+    const manualModal = document.getElementById('manual-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalEyebrow = document.getElementById('modal-eyebrow');
+    const modalBody = document.getElementById('modal-body');
+
+    // Create Navigation Markers
+    VOLUMES.forEach((vol, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'marker';
+      btn.setAttribute('aria-label', `Select Volume ${vol.roman}: ${vol.title}`);
+      if (i === 0) btn.setAttribute('aria-current', 'true');
+      btn.addEventListener('click', () => selectVolume(i));
+      markersEl.appendChild(btn);
+    });
+
+    function selectVolume(index) {
+      if (index < 0 || index >= VOLUMES.length) return;
+      activeIndex = index;
+      const vol = VOLUMES[activeIndex];
+
+      // Update UI texts
+      counterEl.textContent = `0${activeIndex + 1} / 07`;
+      selectionTitleEl.textContent = vol.title;
+      selectionNoteEl.textContent = vol.note;
+      paletteLabelEl.textContent = vol.paletteLabel;
+
+      detailEyebrowEl.textContent = `Volume ${vol.roman} · ${vol.subtitle}`;
+      detailTitleEl.textContent = vol.title;
+      detailDeckEl.textContent = vol.deck;
+      detailDisciplineEl.textContent = vol.discipline;
+      detailBindingEl.textContent = vol.binding;
+      detailLogicEl.textContent = vol.logic;
+      detailCodegenEl.textContent = vol.codegen;
+
+      // Update marker states
+      Array.from(markersEl.children).forEach((m, idx) => {
+        if (idx === activeIndex) m.setAttribute('aria-current', 'true');
+        else m.removeAttribute('aria-current');
+      });
+
+      // Update Book Positions
+      books.forEach((b, idx) => {
+        if (idx === activeIndex) {
+          b.targetZ = 0.55;
+        } else {
+          b.targetZ = 0;
+          b.isOpen = false;
+          b.targetCoverAngle = 0;
+          b.targetPageAngle = 0;
+        }
+      });
+
+      updatePageNav();
+    }
+
+    function toggleDetailMode(open) {
+      isDetailMode = open;
+      if (isDetailMode) {
+        document.body.classList.add('mode-detail');
+        detailPanel.removeAttribute('aria-hidden');
+        openBook(books[activeIndex]);
+      } else {
+        document.body.classList.remove('mode-detail');
+        detailPanel.setAttribute('aria-hidden', 'true');
+        closeBook(books[activeIndex]);
+      }
+    }
+
+    function openBook(b) {
+      b.isOpen = true;
+      b.targetCoverAngle = -Math.PI * 0.85;
+      b.targetZ = 0.85;
+      toggleBookBtn.textContent = "Close 3D Book";
+    }
+
+    function closeBook(b) {
+      b.isOpen = false;
+      b.targetCoverAngle = 0;
+      b.targetPageAngle = 0;
+      b.targetZ = 0.55;
+      toggleBookBtn.textContent = "Open 3D Book";
+    }
+
+    function turnPage(direction) {
+      const b = books[activeIndex];
+      const maxPages = b.data.pages.length;
+      const newPage = b.currentPage + direction;
+      if (newPage < 0 || newPage >= maxPages) return;
+
+      b.currentPage = newPage;
+      const newTex = createPageTexture(b.data, b.currentPage);
+      b.singlePageMat.map = newTex;
+      b.singlePageMat.needsUpdate = true;
+
+      // Subtle flip animation trigger
+      b.pageHinge.rotation.y = -Math.PI * 0.4 * direction;
+      setTimeout(() => {
+        b.pageHinge.rotation.y = 0;
+      }, 320);
+
+      updatePageNav();
+    }
+
+    function updatePageNav() {
+      const b = books[activeIndex];
+      const pageInfo = b.data.pages[b.currentPage] || b.data.pages[0];
+      pageNavTitleEl.textContent = pageInfo.title;
+      pageNavCountEl.textContent = `Page ${b.currentPage + 1} of ${b.data.pages.length}`;
+      prevPageBtn.disabled = (b.currentPage === 0);
+      nextPageBtn.disabled = (b.currentPage === b.data.pages.length - 1);
+    }
+
+    function openTechnicalManual() {
+      const vol = VOLUMES[activeIndex];
+      modalEyebrow.textContent = `Volume ${vol.roman} · ${vol.discipline}`;
+      modalTitle.textContent = `${vol.title} — Technical Reference`;
+
+      modalBody.innerHTML = `
+        <div class="manual-section">
+          <h3>1. Architectural Overview & Intent</h3>
+          <p>${vol.manual.overview}</p>
+        </div>
+
+        <div class="manual-section">
+          <h3>2. Mathematical Foundations & Internal Logic</h3>
+          <p>${vol.manual.logic}</p>
+          ${vol.equations ? vol.equations.map(eq => `<div class="equation-box">${eq}</div>`).join('') : ''}
+        </div>
+
+        <div class="manual-section">
+          <h3>3. Step-by-Step Engineering Workflow</h3>
+          <ol>
+            ${vol.manual.howToUse.map(step => `<li>${step}</li>`).join('')}
+          </ol>
+        </div>
+
+        <div class="manual-section">
+          <h3>4. Code Generation & Contract Output</h3>
+          <p>Exported certified C struct and execution functions:</p>
+          <div class="code-block">${escapeHtml(vol.manual.codeSnippet)}</div>
+        </div>
+      `;
+
+      manualModal.classList.add('is-open');
+      manualModal.removeAttribute('aria-hidden');
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Event Listeners
+    document.getElementById('prev-btn').addEventListener('click', () => selectVolume(activeIndex - 1));
+    document.getElementById('next-btn').addEventListener('click', () => selectVolume(activeIndex + 1));
+    document.getElementById('open-btn').addEventListener('click', () => toggleDetailMode(true));
+    document.getElementById('close-detail-btn').addEventListener('click', () => toggleDetailMode(false));
+    prevPageBtn.addEventListener('click', () => turnPage(-1));
+    nextPageBtn.addEventListener('click', () => turnPage(1));
+    toggleBookBtn.addEventListener('click', () => {
+      const b = books[activeIndex];
+      if (b.isOpen) closeBook(b);
+      else openBook(b);
+    });
+    document.getElementById('read-manual-btn').addEventListener('click', openTechnicalManual);
+    document.getElementById('close-modal-btn').addEventListener('click', () => {
+      manualModal.classList.remove('is-open');
+      manualModal.setAttribute('aria-hidden', 'true');
+    });
+
+    // Keyboard Navigation
+    window.addEventListener('keydown', (e) => {
+      if (manualModal.classList.contains('is-open')) {
+        if (e.key === 'Escape') manualModal.classList.remove('is-open');
+        return;
+      }
+      if (e.key === 'ArrowLeft') selectVolume(activeIndex - 1);
+      if (e.key === 'ArrowRight') selectVolume(activeIndex + 1);
+      if (e.key === 'Enter') toggleDetailMode(!isDetailMode);
+      if (e.key === 'Escape' && isDetailMode) toggleDetailMode(false);
+    });
+
+    // Mouse Wheel Shelf Navigation
+    let wheelTimeout;
+    window.addEventListener('wheel', (e) => {
+      if (isDetailMode || manualModal.classList.contains('is-open')) return;
+      if (wheelTimeout) return;
+      if (Math.abs(e.deltaY) > 30 || Math.abs(e.deltaX) > 30) {
+        if (e.deltaY > 0 || e.deltaX > 0) selectVolume(activeIndex + 1);
+        else selectVolume(activeIndex - 1);
+        wheelTimeout = setTimeout(() => { wheelTimeout = null; }, 280);
+      }
+    }, { passive: true });
+
+    // Raycaster for Book Hover & Selection
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    window.addEventListener('mousemove', (e) => {
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(shelfGroup.children, true);
+
+      if (intersects.length > 0) {
+        let obj = intersects[0].object;
+        while (obj.parent && obj.parent !== shelfGroup) {
+          obj = obj.parent;
+        }
+        const hoveredBook = books.find(b => b.pivot === obj);
+        if (hoveredBook) {
+          canvas.classList.add('has-hover');
+          pointerLabelIndex.textContent = `Volume ${hoveredBook.data.roman}`;
+          pointerLabelTitle.textContent = hoveredBook.data.title;
+          pointerLabel.style.left = `${e.clientX}px`;
+          pointerLabel.style.top = `${e.clientY}px`;
+          pointerLabel.classList.add('is-visible');
+          return;
+        }
+      }
+      canvas.classList.remove('has-hover');
+      pointerLabel.classList.remove('is-visible');
+    });
+
+    canvas.addEventListener('click', () => {
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(shelfGroup.children, true);
+      if (intersects.length > 0) {
+        let obj = intersects[0].object;
+        while (obj.parent && obj.parent !== shelfGroup) {
+          obj = obj.parent;
+        }
+        const clickedBook = books.find(b => b.pivot === obj);
+        if (clickedBook) {
+          if (clickedBook.index === activeIndex) {
+            toggleDetailMode(true);
+          } else {
+            selectVolume(clickedBook.index);
+          }
+        }
+      }
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // ANIMATION & RENDER LOOP
+    // ─────────────────────────────────────────────────────────────
+    const targetCameraPos = new THREE.Vector3();
+    const targetLookAt = new THREE.Vector3();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Smooth Camera Tracking
+      const activeBook = books[activeIndex];
+      if (isDetailMode) {
+        targetCameraPos.set(activeBook.pivot.position.x - 0.45, 0.05, 3.2);
+        targetLookAt.set(activeBook.pivot.position.x, 0, 0.4);
+      } else {
+        targetCameraPos.set(activeBook.pivot.position.x * 0.35, 0.35, 7.4);
+        targetLookAt.set(activeBook.pivot.position.x * 0.25, -0.1, 0);
+      }
+
+      camera.position.lerp(targetCameraPos, 0.055);
+      controls.target.lerp(targetLookAt, 0.055);
+      controls.update();
+
+      // Smooth Book Physics (Hinges & Forward Pull)
+      books.forEach((b) => {
+        // Interpolate Z Pull Position
+        b.pivot.position.z = THREE.MathUtils.lerp(b.pivot.position.z, b.targetZ, 0.08);
+
+        // Interpolate Front Cover Opening Angle
+        b.frontCoverHinge.rotation.y = THREE.MathUtils.lerp(
+          b.frontCoverHinge.rotation.y,
+          b.targetCoverAngle,
+          0.065
+        );
+      });
+
+      renderer.render(scene, camera);
+    }
+
+    // Window Resize Handler
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Initialize First Selection
+    selectVolume(0);
+
+    // Hide Loading Screen
+    setTimeout(() => {
+      document.getElementById('loading-screen').classList.add('is-hidden');
+    }, 450);
+
+    animate();
+  </script>
+</body>
+</html>

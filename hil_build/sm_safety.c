@@ -1,25 +1,12 @@
 #include <stddef.h>
 #include "sm_safety.h"
+#include "sm_mapping.h"
 #include "mcal_dio.h"
 
 static const SM_Node_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {
     [0] = SM_NODE_INVALID,
-    [SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8_IDX] = SM_NODE_INVALID,
-    [SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_IDX] = SM_NODE_INVALID,
-};
-
-static const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U] = {
-    [0] = -1,
-    [SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8_IDX] = 0,
-    [SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705_IDX] = 0,
-};
-
-static const SM_Node_t SM_Layer_Parent_Map[SM_NUM_LAYERS] = {
-    [SM_LYR_ROOT_IDX] = SM_NODE_INVALID,
-};
-
-static const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS] = {
-    [SM_LYR_ROOT_IDX] = 0,
+    [SM_ST__265D4F7C_6336_4720_A143_E009C1002387_IDX] = SM_NODE_INVALID,
+    [SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_IDX] = SM_NODE_INVALID,
 };
 
 static const bool SM_Layer_Has_Children_Map[SM_NUM_LAYERS] = {
@@ -31,8 +18,8 @@ static bool SM_Is_Direct_Layer_Child(uint32_t layer_index, SM_Node_t state)
     switch (layer_index) {
         case SM_LYR_ROOT_IDX:
             switch (state) {
-                case SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8: return true;
-                case SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705: return true;
+                case SM_ST__265D4F7C_6336_4720_A143_E009C1002387: return true;
+                case SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691: return true;
                 default: return false;
             }
         default: return false;
@@ -44,8 +31,8 @@ static bool SM_Is_Layer_Descendant(uint32_t layer_index, SM_Node_t state)
     switch (layer_index) {
         case SM_LYR_ROOT_IDX:
             switch (state) {
-                case SM_ST_F250E7AA_B1CB_41F0_8E88_74BA0068C2B8: return true;
-                case SM_ST__9EC22AE9_B1DB_4EC4_8FAC_5712A1840705: return true;
+                case SM_ST__265D4F7C_6336_4720_A143_E009C1002387: return true;
+                case SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691: return true;
                 default: return false;
             }
         default: return false;
@@ -81,7 +68,7 @@ SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)
         }
     }
     for (layer_index = 0U; layer_index < SM_NUM_LAYERS; ++layer_index) {
-        parent = SM_Layer_Parent_Map[layer_index];
+        parent = SM_Layer_Parent_State_Map[layer_index];
         container_active = (parent == SM_NODE_INVALID)
             || instance->state_active[(uint32_t)parent];
         active_slot = SM_Layer_Active_Slot_Map[layer_index];
@@ -138,6 +125,6 @@ SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)
 void SM_ApplySafeOutputs(ADIA_Instance_t *instance)
 {
     (void)instance;
-    MCAL_WriteChannelValue(MCAL_CH__9B4C84B5_D1BA_413C_83BC_E11F567B19CF, 0);
+    MCAL_Dio_WriteChannel(MCAL_CH__6B8AF776_C9CA_4C37_B295_88950BE006D5, false);
     MCAL_ApplySafeOutputs();
 }

@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
-import ReactFlow, {
+import {
+  ReactFlow,
   Background,
   Controls,
   MiniMap,
@@ -11,16 +12,16 @@ import ReactFlow, {
   Edge,
   Panel,
   BackgroundVariant,
-  Handle,
   Position,
   ConnectionLineType,
   getBezierPath,
-  ConnectionMode,
-  useUpdateNodeInternals
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+  ConnectionMode
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import * as math from 'mathjs';
-import { VLabWorkspaceProps } from './VLabWorkspaceTypes';
+import { VLabWorkspaceProps, VLabNode as AppVLabNode, VLabEdge as AppVLabEdge } from './VLabWorkspaceTypes';
+import { VLabNode, NodeErrorBoundary } from './VLabNode';
+import { SymbolRenderer } from './VLabSymbols';
 import { VLAB_LIBRARY, VLabBlock, VLabPort } from '../../utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../engine/vlab/vlabComponentDefinitions';
 import { VLabPhysicsEngine } from '../../engine/vlab/vlabPhysics';
@@ -29,6 +30,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import * as XLSX from 'xlsx';
 import { isInputFocused } from '../../utils/domUtils';
 import { getVLabSignalInfo, exportScopeToCSV, VLAB_SIGNAL_COLORS } from '../../utils/scopeUtils';
+import { VLabSimulinkScope } from './VLabSimulinkScope';
 
 interface LabNode {
   id: string;
@@ -280,1486 +282,6 @@ const reconstructLabNodes = (labNodes: LabNode[]): Node[] => {
       }
     } as Node;
   });
-};
-
-
-const SymbolRenderer = ({ type, color }: { type: string, color: string }) => {
-  switch (type) {
-    case 'resistor':
-      return (
-        <svg width="60" height="30" viewBox="0 0 60 30" fill="none" stroke={color} strokeWidth="2">
-          <path d="M0 15H15L18 5L24 25L30 5L36 25L42 5L45 15H60" />
-        </svg>
-      );
-    case 'capacitor':
-      return (
-        <svg width="60" height="30" viewBox="0 0 60 30" fill="none" stroke={color} strokeWidth="2">
-          <path d="M0 15H25M35 15H60M25 5V25M35 5V25" />
-        </svg>
-      );
-    case 'inductor':
-      return (
-        <svg width="60" height="30" viewBox="0 0 60 30" fill="none" stroke={color} strokeWidth="2">
-          <path d="M0 15H10C10 15 10 5 17.5 5C25 5 25 15 25 15C25 15 25 5 32.5 5C40 5 40 15 40 15C40 15 40 5 47.5 5C55 5 55 15 55 15H60" />
-        </svg>
-      );
-    case 'diode':
-      return (
-        <svg width="60" height="30" viewBox="0 0 60 30" fill="none" stroke={color} strokeWidth="2">
-          <path d="M0 15H20L20 5L40 15L20 25L20 15M40 5V25M40 15H60" />
-        </svg>
-      );
-    case 'ground':
-      return (
-        <svg width="40" height="30" viewBox="0 0 40 30" fill="none" stroke={color} strokeWidth="2">
-          <path d="M20 0V15M10 15H30M13 20H27M17 25H23" />
-        </svg>
-      );
-    case 'dc_motor':
-    case 'pmsm':
-    case 'ac_motor':
-    case 'bldc_motor':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="30" cy="30" r="25" />
-          <text x="30" y="38" textAnchor="middle" fill={color} fontSize="18" fontWeight="bold" stroke="none">M</text>
-        </svg>
-      );
-    case 'three_phase_source':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="30" cy="30" r="25" />
-          <path d="M15 30Q22.5 15 30 30T45 30" />
-          <text x="45" y="50" textAnchor="middle" fill={color} fontSize="10" stroke="none">3~</text>
-        </svg>
-      );
-    case 'transformer':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <path d="M15 10C15 10 5 10 5 20C5 30 15 30 15 30C15 30 5 30 5 40C5 50 15 50 15 50" />
-          <path d="M45 10C45 10 55 10 55 20C55 30 45 30 45 30C45 30 55 30 55 40C55 50 45 50 45 50" />
-          <line x1="25" y1="10" x2="25" y2="50" strokeWidth="1" strokeDasharray="2 2" />
-          <line x1="35" y1="10" x2="35" y2="50" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
-      );
-    case 'gyrator':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="20" cy="30" r="10" />
-          <circle cx="40" cy="30" r="10" />
-          <path d="M20 20Q30 30 40 20M20 40Q30 30 40 40" />
-        </svg>
-      );
-    case 'opamp':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M10 5V35L50 20L10 5Z" />
-          <text x="15" y="15" fill={color} fontSize="8" stroke="none">+</text>
-          <text x="15" y="30" fill={color} fontSize="8" stroke="none">-</text>
-        </svg>
-      );
-    case 'memristor':
-      return (
-        <svg width="60" height="30" viewBox="0 0 60 30" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="10" width="30" height="10" />
-          <path d="M0 15H15M45 15H60M15 10L45 20" strokeWidth="1" />
-        </svg>
-      );
-    case 'switch':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="15" cy="25" r="2" fill={color} />
-          <circle cx="45" cy="25" r="2" fill={color} />
-          <path d="M15 25L40 10" />
-          <path d="M0 25H15M45 25H60" />
-        </svg>
-      );
-    case 'variable_resistor':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M0 25H15L18 15L24 35L30 15L36 35L42 15L45 25H60" />
-          <path d="M20 35L40 5" strokeWidth="1" />
-          <path d="M40 5L35 7M40 5L38 10" strokeWidth="1" />
-        </svg>
-      );
-    case 'infinite_resistance':
-      return (
-        <svg width="60" height="30" viewBox="0 0 60 30" fill="none" stroke={color} strokeWidth="2">
-          <rect x="20" y="10" width="20" height="10" rx="2" strokeDasharray="2 2" />
-          <text x="30" y="18" fill={color} fontSize="8" textAnchor="middle" stroke="none">∞</text>
-          <path d="M0 15H20M40 15H60" />
-        </svg>
-      );
-    case 'rotational_em':
-    case 'translational_em':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="20" cy="30" r="8" />
-          <rect x="35" y="22" width="15" height="15" />
-          <path d="M28 30H35" strokeDasharray="2 2" />
-        </svg>
-      );
-    case 'thermal_resistor':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="20" y="15" width="20" height="10" fill={color} fillOpacity="0.2" />
-          <path d="M0 20H20M40 20H60" />
-          <path d="M30 15V5M25 5H35" />
-        </svg>
-      );
-    case 'v_sensor':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="15" width="30" height="30" rx="2" />
-          <circle cx="30" cy="30" r="10" />
-          <text x="30" y="34" fill={color} fontSize="12" textAnchor="middle" stroke="none">V</text>
-          <path d="M30 0V15M30 45V60" strokeWidth="1" />
-        </svg>
-      );
-    case 'i_sensor':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="15" width="30" height="30" rx="2" />
-          <circle cx="30" cy="30" r="10" />
-          <text x="30" y="34" fill={color} fontSize="12" textAnchor="middle" stroke="none">A</text>
-          <path d="M0 30H15M45 30H60" strokeWidth="1" />
-        </svg>
-      );
-    case 'dc_voltage':
-    case 'ac_voltage':
-    case 'controlled_voltage':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="30" cy="30" r="15" />
-          <text x="30" y="25" fill={color} fontSize="10" textAnchor="middle" stroke="none">+</text>
-          <text x="30" y="42" fill={color} fontSize="10" textAnchor="middle" stroke="none">-</text>
-          {type === 'ac_voltage' && <path d="M22 30Q30 20 38 30Q30 40 22 30" strokeWidth="1" />}
-          <path d="M30 0V15M30 45V60" strokeWidth="1" />
-        </svg>
-      );
-    case 'pwm_3ph_2level':
-    case 'pwm_3ph_3level':
-      return (
-        <svg width="80" height="60" viewBox="0 0 80 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="10" y="10" width="60" height="40" rx="4" />
-          <path d="M20 30L30 20L40 30L50 20L60 30" strokeWidth="1.5" />
-          <text x="40" y="55" textAnchor="middle" fill={color} fontSize="8" stroke="none" fontWeight="bold">INV</text>
-        </svg>
-      );
-    case 'im_foc_ctrl':
-    case 'im_scalar_ctrl':
-      return (
-        <svg width="80" height="80" viewBox="0 0 80 80" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="70" height="70" rx="2" fill={color} fillOpacity="0.05" />
-          <circle cx="40" cy="40" r="20" strokeDasharray="2 2" />
-          <path d="M30 40H50M40 30V50" strokeWidth="1" />
-          <text x="40" y="70" textAnchor="middle" fill={color} fontSize="8" stroke="none" fontWeight="black">
-            {type.includes('foc') ? 'FOC' : 'V/f'}
-          </text>
-        </svg>
-      );
-    case 'washing_basket':
-      return (
-        <svg width="80" height="80" viewBox="0 0 80 80" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="40" cy="40" r="30" />
-          <circle cx="40" cy="40" r="25" strokeDasharray="2 2" />
-          <path d="M40 10V15M40 65V70M10 40H15M65 40H70" strokeWidth="1" />
-          <rect x="55" y="35" width="10" height="10" fill={color} fillOpacity="0.5" rx="2" />
-          <text x="40" y="45" textAnchor="middle" fill={color} fontSize="8" stroke="none">BASKET</text>
-        </svg>
-      );
-    case 'washing_fluid':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <path d="M10 40 Q 30 35 50 40 L 50 55 Q 30 60 10 55 Z" fill={color} fillOpacity="0.3" />
-          <path d="M15 45 Q 30 42 45 45M18 50 Q 30 47 42 50" strokeWidth="1" strokeOpacity="0.5" />
-          <text x="30" y="30" textAnchor="middle" fill={color} fontSize="8" stroke="none">FLUID</text>
-        </svg>
-      );
-    case 'magnetron':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="30" cy="30" r="18" />
-          <circle cx="30" cy="30" r="6" fill={color} fillOpacity="0.3" />
-          <path d="M30 12V6M30 54V48M12 30H6M54 30H48" strokeWidth="1" />
-          <path d="M38 22L42 18M18 38L22 34" strokeWidth="1" />
-          <text x="30" y="55" textAnchor="middle" fill={color} fontSize="8" stroke="none">MAG</text>
-        </svg>
-      );
-    case 'upper_heater':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M10 10H50M10 20H50M10 30H50" strokeOpacity="0.3" />
-          <path d="M10 10C10 10 15 5 20 10C25 15 30 5 35 10C40 15 45 5 50 10" />
-          <path d="M0 20H10M50 20H60" strokeWidth="1" />
-        </svg>
-      );
-    case 'steam_generator':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <path d="M15 45H45V25C45 25 45 15 30 15C15 15 15 25 15 25V45Z" fill={color} fillOpacity="0.1" />
-          <path d="M25 15V5M30 12V2M35 15V5" strokeWidth="1" strokeDasharray="2 1" />
-          <text x="30" y="40" textAnchor="middle" fill={color} fontSize="8" stroke="none">STEAM</text>
-        </svg>
-      );
-    case 'microwave_inverter':
-      return (
-        <svg width="70" height="50" viewBox="0 0 70 50" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="60" height="40" rx="4" />
-          <path d="M15 25L25 15M25 35L35 25M35 25L45 15" />
-          <text x="35" y="40" textAnchor="middle" fill={color} fontSize="8" stroke="none">HV-INV</text>
-        </svg>
-      );
-    case 'microwave_cavity':
-      return (
-        <svg width="80" height="60" viewBox="0 0 80 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="10" y="10" width="60" height="40" rx="2" />
-          <rect x="15" y="15" width="40" height="30" strokeOpacity="0.2" strokeDasharray="1 1" />
-          <path d="M55 10V50M60 25V35" />
-          <text x="35" y="34" textAnchor="middle" fill={color} fontSize="10" stroke="none" fontWeight="bold">25L</text>
-        </svg>
-      );
-    case 'dc_current':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="30" cy="30" r="15" />
-          <path d="M30 20V40M25 25L30 20L35 25" />
-          <path d="M30 0V15M30 45V60" strokeWidth="1" />
-        </svg>
-      );
-    case 'vcvs':
-    case 'vccs':
-    case 'cccs':
-    case 'ccvs':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <path d="M30 15L45 30L30 45L15 30Z" />
-          <circle cx="30" cy="30" r="4" fill={color} fillOpacity="0.2" />
-          <path d="M30 0V15M30 45V60" strokeWidth="1" />
-        </svg>
-      );
-    case 'gas_flow_src':
-    case 'gas_pres_src':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="30" cy="30" r="15" />
-          <path d="M22 30L38 30M34 26L38 30L34 34" strokeWidth="1.5" />
-          <text x="30" y="25" fill={color} fontSize="8" textAnchor="middle" stroke="none">
-            {type === 'gas_flow_src' ? 'M' : 'P'}
-          </text>
-          <path d="M0 30H15M45 30H60" strokeWidth="1" />
-        </svg>
-      );
-    case 'gas_pipe':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="20" y="15" width="20" height="10" rx="2" />
-          <path d="M0 20H20M40 20H60" />
-          <path d="M30 25V35" stroke="#ef4444" strokeWidth="1" />
-        </svg>
-      );
-    case 'gas_fixed_res':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M20 30H40" />
-          <path d="M30 10V30" />
-          <path d="M25 15L30 10L35 15" strokeWidth="1" />
-        </svg>
-      );
-    case 'gas_rot_conv':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <path d="M20 15C10 30 10 30 20 45" stroke="#10b981" />
-          <path d="M30 15C40 30 40 30 30 45" stroke={color} />
-          <circle cx="25" cy="30" r="4" fill={color} fillOpacity="0.2" />
-          <path d="M30 30H40" strokeDasharray="2 2" />
-        </svg>
-      );
-    case 'gas_trans_conv':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="35" y="20" width="15" height="20" stroke="#10b981" />
-          <path d="M30 30H35" stroke="#10b981" />
-          <rect x="20" y="15" width="10" height="30" stroke={color} />
-          <path d="M30 30H40" strokeDasharray="2 2" />
-        </svg>
-      );
-    case 'flux_sensor':
-    case 'mmf_sensor':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="15" width="30" height="30" rx="2" />
-          <circle cx="30" cy="30" r="10" />
-          <text x="30" y="34" fill={color} fontSize="12" textAnchor="middle" stroke="none">
-            {type === 'flux_sensor' ? 'Φ' : 'ℱ'}
-          </text>
-        </svg>
-      );
-    case 'mmf_source':
-    case 'ctrl_mmf':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="30" cy="30" r="15" />
-          <path d="M22 30C22 20 38 20 38 30C38 40 22 40 22 30" />
-          <path d="M30 15L30 45" strokeWidth="1" />
-          <text x="30" y="25" fill={color} fontSize="8" textAnchor="middle" stroke="none">+</text>
-          <text x="30" y="42" fill={color} fontSize="8" textAnchor="middle" stroke="none">-</text>
-        </svg>
-      );
-    case 'flux_source':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="30" cy="30" r="15" />
-          <path d="M22 30C22 20 38 20 38 30C38 40 22 40 22 30" strokeOpacity="0.3" />
-          <path d="M30 20V40M25 25L30 20L35 25" />
-        </svg>
-      );
-    case 'gear_box':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="20" y="10" width="20" height="40" />
-          <path d="M25 15H35M25 45H35M30 10V5M30 50V55" />
-          <text x="30" y="34" fill={color} fontSize="10" textAnchor="middle" stroke="none">G</text>
-          <path d="M0 30H20M40 30H60" />
-        </svg>
-      );
-    case 'lever':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M10 20H50M30 20V35" />
-          <circle cx="30" cy="20" r="3" fill="white" />
-          <text x="15" y="15" fill={color} fontSize="8" textAnchor="middle" stroke="none">A</text>
-          <text x="45" y="15" fill={color} fontSize="8" textAnchor="middle" stroke="none">B</text>
-          <text x="30" y="10" fill={color} fontSize="8" textAnchor="middle" stroke="none">C</text>
-        </svg>
-      );
-    case 'force_sensor':
-    case 'torque_sensor':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="15" width="30" height="30" rx="2" />
-          <path d="M20 25L30 35L40 25" />
-          <text x="30" y="24" fill={color} fontSize="10" textAnchor="middle" stroke="none">
-            {type === 'force_sensor' ? 'F' : 'T'}
-          </text>
-          <path d="M0 30H15M45 30H60" />
-        </svg>
-      );
-    case 'force_source':
-    case 'torque_source':
-    case 'ang_vel_source':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="30" cy="30" r="15" />
-          <path d="M30 20V40M25 35L30 40L35 35" />
-          <text x="30" y="25" fill={color} fontSize="10" textAnchor="middle" stroke="none">
-            {type === 'force_source' ? 'F' : type === 'torque_source' ? 'T' : 'W'}
-          </text>
-          <path d="M30 0V15M30 45V60" strokeWidth="1" />
-        </svg>
-      );
-    case 'inertia':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <path d="M20 30C20 15 40 15 40 30" />
-          <path d="M30 30V45" />
-          <path d="M25 45H35" />
-        </svg>
-      );
-    case 'rot_ref':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M20 20H40M25 25H35M28 30H32" />
-          <path d="M30 0V20" />
-        </svg>
-      );
-    case 'rot_spring':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M0 20H10C10 20 15 10 20 20C25 30 30 10 35 20C40 30 45 10 50 20H60" />
-        </svg>
-      );
-    case 'rot_damper':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M0 20H20M40 20H60" />
-          <path d="M20 10V30H40V10" />
-          <path d="M30 15V25M25 15H35" />
-        </svg>
-      );
-    case 'rot_friction':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M0 20H20M40 20H60" />
-          <path d="M25 10V30M35 10V30" />
-        </svg>
-      );
-    case 'rot_hard_stop':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M0 20H20M40 20H60" />
-          <path d="M20 10V30" />
-          <path d="M20 10H30" strokeDasharray="2 2" />
-        </svg>
-      );
-    case 'mass':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="20" y="20" width="20" height="20" />
-          <path d="M30 0V20M30 40V60" strokeDasharray="2 2" strokeOpacity="0.5" />
-          <path d="M25 60H35" />
-        </svg>
-      );
-    case 'trans_ref':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M20 20H40M20 20L15 25M25 20L20 25M30 20L25 25M35 20L30 25M40 20L35 25" />
-          <path d="M30 0V20" />
-        </svg>
-      );
-    case 'trans_spring':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M0 20H15L18 10L24 30L30 10L36 30L42 10L45 20H60" />
-        </svg>
-      );
-    case 'trans_damper':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M0 20H15M45 20H60" />
-          <path d="M15 10V30H45" />
-          <path d="M30 10V30" />
-        </svg>
-      );
-    case 'trans_friction':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M0 18H60M0 22H60" />
-        </svg>
-      );
-    case 'trans_hard_stop':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M0 20H20M40 20H60" />
-          <path d="M20 10V30" />
-          <path d="M20 20L25 15L25 25Z" fill={color} />
-        </svg>
-      );
-    case 'ma_flow_sensor':
-    case 'ma_pt_sensor':
-    case 'ma_thermo':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="15" width="30" height="30" rx="2" />
-          <circle cx="30" cy="30" r="10" />
-          <path d={type === 'ma_flow_sensor' ? "M30 20C22 20 22 40 30 40C38 40 38 20 30 20" : "M22 30L38 30M35 25L38 30L35 35"} />
-          {type === 'ma_pt_sensor' && <text x="30" y="24" fill={color} fontSize="8" textAnchor="middle" stroke="none">P/T</text>}
-        </svg>
-      );
-    case 'ma_selector':
-      return (
-        <svg width="40" height="60" viewBox="0 0 40 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="30" height="50" rx="2" />
-          <path d="M10 15H30M10 30H30M10 45H30" strokeOpacity="0.5" />
-          <text x="20" y="34" fill={color} fontSize="10" textAnchor="middle" stroke="none">S</text>
-        </svg>
-      );
-    case 'ma_moisture':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="15" width="30" height="30" rx="2" />
-          <circle cx="30" cy="30" r="10" />
-          <path d="M28 28Q30 24 32 28Q30 32 28 28" fill={color} stroke="none" />
-        </svg>
-      );
-    case 'ma_moisture_src':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="30" cy="30" r="15" />
-          <path d="M28 25Q30 20 32 25Q30 30 28 25" fill={color} stroke="none" />
-          <path d="M30 15V45" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
-      );
-    case 'ma_flow_src':
-    case 'ma_pres_src':
-    case 'ma_pressure_source':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="30" cy="30" r="15" />
-          <path d="M22 30L38 30M34 26L38 30L34 34" strokeWidth="1.5" />
-          <text x="30" y="25" fill={color} fontSize="8" textAnchor="middle" stroke="none">
-            {type === 'ma_flow_src' ? 'M' : 'P'}
-          </text>
-          <path d="M0 30H15M45 30H60" strokeWidth="1" />
-        </svg>
-      );
-    case 'ma_properties':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="10" y="5" width="40" height="30" rx="2" fill={color} fillOpacity="0.05" />
-          <path d="M20 15Q22 10 24 15Q22 20 20 15" fill={color} stroke="none" />
-          <path d="M30 25Q32 20 34 25Q32 30 30 25" fill={color} stroke="none" />
-        </svg>
-      );
-    case 'ps_delay':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="15" width="30" height="30" rx="2" />
-          <path d="M20 30L30 20L40 30" />
-          <text x="20" y="24" fill={color} fontSize="8" textAnchor="middle" stroke="none">U</text>
-          <text x="40" y="24" fill={color} fontSize="8" textAnchor="middle" stroke="none">Y</text>
-        </svg>
-      );
-    case 'ps_add':
-    case 'ps_subtract':
-    case 'ps_product':
-    case 'ps_divide':
-      return (
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="30" height="30" rx="2" />
-          <text x="20" y="24" fill={color} fontSize="14" textAnchor="middle" stroke="none">
-            {type === 'ps_add' ? '+' : type === 'ps_subtract' ? '-' : type === 'ps_product' ? '×' : '÷'}
-          </text>
-        </svg>
-      );
-    case 'ps_gain':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M15 10L45 20L15 30V10Z" />
-          <text x="22" y="23" fill={color} fontSize="8" textAnchor="middle" stroke="none">K</text>
-        </svg>
-      );
-    case 'ps_math':
-      return (
-        <svg width="50" height="40" viewBox="0 0 50 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="10" width="40" height="20" rx="2" />
-          <text x="25" y="24" fill={color} fontSize="8" textAnchor="middle" stroke="none">FCN</text>
-        </svg>
-      );
-    case 'ps_sum':
-      return (
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="30" height="30" rx="2" />
-          <text x="20" y="25" fill={color} fontSize="14" textAnchor="middle" stroke="none">Σ</text>
-        </svg>
-      );
-    case 'ps_integrator':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="10" y="5" width="40" height="30" rx="2" />
-          <path d="M25 15H35M30 10V30M25 25H35" strokeWidth="1" strokeOpacity="0.3" />
-          <text x="30" y="24" fill={color} fontSize="12" textAnchor="middle" stroke="none">1/s</text>
-        </svg>
-      );
-    case 'ps_transfer_fcn':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="50" height="30" rx="2" />
-          <text x="30" y="24" fill={color} fontSize="8" textAnchor="middle" stroke="none">1/(Ts+1)</text>
-        </svg>
-      );
-    case 'ps_lookup_1d':
-    case 'ps_lookup_2d':
-      return (
-        <svg width="50" height="50" viewBox="0 0 50 50" fill="none" stroke={color} strokeWidth="2">
-          <rect x="10" y="10" width="30" height="30" rx="2" />
-          <path d="M15 35Q25 15 35 35" strokeWidth="1" />
-          <path d="M15 15V35H35" strokeWidth="1" strokeOpacity="0.5" />
-        </svg>
-      );
-    case 'ps_abs':
-      return (
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="30" height="30" rx="2" />
-          <path d="M15 15L20 25L25 15" />
-        </svg>
-      );
-    case 'ps_saturation':
-    case 'ps_dead_zone':
-      return (
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="30" height="30" rx="2" />
-          <path d={type === 'ps_saturation' ? "M10 30H15L25 10H30" : "M10 25H20M30 25H40"} strokeWidth="1.5" />
-          <path d="M5 20H35M20 5V35" strokeOpacity="0.2" strokeWidth="1" />
-        </svg>
-      );
-    case 'ps_switch':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="10" width="30" height="40" rx="2" />
-          <path d="M25 30L35 20" strokeWidth="1.5" />
-          <circle cx="25" cy="30" r="2" fill={color} />
-          <circle cx="35" cy="20" r="2" fill={color} />
-          <path d="M0 20H15M0 40H15M45 30H60" strokeWidth="1" />
-        </svg>
-      );
-    case 'ps_min':
-    case 'ps_max':
-      return (
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="30" height="30" rx="2" />
-          <text x="20" y="24" fill={color} fontSize="8" textAnchor="middle" stroke="none">
-            {type === 'ps_min' ? 'MIN' : 'MAX'}
-          </text>
-        </svg>
-      );
-    case 'ps_constant':
-      return (
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="30" height="30" rx="2" />
-          <text x="20" y="25" fill={color} fontSize="14" textAnchor="middle" stroke="none">C</text>
-        </svg>
-      );
-    case 'ps_sine':
-      return (
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="30" height="30" rx="2" />
-          <path d="M10 20Q15 10 20 20Q25 30 30 20" strokeWidth="1.5" />
-        </svg>
-      );
-    case 'ps_step':
-      return (
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="30" height="30" rx="2" />
-          <path d="M10 30H20V10H30" strokeWidth="1.5" />
-        </svg>
-      );
-    case 'ps_rms':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="10" y="5" width="40" height="30" rx="2" />
-          <text x="30" y="24" fill={color} fontSize="10" textAnchor="middle" stroke="none">RMS</text>
-        </svg>
-      );
-    case 'ps_term':
-      return (
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M10 15V25M10 20H25M25 15V25" />
-          <path d="M25 17H30M25 23H30" strokeOpacity="0.5" />
-        </svg>
-      );
-    case 'conductive':
-    case 'convective':
-    case 'radiative':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M15 20H20" />
-          <rect x="20" y="10" width="20" height="20" rx="1" fill={color} fillOpacity="0.1" />
-          {type === 'conductive' && <path d="M22 15L38 25" strokeWidth="1" />}
-          {type === 'convective' && <path d="M22 15Q30 20 22 25M25 15Q33 20 25 25" strokeWidth="1" />}
-          {type === 'radiative' && <path d="M22 15L38 15M22 20L38 20M22 25L38 25" strokeWidth="1" strokeDasharray="2 2" />}
-          <path d="M40 20H45" />
-        </svg>
-      );
-    case 'thermal_mass':
-      return (
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="10" y="15" width="20" height="15" rx="1" />
-          <path d="M20 5V15" />
-          <path d="M15 35H25" strokeWidth="1" strokeOpacity="0.5" />
-        </svg>
-      );
-    case 'thermal_ref':
-      return (
-        <svg width="40" height="30" viewBox="0 0 40 30" fill="none" stroke={color} strokeWidth="2">
-          <path d="M20 5V15M10 15H30" />
-          <path d="M12 20L15 15M17 20L20 15M22 20L25 15M27 20L30 15" strokeWidth="1" />
-        </svg>
-      );
-    case 'temp_sensor':
-    case 'heat_sensor':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="15" width="30" height="30" rx="2" />
-          <path d="M15 30H45" strokeWidth="1" strokeOpacity="0.3" />
-          {type === 'temp_sensor' ? (
-            <path d="M30 20V35M27 35H33" strokeWidth="1.5" />
-          ) : (
-            <path d="M25 25L35 25M30 20L35 25L30 30" strokeWidth="1.5" />
-          )}
-          <text x="30" y="25" fill={color} fontSize="8" textAnchor="middle" stroke="none" opacity="0.5">
-            {type === 'temp_sensor' ? 'T' : 'H'}
-          </text>
-        </svg>
-      );
-    case 'heat_src':
-    case 'temp_src':
-    case 'ctrl_heat_src':
-    case 'ctrl_temp_src':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <path d="M20 40H40L35 20H25L20 40Z" />
-          <path d="M30 35V25M27 28L30 25L33 28" strokeWidth="1.5" />
-          {(type === 'ctrl_heat_src' || type === 'ctrl_temp_src') && (
-            <path d="M0 30H20M15 27L20 30L15 33" strokeWidth="1" />
-          )}
-          <text x="30" y="50" fill={color} fontSize="6" textAnchor="middle" stroke="none" fontWeight="bold">
-            {type.includes('heat') ? 'HEAT' : 'TEMP'}
-          </text>
-        </svg>
-      );
-    case 'solver_config':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="50" height="30" rx="2" />
-          <text x="30" y="24" fill={color} fontSize="10" textAnchor="middle" stroke="none">f(x) = 0</text>
-        </svg>
-      );
-    case 'ps_to_sim':
-    case 'sim_to_ps':
-      return (
-        <svg width="40" height="30" viewBox="0 0 40 30" fill="none" stroke={color} strokeWidth="2">
-          <path d="M10 15L20 15M30 15L35 15" strokeWidth="1" />
-          <path d={type === 'ps_to_sim' ? "M20 10L25 15L20 20" : "M25 10L20 15L25 20"} strokeWidth="2" />
-          <path d="M5 15L10 15" strokeDasharray="2 2" />
-        </svg>
-      );
-    case 'probe':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="15" width="30" height="30" rx="2" />
-          <circle cx="30" cy="30" r="8" strokeWidth="1" />
-          <path d="M25 30H35M30 25V35" strokeWidth="1" />
-          <text x="50" y="34" fill={color} fontSize="10" textAnchor="middle" stroke="none">x</text>
-        </svg>
-      );
-    case 'conn_label':
-      return (
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="15" cy="20" r="8" />
-          <path d="M23 20L35 20" strokeWidth="1" />
-          <path d="M15 15L15 25M10 20L20 20" strokeWidth="1" strokeOpacity="0.3" />
-        </svg>
-      );
-    case 'busbar':
-      return (
-        <svg width="60" height="30" viewBox="0 0 60 30" fill="none" stroke={color} strokeWidth="2">
-          <rect x="10" y="5" width="40" height="20" fill={color} fillOpacity="0.2" />
-          <path d="M5 15H10M50 15H55" />
-          <circle cx="15" cy="15" r="1.5" fill={color} />
-          <circle cx="45" cy="15" r="1.5" fill={color} />
-        </svg>
-      );
-    case 'phase_splitter':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M10 20H25M25 10V30M25 10H45M25 20H45M25 30H45" />
-          <text x="35" y="15" fill={color} fontSize="6" stroke="none">a</text>
-          <text x="35" y="25" fill={color} fontSize="6" stroke="none">b</text>
-          <text x="35" y="35" fill={color} fontSize="6" stroke="none">c</text>
-        </svg>
-      );
-    case 'delta_ref':
-      return (
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M20 10V20M10 30L20 20L30 30H10" />
-        </svg>
-      );
-    case 'open_circuit':
-      return (
-        <svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke={color} strokeWidth="2">
-          <circle cx="15" cy="20" r="4" />
-          <path d="M15 5V16" />
-        </svg>
-      );
-    case 'ps_demux':
-      return (
-        <svg width="40" height="60" viewBox="0 0 40 60" fill="none" stroke="#92400e" strokeWidth="3">
-          <path d="M15 10V50" />
-          <path d="M5 30H15M15 15H30M15 30H30M15 45H30" strokeWidth="1.5" />
-          <text x="5" y="25" fill="#92400e" fontSize="6" stroke="none">abc</text>
-        </svg>
-      );
-    case 'bldc_logic':
-    case 'bldc_ctrl':
-    case 'bldc_pwm':
-    case 'dcdc_ctrl':
-    case 'pfc_ctrl':
-    case 'cyclo_ctrl':
-      return (
-        <svg width="100" height="120" viewBox="0 0 100 120" fill="none" stroke="white" strokeWidth="2">
-          <rect x="10" y="5" width="80" height="110" rx="2" fill="#111" />
-          <text x="50" y="60" fill="white" fontSize="6" textAnchor="middle" stroke="none" fontWeight="bold">
-            {type === 'dcdc_ctrl' ? 'DC-DC CTRL' : type === 'pfc_ctrl' ? 'PFC RECTIFIER' : 'CYCLOCONVERTER'}
-          </text>
-          <text x="85" y="110" fill="white" fontSize="4" textAnchor="end" stroke="none" opacity="0.5">Visualization</text>
-        </svg>
-      );
-    case 'pi_ctrl':
-    case 'lpf':
-    case 'integrator':
-    case 'mov_avg':
-    case 'sr_ff':
-    case 's_h':
-    case 'smith':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke="white" strokeWidth="1.5">
-          <rect x="5" y="5" width="50" height="50" rx="2" fill="#111" />
-          <text x="30" y="30" fill="white" fontSize="6" textAnchor="middle" stroke="none" fontWeight="bold">
-            {type === 'pi_ctrl' ? 'PI(z)' : type === 'lpf' ? '1/(Ts+1)' : type === 'integrator' ? '1/s' : type === 'mov_avg' ? 'MEAN' : type === 'sr_ff' ? 'SR FF' : type === 's_h' ? 'S&H' : 'SMITH'}
-          </text>
-          {type === 'pi_ctrl' && <path d="M10 40H20M15 35V45" strokeWidth="1" opacity="0.5" />}
-        </svg>
-      );
-    case 'sine_3ph':
-    case 'second_order':
-    case 'state_fb':
-    case 'smc':
-    case 'stair':
-    case 'washout':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke="white" strokeWidth="1.5">
-          <rect x="5" y="5" width="50" height="50" rx="2" fill="#111" />
-          <text x="30" y="30" fill="white" fontSize="6" textAnchor="middle" stroke="none" fontWeight="bold">
-            {type === 'sine_3ph' ? '3~ SINE' : type === 'second_order' ? '1/(s²+...)' : type === 'state_fb' ? 'u = -Kx' : type === 'smc' ? 'SMC' : type === 'stair' ? 'STAIR' : 'WASHOUT'}
-          </text>
-          {type === 'stair' && <path d="M10 40H20V30H30V20H40" strokeWidth="1" opacity="0.4" />}
-          {type === 'sine_3ph' && <path d="M10 45Q15 35 20 45T30 45" strokeWidth="1" opacity="0.4" />}
-        </svg>
-      );
-    case 'dc_curr_ctrl':
-    case 'dc_volt_ctrl':
-    case 'hyst_ctrl':
-    case 'vel_ctrl':
-      return (
-        <svg width="100" height="120" viewBox="0 0 100 120" fill="none" stroke="white" strokeWidth="2">
-          <rect x="10" y="5" width="80" height="110" rx="2" fill="#111" />
-          <text x="50" y="60" fill="white" fontSize="6" textAnchor="middle" stroke="none" fontWeight="bold">
-            {type === 'dc_curr_ctrl' ? 'DC CURR' : type === 'dc_volt_ctrl' ? 'DC VOLT' : type === 'hyst_ctrl' ? 'HYSTERESIS' : 'VELOCITY'}
-          </text>
-          <text x="50" y="70" fill="white" fontSize="5" textAnchor="middle" stroke="none" opacity="0.6">CONTROLLER</text>
-        </svg>
-      );
-    case 'im_scalar':
-    case 'im_foc':
-    case 'im_dtc':
-    case 'im_curr':
-      return (
-        <svg width="120" height="140" viewBox="0 0 120 140" fill="none" stroke="white" strokeWidth="2">
-          <rect x="10" y="5" width="100" height="130" rx="2" fill="#111" />
-          <text x="60" y="70" fill="white" fontSize="6" textAnchor="middle" stroke="none" fontWeight="bold">
-            {type === 'im_scalar' ? 'SCALAR (V/f)' : type === 'im_foc' ? 'FOC DRIVE' : type === 'im_dtc' ? 'DIRECT TORQUE' : 'DQ CURR CTRL'}
-          </text>
-          <text x="60" y="80" fill="white" fontSize="4" textAnchor="middle" stroke="none" opacity="0.6">INDUCTION MACHINE</text>
-        </svg>
-      );
-    case 'clarke':
-    case 'inv_clarke':
-    case 'park':
-    case 'inv_park':
-    case 'sym_comp':
-    case 'inv_sym_comp':
-      return (
-        <svg width="80" height="80" viewBox="0 0 80 80" fill="none" stroke="white" strokeWidth="1.5">
-          <rect x="10" y="5" width="60" height="70" rx="2" fill="#111" />
-          <text x="40" y="35" fill="white" fontSize="5" textAnchor="middle" stroke="none" fontWeight="bold">
-            {type.includes('clarke') ? 'CLARKE' : type.includes('park') ? 'PARK' : 'SYM COMP'}
-          </text>
-          <text x="40" y="45" fill="white" fontSize="4" textAnchor="middle" stroke="none" opacity="0.6">
-            {type.includes('inv') ? (type.includes('clarke') ? 'αβ0 → abc' : type.includes('park') ? 'dq0 → abc' : '+-0 → abc') : (type.includes('clarke') ? 'abc → αβ0' : type.includes('park') ? 'abc → dq0' : 'abc → +-0')}
-          </text>
-        </svg>
-      );
-    case 'flux_obs':
-    case 'luenberger':
-    case 'quad_dec':
-    case 'rtd':
-      return (
-        <svg width="100" height="100" viewBox="0 0 100 100" fill="none" stroke="white" strokeWidth="1.5">
-          <rect x="10" y="5" width="80" height="90" rx="2" fill="#111" />
-          <text x="50" y="50" fill="white" fontSize="6" textAnchor="middle" stroke="none" fontWeight="bold">
-            {type === 'flux_obs' ? 'FLUX OBS' : type === 'luenberger' ? 'STATE OBS' : type === 'quad_dec' ? 'QUAD DEC' : 'R/D CONV'}
-          </text>
-          <text x="50" y="60" fill="white" fontSize="4" textAnchor="middle" stroke="none" opacity="0.6">
-            {type === 'flux_obs' ? 'INDUCTION MACHINE' : type === 'luenberger' ? 'LUENBERGER' : 'SHAFT DECODER'}
-          </text>
-        </svg>
-      );
-    case 'pmsm_curr':
-    case 'pmsm_ref':
-    case 'pmsm_foc':
-    case 'pmsm_fw':
-    case 'pmsm_tq':
-      return (
-        <svg width="120" height="140" viewBox="0 0 120 140" fill="none" stroke="white" strokeWidth="2">
-          <rect x="10" y="5" width="100" height="130" rx="2" fill="#111" />
-          <text x="60" y="70" fill="white" fontSize="6" textAnchor="middle" stroke="none" fontWeight="bold">
-            {type === 'pmsm_curr' ? 'PMSM CURR' : type === 'pmsm_ref' ? 'REF GEN' : type === 'pmsm_foc' ? 'PMSM FOC' : type === 'pmsm_fw' ? 'FLD WEAK' : 'TQ EST'}
-          </text>
-          <text x="60" y="80" fill="white" fontSize="4" textAnchor="middle" stroke="none" opacity="0.6">PM SYNCHRONOUS</text>
-        </svg>
-      );
-    case 'pwm_3ph':
-    case 'pwm_npc':
-    case 'pwm_vienna':
-    case 'thy_6p':
-    case 'thy_12p':
-      return (
-        <svg width="120" height="140" viewBox="0 0 120 140" fill="none" stroke="white" strokeWidth="2">
-          <rect x="10" y="5" width="100" height="130" rx="2" fill="#111" />
-          <text x="60" y="70" fill="white" fontSize="6" textAnchor="middle" stroke="none" fontWeight="bold">
-            {type === 'pwm_3ph' ? 'PWM 2-LEVEL' : type === 'pwm_npc' ? 'PWM 3-LEVEL' : type === 'pwm_vienna' ? 'VIENNA PWM' : type === 'thy_6p' ? '6-PULSE' : '12-PULSE'}
-          </text>
-          <text x="60" y="80" fill="white" fontSize="4" textAnchor="middle" stroke="none" opacity="0.6">GATE GENERATOR</text>
-          {(type === 'pwm_3ph' || type === 'pwm_npc') && <path d="M20 40V30H30V40H40V30H50V40" strokeWidth="1" opacity="0.4" />}
-        </svg>
-      );
-    case 'belt_props':
-    case 'belt_end':
-    case 'belt_spool':
-    case 'pulley':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke="white" strokeWidth="1.5">
-          <rect x="5" y="5" width="50" height="50" rx="2" fill="white" stroke="#ccc" />
-          {type === 'belt_props' && (
-            <g transform="translate(15,15)">
-              <circle cx="15" cy="15" r="10" stroke="#3b82f6" strokeWidth="2" strokeDasharray="2 1" />
-              <path d="M10 15L20 15M15 10L15 20" stroke="#333" />
-            </g>
-          )}
-          {type === 'belt_spool' && (
-            <g transform="translate(15,15)">
-              <rect x="5" y="5" width="20" height="20" rx="2" fill="#1e293b" />
-              <path d="M5 10H25M5 15H25M5 20H25" stroke="#3b82f6" strokeWidth="1" />
-            </g>
-          )}
-          {type === 'pulley' && (
-            <g transform="translate(15,15)">
-              <circle cx="15" cy="15" r="12" stroke="#475569" strokeWidth="2" fill="#f1f5f9" />
-              <circle cx="15" cy="15" r="3" fill="#475569" />
-              <path d="M5 5L25 25" stroke="#3b82f6" strokeWidth="2" strokeDasharray="2 1" />
-            </g>
-          )}
-          {type === 'belt_end' && (
-            <g transform="translate(15,15)">
-              <rect x="5" y="10" width="10" height="10" fill="#475569" />
-              <path d="M15 15H30" stroke="#3b82f6" strokeWidth="2" strokeDasharray="2 1" />
-            </g>
-          )}
-        </svg>
-      );
-    case 'world_frame':
-    case 'ref_frame':
-    case 'rigid_trans':
-    case 'dist_cons':
-    case 'angle_cons':
-    case 'grav':
-    case 'spring_damper':
-    case 'ext_force':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke="white" strokeWidth="1.5">
-          <rect x="5" y="5" width="50" height="50" rx="2" fill="white" stroke="#ccc" />
-          {type === 'world_frame' && (
-            <g transform="translate(15,15)">
-              <path d="M0 25H30M15 0V30" stroke="#475569" strokeWidth="1" />
-              <path d="M15 15L25 5" stroke="#475569" strokeWidth="1" />
-              <rect x="12" y="12" width="6" height="6" fill="#1e293b" />
-            </g>
-          )}
-          {type === 'rigid_trans' && (
-            <g transform="translate(15,15)">
-              <path d="M5 25L25 5" stroke="#3b82f6" strokeWidth="2" strokeDasharray="2 2" />
-              <circle cx="5" cy="25" r="3" fill="#1e293b" />
-              <circle cx="25" cy="5" r="3" fill="#3b82f6" />
-            </g>
-          )}
-          {type === 'spring_damper' && (
-            <g transform="translate(15,15)">
-              <path d="M0 15H10L12 10L14 20L16 10L18 20L20 15H30" stroke="#475569" strokeWidth="1.5" />
-              <rect x="10" y="5" width="10" height="20" stroke="#475569" fill="white" opacity="0.3" />
-            </g>
-          )}
-          {type.includes('cons') && (
-            <g transform="translate(15,15)">
-              <circle cx="5" cy="15" r="3" fill="#333" />
-              <circle cx="25" cy="15" r="3" fill="#333" />
-              <path d="M5 15H25" stroke="#333" strokeWidth="2" strokeDasharray="1 1" />
-            </g>
-          )}
-        </svg>
-      );
-    case 'rev_joint':
-    case 'prism_joint':
-    case 'sphere_joint':
-    case 'univ_joint':
-    case 'weld_joint':
-    case 'gear_cons':
-    case 'rack_pinion':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke="white" strokeWidth="1.5">
-          <rect x="5" y="5" width="50" height="50" rx="2" fill="white" stroke="#ccc" />
-          {type === 'rev_joint' && (
-            <g transform="translate(15,15)">
-              <circle cx="15" cy="15" r="8" stroke="#475569" strokeWidth="2" />
-              <path d="M15 15L25 15M15 15L15 25" stroke="#3b82f6" strokeWidth="2" />
-              <path d="M10 10L12 8L15 7L18 8L20 10" stroke="#3b82f6" strokeWidth="1" strokeDasharray="1 1" />
-            </g>
-          )}
-          {type === 'prism_joint' && (
-            <g transform="translate(15,15)">
-              <rect x="5" y="10" width="20" height="10" fill="#475569" opacity="0.3" />
-              <rect x="10" y="5" width="10" height="20" fill="#3b82f6" />
-            </g>
-          )}
-          {type === 'sphere_joint' && (
-            <g transform="translate(15,15)">
-              <circle cx="15" cy="15" r="10" fill="#cbd5e1" stroke="#475569" />
-              <circle cx="15" cy="15" r="4" fill="#475569" />
-              <path d="M15 15L25 25" stroke="#475569" strokeWidth="2" />
-            </g>
-          )}
-          {type === 'gear_cons' && (
-            <g transform="translate(15,15)">
-              <circle cx="10" cy="10" r="8" stroke="#475569" strokeWidth="2" />
-              <circle cx="22" cy="22" r="5" stroke="#3b82f6" strokeWidth="2" />
-              <path d="M5 10H15M10 5V15M19 22H25M22 19V25" stroke="#64748b" strokeWidth="1" />
-            </g>
-          )}
-        </svg>
-      );
-    case 'mech_cfg':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke="white" strokeWidth="1.5">
-          <rect x="5" y="5" width="50" height="50" rx="2" fill="white" stroke="#ccc" />
-          <g transform="translate(10,10)">
-            {/* Robot Arm Icon */}
-            <path d="M5 35L15 35L25 15L35 15" stroke="#475569" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx="15" cy="35" r="4" fill="#333" />
-            <circle cx="25" cy="15" r="3" fill="#333" />
-            {/* Gear Icon */}
-            <circle cx="10" cy="30" r="6" stroke="#333" strokeWidth="1" />
-            <path d="M10 24V36M4 30H16M6 26L14 34M6 34L14 26" stroke="#333" strokeWidth="1" />
-          </g>
-        </svg>
-      );
-    case 'ma_ref':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M20 30H40M25 35H35M28 40H32" strokeOpacity="0.5" />
-          <path d="M30 10V30" />
-          <path d="M28 5Q30 0 32 5Q30 10 28 5" fill={color} stroke="none" />
-        </svg>
-      );
-    case 'ma_chamber':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="15" width="30" height="30" rx="4" />
-          <path d="M25 25Q27 20 29 25Q27 30 25 25" fill={color} stroke="none" />
-          <path d="M30 0V15M30 45V60" strokeDasharray="2 2" strokeOpacity="0.5" />
-        </svg>
-      );
-    case 'ma_pipe':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="20" y="15" width="20" height="10" rx="2" />
-          <path d="M28 18Q30 14 32 18Q30 22 28 18" fill={color} stroke="none" />
-          <path d="M0 20H20M40 20H60" />
-          <path d="M30 25V35" stroke="#ef4444" strokeWidth="1" />
-        </svg>
-      );
-    case 'ma_separator':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="15" width="30" height="30" rx="2" />
-          <path d="M25 25Q27 20 29 25" strokeWidth="1" />
-          <path d="M20 35H40" strokeOpacity="0.3" strokeDasharray="2 2" />
-          <path d="M25 40Q27 35 29 40Q27 45 25 40" fill={color} stroke="none" />
-        </svg>
-      );
-    case 'mag_ref':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M20 30H40M25 35H35M28 40H32" strokeOpacity="0.5" />
-          <path d="M30 10V30" />
-          <circle cx="30" cy="5" r="2" fill={color} />
-        </svg>
-      );
-    case 'reluctance':
-    case 'reluctance_f':
-    case 'var_reluctance':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="10" width="30" height="20" rx="2" />
-          <text x="30" y="24" fill={color} fontSize="12" textAnchor="middle" stroke="none">ℛ</text>
-          <path d="M0 20H15M45 20H60" />
-          {type === 'var_reluctance' && <path d="M20 35L40 5" strokeWidth="1" />}
-        </svg>
-      );
-    case 'perm_magnet':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="10" width="30" height="20" rx="2" />
-          <line x1="30" y1="10" x2="30" y2="30" strokeWidth="1" strokeDasharray="2 2" />
-          <text x="22" y="24" fill={color} fontSize="10" textAnchor="middle" stroke="none">N</text>
-          <text x="38" y="24" fill={color} fontSize="10" textAnchor="middle" stroke="none">S</text>
-          <path d="M0 20H15M45 20H60" />
-        </svg>
-      );
-    case 'em_conv':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <path d="M15 10C15 10 5 10 5 20C5 30 15 30 15 30C15 30 5 30 5 40C5 50 15 50 15 50" stroke="#3b82f6" />
-          <path d="M45 15C55 30 55 30 45 45" />
-          <path d="M15 30H45" strokeDasharray="2 2" strokeOpacity="0.5" />
-        </svg>
-      );
-    case 'rel_force':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <path d="M10 20Q20 30 10 40" />
-          <path d="M20 20Q30 30 20 40" />
-          <rect x="35" y="22" width="15" height="15" stroke="#f59e0b" />
-          <path d="M25 30H35" strokeDasharray="2 2" />
-        </svg>
-      );
-    case 'gas_props':
-    case 'gas_ref':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M20 30H40M25 35H35M28 40H32" />
-          <path d="M30 10V30" />
-        </svg>
-      );
-    case 'gas_cap':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M20 10H40V30H20V10ZM30 30V40" />
-        </svg>
-      );
-    case 'gas_chamber':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="15" y="15" width="30" height="30" rx="4" />
-          <path d="M30 0V15M30 45V60" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
-      );
-    case 'gas_resistance':
-    case 'gas_inf_res':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <path d="M0 20H15L20 10L30 30L40 10L45 20H60" />
-          {type === 'gas_inf_res' && <rect x="20" y="10" width="20" height="20" fill={color} fillOpacity="0.2" />}
-        </svg>
-      );
-    case 'gas_restriction':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color} strokeWidth="2">
-          <path d="M10 30H25M35 30H50" />
-          <path d="M25 20L35 40M35 20L25 40" />
-          <path d="M30 10V20" />
-        </svg>
-      );
-    case 'scope':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="50" height="30" rx="2" />
-          <path d="M10 20L20 10L30 30L40 10L50 20" strokeWidth="1.5" strokeOpacity="0.5" />
-          <circle cx="50" cy="10" r="1.5" fill={color} />
-        </svg>
-      );
-    case 'ps_pi_ctrl':
-    case 'ps_pid_ctrl':
-      return (
-        <svg width="60" height="40" viewBox="0 0 60 40" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="50" height="30" rx="2" />
-          <text x="30" y="24" fill={color} fontSize="10" textAnchor="middle" stroke="none" fontWeight="bold">
-            {type === 'ps_pid_ctrl' ? 'PID' : 'PI'}
-          </text>
-        </svg>
-      );
-    case 'doe_custom':
-    case 'DOE_MODEL':
-    case 'Statistical':
-      return (
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color || '#c9a86c'} strokeWidth="2">
-          <rect x="10" y="10" width="40" height="40" rx="8" fill={color || '#c9a86c'} fillOpacity="0.1" />
-          <path d="M20 20L40 40M40 20L20 40" strokeOpacity="0.2" />
-          <circle cx="30" cy="30" r="12" strokeDasharray="4 2" />
-          <text x="30" y="34" textAnchor="middle" fill={color || '#c9a86c'} fontSize="10" fontWeight="black" stroke="none">DOE</text>
-        </svg>
-      );
-    case 'lms_adaptive_filter':
-      return (
-        <svg width="80" height="60" viewBox="0 0 80 60" fill="none" stroke={color} strokeWidth="2">
-          <rect x="10" y="10" width="60" height="40" rx="4" fill={color} fillOpacity="0.05" />
-          <path d="M15 30H30L35 20L45 40L50 30H65" strokeWidth="1.5" />
-          <text x="40" y="52" textAnchor="middle" fill={color} fontSize="8" stroke="none" fontWeight="bold">LMS FILTER</text>
-        </svg>
-      );
-    case 'neural_neuron_learning':
-      return (
-        <svg width="80" height="80" viewBox="0 0 80 80" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="70" height="70" rx="4" fill={color} fillOpacity="0.05" />
-          <circle cx="25" cy="25" r="6" />
-          <circle cx="25" cy="55" r="6" />
-          <circle cx="55" cy="40" r="10" fill={color} fillOpacity="0.2" />
-          <line x1="31" y1="27" x2="46" y2="36" strokeWidth="1.5" />
-          <line x1="31" y1="53" x2="46" y2="44" strokeWidth="1.5" />
-          <text x="40" y="72" textAnchor="middle" fill={color} fontSize="8" stroke="none" fontWeight="bold">NEURON</text>
-        </svg>
-      );
-    case 'rl_q_learning_controller':
-      return (
-        <svg width="80" height="80" viewBox="0 0 80 80" fill="none" stroke={color} strokeWidth="2">
-          <rect x="5" y="5" width="70" height="70" rx="4" fill={color} fillOpacity="0.05" />
-          <path d="M25 40 A15 15 0 1 1 55 40 A15 15 0 0 1 25 40" strokeDasharray="3 3" />
-          <path d="M55 40 L53 35 M55 40 L50 42" strokeWidth="2" />
-          <text x="40" y="44" textAnchor="middle" fill={color} fontSize="14" stroke="none" fontWeight="bold">Q</text>
-          <text x="40" y="72" textAnchor="middle" fill={color} fontSize="8" stroke="none" fontWeight="bold">RL AGENT</text>
-        </svg>
-      );
-    case 'ac_motor_pid_control':
-      return (
-        <svg width="100" height="100" viewBox="0 0 100 100" fill="none" stroke={color} strokeWidth="2">
-          <rect x="10" y="10" width="80" height="80" rx="6" fill={color} fillOpacity="0.05" />
-          <circle cx="65" cy="50" r="20" />
-          <text x="65" y="56" textAnchor="middle" fill={color} fontSize="16" stroke="none" fontWeight="bold">M</text>
-          <rect x="20" y="35" width="25" height="30" rx="2" strokeWidth="1.5" />
-          <text x="32" y="53" textAnchor="middle" fill={color} fontSize="8" stroke="none" fontWeight="bold">PID</text>
-          <path d="M45 50 H50" strokeWidth="1.5" />
-        </svg>
-      );
-    default:
-      if (type && type.toLowerCase().includes('doe')) {
-        return (
-          <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke={color || '#c9a86c'} strokeWidth="2">
-            <rect x="10" y="10" width="40" height="40" rx="8" fill={color || '#c9a86c'} fillOpacity="0.1" />
-            <text x="30" y="34" textAnchor="middle" fill={color || '#c9a86c'} fontSize="10" fontWeight="black" stroke="none">DOE</text>
-          </svg>
-        );
-      }
-      return (
-        <div className="text-xl font-bold p-4 rounded bg-white/5 border border-white/10" style={{ color: color || '#888' }}>
-          {(type || 'UNK').substring(0, 3).toUpperCase()}
-        </div>
-      );
-  }
-};
-
-class NodeErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
-  constructor(props: any) {
-    super(props);
-    this.state = { hasError: false };
-  }
-  static getDerivedStateFromError() { return { hasError: true }; }
-  componentDidCatch(error: any, errorInfo: any) {
-    console.error("VLab Node Error:", error, errorInfo);
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="p-4 border-2 border-red-500 bg-red-900/20 text-red-400 rounded-xl flex flex-col items-center justify-center text-center">
-          <Activity size={24} className="mb-2 opacity-50" />
-          <span className="text-[10px] font-black uppercase tracking-tighter">Rendering Failure</span>
-          <span className="text-[8px] opacity-70">Check console for details</span>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-const getRotatedPosition = (originalPos: Position, rotation: number): Position => {
-  const normRot = ((rotation % 360) + 360) % 360;
-  if (normRot === 0) return originalPos;
-  
-  const posOrder = [Position.Top, Position.Right, Position.Bottom, Position.Left];
-  const origIdx = posOrder.indexOf(originalPos);
-  if (origIdx === -1) return originalPos;
-  
-  const shift = Math.round(normRot / 90);
-  const newIdx = (origIdx + shift) % 4;
-  return posOrder[newIdx];
-};
-
-const VLabNode = ({ id, data, selected }: { id: string, data: any, selected: boolean }) => {
-  console.log(`VLab Node [${id}]:`, data);
-  const updateNodeInternals = useUpdateNodeInternals();
-  const rotation = data.rotation || 0;
-
-  useEffect(() => {
-    updateNodeInternals(id);
-  }, [id, rotation, updateNodeInternals]);
-  
-  // Robust port gathering (supports ports array or separate inputs/outputs)
-  const rawPorts = data.ports || [
-    ...(data.inputs || []).map((p: any) => ({ ...p, pos: p.pos || p.position || 'left' })),
-    ...(data.outputs || []).map((p: any) => ({ ...p, pos: p.pos || p.position || 'right' }))
-  ];
-
-  // Group ports by side to calculate offsets
-  const portsBySide = rawPorts.reduce((acc: any, port: any) => {
-    if (!port) return acc;
-    const side = port.pos || port.position || 'left';
-    if (!acc[side]) acc[side] = [];
-    acc[side].push(port);
-    return acc;
-  }, {});
-
-  // Determine fixed symbol dimensions to align port pinning perfectly with block terminals
-  const { width, height } = useMemo(() => {
-    switch (data.type) {
-      case 'ground':
-        return { width: 40, height: 30 };
-      case 'ma_selector':
-        return { width: 40, height: 60 };
-      case 'resistor':
-      case 'capacitor':
-      case 'inductor':
-      case 'diode':
-      case 'memristor':
-      case 'infinite_resistance':
-      case 'ps_to_sim':
-      case 'sim_to_ps':
-        return { width: 60, height: 30 };
-      case 'opamp':
-      case 'switch':
-      case 'variable_resistor':
-      case 'thermal_resistor':
-      case 'upper_heater':
-      case 'gas_pipe':
-      case 'gas_fixed_res':
-      case 'lever':
-      case 'rot_ref':
-      case 'rot_spring':
-      case 'rot_damper':
-      case 'rot_friction':
-      case 'rot_hard_stop':
-      case 'trans_ref':
-      case 'trans_spring':
-      case 'trans_damper':
-      case 'trans_friction':
-      case 'trans_hard_stop':
-      case 'ma_properties':
-      case 'conductive_heat':
-      case 'convective_heat':
-      case 'radiative_heat':
-      case 'ps_gain':
-      case 'ps_integrator':
-      case 'ps_transfer_fcn':
-      case 'ps_rms':
-      case 'ps_pi_ctrl':
-      case 'ps_pid_ctrl':
-      case 'solver_config':
-      case 'scope':
-        return { width: 60, height: 40 };
-      case 'ps_math':
-      case 'ps_lookup_1d':
-      case 'ps_lookup_2d':
-        return { width: 50, height: 50 };
-      case 'ps_add':
-      case 'ps_subtract':
-      case 'ps_product':
-      case 'ps_divide':
-      case 'ps_abs':
-      case 'ps_deadzone':
-      case 'ps_saturation':
-      case 'ps_dead_zone':
-      case 'ps_constant':
-      case 'ps_sine':
-      case 'ps_step':
-      case 'ps_term':
-      case 'conn_label':
-        return { width: 40, height: 40 };
-      case 'ps_demux':
-      case 'ps_demux_3':
-        return { width: 40, height: 60 };
-      case 'microwave_inverter':
-        return { width: 70, height: 50 };
-      case 'pwm_3ph_2level':
-      case 'pwm_3ph_3level':
-      case 'microwave_cavity':
-      case 'lms_adaptive_filter':
-        return { width: 80, height: 60 };
-      case 'im_foc_ctrl':
-      case 'im_scalar_ctrl':
-      case 'washing_basket':
-      case 'neural_neuron_learning':
-      case 'rl_q_learning_controller':
-        return { width: 80, height: 80 };
-      default:
-        return { width: 60, height: 60 };
-    }
-  }, [data.type]);
-
-  return (
-    <div 
-      className={`relative group flex flex-col items-center transition-all ${selected ? 'z-50' : 'z-10'} h-full w-full`}
-      onMouseDown={(e) => data.onNodeMouseDown && data.onNodeMouseDown(e)}
-    >
-      {/* Component Name */}
-      <span className="text-[9px] font-black text-white/40 mb-1 pointer-events-none uppercase tracking-widest text-center max-w-[100px] truncate">
-        {data.label}
-      </span>
-      {/* Component Symbol Container */}
-      <div
-        className={`relative flex-1 flex w-full items-center justify-center transition-all duration-300 ${selected
-            ? 'bg-purple-500/5 shadow-[0_0_30px_rgba(168,85,247,0.15)] scale-105'
-            : 'bg-transparent'
-          }`}
-        style={{ minWidth: 80, minHeight: 60 }}
-      >
-        {/* Inner Symbol & Ports Container with Fixed size */}
-        <div className="relative flex items-center justify-center" style={{ width, height, transform: `rotate(${rotation}deg)` }}>
-          {/* Bidirectional Ports with Offsets */}
-          {Object.entries(portsBySide).map(([side, sidePorts]: [any, any]) => (
-            sidePorts.map((port: any, index: number) => {
-              const totalOnSide = sidePorts.length;
-              const offset = totalOnSide > 1 ? (index - (totalOnSide - 1) / 2) * 20 : 0;
-              const position = side === 'left' ? Position.Left :
-                side === 'right' ? Position.Right :
-                  side === 'top' ? Position.Top : Position.Bottom;
-
-              const rotatedPos = getRotatedPosition(position, rotation);
-
-              return (
-                <div
-                  key={port.id}
-                  className="absolute w-2.5 h-2.5"
-                  style={{
-                    top: (side === 'left' || side === 'right') ? `calc(50% + ${offset}px - 5px)` : (side === 'top' ? '-5px' : 'calc(100% - 5px)'),
-                    left: (side === 'top' || side === 'bottom') ? `calc(50% + ${offset}px - 5px)` : (side === 'left' ? '-5px' : 'calc(100% - 5px)')
-                  }}
-                >
-                  {/* A single source handle is used per port. Loose connection mode handles bidirectional linkage. */}
-                  {/* We set transform to none to override default ReactFlow translate styling that misaligns handles. */}
-                  <Handle
-                    type="source"
-                    position={rotatedPos}
-                    id={`${id}-${port.id}`}
-                    className="!w-full !h-full !border !border-white/50 hover:!scale-125 transition-all rounded-none shadow-lg !absolute !top-0 !left-0"
-                    style={{ transform: 'none', backgroundColor: data.color || '#3b82f6' }}
-                  />
-
-                  {/* Port Label */}
-                  <div
-                    className="absolute text-[8px] font-black text-blue-400/80 select-none pointer-events-none uppercase whitespace-nowrap"
-                    style={{
-                      top: side === 'top' ? -18 : side === 'bottom' ? 18 : 0,
-                      left: side === 'left' ? -20 : side === 'right' ? 20 : 0,
-                      transform: (side === 'left' || side === 'right') ? `translateY(-50%) rotate(${-rotation}deg)` : `translateX(-50%) rotate(${-rotation}deg)`
-                    }}
-                  >
-                    {port.label}
-                  </div>
-                </div>
-              );
-            })
-          ))}
-
-          {/* The SVG Symbol */}
-          <div className="drop-shadow-[0_0_10px_rgba(0,0,0,0.5)]">
-            <SymbolRenderer type={data.type} color={data.color} />
-          </div>
-        </div>
-      </div>
-
-      {/* Block Label */}
-      <div className={`mt-2 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider transition-all ${selected ? 'text-purple-400 bg-purple-500/10 border border-purple-500/20' : 'text-gray-500'}`}>
-        {data.label}
-      </div>
-    </div>
-  );
 };
 
 const VLabEdge = ({
@@ -2318,8 +840,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   onNavigateToXbridges,
   initialSelectedNodeId
 }) => {
-  const [nodes, setNodes, onLocalNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onLocalEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, setNodes, onLocalNodesChange] = useNodesState<AppVLabNode>(initialNodes);
+  const [edges, setEdges, onLocalEdgesChange] = useEdgesState<AppVLabEdge>(initialEdges);
 
   const [viewPath, setViewPath] = useState<string[]>(['root']);
   const currentParentId = viewPath[viewPath.length - 1];
@@ -2423,6 +945,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   }, [nodes, setNodes]);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [solverConfigTab, setSolverConfigTab] = useState<'general' | 'numerical' | 'tolerances' | 'diagnostics'>('numerical');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [clipboard, setClipboard] = useState<any[]>([]);
@@ -2430,6 +953,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const [isSimulating, setIsSimulating] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [simTime, setSimTime] = useState(0);
+  const simTimeRef = useRef<number>(0);
   const [vlabLimitInput, setVlabLimitInput] = useState('');
   const vlabLimitRef = useRef<number | null>(null);
 
@@ -2437,6 +961,58 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     const val = parseFloat(vlabLimitInput);
     vlabLimitRef.current = (!isNaN(val) && val > 0) ? val : null;
   }, [vlabLimitInput]);
+
+  const getEffectiveLimit = useCallback((): number | null => {
+    if (vlabLimitRef.current !== null && vlabLimitRef.current > 0) {
+      return vlabLimitRef.current;
+    }
+    const scNode = nodes.find(n => (n.data as any)?.type === 'solver_config' || (n.data as any)?.type === 'solver_configuration');
+    if (scNode) {
+      const st = (scNode.data as any)?.params?.stopTime?.value ?? (scNode.data as any)?.params?.stop_time?.value;
+      const parsed = typeof st === 'number' ? st : parseFloat(st);
+      if (!isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+    return null;
+  }, [nodes]);
+
+  // Sync solver_config stopTime into vlabLimitInput if top bar is empty
+  useEffect(() => {
+    const scNode = nodes.find(n => (n.data as any)?.type === 'solver_config' || (n.data as any)?.type === 'solver_configuration');
+    if (scNode) {
+      const st = (scNode.data as any)?.params?.stopTime?.value ?? (scNode.data as any)?.params?.stop_time?.value;
+      if (st !== undefined && st !== null) {
+        const parsed = typeof st === 'number' ? st : parseFloat(st);
+        if (!isNaN(parsed) && parsed > 0 && vlabLimitInput === '') {
+          setVlabLimitInput(String(parsed));
+        }
+      }
+    }
+  }, [nodes, vlabLimitInput]);
+
+  const handleVlabLimitChange = (raw: string) => {
+    const sanitized = raw.replace(/[^0-9.]/g, '');
+    setVlabLimitInput(sanitized);
+    const parsed = parseFloat(sanitized);
+    if (!isNaN(parsed) && parsed > 0) {
+      setNodes(nds => nds.map(n => {
+        if ((n.data as any)?.type === 'solver_config' || (n.data as any)?.type === 'solver_configuration') {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              params: {
+                ...n.data.params,
+                stopTime: { ...n.data.params?.stopTime, value: parsed }
+              }
+            }
+          };
+        }
+        return n;
+      }));
+    }
+  };
 
   const [showConfirmClear, setShowConfirmClear] = useState(false);
 
@@ -2537,6 +1113,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   };
 
   const [scopeData, setScopeData] = useState<any[]>([]);
+  const [perScopeData, setPerScopeData] = useState<Record<string, any[]>>({});
   const [openScopes, setOpenScopes] = useState<string[]>([]);
   const [activeSidebarTab, setActiveSidebarTab] = useState<'library' | 'labs'>('library');
   const [expandedDomains, setExpandedDomains] = useState<Record<string, boolean>>({});
@@ -2643,9 +1220,12 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
   const scopeParamsRef = useRef<any>({});
   useEffect(() => {
-    const scopeNode = nodes.find(n => (n.data as any).type === 'scope');
+    const selectedScope = selectedNodeId
+      ? nodes.find(n => n.id === selectedNodeId && (n.data as any)?.type === 'scope')
+      : null;
+    const scopeNode = selectedScope || nodes.find(n => (n.data as any)?.type === 'scope');
     scopeParamsRef.current = scopeNode?.data?.params || {};
-  }, [nodes]);
+  }, [nodes, selectedNodeId]);
 
   // Select and focus programmatic node
   useEffect(() => {
@@ -2952,6 +1532,15 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           const result = engine.simulateStep(nodes, edges, state, dt);
           state = result;
           if (result && result.scopeValues !== undefined && result.scopeValues !== null) {
+            if (result.perScopeValues) {
+              const val = result.scopeValues;
+              if (typeof val === 'object' && val !== null) {
+                val.__perScope = result.perScopeValues;
+                return val;
+              } else {
+                return { value: val, in1: val, __perScope: result.perScopeValues };
+              }
+            }
             return result.scopeValues;
           }
         } catch (e) {
@@ -2974,21 +1563,32 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     let stepCount = 0;
     let lastSampleTime = 0;
 
-    let interval: any;
-    interval = setInterval(() => {
+    const interval = setInterval(() => {
       try {
-        setSimTime(prevT => {
-          const t = prevT;
-          if (vlabLimitRef.current !== null && t >= vlabLimitRef.current) {
-            setIsSimulating(false);
-            clearInterval(interval);
-            setStatus({ message: `Simulation reached limit of ${vlabLimitRef.current}s.`, type: 'success' });
-            return t;
-          }
-          const val = step(t, DT);
-          
-          if (val === null || val === undefined) return t + DT;
+        const currentT = simTimeRef.current;
+        const limit = getEffectiveLimit();
 
+        if (limit !== null && currentT >= limit - 1e-9) {
+          setIsSimulating(false);
+          clearInterval(interval);
+          setStatus({ message: `Simulation reached limit of ${limit}s.`, type: 'success' });
+          return;
+        }
+
+        const dt = limit !== null ? Math.min(DT, Math.max(0, limit - currentT)) : DT;
+        if (dt <= 1e-12) {
+          setIsSimulating(false);
+          clearInterval(interval);
+          setStatus({ message: `Simulation reached limit of ${limit}s.`, type: 'success' });
+          return;
+        }
+
+        const val = step(currentT, dt);
+        const nextT = parseFloat((currentT + dt).toFixed(6));
+        simTimeRef.current = nextT;
+        setSimTime(nextT);
+
+        if (val !== null && val !== undefined) {
           stepCount++;
 
           const scopeParams = scopeParamsRef.current || {};
@@ -3003,7 +1603,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           }
 
           if (sampleTime > 0) {
-            if (t - lastSampleTime < sampleTime - 1e-9 && lastSampleTime > 0) {
+            if (currentT - lastSampleTime < sampleTime - 1e-9 && lastSampleTime > 0) {
               shouldSample = false;
             }
           }
@@ -3013,13 +1613,25 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               let newPoint: any;
               if (typeof val === 'number') {
                 if (!Number.isFinite(val)) return prev;
-                newPoint = { time: parseFloat(t.toFixed(3)), value: parseFloat(val.toFixed(6)) };
+                const num = parseFloat(val.toFixed(6));
+                newPoint = { time: parseFloat(nextT.toFixed(3)), value: num, in1: num };
               } else {
-                const entries = Object.entries(val).map(([k, v]) => {
-                  const numVal = parseFloat((v as number).toFixed(6));
-                  return [k, Number.isFinite(numVal) ? numVal : 0];
-                });
-                newPoint = { time: parseFloat(t.toFixed(3)), ...Object.fromEntries(entries) };
+                const entries = Object.entries(val)
+                  .filter(([k]) => k !== '__perScope')
+                  .map(([k, v]) => {
+                    const numVal = parseFloat((v as number).toFixed(6));
+                    return [k, Number.isFinite(numVal) ? numVal : 0];
+                  });
+                const obj = Object.fromEntries(entries);
+                const values = Object.values(obj) as number[];
+                newPoint = {
+                  time: parseFloat(nextT.toFixed(3)),
+                  ...obj,
+                  in1: obj.in1 !== undefined ? obj.in1 : (obj.value !== undefined ? obj.value : (values[0] ?? 0)),
+                  in2: obj.in2 !== undefined ? obj.in2 : values[1],
+                  in3: obj.in3 !== undefined ? obj.in3 : values[2],
+                  in4: obj.in4 !== undefined ? obj.in4 : values[3],
+                };
               }
               
               const next = [...prev, newPoint];
@@ -3029,13 +1641,54 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               return next.slice(-20000); // safety cap
             });
 
+            // Route per-scope data from engine
+            if (val && typeof val === 'object' && val.__perScope) {
+              const perScope = val.__perScope as Record<string, any>;
+              setPerScopeData(prevMap => {
+                const nextMap = { ...prevMap };
+                for (const [scopeId, scopeVal] of Object.entries(perScope)) {
+                  let point: any;
+                  if (typeof scopeVal === 'number') {
+                    if (!Number.isFinite(scopeVal)) continue;
+                    const num = parseFloat(scopeVal.toFixed(6));
+                    point = { time: parseFloat(nextT.toFixed(3)), value: num, in1: num };
+                  } else {
+                    const entries = Object.entries(scopeVal)
+                      .filter(([k]) => k !== '__perScope')
+                      .map(([k, v]) => {
+                        const numVal = parseFloat((v as number).toFixed(6));
+                        return [k, Number.isFinite(numVal) ? numVal : 0];
+                      });
+                    const obj = Object.fromEntries(entries);
+                    const values = Object.values(obj) as number[];
+                    point = {
+                      time: parseFloat(nextT.toFixed(3)),
+                      ...obj,
+                      in1: obj.in1 !== undefined ? obj.in1 : (obj.value !== undefined ? obj.value : (values[0] ?? 0)),
+                      in2: obj.in2 !== undefined ? obj.in2 : values[1],
+                      in3: obj.in3 !== undefined ? obj.in3 : values[2],
+                      in4: obj.in4 !== undefined ? obj.in4 : values[3],
+                    };
+                  }
+                  const prev = nextMap[scopeId] || [];
+                  const next = [...prev, point];
+                  nextMap[scopeId] = limitDataPoints ? next.slice(-bufferSize) : next.slice(-20000);
+                }
+                return nextMap;
+              });
+            }
+
             if (sampleTime > 0) {
-              lastSampleTime = t;
+              lastSampleTime = nextT;
             }
           }
+        }
 
-          return t + DT;
-        });
+        if (limit !== null && nextT >= limit - 1e-9) {
+          setIsSimulating(false);
+          clearInterval(interval);
+          setStatus({ message: `Simulation reached limit of ${limit}s.`, type: 'success' });
+        }
       } catch (err) {
         console.error("Simulation step failed:", err);
         setIsSimulating(false);
@@ -3044,7 +1697,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     }, 50);
 
     return () => clearInterval(interval);
-  }, [isSimulating, isPaused, buildSimEngine]);
+  }, [isSimulating, isPaused, buildSimEngine, getEffectiveLimit]);
 
   // Keyboard Shortcuts
   useEffect(() => {
@@ -3074,8 +1727,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       // Run Simulation (Ctrl + R)
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyR') {
         e.preventDefault();
-        setIsSimulating(true);
-        setIsPaused(false);
+        handleStartSimulation();
       }
 
       // Pause Simulation (Ctrl + P)
@@ -3174,6 +1826,38 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         setNodes(nds => nds.map(n => ({ ...n, selected: true })));
         setEdges(eds => eds.map(e => ({ ...e, selected: true })));
       }
+
+      // Simulink Fit View (F key or Space key)
+      if ((e.code === 'KeyF' || e.code === 'Space') && !e.ctrlKey && !e.metaKey && !e.altKey && !isInputFocused(e.target)) {
+        if (e.code === 'Space' && isSpacePressedRef.current && spaceComboUsedRef.current) return;
+        if (reactFlowInstance) {
+          reactFlowInstance.fitView({ padding: 0.2, duration: 400 });
+        }
+      }
+
+      // Ctrl + 0 (Reset Zoom 100%)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'Digit0') {
+        e.preventDefault();
+        if (reactFlowInstance) {
+          reactFlowInstance.zoomTo(1.0, { duration: 300 });
+        }
+      }
+
+      // Ctrl + Plus / Equals (Zoom In)
+      if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        if (reactFlowInstance) {
+          reactFlowInstance.zoomIn({ duration: 300 });
+        }
+      }
+
+      // Ctrl + Minus (Zoom Out)
+      if ((e.ctrlKey || e.metaKey) && (e.key === '-' || e.key === '_')) {
+        e.preventDefault();
+        if (reactFlowInstance) {
+          reactFlowInstance.zoomOut({ duration: 300 });
+        }
+      }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -3192,7 +1876,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [nodes, edges, clipboard, setNodes, setEdges, isLibCollapsed, isPropsCollapsed, setIsSimulating]);
+  }, [nodes, edges, clipboard, setNodes, setEdges, isLibCollapsed, isPropsCollapsed, setIsSimulating, reactFlowInstance]);
 
   const filteredLibrary = useMemo(() => {
     if (!searchQuery.trim()) return VLAB_LIBRARY;
@@ -3208,6 +1892,64 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       )
     })).filter(domain => domain.blocks.length > 0);
   }, [searchQuery]);
+
+  const handleStartSimulation = useCallback(() => {
+    if (isSimulating) {
+      setIsPaused(p => !p);
+      return;
+    }
+
+    // Dynamic real-time connection check
+    const invalidErrors: string[] = [];
+    edges.forEach(edge => {
+      const sourceNode = nodes.find(n => n.id === edge.source);
+      const targetNode = nodes.find(n => n.id === edge.target);
+      if (!sourceNode || !targetNode) return;
+
+      const sourceData = sourceNode.data as any;
+      const targetData = targetNode.data as any;
+
+      const sPortId = edge.sourceHandle?.split('-').pop()?.replace(/_[st]$/, '');
+      const tPortId = edge.targetHandle?.split('-').pop()?.replace(/_[st]$/, '');
+      
+      const sourcePort = sourceData.ports?.find((p: any) => p.id === sPortId);
+      const targetPort = targetData.ports?.find((p: any) => p.id === tPortId);
+
+      const sDomain = sourcePort?.domain || sourceData.domain;
+      const tDomain = targetPort?.domain || targetData.domain;
+
+      const isUniversalBlock = (id: string) => 
+        id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator' ||
+        id === 'subsystem' || id === 'Subsystem' ||
+        id === 'inport' || id === 'Inport' ||
+        id === 'outport' || id === 'Outport' ||
+        id === 'solver_config' || id === 'solver_configuration';
+      const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type);
+
+      if (sDomain && tDomain && sDomain.toLowerCase() !== tDomain.toLowerCase() && !isRelaxed) {
+        const sLabel = sourceData.label || sourceData.type;
+        const tLabel = targetData.label || targetData.type;
+        invalidErrors.push(`${sLabel} (${sDomain}) ➔ ${tLabel} (${tDomain})`);
+      }
+    });
+
+    if (invalidEdges.size > 0 || invalidErrors.length > 0) {
+      const detail = invalidErrors.length > 0 ? ` Incompatible: ${invalidErrors.slice(0, 2).join('; ')}${invalidErrors.length > 2 ? ` (+${invalidErrors.length - 2} more)` : ''}` : '';
+      setStatus({ 
+        message: `CANNOT RUN SIMULATION: ${Math.max(invalidEdges.size, invalidErrors.length)} invalid connection(s) detected.${detail}`, 
+        type: 'error' 
+      });
+      return;
+    }
+
+    setIsSimulating(true);
+    setIsPaused(false);
+    simTimeRef.current = 0;
+    setSimTime(0);
+    setScopeData([]);
+    setPerScopeData({});
+    setStatus({ message: 'Simulation started successfully.', type: 'success' });
+  }, [isSimulating, edges, nodes, invalidEdges]);
 
   const onConnect = useCallback((params: Connection) => {
     // 1. Domain connection validation (Simscape connection safety parity)
@@ -3230,12 +1972,15 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator' ||
         id === 'subsystem' || id === 'Subsystem' ||
         id === 'inport' || id === 'Inport' ||
-        id === 'outport' || id === 'Outport';
+        id === 'outport' || id === 'Outport' ||
+        id === 'solver_config' || id === 'solver_configuration';
       const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type);
 
       if (sDomain && tDomain && sDomain.toLowerCase() !== tDomain.toLowerCase() && !isRelaxed) {
+        const sName = sourceData.label || sourceData.type;
+        const tName = targetData.label || targetData.type;
         setStatus({
-          message: `Cannot connect ${sDomain} port to ${tDomain} port. Use a converter block.`,
+          message: `Cannot connect ${sDomain} port (${sName}) to ${tDomain} port (${tName}). Use a domain converter block.`,
           type: 'error'
         });
         setTimeout(() => setStatus(s => s.type === 'error' ? { message: 'System Ready', type: 'idle' } : s), 5000);
@@ -3276,10 +2021,11 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         id === 'scope' || id === 'vlab_probe' || id === 'conn_label' || id === 'ps_terminator' ||
         id === 'subsystem' || id === 'Subsystem' ||
         id === 'inport' || id === 'Inport' ||
-        id === 'outport' || id === 'Outport';
+        id === 'outport' || id === 'Outport' ||
+        id === 'solver_config' || id === 'solver_configuration';
       const isRelaxed = isUniversalBlock(sourceData.type) || isUniversalBlock(targetData.type);
 
-      if (sDomain && tDomain && sDomain !== tDomain && !isRelaxed) {
+      if (sDomain && tDomain && sDomain.toLowerCase() !== tDomain.toLowerCase() && !isRelaxed) {
         invalid.add(edge.id);
       }
     });
@@ -3509,7 +2255,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     }
   };
 
-  const onNodeDragStop = (_event: any, draggedNode: Node, draggedNodes: Node[]) => {
+  const onNodeDragStop = (_event: any, draggedNode: AppVLabNode, draggedNodes: AppVLabNode[]) => {
     const nodesToMove = draggedNodes && draggedNodes.length > 0 ? draggedNodes : [draggedNode];
     const draggedNodeIds = new Set(nodesToMove.map(n => n.id));
     
@@ -3720,7 +2466,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           ...n.data.params,
           [paramKey]: { ...n.data.params[paramKey], value }
         };
-        const updatedData = {
+        const updatedData: Record<string, any> = {
           ...n.data,
           params: updatedParams
         };
@@ -3733,6 +2479,13 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             label: `${i + 1}`,
             domain: 'Physical'
           }));
+        }
+
+        if ((n.data.type === 'solver_config' || n.data.type === 'solver_configuration') && paramKey === 'stopTime') {
+          const num = typeof value === 'number' ? value : parseFloat(String(value));
+          if (!isNaN(num) && num > 0) {
+            setVlabLimitInput(String(num));
+          }
         }
 
         let updatedLabel = n.data.label;
@@ -3753,10 +2506,11 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   };
 
   const runSimulation = () => {
-    // Run a batch 300-step physics simulation for the DOE export
+    // Run a batch physics simulation for the DOE export respecting the configured limit
     const step = buildSimEngine();
     const DT = 0.1;   // s
-    const N = 300;
+    const limit = getEffectiveLimit() ?? 30;
+    const N = Math.max(1, Math.round(limit / DT));
 
     const timeArr: number[] = [];
     const valArr: number[] = [];
@@ -3780,11 +2534,24 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   };
 
   const exportToExcel = () => {
-    if (scopeData.length === 0) return;
+    if (scopeData.length === 0 && Object.keys(perScopeData).length === 0) return;
 
-    const ws = XLSX.utils.json_to_sheet(scopeData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Simulation Results");
+
+    // If per-scope data exists, create one sheet per scope
+    const perScopeEntries = Object.entries(perScopeData).filter(([_, d]) => d && d.length > 0);
+    if (perScopeEntries.length > 0) {
+      for (const [scopeId, data] of perScopeEntries) {
+        const scopeNode = nodes.find(n => n.id === scopeId);
+        const rawLabel = (scopeNode?.data as any)?.label || scopeId;
+        const sheetName = rawLabel.replace(/[:\\/?*[\]]/g, '_').slice(0, 31); // Excel valid sheet name
+        const ws = XLSX.utils.json_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      }
+    } else {
+      const ws = XLSX.utils.json_to_sheet(scopeData);
+      XLSX.utils.book_append_sheet(wb, ws, "Simulation Results");
+    }
 
     const date = new Date().toISOString().split('T')[0];
     XLSX.writeFile(wb, `ADIA_VLab_Results_${date}.xlsx`);
@@ -3856,7 +2623,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               <input
                 type="text"
                 value={vlabLimitInput}
-                onChange={e => setVlabLimitInput(e.target.value.replace(/[^0-9.]/g, ''))}
+                onChange={e => handleVlabLimitChange(e.target.value)}
                 disabled={isSimulating}
                 placeholder="Unlimited"
                 className="w-16 bg-black/40 border border-[#2d2d2d] focus:border-[#a855f7]/50 rounded px-1.5 py-0.5 text-center text-xs font-mono font-bold text-[#c084fc] focus:outline-none transition-all disabled:opacity-50"
@@ -3866,24 +2633,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
           </div>
 
           <button
-            onClick={() => {
-              if (isSimulating) {
-                setIsPaused(!isPaused);
-              } else {
-                if (invalidEdges.size > 0) {
-                  setStatus({ 
-                    message: `CANNOT RUN SIMULATION: ${invalidEdges.size} invalid connection(s) detected. Check domains.`, 
-                    type: 'error' 
-                  });
-                  return;
-                }
-                setIsSimulating(true);
-                setIsPaused(false);
-                setSimTime(0);
-                setScopeData([]);
-                setStatus({ message: 'Simulation started successfully.', type: 'success' });
-              }
-            }}
+            onClick={handleStartSimulation}
             className={`flex items-center gap-2 ${isSimulating && !isPaused ? 'bg-amber-600 hover:bg-amber-500' : 'bg-purple-600 hover:bg-purple-500'} text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg shadow-purple-900/20`}
           >
             {isSimulating && !isPaused ? <><Pause size={14} fill="currentColor" /> PAUSE</> : <><Play size={14} fill="currentColor" /> {isPaused ? 'RESUME' : 'RUN SIMULATION'}</>}
@@ -3903,7 +2653,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             </button>
           )}
 
-          {scopeData.length > 0 && (
+          {(scopeData.length > 0 || Object.values(perScopeData).some(d => d.length > 0)) && (
             <button
               onClick={exportToExcel}
               className="flex items-center gap-2 bg-emerald-600/20 border border-emerald-600/30 hover:bg-emerald-600/30 text-emerald-500 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
@@ -4060,8 +2810,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                             onClick={() => addBlockToCenter(block)}
                                             className="group bg-[#111] border border-white/5 p-3 rounded-xl cursor-grab active:cursor-grabbing hover:border-purple-500/50 hover:bg-[#151515] transition-all flex flex-col items-center justify-center gap-2 relative overflow-hidden"
                                           >
-                                            <div className="w-12 h-12 flex items-center justify-center transform scale-[0.6] group-hover:scale-[0.7] transition-transform origin-center">
-                                              <SymbolRenderer type={block.icon} color={block.color} />
+                                            <div className="w-14 h-12 flex items-center justify-center group-hover:scale-110 transition-transform origin-center">
+                                              <SymbolRenderer type={block.icon} color={block.color} size={46} />
                                             </div>
                                             <span className="text-[10px] text-gray-500 font-bold text-center leading-tight truncate w-full px-1 group-hover:text-gray-200 transition-colors uppercase tracking-tight">
                                               {block.name}
@@ -4151,9 +2901,26 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               ...n,
               data: {
                 ...n.data,
-                onNodeMouseDown: (e: React.MouseEvent) => handleNodeMouseDown(e, n)
+                onNodeMouseDown: (e: React.MouseEvent) => handleNodeMouseDown(e, n),
+                onRenameNode: (nodeId: string, newLabel: string) => {
+                  setNodes(nds => nds.map(nd => {
+                    if (nd.id === nodeId) {
+                      return {
+                        ...nd,
+                        data: {
+                          ...nd.data,
+                          label: newLabel,
+                          params: nd.data.params?.name
+                            ? { ...nd.data.params, name: { ...nd.data.params.name, value: newLabel } }
+                            : nd.data.params
+                        }
+                      };
+                    }
+                    return nd;
+                  }));
+                }
               }
-            })), [nodes, currentParentId])}
+            })), [nodes, currentParentId, handleNodeMouseDown, setNodes])}
             edges={useMemo(() => edges.filter(e => {
               const sourceNode = nodes.find(n => n.id === e.source);
               return sourceNode && (sourceNode.data.parentId || 'root') === currentParentId;
@@ -4178,12 +2945,49 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             connectionLineStyle={{ stroke: '#6c9ac6', strokeWidth: 2 }}
             connectionLineType={ConnectionLineType.Bezier}
             connectionMode={ConnectionMode.Loose}
+            colorMode="dark"
             fitView
             snapToGrid
             snapGrid={[10, 10]}
           >
             <Background color="#151515" gap={20} variant={BackgroundVariant.Lines} />
             <Controls className="bg-[#1a1a1a] border-[#333] fill-white" />
+
+            {/* Simulink Canvas Zoom HUD */}
+            <Panel position="bottom-left" className="m-3 select-none">
+              <div className="flex items-center gap-1 bg-[#121218]/90 border border-white/10 p-1 rounded-xl shadow-2xl backdrop-blur-md">
+                <button
+                  onClick={() => reactFlowInstance?.zoomOut({ duration: 300 })}
+                  className="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all active:scale-95"
+                  title="Zoom Out (Ctrl + -)"
+                >
+                  <ZoomOut size={14} />
+                </button>
+                <button
+                  onClick={() => reactFlowInstance?.zoomTo(1.0, { duration: 300 })}
+                  className="px-2 py-1 text-[10px] font-mono font-bold text-purple-400 hover:bg-purple-500/10 rounded-lg transition-all"
+                  title="Reset Zoom to 100% (Ctrl + 0)"
+                >
+                  {Math.round((reactFlowInstance?.getZoom?.() || 1) * 100)}%
+                </button>
+                <button
+                  onClick={() => reactFlowInstance?.zoomIn({ duration: 300 })}
+                  className="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all active:scale-95"
+                  title="Zoom In (Ctrl + +)"
+                >
+                  <ZoomIn size={14} />
+                </button>
+                <div className="w-px h-4 bg-white/10 mx-0.5" />
+                <button
+                  onClick={() => reactFlowInstance?.fitView({ padding: 0.2, duration: 400 })}
+                  className="flex items-center gap-1 px-2 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 rounded-lg text-[10px] font-bold transition-all active:scale-95"
+                  title="Zoom to Fit (Space / F)"
+                >
+                  <Maximize2 size={12} />
+                  <span>Fit View</span>
+                </button>
+              </div>
+            </Panel>
 
             <Panel position="top-left" className="m-0 select-none">
               <div className="flex items-center gap-1.5 bg-[#0d0d0d]/90 border border-white/5 px-3 py-1.5 rounded-full backdrop-blur-md shadow-2xl">
@@ -4239,8 +3043,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                       onClick={() => addBlockAtPos(block, quickSearchPos)}
                       className="w-full flex items-center gap-3 p-2 hover:bg-purple-600/10 transition-colors group text-left border-b border-white/5 last:border-0"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-[#1a1a1a] flex items-center justify-center text-lg border border-white/5 group-hover:border-purple-500/30" style={{ color: block.color }}>
-                        {block.icon}
+                      <div className="w-9 h-9 rounded-lg bg-[#141419] flex items-center justify-center border border-white/5 group-hover:border-purple-500/30 overflow-visible">
+                        <SymbolRenderer type={block.icon} color={block.color} size={26} />
                       </div>
                       <div className="flex flex-col">
                         <span className="text-[11px] font-bold text-gray-200">{block.name}</span>
@@ -4262,7 +3066,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             {selectedNode && (selectedNode.data as any).type === 'scope' && !openScopes.includes(selectedNode.id) && (
               <Panel position="bottom-right" className="w-96 h-64 mb-12 mr-4 shadow-2xl z-50">
                 <ScopeView
-                  data={scopeData}
+                  data={perScopeData[selectedNode.id]?.length > 0 ? perScopeData[selectedNode.id] : scopeData}
                   title={selectedNode.data.label}
                   isPaused={isPaused}
                   params={selectedNode.data.params || {}}
@@ -4358,82 +3162,306 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   )}
 
                   <div className="space-y-4">
-                    <div className="bg-[#141414] p-3 rounded-xl border border-[#222]">
-                      <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Block ID</span>
-                      <span className="text-xs font-mono text-purple-400">{selectedNode.id}</span>
+                    <div className="space-y-2">
+                      <div className="bg-[#141414] p-3 rounded-xl border border-[#222]">
+                        <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Block Name</label>
+                        <input
+                          type="text"
+                          value={(selectedNode.data as any).label || (selectedNode.data as any).type || ''}
+                          onChange={(e) => {
+                            const newLabel = e.target.value;
+                            setNodes(nds => nds.map(nd => {
+                              if (nd.id === selectedNode.id) {
+                                return {
+                                  ...nd,
+                                  data: {
+                                    ...nd.data,
+                                    label: newLabel,
+                                    params: nd.data.params?.name
+                                      ? { ...nd.data.params, name: { ...nd.data.params.name, value: newLabel } }
+                                      : nd.data.params
+                                  }
+                                };
+                              }
+                              return nd;
+                            }));
+                          }}
+                          className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg py-1.5 px-2.5 text-xs text-purple-300 font-medium focus:border-purple-500 outline-none"
+                          placeholder="Enter block name..."
+                        />
+                      </div>
+                      <div className="bg-[#141414] px-3 py-2 rounded-xl border border-[#222] flex justify-between items-center">
+                        <span className="text-[9px] text-gray-500 font-bold uppercase">Block ID</span>
+                        <span className="text-[10px] font-mono text-purple-400/80">{selectedNode.id}</span>
+                      </div>
                     </div>
 
-                    <div className="space-y-3">
-                      {Object.entries((selectedNode.data as any).params || {}).map(([key, param]: [string, any]) => (
-                        <div key={key}>
-                          <div className="flex justify-between items-center mb-1">
-                            <label className="text-[10px] text-gray-400 font-bold uppercase">{param.label || key}</label>
-                            <span className="text-[10px] text-gray-600">{param.unit || ''}</span>
-                          </div>
-                          {['limit_data_points', 'show_grid', 'show_legend'].includes(key) ? (
-                            <select
-                              value={String(param.value ?? 'on')}
-                              onChange={(e) => updateParameter(key, e.target.value)}
-                              className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-[#a855f7] font-bold cursor-pointer"
+                    {selectedNode.data.type === 'solver_config' ? (
+                      <div className="space-y-4">
+                        {/* Segmented Solver Tab Switcher */}
+                        <div className="grid grid-cols-4 gap-1 p-1 bg-[#141414] rounded-lg border border-[#222]">
+                          {(['general', 'numerical', 'tolerances', 'diagnostics'] as const).map((tab) => (
+                            <button
+                              key={tab}
+                              onClick={() => setSolverConfigTab(tab)}
+                              className={`py-1.5 px-1 text-[9px] font-bold uppercase rounded transition-all text-center ${
+                                solverConfigTab === tab
+                                  ? 'bg-purple-600 text-white shadow-md'
+                                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                              }`}
                             >
-                              <option value="on">On (Yes)</option>
-                              <option value="off">Off (No)</option>
-                            </select>
-                          ) : key === 'time_range' ? (
-                            <select
-                              value={String(param.value ?? '10')}
-                              onChange={(e) => {
-                                const val = e.target.value === 'auto' ? 'auto' : parseFloat(e.target.value);
-                                updateParameter(key, val);
-                              }}
-                              className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-mono font-bold cursor-pointer"
-                            >
-                              <option value="auto">Auto (Full)</option>
-                              <option value="1">1s</option>
-                              <option value="2">2s</option>
-                              <option value="5">5s</option>
-                              <option value="10">10s</option>
-                              <option value="30">30s</option>
-                              <option value="60">60s</option>
-                              <option value="300">300s</option>
-                            </select>
-                          ) : key === 'numSignals' || key === 'numPorts' ? (
-                            <select
-                              value={String(param.value ?? 1)}
-                              onChange={(e) => updateParameter(key, parseInt(e.target.value))}
-                              className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-bold cursor-pointer"
-                            >
-                              {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-                                <option key={n} value={n}>{n} Channels</option>
-                              ))}
-                            </select>
-                          ) : key === 'data_type' ? (
-                            <select
-                              value={String(param.value ?? 'auto')}
-                              onChange={(e) => updateParameter(key, e.target.value)}
-                              className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-bold cursor-pointer"
-                            >
-                              <option value="auto">Auto (Loose)</option>
-                              <option value="electrical">Electrical</option>
-                              <option value="thermal">Thermal</option>
-                              <option value="rotational">Rotational</option>
-                              <option value="mechanical">Mechanical</option>
-                              <option value="physical">Physical Signal</option>
-                            </select>
-                          ) : (
-                            <input
-                              type={typeof (param.value ?? 0) === 'number' ? "number" : "text"}
-                              value={param.value ?? ''}
-                              onChange={(e) => {
-                                const val = typeof (param.value ?? 0) === 'number' ? parseFloat(e.target.value) : e.target.value;
-                                updateParameter(key, val);
-                              }}
-                              className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none"
-                            />
-                          )}
+                              {tab === 'tolerances' ? 'Tolerances' : tab === 'numerical' ? 'Numerical' : tab === 'diagnostics' ? 'Diagnostics' : 'General'}
+                            </button>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+
+                        {/* Tab 1: General Settings */}
+                        {solverConfigTab === 'general' && (
+                          <div className="space-y-3 animate-in fade-in duration-200">
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Start Time (s)</label>
+                              <input
+                                type="number"
+                                value={(selectedNode.data as any).params?.startTime?.value ?? 0}
+                                onChange={(e) => updateParameter('startTime', parseFloat(e.target.value) || 0)}
+                                className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-white font-mono"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Stop Time (s)</label>
+                              <input
+                                type="number"
+                                value={(selectedNode.data as any).params?.stopTime?.value ?? 10}
+                                onChange={(e) => updateParameter('stopTime', parseFloat(e.target.value) || 10)}
+                                className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-white font-mono"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Tab 2: Numerical Tab */}
+                        {solverConfigTab === 'numerical' && (
+                          <div className="space-y-3 animate-in fade-in duration-200">
+                            <div>
+                              <div className="flex justify-between items-center mb-1">
+                                <label className="text-[10px] text-purple-400 font-bold uppercase">Numerical Solver</label>
+                                <span className="text-[8px] bg-purple-900/40 text-purple-300 border border-purple-700/50 px-1.5 py-0.5 rounded font-mono">
+                                  SIMSCAPE KERNEL
+                                </span>
+                              </div>
+                              <select
+                                value={String((selectedNode.data as any).params?.solver?.value ?? 'auto')}
+                                onChange={(e) => updateParameter('solver', e.target.value)}
+                                className="w-full bg-[#1a1a1a] border border-purple-500/40 rounded-lg py-2 px-3 text-xs focus:border-purple-500 outline-none text-purple-300 font-bold cursor-pointer"
+                              >
+                                <option value="auto">Auto (Stiffness & Constraint Analyzer)</option>
+                                <option value="bdf">Variable-Step BDF (Implicit DAE)</option>
+                                <option value="rk4">Runge-Kutta 4th Order (Explicit RK4)</option>
+                                <option value="rk_adaptive">Adaptive Runge-Kutta (RKF45)</option>
+                                <option value="euler">Forward Euler (Fixed-Step)</option>
+                              </select>
+                            </div>
+
+                            <div className="bg-[#141414] p-3 rounded-xl border border-[#222] space-y-2">
+                              <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block">Solver Capabilities</span>
+                              <div className="flex items-center justify-between text-[10px]">
+                                <span className="text-gray-400">DAE Index-1 Handling:</span>
+                                <span className="text-emerald-400 font-bold">Supported (Newton-BDF)</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[10px]">
+                                <span className="text-gray-400">Linear Solver Backend:</span>
+                                <span className="text-blue-400 font-mono text-[9px]">Dense LU (Partial Pivoting)</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[10px]">
+                                <span className="text-gray-400">Zero-Crossing Detection:</span>
+                                <span className="text-amber-400 font-bold">Enabled</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Tab 3: Tolerances & Steps */}
+                        {solverConfigTab === 'tolerances' && (
+                          <div className="space-y-3 animate-in fade-in duration-200">
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Initial Step (s)</label>
+                              <input
+                                type="number"
+                                step="any"
+                                value={(selectedNode.data as any).params?.initialStep?.value ?? 0.001}
+                                onChange={(e) => updateParameter('initialStep', parseFloat(e.target.value) || 0.001)}
+                                className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-white font-mono"
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Min Step (s)</label>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={(selectedNode.data as any).params?.minimumStep?.value ?? 1e-6}
+                                  onChange={(e) => updateParameter('minimumStep', parseFloat(e.target.value) || 1e-6)}
+                                  className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1 px-2 text-xs focus:border-purple-500 outline-none text-white font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Max Step (s)</label>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={(selectedNode.data as any).params?.maximumStep?.value ?? 0.05}
+                                  onChange={(e) => updateParameter('maximumStep', parseFloat(e.target.value) || 0.05)}
+                                  className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1 px-2 text-xs focus:border-purple-500 outline-none text-white font-mono"
+                                />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Relative Tol</label>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={(selectedNode.data as any).params?.relativeTolerance?.value ?? 1e-3}
+                                  onChange={(e) => updateParameter('relativeTolerance', parseFloat(e.target.value) || 1e-3)}
+                                  className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1 px-2 text-xs focus:border-purple-500 outline-none text-purple-300 font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Absolute Tol</label>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={(selectedNode.data as any).params?.absoluteTolerance?.value ?? 1e-6}
+                                  onChange={(e) => updateParameter('absoluteTolerance', parseFloat(e.target.value) || 1e-6)}
+                                  className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1 px-2 text-xs focus:border-purple-500 outline-none text-purple-300 font-mono"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Tab 4: Diagnostics & Nonlinear */}
+                        {solverConfigTab === 'diagnostics' && (
+                          <div className="space-y-3 animate-in fade-in duration-200">
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Nonlinear Residual Tol</label>
+                              <input
+                                type="number"
+                                step="any"
+                                value={(selectedNode.data as any).params?.nonlinearTolerance?.value ?? 1e-8}
+                                onChange={(e) => updateParameter('nonlinearTolerance', parseFloat(e.target.value) || 1e-8)}
+                                className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-emerald-400 font-mono"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Max Newton Iterations</label>
+                              <input
+                                type="number"
+                                value={(selectedNode.data as any).params?.maximumIterations?.value ?? 50}
+                                onChange={(e) => updateParameter('maximumIterations', parseInt(e.target.value) || 50)}
+                                className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-white font-mono"
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Diagnostics</label>
+                                <select
+                                  value={String((selectedNode.data as any).params?.enableDiagnostics?.value ?? 'on')}
+                                  onChange={(e) => updateParameter('enableDiagnostics', e.target.value)}
+                                  className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-2 text-xs focus:border-purple-500 outline-none text-emerald-400 font-bold cursor-pointer"
+                                >
+                                  <option value="on">Enabled</option>
+                                  <option value="off">Disabled</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-[9px] text-gray-400 font-bold uppercase block mb-1">Log Stats</label>
+                                <select
+                                  value={String((selectedNode.data as any).params?.enableLogging?.value ?? 'on')}
+                                  onChange={(e) => updateParameter('enableLogging', e.target.value)}
+                                  className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-2 text-xs focus:border-purple-500 outline-none text-purple-400 font-bold cursor-pointer"
+                                >
+                                  <option value="on">Enabled</option>
+                                  <option value="off">Disabled</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {Object.entries((selectedNode.data as any).params || {}).map(([key, param]: [string, any]) => (
+                          <div key={key}>
+                            <div className="flex justify-between items-center mb-1">
+                              <label className="text-[10px] text-gray-400 font-bold uppercase">{param.label || key}</label>
+                              <span className="text-[10px] text-gray-600">{param.unit || ''}</span>
+                            </div>
+                            {['limit_data_points', 'show_grid', 'show_legend'].includes(key) ? (
+                              <select
+                                value={String(param.value ?? 'on')}
+                                onChange={(e) => updateParameter(key, e.target.value)}
+                                className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-[#a855f7] font-bold cursor-pointer"
+                              >
+                                <option value="on">On (Yes)</option>
+                                <option value="off">Off (No)</option>
+                              </select>
+                            ) : key === 'time_range' ? (
+                              <select
+                                value={String(param.value ?? '10')}
+                                onChange={(e) => {
+                                  const val = e.target.value === 'auto' ? 'auto' : parseFloat(e.target.value);
+                                  updateParameter(key, val);
+                                }}
+                                className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-mono font-bold cursor-pointer"
+                              >
+                                <option value="auto">Auto (Full)</option>
+                                <option value="1">1s</option>
+                                <option value="2">2s</option>
+                                <option value="5">5s</option>
+                                <option value="10">10s</option>
+                                <option value="30">30s</option>
+                                <option value="60">60s</option>
+                                <option value="300">300s</option>
+                              </select>
+                            ) : key === 'numSignals' || key === 'numPorts' ? (
+                              <select
+                                value={String(param.value ?? 1)}
+                                onChange={(e) => updateParameter(key, parseInt(e.target.value))}
+                                className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-bold cursor-pointer"
+                              >
+                                {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                                  <option key={n} value={n}>{n} Channels</option>
+                                ))}
+                              </select>
+                            ) : key === 'data_type' ? (
+                              <select
+                                value={String(param.value ?? 'auto')}
+                                onChange={(e) => updateParameter(key, e.target.value)}
+                                className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none text-purple-400 font-bold cursor-pointer"
+                              >
+                                <option value="auto">Auto (Loose)</option>
+                                <option value="electrical">Electrical</option>
+                                <option value="thermal">Thermal</option>
+                                <option value="rotational">Rotational</option>
+                                <option value="mechanical">Mechanical</option>
+                                <option value="physical">Physical Signal</option>
+                              </select>
+                            ) : (
+                              <input
+                                type={typeof (param.value ?? 0) === 'number' ? "number" : "text"}
+                                value={param.value ?? ''}
+                                onChange={(e) => {
+                                  const val = typeof (param.value ?? 0) === 'number' ? parseFloat(e.target.value) : e.target.value;
+                                  updateParameter(key, val);
+                                }}
+                                className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none"
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -4562,16 +3590,16 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* Individual Scope Windows */}
+      {/* Individual MATLAB/Simulink Scope Windows */}
       {openScopes.map(scopeId => {
         const scopeNode = nodes.find(n => n.id === scopeId);
         if (!scopeNode) return null;
         return (
-          <VLabScopeWindow
+          <VLabSimulinkScope
             key={scopeId}
             id={scopeId}
-            title={scopeNode.data.label}
-            data={scopeData}
+            title={scopeNode.data.label || 'Scope'}
+            data={perScopeData[scopeId]?.length > 0 ? perScopeData[scopeId] : scopeData}
             isPaused={isPaused}
             params={scopeNode.data.params || {}}
             nodes={nodes}
@@ -4580,7 +3608,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               setNodes(nds => nds.map(n => {
                 if (n.id === scopeId) {
                   const updatedParams = { ...n.data.params, ...newData };
-                  const updatedData = { ...n.data, params: updatedParams };
+                  const updatedData: Record<string, any> = { ...n.data, params: updatedParams };
                   if (newData.numSignals) {
                     const num = Math.max(1, Math.min(8, Number(newData.numSignals.value) || 1));
                     updatedData.ports = Array.from({ length: num }, (_, i) => ({
@@ -4719,6 +3747,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                     setEdges([]);
                     setSelectedNodeId(null);
                     setScopeData([]);
+                    setPerScopeData({});
                     setHistory([]);
                     setStatus({ message: 'System Ready', type: 'idle' });
                     setShowConfirmClear(false);

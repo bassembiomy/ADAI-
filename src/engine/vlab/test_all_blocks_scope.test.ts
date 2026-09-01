@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll } from 'vitest';
 import { VLabPhysicsEngine } from './vlabPhysics';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { blockEquations } from './vlabEquations';
-import { Node, Edge } from 'reactflow';
+import { Node, Edge } from '@xyflow/react';
 
 // Helper to check if a block has an equation factory
 const hasEquationFactory = (blockId: string): boolean => {

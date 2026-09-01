@@ -16,15 +16,10 @@
 #include <string.h>
 #include <stdlib.h>
 
-static float override_val_ch_2 = 0.0f;
-static bool override_active_ch_2 = false;
+
 
 void HIL_Sync_Inputs(ADIA_Instance_t* instance) {
-    if (override_active_ch_2) {
-        instance->data.x = (int32_t)(override_val_ch_2);
-    } else {
-        instance->data.x = HAL_GPIO_Read(PIN_CH_2, "ch_2");
-    }
+    (void)instance;
 }
 
 void HIL_Sync_Outputs(ADIA_Instance_t* instance) {
@@ -36,7 +31,7 @@ void HIL_Sync_Outputs(ADIA_Instance_t* instance) {
         return;
     }
 #endif
-    HAL_GPIO_Write(PIN_CH_1, "ch_1", instance->data.y);
+    HAL_GPIO_Write(PIN_CH_1, "ch_1", instance->data.x);
 }
 
 void HIL_ProcessMessage(const char* msg) {
@@ -58,13 +53,7 @@ void HIL_ProcessMessage(const char* msg) {
         char name[64];
         float val = 0.0f;
         if (sscanf(token, "%63[^=]=%f", name, &val) == 2) {
-            if (strcmp(name, "ch_2") == 0) {
-                override_val_ch_2 = val;
-                override_active_ch_2 = true;
-            } else if (strcmp(name, "ch_2_release") == 0) {
-                override_active_ch_2 = false;
-            }
-            else { /* MISRA 15.7 */ }
+            /* No input channels */
         }
     }
 }
@@ -75,12 +64,7 @@ void HIL_SendTelemetry(ADIA_Instance_t* instance) {
     (void)instance;
     if ((len >= 0) && ((size_t)len < (sizeof(buf) - 32U))) {
         int remaining = (int)(sizeof(buf) - (size_t)len);
-        int written = snprintf(buf + len, (size_t)remaining, "ch_1=%.4f;", (double)(instance->data.y));
-        if (written > 0) { len += (written < remaining) ? written : (remaining - 1); }
-    }
-    if ((len >= 0) && ((size_t)len < (sizeof(buf) - 32U))) {
-        int remaining = (int)(sizeof(buf) - (size_t)len);
-        int written = snprintf(buf + len, (size_t)remaining, "ch_2=%.4f", (double)(instance->data.x));
+        int written = snprintf(buf + len, (size_t)remaining, "ch_1=%.4f", (double)(instance->data.x));
         if (written > 0) { len += (written < remaining) ? written : (remaining - 1); }
     }
     

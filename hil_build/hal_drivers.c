@@ -57,17 +57,13 @@ void HAL_Drivers_Init(void) {
     Serial.begin(HIL_BAUDRATE);
 
     /* Peripherals Initialization */
-    pinMode(parseArduinoPin(PIN_0), OUTPUT);
-    pinMode(parseArduinoPin(PIN_1), INPUT);
+    pinMode(13, OUTPUT);
 }
 
 bool HAL_GPIO_Read(const char* pin, const char* name) {
     (void)pin;
     (void)name;
-    if (strcmp(name, "ch_2") == 0) {
-        return digitalRead(parseArduinoPin(PIN_1)) == HIGH;
-    }
-    else { /* MISRA 15.7 */ }
+    /* No channels */
     return false;
 }
 
@@ -76,7 +72,7 @@ void HAL_GPIO_Write(const char* pin, const char* name, bool value) {
     (void)name;
     (void)value;
     if (strcmp(name, "ch_1") == 0) {
-        digitalWrite(parseArduinoPin(PIN_0), (value) ? HIGH : LOW);
+        digitalWrite(13, (value) ? HIGH : LOW);
         return;
     }
     else { /* MISRA 15.7 */ }

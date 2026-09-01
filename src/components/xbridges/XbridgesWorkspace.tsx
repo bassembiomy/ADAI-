@@ -1,6 +1,7 @@
 // src/components/xbridges/XbridgesWorkspace.tsx
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import ReactFlow, {
+import {
+  ReactFlow,
   addEdge,
   Background,
   Controls,
@@ -13,8 +14,8 @@ import ReactFlow, {
   BackgroundVariant,
   MiniMap,
   ConnectionLineType
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import { 
   Play, Pause, Square, Save, Trash2, Box, Network, MousePointer2, Settings2, ChevronDown, ChevronRight, Search, Triangle, Layers,
   Activity, Plus, Minus, X, Divide, ChevronUp, MinusCircle, Maximize, Maximize2, Minimize2, Sigma, BarChart, ArrowUp, Grid, RotateCw, RefreshCcw,
@@ -1317,8 +1318,8 @@ export const XbridgesWorkspace: React.FC<{
     () => syncXBBoundaryNodeMetadata(initialNodes, initialMappings),
     [initialNodes, initialMappings],
   );
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodesWithMappings);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<Record<string, any>>>(initialNodesWithMappings);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<Record<string, any>>>(initialEdges);
   const [localClipboard, setLocalClipboard] = useState<{
     nodes: any[];
     edges: any[];
@@ -1967,7 +1968,7 @@ export const XbridgesWorkspace: React.FC<{
     }
   }, [nodes, edges]);
 
-  const onConnect = useCallback((params: Connection | Edge) => {
+  const onConnect = useCallback((params: Connection) => {
     saveHistory();
     setEdges((eds) => addEdge({
       ...params,
@@ -2079,7 +2080,7 @@ export const XbridgesWorkspace: React.FC<{
     setSelectedNodeId(node.id);
   };
 
-  const onNodeDoubleClick = (_: React.MouseEvent, node: Node) => {
+  const onNodeDoubleClick = (_: React.MouseEvent, node: Node<Record<string, any>>) => {
     if (node.data.type === 'Subsystem') {
       setViewPath(prev => [...prev, node.id]);
       setSelectedNodeId(null);
@@ -2094,7 +2095,7 @@ export const XbridgesWorkspace: React.FC<{
     setSelectedNodeId(null);
   };
 
-  const onNodesDelete = useCallback((deleted: Node[]) => {
+  const onNodesDelete = useCallback((deleted: Node<Record<string, any>>[]) => {
     // Clear selection if the currently selected node is deleted
     if (deleted.some(n => n.id === selectedNodeId)) {
       setSelectedNodeId(null);
@@ -2112,7 +2113,7 @@ export const XbridgesWorkspace: React.FC<{
     }
   };
 
-  const onNodeDragStop = useCallback((_event: any, draggedNode: Node, draggedNodes: Node[]) => {
+  const onNodeDragStop = useCallback((_event: any, draggedNode: Node<Record<string, any>>, draggedNodes: Node<Record<string, any>>[]) => {
     const nodesToMove = draggedNodes && draggedNodes.length > 0 ? draggedNodes : [draggedNode];
     const draggedNodeIds = new Set(nodesToMove.map(n => n.id));
 
@@ -2790,6 +2791,7 @@ export const XbridgesWorkspace: React.FC<{
       sourceHandle: e.sourceHandle || 'out',
       target: e.target,
       targetHandle: e.targetHandle || 'in',
+      type: (e as any).type || edgeType,
       animated: isSimulating,
       style: { stroke: '#4caf50', strokeWidth: 3 }
     }));
@@ -3345,6 +3347,7 @@ export const XbridgesWorkspace: React.FC<{
               connectionLineComponent={PremiumConnectionLine}
               connectionRadius={30}
               reconnectRadius={30}
+              colorMode="dark"
               minZoom={0.2}
               maxZoom={2.0}
               snapToGrid

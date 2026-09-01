@@ -188,3 +188,7 @@ export function getDefaultTargetRegistry(): TargetRegistry {
   }
   return defaultRegistryInstance;
 }
+
+export function defaultTargetPackFor(targetId: string): TargetPackManifest | null {
+  return BUILTIN_TARGET_PACKS.find(p => p.targetId === targetId) ?? null;
+}

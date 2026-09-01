@@ -1,11 +1,14 @@
-import { Node, Edge } from 'reactflow';
+import { Node, Edge } from '@xyflow/react';
+
+export type VLabNode = Node<Record<string, any>>;
+export type VLabEdge = Edge<Record<string, any>>;
 
 export interface VLabWorkspaceProps {
-  nodes: Node[];
-  edges: Edge[];
-  onNodesChange: (nodes: Node[]) => void;
-  onEdgesChange: (edges: Edge[]) => void;
-  onResult: (result: any, nodes: Node[]) => void;
+  nodes: VLabNode[];
+  edges: VLabEdge[];
+  onNodesChange: (nodes: VLabNode[]) => void;
+  onEdgesChange: (edges: VLabEdge[]) => void;
+  onResult: (result: any, nodes: VLabNode[]) => void;
   onSendToDOE: (data: any) => void;
   onBack: () => void;
   onSaveAll?: () => void;
