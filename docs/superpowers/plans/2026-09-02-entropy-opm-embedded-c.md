@@ -4,7 +4,7 @@
 
 **Goal:** Extend the existing Entropy OPM editor with backward-compatible executable metadata, one typed deterministic execution model, C99 embedded-code generation, strict host verification, and dedicated authoring/diagnostic UI.
 
-**Architecture:** Keep React Flow data at the editor boundary and introduce a React-free compiler/runtime package in `src/engine/opm`. `adaptOpmDiagram()` converts persisted nodes and edges into stable normalized tables; validation and the expression compiler produce the only model consumed by both the TypeScript runtime and C generator. Focused React components under `src/components/entropy/executable` edit metadata and present diagnostics, simulation traces, generated files, and export/HIL actions without translating OPM into the State Machine model.
+**Architecture:** Keep React Flow data at the editor boundary and introduce a React-free compiler/runtime package in `src/engine/opm`. A thin adapter accepts persisted editor records and produces stable normalized tables; validation and the expression compiler produce the only model consumed by both the TypeScript runtime and C generator. Focused React components under `src/components/entropy/executable` edit metadata and present diagnostics, simulation traces, generated files, and export/HIL actions without translating OPM into the State Machine model.
 
 **Tech Stack:** TypeScript 5.4, React 18, `@xyflow/react` 12, Vitest 4, JSZip 3, generated C99, Node host-compilation tests using the repository's generated-code temp-workspace utility.
 
@@ -20,13 +20,38 @@
 - Expression text is parsed into typed IR and is never interpolated directly into C.
 - Errors block generation; warnings remain in editor output and `opm_manifest.json`.
 - Run `npx vitest run src/components/entropy src/engine/opm` after every task that touches shared Entropy types.
+- Run `npx tsc --noEmit -p tsconfig.json` before every commit. Passing Vitest with a failing typecheck is not acceptable.
+- Treat persisted project JSON as untrusted input. Missing or malformed optional execution fields must produce source-linked diagnostics and must never throw.
+- Apply executable link defaults only to `agent`, `instrument`, `consumption`, `result`, `effect`, `trigger`, and `condition`; structural and requirement-traceability links never receive executable payloads.
+- Preserve the user's unrelated VLab working-tree edits. Do not reset, clean, stage, commit, reformat, or otherwise modify them.
+- Do not weaken, skip, delete, or broaden an existing test to make a gate pass.
+- Do not run `git add` or `git commit` when executing through Gemini/Antigravity. The reviewing orchestrator owns commits.
+
+## Gemini/Antigravity Execution Contract
+
+This plan is deliberately explicit for a fast implementation model with no conversation history. Execute exactly one numbered task per delegation. Before editing, read this header, that task in full, every interface it consumes, and the current versions of all listed files. Do not infer missing fields or rename an interface for convenience. If repository reality conflicts with the plan, stop and report the exact conflict instead of inventing a second architecture.
+
+For every task, use this loop:
+
+1. Record `git status --short` and distinguish pre-existing VLab/spec changes from task-owned changes.
+2. Add the named failing behavior tests without changing existing assertions.
+3. Run the exact focused command and capture the expected failure reason.
+4. Implement only the task's production scope.
+5. Run the focused tests, the shared Entropy suite when types changed, and TypeScript checking.
+6. Inspect `git diff --check` and `git status --short`; leave all task work uncommitted.
+7. Report changed files, test counts, typecheck result, deviations, and open decisions.
+
+The orchestrator reviews test edits before trusting green output, reads the complete diff, reruns the gates independently, and either requests a delta correction or commits the task. A later task must not be started until the preceding task has passed this review gate.
+
+Current baseline on branch `entropy-opm-embedded-c`: commit `68076f5` partially implemented Task 1 but fails `npx tsc --noEmit -p tsconfig.json`, applies executable metadata to every edge type, skips edges with absent `data`, and can throw on partial persisted payloads. Task 1 below repairs that baseline; it is not greenfield scaffolding. The untracked design specification and unrelated VLab modifications predate delegated execution and are out of scope.
 
 ## File Structure
 
 ```text
 src/engine/opm/
   executableTypes.ts       persisted execution schema, normalized model, diagnostics, settings
-  schemaAdapter.ts         defaults, migration, React Flow -> normalized model
+  editorBoundaryTypes.ts   React-free structural input accepted from the editor adapter
+  schemaAdapter.ts         defaults, migration, persisted editor records -> normalized model
   expressionLexer.ts       bounded tokenizer with source ranges
   expressionParser.ts      precedence parser and assignment-row expression AST
   expressionCompiler.ts    name resolution, type checking, constant folding, typed expression IR
@@ -58,26 +83,189 @@ src/App.tsx                 preserve executable data through existing project sa
 src/HelpData.ts             executable OPM workflow help
 ```
 
+## Canonical Persisted Contracts
+
+Task 1 must define these names once in `src/engine/opm/executableTypes.ts`; later tasks extend behavior but do not rename or duplicate them:
+
+```typescript
+export type OpmScalarType =
+  | { kind: 'bool' | 'int32' | 'uint32' | 'float32' }
+  | { kind: 'enum'; enumId: string };
+
+export interface OpmEnumMember { id: string; displayName: string; cIdentifier: string; value: number; }
+export interface OpmEnumDefinition { id: string; displayName: string; cIdentifier: string; members: OpmEnumMember[]; }
+export interface OpmEventDefinition { id: string; displayName: string; cIdentifier: string; }
+export interface OpmHardwareMapping { direction: 'input' | 'output'; symbol: string; }
+
+export interface OpmAttribute {
+  id: string;
+  displayName: string;
+  cIdentifier: string;
+  type: OpmScalarType;
+  initialValue: boolean | number | string;
+  minimum?: number;
+  maximum?: number;
+  overflow: 'diagnostic' | 'wrap' | 'saturate';
+  access: 'readOnly' | 'readWrite';
+  persistent: boolean;
+  hardwareMapping?: OpmHardwareMapping;
+}
+
+export interface OpmAssignment {
+  id: string;
+  targetAttributeId: string;
+  operator: '=' | '+=' | '-=' | '*=' | '/=';
+  expression: string;
+  enabled: boolean;
+}
+
+export interface OpmObjectExecution { enabled: boolean; attributes: OpmAttribute[]; }
+export interface OpmStateExecution {
+  enabled: boolean;
+  initial: boolean;
+  terminal: boolean;
+  entryAssignments: OpmAssignment[];
+  exitAssignments: OpmAssignment[];
+  timeoutMs?: number;
+  timeoutEventId?: string;
+}
+export interface OpmProcessExecution {
+  enabled: boolean;
+  activation: 'cyclic' | 'triggered' | 'both';
+  inputAttributeIds: string[];
+  outputAttributeIds: string[];
+  guard: string;
+  assignments: OpmAssignment[];
+  priority: number;
+  periodMs?: number;
+  debounceMs: number;
+  reentrancy: 'reject';
+}
+export interface OpmTransitionRequest {
+  ownerObjectId: string;
+  sourceStateId?: string;
+  targetStateId: string;
+}
+export interface OpmLinkExecution {
+  enabled: boolean;
+  guard: string;
+  eventId?: string;
+  assignments: OpmAssignment[];
+  transition?: OpmTransitionRequest;
+  priority: number;
+  delayMs: number;
+}
+export interface OpmExecutionConfig {
+  version: 1;
+  events: OpmEventDefinition[];
+  enums: OpmEnumDefinition[];
+  settings: OpmTargetSettings;
+}
+```
+
+Use stable IDs for references; display names and C identifiers are never references. Missing execution payloads mean conceptual-only. The default config contains empty event/enum tables and `DEFAULT_OPM_TARGET_SETTINGS`. Persist `entropyExecutionConfig` beside `entropyNodes` and `entropyEdges` in both `entropy.json` and unified project data; this is an additive field, not a second project file.
+
+## Canonical Compiler and Runtime Contracts
+
+Task 2 defines the normalized records below. They contain no React Flow fields such as position, selection, handles, width, or style.
+
+```typescript
+export interface OpmSourceRef { elementId: string; propertyPath: string; start?: number; end?: number; }
+export interface OpmDiagnostic {
+  code: string;
+  severity: 'error' | 'warning';
+  message: string;
+  source: OpmSourceRef;
+}
+export interface OpmSymbol {
+  id: string;
+  kind: 'object' | 'state' | 'process' | 'attribute' | 'event' | 'enum' | 'enumMember' | 'link';
+  displayName: string;
+  cIdentifier: string;
+  source: OpmSourceRef;
+}
+export interface OpmCompilationInput {
+  executionEnabled: boolean;
+  settings: OpmTargetSettings;
+  objects: readonly NormalizedOpmObject[];
+  states: readonly NormalizedOpmState[];
+  processes: readonly NormalizedOpmProcess[];
+  links: readonly NormalizedOpmLink[];
+  events: readonly OpmEventDefinition[];
+  enums: readonly OpmEnumDefinition[];
+  symbols: Readonly<Record<string, OpmSymbol>>;
+  sourceByNormalizedId: Readonly<Record<string, OpmSourceRef>>;
+}
+export interface NormalizeOpmResult { input?: OpmCompilationInput; diagnostics: OpmDiagnostic[]; }
+```
+
+`NormalizedOpmObject`, `NormalizedOpmState`, `NormalizedOpmProcess`, and `NormalizedOpmLink` contain their stable `id`, resolved owner/endpoints, normalized execution payload, stable `order`, and source reference. Arrays are sorted by persisted ID using ordinal comparison; `order` is the resulting zero-based index. Freeze normalized records in development/tests so runtime code cannot mutate compiler input.
+
+Task 3 defines expression results without sentinel constants:
+
+```typescript
+export type OpmExpectedType =
+  | { kind: 'exact'; type: OpmScalarType }
+  | { kind: 'boolean' }
+  | { kind: 'numeric' }
+  | { kind: 'anyScalar' };
+export interface OpmExpressionScope { symbols: Readonly<Record<string, OpmValueSymbol>>; }
+export interface ExpressionCompileResult { ir?: TypedExpressionIr; diagnostics: OpmDiagnostic[]; }
+export function compileOpmExpression(
+  text: string,
+  expected: OpmExpectedType,
+  scope: OpmExpressionScope,
+  source: OpmSourceRef,
+): ExpressionCompileResult;
+```
+
+Task 4 produces an immutable `ExecutableOpmModel`. Raw expression strings may remain only as source metadata for diagnostics; runtime and generator behavior must consume typed IR fields exclusively.
+
+Task 5 exposes mutation only through an opaque runtime instance:
+
+```typescript
+export interface OpmRuntime { readonly modelFingerprint: string; }
+export function createOpmRuntime(model: ExecutableOpmModel): OpmRuntime;
+export function dispatchOpmEvent(runtime: OpmRuntime, eventId: string): 'accepted' | 'overflow' | 'unknownEvent';
+export function stepOpmRuntime(runtime: OpmRuntime, deltaMs: number): OpmStepResult;
+export function resetOpmRuntime(runtime: OpmRuntime): void;
+```
+
+`OpmStepResult` is a read-only snapshot containing values by attribute ID, active states by object ID, consumed event IDs, fired and blocked process IDs, traversed link IDs, staged and committed writes, transitions, diagnostics, and ordered trace records. The UI may display this result but must not feed edited result data back into the runtime.
+
 ---
 
-### Task 1: Backward-Compatible Executable Schema and Persistence
+### Task 1: Repair and Complete the Backward-Compatible Schema
 
 **Files:**
-- Create: `src/engine/opm/executableTypes.ts`
-- Create: `src/engine/opm/schemaAdapter.ts`
-- Create: `src/engine/opm/__tests__/schemaAdapter.test.ts`
+- Modify: `src/engine/opm/executableTypes.ts`
+- Create: `src/engine/opm/editorBoundaryTypes.ts`
+- Modify: `src/engine/opm/schemaAdapter.ts`
+- Modify: `src/engine/opm/__tests__/schemaAdapter.test.ts`
 - Modify: `src/components/entropy/EntropyTypes.ts`
+- Modify: `src/components/entropy/EntropyWorkspace.tsx` (accept controlled execution config and config-change callback)
 - Modify: `src/App.tsx:6797`, `src/App.tsx:6995`, `src/App.tsx:7804`, `src/App.tsx:7939`, `src/App.tsx:16001`
 
 **Interfaces:**
-- Produces: `OpmScalarType`, `OpmTypedValue`, `OpmAssignment`, `OpmObjectExecution`, `OpmStateExecution`, `OpmProcessExecution`, `OpmLinkExecution`, `OpmTargetSettings`, `OpmDiagnostic`, `NormalizedOpmModel`.
-- Produces: `withExecutableDefaults(nodes, edges)` and `adaptOpmDiagram(nodes, edges, settings)`.
+- Consumes: the canonical persisted contracts above and the existing `OPMNodeData`, `OPMEdgeData`, `AppNode`, and `AppEdge` editor types.
+- Produces: `OpmScalarType`, enum/event definitions, execution payloads, `OpmExecutionConfig`, `OpmTargetSettings`, `OpmDiagnostic`, and a preliminary `AdaptedOpmDiagram`.
+- Produces: `createDefaultOpmExecutionConfig()`, `withExecutableDefaults(nodes, edges)`, `withElementExecutableDefaults(nodes, edges, elementId)`, and `adaptOpmDiagram(nodes, edges, config)`.
+- `editorBoundaryTypes.ts` defines structural `OpmEditorNode` and `OpmEditorEdge` shapes without importing React or `@xyflow/react`; `AppNode` and `AppEdge` must be structurally assignable to them.
 
-- [ ] **Step 1: Write failing migration and serialization tests**
+- [ ] **Step 1: Preserve the current failure evidence**
+
+Run: `npx tsc --noEmit -p tsconfig.json`
+Expected before repair: FAIL with `TS2532` at existing `schemaAdapter.test.ts` accesses to optional edge data. Do not silence this using `as`, `any`, or non-null assertions; make assertions optional-data-safe.
+
+- [ ] **Step 2: Replace the partial schema with the canonical persisted contracts**
+
+Implement the complete interfaces from `Canonical Persisted Contracts`. Keep all execution fields optional on editor node/edge data. Add `entropyExecutionConfig?: OpmExecutionConfig` to the project persistence shape. Default factories must return fresh arrays and objects; never export a mutable singleton that consumers can mutate.
+
+- [ ] **Step 3: Write failing migration, edge classification, malformed-data, and serialization tests**
 
 ```typescript
 it('keeps a legacy conceptual diagram valid and disabled', () => {
-  const result = adaptOpmDiagram(legacyNodes, legacyEdges, DEFAULT_OPM_TARGET_SETTINGS);
+  const result = adaptOpmDiagram(legacyNodes, legacyEdges, createDefaultOpmExecutionConfig());
   expect(result.model.executionEnabled).toBe(false);
   expect(result.diagnostics.filter(d => d.severity === 'error')).toEqual([]);
 });
@@ -86,50 +274,77 @@ it('round-trips executable metadata without changing OPL fields', () => {
   const upgraded = withExecutableDefaults(legacyNodes, legacyEdges);
   upgraded.nodes[0].data.objectExecution!.attributes.push({
     id: 'temperature', displayName: 'Temperature', cIdentifier: 'temperature',
-    type: { kind: 'float32' }, initialValue: 20, access: 'readWrite', persistent: false,
+    type: { kind: 'float32' }, initialValue: 20, overflow: 'diagnostic',
+    access: 'readWrite', persistent: false,
   });
   expect(JSON.parse(JSON.stringify(upgraded)).nodes[0].data.objectExecution?.attributes[0].id)
     .toBe('temperature');
   expect(upgraded.nodes[0].data.name).toBe(legacyNodes[0].data.name);
 });
+
+it.each(['aggregation', 'generalization', 'exhibition', 'satisfies', 'verifies'] as const)(
+  'does not attach execution metadata to %s links', linkType => {
+    const edge = makeEdge({ type: linkType });
+    const upgraded = withExecutableDefaults([], [edge]);
+    expect(upgraded.edges[0].data?.linkExecution).toBeUndefined();
+  },
+);
+
+it('creates data and execution defaults for a procedural edge with no data', () => {
+  const edge = makeEdge({ type: 'trigger', data: undefined });
+  const upgraded = withExecutableDefaults([], [edge]);
+  expect(upgraded.edges[0].data?.linkExecution?.enabled).toBe(true);
+});
+
+it('returns a diagnostic instead of throwing for a partial persisted payload', () => {
+  const node = makeObject({ objectExecution: { enabled: true } as unknown as OpmObjectExecution });
+  expect(() => adaptOpmDiagram([node], [], createDefaultOpmExecutionConfig())).not.toThrow();
+  expect(adaptOpmDiagram([node], [], createDefaultOpmExecutionConfig()).diagnostics)
+    .toContainEqual(expect.objectContaining({ code: 'OPM_SCHEMA_REQUIRED_FIELD' }));
+});
 ```
 
-- [ ] **Step 2: Run the tests and confirm the adapter is absent**
+- [ ] **Step 4: Run the focused tests and confirm behavioral failures**
 
 Run: `npx vitest run src/engine/opm/__tests__/schemaAdapter.test.ts`
-Expected: FAIL because `schemaAdapter.ts` and its exports do not exist.
+Expected: FAIL because the current helper marks structural links executable, skips edges without data, and assumes required nested fields exist.
 
-- [ ] **Step 3: Define the persisted contract and defaults**
+- [ ] **Step 5: Implement safe defaults and schema adaptation**
 
-Use discriminated scalar types and explicit row/settings contracts:
+Use an explicit procedural-link predicate:
 
 ```typescript
-export type OpmScalarType =
-  | { kind: 'bool' | 'int32' | 'uint32' | 'float32' }
-  | { kind: 'enum'; enumId: string };
-export type OpmAssignmentOperator = '=' | '+=' | '-=' | '*=' | '/=';
-export interface OpmAssignment { id: string; target: string; operator: OpmAssignmentOperator; expression: string; enabled: boolean; }
-export interface OpmSourceRef { elementId: string; propertyPath: string; start?: number; end?: number; }
-export interface OpmDiagnostic { code: string; severity: 'error' | 'warning'; message: string; source: OpmSourceRef; }
-export const DEFAULT_OPM_TARGET_SETTINGS: OpmTargetSettings = {
-  tickMs: 10, eventQueueCapacity: 16, eventOverflow: 'rejectNewest',
-  maxStagedWrites: 32, maxTransitions: 16, traceCapacity: 64,
-  integerOverflow: 'diagnostic', floatPolicy: 'ieee754-single', tracing: true,
-};
+const PROCEDURAL_LINK_TYPES = new Set([
+  'agent', 'instrument', 'consumption', 'result',
+  'effect', 'trigger', 'condition',
+]);
+
+function isProceduralLink(edge: OpmEditorEdge): boolean {
+  const type = edge.data?.type ?? edge.type;
+  return typeof type === 'string' && PROCEDURAL_LINK_TYPES.has(type);
+}
 ```
 
-Add `objectExecution?`, `stateExecution?`, and `processExecution?` to `OPMNodeData`; add `linkExecution?` to `OPMEdgeData`. Defaults must be created only by the explicit enable action. The normal adapter must treat missing data as conceptual-only and must never mutate its inputs.
+Clone inputs without mutating them. For a procedural edge with no `data`, create `{ type: resolvedType, linkExecution: defaultLinkExecution() }`. Never attach new executable payloads to structural/traceability links; if imported input already contains one, preserve it in the cloned persistence view so round trips do not destroy user data, exclude it from executable output, and return `OPM_EXECUTION_ON_NON_PROCEDURAL_LINK`. Validate arrays and scalar discriminants with type guards before iterating. Emit `OPM_SCHEMA_REQUIRED_FIELD`, `OPM_SCHEMA_INVALID_TYPE`, or `OPM_SCHEMA_INVALID_VALUE` with the exact element and property path. Do not throw for JSON-shaped input.
 
-- [ ] **Step 4: Preserve the new fields through project save/load**
+`withExecutableDefaults` upgrades every eligible element for the one-time whole-diagram enable command. `withElementExecutableDefaults` upgrades only the matching object/state/process/procedural edge and leaves every other element byte-for-byte unchanged; inspectors must use the element-scoped helper.
 
-Keep `entropyNodes` and `entropyEdges` as the persistence keys. Replace their `any[]` state annotations with `AppNode[]` and `AppEdge[]`; do not add a second project file or strip unknown node/edge data. Add a regression assertion to `schemaAdapter.test.ts` that JSON serialization preserves each execution object byte-for-byte.
+- [ ] **Step 6: Preserve nodes, edges, and execution config through project save/load**
 
-- [ ] **Step 5: Verify and commit**
+Keep `entropyNodes` and `entropyEdges` as persistence keys and add `entropyExecutionConfig` to the same JSON object. Replace their `any[]` state annotations with `AppNode[]` and `AppEdge[]`; do not add a second project file or strip unknown node/edge data. Load missing config through `createDefaultOpmExecutionConfig()` without writing execution metadata into legacy nodes/edges. Add regression assertions for standalone `entropy.json` and unified project JSON round trips, unknown field preservation, and legacy files with no config.
 
-Run: `npx vitest run src/engine/opm/__tests__/schemaAdapter.test.ts src/components/entropy/__tests__/entropy.test.ts`
-Expected: PASS.
+- [ ] **Step 7: Run the complete Task 1 gate and leave changes for review**
 
-Commit: `feat(opm): add backward-compatible executable schema`
+Run: `npx vitest run src/engine/opm/__tests__/schemaAdapter.test.ts src/components/entropy --reporter=verbose`
+Expected: PASS with the new state-node, structural-link, no-edge-data, malformed-payload, and round-trip cases listed separately.
+
+Run: `npx tsc --noEmit -p tsconfig.json`
+Expected: PASS with no `TS2532` errors.
+
+Run: `git diff --check`
+Expected: no output.
+
+Reviewer commit after approval: `fix(opm): complete executable schema and migration`
 
 ---
 
@@ -141,7 +356,8 @@ Commit: `feat(opm): add backward-compatible executable schema`
 - Create: `src/engine/opm/fixtures.ts`
 
 **Interfaces:**
-- Produces: `normalizeOpmModel(nodes, edges, settings): OpmCompilationInput`.
+- Consumes: `OpmEditorNode[]`, `OpmEditorEdge[]`, and `OpmExecutionConfig` from Task 1.
+- Produces: `normalizeOpmModel(nodes, edges, config): NormalizeOpmResult`.
 - `OpmCompilationInput` contains sorted `objects`, `states`, `processes`, `links`, `events`, `enums`, `symbols`, and `sourceByNormalizedId` tables.
 
 - [ ] **Step 1: Write failing normalization tests**
@@ -167,7 +383,7 @@ Expected: FAIL until stable sorting, reference resolution, and symbol registrati
 
 - [ ] **Step 3: Implement normalization rules**
 
-Resolve state ownership from `parentId`, verify all endpoints, sanitize identifiers with `[^A-Za-z0-9_] -> _`, prefix identifiers beginning with digits, reserve C99 keywords and all `OPM_` public names, then collision-check case-sensitively. Sort every table by stable persisted ID, using source array index only to diagnose duplicate IDs. Emit source paths such as `processExecution.guard`, `linkExecution.assignments[2].expression`, and `stateExecution.timeoutMs`.
+Resolve state ownership from top-level `node.parentId` first and `node.data.parentId` second; diagnose disagreement rather than guessing. Verify all endpoints, sanitize identifiers with `[^A-Za-z0-9_] -> _`, prefix identifiers beginning with digits, reserve C99 keywords and all `OPM_` public names, then collision-check case-sensitively. Use ordinal code-unit sorting (`left.id < right.id ? -1 : left.id > right.id ? 1 : 0`) rather than locale-sensitive ordering. Sort every table by stable persisted ID, using source array index only to diagnose duplicate IDs. Emit source paths such as `processExecution.guard`, `linkExecution.assignments[2].expression`, and `stateExecution.timeoutMs`.
 
 - [ ] **Step 4: Add graph/default coverage**
 
@@ -202,7 +418,7 @@ it.each([
   ['1 + 2 * 3', 'add'], ['(1 + 2) * 3', 'multiply'],
   ['temperature.value < target.value && fan.enabled', 'and'],
 ])('parses %s with typed precedence', (text, rootOp) => {
-  expect(compileOpmExpression(text, BOOL_OR_NUMERIC, scope, source).ir?.op).toBe(rootOp);
+  expect(compileOpmExpression(text, { kind: 'anyScalar' }, scope, source).ir?.op).toBe(rootOp);
 });
 
 it.each([
@@ -211,7 +427,7 @@ it.each([
   ['system("erase")', 'OPM_EXPR_UNKNOWN_INTRINSIC'],
   ['2147483648', 'OPM_EXPR_INTEGER_OVERFLOW'],
 ])('rejects %s', (text, code) => {
-  expect(compileOpmExpression(text, ANY_SCALAR, scope, source).diagnostics[0].code).toBe(code);
+  expect(compileOpmExpression(text, { kind: 'anyScalar' }, scope, source).diagnostics[0].code).toBe(code);
 });
 ```
 
@@ -247,7 +463,7 @@ Commit: `feat(opm): compile restricted expressions to typed IR`
 
 **Interfaces:**
 - Produces: `validateExecutableOpm(input): OpmDiagnostic[]`.
-- Produces: `compileExecutableOpm(nodes, edges, settings): { model?: ExecutableOpmModel; diagnostics: OpmDiagnostic[] }`.
+- Produces: `compileExecutableOpm(nodes, edges, config): { model?: ExecutableOpmModel; diagnostics: OpmDiagnostic[] }`.
 - Generation is allowed only when `model` exists and no diagnostic has severity `error`.
 
 - [ ] **Step 1: Write blocking semantic cases**
@@ -260,7 +476,7 @@ it.each([
   ['equal-priority write conflict', equalPriorityWrites(), 'OPM_WRITE_CONFLICT'],
   ['unreachable target', unreachableState(), 'OPM_STATE_UNREACHABLE'],
 ])('blocks %s', (_name, fixture, code) => {
-  const result = compileExecutableOpm(fixture.nodes, fixture.edges, fixture.settings);
+  const result = compileExecutableOpm(fixture.nodes, fixture.edges, fixture.config);
   expect(result.model).toBeUndefined();
   expect(result.diagnostics.map(d => d.code)).toContain(code);
 });
@@ -297,7 +513,7 @@ Commit: `feat(opm): validate and compile executable OPM models`
 - Modify: `src/components/entropy/__tests__/opmSimulationEngine.test.ts`
 
 **Interfaces:**
-- Produces: `createOpmRuntime(model)`, `dispatchOpmEvent(runtime, eventId)`, `stepOpmRuntime(runtime, deltaMs)`.
+- Produces: `createOpmRuntime(model)`, `dispatchOpmEvent(runtime, eventId)`, `stepOpmRuntime(runtime, deltaMs)`, and `resetOpmRuntime(runtime)` with the signatures in `Canonical Compiler and Runtime Contracts`.
 - `OpmStepResult` exposes committed values/states, staged writes, fired/blocked processes, traversed links, transitions, diagnostics, and ordered trace records.
 
 - [ ] **Step 1: Write phase-order and conflict tests**
@@ -354,14 +570,14 @@ Commit: `feat(opm): add deterministic executable runtime`
 
 **Interfaces:**
 - Produces: `lowerOpmToC(model): OpmCProgram`.
-- Produces: `generateOpmCArtifacts(model, settings): { files: GeneratedOpmFile[]; manifest: OpmManifest }`.
+- Produces: `generateOpmCArtifacts(model): { files: GeneratedOpmFile[]; manifest: OpmManifest }`; settings come only from the compiled model so callers cannot generate with settings different from those validated.
 - `GeneratedOpmFile` is `{ name: string; content: string }`.
 
 - [ ] **Step 1: Write artifact and safety tests**
 
 ```typescript
 it('generates the complete deterministic package', () => {
-  const result = generateOpmCArtifacts(applianceModel, settings);
+  const result = generateOpmCArtifacts(applianceModel);
   expect(result.files.map(f => f.name)).toEqual([
     'opm_types.h', 'opm_config.h', 'opm_model.h', 'opm_model.c',
     'opm_runtime.h', 'opm_runtime.c', 'opm_io.h', 'opm_io.c',
@@ -466,7 +682,7 @@ Use stable row IDs and immutable updates. Numeric inputs must reject non-finite 
 
 - [ ] **Step 4: Compose inspectors in the workspace**
 
-Track `selectedEdge` alongside `selectedNode`, clear one when selecting the other, and render exactly one inspector based on node/edge kind. The enable action calls `withExecutableDefaults` for the selected element and saves via the existing `onSave(nodes, edges)` path. Keep conceptual name, states, attributes, ports, zoom, and delete controls operational.
+Track `selectedEdge` alongside `selectedNode`, clear one when selecting the other, and render exactly one inspector based on node/edge kind. The per-inspector enable action calls `withElementExecutableDefaults(nodes, edges, selectedElementId)` and saves through the existing controlled workspace update path; the whole-diagram setup command alone may call `withExecutableDefaults`. Keep conceptual name, states, attributes, ports, zoom, and delete controls operational.
 
 - [ ] **Step 5: Verify and commit**
 
@@ -519,12 +735,17 @@ Commit: `feat(opm): surface executable diagnostics and traces`
 - Create: `src/components/entropy/executable/OpmCodegenPanel.tsx`
 - Create: `src/components/entropy/executable/__tests__/OpmCodegenPanel.test.tsx`
 - Modify: `src/components/entropy/EntropyWorkspace.tsx:214`, `src/components/entropy/EntropyWorkspace.tsx:1586`
+- Create: `src/utils/opmGeneratedCodeVerifier.cjs`
+- Create: `src/utils/opmGeneratedCodeVerifier.test.cjs`
+- Modify: `src/main.cjs` (register one narrow `opm-verify-generated-c` IPC handler)
+- Modify: `src/preload.cjs` only if the existing allowlist blocks the new invoke channel
 - Modify: `src/engine/hil/hilTypes.ts`
 - Modify: `src/components/hil/HILWorkspace.tsx`
 
 **Interfaces:**
-- `OpmCodegenPanel` receives nodes, edges, target settings, and `onHilHandoff(package)`.
+- `OpmCodegenPanel` receives nodes, edges, `OpmExecutionConfig`, `onConfigChange(next)`, and `onHilHandoff(package)`.
 - Add `OpmHilPackage` containing generated files, manifest, I/O symbols, fingerprint, and verification status; it carries artifacts only and never State Machine IR.
+- `verifyOpmGeneratedCode(payload)` accepts generated filenames/content plus the manifest fingerprint, writes only to a fresh generated-code temporary directory, invokes the discovered host compiler with the Task 6 strict flags, runs the harness with a bounded timeout, and returns `{ ok, compiler, stdout, stderr, exitCode }` without accepting caller-supplied paths or commands.
 
 - [ ] **Step 1: Write workflow tests**
 
@@ -532,7 +753,7 @@ Assert validation before generation, disabled generation/download on errors, edi
 
 - [ ] **Step 2: Implement panel states**
 
-Use explicit `edit`, `validated`, `generated`, `verified`, and `failed` states. Any diagram/settings change invalidates artifacts and verification. Generate via `compileExecutableOpm` then `generateOpmCArtifacts`. ZIP with the existing `jszip` dependency as `entropy_opm_<fingerprint-prefix>.zip`. Do not claim host verification in the browser unless an Electron verification IPC returns a successful result; otherwise label it “Not run”.
+Use explicit `edit`, `validated`, `generated`, `verified`, and `failed` states. Any diagram/settings change invalidates artifacts and verification. Generate via `compileExecutableOpm` then `generateOpmCArtifacts`. ZIP with the existing `jszip` dependency as `entropy_opm_<fingerprint-prefix>.zip`. Do not claim host verification in the browser unless the narrow Electron IPC returns a successful result; otherwise label it “Not run”. The IPC validates an allowlist of the 12 generated filenames, rejects path separators, shell metacharacters, unknown fields, oversized content, and fingerprint mismatch, and never passes renderer strings to a shell.
 
 - [ ] **Step 3: Add the HIL boundary**
 
@@ -546,6 +767,9 @@ Extend `rightTab` with `'executable' | 'codegen'`; add inspector/diagnostics and
 
 Run: `npx vitest run src/components/entropy/executable src/components/hil src/engine/opm`
 Expected: PASS.
+
+Run: `node src/utils/opmGeneratedCodeVerifier.test.cjs && npm run test:security`
+Expected: PASS, including rejection of traversal filenames, arbitrary compiler commands, oversized payloads, and manifest mismatches.
 
 Commit: `feat(opm): add code generation and HIL handoff workspace`
 
@@ -589,10 +813,41 @@ Commit: `docs(opm): document executable modeling and release gate`
 
 ## Self-Review
 
-**Spec coverage:** Tasks 1–4 cover optional schema, normalization, restricted expressions, and validation. Tasks 5 and 7 establish one deterministic runtime and TypeScript/C parity. Task 6 produces every required C artifact, public API, static capacity, traceability, and strict compilation. Tasks 8–10 provide dedicated inspectors, assignments/transitions, diagnostics/navigation, simulation feedback, value watch, code preview/export, and HIL handoff. Task 11 protects OPL/legacy diagrams and defines the release gate.
+**Spec coverage:** Task 1 covers the complete optional persisted schema, global execution config, safe legacy migration, and both save formats. Tasks 2–4 cover deterministic normalization, restricted expressions, validation, and immutable executable IR. Tasks 5 and 7 establish one deterministic runtime and TypeScript/C parity. Task 6 produces every required C artifact, public API, static capacity, traceability, and strict compilation. Tasks 8–10 provide dedicated inspectors, assignments/transitions, diagnostics/navigation, simulation feedback, value watch, code preview/export, secure host verification, and HIL handoff. Task 11 protects OPL/legacy diagrams and defines the release gate.
 
 **Boundary check:** No task converts OPM to State Machine IR. The only reused utilities are JSZip, the generated-code temp workspace, compiler discovery patterns, and the HIL package boundary.
 
-**Type consistency:** `OpmDiagnostic.source` is used by compiler and UI navigation; `ExecutableOpmModel` is the sole input to both runtime and C lowering; `OpmStepResult` feeds preview/watch/animation and parity; `GeneratedOpmFile` is shared by preview, ZIP, host compilation, and HIL handoff.
+**Type consistency:** `OpmExecutionConfig` is persisted, edited, and passed to compilation as one object. Stable IDs—not labels or C symbols—join persisted and normalized records. `OpmDiagnostic.source` is used by compiler and UI navigation; `ExecutableOpmModel` is the sole input to both runtime and C lowering; `OpmStepResult` feeds preview/watch/animation and parity; `GeneratedOpmFile` is shared by preview, ZIP, host compilation, and HIL handoff. Generator settings come from `ExecutableOpmModel` and cannot diverge after validation.
 
 **Placeholder scan:** The plan contains no deferred requirements or unnamed implementation work. Every task has exact files, interfaces, test intent, verification commands, and a commit boundary.
+
+## Antigravity Delegation Brief Template
+
+Create a fresh brief for exactly one numbered task. Replace `N` and the task title, but do not paste the entire plan into the command line; direct the implementer to read this file from disk.
+
+```xml
+<task>
+Implement Task N, "TASK TITLE", from docs/superpowers/plans/2026-09-02-entropy-opm-embedded-c.md.
+Read the plan header, Global Constraints, Gemini/Antigravity Execution Contract, canonical contracts, and Task N before editing. The current branch is entropy-opm-embedded-c. Preserve all pre-existing VLab changes and the untracked design spec. Implement only Task N and stop for orchestrator review; do not begin Task N+1.
+</task>
+
+<verification_loop>
+Run the focused commands listed in Task N and fix failures caused by Task N.
+Always run: npx tsc --noEmit -p tsconfig.json
+Always run: git diff --check
+When shared Entropy types change, run: npx vitest run src/components/entropy src/engine/opm
+Confirm git status distinguishes pre-existing files from Task N files.
+</verification_loop>
+
+<action_safety>
+Do not run git add, git commit, git reset, git checkout, git clean, or branch-changing commands.
+Do not modify unrelated VLab files, weaken tests, accept arbitrary C, interpolate expressions into generated C, or route OPM through State Machine IR.
+Do not add dependencies unless Task N explicitly names one.
+</action_safety>
+
+<structured_output_contract>
+Report exactly: (1) behavior implemented, (2) files touched, (3) focused test counts and expected initial failures observed, (4) TypeScript and diff-check outcomes, (5) deviations or decisions requiring review. Leave all Task N edits uncommitted.
+</structured_output_contract>
+```
+
+The orchestrator must compare `git status --short` before and after delegation, inspect untracked files directly, review tests before implementation code, rerun every gate, and commit only Task N files. If rework is needed, resume the same Antigravity conversation with a delta brief naming only the failed requirement and its evidence.
