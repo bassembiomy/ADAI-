@@ -1,4 +1,10 @@
 import { Node, Edge } from '@xyflow/react';
+import type {
+  OpmObjectExecution,
+  OpmStateExecution,
+  OpmProcessExecution,
+  OpmLinkExecution,
+} from '../../engine/opm/executableTypes';
 
 export type OPMNodeType = 'object' | 'process' | 'state' | 'requirement';
 
@@ -50,6 +56,11 @@ export interface OPMNodeData extends Record<string, unknown> {
   zoomedIn?: boolean;
   inputs?: OPMPort[];
   outputs?: OPMPort[];
+  // Executable schema (optional, backward compatible): present only after the
+  // explicit enable action. Absent means the node is conceptual-only.
+  objectExecution?: OpmObjectExecution;
+  stateExecution?: OpmStateExecution;
+  processExecution?: OpmProcessExecution;
   [key: string]: unknown;
 }
 
@@ -60,6 +71,9 @@ export interface OPMEdgeData extends Record<string, unknown> {
   conditionText?: string;
   isSimulating?: boolean;
   isActiveFlow?: boolean;
+  // Executable schema (optional, backward compatible): present only after the
+  // explicit enable action. Absent means the link is conceptual-only.
+  linkExecution?: OpmLinkExecution;
   [key: string]: unknown;
 }
 

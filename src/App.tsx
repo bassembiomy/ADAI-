@@ -10,6 +10,7 @@ import { XbridgesWorkspace } from './components/xbridges/XbridgesWorkspace';
 import { VLabWorkspace } from './components/vlab/VLabWorkspace';
 import { HILWorkspace } from './components/hil/HILWorkspace';
 import { EntropyWorkspace } from './components/entropy/EntropyWorkspace';
+import type { AppNode, AppEdge } from './components/entropy/EntropyTypes';
 import { HILConfig, HILSessionState } from './engine/hil/hilTypes';
 import { GMDHEngine, solveLeastSquares } from './engine/gmdh/gmdh_core/combi';
 import { ChevronLeft } from 'lucide-react';
@@ -6795,8 +6796,8 @@ const ADIA = () => {
   const [xBridgesSelectedNodeId, setXBridgesSelectedNodeId] = useState<string | null>(null);
 
   // ENTROPY OPM STATE
-  const [entropyNodes, setEntropyNodes] = useState<any[]>([]);
-  const [entropyEdges, setEntropyEdges] = useState<any[]>([]);
+  const [entropyNodes, setEntropyNodes] = useState<AppNode[]>([]);
+  const [entropyEdges, setEntropyEdges] = useState<AppEdge[]>([]);
 
   // FACTORY I/O GATEWAY STATE
   const [showFactoryIOGateway, setShowFactoryIOGateway] = useState(false);
