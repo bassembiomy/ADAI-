@@ -800,15 +800,42 @@ export class DAEAssembler {
     nodes.forEach(node => {
       const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
       if (type === 'scope') {
-        const ports = nodePorts.get(node.id) || [];
-        const indices = ports.map(pId => {
+        const declaredPorts: any[] = (node.data as any)?.ports || [];
+        const numSignalsParam = (node.data as any)?.params?.numSignals?.value;
+        const numSignals = Math.max(1, Math.min(8, Number(numSignalsParam) || declaredPorts.length || 1));
+        
+        // Collect all distinct port IDs on this scope (e.g. in1, in2, ...)
+        const portIdSet = new Set<string>();
+        for (let i = 1; i <= numSignals; i++) {
+          portIdSet.add(`in${i}`);
+        }
+        declaredPorts.forEach(p => {
+          if (p && p.id) portIdSet.add(p.id);
+        });
+        edges.forEach(e => {
+          if (e.target === node.id && e.targetHandle) {
+            let t = e.targetHandle.replace(/_[st]$/, '');
+            if (t.startsWith(node.id + '-')) t = t.slice(node.id.length + 1);
+            if (t) portIdSet.add(t);
+          }
+        });
+
+        // Order ports naturally (in1, in2, in3, ...)
+        const sortedPorts = Array.from(portIdSet).sort((a, b) => {
+          const numA = parseInt(a.replace(/\D/g, '')) || 0;
+          const numB = parseInt(b.replace(/\D/g, '')) || 0;
+          if (numA !== numB) return numA - numB;
+          return a.localeCompare(b);
+        });
+
+        const indices = sortedPorts.map(pId => {
           const targetKey = `${node.id}_${pId}`;
           const edge = edges.find(e => {
-            let tPort = (e.targetHandle || 'p').replace(/_[st]$/, '');
+            let tPort = (e.targetHandle || 'in1').replace(/_[st]$/, '');
             if (tPort.startsWith(e.target + '-')) {
               tPort = tPort.slice(e.target.length + 1);
             }
-            return e.target === node.id && tPort === pId;
+            return e.target === node.id && (tPort === pId || (pId === 'in1' && (tPort === 'p' || tPort === 'in' || tPort === 'in1')));
           });
           
           if (edge) {
@@ -818,9 +845,7 @@ export class DAEAssembler {
             }
             const srcKey = `${edge.source}_${srcPort}`;
             
-            const srcDomain = nodePortDomains.get(srcKey) || 'electrical';
             // Prefer the source component's explicit signal branch when it exists (e.g. sensors, PS blocks).
-            // This avoids returning the across variable of an uncommitted scope/sink node.
             const sourceBranchIndices = componentBranchVarIndices.get(edge.source) || [];
             const sourcePorts = nodePorts.get(edge.source) || [];
             const sourceNode = nodes.find(n => n.id === edge.source);
@@ -828,16 +853,16 @@ export class DAEAssembler {
             const sourceSpec = getComponentSpec(edge.source, sourceType, sourcePorts);
             
             const matchingBranchIdx = sourceSpec.branches.findIndex(b =>
-              b.name === `signal_${srcPort}`
+              b.name === `signal_${srcPort}` || b.name === srcPort
             );
             if (matchingBranchIdx !== -1 && sourceBranchIndices[matchingBranchIdx] !== undefined) {
               return sourceBranchIndices[matchingBranchIdx];
             }
             
             const varIdx = portToVarIndex.get(srcKey);
-            return varIdx !== undefined ? varIdx : portToVarIndex.get(targetKey)!;
+            return varIdx !== undefined ? varIdx : (portToVarIndex.get(targetKey) ?? -1);
           } else {
-            return portToVarIndex.get(targetKey)!;
+            return portToVarIndex.get(targetKey) ?? -1;
           }
         });
         scopeOutputs.set(node.id, indices);

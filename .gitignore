@@ -5,6 +5,9 @@ dist/
 .gemini/
 .kilo/
 out/
+dist-package/
+.tmp/
+.temp/
 avr-gcc/
 toolchains/
 hil_build/*.elf

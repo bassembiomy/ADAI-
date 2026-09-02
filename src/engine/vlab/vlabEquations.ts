@@ -698,8 +698,13 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   // ── PHYSICAL SIGNAL BLOCKS ─────────────────────────────────────────────────
+  constant: ({ branch, params }) => {
+    const val = params.value !== undefined ? (params.value?.value !== undefined ? params.value.value : params.value) : 1.0;
+    return [branch[0] - val];
+  },
+
   ps_constant: ({ branch, params }) => {
-    const val = params.value !== undefined ? params.value : 1.0;
+    const val = params.value !== undefined ? (params.value?.value !== undefined ? params.value.value : params.value) : 1.0;
     return [branch[0] - val];
   },
   

@@ -53,7 +53,7 @@ const domainVariables: Record<string, { across: { name: string; unit: string }; 
 };
 
 /**
- * Build validation contracts for all 241 blocks in VLAB_LIBRARY.
+ * Build validation contracts for all 242 blocks in VLAB_LIBRARY.
  */
 export const VLAB_VALIDATION_CONTRACTS: Record<string, VLabValidationContract> = {};
 

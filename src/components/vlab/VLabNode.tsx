@@ -43,7 +43,7 @@ export function formatNodeParameterBadge(type: string, params: Record<string, an
   if (type === 'thermal_resistor' && params.Rth !== undefined) {
     return `${params.Rth.value ?? params.Rth} ${params.Rth.unit || 'K/W'}`.trim();
   }
-  if (type === 'ps_constant' && params.value !== undefined) {
+  if ((type === 'constant' || type === 'ps_constant') && params.value !== undefined) {
     return `const ${params.value.value ?? params.value}`;
   }
 

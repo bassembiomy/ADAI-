@@ -22,7 +22,7 @@ import * as math from 'mathjs';
 import { VLabWorkspaceProps, VLabNode as AppVLabNode, VLabEdge as AppVLabEdge } from './VLabWorkspaceTypes';
 import { VLabNode, NodeErrorBoundary } from './VLabNode';
 import { SymbolRenderer } from './VLabSymbols';
-import { VLAB_LIBRARY, VLabBlock, VLabPort } from '../../utils/vlabLibrary';
+import { VLAB_LIBRARY, VLabBlock, VLabPort, scoreVLabBlock, searchVLabBlocks } from '../../utils/vlabLibrary';
 import { VLAB_COMPONENT_DEFINITIONS } from '../../engine/vlab/vlabComponentDefinitions';
 import { VLabPhysicsEngine } from '../../engine/vlab/vlabPhysics';
 import { Settings2, Play, Pause, Square, Send, ChevronLeft, ChevronDown, ChevronRight, Box, Activity, FlaskConical, LineChart, X, Maximize2, FileSpreadsheet, Info, GraduationCap, BookOpen, Layers, Settings, RefreshCcw, Zap, ZoomIn, ZoomOut, Minus, Network, Cloud, Download, CheckCircle2, AlertCircle, Triangle, Trash2 } from 'lucide-react';
@@ -1628,9 +1628,13 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                   time: parseFloat(nextT.toFixed(3)),
                   ...obj,
                   in1: obj.in1 !== undefined ? obj.in1 : (obj.value !== undefined ? obj.value : (values[0] ?? 0)),
-                  in2: obj.in2 !== undefined ? obj.in2 : values[1],
-                  in3: obj.in3 !== undefined ? obj.in3 : values[2],
-                  in4: obj.in4 !== undefined ? obj.in4 : values[3],
+                  in2: obj.in2 !== undefined ? obj.in2 : (values[1] ?? 0),
+                  in3: obj.in3 !== undefined ? obj.in3 : (values[2] ?? 0),
+                  in4: obj.in4 !== undefined ? obj.in4 : (values[3] ?? 0),
+                  in5: obj.in5 !== undefined ? obj.in5 : (values[4] ?? 0),
+                  in6: obj.in6 !== undefined ? obj.in6 : (values[5] ?? 0),
+                  in7: obj.in7 !== undefined ? obj.in7 : (values[6] ?? 0),
+                  in8: obj.in8 !== undefined ? obj.in8 : (values[7] ?? 0),
                 };
               }
               
@@ -1665,9 +1669,13 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                       time: parseFloat(nextT.toFixed(3)),
                       ...obj,
                       in1: obj.in1 !== undefined ? obj.in1 : (obj.value !== undefined ? obj.value : (values[0] ?? 0)),
-                      in2: obj.in2 !== undefined ? obj.in2 : values[1],
-                      in3: obj.in3 !== undefined ? obj.in3 : values[2],
-                      in4: obj.in4 !== undefined ? obj.in4 : values[3],
+                      in2: obj.in2 !== undefined ? obj.in2 : (values[1] ?? 0),
+                      in3: obj.in3 !== undefined ? obj.in3 : (values[2] ?? 0),
+                      in4: obj.in4 !== undefined ? obj.in4 : (values[3] ?? 0),
+                      in5: obj.in5 !== undefined ? obj.in5 : (values[4] ?? 0),
+                      in6: obj.in6 !== undefined ? obj.in6 : (values[5] ?? 0),
+                      in7: obj.in7 !== undefined ? obj.in7 : (values[6] ?? 0),
+                      in8: obj.in8 !== undefined ? obj.in8 : (values[7] ?? 0),
                     };
                   }
                   const prev = nextMap[scopeId] || [];
@@ -1880,17 +1888,22 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
   const filteredLibrary = useMemo(() => {
     if (!searchQuery.trim()) return VLAB_LIBRARY;
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.toLowerCase().trim();
 
-    return VLAB_LIBRARY.map(domain => ({
-      ...domain,
-      blocks: domain.blocks.filter(block =>
-        block.name.toLowerCase().includes(query) ||
-        block.id.toLowerCase().includes(query) ||
-        (block.category || '').toLowerCase().includes(query) ||
-        (block.description || '').toLowerCase().includes(query)
-      )
-    })).filter(domain => domain.blocks.length > 0);
+    return VLAB_LIBRARY.map(domain => {
+      const scored = domain.blocks
+        .map(b => ({ block: b, score: scoreVLabBlock(b, query) }))
+        .filter(item => item.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      return {
+        ...domain,
+        maxScore: scored.length > 0 ? Math.max(...scored.map(s => s.score)) : 0,
+        blocks: scored.map(s => s.block)
+      };
+    })
+    .filter(domain => domain.blocks.length > 0)
+    .sort((a, b) => b.maxScore - a.maxScore);
   }, [searchQuery]);
 
   const handleStartSimulation = useCallback(() => {
@@ -2151,14 +2164,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
   const quickSearchResults = useMemo(() => {
     if (!quickSearchQuery.trim()) return [];
-    const query = quickSearchQuery.toLowerCase();
     const allBlocks = VLAB_LIBRARY.flatMap(d => d.blocks);
-    return allBlocks.filter(b =>
-      b.name.toLowerCase().includes(query) ||
-      b.id.toLowerCase().includes(query) ||
-      (b.category || '').toLowerCase().includes(query) ||
-      (b.description || '').toLowerCase().includes(query)
-    ).slice(0, 8);
+    return searchVLabBlocks(allBlocks, quickSearchQuery).slice(0, 10);
   }, [quickSearchQuery]);
 
   const onNodeDoubleClick = (_: any, node: Node) => {
@@ -2228,6 +2235,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       case 'ps_deadzone':
       case 'ps_saturation':
       case 'ps_dead_zone':
+      case 'constant':
       case 'ps_constant':
       case 'ps_sine':
       case 'ps_step':

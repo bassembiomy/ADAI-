@@ -6467,6 +6467,30 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "description": "Terminates unused physical signal outputs to prevent solver floating port warnings."
       },
       {
+        "id": "constant",
+        "name": "Constant",
+        "color": "#92400e",
+        "icon": "ps_const",
+        "category": "Sources",
+        "params": {
+          "value": {
+            "value": 1,
+            "unit": "1",
+            "label": "Constant Value"
+          }
+        },
+        "ports": [
+          {
+            "id": "y",
+            "pos": "right",
+            "label": "C",
+            "domain": "Physical"
+          }
+        ],
+        "equation": "y(t) = Value",
+        "description": "Outputs a steady constant scalar value across all simulation time."
+      },
+      {
         "id": "ps_constant",
         "name": "PS Constant",
         "color": "#92400e",
@@ -8256,3 +8280,32 @@ export const VLAB_LIBRARY: VLabDomain[] = [
     ]
   }
 ];
+
+export function scoreVLabBlock(block: VLabBlock, query: string): number {
+  if (!query) return 0;
+  const q = query.toLowerCase().trim();
+  const name = (block.name || '').toLowerCase();
+  const id = (block.id || '').toLowerCase();
+  const cat = (block.category || '').toLowerCase();
+  const desc = (block.description || '').toLowerCase();
+  const eq = (block.equation || '').toLowerCase();
+
+  if (name === q || id === q) return 1000;
+  if (name.startsWith(q) || id.startsWith(q)) return 800;
+  if (name.includes(q) || id.includes(q)) return 600;
+  if (cat === q) return 400;
+  if (cat.includes(q)) return 300;
+  if (desc.includes(q) || eq.includes(q)) return 100;
+  return 0;
+}
+
+export function searchVLabBlocks(blocks: VLabBlock[], query: string): VLabBlock[] {
+  if (!query.trim()) return blocks;
+  const q = query.toLowerCase().trim();
+  return blocks
+    .map(b => ({ block: b, score: scoreVLabBlock(b, q) }))
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map(item => item.block);
+}
+

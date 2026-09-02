@@ -198,4 +198,73 @@ describe('VLab Physical DAE Engine Tests', () => {
     const val = typeof state.scopeValues === 'object' ? state.scopeValues.value : state.scopeValues;
     expect(val).toBeCloseTo(5.0, 3);
   });
+
+  it('evaluates constant block in physical simulation pipeline', () => {
+    const engine = new VLabPhysicsEngine();
+
+    // constant (value = 7.5) -> ps_gain (gain = 2.0) -> scope
+    const nodes: Node[] = [
+      { id: 'const_src', data: { type: 'constant', params: { value: 7.5 } } } as any,
+      { id: 'gain', data: { type: 'ps_gain', params: { gain: 2.0 } } } as any,
+      { id: 'scope', data: { type: 'scope' } } as any,
+    ];
+
+    const edges: Edge[] = [
+      { id: 'e1', source: 'const_src', target: 'gain', sourceHandle: 'y_s', targetHandle: 'u_t' },
+      { id: 'e2', source: 'gain', target: 'scope', sourceHandle: 'y_s', targetHandle: 'in1_t' },
+    ];
+
+    let state: any = null;
+    const dt = 0.05;
+
+    for (let i = 0; i < 5; i++) {
+      state = engine.simulateStep(nodes, edges, state, dt);
+    }
+
+    const val = typeof state.scopeValues === 'object' ? state.scopeValues.value : state.scopeValues;
+    expect(val).toBeCloseTo(15.0, 3);
+  });
+
+  it('correctly reads multiple channels on multi-input scope', () => {
+    const engine = new VLabPhysicsEngine();
+
+    const nodes: Node[] = [
+      { id: 'c1', data: { type: 'constant', params: { value: 5.0 } } } as any,
+      { id: 'c2', data: { type: 'constant', params: { value: 12.0 } } } as any,
+      { id: 'c3', data: { type: 'constant', params: { value: 24.0 } } } as any,
+      {
+        id: 'multi_scope',
+        data: {
+          type: 'scope',
+          params: { numSignals: { value: 3 } },
+          ports: [
+            { id: 'in1', pos: 'left', label: '1' },
+            { id: 'in2', pos: 'left', label: '2' },
+            { id: 'in3', pos: 'left', label: '3' },
+          ]
+        }
+      } as any,
+    ];
+
+    const edges: Edge[] = [
+      { id: 'e1', source: 'c1', target: 'multi_scope', sourceHandle: 'y_s', targetHandle: 'in1_t' },
+      { id: 'e2', source: 'c2', target: 'multi_scope', sourceHandle: 'y_s', targetHandle: 'in2_t' },
+      { id: 'e3', source: 'c3', target: 'multi_scope', sourceHandle: 'y_s', targetHandle: 'in3_t' },
+    ];
+
+    let state: any = null;
+    const dt = 0.05;
+
+    for (let i = 0; i < 5; i++) {
+      state = engine.simulateStep(nodes, edges, state, dt);
+    }
+
+    const scopeRes = state.perScopeValues['multi_scope'];
+    expect(scopeRes).toBeDefined();
+    expect(scopeRes.in1).toBeCloseTo(5.0, 3);
+    expect(scopeRes.in2).toBeCloseTo(12.0, 3);
+    expect(scopeRes.in3).toBeCloseTo(24.0, 3);
+  });
 });
+
+

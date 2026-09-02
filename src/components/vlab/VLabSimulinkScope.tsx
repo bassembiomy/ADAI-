@@ -203,10 +203,6 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
           normalizedPt[chKey] = Number(pt[chKey]);
         } else if (i === 0 && pt.value !== undefined && Number.isFinite(Number(pt.value))) {
           normalizedPt[chKey] = Number(pt.value);
-        } else if (i < rawNumericEntries.length) {
-          normalizedPt[chKey] = rawNumericEntries[i][1];
-        } else if (rawNumericEntries.length > 0) {
-          normalizedPt[chKey] = rawNumericEntries[0][1];
         } else {
           normalizedPt[chKey] = 0;
         }

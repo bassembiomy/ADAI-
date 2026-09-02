@@ -5,5 +5,15 @@
     "*.c": "cpp",
     "*.h": "cpp",
     "*.m": "matlab"
+  },
+  "files.watcherExclude": {
+    "**/out/**": true,
+    "**/*.asar": true,
+    "**/dist-package/**": true
+  },
+  "search.exclude": {
+    "**/out/**": true,
+    "**/*.asar": true,
+    "**/dist-package/**": true
   }
 }

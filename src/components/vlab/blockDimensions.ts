@@ -54,6 +54,7 @@ export const BLOCK_DIMENSIONS: Record<string, BlockDimensions> = {
   ps_deadzone: { width: 40, height: 40 },
   ps_saturation: { width: 40, height: 40 },
   ps_dead_zone: { width: 40, height: 40 },
+  constant: { width: 40, height: 40 },
   ps_constant: { width: 40, height: 40 },
   ps_sine: { width: 40, height: 40 },
   ps_step: { width: 40, height: 40 },

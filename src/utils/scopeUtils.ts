@@ -49,10 +49,14 @@ export function getVLabSignalInfo(
 ): VLabSignalInfo {
   const targetPortId = `in${channelIndex + 1}`;
   const edge = edges?.find(
-    (e: any) =>
-      e.target === scopeNodeId &&
-      (e.targetHandle === targetPortId ||
-        (channelIndex === 0 && (e.targetHandle === 'in1_t' || e.targetHandle === 'in1')))
+    (e: any) => {
+      if (e.target !== scopeNodeId) return false;
+      let t = (e.targetHandle || '').replace(/_[st]$/, '');
+      if (t.startsWith(scopeNodeId + '-')) {
+        t = t.slice(scopeNodeId.length + 1);
+      }
+      return t === targetPortId || (channelIndex === 0 && (t === 'p' || t === 'in' || t === 'in1' || t === ''));
+    }
   );
 
   if (!edge) {

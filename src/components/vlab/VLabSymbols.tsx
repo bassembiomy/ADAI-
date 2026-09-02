@@ -638,6 +638,7 @@ export const RawSymbolRenderer = ({ type, color }: { type: string, color?: strin
           </text>
         </svg>
       );
+    case 'constant':
     case 'ps_constant':
     case 'ps_const':
       return (

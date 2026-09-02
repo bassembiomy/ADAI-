@@ -380,6 +380,7 @@ export class VLabPhysicsEngine {
       if (isTest) return val;
       const obj = new Number(val) as any;
       obj[label] = val;
+      obj['in1'] = val;
       Object.defineProperty(obj, 'value', {
         get() { return val; },
         enumerable: false,
@@ -389,23 +390,14 @@ export class VLabPhysicsEngine {
     };
 
     const createMultiScopeValues = (values: Record<string, number>, aliases: Record<string, string>): any => {
-      if (isTest) {
-        const obj: any = {};
-        Object.entries(aliases).forEach(([aliasName, keyName]) => {
-          obj[aliasName] = values[keyName];
-        });
-        return obj;
-      }
       const obj: any = {};
       Object.entries(values).forEach(([k, v]) => {
         obj[k] = v;
       });
       Object.entries(aliases).forEach(([aliasName, keyName]) => {
-        Object.defineProperty(obj, aliasName, {
-          get() { return this[keyName]; },
-          enumerable: false,
-          configurable: true
-        });
+        if (obj[aliasName] === undefined && values[keyName] !== undefined) {
+          obj[aliasName] = values[keyName];
+        }
       });
       return obj;
     };
@@ -507,16 +499,22 @@ export class VLabPhysicsEngine {
       const indices = system.scopeOutputs.get(scopeNode.id);
       if (indices && indices.length > 0) {
         if (indices.length === 1) {
-          const friendlyName = getFriendlyVariableName(indices[0]);
-          perScopeValues[scopeNode.id] = createSingleScopeValue(xCurrent[indices[0]], friendlyName);
+          const val = indices[0] >= 0 && indices[0] < xCurrent.length ? xCurrent[indices[0]] : 0;
+          const friendlyName = indices[0] >= 0 ? getFriendlyVariableName(indices[0]) : 'in1';
+          perScopeValues[scopeNode.id] = createSingleScopeValue(val, friendlyName);
         } else {
           const values: Record<string, number> = {};
           const aliases: Record<string, string> = {};
           indices.forEach((idx, i) => {
-            const friendlyName = getFriendlyVariableName(idx);
-            values[friendlyName] = xCurrent[idx];
-            if (i === 0) aliases['value'] = friendlyName;
-            if (i === 1) aliases['target'] = friendlyName;
+            const val = idx >= 0 && idx < xCurrent.length ? xCurrent[idx] : 0;
+            const channelKey = `in${i + 1}`;
+            const friendlyName = idx >= 0 ? getFriendlyVariableName(idx) : channelKey;
+            values[channelKey] = val;
+            if (friendlyName && !values[friendlyName]) {
+              values[friendlyName] = val;
+            }
+            if (i === 0) aliases['value'] = channelKey;
+            if (i === 1) aliases['target'] = channelKey;
           });
           perScopeValues[scopeNode.id] = createMultiScopeValues(values, aliases);
         }

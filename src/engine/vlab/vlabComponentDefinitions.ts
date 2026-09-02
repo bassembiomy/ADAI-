@@ -1044,6 +1044,12 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     across: 'Angular Velocity', through: 'Slosh Torque',
     description: 'Simulates the non-linear fluid drag and sloshing effects of water and detergent during the wash cycle.'
   },
+  constant: {
+    equations: ['y = value'],
+    latex: ['y(t) = C'],
+    across: 'None', through: 'Signal',
+    description: 'Generates a constant physical signal. Use to set fixed setpoints or parameters in control loops.'
+  },
   ps_constant: {
     equations: ['y = value'],
     latex: ['y(t) = C'],

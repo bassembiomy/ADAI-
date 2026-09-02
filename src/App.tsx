@@ -5408,15 +5408,38 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
   
   const domainsList = ["All", ...Array.from(new Set(allBlocks.map(b => b.domain)))];
 
-  const filteredBlocks = allBlocks.filter(b => {
-    const matchesSearch = b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      b.domain.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (b.description && b.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (b.equation && b.equation.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesDomain = selectedDomainFilter === "All" || b.domain.toLowerCase() === selectedDomainFilter.toLowerCase();
-    const matchesSource = selectedSourceFilter === "All" || b.source.toLowerCase() === selectedSourceFilter.toLowerCase();
-    return matchesSearch && matchesDomain && matchesSource;
-  });
+  const filteredBlocks = allBlocks
+    .map(b => {
+      const q = searchQuery.toLowerCase().trim();
+      const name = b.name.toLowerCase();
+      const id = b.id.toLowerCase();
+      const domain = b.domain.toLowerCase();
+      const desc = (b.description || '').toLowerCase();
+      const eq = (b.equation || '').toLowerCase();
+
+      let score = 0;
+      if (!q) {
+        score = 1;
+      } else if (name === q || id === q) {
+        score = 1000;
+      } else if (name.startsWith(q) || id.startsWith(q)) {
+        score = 800;
+      } else if (name.includes(q) || id.includes(q)) {
+        score = 600;
+      } else if (domain.includes(q)) {
+        score = 400;
+      } else if (desc.includes(q) || eq.includes(q)) {
+        score = 100;
+      }
+
+      const matchesDomain = selectedDomainFilter === "All" || b.domain.toLowerCase() === selectedDomainFilter.toLowerCase();
+      const matchesSource = selectedSourceFilter === "All" || b.source.toLowerCase() === selectedSourceFilter.toLowerCase();
+
+      return { block: b, score, match: score > 0 && matchesDomain && matchesSource };
+    })
+    .filter(item => item.match)
+    .sort((a, b) => b.score - a.score)
+    .map(item => item.block);
 
   const selectedBlock = allBlocks.find(b => b.id === selectedBlockId);
 

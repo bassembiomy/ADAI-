@@ -1,6 +1,13 @@
 const path = require('path');
 const fs = require('fs');
 
+const localTmp = path.resolve(path.parse(__dirname).root, 'tmp');
+if (!fs.existsSync(localTmp)) {
+  fs.mkdirSync(localTmp, { recursive: true });
+}
+process.env.TEMP = localTmp;
+process.env.TMP = localTmp;
+
 module.exports = {
   packagerConfig: {
     executableName: 'ADIA',
@@ -46,11 +53,14 @@ module.exports = {
   rebuildConfig: {},
   hooks: {
     postPackage: async (forgeConfig, options) => {
-      if (process.platform !== 'win32' || !options || !options.outputPaths) return;
+      if (process.platform !== 'win32' || !options || !Array.isArray(options.outputPaths)) return;
       const rceditPath = path.resolve(__dirname, 'node_modules/electron-winstaller/vendor/rcedit.exe');
       const iconPath = path.resolve(__dirname, 'icon.ico');
-      for (const outDir of options.outputPaths) {
-        const targetExe = path.resolve(outDir, 'ADIA.exe');
+      for (const rawOutDir of options.outputPaths) {
+        if (typeof rawOutDir !== 'string' || !rawOutDir.trim()) continue;
+        const baseName = path.basename(rawOutDir);
+        if (!baseName || baseName === '.' || baseName === '..') continue;
+        const targetExe = path.join(__dirname, 'out', baseName, 'ADIA.exe');
         if (fs.existsSync(rceditPath) && fs.existsSync(targetExe) && fs.existsSync(iconPath)) {
           const { execFileSync } = require('child_process');
           try {
