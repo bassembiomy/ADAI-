@@ -99,9 +99,73 @@ const collectCatalogIssues = (): CertificationIssue[] => {
   return issues;
 };
 
+const VALID_PORT_POSITIONS = new Set(['left', 'right', 'top', 'bottom']);
+const VALID_PORT_DOMAINS = new Set([
+  'Electrical',
+  'Fluid',
+  'Physical',
+  'Rotational',
+  'Thermal',
+  'Translational',
+]);
+const ZERO_PORT_BLOCKS = new Set(['gas_properties', 'ma_properties', 'subsystem', 'doe_custom']);
+
+const collectPortIssues = (): CertificationIssue[] => {
+  const issues: CertificationIssue[] = [];
+  const assembler = new DAEAssembler();
+
+  for (const { domain, block } of inventory) {
+    const portIds = new Set<string>();
+    if (block.ports.length === 0 && !ZERO_PORT_BLOCKS.has(block.id)) {
+      issues.push(issue(domain, block.id, 'ports', 'unexpected zero-port block'));
+    }
+
+    for (const port of block.ports) {
+      if (!port.id.trim()) issues.push(issue(domain, block.id, 'ports', 'empty port ID'));
+      if (portIds.has(port.id)) issues.push(issue(domain, block.id, 'ports', `duplicate port ID "${port.id}"`));
+      if (!VALID_PORT_POSITIONS.has(port.pos)) issues.push(issue(domain, block.id, 'ports', `invalid position "${port.pos}"`));
+      if (port.label !== undefined && !port.label.trim()) issues.push(issue(domain, block.id, 'ports', `port "${port.id}" has an empty label`));
+      if (port.domain !== undefined && !VALID_PORT_DOMAINS.has(port.domain)) {
+        issues.push(issue(domain, block.id, 'ports', `port "${port.id}" has unknown domain "${port.domain}"`));
+      }
+      portIds.add(port.id);
+    }
+
+    const node: Node = {
+      id: `cert-${block.id}`,
+      type: 'default',
+      position: { x: 0, y: 0 },
+      data: { type: block.id, params: block.params, ports: block.ports, domain },
+    } as Node;
+
+    try {
+      const system = assembler.assemble([node], []);
+      if (!Number.isInteger(system.systemSize) || system.systemSize < 0) {
+        issues.push(issue(domain, block.id, 'ports', `invalid assembled system size ${system.systemSize}`));
+      }
+      if (system.variableNames.length !== system.systemSize) {
+        issues.push(issue(domain, block.id, 'ports', 'variable-name count does not match system size'));
+      }
+      if (system.isDifferentialState.length !== system.systemSize) {
+        issues.push(issue(domain, block.id, 'ports', 'differential-state mask does not match system size'));
+      }
+    } catch (error) {
+      issues.push(issue(domain, block.id, 'ports', `assembly threw: ${error instanceof Error ? error.message : String(error)}`));
+    }
+  }
+
+  return issues;
+};
+
 describe('V-Lab full certification', () => {
   it('certifies the complete live catalog in both directions', () => {
     const issues = collectCatalogIssues();
     expect(issues, formatIssues(issues)).toEqual([]);
   });
+
+  it('certifies every declared port and its DAE assembly contract', () => {
+    const issues = collectPortIssues();
+    expect(issues, formatIssues(issues)).toEqual([]);
+  });
 });
+

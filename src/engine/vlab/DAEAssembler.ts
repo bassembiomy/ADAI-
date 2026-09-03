@@ -264,7 +264,7 @@ export class DAEAssembler {
           return true;
         }
         const id = portId.toLowerCase();
-        return ['y', 'out', 'v', 'i', 'w', 't', 'a', 'theta', 'd', 'q', 'alpha', 'beta', 'pos', 'neg', 'zero', 'abc', 'y1', 'y2', 'y3', 'amps'].includes(id) || 
+        return ['y', 'out', 'v', 'i', 'w', 't', 'a', 'p', 'f', 'x', 'h', 'm', 'theta', 'd', 'q', 'alpha', 'beta', 'pos', 'neg', 'zero', 'abc', 'y1', 'y2', 'y3', 'amps'].includes(id) || 
                id.startsWith('out') || id.startsWith('signal');
       };
 
@@ -737,7 +737,7 @@ export class DAEAssembler {
       }
     });
 
-    // Automatically treat unconnected case/reference ports (e.g. c, n, ref) as reference nodes (0 potential/speed)
+    // Automatically treat unconnected case/reference ports (e.g. c, b, n, ref, gnd) as reference nodes (0 potential/speed)
     // Also treat any unconnected fluid/gas/thermal ports as reference nodes (open to atmosphere/ambient)
     nodes.forEach(node => {
       const ports = nodePorts.get(node.id) || [];
@@ -747,7 +747,7 @@ export class DAEAssembler {
         const portsInRoot = rootToPorts.get(root) || [];
         if (portsInRoot.length === 1) {
           const domain = nodePortDomains.get(key);
-          if (['c', 'n', 'ref', 'gnd'].includes(portId.toLowerCase()) ||
+          if (['c', 'b', 'n', 'ref', 'gnd'].includes(portId.toLowerCase()) ||
               domain === 'fluid' || domain === 'gas' || domain === 'thermal') {
             referenceNodeIds.add(root);
           }
@@ -802,59 +802,65 @@ export class DAEAssembler {
       if (type === 'scope') {
         const declaredPorts: any[] = (node.data as any)?.ports || [];
         const numSignalsParam = (node.data as any)?.params?.numSignals?.value;
-        const numSignals = Math.max(1, Math.min(8, Number(numSignalsParam) || declaredPorts.length || 1));
+        const numSignals = Math.max(1, Math.min(8, Number(numSignalsParam) || (declaredPorts.length > 0 ? declaredPorts.length : 1)));
         
-        // Collect all distinct port IDs on this scope (e.g. in1, in2, ...)
-        const portIdSet = new Set<string>();
-        for (let i = 1; i <= numSignals; i++) {
-          portIdSet.add(`in${i}`);
-        }
-        declaredPorts.forEach(p => {
-          if (p && p.id) portIdSet.add(p.id);
-        });
-        edges.forEach(e => {
-          if (e.target === node.id && e.targetHandle) {
-            let t = e.targetHandle.replace(/_[st]$/, '');
-            if (t.startsWith(node.id + '-')) t = t.slice(node.id.length + 1);
-            if (t) portIdSet.add(t);
-          }
-        });
+        // Exact canonical ports strictly bounded by numSignals
+        const canonicalPorts = Array.from({ length: numSignals }, (_, i) => `in${i + 1}`);
 
-        // Order ports naturally (in1, in2, in3, ...)
-        const sortedPorts = Array.from(portIdSet).sort((a, b) => {
-          const numA = parseInt(a.replace(/\D/g, '')) || 0;
-          const numB = parseInt(b.replace(/\D/g, '')) || 0;
-          if (numA !== numB) return numA - numB;
-          return a.localeCompare(b);
-        });
-
-        const indices = sortedPorts.map(pId => {
+        const indices = canonicalPorts.map(pId => {
           const targetKey = `${node.id}_${pId}`;
           const edge = edges.find(e => {
-            let tPort = (e.targetHandle || 'in1').replace(/_[st]$/, '');
-            if (tPort.startsWith(e.target + '-')) {
-              tPort = tPort.slice(e.target.length + 1);
+            if (e.target === node.id) {
+              let tPort = (e.targetHandle || 'in1').replace(/_[st]$/, '');
+              if (tPort.startsWith(e.target + '-')) {
+                tPort = tPort.slice(e.target.length + 1);
+              }
+              return tPort === pId || (pId === 'in1' && (tPort === 'p' || tPort === 'in' || tPort === 'in1' || !tPort));
+            } else if (e.source === node.id) {
+              let sPort = (e.sourceHandle || 'in1').replace(/_[st]$/, '');
+              if (sPort.startsWith(e.source + '-')) {
+                sPort = sPort.slice(e.source.length + 1);
+              }
+              return sPort === pId || (pId === 'in1' && (sPort === 'p' || sPort === 'in' || sPort === 'in1' || !sPort));
             }
-            return e.target === node.id && (tPort === pId || (pId === 'in1' && (tPort === 'p' || tPort === 'in' || tPort === 'in1')));
+            return false;
           });
           
           if (edge) {
-            let srcPort = (edge.sourceHandle || 'y').replace(/_[st]$/, '');
-            if (srcPort.startsWith(edge.source + '-')) {
-              srcPort = srcPort.slice(edge.source.length + 1);
+            const isTarget = edge.target === node.id;
+            const otherNodeId = isTarget ? edge.source : edge.target;
+            const otherHandle = isTarget ? edge.sourceHandle : edge.targetHandle;
+
+            let srcPort = (otherHandle || 'y').replace(/_[st]$/, '');
+            if (srcPort.startsWith(otherNodeId + '-')) {
+              srcPort = srcPort.slice(otherNodeId.length + 1);
             }
-            const srcKey = `${edge.source}_${srcPort}`;
+            const srcKey = `${otherNodeId}_${srcPort}`;
             
             // Prefer the source component's explicit signal branch when it exists (e.g. sensors, PS blocks).
-            const sourceBranchIndices = componentBranchVarIndices.get(edge.source) || [];
-            const sourcePorts = nodePorts.get(edge.source) || [];
-            const sourceNode = nodes.find(n => n.id === edge.source);
+            const sourceBranchIndices = componentBranchVarIndices.get(otherNodeId) || [];
+            const sourcePorts = nodePorts.get(otherNodeId) || [];
+            const sourceNode = nodes.find(n => n.id === otherNodeId);
             const sourceType = (sourceNode?.data as any)?.type || sourceNode?.type || (sourceNode?.data as any)?.blockId || '';
-            const sourceSpec = getComponentSpec(edge.source, sourceType, sourcePorts);
+            const sourceSpec = getComponentSpec(otherNodeId, sourceType, sourcePorts);
             
-            const matchingBranchIdx = sourceSpec.branches.findIndex(b =>
+            let matchingBranchIdx = sourceSpec.branches.findIndex(b =>
               b.name === `signal_${srcPort}` || b.name === srcPort
             );
+            if (matchingBranchIdx === -1 && sourceBranchIndices.length > 0) {
+              if (sourceType === 'force_source' || sourceType === 'force_sensor') {
+                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'force' || b.name.includes('force'));
+              } else if (sourceType === 'torque_source' || sourceType === 'torque_sensor') {
+                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'torque' || b.name.includes('torque'));
+              } else if (sourceType === 'current_source' || sourceType === 'controlled_current' || sourceType === 'current_sensor' || sourceType === 'ideal_current_sensor') {
+                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name === 'current' || b.name.includes('current'));
+              } else if (sourceType === 'heat_src' || sourceType === 'ctrl_heat_src' || sourceType === 'temp_sensor') {
+                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name.includes('heat') || b.name.includes('signal_t'));
+              } else if (sourceType === 'mass_flow_src' || sourceType === 'ctrl_mass_flow') {
+                matchingBranchIdx = sourceSpec.branches.findIndex(b => b.name.includes('mass_flow'));
+              }
+            }
+
             if (matchingBranchIdx !== -1 && sourceBranchIndices[matchingBranchIdx] !== undefined) {
               return sourceBranchIndices[matchingBranchIdx];
             }
@@ -939,15 +945,35 @@ export class DAEAssembler {
         } else {
           // Kirchhoff Conservation node: Sum of through variables = 0
           const kn = kirchhoffNodes.find(k => k.nodeId === pn.id);
-          if (kn) {
+          if (kn && kn.throughIndices.length > 0) {
             let sum = 0;
             for (let i = 0; i < kn.throughIndices.length; i++) {
               sum += kn.signs[i] * x[kn.throughIndices[i]];
             }
-            res[acrossVarIdx] = sum;
+            // For open mechanical source-to-scope measurement nodes with no other physical loads, velocity is 0
+            const portsOnNode = rootToPorts.get(pn.id) || [];
+            const isPureSourceToScope = portsOnNode.length > 0 && portsOnNode.every(pKey => {
+              const lastIdx = pKey.lastIndexOf('_');
+              const nodeId = lastIdx !== -1 ? pKey.slice(0, lastIdx) : pKey;
+              const n = nodes.find(item => item.id === nodeId);
+              const t = (n?.data as any)?.type || n?.type || '';
+              return ['force_source', 'torque_source', 'constant', 'ps_constant', 'ps_step', 'ps_sine', 'scope', 'vlab_probe', 'conn_label'].includes(t);
+            });
+
+            if (isPureSourceToScope && (pn.domain === 'translational' || pn.domain === 'rotational') && kn.throughIndices.length === 1) {
+              res[acrossVarIdx] = x[acrossVarIdx];
+            } else {
+              res[acrossVarIdx] = sum;
+            }
           } else {
-            // Unconnected isolated node has 0 across potential
-            res[acrossVarIdx] = x[acrossVarIdx];
+            // Unconnected isolated node has reference across potential
+            if (pn.domain === 'thermal') {
+              res[acrossVarIdx] = x[acrossVarIdx] - 293.15;
+            } else if (pn.domain === 'fluid' || pn.domain === 'gas') {
+              res[acrossVarIdx] = x[acrossVarIdx] - 101325;
+            } else {
+              res[acrossVarIdx] = x[acrossVarIdx];
+            }
           }
         }
       });

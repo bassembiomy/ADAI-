@@ -411,7 +411,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "g",
             "pos": "left",
             "label": "G",
-            "domain": "physical"
+            "domain": "Physical"
           }
         ],
         "equation": "Id = f(Vgs, Vds)",
@@ -455,7 +455,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "g",
             "pos": "left",
             "label": "G",
-            "domain": "physical"
+            "domain": "Physical"
           }
         ],
         "equation": "Ic = (Vce - Vce_sat)/Rd",
@@ -1259,7 +1259,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": ""
+            "label": "A"
           }
         ],
         "equation": "V = 0",
@@ -1336,7 +1336,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": ""
+            "label": "A"
           }
         ],
         "equation": "Va + Vb + Vc = 0",
@@ -1353,7 +1353,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "top",
-            "label": ""
+            "label": "A"
           }
         ],
         "equation": "I = 0 A",
@@ -6460,7 +6460,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "u",
             "pos": "left",
-            "label": ""
+            "label": "U"
           }
         ],
         "equation": "Terminal unconnected (sink)",
@@ -7662,7 +7662,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "right",
-            "label": ""
+            "label": "A"
           }
         ],
         "description": "Defines the numerical solver parameters, integration tolerances, time-stepping, and diagnostics for the physical network.",
@@ -7679,12 +7679,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "in",
             "pos": "left",
-            "label": ""
+            "label": "In"
           },
           {
             "id": "out",
             "pos": "right",
-            "label": ""
+            "label": "Out"
           }
         ],
         "equation": "PS-Simulink Converter governing physical equation",
@@ -7701,12 +7701,12 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "in",
             "pos": "left",
-            "label": ""
+            "label": "In"
           },
           {
             "id": "out",
             "pos": "right",
-            "label": ""
+            "label": "Out"
           }
         ],
         "equation": "Simulink-PS Converter governing physical equation",
@@ -7723,7 +7723,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "in",
             "pos": "left",
-            "label": ""
+            "label": "In"
           },
           {
             "id": "out",
@@ -7751,7 +7751,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
           {
             "id": "a",
             "pos": "left",
-            "label": ""
+            "label": "A"
           }
         ],
         "equation": "Connection Label governing physical equation",
@@ -8019,7 +8019,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "ctrl",
             "pos": "left",
             "label": "In",
-            "domain": "physical"
+            "domain": "Physical"
           }
         ],
         "equation": "Ctrl Pressure Source governing physical equation",
@@ -8137,7 +8137,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "q_in",
             "pos": "left",
             "label": "Heat",
-            "domain": "physical"
+            "domain": "Physical"
           }
         ],
         "equation": "Steam Generator governing physical equation",
@@ -8216,7 +8216,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "out",
             "pos": "right",
             "label": "P",
-            "domain": "physical"
+            "domain": "Physical"
           }
         ],
         "equation": "P_out = P_p - P_n",
@@ -8244,7 +8244,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "id": "out",
             "pos": "top",
             "label": "F",
-            "domain": "physical"
+            "domain": "Physical"
           }
         ],
         "equation": "Q_out = Q_branch",
