@@ -1,6 +1,7 @@
 // src/engine/vlab/kernel/PhysicalNetworkExtractor.ts
 import { Node, Edge } from '@xyflow/react';
-import { PhysicalNetwork, PhysicalConnection, Diagnostic } from './types';
+import { PhysicalNetwork, PhysicalConnection, Diagnostic, PhysicalDomain } from './types';
+import { VLAB_LIBRARY } from '../../../utils/vlabLibrary';
 
 class DisjointSet {
   parent: Record<string, string> = {};
@@ -71,23 +72,98 @@ export class PhysicalNetworkExtractor {
     let netIdx = 1;
 
     networksMap.forEach((compIds, rootKey) => {
-      const netId = `PhysicalNetwork_electrical_${String(netIdx++).padStart(2, '0')}`;
       const netComps = nodes.filter(n => compIds.includes(n.id));
 
-      const hasGround = netComps.some(n => {
+      const compDomains = new Set<string>();
+      netComps.forEach(n => {
         const type = (n.data as any)?.type || n.type || '';
-        return type === 'electrical_reference' || type === 'ground';
+        const d = (n.data as any)?.domain;
+        if (d) {
+          compDomains.add(d.toLowerCase());
+        } else {
+          for (const dom of VLAB_LIBRARY) {
+            if (dom.blocks.some(b => b.id === type)) {
+              compDomains.add(dom.type === 'Isothermal Liquid' ? 'isothermal_liquid' : dom.type.toLowerCase());
+              break;
+            }
+          }
+        }
       });
 
-      if (!hasGround) {
-        diagnostics.push({
-          id: 'VL-REF-001',
-          severity: 'ERROR',
-          message: `Physical network "${netId}" has no electrical reference.`,
-          networkId: netId,
-          componentIds: compIds,
-          suggestedAction: 'Add an Electrical Reference block.'
+      const isIL = compDomains.has('isothermal_liquid') || netComps.some(n => {
+        const type = (n.data as any)?.type || n.type || '';
+        return type.endsWith('_il') || type === 'hydraulic_reference_il' || type === 'reservoir_il';
+      });
+
+      const netDomain: PhysicalDomain = isIL ? 'isothermal_liquid' : 'electrical';
+      const netId = `PhysicalNetwork_${netDomain}_${String(netIdx++).padStart(2, '0')}`;
+
+      let hasRef = false;
+      if (isIL) {
+        hasRef = netComps.some(n => {
+          const type = (n.data as any)?.type || n.type || '';
+          return type === 'hydraulic_reference_il' || type === 'reservoir_il';
         });
+
+        if (!hasRef) {
+          diagnostics.push({
+            id: 'VL-REF-IL-001',
+            severity: 'ERROR',
+            message: `Isothermal Liquid network has no pressure reference. Add a Hydraulic Reference (IL), Reservoir (IL), or another pressure boundary.`,
+            networkId: netId,
+            componentIds: compIds,
+            suggestedAction: 'Add a Hydraulic Reference (IL) block.'
+          });
+        }
+
+        // Check for conflicting ideal pressure references connected to the same node
+        const refComps = netComps.filter(n => {
+          const type = (n.data as any)?.type || n.type || '';
+          return type === 'hydraulic_reference_il' || type === 'reservoir_il';
+        });
+
+        if (refComps.length > 1) {
+          for (let i = 0; i < refComps.length; i++) {
+            for (let j = i + 1; j < refComps.length; j++) {
+              const r1 = refComps[i];
+              const r2 = refComps[j];
+              const isDirectlyConnected = edges.some(e =>
+                (e.source === r1.id && e.target === r2.id) ||
+                (e.source === r2.id && e.target === r1.id)
+              );
+              if (isDirectlyConnected) {
+                const p1 = Number((r1.data as any)?.params?.referencePressure?.value ?? (r1.data as any)?.params?.referencePressure ?? 101325);
+                const p2 = Number((r2.data as any)?.params?.referencePressure?.value ?? (r2.data as any)?.params?.referencePressure ?? 101325);
+                if (p1 !== p2) {
+                  diagnostics.push({
+                    id: 'VL-OVERCONSTRAINT-001',
+                    severity: 'ERROR',
+                    message: `Conflicting ideal pressure references connected to the same node (overconstraint).`,
+                    networkId: netId,
+                    componentIds: [r1.id, r2.id],
+                    suggestedAction: 'Ensure connected pressure references have identical pressures or are separated by a hydraulic component.'
+                  });
+                }
+              }
+            }
+          }
+        }
+      } else {
+        hasRef = netComps.some(n => {
+          const type = (n.data as any)?.type || n.type || '';
+          return type === 'electrical_reference' || type === 'ground';
+        });
+
+        if (!hasRef) {
+          diagnostics.push({
+            id: 'VL-REF-001',
+            severity: 'ERROR',
+            message: `Physical network "${netId}" has no electrical reference.`,
+            networkId: netId,
+            componentIds: compIds,
+            suggestedAction: 'Add an Electrical Reference block.'
+          });
+        }
       }
 
       let assignedSolverConfigId: string | undefined;
@@ -115,11 +191,11 @@ export class PhysicalNetworkExtractor {
 
       networks.push({
         id: netId,
-        domains: ['electrical'],
+        domains: [netDomain],
         componentIds: compIds,
         portIds: [],
         nodeIds: [rootKey],
-        referenceNodeIds: hasGround ? ['gnd_node'] : [],
+        referenceNodeIds: hasRef ? [isIL ? 'il_ref_node' : 'gnd_node'] : [],
         connections,
         solverConfigurationId: assignedSolverConfigId,
         topologyHash: compIds.sort().join('_')
