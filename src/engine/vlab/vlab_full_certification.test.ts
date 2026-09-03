@@ -254,6 +254,104 @@ const collectEquationIssues = (): CertificationIssue[] => {
   return issues;
 };
 
+const blockById = new Map(inventory.map(({ block }) => [block.id, block]));
+
+const makeNode = (id: string, blockId: string, overrides: Record<string, number> = {}): Node => {
+  const block = blockById.get(blockId);
+  if (!block) throw new Error(`Unknown connected-case block ${blockId}`);
+  const params = structuredClone(block.params);
+  for (const [name, value] of Object.entries(overrides)) {
+    params[name] = params[name] ? { ...params[name], value } : { value, unit: '1', label: name };
+  }
+  const domain = inventory.find((entry) => entry.block.id === blockId)?.domain;
+  return { id, type: 'default', position: { x: 0, y: 0 }, data: { type: blockId, params, ports: block.ports, domain } } as Node;
+};
+
+const makeEdge = (
+  id: string,
+  source: string,
+  target: string,
+  sourceHandle: string,
+  targetHandle: string,
+): Edge => ({ id, source, target, sourceHandle, targetHandle });
+
+interface ConnectedCase {
+  name: string;
+  nodes: Node[];
+  edges: Edge[];
+  dt: number;
+  steps: number;
+}
+
+const connectedCases = (): ConnectedCase[] => [
+  {
+    name: 'electrical', dt: 1e-4, steps: 20,
+    nodes: [makeNode('src', 'dc_voltage', { V: 12 }), makeNode('r', 'resistor', { R: 100 }), makeNode('g', 'ground')],
+    edges: [makeEdge('e1', 'src', 'r', 'p', 'p'), makeEdge('e2', 'r', 'g', 'n', 'a'), makeEdge('e3', 'src', 'g', 'n', 'a')],
+  },
+  {
+    name: 'translational', dt: 1e-3, steps: 20,
+    nodes: [makeNode('src', 'force_source', { F: 10 }), makeNode('m', 'mass', { m: 1 }), makeNode('d', 'trans_damper', { b: 5 }), makeNode('ref', 'trans_ref')],
+    edges: [makeEdge('e1', 'src', 'm', 'a', 'p'), makeEdge('e2', 'src', 'ref', 'b', 'p'), makeEdge('e3', 'm', 'd', 'p', 'r'), makeEdge('e4', 'd', 'ref', 'c', 'p')],
+  },
+  {
+    name: 'rotational', dt: 1e-3, steps: 20,
+    nodes: [makeNode('src', 'torque_source', { T: 5 }), makeNode('j', 'inertia', { J: 0.01 }), makeNode('d', 'rot_damper', { b: 0.1 }), makeNode('ref', 'rot_ref')],
+    edges: [makeEdge('e1', 'src', 'j', 'r', 'r'), makeEdge('e2', 'src', 'ref', 'c', 'r'), makeEdge('e3', 'j', 'd', 'r', 'r'), makeEdge('e4', 'd', 'ref', 'c', 'r')],
+  },
+  {
+    name: 'thermal', dt: 0.01, steps: 20,
+    nodes: [makeNode('src', 'temp_src', { T: 350 }), makeNode('c', 'conductive_heat', { k: 2 }), makeNode('ref', 'thermal_ref')],
+    edges: [makeEdge('e1', 'src', 'c', 'a', 'a'), makeEdge('e2', 'c', 'ref', 'b', 'a')],
+  },
+  {
+    name: 'fluid', dt: 0.005, steps: 20,
+    nodes: [makeNode('src', 'pressure_source', { P: 106325 }), makeNode('pipe', 'fluid_resistance', { Rf: 100000 }), makeNode('ref', 'fluid_ref')],
+    edges: [makeEdge('e1', 'src', 'pipe', 'p', 'p'), makeEdge('e2', 'pipe', 'ref', 'n', 'p')],
+  },
+  {
+    name: 'gas', dt: 0.002, steps: 20,
+    nodes: [makeNode('src', 'gas_pressure_source', { P: 200000 }), makeNode('r', 'gas_resistance', { k: 2e-5 }), makeNode('ref', 'gas_ref')],
+    edges: [makeEdge('e1', 'src', 'r', 'b', 'a'), makeEdge('e2', 'r', 'ref', 'b', 'g')],
+  },
+  {
+    name: 'magnetic', dt: 0.001, steps: 20,
+    nodes: [makeNode('src', 'mag_mmf_source', { MMF: 500 }), makeNode('core', 'reluctance', { R: 1000000 }), makeNode('ref', 'mag_ref')],
+    edges: [makeEdge('e1', 'src', 'core', 's', 'n'), makeEdge('e2', 'core', 'ref', 's', 'n')],
+  },
+  {
+    name: 'signal-control', dt: 0.002, steps: 20,
+    nodes: [makeNode('src', 'ps_constant', { value: 3 }), makeNode('gain', 'ps_gain', { gain: 2 }), makeNode('scope', 'scope')],
+    edges: [makeEdge('e1', 'src', 'gain', 'y', 'u'), makeEdge('e2', 'gain', 'scope', 'y', 'in1')],
+  },
+  {
+    name: 'electromechanical', dt: 0.001, steps: 20,
+    nodes: [makeNode('src', 'dc_voltage', { V: 24 }), makeNode('motor', 'dc_motor', { Ra: 2, La: 0.005, Ke: 0.1, J: 0.01 }), makeNode('g', 'ground'), makeNode('ref', 'rot_ref')],
+    edges: [makeEdge('e1', 'src', 'motor', 'p', 'p'), makeEdge('e2', 'motor', 'g', 'n', 'a'), makeEdge('e3', 'motor', 'ref', 'r', 'r')],
+  },
+];
+
+const collectConnectedIssues = (): CertificationIssue[] => {
+  const issues: CertificationIssue[] = [];
+  for (const connected of connectedCases()) {
+    const engine = new VLabPhysicsEngine();
+    let state: { x: number[] } | null = null;
+    try {
+      for (let step = 0; step < connected.steps; step += 1) {
+        state = engine.simulateStep(connected.nodes, connected.edges, state as never, connected.dt);
+        if (!state?.x.every(Number.isFinite)) {
+          issues.push(issue(connected.name, '(model)', 'connected', `non-finite state at step ${step}`));
+          break;
+        }
+      }
+      if (!state || state.x.length === 0) issues.push(issue(connected.name, '(model)', 'connected', 'model produced no state vector'));
+    } catch (error) {
+      issues.push(issue(connected.name, '(model)', 'connected', `simulation threw: ${error instanceof Error ? error.message : String(error)}`));
+    }
+  }
+  return issues;
+};
+
 describe('V-Lab full certification', () => {
   it('certifies the complete live catalog in both directions', () => {
     const issues = collectCatalogIssues();
@@ -290,6 +388,11 @@ describe('V-Lab full certification', () => {
     springResiduals.forEach((residual) => expectNear(residual, 0));
     expectNear(blockEquations.rot_damper({ ...args, across: [50, 0], branch: [5], params: { b: 0.1 } })[0], 0);
     expectNear(blockEquations.ps_gain({ ...args, across: [3], branch: [6], params: { gain: 2 } })[0], 0);
+  });
+
+  it('runs a finite connected reference model for every behavior group', { timeout: 120_000 }, () => {
+    const issues = collectConnectedIssues();
+    expect(issues, formatIssues(issues)).toEqual([]);
   });
 });
 

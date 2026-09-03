@@ -29,6 +29,7 @@
     "test:project-files": "node src/projectFiles/projectFileService.test.cjs && node src/projectFiles/windowsFileAssociation.test.cjs && node src/projectFiles/squirrelLifecycle.test.cjs && node src/projectFiles/projectFileController.test.cjs",
     "register-associations": "node scripts/register_file_association.cjs",
     "test:vlab": "vitest run src/engine/vlab/vlab_validation.test.ts src/engine/vlab/vlab.test.ts src/engine/vlab/labs_sim.test.ts src/engine/vlab/check_missing_math.test.ts",
+    "test:vlab:full": "vitest run src/engine/vlab/vlab_full_certification.test.ts --reporter=verbose",
     "test:vlab:connected": "vitest run src/engine/vlab/vlab_connected_models.test.ts --reporter=verbose",
     "test:vlab:all-blocks": "vitest run src/engine/vlab/test_all_blocks_scope.test.ts --reporter=dot",
     "test:vlab:professional": "tsx scripts/run_vlab_math_test.ts",

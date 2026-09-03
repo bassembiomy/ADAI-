@@ -727,7 +727,7 @@ export class DAEAssembler {
     // Scan for reference components (e.g. ground, rot_ref, etc.)
     nodes.forEach(node => {
       const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
-      if (['ground', 'rot_ref', 'trans_ref', 'thermal_ref', 'mag_ref', 'gas_ref', 'ma_ref', 'delta_ref'].includes(type)) {
+      if (['ground', 'rot_ref', 'trans_ref', 'thermal_ref', 'mag_ref', 'gas_ref', 'ma_ref', 'delta_ref', 'fluid_ref'].includes(type)) {
         const ports = nodePorts.get(node.id) || [];
         ports.forEach(portId => {
           const key = `${node.id}_${portId}`;
