@@ -954,8 +954,15 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
   const [isPaused, setIsPaused] = useState(false);
   const [simTime, setSimTime] = useState(0);
   const simTimeRef = useRef<number>(0);
+  const simPhysicsStateRef = useRef<any>(null);
   const [vlabLimitInput, setVlabLimitInput] = useState('');
   const vlabLimitRef = useRef<number | null>(null);
+  const [simSpeed, setSimSpeed] = useState<number>(1);
+  const simSpeedRef = useRef<number>(1);
+
+  useEffect(() => {
+    simSpeedRef.current = Math.max(1, Math.min(5, simSpeed));
+  }, [simSpeed]);
 
   useEffect(() => {
     const val = parseFloat(vlabLimitInput);
@@ -1253,7 +1260,6 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
    */
   const buildSimEngine = useCallback(() => {
     const engine = new VLabPhysicsEngine();
-    let state: any = null;
     let useFallback = false;
 
     // Helper: get a param value from a node by id for the fallback
@@ -1529,8 +1535,8 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     return (t: number, dt: number) => {
       if (!useFallback) {
         try {
-          const result = engine.simulateStep(nodes, edges, state, dt);
-          state = result;
+          const result = engine.simulateStep(nodes, edges, simPhysicsStateRef.current, dt);
+          simPhysicsStateRef.current = result;
           if (result && result.scopeValues !== undefined && result.scopeValues !== null) {
             if (result.perScopeValues) {
               const val = result.scopeValues;
@@ -1565,138 +1571,142 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
 
     const interval = setInterval(() => {
       try {
-        const currentT = simTimeRef.current;
-        const limit = getEffectiveLimit();
+        const stepsToRun = Math.max(1, Math.min(5, simSpeedRef.current || 1));
+        for (let s = 0; s < stepsToRun; s++) {
+          const currentT = simTimeRef.current;
+          const limit = getEffectiveLimit();
 
-        if (limit !== null && currentT >= limit - 1e-9) {
-          setIsSimulating(false);
-          clearInterval(interval);
-          setStatus({ message: `Simulation reached limit of ${limit}s.`, type: 'success' });
-          return;
-        }
-
-        const dt = limit !== null ? Math.min(DT, Math.max(0, limit - currentT)) : DT;
-        if (dt <= 1e-12) {
-          setIsSimulating(false);
-          clearInterval(interval);
-          setStatus({ message: `Simulation reached limit of ${limit}s.`, type: 'success' });
-          return;
-        }
-
-        const val = step(currentT, dt);
-        const nextT = parseFloat((currentT + dt).toFixed(6));
-        simTimeRef.current = nextT;
-        setSimTime(nextT);
-
-        if (val !== null && val !== undefined) {
-          stepCount++;
-
-          const scopeParams = scopeParamsRef.current || {};
-          const decimation = Number(scopeParams.decimation?.value) || 1;
-          const sampleTime = scopeParams.sample_time?.value !== undefined ? Number(scopeParams.sample_time.value) : -1;
-          const limitDataPoints = scopeParams.limit_data_points?.value !== 'off';
-          const bufferSize = Number(scopeParams.buffer_size?.value) || 1000;
-
-          let shouldSample = true;
-          if (decimation > 1 && (stepCount % decimation !== 0)) {
-            shouldSample = false;
+          if (limit !== null && currentT >= limit - 1e-9) {
+            setIsSimulating(false);
+            clearInterval(interval);
+            setStatus({ message: `Simulation reached limit of ${limit}s.`, type: 'success' });
+            return;
           }
 
-          if (sampleTime > 0) {
-            if (currentT - lastSampleTime < sampleTime - 1e-9 && lastSampleTime > 0) {
+          const dt = limit !== null ? Math.min(DT, Math.max(0, limit - currentT)) : DT;
+          if (dt <= 1e-12) {
+            setIsSimulating(false);
+            clearInterval(interval);
+            setStatus({ message: `Simulation reached limit of ${limit}s.`, type: 'success' });
+            return;
+          }
+
+          const val = step(currentT, dt);
+          const nextT = parseFloat((currentT + dt).toFixed(6));
+          simTimeRef.current = nextT;
+
+          if (val !== null && val !== undefined) {
+            stepCount++;
+
+            const scopeParams = scopeParamsRef.current || {};
+            const decimation = Number(scopeParams.decimation?.value) || 1;
+            const sampleTime = scopeParams.sample_time?.value !== undefined ? Number(scopeParams.sample_time.value) : -1;
+            const limitDataPoints = scopeParams.limit_data_points?.value !== 'off';
+            const bufferSize = Number(scopeParams.buffer_size?.value) || 1000;
+
+            let shouldSample = true;
+            if (decimation > 1 && (stepCount % decimation !== 0)) {
               shouldSample = false;
-            }
-          }
-
-          if (shouldSample) {
-            setScopeData(prev => {
-              let newPoint: any;
-              if (typeof val === 'number') {
-                if (!Number.isFinite(val)) return prev;
-                const num = parseFloat(val.toFixed(6));
-                newPoint = { time: parseFloat(nextT.toFixed(3)), value: num, in1: num };
-              } else {
-                const entries = Object.entries(val)
-                  .filter(([k]) => k !== '__perScope')
-                  .map(([k, v]) => {
-                    const numVal = parseFloat((v as number).toFixed(6));
-                    return [k, Number.isFinite(numVal) ? numVal : 0];
-                  });
-                const obj = Object.fromEntries(entries);
-                const values = Object.values(obj) as number[];
-                newPoint = {
-                  time: parseFloat(nextT.toFixed(3)),
-                  ...obj,
-                  in1: obj.in1 !== undefined ? obj.in1 : (obj.value !== undefined ? obj.value : (values[0] ?? 0)),
-                  in2: obj.in2 !== undefined ? obj.in2 : (values[1] ?? 0),
-                  in3: obj.in3 !== undefined ? obj.in3 : (values[2] ?? 0),
-                  in4: obj.in4 !== undefined ? obj.in4 : (values[3] ?? 0),
-                  in5: obj.in5 !== undefined ? obj.in5 : (values[4] ?? 0),
-                  in6: obj.in6 !== undefined ? obj.in6 : (values[5] ?? 0),
-                  in7: obj.in7 !== undefined ? obj.in7 : (values[6] ?? 0),
-                  in8: obj.in8 !== undefined ? obj.in8 : (values[7] ?? 0),
-                };
-              }
-              
-              const next = [...prev, newPoint];
-              if (limitDataPoints) {
-                return next.slice(-bufferSize);
-              }
-              return next.slice(-20000); // safety cap
-            });
-
-            // Route per-scope data from engine
-            if (val && typeof val === 'object' && val.__perScope) {
-              const perScope = val.__perScope as Record<string, any>;
-              setPerScopeData(prevMap => {
-                const nextMap = { ...prevMap };
-                for (const [scopeId, scopeVal] of Object.entries(perScope)) {
-                  let point: any;
-                  if (typeof scopeVal === 'number') {
-                    if (!Number.isFinite(scopeVal)) continue;
-                    const num = parseFloat(scopeVal.toFixed(6));
-                    point = { time: parseFloat(nextT.toFixed(3)), value: num, in1: num };
-                  } else {
-                    const entries = Object.entries(scopeVal)
-                      .filter(([k]) => k !== '__perScope')
-                      .map(([k, v]) => {
-                        const numVal = parseFloat((v as number).toFixed(6));
-                        return [k, Number.isFinite(numVal) ? numVal : 0];
-                      });
-                    const obj = Object.fromEntries(entries);
-                    const values = Object.values(obj) as number[];
-                    point = {
-                      time: parseFloat(nextT.toFixed(3)),
-                      ...obj,
-                      in1: obj.in1 !== undefined ? obj.in1 : (obj.value !== undefined ? obj.value : (values[0] ?? 0)),
-                      in2: obj.in2 !== undefined ? obj.in2 : (values[1] ?? 0),
-                      in3: obj.in3 !== undefined ? obj.in3 : (values[2] ?? 0),
-                      in4: obj.in4 !== undefined ? obj.in4 : (values[3] ?? 0),
-                      in5: obj.in5 !== undefined ? obj.in5 : (values[4] ?? 0),
-                      in6: obj.in6 !== undefined ? obj.in6 : (values[5] ?? 0),
-                      in7: obj.in7 !== undefined ? obj.in7 : (values[6] ?? 0),
-                      in8: obj.in8 !== undefined ? obj.in8 : (values[7] ?? 0),
-                    };
-                  }
-                  const prev = nextMap[scopeId] || [];
-                  const next = [...prev, point];
-                  nextMap[scopeId] = limitDataPoints ? next.slice(-bufferSize) : next.slice(-20000);
-                }
-                return nextMap;
-              });
             }
 
             if (sampleTime > 0) {
-              lastSampleTime = nextT;
+              if (currentT - lastSampleTime < sampleTime - 1e-9 && lastSampleTime > 0) {
+                shouldSample = false;
+              }
+            }
+
+            if (shouldSample) {
+              setScopeData(prev => {
+                let newPoint: any;
+                if (typeof val === 'number') {
+                  if (!Number.isFinite(val)) return prev;
+                  const num = parseFloat(val.toFixed(6));
+                  newPoint = { time: parseFloat(nextT.toFixed(3)), value: num, in1: num };
+                } else {
+                  const entries = Object.entries(val)
+                    .filter(([k]) => k !== '__perScope')
+                    .map(([k, v]) => {
+                      const numVal = parseFloat((v as number).toFixed(6));
+                      return [k, Number.isFinite(numVal) ? numVal : 0];
+                    });
+                  const obj = Object.fromEntries(entries);
+                  const values = Object.values(obj) as number[];
+                  newPoint = {
+                    time: parseFloat(nextT.toFixed(3)),
+                    ...obj,
+                    in1: obj.in1 !== undefined ? obj.in1 : (obj.value !== undefined ? obj.value : (values[0] ?? 0)),
+                    in2: obj.in2 !== undefined ? obj.in2 : (values[1] ?? 0),
+                    in3: obj.in3 !== undefined ? obj.in3 : (values[2] ?? 0),
+                    in4: obj.in4 !== undefined ? obj.in4 : (values[3] ?? 0),
+                    in5: obj.in5 !== undefined ? obj.in5 : (values[4] ?? 0),
+                    in6: obj.in6 !== undefined ? obj.in6 : (values[5] ?? 0),
+                    in7: obj.in7 !== undefined ? obj.in7 : (values[6] ?? 0),
+                    in8: obj.in8 !== undefined ? obj.in8 : (values[7] ?? 0),
+                  };
+                }
+                
+                const next = [...prev, newPoint];
+                if (limitDataPoints) {
+                  return next.slice(-bufferSize);
+                }
+                return next.slice(-20000); // safety cap
+              });
+
+              // Route per-scope data from engine
+              if (val && typeof val === 'object' && val.__perScope) {
+                const perScope = val.__perScope as Record<string, any>;
+                setPerScopeData(prevMap => {
+                  const nextMap = { ...prevMap };
+                  for (const [scopeId, scopeVal] of Object.entries(perScope)) {
+                    let point: any;
+                    if (typeof scopeVal === 'number') {
+                      if (!Number.isFinite(scopeVal)) continue;
+                      const num = parseFloat(scopeVal.toFixed(6));
+                      point = { time: parseFloat(nextT.toFixed(3)), value: num, in1: num };
+                    } else {
+                      const entries = Object.entries(scopeVal)
+                        .filter(([k]) => k !== '__perScope')
+                        .map(([k, v]) => {
+                          const numVal = parseFloat((v as number).toFixed(6));
+                          return [k, Number.isFinite(numVal) ? numVal : 0];
+                        });
+                      const obj = Object.fromEntries(entries);
+                      const values = Object.values(obj) as number[];
+                      point = {
+                        time: parseFloat(nextT.toFixed(3)),
+                        ...obj,
+                        in1: obj.in1 !== undefined ? obj.in1 : (obj.value !== undefined ? obj.value : (values[0] ?? 0)),
+                        in2: obj.in2 !== undefined ? obj.in2 : (values[1] ?? 0),
+                        in3: obj.in3 !== undefined ? obj.in3 : (values[2] ?? 0),
+                        in4: obj.in4 !== undefined ? obj.in4 : (values[3] ?? 0),
+                        in5: obj.in5 !== undefined ? obj.in5 : (values[4] ?? 0),
+                        in6: obj.in6 !== undefined ? obj.in6 : (values[5] ?? 0),
+                        in7: obj.in7 !== undefined ? obj.in7 : (values[6] ?? 0),
+                        in8: obj.in8 !== undefined ? obj.in8 : (values[7] ?? 0),
+                      };
+                    }
+                    const prev = nextMap[scopeId] || [];
+                    const next = [...prev, point];
+                    nextMap[scopeId] = limitDataPoints ? next.slice(-bufferSize) : next.slice(-20000);
+                  }
+                  return nextMap;
+                });
+              }
+
+              if (sampleTime > 0) {
+                lastSampleTime = nextT;
+              }
             }
           }
-        }
 
-        if (limit !== null && nextT >= limit - 1e-9) {
-          setIsSimulating(false);
-          clearInterval(interval);
-          setStatus({ message: `Simulation reached limit of ${limit}s.`, type: 'success' });
+          if (limit !== null && nextT >= limit - 1e-9) {
+            setIsSimulating(false);
+            clearInterval(interval);
+            setStatus({ message: `Simulation reached limit of ${limit}s.`, type: 'success' });
+            return;
+          }
         }
+        setSimTime(simTimeRef.current);
       } catch (err) {
         console.error("Simulation step failed:", err);
         setIsSimulating(false);
@@ -1958,6 +1968,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     setIsSimulating(true);
     setIsPaused(false);
     simTimeRef.current = 0;
+    simPhysicsStateRef.current = null;
     setSimTime(0);
     setScopeData([]);
     setPerScopeData({});
@@ -1972,9 +1983,88 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
       const sourceData = sourceNode.data as any;
       const targetData = targetNode.data as any;
 
-      const sPortId = params.sourceHandle?.split('-').pop()?.replace(/_[st]$/, '');
-      const tPortId = params.targetHandle?.split('-').pop()?.replace(/_[st]$/, '');
+      // Extract port IDs stripping handle prefixes
+      let sPortId = (params.sourceHandle || '').replace(/_[st]$/, '');
+      if (sPortId.startsWith(params.source + '-')) {
+        sPortId = sPortId.slice(params.source.length + 1);
+      }
+      let tPortId = (params.targetHandle || '').replace(/_[st]$/, '');
+      if (tPortId.startsWith(params.target + '-')) {
+        tPortId = tPortId.slice(params.target.length + 1);
+      }
       
+      // Strict scope channel limit enforcement (supports connections in either direction)
+      const isTargetScope = targetData.type === 'scope';
+      const isSourceScope = sourceData.type === 'scope';
+
+      if (isTargetScope || isSourceScope) {
+        const scopeNode = isTargetScope ? targetNode : sourceNode;
+        const scopeData = isTargetScope ? targetData : sourceData;
+        const scopeId = scopeNode.id;
+        let scopePortId = isTargetScope ? tPortId : sPortId;
+
+        const numChannels = Math.max(1, Math.min(8, Number(scopeData.params?.numSignals?.value) || (scopeData.ports?.length || 1)));
+
+        // If no explicit handle was given, find the first available unconnected channel
+        if (!scopePortId) {
+          const usedPorts = new Set(
+            edges
+              .filter(e => e.target === scopeId || e.source === scopeId)
+              .map(e => {
+                const h = (e.target === scopeId ? e.targetHandle : e.sourceHandle) || '';
+                let p = h.replace(/_[st]$/, '');
+                if (p.startsWith(scopeId + '-')) p = p.slice(scopeId.length + 1);
+                return p;
+              })
+          );
+          for (let i = 1; i <= numChannels; i++) {
+            if (!usedPorts.has(`in${i}`)) {
+              scopePortId = `in${i}`;
+              if (isTargetScope) {
+                params.targetHandle = `${scopeId}-in${i}`;
+              } else {
+                params.sourceHandle = `${scopeId}-in${i}`;
+              }
+              break;
+            }
+          }
+        }
+
+        const chNum = parseInt(scopePortId.replace(/\D/g, '')) || 1;
+
+        if (chNum > numChannels) {
+          setStatus({
+            message: `Scope '${scopeData.label || 'Scope'}' is configured for ${numChannels} channel(s). Increase 'Number of Input Ports' in properties to connect to Channel ${chNum}.`,
+            type: 'error'
+          });
+          setTimeout(() => setStatus(s => s.type === 'error' ? { message: 'System Ready', type: 'idle' } : s), 5000);
+          return; // Block excess channel connection
+        }
+
+        const alreadyConnected = edges.some(e => {
+          if (e.target === scopeId) {
+            let p = (e.targetHandle || '').replace(/_[st]$/, '');
+            if (p.startsWith(scopeId + '-')) p = p.slice(scopeId.length + 1);
+            return p === scopePortId;
+          }
+          if (e.source === scopeId) {
+            let p = (e.sourceHandle || '').replace(/_[st]$/, '');
+            if (p.startsWith(scopeId + '-')) p = p.slice(scopeId.length + 1);
+            return p === scopePortId;
+          }
+          return false;
+        });
+
+        if (alreadyConnected) {
+          setStatus({
+            message: `Channel ${chNum} on Scope '${scopeData.label || 'Scope'}' is already connected. Disconnect existing wire first.`,
+            type: 'error'
+          });
+          setTimeout(() => setStatus(s => s.type === 'error' ? { message: 'System Ready', type: 'idle' } : s), 5000);
+          return;
+        }
+      }
+
       const sourcePort = sourceData.ports?.find((p: any) => p.id === sPortId);
       const targetPort = targetData.ports?.find((p: any) => p.id === tPortId);
 
@@ -2487,6 +2577,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
             label: `${i + 1}`,
             domain: 'Physical'
           }));
+          // Prune any incoming edges to channels exceeding new capacity
+          setEdges(eds => eds.filter(e => {
+            if (e.target !== n.id) return true;
+            let t = (e.targetHandle || '').replace(/_[st]$/, '');
+            if (t.startsWith(n.id + '-')) t = t.slice(n.id.length + 1);
+            const ch = parseInt(t.replace(/\D/g, '')) || 1;
+            return ch <= num;
+          }));
         }
 
         if ((n.data.type === 'solver_config' || n.data.type === 'solver_configuration') && paramKey === 'stopTime') {
@@ -2652,6 +2750,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               onClick={() => {
                 setIsSimulating(false);
                 setIsPaused(false);
+                simPhysicsStateRef.current = null;
                 setStatus({ message: 'Simulation stopped.', type: 'info' });
                 setTimeout(() => setStatus({ message: 'System Ready', type: 'idle' }), 3000);
               }}
@@ -3456,15 +3555,24 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 <option value="physical">Physical Signal</option>
                               </select>
                             ) : (
-                              <input
-                                type={typeof (param.value ?? 0) === 'number' ? "number" : "text"}
-                                value={param.value ?? ''}
-                                onChange={(e) => {
-                                  const val = typeof (param.value ?? 0) === 'number' ? parseFloat(e.target.value) : e.target.value;
-                                  updateParameter(key, val);
-                                }}
-                                className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none"
-                              />
+                              (() => {
+                                const isPositivePhysical = ['C', 'heat_capacity', 'mass', 'm', 'R', 'resistance', 'k', 'conductivity', 'L', 'inductance', 'b', 'damping', 'J', 'inertia'].includes(key);
+                                return (
+                                  <input
+                                    type={typeof (param.value ?? 0) === 'number' ? "number" : "text"}
+                                    min={isPositivePhysical ? 0 : undefined}
+                                    value={param.value ?? ''}
+                                    onChange={(e) => {
+                                      let val = typeof (param.value ?? 0) === 'number' ? parseFloat(e.target.value) : e.target.value;
+                                      if (isPositivePhysical && typeof val === 'number' && !isNaN(val) && val < 0) {
+                                        val = 0;
+                                      }
+                                      updateParameter(key, val);
+                                    }}
+                                    className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-purple-500 outline-none"
+                                  />
+                                );
+                              })()
                             )}
                           </div>
                         ))}
@@ -3625,6 +3733,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                       label: `${i + 1}`,
                       domain: 'Physical'
                     }));
+                    // Prune any incoming edges to channels exceeding new capacity
+                    setEdges(eds => eds.filter(e => {
+                      if (e.target !== scopeId) return true;
+                      let t = (e.targetHandle || '').replace(/_[st]$/, '');
+                      if (t.startsWith(scopeId + '-')) t = t.slice(scopeId.length + 1);
+                      const ch = parseInt(t.replace(/\D/g, '')) || 1;
+                      return ch <= num;
+                    }));
                   }
                   return { ...n, data: updatedData };
                 }
@@ -3632,6 +3748,12 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
               }));
             }}
             onClose={() => setOpenScopes(prev => prev.filter(id => id !== scopeId))}
+            onClear={() => {
+              setPerScopeData(prev => ({ ...prev, [scopeId]: [] }));
+              setScopeData([]);
+            }}
+            simSpeed={simSpeed}
+            onSpeedChange={setSimSpeed}
           />
         );
       })}
