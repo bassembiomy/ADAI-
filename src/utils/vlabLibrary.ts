@@ -8268,7 +8268,7 @@ export const VLAB_LIBRARY: VLabDomain[] = [
             "label": "Model Type"
           },
           "equation": {
-            "value": "",
+            "value": "Y = f(X1, X2, ...)",
             "unit": "",
             "label": "Equation"
           }
