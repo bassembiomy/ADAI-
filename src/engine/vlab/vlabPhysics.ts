@@ -77,7 +77,7 @@ export class VLabPhysicsEngine {
             }
           }
           x[idx] = T_init;
-        } else if (name.includes('(fluid)') || name.includes('(gas)')) {
+        } else if (name.includes('(fluid)') || name.includes('(gas)') || name.includes('(isothermal_liquid)')) {
           x[idx] = 101325;
         } else if (name.includes('_state_')) {
           const parts = name.split('_state_');
@@ -531,6 +531,7 @@ export class VLabPhysicsEngine {
       prevDt: lastDt,
       time: tTarget,
       systemSize: system.systemSize,
+      variableNames: system.variableNames,
       scopeValues,
       perScopeValues,
       useSdirk

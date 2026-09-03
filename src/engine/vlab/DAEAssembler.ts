@@ -579,10 +579,6 @@ export class DAEAssembler {
           branches.push({ name: 'flow_in', ports: [{ id: 'pin', sign: -1 }] });
           branches.push({ name: 'flow_out', ports: [{ id: 'pout', sign: 1 }] });
           break;
-        case 'hydraulic_reference_il':
-        case 'reservoir_il':
-          branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }] });
-          break;
         case 'pump_il':
         case 'pipe_il':
         case 'restriction_il':

@@ -1793,39 +1793,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   // ── ISOTHERMAL LIQUID DOMAIN ───────────────────────────────────────────────
-  hydraulic_reference_il: ({ across, params }) => {
-    const pRef = Number(params?.referencePressure?.value ?? params?.referencePressure ?? 101325);
-    const pRefUnit = (params?.referencePressure?.unit || 'Pa') as any;
-    const pType = String(params?.pressureType?.value ?? params?.pressureType ?? 'absolute');
-    const pAtm = Number(params?.atmosphericPressure?.value ?? params?.atmosphericPressure ?? 101325);
-    const pAtmUnit = (params?.atmosphericPressure?.unit || 'Pa') as any;
-    const elevCorr = String(params?.elevationCorrection?.value ?? params?.elevationCorrection) === 'true';
-    const zRef = Number(params?.referenceElevation?.value ?? params?.referenceElevation ?? 0);
-    const zRefUnit = (params?.referenceElevation?.unit || 'm') as any;
-    const zA = Number(params?.portElevation?.value ?? params?.portElevation ?? 0);
-    const zAUnit = (params?.portElevation?.unit || 'm') as any;
-
-    const pAbs = computeAbsoluteReferencePressure(pRef, pRefUnit, pType as any, pAtm, pAtmUnit);
-    const pTarget = computeEffectivePortPressure(pAbs, elevCorr, zRef, zRefUnit, zA, zAUnit);
-    return [across[0] - pTarget];
-  },
-
-  reservoir_il: ({ across, params }) => {
-    const pRef = Number(params?.referencePressure?.value ?? params?.referencePressure ?? 101325);
-    const pRefUnit = (params?.referencePressure?.unit || 'Pa') as any;
-    const pType = String(params?.pressureType?.value ?? params?.pressureType ?? 'absolute');
-    const pAtm = Number(params?.atmosphericPressure?.value ?? params?.atmosphericPressure ?? 101325);
-    const pAtmUnit = (params?.atmosphericPressure?.unit || 'Pa') as any;
-    const elevCorr = String(params?.elevationCorrection?.value ?? params?.elevationCorrection) === 'true';
-    const zRef = Number(params?.referenceElevation?.value ?? params?.referenceElevation ?? 0);
-    const zRefUnit = (params?.referenceElevation?.unit || 'm') as any;
-    const zA = Number(params?.portElevation?.value ?? params?.portElevation ?? 0);
-    const zAUnit = (params?.portElevation?.unit || 'm') as any;
-
-    const pAbs = computeAbsoluteReferencePressure(pRef, pRefUnit, pType as any, pAtm, pAtmUnit);
-    const pTarget = computeEffectivePortPressure(pAbs, elevCorr, zRef, zRefUnit, zA, zAUnit);
-    return [across[0] - pTarget];
-  },
+  hydraulic_reference_il: () => [],
+  reservoir_il: () => [],
 
   pump_il: ({ across, branch, params }) => {
     const dp = Number(params?.pressure_rise?.value ?? params?.pressure_rise ?? 200000);

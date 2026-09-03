@@ -3,22 +3,22 @@ import { blockEquations } from './vlabEquations';
 import { DAEAssembler } from './DAEAssembler';
 
 describe('Isothermal Liquid Equations & DAE Assembly', () => {
-  it('evaluates hydraulic_reference_il residual to zero at target pressure', () => {
+  it('evaluates hydraulic_reference_il equation to empty array (reference datum handled at node level)', () => {
     const eq = blockEquations['hydraulic_reference_il'];
     expect(eq).toBeDefined();
     const res = eq({
       across: [101325],
-      branch: [0],
+      branch: [],
       dAcross: [],
       dBranch: [],
       state: [],
       dState: [],
-      ctx: { dt: 0.01, time: 0, parameters: {}, prevStates: [] },
+      ctx: { dt: 0.01, time: 0, parameters: {}, prevStates: [], states: [], stateDerivatives: [] },
       params: { referencePressure: 101325, pressureType: 'absolute' },
       ports: ['a'],
       nodeId: 'ref1'
     });
-    expect(res[0]).toBeCloseTo(0, 5);
+    expect(res).toEqual([]);
   });
 
   it('evaluates pump_il across pressure rise', () => {
