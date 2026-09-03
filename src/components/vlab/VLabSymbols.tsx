@@ -1621,6 +1621,60 @@ export const RawSymbolRenderer = ({ type, color }: { type: string, color?: strin
       return <SymGlyph w={60} h={60} color={color} text="STEAM" sub="ACC" />;
     case 'steam_nozzle':
       return <SymGlyph w={60} h={60} color={color} text="NOZ" sub="STEAM" />;
+    // Isothermal Liquid
+    case 'hydraulic_reference_il':
+    case 'reservoir_il':
+      return (
+        <svg width="60" height="60" viewBox="0 0 60 60" className="overflow-visible">
+          {/* Top hydraulic stem entering reservoir */}
+          <line x1="30" y1="2" x2="30" y2="20" stroke={color || '#2563eb'} strokeWidth="2.5" />
+          <circle cx="30" cy="5" r="2.5" fill={color || '#2563eb'} />
+          {/* Liquid surface horizontal datum bar */}
+          <line x1="12" y1="20" x2="48" y2="20" stroke={color || '#2563eb'} strokeWidth="2.2" />
+          {/* Reservoir datum boundary diagonal hatch lines */}
+          <line x1="16" y1="20" x2="11" y2="29" stroke={color || '#2563eb'} strokeWidth="1.5" strokeLinecap="round" />
+          <line x1="23" y1="20" x2="18" y2="29" stroke={color || '#2563eb'} strokeWidth="1.5" strokeLinecap="round" />
+          <line x1="30" y1="20" x2="25" y2="29" stroke={color || '#2563eb'} strokeWidth="1.5" strokeLinecap="round" />
+          <line x1="37" y1="20" x2="32" y2="29" stroke={color || '#2563eb'} strokeWidth="1.5" strokeLinecap="round" />
+          <line x1="44" y1="20" x2="39" y2="29" stroke={color || '#2563eb'} strokeWidth="1.5" strokeLinecap="round" />
+          {/* Text identifier */}
+          <text x="30" y="44" fill={color || '#60a5fa'} fontSize="9" fontWeight="bold" textAnchor="middle" fontFamily="sans-serif">
+            IL REF
+          </text>
+        </svg>
+      );
+    case 'pump_il':
+      return (
+        <svg width="60" height="60" viewBox="0 0 60 60" className="overflow-visible">
+          <circle cx="30" cy="30" r="18" stroke={color || '#2563eb'} strokeWidth="2" fill="none" />
+          <polygon points="20,22 40,30 20,38" fill={color || '#2563eb'} />
+          <text x="30" y="55" fill={color || '#60a5fa'} fontSize="8" fontWeight="bold" textAnchor="middle">
+            PUMP
+          </text>
+        </svg>
+      );
+    case 'pipe_il':
+      return (
+        <svg width="60" height="60" viewBox="0 0 60 60" className="overflow-visible">
+          <rect x="10" y="20" width="40" height="20" rx="3" stroke={color || '#2563eb'} strokeWidth="2" fill="none" />
+          <line x1="18" y1="30" x2="42" y2="30" stroke={color || '#2563eb'} strokeWidth="1.5" strokeDasharray="3,3" />
+          <text x="30" y="55" fill={color || '#60a5fa'} fontSize="8" fontWeight="bold" textAnchor="middle">
+            PIPE
+          </text>
+        </svg>
+      );
+    case 'restriction_il':
+      return (
+        <svg width="60" height="60" viewBox="0 0 60 60" className="overflow-visible">
+          <line x1="10" y1="30" x2="25" y2="30" stroke={color || '#2563eb'} strokeWidth="2" />
+          <line x1="35" y1="30" x2="50" y2="30" stroke={color || '#2563eb'} strokeWidth="2" />
+          <line x1="25" y1="18" x2="25" y2="42" stroke={color || '#2563eb'} strokeWidth="2.5" />
+          <line x1="35" y1="18" x2="35" y2="42" stroke={color || '#2563eb'} strokeWidth="2.5" />
+          <text x="30" y="55" fill={color || '#60a5fa'} fontSize="8" fontWeight="bold" textAnchor="middle">
+            ORIFICE
+          </text>
+        </svg>
+      );
     default:
       if (type && type.toLowerCase().includes('doe')) {
         return (

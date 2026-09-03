@@ -81,7 +81,7 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
 
   useEffect(() => {
     updateNodeInternals(id);
-  }, [id, rotation, updateNodeInternals]);
+  }, [id, rotation, data.ports?.length, JSON.stringify(data.ports), updateNodeInternals]);
 
   useEffect(() => {
     if (isEditingLabel && inputRef.current) {
@@ -103,7 +103,14 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
     return acc;
   }, {});
 
-  const { width, height } = getBlockDimensions(data.type);
+  const { width: baseWidth, height: baseHeight } = getBlockDimensions(data.type);
+  const maxPortsOnSide = Math.max(
+    portsBySide.left?.length || 0,
+    portsBySide.right?.length || 0,
+    1
+  );
+  const height = Math.max(baseHeight, maxPortsOnSide * 20 + 10);
+  const width = baseWidth;
   const paramBadge = formatNodeParameterBadge(data.type, data.params);
 
   // Handles referenced by an edge -> solid fill feedback ("connected dot")
@@ -166,6 +173,7 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
                   type="source"
                   position={rotatedPos}
                   id={handleId}
+                  title={port.domain === 'isothermal_liquid' ? 'Isothermal Liquid conserving port' : `${port.domain || data.domain || 'Physical'} conserving port`}
                   className={isConnected ? 'vlab-handle vlab-handle-connected' : 'vlab-handle'}
                   style={{ ['--pc' as any]: pc }}
                 />

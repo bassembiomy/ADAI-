@@ -31,6 +31,7 @@ import * as XLSX from 'xlsx';
 import { isInputFocused } from '../../utils/domUtils';
 import { getVLabSignalInfo, exportScopeToCSV, VLAB_SIGNAL_COLORS } from '../../utils/scopeUtils';
 import { VLabSimulinkScope } from './VLabSimulinkScope';
+import { computeAbsoluteReferencePressure, convertPressureFromSI, type PressureUnit, type ElevationUnit } from '../../utils/hydraulicUnits';
 
 interface LabNode {
   id: string;
@@ -3496,6 +3497,220 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                           </div>
                         )}
                       </div>
+                    ) : selectedNode.data.type === 'hydraulic_reference_il' || selectedNode.data.type === 'reservoir_il' ? (
+                      (() => {
+                        const params = (selectedNode.data as any).params || {};
+                        const pRef = Number(params.referencePressure?.value ?? params.referencePressure ?? 101325);
+                        const pRefUnit = (params.referencePressure?.unit || 'Pa') as PressureUnit;
+                        const pType = String(params.pressureType?.value ?? params.pressureType ?? 'absolute').toLowerCase();
+                        const pAtm = Number(params.atmosphericPressure?.value ?? params.atmosphericPressure ?? 101325);
+                        const pAtmUnit = (params.atmosphericPressure?.unit || 'Pa') as PressureUnit;
+                        const elevCorr = String(params.elevationCorrection?.value ?? params.elevationCorrection) === 'true';
+                        const zRef = Number(params.referenceElevation?.value ?? params.referenceElevation ?? 0);
+                        const zRefUnit = (params.referenceElevation?.unit || 'm') as ElevationUnit;
+                        const initPriority = String(params.initializationPriority?.value ?? params.initializationPriority ?? 'high');
+
+                        const pAbsPa = computeAbsoluteReferencePressure(pRef, pRefUnit, pType as any, pAtm, pAtmUnit);
+                        const pAbsDisplay = convertPressureFromSI(pAbsPa, pRefUnit);
+
+                        return (
+                          <div className="space-y-4 animate-in fade-in duration-200">
+                            {/* Pressure Settings Section */}
+                            <div className="bg-[#141414] p-3 rounded-xl border border-[#222] space-y-3">
+                              <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider block">
+                                Pressure Settings
+                              </span>
+
+                              {/* Reference Pressure & Unit */}
+                              <div>
+                                <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">
+                                  Reference Pressure
+                                </label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    value={pRef}
+                                    onChange={(e) => {
+                                      const val = parseFloat(e.target.value) || 0;
+                                      updateParameter('referencePressure', { value: val, unit: pRefUnit, label: 'Reference Pressure' });
+                                    }}
+                                    className="flex-1 bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-white font-mono"
+                                  />
+                                  <select
+                                    value={pRefUnit}
+                                    onChange={(e) => {
+                                      updateParameter('referencePressure', { value: pRef, unit: e.target.value, label: 'Reference Pressure' });
+                                    }}
+                                    className="bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-2 text-xs focus:border-blue-500 outline-none text-blue-400 font-bold cursor-pointer"
+                                  >
+                                    <option value="Pa">Pa</option>
+                                    <option value="kPa">kPa</option>
+                                    <option value="MPa">MPa</option>
+                                    <option value="bar">bar</option>
+                                    <option value="psi">psi</option>
+                                    <option value="atm">atm</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* Pressure Type Selector (Absolute vs Gauge) */}
+                              <div>
+                                <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">
+                                  Pressure Type
+                                </label>
+                                <div className="grid grid-cols-2 gap-1 p-1 bg-[#1a1a1a] rounded-lg border border-[#222]">
+                                  {(['absolute', 'gauge'] as const).map((t) => (
+                                    <button
+                                      key={t}
+                                      type="button"
+                                      onClick={() => updateParameter('pressureType', { value: t, unit: '', label: 'Pressure Type' })}
+                                      className={`py-1 text-[10px] font-bold uppercase rounded transition-all text-center ${
+                                        pType === t
+                                          ? 'bg-blue-600 text-white shadow-sm'
+                                          : 'text-gray-400 hover:text-gray-200'
+                                      }`}
+                                    >
+                                      {t === 'absolute' ? 'Absolute' : 'Gauge'}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Atmospheric Pressure */}
+                              <div>
+                                <div className="flex justify-between items-center mb-1">
+                                  <label className="text-[10px] text-gray-400 font-bold uppercase">
+                                    Atmospheric Pressure
+                                  </label>
+                                  {pType === 'gauge' && (
+                                    <span className="text-[8px] bg-blue-900/40 text-blue-300 border border-blue-700/50 px-1 py-0.2 rounded font-mono">
+                                      GAUGE DATUM
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    value={pAtm}
+                                    onChange={(e) => {
+                                      const val = parseFloat(e.target.value) || 0;
+                                      updateParameter('atmosphericPressure', { value: val, unit: pAtmUnit, label: 'Atmospheric Pressure' });
+                                    }}
+                                    className="flex-1 bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-white font-mono"
+                                  />
+                                  <select
+                                    value={pAtmUnit}
+                                    onChange={(e) => {
+                                      updateParameter('atmosphericPressure', { value: pAtm, unit: e.target.value, label: 'Atmospheric Pressure' });
+                                    }}
+                                    className="bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-2 text-xs focus:border-blue-500 outline-none text-blue-400 font-bold cursor-pointer"
+                                  >
+                                    <option value="Pa">Pa</option>
+                                    <option value="kPa">kPa</option>
+                                    <option value="MPa">MPa</option>
+                                    <option value="bar">bar</option>
+                                    <option value="psi">psi</option>
+                                    <option value="atm">atm</option>
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Elevation Settings Section */}
+                            <div className="bg-[#141414] p-3 rounded-xl border border-[#222] space-y-3">
+                              <div className="flex justify-between items-center">
+                                <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">
+                                  Elevation Settings
+                                </span>
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={elevCorr}
+                                    onChange={(e) => {
+                                      updateParameter('elevationCorrection', { value: e.target.checked ? 'true' : 'false', unit: '', label: 'Enable Elevation Correction' });
+                                    }}
+                                    className="rounded border-[#222] text-blue-500 focus:ring-0 cursor-pointer"
+                                  />
+                                  <span className="text-[9px] text-gray-300 font-medium">Enable</span>
+                                </label>
+                              </div>
+
+                              {elevCorr && (
+                                <div className="space-y-2 animate-in fade-in duration-150">
+                                  <label className="text-[10px] text-gray-400 font-bold uppercase block">
+                                    Reference Elevation (z_ref)
+                                  </label>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      value={zRef}
+                                      onChange={(e) => {
+                                        const val = parseFloat(e.target.value) || 0;
+                                        updateParameter('referenceElevation', { value: val, unit: zRefUnit, label: 'Reference Elevation' });
+                                      }}
+                                      className="flex-1 bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-white font-mono"
+                                    />
+                                    <select
+                                      value={zRefUnit}
+                                      onChange={(e) => {
+                                        updateParameter('referenceElevation', { value: zRef, unit: e.target.value, label: 'Reference Elevation' });
+                                      }}
+                                      className="bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-2 text-xs focus:border-blue-500 outline-none text-blue-400 font-bold cursor-pointer"
+                                    >
+                                      <option value="m">m</option>
+                                      <option value="cm">cm</option>
+                                      <option value="mm">mm</option>
+                                      <option value="km">km</option>
+                                      <option value="ft">ft</option>
+                                      <option value="in">in</option>
+                                    </select>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Initialization & Calculated Absolute Pressure Section */}
+                            <div className="bg-[#141414] p-3 rounded-xl border border-[#222] space-y-3">
+                              <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider block">
+                                Initialization
+                              </span>
+
+                              <div>
+                                <label className="text-[10px] text-gray-400 font-bold uppercase block mb-1">
+                                  Initialization Priority
+                                </label>
+                                <select
+                                  value={initPriority}
+                                  onChange={(e) => updateParameter('initializationPriority', { value: e.target.value, unit: '', label: 'Initialization Priority' })}
+                                  className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-blue-300 font-bold cursor-pointer"
+                                >
+                                  <option value="high">High</option>
+                                  <option value="low">Low</option>
+                                  <option value="none">None</option>
+                                </select>
+                              </div>
+
+                              {/* Calculated Absolute Reference Pressure Preview */}
+                              <div className="p-2.5 rounded-lg bg-blue-950/30 border border-blue-800/40">
+                                <div className="text-[9px] text-blue-400 font-bold uppercase tracking-wider">
+                                  Calculated Absolute Reference Pressure
+                                </div>
+                                <div className="text-sm font-mono font-bold text-blue-200 mt-0.5">
+                                  {pAbsDisplay.toLocaleString(undefined, { maximumFractionDigits: 4 })} {pRefUnit}
+                                </div>
+                                {pRefUnit !== 'Pa' && (
+                                  <div className="text-[9px] font-mono text-blue-400/70 mt-0.5">
+                                    SI: {pAbsPa.toLocaleString()} Pa
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()
                     ) : (
                       <div className="space-y-3">
                         {Object.entries((selectedNode.data as any).params || {}).map(([key, param]: [string, any]) => (
