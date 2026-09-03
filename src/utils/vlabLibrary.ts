@@ -8278,6 +8278,81 @@ export const VLAB_LIBRARY: VLabDomain[] = [
         "description": "A data-driven model generated from experimental results (Design of Experiments). It allows high-fidelity behavioral simulation without complex physical equations."
       }
     ]
+  },
+  {
+    "type": "Isothermal Liquid",
+    "blocks": [
+      {
+        "id": "hydraulic_reference_il",
+        "name": "Hydraulic Reference (IL)",
+        "color": "#2563eb",
+        "icon": "hydraulic_reference_il",
+        "category": "Utilities",
+        "params": {
+          "referencePressure": { "value": 101325, "unit": "Pa", "label": "Reference Pressure" },
+          "pressureType": { "value": "absolute", "unit": "", "label": "Pressure Type" },
+          "atmosphericPressure": { "value": 101325, "unit": "Pa", "label": "Atmospheric Pressure" },
+          "elevationCorrection": { "value": "false", "unit": "", "label": "Enable Elevation Correction" },
+          "referenceElevation": { "value": 0, "unit": "m", "label": "Reference Elevation" },
+          "initializationPriority": { "value": "high", "unit": "", "label": "Initialization Priority" }
+        },
+        "ports": [
+          { "id": "a", "pos": "top", "label": "A", "domain": "isothermal_liquid" }
+        ],
+        "equation": "p_A = p_absolute + rho*g*(z_ref - z_A)",
+        "description": "Establishes the absolute pressure reference for an isothermal liquid network, equivalent to connecting to a large reservoir."
+      },
+      {
+        "id": "pump_il",
+        "name": "Pump (IL)",
+        "color": "#2563eb",
+        "icon": "pump_il",
+        "category": "Sources",
+        "params": {
+          "pressure_rise": { "value": 200000, "unit": "Pa", "label": "Pressure Rise" }
+        },
+        "ports": [
+          { "id": "a", "pos": "left", "label": "A", "domain": "isothermal_liquid" },
+          { "id": "b", "pos": "right", "label": "B", "domain": "isothermal_liquid" }
+        ],
+        "equation": "p_B - p_A = dp",
+        "description": "Ideal pump maintaining a fixed pressure rise in an isothermal liquid network."
+      },
+      {
+        "id": "pipe_il",
+        "name": "Pipe (IL)",
+        "color": "#2563eb",
+        "icon": "pipe_il",
+        "category": "Elements",
+        "params": {
+          "R": { "value": 100000, "unit": "Pa/(kg/s)", "label": "Hydraulic Resistance" }
+        },
+        "ports": [
+          { "id": "a", "pos": "left", "label": "A", "domain": "isothermal_liquid" },
+          { "id": "b", "pos": "right", "label": "B", "domain": "isothermal_liquid" }
+        ],
+        "equation": "p_A - p_B = R * mdot",
+        "description": "Hydraulic pipe with laminar flow resistance."
+      },
+      {
+        "id": "restriction_il",
+        "name": "Restriction (IL)",
+        "color": "#2563eb",
+        "icon": "restriction_il",
+        "category": "Elements",
+        "params": {
+          "Cd": { "value": 0.6, "unit": "1", "label": "Discharge Coefficient" },
+          "area": { "value": 0.0001, "unit": "m^2", "label": "Restriction Area" },
+          "rho": { "value": 1000, "unit": "kg/m^3", "label": "Fluid Density" }
+        },
+        "ports": [
+          { "id": "a", "pos": "left", "label": "A", "domain": "isothermal_liquid" },
+          { "id": "b", "pos": "right", "label": "B", "domain": "isothermal_liquid" }
+        ],
+        "equation": "mdot = Cd * A * sqrt(2*rho*|dp|) * sign(dp)",
+        "description": "Hydraulic orifice restriction obeying Bernoulli flow."
+      }
+    ]
   }
 ];
 

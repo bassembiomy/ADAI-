@@ -49,6 +49,7 @@ const domainVariables: Record<string, { across: { name: string; unit: string }; 
   'Microwave & Cooking': { across: { name: 'Temperature', unit: 'K' }, through: { name: 'Power', unit: 'W' } },
   Utilities: { across: { name: 'Signal', unit: '1' }, through: { name: 'Flow', unit: '1' } },
   'Fluid / Steam': { across: { name: 'Pressure', unit: 'Pa' }, through: { name: 'MassFlow', unit: 'kg/s' } },
+  'Isothermal Liquid': { across: { name: 'Pressure', unit: 'Pa' }, through: { name: 'MassFlow', unit: 'kg/s' } },
   'DOE Models': { across: { name: 'State', unit: '1' }, through: { name: 'Rate', unit: '1' } },
 };
 

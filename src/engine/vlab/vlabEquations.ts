@@ -1,4 +1,5 @@
 import { EquationContext } from './types';
+import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 
 export interface BlockEquationArgs {
   across: number[];        // values of across variables at the ports
@@ -499,7 +500,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   
   thermal_mass: ({ across, dAcross, branch, params }) => {
     // Q = C * dT/dt
-    const C = params.C || params.heat_capacity || 100.0;
+    const rawC = Number(params.C ?? params.heat_capacity ?? 100.0);
+    const C = Math.max(1e-6, isNaN(rawC) ? 100.0 : rawC);
     return [branch[0] - C * dAcross[0]];
   },
   
@@ -1788,6 +1790,60 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       across[0] - across[1],
       branch[1] - branch[0]
     ];
+  },
+
+  // ── ISOTHERMAL LIQUID DOMAIN ───────────────────────────────────────────────
+  hydraulic_reference_il: ({ across, params }) => {
+    const pRef = Number(params?.referencePressure?.value ?? params?.referencePressure ?? 101325);
+    const pRefUnit = (params?.referencePressure?.unit || 'Pa') as any;
+    const pType = String(params?.pressureType?.value ?? params?.pressureType ?? 'absolute');
+    const pAtm = Number(params?.atmosphericPressure?.value ?? params?.atmosphericPressure ?? 101325);
+    const pAtmUnit = (params?.atmosphericPressure?.unit || 'Pa') as any;
+    const elevCorr = String(params?.elevationCorrection?.value ?? params?.elevationCorrection) === 'true';
+    const zRef = Number(params?.referenceElevation?.value ?? params?.referenceElevation ?? 0);
+    const zRefUnit = (params?.referenceElevation?.unit || 'm') as any;
+    const zA = Number(params?.portElevation?.value ?? params?.portElevation ?? 0);
+    const zAUnit = (params?.portElevation?.unit || 'm') as any;
+
+    const pAbs = computeAbsoluteReferencePressure(pRef, pRefUnit, pType as any, pAtm, pAtmUnit);
+    const pTarget = computeEffectivePortPressure(pAbs, elevCorr, zRef, zRefUnit, zA, zAUnit);
+    return [across[0] - pTarget];
+  },
+
+  reservoir_il: ({ across, params }) => {
+    const pRef = Number(params?.referencePressure?.value ?? params?.referencePressure ?? 101325);
+    const pRefUnit = (params?.referencePressure?.unit || 'Pa') as any;
+    const pType = String(params?.pressureType?.value ?? params?.pressureType ?? 'absolute');
+    const pAtm = Number(params?.atmosphericPressure?.value ?? params?.atmosphericPressure ?? 101325);
+    const pAtmUnit = (params?.atmosphericPressure?.unit || 'Pa') as any;
+    const elevCorr = String(params?.elevationCorrection?.value ?? params?.elevationCorrection) === 'true';
+    const zRef = Number(params?.referenceElevation?.value ?? params?.referenceElevation ?? 0);
+    const zRefUnit = (params?.referenceElevation?.unit || 'm') as any;
+    const zA = Number(params?.portElevation?.value ?? params?.portElevation ?? 0);
+    const zAUnit = (params?.portElevation?.unit || 'm') as any;
+
+    const pAbs = computeAbsoluteReferencePressure(pRef, pRefUnit, pType as any, pAtm, pAtmUnit);
+    const pTarget = computeEffectivePortPressure(pAbs, elevCorr, zRef, zRefUnit, zA, zAUnit);
+    return [across[0] - pTarget];
+  },
+
+  pump_il: ({ across, branch, params }) => {
+    const dp = Number(params?.pressure_rise?.value ?? params?.pressure_rise ?? 200000);
+    return [(across[1] - across[0]) - dp];
+  },
+
+  pipe_il: ({ across, branch, params }) => {
+    const R = Number(params?.R?.value ?? params?.R ?? 100000);
+    return [(across[0] - across[1]) - branch[0] * R];
+  },
+
+  restriction_il: ({ across, branch, params }) => {
+    const Cd = Number(params?.Cd?.value ?? params?.Cd ?? 0.6);
+    const A = Number(params?.area?.value ?? params?.area ?? 1e-4);
+    const rho = Number(params?.rho?.value ?? params?.rho ?? 1000);
+    const dp = across[0] - across[1];
+    const mdot = Cd * A * Math.sqrt(2 * rho * Math.max(1e-9, Math.abs(dp))) * Math.sign(dp);
+    return [branch[0] - mdot];
   },
 
   // ── SIMULATION & UTILITIES ──────────────────────────────────────────────────

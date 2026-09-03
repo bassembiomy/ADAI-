@@ -13,13 +13,13 @@ describe('V-Lab Validation Contract Registry', () => {
     expect(coverage.missingContracts).toEqual([]);
     expect(coverage.orphanContracts).toEqual([]);
     expect(coverage.missingEquationFactories).toEqual([]);
-    expect(coverage.totalBlocks).toBe(242);
+    expect(coverage.totalBlocks).toBe(246);
     expect(coverage.isComplete).toBe(true);
   });
 
   it('retrieves valid validation contract for any block in VLAB_LIBRARY', () => {
     const allBlocks = VLAB_LIBRARY.flatMap((domain) => domain.blocks);
-    expect(allBlocks.length).toBe(242);
+    expect(allBlocks.length).toBe(246);
 
     for (const block of allBlocks) {
       const contract = getValidationContract(block.id);

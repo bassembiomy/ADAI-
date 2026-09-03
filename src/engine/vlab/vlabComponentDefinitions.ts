@@ -1420,5 +1420,35 @@ export const VLAB_COMPONENT_DEFINITIONS: Record<string, BlockDefinition> = {
     latex: [],
     across: 'None', through: 'None',
     description: 'Subsystem output port block.'
+  },
+  hydraulic_reference_il: {
+    equations: ['p_A = p_absolute + rho*g*(z_ref - z_A)'],
+    latex: ['p_A = p_{absolute} + \\rho g (z_{ref} - z_A)'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Establishes the absolute pressure reference datum for an isothermal liquid hydraulic network.'
+  },
+  reservoir_il: {
+    equations: ['p_A = p_absolute + rho*g*(z_ref - z_A)'],
+    latex: ['p_A = p_{absolute} + \\rho g (z_{ref} - z_A)'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Reservoir maintaining a specified reference pressure in an isothermal liquid network.'
+  },
+  pump_il: {
+    equations: ['p_B - p_A = delta_p'],
+    latex: ['p_B - p_A = \\Delta p'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Ideal hydraulic pump maintaining a specified pressure difference across ports.'
+  },
+  pipe_il: {
+    equations: ['p_A - p_B = R * mdot'],
+    latex: ['p_A - p_B = R \\cdot \\dot{m}'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Hydraulic pipe with laminar flow resistance in an isothermal liquid network.'
+  },
+  restriction_il: {
+    equations: ['mdot = Cd * A * sqrt(2*rho*|dp|) * sign(dp)'],
+    latex: ['\\dot{m} = C_d A \\sqrt{2 \\rho |\\Delta p|} \\operatorname{sign}(\\Delta p)'],
+    across: 'Pressure (Pa)', through: 'Mass Flow (kg/s)',
+    description: 'Hydraulic restriction or orifice obeying Bernoulli flow.'
   }
 };
