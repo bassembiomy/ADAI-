@@ -16,7 +16,9 @@ import {
   BarChart2,
   Grid,
   Sparkles,
-  ChevronDown
+  ChevronDown,
+  Trash2,
+  Zap
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -51,6 +53,9 @@ export interface VLabSimulinkScopeProps {
   edges?: any[];
   onClose: () => void;
   onUpdate?: (data: any) => void;
+  onClear?: () => void;
+  simSpeed?: number;
+  onSpeedChange?: (speed: number) => void;
 }
 
 export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
@@ -62,7 +67,10 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
   nodes = [],
   edges = [],
   onClose,
-  onUpdate
+  onUpdate,
+  onClear,
+  simSpeed = 1,
+  onSpeedChange
 }) => {
   // Window position and sizing
   const [pos, setPos] = useState({ x: 80 + Math.random() * 40, y: 80 + Math.random() * 40 });
@@ -77,6 +85,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
   const [showStats, setShowStats] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showLayoutMenu, setShowLayoutMenu] = useState(false);
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [hiddenChannels, setHiddenChannels] = useState<Record<string, boolean>>({});
 
   // Zoom & Scale bounds override
@@ -166,17 +175,31 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
       return [idlePt1, idlePt2];
     }
 
-    let sliced = data;
+    // Isolate the latest monotonic simulation run if multiple runs / restarts exist
+    let currentRun = data;
+    let lastRestartIdx = 0;
+    for (let i = 1; i < data.length; i++) {
+      const prevT = data[i - 1].time !== undefined ? data[i - 1].time : (data[i - 1].t || 0);
+      const currT = data[i].time !== undefined ? data[i].time : (data[i].t || 0);
+      if (currT < prevT - 1e-6) {
+        lastRestartIdx = i;
+      }
+    }
+    if (lastRestartIdx > 0) {
+      currentRun = data.slice(lastRestartIdx);
+    }
+
+    let sliced = currentRun;
     if (timeZoomRange && timeZoomRange.min !== undefined && timeZoomRange.max !== undefined) {
-      sliced = data.filter(pt => {
+      sliced = currentRun.filter(pt => {
         const t = pt.time !== undefined ? pt.time : (pt.t || 0);
         return t >= timeZoomRange.min! && t <= timeZoomRange.max!;
       });
     } else if (timeRangeParam !== 'auto') {
       const limit = Number(timeRangeParam);
       if (!isNaN(limit) && limit > 0) {
-        const maxTime = data[data.length - 1].time !== undefined ? data[data.length - 1].time : (data[data.length - 1].t || 0);
-        sliced = data.filter(pt => {
+        const maxTime = currentRun[currentRun.length - 1].time !== undefined ? currentRun[currentRun.length - 1].time : (currentRun[currentRun.length - 1].t || 0);
+        sliced = currentRun.filter(pt => {
           const t = pt.time !== undefined ? pt.time : (pt.t || 0);
           return t >= maxTime - limit;
         });
@@ -427,6 +450,16 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                 <RefreshCcw size={13} />
               </button>
 
+              {onClear && (
+                <button
+                  onClick={onClear}
+                  className="p-1.5 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded transition-all active:scale-90"
+                  title="Clear Scope Data"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
+
               <div className="w-px h-4 bg-white/10 mx-1" />
 
               {/* Calipers / Cursor Measurements */}
@@ -483,6 +516,44 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                       >
                         <span>{l.replace('x', ' x ')}</span>
                         {layout === l && <span className="text-[10px] text-amber-400 font-mono">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Simulation Speed Multiplier Selector */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowSpeedMenu(!showSpeedMenu)}
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-all ${
+                    simSpeed > 1 ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'bg-[#20202a] text-gray-400 border-white/5 hover:text-white'
+                  }`}
+                  title="Speed (Simulation Rate)"
+                >
+                  <Zap size={12} className={simSpeed > 1 ? "text-amber-400 fill-amber-400" : "text-gray-400"} />
+                  <span>{simSpeed}×</span>
+                  <ChevronDown size={11} />
+                </button>
+
+                {showSpeedMenu && (
+                  <div className="absolute left-0 top-full mt-1 w-36 bg-[#1a1a24] border border-[#333345] rounded-lg shadow-2xl py-1 z-50 animate-in fade-in">
+                    <div className="px-2.5 py-1 text-[9px] uppercase tracking-wider text-gray-500 font-bold border-b border-white/5 mb-1">
+                      Simulation Rate
+                    </div>
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => {
+                          onSpeedChange?.(s);
+                          setShowSpeedMenu(false);
+                        }}
+                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between hover:bg-white/10 ${
+                          simSpeed === s ? 'text-amber-400 font-bold bg-amber-500/10' : 'text-gray-300'
+                        }`}
+                      >
+                        <span>{s}× {s === 1 ? '(Real-Time)' : 'Speed'}</span>
+                        {simSpeed === s && <span className="text-[10px] text-amber-400 font-mono">✓</span>}
                       </button>
                     ))}
                   </div>
@@ -758,6 +829,7 @@ export const VLabSimulinkScope: React.FC<VLabSimulinkScopeProps> = ({
                                 fill={`url(#grad-${chKey})`}
                                 isAnimationActive={false}
                                 dot={false}
+                                connectNulls={false}
                               />
                             );
                           })}

@@ -39,4 +39,29 @@ describe('VLabSimulinkScope', () => {
     expect(html).toContain('Continuous Acquisition');
     expect(html).toContain('Channels: 2');
   });
+
+  it('renders a Clear Data button in the ribbon toolbar', () => {
+    const html = renderToStaticMarkup(<VLabSimulinkScope {...defaultProps} onClear={vi.fn()} />);
+    expect(html).toContain('Clear Scope Data');
+  });
+
+  it('isolates the latest run when time resets so it does not connect across restarts', () => {
+    // Data containing an old run (time 0 -> 10) and a restarted run (time 0 -> 2)
+    const multiRunData = [
+      { time: 0, in1: 293 },
+      { time: 10, in1: 311 },
+      { time: 0, in1: 293 },
+      { time: 1, in1: 295 },
+      { time: 2, in1: 297 }
+    ];
+    const html = renderToStaticMarkup(<VLabSimulinkScope {...defaultProps} data={multiRunData} />);
+    // Should display only the 3 samples from the current active run (0, 1, 2)
+    expect(html).toContain('Samples: 3 pts');
+  });
+
+  it('renders simulation speed multiplier button with current rate', () => {
+    const html = renderToStaticMarkup(<VLabSimulinkScope {...defaultProps} simSpeed={3} onSpeedChange={vi.fn()} />);
+    expect(html).toContain('3×');
+    expect(html).toContain('Speed (Simulation Rate)');
+  });
 });
