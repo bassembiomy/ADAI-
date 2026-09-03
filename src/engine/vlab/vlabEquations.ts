@@ -1257,8 +1257,8 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     const alpha = params.alpha !== undefined ? params.alpha : 0.1;
     const gamma = params.gamma !== undefined ? params.gamma : 0.9;
     const epsilon = params.epsilon !== undefined ? params.epsilon : 0.1;
-    const nS = params.numStates !== undefined ? params.numStates : 5;
-    const nA = params.numActions !== undefined ? params.numActions : 3;
+    const nS = Math.max(1, Math.round(Number(params.numStates) || 5));
+    const nA = Math.max(1, Math.round(Number(params.numActions) || 3));
 
     const actions: number[] = [];
     if (nA === 1) {
@@ -1270,14 +1270,14 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
     }
 
     let cached = rlStateCache.get(nodeId);
-    if (!cached || ctx.time < 1e-5 || reset) {
+    if (!cached || cached.qTable.length !== nS || cached.qTable[0]?.length !== nA || ctx.time < 1e-5 || reset) {
       cached = {
         qTable: Array.from({ length: nS }, () => Array(nA).fill(0)),
         lastStateIdx: Math.floor(nS / 2),
         lastActionIdx: Math.floor(nA / 2),
         hasPrev: 0,
         lastUpdateTime: -1.0,
-        currentAction: actions[Math.floor(nA / 2)],
+        currentAction: actions[Math.floor(nA / 2)] ?? 0,
         currentMaxQ: 0.0
       };
       rlStateCache.set(nodeId, cached);
@@ -1299,28 +1299,31 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
       }
 
       if (cached.hasPrev === 1 && !reset) {
-        const maxQNext = Math.max(...cached.qTable[s]);
+        const maxQNext = Math.max(...(cached.qTable[s] ?? [0]));
         const targetQ = reward + gamma * maxQNext;
-        const currentQ = cached.qTable[cached.lastStateIdx][cached.lastActionIdx];
-        cached.qTable[cached.lastStateIdx][cached.lastActionIdx] = currentQ + alpha * (targetQ - currentQ);
+        const currentQ = cached.qTable[cached.lastStateIdx]?.[cached.lastActionIdx] ?? 0;
+        if (cached.qTable[cached.lastStateIdx]) {
+          cached.qTable[cached.lastStateIdx][cached.lastActionIdx] = currentQ + alpha * (targetQ - currentQ);
+        }
       }
 
       let aIdx = Math.floor(nA / 2);
-      if (Math.random() < epsilon) {
-        aIdx = Math.floor(Math.random() * nA);
+      const pseudoRand = Math.abs(Math.sin((ctx.time + 0.001) * 12345.67 + s * 987.65)) % 1;
+      if (pseudoRand < epsilon) {
+        aIdx = Math.floor(pseudoRand * nA) % nA;
       } else {
-        let maxVal = cached.qTable[s][0];
+        let maxVal = cached.qTable[s]?.[0] ?? 0;
         aIdx = 0;
         for (let i = 1; i < nA; i++) {
-          if (cached.qTable[s][i] > maxVal) {
+          if ((cached.qTable[s]?.[i] ?? 0) > maxVal) {
             maxVal = cached.qTable[s][i];
             aIdx = i;
           }
         }
       }
 
-      cached.currentAction = actions[aIdx];
-      cached.currentMaxQ = Math.max(...cached.qTable[s]);
+      cached.currentAction = actions[aIdx] ?? 0;
+      cached.currentMaxQ = Math.max(...(cached.qTable[s] ?? [0]));
       cached.lastStateIdx = s;
       cached.lastActionIdx = aIdx;
       cached.hasPrev = 1;
@@ -1559,7 +1562,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   // ── ADVANCED CONTROL & OBSERVERS ───────────────────────────────────────────
   luenberger_observer: ({ across, branch, state, dState, params }) => {
     const A = -1;
-    const L = params.L || 10;
+    let L = 10;
+    if (typeof params.L === 'number') {
+      L = Number.isFinite(params.L) ? params.L : 10;
+    } else if (typeof params.L === 'string') {
+      const parsed = parseFloat(params.L.replace(/[[\];]/g, ' ').trim());
+      if (Number.isFinite(parsed)) L = parsed;
+    } else if (Array.isArray(params.L) && typeof params.L[0] === 'number') {
+      L = params.L[0];
+    }
     const u = across[0] || 0;
     const y = across[1] || 0;
     const xhat = state[0];
@@ -1874,7 +1885,15 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
   ps_state_feedback: ({ across, branch, params }) => {
     const x = across[0] || 0;
-    const K = params.K || 1.0;
+    let K = 1.0;
+    if (typeof params.K === 'number') {
+      K = Number.isFinite(params.K) ? params.K : 1.0;
+    } else if (typeof params.K === 'string') {
+      const parsed = parseFloat(params.K.replace(/[[\]]/g, '').trim());
+      if (Number.isFinite(parsed)) K = parsed;
+    } else if (Array.isArray(params.K) && typeof params.K[0] === 'number') {
+      K = params.K[0];
+    }
     return [branch[0] - (-K * x)];
   },
 

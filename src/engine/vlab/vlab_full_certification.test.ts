@@ -157,6 +157,103 @@ const collectPortIssues = (): CertificationIssue[] => {
   return issues;
 };
 
+const ZERO_RESIDUAL_FACTORIES = new Set([
+  'ground', 'delta_ref', 'open_circuit', 'subsystem', 'inport', 'outport', 'rot_ref', 'trans_ref',
+  'thermal_ref', 'ma_ref', 'gas_ref', 'gas_properties', 'mag_ref', 'world_frame',
+  'ref_frame', 'ps_terminator', 'fluid_ref', 'scope', 'solver_config', 'mech_config',
+  'belt_properties', 'ma_properties',
+]);
+
+const numericParams = (block: VLabBlock): Record<string, number | string> =>
+  Object.fromEntries(Object.entries(block.params).map(([name, parameter]) => [name, parameter.value]));
+
+const makeEquationArgs = (ports: string[], params: Record<string, unknown> = {}): BlockEquationArgs => ({
+  across: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => 1 + index * 0.25),
+  dAcross: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => 0.1 + index * 0.01),
+  branch: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => 0.5 + index * 0.05),
+  dBranch: Array.from({ length: Math.max(16, ports.length + 4) }, (_, index) => 0.2 + index * 0.02),
+  state: Array.from({ length: 16 }, (_, index) => 0.25 + index * 0.01),
+  dState: Array.from({ length: 16 }, (_, index) => 0.05 + index * 0.005),
+  ctx: {
+    dt: 1e-3,
+    time: 0.125,
+    parameters: {},
+    prevStates: Array(16).fill(0.2),
+    prevPrevStates: Array(16).fill(0.15),
+    prevDt: 1e-3,
+    order: 2,
+    states: Array(16).fill(0.25),
+    stateDerivatives: Array(16).fill(0.05),
+  },
+  params,
+  ports,
+  nodeId: 'full-certification-dut',
+});
+
+const cloneArgs = (args: BlockEquationArgs): BlockEquationArgs => structuredClone(args);
+
+const immutableInputs = (args: BlockEquationArgs): string => JSON.stringify({
+  across: args.across,
+  dAcross: args.dAcross,
+  branch: args.branch,
+  dBranch: args.dBranch,
+  state: args.state,
+  dState: args.dState,
+  params: args.params,
+  ports: args.ports,
+  nodeId: args.nodeId,
+});
+
+const expectNear = (actual: number, expected: number, abs = 1e-10, rel = 1e-8): void => {
+  const tolerance = abs + rel * Math.max(Math.abs(actual), Math.abs(expected));
+  expect(Math.abs(actual - expected)).toBeLessThanOrEqual(tolerance);
+};
+
+const collectEquationIssues = (): CertificationIssue[] => {
+  const issues: CertificationIssue[] = [];
+
+  for (const { domain, block } of inventory) {
+    const factory = blockEquations[block.id];
+    if (!factory) continue;
+    const contract = VLAB_VALIDATION_CONTRACTS[block.id];
+    const cases: Record<string, unknown>[] = [
+      numericParams(block),
+      ...(contract?.boundaryParameters ?? []),
+    ];
+
+    cases.forEach((params, caseIndex) => {
+      const args = makeEquationArgs(block.ports.map((port) => port.id), params);
+      const before = cloneArgs(args);
+      const immutableBefore = immutableInputs(args);
+      try {
+        const first = factory(args);
+        const second = factory(cloneArgs(before));
+        if (!Array.isArray(first)) issues.push(issue(domain, block.id, 'equation', `case ${caseIndex} did not return an array`));
+        else {
+          if (!ZERO_RESIDUAL_FACTORIES.has(block.id) && first.length === 0) {
+            issues.push(issue(domain, block.id, 'equation', `case ${caseIndex} returned no residuals`));
+          }
+          if (first.some((value) => !Number.isFinite(value))) {
+            issues.push(issue(domain, block.id, 'equation', `case ${caseIndex} returned a non-finite residual`));
+          }
+          if (first.length !== second.length) {
+            issues.push(issue(domain, block.id, 'equation', `case ${caseIndex} changed residual count`));
+          } else if (!first.every((value, index) => Object.is(value, second[index]))) {
+            issues.push(issue(domain, block.id, 'equation', `case ${caseIndex} is nondeterministic`));
+          }
+        }
+        if (immutableInputs(args) !== immutableBefore) {
+          issues.push(issue(domain, block.id, 'equation', `case ${caseIndex} mutated its inputs`));
+        }
+      } catch (error) {
+        issues.push(issue(domain, block.id, 'equation', `case ${caseIndex} threw: ${error instanceof Error ? error.message : String(error)}`));
+      }
+    });
+  }
+
+  return issues;
+};
+
 describe('V-Lab full certification', () => {
   it('certifies the complete live catalog in both directions', () => {
     const issues = collectCatalogIssues();
@@ -166,6 +263,33 @@ describe('V-Lab full certification', () => {
   it('certifies every declared port and its DAE assembly contract', () => {
     const issues = collectPortIssues();
     expect(issues, formatIssues(issues)).toEqual([]);
+  });
+
+  it('executes every equation factory at nominal and boundary conditions', () => {
+    const issues = collectEquationIssues();
+    expect(issues, formatIssues(issues)).toEqual([]);
+  });
+
+  it('matches independent governing-equation reference points', () => {
+    const args = makeEquationArgs(['p', 'n']);
+
+    expectNear(blockEquations.resistor({ ...args, across: [12, 0], branch: [0.12], params: { R: 100 } })[0], 0);
+    expectNear(blockEquations.capacitor({ ...args, dAcross: [2, 0], branch: [0.002], params: { C: 1e-3 } })[0], 0);
+    expectNear(blockEquations.inductor({ ...args, across: [5, 0], dBranch: [5000], params: { L: 1e-3 } })[0], 0);
+    expectNear(blockEquations.conductive_heat({ ...args, across: [350, 300], branch: [100], params: { k: 2 } })[0], 0);
+    expectNear(blockEquations.gas_resistance({ ...args, across: [200000, 100000], branch: [2], params: { k: 2e-5 } })[0], 0);
+    expectNear(blockEquations.reluctance({ ...args, across: [500, 0], branch: [5e-4], params: { R: 1e6 } })[0], 0);
+    const springResiduals = blockEquations.trans_spring({
+      ...args,
+      across: [2, 0],
+      branch: [10],
+      state: [0.1],
+      dState: [2],
+      params: { k: 100 },
+    });
+    springResiduals.forEach((residual) => expectNear(residual, 0));
+    expectNear(blockEquations.rot_damper({ ...args, across: [50, 0], branch: [5], params: { b: 0.1 } })[0], 0);
+    expectNear(blockEquations.ps_gain({ ...args, across: [3], branch: [6], params: { gain: 2 } })[0], 0);
   });
 });
 
