@@ -2,6 +2,7 @@ import { Node, Edge } from '@xyflow/react';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
 import { EquationContext, AssembledSystem, PhysicalDomain, ComponentEquation } from './types';
 import { blockEquations } from './vlabEquations';
+import { computeAbsoluteReferencePressure, computeEffectivePortPressure } from '../../utils/hydraulicUnits';
 
 const SIGNAL_CONTROL_BLOCKS = new Set([
   'ps_lookup_2d', 'bldc_commutation', 'bldc_current_ctrl', 'bldc_pwm_ctrl',
@@ -578,6 +579,15 @@ export class DAEAssembler {
           branches.push({ name: 'flow_in', ports: [{ id: 'pin', sign: -1 }] });
           branches.push({ name: 'flow_out', ports: [{ id: 'pout', sign: 1 }] });
           break;
+        case 'hydraulic_reference_il':
+        case 'reservoir_il':
+          branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }] });
+          break;
+        case 'pump_il':
+        case 'pipe_il':
+        case 'restriction_il':
+          branches.push({ name: 'mass_flow', ports: [{ id: 'a', sign: -1 }, { id: 'b', sign: 1 }] });
+          break;
         default:
           if (ports.includes('p') && ports.includes('n')) {
             branches.push({ name: 'current', ports: [{ id: 'p', sign: -1 }, { id: 'n', sign: 1 }] });
@@ -723,16 +733,38 @@ export class DAEAssembler {
     // Identify which variables represent through-variables and which nodes they affect
     const kirchhoffNodes: { nodeId: string; throughIndices: number[]; signs: number[] }[] = [];
     const referenceNodeIds = new Set<string>();
+    const referenceNodeTargets = new Map<string, number>();
 
-    // Scan for reference components (e.g. ground, rot_ref, etc.)
+    // Scan for reference components (e.g. ground, rot_ref, hydraulic_reference_il, etc.)
     nodes.forEach(node => {
       const type = (node.data as any)?.type || node.type || (node.data as any)?.blockId || '';
-      if (['ground', 'rot_ref', 'trans_ref', 'thermal_ref', 'mag_ref', 'gas_ref', 'ma_ref', 'delta_ref', 'fluid_ref'].includes(type)) {
+      if (['ground', 'rot_ref', 'trans_ref', 'thermal_ref', 'mag_ref', 'gas_ref', 'ma_ref', 'delta_ref', 'fluid_ref', 'hydraulic_reference_il', 'reservoir_il'].includes(type)) {
         const ports = nodePorts.get(node.id) || [];
+        let targetVal = 0;
+        if (type === 'hydraulic_reference_il' || type === 'reservoir_il') {
+          const params = (node.data as any)?.params || {};
+          const pRef = Number(params?.referencePressure?.value ?? params?.referencePressure ?? 101325);
+          const pRefUnit = (params?.referencePressure?.unit || 'Pa');
+          const pType = String(params?.pressureType?.value ?? params?.pressureType ?? 'absolute');
+          const pAtm = Number(params?.atmosphericPressure?.value ?? params?.atmosphericPressure ?? 101325);
+          const pAtmUnit = (params?.atmosphericPressure?.unit || 'Pa');
+          const elevCorr = String(params?.elevationCorrection?.value ?? params?.elevationCorrection) === 'true';
+          const zRef = Number(params?.referenceElevation?.value ?? params?.referenceElevation ?? 0);
+          const zRefUnit = (params?.referenceElevation?.unit || 'm');
+          const zA = Number(params?.portElevation?.value ?? params?.portElevation ?? 0);
+          const zAUnit = (params?.portElevation?.unit || 'm');
+          const pAbs = computeAbsoluteReferencePressure(pRef, pRefUnit as any, pType as any, pAtm, pAtmUnit as any);
+          targetVal = computeEffectivePortPressure(pAbs, elevCorr, zRef, zRefUnit as any, zA, zAUnit as any);
+        } else if (type === 'fluid_ref') {
+          targetVal = 101325;
+        } else if (type === 'thermal_ref') {
+          targetVal = 293.15;
+        }
         ports.forEach(portId => {
           const key = `${node.id}_${portId}`;
           const root = uf.find(key);
           referenceNodeIds.add(root);
+          referenceNodeTargets.set(root, targetVal);
         });
       }
     });
@@ -922,7 +954,9 @@ export class DAEAssembler {
         
         if (referenceNodeIds.has(pn.id)) {
           // Reference node potential/pressure/temperature
-          if (pn.domain === 'fluid' || pn.domain === 'gas') {
+          if (referenceNodeTargets.has(pn.id)) {
+            res[acrossVarIdx] = x[acrossVarIdx] - referenceNodeTargets.get(pn.id)!;
+          } else if (pn.domain === 'fluid' || pn.domain === 'gas' || pn.domain === 'isothermal_liquid') {
             res[acrossVarIdx] = x[acrossVarIdx] - 101325;
           } else if (pn.domain === 'thermal') {
             res[acrossVarIdx] = x[acrossVarIdx] - 293.15;
@@ -969,7 +1003,7 @@ export class DAEAssembler {
             // Unconnected isolated node has reference across potential
             if (pn.domain === 'thermal') {
               res[acrossVarIdx] = x[acrossVarIdx] - 293.15;
-            } else if (pn.domain === 'fluid' || pn.domain === 'gas') {
+            } else if (pn.domain === 'fluid' || pn.domain === 'gas' || pn.domain === 'isothermal_liquid') {
               res[acrossVarIdx] = x[acrossVarIdx] - 101325;
             } else {
               res[acrossVarIdx] = x[acrossVarIdx];

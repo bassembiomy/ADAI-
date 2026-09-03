@@ -6,7 +6,8 @@ export type PhysicalDomain =
   | 'translational'
   | 'thermal'
   | 'fluid'
-  | 'gas';
+  | 'gas'
+  | 'isothermal_liquid';
 
 export type VariableRole = 'across' | 'through' | 'state' | 'algebraic' | 'input' | 'output';
 

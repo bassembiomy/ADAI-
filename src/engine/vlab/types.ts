@@ -7,6 +7,7 @@ export type PhysicalDomain =
   | 'magnetic'      // across: MMF,         through: Flux
   | 'gas'           // across: Pressure,    through: Mass Flow
   | 'fluid'         // across: P/T/H,       through: m/Q/mw
+  | 'isothermal_liquid' // across: Pressure, through: Mass Flow
   | 'physical'      // signal domain (no conservation law)
   | 'multibody';    // frame-based
 
