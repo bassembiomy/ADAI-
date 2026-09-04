@@ -1,6 +1,43 @@
 import React from 'react';
-import { EdgeProps, getBezierPath } from 'reactflow';
+import { EdgeProps, getSmoothStepPath, getBezierPath } from 'reactflow';
 import { OPMEdgeData } from './EntropyTypes';
+
+/**
+ * ISO 19450 OPD link notation:
+ *  - Enabler links: agent = filled arrowhead, instrument = hollow arrowhead
+ *  - Transforming links: consumption / result = filled arrowhead;
+ *    effect = filled arrowheads on both ends (changes the object either way)
+ *  - Event links: trigger = dashed + filled arrowhead, condition = dashed + hollow arrowhead
+ *  - Structural links (glyph at the source/whole end): aggregation = filled triangle,
+ *    generalization = hollow triangle, exhibition = filled circle
+ *  - Requirement traceability (extension): satisfies / verifies = dashed + filled arrowhead
+ * Colors are a tool-specific secondary cue; the shape carries the standard meaning.
+ */
+
+type MarkerKind = 'filled' | 'hollow' | 'none';
+
+interface LinkStyle {
+  stroke: string;
+  dashed?: boolean;
+  end?: MarkerKind;
+  start?: MarkerKind;
+  structuralStart?: 'triangle-filled' | 'triangle-hollow' | 'circle-filled';
+}
+
+const LINK_STYLES: Record<string, LinkStyle> = {
+  agent:         { stroke: '#38bdf8', end: 'filled' },
+  instrument:    { stroke: '#38bdf8', end: 'hollow' },
+  consumption:   { stroke: '#94a3b8', end: 'filled' },
+  result:        { stroke: '#10b981', end: 'filled' },
+  effect:        { stroke: '#ec4899', end: 'filled', start: 'filled' },
+  trigger:       { stroke: '#f59e0b', dashed: true, end: 'filled' },
+  condition:     { stroke: '#c084fc', dashed: true, end: 'hollow' },
+  aggregation:   { stroke: '#10b981', structuralStart: 'triangle-filled' },
+  generalization:{ stroke: '#10b981', structuralStart: 'triangle-hollow' },
+  exhibition:    { stroke: '#10b981', structuralStart: 'circle-filled' },
+  satisfies:     { stroke: '#c084fc', dashed: true, end: 'filled' },
+  verifies:      { stroke: '#c084fc', dashed: true, end: 'filled' },
+};
 
 // A single component that can render all custom edges based on the OPM link type.
 export const OPMEdge: React.FC<EdgeProps<OPMEdgeData>> = ({
@@ -16,219 +53,58 @@ export const OPMEdge: React.FC<EdgeProps<OPMEdgeData>> = ({
   markerEnd,
   selected,
 }) => {
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const linkType = data?.type || 'consumption';
+  const isStructural = linkType === 'aggregation' || linkType === 'generalization' || linkType === 'exhibition';
+
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
     targetX,
     targetY,
     sourcePosition,
     targetPosition,
+    borderRadius: 12,
+    offset: 24,
   });
 
-  const linkType = data?.type || 'consumption';
-  
-  // Base styling for OPM links
-  let strokeColor = '#94a3b8'; // slate-400
-  let strokeWidth = selected ? 2.5 : 1.5;
-  let strokeDasharray = undefined;
-
-  // Specific link type styling
-  if (linkType === 'aggregation' || linkType === 'generalization' || linkType === 'exhibition') {
-    strokeColor = '#10b981'; // emerald-500 for structural links
-  } else if (linkType === 'agent' || linkType === 'instrument') {
-    strokeColor = '#38bdf8'; // sky-400 for enabling links
-  } else if (linkType === 'trigger') {
-    strokeColor = '#f59e0b'; // amber-500
-    strokeWidth = selected ? 3 : 2;
-  } else if (linkType === 'condition') {
-    strokeColor = '#c084fc'; // purple-400
-  } else if (linkType === 'effect') {
-    strokeColor = '#ec4899'; // pink-500
-  }
-
-  // Custom marker setups
-  let customMarkerEnd = undefined;
-  let customMarkerStart = undefined;
-
-  switch (linkType) {
-    case 'consumption':
-      customMarkerEnd = `url(#opm-arrow-consumption-${id})`;
-      break;
-    case 'result':
-      customMarkerEnd = `url(#opm-arrow-result-${id})`;
-      break;
-    case 'effect':
-      customMarkerEnd = `url(#opm-arrow-effect-end-${id})`;
-      customMarkerStart = `url(#opm-arrow-effect-start-${id})`;
-      break;
-    case 'agent':
-      customMarkerEnd = `url(#opm-circle-agent-${id})`;
-      break;
-    case 'instrument':
-      customMarkerEnd = `url(#opm-circle-instrument-${id})`;
-      break;
-    case 'condition':
-      customMarkerEnd = `url(#opm-circle-condition-${id})`;
-      break;
-    case 'trigger':
-      customMarkerEnd = `url(#opm-lightning-trigger-${id})`;
-      break;
-    // Structural links have a triangle marker at the source (the whole / superclass / object exhibiting)
-    case 'aggregation':
-      customMarkerStart = `url(#opm-tri-aggregation-${id})`;
-      break;
-    case 'generalization':
-      customMarkerStart = `url(#opm-tri-generalization-${id})`;
-      break;
-    case 'exhibition':
-      customMarkerStart = `url(#opm-tri-exhibition-${id})`;
-      break;
-    default:
-      break;
-  }
+  const ls = LINK_STYLES[linkType] ?? { stroke: '#94a3b8', end: 'filled' as MarkerKind };
+  const dash = ls.dashed ? '6 4' : undefined;
 
   return (
     <>
       {/* SVG Marker Definitions self-contained for each edge */}
       <svg className="absolute w-0 h-0">
         <defs>
-          {/* Consumption Arrow (Normal arrowhead pointing target) */}
-          <marker
-            id={`opm-arrow-consumption-${id}`}
-            markerWidth="10"
-            markerHeight="7"
-            refX="8"
-            refY="3.5"
-            orient="auto"
-            markerUnits="strokeWidth"
-          >
-            <polygon points="0 0, 10 3.5, 0 7" fill={strokeColor} />
-          </marker>
-
-          {/* Result Arrow (Normal arrowhead pointing target) */}
-          <marker
-            id={`opm-arrow-result-${id}`}
-            markerWidth="10"
-            markerHeight="7"
-            refX="8"
-            refY="3.5"
-            orient="auto"
-            markerUnits="strokeWidth"
-          >
-            <polygon points="0 0, 10 3.5, 0 7" fill={strokeColor} />
-          </marker>
-
-          {/* Effect Arrow (Double-headed arrow, start and end markers) */}
-          <marker
-            id={`opm-arrow-effect-end-${id}`}
-            markerWidth="10"
-            markerHeight="7"
-            refX="8"
-            refY="3.5"
-            orient="auto"
-            markerUnits="strokeWidth"
-          >
-            <polygon points="0 0, 10 3.5, 0 7" fill={strokeColor} />
-          </marker>
-          <marker
-            id={`opm-arrow-effect-start-${id}`}
-            markerWidth="10"
-            markerHeight="7"
-            refX="2"
-            refY="3.5"
-            orient="auto-start-reverse"
-            markerUnits="strokeWidth"
-          >
-            <polygon points="0 0, 10 3.5, 0 7" fill={strokeColor} />
-          </marker>
-
-          {/* Agent (Solid black circle at target) */}
-          <marker
-            id={`opm-circle-agent-${id}`}
-            markerWidth="8"
-            markerHeight="8"
-            refX="6"
-            refY="4"
-            orient="auto"
-          >
-            <circle cx="4" cy="4" r="3.5" fill={strokeColor} stroke={strokeColor} strokeWidth="1" />
-          </marker>
-
-          {/* Instrument (Hollow circle at target) */}
-          <marker
-            id={`opm-circle-instrument-${id}`}
-            markerWidth="8"
-            markerHeight="8"
-            refX="6"
-            refY="4"
-            orient="auto"
-          >
-            <circle cx="4" cy="4" r="3.5" fill="#0c1a24" stroke={strokeColor} strokeWidth="1.5" />
-          </marker>
-
-          {/* Condition (Circle with 'c' at target) */}
-          <marker
-            id={`opm-circle-condition-${id}`}
-            markerWidth="12"
-            markerHeight="12"
-            refX="10"
-            refY="6"
-            orient="auto"
-          >
-            <circle cx="6" cy="6" r="5" fill="#0c1a24" stroke={strokeColor} strokeWidth="1.5" />
-            <text x="6" y="9" fontSize="8" fontWeight="bold" fontFamily="monospace" fill={strokeColor} textAnchor="middle">c</text>
-          </marker>
-
-          {/* Trigger (Lightning bolt / double arrowhead at target) */}
-          <marker
-            id={`opm-lightning-trigger-${id}`}
-            markerWidth="12"
-            markerHeight="12"
-            refX="10"
-            refY="6"
-            orient="auto"
-            markerUnits="strokeWidth"
-          >
-            {/* Draw a lightning symbol or double chevron */}
-            <path d="M3,2 L8,6 L4,7 L9,11" fill="none" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" />
-          </marker>
-
-          {/* Aggregation (Solid triangle pointing whole - pointing back to source) */}
-          <marker
-            id={`opm-tri-aggregation-${id}`}
-            markerWidth="12"
-            markerHeight="12"
-            refX="2"
-            refY="6"
-            orient="auto-start-reverse"
-          >
-            <polygon points="10 2, 2 6, 10 10" fill={strokeColor} stroke={strokeColor} strokeWidth="1" />
-          </marker>
-
-          {/* Generalization (Open triangle pointing superclass - pointing back to source) */}
-          <marker
-            id={`opm-tri-generalization-${id}`}
-            markerWidth="12"
-            markerHeight="12"
-            refX="2"
-            refY="6"
-            orient="auto-start-reverse"
-          >
-            <polygon points="10 2, 2 6, 10 10" fill="#0d1f14" stroke={strokeColor} strokeWidth="1.5" />
-          </marker>
-
-          {/* Exhibition (Open triangle containing smaller solid triangle) */}
-          <marker
-            id={`opm-tri-exhibition-${id}`}
-            markerWidth="12"
-            markerHeight="12"
-            refX="2"
-            refY="6"
-            orient="auto-start-reverse"
-          >
-            <polygon points="10 2, 2 6, 10 10" fill="#0d1f14" stroke={strokeColor} strokeWidth="1.5" />
-            <polygon points="8 4, 4 6, 8 8" fill={strokeColor} />
-          </marker>
+          {ls.end === 'filled' && (
+            <marker id={`m-filled-${id}`} markerWidth="10" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="strokeWidth">
+              <polygon points="0 0, 10 3.5, 0 7" fill={ls.stroke} />
+            </marker>
+          )}
+          {ls.end === 'hollow' && (
+            <marker id={`m-hollow-${id}`} markerWidth="10" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="strokeWidth">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#0d0d0d" stroke={ls.stroke} strokeWidth="1.2" />
+            </marker>
+          )}
+          {ls.start === 'filled' && (
+            <marker id={`m-sfilled-${id}`} markerWidth="10" markerHeight="7" refX="2" refY="3.5" orient="auto-start-reverse" markerUnits="strokeWidth">
+              <polygon points="0 0, 10 3.5, 0 7" fill={ls.stroke} />
+            </marker>
+          )}
+          {ls.structuralStart === 'triangle-filled' && (
+            <marker id={`m-tri-f-${id}`} markerWidth="12" markerHeight="12" refX="2" refY="6" orient="auto-start-reverse">
+              <polygon points="10 2, 2 6, 10 10" fill={ls.stroke} stroke={ls.stroke} strokeWidth="1" />
+            </marker>
+          )}
+          {ls.structuralStart === 'triangle-hollow' && (
+            <marker id={`m-tri-h-${id}`} markerWidth="12" markerHeight="12" refX="2" refY="6" orient="auto-start-reverse">
+              <polygon points="10 2, 2 6, 10 10" fill="#0d0d0d" stroke={ls.stroke} strokeWidth="1.5" />
+            </marker>
+          )}
+          {ls.structuralStart === 'circle-filled' && (
+            <marker id={`m-cir-f-${id}`} markerWidth="12" markerHeight="12" refX="3" refY="6" orient="auto-start-reverse">
+              <circle cx="6" cy="6" r="4" fill={ls.stroke} />
+            </marker>
+          )}
         </defs>
       </svg>
 
@@ -237,12 +113,12 @@ export const OPMEdge: React.FC<EdgeProps<OPMEdgeData>> = ({
         id={`${id}-glow`}
         d={edgePath}
         fill="none"
-        stroke={selected ? '#fb923c' : (data?.isActiveFlow ? strokeColor : '#27272a')}
+        stroke={selected ? '#fb923c' : (data?.isActiveFlow ? ls.stroke : '#27272a')}
         strokeWidth={selected ? 5 : (data?.isActiveFlow ? 5.5 : 2.5)}
         strokeOpacity={selected ? 0.35 : (data?.isActiveFlow ? 0.6 : 0.05)}
         className="transition-all duration-300 pointer-events-none"
         style={{
-          filter: (selected || data?.isActiveFlow) ? `drop-shadow(0 0 5px ${selected ? '#fb923c' : strokeColor})` : undefined
+          filter: (selected || data?.isActiveFlow) ? `drop-shadow(0 0 5px ${selected ? '#fb923c' : ls.stroke})` : undefined
         }}
       />
 
@@ -251,14 +127,24 @@ export const OPMEdge: React.FC<EdgeProps<OPMEdgeData>> = ({
         id={id}
         style={{
           ...style,
-          stroke: selected ? '#fb923c' : (data?.isActiveFlow ? strokeColor : '#52525b'),
+          stroke: selected ? '#fb923c' : (data?.isActiveFlow ? ls.stroke : '#52525b'),
           strokeWidth: selected ? 2.5 : (data?.isActiveFlow ? 2.2 : 1.2),
-          strokeDasharray,
+          strokeDasharray: dash,
         }}
         className="react-flow__edge-path transition-all duration-300"
         d={edgePath}
-        markerEnd={customMarkerEnd || markerEnd}
-        markerStart={customMarkerStart}
+        markerEnd={
+          ls.end === 'filled' ? `url(#m-filled-${id})`
+          : ls.end === 'hollow' ? `url(#m-hollow-${id})`
+          : markerEnd
+        }
+        markerStart={
+          ls.structuralStart === 'triangle-filled' ? `url(#m-tri-f-${id})`
+          : ls.structuralStart === 'triangle-hollow' ? `url(#m-tri-h-${id})`
+          : ls.structuralStart === 'circle-filled' ? `url(#m-cir-f-${id})`
+          : ls.start === 'filled' ? `url(#m-sfilled-${id})`
+          : undefined
+        }
       />
 
       {/* Thick invisible interaction path to make clicking/hovering easy */}
@@ -273,10 +159,10 @@ export const OPMEdge: React.FC<EdgeProps<OPMEdgeData>> = ({
       {/* Moving Signal Particle / Pulse (only on active execution flows) */}
       {data?.isActiveFlow && (
         <circle r="3.5" fill="#ffffff" style={{ filter: 'drop-shadow(0 0 5px #ffffff)' }}>
-          <animateMotion 
-            dur="1.2s" 
-            repeatCount="indefinite" 
-            path={edgePath} 
+          <animateMotion
+            dur="1.2s"
+            repeatCount="indefinite"
+            path={edgePath}
             calcMode="linear"
           />
         </circle>
