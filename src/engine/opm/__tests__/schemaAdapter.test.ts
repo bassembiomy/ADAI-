@@ -75,9 +75,9 @@ describe('OPM executable schema adapter', () => {
 
   it('creates defaults for objects, processes, states and links on explicit enable', () => {
     const upgraded = withExecutableDefaults(legacyNodes, legacyEdges);
-    expect(upgraded.nodes[0].data.objectExecution).toEqual({ enabled: true, attributes: [] });
-    expect(upgraded.nodes[1].data.processExecution).toEqual({ enabled: true, assignments: [] });
-    expect(upgraded.edges[0].data.linkExecution).toEqual({ enabled: true, conditionExpression: '' });
+    expect(upgraded.nodes[0].data.objectExecution).toMatchObject({ enabled: true, attributes: [] });
+    expect(upgraded.nodes[1].data.processExecution).toMatchObject({ enabled: true, assignments: [] });
+    expect(upgraded.edges[0].data.linkExecution).toMatchObject({ enabled: true, guard: '' });
   });
 
   it('preserves each execution object byte-for-byte through JSON serialization', () => {

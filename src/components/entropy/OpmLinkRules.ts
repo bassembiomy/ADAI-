@@ -34,7 +34,10 @@ export function validateOpmConnection(
       if (sourceType === 'process' && (tgtIsObjectish || targetType === 'state')) return { allowed: true };
       return { allowed: false, reason: 'Result links connect a Process to the Object or State it yields.' };
     case 'effect':
-      if (sourceType === 'process' && (tgtIsObjectish || targetType === 'state')) return { allowed: true };
+      if (
+        (sourceType === 'process' && (tgtIsObjectish || targetType === 'state')) ||
+        ((srcIsObjectish || sourceType === 'state') && targetType === 'process')
+      ) return { allowed: true };
       return { allowed: false, reason: 'Effect links connect a Process with the Object or State it changes.' };
     case 'trigger':
       if (sourceType === 'state' && targetType === 'state') return { allowed: true };

@@ -28,16 +28,18 @@ const renderOPMPort = (port: OPMPort, idx: number, totalCount: number, isEllipse
   
   const handleStyle: React.CSSProperties = {
     background: color,
-    width: 9,
-    height: 9,
-    border: '2px solid #0d0d0d',
+    width: 10,
+    height: 10,
+    border: '2px solid #18181b',
     borderRadius: '50%',
     position: 'absolute',
     left: '50%',
     top: '50%',
     transform: 'translate(-50%, -50%)',
     zIndex: 20,
-    cursor: 'pointer',
+    cursor: 'crosshair',
+    boxShadow: `0 0 6px ${color}99`,
+    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
   };
 
   const wrapperStyle: React.CSSProperties = {
@@ -119,14 +121,15 @@ const renderOPMPort = (port: OPMPort, idx: number, totalCount: number, isEllipse
   }
 
   return (
-    <div key={port.id} className="group" style={wrapperStyle}>
+    <div key={port.id} className="group hover:z-30" style={wrapperStyle}>
       <Handle
         type={isInput ? 'target' : 'source'}
         position={position}
         id={port.id}
         style={handleStyle}
+        className="hover:scale-125 hover:!border-amber-400 hover:!shadow-[0_0_12px_#fbbf24]"
       />
-      <span className="opacity-0 group-hover:opacity-100 group-hover:text-white group-hover:bg-black/95 group-hover:scale-105 transition-all duration-150 shadow-lg pointer-events-none z-30" style={labelStyle}>
+      <span className="opacity-0 group-hover:opacity-100 group-hover:text-amber-100 group-hover:bg-black/95 group-hover:border-amber-400/50 group-hover:scale-105 transition-all duration-150 shadow-lg pointer-events-none z-30" style={labelStyle}>
         {port.name}
       </span>
     </div>
@@ -157,8 +160,8 @@ export const OPMObjectNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected
   // ISO 19450: physical things get a THICK border, informational things a thin one.
   const borderClass = selected
     ? isRequirement
-      ? 'border-2 border-purple-400 shadow-[0_0_20px_rgba(192,132,252,0.4)] bg-purple-950/50'
-      : 'border-2 border-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.4)] bg-emerald-950/50'
+      ? 'border-2 border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.65),0_0_50px_rgba(245,158,11,0.35),inset_0_0_12px_rgba(251,191,36,0.15)] ring-1 ring-amber-300/40 bg-gradient-to-b from-[#22142d]/95 to-[#160b22]/95'
+      : 'border-2 border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.65),0_0_50px_rgba(245,158,11,0.35),inset_0_0_12px_rgba(251,191,36,0.15)] ring-1 ring-amber-300/40 bg-gradient-to-b from-[#1a1608]/95 to-[#0a1810]/95'
     : isRequirement
       ? 'border border-purple-500/70 bg-[#160b22]/90 shadow-lg'
       : isPhysical
@@ -179,7 +182,7 @@ export const OPMObjectNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected
         height: '100%'
       }}
     >
-      <NodeResizer minWidth={160} minHeight={60} isVisible={selected} lineStyle={{ borderColor: isRequirement ? '#c084fc' : '#10b981' }} handleStyle={{ background: isRequirement ? '#c084fc' : '#10b981', border: 'none', borderRadius: '4px' }} />
+      <NodeResizer minWidth={160} minHeight={60} isVisible={selected} lineStyle={{ borderColor: '#fbbf24' }} handleStyle={{ background: '#fbbf24', border: '1px solid #78350f', borderRadius: '4px' }} />
 
       {/* Header tag */}
       <div className={`flex items-center justify-between border-b pb-1 select-none ${isRequirement ? 'border-purple-800/40' : 'border-emerald-800/40'}`}>
@@ -263,12 +266,12 @@ export const OPMProcessNode: React.FC<NodeProps<AppNode>> = ({ id, data, selecte
     <div
       className={`relative px-4 py-2 min-w-[200px] min-h-[68px] flex flex-col items-center justify-center transition-all duration-200 ${
         selected
-          ? 'border-2 border-sky-400 shadow-[0_0_20px_rgba(56,189,248,0.5)] bg-sky-950/50'
+          ? 'border-2 border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.65),0_0_50px_rgba(245,158,11,0.35),inset_0_0_12px_rgba(251,191,36,0.15)] ring-1 ring-amber-300/40 bg-gradient-to-b from-[#1a1608]/95 to-[#081522]/95'
           : isFiring
           ? 'border-2 border-orange-400 bg-sky-900/60 shadow-[0_0_25px_rgba(251,146,60,0.8)] scale-105 animate-pulse'
           : 'border border-sky-600/70 bg-[#0c1a24]/85 backdrop-blur-md shadow-md'
       } ${
-        isPhysical
+        isPhysical && !selected
           ? 'border-[3px] border-sky-400/90'
           : ''
       }`}
@@ -278,7 +281,7 @@ export const OPMProcessNode: React.FC<NodeProps<AppNode>> = ({ id, data, selecte
         height: '100%',
       }}
     >
-      <NodeResizer minWidth={160} minHeight={60} isVisible={selected} lineStyle={{ borderColor: '#0284c7' }} handleStyle={{ background: '#0284c7', border: 'none', borderRadius: '4px' }} />
+      <NodeResizer minWidth={160} minHeight={60} isVisible={selected} lineStyle={{ borderColor: '#fbbf24' }} handleStyle={{ background: '#fbbf24', border: '1px solid #78350f', borderRadius: '4px' }} />
 
       <div className="text-center z-10 select-none px-3">
         <span className="text-[7.5px] uppercase tracking-widest font-black text-sky-400/70 block mb-0.5">«Process»</span>
@@ -332,7 +335,7 @@ export const OPMStateNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected 
     <div
       className={`relative rounded-lg px-2 py-1 w-[95px] h-[32px] flex items-center justify-center border transition-all duration-200 box-border ${
         selected
-          ? 'border-orange-400 bg-orange-950/80 shadow-[0_0_12px_rgba(251,146,60,0.5)] scale-105'
+          ? 'border-2 border-amber-400 bg-gradient-to-b from-[#2a1b08] to-[#140b02] shadow-[0_0_22px_rgba(251,191,36,0.7),inset_0_0_8px_rgba(251,191,36,0.2)] ring-1 ring-amber-300/50 scale-105'
           : isActive
           ? 'border-orange-400 bg-gradient-to-r from-orange-500 to-amber-500 text-black font-extrabold shadow-[0_0_18px_rgba(249,115,22,0.85)] scale-105'
           : 'border-orange-900/40 bg-gradient-to-br from-[#1a0e05]/95 to-[#0e0803]/95 text-orange-200/80 hover:border-orange-500/50 hover:bg-[#1a0e05]'

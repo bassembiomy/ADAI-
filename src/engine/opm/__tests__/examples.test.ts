@@ -1,16 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import { OPM_EXAMPLES } from '../../../components/entropy/EntropyExamples';
+import { makeApplianceFixture, makeConformanceExerciseFixture, makeConformanceContentionFixture } from '../fixtures';
 import { compileExecutableOpm } from '../pipeline';
 import { generateOpmCArtifacts } from '../cGenerator';
 
 describe('OPM template examples validation and code generation', () => {
-  it.each(['smartHome', 'trafficLight', 'pidController'])('validates and generates template %s', (key) => {
-    const ex = OPM_EXAMPLES[key];
+  const getFixture = (key: string) => {
+    switch (key) {
+      case 'appliance': return makeApplianceFixture();
+      case 'exercise': return makeConformanceExerciseFixture();
+      case 'contention': return makeConformanceContentionFixture();
+      default: throw new Error(`Unknown fixture ${key}`);
+    }
+  };
+
+  it.each(['appliance', 'exercise', 'contention'])('validates and generates template %s', (key) => {
+    const ex = getFixture(key);
     expect(ex).toBeDefined();
     expect(ex.nodes).toBeDefined();
     expect(ex.edges).toBeDefined();
 
-    const comp = compileExecutableOpm(ex.nodes!, ex.edges!, ex.executionConfig);
+    const comp = compileExecutableOpm(ex.nodes, ex.edges, ex.config);
     expect(comp.model).toBeDefined();
     expect(comp.diagnostics.filter(d => d.severity === 'error')).toEqual([]);
 
@@ -20,9 +29,9 @@ describe('OPM template examples validation and code generation', () => {
     expect(cArtifacts.files.map(f => f.name)).toContain('opm_manifest.json');
   });
 
-  it.each(['smartHome', 'trafficLight', 'pidController'])('template %s emits bounded scheduler with diagnostics', (key) => {
-    const ex = OPM_EXAMPLES[key];
-    const comp = compileExecutableOpm(ex.nodes!, ex.edges!, ex.executionConfig);
+  it.each(['appliance', 'exercise', 'contention'])('template %s emits bounded scheduler with diagnostics', (key) => {
+    const ex = getFixture(key);
+    const comp = compileExecutableOpm(ex.nodes, ex.edges, ex.config);
     const cArtifacts = generateOpmCArtifacts(comp.model!);
     const byName = new Map(cArtifacts.files.map(f => [f.name, f.content]));
     expect(byName.get('opm_runtime.h')).toContain('const OPM_Diagnostics_t *OPM_GetDiagnostics');

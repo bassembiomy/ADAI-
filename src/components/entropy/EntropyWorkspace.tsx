@@ -30,6 +30,7 @@ import { OpmLegend } from './OpmLegend';
 import { importSysmlToOpm } from './SysmlToOpmImporter';
 import { validateOpmConnection } from './OpmLinkRules';
 import { layoutOpmGraph } from './OpmAutoLayout';
+import { resolveBlockOverlap, type RectBounds } from './OpmCollisionAvoidance';
 import type { SysMLDiagramState } from '../../types/sysml_types';
 import { Play, Pause, RotateCcw, ArrowRight, Layout, Download, Upload, ZoomIn, ZoomOut, Check, X, Plus, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
@@ -54,7 +55,7 @@ const OPMConnectionLine = ({
   toPosition,
   fromNode
 }: any) => {
-  const color = fromNode?.type === 'opmObject' ? '#10b981' : fromNode?.type === 'opmProcess' ? '#0284c7' : '#f59e0b';
+  const color = '#fbbf24'; // Warm golden-amber light
   const { screenToFlowPosition } = useReactFlow();
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const targetsRef = useRef<{ x: number; y: number; flowX: number; flowY: number }[]>([]);
@@ -127,20 +128,20 @@ const OPMConnectionLine = ({
       <path
         fill="none"
         stroke={color}
-        strokeWidth={4}
-        strokeOpacity={0.25}
+        strokeWidth={6}
+        strokeOpacity={0.4}
         d={path}
-        style={{ filter: `drop-shadow(0 0 3px ${color})` }}
+        style={{ filter: `drop-shadow(0 0 6px ${color})` }}
       />
-      <path fill="none" stroke={color} strokeWidth={2.5} d={path} />
+      <path fill="none" stroke={color} strokeWidth={2.5} strokeDasharray="6 4" d={path} />
       <circle
         cx={finalToX}
         cy={finalToY}
-        fill="#ffffff"
-        r={3.5}
-        stroke={color}
-        strokeWidth={2}
-        style={{ filter: `drop-shadow(0 0 4px ${color})` }}
+        fill="#fbbf24"
+        r={4.5}
+        stroke="#ffffff"
+        strokeWidth={1.5}
+        style={{ filter: `drop-shadow(0 0 8px ${color})` }}
       />
     </g>
   );
@@ -954,6 +955,50 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     });
   };
 
+  const handleEdgeTypeChange = useCallback((edgeId: string, newType: OPMLinkType) => {
+    setEdges(eds => eds.map(edge => edge.id === edgeId ? { ...edge, data: { ...edge.data, type: newType } } : edge));
+  }, [setEdges]);
+
+  const handleEdgeDelete = useCallback((edgeId: string) => {
+    setEdges(eds => eds.filter(edge => edge.id !== edgeId));
+  }, [setEdges]);
+
+  const handleNodeDragStop = useCallback((_: React.MouseEvent, node: AppNode) => {
+    if (node.parentId) return;
+
+    setNodes((currentNodes) => {
+      const movingNode = currentNodes.find((n) => n.id === node.id);
+      if (!movingNode) return currentNodes;
+
+      const otherNodes: RectBounds[] = currentNodes
+        .filter((n) => n.id !== node.id && !n.parentId && n.position)
+        .map((n) => ({
+          id: n.id,
+          x: n.position.x,
+          y: n.position.y,
+          width: (n.measured?.width ?? (n.width as number)) || 220,
+          height: (n.measured?.height ?? (n.height as number)) || 80,
+        }));
+
+      const movingBounds: RectBounds = {
+        id: movingNode.id,
+        x: movingNode.position.x,
+        y: movingNode.position.y,
+        width: (movingNode.measured?.width ?? (movingNode.width as number)) || 220,
+        height: (movingNode.measured?.height ?? (movingNode.height as number)) || 80,
+      };
+
+      const resolution = resolveBlockOverlap(movingBounds, otherNodes, 16);
+      if (!resolution.collided) return currentNodes;
+
+      return currentNodes.map((n) =>
+        n.id === node.id
+          ? { ...n, position: { x: resolution.x, y: resolution.y } }
+          : n
+      );
+    });
+  }, [setNodes]);
+
   const mappedEdges = useMemo(() => {
     return filteredEdges.map(e => {
       const srcNode = nodes.find(n => n.id === e.source);
@@ -977,11 +1022,13 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         data: {
           ...e.data,
           isSimulating: simRunning,
-          isActiveFlow
+          isActiveFlow,
+          onTypeChange: (newType: OPMLinkType) => handleEdgeTypeChange(e.id, newType),
+          onDelete: () => handleEdgeDelete(e.id),
         }
       };
     });
-  }, [filteredEdges, nodes, simRunning]);
+  }, [filteredEdges, nodes, simRunning, handleEdgeTypeChange, handleEdgeDelete]);
 
   const numIn = selectedNode?.data?.inputs?.length || 0;
   const numOut = selectedNode?.data?.outputs?.length || 0;
@@ -1237,6 +1284,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
+              onNodeDragStop={handleNodeDragStop}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
               onInit={(inst) => { reactFlowInstanceRef.current = inst; }}

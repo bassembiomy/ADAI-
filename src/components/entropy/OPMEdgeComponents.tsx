@@ -1,5 +1,5 @@
 import React from 'react';
-import { EdgeProps, getSmoothStepPath, getBezierPath } from '@xyflow/react';
+import { EdgeProps, getSmoothStepPath, EdgeLabelRenderer } from '@xyflow/react';
 import { OPMEdgeData, type AppEdge } from './EntropyTypes';
 
 /**
@@ -39,6 +39,36 @@ const LINK_STYLES: Record<string, LinkStyle> = {
   verifies:      { stroke: '#c084fc', dashed: true, end: 'filled' },
 };
 
+const LINK_LABELS: Record<string, string> = {
+  agent: 'Agent',
+  instrument: 'Instrument',
+  consumption: 'Consumption',
+  result: 'Result',
+  effect: 'Effect',
+  trigger: 'Trigger',
+  condition: 'Condition',
+  aggregation: 'Aggregation',
+  generalization: 'Generalization',
+  exhibition: 'Exhibition',
+  satisfies: 'Satisfies',
+  verifies: 'Verifies',
+};
+
+const LINK_ICONS: Record<string, string> = {
+  agent: '👤',
+  instrument: '🎯',
+  consumption: '📦',
+  result: '✨',
+  effect: '🔄',
+  trigger: '⚡',
+  condition: '❓',
+  aggregation: '🧩',
+  generalization: '📐',
+  exhibition: '⚪',
+  satisfies: '📜',
+  verifies: '✅',
+};
+
 // A single component that can render all custom edges based on the OPM link type.
 export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
   id,
@@ -54,7 +84,6 @@ export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
   selected,
 }) => {
   const linkType = data?.type || 'consumption';
-  const isStructural = linkType === 'aggregation' || linkType === 'generalization' || linkType === 'exhibition';
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
@@ -63,12 +92,13 @@ export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
     targetY,
     sourcePosition,
     targetPosition,
-    borderRadius: 12,
-    offset: 24,
+    borderRadius: 16,
+    offset: 28,
   });
 
   const ls = LINK_STYLES[linkType] ?? { stroke: '#94a3b8', end: 'filled' as MarkerKind };
   const dash = ls.dashed ? '6 4' : undefined;
+  const markerStroke = selected ? '#fbbf24' : ls.stroke;
 
   return (
     <>
@@ -77,32 +107,32 @@ export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
         <defs>
           {ls.end === 'filled' && (
             <marker id={`m-filled-${id}`} markerWidth="10" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="strokeWidth">
-              <polygon points="0 0, 10 3.5, 0 7" fill={ls.stroke} />
+              <polygon points="0 0, 10 3.5, 0 7" fill={markerStroke} />
             </marker>
           )}
           {ls.end === 'hollow' && (
             <marker id={`m-hollow-${id}`} markerWidth="10" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="strokeWidth">
-              <polygon points="0 0, 10 3.5, 0 7" fill="#0d0d0d" stroke={ls.stroke} strokeWidth="1.2" />
+              <polygon points="0 0, 10 3.5, 0 7" fill="#0d0d0d" stroke={markerStroke} strokeWidth="1.2" />
             </marker>
           )}
           {ls.start === 'filled' && (
             <marker id={`m-sfilled-${id}`} markerWidth="10" markerHeight="7" refX="2" refY="3.5" orient="auto-start-reverse" markerUnits="strokeWidth">
-              <polygon points="0 0, 10 3.5, 0 7" fill={ls.stroke} />
+              <polygon points="0 0, 10 3.5, 0 7" fill={markerStroke} />
             </marker>
           )}
           {ls.structuralStart === 'triangle-filled' && (
             <marker id={`m-tri-f-${id}`} markerWidth="12" markerHeight="12" refX="2" refY="6" orient="auto-start-reverse">
-              <polygon points="10 2, 2 6, 10 10" fill={ls.stroke} stroke={ls.stroke} strokeWidth="1" />
+              <polygon points="10 2, 2 6, 10 10" fill={markerStroke} stroke={markerStroke} strokeWidth="1" />
             </marker>
           )}
           {ls.structuralStart === 'triangle-hollow' && (
             <marker id={`m-tri-h-${id}`} markerWidth="12" markerHeight="12" refX="2" refY="6" orient="auto-start-reverse">
-              <polygon points="10 2, 2 6, 10 10" fill="#0d0d0d" stroke={ls.stroke} strokeWidth="1.5" />
+              <polygon points="10 2, 2 6, 10 10" fill="#0d0d0d" stroke={markerStroke} strokeWidth="1.5" />
             </marker>
           )}
           {ls.structuralStart === 'circle-filled' && (
             <marker id={`m-cir-f-${id}`} markerWidth="12" markerHeight="12" refX="3" refY="6" orient="auto-start-reverse">
-              <circle cx="6" cy="6" r="4" fill={ls.stroke} />
+              <circle cx="6" cy="6" r="4" fill={markerStroke} />
             </marker>
           )}
         </defs>
@@ -113,12 +143,12 @@ export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
         id={`${id}-glow`}
         d={edgePath}
         fill="none"
-        stroke={selected ? '#fb923c' : (data?.isActiveFlow ? ls.stroke : '#27272a')}
-        strokeWidth={selected ? 5 : (data?.isActiveFlow ? 5.5 : 2.5)}
-        strokeOpacity={selected ? 0.35 : (data?.isActiveFlow ? 0.6 : 0.05)}
+        stroke={selected ? '#fbbf24' : (data?.isActiveFlow ? ls.stroke : '#27272a')}
+        strokeWidth={selected ? 6 : (data?.isActiveFlow ? 5.5 : 2.5)}
+        strokeOpacity={selected ? 0.6 : (data?.isActiveFlow ? 0.6 : 0.05)}
         className="transition-all duration-300 pointer-events-none"
         style={{
-          filter: (selected || data?.isActiveFlow) ? `drop-shadow(0 0 5px ${selected ? '#fb923c' : ls.stroke})` : undefined
+          filter: selected ? 'drop-shadow(0 0 8px rgba(251, 191, 36, 0.85))' : (data?.isActiveFlow ? `drop-shadow(0 0 5px ${ls.stroke})` : undefined)
         }}
       />
 
@@ -127,7 +157,7 @@ export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
         id={id}
         style={{
           ...style,
-          stroke: selected ? '#fb923c' : (data?.isActiveFlow ? ls.stroke : '#52525b'),
+          stroke: selected ? '#fbbf24' : (data?.isActiveFlow ? ls.stroke : '#52525b'),
           strokeWidth: selected ? 2.5 : (data?.isActiveFlow ? 2.2 : 1.2),
           strokeDasharray: dash,
         }}
@@ -185,6 +215,66 @@ export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
             {data.conditionText}
           </text>
         </g>
+      )}
+
+      {/* Floating Interactive Badge on Selected Links */}
+      {selected && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              pointerEvents: 'all',
+            }}
+            className="nodrag nopan z-50 flex items-center gap-1.5 bg-[#121214]/95 border border-amber-400/80 shadow-[0_0_16px_rgba(251,191,36,0.6)] rounded-full px-2.5 py-1 text-[10px] text-amber-200 backdrop-blur-md transition-all"
+          >
+            <span className="font-semibold select-none flex items-center gap-1">
+              <span>{LINK_ICONS[linkType] || '🔗'}</span>
+              <span>{LINK_LABELS[linkType] || linkType}</span>
+            </span>
+            <select
+              value={linkType}
+              onChange={(e) => {
+                e.stopPropagation();
+                if (data?.onTypeChange) {
+                  (data.onTypeChange as any)(e.target.value);
+                }
+              }}
+              className="bg-[#1c1a14] text-amber-100 border border-amber-500/50 rounded px-1.5 py-0.5 text-[9px] outline-none cursor-pointer hover:border-amber-400"
+            >
+              <optgroup label="Procedural" className="bg-[#141414] text-neutral-200">
+                <option value="consumption">Consumption</option>
+                <option value="result">Result</option>
+                <option value="effect">Effect</option>
+                <option value="agent">Agent</option>
+                <option value="instrument">Instrument</option>
+                <option value="trigger">Trigger</option>
+                <option value="condition">Condition</option>
+              </optgroup>
+              <optgroup label="Structural" className="bg-[#141414] text-neutral-200">
+                <option value="aggregation">Aggregation</option>
+                <option value="generalization">Generalization</option>
+                <option value="exhibition">Exhibition</option>
+              </optgroup>
+              <optgroup label="Traceability" className="bg-[#141414] text-neutral-200">
+                <option value="satisfies">Satisfies</option>
+                <option value="verifies">Verifies</option>
+              </optgroup>
+            </select>
+            {data?.onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  (data.onDelete as any)();
+                }}
+                className="hover:text-red-400 text-neutral-400 ml-0.5 p-0.5 transition-colors font-bold"
+                title="Delete link"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </EdgeLabelRenderer>
       )}
     </>
   );
