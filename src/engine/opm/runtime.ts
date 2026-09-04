@@ -30,6 +30,7 @@ import type {
   OpmRuntimeLifecycle,
   OpmRuntimeStatus,
   OpmCommittedTransition,
+  OpmStepSnapshot,
 } from './executableTypes';
 import type { TypedExpressionIr } from './expressionCompiler';
 import {
@@ -66,6 +67,15 @@ export interface OpmTraceRecord {
   data?: Record<string, unknown>;
 }
 
+export type OpmStepInput =
+  | number
+  | {
+      deltaMs?: number;
+      events?: readonly string[] | string[];
+      inputs?: Readonly<Record<string, boolean | number | string>> | Record<string, boolean | number | string>;
+      maxTicks?: number;
+    };
+
 export interface OpmStepResult {
   stepIndex: number;
   timeMs: number;
@@ -86,7 +96,9 @@ export interface OpmStepResult {
   committedWriteIds: string[];
   transitions: CommittedTransition[];
   diagnostics: OpmDiagnostic[];
+  diagnosticsDelta: OpmDiagnostic[];
   trace: OpmTraceRecord[];
+  snapshot: OpmStepSnapshot;
 }
 
 interface DelayedTransitionRecord {
@@ -318,13 +330,33 @@ function buildFaultedResult(
   runtime: OpmRuntime,
   diagnostics: OpmDiagnostic[],
   trace: OpmTraceRecord[],
+  finished = false,
+  lifecycle: OpmRuntimeLifecycle = 'faulted',
 ): OpmStepResult {
+  const snapshot: OpmStepSnapshot = {
+    stepIndex: runtime.stepIndex,
+    timeMs: runtime.timeMs,
+    status: computeStepStatus(diagnostics),
+    lifecycle,
+    finished,
+    values: { ...runtime.values },
+    activeStates: { ...runtime.activeStates },
+    queuedEventIds: [...runtime.eventQueue],
+    stateTimersMs: { ...runtime.stateTimeouts },
+    processTimersMs: { ...runtime.processTimers },
+    firedProcessIds: [],
+    blockedProcessIds: [],
+    traversedLinkIds: [],
+    committedWriteIds: [],
+    transitions: [],
+    diagnostics: [...diagnostics],
+  };
   return {
     stepIndex: runtime.stepIndex,
     timeMs: runtime.timeMs,
     status: computeStepStatus(diagnostics),
-    lifecycle: 'faulted',
-    finished: false,
+    lifecycle,
+    finished,
     values: { ...runtime.values },
     activeStates: { ...runtime.activeStates },
     queuedEventIds: [...runtime.eventQueue],
@@ -339,11 +371,13 @@ function buildFaultedResult(
     committedWriteIds: [],
     transitions: [],
     diagnostics,
+    diagnosticsDelta: [...diagnostics],
     trace,
+    snapshot,
   };
 }
 
-export function stepOpmRuntime(runtime: OpmRuntime, deltaMs: number): OpmStepResult {
+export function stepOpmRuntime(runtime: OpmRuntime, input: OpmStepInput = 10): OpmStepResult {
   const diagnostics: OpmDiagnostic[] = [];
   const trace: OpmTraceRecord[] = [];
   const model = runtime.model;
@@ -355,6 +389,25 @@ export function stepOpmRuntime(runtime: OpmRuntime, deltaMs: number): OpmStepRes
       traceOverflowed = true;
     }
   };
+
+  const isNumericInput = typeof input === 'number';
+  const deltaMs = isNumericInput ? input : (input?.deltaMs ?? model.settings.tickMs ?? 10);
+  const inputEvents = !isNumericInput && input?.events ? input.events : [];
+  const inputValues = !isNumericInput && input?.inputs ? input.inputs : undefined;
+  const configuredMaxTicks = (!isNumericInput && input?.maxTicks !== undefined)
+    ? input.maxTicks
+    : model.settings.maxTicks;
+
+  // Max ticks limit check before executing tick
+  if (configuredMaxTicks !== undefined && configuredMaxTicks > 0 && runtime.stepIndex >= configuredMaxTicks) {
+    diagnostics.push({
+      code: OPM_DIAGNOSTIC_CODES.MAX_TICKS_EXCEEDED,
+      severity: 'error',
+      message: `Execution terminated: stepIndex ${runtime.stepIndex} reached or exceeded maxTicks limit (${configuredMaxTicks}).`,
+      source: { elementId: 'settings', propertyPath: 'settings.maxTicks' },
+    });
+    return buildFaultedResult(runtime, diagnostics, trace, true, 'finished');
+  }
 
   // Validate deltaMs
   if (
@@ -372,9 +425,30 @@ export function stepOpmRuntime(runtime: OpmRuntime, deltaMs: number): OpmStepRes
     return buildFaultedResult(runtime, diagnostics, trace);
   }
 
+  // Validate initial/active states of stateful objects
+  for (const obj of model.objects) {
+    if (obj.stateIds && obj.stateIds.length > 0) {
+      const activeState = runtime.activeStates[obj.id];
+      const isValid = activeState && obj.stateIds.includes(activeState);
+      if (!isValid) {
+        diagnostics.push({
+          code: OPM_DIAGNOSTIC_CODES.INVALID_INITIAL_STATE,
+          severity: 'error',
+          message: `Object "${obj.name}" (${obj.id}) has invalid or missing active state "${activeState}".`,
+          source: obj.source || { elementId: obj.id, propertyPath: 'activeState' },
+        });
+      }
+    }
+  }
+
   const currentStepTime = Math.min(UINT32_MAX, runtime.timeMs + deltaMs);
 
-  // Phase 1: sampleInputs
+  // Phase 1: sampleInputs (input latch)
+  if (inputValues) {
+    for (const [key, val] of Object.entries(inputValues)) {
+      runtime.ioInputs[key] = val;
+    }
+  }
   pushTrace({
     phase: 'sampleInputs',
     description: `Sample inputs for step ${runtime.stepIndex + 1}`,
@@ -382,6 +456,18 @@ export function stepOpmRuntime(runtime: OpmRuntime, deltaMs: number): OpmStepRes
   });
   for (const [key, val] of Object.entries(runtime.ioInputs)) {
     runtime.values[key] = val;
+  }
+
+  // Dispatch latched events if provided in step input
+  if (inputEvents.length > 0) {
+    const maxEvents = model.settings.maxEventsPerTick ?? 16;
+    let count = 0;
+    for (const ev of inputEvents) {
+      if (count < maxEvents) {
+        dispatchOpmEvent(runtime, ev, diagnostics);
+        count++;
+      }
+    }
   }
 
   // Phase 2: advanceTimers
@@ -436,7 +522,7 @@ export function stepOpmRuntime(runtime: OpmRuntime, deltaMs: number): OpmStepRes
 
   // Immutable snapshot for evaluation: frozen so staged writes cannot leak
   // into guard/expression evaluation within this step.
-  const snapshot: Record<string, boolean | number | string> = Object.freeze({
+  const evalSnapshot: Record<string, boolean | number | string> = Object.freeze({
     ...runtime.values,
   });
   const queuedEvents = [...runtime.eventQueue];
@@ -479,7 +565,7 @@ export function stepOpmRuntime(runtime: OpmRuntime, deltaMs: number): OpmStepRes
       }
     }
     if (link.guardIr) {
-      const res = tryEvaluateExpression(link.guardIr, snapshot, diagnostics, link.source);
+      const res = tryEvaluateExpression(link.guardIr, evalSnapshot, diagnostics, link.source);
       if (!res.ok || !res.value) {
         return false;
       }
@@ -566,7 +652,7 @@ export function stepOpmRuntime(runtime: OpmRuntime, deltaMs: number): OpmStepRes
 
     // 4. Guard check (fail-closed: failed evaluation blocks the process)
     if (eligible && proc.guardIr) {
-      const res = tryEvaluateExpression(proc.guardIr, snapshot, diagnostics, proc.source);
+      const res = tryEvaluateExpression(proc.guardIr, evalSnapshot, diagnostics, proc.source);
       if (!res.ok || !res.value) {
         eligible = false;
         blockedReason = 'guard evaluated to false';
@@ -645,7 +731,7 @@ export function stepOpmRuntime(runtime: OpmRuntime, deltaMs: number): OpmStepRes
   for (const proc of firedProcesses) {
     for (const a of proc.assignments) {
       if (!a.enabled) continue;
-      const res = tryEvaluateExpression(a.expressionIr, snapshot, diagnostics, a.source);
+      const res = tryEvaluateExpression(a.expressionIr, evalSnapshot, diagnostics, a.source);
       if (!res.ok) continue;
       const key = resolvedKeyOf(a);
       stagedWrites.push({
@@ -663,7 +749,7 @@ export function stepOpmRuntime(runtime: OpmRuntime, deltaMs: number): OpmStepRes
   for (const link of traversedLinks) {
     for (const a of link.assignments) {
       if (!a.enabled) continue;
-      const res = tryEvaluateExpression(a.expressionIr, snapshot, diagnostics, a.source);
+      const res = tryEvaluateExpression(a.expressionIr, evalSnapshot, diagnostics, a.source);
       if (!res.ok) continue;
       const key = resolvedKeyOf(a);
       stagedWrites.push({
@@ -1003,13 +1089,35 @@ export function stepOpmRuntime(runtime: OpmRuntime, deltaMs: number): OpmStepRes
   const objectIdsWithStates = model.objects
     .filter(o => (o.stateIds?.length ?? 0) > 0)
     .map(o => o.id);
-  const finished = computeFinished(runtime.activeStates, isTerminalByStateId, objectIdsWithStates);
+  let finished = computeFinished(runtime.activeStates, isTerminalByStateId, objectIdsWithStates);
+  if (configuredMaxTicks !== undefined && configuredMaxTicks > 0 && runtime.stepIndex >= configuredMaxTicks) {
+    finished = true;
+  }
   const lifecycle = computeStepLifecycle({
     hasError,
     finished,
     firedCount: firedProcesses.length,
     hasWaitingTriggered,
   });
+
+  const snapshot: OpmStepSnapshot = {
+    stepIndex: runtime.stepIndex,
+    timeMs: runtime.timeMs,
+    status: computeStepStatus(diagnostics),
+    lifecycle,
+    finished,
+    values: { ...runtime.values },
+    activeStates: { ...runtime.activeStates },
+    queuedEventIds: [...runtime.eventQueue],
+    stateTimersMs: { ...runtime.stateTimeouts },
+    processTimersMs: { ...runtime.processTimers },
+    firedProcessIds: firedProcesses.map(p => p.id),
+    blockedProcessIds,
+    traversedLinkIds: traversedLinks.map(l => l.id),
+    committedWriteIds: appliedWrites.map(w => w.attributeId),
+    transitions: committedTransitions,
+    diagnostics: [...diagnostics],
+  };
 
   // Reference phase vocabulary so renames stay coupled to runtimeSemantics.
   void OPM_RUNTIME_PHASES;
@@ -1034,6 +1142,8 @@ export function stepOpmRuntime(runtime: OpmRuntime, deltaMs: number): OpmStepRes
     committedWriteIds: appliedWrites.map(w => w.attributeId),
     transitions: committedTransitions,
     diagnostics,
+    diagnosticsDelta: [...diagnostics],
     trace,
+    snapshot,
   };
 }
