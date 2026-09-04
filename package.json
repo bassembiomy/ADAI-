@@ -38,6 +38,7 @@
     "zero-g": "tsx scripts/zero_g_ci.ts",
     "test:opm": "vitest run src/engine/opm src/components/entropy/__tests__ --reporter=verbose",
     "test:opm:codegen": "vitest run src/engine/opm/__tests__/hostCompilation.test.ts src/engine/opm/__tests__/goldenExecution.test.ts src/engine/opm/__tests__/mutationResistance.test.ts --reporter=verbose",
+    "test:opm:qualification": "vitest run src/engine/opm/__tests__/runtimeConformance.test.ts src/engine/opm/__tests__/generatorBoundary.test.ts src/engine/opm/__tests__/cGenerator.test.ts --reporter=verbose",
     "test:opm:release": "npm run test:opm && npm run test:opm:codegen && node src/security/opmCodeVerifier.test.cjs && tsc --noEmit",
     "audit:prebuild": "npm audit --audit-level=critical || echo [WARNING] Unfixable audit vulnerabilities detected (tar, tmp have no upstream fix). Review before production release.",
     "prebuild": "npm run build:sm-runtime && npm run audit:prebuild"
