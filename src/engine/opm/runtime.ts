@@ -234,9 +234,15 @@ export function createOpmRuntime(model: ExecutableOpmModel): OpmRuntime {
   // Initialize object attribute values and aliases
   for (const obj of model.objects) {
     for (const attr of obj.attributes) {
-      const initial = attr.initialValue as boolean | number | string | { memberId: string };
-      const runtimeValue: boolean | number | string =
-        typeof initial === 'object' && initial !== null ? initial.memberId : initial;
+      const initial = attr.initialValue;
+      let runtimeValue: boolean | number | string;
+      if (typeof initial === 'object' && initial !== null && 'memberId' in initial) {
+        runtimeValue = (initial as { memberId: string }).memberId;
+      } else if (typeof initial === 'boolean' || typeof initial === 'number' || typeof initial === 'string') {
+        runtimeValue = initial;
+      } else {
+        runtimeValue = 0;
+      }
       values[attr.id] = runtimeValue;
       values[attr.cIdentifier] = runtimeValue;
     }

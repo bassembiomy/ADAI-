@@ -963,7 +963,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     setEdges(eds => eds.filter(edge => edge.id !== edgeId));
   }, [setEdges]);
 
-  const handleNodeDragStop = useCallback((_: React.MouseEvent, node: AppNode) => {
+  const handleNodeDragStop = useCallback((_: unknown, node: AppNode) => {
     if (node.parentId) return;
 
     setNodes((currentNodes) => {

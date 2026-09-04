@@ -52,6 +52,7 @@ describe('OPM executable schema adapter', () => {
     upgraded.nodes[0].data.objectExecution!.attributes.push({
       id: 'temperature', displayName: 'Temperature', cIdentifier: 'temperature',
       type: { kind: 'float32' }, initialValue: 20, access: 'readWrite', persistent: false,
+      overflow: 'wrap',
     });
     expect(JSON.parse(JSON.stringify(upgraded)).nodes[0].data.objectExecution?.attributes[0].id)
       .toBe('temperature');
@@ -63,10 +64,11 @@ describe('OPM executable schema adapter', () => {
     upgraded.nodes[0].data.objectExecution!.attributes.push({
       id: 'x', displayName: 'X', cIdentifier: 'x',
       type: { kind: 'int32' }, initialValue: 0, access: 'readWrite', persistent: false,
+      overflow: 'wrap',
     });
     expect(legacyNodes[0].data.objectExecution).toBeUndefined();
-    expect(legacyEdges[0].data.linkExecution).toBeUndefined();
-    expect(legacyNodes[0].data.states).toHaveLength(2);
+    expect(legacyEdges[0].data?.linkExecution).toBeUndefined();
+    expect(legacyNodes[0].data.states ?? []).toHaveLength(2);
 
     const adapted = adaptOpmDiagram(legacyNodes, legacyEdges, DEFAULT_OPM_TARGET_SETTINGS);
     expect(legacyNodes[0].data.objectExecution).toBeUndefined();
@@ -77,7 +79,7 @@ describe('OPM executable schema adapter', () => {
     const upgraded = withExecutableDefaults(legacyNodes, legacyEdges);
     expect(upgraded.nodes[0].data.objectExecution).toMatchObject({ enabled: true, attributes: [] });
     expect(upgraded.nodes[1].data.processExecution).toMatchObject({ enabled: true, assignments: [] });
-    expect(upgraded.edges[0].data.linkExecution).toMatchObject({ enabled: true, guard: '' });
+    expect(upgraded.edges[0].data?.linkExecution).toMatchObject({ enabled: true, guard: '' });
   });
 
   it('preserves each execution object byte-for-byte through JSON serialization', () => {
@@ -85,9 +87,10 @@ describe('OPM executable schema adapter', () => {
     upgraded.nodes[0].data.objectExecution!.attributes.push({
       id: 'temperature', displayName: 'Temperature', cIdentifier: 'temperature',
       type: { kind: 'float32' }, initialValue: 20, access: 'readWrite', persistent: false,
+      overflow: 'wrap',
     });
     upgraded.nodes[1].data.processExecution!.assignments.push({
-      id: 'a-1', target: 'temperature', operator: '=', expression: 'temperature + 1', enabled: true,
+      id: 'a-1', targetAttributeId: 'temperature', target: 'temperature', operator: '=', expression: 'temperature + 1', enabled: true,
     });
 
     // Same persistence shape used by project save/load: entropy.json / unified project
@@ -98,8 +101,8 @@ describe('OPM executable schema adapter', () => {
       .toBe(JSON.stringify(upgraded.nodes[0].data.objectExecution));
     expect(JSON.stringify(parsed.entropyNodes[1].data.processExecution))
       .toBe(JSON.stringify(upgraded.nodes[1].data.processExecution));
-    expect(JSON.stringify(parsed.entropyEdges[0].data.linkExecution))
-      .toBe(JSON.stringify(upgraded.edges[0].data.linkExecution));
+    expect(JSON.stringify(parsed.entropyEdges[0].data?.linkExecution))
+      .toBe(JSON.stringify(upgraded.edges[0].data?.linkExecution));
     // Legacy OPL fields survive untouched alongside the execution metadata
     expect(JSON.stringify(parsed.entropyNodes[0].data.states))
       .toBe(JSON.stringify(legacyNodes[0].data.states));
@@ -112,6 +115,7 @@ describe('OPM executable schema adapter', () => {
     upgraded.nodes[0].data.objectExecution!.attributes.push({
       id: 'temperature', displayName: 'Temperature', cIdentifier: 'temperature',
       type: { kind: 'float32' }, initialValue: 20, access: 'readWrite', persistent: false,
+      overflow: 'wrap',
     });
     const result = adaptOpmDiagram(upgraded.nodes, upgraded.edges, DEFAULT_OPM_TARGET_SETTINGS);
     expect(result.model.executionEnabled).toBe(true);
@@ -125,10 +129,12 @@ describe('OPM executable schema adapter', () => {
     attributes.push({
       id: 'a', displayName: 'A', cIdentifier: 'clash',
       type: { kind: 'int32' }, initialValue: 0, access: 'readWrite', persistent: false,
+      overflow: 'wrap',
     });
     attributes.push({
       id: 'b', displayName: 'B', cIdentifier: 'clash',
       type: { kind: 'int32' }, initialValue: 0, access: 'readWrite', persistent: false,
+      overflow: 'wrap',
     });
     const result = adaptOpmDiagram(upgraded.nodes, upgraded.edges, DEFAULT_OPM_TARGET_SETTINGS);
     const errors = result.diagnostics.filter(d => d.severity === 'error');

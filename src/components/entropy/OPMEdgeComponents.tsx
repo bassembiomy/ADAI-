@@ -261,11 +261,11 @@ export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
                 <option value="verifies">Verifies</option>
               </optgroup>
             </select>
-            {data?.onDelete && (
+            {Boolean(data?.onDelete) && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  (data.onDelete as any)();
+                  (data?.onDelete as any)();
                 }}
                 className="hover:text-red-400 text-neutral-400 ml-0.5 p-0.5 transition-colors font-bold"
                 title="Delete link"
