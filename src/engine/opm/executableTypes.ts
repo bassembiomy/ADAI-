@@ -106,3 +106,124 @@ export const DEFAULT_OPM_TARGET_SETTINGS: OpmTargetSettings = {
   floatPolicy: 'ieee754-single',
   tracing: true,
 };
+
+export interface OpmEventDefinition {
+  id: string;
+  displayName: string;
+  cIdentifier: string;
+}
+
+export interface OpmEnumDefinition {
+  id: string;
+  name: string;
+  cIdentifier: string;
+  literals: string[];
+}
+
+export interface OpmExecutionConfig {
+  settings: OpmTargetSettings;
+  events: OpmEventDefinition[];
+  enums: OpmEnumDefinition[];
+}
+
+export function createDefaultOpmExecutionConfig(): OpmExecutionConfig {
+  return {
+    settings: { ...DEFAULT_OPM_TARGET_SETTINGS },
+    events: [],
+    enums: [],
+  };
+}
+
+export type CanonicalOpmValue = boolean | number | { enumId: string; memberId: string; cIdentifier: string };
+
+export type OpmSymbol = {
+  id: string;
+  name: string;
+  cIdentifier: string;
+  kind?: string;
+  [key: string]: any;
+};
+
+export type OpmTransitionRequest = {
+  ownerObjectId: string;
+  targetStateId: string;
+  sourceStateId?: string;
+  delayMs?: number;
+  priority?: number;
+};
+
+export type OpmRuntimeLifecycle = 'ready' | 'running' | 'waiting' | 'finished' | 'faulted';
+export type OpmRuntimeStatus = 'idle' | 'running' | 'error' | 'stopped' | 'complete';
+
+export interface OpmCommittedTransition {
+  ownerObjectId: string;
+  fromStateId?: string;
+  toStateId: string;
+  linkId?: string;
+}
+
+export interface OpmStepSnapshot {
+  stepIndex: number;
+  timeMs: number;
+  status: OpmRuntimeStatus;
+  lifecycle: OpmRuntimeLifecycle;
+  values: Readonly<Record<string, boolean | number | string>>;
+  activeStates: Readonly<Record<string, string>>;
+  queuedEventIds: readonly string[];
+  stateTimersMs: Readonly<Record<string, number>>;
+  processTimersMs: Readonly<Record<string, number>>;
+  firedProcessIds: readonly string[];
+  blockedProcessIds: readonly string[];
+  traversedLinkIds: readonly string[];
+  committedWriteIds: readonly string[];
+  transitions: readonly OpmCommittedTransition[];
+  diagnostics: readonly OpmDiagnostic[];
+}
+
+export interface CompiledOpmAssignment {
+  id: string;
+  targetAttributeId: string;
+  resolvedTargetCIdentifier: string;
+  operator: OpmAssignmentOperator;
+  expressionText: string;
+  expressionIr: any;
+  enabled: boolean;
+  source: OpmSourceRef;
+}
+
+export interface CompiledOpmProcess {
+  enabled: boolean;
+  id: string;
+  name: string;
+  cIdentifier: string;
+  physical: boolean;
+  order: number;
+  source: OpmSourceRef;
+  activation: 'cyclic' | 'triggered' | 'both';
+  inputAttributeIds: readonly string[];
+  outputAttributeIds: readonly string[];
+  guardText: string;
+  guardIr?: any;
+  assignments: readonly CompiledOpmAssignment[];
+  priority: number;
+  periodMs?: number;
+  debounceMs: number;
+  reentrancy: 'reject';
+}
+
+export interface CompiledOpmLink {
+  enabled: boolean;
+  id: string;
+  type: string;
+  sourceId: string;
+  targetId: string;
+  order: number;
+  source: OpmSourceRef;
+  guardText: string;
+  guardIr?: any;
+  eventId?: string;
+  assignments: readonly CompiledOpmAssignment[];
+  transition?: OpmTransitionRequest;
+  priority: number;
+  delayMs: number;
+}
