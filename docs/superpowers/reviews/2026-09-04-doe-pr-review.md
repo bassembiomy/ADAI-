@@ -134,7 +134,22 @@ Following the initial PR review, five critical findings were resolved:
 
 ---
 
-## 6. Human Gatekeeper & Confirmation Protocol
+## 6. Review Findings & Remediation (2026-09-04 Second Follow-up)
+
+Following the PR #3 re-review at commit `307ce35`, two blocking integration issues were addressed:
+1. **Production Exports Receiving Legacy Results**:
+   - `calculateRSM`, `calculateGMDH`, and `calculateTaguchi` in `src/App.tsx` were wired to call the canonical engine solvers `fitRSM`, `fitGMDH`, and `fitTaguchi` from `src/engine/doe/statistics.ts`.
+   - Results now include both the canonical result (`canonicalResult`, `deployment: DOEDeploymentModel`) and legacy aliases (`type`, `Beta`, `model`, `fits`, `residuals`, `actuals`, etc.).
+   - `validateDOEModelResult` and `resolveDeploymentModel` in `src/engine/doe/integration.ts` now tolerate legacy result wrappers and can synthesize compliant `DOEDeploymentModel` instances when needed.
+   - `createVLabDOEBlock` and `createXBridgesDOEBlock` successfully validate and export canonical blocks directly from production workspace calculations.
+2. **GMDH Graph Surface False Flat Zero**:
+   - `PlotlyPlots.tsx` resolved the trained GMDH model across both `results.details.model` and `results.model` (the production workspace location), with fallback to canonical `results.deployment.gmdh` via `evaluateDOEModelDetailed`.
+   - Eliminated silent `0` substitution on failed/missing predictions (`rowZ.push(Number.isFinite(z) ? z : NaN)`).
+   - If no GMDH model/deployment exists or if all surface predictions are non-finite, returns clean `diagnosticState` rather than drawing a deceptive flat zero plane.
+
+---
+
+## 7. Human Gatekeeper & Confirmation Protocol
 In strict adherence to the [Superpowers Workflow Guidelines](file:///g:/adia%20project/.agents/AGENTS.md) and [Pre-Deployment Security Review Gate](file:///g:/adia%20project/.agents/rules/pre-deployment-security-gate.md):
 - The pull request is prepared on `codex/doe-module-review`.
 - All automated gates have passed locally and in CI configuration.

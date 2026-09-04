@@ -2,6 +2,7 @@ import React from 'react';
 import Plot from 'react-plotly.js';
 import { tDistCritical } from '../../engine/doe/statistics';
 import type { DOEModelResult } from '../../engine/doe/types';
+import { evaluateDOEModelDetailed } from '../../engine/doe/modelEvaluator';
 
 export type PlotType =
   | 'surface'
@@ -392,9 +393,22 @@ export function preparePlotlyDataAndLayout({
   const xRange = Array.from({ length: gridRes + 1 }, (_, i) => minX + i * stepX);
   const yRange = Array.from({ length: gridRes + 1 }, (_, i) => minY + i * stepY);
 
+  const resolvedModelType = modelType || results?.modelType || results?.type || 'RSM';
+  const gmdhModel = results?.details?.model || results?.model;
+  const gmdhDeployment = (results?.deployment?.modelType === 'GMDH' ? results.deployment : null)
+    || (results?.canonicalResult?.deployment?.modelType === 'GMDH' ? results.canonicalResult.deployment : null);
+
+  if (resolvedModelType === 'GMDH' && !gmdhModel && !gmdhDeployment) {
+    return {
+      plotData: [],
+      layout: {},
+      diagnosticState: 'GMDH model object not found in results.'
+    };
+  }
+
   const k = headers.length - 1;
   const zGrid: number[][] = [];
-  const beta = results.details?.physicalCoefficients || results.Beta;
+  const beta = results?.details?.physicalCoefficients || results?.details?.Beta || results?.Beta;
 
   for (let j = 0; j < yRange.length; j++) {
     const rowZ: number[] = [];
@@ -404,39 +418,56 @@ export function preparePlotlyDataAndLayout({
       currentFactors[idxX] = xRange[i];
       currentFactors[idxY] = yRange[j];
 
-      let z = 0;
-      if (modelType === 'RSM' && beta) {
-        z = beta[0];
-        for (let f = 0; f < k; f++) z += (beta[f + 1] || 0) * currentFactors[f];
-        for (let f = 0; f < k; f++) z += (beta[k + 1 + f] || 0) * currentFactors[f] * currentFactors[f];
+      let z = NaN;
+      if (resolvedModelType === 'RSM' && beta) {
+        let val = beta[0];
+        for (let f = 0; f < k; f++) val += (beta[f + 1] || 0) * currentFactors[f];
+        for (let f = 0; f < k; f++) val += (beta[k + 1 + f] || 0) * currentFactors[f] * currentFactors[f];
         let idx = 2 * k + 1;
         for (let f = 0; f < k; f++) {
           for (let g = f + 1; g < k; g++) {
-            z += (beta[idx] || 0) * currentFactors[f] * currentFactors[g];
+            val += (beta[idx] || 0) * currentFactors[f] * currentFactors[g];
             idx++;
           }
         }
-      } else if (modelType === 'GMDH' && results.details?.model) {
-        try {
-          z = results.details.model.predict(currentFactors.slice(0, k));
-        } catch {
-          z = 0;
+        z = val;
+      } else if (resolvedModelType === 'GMDH') {
+        if (gmdhModel && typeof gmdhModel.predict === 'function') {
+          try {
+            const pred = gmdhModel.predict(currentFactors.slice(0, k));
+            z = Number.isFinite(pred) ? pred : NaN;
+          } catch {
+            z = NaN;
+          }
+        } else if (gmdhDeployment) {
+          const evalRes = evaluateDOEModelDetailed(gmdhDeployment, currentFactors.slice(0, k));
+          z = evalRes.success && Number.isFinite(evalRes.value) ? evalRes.value : NaN;
         }
-      } else if (modelType === 'Taguchi') {
-        const factorLevels = results.details?.factorLevels || results.factorLevels || [];
-        const grandMean = results.details?.grandMeanY ?? results.grandMean ?? 0;
-        z = grandMean;
+      } else if (resolvedModelType === 'Taguchi') {
+        const factorLevels = results?.details?.factorLevels || results?.factorLevels || [];
+        const grandMean = results?.details?.grandMeanY ?? results?.grandMean ?? 0;
+        let val = grandMean;
         factorLevels.forEach((fl: any, fIdx: number) => {
-          const val = currentFactors[fIdx];
+          const curVal = currentFactors[fIdx];
           if (fl.means && fl.means.length > 0) {
-            const sorted = [...fl.means].sort((a: any, b: any) => Math.abs(a.level - val) - Math.abs(b.level - val));
-            if (sorted[0]) z += (sorted[0].meanY - grandMean);
+            const sorted = [...fl.means].sort((a: any, b: any) => Math.abs(a.level - curVal) - Math.abs(b.level - curVal));
+            if (sorted[0]) val += (sorted[0].meanY - grandMean);
           }
         });
+        z = val;
       }
-      rowZ.push(Number.isFinite(z) ? z : 0);
+      rowZ.push(Number.isFinite(z) ? z : NaN);
     }
     zGrid.push(rowZ);
+  }
+
+  const hasFiniteZ = zGrid.some(row => row.some(val => Number.isFinite(val)));
+  if (!hasFiniteZ) {
+    return {
+      plotData: [],
+      layout: {},
+      diagnosticState: 'Surface plot could not be rendered: model returned non-finite predictions.'
+    };
   }
 
   const plotData: any[] = [

@@ -16,7 +16,7 @@ export function validateDOEModelResult(
 ): DOEDiagnostic[] {
   const diagnostics: DOEDiagnostic[] = [];
 
-  const modelType = result.modelType as DOEModelType;
+  const modelType = ((result as any).modelType || (result as any).type) as DOEModelType;
   if (!modelType || !['RSM', 'GMDH', 'Taguchi'].includes(modelType)) {
     diagnostics.push({
       code: 'UNSUPPORTED_MODEL_TYPE',
@@ -25,7 +25,10 @@ export function validateDOEModelResult(
     });
   }
 
-  const factorNames = (result as any).factorNames || (result as any).factorOrder;
+  const factorNames = (result as any).factorNames
+    || (result as any).factorOrder
+    || ((result as any).deployment && (result as any).deployment.factorOrder)
+    || (Array.isArray((result as any).headers) ? (result as any).headers.slice(0, -1) : undefined);
   if (!factorNames || !Array.isArray(factorNames) || factorNames.length === 0) {
     diagnostics.push({
       code: 'MISSING_FACTORS',
@@ -48,7 +51,9 @@ export function validateDOEModelResult(
     }
   }
 
-  const responseName = (result as any).responseName;
+  const responseName = (result as any).responseName
+    || ((result as any).deployment && (result as any).deployment.responseName)
+    || (Array.isArray((result as any).headers) ? (result as any).headers[(result as any).headers.length - 1] : undefined);
   if (!responseName || typeof responseName !== 'string' || responseName.trim() === '') {
     diagnostics.push({
       code: 'MISSING_RESPONSE',
@@ -243,6 +248,86 @@ function resolveDeploymentModel(
   }
   if ('deployment' in input && input.deployment) {
     return input.deployment;
+  }
+  if ('canonicalResult' in (input as any) && (input as any).canonicalResult?.deployment) {
+    return (input as any).canonicalResult.deployment;
+  }
+  // Synthesize deployment from legacy result if possible
+  const raw = input as any;
+  const mType = (raw.modelType || raw.type) as DOEModelType;
+  const factorOrder: string[] = raw.factorNames || (Array.isArray(raw.headers) ? raw.headers.slice(0, -1) : []);
+  const responseName: string = raw.responseName || (Array.isArray(raw.headers) ? raw.headers[raw.headers.length - 1] : 'Y');
+
+  if (mType === 'RSM') {
+    const beta = raw.Beta || raw.details?.Beta || raw.details?.physicalCoefficients;
+    if (Array.isArray(beta) && beta.length > 0) {
+      const k = factorOrder.length || 1;
+      const terms: any[] = [];
+      for (let i = 0; i < k; i++) {
+        if (beta[i + 1] !== undefined) {
+          terms.push({ name: factorOrder[i] || `X${i + 1}`, factors: [i], powers: [1], coeff: beta[i + 1] });
+        }
+      }
+      for (let i = 0; i < k; i++) {
+        if (beta[k + 1 + i] !== undefined) {
+          terms.push({ name: `${factorOrder[i] || `X${i + 1}`}²`, factors: [i], powers: [2], coeff: beta[k + 1 + i] });
+        }
+      }
+      let cIdx = 2 * k + 1;
+      for (let i = 0; i < k; i++) {
+        for (let j = i + 1; j < k; j++) {
+          if (beta[cIdx] !== undefined) {
+            terms.push({ name: `${factorOrder[i] || `X${i + 1}`}·${factorOrder[j] || `X${j + 1}`}`, factors: [i, j], powers: [1, 1], coeff: beta[cIdx] });
+            cIdx++;
+          }
+        }
+      }
+      return {
+        schemaVersion: 1,
+        modelType: 'RSM',
+        factorOrder,
+        responseName,
+        trainingRowCount: raw.actuals?.length || 4,
+        metrics: { rSquared: raw.rSquared ?? raw.R2 ?? 0 },
+        rsm: { intercept: beta[0] || 0, terms }
+      };
+    }
+  } else if (mType === 'GMDH') {
+    const gmdhModel = raw.model || raw.details?.model;
+    if (gmdhModel && Array.isArray(gmdhModel.layers)) {
+      return {
+        schemaVersion: 1,
+        modelType: 'GMDH',
+        factorOrder,
+        responseName,
+        trainingRowCount: raw.actuals?.length || 5,
+        metrics: { rSquared: raw.rSquared ?? raw.R2 ?? 0 },
+        gmdh: { polyOrder: gmdhModel.polynomialOrder || 2, layers: gmdhModel.layers }
+      };
+    }
+  } else if (mType === 'Taguchi') {
+    const factorLevels = raw.factorLevels || raw.details?.factorLevels;
+    if (Array.isArray(factorLevels)) {
+      return {
+        schemaVersion: 1,
+        modelType: 'Taguchi',
+        factorOrder,
+        responseName,
+        trainingRowCount: raw.actuals?.length || 2,
+        metrics: { rSquared: raw.rSquared ?? raw.R2 ?? 0 },
+        taguchi: {
+          grandMean: raw.grandMean ?? raw.details?.grandMeanY ?? 0,
+          factorLevels: factorLevels.map((fl: any) => ({
+            factorName: fl.factor || fl.factorName,
+            levels: (fl.means || []).map((m: any) => ({
+              level: m.level,
+              meanY: m.meanY,
+              snr: m.meanSN ?? m.snr ?? 0
+            }))
+          }))
+        }
+      };
+    }
   }
   return null;
 }

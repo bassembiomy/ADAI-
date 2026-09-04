@@ -256,4 +256,116 @@ describe('PlotlyPlots Chart Data and Trace Preparation', () => {
 
     expect(meanData[0].y).toEqual([40.0, 50.0]);
   });
+
+  it('renders GMDH surface when model is stored at results.model (production workspace)', () => {
+    const mockGMDHModel = {
+      predict: (inputs: number[]) => 50 + inputs[0] * 1.5 - inputs[1] * 0.8
+    };
+
+    const gmdhResultWithRootModel = {
+      modelType: 'GMDH',
+      factorNames: ['Speed', 'Feed'],
+      responseName: 'Roughness',
+      model: mockGMDHModel, // Production workspace stores model here
+      predictions: [10, 12, 14, 16],
+      actuals: [9.5, 12.2, 14.4, 15.9]
+    };
+
+    const { plotData, diagnosticState } = preparePlotlyDataAndLayout({
+      type: 'surface',
+      data: rawData,
+      results: gmdhResultWithRootModel as any,
+      factors: { x: 0, y: 1 },
+      headers: ['Speed', 'Feed', 'Roughness'],
+      holdValues: [150, 0.3],
+      modelType: 'GMDH'
+    });
+
+    expect(diagnosticState).toBeUndefined();
+    expect(plotData).toHaveLength(2);
+    const surface = plotData[0];
+    expect(surface.type).toBe('surface');
+    for (const row of surface.z) {
+      for (const val of row) {
+        expect(Number.isFinite(val)).toBe(true);
+        expect(val).not.toBe(0); // Ensure not masking with zero plane
+      }
+    }
+  });
+
+  it('renders GMDH surface when model is stored at results.details.model', () => {
+    const mockGMDHModel = {
+      predict: (inputs: number[]) => 20 + inputs[0] * 0.5 + inputs[1] * 2
+    };
+
+    const gmdhResultWithDetailsModel = {
+      modelType: 'GMDH',
+      factorNames: ['Speed', 'Feed'],
+      responseName: 'Roughness',
+      details: {
+        model: mockGMDHModel
+      }
+    };
+
+    const { plotData, diagnosticState } = preparePlotlyDataAndLayout({
+      type: 'surface',
+      data: rawData,
+      results: gmdhResultWithDetailsModel as any,
+      factors: { x: 0, y: 1 },
+      headers: ['Speed', 'Feed', 'Roughness'],
+      holdValues: [150, 0.3],
+      modelType: 'GMDH'
+    });
+
+    expect(diagnosticState).toBeUndefined();
+    expect(plotData).toHaveLength(2);
+    expect(plotData[0].type).toBe('surface');
+  });
+
+  it('does not mask failed GMDH predictions as false flat zero, returning diagnosticState instead', () => {
+    const brokenGMDHModel = {
+      predict: () => NaN
+    };
+
+    const brokenGMDHResult = {
+      modelType: 'GMDH',
+      factorNames: ['Speed', 'Feed'],
+      responseName: 'Roughness',
+      model: brokenGMDHModel
+    };
+
+    const { plotData, diagnosticState } = preparePlotlyDataAndLayout({
+      type: 'surface',
+      data: rawData,
+      results: brokenGMDHResult as any,
+      factors: { x: 0, y: 1 },
+      headers: ['Speed', 'Feed', 'Roughness'],
+      holdValues: [150, 0.3],
+      modelType: 'GMDH'
+    });
+
+    expect(plotData).toHaveLength(0);
+    expect(diagnosticState).toContain('non-finite');
+  });
+
+  it('returns diagnosticState when GMDH model is completely missing', () => {
+    const missingGMDHResult = {
+      modelType: 'GMDH',
+      factorNames: ['Speed', 'Feed'],
+      responseName: 'Roughness'
+    };
+
+    const { plotData, diagnosticState } = preparePlotlyDataAndLayout({
+      type: 'surface',
+      data: rawData,
+      results: missingGMDHResult as any,
+      factors: { x: 0, y: 1 },
+      headers: ['Speed', 'Feed', 'Roughness'],
+      holdValues: [150, 0.3],
+      modelType: 'GMDH'
+    });
+
+    expect(plotData).toHaveLength(0);
+    expect(diagnosticState).toContain('GMDH model object not found');
+  });
 });

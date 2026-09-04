@@ -398,4 +398,53 @@ describe('DOE Canonical Model and Integration Factories', () => {
       expect(residualValid[0]).toBeCloseTo(0, 4);
     });
   });
+
+  describe('Legacy and Production Export Compatibility', () => {
+    it('successfully creates blocks when given a production wrapped result with canonicalResult', () => {
+      const productionWrappedRSM: any = {
+        type: 'RSM',
+        modelType: 'RSM',
+        canonicalResult: mockRSMResult,
+        deployment: mockRSMResult.deployment,
+        Beta: [12.5, 1.2, -0.5],
+        headers: ['Speed', 'Feed', 'Roughness'],
+        r2: 0.96
+      };
+
+      const xblock = createXBridgesDOEBlock(productionWrappedRSM);
+      const vblock = createVLabDOEBlock(productionWrappedRSM);
+
+      expect('data' in xblock).toBe(true);
+      expect('data' in vblock).toBe(true);
+      if ('data' in xblock) {
+        expect(xblock.data.modelType).toBe('RSM');
+        expect(xblock.data.inputs.map((p: any) => p.name)).toEqual(['Speed', 'Feed', 'Depth']);
+      }
+    });
+
+    it('successfully synthesizes DOEDeploymentModel for legacy RSM result without canonical deployment', () => {
+      const legacyRSM: any = {
+        type: 'RSM',
+        headers: ['Speed', 'Feed', 'Roughness'],
+        Beta: [10.0, 1.5, -0.8],
+        r2: 0.92,
+        r2_adj: 0.90,
+        rmse: 0.25
+      };
+
+      const xblock = createXBridgesDOEBlock(legacyRSM);
+      const vblock = createVLabDOEBlock(legacyRSM);
+
+      expect('data' in xblock).toBe(true);
+      expect('data' in vblock).toBe(true);
+      if ('data' in xblock) {
+        expect(xblock.data.type).toBe('DOE_MODEL');
+        expect(xblock.data.modelType).toBe('RSM');
+        expect(xblock.data.deploymentModel.schemaVersion).toBe(1);
+        expect(xblock.data.deploymentModel.rsm?.intercept).toBe(10.0);
+        expect(xblock.data.inputs.map((p: any) => p.name)).toEqual(['Speed', 'Feed']);
+        expect(xblock.data.outputs[0].name).toBe('Roughness');
+      }
+    });
+  });
 });
