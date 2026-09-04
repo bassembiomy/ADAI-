@@ -1,4 +1,5 @@
 import { EquationContext } from './types';
+import { evaluateDOEModel, evaluateLegacyDOEEquation } from '../doe/modelEvaluator';
 
 export interface BlockEquationArgs {
   across: number[];        // values of across variables at the ports
@@ -1733,7 +1734,41 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   simulink_ps_conv: ({ across, branch }) => [branch[0] - (across[0] || 0)],
   vlab_probe: ({ across, branch }) => [branch[0] - (across[0] || 0)],
   conn_label: ({ across, branch }) => [branch[0] - (across[0] || 0)],
-  doe_custom: ({ across, branch }) => [branch[0] - (across[0] || 0)],
+  doe_custom: ({ across, branch, params }) => {
+    let deployment = params?.deploymentModel || params?.deployment;
+    if (typeof deployment === 'object' && deployment !== null && 'value' in deployment) {
+      deployment = deployment.value;
+    }
+    if (typeof deployment === 'string') {
+      try {
+        deployment = JSON.parse(deployment);
+      } catch {
+        deployment = null;
+      }
+    }
+
+    let y = NaN;
+    if (deployment && deployment.schemaVersion === 1) {
+      try {
+        y = evaluateDOEModel(deployment, across);
+      } catch {
+        y = NaN;
+      }
+    } else {
+      const eq = params?.equation?.value || params?.equation || '';
+      if (eq) {
+        try {
+          const factorNames = across.map((_, i) => `X${i + 1}`);
+          y = evaluateLegacyDOEEquation(eq, factorNames, across);
+        } catch {
+          y = NaN;
+        }
+      } else {
+        y = NaN;
+      }
+    }
+    return [branch[0] - y];
+  },
 
   ps_demux_3: ({ across, branch }) => {
     const u = across[0] || 0;

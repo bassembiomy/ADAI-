@@ -169,6 +169,86 @@ describe('DOE Canonical Model and Integration Factories', () => {
     expect('data' in vblock).toBe(true);
   });
 
+  it('rejects RSM terms with out-of-bounds factor indices or invalid powers', () => {
+    const badRSM: any = {
+      modelType: 'RSM',
+      factorNames: ['X1', 'X2'],
+      responseName: 'Yield',
+      deployment: {
+        schemaVersion: 1,
+        modelType: 'RSM',
+        factorOrder: ['X1', 'X2'],
+        responseName: 'Yield',
+        trainingRowCount: 10,
+        metrics: {},
+        rsm: {
+          intercept: 10,
+          terms: [
+            { name: 'BadIndex', factors: [5], powers: [1], coeff: 2 }, // factor 5 > 1
+            { name: 'BadPower', factors: [0], powers: [0], coeff: 3 }   // power 0 is not positive
+          ]
+        }
+      }
+    };
+    const diags = validateDOEModelResult(badRSM);
+    const codes = diags.map(d => d.code);
+    expect(codes).toContain('INVALID_FACTOR_INDEX');
+    expect(codes).toContain('INVALID_TERM_POWER');
+  });
+
+  it('rejects GMDH neurons with invalid input indices', () => {
+    const badGMDH: any = {
+      modelType: 'GMDH',
+      factorNames: ['X1', 'X2'],
+      responseName: 'Yield',
+      deployment: {
+        schemaVersion: 1,
+        modelType: 'GMDH',
+        factorOrder: ['X1', 'X2'],
+        responseName: 'Yield',
+        trainingRowCount: 10,
+        metrics: {},
+        gmdh: {
+          polyOrder: 2,
+          layers: [
+            [
+              { inputs: [0, 99], coeffs: [1, 2, 3, 4, 5, 6] } // 99 out of range
+            ]
+          ]
+        }
+      }
+    };
+    const diags = validateDOEModelResult(badGMDH);
+    const codes = diags.map(d => d.code);
+    expect(codes).toContain('INVALID_NEURON_INPUT');
+  });
+
+  it('rejects Taguchi models with factor level count mismatch', () => {
+    const badTaguchi: any = {
+      modelType: 'Taguchi',
+      factorNames: ['X1', 'X2'],
+      responseName: 'Yield',
+      deployment: {
+        schemaVersion: 1,
+        modelType: 'Taguchi',
+        factorOrder: ['X1', 'X2'],
+        responseName: 'Yield',
+        trainingRowCount: 10,
+        metrics: {},
+        taguchi: {
+          grandMean: 20,
+          factorLevels: [
+            { factorName: 'X1', levels: [{ level: 1, meanY: 15 }] }
+            // Missing X2
+          ]
+        }
+      }
+    };
+    const diags = validateDOEModelResult(badTaguchi);
+    const codes = diags.map(d => d.code);
+    expect(codes).toContain('FACTOR_LEVEL_COUNT_MISMATCH');
+  });
+
   it('rejects invalid model results with typed diagnostics instead of producing a node', () => {
     // Missing response column
     const missingResponse: any = {

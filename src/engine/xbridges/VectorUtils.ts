@@ -300,60 +300,56 @@ export class VectorUtils {
       return Number(trimmed);
     }
 
-    // Try to normalize brackets and parse as JSON
     if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      // 1. Try direct JSON parse first (handles valid JSON arrays like [[1, 2], [3, 4]] or [[1], [0.5]])
       try {
-        let res = trimmed;
-        let prev;
-        do {
-          prev = res;
-          res = res.replace(/\[([^\[\]]+)\]/g, (m: string, p1: string) => {
-            if (p1.includes(';')) {
-              const rows = p1.split(';').map((r: string) => {
-                const parts = r.trim().split(/[\s,]+/).filter(Boolean);
-                return '[' + parts.join(',') + ']';
-              });
-              return '[' + rows.join(',') + ']';
-            } else {
-              const parts = p1.trim().split(/[\s,]+/).filter(Boolean);
-              return '[' + parts.join(',') + ']';
-            }
-          });
-        } while (res !== prev);
-        
-        return JSON.parse(res);
-      } catch (e) {
-        // If JSON.parse fails, fallback to legacy/other methods
+        const jsonParsed = JSON.parse(trimmed);
+        if (Array.isArray(jsonParsed)) {
+          return jsonParsed;
+        }
+      } catch {
+        // Not standard JSON array format, fall back to MATLAB array syntax parsing below
       }
-    }
 
-    // Fallback to legacy parsing if JSON normalization failed
-    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      // 2. Parse MATLAB-style arrays (e.g. "[1 2 3]" or "[1 2; 3 4]" or "[[1 2], [3 5]]")
       const content = trimmed.slice(1, -1).trim();
       if (content === '') return [];
+
+      if (content.includes('[')) {
+        const matches = [...content.matchAll(/\[([^\]]+)\]/g)];
+        if (matches.length > 0) {
+          const matrix = matches.map(m => {
+            const inner = m[1].trim().split(/[\s,]+/).filter(Boolean);
+            return inner.map(p => Number(p)).filter(n => !isNaN(n));
+          }).filter(r => r.length > 0);
+          return matrix;
+        }
+      }
 
       if (content.includes(';')) {
         // Matrix: rows separated by semicolons
         const rows = content.split(';');
-        const matrix = rows.map(row => {
-          const parts = row.trim().split(/[\s,]+/);
-          return parts.map(p => Number(p)).filter(n => !isNaN(n));
-        }).filter((r: number[]) => r.length > 0);
+        const matrix = rows
+          .map((row) => {
+            const parts = row.trim().split(/[\s,]+/).filter(Boolean);
+            return parts.map((p) => Number(p)).filter((n) => !isNaN(n));
+          })
+          .filter((r: number[]) => r.length > 0);
         return matrix;
       } else {
-        // 1D Vector: separated by spaces and/or commas
-        const parts = content.split(/[\s,]+/);
-        const arr = parts.map(p => Number(p)).filter(n => !isNaN(n));
+        // 1D Vector: elements separated by spaces and/or commas
+        const parts = content.split(/[\s,]+/).filter(Boolean);
+        const arr = parts.map((p) => Number(p)).filter((n) => !isNaN(n));
         return arr;
       }
     }
 
-    // Fallback to JSON parse directly
+    // Fallback to JSON parse directly for objects or primitives
     try {
       return JSON.parse(trimmed);
-    } catch (e) {}
-
-    return val;
+    } catch {
+      return val;
+    }
   }
 }
 

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { Edge, Node } from 'reactflow';
+import { Edge, Node } from '@xyflow/react';
 import { VLabPhysicsEngine } from './vlabPhysics';
 import { VLAB_LIBRARY } from '../../utils/vlabLibrary';
+import { createVLabDOEBlock } from '../doe/integration';
+import { DOEDeploymentModel } from '../doe/types';
 
 type Model = { nodes: Node[]; edges: Edge[]; dt: number; steps: number };
 
@@ -176,10 +178,52 @@ describe('V-Lab connected reference models', () => {
     expect(result.readings.at(-1)).toBeCloseTo(10, 6);
   });
 
+  it('evaluates a canonical DOE model inside a connected V-Lab simulation network', () => {
+    const rsmModel: DOEDeploymentModel = {
+      schemaVersion: 1,
+      modelType: 'RSM',
+      responseName: 'Yield',
+      factorOrder: ['X1', 'X2'],
+      trainingRowCount: 10,
+      metrics: { rSquared: 0.99, adjustedRSquared: 0.98, rmse: 0.05, fStatistic: 100, pValue: 0.0001 },
+      rsm: {
+        intercept: 10,
+        terms: [
+          { name: 'X1', factors: [0], powers: [1], coeff: 2 },
+          { name: 'X2', factors: [1], powers: [1], coeff: 3 },
+        ],
+      },
+    };
+
+    const exportRes = createVLabDOEBlock(rsmModel, 'doe1');
+    expect('success' in exportRes && (exportRes as any).success === false).toBe(false);
+    const doeNode = exportRes as any;
+
+    // Feed X1 = 4, X2 = 5 into doe1 -> Expected output = 10 + 2*4 + 3*5 = 33
+    const result = run({
+      dt: 0.01,
+      steps: 2,
+      nodes: [
+        node('const1', 'ps_constant', { value: 4 }),
+        node('const2', 'ps_constant', { value: 5 }),
+        doeNode,
+        node('scope', 'scope'),
+      ],
+      edges: [
+        edge('c1-doe', 'const1', 'y_s', 'doe1', 'in1_t'),
+        edge('c2-doe', 'const2', 'y_s', 'doe1', 'in2_t'),
+        edge('doe-scope', 'doe1', 'out_s', 'scope', 'in1_t'),
+      ],
+    });
+
+    expect(result.readings.at(-1)).toBeCloseTo(33, 6);
+  });
+
   it('keeps the catalog testable: every library block is assigned to a connected-model family', () => {
     const families = new Set([
       'Electrical', 'Gas', 'Magnetic', 'Mechanical', 'Fluid', 'Physical', 'Thermal',
       'Consumer Appliances', 'Microwave & Cooking', 'Utilities', 'Fluid / Steam', 'DOE Models',
+      'Isothermal Liquid',
     ]);
     const unclassified = VLAB_LIBRARY.flatMap(domain => domain.blocks)
       .filter(block => !families.has(domainForBlock(block.id)))

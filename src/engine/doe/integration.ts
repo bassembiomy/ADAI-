@@ -70,6 +70,8 @@ export function validateDOEModelResult(
       });
     }
 
+    const factorCount = factorNames ? factorNames.length : (deployment.factorOrder?.length || 0);
+
     if (modelType === 'RSM') {
       if (!deployment.rsm) {
         diagnostics.push({
@@ -93,6 +95,39 @@ export function validateDOEModelResult(
               message: `RSM term coefficient for "${term.name}" is not a finite number.`
             });
           }
+          if (!Array.isArray(term.factors) || !Array.isArray(term.powers)) {
+            diagnostics.push({
+              code: 'MALFORMED_TERM_PAYLOAD',
+              severity: 'error',
+              message: `RSM term "${term.name}" has invalid factors or powers array.`
+            });
+          } else {
+            if (term.factors.length !== term.powers.length) {
+              diagnostics.push({
+                code: 'TERM_LENGTH_MISMATCH',
+                severity: 'error',
+                message: `RSM term "${term.name}" has factors length ${term.factors.length} != powers length ${term.powers.length}.`
+              });
+            }
+            for (const fIdx of term.factors) {
+              if (!Number.isInteger(fIdx) || fIdx < 0 || fIdx >= factorCount) {
+                diagnostics.push({
+                  code: 'INVALID_FACTOR_INDEX',
+                  severity: 'error',
+                  message: `RSM term "${term.name}" references invalid factor index ${fIdx} (valid: 0 to ${factorCount - 1}).`
+                });
+              }
+            }
+            for (const pwr of term.powers) {
+              if (!Number.isInteger(pwr) || pwr < 1) {
+                diagnostics.push({
+                  code: 'INVALID_TERM_POWER',
+                  severity: 'error',
+                  message: `RSM term "${term.name}" references non-positive integer power ${pwr}.`
+                });
+              }
+            }
+          }
         }
       }
     } else if (modelType === 'GMDH') {
@@ -103,10 +138,36 @@ export function validateDOEModelResult(
           message: 'GMDH model is missing layers payload.'
         });
       } else {
+        let prevWidth = factorCount;
         for (let l = 0; l < deployment.gmdh.layers.length; l++) {
           const layer = deployment.gmdh.layers[l];
+          if (!Array.isArray(layer) || layer.length === 0) {
+            diagnostics.push({
+              code: 'EMPTY_GMDH_LAYER',
+              severity: 'error',
+              message: `GMDH layer ${l} has no neurons.`
+            });
+            continue;
+          }
           for (let n = 0; n < layer.length; n++) {
             const neuron = layer[n];
+            if (!neuron || !Array.isArray(neuron.inputs) || neuron.inputs.length !== 2) {
+              diagnostics.push({
+                code: 'INVALID_NEURON_STRUCTURE',
+                severity: 'error',
+                message: `GMDH layer ${l} neuron ${n} must have exactly 2 input indices.`
+              });
+            } else {
+              for (const inp of neuron.inputs) {
+                if (!Number.isInteger(inp) || inp < 0 || inp >= prevWidth) {
+                  diagnostics.push({
+                    code: 'INVALID_NEURON_INPUT',
+                    severity: 'error',
+                    message: `GMDH layer ${l} neuron ${n} input index ${inp} out of range (0 to ${prevWidth - 1}).`
+                  });
+                }
+              }
+            }
             for (const c of neuron.coeffs || []) {
               if (!Number.isFinite(c)) {
                 diagnostics.push({
@@ -117,6 +178,7 @@ export function validateDOEModelResult(
               }
             }
           }
+          prevWidth = layer.length;
         }
       }
     } else if (modelType === 'Taguchi') {
@@ -133,6 +195,35 @@ export function validateDOEModelResult(
             severity: 'error',
             message: 'Taguchi grand mean is not a finite number.'
           });
+        }
+        if (!Array.isArray(deployment.taguchi.factorLevels) || deployment.taguchi.factorLevels.length !== factorCount) {
+          diagnostics.push({
+            code: 'FACTOR_LEVEL_COUNT_MISMATCH',
+            severity: 'error',
+            message: `Taguchi factor level count (${deployment.taguchi.factorLevels?.length ?? 0}) does not match factor count (${factorCount}).`
+          });
+        } else {
+          for (const fl of deployment.taguchi.factorLevels) {
+            if (!fl.levels || !Array.isArray(fl.levels) || fl.levels.length === 0) {
+              diagnostics.push({
+                code: 'EMPTY_FACTOR_LEVELS',
+                severity: 'error',
+                factor: fl.factorName,
+                message: `Taguchi factor "${fl.factorName}" has no level response data.`
+              });
+            } else {
+              for (const lvl of fl.levels) {
+                if (!Number.isFinite(lvl.level) || !Number.isFinite(lvl.meanY)) {
+                  diagnostics.push({
+                    code: 'NON_FINITE_LEVEL_STATISTIC',
+                    severity: 'error',
+                    factor: fl.factorName,
+                    message: `Taguchi factor "${fl.factorName}" level has non-finite values (level=${lvl.level}, meanY=${lvl.meanY}).`
+                  });
+                }
+              }
+            }
+          }
         }
       }
     }

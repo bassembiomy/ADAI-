@@ -69,6 +69,8 @@ export interface TaguchiFactorLevel {
 
 export interface TaguchiDeployment {
   grandMean: number;
+  objective?: 'larger' | 'smaller' | 'nominal' | 'target';
+  targetValue?: number;
   factorLevels: TaguchiFactorLevel[];
 }
 
