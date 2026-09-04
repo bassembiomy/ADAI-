@@ -99,3 +99,41 @@ export type DOEDeploymentModel =
   - Residuals vs Run / Residuals vs Predicted scatter plot centered around zero.
 - **Predicted vs Actual**:
   - $45^\circ$ reference line ($y = x$) spanning min/max of actual and predicted values.
+
+---
+
+## 6. Automated Review Gates
+
+The DOE validation suite is enforced via local npm scripts and GitHub Actions CI:
+
+### 6.1 Focused Verification Commands
+- `npm run test:doe`: Executes unit and component tests across `src/engine/doe` and `src/components/doe`.
+- `npm run test:doe:integration`: Executes integration parity tests between the DOE engine, X-Bridges, and V-Lab connected simulation.
+- `npx tsc --noEmit`: Typecheck ensuring strict compliance with `DOEDeploymentModel` schema.
+- `npm run build`: Production build gate.
+
+### 6.2 PR Workflow Gate
+`.github/workflows/doe-review.yml` runs on all PRs modifying DOE, X-Bridges, V-Lab, or AI integration paths:
+1. Environment: Node.js 20 with `npm ci`.
+2. Execution of `test:doe`, `test:doe:integration`, `tsc --noEmit`, and `npm run build`.
+3. Validation report artifacts uploaded on completion.
+
+---
+
+## 7. Agent Git Protocol & Review Guidelines
+
+Automated and human agents interacting with the DOE module must follow this strict protocol:
+
+1. **Dedicated Branch**: All work must be performed on branch `codex/doe-module-review`.
+2. **Focused Atomic Commits**: Exactly one focused commit per implementation task with descriptive semantic messages.
+3. **Secrets & Hygiene**: Never commit credentials, tokens, or local secrets.
+4. **Preserve User Context**: Never stash, force-reset, or rewrite unrelated user files in the working directory.
+5. **Push and PR**: Push only `codex/doe-module-review` to origin and open a PR against default branch.
+6. **PR Documentation**: The PR body must include:
+   - Baseline commit and current commit SHA.
+   - Exact test commands run and evidence.
+   - Changed file summary.
+   - Known limitations or legacy compatibility notices.
+   - Mathematical and integration evidence checklist.
+7. **Explicit Human Confirmation Gate**: The agent MUST pause after opening/updating the PR and request explicit user confirmation before any merge or final sign-off.
+
