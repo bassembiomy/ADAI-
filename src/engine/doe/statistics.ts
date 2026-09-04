@@ -303,18 +303,29 @@ export function fitRSM(input: DOEInputDataset): DOEModelResult {
 
   const df_total = n - 1;
   const df_model = p_terms;
-  const df_error = Math.max(1, n - numTerms);
+  const df_error = n - numTerms;
 
-  const R2 = SST === 0 ? 1 : Math.max(0, 1 - SSE / SST);
-  const R2Adj = df_error > 0 && df_total > 0 && SST > 0
-    ? Math.max(0, 1 - (SSE / df_error) / (SST / df_total))
-    : R2;
+  // R² is unconstrained by lower bound: genuinely poor models can have negative R²
+  const R2 = SST === 0 ? 1 : 1 - SSE / SST;
   const rmse = Math.sqrt(SSE / n);
 
-  const MS_model = df_model > 0 ? (SST - SSE) / df_model : 0;
-  const MS_error = df_error > 0 ? SSE / df_error : 1e-12;
-  const F = MS_error > 0 ? MS_model / MS_error : 0;
-  const P = fDistPValue(F, df_model, df_error);
+  let R2Adj: number | undefined = undefined;
+  let F: number | undefined = undefined;
+  let P: number | undefined = undefined;
+
+  if (df_error <= 0) {
+    diagnostics.push({
+      code: 'SATURATED_DESIGN_UNESTIMABLE_INFERENCE',
+      severity: 'warning',
+      message: `Saturated design (${n} observations for ${numTerms} model parameters). Residual degrees of freedom are ${df_error}; error variance, F-statistic, and p-value are unestimable.`
+    });
+  } else {
+    R2Adj = df_total > 0 && SST > 0 ? 1 - (SSE / df_error) / (SST / df_total) : R2;
+    const MS_model = df_model > 0 ? (SST - SSE) / df_model : 0;
+    const MS_error = SSE / df_error;
+    F = MS_error > 0 ? MS_model / MS_error : (SST === SSE ? 0 : Infinity);
+    P = Number.isFinite(F) ? fDistPValue(F, df_model, df_error) : (F === 0 ? 1 : 0);
+  }
 
   const terms: RSMTerm[] = [];
   for (let i = 0; i < k; i++) {
@@ -458,7 +469,7 @@ export function fitGMDH(input: DOEInputDataset & GMDHOptions, options: GMDHOptio
     SSE += Math.pow(Y[i] - Y_pred[i], 2);
     SST += Math.pow(Y[i] - meanY, 2);
   }
-  const R2 = SST === 0 ? 1 : Math.max(0, 1 - SSE / SST);
+  const R2 = SST === 0 ? 1 : 1 - SSE / SST;
   const rmse = Math.sqrt(SSE / n);
 
   const layers = (engine.layers || []).map(layer =>
@@ -611,7 +622,7 @@ export function fitTaguchi(
 
   const SSE = Y_all.reduce((acc, y, i) => acc + Math.pow(y - fits[i], 2), 0);
   const SST = Y_all.reduce((acc, y) => acc + Math.pow(y - grandMeanY, 2), 0);
-  const R2 = SST === 0 ? 1 : Math.max(0, 1 - SSE / SST);
+  const R2 = SST === 0 ? 1 : 1 - SSE / SST;
   const rmse = Math.sqrt(SSE / n);
 
   const deployment: DOEDeploymentModel = {
@@ -755,3 +766,12 @@ export function tDistCritical(df: number, alpha: number = 0.05): number {
   const z5 = z3 * z2;
   return z + (z3 + z) / (4 * df) + (5 * z5 + 16 * z3 + 3 * z) / (96 * df * df);
 }
+
+export const calculateRSM = (data: number[][], headers: string[]) =>
+  fitRSM({ headers, data });
+
+export const calculateGMDH = (data: number[][], headers: string[], options?: GMDHOptions) =>
+  fitGMDH({ headers, data, ...options });
+
+export const calculateTaguchi = (data: number[][], headers: string[], options?: TaguchiOptions) =>
+  fitTaguchi({ headers, data, ...options });

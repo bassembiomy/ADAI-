@@ -1,5 +1,10 @@
 import { EquationContext } from './types';
-import { evaluateDOEModel, evaluateLegacyDOEEquation } from '../doe/modelEvaluator';
+import {
+  evaluateDOEModel,
+  evaluateLegacyDOEEquation,
+  evaluateDOEModelDetailed,
+  evaluateLegacyDOEEquationDetailed
+} from '../doe/modelEvaluator';
 
 export interface BlockEquationArgs {
   across: number[];        // values of across variables at the ports
@@ -1734,7 +1739,7 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   simulink_ps_conv: ({ across, branch }) => [branch[0] - (across[0] || 0)],
   vlab_probe: ({ across, branch }) => [branch[0] - (across[0] || 0)],
   conn_label: ({ across, branch }) => [branch[0] - (across[0] || 0)],
-  doe_custom: ({ across, branch, params }) => {
+  doe_custom: ({ across, branch, params, nodeId, ctx }) => {
     let deployment = params?.deploymentModel || params?.deployment;
     if (typeof deployment === 'object' && deployment !== null && 'value' in deployment) {
       deployment = deployment.value;
@@ -1749,21 +1754,36 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
 
     let y = NaN;
     if (deployment && deployment.schemaVersion === 1) {
-      try {
-        y = evaluateDOEModel(deployment, across);
-      } catch {
+      const res = evaluateDOEModelDetailed(deployment, across);
+      if (!res.success) {
+        if (params) params._runtimeDiagnostic = res.diagnostic;
+        if (ctx?.parameters && nodeId) ctx.parameters[`${nodeId}_fault`] = res.diagnostic;
         y = NaN;
+      } else {
+        if (params) params._runtimeDiagnostic = null;
+        y = res.value;
       }
     } else {
       const eq = params?.equation?.value || params?.equation || '';
       if (eq) {
-        try {
-          const factorNames = across.map((_, i) => `X${i + 1}`);
-          y = evaluateLegacyDOEEquation(eq, factorNames, across);
-        } catch {
+        const factorNames = across.map((_, i) => `X${i + 1}`);
+        const res = evaluateLegacyDOEEquationDetailed(eq, factorNames, across);
+        if (!res.success) {
+          if (params) params._runtimeDiagnostic = res.diagnostic;
+          if (ctx?.parameters && nodeId) ctx.parameters[`${nodeId}_fault`] = res.diagnostic;
           y = NaN;
+        } else {
+          if (params) params._runtimeDiagnostic = null;
+          y = res.value;
         }
       } else {
+        const diag = {
+          code: 'MISSING_MODEL_PAYLOAD',
+          severity: 'error' as const,
+          message: 'doe_custom block has no deployment model or equation configured.'
+        };
+        if (params) params._runtimeDiagnostic = diag;
+        if (ctx?.parameters && nodeId) ctx.parameters[`${nodeId}_fault`] = diag;
         y = NaN;
       }
     }

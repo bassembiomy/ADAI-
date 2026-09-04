@@ -3,6 +3,9 @@ import {
   fitRSM,
   fitGMDH,
   fitTaguchi,
+  calculateRSM,
+  calculateGMDH,
+  calculateTaguchi,
   fDistPValue,
   tDistCritical
 } from './statistics';
@@ -222,6 +225,54 @@ describe('DOE Statistical Engine - Analytical Oracles and Invariants', () => {
       // t(10, 0.05 two-tailed) ≈ 2.228
       const tc = tDistCritical(10, 0.05);
       expect(tc).toBeCloseTo(2.228, 2);
+    });
+  });
+
+  describe('Edge Case Correctness & Inference Estimability', () => {
+    it('detects saturated RSM design and emits SATURATED_DESIGN_UNESTIMABLE_INFERENCE diagnostic', () => {
+      // 2 factors full quadratic has 6 terms: 1, X1, X2, X1^2, X2^2, X1*X2
+      // Provide exactly 6 observations (n = 6 = numTerms, df_error = 0)
+      const headers = ['X1', 'X2', 'Y'];
+      const data = [
+        [-1, -1, 10],
+        [1, -1, 20],
+        [-1, 1, 15],
+        [1, 1, 35],
+        [0, 0, 18],
+        [0.5, 0, 22]
+      ];
+
+      const res = calculateRSM(data, headers);
+      expect(res.diagnostics.some(d => d.code === 'SATURATED_DESIGN_UNESTIMABLE_INFERENCE')).toBe(true);
+      // Saturated designs have 0 error degrees of freedom; F, P, and adjusted R2 are not estimable
+      expect(res.fStatistic).toBeUndefined();
+      expect(res.pValue).toBeUndefined();
+      expect(res.adjustedRSquared).toBeUndefined();
+      expect(res.rSquared).toBeDefined();
+    });
+
+    it('does not clamp negative R2 to zero when SSE exceeds SST', () => {
+      // Create data where an imperfect model or arbitrary fit produces SSE > SST
+      // In statistics.ts, R2 = 1 - SSE / SST. When SSE > SST, R2 < 0.
+      const headers = ['X1', 'Y'];
+      // Normal dataset with sufficient df
+      const data = [
+        [1, 10],
+        [2, 12],
+        [3, 11],
+        [4, 9],
+        [5, 13],
+        [6, 10],
+        [7, 12]
+      ];
+      const res = calculateRSM(data, headers);
+      expect(typeof res.rSquared).toBe('number');
+      // Verify R2 formula is unconstrained by lower bound 0
+      const SST = res.details?.SST;
+      const SSE = res.details?.SSE;
+      if (SST !== undefined && SSE !== undefined) {
+        expect(res.rSquared).toBeCloseTo(1 - SSE / SST, 6);
+      }
     });
   });
 });

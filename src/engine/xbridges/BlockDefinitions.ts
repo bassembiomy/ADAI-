@@ -2,7 +2,12 @@
 import { XBlock, XPort } from './types';
 import { VectorUtils } from './VectorUtils';
 import * as math from 'mathjs';
-import { evaluateDOEModel, evaluateLegacyDOEEquation } from '../doe/modelEvaluator';
+import {
+  evaluateDOEModel,
+  evaluateLegacyDOEEquation,
+  evaluateDOEModelDetailed,
+  evaluateLegacyDOEEquationDetailed
+} from '../doe/modelEvaluator';
 import { MpcSolver } from './MpcSolver';
 
 export function polyToString(coeffs: number[], variable = 's'): string {
@@ -3094,12 +3099,9 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       params: { ...params, inputNames, outputName, modelType },
       inputs: inputNames.map((name: string, i: number) => createPort(`in${i+1}`, name, 'input')),
       outputs: [createPort('out', outputName, 'output')],
-      execute: (ins, p) => {
+      execute: (ins, p, state) => {
         try {
-          const cleanIns = ins.map(v => {
-            const n = Number(v);
-            return Number.isFinite(n) ? n : 0;
-          });
+          const rawInputs = ins.map(Number);
 
           // 1. Prefer canonical DOEDeploymentModel if available
           let deployment = p.deploymentModel || (p.params && p.params.deploymentModel);
@@ -3115,8 +3117,18 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
           }
 
           if (deployment && deployment.schemaVersion === 1) {
-            const y = evaluateDOEModel(deployment, cleanIns);
-            return { outputs: [y] };
+            const res = evaluateDOEModelDetailed(deployment, rawInputs);
+            if (!res.success) {
+              return {
+                outputs: [NaN],
+                error: res.diagnostic?.message || 'DOE model evaluation failed.',
+                nextState: { ...(state || {}), lastFault: res.diagnostic }
+              };
+            }
+            return {
+              outputs: [res.value],
+              nextState: { ...(state || {}), lastFault: null }
+            };
           }
 
           // 2. Legacy fallback
@@ -3126,25 +3138,39 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
             ? p.inputNames.value : (p.inputNames || inputNames);
 
           if (mType === 'RSM') {
-            try {
-              const y = evaluateLegacyDOEEquation(equationStr, inputNamesArr, cleanIns);
-              return { outputs: [y] };
-            } catch {
-              return { outputs: [NaN] };
+            const res = evaluateLegacyDOEEquationDetailed(equationStr, inputNamesArr, rawInputs);
+            if (!res.success) {
+              return {
+                outputs: [NaN],
+                error: res.diagnostic?.message || 'Legacy DOE equation evaluation failed.',
+                nextState: { ...(state || {}), lastFault: res.diagnostic }
+              };
             }
+            return {
+              outputs: [res.value],
+              nextState: { ...(state || {}), lastFault: null }
+            };
           } else if (mType === 'GMDH') {
             const layers = (typeof p.layers === 'object' && p.layers !== null && !Array.isArray(p.layers)) ? p.layers.value : p.layers;
             const polyOrder = (typeof p.polyOrder === 'object' && p.polyOrder !== null) ? p.polyOrder.value : (p.polyOrder || 2);
 
             if (!layers || !Array.isArray(layers) || layers.length === 0) {
-              return { outputs: [NaN] };
+              const diag = { code: 'INVALID_GMDH_LAYERS', message: 'GMDH layers missing or empty.', severity: 'error' as const };
+              return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
             }
 
-            let currentVals = [...cleanIns];
+            for (let i = 0; i < rawInputs.length; i++) {
+              if (!Number.isFinite(rawInputs[i])) {
+                const diag = { code: 'NON_FINITE_INPUT', message: `Non-finite input at index ${i}.`, severity: 'error' as const };
+                return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
+              }
+            }
+
+            let currentVals = [...rawInputs];
             for (const layer of (layers as any[])) {
               currentVals = layer.map((neuron: any) => {
-                const xi = currentVals[neuron.inputs[0]] || 0;
-                const xj = currentVals[neuron.inputs[1]] || 0;
+                const xi = currentVals[neuron.inputs[0]];
+                const xj = currentVals[neuron.inputs[1]];
                 let vals: number[];
                 if (polyOrder === 3) {
                   vals = [1, xi, xj, xi * xi, xj * xj, xi * xj, xi * xi * xi, xj * xj * xj, xi * xi * xj, xi * xj * xj];
@@ -3155,19 +3181,31 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
                 return vals.reduce((sum, v, cIdx) => sum + v * (coeffs[cIdx] || 0), 0);
               });
             }
-            return { outputs: [Number(currentVals[0])] };
+            const outVal = Number(currentVals[0]);
+            if (!Number.isFinite(outVal)) {
+              const diag = { code: 'NUMERICAL_OVERFLOW', message: 'GMDH execution produced non-finite output.', severity: 'error' as const };
+              return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
+            }
+            return { outputs: [outVal], nextState: { ...(state || {}), lastFault: null } };
           } else if (mType === 'Taguchi') {
             const grandMean = (typeof p.grandMean === 'object') ? p.grandMean.value : (p.grandMean || 0);
             const factorLevels = (typeof p.factorLevels === 'object' && !Array.isArray(p.factorLevels)) ? p.factorLevels.value : (p.factorLevels || []);
 
             if (!Array.isArray(factorLevels) || factorLevels.length === 0) {
-              return { outputs: [NaN] };
+              const diag = { code: 'INVALID_TAGUCHI_LEVELS', message: 'Taguchi factorLevels missing or empty.', severity: 'error' as const };
+              return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
+            }
+
+            for (let i = 0; i < rawInputs.length; i++) {
+              if (!Number.isFinite(rawInputs[i])) {
+                const diag = { code: 'NON_FINITE_INPUT', message: `Non-finite input at index ${i}.`, severity: 'error' as const };
+                return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
+              }
             }
 
             let prediction = Number(grandMean);
             factorLevels.forEach((f: any, i: number) => {
-              const val = cleanIns[i] || 0;
-              // Find nearest level
+              const val = rawInputs[i];
               if (f.means && Array.isArray(f.means)) {
                 const sortedMeans = [...f.means].sort((a: any, b: any) => Math.abs(a.level - val) - Math.abs(b.level - val));
                 const nearest = sortedMeans[0];
@@ -3176,12 +3214,19 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
                 }
               }
             });
-            return { outputs: [prediction] };
+
+            if (!Number.isFinite(prediction)) {
+              const diag = { code: 'NUMERICAL_OVERFLOW', message: 'Taguchi execution produced non-finite output.', severity: 'error' as const };
+              return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
+            }
+            return { outputs: [prediction], nextState: { ...(state || {}), lastFault: null } };
           }
 
-          return { outputs: [NaN] };
-        } catch (err) {
-          return { outputs: [NaN] };
+          const noModelDiag = { code: 'NO_MODEL_CONFIGURED', message: 'No valid DOE model configured on block.', severity: 'error' as const };
+          return { outputs: [NaN], error: noModelDiag.message, nextState: { ...(state || {}), lastFault: noModelDiag } };
+        } catch (err: any) {
+          const exDiag = { code: 'EXECUTION_EXCEPTION', message: err?.message || 'Unknown execution exception.', severity: 'error' as const };
+          return { outputs: [NaN], error: exDiag.message, nextState: { ...(state || {}), lastFault: exDiag } };
         }
       }
     };

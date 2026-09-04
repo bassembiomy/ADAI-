@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateDOEModel, evaluateLegacyDOEEquation } from './modelEvaluator';
+import {
+  evaluateDOEModel,
+  evaluateLegacyDOEEquation,
+  evaluateDOEModelDetailed,
+  evaluateLegacyDOEEquationDetailed
+} from './modelEvaluator';
 import { fitRSM, fitGMDH, fitTaguchi } from './statistics';
 import { createXBridgesDOEBlock, createVLabDOEBlock } from './integration';
 import type { DOEDeploymentModel } from './types';
@@ -129,6 +134,65 @@ describe('DOE Model Evaluator and Runtime Parity', () => {
       const val = evaluateLegacyDOEEquation(eq, ['X1', 'X2'], [2, 3]);
       // 12.5 + 4.8 - 3.3 + 2.0 = 16.0
       expect(val).toBeCloseTo(16.0, 2);
+    });
+  });
+
+  describe('Non-Finite Input Rejection & Structured Diagnostics', () => {
+    const rsmModel: DOEDeploymentModel = {
+      schemaVersion: 1,
+      modelType: 'RSM',
+      factorOrder: ['X1', 'X2'],
+      responseName: 'Y',
+      trainingRowCount: 10,
+      rsm: {
+        intercept: 10,
+        terms: [
+          { name: 'X1', factors: [0], powers: [1], coeff: 2 },
+          { name: 'X2', factors: [1], powers: [1], coeff: 3 }
+        ]
+      }
+    };
+
+    it('rejects NaN inputs and does NOT silently convert them to zero', () => {
+      const detailed = evaluateDOEModelDetailed(rsmModel, [NaN, 5]);
+      expect(detailed.success).toBe(false);
+      expect(Number.isNaN(detailed.value)).toBe(true);
+      expect(detailed.diagnostic?.code).toBe('NON_FINITE_INPUT');
+      expect(detailed.diagnostic?.message).toContain('Non-finite');
+
+      expect(() => evaluateDOEModel(rsmModel, [NaN, 5])).toThrowError(/Non-finite/);
+    });
+
+    it('rejects Infinity and -Infinity inputs without zero substitution', () => {
+      const posInf = evaluateDOEModelDetailed(rsmModel, [Infinity, 5]);
+      expect(posInf.success).toBe(false);
+      expect(Number.isNaN(posInf.value)).toBe(true);
+      expect(posInf.diagnostic?.code).toBe('NON_FINITE_INPUT');
+
+      const negInf = evaluateDOEModelDetailed(rsmModel, [1, -Infinity]);
+      expect(negInf.success).toBe(false);
+      expect(Number.isNaN(negInf.value)).toBe(true);
+      expect(negInf.diagnostic?.code).toBe('NON_FINITE_INPUT');
+
+      expect(() => evaluateDOEModel(rsmModel, [Infinity, 5])).toThrowError(/Non-finite/);
+      expect(() => evaluateDOEModel(rsmModel, [1, -Infinity])).toThrowError(/Non-finite/);
+    });
+
+    it('rejects insufficient input arrays with INSUFFICIENT_INPUTS diagnostic', () => {
+      const res = evaluateDOEModelDetailed(rsmModel, [1]);
+      expect(res.success).toBe(false);
+      expect(Number.isNaN(res.value)).toBe(true);
+      expect(res.diagnostic?.code).toBe('INSUFFICIENT_INPUTS');
+    });
+
+    it('rejects legacy equation non-finite inputs without fallback substitution', () => {
+      const eq = '10 + 2 * X1 + 3 * X2';
+      const res = evaluateLegacyDOEEquationDetailed(eq, ['X1', 'X2'], [NaN, 4]);
+      expect(res.success).toBe(false);
+      expect(Number.isNaN(res.value)).toBe(true);
+      expect(res.diagnostic?.code).toBe('NON_FINITE_INPUT');
+
+      expect(() => evaluateLegacyDOEEquation(eq, ['X1', 'X2'], [NaN, 4])).toThrowError(/Non-finite/);
     });
   });
 });

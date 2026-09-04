@@ -115,8 +115,28 @@ e9a33ae docs: record DOE review baseline
 
 ---
 
-## 5. Human Gatekeeper & Confirmation Protocol
+---
+
+## 5. Review Findings & Remediation (2026-09-04 Follow-up)
+
+Following the initial PR review, five critical findings were resolved:
+1. **GitHub CI `npm ci` Lockfile Sync**:
+   - Synchronized `package-lock.json` with `package.json` for `dompurify` (3.4.14) and `uuid` (14.0.2). Verified `npm ci --dry-run` completes with exit code 0.
+2. **Unclamped $R^2$**:
+   - Removed artificial `Math.max(0, ...)` clipping from RSM, GMDH, and Taguchi statistics in `src/engine/doe/statistics.ts` and `src/App.tsx`. Models with SSE > SST now correctly report negative $R^2$ without distortion.
+3. **Saturated RSM Design Diagnostics**:
+   - Correctly compute $df_{\text{error}} = n - \text{numTerms}$. When $df_{\text{error}} \le 0$, emit `SATURATED_DESIGN_UNESTIMABLE_INFERENCE` diagnostic and keep $F$-statistic, $p$-value, and adjusted $R^2$ as `undefined`/`NaN`.
+4. **Non-Finite Runtime Input Rejection**:
+   - Replaced silent substitution of `NaN`/`Infinity` with 0 in `src/engine/doe/modelEvaluator.ts`. Non-finite inputs return `NaN` and generate structured diagnostics.
+5. **Structured Runtime Fault Propagation**:
+   - Updated X-Bridges `DOE_MODEL` block to propagate `lastFault` and `error` in block execution state when evaluation fails or inputs are non-finite.
+   - Updated V-Lab `doe_custom` block to record `_runtimeDiagnostic` and context fault state when non-finite inputs or invalid models are encountered.
+
+---
+
+## 6. Human Gatekeeper & Confirmation Protocol
 In strict adherence to the [Superpowers Workflow Guidelines](file:///g:/adia%20project/.agents/AGENTS.md) and [Pre-Deployment Security Review Gate](file:///g:/adia%20project/.agents/rules/pre-deployment-security-gate.md):
 - The pull request is prepared on `codex/doe-module-review`.
 - All automated gates have passed locally and in CI configuration.
 - **Merge is paused awaiting explicit confirmation from the human engineer.**
+

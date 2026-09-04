@@ -6149,7 +6149,7 @@ const ADIA = () => {
 
     const SSE = Y_all.reduce((acc, y, i) => acc + Math.pow(y - fits[i], 2), 0);
     const SST = Y_all.reduce((acc, y) => acc + Math.pow(y - meanY, 2), 0);
-    const R2 = SST === 0 ? 1 : Math.max(0, 1 - SSE / SST);
+    const R2 = SST === 0 ? 1 : 1 - SSE / SST;
 
     setResults({
       type: 'Taguchi',

@@ -6,6 +6,8 @@ import {
   serializeDOEDeploymentModel,
   deserializeDOEDeploymentModel
 } from './integration';
+import { BLOCK_LIBRARY } from '../xbridges/BlockDefinitions';
+import { blockEquations } from '../vlab/vlabEquations';
 import type {
   DOEModelResult,
   DOEDeploymentModel,
@@ -320,5 +322,80 @@ describe('DOE Canonical Model and Integration Factories', () => {
       const restored = deserializeDOEDeploymentModel(json);
       expect(restored).toEqual(model);
     }
+  });
+
+  describe('Runtime Execution Contract & Fault Propagation', () => {
+    it('X-Bridges DOE_MODEL returns NaN, sets error and lastFault on non-finite inputs', () => {
+      const xblock = createXBridgesDOEBlock(mockRSMResult, 'doe_block_1');
+      expect('data' in xblock).toBe(true);
+      if (!('data' in xblock)) return;
+
+      const blockDef = BLOCK_LIBRARY['DOE_MODEL'];
+      expect(blockDef).toBeDefined();
+
+      const instance = blockDef('doe_block_1', xblock.data.params);
+
+      // Execute with NaN input
+      const resNaN = instance.execute([NaN, 1, 2], xblock.data.params, {}, 0);
+      expect(Number.isNaN(resNaN.outputs[0])).toBe(true);
+      expect(resNaN.error).toBeDefined();
+      expect(resNaN.error).toContain('Non-finite');
+      expect(resNaN.nextState?.lastFault?.code).toBe('NON_FINITE_INPUT');
+
+      // Execute with valid input
+      const resValid = instance.execute([1, 1, 1], xblock.data.params, {}, 0);
+      expect(Number.isFinite(resValid.outputs[0])).toBe(true);
+      expect(resValid.error).toBeUndefined();
+      expect(resValid.nextState?.lastFault).toBeNull();
+    });
+
+    it('V-Lab doe_custom evaluates residual, returns NaN and attaches _runtimeDiagnostic on failure', () => {
+      const vblock = createVLabDOEBlock(mockRSMResult, 'vlab_doe_1');
+      expect('data' in vblock).toBe(true);
+      if (!('data' in vblock)) return;
+
+      const doeEquation = blockEquations['doe_custom'];
+      expect(doeEquation).toBeDefined();
+
+      const params = { ...vblock.data.params };
+      const ctx: any = { parameters: {} };
+
+      // Execute with non-finite input
+      const residualNaN = doeEquation({
+        across: [NaN, 1, 2],
+        dAcross: [0, 0, 0],
+        branch: [0],
+        dBranch: [0],
+        state: [],
+        dState: [],
+        ctx,
+        params,
+        ports: ['in1', 'in2', 'in3', 'out'],
+        nodeId: 'vlab_doe_1'
+      });
+
+      expect(Number.isNaN(residualNaN[0])).toBe(true);
+      expect(params._runtimeDiagnostic).toBeDefined();
+      expect(params._runtimeDiagnostic?.code).toBe('NON_FINITE_INPUT');
+      expect(ctx.parameters['vlab_doe_1_fault']?.code).toBe('NON_FINITE_INPUT');
+
+      // Execute with valid input
+      const residualValid = doeEquation({
+        across: [0, 0, 0],
+        dAcross: [0, 0, 0],
+        branch: [12.5],
+        dBranch: [0],
+        state: [],
+        dState: [],
+        ctx,
+        params,
+        ports: ['in1', 'in2', 'in3', 'out'],
+        nodeId: 'vlab_doe_1'
+      });
+
+      expect(params._runtimeDiagnostic).toBeNull();
+      // branch[0] - Y: 12.5 - 12.5 = 0
+      expect(residualValid[0]).toBeCloseTo(0, 4);
+    });
   });
 });
