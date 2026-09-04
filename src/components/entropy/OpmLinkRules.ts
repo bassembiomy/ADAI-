@@ -35,12 +35,14 @@ export function validateOpmConnection(
       return { allowed: false, reason: 'Result links connect a Process to the Object or State it yields.' };
     case 'effect':
       if (sourceType === 'process' && (tgtIsObjectish || targetType === 'state')) return { allowed: true };
-      if ((srcIsObjectish || sourceType === 'state') && targetType === 'process') return { allowed: true };
       return { allowed: false, reason: 'Effect links connect a Process with the Object or State it changes.' };
     case 'trigger':
+      if (sourceType === 'state' && targetType === 'state') return { allowed: true };
+      if ((srcIsObjectish || sourceType === 'state') && targetType === 'process') return { allowed: true };
+      return { allowed: false, reason: 'Trigger links connect a State to its next State or to the Process it gates.' };
     case 'condition':
       if ((srcIsObjectish || sourceType === 'state') && targetType === 'process') return { allowed: true };
-      return { allowed: false, reason: `${linkType === 'trigger' ? 'Trigger' : 'Condition'} links connect a State (or Object) to the Process it gates.` };
+      return { allowed: false, reason: 'Condition links connect a State (or Object) to the Process it gates.' };
     case 'aggregation':
     case 'generalization':
     case 'exhibition':
@@ -53,4 +55,26 @@ export function validateOpmConnection(
     default:
       return { allowed: true };
   }
+}
+
+export function validateOpmConnectionContract(
+  sourceType: string,
+  targetType: string,
+  linkType: string,
+): { valid: boolean; code?: string; reason?: string } {
+  if (['aggregation', 'generalization', 'exhibition'].includes(linkType)) {
+    return { valid: sourceType === 'object' && targetType === 'object' };
+  }
+  if (['satisfies', 'verifies'].includes(linkType)) {
+    const valid = sourceType === 'requirement' && ['object', 'process'].includes(targetType);
+    return valid ? { valid } : {
+      valid,
+      code: 'OPM_INVALID_LINK_DIRECTION',
+      reason: `${linkType} links must originate at a requirement and target an object or process.`,
+    };
+  }
+  const verdict = validateOpmConnection(linkType as OPMLinkType, sourceType as OPMNodeType, targetType as OPMNodeType);
+  return verdict.allowed
+    ? { valid: true }
+    : { valid: false, code: 'OPM_INVALID_LINK_DIRECTION', reason: verdict.reason };
 }

@@ -69,9 +69,9 @@ export function nextStableId(prefix: string): string {
 
 export interface TypedValueEditorProps {
   type: OpmScalarType;
-  value: CanonicalOpmValue | string;
+  value: CanonicalOpmValue | string | number | boolean | null;
   enumOptions?: readonly OpmEnumMember[];
-  onChange: (next: CanonicalOpmValue) => void;
+  onChange: (next: CanonicalOpmValue | string | number | boolean | null) => void;
   /** data-testid prefix for the rendered control. */
   testId?: string;
   /** Canonical engine property path for diagnostics focus. */

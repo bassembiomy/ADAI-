@@ -4,43 +4,19 @@ import type {
   OpmStateExecution,
   OpmProcessExecution,
   OpmLinkExecution,
+  OpmExecutionConfig,
 } from '../../engine/opm/executableTypes';
+import type {
+  OpmEditorNodeType,
+  OpmEditorLinkType,
+  OpmEditorState,
+  OpmEditorPort,
+} from '../../engine/opm/editorBoundaryTypes';
 
-export type OPMNodeType = 'object' | 'process' | 'state' | 'requirement';
-
-export type OPMLinkType =
-  // Structural Links
-  | 'aggregation'
-  | 'exhibition'
-  | 'generalization'
-  // Procedural Links
-  | 'agent'
-  | 'instrument'
-  | 'consumption'
-  | 'result'
-  | 'effect'
-  | 'trigger'
-  | 'condition'
-  // Requirement traceability (extension to ISO 19450 — see module docs)
-  | 'satisfies'
-  | 'verifies';
-
-export interface OPMState {
-  id: string;
-  name: string;
-  isActive: boolean;
-  isInitial?: boolean;
-  value?: string;
-}
-
-export interface OPMPort {
-  id: string;
-  name: string;
-  type: 'consumption' | 'result' | 'effect' | 'agent' | 'instrument' | 'trigger' | 'condition' | 'standard';
-  direction: 'input' | 'output';
-  position: 'left' | 'right' | 'top' | 'bottom';
-}
-
+export type OPMNodeType = OpmEditorNodeType;
+export type OPMLinkType = OpmEditorLinkType;
+export type OPMState = OpmEditorState;
+export type OPMPort = OpmEditorPort;
 export interface OPMNodeData extends Record<string, unknown> {
   name: string;
   type: OPMNodeType;
@@ -86,6 +62,7 @@ export interface SimulationLog {
 export interface OPMProjectData {
   nodes: AppNode[];
   edges: AppEdge[];
+  executionConfig?: OpmExecutionConfig;
 }
 
 export type AppNode = Node<

@@ -17,6 +17,9 @@
  *    sorts first wins; the others are blocked that tick (deterministic conflict resolution).
  */
 import type { AppNode, AppEdge } from './EntropyTypes';
+import { compileExecutableOpm, type ExecutableOpmModel } from '../../engine/opm/pipeline';
+import { createOpmRuntime, stepOpmRuntime, type OpmStepResult, type OpmRuntime } from '../../engine/opm/runtime';
+import { createDefaultOpmExecutionConfig, type OpmDiagnostic, type OpmExecutionConfig, type OpmTargetSettings } from '../../engine/opm/executableTypes';
 
 export interface OpmEvent {
   stateId: string;
@@ -360,4 +363,40 @@ export function applySimResultToNodes(
     }
     return n;
   });
+}
+
+export interface OpmSimulationController {
+  compile(nodes: AppNode[], edges: AppEdge[], config?: OpmExecutionConfig | OpmTargetSettings): {
+    ok: boolean;
+    diagnostics: OpmDiagnostic[];
+  };
+  step(deltaMs?: number): OpmStepResult | null;
+  getSnapshot(): OpmStepResult | null;
+}
+
+export function createOpmSimulationController(): OpmSimulationController {
+  let runtime: OpmRuntime | null = null;
+  let snapshot: OpmStepResult | null = null;
+
+  return {
+    compile(nodes, edges, config = createDefaultOpmExecutionConfig()) {
+      const result = compileExecutableOpm(nodes as any, edges as any, config);
+      if (!result.model) {
+        runtime = null;
+        snapshot = null;
+        return { ok: false, diagnostics: result.diagnostics };
+      }
+      runtime = createOpmRuntime(result.model as ExecutableOpmModel);
+      snapshot = null;
+      return { ok: true, diagnostics: result.diagnostics };
+    },
+    step(deltaMs = 10) {
+      if (!runtime || !Number.isFinite(deltaMs) || deltaMs <= 0) return snapshot;
+      snapshot = stepOpmRuntime(runtime, deltaMs);
+      return snapshot;
+    },
+    getSnapshot() {
+      return snapshot;
+    },
+  };
 }

@@ -56,6 +56,7 @@ export function validateExecutableOpm(
   // the production contract used by the canvas. Structural requirement
   // links always validate but never enter executable scheduling tables.
   for (const link of input.links) {
+    if (['aggregation', 'generalization', 'exhibition', 'satisfies', 'verifies'].includes(link.type)) continue;
     const srcKind = nodeKindById.get(link.sourceId);
     const tgtKind = nodeKindById.get(link.targetId);
     if (!srcKind || !tgtKind) continue;
