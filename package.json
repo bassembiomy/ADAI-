@@ -20,7 +20,7 @@
     "test:doe": "vitest run src/engine/doe/ src/components/doe/",
     "test:doe:integration": "vitest run src/engine/doe/ src/components/doe/ src/engine/vlab/vlab_connected_models.test.ts src/utils/jsonImportValidator.test.ts",
     "zero-g": "tsx scripts/zero_g_ci.ts",
-    "prebuild": "npm audit --audit-level=critical || echo [WARNING] Unfixable audit vulnerabilities detected (tar, tmp, xlsx have no upstream fix). Review before production release."
+    "prebuild": "npm audit --audit-level=critical || echo \"[WARNING] Unfixable audit vulnerabilities detected: tar, tmp, xlsx have no upstream fix. Review before production release.\""
   },
   "config": {
     "forge": "./forge.config.cjs"
