@@ -20,6 +20,7 @@ import {
 } from '../../engine/opm/executableTypes';
 
 export type OpmArtifactLifecycle =
+  | 'draft'
   | 'edited'
   | 'validated'
   | 'generated'
@@ -63,7 +64,7 @@ export interface OpmVerifyResult {
 
 export function createInitialArtifactState(): OpmArtifactState {
   return {
-    lifecycle: 'edited',
+    lifecycle: 'draft',
     currentFingerprint: null,
     generatedFingerprint: null,
     verifiedFingerprint: null,
@@ -109,7 +110,7 @@ export function computeCurrentFingerprint(
  * Fold a live-model fingerprint into artifact state. Layout-only edits keep
  * the same fingerprint, so the same state reference is returned unchanged
  * (no invalidation). Any fingerprint change is a semantic edit: the
- * lifecycle falls back to `edited` and prior verification no longer gates.
+ * lifecycle falls back to `draft` and prior verification no longer gates.
  */
 export function applyModelEdit(prev: OpmArtifactState, currentFingerprint: string | null): OpmArtifactState {
   if (currentFingerprint === prev.currentFingerprint) return prev;
@@ -117,7 +118,7 @@ export function applyModelEdit(prev: OpmArtifactState, currentFingerprint: strin
     currentFingerprint !== null &&
     prev.generatedFingerprint !== null &&
     currentFingerprint === prev.generatedFingerprint &&
-    prev.lifecycle !== 'edited'
+    prev.lifecycle !== 'draft'
   ) {
     // Fingerprint still matches the generated bundle (e.g. undo back to the
     // generated model): refresh the pointer without invalidating.
@@ -125,7 +126,7 @@ export function applyModelEdit(prev: OpmArtifactState, currentFingerprint: strin
   }
   return {
     ...prev,
-    lifecycle: 'edited',
+    lifecycle: 'draft',
     currentFingerprint,
     verifiedFingerprint:
       prev.verifiedFingerprint !== null && prev.verifiedFingerprint === currentFingerprint
@@ -237,8 +238,28 @@ async function defaultVerifyViaIpc(files: GeneratedOpmFile[]): Promise<OpmVerify
   return await bridge.invoke('opm-verify-generated-c', { files });
 }
 
+export function getRemediationMessage(state: OpmArtifactState, currentFingerprint: string | null): string | null {
+  if (state.diagnostics.some((d) => d.severity === 'error')) {
+    return 'Resolve model validation errors before generating C code.';
+  }
+  if (state.lifecycle === 'failed') {
+    return 'C qualification failed. Inspect error logs and remediate model or environment.';
+  }
+  if (state.generatedFingerprint === null || state.lifecycle === 'draft') {
+    return 'Generate C code for the current model fingerprint before running verification.';
+  }
+  if (currentFingerprint !== null && state.generatedFingerprint !== currentFingerprint) {
+    return 'Model changed since generation. Re-generate C artifacts for the updated fingerprint.';
+  }
+  if (state.lifecycle !== 'verified') {
+    return 'Verify generated C code against the qualification compiler to unlock download and HIL export.';
+  }
+  return null;
+}
+
 const LIFECYCLE_LABEL: Record<OpmArtifactLifecycle, string> = {
-  edited: 'Edited — regeneration required',
+  draft: 'Draft — edit model to generate',
+  edited: 'Draft — regeneration required',
   validated: 'Validated — ready to generate',
   generated: 'Generated — ready to verify',
   verifying: 'Verifying…',
@@ -383,6 +404,11 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
             Send to HIL
           </button>
         </div>
+        {!downloadEnabled && (
+          <div className="mt-2 text-[10px] text-amber-400 font-medium" data-testid="opm-remediation">
+            {getRemediationMessage(state, current.fingerprint)}
+          </div>
+        )}
       </div>
 
       <div className="bg-[#1a1a1a] border border-[#2d2d2d] rounded-md p-2.5">

@@ -400,7 +400,17 @@ export function createOpmSimulationController(): OpmSimulationController {
     },
     step(input = 10) {
       if (!runtime) return snapshot;
-      snapshot = stepOpmRuntime(runtime, input as any);
+      const res = stepOpmRuntime(runtime, input as any);
+      if (res.status === 'error' && snapshot !== null) {
+        snapshot = {
+          ...snapshot,
+          status: 'error',
+          diagnostics: [...res.diagnostics],
+          diagnosticsDelta: [...res.diagnosticsDelta],
+        };
+        return snapshot;
+      }
+      snapshot = res;
       return snapshot;
     },
     getSnapshot() {

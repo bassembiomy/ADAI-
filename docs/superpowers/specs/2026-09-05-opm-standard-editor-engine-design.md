@@ -213,3 +213,14 @@ The OPM release is ready only when TypeScript tests, strict type-check, OPM host
 4. Harden the OPM C generator and qualification manifest.
 5. Add boundary tests and release gate.
 6. Review the resulting PR before merging; do not merge changes into State Machine/X-Bridges paths as part of this work.
+
+## Implementation and Release Flow Status
+
+All planned milestones have been implemented and verified:
+- **Warm-light Selection & Port Contracts:** Every selected OPM block and transition shares the warm golden-amber selection treatment. Link creation strictly validates ISO 19450 contracts in real time for both preview and commit (`validateOpmPortConnection`).
+- **Safe Block and Edge Conversions:** `convertOpmNodeType` and `convertOpmEdgeType` preserve common node data and emit explicit user warnings (`OPM_STATE_DATA_DISABLED`, `OPM_STATE_PARENT_REQUIRED`) before mutating structures.
+- **Deterministic Scheduler & Independent Tick:** OPM runtime uses canonical `stepOpmRuntime(runtime, input)` with explicit latch, evaluation, staging, and commit phases. Tick configuration is strictly decoupled from State Machine tick.
+- **Embedded C99 Code Generator:** Emits bounded C99 artifacts with standard API (`OPM_Init`, `OPM_Reset`, `OPM_Step`, `OPM_DispatchEvent`), compile-time limits, fail-closed identifier safety, and JSON manifest.
+- **Boundary & Qualification Gates:** `test:opm:qualification` strictly tests compiler presence, snapshot parity, and enforces zero-import isolation from State Machine and X-Bridges generators.
+- **Release UX & Lifecycle Management:** The codegen workspace tracks canonical states `draft`, `generated`, `verified`, and `failed` linked to `model.fingerprint`. Model edits immediately invalidate to `draft`, disabling download/export and displaying remediation guidance until re-verified.
+

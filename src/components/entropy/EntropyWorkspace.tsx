@@ -27,6 +27,8 @@ import {
 } from './OpmSimulationEngine';
 import { SmartShowPanel } from './SmartShowPanel';
 import { OpmLegend } from './OpmLegend';
+import { OpmDiagnosticsBadge } from './OpmDiagnosticsBadge';
+import type { OpmSourceRef } from '../../engine/opm/executableTypes';
 import { importSysmlToOpm } from './SysmlToOpmImporter';
 import { validateOpmConnection } from './OpmLinkRules';
 import { layoutOpmGraph } from './OpmAutoLayout';
@@ -215,6 +217,20 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   // Right Sidebar active tab
   const [rightTab, setRightTab] = useState<'simControl' | 'opl' | 'smartShow' | 'opmCodegen'>('simControl');
   const [opmArtifactState, setOpmArtifactState] = useState<OpmArtifactState>(createInitialArtifactState);
+
+  const handleNavigateToDiagnostic = useCallback((source: OpmSourceRef) => {
+    const node = nodes.find(n => n.id === source.elementId);
+    if (node) {
+      setSelectedNode(node);
+    }
+    setTimeout(() => {
+      const el = document.querySelector(`[data-opm-path="${source.propertyPath}"]`);
+      if (el instanceof HTMLElement) {
+        el.focus();
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 60);
+  }, [nodes]);
 
   // --- Initialize canvas ---
   useEffect(() => {
@@ -1310,6 +1326,10 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               />
             </ReactFlow>
             <OpmLegend />
+            <OpmDiagnosticsBadge
+              diagnostics={opmArtifactState.diagnostics}
+              onNavigateToDiagnostic={handleNavigateToDiagnostic}
+            />
           </div>
 
           {/* Selected Node Properties Panel (Floating bottom-left) */}
