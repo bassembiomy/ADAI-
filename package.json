@@ -33,6 +33,8 @@
     "test:vlab:connected": "vitest run src/engine/vlab/vlab_connected_models.test.ts --reporter=verbose",
     "test:vlab:all-blocks": "vitest run src/engine/vlab/test_all_blocks_scope.test.ts --reporter=dot",
     "test:vlab:professional": "tsx scripts/run_vlab_math_test.ts",
+    "test:doe": "vitest run src/engine/doe/ src/components/doe/",
+    "test:doe:integration": "vitest run src/engine/doe/ src/components/doe/ src/engine/vlab/vlab_connected_models.test.ts src/utils/jsonImportValidator.test.ts",
     "zero-g": "tsx scripts/zero_g_ci.ts",
     "audit:prebuild": "npm audit --audit-level=critical || echo [WARNING] Unfixable audit vulnerabilities detected (tar, tmp have no upstream fix). Review before production release.",
     "prebuild": "npm run build:sm-runtime && npm run audit:prebuild"

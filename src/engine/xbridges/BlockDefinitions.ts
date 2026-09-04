@@ -2,6 +2,12 @@
 import { XBlock, XPort } from './types';
 import { VectorUtils } from './VectorUtils';
 import * as math from 'mathjs';
+import {
+  evaluateDOEModel,
+  evaluateLegacyDOEEquation,
+  evaluateDOEModelDetailed,
+  evaluateLegacyDOEEquationDetailed
+} from '../doe/modelEvaluator';
 import { MpcSolver } from './MpcSolver';
 import {
   xbConvertScalar,
@@ -3131,63 +3137,78 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
       params: { ...params, inputNames, outputName, modelType },
       inputs: inputNames.map((name: string, i: number) => createPort(`in${i + 1}`, name, 'input')),
       outputs: [createPort('out', outputName, 'output')],
-      execute: (ins, p) => {
+      execute: (ins, p, state) => {
         try {
+          const rawInputs = ins.map(Number);
+
+          // 1. Prefer canonical DOEDeploymentModel if available
+          let deployment = p.deploymentModel || (p.params && p.params.deploymentModel);
+          if (typeof deployment === 'object' && deployment !== null && 'value' in deployment) {
+            deployment = deployment.value;
+          }
+          if (typeof deployment === 'string') {
+            try {
+              deployment = JSON.parse(deployment);
+            } catch {
+              deployment = null;
+            }
+          }
+
+          if (deployment && deployment.schemaVersion === 1) {
+            const res = evaluateDOEModelDetailed(deployment, rawInputs);
+            if (!res.success) {
+              return {
+                outputs: [NaN],
+                error: res.diagnostic?.message || 'DOE model evaluation failed.',
+                nextState: { ...(state || {}), lastFault: res.diagnostic }
+              };
+            }
+            return {
+              outputs: [res.value],
+              nextState: { ...(state || {}), lastFault: null }
+            };
+          }
+
+          // 2. Legacy fallback
           const mType = (typeof p.modelType === 'object' && p.modelType !== null) ? p.modelType.value : (p.modelType || 'RSM');
           const equationStr = (typeof p.equation === 'object' && p.equation !== null) ? p.equation.value : (p.equation || '');
-
-          const cleanIns = ins.map(v => {
-            const n = Number(v);
-            return isNaN(n) ? 0 : n;
-          });
+          const inputNamesArr = (typeof p.inputNames === 'object' && p.inputNames !== null && 'value' in p.inputNames) 
+            ? p.inputNames.value : (p.inputNames || inputNames);
 
           if (mType === 'RSM') {
-            const scope: any = {};
-            const inputNamesArr = (typeof p.inputNames === 'object' && p.inputNames !== null && 'value' in p.inputNames)
-              ? p.inputNames.value : (p.inputNames || inputNames);
-
-            inputNamesArr.forEach((name: string, i: number) => {
-              const val = cleanIns[i] || 0;
-              scope[name] = val;
-              scope[`X${i + 1}`] = val;
-            });
-
-            const lines = (equationStr || '').split('\n').filter((l: string) => l.trim() !== '');
-            const eqLine = lines.find((l: string) => l.includes('Y ='));
-            let eqStr = eqLine ? eqLine.split('Y =')[1].trim() : (lines[0] || '0');
-
-            if (eqLine) {
-              lines.slice(lines.indexOf(eqLine) + 1).forEach((line: string) => {
-                const trimmed = line.trim();
-                if (trimmed.startsWith('+') || trimmed.startsWith('-')) {
-                  eqStr += ' ' + trimmed;
-                }
-              });
+            const res = evaluateLegacyDOEEquationDetailed(equationStr, inputNamesArr, rawInputs);
+            if (!res.success) {
+              return {
+                outputs: [NaN],
+                error: res.diagnostic?.message || 'Legacy DOE equation evaluation failed.',
+                nextState: { ...(state || {}), lastFault: res.diagnostic }
+              };
             }
-
-            const cleanEq = eqStr.replace(/·/g, '*')
-              .replace(/²/g, '^2')
-              .replace(/³/g, '^3')
-              .replace(/⁴/g, '^4');
-            try {
-              const result = math.evaluate(cleanEq, scope);
-              return { outputs: [Number(result) || 0] };
-            } catch (e) {
-              return { outputs: [cleanIns.reduce((a, b) => a + b, 0)] };
-            }
+            return {
+              outputs: [res.value],
+              nextState: { ...(state || {}), lastFault: null }
+            };
           } else if (mType === 'GMDH') {
             const layers = (typeof p.layers === 'object' && p.layers !== null && !Array.isArray(p.layers)) ? p.layers.value : p.layers;
             const polyOrder = (typeof p.polyOrder === 'object' && p.polyOrder !== null) ? p.polyOrder.value : (p.polyOrder || 2);
 
             if (!layers || !Array.isArray(layers) || layers.length === 0) {
-              return { outputs: [cleanIns[0] || 0] };
+              const diag = { code: 'INVALID_GMDH_LAYERS', message: 'GMDH layers missing or empty.', severity: 'error' as const };
+              return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
             }
 
-            let currentVals = [...cleanIns];
+            for (let i = 0; i < rawInputs.length; i++) {
+              if (!Number.isFinite(rawInputs[i])) {
+                const diag = { code: 'NON_FINITE_INPUT', message: `Non-finite input at index ${i}.`, severity: 'error' as const };
+                return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
+              }
+            }
+
+            let currentVals = [...rawInputs];
             for (const layer of (layers as any[])) {
               currentVals = layer.map((neuron: any) => {
-                const xi = currentVals[neuron.inputs[0]] || 0;
-                const xj = currentVals[neuron.inputs[1]] || 0;
+                const xi = currentVals[neuron.inputs[0]];
+                const xj = currentVals[neuron.inputs[1]];
                 let vals: number[];
                 if (polyOrder === 3) {
                   vals = [1, xi, xj, xi * xi, xj * xj, xi * xj, xi * xi * xi, xj * xj * xj, xi * xi * xj, xi * xj * xj];
@@ -3198,29 +3219,52 @@ export const BLOCK_LIBRARY: Record<string, (id: string, params: any) => XBlock> 
                 return vals.reduce((sum, v, cIdx) => sum + v * (coeffs[cIdx] || 0), 0);
               });
             }
-            return { outputs: [Number(currentVals[0]) || 0] };
+            const outVal = Number(currentVals[0]);
+            if (!Number.isFinite(outVal)) {
+              const diag = { code: 'NUMERICAL_OVERFLOW', message: 'GMDH execution produced non-finite output.', severity: 'error' as const };
+              return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
+            }
+            return { outputs: [outVal], nextState: { ...(state || {}), lastFault: null } };
           } else if (mType === 'Taguchi') {
             const grandMean = (typeof p.grandMean === 'object') ? p.grandMean.value : (p.grandMean || 0);
             const factorLevels = (typeof p.factorLevels === 'object' && !Array.isArray(p.factorLevels)) ? p.factorLevels.value : (p.factorLevels || []);
 
+            if (!Array.isArray(factorLevels) || factorLevels.length === 0) {
+              const diag = { code: 'INVALID_TAGUCHI_LEVELS', message: 'Taguchi factorLevels missing or empty.', severity: 'error' as const };
+              return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
+            }
+
+            for (let i = 0; i < rawInputs.length; i++) {
+              if (!Number.isFinite(rawInputs[i])) {
+                const diag = { code: 'NON_FINITE_INPUT', message: `Non-finite input at index ${i}.`, severity: 'error' as const };
+                return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
+              }
+            }
+
             let prediction = Number(grandMean);
             factorLevels.forEach((f: any, i: number) => {
-              const val = cleanIns[i] || 0;
-              // Find nearest level
+              const val = rawInputs[i];
               if (f.means && Array.isArray(f.means)) {
-                const sortedMeans = [...f.means].sort((a, b) => Math.abs(a.level - val) - Math.abs(b.level - val));
+                const sortedMeans = [...f.means].sort((a: any, b: any) => Math.abs(a.level - val) - Math.abs(b.level - val));
                 const nearest = sortedMeans[0];
                 if (nearest) {
                   prediction += (nearest.meanY - grandMean);
                 }
               }
             });
-            return { outputs: [prediction] };
+
+            if (!Number.isFinite(prediction)) {
+              const diag = { code: 'NUMERICAL_OVERFLOW', message: 'Taguchi execution produced non-finite output.', severity: 'error' as const };
+              return { outputs: [NaN], error: diag.message, nextState: { ...(state || {}), lastFault: diag } };
+            }
+            return { outputs: [prediction], nextState: { ...(state || {}), lastFault: null } };
           }
 
-          return { outputs: [cleanIns.reduce((a, b) => a + b, 0)] };
-        } catch (err) {
-          return { outputs: [0] };
+          const noModelDiag = { code: 'NO_MODEL_CONFIGURED', message: 'No valid DOE model configured on block.', severity: 'error' as const };
+          return { outputs: [NaN], error: noModelDiag.message, nextState: { ...(state || {}), lastFault: noModelDiag } };
+        } catch (err: any) {
+          const exDiag = { code: 'EXECUTION_EXCEPTION', message: err?.message || 'Unknown execution exception.', severity: 'error' as const };
+          return { outputs: [NaN], error: exDiag.message, nextState: { ...(state || {}), lastFault: exDiag } };
         }
       }
     };

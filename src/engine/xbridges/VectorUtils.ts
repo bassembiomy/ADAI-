@@ -311,9 +311,20 @@ export class VectorUtils {
         // Not standard JSON array format, fall back to MATLAB array syntax parsing below
       }
 
-      // 2. Parse MATLAB-style arrays (e.g. "[1 2 3]" or "[1 2; 3 4]")
+      // 2. Parse MATLAB-style arrays (e.g. "[1 2 3]" or "[1 2; 3 4]" or "[[1 2], [3 5]]")
       const content = trimmed.slice(1, -1).trim();
       if (content === '') return [];
+
+      if (content.includes('[')) {
+        const matches = [...content.matchAll(/\[([^\]]+)\]/g)];
+        if (matches.length > 0) {
+          const matrix = matches.map(m => {
+            const inner = m[1].trim().split(/[\s,]+/).filter(Boolean);
+            return inner.map(p => Number(p)).filter(n => !isNaN(n));
+          }).filter(r => r.length > 0);
+          return matrix;
+        }
+      }
 
       if (content.includes(';')) {
         // Matrix: rows separated by semicolons

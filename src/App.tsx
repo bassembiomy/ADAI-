@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent } from 'react';
 import * as math from 'mathjs';
 import Plot from 'react-plotly.js';
+import { PlotlyPlots } from './components/doe/PlotlyPlots';
+import { createVLabDOEBlock, createXBridgesDOEBlock } from './engine/doe/integration';
+import { fitRSM, fitGMDH, fitTaguchi } from './engine/doe/statistics';
 import DOMPurify from 'dompurify';
 import { v4 as uuidv4 } from 'uuid';
 import * as XLSX from 'xlsx';
@@ -4847,477 +4850,7 @@ const ManualEntryTable = ({
     </div>
   );
 };
-
-const PlotlyPlots = ({
-  type,
-  data,
-  results,
-  factors,
-  headers,
-  holdValues,
-  modelType = 'RSM'
-}: {
-  type: 'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act' | 'taguchi_main_sn' | 'taguchi_main_mean',
-  data: number[][],
-  results: any,
-  factors: { x: number, y: number },
-  headers: string[],
-  holdValues: number[],
-  modelType?: 'RSM' | 'GMDH' | 'Taguchi'
-}) => {
-  if (!results || !data) return <div className="flex items-center justify-center h-full text-[#444]">No Model Calculated</div>;
-
-  if (type === 'pareto' && results.coeffTable) {
-    // Pareto Chart of Standardized Effects with dynamic critical t-value
-    const n = data.length;
-    const p = results.coeffTable?.length || 1;
-    const dfErr = Math.max(1, n - p);
-    // Compute critical t from degrees of freedom (approximate)
-    const lgamma = (x: number): number => {
-      const c = [76.18009172947146, -86.50532032941677, 24.01409824083091,
-        -1.231739572450155, 0.001208650973866179, -0.000005395239384953];
-      let y = x, tmp = x + 5.5;
-      tmp -= (x + 0.5) * Math.log(tmp);
-      let ser = 1.000000000190015;
-      for (let j = 0; j < 6; j++) ser += c[j] / ++y;
-      return -tmp + Math.log(2.5066282746310005 * ser / x);
-    };
-    // Approximate critical t via Wilson-Hilferty
-    let critT = 2.0; // fallback
-    if (dfErr > 2) {
-      const a = 0.025; // two-tailed alpha/2
-      let z = Math.sqrt(-2 * Math.log(a));
-      z = z - (2.30753 + 0.27061 * z) / (1 + 0.99229 * z + 0.04481 * z * z);
-      critT = Math.abs(z * Math.sqrt(dfErr / (dfErr - 2 + z * z / (3 * dfErr))));
-      critT = Math.min(critT, z * (1 + 1 / (4 * dfErr))); // bounded correction
-    }
-
-    const sortedEffects = results.coeffTable
-      .filter((c: any) => c.term !== 'Intercept')
-      .map((c: any) => ({ term: c.term, absT: Math.abs(c.t) }))
-      .sort((a: any, b: any) => a.absT - b.absT);
-
-    const trace = {
-      x: sortedEffects.map((s: any) => s.absT),
-      y: sortedEffects.map((s: any) => s.term),
-      type: 'bar',
-      orientation: 'h',
-      marker: {
-        color: sortedEffects.map((s: any) => s.absT > critT ? '#10b981' : '#444'),
-        line: { color: '#000', width: 1 }
-      },
-      name: 'Effect Magnitude'
-    };
-
-    return (
-      <Plot
-        data={[trace] as any}
-        layout={{
-          template: { layout: { paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' } },
-          autosize: true,
-          margin: { l: 120, r: 40, t: 40, b: 40 },
-          paper_bgcolor: 'transparent',
-          plot_bgcolor: 'rgba(0,0,0,0.2)',
-          font: { color: '#888', size: 10 },
-          title: { text: `Pareto Chart of Standardized Effects (α=0.05, df=${dfErr})`, font: { size: 12, color: '#f97316' } },
-          xaxis: { title: 'Absolute T-Value', gridcolor: '#222' },
-          yaxis: { title: 'Factor Term', gridcolor: '#222' },
-          shapes: [
-            {
-              type: 'line',
-              x0: critT,
-              x1: critT,
-              y0: -0.5,
-              y1: sortedEffects.length - 0.5,
-              line: { color: '#ef4444', width: 2, dash: 'dash' }
-            }
-          ],
-          annotations: [
-            {
-              x: critT,
-              y: sortedEffects.length - 1,
-              text: `t_crit = ${critT.toFixed(3)}`,
-              showarrow: false,
-              font: { color: '#ef4444', size: 9 },
-              xanchor: 'left',
-              xshift: 5
-            }
-          ]
-        }}
-        useResizeHandler
-        className="w-full h-full"
-      />
-    );
-  }
-
-  if (type === 'residuals' && results.residuals) {
-    // Residual Diagnostics
-    const res = results.residuals;
-    const fits = results.fits || [];
-    
-    // Normal Probability Plot Calculation
-    const sortedRes = [...res].sort((a, b) => a - b);
-    const n = res.length;
-    const pValues = res.map((_: number, i: number) => (i + 0.5) / n);
-    const zScores = pValues.map((p: number) => {
-      // Simple inverse normal approximation
-      const t = Math.sqrt(-2 * Math.log(Math.min(p, 1 - p)));
-      const z = t - (2.30753 + 0.27061 * t) / (1 + 0.99229 * t + 0.04481 * t * t);
-      return p > 0.5 ? z : -z;
-    });
-
-    const normalTrace = {
-      x: sortedRes,
-      y: zScores,
-      mode: 'markers',
-      type: 'scatter',
-      name: 'Normal Probability',
-      marker: { color: '#f97316' }
-    };
-
-    const fitsTrace = {
-      x: fits,
-      y: res,
-      mode: 'markers',
-      type: 'scatter',
-      name: 'Residual vs Fits',
-      xaxis: 'x2',
-      yaxis: 'y2',
-      marker: { color: '#10b981' }
-    };
-
-    const histTrace = {
-      x: res,
-      type: 'histogram',
-      name: 'Histogram',
-      xaxis: 'x3',
-      yaxis: 'y3',
-      marker: { color: '#f97316' }
-    };
-
-    return (
-      <Plot
-        data={[normalTrace, fitsTrace, histTrace] as any}
-        layout={{
-          grid: { rows: 2, columns: 2, pattern: 'independent' },
-          template: { layout: { paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' } },
-          paper_bgcolor: 'transparent',
-          plot_bgcolor: 'rgba(0,0,0,0.1)',
-          font: { color: '#888', size: 10 },
-          showlegend: false,
-          annotations: [
-            { text: 'Normal Probability Plot', xref: 'paper', yref: 'paper', x: 0, y: 1.1, showarrow: false, font: { color: '#f97316' } },
-            { text: 'Residual vs Fits', xref: 'paper', yref: 'paper', x: 0.6, y: 1.1, showarrow: false, font: { color: '#10b981' } },
-            { text: 'Histogram of Residuals', xref: 'paper', yref: 'paper', x: 0, y: 0.4, showarrow: false, font: { color: '#f97316' } }
-          ],
-          xaxis: { title: 'Residual', gridcolor: '#222' },
-          yaxis: { title: 'Z-Score', gridcolor: '#222' },
-          xaxis2: { title: 'Fitted Value', gridcolor: '#222' },
-          yaxis2: { title: 'Residual', gridcolor: '#222' },
-          xaxis3: { title: 'Residual', gridcolor: '#222' },
-          yaxis3: { title: 'Frequency', gridcolor: '#222' }
-        }}
-        useResizeHandler
-        className="w-full h-full"
-      />
-    );
-  }
-
-  if (type === 'pred_vs_act' && results.fits) {
-    const act = results.actuals || data.map(r => r[headers.length-1]);
-    const fits = results.fits;
-    
-    const min = Math.min(...act, ...fits);
-    const max = Math.max(...act, ...fits);
-
-    const trace = {
-      x: act,
-      y: fits,
-      mode: 'markers',
-      type: 'scatter',
-      name: 'Observations',
-      marker: { color: '#f97316', size: 8, line: { color: '#000', width: 1 } }
-    };
-
-    const line = {
-      x: [min, max],
-      y: [min, max],
-      mode: 'lines',
-      type: 'scatter',
-      name: 'Ideal (45°)',
-      line: { color: '#666', dash: 'dash', width: 1 }
-    };
-
-    return (
-      <Plot
-        data={[trace, line] as any}
-        layout={{
-          template: { layout: { paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' } },
-          paper_bgcolor: 'transparent',
-          plot_bgcolor: 'rgba(0,0,0,0.1)',
-          font: { color: '#888', size: 10 },
-          title: { text: 'Predicted vs Actual Response', font: { size: 12, color: '#f97316' } },
-          xaxis: { title: 'Actual Value', gridcolor: '#222', scaleanchor: 'y', scaleratio: 1 },
-          yaxis: { title: 'Predicted Value', gridcolor: '#222' }
-        }}
-        useResizeHandler
-        className="w-full h-full"
-      />
-    );
-  }
-  if (type === 'taguchi_delta' && results.type === 'Taguchi') {
-    // Response Table Delta Plot
-    const deltaTrace = {
-      x: results.factorLevels.map((f: any) => f.factor),
-      y: results.factorLevels.map((f: any) => f.delta),
-      type: 'bar',
-      marker: { color: '#f97316' },
-      name: 'Delta (Max-Min)'
-    };
-
-    return (
-      <Plot
-        data={[deltaTrace] as any}
-        layout={{
-          template: { layout: { paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' } },
-          paper_bgcolor: 'transparent',
-          plot_bgcolor: 'rgba(0,0,0,0.1)',
-          font: { color: '#888', size: 10 },
-          title: { text: 'Response Table Delta (Factor Significance)', font: { size: 12, color: '#f97316' } },
-          xaxis: { title: 'Factor', gridcolor: '#222' },
-          yaxis: { title: 'Delta (S/N)', gridcolor: '#222' }
-        }}
-        useResizeHandler
-        className="w-full h-full"
-      />
-    );
-  }
-
-  if (modelType === 'Taguchi' && (type === 'taguchi_main_sn' || type === 'taguchi_main_mean')) {
-    const isSN = type === 'taguchi_main_sn';
-    const K = results.factorLevels?.length || 0;
-    if (K === 0) return <div className="flex items-center justify-center h-full text-[#444]">No Factor Levels Found</div>;
-
-    const traces: any[] = [];
-    const layoutAxes: any = {};
-    const grandMean = isSN ? results.grandMeanSN : results.grandMeanY;
-
-    results.factorLevels.forEach((fl: any, idx: number) => {
-      const factorName = fl.factor;
-      const sortedMeans = [...fl.means].sort((a: any, b: any) => a.level - b.level);
-      const x = sortedMeans.map((m: any) => `L${m.level}`);
-      const y = sortedMeans.map((m: any) => isSN ? m.meanSN : m.meanY);
-      
-      traces.push({
-        x,
-        y,
-        type: 'scatter',
-        mode: 'lines+markers',
-        name: factorName,
-        xaxis: 'x' + (idx + 1),
-        yaxis: 'y',
-        line: { 
-          color: isSN ? '#f97316' : '#10b981', 
-          width: 3 
-        },
-        marker: { 
-          color: isSN ? '#f97316' : '#10b981', 
-          size: 10,
-          line: { color: '#000', width: 1 } 
-        },
-        showlegend: false
-      });
-
-      layoutAxes[`xaxis${idx + 1}`] = {
-        title: factorName,
-        titlefont: { size: 10, color: '#aaa', family: 'Inter, sans-serif' },
-        tickfont: { size: 9, color: '#888' },
-        gridcolor: '#222',
-        zeroline: false,
-        domain: [idx / K + 0.02, (idx + 1) / K - 0.02]
-      };
-    });
-
-    const layout = {
-      paper_bgcolor: 'transparent',
-      plot_bgcolor: 'rgba(0,0,0,0.1)',
-      font: { color: '#888', family: 'Inter, sans-serif' },
-      margin: { l: 60, r: 20, b: 50, t: 50 },
-      title: { 
-        text: isSN ? 'Main Effects Plot for SN Ratios' : 'Main Effects Plot for Means',
-        font: { size: 13, color: '#f97316' }
-      },
-      yaxis: {
-        title: isSN ? 'Mean S/N Ratio (dB)' : 'Mean Response',
-        gridcolor: '#222',
-        tickfont: { size: 9, color: '#aaa' },
-        zeroline: false
-      },
-      ...layoutAxes,
-      shapes: [
-        {
-          type: 'line',
-          x0: 0,
-          x1: 1,
-          xref: 'paper',
-          y0: grandMean || 0,
-          y1: grandMean || 0,
-          yref: 'y',
-          line: { color: '#666', width: 1.5, dash: 'dash' }
-        }
-      ],
-      annotations: [
-        {
-          xref: 'paper',
-          yref: 'y',
-          x: 0.98,
-          y: grandMean || 0,
-          text: `Grand Mean: ${(grandMean || 0).toFixed(3)}`,
-          showarrow: false,
-          font: { color: '#888', size: 9 },
-          yanchor: 'bottom',
-          xanchor: 'right'
-        }
-      ],
-      autosize: true
-    };
-
-    return (
-      <div className="w-full h-full">
-        <Plot
-          data={traces as any}
-          layout={layout as any}
-          useResizeHandler={true}
-          className="w-full h-full"
-          config={{ displayModeBar: false }}
-        />
-      </div>
-    );
-  }
-
-  const idxX = factors.x;
-  const idxY = factors.y;
-
-  const xVals = data.map(r => r[idxX]);
-  const yVals = data.map(r => r[idxY]);
-  const minX = Math.min(...xVals), maxX = Math.max(...xVals);
-  const minY = Math.min(...yVals), maxY = Math.max(...yVals);
-
-  // Higher resolution mesh for smoother surfaces
-  const gridRes = 60;
-  const stepX = Math.max(1e-9, (maxX - minX) / gridRes);
-  const stepY = Math.max(1e-9, (maxY - minY) / gridRes);
-  const xRange = Array.from({ length: gridRes + 1 }, (_, i) => minX + i * stepX);
-  const yRange = Array.from({ length: gridRes + 1 }, (_, i) => minY + i * stepY);
-
-  const k = headers.length - 1;
-  const zGrid: number[][] = [];
-
-  for (let j = 0; j < yRange.length; j++) {
-    const rowZ: number[] = [];
-    for (let i = 0; i < xRange.length; i++) {
-      const currentFactors = [...holdValues];
-      currentFactors[idxX] = xRange[i];
-      currentFactors[idxY] = yRange[j];
-
-      let z = 0;
-      if (modelType === 'RSM' && results.Beta) {
-        // Use unified prediction function — matches engine exactly
-        z = results.Beta[0];
-        for (let f = 0; f < k; f++) z += results.Beta[f + 1] * currentFactors[f];
-        for (let f = 0; f < k; f++) z += results.Beta[k + 1 + f] * currentFactors[f] * currentFactors[f];
-        let idx = 2 * k + 1;
-        for (let f = 0; f < k; f++) {
-          for (let g = f + 1; g < k; g++) {
-            z += results.Beta[idx] * currentFactors[f] * currentFactors[g];
-            idx++;
-          }
-        }
-      } else if (modelType === 'GMDH' && results.model) {
-        z = results.model.predict(currentFactors.slice(0, k));
-      } else if (modelType === 'Taguchi' && results.factorLevels && results.grandMean !== undefined) {
-        // Taguchi additive model surface
-        z = results.grandMean;
-        results.factorLevels.forEach((f: any, fIdx: number) => {
-          const val = currentFactors[fIdx];
-          if (f.means && f.means.length > 0) {
-            const sorted = [...f.means].sort((a: any, b: any) => Math.abs(a.level - val) - Math.abs(b.level - val));
-            if (sorted[0]) z += (sorted[0].meanY - results.grandMean);
-          }
-        });
-      }
-      rowZ.push(z);
-    }
-    zGrid.push(rowZ);
-  }
-
-  const plotData: any[] = [
-    {
-      z: zGrid,
-      x: xRange,
-      y: yRange,
-      type: type === 'surface' ? 'surface' : 'contour',
-      colorscale: 'Viridis',
-      showscale: true,
-      opacity: type === 'surface' ? 0.95 : 1,
-      contours: type === 'contour' ? {
-        coloring: 'heatmap',
-        showlabels: true,
-        labelfont: { size: 10, color: '#fff' }
-      } : type === 'surface' ? {
-        z: { show: true, usecolormap: true, highlightcolor: '#fff', project: { z: false } }
-      } : undefined
-    }
-  ];
-
-  // Overlay actual data points on 3D surface
-  if (type === 'surface') {
-    plotData.push({
-      x: xVals,
-      y: yVals,
-      z: data.map(r => r[data[0].length - 1]),
-      mode: 'markers',
-      type: 'scatter3d',
-      marker: {
-        size: 5,
-        color: '#f97316',
-        opacity: 1,
-        line: { width: 1, color: '#fff' }
-      },
-      name: 'Actual Data'
-    });
-  }
-
-  const layout = {
-    paper_bgcolor: 'rgba(0,0,0,0)',
-    plot_bgcolor: 'rgba(0,0,0,0)',
-    font: { color: '#888', family: 'Inter, sans-serif' },
-    margin: { l: 20, r: 20, b: 20, t: 40 },
-    title: { 
-      text: type === 'surface' ? '3D Response Surface' : 'Contour Plot',
-      font: { size: 14, color: '#f97316' }
-    },
-    scene: {
-      xaxis: { title: { text: headers[idxX], font: { color: '#f97316' } }, gridcolor: '#222' },
-      yaxis: { title: { text: headers[idxY], font: { color: '#10b981' } }, gridcolor: '#222' },
-      zaxis: { title: { text: headers[headers.length - 1], font: { color: '#3b82f6' } }, gridcolor: '#222' },
-      camera: { eye: { x: 1.6, y: 1.6, z: 1.4 } }
-    },
-    autosize: true
-  };
-
-  return (
-    <div className="w-full h-full">
-      <Plot
-        data={plotData}
-        layout={layout}
-        useResizeHandler={true}
-        className="w-full h-full"
-        config={{ displayModeBar: true, responsive: true }}
-      />
-    </div>
-  );
-};
+// PlotlyPlots extracted to src/components/doe/PlotlyPlots.tsx
 // Help Data moved to HelpData.ts
 
 const ALL_MODULES = [
@@ -6322,113 +5855,29 @@ const ADIA = () => {
       addError('warning', 'Insufficient data points for RSM.');
       return;
     }
-    const factorsCount = headers.length - 1;
-    const n = data.length;
-    const factorStats = headers.slice(0, factorsCount).map((_, i) => {
-      const col = data.map(r => r[i]);
-      return { min: Math.min(...col), max: Math.max(...col) };
-    });
-    const coding = factorStats.map(s => ({ mid: (s.max + s.min) / 2, scale: (s.max - s.min) / 2 || 1 }));
-    const Z: number[][] = [];
-    const Y: number[] = [];
-    data.forEach(row => {
-      const f = row.slice(0, factorsCount);
-      Y.push(row[factorsCount]);
-      const x = f.map((v, i) => (v - coding[i].mid) / coding[i].scale);
-      const zRow = [1];
-      for (let i = 0; i < factorsCount; i++) zRow.push(x[i]);
-      for (let i = 0; i < factorsCount; i++) zRow.push(x[i] * x[i]);
-      for (let i = 0; i < factorsCount; i++) {
-        for (let j = i + 1; j < factorsCount; j++) zRow.push(x[i] * x[j]);
-      }
-      Z.push(zRow);
-    });
-
-    try {
-      const Beta_coded = solveLeastSquares(Z, Y);
-      const p_terms = Z[0].length - 1;
-      const Beta: number[] = new Array(p_terms + 1).fill(0);
-      const k = factorsCount;
-      for (let i = 0; i < k; i++) Beta[k + 1 + i] = Beta_coded[k + 1 + i] / (coding[i].scale ** 2);
-      let interIdx = 2 * k + 1;
-      for (let i = 0; i < k; i++) {
-        for (let j = i + 1; j < k; j++) {
-          Beta[interIdx] = Beta_coded[interIdx] / (coding[i].scale * coding[j].scale);
-          interIdx++;
-        }
-      }
-      for (let i = 0; i < k; i++) {
-        let val = Beta_coded[i + 1] / coding[i].scale;
-        val -= 2 * Beta[k + 1 + i] * coding[i].mid;
-        let itIdx = 2 * k + 1;
-        for (let m = 0; m < k; m++) {
-          for (let n = m + 1; n < k; n++) {
-            if (m === i) val -= Beta[itIdx] * coding[n].mid;
-            if (n === i) val -= Beta[itIdx] * coding[m].mid;
-            itIdx++;
-          }
-        }
-        Beta[i + 1] = val;
-      }
-      let intercept = Beta_coded[0];
-      for (let i = 0; i < k; i++) intercept -= (Beta_coded[i + 1] / coding[i].scale) * coding[i].mid;
-      for (let i = 0; i < k; i++) intercept += Beta[k + 1 + i] * (coding[i].mid ** 2);
-      let iIdx = 2 * k + 1;
-      for (let i = 0; i < k; i++) {
-        for (let j = i + 1; j < k; j++) {
-          intercept += Beta[iIdx] * coding[i].mid * coding[j].mid;
-          iIdx++;
-        }
-      }
-      Beta[0] = intercept;
-
-      const Y_pred = Z.map(row => {
-        let sum = 0;
-        for (let i = 0; i < Beta_coded.length; i++) sum += Beta_coded[i] * row[i];
-        return sum;
-      });
-
-      const SSE = Y.reduce((acc, y, i) => acc + Math.pow(y - Y_pred[i], 2), 0);
-      const SST = Y.reduce((acc, y) => acc + Math.pow(y - (Y.reduce((a, b) => a + b, 0) / Y.length), 2), 0);
-      const df_total = n - 1;
-      const df_model = p_terms;
-      const df_error = n - p_terms - 1;
-      const R2 = 1 - SSE / SST;
-      const R2Adj = 1 - (SSE / df_error) / (SST / df_total);
-      const MS_model = (SST - SSE) / df_model;
-      const MS_error = SSE / df_error;
-      const F = MS_model / MS_error;
-      const P = fDistPValue(F, df_model, df_error);
-
-      let eq = `Y = ${Beta[0].toFixed(4)}`;
-      for (let i = 0; i < k; i++) eq += ` ${Beta[i + 1] >= 0 ? '+' : ''} ${Beta[i + 1].toFixed(4)}·${headers[i]}`;
-      for (let i = 0; i < k; i++) eq += ` ${Beta[k + 1 + i] >= 0 ? '+' : ''} ${Beta[k + 1 + i].toFixed(4)}·${headers[i]}²`;
-      let aIdx = 2 * k + 1;
-      for (let i = 0; i < k; i++) {
-        for (let j = i + 1; j < k; j++) {
-          eq += ` ${Beta[aIdx] >= 0 ? '+' : ''} ${Beta[aIdx].toFixed(4)}·${headers[i]}·${headers[j]}`;
-          aIdx++;
-        }
-      }
-
-      setResults({
-        type: 'RSM',
-        Beta,
-        Beta_coded,
-        R2,
-        R2Adj,
-        F,
-        P,
-        equation: eq,
-        fits: Y_pred,
-        residuals: Y.map((y, i) => y - Y_pred[i]),
-        actuals: Y
-      });
-      setActiveModel('RSM');
-      addError('info', `RSM Calculated: R² = ${(R2 * 100).toFixed(2)}%`);
-    } catch (err) {
-      addError('error', 'Statistical solver failed.');
+    const res = fitRSM({ headers, data });
+    if (res.diagnostics.some(d => d.severity === 'error')) {
+      addError('error', res.diagnostics.find(d => d.severity === 'error')?.message || 'RSM solve failed.');
+      return;
     }
+    const Y = data.map(r => r[headers.length - 1]);
+    const legacyCompatible = {
+      ...res,
+      canonicalResult: res,
+      type: 'RSM',
+      Beta: res.details?.Beta,
+      Beta_coded: res.details?.Beta_coded,
+      R2: res.rSquared,
+      R2Adj: res.adjustedRSquared,
+      F: res.fStatistic,
+      P: res.pValue,
+      fits: res.details?.predicted,
+      residuals: res.details?.residuals,
+      actuals: Y
+    };
+    setResults(legacyCompatible);
+    setActiveModel('RSM');
+    addError('info', `RSM Calculated: R² = ${((res.rSquared ?? 0) * 100).toFixed(2)}%`);
   };
 
   const calculateGMDH = () => {
@@ -6436,42 +5885,26 @@ const ADIA = () => {
       addError('warning', 'Insufficient data for GMDH.');
       return;
     }
-    const factorsCount = headers.length - 1;
-    const X = data.map(r => r.slice(0, factorsCount));
-    const Y = data.map(r => r[factorsCount]);
-
-    const k_folds = 5;
-    const model = new GMDHEngine({
-      algorithm: 'MIA',
-      polynomialOrder: 2,
-      maxLayers: 8,
-      externalCriterion: 'RMSE',
-      validationSplit: 0.3
-    });
-    model.train(data, headers);
-
-    const Y_pred = data.map(r => {
-      try { return model.predict(r.slice(0, factorsCount)); } catch(e) { return 0; }
-    });
-    const meanY = Y.reduce((a, b) => a + b, 0) / Y.length;
-    let SSE = 0, SST = 0;
-    for (let i = 0; i < Y.length; i++) {
-      SSE += Math.pow(Y[i] - Y_pred[i], 2);
-      SST += Math.pow(Y[i] - meanY, 2);
+    const res = fitGMDH({ headers, data });
+    if (res.diagnostics.some(d => d.severity === 'error')) {
+      addError('error', res.diagnostics.find(d => d.severity === 'error')?.message || 'GMDH solve failed.');
+      return;
     }
-    const R2 = SST === 0 ? 1 : Math.max(0, 1 - (SSE / SST));
-
-    setResults({
+    const Y = data.map(r => r[headers.length - 1]);
+    const legacyCompatible = {
+      ...res,
+      canonicalResult: res,
       type: 'GMDH',
-      model,
-      R2,
-      equation: model.getEquation ? model.getEquation() : 'GMDH Neural Model',
-      fits: Y_pred,
-      residuals: Y.map((y, i) => y - Y_pred[i]),
+      model: res.details?.model,
+      R2: res.rSquared,
+      R2Adj: res.adjustedRSquared,
+      fits: res.details?.predicted,
+      residuals: res.details?.residuals,
       actuals: Y
-    });
+    };
+    setResults(legacyCompatible);
     setActiveModel('GMDH');
-    addError('info', `GMDH Trained: R² = ${(R2 * 100).toFixed(2)}%`);
+    addError('info', `GMDH Trained: R² = ${((res.rSquared ?? 0) * 100).toFixed(2)}%`);
   };
 
   const calculateTaguchi = () => {
@@ -6479,124 +5912,34 @@ const ADIA = () => {
       addError('warning', 'Insufficient data for Taguchi analysis.');
       return;
     }
-
-    const factorsCount = headers.length - 1;
-    const factors = headers.slice(0, factorsCount);
-    const meanY = data.reduce((a, r) => a + r[factorsCount], 0) / data.length;
-
-    // Group data into unique trials to handle replicates properly
-    const trialsMap = new Map<string, number[]>();
-    data.forEach((row: number[]) => {
-      const factorsPart = row.slice(0, factorsCount).join('|');
-      if (!trialsMap.has(factorsPart)) trialsMap.set(factorsPart, []);
-      trialsMap.get(factorsPart)!.push(row[factorsCount]);
+    const res = fitTaguchi({
+      headers,
+      data,
+      objective: taguchiConfig.objective,
+      targetValue: taguchiConfig.targetValue
     });
-
-    const trials = Array.from(trialsMap.entries()).map(([key, vals]: [string, number[]]) => ({
-      factors: key.split('|').map(Number),
-      mean: vals.reduce((a: number, b: number) => a + b, 0) / vals.length,
-      variance: vals.length > 1 ? vals.reduce((a: number, b: number) => a + Math.pow(b - (vals.reduce((x: number, y: number) => x + y, 0) / vals.length), 2), 0) / (vals.length - 1) : 0,
-      count: vals.length,
-      responses: vals
-    }));
-
-    const snRatios = trials.map((t: any) => {
-      const n = t.count;
-      const y = t.responses;
-      if (taguchiConfig.objective === 'larger') {
-        const sumSqInv = y.reduce((acc: number, val: number) => acc + 1 / (val * val + 1e-12), 0);
-        return -10 * Math.log10(sumSqInv / n);
-      } else if (taguchiConfig.objective === 'smaller') {
-        const sumSq = y.reduce((acc: number, val: number) => acc + val * val, 0);
-        return -10 * Math.log10(sumSq / n);
-      } else if (taguchiConfig.objective === 'target') {
-        const target = taguchiConfig.targetValue !== undefined ? taguchiConfig.targetValue : 0;
-        const sumSqDev = y.reduce((acc: number, val: number) => acc + Math.pow(val - target, 2), 0);
-        return -10 * Math.log10((sumSqDev / n) + 1e-12);
-      } else { // 'nominal'
-        if (t.variance === 0) return 10 * Math.log10(Math.pow(t.mean, 2) / 1e-6);
-        return 10 * Math.log10(Math.pow(t.mean, 2) / t.variance);
-      }
-    });
-
-    const factorLevels = factors.map((f: string, factorIdx: number) => {
-      const levels = Array.from(new Set(trials.map((t: any) => t.factors[factorIdx]))).sort((a: number, b: number) => a - b);
-      const means = levels.map((l: number) => {
-        const matchingTrialsIndices = trials.map((t: any, i: number) => t.factors[factorIdx] === l ? i : -1).filter((idx: number) => idx !== -1);
-        const levelMeanY = matchingTrialsIndices.reduce((acc: number, idx: number) => acc + trials[idx].mean, 0) / matchingTrialsIndices.length;
-        const meanSN = matchingTrialsIndices.reduce((acc: number, idx: number) => acc + snRatios[idx], 0) / matchingTrialsIndices.length;
-        return { level: l, meanY: levelMeanY, meanSN };
-      });
-      const delta = Math.max(...means.map((m: any) => m.meanSN)) - Math.min(...means.map((m: any) => m.meanSN));
-      const deltaY = Math.max(...means.map((m: any) => m.meanY)) - Math.min(...means.map((m: any) => m.meanY));
-      return { factor: f, means, delta, deltaY };
-    });
-
-    const rankedFactors = factorLevels.map((f: any) => {
-      const snSorted = [...factorLevels].sort((a: any, b: any) => b.delta - a.delta);
-      const rank = snSorted.findIndex((x: any) => x.factor === f.factor) + 1;
-      
-      const ySorted = [...factorLevels].sort((a: any, b: any) => b.deltaY - a.deltaY);
-      const rankY = ySorted.findIndex((x: any) => x.factor === f.factor) + 1;
-      
-      return { ...f, rank, rankY };
-    });
-
-    const grandMeanSN = snRatios.reduce((a: number, b: number) => a + b, 0) / snRatios.length;
-    const grandMeanY = trials.reduce((a: number, t: any) => a + t.mean, 0) / trials.length;
-
-    const optimal = factorLevels.map((fl: any) => {
-      const bestMean = [...fl.means].sort((a: any, b: any) => b.meanSN - a.meanSN)[0];
-      return {
-        factor: fl.factor,
-        level: bestMean ? bestMean.level : 1,
-        meanSN: bestMean ? bestMean.meanSN : 0,
-        meanY: bestMean ? bestMean.meanY : 0
-      };
-    });
-
-    let predOptSN = grandMeanSN;
-    let predOptY = grandMeanY;
-    optimal.forEach((opt: any) => {
-      predOptSN += (opt.meanSN - grandMeanSN);
-      predOptY += (opt.meanY - grandMeanY);
-    });
-
-    const Y_all = data.map(r => r[factorsCount]);
-    const fits = data.map(row => {
-      let pred = meanY;
-      factorLevels.forEach((f, fIdx) => {
-        const val = row[fIdx];
-        const nearest = [...f.means].sort((a: any, b: any) => Math.abs(a.level - val) - Math.abs(b.level - val))[0];
-        if (nearest) pred += (nearest.meanY - meanY);
-      });
-      return pred;
-    });
-
-    const SSE = Y_all.reduce((acc, y, i) => acc + Math.pow(y - fits[i], 2), 0);
-    const SST = Y_all.reduce((acc, y) => acc + Math.pow(y - meanY, 2), 0);
-    const R2 = SST === 0 ? 1 : Math.max(0, 1 - SSE / SST);
-
-    setResults({
+    if (res.diagnostics.some(d => d.severity === 'error')) {
+      addError('error', res.diagnostics.find(d => d.severity === 'error')?.message || 'Taguchi analysis failed.');
+      return;
+    }
+    const Y = data.map(r => r[headers.length - 1]);
+    const legacyCompatible = {
+      ...res,
+      canonicalResult: res,
       type: 'Taguchi',
-      snRatios,
-      factorLevels: rankedFactors,
+      snRatios: res.details?.snRatios,
+      factorLevels: res.details?.factorLevels,
       objective: taguchiConfig.objective,
       targetValue: taguchiConfig.targetValue,
-      equation: `Taguchi Model (R² = ${(R2*100).toFixed(2)}%)`,
-      grandMean: meanY,
-      grandMeanSN,
-      grandMeanY,
-      R2,
-      fits,
-      actuals: Y_all,
-      residuals: Y_all.map((y, i) => y - fits[i]),
-      optimal,
-      predOptSN,
-      predOptY
-    });
+      R2: res.rSquared,
+      grandMean: res.details?.grandMeanY,
+      fits: res.details?.predicted,
+      residuals: res.details?.residuals,
+      actuals: Y
+    };
+    setResults(legacyCompatible);
     setActiveModel('Taguchi');
-    addError('info', `Taguchi Analysis Completed. R² = ${(R2 * 100).toFixed(2)}%`);
+    addError('info', `Taguchi Analysis Completed. R² = ${((res.rSquared ?? 0) * 100).toFixed(2)}%`);
   };
 
 
@@ -7147,35 +6490,15 @@ const ADIA = () => {
     // Prevent React events from being treated as block data
     const actualBlock = (block && block.nativeEvent) ? null : block;
     
-    const exportBlock = actualBlock || {
-      name: `${activeModel} Model`,
-      type: 'doe_custom',
-      color: '#c9a86c', // Explicit gold color for DOE
-      params: { 
-        equation: { label: 'Model Equation', value: results.equation || '', unit: '' },
-        modelType: { label: 'Algorithm', value: activeModel, unit: '' }
-      },
-      ports: [
-        ...headers.slice(0, -1).map((h, i) => ({ 
-          id: `in${i + 1}`, label: h, type: 'input', pos: 'left', position: 'left', domain: 'General' 
-        })),
-        { id: 'out', label: headers[headers.length - 1], type: 'output', pos: 'right', position: 'right', domain: 'General' }
-      ]
-    };
-    
-    const newNodeId = `doe_vlab_${Date.now()}`;
-    const newNode = {
-      id: newNodeId,
-      type: 'doe_custom', 
-      position: { x: 400, y: 300 },
-      data: { 
-        ...exportBlock, 
-        id: newNodeId, 
-        label: exportBlock.name,
-        type: 'doe_custom', 
-        ports: exportBlock.ports 
+    let newNode: any = actualBlock;
+    if (!newNode) {
+      const exportRes = createVLabDOEBlock(results.canonicalResult || results);
+      if ('success' in exportRes && !exportRes.success) {
+        addError('error', exportRes.diagnostics[0]?.message || 'Failed to export V-Lab block.');
+        return;
       }
-    };
+      newNode = exportRes;
+    }
     console.log('[DOE EXPORT DEBUG] Exporting to VLab:', newNode);
     
     const getTargetFileForMode = (mode: DiagramMode) => {
@@ -7267,51 +6590,12 @@ const ADIA = () => {
       addError('warning', 'Please calculate a model first.');
       return;
     }
-    const newNodeId = `doe_xb_${Date.now()}`;
-    const blockData = {
-      name: `${activeModel} Model`,
-      label: `${activeModel} Model`,
-      type: 'DOE_MODEL',
-      equation: results.equation || '',
-      modelType: activeModel,
-      inputNames: headers.slice(0, -1),
-      outputName: headers[headers.length - 1],
-      params: { 
-        equation: { label: 'Equation', value: results.equation || '' },
-        inputNames: { label: 'Inputs', value: headers.slice(0, -1) },
-        outputName: { label: 'Output', value: headers[headers.length - 1] },
-        modelType: { label: 'Model', value: activeModel }
-      },
-      inputs: headers.slice(0, -1).map((h, i) => ({ 
-        id: `in${i + 1}`, name: h, type: 'auto', direction: 'input', position: 'left', value: 0 
-      })),
-      outputs: [{ 
-        id: 'out', name: headers[headers.length - 1], type: 'auto', direction: 'output', position: 'right', value: 0 
-      }],
-      // Inject execution logic for simulation
-      execute: (inputs: any[], params: any) => {
-        try {
-          const scope: any = {};
-          const inputNames = params.inputNames.value;
-          inputNames.forEach((name: string, i: number) => {
-            scope[name] = inputs[i] || 0;
-          });
-          // Evaluate using mathjs (available globally as math)
-          const result = math.evaluate(params.equation.value, scope);
-          return { outputs: [result] };
-        } catch (e) {
-          console.error('DOE Model execution error:', e);
-          return { outputs: [0] };
-        }
-      }
-    };
-    
-    const newNode = {
-      id: newNodeId,
-      type: 'xblock',
-      position: { x: 400, y: 300 },
-      data: { ...blockData, id: newNodeId, selected: false }
-    };
+    const exportRes = createXBridgesDOEBlock(results.canonicalResult || results);
+    if ('success' in exportRes && !exportRes.success) {
+      addError('error', exportRes.diagnostics[0]?.message || 'Failed to export X-Bridges block.');
+      return;
+    }
+    const newNode = exportRes;
     
     if (xBridgesStateId) {
       // 1. If inside a state-specific sub-workspace, append node to that state's xBridgesModel.nodes
@@ -7799,7 +7083,7 @@ const ADIA = () => {
       projectFiles['hil.json'] = hilConfig;
     }
     if (selectedKeys.includes('doe')) {
-      projectFiles['doe.json'] = { headers, data, activeModel, taguchiConfig, results: results ? { R2: results.R2, equation: results.equation, type: results.type } : null };
+      projectFiles['doe.json'] = { schemaVersion: 1, headers, data, activeModel, taguchiConfig, results };
     }
     if (selectedKeys.includes('entropy')) {
       projectFiles['entropy.json'] = { entropyNodes, entropyEdges };
@@ -7814,7 +7098,7 @@ const ADIA = () => {
         blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
         hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
         hilConfig,
-        doe: { headers, data, activeModel, taguchiConfig, results },
+        doe: { schemaVersion: 1, headers, data, activeModel, taguchiConfig, results },
         managedWindows,
         entropyNodes,
         entropyEdges,

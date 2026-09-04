@@ -79,6 +79,20 @@ export function validateImportedJson(data: unknown): ValidationResult {
     });
   }
 
+  // Validate DOE suite structure if present
+  if (obj.doe !== undefined) {
+    if (typeof obj.doe !== 'object' || obj.doe === null || Array.isArray(obj.doe)) {
+      errors.push("Field 'doe' must be an object.");
+    } else {
+      if (obj.doe.headers !== undefined && !Array.isArray(obj.doe.headers)) {
+        errors.push("Field 'doe.headers' must be an array.");
+      }
+      if (obj.doe.data !== undefined && !Array.isArray(obj.doe.data)) {
+        errors.push("Field 'doe.data' must be an array.");
+      }
+    }
+  }
+
   // Detect Type
   let detectedType = 'project';
   if (obj.globalXBridgesNodes || obj.globalXBridgesEdges) detectedType = 'xbridges';
@@ -86,7 +100,7 @@ export function validateImportedJson(data: unknown): ValidationResult {
   else if (obj.states || obj.junctions || obj.transitions) detectedType = 'statemachine';
   else if (obj.entropyNodes || obj.entropyEdges) detectedType = 'entropy';
   else if (obj.hmiComponents) detectedType = 'hmi';
-  else if (obj.headers || obj.activeModel) detectedType = 'doe';
+  else if (obj.headers || obj.activeModel || obj.deploymentModel || (obj.schemaVersion === 1 && (obj.modelType || obj.rsm || obj.gmdh || obj.taguchi))) detectedType = 'doe';
   else if (obj.target || obj.clockSpeed) detectedType = 'hil';
   else if (obj.parts || obj.connectors) detectedType = 'ibd';
   else if (obj.blocks) {
@@ -97,7 +111,9 @@ export function validateImportedJson(data: unknown): ValidationResult {
   // Final check: if no recognizeable keys at all
   const hasRecognizedKeys = Boolean(
     obj.projectName || obj.workspaceFiles || obj.openTabs ||
-    arrayFields.some(f => f in obj) || obj.doe || obj.hilConfig
+    arrayFields.some(f => f in obj) || obj.doe || obj.hilConfig ||
+    obj.headers || obj.activeModel || obj.deploymentModel ||
+    (obj.schemaVersion && obj.modelType)
   );
 
   if (!hasRecognizedKeys) {

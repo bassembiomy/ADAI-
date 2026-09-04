@@ -47,4 +47,43 @@ describe('jsonImportValidator', () => {
     expect(res.isValid).toBe(true);
     expect(res.detectedType).toBe('vlab');
   });
+  it('accepts project with valid DOE structured state', () => {
+    const validProjectWithDOE = {
+      projectName: 'DOE Test Project',
+      states: [],
+      workspaceFiles: [],
+      doe: {
+        schemaVersion: 1,
+        headers: ['X1', 'X2', 'Yield'],
+        data: [[1, 2, 10], [3, 4, 20]],
+        activeModel: 'RSM'
+      }
+    };
+    const res = validateImportedJson(validProjectWithDOE);
+    expect(res.isValid).toBe(true);
+    expect(res.errors).toHaveLength(0);
+  });
+
+  it('rejects project with malformed doe.data', () => {
+    const invalidDOE = {
+      projectName: 'Bad DOE Project',
+      doe: {
+        data: 'not-an-array'
+      }
+    };
+    const res = validateImportedJson(invalidDOE);
+    expect(res.isValid).toBe(false);
+    expect(res.errors).toContain("Field 'doe.data' must be an array.");
+  });
+
+  it('detects standalone DOE model asset payload', () => {
+    const standaloneDOE = {
+      schemaVersion: 1,
+      modelType: 'RSM',
+      rsm: { intercept: 10, terms: [] }
+    };
+    const res = validateImportedJson(standaloneDOE);
+    expect(res.isValid).toBe(true);
+    expect(res.detectedType).toBe('doe');
+  });
 });
