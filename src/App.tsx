@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, MouseEvent, KeyboardEvent, ChangeEvent } from 'react';
 import * as math from 'mathjs';
 import Plot from 'react-plotly.js';
+import { PlotlyPlots } from './components/doe/PlotlyPlots';
+import { createVLabDOEBlock, createXBridgesDOEBlock } from './engine/doe/integration';
 import DOMPurify from 'dompurify';
 import { v4 as uuidv4 } from 'uuid';
 import * as XLSX from 'xlsx';
@@ -4952,477 +4954,7 @@ const ManualEntryTable = ({
     </div>
   );
 };
-
-const PlotlyPlots = ({
-  type,
-  data,
-  results,
-  factors,
-  headers,
-  holdValues,
-  modelType = 'RSM'
-}: {
-  type: 'surface' | 'contour' | 'pareto' | 'residuals' | 'taguchi_delta' | 'pred_vs_act' | 'taguchi_main_sn' | 'taguchi_main_mean',
-  data: number[][],
-  results: any,
-  factors: { x: number, y: number },
-  headers: string[],
-  holdValues: number[],
-  modelType?: 'RSM' | 'GMDH' | 'Taguchi'
-}) => {
-  if (!results || !data) return <div className="flex items-center justify-center h-full text-[#444]">No Model Calculated</div>;
-
-  if (type === 'pareto' && results.coeffTable) {
-    // Pareto Chart of Standardized Effects with dynamic critical t-value
-    const n = data.length;
-    const p = results.coeffTable?.length || 1;
-    const dfErr = Math.max(1, n - p);
-    // Compute critical t from degrees of freedom (approximate)
-    const lgamma = (x: number): number => {
-      const c = [76.18009172947146, -86.50532032941677, 24.01409824083091,
-        -1.231739572450155, 0.001208650973866179, -0.000005395239384953];
-      let y = x, tmp = x + 5.5;
-      tmp -= (x + 0.5) * Math.log(tmp);
-      let ser = 1.000000000190015;
-      for (let j = 0; j < 6; j++) ser += c[j] / ++y;
-      return -tmp + Math.log(2.5066282746310005 * ser / x);
-    };
-    // Approximate critical t via Wilson-Hilferty
-    let critT = 2.0; // fallback
-    if (dfErr > 2) {
-      const a = 0.025; // two-tailed alpha/2
-      let z = Math.sqrt(-2 * Math.log(a));
-      z = z - (2.30753 + 0.27061 * z) / (1 + 0.99229 * z + 0.04481 * z * z);
-      critT = Math.abs(z * Math.sqrt(dfErr / (dfErr - 2 + z * z / (3 * dfErr))));
-      critT = Math.min(critT, z * (1 + 1 / (4 * dfErr))); // bounded correction
-    }
-
-    const sortedEffects = results.coeffTable
-      .filter((c: any) => c.term !== 'Intercept')
-      .map((c: any) => ({ term: c.term, absT: Math.abs(c.t) }))
-      .sort((a: any, b: any) => a.absT - b.absT);
-
-    const trace = {
-      x: sortedEffects.map((s: any) => s.absT),
-      y: sortedEffects.map((s: any) => s.term),
-      type: 'bar',
-      orientation: 'h',
-      marker: {
-        color: sortedEffects.map((s: any) => s.absT > critT ? '#10b981' : '#444'),
-        line: { color: '#000', width: 1 }
-      },
-      name: 'Effect Magnitude'
-    };
-
-    return (
-      <Plot
-        data={[trace] as any}
-        layout={{
-          template: { layout: { paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' } },
-          autosize: true,
-          margin: { l: 120, r: 40, t: 40, b: 40 },
-          paper_bgcolor: 'transparent',
-          plot_bgcolor: 'rgba(0,0,0,0.2)',
-          font: { color: '#888', size: 10 },
-          title: { text: `Pareto Chart of Standardized Effects (α=0.05, df=${dfErr})`, font: { size: 12, color: '#f97316' } },
-          xaxis: { title: 'Absolute T-Value', gridcolor: '#222' },
-          yaxis: { title: 'Factor Term', gridcolor: '#222' },
-          shapes: [
-            {
-              type: 'line',
-              x0: critT,
-              x1: critT,
-              y0: -0.5,
-              y1: sortedEffects.length - 0.5,
-              line: { color: '#ef4444', width: 2, dash: 'dash' }
-            }
-          ],
-          annotations: [
-            {
-              x: critT,
-              y: sortedEffects.length - 1,
-              text: `t_crit = ${critT.toFixed(3)}`,
-              showarrow: false,
-              font: { color: '#ef4444', size: 9 },
-              xanchor: 'left',
-              xshift: 5
-            }
-          ]
-        }}
-        useResizeHandler
-        className="w-full h-full"
-      />
-    );
-  }
-
-  if (type === 'residuals' && results.residuals) {
-    // Residual Diagnostics
-    const res = results.residuals;
-    const fits = results.fits || [];
-    
-    // Normal Probability Plot Calculation
-    const sortedRes = [...res].sort((a, b) => a - b);
-    const n = res.length;
-    const pValues = res.map((_: number, i: number) => (i + 0.5) / n);
-    const zScores = pValues.map((p: number) => {
-      // Simple inverse normal approximation
-      const t = Math.sqrt(-2 * Math.log(Math.min(p, 1 - p)));
-      const z = t - (2.30753 + 0.27061 * t) / (1 + 0.99229 * t + 0.04481 * t * t);
-      return p > 0.5 ? z : -z;
-    });
-
-    const normalTrace = {
-      x: sortedRes,
-      y: zScores,
-      mode: 'markers',
-      type: 'scatter',
-      name: 'Normal Probability',
-      marker: { color: '#f97316' }
-    };
-
-    const fitsTrace = {
-      x: fits,
-      y: res,
-      mode: 'markers',
-      type: 'scatter',
-      name: 'Residual vs Fits',
-      xaxis: 'x2',
-      yaxis: 'y2',
-      marker: { color: '#10b981' }
-    };
-
-    const histTrace = {
-      x: res,
-      type: 'histogram',
-      name: 'Histogram',
-      xaxis: 'x3',
-      yaxis: 'y3',
-      marker: { color: '#f97316' }
-    };
-
-    return (
-      <Plot
-        data={[normalTrace, fitsTrace, histTrace] as any}
-        layout={{
-          grid: { rows: 2, columns: 2, pattern: 'independent' },
-          template: { layout: { paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' } },
-          paper_bgcolor: 'transparent',
-          plot_bgcolor: 'rgba(0,0,0,0.1)',
-          font: { color: '#888', size: 10 },
-          showlegend: false,
-          annotations: [
-            { text: 'Normal Probability Plot', xref: 'paper', yref: 'paper', x: 0, y: 1.1, showarrow: false, font: { color: '#f97316' } },
-            { text: 'Residual vs Fits', xref: 'paper', yref: 'paper', x: 0.6, y: 1.1, showarrow: false, font: { color: '#10b981' } },
-            { text: 'Histogram of Residuals', xref: 'paper', yref: 'paper', x: 0, y: 0.4, showarrow: false, font: { color: '#f97316' } }
-          ],
-          xaxis: { title: 'Residual', gridcolor: '#222' },
-          yaxis: { title: 'Z-Score', gridcolor: '#222' },
-          xaxis2: { title: 'Fitted Value', gridcolor: '#222' },
-          yaxis2: { title: 'Residual', gridcolor: '#222' },
-          xaxis3: { title: 'Residual', gridcolor: '#222' },
-          yaxis3: { title: 'Frequency', gridcolor: '#222' }
-        }}
-        useResizeHandler
-        className="w-full h-full"
-      />
-    );
-  }
-
-  if (type === 'pred_vs_act' && results.fits) {
-    const act = results.actuals || data.map(r => r[headers.length-1]);
-    const fits = results.fits;
-    
-    const min = Math.min(...act, ...fits);
-    const max = Math.max(...act, ...fits);
-
-    const trace = {
-      x: act,
-      y: fits,
-      mode: 'markers',
-      type: 'scatter',
-      name: 'Observations',
-      marker: { color: '#f97316', size: 8, line: { color: '#000', width: 1 } }
-    };
-
-    const line = {
-      x: [min, max],
-      y: [min, max],
-      mode: 'lines',
-      type: 'scatter',
-      name: 'Ideal (45°)',
-      line: { color: '#666', dash: 'dash', width: 1 }
-    };
-
-    return (
-      <Plot
-        data={[trace, line] as any}
-        layout={{
-          template: { layout: { paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' } },
-          paper_bgcolor: 'transparent',
-          plot_bgcolor: 'rgba(0,0,0,0.1)',
-          font: { color: '#888', size: 10 },
-          title: { text: 'Predicted vs Actual Response', font: { size: 12, color: '#f97316' } },
-          xaxis: { title: 'Actual Value', gridcolor: '#222', scaleanchor: 'y', scaleratio: 1 },
-          yaxis: { title: 'Predicted Value', gridcolor: '#222' }
-        }}
-        useResizeHandler
-        className="w-full h-full"
-      />
-    );
-  }
-  if (type === 'taguchi_delta' && results.type === 'Taguchi') {
-    // Response Table Delta Plot
-    const deltaTrace = {
-      x: results.factorLevels.map((f: any) => f.factor),
-      y: results.factorLevels.map((f: any) => f.delta),
-      type: 'bar',
-      marker: { color: '#f97316' },
-      name: 'Delta (Max-Min)'
-    };
-
-    return (
-      <Plot
-        data={[deltaTrace] as any}
-        layout={{
-          template: { layout: { paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' } },
-          paper_bgcolor: 'transparent',
-          plot_bgcolor: 'rgba(0,0,0,0.1)',
-          font: { color: '#888', size: 10 },
-          title: { text: 'Response Table Delta (Factor Significance)', font: { size: 12, color: '#f97316' } },
-          xaxis: { title: 'Factor', gridcolor: '#222' },
-          yaxis: { title: 'Delta (S/N)', gridcolor: '#222' }
-        }}
-        useResizeHandler
-        className="w-full h-full"
-      />
-    );
-  }
-
-  if (modelType === 'Taguchi' && (type === 'taguchi_main_sn' || type === 'taguchi_main_mean')) {
-    const isSN = type === 'taguchi_main_sn';
-    const K = results.factorLevels?.length || 0;
-    if (K === 0) return <div className="flex items-center justify-center h-full text-[#444]">No Factor Levels Found</div>;
-
-    const traces: any[] = [];
-    const layoutAxes: any = {};
-    const grandMean = isSN ? results.grandMeanSN : results.grandMeanY;
-
-    results.factorLevels.forEach((fl: any, idx: number) => {
-      const factorName = fl.factor;
-      const sortedMeans = [...fl.means].sort((a: any, b: any) => a.level - b.level);
-      const x = sortedMeans.map((m: any) => `L${m.level}`);
-      const y = sortedMeans.map((m: any) => isSN ? m.meanSN : m.meanY);
-      
-      traces.push({
-        x,
-        y,
-        type: 'scatter',
-        mode: 'lines+markers',
-        name: factorName,
-        xaxis: 'x' + (idx + 1),
-        yaxis: 'y',
-        line: { 
-          color: isSN ? '#f97316' : '#10b981', 
-          width: 3 
-        },
-        marker: { 
-          color: isSN ? '#f97316' : '#10b981', 
-          size: 10,
-          line: { color: '#000', width: 1 } 
-        },
-        showlegend: false
-      });
-
-      layoutAxes[`xaxis${idx + 1}`] = {
-        title: factorName,
-        titlefont: { size: 10, color: '#aaa', family: 'Inter, sans-serif' },
-        tickfont: { size: 9, color: '#888' },
-        gridcolor: '#222',
-        zeroline: false,
-        domain: [idx / K + 0.02, (idx + 1) / K - 0.02]
-      };
-    });
-
-    const layout = {
-      paper_bgcolor: 'transparent',
-      plot_bgcolor: 'rgba(0,0,0,0.1)',
-      font: { color: '#888', family: 'Inter, sans-serif' },
-      margin: { l: 60, r: 20, b: 50, t: 50 },
-      title: { 
-        text: isSN ? 'Main Effects Plot for SN Ratios' : 'Main Effects Plot for Means',
-        font: { size: 13, color: '#f97316' }
-      },
-      yaxis: {
-        title: isSN ? 'Mean S/N Ratio (dB)' : 'Mean Response',
-        gridcolor: '#222',
-        tickfont: { size: 9, color: '#aaa' },
-        zeroline: false
-      },
-      ...layoutAxes,
-      shapes: [
-        {
-          type: 'line',
-          x0: 0,
-          x1: 1,
-          xref: 'paper',
-          y0: grandMean || 0,
-          y1: grandMean || 0,
-          yref: 'y',
-          line: { color: '#666', width: 1.5, dash: 'dash' }
-        }
-      ],
-      annotations: [
-        {
-          xref: 'paper',
-          yref: 'y',
-          x: 0.98,
-          y: grandMean || 0,
-          text: `Grand Mean: ${(grandMean || 0).toFixed(3)}`,
-          showarrow: false,
-          font: { color: '#888', size: 9 },
-          yanchor: 'bottom',
-          xanchor: 'right'
-        }
-      ],
-      autosize: true
-    };
-
-    return (
-      <div className="w-full h-full">
-        <Plot
-          data={traces as any}
-          layout={layout as any}
-          useResizeHandler={true}
-          className="w-full h-full"
-          config={{ displayModeBar: false }}
-        />
-      </div>
-    );
-  }
-
-  const idxX = factors.x;
-  const idxY = factors.y;
-
-  const xVals = data.map(r => r[idxX]);
-  const yVals = data.map(r => r[idxY]);
-  const minX = Math.min(...xVals), maxX = Math.max(...xVals);
-  const minY = Math.min(...yVals), maxY = Math.max(...yVals);
-
-  // Higher resolution mesh for smoother surfaces
-  const gridRes = 60;
-  const stepX = Math.max(1e-9, (maxX - minX) / gridRes);
-  const stepY = Math.max(1e-9, (maxY - minY) / gridRes);
-  const xRange = Array.from({ length: gridRes + 1 }, (_, i) => minX + i * stepX);
-  const yRange = Array.from({ length: gridRes + 1 }, (_, i) => minY + i * stepY);
-
-  const k = headers.length - 1;
-  const zGrid: number[][] = [];
-
-  for (let j = 0; j < yRange.length; j++) {
-    const rowZ: number[] = [];
-    for (let i = 0; i < xRange.length; i++) {
-      const currentFactors = [...holdValues];
-      currentFactors[idxX] = xRange[i];
-      currentFactors[idxY] = yRange[j];
-
-      let z = 0;
-      if (modelType === 'RSM' && results.Beta) {
-        // Use unified prediction function — matches engine exactly
-        z = results.Beta[0];
-        for (let f = 0; f < k; f++) z += results.Beta[f + 1] * currentFactors[f];
-        for (let f = 0; f < k; f++) z += results.Beta[k + 1 + f] * currentFactors[f] * currentFactors[f];
-        let idx = 2 * k + 1;
-        for (let f = 0; f < k; f++) {
-          for (let g = f + 1; g < k; g++) {
-            z += results.Beta[idx] * currentFactors[f] * currentFactors[g];
-            idx++;
-          }
-        }
-      } else if (modelType === 'GMDH' && results.model) {
-        z = results.model.predict(currentFactors.slice(0, k));
-      } else if (modelType === 'Taguchi' && results.factorLevels && results.grandMean !== undefined) {
-        // Taguchi additive model surface
-        z = results.grandMean;
-        results.factorLevels.forEach((f: any, fIdx: number) => {
-          const val = currentFactors[fIdx];
-          if (f.means && f.means.length > 0) {
-            const sorted = [...f.means].sort((a: any, b: any) => Math.abs(a.level - val) - Math.abs(b.level - val));
-            if (sorted[0]) z += (sorted[0].meanY - results.grandMean);
-          }
-        });
-      }
-      rowZ.push(z);
-    }
-    zGrid.push(rowZ);
-  }
-
-  const plotData: any[] = [
-    {
-      z: zGrid,
-      x: xRange,
-      y: yRange,
-      type: type === 'surface' ? 'surface' : 'contour',
-      colorscale: 'Viridis',
-      showscale: true,
-      opacity: type === 'surface' ? 0.95 : 1,
-      contours: type === 'contour' ? {
-        coloring: 'heatmap',
-        showlabels: true,
-        labelfont: { size: 10, color: '#fff' }
-      } : type === 'surface' ? {
-        z: { show: true, usecolormap: true, highlightcolor: '#fff', project: { z: false } }
-      } : undefined
-    }
-  ];
-
-  // Overlay actual data points on 3D surface
-  if (type === 'surface') {
-    plotData.push({
-      x: xVals,
-      y: yVals,
-      z: data.map(r => r[data[0].length - 1]),
-      mode: 'markers',
-      type: 'scatter3d',
-      marker: {
-        size: 5,
-        color: '#f97316',
-        opacity: 1,
-        line: { width: 1, color: '#fff' }
-      },
-      name: 'Actual Data'
-    });
-  }
-
-  const layout = {
-    paper_bgcolor: 'rgba(0,0,0,0)',
-    plot_bgcolor: 'rgba(0,0,0,0)',
-    font: { color: '#888', family: 'Inter, sans-serif' },
-    margin: { l: 20, r: 20, b: 20, t: 40 },
-    title: { 
-      text: type === 'surface' ? '3D Response Surface' : 'Contour Plot',
-      font: { size: 14, color: '#f97316' }
-    },
-    scene: {
-      xaxis: { title: { text: headers[idxX], font: { color: '#f97316' } }, gridcolor: '#222' },
-      yaxis: { title: { text: headers[idxY], font: { color: '#10b981' } }, gridcolor: '#222' },
-      zaxis: { title: { text: headers[headers.length - 1], font: { color: '#3b82f6' } }, gridcolor: '#222' },
-      camera: { eye: { x: 1.6, y: 1.6, z: 1.4 } }
-    },
-    autosize: true
-  };
-
-  return (
-    <div className="w-full h-full">
-      <Plot
-        data={plotData}
-        layout={layout}
-        useResizeHandler={true}
-        className="w-full h-full"
-        config={{ displayModeBar: true, responsive: true }}
-      />
-    </div>
-  );
-};
+// PlotlyPlots extracted to src/components/doe/PlotlyPlots.tsx
 // Help Data moved to HelpData.ts
 
 const ALL_MODULES = [
@@ -7345,35 +6877,15 @@ const ADIA = () => {
     // Prevent React events from being treated as block data
     const actualBlock = (block && block.nativeEvent) ? null : block;
     
-    const exportBlock = actualBlock || {
-      name: `${activeModel} Model`,
-      type: 'doe_custom',
-      color: '#c9a86c', // Explicit gold color for DOE
-      params: { 
-        equation: { label: 'Model Equation', value: results.equation || '', unit: '' },
-        modelType: { label: 'Algorithm', value: activeModel, unit: '' }
-      },
-      ports: [
-        ...headers.slice(0, -1).map((h, i) => ({ 
-          id: `in${i + 1}`, label: h, type: 'input', pos: 'left', position: 'left', domain: 'General' 
-        })),
-        { id: 'out', label: headers[headers.length - 1], type: 'output', pos: 'right', position: 'right', domain: 'General' }
-      ]
-    };
-    
-    const newNodeId = `doe_vlab_${Date.now()}`;
-    const newNode = {
-      id: newNodeId,
-      type: 'doe_custom', 
-      position: { x: 400, y: 300 },
-      data: { 
-        ...exportBlock, 
-        id: newNodeId, 
-        label: exportBlock.name,
-        type: 'doe_custom', 
-        ports: exportBlock.ports 
+    let newNode: any = actualBlock;
+    if (!newNode) {
+      const exportRes = createVLabDOEBlock(results.canonicalResult || results);
+      if ('success' in exportRes && !exportRes.success) {
+        addError('error', exportRes.diagnostics[0]?.message || 'Failed to export V-Lab block.');
+        return;
       }
-    };
+      newNode = exportRes;
+    }
     console.log('[DOE EXPORT DEBUG] Exporting to VLab:', newNode);
     
     const getTargetFileForMode = (mode: DiagramMode) => {
@@ -7465,51 +6977,12 @@ const ADIA = () => {
       addError('warning', 'Please calculate a model first.');
       return;
     }
-    const newNodeId = `doe_xb_${Date.now()}`;
-    const blockData = {
-      name: `${activeModel} Model`,
-      label: `${activeModel} Model`,
-      type: 'DOE_MODEL',
-      equation: results.equation || '',
-      modelType: activeModel,
-      inputNames: headers.slice(0, -1),
-      outputName: headers[headers.length - 1],
-      params: { 
-        equation: { label: 'Equation', value: results.equation || '' },
-        inputNames: { label: 'Inputs', value: headers.slice(0, -1) },
-        outputName: { label: 'Output', value: headers[headers.length - 1] },
-        modelType: { label: 'Model', value: activeModel }
-      },
-      inputs: headers.slice(0, -1).map((h, i) => ({ 
-        id: `in${i + 1}`, name: h, type: 'auto', direction: 'input', position: 'left', value: 0 
-      })),
-      outputs: [{ 
-        id: 'out', name: headers[headers.length - 1], type: 'auto', direction: 'output', position: 'right', value: 0 
-      }],
-      // Inject execution logic for simulation
-      execute: (inputs: any[], params: any) => {
-        try {
-          const scope: any = {};
-          const inputNames = params.inputNames.value;
-          inputNames.forEach((name: string, i: number) => {
-            scope[name] = inputs[i] || 0;
-          });
-          // Evaluate using mathjs (available globally as math)
-          const result = math.evaluate(params.equation.value, scope);
-          return { outputs: [result] };
-        } catch (e) {
-          console.error('DOE Model execution error:', e);
-          return { outputs: [0] };
-        }
-      }
-    };
-    
-    const newNode = {
-      id: newNodeId,
-      type: 'xblock',
-      position: { x: 400, y: 300 },
-      data: { ...blockData, id: newNodeId, selected: false }
-    };
+    const exportRes = createXBridgesDOEBlock(results.canonicalResult || results);
+    if ('success' in exportRes && !exportRes.success) {
+      addError('error', exportRes.diagnostics[0]?.message || 'Failed to export X-Bridges block.');
+      return;
+    }
+    const newNode = exportRes;
     
     if (xBridgesStateId) {
       // 1. If inside a state-specific sub-workspace, append node to that state's xBridgesModel.nodes
@@ -7997,7 +7470,7 @@ const ADIA = () => {
       projectFiles['hil.json'] = hilConfig;
     }
     if (selectedKeys.includes('doe')) {
-      projectFiles['doe.json'] = { headers, data, activeModel, taguchiConfig, results: results ? { R2: results.R2, equation: results.equation, type: results.type } : null };
+      projectFiles['doe.json'] = { schemaVersion: 1, headers, data, activeModel, taguchiConfig, results };
     }
     if (selectedKeys.includes('entropy')) {
       projectFiles['entropy.json'] = { entropyNodes, entropyEdges };
@@ -8012,7 +7485,7 @@ const ADIA = () => {
         blocks, relationships, parts, connectors, interfaceRealizations, customStereotypes,
         hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
         hilConfig,
-        doe: { headers, data, activeModel, taguchiConfig, results },
+        doe: { schemaVersion: 1, headers, data, activeModel, taguchiConfig, results },
         managedWindows,
         entropyNodes,
         entropyEdges,

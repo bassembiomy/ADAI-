@@ -1,0 +1,54 @@
+name: DOE Verification and Integration Gate
+
+on:
+  pull_request:
+    paths:
+      - 'src/engine/doe/**'
+      - 'src/components/doe/**'
+      - 'src/engine/xbridges/**'
+      - 'src/engine/vlab/**'
+      - 'src/utils/aiActionProcessor.ts'
+      - 'package.json'
+      - '.github/workflows/doe-review.yml'
+      - 'docs/DOE_VALIDATION.md'
+  workflow_dispatch:
+
+jobs:
+  doe-gate:
+    name: DOE Correctness, Types & Build Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Focused DOE Unit Tests
+        run: npm run test:doe
+
+      - name: Run DOE Integration Tests (X-Bridges & V-Lab)
+        run: npm run test:doe:integration
+
+      - name: Run TypeScript Verification
+        run: npx tsc --noEmit
+
+      - name: Build Application
+        run: npm run build
+
+      - name: Upload DOE Validation Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: doe-validation-evidence
+          path: |
+            docs/DOE_VALIDATION.md
+            docs/superpowers/reviews/
+          if-no-files-found: ignore
