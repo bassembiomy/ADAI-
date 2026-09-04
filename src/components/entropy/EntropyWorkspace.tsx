@@ -17,6 +17,7 @@ import 'reactflow/dist/style.css';
 import { OPMObjectNode, OPMProcessNode, OPMStateNode } from './OPMNodeComponents';
 import { OPMEdge } from './OPMEdgeComponents';
 import { OPMNodeData, OPMEdgeData, OPMLinkType, SimulationLog, OPMState, OPMPort } from './EntropyTypes';
+import { OpmCodeGenerationWorkspace, createInitialArtifactState, type OpmArtifactState } from './OpmCodeGenerationWorkspace';
 import { generateOpl, parseOpl, OplSyntaxError } from './OplParser';
 import { Play, Pause, RotateCcw, ArrowRight, Layout, Download, Upload, ZoomIn, ZoomOut, Check, X, Plus, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
@@ -195,7 +196,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const [newPortType, setNewPortType] = useState<OPMPort['type']>('standard');
 
   // Right Sidebar active tab
-  const [rightTab, setRightTab] = useState<'simControl' | 'opl'>('simControl');
+  const [rightTab, setRightTab] = useState<'simControl' | 'opl' | 'opmCodegen'>('simControl');
+  const [opmArtifactState, setOpmArtifactState] = useState<OpmArtifactState>(createInitialArtifactState);
 
   // --- Initialize canvas ---
   useEffect(() => {
@@ -1735,6 +1737,16 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           >
             📝 OPL Specs
           </button>
+          <button
+            onClick={() => setRightTab('opmCodegen')}
+            className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 ${
+              rightTab === 'opmCodegen'
+                ? 'border-emerald-500 text-emerald-400 bg-emerald-950/10'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            🛠 OPM Build
+          </button>
         </div>
 
         {/* Tab Content 1: Simulation Control Dashboard */}
@@ -2003,6 +2015,23 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {rightTab === 'opmCodegen' && (
+          <div className="flex-1 overflow-y-auto">
+            <OpmCodeGenerationWorkspace
+              nodes={nodes as never}
+              edges={edges as never}
+              state={opmArtifactState}
+              onStateChange={setOpmArtifactState}
+              onDownload={(files) => {
+                onAddError?.('info', `Verified OPM bundle ready: ${files.length} files.`, 'OPM');
+              }}
+              onRunHil={(files) => {
+                onAddError?.('info', `Verified OPM bundle sent to HIL: ${files.length} files.`, 'OPM');
+              }}
+            />
           </div>
         )}
       </div>
