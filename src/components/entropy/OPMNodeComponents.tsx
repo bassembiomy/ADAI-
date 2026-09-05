@@ -141,17 +141,21 @@ const renderOPMPort = (port: OPMPort, idx: number, totalCount: number, isEllipse
   };
 
   return (
-    <div key={port.id} className="group hover:z-30" style={wrapperStyle}>
+    <div key={port.id} className="group hover:z-30" style={wrapperStyle} data-port-direction={port.direction}>
       <span style={haloStyle}>
         <Handle
           type={isInput ? 'target' : 'source'}
           position={position}
           id={port.id}
           style={handleStyle}
-          className="hover:scale-125 hover:!border-amber-400 hover:!shadow-[0_0_12px_#fbbf24]"
-        />
+          className="hover:scale-125 hover:!border-amber-400 hover:!shadow-[0_0_14px_#fbbf24] flex items-center justify-center transition-transform"
+        >
+          <span data-testid="port-chevron" className="text-[6px] text-black font-black leading-none pointer-events-none select-none flex items-center justify-center">
+            {isInput ? '▶' : '◀'}
+          </span>
+        </Handle>
       </span>
-      <span className="opacity-100 bg-black/85 border border-white/10 transition-all duration-150 shadow-lg pointer-events-none z-30" style={labelStyle}>
+      <span className="opacity-100 bg-[#09090b]/95 border border-white/15 transition-all duration-150 shadow-xl pointer-events-none z-30" style={labelStyle}>
         <span style={dotStyle} />
         {port.name}
       </span>
@@ -288,12 +292,13 @@ export const OPMProcessNode: React.FC<NodeProps<AppNode>> = ({ id, data, selecte
 
   return (
     <div
+      data-process-firing={isFiring ? 'true' : undefined}
       className={`relative px-4 py-2 min-w-[200px] min-h-[68px] flex flex-col items-center justify-center transition-all duration-200 ${
         selected
           ? 'border-2 border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.65),0_0_50px_rgba(245,158,11,0.35),inset_0_0_12px_rgba(251,191,36,0.15)] ring-1 ring-amber-300/40 bg-gradient-to-b from-[#1a1608]/95 to-[#081522]/95'
           : isFiring
-          ? 'border-2 border-orange-400 bg-sky-900/60 shadow-[0_0_25px_rgba(251,146,60,0.8)] scale-105 animate-pulse'
-          : 'border border-sky-600/70 bg-[#0c1a24]/85 backdrop-blur-md shadow-md'
+          ? 'border-2 border-orange-400 bg-sky-900/60 shadow-[0_0_30px_rgba(251,146,60,0.85),0_0_60px_rgba(249,115,22,0.4)] ring-2 ring-orange-400/50 scale-105 animate-pulse'
+          : 'border border-sky-600/70 bg-[#0c1a24]/85 backdrop-blur-md shadow-md hover:border-sky-400/80'
       } ${
         isPhysical && !selected
           ? 'border-[3px] border-sky-400/90'

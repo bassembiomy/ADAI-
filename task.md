@@ -8,11 +8,11 @@
 - [x] Step 5: Commit changes.
 
 ## Task 2: High-Fidelity Blocks & Directional Ports Visual System
-- [ ] Step 1: Add visual assertions for directional port chevrons and process firing aura in `src/components/entropy/__tests__/opmBlocksVisual.test.tsx`.
-- [ ] Step 2: Run tests to verify failure on missing directional indicators.
-- [ ] Step 3: Implement directional port chevrons, expanded interactive halos, and active energy pulse auras in `OPMNodeComponents.tsx`.
-- [ ] Step 4: Run tests to verify they pass.
-- [ ] Step 5: Commit changes.
+- [x] Step 1: Add visual assertions for directional port chevrons and process firing aura in `src/components/entropy/__tests__/opmBlocksVisual.test.tsx`.
+- [x] Step 2: Run tests to verify failure on missing directional indicators.
+- [x] Step 3: Implement directional port chevrons, expanded interactive halos, and active energy pulse auras in `OPMNodeComponents.tsx`.
+- [x] Step 4: Run tests to verify they pass.
+- [x] Step 5: Commit changes.
 
 ## Task 3: Studio Ribbon Command Bar Redistribution & Dock Scope Integration
 - [ ] Step 1: Write test for Ribbon distribution and Scope tab in `src/components/entropy/__tests__/executionPanels.test.tsx`.
