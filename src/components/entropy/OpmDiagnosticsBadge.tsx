@@ -55,13 +55,14 @@ export const OpmDiagnosticsBadge: React.FC<OpmDiagnosticsBadgeProps> = ({
 
   return (
     <div
-      data-testid="diagnostics-badge"
+      data-testid="opm-diagnostics-badge"
       className="absolute bottom-4 left-4 z-40 bg-[#121212]/95 border border-[#333] rounded-lg shadow-2xl p-2 text-xs font-mono text-gray-200 max-w-sm select-none"
     >
       <div className="flex items-center justify-between gap-2">
         <button
           onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-1.5 font-bold hover:opacity-80"
+          aria-label="Toggle diagnostics details"
+          className="flex items-center gap-1.5 font-bold hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded"
         >
           {errors.length > 0 ? (
             <span className="flex items-center gap-1 text-red-400">
@@ -76,7 +77,8 @@ export const OpmDiagnosticsBadge: React.FC<OpmDiagnosticsBadgeProps> = ({
         </button>
         <button
           onClick={() => setExpanded(!expanded)}
-          className="text-gray-400 hover:text-white p-0.5"
+          aria-label={expanded ? 'Collapse diagnostics' : 'Expand diagnostics'}
+          className="text-gray-400 hover:text-white p-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded"
         >
           {expanded ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
         </button>

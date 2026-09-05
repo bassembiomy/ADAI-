@@ -371,8 +371,8 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
   };
 
   const activeContent = state.files.find((f) => f.name === activeFile)?.content ?? '';
-  const errorDiagnostics = state.diagnostics.filter((d) => d.severity === 'error');
-  const warnDiagnostics = state.diagnostics.filter((d) => d.severity === 'warning');
+  const errorDiagnostics = (state.diagnostics ?? []).filter((d) => d.severity === 'error');
+  const warnDiagnostics = (state.diagnostics ?? []).filter((d) => d.severity === 'warning');
   const limits = state.manifest?.resourceLimits ?? DEFAULT_OPM_RESOURCE_LIMITS;
   const qualificationStatus =
     state.manifest?.qualificationStatus ??
@@ -490,8 +490,8 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
           Validation diagnostics ({errorDiagnostics.length} errors, {warnDiagnostics.length} warnings)
         </span>
         <div className="mt-1 max-h-32 overflow-y-auto space-y-1 font-mono text-[10px]">
-          {state.diagnostics.length === 0 && <div className="text-gray-600 italic">No diagnostics yet — run Validate or Generate.</div>}
-          {state.diagnostics.map((d, i) => {
+          {(state.diagnostics ?? []).length === 0 && <div className="text-gray-600 italic">No diagnostics yet — run Validate or Generate.</div>}
+          {(state.diagnostics ?? []).map((d, i) => {
             const path = `${d.source.elementId}.${d.source.propertyPath}`;
             return (
               <div
