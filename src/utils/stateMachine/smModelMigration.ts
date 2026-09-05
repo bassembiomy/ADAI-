@@ -1,13 +1,17 @@
 import type { StateData } from '../../types/sm_types';
 import {
   CURRENT_SM_SCHEMA_VERSION,
+  defaultSMVerificationConfig,
   type LegacyStateMachineModel,
   type MigrationResult,
   type ModelDiagnostic,
-  type StateMachineModelV4,
+  type SMVerificationConfig,
+  type StateMachineModelV5,
 } from './smModel';
 import { adaptXBModel } from './xbModelAdapter';
 import { repairLegacyXBBoundaryMappings } from './xbBoundaryMappings';
+
+export { defaultSMVerificationConfig };
 
 const normalizeEmbeddedXBModels = (
   states: StateData[],
@@ -53,11 +57,11 @@ const normalizeEmbeddedXBModels = (
 };
 
 const repairHistoryJunctions = (
-  junctions: StateMachineModelV4['junctions'] = [],
-  layers: StateMachineModelV4['layers'] = [],
+  junctions: StateMachineModelV5['junctions'] = [],
+  layers: StateMachineModelV5['layers'] = [],
 ): {
-  junctions: StateMachineModelV4['junctions'];
-  layers: StateMachineModelV4['layers'];
+  junctions: StateMachineModelV5['junctions'];
+  layers: StateMachineModelV5['layers'];
 } => {
   const updatedJunctions = junctions.map((junction) => ({ ...junction }));
   const updatedLayers = layers.map((layer) => ({
@@ -94,17 +98,27 @@ export const migrateStateMachineModel = (
     states: normalizedXB.states,
   });
 
+  const verification: SMVerificationConfig = {
+    ...defaultSMVerificationConfig(),
+    ...(clonedInput.verification ?? {}),
+  };
+  if (clonedInput.verification?.invalidInputPolicies) {
+    verification.invalidInputPolicies = { ...clonedInput.verification.invalidInputPolicies };
+  }
+
   if (clonedInput.schemaVersion === CURRENT_SM_SCHEMA_VERSION) {
     const repaired = repairHistoryJunctions(
-      (clonedInput as StateMachineModelV4).junctions,
-      (clonedInput as StateMachineModelV4).layers,
+      (clonedInput as StateMachineModelV5).junctions,
+      (clonedInput as StateMachineModelV5).layers,
     );
     return {
       model: {
-        ...(clonedInput as StateMachineModelV4),
+        ...(clonedInput as StateMachineModelV5),
+        schemaVersion: CURRENT_SM_SCHEMA_VERSION,
         states: clonedInput.states,
         junctions: repaired.junctions,
         layers: repaired.layers,
+        verification,
       },
       diagnostics: normalizedXB.diagnostics,
     };
@@ -147,8 +161,8 @@ export const migrateStateMachineModel = (
   });
 
   const repaired = repairHistoryJunctions(
-    clonedInput.junctions as StateMachineModelV4['junctions'],
-    layers as StateMachineModelV4['layers'],
+    clonedInput.junctions as StateMachineModelV5['junctions'],
+    layers as StateMachineModelV5['layers'],
   );
 
   return {
@@ -160,7 +174,8 @@ export const migrateStateMachineModel = (
       hilConfig,
       layers: repaired.layers,
       junctions: repaired.junctions,
-    } as StateMachineModelV4,
+      verification,
+    } as StateMachineModelV5,
     diagnostics,
   };
 };

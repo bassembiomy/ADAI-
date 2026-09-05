@@ -1,6 +1,12 @@
 import type { VariableType } from '../../types/sm_types';
 import type { ActionNode, ExpressionNode } from './smExpressions';
-import type { ModelDiagnostic, StateDecomposition } from './smModel';
+import type {
+  ModelDiagnostic,
+  SMCStandard,
+  SMInvalidInputPolicy,
+  SMTimerPolicy,
+  StateDecomposition,
+} from './smModel';
 import type { XBSemanticModel } from './xbSemanticModel';
 
 export type SemanticType =
@@ -130,6 +136,22 @@ export interface TraceableElement {
   traceId: string;
 }
 
+export interface ResolvedSMVerificationConfig {
+  readonly cStandard: SMCStandard;
+  readonly tickToleranceMs: number;
+  readonly timerPolicy: SMTimerPolicy;
+  readonly resetPolicy: 'always-authorized' | 'condition-required';
+  readonly watchdogAfterCriticalFault: 'service' | 'do-not-service';
+  readonly statementCoverageTarget: number;
+  readonly branchCoverageTarget: number;
+  readonly requireMcdc: boolean;
+  readonly repeatedExecutionCycles: number;
+  readonly staticAnalysisToolId: string | null;
+  readonly misraToolId: string | null;
+  readonly targetId: string | null;
+  readonly invalidInputPolicies: Readonly<Record<string, SMInvalidInputPolicy>>;
+}
+
 export interface SemanticModel {
   tickMs: number;
   safetyMode: boolean;
@@ -145,6 +167,7 @@ export interface SemanticModel {
   activeSlotCount: number;
   traceableElements: TraceableElement[];
   modelHash?: string;
+  verification: ResolvedSMVerificationConfig;
 }
 
 export interface SemanticBuildResult {

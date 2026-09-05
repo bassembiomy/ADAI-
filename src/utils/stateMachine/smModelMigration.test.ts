@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { migrateStateMachineModel } from './smModelMigration';
+import { defaultSMVerificationConfig, migrateStateMachineModel } from './smModelMigration';
 
 describe('migrateStateMachineModel', () => {
   it('migrates consistent legacy siblings to explicit AND', () => {
@@ -17,7 +17,7 @@ describe('migrateStateMachineModel', () => {
     } as any);
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.model.schemaVersion).toBe(4);
+    expect(result.model.schemaVersion).toBe(5);
     expect(result.model.layers[0].decomposition).toBe('AND');
   });
 
@@ -69,7 +69,7 @@ describe('migrateStateMachineModel', () => {
       variables: [],
     } as any);
 
-    expect(result.model.schemaVersion).toBe(4);
+    expect(result.model.schemaVersion).toBe(5);
   });
 
   it('normalizes missing legacy safetyMode to false', () => {
@@ -86,9 +86,9 @@ describe('migrateStateMachineModel', () => {
     expect(result.model.safetyMode).toBe(false);
   });
 
-  it('preserves and clones a current V4 model', () => {
+  it('preserves and clones a current V5 model', () => {
     const input = {
-      schemaVersion: 4,
+      schemaVersion: 5,
       tickMs: 10,
       safetyMode: true,
       states: [],
@@ -104,6 +104,7 @@ describe('migrateStateMachineModel', () => {
       junctions: [],
       transitions: [],
       variables: [],
+      verification: defaultSMVerificationConfig(),
     } as any;
 
     const result = migrateStateMachineModel(input);
@@ -473,6 +474,98 @@ describe('migrateStateMachineModel', () => {
       blockId: 'XB6-StepOut',
       portId: 'out',
       direction: 'out',
+    });
+  });
+
+  it('migrates a v4 model to v5 with default verification configuration', () => {
+    const v4 = {
+      schemaVersion: 4,
+      tickMs: 10,
+      safetyMode: false,
+      states: [],
+      layers: [{
+        id: 'root',
+        name: 'Root',
+        parentStateId: null,
+        stateIds: [],
+        transitionIds: [],
+        junctionIds: [],
+        decomposition: 'OR',
+      }],
+      junctions: [],
+      transitions: [],
+      variables: [],
+    } as any;
+
+    const result = migrateStateMachineModel(v4);
+    expect(result.model.schemaVersion).toBe(5);
+    expect(result.model.verification).toEqual({
+      cStandard: 'c11',
+      tickToleranceMs: 0,
+      timerPolicy: 'logical-tick',
+      resetPolicy: 'always-authorized',
+      watchdogAfterCriticalFault: 'do-not-service',
+      statementCoverageTarget: 100,
+      branchCoverageTarget: 100,
+      requireMcdc: false,
+      repeatedExecutionCycles: 100_000,
+      staticAnalysisToolId: null,
+      misraToolId: null,
+      targetId: null,
+    });
+  });
+
+  it('preserves explicit v5 verification configuration during migration', () => {
+    const v5 = {
+      schemaVersion: 5,
+      tickMs: 20,
+      safetyMode: true,
+      states: [],
+      layers: [{
+        id: 'root',
+        name: 'Root',
+        parentStateId: null,
+        stateIds: [],
+        transitionIds: [],
+        junctionIds: [],
+        decomposition: 'OR',
+      }],
+      junctions: [],
+      transitions: [],
+      variables: [],
+      verification: {
+        cStandard: 'c99',
+        tickToleranceMs: 5,
+        timerPolicy: 'actual-delta',
+        resetPolicy: 'condition-required',
+        watchdogAfterCriticalFault: 'service',
+        statementCoverageTarget: 95,
+        branchCoverageTarget: 90,
+        requireMcdc: true,
+        repeatedExecutionCycles: 50_000,
+        staticAnalysisToolId: 'clang-tidy',
+        misraToolId: 'cppcheck-misra',
+        targetId: 'stm32f407vgt6',
+        invalidInputPolicies: { in1: 'clamp' },
+      },
+    } as any;
+
+    const result = migrateStateMachineModel(v5);
+    expect(result.model.schemaVersion).toBe(5);
+    expect(result.model.verification).toEqual({
+      cStandard: 'c99',
+      tickToleranceMs: 5,
+      timerPolicy: 'actual-delta',
+      resetPolicy: 'condition-required',
+      watchdogAfterCriticalFault: 'service',
+      statementCoverageTarget: 95,
+      branchCoverageTarget: 90,
+      requireMcdc: true,
+      repeatedExecutionCycles: 50_000,
+      staticAnalysisToolId: 'clang-tidy',
+      misraToolId: 'cppcheck-misra',
+      targetId: 'stm32f407vgt6',
+      invalidInputPolicies: { in1: 'clamp' },
     });
   });
 });
