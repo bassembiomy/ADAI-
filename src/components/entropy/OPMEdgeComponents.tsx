@@ -1,5 +1,5 @@
 import React from 'react';
-import { EdgeProps, getSmoothStepPath, EdgeLabelRenderer } from '@xyflow/react';
+import { EdgeProps, getBezierPath } from '@xyflow/react';
 import { OPMEdgeData, type AppEdge } from './EntropyTypes';
 
 /**
@@ -85,15 +85,13 @@ export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
 }) => {
   const linkType = data?.type || 'consumption';
 
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
+  const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
     targetX,
     targetY,
     sourcePosition,
     targetPosition,
-    borderRadius: 16,
-    offset: 28,
   });
 
   const ls = LINK_STYLES[linkType] ?? { stroke: '#94a3b8', end: 'filled' as MarkerKind };
@@ -217,65 +215,82 @@ export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
         </g>
       )}
 
-      {/* Floating Interactive Badge on Selected Links */}
-      {selected && (
-        <EdgeLabelRenderer>
-          <div
-            style={{
-              position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              pointerEvents: 'all',
-            }}
-            className="nodrag nopan z-50 flex items-center gap-1.5 bg-[#121214]/95 border border-amber-400/80 shadow-[0_0_16px_rgba(251,191,36,0.6)] rounded-full px-2.5 py-1 text-[10px] text-amber-200 backdrop-blur-md transition-all"
-          >
-            <span className="font-semibold select-none flex items-center gap-1">
-              <span>{LINK_ICONS[linkType] || '🔗'}</span>
-              <span>{LINK_LABELS[linkType] || linkType}</span>
-            </span>
-            <select
-              value={linkType}
-              onChange={(e) => {
-                e.stopPropagation();
-                if (data?.onTypeChange) {
-                  (data.onTypeChange as any)(e.target.value);
-                }
-              }}
-              className="bg-[#1c1a14] text-amber-100 border border-amber-500/50 rounded px-1.5 py-0.5 text-[9px] outline-none cursor-pointer hover:border-amber-400"
-            >
-              <optgroup label="Procedural" className="bg-[#141414] text-neutral-200">
-                <option value="consumption">Consumption</option>
-                <option value="result">Result</option>
-                <option value="effect">Effect</option>
-                <option value="agent">Agent</option>
-                <option value="instrument">Instrument</option>
-                <option value="trigger">Trigger</option>
-                <option value="condition">Condition</option>
-              </optgroup>
-              <optgroup label="Structural" className="bg-[#141414] text-neutral-200">
-                <option value="aggregation">Aggregation</option>
-                <option value="generalization">Generalization</option>
-                <option value="exhibition">Exhibition</option>
-              </optgroup>
-              <optgroup label="Traceability" className="bg-[#141414] text-neutral-200">
-                <option value="satisfies">Satisfies</option>
-                <option value="verifies">Verifies</option>
-              </optgroup>
-            </select>
-            {Boolean(data?.onDelete) && (
-              <button
-                onClick={(e) => {
+      {/* Always-on midpoint type chip (foreignObject keeps the chip testid in the
+          edge's own SVG output; EdgeLabelRenderer portals render null under
+          renderToStaticMarkup since there is no viewport DOM node) */}
+      <foreignObject
+        x={labelX - 80}
+        y={labelY - 16}
+        width={160}
+        height={32}
+        style={{ overflow: 'visible', pointerEvents: 'all' }}
+      >
+        <div
+          data-testid={`opm-link-chip-${linkType}`}
+          style={{
+            position: 'absolute',
+            left: 80,
+            top: 16,
+            transform: 'translate(-50%, -50%)',
+            pointerEvents: 'all',
+          }}
+          className={`nodrag nopan z-40 flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[9px] backdrop-blur-md transition-all ${
+            selected
+              ? 'bg-[#121214]/95 border border-amber-400/80 shadow-[0_0_16px_rgba(251,191,36,0.6)] text-amber-200 z-50'
+              : 'bg-[#121214]/85 border border-[#333] text-gray-300 shadow-md hover:border-amber-400/50'
+          }`}
+        >
+          <span className="font-semibold select-none flex items-center gap-1">
+            <span>{LINK_ICONS[linkType] || '🔗'}</span>
+            <span>{LINK_LABELS[linkType] || linkType}</span>
+          </span>
+          {selected && (
+            <>
+              <select
+                value={linkType}
+                onChange={(e) => {
                   e.stopPropagation();
-                  (data?.onDelete as any)();
+                  if (data?.onTypeChange) {
+                    (data.onTypeChange as any)(e.target.value);
+                  }
                 }}
-                className="hover:text-red-400 text-neutral-400 ml-0.5 p-0.5 transition-colors font-bold"
-                title="Delete link"
+                className="bg-[#1c1a14] text-amber-100 border border-amber-500/50 rounded px-1.5 py-0.5 text-[9px] outline-none cursor-pointer hover:border-amber-400"
               >
-                ✕
-              </button>
-            )}
-          </div>
-        </EdgeLabelRenderer>
-      )}
+                <optgroup label="Procedural" className="bg-[#141414] text-neutral-200">
+                  <option value="consumption">Consumption</option>
+                  <option value="result">Result</option>
+                  <option value="effect">Effect</option>
+                  <option value="agent">Agent</option>
+                  <option value="instrument">Instrument</option>
+                  <option value="trigger">Trigger</option>
+                  <option value="condition">Condition</option>
+                </optgroup>
+                <optgroup label="Structural" className="bg-[#141414] text-neutral-200">
+                  <option value="aggregation">Aggregation</option>
+                  <option value="generalization">Generalization</option>
+                  <option value="exhibition">Exhibition</option>
+                </optgroup>
+                <optgroup label="Traceability" className="bg-[#141414] text-neutral-200">
+                  <option value="satisfies">Satisfies</option>
+                  <option value="verifies">Verifies</option>
+                </optgroup>
+              </select>
+              {Boolean(data?.onDelete) && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    (data?.onDelete as any)();
+                  }}
+                  className="hover:text-red-400 text-neutral-400 ml-0.5 p-0.5 transition-colors font-bold"
+                  title="Delete link"
+                >
+                  ✕
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </foreignObject>
     </>
   );
 };
