@@ -2557,13 +2557,20 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
     return VLAB_COMPONENT_DEFINITIONS[blockType] || null;
   }, [selectedNode]);
 
-  const updateParameter = (paramKey: string, value: number | string) => {
+  const updateParameter = (
+    paramKey: string,
+    value: number | string | { value: number | string; unit?: string; label?: string },
+  ) => {
     if (!selectedNodeId) return;
     setNodes(nds => nds.map(n => {
       if (n.id === selectedNodeId) {
+        const currentParameter = n.data.params[paramKey] ?? {};
+        const updatedParameter = typeof value === 'object'
+          ? { ...currentParameter, ...value }
+          : { ...currentParameter, value };
         const updatedParams = {
           ...n.data.params,
-          [paramKey]: { ...n.data.params[paramKey], value }
+          [paramKey]: updatedParameter,
         };
         const updatedData: Record<string, any> = {
           ...n.data,
