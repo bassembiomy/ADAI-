@@ -415,4 +415,16 @@ describe('OPM typed executable modeling editors', () => {
     expect(html).toContain('data-opm-path="settings.tickMs"');
     expect(html).toContain('disabled');
   });
+
+  it('verifies Studio Ribbon clusters and OpmSimulationScope integration in EntropyWorkspace', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const wsPath = path.resolve(__dirname, '../EntropyWorkspace.tsx');
+    const wsSource = fs.readFileSync(wsPath, 'utf-8');
+
+    expect(wsSource).toContain("from './OpmSimulationScope'");
+    expect(wsSource).toContain('data-testid="opm-studio-ribbon"');
+    expect(wsSource).toContain("rightTab === 'scope'");
+    expect(wsSource).toContain('data-testid="opm-sim-scope-launcher"');
+  });
 });

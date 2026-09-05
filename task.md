@@ -15,11 +15,11 @@
 - [x] Step 5: Commit changes.
 
 ## Task 3: Studio Ribbon Command Bar Redistribution & Dock Scope Integration
-- [ ] Step 1: Write test for Ribbon distribution and Scope tab in `src/components/entropy/__tests__/executionPanels.test.tsx`.
-- [ ] Step 2: Run test to verify failure on missing scope tab and ribbon segments.
-- [ ] Step 3: Restructure top bar into 4 Studio Ribbon clusters and integrate `OpmSimulationScope` into dock tabs in `EntropyWorkspace.tsx`.
-- [ ] Step 4: Run tests to verify they pass.
-- [ ] Step 5: Commit changes.
+- [x] Step 1: Write test for Ribbon distribution and Scope tab in `src/components/entropy/__tests__/executionPanels.test.tsx`.
+- [x] Step 2: Run test to verify failure on missing scope tab and ribbon segments.
+- [x] Step 3: Restructure top bar into 4 Studio Ribbon clusters and integrate `OpmSimulationScope` into dock tabs in `EntropyWorkspace.tsx`.
+- [x] Step 4: Run tests to verify they pass.
+- [x] Step 5: Commit changes.
 
 ## Task 4: Full Test Suite, Accessibility, and Production Build Verification
 - [ ] Step 1: Run complete vitest test suite across all entropy and engine tests (`npx vitest run src/components/entropy/__tests__ src/engine/opm/__tests__`).

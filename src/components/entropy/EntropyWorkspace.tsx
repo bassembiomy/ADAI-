@@ -17,6 +17,7 @@ import { OPMObjectNode, OPMProcessNode, OPMStateNode } from './OPMNodeComponents
 import { OPMEdge } from './OPMEdgeComponents';
 import { OPMNodeData, OPMEdgeData, OPMLinkType, SimulationLog, OPMState, OPMPort, type AppNode, type AppEdge } from './EntropyTypes';
 import { OpmCodeGenerationWorkspace, createInitialArtifactState, type OpmArtifactState } from './OpmCodeGenerationWorkspace';
+import { OpmSimulationScope } from './OpmSimulationScope';
 import { generateOpl, parseOpl, OplSyntaxError } from './OplParser';
 import {
   OpmSimulationState,
@@ -276,7 +277,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const [newPortType, setNewPortType] = useState<OPMPort['type']>('standard');
 
   // Right Sidebar active tab
-  const [rightTab, setRightTab] = useState<'simControl' | 'opl' | 'smartShow' | 'opmCodegen'>('simControl');
+  const [rightTab, setRightTab] = useState<'simControl' | 'scope' | 'opl' | 'smartShow' | 'opmCodegen'>('simControl');
+  const [bottomView, setBottomView] = useState<'console' | 'scope'>('console');
   const [opmArtifactState, setOpmArtifactState] = useState<OpmArtifactState>(createInitialArtifactState);
   const [selectedEdge, setSelectedEdge] = useState<AppEdge | null>(null);
   const [diagnosticNavMessage, setDiagnosticNavMessage] = useState<string | null>(null);
@@ -1340,18 +1342,22 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         }
         center={
           <div className="flex h-full min-h-0 flex-col">
-        {/* Navigation / Control bar */}
-        <div className="h-12 bg-[#141414] border-b border-[#222] px-4 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
+        {/* Navigation / Control bar -> Studio Ribbon */}
+        <div
+          data-testid="opm-studio-ribbon"
+          className="h-12 bg-[#121215]/95 backdrop-blur-md border-b border-[#25252a] px-3 flex items-center justify-between gap-2.5 shrink-0 select-none overflow-x-auto custom-scrollbar"
+        >
+          {/* Cluster 1: Context & Model Sources */}
+          <div className="flex items-center gap-2 shrink-0 bg-[#19191d] px-2 py-1 rounded-md border border-white/5 shadow-inner">
             <button
               onClick={onBack}
-              className="px-2.5 py-1 text-xs border border-[#333] rounded hover:bg-[#222] transition-colors"
+              className="px-2 py-0.5 text-xs font-semibold border border-[#333] rounded hover:bg-[#252528] text-gray-300 hover:text-white transition-colors flex items-center gap-1"
             >
-              ← Back
+              ← <span className="hidden sm:inline">Back</span>
             </button>
-            <span className="text-xs text-[#888]">/</span>
+            <span className="text-xs text-[#555]">|</span>
             {/* Breadcrumbs */}
-            <div className="flex items-center gap-1.5 text-sm font-semibold">
+            <div className="flex items-center gap-1 text-xs font-medium max-w-[200px] truncate">
               {zoomPath.map((zp, i) => {
                 const label = zp === 'root' ? 'System Context' : nodes.find(n => n.id === zp)?.data.name || zp;
                 return (
@@ -1359,7 +1365,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                     {i > 0 && <span className="text-[#555]">›</span>}
                     <button
                       onClick={() => setZoomPath(zoomPath.slice(0, i + 1))}
-                      className={`hover:text-orange-400 transition-colors ${i === zoomPath.length - 1 ? 'text-orange-500 font-bold' : 'text-[#888]'}`}
+                      className={`hover:text-orange-400 transition-colors truncate ${i === zoomPath.length - 1 ? 'text-orange-400 font-bold' : 'text-[#888]'}`}
                     >
                       {label}
                     </button>
@@ -1367,11 +1373,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 );
               })}
             </div>
-          </div>
-
-          {/* Example Template Loader */}
-          <div className="flex items-center gap-1.5 bg-[#1a1a1a] px-2.5 py-1 rounded border border-[#2d2d2d]">
-            <span className="text-[10px] text-[#888] font-bold uppercase tracking-wider">Example:</span>
+            <span className="text-xs text-[#555]">|</span>
+            {/* Example Template Loader */}
             <select
               onChange={(e) => {
                 const val = e.target.value;
@@ -1390,7 +1393,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 }
               }}
               defaultValue=""
-              className="bg-[#0f0f0f] border border-[#333] rounded text-[11px] py-0.5 px-1.5 outline-none text-[#ccc] w-40 font-semibold"
+              className="bg-[#0f0f11] border border-[#333] rounded text-[10px] py-1 px-1.5 outline-none text-[#ccc] w-32 font-medium"
             >
               <option value="" disabled>-- Load Template --</option>
               {Object.entries(OPM_EXAMPLES).map(([key, ex]) => (
@@ -1409,44 +1412,90 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   logSim('success', `Imported ${impNodes.length} OPM elements from the SysML model.`);
                   if (onSave) onSave(impNodes, impEdges);
                 }}
-                className="px-2.5 py-1 text-[10px] border border-purple-700 text-purple-300 rounded hover:bg-purple-950/40 ml-1 font-semibold"
+                className="px-2 py-0.5 text-[10px] border border-purple-600/80 bg-purple-950/30 text-purple-300 rounded hover:bg-purple-900/50 transition-colors font-semibold"
                 title="Migrate the SysML BDD/IBD/Requirements model into this OPM workspace"
               >
-                Import SysML → OPM
+                SysML → OPM
               </button>
             )}
           </div>
 
-          {/* Simulation Tools */}
-          <div className="flex items-center gap-2 bg-[#1a1a1a] px-3 py-1 rounded border border-[#2d2d2d]">
+          {/* Cluster 2: History & Canvas Layout */}
+          <div className="flex items-center gap-1.5 shrink-0 bg-[#19191d] px-2 py-1 rounded-md border border-white/5 shadow-inner">
             <button
-              onClick={toggleSimulation}
-              className={`p-1 rounded transition-colors ${simRunning ? 'text-red-400 hover:bg-red-950/40' : 'text-green-400 hover:bg-green-950/40'}`}
-              title={simRunning ? 'Pause Simulation' : 'Start Simulation'}
+              onClick={triggerUndo}
+              disabled={undoStack.length === 0}
+              className="p-1 border border-[#2d2d32] rounded hover:bg-[#252529] text-[#aaa] disabled:opacity-25 disabled:hover:bg-transparent transition-colors text-xs"
+              title="Undo (Ctrl+Z)"
             >
-              {simRunning ? <Pause size={14} /> : <Play size={14} />}
+              ↶
             </button>
             <button
-              onClick={runSimTick}
-              className="p-1 text-sky-400 hover:bg-sky-950/40 rounded transition-colors"
-              title="Step Simulation"
+              onClick={triggerRedo}
+              disabled={redoStack.length === 0}
+              className="p-1 border border-[#2d2d32] rounded hover:bg-[#252529] text-[#aaa] disabled:opacity-25 disabled:hover:bg-transparent transition-colors text-xs"
+              title="Redo (Ctrl+Y)"
             >
-              <ArrowRight size={14} />
+              ↷
+            </button>
+            <span className="w-px h-3.5 bg-[#333] mx-0.5"></span>
+            <button
+              onClick={() => triggerAutoLayout('force')}
+              className="px-2 py-0.5 text-[10px] border border-[#2d2d32] rounded hover:bg-[#252529] flex items-center gap-1 text-[#bbb] hover:text-white transition-colors"
+              title="Force-Directed Auto Layout"
+            >
+              <Layout size={11} /> Force
             </button>
             <button
-              onClick={resetSimulation}
-              className="p-1 text-amber-400 hover:bg-amber-950/40 rounded transition-colors"
-              title="Reset Simulation"
+              onClick={() => triggerAutoLayout('hierarchy')}
+              className="px-2 py-0.5 text-[10px] border border-[#2d2d32] rounded hover:bg-[#252529] flex items-center gap-1 text-[#bbb] hover:text-white transition-colors"
+              title="Grid/Hierarchy Auto Layout"
             >
-              <RotateCcw size={14} />
+              <Layout size={11} /> Tree
             </button>
-            <span className="w-px h-4 bg-[#333]"></span>
-            <span className="text-[10px] uppercase font-bold text-[#666]">
+          </div>
+
+          {/* Cluster 3: Simulation Transport & Logic Scope Controls */}
+          <div className="flex items-center gap-2 shrink-0 bg-[#19191d] px-2.5 py-1 rounded-md border border-white/5 shadow-inner">
+            <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded border border-white/5">
+              <button
+                data-testid="opm-sim-toggle"
+                onClick={toggleSimulation}
+                className={`p-1 rounded transition-colors ${simRunning ? 'text-red-400 hover:bg-red-950/40' : 'text-green-400 hover:bg-green-950/40'}`}
+                title={simRunning ? 'Pause Simulation' : 'Start Simulation'}
+              >
+                {simRunning ? <Pause size={13} /> : <Play size={13} />}
+              </button>
+              <button
+                data-testid="opm-sim-step"
+                onClick={runSimTick}
+                className="p-1 text-sky-400 hover:bg-sky-950/40 rounded transition-colors"
+                title="Step Simulation"
+              >
+                <ArrowRight size={13} />
+              </button>
+              <button
+                data-testid="opm-sim-reset"
+                onClick={resetSimulation}
+                className="p-1 text-amber-400 hover:bg-amber-950/40 rounded transition-colors"
+                title="Reset Simulation"
+              >
+                <RotateCcw size={13} />
+              </button>
+            </div>
+
+            <span className="w-px h-3.5 bg-[#333]"></span>
+            <span
+              data-testid="opm-sim-status"
+              className={`text-[9px] uppercase font-extrabold flex items-center gap-1 ${simRunning ? 'text-green-400' : 'text-[#888]'}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${simRunning ? 'bg-green-400 animate-ping' : 'bg-gray-500'}`} />
               {simRunning ? 'Running' : 'Paused'}
             </span>
-            <span className="w-px h-4 bg-[#333]"></span>
+            <span className="w-px h-3.5 bg-[#333]"></span>
+
             <div className="flex items-center gap-1.5">
-              <span className="text-[8px] uppercase tracking-wider font-extrabold text-[#777]">OPM Tick:</span>
+              <span className="text-[8px] uppercase tracking-wider font-extrabold text-[#777]">Tick:</span>
               <input
                 data-testid="opm-toolbar-tick-slider"
                 type="range"
@@ -1460,40 +1509,21 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               />
               <span className="text-[9px] text-[#888] font-mono w-9 text-right">{activeOpmConfig.tickMs}ms</span>
             </div>
-          </div>
 
-          {/* Graphical Operations */}
-          <div className="flex items-center gap-1.5">
+            <span className="w-px h-3.5 bg-[#333]"></span>
+
+            {/* Scope Quick Launcher */}
             <button
-              onClick={triggerUndo}
-              disabled={undoStack.length === 0}
-              className="p-1.5 border border-[#222] rounded hover:bg-[#222] text-[#888] disabled:opacity-30 disabled:hover:bg-transparent"
-              title="Undo"
+              data-testid="opm-sim-scope-launcher"
+              onClick={() => setRightTab('scope')}
+              className={`px-2 py-0.5 text-[10px] rounded transition-all flex items-center gap-1 font-bold ${
+                rightTab === 'scope'
+                  ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40 shadow-sm'
+                  : 'text-gray-400 hover:text-orange-300 hover:bg-white/5 border border-transparent'
+              }`}
+              title="Open Simulation Scope (Logic Analyzer)"
             >
-              ↶
-            </button>
-            <button
-              onClick={triggerRedo}
-              disabled={redoStack.length === 0}
-              className="p-1.5 border border-[#222] rounded hover:bg-[#222] text-[#888] disabled:opacity-30 disabled:hover:bg-transparent"
-              title="Redo"
-            >
-              ↷
-            </button>
-            <span className="w-px h-4 bg-[#222] mx-1"></span>
-            <button
-              onClick={() => triggerAutoLayout('force')}
-              className="px-2.5 py-1 text-xs border border-[#222] rounded hover:bg-[#222] flex items-center gap-1 text-[#aaa] hover:text-white"
-              title="Force-Directed Auto Layout"
-            >
-              <Layout size={12} /> Force Layout
-            </button>
-            <button
-              onClick={() => triggerAutoLayout('hierarchy')}
-              className="px-2.5 py-1 text-xs border border-[#222] rounded hover:bg-[#222] flex items-center gap-1 text-[#aaa] hover:text-white"
-              title="Grid/Hierarchy Auto Layout"
-            >
-              <Layout size={12} /> Hierarchy Layout
+              📈 <span>Scope</span>
             </button>
           </div>
         </div>
@@ -1934,6 +1964,17 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             ⚡ Sim
           </button>
           <button
+            data-testid="opm-scope-tab-btn"
+            onClick={() => setRightTab('scope')}
+            className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors border-b-2 ${
+              rightTab === 'scope'
+                ? 'border-orange-500 text-orange-400 bg-orange-950/10'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            📈 Scope
+          </button>
+          <button
             onClick={() => setRightTab('opl')}
             className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors border-b-2 ${
               rightTab === 'opl'
@@ -2235,6 +2276,21 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           </div>
         )}
 
+        {/* Tab Content: Simulation Scope */}
+        {rightTab === 'scope' && (
+          <div className="flex-1 flex flex-col overflow-hidden p-2 min-h-0">
+            <OpmSimulationScope
+              simRunning={simRunning}
+              currentTick={simStateRef.current.tick}
+              tickMs={activeOpmConfig.tickMs}
+              nodes={nodes}
+              edges={edges}
+              recentLogs={simLogs}
+              onReset={resetSimulation}
+            />
+          </div>
+        )}
+
         {/* Tab Content 2: OPL Editor (moved verbatim into the bottom dock slot; stub keeps the tab) */}
         {rightTab === 'opl' && (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
@@ -2304,37 +2360,70 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         }
         bottom={
           <div className="flex h-full">
-            {/* Bottom Simulation Logs console (moved verbatim into bottom dock slot; wrapper adapted to dock pane) */}
+            {/* Bottom Simulation Logs console / Scope */}
             <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#111]">
-              <div className="h-8 bg-[#181818] border-b border-[#222] px-4 flex items-center justify-between text-xs font-bold text-[#888]">
-                <span>SIMULATION CONSOLE</span>
-                <button
-                  onClick={() => setSimLogs([])}
-                  className="text-[#555] hover:text-[#bbb]"
-                >
-                  Clear Logs
-                </button>
-              </div>
-              <div className="flex-1 p-2 font-mono text-[11px] overflow-y-auto space-y-0.5">
-                {simLogs.map((log, idx) => (
-                  <div key={idx} className="flex gap-2">
-                    <span className="text-[#555]">{log.timestamp}</span>
-                    <span className={
-                      log.type === 'success' ? 'text-green-400' :
-                      log.type === 'error' ? 'text-red-400' :
-                      log.type === 'warning' ? 'text-amber-400' :
-                      'text-[#888]'
-                    }>
-                      [{log.type.toUpperCase()}] {log.message}
-                    </span>
-                  </div>
-                ))}
-                {simLogs.length === 0 && (
-                  <div className="h-full flex items-center justify-center text-[#555] italic">
-                    Console idle. Start the simulation or trigger a process to see live execution traces.
-                  </div>
+              <div className="h-8 bg-[#181818] border-b border-[#222] px-3 flex items-center justify-between text-xs font-bold text-[#888]">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setBottomView('console')}
+                    className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-colors ${
+                      bottomView === 'console' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Console
+                  </button>
+                  <button
+                    onClick={() => setBottomView('scope')}
+                    className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-colors ${
+                      bottomView === 'scope' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    📈 Scope
+                  </button>
+                </div>
+                {bottomView === 'console' && (
+                  <button
+                    onClick={() => setSimLogs([])}
+                    className="text-[#555] hover:text-[#bbb] text-[10px]"
+                  >
+                    Clear Logs
+                  </button>
                 )}
               </div>
+              {bottomView === 'console' ? (
+                <div className="flex-1 p-2 font-mono text-[11px] overflow-y-auto space-y-0.5">
+                  {simLogs.map((log, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <span className="text-[#555]">{log.timestamp}</span>
+                      <span className={
+                        log.type === 'success' ? 'text-green-400' :
+                        log.type === 'error' ? 'text-red-400' :
+                        log.type === 'warning' ? 'text-amber-400' :
+                        'text-[#888]'
+                      }>
+                        [{log.type.toUpperCase()}] {log.message}
+                      </span>
+                    </div>
+                  ))}
+                  {simLogs.length === 0 && (
+                    <div className="h-full flex items-center justify-center text-[#555] italic">
+                      Console idle. Start the simulation or trigger a process to see live execution traces.
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex-1 min-h-0 overflow-hidden p-1">
+                  <OpmSimulationScope
+                    simRunning={simRunning}
+                    currentTick={simStateRef.current.tick}
+                    tickMs={activeOpmConfig.tickMs}
+                    nodes={nodes}
+                    edges={edges}
+                    recentLogs={simLogs}
+                    onReset={resetSimulation}
+                  />
+                </div>
+              )}
             </div>
             {/* OPL Editor (moved verbatim into bottom dock slot; wrapper adapted to dock pane) */}
             <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden border-l border-[#222]">
