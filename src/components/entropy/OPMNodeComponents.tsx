@@ -54,11 +54,14 @@ const renderOPMPort = (port: OPMPort, idx: number, totalCount: number, isEllipse
 
   const labelStyle: React.CSSProperties = {
     position: 'absolute',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
     fontSize: '7.5px',
     fontFamily: 'monospace',
     padding: '1.5px 3px',
     borderRadius: '3px',
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     border: '1px solid rgba(255, 255, 255, 0.1)',
     color: '#d1d5db',
     textTransform: 'uppercase',
@@ -120,16 +123,36 @@ const renderOPMPort = (port: OPMPort, idx: number, totalCount: number, isEllipse
     }
   }
 
+  const haloStyle: React.CSSProperties = {
+    padding: '4px',
+    margin: '-4px',
+    background: 'transparent',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+
+  const dotStyle: React.CSSProperties = {
+    width: 8,
+    height: 8,
+    borderRadius: '50%',
+    background: color,
+    flexShrink: 0,
+  };
+
   return (
     <div key={port.id} className="group hover:z-30" style={wrapperStyle}>
-      <Handle
-        type={isInput ? 'target' : 'source'}
-        position={position}
-        id={port.id}
-        style={handleStyle}
-        className="hover:scale-125 hover:!border-amber-400 hover:!shadow-[0_0_12px_#fbbf24]"
-      />
-      <span className="opacity-0 group-hover:opacity-100 group-hover:text-amber-100 group-hover:bg-black/95 group-hover:border-amber-400/50 group-hover:scale-105 transition-all duration-150 shadow-lg pointer-events-none z-30" style={labelStyle}>
+      <span style={haloStyle}>
+        <Handle
+          type={isInput ? 'target' : 'source'}
+          position={position}
+          id={port.id}
+          style={handleStyle}
+          className="hover:scale-125 hover:!border-amber-400 hover:!shadow-[0_0_12px_#fbbf24]"
+        />
+      </span>
+      <span className="opacity-100 bg-black/85 border border-white/10 transition-all duration-150 shadow-lg pointer-events-none z-30" style={labelStyle}>
+        <span style={dotStyle} />
         {port.name}
       </span>
     </div>
