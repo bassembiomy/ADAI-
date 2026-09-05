@@ -27,6 +27,16 @@ import {
 } from './OpmSimulationEngine';
 import { SmartShowPanel } from './SmartShowPanel';
 import { OpmLegend } from './OpmLegend';
+import { OpmDiagnosticsBadge } from './OpmDiagnosticsBadge';
+import type { OpmSourceRef } from '../../engine/opm/executableTypes';
+import { convertOpmNodeType, convertOpmEdgeType, type OpmNodeKind } from './OpmMigrations';
+import { validateOpmPortConnection } from './OpmPortContracts';
+import {
+  normalizeOpmSimulationConfig,
+  parseOpmSimulationConfig,
+  DEFAULT_OPM_SIMULATION_CONFIG,
+  type OpmSimulationConfig,
+} from './OpmSimulationConfig';
 import { importSysmlToOpm } from './SysmlToOpmImporter';
 import { validateOpmConnection } from './OpmLinkRules';
 import { layoutOpmGraph } from './OpmAutoLayout';
@@ -152,8 +162,10 @@ interface EntropyWorkspaceProps {
   initialEdges?: AppEdge[];
   availableVariables: any[];
   onVariablesChange: (vars: any[]) => void;
-  tickMs: number;
+  tickMs?: number;
   onTickMsChange?: (tickMs: number) => void;
+  opmSimulationConfig?: OpmSimulationConfig;
+  onOpmSimulationConfigChange?: (config: OpmSimulationConfig) => void;
   onBack: () => void;
   onSave?: (nodes: AppNode[], edges: AppEdge[]) => void;
   onAddError?: (type: 'error' | 'warning' | 'info', message: string, source?: string) => void;
@@ -165,8 +177,10 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   initialEdges = [],
   availableVariables,
   onVariablesChange,
-  tickMs,
+  tickMs = 10,
   onTickMsChange,
+  opmSimulationConfig,
+  onOpmSimulationConfigChange,
   onBack,
   onSave,
   onAddError,
@@ -202,6 +216,52 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const [simLogs, setSimLogs] = useState<SimulationLog[]>([]);
   const [firingProcesses, setFiringProcesses] = useState<Set<string>>(new Set());
   const simStateRef = useRef<OpmSimulationState>(createSimulationState());
+
+  // Isolated OPM Simulation Configuration
+  const activeOpmConfig: OpmSimulationConfig = useMemo(() => {
+    return normalizeOpmSimulationConfig(opmSimulationConfig);
+  }, [opmSimulationConfig]);
+
+  const [configDraft, setConfigDraft] = useState<{
+    tickMs: number;
+    maxTicks: number;
+    maxEventsPerTick: number;
+  }>({
+    tickMs: activeOpmConfig.tickMs,
+    maxTicks: activeOpmConfig.maxTicks,
+    maxEventsPerTick: activeOpmConfig.maxEventsPerTick,
+  });
+  const [configErrors, setConfigErrors] = useState<string[]>([]);
+
+  useEffect(() => {
+    setConfigDraft({
+      tickMs: activeOpmConfig.tickMs,
+      maxTicks: activeOpmConfig.maxTicks,
+      maxEventsPerTick: activeOpmConfig.maxEventsPerTick,
+    });
+    setConfigErrors([]);
+  }, [activeOpmConfig]);
+
+  const handleConfigFieldChange = useCallback((field: keyof OpmSimulationConfig, rawValue: string | number) => {
+    const num = typeof rawValue === 'number' ? rawValue : Number(rawValue);
+    const nextDraft = { ...configDraft, [field]: num };
+    setConfigDraft(nextDraft);
+
+    const parsed = parseOpmSimulationConfig({
+      ...activeOpmConfig,
+      ...nextDraft,
+    });
+
+    if (parsed.ok) {
+      setConfigErrors([]);
+      if (onOpmSimulationConfigChange) {
+        onOpmSimulationConfigChange(parsed.config);
+      }
+    } else {
+      setConfigErrors(parsed.diagnostics);
+      // Keep previous valid config active; do NOT update active config
+    }
+  }, [configDraft, activeOpmConfig, onOpmSimulationConfigChange]);
   
   // Selected Node Details
   const [selectedNode, setSelectedNode] = useState<AppNode | null>(null);
@@ -215,6 +275,45 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   // Right Sidebar active tab
   const [rightTab, setRightTab] = useState<'simControl' | 'opl' | 'smartShow' | 'opmCodegen'>('simControl');
   const [opmArtifactState, setOpmArtifactState] = useState<OpmArtifactState>(createInitialArtifactState);
+  const [selectedEdge, setSelectedEdge] = useState<AppEdge | null>(null);
+  const [diagnosticNavMessage, setDiagnosticNavMessage] = useState<string | null>(null);
+
+  const normalizedOpmConfig = useMemo(() => {
+    return normalizeOpmSimulationConfig({ tickMs });
+  }, [tickMs]);
+
+  const handleNavigateToDiagnostic = useCallback((source: OpmSourceRef) => {
+    setDiagnosticNavMessage(null);
+    const node = nodes.find(n => n.id === source.elementId);
+    const edge = edges.find(e => e.id === source.elementId);
+
+    if (node) {
+      setSelectedNode(node);
+      setSelectedEdge(null);
+    } else if (edge) {
+      setSelectedEdge(edge);
+      setSelectedNode(null);
+    }
+
+    setTimeout(() => {
+      let el = document.querySelector(`[data-opm-path="${source.propertyPath}"]`);
+      if (!el && source.propertyPath) {
+        const base = source.propertyPath.replace(/\[\d+\]\..*$/, '');
+        el = document.querySelector(`[data-opm-path="${base}"]`) ||
+             document.querySelector(`[data-opm-path*="${source.propertyPath}"]`);
+      }
+
+      if (el instanceof HTMLElement) {
+        el.focus();
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        const targetDesc = node ? `Node "${node.data.name || node.id}"` : edge ? `Link "${edge.id}"` : `Element "${source.elementId}"`;
+        const msg = `Navigated to ${targetDesc}. (Property control for "${source.propertyPath}" is not visible in current view)`;
+        setDiagnosticNavMessage(msg);
+        logSim('warning', msg);
+      }
+    }, 60);
+  }, [nodes, edges]);
 
   // --- Initialize canvas ---
   useEffect(() => {
@@ -309,6 +408,20 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     setEdges(nextState.edges);
     if (onSave) onSave(nextState.nodes, nextState.edges);
   };
+
+  // --- Keyboard accessibility: Escape to cancel selection / close inspectors ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (selectedNode || selectedEdge) {
+          setSelectedNode(null);
+          setSelectedEdge(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNode, selectedEdge]);
 
   // --- Node Filtering based on Zoom ---
   const filteredNodes = useMemo(() => {
@@ -546,23 +659,30 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     logSim('success', `Created ${isReq ? 'Requirement' : activeTool.toUpperCase()} [${nodeName}] at (${Math.round(flowPos.x)}, ${Math.round(flowPos.y)}).`);
   }, [activeTool, activeParentId, nodes, edges, saveHistory]);
 
+  // --- Shared Port Connection Validator (Canvas preview and onConnect gate) ---
+  const isValidConnection = useCallback((connection: Connection | { source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }) => {
+    if (!connection.source || !connection.target) return false;
+    const verdict = validateOpmPortConnection(nodes, edges, connection as any, activeLinkType);
+    return verdict.valid;
+  }, [nodes, edges, activeLinkType]);
+
   // --- Connect nodes (draw OPM links) ---
   const onConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return;
 
-    const src = nodes.find(n => n.id === connection.source);
-    const tgt = nodes.find(n => n.id === connection.target);
-    if (!src || !tgt) return;
-
-    // ISO 19450 link-role validation (OpmLinkRules.ts)
-    const verdict = validateOpmConnection(activeLinkType, src.data.type, tgt.data.type);
-    if (!verdict.allowed) {
-      if (onAddError) onAddError('error', `OPM link rejected: ${verdict.reason}`, 'ENTROPY');
-      logSim('error', `Link rejected [${activeLinkType}]: ${verdict.reason}`);
+    // Strict validation via shared contract
+    const verdict = validateOpmPortConnection(nodes, edges, connection as any, activeLinkType);
+    if (!verdict.valid) {
+      const msg = verdict.reason || `Link rejected [${activeLinkType}]: invalid connection`;
+      if (onAddError) onAddError('error', `OPM link rejected: ${msg}`, 'ENTROPY');
+      logSim('error', `Link rejected [${activeLinkType}]: ${msg}`);
       return;
     }
 
     saveHistory(nodes, edges);
+
+    const src = nodes.find(n => n.id === connection.source);
+    const tgt = nodes.find(n => n.id === connection.target);
 
     const newEdge: AppEdge = {
       id: `e-${connection.source}-${connection.sourceHandle || 'std-out'}-${connection.target}-${connection.targetHandle || 'res-in'}`,
@@ -573,11 +693,12 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       type: 'opmEdge',
       data: {
         type: activeLinkType,
+        linkType: activeLinkType,
       },
     };
 
     setEdges(prev => addEdge(newEdge, prev));
-    logSim('info', `Link [${activeLinkType}] connected: ${src.data.name} → ${tgt.data.name}`);
+    logSim('info', `Link [${activeLinkType}] connected: ${src?.data?.name || connection.source} → ${tgt?.data?.name || connection.target}`);
   }, [activeLinkType, nodes, edges, saveHistory, onAddError]);
 
   // --- Dynamic Port Handlers ---
@@ -831,16 +952,16 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     result.logs.forEach(l => logSim(l.type, l.message));
   }, [nodes, edges]);
 
-  // Handle simulation timer
+  // Handle simulation timer (uses isolated OPM tickMs)
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
     if (simRunning) {
-      interval = setInterval(runSimTick, tickMs);
+      interval = setInterval(runSimTick, activeOpmConfig.tickMs);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [simRunning, tickMs, runSimTick]);
+  }, [simRunning, activeOpmConfig.tickMs, runSimTick]);
 
   const toggleSimulation = () => {
     if (!simRunning && simStateRef.current.tick === 0) {
@@ -922,6 +1043,39 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     setSelectedNode(null);
     logSim('warning', `Element ${selectedNode.data.name} deleted.`);
   };
+
+  const handleConvertNodeType = useCallback((targetType: OpmNodeKind) => {
+    if (!selectedNode) return;
+    const conversion = convertOpmNodeType(selectedNode, targetType);
+    if (conversion.warnings.length > 0) {
+      conversion.warnings.forEach(w => {
+        onAddError?.('warning', `[${w.code}] ${w.message}`, 'OPM');
+        logSim('warning', `[${w.code}] ${w.message}`);
+      });
+    }
+    saveHistory(nodes, edges);
+    setNodes(prev => prev.map(n => n.id === selectedNode.id ? conversion.node : n));
+    setSelectedNode(conversion.node);
+    logSim('info', `Converted "${selectedNode.data.name || selectedNode.id}" to ${targetType}.`);
+  }, [selectedNode, nodes, edges, saveHistory, onAddError]);
+
+  const handleConvertEdgeType = useCallback((edgeId: string, nextType: OPMLinkType) => {
+    const edge = edges.find(e => e.id === edgeId);
+    if (!edge) return;
+    const conversion = convertOpmEdgeType(edge, nextType);
+    if (conversion.warnings.length > 0) {
+      conversion.warnings.forEach(w => {
+        onAddError?.('warning', `[${w.code}] ${w.message}`, 'OPM');
+        logSim('warning', `[${w.code}] ${w.message}`);
+      });
+    }
+    saveHistory(nodes, edges);
+    setEdges(prev => prev.map(e => e.id === edgeId ? conversion.edge : e));
+    if (selectedEdge && selectedEdge.id === edgeId) {
+      setSelectedEdge(conversion.edge);
+    }
+    logSim('info', `Converted link "${edgeId}" to ${nextType}.`);
+  }, [edges, selectedEdge, saveHistory, onAddError]);
 
   const handleAddAttribute = (key: string, val: string) => {
     if (!selectedNode || selectedNode.data.type !== 'object') return;
@@ -1144,18 +1298,19 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             </span>
             <span className="w-px h-4 bg-[#333]"></span>
             <div className="flex items-center gap-1.5">
-              <span className="text-[8px] uppercase tracking-wider font-extrabold text-[#777]">Interval:</span>
+              <span className="text-[8px] uppercase tracking-wider font-extrabold text-[#777]">OPM Tick:</span>
               <input
+                data-testid="opm-toolbar-tick-slider"
                 type="range"
-                min="100"
+                min="10"
                 max="2000"
-                step="100"
-                value={tickMs}
-                onChange={(e) => onTickMsChange && onTickMsChange(Number(e.target.value))}
+                step="10"
+                value={activeOpmConfig.tickMs}
+                onChange={(e) => handleConfigFieldChange('tickMs', Number(e.target.value))}
                 className="w-16 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                title="Simulation speed interval (ms)"
+                title="OPM Simulation speed interval (ms)"
               />
-              <span className="text-[9px] text-[#888] font-mono w-9 text-right">{tickMs}ms</span>
+              <span className="text-[9px] text-[#888] font-mono w-9 text-right">{activeOpmConfig.tickMs}ms</span>
             </div>
           </div>
 
@@ -1198,52 +1353,62 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         {/* Workspace core body */}
         <div className="flex-1 flex overflow-hidden relative">
           {/* Tool Dock (Left floating bar) */}
-          <div className="absolute left-3 top-3 z-10 bg-[#161616]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-2 flex flex-col gap-2 shadow-xl">
+          <div className="absolute left-3 top-3 z-10 bg-[#161616]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-2 flex flex-col gap-2 shadow-xl" role="toolbar" aria-label="OPM Canvas Tools">
             <span className="text-[8px] uppercase tracking-wider font-extrabold text-orange-400/80 mb-0.5 text-center">Tools</span>
             <button
               onClick={() => setActiveTool('select')}
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
+              aria-label="Select tool"
+              data-testid="opm-tool-select"
+              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
                 activeTool === 'select' ? 'bg-[#f97316]/20 border border-[#f97316] text-[#f97316] font-bold shadow' : 'hover:bg-[#222] text-[#999]'
               }`}
               title="Select / Move elements"
             >
-              🖱️ <span className="text-[8px]">Select</span>
+              <span aria-hidden="true">🖱️</span> <span className="text-[8px]">Select</span>
             </button>
             <button
               onClick={() => setActiveTool('object')}
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
+              aria-label="Add Object"
+              data-testid="opm-tool-object"
+              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                 activeTool === 'object' ? 'bg-emerald-950/60 border border-emerald-400 text-emerald-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
               }`}
               title="Click canvas to place an Object"
             >
-              🟢 <span className="text-[8px]">Object</span>
+              <span aria-hidden="true">🟢</span> <span className="text-[8px]">Object</span>
             </button>
             <button
               onClick={() => setActiveTool('process')}
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
+              aria-label="Add Process"
+              data-testid="opm-tool-process"
+              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
                 activeTool === 'process' ? 'bg-sky-950/60 border border-sky-400 text-sky-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
               }`}
               title="Click canvas to place a Process"
             >
-              🔵 <span className="text-[8px]">Process</span>
+              <span aria-hidden="true">🔵</span> <span className="text-[8px]">Process</span>
             </button>
             <button
               onClick={() => setActiveTool('state')}
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
+              aria-label="Add State"
+              data-testid="opm-tool-state"
+              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
                 activeTool === 'state' ? 'bg-orange-950/60 border border-orange-400 text-orange-300 font-bold shadow animate-pulse' : 'hover:bg-[#222] text-[#999]'
               }`}
               title="Click an Object to add a State inside it"
             >
-              🔶 <span className="text-[8px]">State</span>
+              <span aria-hidden="true">🔶</span> <span className="text-[8px]">State</span>
             </button>
             <button
               onClick={() => setActiveTool('requirement')}
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
+              aria-label="Add Requirement"
+              data-testid="opm-tool-requirement"
+              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 ${
                 activeTool === 'requirement' ? 'bg-purple-950/60 border border-purple-400 text-purple-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
               }`}
               title="Click canvas to place a Requirement"
             >
-              📜 <span className="text-[8px]">Req</span>
+              <span aria-hidden="true">📜</span> <span className="text-[8px]">Req</span>
             </button>
 
             <div className="h-px bg-[#333] my-1"></div>
@@ -1252,7 +1417,9 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             <select
               value={activeLinkType}
               onChange={(e) => setActiveLinkType(e.target.value as OPMLinkType)}
-              className="bg-[#0f0f0f] border border-[#333] rounded text-[10px] py-1 px-1.5 outline-none text-[#ccc] w-20"
+              aria-label="Select link type"
+              data-testid="opm-link-mode-select"
+              className="bg-[#0f0f0f] border border-[#333] rounded text-[10px] py-1 px-1.5 outline-none text-[#ccc] w-20 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
             >
               <optgroup label="Procedural" className="bg-[#141414]">
                 <option value="consumption">Consumption</option>
@@ -1284,6 +1451,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
+              isValidConnection={isValidConnection}
+              onEdgeClick={(_, edge) => { setSelectedEdge(edge); setSelectedNode(null); }}
               onNodeDragStop={handleNodeDragStop}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
@@ -1310,6 +1479,21 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               />
             </ReactFlow>
             <OpmLegend />
+            <OpmDiagnosticsBadge
+              diagnostics={opmArtifactState.diagnostics}
+              onNavigateToDiagnostic={handleNavigateToDiagnostic}
+            />
+
+            {/* Diagnostic Navigation Fallback Toast */}
+            {diagnosticNavMessage && (
+              <div
+                data-testid="diagnostic-nav-fallback"
+                className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-[#241305] border border-amber-500/70 text-amber-300 px-3 py-1.5 rounded shadow-2xl text-xs flex items-center gap-2 select-none"
+              >
+                <span>{diagnosticNavMessage}</span>
+                <button onClick={() => setDiagnosticNavMessage(null)} className="text-gray-400 hover:text-white text-xs font-bold">✕</button>
+              </div>
+            )}
           </div>
 
           {/* Selected Node Properties Panel (Floating bottom-left) */}
@@ -1321,7 +1505,10 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 </span>
                 <button
                   onClick={() => setSelectedNode(null)}
-                  className="text-gray-500 hover:text-white"
+                  aria-label="Close Element Inspector"
+                  data-testid="opm-close-node-inspector"
+                  className="text-gray-500 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded p-0.5"
+                  title="Close Element Inspector"
                 >
                   <X size={14} />
                 </button>
@@ -1330,14 +1517,32 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               {/* Basic Fields */}
               <div className="space-y-1.5 text-xs shrink-0">
                 <div className="flex flex-col gap-0.5">
-                  <label className="text-[10px] text-[#777] uppercase font-semibold">Name</label>
+                  <label htmlFor="opm-node-name-input" className="text-[10px] text-[#777] uppercase font-semibold">Name</label>
                   <input
+                    id="opm-node-name-input"
+                    data-testid="opm-node-name-input"
+                    aria-label="Element Name"
                     type="text"
                     value={selectedNode.data.name}
                     onChange={(e) => handleUpdateNodeProp('name', e.target.value)}
-                    className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-orange-500/50 text-white"
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-orange-500/50 text-white focus-visible:ring-2 focus-visible:ring-orange-500"
                   />
                 </div>
+
+                {selectedNode.data.type !== 'state' && (
+                  <div className="flex flex-col gap-0.5 pt-1">
+                    <label className="text-[10px] text-[#777] uppercase font-semibold">Element Type</label>
+                    <select
+                      value={selectedNode.type}
+                      onChange={(e) => handleConvertNodeType(e.target.value as OpmNodeKind)}
+                      className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-orange-500/50 text-white text-xs"
+                      data-testid="opm-convert-node-type"
+                    >
+                      <option value="opmObject">Object</option>
+                      <option value="opmProcess">Process</option>
+                    </select>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between pt-1">
                   <label className="text-[10px] text-[#777] uppercase font-semibold">Physical Entity</label>
@@ -1597,6 +1802,56 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               </button>
             </div>
           )}
+
+          {/* Selected Edge Inspector */}
+          {selectedEdge && !selectedNode && (
+            <div className="absolute right-4 top-4 z-10 w-72 bg-[#141414]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-3.5 shadow-xl flex flex-col gap-2.5 max-h-[85%] overflow-y-auto custom-scrollbar">
+              <div className="flex items-center justify-between border-b border-[#333] pb-1.5 shrink-0">
+                <span className="text-xs uppercase font-extrabold tracking-wider text-sky-400">
+                  Link Inspector
+                </span>
+                <button
+                  onClick={() => setSelectedEdge(null)}
+                  aria-label="Close Link Inspector"
+                  data-testid="opm-close-edge-inspector"
+                  className="text-gray-500 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 rounded p-0.5"
+                  title="Close Link Inspector"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="space-y-1.5 text-xs shrink-0">
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[10px] text-[#777] uppercase font-semibold">Link ID</label>
+                  <span className="font-mono text-[11px] text-gray-300">{selectedEdge.id}</span>
+                </div>
+                <div className="flex flex-col gap-0.5 pt-1">
+                  <label htmlFor="opm-convert-edge-type" className="text-[10px] text-[#777] uppercase font-semibold">Link Role</label>
+                  <select
+                    id="opm-convert-edge-type"
+                    aria-label="Link Role"
+                    value={(selectedEdge.data?.linkType ?? (selectedEdge.data?.type || 'effect')) as string}
+                    onChange={(e) => handleConvertEdgeType(selectedEdge.id, e.target.value as OPMLinkType)}
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-sky-500/50 text-white text-xs focus-visible:ring-2 focus-visible:ring-sky-500"
+                    data-testid="opm-convert-edge-type"
+                  >
+                    <option value="consumption">Consumption</option>
+                    <option value="result">Result</option>
+                    <option value="effect">Effect</option>
+                    <option value="agent">Agent</option>
+                    <option value="instrument">Instrument</option>
+                    <option value="trigger">Trigger</option>
+                    <option value="condition">Condition</option>
+                    <option value="aggregation">Aggregation</option>
+                    <option value="generalization">Generalization</option>
+                    <option value="exhibition">Exhibition</option>
+                    <option value="satisfies">Satisfies</option>
+                    <option value="verifies">Verifies</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Bottom Simulation Logs console */}
@@ -1686,13 +1941,17 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             <div className="bg-[#1a1a1a] rounded-lg border border-[#2d2d2d] p-3 flex items-center justify-between shadow-md shrink-0">
               <div className="flex flex-col">
                 <span className="text-[10px] text-gray-500 uppercase font-black">Simulation Status</span>
-                <span className={`text-xs font-extrabold flex items-center gap-1.5 ${simRunning ? 'text-green-400' : 'text-amber-400'}`}>
+                <span data-testid="opm-sim-status" className={`text-xs font-extrabold flex items-center gap-1.5 ${simRunning ? 'text-green-400' : 'text-amber-400'}`}>
                   <span className={`w-2 h-2 rounded-full ${simRunning ? 'bg-green-400 animate-ping' : 'bg-amber-400'}`} />
                   {simRunning ? 'ACTIVE RUNNING' : 'PAUSED'}
+                </span>
+                <span data-testid="opm-sim-time" className="text-[10px] text-gray-400 font-mono mt-0.5">
+                  Simulated Time: {simStateRef.current.tick * activeOpmConfig.tickMs}ms (Tick {simStateRef.current.tick})
                 </span>
               </div>
               <div className="flex gap-1 bg-black/40 p-1 rounded border border-white/5">
                 <button
+                  data-testid="opm-sim-toggle"
                   onClick={toggleSimulation}
                   className={`p-1.5 rounded transition-all ${simRunning ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-green-500/20 text-green-400 border border-green-500/30'}`}
                   title={simRunning ? 'Pause' : 'Start'}
@@ -1700,6 +1959,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   {simRunning ? <Pause size={12} /> : <Play size={12} />}
                 </button>
                 <button
+                  data-testid="opm-sim-step"
                   onClick={runSimTick}
                   className="p-1.5 text-sky-400 hover:bg-sky-950/40 rounded transition-all"
                   title="Step Simulation"
@@ -1707,6 +1967,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   <ArrowRight size={12} />
                 </button>
                 <button
+                  data-testid="opm-sim-reset"
                   onClick={resetSimulation}
                   className="p-1.5 text-amber-400 hover:bg-amber-950/40 rounded transition-all"
                   title="Reset"
@@ -1714,6 +1975,78 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   <RotateCcw size={12} />
                 </button>
               </div>
+            </div>
+
+            {/* OPM Isolated Simulation Configuration */}
+            <div className="bg-[#181818] rounded-lg border border-[#2d2d2d] p-3 flex flex-col gap-2.5 shadow-md shrink-0">
+              <div className="flex items-center justify-between border-b border-[#2d2d2d] pb-1">
+                <span className="text-[10px] text-orange-400 uppercase font-extrabold tracking-wider">
+                  OPM Simulation Settings (Isolated)
+                </span>
+                <span className="text-[9px] text-gray-500 font-mono">
+                  {activeOpmConfig.tickMs}ms / tick
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[9px] text-gray-400 uppercase font-semibold">Tick (ms)</label>
+                  <input
+                    data-testid="opm-sim-config-tick"
+                    type="number"
+                    min="1"
+                    max="60000"
+                    step="1"
+                    value={configDraft.tickMs ?? ''}
+                    onChange={(e) => handleConfigFieldChange('tickMs', e.target.value)}
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-1.5 py-1 text-xs font-mono text-white outline-none focus:border-orange-500/60"
+                  />
+                  <span className="text-[8px] text-gray-500">1–60,000</span>
+                </div>
+
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[9px] text-gray-400 uppercase font-semibold">Max Ticks</label>
+                  <input
+                    data-testid="opm-sim-config-maxticks"
+                    type="number"
+                    min="1"
+                    max="1000000"
+                    step="1"
+                    value={configDraft.maxTicks ?? ''}
+                    onChange={(e) => handleConfigFieldChange('maxTicks', e.target.value)}
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-1.5 py-1 text-xs font-mono text-white outline-none focus:border-orange-500/60"
+                  />
+                  <span className="text-[8px] text-gray-500">1–1,000,000</span>
+                </div>
+
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[9px] text-gray-400 uppercase font-semibold">Max Events</label>
+                  <input
+                    data-testid="opm-sim-config-maxevents"
+                    type="number"
+                    min="1"
+                    max="1024"
+                    step="1"
+                    value={configDraft.maxEventsPerTick ?? ''}
+                    onChange={(e) => handleConfigFieldChange('maxEventsPerTick', e.target.value)}
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-1.5 py-1 text-xs font-mono text-white outline-none focus:border-orange-500/60"
+                  />
+                  <span className="text-[8px] text-gray-500">1–1,024</span>
+                </div>
+              </div>
+
+              {/* Inline Validation Diagnostics */}
+              {configErrors.length > 0 && (
+                <div
+                  data-testid="opm-sim-config-errors"
+                  className="bg-red-950/40 border border-red-900/60 rounded p-1.5 text-[10px] text-red-300 space-y-0.5"
+                >
+                  <div className="font-bold text-red-400 uppercase text-[9px]">Invalid Configuration (Previous Active):</div>
+                  {configErrors.map((err, i) => (
+                    <div key={i}>• {err}</div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Quick Initialize Button */}
@@ -1972,6 +2305,24 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               edges={edges as never}
               state={opmArtifactState}
               onStateChange={setOpmArtifactState}
+              opmSimulationConfig={activeOpmConfig}
+              onNavigateToDiagnostic={(src) => {
+                if (src.elementId) {
+                  const node = nodes.find(n => n.id === src.elementId);
+                  if (node) {
+                    setSelectedNode(node);
+                    setSelectedEdge(null);
+                    return;
+                  }
+                  const edge = edges.find(e => e.id === src.elementId);
+                  if (edge) {
+                    setSelectedEdge(edge);
+                    setSelectedNode(null);
+                    return;
+                  }
+                }
+                onAddError?.('info', `Diagnostic reference: ${src.elementId || src.propertyPath || 'unknown source'}`, 'OPM');
+              }}
               onDownload={(files) => {
                 onAddError?.('info', `Verified OPM bundle ready: ${files.length} files.`, 'OPM');
               }}

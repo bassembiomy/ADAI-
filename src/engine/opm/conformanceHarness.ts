@@ -135,8 +135,18 @@ export function compareOpmSnapshots(
   expected: readonly OpmStepSnapshot[],
   actual: readonly OpmStepSnapshot[],
   model: ExecutableOpmModel,
+  expectedFingerprint?: string,
 ): OpmSnapshotDiff[] {
   const diffs: OpmSnapshotDiff[] = [];
+  if (expectedFingerprint !== undefined && model.fingerprint !== expectedFingerprint) {
+    diffs.push({
+      stepPosition: -1,
+      stepIndex: -1,
+      field: 'modelFingerprint',
+      expected: expectedFingerprint,
+      actual: model.fingerprint,
+    });
+  }
   if (expected.length !== actual.length) {
     diffs.push({
       stepPosition: -1,

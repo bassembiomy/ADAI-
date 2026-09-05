@@ -366,7 +366,7 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
     fixture: makeXBridgesFixture(
       [
         createNode('c1', 'Constant', { value: 1 }),
-        createNode('del1', 'DELAY', { delayTime: 0.01, initialCondition: 0 }),
+        createNode('del1', 'DELAY', { delay_length: 1, initial_condition: 0 }),
       ],
       [
         { id: 'e1', sourceNodeId: 'c1', sourcePortId: 'out', targetNodeId: 'del1', targetPortId: 'u' },
@@ -497,7 +497,16 @@ export const XB_EXECUTABLE_C_CASES: Readonly<
     fixture: makeXBridgesFixture(
       [
         createNode('c1', 'Constant', { value: [1] }),
-        createNode('tf1', 'DISCRETE_TRANSFER_FUNCTION', { numerator: [1], denominator: [1, -0.5], sampleTime: 0.01 }),
+        createNode('tf1', 'DISCRETE_TRANSFER_FUNCTION', {
+          numerator: [1],
+          denominator: [1, -0.5],
+          sampleTime: 0.01,
+          inputs: [{ id: 'u', direction: 'input', shape: 'vector', dimensions: [1], dataType: 'float32' }],
+          outputs: [
+            { id: 'y', direction: 'output', shape: 'vector', dimensions: [1], dataType: 'float32' },
+            { id: 'x', direction: 'output', shape: 'vector', dimensions: [1], dataType: 'float32' },
+          ],
+        }),
       ],
       [
         { id: 'e1', sourceNodeId: 'c1', sourcePortId: 'out', targetNodeId: 'tf1', targetPortId: 'u' },

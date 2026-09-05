@@ -127,5 +127,45 @@ describe('OPM project persistence and ZIP roundtrip', () => {
     expect(resolved.trusted).toBe(false);
     expect(resolved.status).toBe('stale');
   });
+
+  it('preserves opmSimulationConfig during export/import without altering state machine tickMs', async () => {
+    const globalStateMachineTickMs = 50;
+    const customOpmConfig = {
+      tickMs: 25,
+      maxTicks: 2500,
+      maxEventsPerTick: 32,
+      deterministicOrder: 'priority-then-source-order' as const,
+    };
+
+    const project: OpmProjectPayload = {
+      projectName: 'IsolatedTickBoiler',
+      entropyNodes: fixture.nodes,
+      entropyEdges: fixture.edges,
+      entropyExecutionConfig: fixture.config,
+      opmSimulationConfig: customOpmConfig,
+      tickMs: globalStateMachineTickMs, // State Machine global tick
+    };
+
+    const zipBlob = await exportProjectZip(project);
+    const imported = await importProjectZip(zipBlob);
+
+    // Assert OPM simulation config is preserved exactly
+    expect(imported.opmSimulationConfig).toEqual(customOpmConfig);
+    expect(imported.opmSimulationConfig?.tickMs).toBe(25);
+
+    // Assert global State Machine tickMs is preserved and not overwritten by OPM tickMs
+    expect(imported.tickMs).toBe(globalStateMachineTickMs);
+
+    // Also assert entropy.json includes opmSimulationConfig and restores it when fallback occurs
+    const zip = await JSZip.loadAsync(zipBlob);
+    const entropyJson = JSON.parse(await zip.file('entropy.json')!.async('string'));
+    expect(entropyJson.opmSimulationConfig).toEqual(customOpmConfig);
+
+    // Fallback import test (remove unified file)
+    zip.remove('adia_project_unified.json');
+    const fallbackBlob = await zip.generateAsync({ type: 'uint8array' });
+    const fallbackImported = await importProjectZip(fallbackBlob);
+    expect(fallbackImported.opmSimulationConfig).toEqual(customOpmConfig);
+  });
 });
 

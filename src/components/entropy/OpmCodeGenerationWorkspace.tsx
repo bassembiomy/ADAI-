@@ -11,15 +11,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { AppNode, AppEdge } from './EntropyTypes';
 import { compileExecutableOpm } from '../../engine/opm/pipeline';
-import { generateOpmCArtifacts, type OpmManifest } from '../../engine/opm/cGenerator';
+import {
+  generateOpmCArtifacts,
+  DEFAULT_OPM_RESOURCE_LIMITS,
+  STRICT_C99_COMPILER_FLAGS,
+  type OpmManifest,
+} from '../../engine/opm/cGenerator';
 import type { GeneratedOpmFile } from '../../engine/opm/cGeneratorTypes';
 import {
   createDefaultOpmExecutionConfig,
   type OpmDiagnostic,
   type OpmExecutionConfig,
+  type OpmSourceRef,
 } from '../../engine/opm/executableTypes';
+import type { OpmSimulationConfig } from './OpmSimulationConfig';
 
 export type OpmArtifactLifecycle =
+  | 'draft'
   | 'edited'
   | 'validated'
   | 'generated'
@@ -63,7 +71,7 @@ export interface OpmVerifyResult {
 
 export function createInitialArtifactState(): OpmArtifactState {
   return {
-    lifecycle: 'edited',
+    lifecycle: 'draft',
     currentFingerprint: null,
     generatedFingerprint: null,
     verifiedFingerprint: null,
@@ -109,7 +117,7 @@ export function computeCurrentFingerprint(
  * Fold a live-model fingerprint into artifact state. Layout-only edits keep
  * the same fingerprint, so the same state reference is returned unchanged
  * (no invalidation). Any fingerprint change is a semantic edit: the
- * lifecycle falls back to `edited` and prior verification no longer gates.
+ * lifecycle falls back to `draft` and prior verification no longer gates.
  */
 export function applyModelEdit(prev: OpmArtifactState, currentFingerprint: string | null): OpmArtifactState {
   if (currentFingerprint === prev.currentFingerprint) return prev;
@@ -117,7 +125,7 @@ export function applyModelEdit(prev: OpmArtifactState, currentFingerprint: strin
     currentFingerprint !== null &&
     prev.generatedFingerprint !== null &&
     currentFingerprint === prev.generatedFingerprint &&
-    prev.lifecycle !== 'edited'
+    prev.lifecycle !== 'draft'
   ) {
     // Fingerprint still matches the generated bundle (e.g. undo back to the
     // generated model): refresh the pointer without invalidating.
@@ -125,7 +133,7 @@ export function applyModelEdit(prev: OpmArtifactState, currentFingerprint: strin
   }
   return {
     ...prev,
-    lifecycle: 'edited',
+    lifecycle: 'draft',
     currentFingerprint,
     verifiedFingerprint:
       prev.verifiedFingerprint !== null && prev.verifiedFingerprint === currentFingerprint
@@ -217,6 +225,11 @@ export function canDownload(state: OpmArtifactState): boolean {
   );
 }
 
+export function canGenerate(diagnostics: OpmDiagnostic[], currentFingerprint: string | null): boolean {
+  if (currentFingerprint === null) return false;
+  return !diagnostics.some((d) => d.severity === 'error');
+}
+
 export const canRunHil = canDownload;
 
 export interface OpmCodeGenerationWorkspaceProps {
@@ -228,6 +241,8 @@ export interface OpmCodeGenerationWorkspaceProps {
   verifyViaIpc?: (files: GeneratedOpmFile[]) => Promise<OpmVerifyResult>;
   onDownload?: (files: GeneratedOpmFile[], fingerprint: string) => void;
   onRunHil?: (files: GeneratedOpmFile[], fingerprint: string) => void;
+  onNavigateToDiagnostic?: (source: OpmSourceRef) => void;
+  opmSimulationConfig?: OpmSimulationConfig;
 }
 
 async function defaultVerifyViaIpc(files: GeneratedOpmFile[]): Promise<OpmVerifyResult> {
@@ -237,8 +252,28 @@ async function defaultVerifyViaIpc(files: GeneratedOpmFile[]): Promise<OpmVerify
   return await bridge.invoke('opm-verify-generated-c', { files });
 }
 
+export function getRemediationMessage(state: OpmArtifactState, currentFingerprint: string | null): string | null {
+  if (state.diagnostics.some((d) => d.severity === 'error')) {
+    return 'Resolve model validation errors before generating C code.';
+  }
+  if (state.lifecycle === 'failed') {
+    return 'C qualification failed. Inspect error logs and remediate model or environment.';
+  }
+  if (state.generatedFingerprint === null || state.lifecycle === 'draft') {
+    return 'Generate C code for the current model fingerprint before running verification.';
+  }
+  if (currentFingerprint !== null && state.generatedFingerprint !== currentFingerprint) {
+    return 'Model changed since generation. Re-generate C artifacts for the updated fingerprint.';
+  }
+  if (state.lifecycle !== 'verified') {
+    return 'Verify generated C code against the qualification compiler to unlock download and HIL export.';
+  }
+  return null;
+}
+
 const LIFECYCLE_LABEL: Record<OpmArtifactLifecycle, string> = {
-  edited: 'Edited — regeneration required',
+  draft: 'Draft — edit model to generate',
+  edited: 'Draft — regeneration required',
   validated: 'Validated — ready to generate',
   generated: 'Generated — ready to verify',
   verifying: 'Verifying…',
@@ -255,6 +290,8 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
   verifyViaIpc,
   onDownload,
   onRunHil,
+  onNavigateToDiagnostic,
+  opmSimulationConfig,
 }) => {
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -271,6 +308,7 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current.fingerprint]);
 
+  const generateEnabled = canGenerate(current.diagnostics, current.fingerprint);
   const verifyEnabled = canVerify({ ...state, currentFingerprint: current.fingerprint });
   const downloadEnabled = canDownload({ ...state, currentFingerprint: current.fingerprint });
   const stale =
@@ -300,9 +338,13 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
         onStateChange(markFailed(withCurrent, compRes.diagnostics.filter((d) => d.severity === 'error').map((d) => `[${d.code}] ${d.message}`)));
         return;
       }
-      const { files, manifest } = generateOpmCArtifacts(compRes.model);
+      const { files, manifest, diagnostics } = generateOpmCArtifacts(compRes.model, compRes.diagnostics);
+      if (manifest.qualificationStatus === 'failed') {
+        onStateChange(markFailed(withCurrent, diagnostics.map((d) => `[${d.code}] ${d.message}`)));
+        return;
+      }
       setActiveFile(files[0]?.name ?? null);
-      onStateChange(markGenerated(withCurrent, compRes.model.fingerprint, files, manifest, compRes.diagnostics));
+      onStateChange(markGenerated(withCurrent, compRes.model.fingerprint, files, manifest, diagnostics));
     } catch (err) {
       onStateChange(markFailed(withCurrent, [err instanceof Error ? err.message : String(err)]));
     }
@@ -329,8 +371,12 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
   };
 
   const activeContent = state.files.find((f) => f.name === activeFile)?.content ?? '';
-  const errorDiagnostics = state.diagnostics.filter((d) => d.severity === 'error');
-  const warnDiagnostics = state.diagnostics.filter((d) => d.severity === 'warning');
+  const errorDiagnostics = (state.diagnostics ?? []).filter((d) => d.severity === 'error');
+  const warnDiagnostics = (state.diagnostics ?? []).filter((d) => d.severity === 'warning');
+  const limits = state.manifest?.resourceLimits ?? DEFAULT_OPM_RESOURCE_LIMITS;
+  const qualificationStatus =
+    state.manifest?.qualificationStatus ??
+    (state.lifecycle === 'verified' ? 'qualified' : state.lifecycle === 'failed' ? 'failed' : 'pending');
 
   return (
     <div className="flex flex-col gap-3 p-3 text-xs" data-testid="opm-codegen-workspace">
@@ -348,40 +394,94 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
           </div>
         )}
         {localError && <div className="mt-1 text-[10px] text-red-400">{localError}</div>}
+
+        {/* Sequential Actions Stepper */}
         <div className="mt-2 flex flex-wrap gap-1.5">
-          <button onClick={handleValidate} className="px-2 py-1 bg-[#222] hover:bg-[#333] border border-[#333] rounded text-[10px] font-bold" data-testid="opm-validate">
-            Validate
-          </button>
-          <button onClick={handleGenerate} className="px-2 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-[10px] font-bold" data-testid="opm-generate">
-            Generate
+          <button
+            data-testid="opm-validate"
+            onClick={handleValidate}
+            className="px-2 py-1 bg-[#222] hover:bg-[#333] border border-[#333] rounded text-[10px] font-bold"
+          >
+            1. Validate
           </button>
           <button
+            data-testid="opm-generate"
+            onClick={handleGenerate}
+            disabled={!generateEnabled}
+            title={generateEnabled ? 'Generate C artifacts' : 'Generate is blocked: resolve model validation errors first'}
+            className={`px-2 py-1 rounded text-[10px] font-bold border ${generateEnabled ? 'bg-emerald-700 hover:bg-emerald-600 text-white border-emerald-600' : 'bg-[#1c1c1c] text-gray-600 border-[#2d2d2d] cursor-not-allowed'}`}
+          >
+            2. Generate
+          </button>
+          <button
+            data-testid="opm-verify"
             onClick={handleVerify}
             disabled={!verifyEnabled}
             title={verifyEnabled ? 'Verify the generated bundle' : 'Verify unlocks when generation matches the current model fingerprint'}
             className={`px-2 py-1 rounded text-[10px] font-bold border ${verifyEnabled ? 'bg-sky-700 hover:bg-sky-600 text-white border-sky-600' : 'bg-[#1c1c1c] text-gray-600 border-[#2d2d2d] cursor-not-allowed'}`}
-            data-testid="opm-verify"
           >
-            Verify
+            3. Verify
           </button>
           <button
+            data-testid="opm-download"
             onClick={() => downloadEnabled && state.generatedFingerprint && onDownload?.(state.files, state.generatedFingerprint)}
             disabled={!downloadEnabled}
             title={downloadEnabled ? 'Download the verified bundle' : 'Download unlocks only for a verified bundle matching the current model'}
             className={`px-2 py-1 rounded text-[10px] font-bold border ${downloadEnabled ? 'bg-orange-600 hover:bg-orange-500 text-black border-orange-500' : 'bg-[#1c1c1c] text-gray-600 border-[#2d2d2d] cursor-not-allowed'}`}
-            data-testid="opm-download"
           >
-            Download
+            4. Download
           </button>
           <button
+            data-testid="opm-hil"
             onClick={() => downloadEnabled && state.generatedFingerprint && onRunHil?.(state.files, state.generatedFingerprint)}
             disabled={!downloadEnabled}
             title={downloadEnabled ? 'Send the verified bundle to HIL' : 'HIL unlocks only for a verified bundle matching the current model'}
             className={`px-2 py-1 rounded text-[10px] font-bold border ${downloadEnabled ? 'bg-purple-700 hover:bg-purple-600 text-white border-purple-600' : 'bg-[#1c1c1c] text-gray-600 border-[#2d2d2d] cursor-not-allowed'}`}
-            data-testid="opm-hil"
           >
             Send to HIL
           </button>
+        </div>
+        {!downloadEnabled && (
+          <div className="mt-2 text-[10px] text-amber-400 font-medium" data-testid="opm-remediation">
+            {getRemediationMessage(state, current.fingerprint)}
+          </div>
+        )}
+      </div>
+
+      {/* Progress & Target Evidence Section */}
+      <div className="bg-[#1a1a1a] border border-[#2d2d2d] rounded-md p-2.5 space-y-1.5 font-mono text-[10px]">
+        <div className="flex items-center justify-between uppercase text-[10px] font-extrabold tracking-wider text-gray-400 border-b border-[#2d2d2d] pb-1">
+          <span>Target Configuration &amp; Qualification</span>
+          <span
+            data-testid="opm-qualification-status"
+            className={`font-bold uppercase ${
+              qualificationStatus === 'qualified'
+                ? 'text-green-400'
+                : qualificationStatus === 'failed'
+                ? 'text-red-400'
+                : 'text-amber-400'
+            }`}
+          >
+            {qualificationStatus}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-gray-400">
+          <span>OPM Simulation Tick:</span>
+          <span data-testid="opm-tick" className="text-white font-bold">
+            {opmSimulationConfig?.tickMs ?? state.manifest?.tickMs ?? 10}ms
+          </span>
+        </div>
+        <div className="flex flex-col gap-0.5 text-gray-400">
+          <span>Resource Limits:</span>
+          <div data-testid="opm-resource-limits" className="text-gray-300 pl-1">
+            Nodes: {limits.maxNodes} · States: {limits.maxStates} · Processes: {limits.maxProcesses} · Links: {limits.maxLinks}
+          </div>
+        </div>
+        <div className="flex flex-col gap-0.5 text-gray-400">
+          <span>Strict Compiler Flags:</span>
+          <div data-testid="opm-compiler-flags" className="text-sky-300 pl-1 break-all">
+            {STRICT_C99_COMPILER_FLAGS.join(' ')}
+          </div>
         </div>
       </div>
 
@@ -390,13 +490,22 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
           Validation diagnostics ({errorDiagnostics.length} errors, {warnDiagnostics.length} warnings)
         </span>
         <div className="mt-1 max-h-32 overflow-y-auto space-y-1 font-mono text-[10px]">
-          {state.diagnostics.length === 0 && <div className="text-gray-600 italic">No diagnostics yet — run Validate or Generate.</div>}
-          {state.diagnostics.map((d, i) => (
-            <div key={i} className={d.severity === 'error' ? 'text-red-400' : 'text-amber-300'}>
-              [{d.severity.toUpperCase()}] [{d.code}] {d.message}
-              <span className="text-gray-500"> @ {d.source.elementId}:{d.source.propertyPath}</span>
-            </div>
-          ))}
+          {(state.diagnostics ?? []).length === 0 && <div className="text-gray-600 italic">No diagnostics yet — run Validate or Generate.</div>}
+          {(state.diagnostics ?? []).map((d, i) => {
+            const path = `${d.source.elementId}.${d.source.propertyPath}`;
+            return (
+              <div
+                key={i}
+                data-opm-path={path}
+                onClick={() => onNavigateToDiagnostic?.(d.source)}
+                className={`cursor-pointer hover:underline p-1 rounded hover:bg-white/5 ${d.severity === 'error' ? 'text-red-400' : 'text-amber-300'}`}
+                title={`Click to focus inspector for ${d.source.elementId}`}
+              >
+                [{d.severity.toUpperCase()}] [{d.code}] {d.message}
+                <span className="text-gray-500"> @ {d.source.elementId}:{d.source.propertyPath}</span>
+              </div>
+            );
+          })}
         </div>
         {state.errors.length > 0 && (
           <div className="mt-1 space-y-0.5 font-mono text-[10px] text-red-400" data-testid="opm-errors">

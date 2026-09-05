@@ -11,9 +11,28 @@ describe('smPipelineOrchestrator', () => {
 
     expect(report.artifactsCount).toBeGreaterThan(0);
     expect(report.traceabilityMappingsCount).toBeGreaterThan(0);
-    expect(report.status.behavioralGenerationStatus).toBe('PASS');
+    expect(report.status.behavioralGenerationStatus).toBe(
+      report.toolchain.status === 'BLOCKED' ? 'BLOCKED' : 'PASS',
+    );
     expect(report.status.targetIntegrationStatus).toBe('INTEGRATION REQUIRED');
     expect(report.status.productVerificationStatus).toBe('INCOMPLETE');
+  }, 30000);
+
+  it('reports an unusable explicitly selected compiler as BLOCKED', () => {
+    const { ir } = buildSemanticModel(flatOrFixture());
+    const compiler = `adia-missing-pipeline-compiler-${process.pid}`;
+    const report = runVerificationPipeline(ir!, undefined, { compiler });
+
+    expect(report.toolchain).toMatchObject({
+      status: 'BLOCKED',
+      compiler,
+      selectionSource: 'explicit',
+    });
+    expect(report.execution).toEqual({
+      hostCompileStatus: 'BLOCKED',
+      runtimeStatus: 'BLOCKED',
+    });
+    expect(report.status.behavioralGenerationStatus).toBe('BLOCKED');
   }, 30000);
 
   it('verifies XB6 Step block model differential trace parity across 0ms to 1000ms steps (GEN-XB-STEP-007, 009)', () => {
@@ -30,8 +49,9 @@ describe('smPipelineOrchestrator', () => {
     }));
 
     const report = runVerificationPipeline(ir!, vectors);
-    expect(report.differential.behavioralGenerationStatus).toBe('PASS');
-    expect(report.status.behavioralGenerationStatus).toBe('PASS');
+    const expectedStatus = report.toolchain.status === 'BLOCKED' ? 'BLOCKED' : 'PASS';
+    expect(report.differential.behavioralGenerationStatus).toBe(expectedStatus);
+    expect(report.status.behavioralGenerationStatus).toBe(expectedStatus);
   }, 30000);
 });
 

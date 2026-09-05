@@ -14,6 +14,7 @@ import type { OpmDiagnostic } from './executableTypes';
 import { compileExecutableOpm } from './pipeline';
 import { generateOpmCArtifacts, type OpmManifest } from './cGenerator';
 import type { GeneratedOpmFile } from './cGeneratorTypes';
+import type { OpmSimulationConfig } from '../../components/entropy/OpmSimulationConfig';
 
 export type OpmPersistedVerificationStatus = 'verified' | 'failed';
 
@@ -30,6 +31,7 @@ export interface OpmProjectPayload {
   entropyEdges: any[];
   entropyExecutionConfig?: OpmExecutionConfig;
   opmVerification?: OpmVerificationMetadata;
+  opmSimulationConfig?: OpmSimulationConfig;
   [key: string]: any;
 }
 
@@ -57,6 +59,7 @@ export async function exportProjectZip(payload: OpmProjectPayload): Promise<Uint
     edges: payload.entropyEdges || [],
     executionConfig: payload.entropyExecutionConfig,
     opmVerification: payload.opmVerification,
+    opmSimulationConfig: payload.opmSimulationConfig,
   };
   zip.file('entropy.json', JSON.stringify(entropyData, null, 2));
   zip.file('adia_project_unified.json', JSON.stringify(payload, null, 2));
@@ -105,6 +108,7 @@ export async function importProjectZip(zipInput: Uint8Array | ArrayBuffer | Blob
       entropyNodes: parsed.nodes || [],
       entropyEdges: parsed.edges || [],
       entropyExecutionConfig: parsed.executionConfig,
+      opmSimulationConfig: parsed.opmSimulationConfig,
       ...(parsed.opmVerification ? { opmVerification: parsed.opmVerification } : {}),
     };
   }

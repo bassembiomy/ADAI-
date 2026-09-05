@@ -270,7 +270,6 @@ describe('V-Lab connected reference models', () => {
 
     expect(result.readings.at(-1)).toBeCloseTo(33, 6);
   });
-  });
 
   it('keeps the catalog testable: every library block is assigned to a connected-model family', () => {
     const families = new Set([

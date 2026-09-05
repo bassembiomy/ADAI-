@@ -1022,4 +1022,87 @@ describe('OPM canonical TypeScript runtime', () => {
     expect(res.firedProcessIds).toEqual([]);
     expect(res.traversedLinkIds).toEqual([]);
   });
+
+  describe('Task 5: Hardened deterministic runtime semantics and diagnostics', () => {
+    it('executes exact tick ordering: input latch, event dispatch, guard evaluation, conflict resolution, staged writes, trace emission, and time increment', () => {
+      const queueFixture = makeQueueFixture();
+      const runtime = createOpmRuntime(queueFixture.model);
+
+      expect(runtime.timeMs).toBe(0);
+
+      // Step with structured input
+      const result = stepOpmRuntime(runtime, {
+        deltaMs: 25,
+        inputs: { 'obj_door.door_sensor': 1 },
+        events: ['door_open'],
+      } as any);
+
+      // Check return interface: snapshot, fired/blocked process IDs, diagnosticsDelta, simulated time
+      expect(result.snapshot).toBeDefined();
+      expect(result.snapshot.timeMs).toBe(25);
+      expect(result.timeMs).toBe(25);
+      expect(result.firedProcessIds).toContain('open_door');
+      expect(result.diagnosticsDelta).toBeDefined();
+      expect(Array.isArray(result.diagnosticsDelta)).toBe(true);
+
+      // Verify phase ordering in trace emission
+      const tracePhases = result.trace.map(t => t.phase);
+      expect(tracePhases).toEqual([
+        'sampleInputs',
+        'advanceTimers',
+        'activate',
+        'evaluate',
+        'stage',
+        'resolveConflicts',
+        'commit',
+        'stateActions',
+        'publishOutputs',
+      ]);
+
+      // Verify time incremented to 25
+      expect(runtime.timeMs).toBe(25);
+      expect(runtime.stepIndex).toBe(1);
+    });
+
+    it('enforces stable diagnostic codes for event overflow, transition conflict, write conflict, invalid initial states, and max-tick termination', () => {
+      // 1. Event overflow
+      const queueFixture = makeQueueFixture();
+      const model = {
+        ...queueFixture.model,
+        settings: {
+          ...queueFixture.model.settings,
+          eventQueueCapacity: 1,
+          eventOverflow: 'rejectNewest' as const,
+        },
+      };
+      const qRuntime = createOpmRuntime(model);
+      dispatchOpmEvent(qRuntime, 'door_open');
+      const overflowDiag: any[] = [];
+      const overStatus = dispatchOpmEvent(qRuntime, 'door_close', overflowDiag);
+      expect(overStatus).toBe('overflow');
+      expect(overflowDiag.some(d => d.code === 'OPM_EVENT_QUEUE_OVERFLOW')).toBe(true);
+
+      // 2. Invalid initial states
+      const brokenModel = JSON.parse(JSON.stringify(queueFixture.model));
+      brokenModel.objects[0].initialStateId = 'non_existent_state_id';
+      const brokenRuntime = createOpmRuntime(brokenModel);
+      brokenRuntime.activeStates['obj_door'] = 'non_existent_state_id';
+      const stepBroken = stepOpmRuntime(brokenRuntime, 10);
+      expect(stepBroken.diagnostics.some(d => d.code === 'OPM_RUNTIME_INVALID_INITIAL_STATE')).toBe(true);
+
+      // 3. Max-tick termination
+      const boundedModel = JSON.parse(JSON.stringify(queueFixture.model));
+      boundedModel.settings.maxTicks = 2;
+      const boundedRuntime = createOpmRuntime(boundedModel);
+      const s1 = stepOpmRuntime(boundedRuntime, 10);
+      expect(s1.finished).toBe(false);
+      const s2 = stepOpmRuntime(boundedRuntime, 10);
+      expect(s2.finished).toBe(true);
+      expect(s2.lifecycle).toBe('finished');
+      const s3 = stepOpmRuntime(boundedRuntime, 10);
+      expect(s3.finished).toBe(true);
+      expect(s3.diagnostics.some(d => d.code === 'OPM_RUNTIME_MAX_TICKS_EXCEEDED')).toBe(true);
+    });
+  });
 });
+
