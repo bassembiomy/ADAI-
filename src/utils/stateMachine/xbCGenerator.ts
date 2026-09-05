@@ -2367,8 +2367,7 @@ const renderStateOutputs = (
     const inputSignalId = operation.inputSignalIds[0];
     if (prevSlot !== undefined && outputSignalId !== undefined && inputSignalId !== undefined) {
       const outputSignal = requireSignal(state, outputSignalId);
-      const isFloat32 = outputSignal.numericType.kind === 'float32';
-      const isnanFn = isFloat32 ? 'isnanf' : 'isnan';
+      const isnanFn = 'isnan';
       const nanVal = 'NAN';
 
       const rising = cNumber(scalarParameter(operation, ['risingSlewRate', 'risingLimit'], 1));
@@ -3316,7 +3315,7 @@ const renderDiscreteStateUpdates = (
       state, operation, layout, member,
     ),
   ];
-  const input = (operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION' || operation.type === 'KALMAN_FILTER' || operation.type === 'EXTENDED_KALMAN_FILTER') || operation.inputSignalIds[0] === undefined
+  const input = (operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION' || operation.type === 'KALMAN_FILTER' || operation.type === 'EXTENDED_KALMAN_FILTER' || operation.type === 'RATE_LIMITER') || operation.inputSignalIds[0] === undefined
     ? '0.0'
     : signalRealExpression(state, operation.inputSignalIds[0], layout, member);
   if (operation.type === 'STATE_SPACE' || operation.type === 'DISCRETE_TRANSFER_FUNCTION') {
@@ -3750,8 +3749,11 @@ const renderDiscreteStateUpdates = (
         );
       }
       case 'RATE_LIMITER': {
-        const isFloat32 = slot.numericType.kind === 'float32';
-        const isnanFn = isFloat32 ? 'isnanf' : 'isnan';
+        const inputSignalId = operation.inputSignalIds[0];
+        if (inputSignalId === undefined) {
+          throw new Error(`X-Bridges RATE_LIMITER '${operation.id}' requires an input signal`);
+        }
+        const isnanFn = 'isnan';
         const nanVal = 'NAN';
 
         const rising = cNumber(scalarParameter(operation, ['risingSlewRate', 'risingLimit'], 1));
@@ -3762,15 +3764,38 @@ const renderDiscreteStateUpdates = (
         const rawDt = operation.parameters.sampleTime ?? operation.parameters.dt;
         const parsedDt = typeof rawDt === 'number' ? rawDt : (typeof rawDt === 'string' ? parseFloat(rawDt) : NaN);
         const dt = cNumber(Number.isFinite(parsedDt) && parsedDt > 0 ? parsedDt : (state.xBridges?.solver?.stepSeconds ?? 0.01));
-        const prev_y = stateSlotRealExpression(slot, layout, member);
+        const updateExpression = (inputValue: string, previousValue: string) =>
+          `(${isnanFn}(${inputValue}) || ${isnanFn}(${previousValue})) ? ${nanVal} : (((${inputValue}) - (${previousValue}) > (${rising}) * (${dt})) ? (${previousValue}) + (${rising}) * (${dt}) : (((${inputValue}) - (${previousValue}) < (${falling}) * (${dt})) ? (${previousValue}) + (${falling}) * (${dt}) : (${inputValue})))`;
 
-        const expr = `(${isnanFn}(${input}) || ${isnanFn}(${prev_y})) ? ${nanVal} : (((${input}) - (${prev_y}) > (${rising}) * (${dt})) ? (${prev_y}) + (${rising}) * (${dt}) : (((${input}) - (${prev_y}) < (${falling}) * (${dt})) ? (${prev_y}) + (${falling}) * (${dt}) : (${input})))`;
+        if (slot.shape.kind === 'scalar') {
+          const inputValue = signalElementRealExpression(state, inputSignalId, layout, member, '0U');
+          const previousValue = stateSlotElementRealExpression(slot, layout, member, '0U');
+          return renderStateSlotAssignment(
+            state, slot,
+            updateExpression(inputValue, previousValue),
+            layout, member, `${operation.id}_${slotIndex}_update`, layout.errorFields.get(operation.id), operation,
+          );
+        }
 
-        return renderStateSlotAssignment(
-          state, slot,
-          expr,
-          layout, member, `${operation.id}_${slotIndex}_update`, layout.errorFields.get(operation.id), operation,
-        );
+        const elementCount = slot.initialValues.length;
+        return [
+          `    for (uint32_t xb_i = 0U; xb_i < ${elementCount}U; ++xb_i) {`,
+          ...renderStateSlotElementAssignment(
+            state,
+            slot,
+            'xb_i',
+            updateExpression(
+              signalElementRealExpression(state, inputSignalId, layout, member, 'xb_i'),
+              stateSlotElementRealExpression(slot, layout, member, 'xb_i'),
+            ),
+            layout,
+            member,
+            `${operation.id}_${slotIndex}_update`,
+            layout.errorFields.get(operation.id),
+            operation,
+          ).map((line) => `    ${line}`),
+          '    }',
+        ];
       }
       case 'RELAY': {
         const switchOn = cNumber(scalarParameter(operation, ['switchOn'], 1));
