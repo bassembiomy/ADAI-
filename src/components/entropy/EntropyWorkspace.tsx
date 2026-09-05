@@ -409,6 +409,20 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     if (onSave) onSave(nextState.nodes, nextState.edges);
   };
 
+  // --- Keyboard accessibility: Escape to cancel selection / close inspectors ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (selectedNode || selectedEdge) {
+          setSelectedNode(null);
+          setSelectedEdge(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNode, selectedEdge]);
+
   // --- Node Filtering based on Zoom ---
   const filteredNodes = useMemo(() => {
     return nodes.filter(n => {
@@ -1339,52 +1353,62 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         {/* Workspace core body */}
         <div className="flex-1 flex overflow-hidden relative">
           {/* Tool Dock (Left floating bar) */}
-          <div className="absolute left-3 top-3 z-10 bg-[#161616]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-2 flex flex-col gap-2 shadow-xl">
+          <div className="absolute left-3 top-3 z-10 bg-[#161616]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-2 flex flex-col gap-2 shadow-xl" role="toolbar" aria-label="OPM Canvas Tools">
             <span className="text-[8px] uppercase tracking-wider font-extrabold text-orange-400/80 mb-0.5 text-center">Tools</span>
             <button
               onClick={() => setActiveTool('select')}
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
+              aria-label="Select tool"
+              data-testid="opm-tool-select"
+              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
                 activeTool === 'select' ? 'bg-[#f97316]/20 border border-[#f97316] text-[#f97316] font-bold shadow' : 'hover:bg-[#222] text-[#999]'
               }`}
               title="Select / Move elements"
             >
-              🖱️ <span className="text-[8px]">Select</span>
+              <span aria-hidden="true">🖱️</span> <span className="text-[8px]">Select</span>
             </button>
             <button
               onClick={() => setActiveTool('object')}
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
+              aria-label="Add Object"
+              data-testid="opm-tool-object"
+              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                 activeTool === 'object' ? 'bg-emerald-950/60 border border-emerald-400 text-emerald-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
               }`}
               title="Click canvas to place an Object"
             >
-              🟢 <span className="text-[8px]">Object</span>
+              <span aria-hidden="true">🟢</span> <span className="text-[8px]">Object</span>
             </button>
             <button
               onClick={() => setActiveTool('process')}
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
+              aria-label="Add Process"
+              data-testid="opm-tool-process"
+              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
                 activeTool === 'process' ? 'bg-sky-950/60 border border-sky-400 text-sky-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
               }`}
               title="Click canvas to place a Process"
             >
-              🔵 <span className="text-[8px]">Process</span>
+              <span aria-hidden="true">🔵</span> <span className="text-[8px]">Process</span>
             </button>
             <button
               onClick={() => setActiveTool('state')}
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
+              aria-label="Add State"
+              data-testid="opm-tool-state"
+              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
                 activeTool === 'state' ? 'bg-orange-950/60 border border-orange-400 text-orange-300 font-bold shadow animate-pulse' : 'hover:bg-[#222] text-[#999]'
               }`}
               title="Click an Object to add a State inside it"
             >
-              🔶 <span className="text-[8px]">State</span>
+              <span aria-hidden="true">🔶</span> <span className="text-[8px]">State</span>
             </button>
             <button
               onClick={() => setActiveTool('requirement')}
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
+              aria-label="Add Requirement"
+              data-testid="opm-tool-requirement"
+              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 ${
                 activeTool === 'requirement' ? 'bg-purple-950/60 border border-purple-400 text-purple-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
               }`}
               title="Click canvas to place a Requirement"
             >
-              📜 <span className="text-[8px]">Req</span>
+              <span aria-hidden="true">📜</span> <span className="text-[8px]">Req</span>
             </button>
 
             <div className="h-px bg-[#333] my-1"></div>
@@ -1393,7 +1417,9 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             <select
               value={activeLinkType}
               onChange={(e) => setActiveLinkType(e.target.value as OPMLinkType)}
-              className="bg-[#0f0f0f] border border-[#333] rounded text-[10px] py-1 px-1.5 outline-none text-[#ccc] w-20"
+              aria-label="Select link type"
+              data-testid="opm-link-mode-select"
+              className="bg-[#0f0f0f] border border-[#333] rounded text-[10px] py-1 px-1.5 outline-none text-[#ccc] w-20 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
             >
               <optgroup label="Procedural" className="bg-[#141414]">
                 <option value="consumption">Consumption</option>
@@ -1479,7 +1505,10 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 </span>
                 <button
                   onClick={() => setSelectedNode(null)}
-                  className="text-gray-500 hover:text-white"
+                  aria-label="Close Element Inspector"
+                  data-testid="opm-close-node-inspector"
+                  className="text-gray-500 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded p-0.5"
+                  title="Close Element Inspector"
                 >
                   <X size={14} />
                 </button>
@@ -1488,12 +1517,15 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               {/* Basic Fields */}
               <div className="space-y-1.5 text-xs shrink-0">
                 <div className="flex flex-col gap-0.5">
-                  <label className="text-[10px] text-[#777] uppercase font-semibold">Name</label>
+                  <label htmlFor="opm-node-name-input" className="text-[10px] text-[#777] uppercase font-semibold">Name</label>
                   <input
+                    id="opm-node-name-input"
+                    data-testid="opm-node-name-input"
+                    aria-label="Element Name"
                     type="text"
                     value={selectedNode.data.name}
                     onChange={(e) => handleUpdateNodeProp('name', e.target.value)}
-                    className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-orange-500/50 text-white"
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-orange-500/50 text-white focus-visible:ring-2 focus-visible:ring-orange-500"
                   />
                 </div>
 
@@ -1780,7 +1812,10 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 </span>
                 <button
                   onClick={() => setSelectedEdge(null)}
-                  className="text-gray-500 hover:text-white"
+                  aria-label="Close Link Inspector"
+                  data-testid="opm-close-edge-inspector"
+                  className="text-gray-500 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 rounded p-0.5"
+                  title="Close Link Inspector"
                 >
                   <X size={14} />
                 </button>
@@ -1791,11 +1826,13 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   <span className="font-mono text-[11px] text-gray-300">{selectedEdge.id}</span>
                 </div>
                 <div className="flex flex-col gap-0.5 pt-1">
-                  <label className="text-[10px] text-[#777] uppercase font-semibold">Link Role</label>
+                  <label htmlFor="opm-convert-edge-type" className="text-[10px] text-[#777] uppercase font-semibold">Link Role</label>
                   <select
+                    id="opm-convert-edge-type"
+                    aria-label="Link Role"
                     value={(selectedEdge.data?.linkType ?? (selectedEdge.data?.type || 'effect')) as string}
                     onChange={(e) => handleConvertEdgeType(selectedEdge.id, e.target.value as OPMLinkType)}
-                    className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-sky-500/50 text-white text-xs"
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-sky-500/50 text-white text-xs focus-visible:ring-2 focus-visible:ring-sky-500"
                     data-testid="opm-convert-edge-type"
                   >
                     <option value="consumption">Consumption</option>

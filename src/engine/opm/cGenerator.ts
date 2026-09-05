@@ -335,7 +335,14 @@ export function generateOpmCArtifacts(
   }
 
   // 3. Generated text size limit check
-  const totalBytes = files.reduce((acc, f) => acc + Buffer.byteLength(f.content, 'utf8'), 0);
+  const totalBytes = files.reduce((acc, f) => {
+    const bytes = typeof TextEncoder !== 'undefined'
+      ? new TextEncoder().encode(f.content).length
+      : typeof Buffer !== 'undefined'
+        ? Buffer.byteLength(f.content, 'utf8')
+        : f.content.length;
+    return acc + bytes;
+  }, 0);
   if (totalBytes > limits.maxGeneratedTextBytes) {
     diagnostics.push({
       code: 'OPM_CODEGEN_RESOURCE_LIMIT_EXCEEDED',

@@ -336,6 +336,18 @@ describe('OPM C99 code generator', () => {
       expect(result.diagnostics).toBeDefined();
       expect(result.diagnostics.some(d => d.code === 'OPM_CODEGEN_RESOURCE_LIMIT_EXCEEDED')).toBe(true);
     });
+
+    it('functions in browser / renderer environment where Buffer is undefined', () => {
+      const originalBuffer = (globalThis as any).Buffer;
+      try {
+        delete (globalThis as any).Buffer;
+        const result = generateOpmCArtifacts(applianceModel);
+        expect(result.files.length).toBeGreaterThan(0);
+        expect(result.manifest.qualificationStatus).toBe('pending');
+      } finally {
+        (globalThis as any).Buffer = originalBuffer;
+      }
+    });
   });
 });
 
