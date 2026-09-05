@@ -17,32 +17,100 @@ export const DEFAULT_OPM_SIMULATION_CONFIG: Readonly<OpmSimulationConfig> = Obje
   deterministicOrder: 'priority-then-source-order',
 });
 
-export function normalizeOpmSimulationConfig(
+export const OPM_SIMULATION_BOUNDS = Object.freeze({
+  minTickMs: 1,
+  maxTickMs: 60000,
+  minMaxTicks: 1,
+  maxMaxTicks: 1000000,
+  minMaxEventsPerTick: 1,
+  maxMaxEventsPerTick: 1024,
+});
+
+export type ParseOpmSimulationConfigResult =
+  | { ok: true; config: OpmSimulationConfig }
+  | { ok: false; diagnostics: string[] };
+
+export function parseOpmSimulationConfig(
   input?: Partial<OpmSimulationConfig> | null,
-): OpmSimulationConfig {
-  if (!input) {
-    return { ...DEFAULT_OPM_SIMULATION_CONFIG };
+): ParseOpmSimulationConfigResult {
+  if (!input || typeof input !== 'object') {
+    return {
+      ok: false,
+      diagnostics: ['Input configuration is missing or not an object.'],
+    };
   }
 
-  let tickMs = DEFAULT_OPM_SIMULATION_CONFIG.tickMs;
-  if (typeof input.tickMs === 'number' && Number.isFinite(input.tickMs) && input.tickMs > 0) {
-    tickMs = Math.round(input.tickMs);
+  const diagnostics: string[] = [];
+
+  const rawTickMs = input.tickMs !== undefined ? input.tickMs : DEFAULT_OPM_SIMULATION_CONFIG.tickMs;
+  if (
+    typeof rawTickMs !== 'number' ||
+    !Number.isFinite(rawTickMs) ||
+    !Number.isInteger(rawTickMs) ||
+    rawTickMs < OPM_SIMULATION_BOUNDS.minTickMs ||
+    rawTickMs > OPM_SIMULATION_BOUNDS.maxTickMs
+  ) {
+    diagnostics.push(
+      `tickMs must be an integer between ${OPM_SIMULATION_BOUNDS.minTickMs} and ${OPM_SIMULATION_BOUNDS.maxTickMs} (received: ${rawTickMs}).`,
+    );
   }
 
-  let maxTicks = DEFAULT_OPM_SIMULATION_CONFIG.maxTicks;
-  if (typeof input.maxTicks === 'number' && Number.isFinite(input.maxTicks) && input.maxTicks > 0) {
-    maxTicks = Math.round(input.maxTicks);
+  const rawMaxTicks = input.maxTicks !== undefined ? input.maxTicks : DEFAULT_OPM_SIMULATION_CONFIG.maxTicks;
+  if (
+    typeof rawMaxTicks !== 'number' ||
+    !Number.isFinite(rawMaxTicks) ||
+    !Number.isInteger(rawMaxTicks) ||
+    rawMaxTicks < OPM_SIMULATION_BOUNDS.minMaxTicks ||
+    rawMaxTicks > OPM_SIMULATION_BOUNDS.maxMaxTicks
+  ) {
+    diagnostics.push(
+      `maxTicks must be an integer between ${OPM_SIMULATION_BOUNDS.minMaxTicks} and ${OPM_SIMULATION_BOUNDS.maxMaxTicks} (received: ${rawMaxTicks}).`,
+    );
   }
 
-  let maxEventsPerTick = DEFAULT_OPM_SIMULATION_CONFIG.maxEventsPerTick;
-  if (typeof input.maxEventsPerTick === 'number' && Number.isFinite(input.maxEventsPerTick) && input.maxEventsPerTick > 0) {
-    maxEventsPerTick = Math.round(input.maxEventsPerTick);
+  const rawMaxEvents = input.maxEventsPerTick !== undefined ? input.maxEventsPerTick : DEFAULT_OPM_SIMULATION_CONFIG.maxEventsPerTick;
+  if (
+    typeof rawMaxEvents !== 'number' ||
+    !Number.isFinite(rawMaxEvents) ||
+    !Number.isInteger(rawMaxEvents) ||
+    rawMaxEvents < OPM_SIMULATION_BOUNDS.minMaxEventsPerTick ||
+    rawMaxEvents > OPM_SIMULATION_BOUNDS.maxMaxEventsPerTick
+  ) {
+    diagnostics.push(
+      `maxEventsPerTick must be an integer between ${OPM_SIMULATION_BOUNDS.minMaxEventsPerTick} and ${OPM_SIMULATION_BOUNDS.maxMaxEventsPerTick} (received: ${rawMaxEvents}).`,
+    );
+  }
+
+  if (
+    input.deterministicOrder !== undefined &&
+    input.deterministicOrder !== 'priority-then-source-order'
+  ) {
+    diagnostics.push(
+      `deterministicOrder must be 'priority-then-source-order' (received: ${String(input.deterministicOrder)}).`,
+    );
+  }
+
+  if (diagnostics.length > 0) {
+    return { ok: false, diagnostics };
   }
 
   return {
-    tickMs,
-    maxTicks,
-    maxEventsPerTick,
-    deterministicOrder: 'priority-then-source-order',
+    ok: true,
+    config: {
+      tickMs: rawTickMs,
+      maxTicks: rawMaxTicks,
+      maxEventsPerTick: rawMaxEvents,
+      deterministicOrder: 'priority-then-source-order',
+    },
   };
+}
+
+export function normalizeOpmSimulationConfig(
+  input?: Partial<OpmSimulationConfig> | null,
+): OpmSimulationConfig {
+  const parsed = parseOpmSimulationConfig(input);
+  if (parsed.ok) {
+    return parsed.config;
+  }
+  return { ...DEFAULT_OPM_SIMULATION_CONFIG };
 }

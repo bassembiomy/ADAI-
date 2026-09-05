@@ -31,7 +31,12 @@ import { OpmDiagnosticsBadge } from './OpmDiagnosticsBadge';
 import type { OpmSourceRef } from '../../engine/opm/executableTypes';
 import { convertOpmNodeType, convertOpmEdgeType, type OpmNodeKind } from './OpmMigrations';
 import { validateOpmPortConnection } from './OpmPortContracts';
-import { normalizeOpmSimulationConfig } from './OpmSimulationConfig';
+import {
+  normalizeOpmSimulationConfig,
+  parseOpmSimulationConfig,
+  DEFAULT_OPM_SIMULATION_CONFIG,
+  type OpmSimulationConfig,
+} from './OpmSimulationConfig';
 import { importSysmlToOpm } from './SysmlToOpmImporter';
 import { validateOpmConnection } from './OpmLinkRules';
 import { layoutOpmGraph } from './OpmAutoLayout';
@@ -157,8 +162,10 @@ interface EntropyWorkspaceProps {
   initialEdges?: AppEdge[];
   availableVariables: any[];
   onVariablesChange: (vars: any[]) => void;
-  tickMs: number;
+  tickMs?: number;
   onTickMsChange?: (tickMs: number) => void;
+  opmSimulationConfig?: OpmSimulationConfig;
+  onOpmSimulationConfigChange?: (config: OpmSimulationConfig) => void;
   onBack: () => void;
   onSave?: (nodes: AppNode[], edges: AppEdge[]) => void;
   onAddError?: (type: 'error' | 'warning' | 'info', message: string, source?: string) => void;
@@ -170,8 +177,10 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   initialEdges = [],
   availableVariables,
   onVariablesChange,
-  tickMs,
+  tickMs = 10,
   onTickMsChange,
+  opmSimulationConfig,
+  onOpmSimulationConfigChange,
   onBack,
   onSave,
   onAddError,
@@ -207,6 +216,52 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const [simLogs, setSimLogs] = useState<SimulationLog[]>([]);
   const [firingProcesses, setFiringProcesses] = useState<Set<string>>(new Set());
   const simStateRef = useRef<OpmSimulationState>(createSimulationState());
+
+  // Isolated OPM Simulation Configuration
+  const activeOpmConfig: OpmSimulationConfig = useMemo(() => {
+    return normalizeOpmSimulationConfig(opmSimulationConfig);
+  }, [opmSimulationConfig]);
+
+  const [configDraft, setConfigDraft] = useState<{
+    tickMs: number;
+    maxTicks: number;
+    maxEventsPerTick: number;
+  }>({
+    tickMs: activeOpmConfig.tickMs,
+    maxTicks: activeOpmConfig.maxTicks,
+    maxEventsPerTick: activeOpmConfig.maxEventsPerTick,
+  });
+  const [configErrors, setConfigErrors] = useState<string[]>([]);
+
+  useEffect(() => {
+    setConfigDraft({
+      tickMs: activeOpmConfig.tickMs,
+      maxTicks: activeOpmConfig.maxTicks,
+      maxEventsPerTick: activeOpmConfig.maxEventsPerTick,
+    });
+    setConfigErrors([]);
+  }, [activeOpmConfig]);
+
+  const handleConfigFieldChange = useCallback((field: keyof OpmSimulationConfig, rawValue: string | number) => {
+    const num = typeof rawValue === 'number' ? rawValue : Number(rawValue);
+    const nextDraft = { ...configDraft, [field]: num };
+    setConfigDraft(nextDraft);
+
+    const parsed = parseOpmSimulationConfig({
+      ...activeOpmConfig,
+      ...nextDraft,
+    });
+
+    if (parsed.ok) {
+      setConfigErrors([]);
+      if (onOpmSimulationConfigChange) {
+        onOpmSimulationConfigChange(parsed.config);
+      }
+    } else {
+      setConfigErrors(parsed.diagnostics);
+      // Keep previous valid config active; do NOT update active config
+    }
+  }, [configDraft, activeOpmConfig, onOpmSimulationConfigChange]);
   
   // Selected Node Details
   const [selectedNode, setSelectedNode] = useState<AppNode | null>(null);
@@ -883,16 +938,16 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     result.logs.forEach(l => logSim(l.type, l.message));
   }, [nodes, edges]);
 
-  // Handle simulation timer
+  // Handle simulation timer (uses isolated OPM tickMs)
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
     if (simRunning) {
-      interval = setInterval(runSimTick, tickMs);
+      interval = setInterval(runSimTick, activeOpmConfig.tickMs);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [simRunning, tickMs, runSimTick]);
+  }, [simRunning, activeOpmConfig.tickMs, runSimTick]);
 
   const toggleSimulation = () => {
     if (!simRunning && simStateRef.current.tick === 0) {
@@ -1229,18 +1284,19 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             </span>
             <span className="w-px h-4 bg-[#333]"></span>
             <div className="flex items-center gap-1.5">
-              <span className="text-[8px] uppercase tracking-wider font-extrabold text-[#777]">Interval:</span>
+              <span className="text-[8px] uppercase tracking-wider font-extrabold text-[#777]">OPM Tick:</span>
               <input
+                data-testid="opm-toolbar-tick-slider"
                 type="range"
-                min="100"
+                min="10"
                 max="2000"
-                step="100"
-                value={tickMs}
-                onChange={(e) => onTickMsChange && onTickMsChange(Number(e.target.value))}
+                step="10"
+                value={activeOpmConfig.tickMs}
+                onChange={(e) => handleConfigFieldChange('tickMs', Number(e.target.value))}
                 className="w-16 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                title="Simulation speed interval (ms)"
+                title="OPM Simulation speed interval (ms)"
               />
-              <span className="text-[9px] text-[#888] font-mono w-9 text-right">{tickMs}ms</span>
+              <span className="text-[9px] text-[#888] font-mono w-9 text-right">{activeOpmConfig.tickMs}ms</span>
             </div>
           </div>
 
@@ -1848,13 +1904,17 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             <div className="bg-[#1a1a1a] rounded-lg border border-[#2d2d2d] p-3 flex items-center justify-between shadow-md shrink-0">
               <div className="flex flex-col">
                 <span className="text-[10px] text-gray-500 uppercase font-black">Simulation Status</span>
-                <span className={`text-xs font-extrabold flex items-center gap-1.5 ${simRunning ? 'text-green-400' : 'text-amber-400'}`}>
+                <span data-testid="opm-sim-status" className={`text-xs font-extrabold flex items-center gap-1.5 ${simRunning ? 'text-green-400' : 'text-amber-400'}`}>
                   <span className={`w-2 h-2 rounded-full ${simRunning ? 'bg-green-400 animate-ping' : 'bg-amber-400'}`} />
                   {simRunning ? 'ACTIVE RUNNING' : 'PAUSED'}
+                </span>
+                <span data-testid="opm-sim-time" className="text-[10px] text-gray-400 font-mono mt-0.5">
+                  Simulated Time: {simStateRef.current.tick * activeOpmConfig.tickMs}ms (Tick {simStateRef.current.tick})
                 </span>
               </div>
               <div className="flex gap-1 bg-black/40 p-1 rounded border border-white/5">
                 <button
+                  data-testid="opm-sim-toggle"
                   onClick={toggleSimulation}
                   className={`p-1.5 rounded transition-all ${simRunning ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-green-500/20 text-green-400 border border-green-500/30'}`}
                   title={simRunning ? 'Pause' : 'Start'}
@@ -1862,6 +1922,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   {simRunning ? <Pause size={12} /> : <Play size={12} />}
                 </button>
                 <button
+                  data-testid="opm-sim-step"
                   onClick={runSimTick}
                   className="p-1.5 text-sky-400 hover:bg-sky-950/40 rounded transition-all"
                   title="Step Simulation"
@@ -1869,6 +1930,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   <ArrowRight size={12} />
                 </button>
                 <button
+                  data-testid="opm-sim-reset"
                   onClick={resetSimulation}
                   className="p-1.5 text-amber-400 hover:bg-amber-950/40 rounded transition-all"
                   title="Reset"
@@ -1876,6 +1938,78 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   <RotateCcw size={12} />
                 </button>
               </div>
+            </div>
+
+            {/* OPM Isolated Simulation Configuration */}
+            <div className="bg-[#181818] rounded-lg border border-[#2d2d2d] p-3 flex flex-col gap-2.5 shadow-md shrink-0">
+              <div className="flex items-center justify-between border-b border-[#2d2d2d] pb-1">
+                <span className="text-[10px] text-orange-400 uppercase font-extrabold tracking-wider">
+                  OPM Simulation Settings (Isolated)
+                </span>
+                <span className="text-[9px] text-gray-500 font-mono">
+                  {activeOpmConfig.tickMs}ms / tick
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[9px] text-gray-400 uppercase font-semibold">Tick (ms)</label>
+                  <input
+                    data-testid="opm-sim-config-tick"
+                    type="number"
+                    min="1"
+                    max="60000"
+                    step="1"
+                    value={configDraft.tickMs ?? ''}
+                    onChange={(e) => handleConfigFieldChange('tickMs', e.target.value)}
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-1.5 py-1 text-xs font-mono text-white outline-none focus:border-orange-500/60"
+                  />
+                  <span className="text-[8px] text-gray-500">1–60,000</span>
+                </div>
+
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[9px] text-gray-400 uppercase font-semibold">Max Ticks</label>
+                  <input
+                    data-testid="opm-sim-config-maxticks"
+                    type="number"
+                    min="1"
+                    max="1000000"
+                    step="1"
+                    value={configDraft.maxTicks ?? ''}
+                    onChange={(e) => handleConfigFieldChange('maxTicks', e.target.value)}
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-1.5 py-1 text-xs font-mono text-white outline-none focus:border-orange-500/60"
+                  />
+                  <span className="text-[8px] text-gray-500">1–1,000,000</span>
+                </div>
+
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[9px] text-gray-400 uppercase font-semibold">Max Events</label>
+                  <input
+                    data-testid="opm-sim-config-maxevents"
+                    type="number"
+                    min="1"
+                    max="1024"
+                    step="1"
+                    value={configDraft.maxEventsPerTick ?? ''}
+                    onChange={(e) => handleConfigFieldChange('maxEventsPerTick', e.target.value)}
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-1.5 py-1 text-xs font-mono text-white outline-none focus:border-orange-500/60"
+                  />
+                  <span className="text-[8px] text-gray-500">1–1,024</span>
+                </div>
+              </div>
+
+              {/* Inline Validation Diagnostics */}
+              {configErrors.length > 0 && (
+                <div
+                  data-testid="opm-sim-config-errors"
+                  className="bg-red-950/40 border border-red-900/60 rounded p-1.5 text-[10px] text-red-300 space-y-0.5"
+                >
+                  <div className="font-bold text-red-400 uppercase text-[9px]">Invalid Configuration (Previous Active):</div>
+                  {configErrors.map((err, i) => (
+                    <div key={i}>• {err}</div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Quick Initialize Button */}
