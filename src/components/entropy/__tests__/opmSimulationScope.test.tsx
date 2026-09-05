@@ -8,13 +8,13 @@ describe('OpmSimulationScope', () => {
   const mockNodes: AppNode[] = [
     {
       id: 'proc-1',
-      type: 'process',
+      type: 'opmProcess',
       position: { x: 0, y: 0 },
       data: { id: 'proc-1', name: 'WaterBoiling', type: 'process', isFiring: true } as any,
     },
     {
       id: 'obj-1',
-      type: 'object',
+      type: 'opmObject',
       position: { x: 100, y: 100 },
       data: {
         id: 'obj-1',

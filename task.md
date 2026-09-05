@@ -22,7 +22,7 @@
 - [x] Step 5: Commit changes.
 
 ## Task 4: Full Test Suite, Accessibility, and Production Build Verification
-- [ ] Step 1: Run complete vitest test suite across all entropy and engine tests (`npx vitest run src/components/entropy/__tests__ src/engine/opm/__tests__`).
-- [ ] Step 2: Run TypeScript typecheck (`npx tsc --noEmit`).
-- [ ] Step 3: Run production build (`npm run build`).
-- [ ] Step 4: Commit final verification changes.
+- [x] Step 1: Run complete vitest test suite across all entropy and engine tests (`npx vitest run src/components/entropy/__tests__ src/engine/opm/__tests__`).
+- [x] Step 2: Run TypeScript typecheck (`npx tsc --noEmit`).
+- [x] Step 3: Run production build (`npm run build`).
+- [x] Step 4: Commit final verification changes.
