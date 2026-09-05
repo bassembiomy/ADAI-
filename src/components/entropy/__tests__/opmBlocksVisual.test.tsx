@@ -12,12 +12,14 @@ describe('opm bold blocks', () => {
     expect(html).toContain('Pump');
   });
   it('active state renders solid orange fill', () => {
-    const html = renderToStaticMarkup(<ReactFlowProvider><OPMStateNode id="s" selected={false} data={{ name: 'On', type: 'state', physical: false, isActive: true } as any} /></ReactFlowProvider>);
+    const props: any = { id: 's', selected: false, data: { name: 'On', type: 'state', physical: false, isActive: true } };
+    const html = renderToStaticMarkup(<ReactFlowProvider><OPMStateNode {...props} /></ReactFlowProvider>);
     expect(html).toContain('On');
     expect(html).toMatch(/from-orange-500|bg-orange-500/);
   });
   it('selected block carries amber glow ring', () => {
-    const html = renderToStaticMarkup(<ReactFlowProvider><OPMProcessNode id="p" selected data={{ name: 'Heat', type: 'process', physical: false, inputs: [], outputs: [] } as any} /></ReactFlowProvider>);
+    const props: any = { id: 'p', selected: true, data: { name: 'Heat', type: 'process', physical: false, inputs: [], outputs: [] } };
+    const html = renderToStaticMarkup(<ReactFlowProvider><OPMProcessNode {...props} /></ReactFlowProvider>);
     expect(html).toContain('ring-amber-300/40');
   });
 });
