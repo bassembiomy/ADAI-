@@ -911,3 +911,79 @@ export const xb6StepFixture = (): StateMachineModelV5 => ({
   ],
 });
 
+export const reviewedTwoStateFixture = (): StateMachineModelV5 => ({
+  schemaVersion: CURRENT_SM_SCHEMA_VERSION,
+  tickMs: 500,
+  safetyMode: true,
+  verification: {
+    ...defaultSMVerificationConfig(),
+    tickToleranceMs: 50,
+    invalidInputPolicies: {
+      read_x: 'clamp',
+    },
+  },
+  states: [
+    state('State_1', { name: 'State_1', autostart: true, priority: 1 }),
+    state('State_2', { name: 'State_2', autostart: false, priority: 2, entry: 'y = 10;' }),
+  ],
+  junctions: [],
+  transitions: [
+    transition('trans_1_2', 'State_1', 'State_2', { condition: 'x == true' }),
+  ],
+  layers: [
+    layer('root', null, 'OR', ['State_1', 'State_2'], ['trans_1_2']),
+  ],
+  variables: [
+    { id: 'x', name: 'x', type: 'bool', initialValue: 'false', currentValue: false, visibleInScope: true },
+    { id: 'y', name: 'y', type: 'int', initialValue: '0', currentValue: 0, visibleInScope: true },
+  ],
+  hilConfig: {
+    enabled: true,
+    target: 'Generic',
+    clockSpeed: 1,
+    commPort: '',
+    baudRate: 115200,
+    channels: [
+      {
+        id: 'chan_x',
+        name: 'Channel_X',
+        peripheral: 'GPIO',
+        pin: '0',
+        direction: 'In',
+        dataType: 'bool',
+        rangeMin: 0,
+        rangeMax: 1,
+        scalingFactor: 1,
+        unit: '',
+      },
+      {
+        id: 'chan_y',
+        name: 'Channel_Y',
+        peripheral: 'GPIO',
+        pin: '1',
+        direction: 'Out',
+        dataType: 'int32_t',
+        rangeMin: 0,
+        rangeMax: 100,
+        scalingFactor: 1,
+        unit: '',
+      },
+    ],
+    mappings: [
+      {
+        id: 'read_x',
+        adiaVarId: 'x',
+        channelId: 'chan_x',
+        direction: 'read',
+      },
+      {
+        id: 'write_y',
+        adiaVarId: 'y',
+        channelId: 'chan_y',
+        direction: 'write',
+        safeValue: 0,
+      },
+    ],
+  },
+});
+
