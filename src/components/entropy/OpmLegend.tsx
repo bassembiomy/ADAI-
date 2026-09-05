@@ -91,6 +91,39 @@ export const OpmLegend: React.FC = () => {
       >
         ISO 19450 Notation <ChevronDown size={12} />
       </button>
+      <div className="mb-1.5">
+        <div className="text-[8px] uppercase text-[#666] font-bold mb-0.5">Blocks</div>
+        <div className="flex items-center gap-1.5 py-[1px]">
+          <span className="h-3 w-8 shrink-0 rounded-[2px] border-2 border-emerald-500 bg-emerald-950/80" />
+          <span className="text-[9px] text-[#bbb]">Object</span>
+        </div>
+        <div className="flex items-center gap-1.5 py-[1px]">
+          <span className="h-3 w-8 shrink-0 rounded-full border-2 border-sky-500 bg-sky-950/80" />
+          <span className="text-[9px] text-[#bbb]">Process</span>
+        </div>
+        <div className="flex items-center gap-1.5 py-[1px]">
+          <span className="h-3 w-8 shrink-0 rounded-full bg-gradient-to-r from-orange-500 to-amber-500" />
+          <span className="text-[9px] text-[#bbb]">State (active)</span>
+        </div>
+        <div className="flex items-center gap-1.5 py-[1px]">
+          <span className="h-3 w-8 shrink-0 rounded-[2px] border-2 border-dashed border-purple-500 bg-purple-950/60" />
+          <span className="text-[9px] text-[#bbb]">Requirement</span>
+        </div>
+      </div>
+      <div className="mb-1.5">
+        <div className="text-[8px] uppercase text-[#666] font-bold mb-0.5">Ports</div>
+        <div className="flex items-center gap-1.5 py-[1px]">
+          <span className="rounded border border-white/10 bg-black/85 px-1.5 py-px text-[8px] font-bold text-white">Consume</span>
+          <span className="text-[9px] text-[#bbb]">Port pill (always labeled)</span>
+        </div>
+      </div>
+      <div className="mb-1.5">
+        <div className="text-[8px] uppercase text-[#666] font-bold mb-0.5">Links</div>
+        <div className="flex items-center gap-1.5 py-[1px]">
+          <span className="rounded-full border border-sky-500/40 bg-[#0d0d0d] px-1.5 py-px text-[8px] font-bold text-sky-300">⇢ Result</span>
+          <span className="text-[9px] text-[#bbb]">Midpoint type chip</span>
+        </div>
+      </div>
       {SECTIONS.map(s => (
         <div key={s.title} className="mb-1.5">
           <div className="text-[8px] uppercase text-[#666] font-bold mb-0.5">{s.title}</div>

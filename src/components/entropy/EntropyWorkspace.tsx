@@ -27,6 +27,8 @@ import {
 } from './OpmSimulationEngine';
 import { SmartShowPanel } from './SmartShowPanel';
 import { OpmLegend } from './OpmLegend';
+import { OpmDockShell } from './OpmDockShell';
+import { loadDocks, saveDocks, PAGE_PRESETS, type OpmDocks } from './OpmDockState';
 import { OpmDiagnosticsBadge } from './OpmDiagnosticsBadge';
 import type { OpmSourceRef } from '../../engine/opm/executableTypes';
 import { convertOpmNodeType, convertOpmEdgeType, type OpmNodeKind } from './OpmMigrations';
@@ -279,6 +281,20 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const [selectedEdge, setSelectedEdge] = useState<AppEdge | null>(null);
   const [diagnosticNavMessage, setDiagnosticNavMessage] = useState<string | null>(null);
   const [connectSourceId, setConnectSourceId] = useState<string | null>(null);
+  const [docks, setDocks] = useState<OpmDocks>(loadDocks);
+
+  // --- Dock page presets: page switch applies the preset + its right tab ---
+  const handleDocksChange = (d: OpmDocks) => {
+    if (d.page !== docks.page) {
+      const preset = PAGE_PRESETS[d.page];
+      setDocks(preset);
+      saveDocks(preset);
+      setRightTab(preset.rightTab as typeof rightTab);
+    } else {
+      setDocks(d);
+      saveDocks(d);
+    }
+  };
 
   const normalizedOpmConfig = useMemo(() => {
     return normalizeOpmSimulationConfig({ tickMs });
@@ -439,7 +455,15 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         return parent.data.parentId === activeParentId;
       }
       return n.data.parentId === activeParentId;
-    }).map(n => ({ ...n, data: { ...n.data, composerValid: validTargets.includes(n.id) } as typeof n.data }));
+    }).map(n => {
+      // --- Link composer glow: valid drop targets glow green during connect drag ---
+      const composerValid = connectSourceId !== null && validTargets.includes(n.id);
+      return {
+        ...n,
+        ...(composerValid ? { style: { ...(n.style ?? {}), boxShadow: '0 0 0 2px rgba(34,197,94,0.9), 0 0 22px rgba(34,197,94,0.5)' } } : {}),
+        data: { ...n.data, composerValid } as typeof n.data,
+      };
+    });
   }, [nodes, activeParentId, validTargets]);
 
   const filteredEdges = useMemo(() => {
@@ -1196,9 +1220,126 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const selectedNodePortsCount = numIn + numOut;
 
   return (
-    <div className="flex h-full w-full bg-[#0d0d0d] text-[#e0e0e0] font-sans">
-      {/* 1. Left canvas and sidebar */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden border-r border-[#222]">
+    <div className="h-full w-full bg-[#0d0d0d] text-[#e0e0e0] font-sans">
+      <OpmDockShell
+        docks={docks}
+        onDocksChange={handleDocksChange}
+        left={
+          <div className="flex flex-col gap-2 p-2">
+            {/* Tool Dock (moved verbatim into left dock slot; wrapper adapted from floating to docked) */}
+            <div className="bg-[#161616]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-2 flex flex-col gap-2 shadow-xl" role="toolbar" aria-label="OPM Canvas Tools">
+              <span className="text-[8px] uppercase tracking-wider font-extrabold text-orange-400/80 mb-0.5 text-center">Tools</span>
+              <button
+                onClick={() => setActiveTool('select')}
+                aria-label="Select tool"
+                data-testid="opm-tool-select"
+                className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
+                  activeTool === 'select' ? 'bg-[#f97316]/20 border border-[#f97316] text-[#f97316] font-bold shadow' : 'hover:bg-[#222] text-[#999]'
+                }`}
+                title="Select / Move elements"
+              >
+                <span aria-hidden="true">🖱️</span> <span className="text-[8px]">Select</span>
+              </button>
+              <button
+                onClick={() => setActiveTool('object')}
+                aria-label="Add Object"
+                data-testid="opm-tool-object"
+                className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                  activeTool === 'object' ? 'bg-emerald-950/60 border border-emerald-400 text-emerald-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
+                }`}
+                title="Click canvas to place an Object"
+              >
+                <span aria-hidden="true">🟢</span> <span className="text-[8px]">Object</span>
+              </button>
+              <button
+                onClick={() => setActiveTool('process')}
+                aria-label="Add Process"
+                data-testid="opm-tool-process"
+                className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
+                  activeTool === 'process' ? 'bg-sky-950/60 border border-sky-400 text-sky-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
+                }`}
+                title="Click canvas to place a Process"
+              >
+                <span aria-hidden="true">🔵</span> <span className="text-[8px]">Process</span>
+              </button>
+              <button
+                onClick={() => setActiveTool('state')}
+                aria-label="Add State"
+                data-testid="opm-tool-state"
+                className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
+                  activeTool === 'state' ? 'bg-orange-950/60 border border-orange-400 text-orange-300 font-bold shadow animate-pulse' : 'hover:bg-[#222] text-[#999]'
+                }`}
+                title="Click an Object to add a State inside it"
+              >
+                <span aria-hidden="true">🔶</span> <span className="text-[8px]">State</span>
+              </button>
+              <button
+                onClick={() => setActiveTool('requirement')}
+                aria-label="Add Requirement"
+                data-testid="opm-tool-requirement"
+                className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 ${
+                  activeTool === 'requirement' ? 'bg-purple-950/60 border border-purple-400 text-purple-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
+                }`}
+                title="Click canvas to place a Requirement"
+              >
+                <span aria-hidden="true">📜</span> <span className="text-[8px]">Req</span>
+              </button>
+
+              <div className="h-px bg-[#333] my-1"></div>
+              <span className="text-[8px] uppercase tracking-wider font-extrabold text-sky-400/80 text-center mb-0.5">Link Mode</span>
+
+              <select
+                value={activeLinkType}
+                onChange={(e) => setActiveLinkType(e.target.value as OPMLinkType)}
+                aria-label="Select link type"
+                data-testid="opm-link-mode-select"
+                className="bg-[#0f0f0f] border border-[#333] rounded text-[10px] py-1 px-1.5 outline-none text-[#ccc] w-20 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+              >
+                <optgroup label="Procedural" className="bg-[#141414]">
+                  <option value="consumption">Consumption</option>
+                  <option value="result">Result</option>
+                  <option value="effect">Effect</option>
+                  <option value="agent">Agent</option>
+                  <option value="instrument">Instrument</option>
+                  <option value="trigger">Trigger</option>
+                  <option value="condition">Condition</option>
+                </optgroup>
+                <optgroup label="Structural" className="bg-[#141414]">
+                  <option value="aggregation">Aggregation</option>
+                  <option value="generalization">Generalization</option>
+                  <option value="exhibition">Exhibition</option>
+                </optgroup>
+                <optgroup label="Traceability" className="bg-[#141414]">
+                  <option value="satisfies">Satisfies</option>
+                  <option value="verifies">Verifies</option>
+                </optgroup>
+              </select>
+            </div>
+            {/* Model outline: zoom path navigator + in-scope counts */}
+            <div className="rounded-lg border border-[#2d2d2d] bg-[#161616]/95 p-2 shadow-xl">
+              <span className="mb-1 block text-center text-[8px] font-extrabold uppercase tracking-wider text-orange-400/80">Outline</span>
+              <div className="flex flex-col gap-1">
+                {zoomPath.map((zp, i) => {
+                  const label = zp === 'root' ? 'System Context' : nodes.find(n => n.id === zp)?.data.name || zp;
+                  return (
+                    <button
+                      key={zp}
+                      onClick={() => setZoomPath(zoomPath.slice(0, i + 1))}
+                      className={`truncate rounded px-1.5 py-1 text-left text-[10px] transition-colors ${i === zoomPath.length - 1 ? 'bg-orange-950/40 font-bold text-orange-300' : 'text-[#888] hover:bg-[#222]'}`}
+                    >
+                      {i > 0 ? '› ' : ''}{label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-1.5 border-t border-[#2d2d2d] pt-1.5 font-mono text-[9px] text-[#666]">
+                {nodes.filter(n => n.data.parentId === activeParentId).length} elements · {filteredEdges.length} links
+              </div>
+            </div>
+          </div>
+        }
+        center={
+          <div className="flex h-full min-h-0 flex-col">
         {/* Navigation / Control bar */}
         <div className="h-12 bg-[#141414] border-b border-[#222] px-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -1357,100 +1498,11 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           </div>
         </div>
 
-        {/* Workspace core body */}
-        <div className="flex-1 flex overflow-hidden relative">
-          {/* Tool Dock (Left floating bar) */}
-          <div className="absolute left-3 top-3 z-10 bg-[#161616]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-2 flex flex-col gap-2 shadow-xl" role="toolbar" aria-label="OPM Canvas Tools">
-            <span className="text-[8px] uppercase tracking-wider font-extrabold text-orange-400/80 mb-0.5 text-center">Tools</span>
-            <button
-              onClick={() => setActiveTool('select')}
-              aria-label="Select tool"
-              data-testid="opm-tool-select"
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
-                activeTool === 'select' ? 'bg-[#f97316]/20 border border-[#f97316] text-[#f97316] font-bold shadow' : 'hover:bg-[#222] text-[#999]'
-              }`}
-              title="Select / Move elements"
-            >
-              <span aria-hidden="true">🖱️</span> <span className="text-[8px]">Select</span>
-            </button>
-            <button
-              onClick={() => setActiveTool('object')}
-              aria-label="Add Object"
-              data-testid="opm-tool-object"
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
-                activeTool === 'object' ? 'bg-emerald-950/60 border border-emerald-400 text-emerald-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
-              }`}
-              title="Click canvas to place an Object"
-            >
-              <span aria-hidden="true">🟢</span> <span className="text-[8px]">Object</span>
-            </button>
-            <button
-              onClick={() => setActiveTool('process')}
-              aria-label="Add Process"
-              data-testid="opm-tool-process"
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
-                activeTool === 'process' ? 'bg-sky-950/60 border border-sky-400 text-sky-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
-              }`}
-              title="Click canvas to place a Process"
-            >
-              <span aria-hidden="true">🔵</span> <span className="text-[8px]">Process</span>
-            </button>
-            <button
-              onClick={() => setActiveTool('state')}
-              aria-label="Add State"
-              data-testid="opm-tool-state"
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
-                activeTool === 'state' ? 'bg-orange-950/60 border border-orange-400 text-orange-300 font-bold shadow animate-pulse' : 'hover:bg-[#222] text-[#999]'
-              }`}
-              title="Click an Object to add a State inside it"
-            >
-              <span aria-hidden="true">🔶</span> <span className="text-[8px]">State</span>
-            </button>
-            <button
-              onClick={() => setActiveTool('requirement')}
-              aria-label="Add Requirement"
-              data-testid="opm-tool-requirement"
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 ${
-                activeTool === 'requirement' ? 'bg-purple-950/60 border border-purple-400 text-purple-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
-              }`}
-              title="Click canvas to place a Requirement"
-            >
-              <span aria-hidden="true">📜</span> <span className="text-[8px]">Req</span>
-            </button>
-
-            <div className="h-px bg-[#333] my-1"></div>
-            <span className="text-[8px] uppercase tracking-wider font-extrabold text-sky-400/80 text-center mb-0.5">Link Mode</span>
-            
-            <select
-              value={activeLinkType}
-              onChange={(e) => setActiveLinkType(e.target.value as OPMLinkType)}
-              aria-label="Select link type"
-              data-testid="opm-link-mode-select"
-              className="bg-[#0f0f0f] border border-[#333] rounded text-[10px] py-1 px-1.5 outline-none text-[#ccc] w-20 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
-            >
-              <optgroup label="Procedural" className="bg-[#141414]">
-                <option value="consumption">Consumption</option>
-                <option value="result">Result</option>
-                <option value="effect">Effect</option>
-                <option value="agent">Agent</option>
-                <option value="instrument">Instrument</option>
-                <option value="trigger">Trigger</option>
-                <option value="condition">Condition</option>
-              </optgroup>
-              <optgroup label="Structural" className="bg-[#141414]">
-                <option value="aggregation">Aggregation</option>
-                <option value="generalization">Generalization</option>
-                <option value="exhibition">Exhibition</option>
-              </optgroup>
-              <optgroup label="Traceability" className="bg-[#141414]">
-                <option value="satisfies">Satisfies</option>
-                <option value="verifies">Verifies</option>
-              </optgroup>
-            </select>
-          </div>
+          {/* Center canvas */}
+          <div className="relative min-h-0 flex-1">
 
           {/* React Flow Canvas */}
-          <div className="flex-1 h-full">
+          <div className="absolute inset-0">
             <ReactFlow
               proOptions={{ hideAttribution: true }}
               nodes={filteredNodes}
@@ -1504,10 +1556,14 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               </div>
             )}
           </div>
-
-          {/* Selected Node Properties Panel (Floating bottom-left) */}
+          </div>
+          </div>
+        }
+        right={
+          <div className="flex h-full flex-col gap-2 overflow-y-auto p-2">
+          {/* Selected Node Properties Panel (moved verbatim into right dock slot; wrapper adapted from floating to docked) */}
           {selectedNode && (
-            <div className="absolute right-4 top-4 z-10 w-72 bg-[#141414]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-3.5 shadow-xl flex flex-col gap-2.5 max-h-[85%] overflow-y-auto custom-scrollbar">
+            <div className="w-full shrink-0 bg-[#141414]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-3.5 shadow-xl flex flex-col gap-2.5 custom-scrollbar">
               <div className="flex items-center justify-between border-b border-[#333] pb-1.5 shrink-0">
                 <span className="text-xs uppercase font-extrabold tracking-wider text-orange-400">
                   Element Inspector
@@ -1812,9 +1868,9 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             </div>
           )}
 
-          {/* Selected Edge Inspector */}
+          {/* Selected Edge Inspector (moved verbatim into right dock slot; wrapper adapted from floating to docked) */}
           {selectedEdge && !selectedNode && (
-            <div className="absolute right-4 top-4 z-10 w-72 bg-[#141414]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-3.5 shadow-xl flex flex-col gap-2.5 max-h-[85%] overflow-y-auto custom-scrollbar">
+            <div className="w-full shrink-0 bg-[#141414]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-3.5 shadow-xl flex flex-col gap-2.5 custom-scrollbar">
               <div className="flex items-center justify-between border-b border-[#333] pb-1.5 shrink-0">
                 <span className="text-xs uppercase font-extrabold tracking-wider text-sky-400">
                   Link Inspector
@@ -1861,44 +1917,10 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               </div>
             </div>
           )}
-        </div>
-
-        {/* Bottom Simulation Logs console */}
-        <div className="h-40 bg-[#111] border-t border-[#222] flex flex-col shrink-0 overflow-hidden">
-          <div className="h-8 bg-[#181818] border-b border-[#222] px-4 flex items-center justify-between text-xs font-bold text-[#888]">
-            <span>SIMULATION CONSOLE</span>
-            <button
-              onClick={() => setSimLogs([])}
-              className="text-[#555] hover:text-[#bbb]"
-            >
-              Clear Logs
-            </button>
-          </div>
-          <div className="flex-1 p-2 font-mono text-[11px] overflow-y-auto space-y-0.5">
-            {simLogs.map((log, idx) => (
-              <div key={idx} className="flex gap-2">
-                <span className="text-[#555]">{log.timestamp}</span>
-                <span className={
-                  log.type === 'success' ? 'text-green-400' :
-                  log.type === 'error' ? 'text-red-400' :
-                  log.type === 'warning' ? 'text-amber-400' :
-                  'text-[#888]'
-                }>
-                  [{log.type.toUpperCase()}] {log.message}
-                </span>
-              </div>
-            ))}
-            {simLogs.length === 0 && (
-              <div className="h-full flex items-center justify-center text-[#555] italic">
-                Console idle. Start the simulation or trigger a process to see live execution traces.
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+        {/* Task 6: simulation console moved into the bottom dock slot (see below) */}
 
       {/* 2. Right Tabbed Panel (Simulation Monitor & OPL Editor & Smart Show) */}
-      <div className="w-96 flex flex-col h-full bg-[#141414] overflow-hidden border-l border-[#222]">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[#222] bg-[#141414]">
         {/* Tab Header */}
         <div className="h-12 border-b border-[#222] flex shrink-0 bg-[#181818]">
           <button
@@ -2213,80 +2235,16 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           </div>
         )}
 
-        {/* Tab Content 2: OPL Editor */}
+        {/* Tab Content 2: OPL Editor (moved verbatim into the bottom dock slot; stub keeps the tab) */}
         {rightTab === 'opl' && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="h-8 border-b border-[#222] px-4 flex items-center justify-between shrink-0 bg-[#181818]/60 text-xs text-[#888]">
-              <span>OPL Editor Mode</span>
-              {isEditingText ? (
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={applyOplChanges}
-                    className="px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded text-[10px] font-bold flex items-center gap-0.5 transition-colors"
-                    title="Apply Changes"
-                  >
-                    <Check size={10} /> Sync
-                  </button>
-                  <button
-                    onClick={() => {
-                      setIsEditingText(false);
-                      const generated = generateOpl(nodes, edges);
-                      setOplText(generated);
-                    }}
-                    className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded text-[10px] font-bold flex items-center gap-0.5 transition-colors"
-                    title="Discard Changes"
-                  >
-                    <X size={10} /> Cancel
-                  </button>
-                </div>
-              ) : (
-                <span className="text-[9px] px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded uppercase font-semibold tracking-wide">
-                  Auto-Sync
-                </span>
-              )}
-            </div>
-
-            {/* Text Area */}
-            <div className="flex-1 relative p-3">
-              <textarea
-                value={oplText}
-                onChange={(e) => {
-                  setOplText(e.target.value);
-                  setIsEditingText(true);
-                }}
-                placeholder="// Add OPL Sentences to represent system architecture..."
-                className="w-full h-full bg-[#0a0a0a] border border-[#2d2d2d] rounded-md p-3 outline-none text-[#cfd8dc] font-mono text-xs leading-relaxed resize-none focus:border-sky-500/50"
-              />
-
-              {isEditingText && (
-                <div className="absolute top-5 right-5 bg-orange-950/80 border border-orange-500 text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded shadow animate-pulse">
-                  Edit Mode Active
-                </div>
-              )}
-            </div>
-
-            {/* OPL Errors / Warnings Drawer */}
-            <div className="h-32 bg-[#0c0c0c] border-t border-[#222] flex flex-col shrink-0">
-              <div className="h-7 bg-[#111] px-3 flex items-center justify-between text-[10px] font-bold text-[#666]">
-                <span>SYNTAX CHECKER</span>
-                <span className={oplErrors.length > 0 ? 'text-red-400 font-extrabold' : 'text-green-500'}>
-                  {oplErrors.length > 0 ? `${oplErrors.length} Errors` : 'Grammar Valid ✓'}
-                </span>
-              </div>
-              <div className="flex-1 p-2 overflow-y-auto space-y-1">
-                {oplErrors.map((err, idx) => (
-                  <div key={idx} className="flex gap-2 text-xs font-mono">
-                    <span className="text-red-500 font-bold">[Line {err.line}]</span>
-                    <span className="text-[#ccc]">{err.message}</span>
-                  </div>
-                ))}
-                {oplErrors.length === 0 && (
-                  <div className="h-full flex items-center justify-center text-[10px] text-[#555] italic">
-                    No syntax warnings found. All OPL structures are correct.
-                  </div>
-                )}
-              </div>
-            </div>
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+            <span className="text-xs text-[#888]">The OPL editor now lives in the bottom dock, next to the simulation console.</span>
+            <button
+              onClick={() => handleDocksChange({ ...docks, bottom: true })}
+              className="px-2.5 py-1 text-[11px] border border-[#333] rounded hover:bg-[#222] text-[#ccc]"
+            >
+              Show bottom dock
+            </button>
           </div>
         )}
 
@@ -2342,6 +2300,119 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           </div>
         )}
       </div>
+          </div>
+        }
+        bottom={
+          <div className="flex h-full">
+            {/* Bottom Simulation Logs console (moved verbatim into bottom dock slot; wrapper adapted to dock pane) */}
+            <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#111]">
+              <div className="h-8 bg-[#181818] border-b border-[#222] px-4 flex items-center justify-between text-xs font-bold text-[#888]">
+                <span>SIMULATION CONSOLE</span>
+                <button
+                  onClick={() => setSimLogs([])}
+                  className="text-[#555] hover:text-[#bbb]"
+                >
+                  Clear Logs
+                </button>
+              </div>
+              <div className="flex-1 p-2 font-mono text-[11px] overflow-y-auto space-y-0.5">
+                {simLogs.map((log, idx) => (
+                  <div key={idx} className="flex gap-2">
+                    <span className="text-[#555]">{log.timestamp}</span>
+                    <span className={
+                      log.type === 'success' ? 'text-green-400' :
+                      log.type === 'error' ? 'text-red-400' :
+                      log.type === 'warning' ? 'text-amber-400' :
+                      'text-[#888]'
+                    }>
+                      [{log.type.toUpperCase()}] {log.message}
+                    </span>
+                  </div>
+                ))}
+                {simLogs.length === 0 && (
+                  <div className="h-full flex items-center justify-center text-[#555] italic">
+                    Console idle. Start the simulation or trigger a process to see live execution traces.
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* OPL Editor (moved verbatim into bottom dock slot; wrapper adapted to dock pane) */}
+            <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden border-l border-[#222]">
+              <div className="h-8 border-b border-[#222] px-4 flex items-center justify-between shrink-0 bg-[#181818]/60 text-xs text-[#888]">
+                <span>OPL Editor Mode</span>
+                {isEditingText ? (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={applyOplChanges}
+                      className="px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded text-[10px] font-bold flex items-center gap-0.5 transition-colors"
+                      title="Apply Changes"
+                    >
+                      <Check size={10} /> Sync
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsEditingText(false);
+                        const generated = generateOpl(nodes, edges);
+                        setOplText(generated);
+                      }}
+                      className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded text-[10px] font-bold flex items-center gap-0.5 transition-colors"
+                      title="Discard Changes"
+                    >
+                      <X size={10} /> Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-[9px] px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded uppercase font-semibold tracking-wide">
+                    Auto-Sync
+                  </span>
+                )}
+              </div>
+
+              {/* Text Area */}
+              <div className="flex-1 relative p-3 min-h-0">
+                <textarea
+                  value={oplText}
+                  onChange={(e) => {
+                    setOplText(e.target.value);
+                    setIsEditingText(true);
+                  }}
+                  placeholder="// Add OPL Sentences to represent system architecture..."
+                  className="w-full h-full bg-[#0a0a0a] border border-[#2d2d2d] rounded-md p-3 outline-none text-[#cfd8dc] font-mono text-xs leading-relaxed resize-none focus:border-sky-500/50"
+                />
+
+                {isEditingText && (
+                  <div className="absolute top-5 right-5 bg-orange-950/80 border border-orange-500 text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded shadow animate-pulse">
+                    Edit Mode Active
+                  </div>
+                )}
+              </div>
+
+              {/* OPL Errors / Warnings Drawer */}
+              <div className="h-32 bg-[#0c0c0c] border-t border-[#222] flex flex-col shrink-0">
+                <div className="h-7 bg-[#111] px-3 flex items-center justify-between text-[10px] font-bold text-[#666]">
+                  <span>SYNTAX CHECKER</span>
+                  <span className={oplErrors.length > 0 ? 'text-red-400 font-extrabold' : 'text-green-500'}>
+                    {oplErrors.length > 0 ? `${oplErrors.length} Errors` : 'Grammar Valid ✓'}
+                  </span>
+                </div>
+                <div className="flex-1 p-2 overflow-y-auto space-y-1">
+                  {oplErrors.map((err, idx) => (
+                    <div key={idx} className="flex gap-2 text-xs font-mono">
+                      <span className="text-red-500 font-bold">[Line {err.line}]</span>
+                      <span className="text-[#ccc]">{err.message}</span>
+                    </div>
+                  ))}
+                  {oplErrors.length === 0 && (
+                    <div className="h-full flex items-center justify-center text-[10px] text-[#555] italic">
+                      No syntax warnings found. All OPL structures are correct.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        }
+      />
     </div>
   );
 };
