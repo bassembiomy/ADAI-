@@ -31,6 +31,7 @@ import { OpmDiagnosticsBadge } from './OpmDiagnosticsBadge';
 import type { OpmSourceRef } from '../../engine/opm/executableTypes';
 import { convertOpmNodeType, convertOpmEdgeType, type OpmNodeKind } from './OpmMigrations';
 import { validateOpmPortConnection } from './OpmPortContracts';
+import { getValidTargetNodeIds } from './OpmLinkComposer';
 import {
   normalizeOpmSimulationConfig,
   parseOpmSimulationConfig,
@@ -277,6 +278,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const [opmArtifactState, setOpmArtifactState] = useState<OpmArtifactState>(createInitialArtifactState);
   const [selectedEdge, setSelectedEdge] = useState<AppEdge | null>(null);
   const [diagnosticNavMessage, setDiagnosticNavMessage] = useState<string | null>(null);
+  const [connectSourceId, setConnectSourceId] = useState<string | null>(null);
 
   const normalizedOpmConfig = useMemo(() => {
     return normalizeOpmSimulationConfig({ tickMs });
@@ -423,6 +425,9 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedNode, selectedEdge]);
 
+  // --- Smart link composer: valid targets for the in-progress connection ---
+  const validTargets = useMemo(() => connectSourceId ? getValidTargetNodeIds(nodes, edges, connectSourceId, activeLinkType) : [], [connectSourceId, nodes, edges, activeLinkType]);
+
   // --- Node Filtering based on Zoom ---
   const filteredNodes = useMemo(() => {
     return nodes.filter(n => {
@@ -434,8 +439,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         return parent.data.parentId === activeParentId;
       }
       return n.data.parentId === activeParentId;
-    });
-  }, [nodes, activeParentId]);
+    }).map(n => ({ ...n, data: { ...n.data, composerValid: validTargets.includes(n.id) } as typeof n.data }));
+  }, [nodes, activeParentId, validTargets]);
 
   const filteredEdges = useMemo(() => {
     return edges.filter(e => {
@@ -676,6 +681,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       const msg = verdict.reason || `Link rejected [${activeLinkType}]: invalid connection`;
       if (onAddError) onAddError('error', `OPM link rejected: ${msg}`, 'ENTROPY');
       logSim('error', `Link rejected [${activeLinkType}]: ${msg}`);
+      setDiagnosticNavMessage(msg);
+      window.setTimeout(() => setDiagnosticNavMessage(null), 1200);
       return;
     }
 
@@ -1452,6 +1459,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               isValidConnection={isValidConnection}
+              onConnectStart={(_, p) => setConnectSourceId(p.nodeId ?? null)}
+              onConnectEnd={() => setConnectSourceId(null)}
               onEdgeClick={(_, edge) => { setSelectedEdge(edge); setSelectedNode(null); }}
               onNodeDragStop={handleNodeDragStop}
               nodeTypes={nodeTypes}
