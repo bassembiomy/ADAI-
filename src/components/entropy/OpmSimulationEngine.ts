@@ -370,7 +370,15 @@ export interface OpmSimulationController {
     ok: boolean;
     diagnostics: OpmDiagnostic[];
   };
-  step(deltaMs?: number): OpmStepResult | null;
+  step(
+    input?:
+      | number
+      | {
+          deltaMs?: number;
+          events?: string[];
+          inputs?: Record<string, boolean | number | string>;
+        },
+  ): OpmStepResult | null;
   getSnapshot(): OpmStepResult | null;
 }
 
@@ -390,9 +398,19 @@ export function createOpmSimulationController(): OpmSimulationController {
       snapshot = null;
       return { ok: true, diagnostics: result.diagnostics };
     },
-    step(deltaMs = 10) {
-      if (!runtime || !Number.isFinite(deltaMs) || deltaMs <= 0) return snapshot;
-      snapshot = stepOpmRuntime(runtime, deltaMs);
+    step(input = 10) {
+      if (!runtime) return snapshot;
+      const res = stepOpmRuntime(runtime, input as any);
+      if (res.status === 'error' && snapshot !== null) {
+        snapshot = {
+          ...snapshot,
+          status: 'error',
+          diagnostics: [...res.diagnostics],
+          diagnosticsDelta: [...res.diagnosticsDelta],
+        };
+        return snapshot;
+      }
+      snapshot = res;
       return snapshot;
     },
     getSnapshot() {

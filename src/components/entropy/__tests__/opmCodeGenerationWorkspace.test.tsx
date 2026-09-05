@@ -18,6 +18,7 @@ import { compileExecutableOpm } from '../../../engine/opm/pipeline';
 import { makeApplianceFixture } from '../../../engine/opm/fixtures';
 
 const ALL_LIFECYCLES: OpmArtifactLifecycle[] = [
+  'draft',
   'edited',
   'validated',
   'generated',
@@ -73,7 +74,7 @@ describe('OpmCodeGenerationWorkspace lifecycle', () => {
     expect(failed.lifecycle).toBe('failed');
     expect(failed.errors).toEqual(['boom']);
 
-    expect(ALL_LIFECYCLES).toHaveLength(6);
+    expect(ALL_LIFECYCLES).toHaveLength(7);
   });
 
   it('semantic edits invalidate verification, layout-only edits do not', () => {
@@ -100,7 +101,7 @@ describe('OpmCodeGenerationWorkspace lifecycle', () => {
     expect(edited.fingerprint).not.toBe(fingerprint);
     const afterSemantic = applyModelEdit(verified, edited.fingerprint);
     expect(afterSemantic).not.toBe(verified);
-    expect(afterSemantic.lifecycle).toBe('edited');
+    expect(afterSemantic.lifecycle).toBe('draft');
     expect(afterSemantic.verifiedFingerprint).toBeNull();
     expect(afterSemantic.evidence).toBeNull();
   });
@@ -136,9 +137,9 @@ describe('OpmCodeGenerationWorkspace lifecycle', () => {
     const staleVerified: OpmArtifactState = { ...verified, lifecycle: 'verified', currentFingerprint: `${fingerprint}-stale` };
     expect(canDownload(staleVerified)).toBe(false);
 
-    // Stale generation invalidated back to edited.
+    // Stale generation invalidated back to draft.
     const invalidated = applyModelEdit(verified, `${fingerprint}-stale`);
-    expect(invalidated.lifecycle).toBe('edited');
+    expect(invalidated.lifecycle).toBe('draft');
     expect(canDownload(invalidated)).toBe(false);
   });
 });

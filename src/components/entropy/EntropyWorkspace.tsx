@@ -27,6 +27,11 @@ import {
 } from './OpmSimulationEngine';
 import { SmartShowPanel } from './SmartShowPanel';
 import { OpmLegend } from './OpmLegend';
+import { OpmDiagnosticsBadge } from './OpmDiagnosticsBadge';
+import type { OpmSourceRef } from '../../engine/opm/executableTypes';
+import { convertOpmNodeType, convertOpmEdgeType, type OpmNodeKind } from './OpmMigrations';
+import { validateOpmPortConnection } from './OpmPortContracts';
+import { DEFAULT_OPM_SIMULATION_CONFIG, normalizeOpmSimulationConfig, type OpmSimulationConfig } from './OpmSimulationConfig';
 import { importSysmlToOpm } from './SysmlToOpmImporter';
 import { validateOpmConnection } from './OpmLinkRules';
 import { layoutOpmGraph } from './OpmAutoLayout';
@@ -154,6 +159,8 @@ interface EntropyWorkspaceProps {
   onVariablesChange: (vars: any[]) => void;
   tickMs: number;
   onTickMsChange?: (tickMs: number) => void;
+  opmSimulationConfig?: Partial<OpmSimulationConfig>;
+  onOpmSimulationConfigChange?: (config: OpmSimulationConfig) => void;
   onBack: () => void;
   onSave?: (nodes: AppNode[], edges: AppEdge[]) => void;
   onAddError?: (type: 'error' | 'warning' | 'info', message: string, source?: string) => void;
@@ -167,6 +174,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   onVariablesChange,
   tickMs,
   onTickMsChange,
+  opmSimulationConfig,
+  onOpmSimulationConfigChange,
   onBack,
   onSave,
   onAddError,
@@ -215,6 +224,56 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   // Right Sidebar active tab
   const [rightTab, setRightTab] = useState<'simControl' | 'opl' | 'smartShow' | 'opmCodegen'>('simControl');
   const [opmArtifactState, setOpmArtifactState] = useState<OpmArtifactState>(createInitialArtifactState);
+  const [selectedEdge, setSelectedEdge] = useState<AppEdge | null>(null);
+  const [diagnosticNavMessage, setDiagnosticNavMessage] = useState<string | null>(null);
+  const [opmConfig, setOpmConfig] = useState<OpmSimulationConfig>(() => normalizeOpmSimulationConfig({
+    ...DEFAULT_OPM_SIMULATION_CONFIG, ...opmSimulationConfig,
+  }));
+  const [pendingNodeConversion, setPendingNodeConversion] = useState<{ node: AppNode; warnings: string[] } | null>(null);
+  const [pendingEdgeConversion, setPendingEdgeConversion] = useState<{ edge: AppEdge; warnings: string[] } | null>(null);
+
+  useEffect(() => {
+    if (opmSimulationConfig) setOpmConfig(normalizeOpmSimulationConfig(opmSimulationConfig));
+  }, [opmSimulationConfig]);
+
+  const updateOpmConfig = useCallback((patch: Partial<OpmSimulationConfig>) => {
+    const next = normalizeOpmSimulationConfig({ ...opmConfig, ...patch });
+    setOpmConfig(next);
+    onOpmSimulationConfigChange?.(next);
+  }, [onOpmSimulationConfigChange, opmConfig]);
+
+  const handleNavigateToDiagnostic = useCallback((source: OpmSourceRef) => {
+    setDiagnosticNavMessage(null);
+    const node = nodes.find(n => n.id === source.elementId);
+    const edge = edges.find(e => e.id === source.elementId);
+
+    if (node) {
+      setSelectedNode(node);
+      setSelectedEdge(null);
+    } else if (edge) {
+      setSelectedEdge(edge);
+      setSelectedNode(null);
+    }
+
+    setTimeout(() => {
+      let el = document.querySelector(`[data-opm-path="${source.propertyPath}"]`);
+      if (!el && source.propertyPath) {
+        const base = source.propertyPath.replace(/\[\d+\]\..*$/, '');
+        el = document.querySelector(`[data-opm-path="${base}"]`) ||
+             document.querySelector(`[data-opm-path*="${source.propertyPath}"]`);
+      }
+
+      if (el instanceof HTMLElement) {
+        el.focus();
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        const targetDesc = node ? `Node "${node.data.name || node.id}"` : edge ? `Link "${edge.id}"` : `Element "${source.elementId}"`;
+        const msg = `Navigated to ${targetDesc}. (Property control for "${source.propertyPath}" is not visible in current view)`;
+        setDiagnosticNavMessage(msg);
+        logSim('warning', msg);
+      }
+    }, 60);
+  }, [nodes, edges]);
 
   // --- Initialize canvas ---
   useEffect(() => {
@@ -546,23 +605,30 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     logSim('success', `Created ${isReq ? 'Requirement' : activeTool.toUpperCase()} [${nodeName}] at (${Math.round(flowPos.x)}, ${Math.round(flowPos.y)}).`);
   }, [activeTool, activeParentId, nodes, edges, saveHistory]);
 
+  // --- Shared Port Connection Validator (Canvas preview and onConnect gate) ---
+  const isValidConnection = useCallback((connection: Connection | { source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }) => {
+    if (!connection.source || !connection.target) return false;
+    const verdict = validateOpmPortConnection(nodes, edges, connection as any, activeLinkType);
+    return verdict.valid;
+  }, [nodes, edges, activeLinkType]);
+
   // --- Connect nodes (draw OPM links) ---
   const onConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return;
 
-    const src = nodes.find(n => n.id === connection.source);
-    const tgt = nodes.find(n => n.id === connection.target);
-    if (!src || !tgt) return;
-
-    // ISO 19450 link-role validation (OpmLinkRules.ts)
-    const verdict = validateOpmConnection(activeLinkType, src.data.type, tgt.data.type);
-    if (!verdict.allowed) {
-      if (onAddError) onAddError('error', `OPM link rejected: ${verdict.reason}`, 'ENTROPY');
-      logSim('error', `Link rejected [${activeLinkType}]: ${verdict.reason}`);
+    // Strict validation via shared contract
+    const verdict = validateOpmPortConnection(nodes, edges, connection as any, activeLinkType);
+    if (!verdict.valid) {
+      const msg = verdict.reason || `Link rejected [${activeLinkType}]: invalid connection`;
+      if (onAddError) onAddError('error', `OPM link rejected: ${msg}`, 'ENTROPY');
+      logSim('error', `Link rejected [${activeLinkType}]: ${msg}`);
       return;
     }
 
     saveHistory(nodes, edges);
+
+    const src = nodes.find(n => n.id === connection.source);
+    const tgt = nodes.find(n => n.id === connection.target);
 
     const newEdge: AppEdge = {
       id: `e-${connection.source}-${connection.sourceHandle || 'std-out'}-${connection.target}-${connection.targetHandle || 'res-in'}`,
@@ -573,11 +639,12 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       type: 'opmEdge',
       data: {
         type: activeLinkType,
+        linkType: activeLinkType,
       },
     };
 
     setEdges(prev => addEdge(newEdge, prev));
-    logSim('info', `Link [${activeLinkType}] connected: ${src.data.name} → ${tgt.data.name}`);
+    logSim('info', `Link [${activeLinkType}] connected: ${src?.data?.name || connection.source} → ${tgt?.data?.name || connection.target}`);
   }, [activeLinkType, nodes, edges, saveHistory, onAddError]);
 
   // --- Dynamic Port Handlers ---
@@ -835,12 +902,12 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
     if (simRunning) {
-      interval = setInterval(runSimTick, tickMs);
+      interval = setInterval(runSimTick, opmConfig.tickMs);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [simRunning, tickMs, runSimTick]);
+  }, [simRunning, opmConfig.tickMs, runSimTick]);
 
   const toggleSimulation = () => {
     if (!simRunning && simStateRef.current.tick === 0) {
@@ -922,6 +989,53 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     setSelectedNode(null);
     logSim('warning', `Element ${selectedNode.data.name} deleted.`);
   };
+
+  const handleConvertNodeType = useCallback((targetType: OpmNodeKind) => {
+    if (!selectedNode) return;
+    const conversion = convertOpmNodeType(selectedNode, targetType);
+    if (conversion.warnings.length > 0) {
+      setPendingNodeConversion({
+        node: conversion.node,
+        warnings: conversion.warnings.map(w => `[${w.code}] ${w.message}`),
+      });
+      return;
+    }
+    saveHistory(nodes, edges);
+    setNodes(prev => prev.map(n => n.id === selectedNode.id ? conversion.node : n));
+    setSelectedNode(conversion.node);
+    logSim('info', `Converted "${selectedNode.data.name || selectedNode.id}" to ${targetType}.`);
+  }, [selectedNode, nodes, edges, saveHistory]);
+
+  const handleConvertEdgeType = useCallback((edgeId: string, nextType: OPMLinkType) => {
+    const edge = edges.find(e => e.id === edgeId);
+    if (!edge) return;
+    const conversion = convertOpmEdgeType(edge, nextType);
+    const verdict = validateOpmPortConnection(nodes, edges.filter(e => e.id !== edgeId), {
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle,
+    }, nextType);
+    if (!verdict.valid) {
+      const msg = verdict.reason || `Link conversion rejected [${nextType}].`;
+      onAddError?.('error', `OPM link conversion rejected: ${msg}`, 'OPM');
+      logSim('error', msg);
+      return;
+    }
+    if (conversion.warnings.length > 0) {
+      setPendingEdgeConversion({
+        edge: conversion.edge,
+        warnings: conversion.warnings.map(w => `[${w.code}] ${w.message}`),
+      });
+      return;
+    }
+    saveHistory(nodes, edges);
+    setEdges(prev => prev.map(e => e.id === edgeId ? conversion.edge : e));
+    if (selectedEdge && selectedEdge.id === edgeId) {
+      setSelectedEdge(conversion.edge);
+    }
+    logSim('info', `Converted link "${edgeId}" to ${nextType}.`);
+  }, [edges, nodes, selectedEdge, saveHistory, onAddError]);
 
   const handleAddAttribute = (key: string, val: string) => {
     if (!selectedNode || selectedNode.data.type !== 'object') return;
@@ -1150,12 +1264,12 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 min="100"
                 max="2000"
                 step="100"
-                value={tickMs}
-                onChange={(e) => onTickMsChange && onTickMsChange(Number(e.target.value))}
+                value={opmConfig.tickMs}
+                onChange={(e) => updateOpmConfig({ tickMs: Number(e.target.value) })}
                 className="w-16 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
                 title="Simulation speed interval (ms)"
               />
-              <span className="text-[9px] text-[#888] font-mono w-9 text-right">{tickMs}ms</span>
+              <span className="text-[9px] text-[#888] font-mono w-9 text-right">{opmConfig.tickMs}ms</span>
             </div>
           </div>
 
@@ -1284,6 +1398,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
+              isValidConnection={isValidConnection}
+              onEdgeClick={(_, edge) => { setSelectedEdge(edge); setSelectedNode(null); }}
               onNodeDragStop={handleNodeDragStop}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
@@ -1310,6 +1426,21 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               />
             </ReactFlow>
             <OpmLegend />
+            <OpmDiagnosticsBadge
+              diagnostics={opmArtifactState.diagnostics}
+              onNavigateToDiagnostic={handleNavigateToDiagnostic}
+            />
+
+            {/* Diagnostic Navigation Fallback Toast */}
+            {diagnosticNavMessage && (
+              <div
+                data-testid="diagnostic-nav-fallback"
+                className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-[#241305] border border-amber-500/70 text-amber-300 px-3 py-1.5 rounded shadow-2xl text-xs flex items-center gap-2 select-none"
+              >
+                <span>{diagnosticNavMessage}</span>
+                <button onClick={() => setDiagnosticNavMessage(null)} className="text-gray-400 hover:text-white text-xs font-bold">✕</button>
+              </div>
+            )}
           </div>
 
           {/* Selected Node Properties Panel (Floating bottom-left) */}
@@ -1338,6 +1469,41 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                     className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-orange-500/50 text-white"
                   />
                 </div>
+
+                {selectedNode.data.type !== 'requirement' && (
+                  <div className="flex flex-col gap-0.5 pt-1">
+                    <label className="text-[10px] text-[#777] uppercase font-semibold">Element Type</label>
+                    <select
+                      value={selectedNode.type}
+                      onChange={(e) => handleConvertNodeType(e.target.value as OpmNodeKind)}
+                      className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-orange-500/50 text-white text-xs"
+                      data-testid="opm-convert-node-type"
+                    >
+                      <option value="opmObject">Object</option>
+                      <option value="opmProcess">Process</option>
+                      <option value="opmState">State</option>
+                    </select>
+                  </div>
+                )}
+
+                {pendingNodeConversion && pendingNodeConversion.node.id === selectedNode.id && (
+                  <div className="rounded border border-amber-700/70 bg-amber-950/40 p-2 text-[10px] text-amber-200">
+                    <div className="font-bold">Confirm conversion</div>
+                    {pendingNodeConversion.warnings.map(w => <div key={w} className="mt-1">{w}</div>)}
+                    <div className="mt-2 flex gap-1.5">
+                      <button
+                        className="rounded bg-amber-600 px-2 py-1 font-bold text-black"
+                        onClick={() => {
+                          saveHistory(nodes, edges);
+                          setNodes(prev => prev.map(n => n.id === pendingNodeConversion.node.id ? pendingNodeConversion.node : n));
+                          setSelectedNode(pendingNodeConversion.node);
+                          setPendingNodeConversion(null);
+                        }}
+                      >Apply</button>
+                      <button className="rounded border border-[#555] px-2 py-1" onClick={() => setPendingNodeConversion(null)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between pt-1">
                   <label className="text-[10px] text-[#777] uppercase font-semibold">Physical Entity</label>
@@ -1595,6 +1761,66 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               >
                 <Trash2 size={12} /> Delete Element
               </button>
+            </div>
+          )}
+
+          {/* Selected Edge Inspector */}
+          {selectedEdge && !selectedNode && (
+            <div className="absolute right-4 top-4 z-10 w-72 bg-[#141414]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-3.5 shadow-xl flex flex-col gap-2.5 max-h-[85%] overflow-y-auto custom-scrollbar">
+              <div className="flex items-center justify-between border-b border-[#333] pb-1.5 shrink-0">
+                <span className="text-xs uppercase font-extrabold tracking-wider text-sky-400">
+                  Link Inspector
+                </span>
+                <button
+                  onClick={() => setSelectedEdge(null)}
+                  className="text-gray-500 hover:text-white"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="space-y-1.5 text-xs shrink-0">
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[10px] text-[#777] uppercase font-semibold">Link ID</label>
+                  <span className="font-mono text-[11px] text-gray-300">{selectedEdge.id}</span>
+                </div>
+                <div className="flex flex-col gap-0.5 pt-1">
+                  <label className="text-[10px] text-[#777] uppercase font-semibold">Link Role</label>
+                  <select
+                    value={(selectedEdge.data?.type || selectedEdge.data?.linkType || 'effect') as string}
+                    onChange={(e) => handleConvertEdgeType(selectedEdge.id, e.target.value as OPMLinkType)}
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-sky-500/50 text-white text-xs"
+                    data-testid="opm-convert-edge-type"
+                  >
+                    <option value="consumption">Consumption</option>
+                    <option value="result">Result</option>
+                    <option value="effect">Effect</option>
+                    <option value="agent">Agent</option>
+                    <option value="instrument">Instrument</option>
+                    <option value="trigger">Trigger</option>
+                    <option value="condition">Condition</option>
+                    <option value="aggregation">Aggregation</option>
+                    <option value="generalization">Generalization</option>
+                    <option value="exhibition">Exhibition</option>
+                    <option value="satisfies">Satisfies</option>
+                    <option value="verifies">Verifies</option>
+                  </select>
+                </div>
+                {pendingEdgeConversion && pendingEdgeConversion.edge.id === selectedEdge.id && (
+                  <div className="rounded border border-amber-700/70 bg-amber-950/40 p-2 text-[10px] text-amber-200">
+                    <div className="font-bold">Confirm link conversion</div>
+                    {pendingEdgeConversion.warnings.map(w => <div key={w} className="mt-1">{w}</div>)}
+                    <div className="mt-2 flex gap-1.5">
+                      <button className="rounded bg-amber-600 px-2 py-1 font-bold text-black" onClick={() => {
+                        saveHistory(nodes, edges);
+                        setEdges(prev => prev.map(e => e.id === pendingEdgeConversion.edge.id ? pendingEdgeConversion.edge : e));
+                        setSelectedEdge(pendingEdgeConversion.edge);
+                        setPendingEdgeConversion(null);
+                      }}>Apply</button>
+                      <button className="rounded border border-[#555] px-2 py-1" onClick={() => setPendingEdgeConversion(null)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

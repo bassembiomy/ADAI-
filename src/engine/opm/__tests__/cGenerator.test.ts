@@ -295,4 +295,47 @@ describe('OPM C99 code generator', () => {
     expect(modelC).toContain('OPM_CheckedDiv');
     expect(runtimeC).toContain('OPM_Model_EvaluateAction');
   });
+
+  describe('Task 6: Strengthen embedded-oriented OPM C artifacts', () => {
+    it('emits standard public API names, fixed-width types, bounded arrays, and comprehensive manifest fields', () => {
+      const result = generateOpmCArtifacts(applianceModel);
+      const runtimeH = result.files.find(f => f.name === 'opm_runtime.h')?.content ?? '';
+
+      // 1. Public API names
+      expect(runtimeH).toContain('void OPM_Init(OPM_Instance_t *instance);');
+      expect(runtimeH).toContain('void OPM_Reset(OPM_Instance_t *instance);');
+      expect(runtimeH).toContain('OPM_Status_t OPM_Step(OPM_Instance_t *instance, uint32_t delta_ms);');
+      expect(runtimeH).toContain('OPM_Status_t OPM_DispatchEvent(OPM_Instance_t *instance, OPM_EventId_t event_id);');
+
+      // 2. Manifest fields
+      expect(result.manifest.modelFingerprint).toBe(applianceModel.fingerprint);
+      expect(result.manifest.generatorVersion).toBe('1.0.0');
+      expect(result.manifest.tickMs).toBe(applianceModel.settings.tickMs);
+      expect(result.manifest.resourceLimits).toBeDefined();
+      expect(result.manifest.resourceLimits.maxNodes).toBeGreaterThan(0);
+      expect(result.manifest.strictCompilerFlags).toEqual(
+        expect.arrayContaining(['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror']),
+      );
+    expect(result.manifest.qualificationStatus).toBe('pending');
+    });
+
+    it('rejects invalid C identifiers fail-closed without emitting partial artifacts', () => {
+      const invalidModel = JSON.parse(JSON.stringify(applianceModel));
+      invalidModel.objects[0].cIdentifier = '123-invalid-ident!';
+      const result = generateOpmCArtifacts(invalidModel);
+      expect(result.files).toHaveLength(0);
+      expect(result.diagnostics).toBeDefined();
+      expect(result.diagnostics.some(d => d.code === 'OPM_CODEGEN_INVALID_IDENTIFIER')).toBe(true);
+    });
+
+    it('rejects resource limit overflow fail-closed without emitting partial artifacts', () => {
+      const overflowModel = JSON.parse(JSON.stringify(applianceModel));
+      overflowModel.settings.eventQueueCapacity = 99999;
+      const result = generateOpmCArtifacts(overflowModel);
+      expect(result.files).toHaveLength(0);
+      expect(result.diagnostics).toBeDefined();
+      expect(result.diagnostics.some(d => d.code === 'OPM_CODEGEN_RESOURCE_LIMIT_EXCEEDED')).toBe(true);
+    });
+  });
 });
+

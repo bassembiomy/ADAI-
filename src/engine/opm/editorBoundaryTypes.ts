@@ -45,6 +45,7 @@ export interface OpmEditorPort {
   type: string;
   direction: 'input' | 'output';
   position: 'left' | 'right' | 'top' | 'bottom';
+  dataType?: string;
 }
 
 export interface OpmEditorNodeData extends Record<string, unknown> {
