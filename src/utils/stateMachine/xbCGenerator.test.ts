@@ -25,8 +25,8 @@ import { compileGeneratedCSyntax } from './smCHarness';
 import { toCIdentifier } from './smExpressions';
 import { XB_EXECUTABLE_C_CASES } from './xbCConformanceCases';
 
-import type { StateMachineModelV4 } from './smModel';
-import { buildSemanticModel } from './smSemanticBuilder';
+import type { StateMachineModelV4, StateMachineModelV5 } from './smModel';
+import { buildSemanticModel, resolveVerificationConfig } from './smSemanticBuilder';
 import { XB_CAPABILITIES } from './xbCapabilities';
 import {
   renderXBHeader,
@@ -34,7 +34,7 @@ import {
   renderXBSource,
 } from './xbCGenerator';
 
-const build = (model: StateMachineModelV4): SemanticModel => {
+const build = (model: StateMachineModelV4 | StateMachineModelV5): SemanticModel => {
   const result = buildSemanticModel(model);
   expect(result.diagnostics).toEqual([]);
   if (!result.ir) throw new Error('semantic model build failed');
@@ -226,6 +226,7 @@ const semanticModel = (ownerState = defaultOwnerState()): SemanticModel => ({
   variables: {},
   ioMappings: [],
   activeSlotCount: 1,
+  verification: resolveVerificationConfig(),
 });
 
 

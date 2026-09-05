@@ -8,9 +8,11 @@ import {
   type SemanticRuntime,
 } from './smInterpreter';
 import type {
+  AnyStateMachineModel,
   LegacyStateMachineModel,
   ModelDiagnostic,
   StateMachineModelV4,
+  StateMachineModelV5,
 } from './smModel';
 import { migrateStateMachineModel } from './smModelMigration';
 import { buildSemanticModel } from './smSemanticBuilder';
@@ -306,12 +308,12 @@ const clonePersistentValue = (value: unknown): unknown => {
  * complete typed X-Bridges configuration remain intact for later adaptation.
  */
 export const createPersistedAppSimulationModel = <
-  T extends StateMachineModelV4 | LegacyStateMachineModel,
+  T extends AnyStateMachineModel | LegacyStateMachineModel,
 >(model: T): T => clonePersistentValue(model) as T;
 
 export const restorePersistedAppSimulationModel = (
   snapshot: unknown,
-): StateMachineModelV4 => {
+): StateMachineModelV5 => {
   const persisted = clonePersistentValue(snapshot) as LegacyStateMachineModel;
   const persistedXBridges = new Map(
     (Array.isArray(persisted?.states) ? persisted.states : [])
@@ -334,8 +336,8 @@ export const restorePersistedAppSimulationModel = (
 
 export const applyPersistedAppSimulationModel = (
   snapshot: unknown,
-  apply: (model: StateMachineModelV4) => void,
-): StateMachineModelV4 => {
+  apply: (model: StateMachineModelV5) => void,
+): StateMachineModelV5 => {
   const restored = restorePersistedAppSimulationModel(snapshot);
   apply(restored);
   return restored;

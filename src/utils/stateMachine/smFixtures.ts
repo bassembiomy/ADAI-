@@ -1,8 +1,11 @@
 import type { StateData, TransitionData, VariableDef } from '../../types/sm_types';
 import {
   CURRENT_SM_SCHEMA_VERSION,
+  defaultSMVerificationConfig,
+  type AnyStateMachineModel,
   type StateMachineLayerV4,
   type StateMachineModelV4,
+  type StateMachineModelV5,
 } from './smModel';
 
 const state = (
@@ -107,7 +110,7 @@ const counterVariable = (): VariableDef => ({
   visibleInScope: true,
 });
 
-export const flatOrFixture = (): StateMachineModelV4 => ({
+export const flatOrFixture = (): StateMachineModelV5 => ({
   schemaVersion: CURRENT_SM_SCHEMA_VERSION,
   tickMs: 10,
   states: [
@@ -121,9 +124,10 @@ export const flatOrFixture = (): StateMachineModelV4 => ({
   variables: variables(),
   layers: [layer('root', null, 'OR', ['a', 'b'], ['t_ab'])],
   safetyMode: false,
+  verification: defaultSMVerificationConfig(),
 });
 
-export const hybridXBridgesFixture = (): StateMachineModelV4 => ({
+export const hybridXBridgesFixture = (): StateMachineModelV5 => ({
   schemaVersion: CURRENT_SM_SCHEMA_VERSION,
   tickMs: 10,
   states: [
@@ -151,9 +155,10 @@ export const hybridXBridgesFixture = (): StateMachineModelV4 => ({
   variables: variables(),
   layers: [layer('root', null, 'OR', ['ordinary', 'controller'])],
   safetyMode: false,
+  verification: defaultSMVerificationConfig(),
 });
 
-export const nestedAndFixture = (): StateMachineModelV4 => ({
+export const nestedAndFixture = (): StateMachineModelV5 => ({
   schemaVersion: CURRENT_SM_SCHEMA_VERSION,
   tickMs: 10,
   states: [
@@ -169,6 +174,7 @@ export const nestedAndFixture = (): StateMachineModelV4 => ({
     layer('parallel', 'parallel', 'AND', ['region_b', 'region_a']),
   ],
   safetyMode: false,
+  verification: defaultSMVerificationConfig(),
 });
 
 export type InterpreterFixtureName =
@@ -183,7 +189,7 @@ export type InterpreterFixtureName =
 
 export const interpreterFixture = (
   name: InterpreterFixtureName,
-): StateMachineModelV4 => {
+): StateMachineModelV5 => {
   const model = flatOrFixture();
   model.variables.push(counterVariable());
 
@@ -361,7 +367,7 @@ const taskFourVariables = (): VariableDef[] => [
   },
 ];
 
-const parallelSkeletonFixture = (): StateMachineModelV4 => ({
+const parallelSkeletonFixture = (): StateMachineModelV5 => ({
   schemaVersion: CURRENT_SM_SCHEMA_VERSION,
   tickMs: 10,
   states: [
@@ -406,11 +412,12 @@ const parallelSkeletonFixture = (): StateMachineModelV4 => ({
     layer('parallel_regions', 'PARENT', 'AND', ['R1', 'R2', 'R3']),
   ],
   safetyMode: false,
+  verification: defaultSMVerificationConfig(),
 });
 
 export const parallelHistoryFixture = (
   name: ParallelHistoryFixtureName,
-): StateMachineModelV4 => {
+): StateMachineModelV5 => {
   if (name === 'timing-boundary') {
     return {
       schemaVersion: CURRENT_SM_SCHEMA_VERSION,
@@ -429,6 +436,7 @@ export const parallelHistoryFixture = (
       variables: variables(),
       layers: [layer('root', null, 'OR', ['TIMED', 'DONE'], ['after_three'])],
       safetyMode: false,
+      verification: defaultSMVerificationConfig(),
     };
   }
 
@@ -477,7 +485,7 @@ const historyVariables = (): VariableDef[] => [
 
 export const historyFixture = (
   kind: HistoryFixtureKind,
-): StateMachineModelV4 => {
+): StateMachineModelV5 => {
   const historyId = `${kind}_history`;
   const transitions = [
     transition('select_a', 'parent_b', 'parent_a', {
@@ -606,6 +614,7 @@ export const historyFixture = (
       ),
     ],
     safetyMode: false,
+    verification: defaultSMVerificationConfig(),
   };
 };
 
@@ -640,7 +649,7 @@ export type DifferentialScenarioStep =
 
 export interface DifferentialFixture {
   name: DifferentialFixtureName;
-  model: StateMachineModelV4;
+  model: AnyStateMachineModel;
   steps: readonly DifferentialScenarioStep[];
 }
 
@@ -653,7 +662,7 @@ const historySteps = (): DifferentialScenarioStep[] => [
   { kind: 'step', inputs: { leave: false, go: true } },
 ];
 
-const terminalOrFixture = (): StateMachineModelV4 => {
+const terminalOrFixture = (): StateMachineModelV5 => {
   const model = flatOrFixture();
   model.states[0].isTerminalState = true;
   model.states[0].during = 'total = total + 100;';
@@ -662,9 +671,9 @@ const terminalOrFixture = (): StateMachineModelV4 => {
   return model;
 };
 
-const withMotorOutput = (
-  model: StateMachineModelV4,
-): StateMachineModelV4 => {
+const withMotorOutput = <T extends AnyStateMachineModel>(
+  model: T,
+): T => {
   model.variables.push({
     id: 'output_enable',
     name: 'output_enable',
@@ -702,7 +711,7 @@ const withMotorOutput = (
   return model;
 };
 
-const safeOutputFaultFixture = (): StateMachineModelV4 => {
+const safeOutputFaultFixture = (): StateMachineModelV5 => {
   const model = withMotorOutput(flatOrFixture());
   model.safetyMode = true;
   model.states[0].id = 'run';
@@ -718,7 +727,7 @@ const safeOutputFaultFixture = (): StateMachineModelV4 => {
   return model;
 };
 
-const innerHistoryFixture = (): StateMachineModelV4 => {
+const innerHistoryFixture = (): StateMachineModelV5 => {
   const model = historyFixture('shallow');
   model.transitions.push(
     transition('inner_restore_history', 'workspace', 'shallow_history', {
@@ -853,10 +862,11 @@ export const semanticFixture = (
   }
 };
 
-export const xb6StepFixture = (): StateMachineModelV4 => ({
+export const xb6StepFixture = (): StateMachineModelV5 => ({
   schemaVersion: CURRENT_SM_SCHEMA_VERSION,
   tickMs: 100,
   safetyMode: false,
+  verification: defaultSMVerificationConfig(),
   states: [
     {
       ...state('s1', {

@@ -12,7 +12,7 @@ import {
   stepRuntime,
   type SemanticRuntime,
 } from './smInterpreter';
-import type { StateMachineModelV4 } from './smModel';
+import type { AnyStateMachineModel } from './smModel';
 import { buildSemanticModel } from './smSemanticBuilder';
 import type { SemanticBuildResult } from './smSemanticModel';
 import type { SemanticTraceFrame } from './smTrace';
@@ -24,7 +24,7 @@ interface ScenarioOperation {
 }
 
 interface StandaloneRuntimeApi {
-  buildSemanticModel(model: StateMachineModelV4): SemanticBuildResult;
+  buildSemanticModel(model: AnyStateMachineModel): SemanticBuildResult;
   createRuntime(ir: NonNullable<SemanticBuildResult['ir']>): SemanticRuntime;
   initializeRuntime(runtime: SemanticRuntime): SemanticTraceFrame;
   applyInputs(
@@ -39,7 +39,7 @@ interface StandaloneRuntimeApi {
 }
 
 const runModuleScenario = (
-  model: StateMachineModelV4,
+  model: AnyStateMachineModel,
   operations: readonly ScenarioOperation[],
 ): SemanticTraceFrame[] => {
   const built = buildSemanticModel(model);
@@ -67,7 +67,7 @@ return ADIAStateMachineRuntime;`,
 };
 
 const runStandaloneScenario = (
-  model: StateMachineModelV4,
+  model: AnyStateMachineModel,
   operations: readonly ScenarioOperation[],
 ): SemanticTraceFrame[] => {
   const standalone = loadStandaloneRuntime();

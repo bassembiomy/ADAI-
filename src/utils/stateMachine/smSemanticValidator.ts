@@ -12,10 +12,12 @@ import {
   toCIdentifier,
 } from './smExpressions';
 import type {
+  AnyStateMachineModel,
   ModelDiagnostic,
   StateMachineLayerV4,
-  StateMachineModelV4,
 } from './smModel';
+
+type StateMachineModelV4 = AnyStateMachineModel;
 import type { SemanticVariable } from './smSemanticModel';
 import { DEFAULT_XB_EMBEDDED_LIMITS } from './xbEmbeddedProfile';
 import type { XBTargetCapabilities } from './xbModel';
