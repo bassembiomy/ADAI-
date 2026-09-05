@@ -32,7 +32,14 @@ describe('Isothermal Liquid Equations & DAE Assembly', () => {
       dBranch: [],
       state: [],
       dState: [],
-      ctx: { dt: 0.01, time: 0, parameters: {}, prevStates: [] },
+      ctx: {
+        dt: 0.01,
+        time: 0,
+        parameters: {},
+        prevStates: [],
+        states: [],
+        stateDerivatives: [],
+      },
       params: { pressure_rise: 200000 },
       ports: ['a', 'b'],
       nodeId: 'pump1'
