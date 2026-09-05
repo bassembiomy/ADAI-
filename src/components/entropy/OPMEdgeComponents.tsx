@@ -223,7 +223,7 @@ export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
         y={labelY - 16}
         width={160}
         height={32}
-        style={{ overflow: 'visible', pointerEvents: 'all' }}
+        style={{ overflow: 'visible', pointerEvents: 'none' }}
       >
         <div
           data-testid={`opm-link-chip-${linkType}`}
@@ -232,7 +232,7 @@ export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
             left: 80,
             top: 16,
             transform: 'translate(-50%, -50%)',
-            pointerEvents: 'all',
+            pointerEvents: 'none',
           }}
           className={`nodrag nopan z-40 flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[9px] backdrop-blur-md transition-all ${
             selected
@@ -255,6 +255,7 @@ export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
                   }
                 }}
                 className="bg-[#1c1a14] text-amber-100 border border-amber-500/50 rounded px-1.5 py-0.5 text-[9px] outline-none cursor-pointer hover:border-amber-400"
+                style={{ pointerEvents: 'auto' }}
               >
                 <optgroup label="Procedural" className="bg-[#141414] text-neutral-200">
                   <option value="consumption">Consumption</option>
@@ -282,6 +283,7 @@ export const OPMEdge: React.FC<EdgeProps<AppEdge>> = ({
                     (data?.onDelete as any)();
                   }}
                   className="hover:text-red-400 text-neutral-400 ml-0.5 p-0.5 transition-colors font-bold"
+                  style={{ pointerEvents: 'auto' }}
                   title="Delete link"
                 >
                   ✕

@@ -44,6 +44,10 @@ describe('opm bold blocks', () => {
     expect(html).toContain('data-port-direction="input"');
     expect(html).toContain('data-port-direction="output"');
     expect(html).toContain('data-testid="port-chevron"');
+    // Left port label must be placed outside the block on the left (right: 14px), not inside (left: 12px)
+    expect(html).toMatch(/right:\s*14px/);
+    // Right port label must be placed outside the block on the right (left: 14px), not inside (right: 12px)
+    expect(html).toMatch(/left:\s*14px/);
   });
 
   it('firing process renders energy pulse aura and firing data attribute', () => {

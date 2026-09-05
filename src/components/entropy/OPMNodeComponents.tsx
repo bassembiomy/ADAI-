@@ -80,45 +80,45 @@ const renderOPMPort = (port: OPMPort, idx: number, totalCount: number, isEllipse
     if (port.position === 'left') {
       wrapperStyle.left = `${50 * (1 - factor)}%`;
       wrapperStyle.top = percentage;
-      labelStyle.left = '12px';
+      labelStyle.right = '14px';
       labelStyle.transform = 'translateY(-50%)';
     } else if (port.position === 'right') {
       wrapperStyle.left = `${50 + 50 * factor}%`;
       wrapperStyle.top = percentage;
-      labelStyle.right = '12px';
+      labelStyle.left = '14px';
       labelStyle.transform = 'translateY(-50%)';
     } else if (port.position === 'top') {
       wrapperStyle.left = percentage;
       wrapperStyle.top = `${50 * (1 - factor)}%`;
-      labelStyle.top = '12px';
+      labelStyle.bottom = '14px';
       labelStyle.transform = 'translateX(-50%)';
     } else if (port.position === 'bottom') {
       wrapperStyle.left = percentage;
       wrapperStyle.top = `${50 + 50 * factor}%`;
-      labelStyle.bottom = '12px';
+      labelStyle.top = '14px';
       labelStyle.transform = 'translateX(-50%)';
     }
   } else {
-    // Normal rectangular boundaries
+    // Normal rectangular boundaries: place labels OUTSIDE the block perimeter
     if (port.position === 'left') {
       wrapperStyle.left = '0%';
       wrapperStyle.top = percentage;
-      labelStyle.left = '12px';
+      labelStyle.right = '14px';
       labelStyle.transform = 'translateY(-50%)';
     } else if (port.position === 'right') {
       wrapperStyle.left = '100%';
       wrapperStyle.top = percentage;
-      labelStyle.right = '12px';
+      labelStyle.left = '14px';
       labelStyle.transform = 'translateY(-50%)';
     } else if (port.position === 'top') {
       wrapperStyle.left = percentage;
       wrapperStyle.top = '0%';
-      labelStyle.top = '12px';
+      labelStyle.bottom = '14px';
       labelStyle.transform = 'translateX(-50%)';
     } else if (port.position === 'bottom') {
       wrapperStyle.left = percentage;
       wrapperStyle.top = '100%';
-      labelStyle.bottom = '12px';
+      labelStyle.top = '14px';
       labelStyle.transform = 'translateX(-50%)';
     }
   }

@@ -427,4 +427,16 @@ describe('OPM typed executable modeling editors', () => {
     expect(wsSource).toContain("rightTab === 'scope'");
     expect(wsSource).toContain('data-testid="opm-sim-scope-launcher"');
   });
+
+  it('verifies keyboard shortcuts for Delete, Undo, Redo, and Escape in EntropyWorkspace', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const wsPath = path.resolve(__dirname, '../EntropyWorkspace.tsx');
+    const wsSource = fs.readFileSync(wsPath, 'utf-8');
+
+    expect(wsSource).toContain("e.key === 'Delete' || e.key === 'Backspace'");
+    expect(wsSource).toContain('handleDeleteSelectedNode');
+    expect(wsSource).toContain('triggerUndo');
+    expect(wsSource).toContain('triggerRedo');
+  });
 });

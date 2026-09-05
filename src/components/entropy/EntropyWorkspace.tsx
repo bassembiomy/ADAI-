@@ -429,20 +429,6 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     if (onSave) onSave(nextState.nodes, nextState.edges);
   };
 
-  // --- Keyboard accessibility: Escape to cancel selection / close inspectors ---
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (selectedNode || selectedEdge) {
-          setSelectedNode(null);
-          setSelectedEdge(null);
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedNode, selectedEdge]);
-
   // --- Smart link composer: valid targets for the in-progress connection ---
   const validTargets = useMemo(() => connectSourceId ? getValidTargetNodeIds(nodes, edges, connectSourceId, activeLinkType) : [], [connectSourceId, nodes, edges, activeLinkType]);
 
@@ -1217,6 +1203,82 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     });
   }, [filteredEdges, nodes, simRunning, handleEdgeTypeChange, handleEdgeDelete]);
 
+  // --- Comprehensive Keyboard Shortcuts (Delete, Backspace, Undo, Redo, Escape, Save, Space) ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // If user is actively typing in an input, textarea, or contentEditable element, do not intercept
+      const target = e.target as HTMLElement | null;
+      const isInput = target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      );
+
+      // Escape: Deselect elements / close inspectors
+      if (e.key === 'Escape') {
+        if (selectedNode || selectedEdge) {
+          setSelectedNode(null);
+          setSelectedEdge(null);
+        }
+        return;
+      }
+
+      // If typing in an input field, let normal typing / delete / undo happen inside the field
+      if (isInput) return;
+
+      // Delete or Backspace: Delete selected node or selected edge
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedNode) {
+          e.preventDefault();
+          handleDeleteSelectedNode();
+        } else if (selectedEdge) {
+          e.preventDefault();
+          handleEdgeDelete(selectedEdge.id);
+          setSelectedEdge(null);
+        }
+        return;
+      }
+
+      // Ctrl+Z / Cmd+Z (without shift): Undo
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
+        e.preventDefault();
+        triggerUndo();
+        return;
+      }
+
+      // Ctrl+Y / Cmd+Y OR Ctrl+Shift+Z / Cmd+Shift+Z: Redo
+      if (
+        ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) ||
+        ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && e.shiftKey)
+      ) {
+        e.preventDefault();
+        triggerRedo();
+        return;
+      }
+
+      // Ctrl+S / Cmd+S: Save diagram
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        if (onSave) {
+          onSave(nodes, edges);
+          logSim('success', 'Diagram saved.');
+        }
+        return;
+      }
+
+      // Space: Toggle simulation play/pause
+      if (e.key === ' ') {
+        e.preventDefault();
+        toggleSimulation();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNode, selectedEdge, handleDeleteSelectedNode, handleEdgeDelete, triggerUndo, triggerRedo, onSave, nodes, edges, toggleSimulation, logSim]);
+
   const numIn = selectedNode?.data?.inputs?.length || 0;
   const numOut = selectedNode?.data?.outputs?.length || 0;
   const selectedNodePortsCount = numIn + numOut;
@@ -1345,19 +1407,19 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         {/* Navigation / Control bar -> Studio Ribbon */}
         <div
           data-testid="opm-studio-ribbon"
-          className="h-12 bg-[#121215]/95 backdrop-blur-md border-b border-[#25252a] px-3 flex items-center justify-between gap-2.5 shrink-0 select-none overflow-x-auto custom-scrollbar"
+          className="h-11 bg-[#121215]/95 backdrop-blur-md border-b border-[#25252a] px-3 flex items-center justify-between gap-3 shrink-0 select-none overflow-x-auto custom-scrollbar"
         >
-          {/* Cluster 1: Context & Model Sources */}
-          <div className="flex items-center gap-2 shrink-0 bg-[#19191d] px-2 py-1 rounded-md border border-white/5 shadow-inner">
+          {/* Zone 1: Context & Model Sources (Left) */}
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={onBack}
-              className="px-2 py-0.5 text-xs font-semibold border border-[#333] rounded hover:bg-[#252528] text-gray-300 hover:text-white transition-colors flex items-center gap-1"
+              className="px-2 py-1 text-xs font-semibold border border-[#333] rounded hover:bg-[#252528] text-gray-300 hover:text-white transition-colors flex items-center gap-1"
             >
               ← <span className="hidden sm:inline">Back</span>
             </button>
-            <span className="text-xs text-[#555]">|</span>
+            <span className="text-xs text-[#444]">/</span>
             {/* Breadcrumbs */}
-            <div className="flex items-center gap-1 text-xs font-medium max-w-[200px] truncate">
+            <div className="flex items-center gap-1 text-xs font-medium max-w-[180px] truncate">
               {zoomPath.map((zp, i) => {
                 const label = zp === 'root' ? 'System Context' : nodes.find(n => n.id === zp)?.data.name || zp;
                 return (
@@ -1373,7 +1435,6 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 );
               })}
             </div>
-            <span className="text-xs text-[#555]">|</span>
             {/* Example Template Loader */}
             <select
               onChange={(e) => {
@@ -1393,9 +1454,9 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 }
               }}
               defaultValue=""
-              className="bg-[#0f0f11] border border-[#333] rounded text-[10px] py-1 px-1.5 outline-none text-[#ccc] w-32 font-medium"
+              className="bg-[#18181c] border border-[#333] rounded text-[10px] py-1 px-1.5 outline-none text-[#ccc] w-28 font-medium focus:border-orange-500/50"
             >
-              <option value="" disabled>-- Load Template --</option>
+              <option value="" disabled>-- Template --</option>
               {Object.entries(OPM_EXAMPLES).map(([key, ex]) => (
                 <option key={key} value={key}>{ex.name}</option>
               ))}
@@ -1420,49 +1481,14 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             )}
           </div>
 
-          {/* Cluster 2: History & Canvas Layout */}
-          <div className="flex items-center gap-1.5 shrink-0 bg-[#19191d] px-2 py-1 rounded-md border border-white/5 shadow-inner">
-            <button
-              onClick={triggerUndo}
-              disabled={undoStack.length === 0}
-              className="p-1 border border-[#2d2d32] rounded hover:bg-[#252529] text-[#aaa] disabled:opacity-25 disabled:hover:bg-transparent transition-colors text-xs"
-              title="Undo (Ctrl+Z)"
-            >
-              ↶
-            </button>
-            <button
-              onClick={triggerRedo}
-              disabled={redoStack.length === 0}
-              className="p-1 border border-[#2d2d32] rounded hover:bg-[#252529] text-[#aaa] disabled:opacity-25 disabled:hover:bg-transparent transition-colors text-xs"
-              title="Redo (Ctrl+Y)"
-            >
-              ↷
-            </button>
-            <span className="w-px h-3.5 bg-[#333] mx-0.5"></span>
-            <button
-              onClick={() => triggerAutoLayout('force')}
-              className="px-2 py-0.5 text-[10px] border border-[#2d2d32] rounded hover:bg-[#252529] flex items-center gap-1 text-[#bbb] hover:text-white transition-colors"
-              title="Force-Directed Auto Layout"
-            >
-              <Layout size={11} /> Force
-            </button>
-            <button
-              onClick={() => triggerAutoLayout('hierarchy')}
-              className="px-2 py-0.5 text-[10px] border border-[#2d2d32] rounded hover:bg-[#252529] flex items-center gap-1 text-[#bbb] hover:text-white transition-colors"
-              title="Grid/Hierarchy Auto Layout"
-            >
-              <Layout size={11} /> Tree
-            </button>
-          </div>
-
-          {/* Cluster 3: Simulation Transport & Logic Scope Controls */}
-          <div className="flex items-center gap-2 shrink-0 bg-[#19191d] px-2.5 py-1 rounded-md border border-white/5 shadow-inner">
+          {/* Zone 2: Simulation Transport & Logic Scope (Center) */}
+          <div className="flex items-center gap-2 shrink-0 bg-[#18181c] px-2.5 py-1 rounded-lg border border-white/5 shadow-sm">
             <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded border border-white/5">
               <button
                 data-testid="opm-sim-toggle"
                 onClick={toggleSimulation}
                 className={`p-1 rounded transition-colors ${simRunning ? 'text-red-400 hover:bg-red-950/40' : 'text-green-400 hover:bg-green-950/40'}`}
-                title={simRunning ? 'Pause Simulation' : 'Start Simulation'}
+                title={simRunning ? 'Pause Simulation (Space)' : 'Start Simulation (Space)'}
               >
                 {simRunning ? <Pause size={13} /> : <Play size={13} />}
               </button>
@@ -1526,6 +1552,44 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               📈 <span>Scope</span>
             </button>
           </div>
+
+          {/* Zone 3: History & Canvas Layout (Right) */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center bg-[#18181c] rounded-md border border-white/5 p-0.5">
+              <button
+                onClick={triggerUndo}
+                disabled={undoStack.length === 0}
+                className="p-1 rounded hover:bg-[#252529] text-[#aaa] hover:text-white disabled:opacity-25 disabled:hover:bg-transparent transition-colors text-xs"
+                title="Undo (Ctrl+Z)"
+              >
+                ↶
+              </button>
+              <button
+                onClick={triggerRedo}
+                disabled={redoStack.length === 0}
+                className="p-1 rounded hover:bg-[#252529] text-[#aaa] hover:text-white disabled:opacity-25 disabled:hover:bg-transparent transition-colors text-xs"
+                title="Redo (Ctrl+Y)"
+              >
+                ↷
+              </button>
+            </div>
+            <div className="flex items-center bg-[#18181c] rounded-md border border-white/5 p-0.5">
+              <button
+                onClick={() => triggerAutoLayout('force')}
+                className="px-2 py-0.5 text-[10px] rounded hover:bg-[#252529] flex items-center gap-1 text-[#bbb] hover:text-white transition-colors"
+                title="Force-Directed Auto Layout"
+              >
+                <Layout size={11} /> Force
+              </button>
+              <button
+                onClick={() => triggerAutoLayout('hierarchy')}
+                className="px-2 py-0.5 text-[10px] rounded hover:bg-[#252529] flex items-center gap-1 text-[#bbb] hover:text-white transition-colors"
+                title="Grid/Hierarchy Auto Layout"
+              >
+                <Layout size={11} /> Tree
+              </button>
+            </div>
+          </div>
         </div>
 
           {/* Center canvas */}
@@ -1550,6 +1614,22 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               onInit={(inst) => { reactFlowInstanceRef.current = inst; }}
               onPaneClick={handlePaneClick}
               onNodeClick={handleNodeClick}
+              onNodesDelete={(deleted) => {
+                saveHistory(nodes, edges);
+                const deletedIds = new Set(deleted.map(n => n.id));
+                setNodes(prev => prev.filter(n => !deletedIds.has(n.id) && !deletedIds.has(n.parentId || '')));
+                setEdges(prev => prev.filter(e => !deletedIds.has(e.source) && !deletedIds.has(e.target)));
+                if (selectedNode && deletedIds.has(selectedNode.id)) setSelectedNode(null);
+                logSim('warning', `Deleted ${deleted.length} element(s).`);
+              }}
+              onEdgesDelete={(deleted) => {
+                saveHistory(nodes, edges);
+                const deletedIds = new Set(deleted.map(e => e.id));
+                setEdges(prev => prev.filter(e => !deletedIds.has(e.id)));
+                if (selectedEdge && deletedIds.has(selectedEdge.id)) setSelectedEdge(null);
+                logSim('warning', `Deleted ${deleted.length} link(s).`);
+              }}
+              deleteKeyCode={['Backspace', 'Delete']}
               connectionLineComponent={OPMConnectionLine}
               colorMode="dark"
               minZoom={0.01}

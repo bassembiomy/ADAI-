@@ -120,7 +120,7 @@ export const OpmLegend: React.FC = () => {
       <div className="mb-1.5">
         <div className="text-[8px] uppercase text-[#666] font-bold mb-0.5">Links</div>
         <div className="flex items-center gap-1.5 py-[1px]">
-          <span className="rounded-full border border-sky-500/40 bg-[#0d0d0d] px-1.5 py-px text-[8px] font-bold text-sky-300">⇢ Result</span>
+          <span className="rounded-full border border-sky-500/40 bg-[#0d0d0d] px-1.5 py-px text-[8px] font-bold text-sky-300">✨ Result</span>
           <span className="text-[9px] text-[#bbb]">Midpoint type chip</span>
         </div>
       </div>
