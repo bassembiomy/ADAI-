@@ -33,3 +33,5 @@ out.txt
 test_bool.*
 .superpowers/
 scratch_pdf/
+scratch-opm-probe/
+.codex-*

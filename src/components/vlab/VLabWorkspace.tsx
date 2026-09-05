@@ -3533,14 +3533,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                     value={pRef}
                                     onChange={(e) => {
                                       const val = parseFloat(e.target.value) || 0;
-                                      updateParameter('referencePressure', { value: val, unit: pRefUnit, label: 'Reference Pressure' });
+                                      updateParameter('referencePressure', { value: val, unit: pRefUnit, label: 'Reference Pressure' } as any);
                                     }}
                                     className="flex-1 bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-white font-mono"
                                   />
                                   <select
                                     value={pRefUnit}
                                     onChange={(e) => {
-                                      updateParameter('referencePressure', { value: pRef, unit: e.target.value, label: 'Reference Pressure' });
+                                      updateParameter('referencePressure', { value: pRef, unit: e.target.value, label: 'Reference Pressure' } as any);
                                     }}
                                     className="bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-2 text-xs focus:border-blue-500 outline-none text-blue-400 font-bold cursor-pointer"
                                   >
@@ -3564,7 +3564,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                     <button
                                       key={t}
                                       type="button"
-                                      onClick={() => updateParameter('pressureType', { value: t, unit: '', label: 'Pressure Type' })}
+                                      onClick={() => updateParameter('pressureType', { value: t, unit: '', label: 'Pressure Type' } as any)}
                                       className={`py-1 text-[10px] font-bold uppercase rounded transition-all text-center ${
                                         pType === t
                                           ? 'bg-blue-600 text-white shadow-sm'
@@ -3596,14 +3596,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                     value={pAtm}
                                     onChange={(e) => {
                                       const val = parseFloat(e.target.value) || 0;
-                                      updateParameter('atmosphericPressure', { value: val, unit: pAtmUnit, label: 'Atmospheric Pressure' });
+                                      updateParameter('atmosphericPressure', { value: val, unit: pAtmUnit, label: 'Atmospheric Pressure' } as any);
                                     }}
                                     className="flex-1 bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-white font-mono"
                                   />
                                   <select
                                     value={pAtmUnit}
                                     onChange={(e) => {
-                                      updateParameter('atmosphericPressure', { value: pAtm, unit: e.target.value, label: 'Atmospheric Pressure' });
+                                      updateParameter('atmosphericPressure', { value: pAtm, unit: e.target.value, label: 'Atmospheric Pressure' } as any);
                                     }}
                                     className="bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-2 text-xs focus:border-blue-500 outline-none text-blue-400 font-bold cursor-pointer"
                                   >
@@ -3629,7 +3629,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                     type="checkbox"
                                     checked={elevCorr}
                                     onChange={(e) => {
-                                      updateParameter('elevationCorrection', { value: e.target.checked ? 'true' : 'false', unit: '', label: 'Enable Elevation Correction' });
+                                      updateParameter('elevationCorrection', { value: e.target.checked ? 'true' : 'false', unit: '', label: 'Enable Elevation Correction' } as any);
                                     }}
                                     className="rounded border-[#222] text-blue-500 focus:ring-0 cursor-pointer"
                                   />
@@ -3649,14 +3649,14 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                       value={zRef}
                                       onChange={(e) => {
                                         const val = parseFloat(e.target.value) || 0;
-                                        updateParameter('referenceElevation', { value: val, unit: zRefUnit, label: 'Reference Elevation' });
+                                        updateParameter('referenceElevation', { value: val, unit: zRefUnit, label: 'Reference Elevation' } as any);
                                       }}
                                       className="flex-1 bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-white font-mono"
                                     />
                                     <select
                                       value={zRefUnit}
                                       onChange={(e) => {
-                                        updateParameter('referenceElevation', { value: zRef, unit: e.target.value, label: 'Reference Elevation' });
+                                        updateParameter('referenceElevation', { value: zRef, unit: e.target.value, label: 'Reference Elevation' } as any);
                                       }}
                                       className="bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-2 text-xs focus:border-blue-500 outline-none text-blue-400 font-bold cursor-pointer"
                                     >
@@ -3684,7 +3684,7 @@ export const VLabWorkspace: React.FC<VLabWorkspaceProps> = ({
                                 </label>
                                 <select
                                   value={initPriority}
-                                  onChange={(e) => updateParameter('initializationPriority', { value: e.target.value, unit: '', label: 'Initialization Priority' })}
+                                  onChange={(e) => updateParameter('initializationPriority', { value: e.target.value, unit: '', label: 'Initialization Priority' } as any)}
                                   className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg py-1.5 px-3 text-xs focus:border-blue-500 outline-none text-blue-300 font-bold cursor-pointer"
                                 >
                                   <option value="high">High</option>
