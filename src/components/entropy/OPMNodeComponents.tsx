@@ -165,12 +165,12 @@ export const OPMObjectNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected
     : isRequirement
       ? 'border border-purple-500/70 bg-[#160b22]/90 shadow-lg'
       : isPhysical
-        ? 'border-[3px] border-emerald-400/90 bg-[#0a1810]/90 shadow-lg'
-        : 'border border-emerald-600/70 bg-[#0a1810]/90 shadow-lg';
+        ? 'border-[3px] border-emerald-400 bg-[#0a1810]/90 shadow-lg'
+        : 'border-2 border-emerald-500 bg-[#0a1810]/90 shadow-lg';
 
   const stateCount = (data.states || []).length;
-  const dynamicMinHeight = stateCount > 0 ? 105 : 80;
-  const dynamicMinWidth = stateCount > 0 ? 36 + stateCount * 95 + (stateCount - 1) * 12 : 220;
+  const dynamicMinHeight = stateCount > 0 ? 110 : 80;
+  const dynamicMinWidth = stateCount > 0 ? 240 : 220;
 
   return (
     <div
@@ -185,10 +185,15 @@ export const OPMObjectNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected
       <NodeResizer minWidth={160} minHeight={60} isVisible={selected} lineStyle={{ borderColor: '#fbbf24' }} handleStyle={{ background: '#fbbf24', border: '1px solid #78350f', borderRadius: '4px' }} />
 
       {/* Header tag */}
-      <div className={`flex items-center justify-between border-b pb-1 select-none ${isRequirement ? 'border-purple-800/40' : 'border-emerald-800/40'}`}>
+      <div className={`flex items-center justify-between gap-2 border-b px-2 pb-1 select-none ${isRequirement ? 'border-purple-800/40' : 'border-emerald-800/40 bg-emerald-950/80'}`}>
         <span className={`text-[8px] uppercase tracking-wider font-extrabold ${isRequirement ? 'text-purple-400/90' : 'text-emerald-400/80'}`}>
           {isRequirement ? '«Requirement»' : '«Object»'}
         </span>
+        {!isRequirement && (
+          <span className="text-[13px] font-bold text-white truncate">
+            {data.name}
+          </span>
+        )}
         {isPhysical && !isRequirement && (
           <span className="text-[7.5px] px-1.5 py-0.5 rounded bg-emerald-900/60 border border-emerald-700/60 text-emerald-300 font-bold uppercase tracking-wider">Physical</span>
         )}
@@ -201,15 +206,11 @@ export const OPMObjectNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected
         </div>
       ) : (
         <>
-          <div className="h-6 flex items-center justify-center pt-0.5">
-            <div className="text-xs font-bold text-emerald-100 text-center tracking-wide px-2 select-none truncate">
-              {data.name}
-            </div>
-          </div>
-
           {/* Reserved clean slot area for child state nodes */}
-          {stateCount > 0 && (
+          {stateCount > 0 ? (
             <div className="mt-1 h-9 w-full rounded-lg border border-emerald-900/30 bg-black/35" />
+          ) : (
+            <div className="mt-1 h-9 w-full rounded-lg border border-dashed border-emerald-700/60 bg-black/25 flex items-center justify-center px-2 text-[10px] text-emerald-300/70 select-none truncate">+ State — click State tool then this object</div>
           )}
 
           {/* Attributes Listing */}
