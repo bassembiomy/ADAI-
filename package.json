@@ -10,6 +10,8 @@
   "scripts": {
     "dev": "vite",
     "build:sm-runtime": "tsx scripts/build_state_machine_runtime.ts",
+    "verify:sm-codegen": "tsx scripts/verify_sm_codegen.ts",
+    "benchmark:sm-codegen": "tsx scripts/benchmark_sm_codegen.ts",
     "build:electron": "npx electron scripts/build_protected_electron.cjs",
     "build": "tsc && vite build && npm run build:electron",
     "preview": "vite preview",

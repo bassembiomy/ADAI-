@@ -1,5 +1,6 @@
-import { execFileSync } from 'child_process';
-import { existsSync, writeFileSync } from 'fs';
+import { execFileSync, spawnSync } from 'child_process';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
 import { createGeneratedCodeTestWorkspace } from '../generatedCodeTestWorkspace';
 import {
@@ -42,16 +43,159 @@ export interface CProgramOptions {
   defines?: readonly string[];
   allowMissingCompiler?: boolean;
   executableName?: string;
+  compiler?: string;
+  toolchainPreflight?: C99ToolchainAvailable;
 }
+
+export type CToolchainSelectionSource = 'explicit' | 'environment' | 'default';
+
+export interface C99ToolchainAvailable {
+  status: 'AVAILABLE';
+  compiler: string;
+  selectionSource: CToolchainSelectionSource;
+  version: string;
+  probeOutput: string;
+}
+
+export interface C99ToolchainBlocked {
+  status: 'BLOCKED';
+  compiler: string;
+  selectionSource: CToolchainSelectionSource;
+  phase: 'compile-link' | 'run';
+  detail: string;
+}
+
+export type C99ToolchainProbeResult =
+  | C99ToolchainAvailable
+  | C99ToolchainBlocked;
+
+export interface C99ToolchainProbeOptions {
+  compiler?: string;
+}
+
+export class CProgramExecutionError extends Error {
+  constructor(
+    readonly phase: 'compile-generated' | 'run-generated',
+    message: string,
+    readonly detail: string,
+  ) {
+    super(`${message}: ${detail}`);
+    this.name = 'CProgramExecutionError';
+  }
+}
+
+const resolveCCompiler = (
+  explicit?: string,
+): { compiler: string; selectionSource: CToolchainSelectionSource } => {
+  if (explicit) return { compiler: explicit, selectionSource: 'explicit' };
+  const environment = process.env.ADIA_SM_C_COMPILER?.trim();
+  if (environment) {
+    return { compiler: environment, selectionSource: 'environment' };
+  }
+  return { compiler: 'gcc', selectionSource: 'default' };
+};
+
+const processFailureDetail = (
+  command: string,
+  result: ReturnType<typeof spawnSync>,
+): string => {
+  const parts = [
+    `${command} exited with ${result.status ?? 'no status'}`,
+    result.error?.message,
+    typeof result.stderr === 'string' ? result.stderr.trim() : undefined,
+    typeof result.stdout === 'string' ? result.stdout.trim() : undefined,
+  ].filter((part): part is string => Boolean(part));
+  return parts.join('\n');
+};
+
+/**
+ * Proves that the selected host compiler can compile, link, and execute C99.
+ * Merely printing a compiler version is deliberately insufficient.
+ */
+export const probeC99Toolchain = (
+  options: C99ToolchainProbeOptions = {},
+): C99ToolchainProbeResult => {
+  const selection = resolveCCompiler(options.compiler);
+  const directory = mkdtempSync(join(tmpdir(), 'adia-c99-preflight-'));
+  const source = join(directory, 'preflight.c');
+  const executable = join(
+    directory,
+    process.platform === 'win32' ? 'preflight.exe' : 'preflight',
+  );
+  const expected = 'ADIA_C99_PREFLIGHT_OK';
+  writeFileSync(source, [
+    '#include <stdio.h>',
+    'int main(void)',
+    '{',
+    `    (void)puts("${expected}");`,
+    '    return 0;',
+    '}',
+    '',
+  ].join('\n'));
+
+  try {
+    const compiled = spawnSync(selection.compiler, [
+      '-std=c99',
+      '-pedantic-errors',
+      '-Wall',
+      '-Wextra',
+      '-Werror',
+      source,
+      '-o',
+      executable,
+    ], { cwd: directory, encoding: 'utf8', timeout: 30_000 });
+    if (compiled.error || compiled.status !== 0 || !existsSync(executable)) {
+      return {
+        status: 'BLOCKED',
+        ...selection,
+        phase: 'compile-link',
+        detail: processFailureDetail(selection.compiler, compiled),
+      };
+    }
+
+    const ran = spawnSync(executable, [], {
+      cwd: directory,
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+    const output = typeof ran.stdout === 'string' ? ran.stdout.trim() : '';
+    if (ran.error || ran.status !== 0 || output !== expected) {
+      return {
+        status: 'BLOCKED',
+        ...selection,
+        phase: 'run',
+        detail: processFailureDetail(executable, ran),
+      };
+    }
+
+    const versionResult = spawnSync(selection.compiler, ['--version'], {
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+    const version = typeof versionResult.stdout === 'string'
+      ? (versionResult.stdout.split(/\r?\n/, 1)[0] ?? '').trim()
+      : '';
+    return {
+      status: 'AVAILABLE',
+      ...selection,
+      version,
+      probeOutput: output,
+    };
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+};
 
 export const compileAndRunCProgram = (
   options: CProgramOptions,
 ): string | null => {
-  try {
-    execFileSync('gcc', ['--version'], { stdio: 'pipe' });
-  } catch (error) {
+  const preflight = options.toolchainPreflight
+    ?? probeC99Toolchain({ compiler: options.compiler });
+  if (preflight.status === 'BLOCKED') {
     if (options.allowMissingCompiler) return null;
-    throw error;
+    throw new Error(
+      `C99 toolchain BLOCKED during ${preflight.phase}: ${preflight.detail}`,
+    );
   }
   const harnessName = 'sm_trace_harness.c';
   writeFileSync(
@@ -64,32 +208,54 @@ export const compileAndRunCProgram = (
       ? `${options.executableName ?? 'sm_trace_harness'}.exe`
       : options.executableName ?? 'sm_trace_harness',
   );
-  execFileSync('gcc', [
-    '-std=c99',
-    '-pedantic-errors',
-    '-Wall',
-    '-Wextra',
-    '-Werror',
-    ...(options.defines ?? []).map((define) => `-D${define}`),
-    '-I.',
-    'sm_mapping.c',
-    'sm_core.c',
-    'sm_safety.c',
-    'sm_user_logic.c',
-    ...(existsSync(join(options.directory, 'sm_xbridges.c'))
-      ? ['sm_xbridges.c']
-      : []),
-    ...(options.additionalSources ?? []),
-    harnessName,
-    '-lm',
-    '-o',
-    executable,
-  ], { cwd: options.directory, stdio: 'pipe' });
-  return execFileSync(executable, [], {
-    cwd: options.directory,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  try {
+    execFileSync(preflight.compiler, [
+      '-std=c99',
+      '-pedantic-errors',
+      '-Wall',
+      '-Wextra',
+      '-Werror',
+      ...(options.defines ?? []).map((define) => `-D${define}`),
+      '-I.',
+      'sm_mapping.c',
+      'sm_core.c',
+      'sm_safety.c',
+      'sm_user_logic.c',
+      ...(existsSync(join(options.directory, 'sm_xbridges.c'))
+        ? ['sm_xbridges.c']
+        : []),
+      ...(options.additionalSources ?? []),
+      harnessName,
+      '-lm',
+      '-o',
+      executable,
+    ], { cwd: options.directory, stdio: 'pipe' });
+  } catch (error) {
+    const detail = error instanceof Error
+      ? `${error.message}\n${'stderr' in error ? String(error.stderr ?? '') : ''}`.trim()
+      : String(error);
+    throw new CProgramExecutionError(
+      'compile-generated',
+      'Generated C99 source was rejected',
+      detail,
+    );
+  }
+  try {
+    return execFileSync(executable, [], {
+      cwd: options.directory,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (error) {
+    const detail = error instanceof Error
+      ? `${error.message}\n${'stderr' in error ? String(error.stderr ?? '') : ''}`.trim()
+      : String(error);
+    throw new CProgramExecutionError(
+      'run-generated',
+      'Generated C99 program failed at runtime',
+      detail,
+    );
+  }
 };
 
 export interface SyntaxCompilationResult {
@@ -1027,6 +1193,10 @@ const parseFrame = (line: string): CTraceFrame => {
 
 export const compileAndRunCTrace = (
   fixture: DifferentialFixture,
+  options: {
+    compiler?: string;
+    toolchainPreflight?: C99ToolchainAvailable;
+  } = {},
 ): CTraceFrame[] => {
   const ir = buildFixtureIr(fixture);
   const workspace = createGeneratedCodeTestWorkspace(
@@ -1043,10 +1213,13 @@ export const compileAndRunCTrace = (
       directory: workspace.directory,
       harnessSource: renderDifferentialHarness(ir, fixture.steps),
       defines: ['SM_TRACE_ENABLED'],
+      compiler: options.compiler,
+      toolchainPreflight: options.toolchainPreflight,
     });
     if (output === null) throw new Error('host gcc is required');
     return output.trim().split(/\r?\n/).filter(Boolean).map(parseFrame);
   } catch (error) {
+    if (error instanceof CProgramExecutionError) throw error;
     const detail = error instanceof Error
       ? `${error.message}\n${'stderr' in error ? String(error.stderr ?? '') : ''}`
       : String(error);

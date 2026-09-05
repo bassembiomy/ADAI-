@@ -8,15 +8,33 @@ import { runReferenceInterpreter, type SMTraceStep, type SMVerificationVector } 
 import { compareTraces, type DifferentialResult, type VerificationStatus } from './smDifferentialEngine';
 import { aggregateVerificationStatus, type AggregatedStatus } from './smVerificationAggregator';
 import { createGeneratedCodeTestWorkspace } from '../generatedCodeTestWorkspace';
+import {
+  probeC99Toolchain,
+  type C99ToolchainProbeResult,
+} from './smCHarness';
 
 export interface PipelineReport {
   artifactsCount: number;
   traceabilityMappingsCount: number;
   differential: DifferentialResult;
   status: AggregatedStatus;
+  toolchain: C99ToolchainProbeResult;
+  execution: {
+    hostCompileStatus: VerificationStatus;
+    runtimeStatus: VerificationStatus;
+  };
 }
 
-export function runVerificationPipeline(ir: SemanticModel, vectors?: SMVerificationVector[]): PipelineReport {
+export interface VerificationPipelineOptions {
+  compiler?: string;
+  toolchainPreflight?: C99ToolchainProbeResult;
+}
+
+export function runVerificationPipeline(
+  ir: SemanticModel,
+  vectors?: SMVerificationVector[],
+  options: VerificationPipelineOptions = {},
+): PipelineReport {
   const testVectors = vectors || [{ tick: 1, deltaMs: 100, inputs: {}, events: [] }];
   const artifacts = generateCArtifacts(ir, { includeHostHarness: true, vectorCount: testVectors.length });
 
@@ -26,36 +44,56 @@ export function runVerificationPipeline(ir: SemanticModel, vectors?: SMVerificat
   let hostCompileStatus: VerificationStatus = 'NOT RUN';
   let runtimeStatus: VerificationStatus = 'NOT RUN';
   let generatedTrace: SMTraceStep[] = [];
+  const toolchain = options.toolchainPreflight
+    ?? probeC99Toolchain({ compiler: options.compiler });
 
-  // Real host compilation & execution attempt
-  try {
+  if (toolchain.status === 'BLOCKED') {
+    hostCompileStatus = 'BLOCKED';
+    runtimeStatus = 'BLOCKED';
+  } else {
     const workspace = createGeneratedCodeTestWorkspace('pipeline-exec');
-    const sourceFiles: string[] = [];
-    for (const f of artifacts.files) {
-      if (f.name.endsWith('.c') || f.name.endsWith('.h')) {
-        writeFileSync(join(workspace.directory, f.name), f.content);
-        if (f.name.endsWith('.c')) sourceFiles.push(f.name);
+    try {
+      const sourceFiles: string[] = [];
+      for (const f of artifacts.files) {
+        if (f.name.endsWith('.c') || f.name.endsWith('.h')) {
+          writeFileSync(join(workspace.directory, f.name), f.content);
+          if (f.name.endsWith('.c')) sourceFiles.push(f.name);
+        }
       }
-    }
-    const execPath = join(workspace.directory, 'sm_host.exe');
-    
-    // Attempt host GCC compilation
-    execFileSync('gcc', ['-std=c99', '-Wall', '-Wextra', '-Wshadow', '-Werror', '-I.', ...sourceFiles, '-lm', '-o', execPath], { cwd: workspace.directory });
+      const execPath = join(
+        workspace.directory,
+        process.platform === 'win32' ? 'sm_host.exe' : 'sm_host',
+      );
 
-    hostCompileStatus = 'PASS';
+      try {
+        execFileSync(toolchain.compiler, [
+          '-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Wshadow',
+          '-Werror', '-I.', ...sourceFiles, '-lm', '-o', execPath,
+        ], { cwd: workspace.directory, stdio: 'pipe' });
+        hostCompileStatus = 'PASS';
+      } catch {
+        hostCompileStatus = 'FAIL';
+        runtimeStatus = 'NOT RUN';
+      }
 
-    // Execute compiled C binary and capture JSONL trace
-    const output = execFileSync(execPath, { cwd: workspace.directory, encoding: 'utf8' });
-    const lines = output.trim().split('\n');
-    generatedTrace = lines.filter(l => l.trim().startsWith('{')).map(l => JSON.parse(l));
-    runtimeStatus = 'PASS';
-  } catch (err: any) {
-    console.error('PIPELINE GCC COMPILE ERROR:', err?.stderr ? err.stderr.toString() : String(err));
-    if (hostCompileStatus === 'PASS') {
-      runtimeStatus = 'FAIL';
-    } else {
-      hostCompileStatus = 'BLOCKED';
-      runtimeStatus = 'BLOCKED';
+      if (hostCompileStatus === 'PASS') {
+        try {
+          const output = execFileSync(execPath, {
+            cwd: workspace.directory,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+          const lines = output.trim().split(/\r?\n/);
+          generatedTrace = lines
+            .filter((line) => line.trim().startsWith('{'))
+            .map((line) => JSON.parse(line));
+          runtimeStatus = 'PASS';
+        } catch {
+          runtimeStatus = 'FAIL';
+        }
+      }
+    } finally {
+      workspace.cleanup();
     }
   }
 
@@ -63,7 +101,11 @@ export function runVerificationPipeline(ir: SemanticModel, vectors?: SMVerificat
   const diffResult = (hostCompileStatus === 'PASS' && runtimeStatus === 'PASS')
     ? compareTraces(referenceTrace, generatedTrace, { modelHash: ir.modelHash || '000', vectors: testVectors })
     : {
-        behavioralGenerationStatus: 'BLOCKED' as VerificationStatus,
+        behavioralGenerationStatus: (
+          hostCompileStatus === 'FAIL' || runtimeStatus === 'FAIL'
+            ? 'FAIL'
+            : 'BLOCKED'
+        ) as VerificationStatus,
         targetIntegrationStatus: 'INTEGRATION REQUIRED' as VerificationStatus,
         productVerificationStatus: 'INCOMPLETE' as const,
         firstDivergence: null
@@ -73,7 +115,7 @@ export function runVerificationPipeline(ir: SemanticModel, vectors?: SMVerificat
     hostCompile: hostCompileStatus,
     runtimeTests: runtimeStatus,
     differential: diffResult.behavioralGenerationStatus,
-    coverage: hostCompileStatus === 'PASS' ? 'PASS' : 'BLOCKED',
+    coverage: hostCompileStatus === 'PASS' ? 'PASS' : hostCompileStatus,
     mcuIntegration: 'INTEGRATION REQUIRED'
   });
 
@@ -81,6 +123,8 @@ export function runVerificationPipeline(ir: SemanticModel, vectors?: SMVerificat
     artifactsCount: artifacts.files.length,
     traceabilityMappingsCount: traceReport.mappings.length,
     differential: diffResult,
-    status
+    status,
+    toolchain,
+    execution: { hostCompileStatus, runtimeStatus },
   };
 }

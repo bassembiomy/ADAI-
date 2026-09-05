@@ -1,9 +1,9 @@
-import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createGeneratedCodeTestWorkspace } from '../generatedCodeTestWorkspace';
+import { BLOCK_LIBRARY } from '../../engine/xbridges/BlockDefinitions';
 import { generateMISRACCode } from '../stateMachineCodeGenerator';
 import { buildSemanticModel } from './smSemanticBuilder';
 import { migrateStateMachineModel } from './smModelMigration';
@@ -15,6 +15,7 @@ import {
   nestedAndFixture,
   parallelHistoryFixture,
 } from './smFixtures';
+import type { XBNodeV1, XBParameterValue } from './xbModel';
 import type { SemanticModel } from './smSemanticModel';
 import {
   generateCArtifacts,
@@ -31,6 +32,92 @@ const build = (model: ReturnType<typeof flatOrFixture>) => {
   expect(result.diagnostics.filter((item) => item.severity === 'error')).toEqual([]);
   expect(result.ir).toBeDefined();
   return result.ir!;
+};
+
+const regressionXBNode = (
+  id: string,
+  type: string,
+  parameters: Record<string, XBParameterValue> = {},
+): XBNodeV1 => {
+  const block = BLOCK_LIBRARY[type](id, parameters);
+  const port = (item: any) => ({
+    id: item.id,
+    direction: item.direction,
+    shape: item.shape
+      ?? (['scalar', 'vector', 'matrix'].includes(item.type) ? item.type : 'scalar'),
+    dimensions: item.dimensions ?? [],
+    dataType: item.dataType ?? 'float32',
+  });
+  return {
+    id,
+    type,
+    parameters: {
+      ...(block.inputs ? { inputs: block.inputs.map(port) } : {}),
+      ...(block.outputs ? { outputs: block.outputs.map(port) } : {}),
+      ...parameters,
+    },
+  };
+};
+
+const delayInitialConditionFixture = () => {
+  const model = hybridXBridgesFixture();
+  const controller = model.states[1];
+  controller.id = 'state_initial_3';
+  controller.autostart = true;
+  controller.xBridgesModel!.nodes = [
+    regressionXBNode('XB2_A', 'Constant', { value: 0 }),
+    regressionXBNode('XB2_B', 'Constant', { value: 0 }),
+    regressionXBNode('XB2_C', 'Constant', { value: 0 }),
+    regressionXBNode('XB2_Source', 'Constant', { value: 2 }),
+    regressionXBNode('XB2_Delay', 'DELAY', { delay_length: 1, initial_condition: -1 }),
+  ];
+  controller.xBridgesModel!.edges = [{
+    id: 'edge-delay',
+    sourceNodeId: 'XB2_Source',
+    sourcePortId: 'out',
+    targetNodeId: 'XB2_Delay',
+    targetPortId: 'u',
+  }];
+  model.states = [controller];
+  model.layers[0].stateIds = [controller.id];
+  model.variables = [];
+  return model;
+};
+
+const routingProbeFixture = () => {
+  const model = hybridXBridgesFixture();
+  const controller = model.states[1];
+  controller.id = 'routing';
+  controller.autostart = true;
+  controller.xBridgesModel!.nodes = [
+    regressionXBNode('XB5_Control5', 'Constant', { value: 5 }),
+    regressionXBNode('XB5_Route11', 'Constant', { value: 11 }),
+    regressionXBNode('XB5_Route22', 'Constant', { value: 22 }),
+    regressionXBNode('XB5_Switch', 'SWITCH', { threshold: 3, criteria: '>' }),
+    regressionXBNode('XB5_ConditionOne', 'Constant', { value: 1 }),
+    regressionXBNode('XB5_True33', 'Constant', { value: 33 }),
+    regressionXBNode('XB5_False44', 'Constant', { value: 44 }),
+    regressionXBNode('XB5_IfElse', 'IF_ELSE'),
+  ];
+  controller.xBridgesModel!.edges = [
+    { id: 'switch-control', sourceNodeId: 'XB5_Control5', sourcePortId: 'out', targetNodeId: 'XB5_Switch', targetPortId: 'ctrl' },
+    { id: 'switch-true', sourceNodeId: 'XB5_Route11', sourcePortId: 'out', targetNodeId: 'XB5_Switch', targetPortId: 'u1' },
+    { id: 'switch-false', sourceNodeId: 'XB5_Route22', sourcePortId: 'out', targetNodeId: 'XB5_Switch', targetPortId: 'u2' },
+    { id: 'if-condition', sourceNodeId: 'XB5_ConditionOne', sourcePortId: 'out', targetNodeId: 'XB5_IfElse', targetPortId: 'cond' },
+    { id: 'if-true', sourceNodeId: 'XB5_True33', sourcePortId: 'out', targetNodeId: 'XB5_IfElse', targetPortId: 'u_true' },
+    { id: 'if-false', sourceNodeId: 'XB5_False44', sourcePortId: 'out', targetNodeId: 'XB5_IfElse', targetPortId: 'u_false' },
+  ];
+  controller.xBridgesModel!.mappings = [
+    { smVarId: 'switch_output', blockId: 'XB5_Switch', portId: 'y', direction: 'out' },
+    { smVarId: 'ifelse_output', blockId: 'XB5_IfElse', portId: 'y', direction: 'out' },
+  ];
+  model.states = [controller];
+  model.layers[0].stateIds = [controller.id];
+  model.variables = [
+    { id: 'switch_output', name: 'xb5_switch_output', type: 'float', initialValue: '0', currentValue: 0, visibleInScope: true },
+    { id: 'ifelse_output', name: 'xb5_ifelse_output', type: 'float', initialValue: '0', currentValue: 0, visibleInScope: true },
+  ];
+  return model;
 };
 
 const generatedFile = (
@@ -1250,18 +1337,14 @@ int main(void) {
     });
 
     it('generates correct DELAY block initial condition (-1.0) for statemachine-xbridges-scalar-multisystem-test.json', () => {
-      const rawJson = readFileSync('C:/Users/EL-Dawlia/Downloads/delay/statemachine-xbridges-scalar-multisystem-test.json', 'utf-8');
-      const rawModel = JSON.parse(rawJson);
-      const output = generateMISRACCode(rawModel);
+      const output = generateMISRACCode(delayInitialConditionFixture());
       const coreSource = output.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
       expect(coreSource).toContain('xb_state_initial_3_XB2_Delay_XB2_Delay_y_state_value = (double)(-1.0)');
       expect(coreSource).not.toContain('xb_state_initial_3_XB2_Delay_XB2_Delay_y_state_value = (double)(0.0)');
     });
 
     it('generates correct routing equations for SWITCH (11) and IF_ELSE (33) for statemachine-xbridges-master-batch2b-routing-probe.json', () => {
-      const rawJson = readFileSync('C:/Users/EL-Dawlia/Downloads/delay/New folder/statemachine-xbridges-master-batch2b-routing-probe.json', 'utf-8');
-      const rawModel = JSON.parse(rawJson);
-      const output = generateMISRACCode(rawModel);
+      const output = generateMISRACCode(routingProbeFixture());
       const coreSource = output.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
       const headerSource = output.files.find((f) => f.name === 'sm_xbridges.h')?.content ?? '';
 
