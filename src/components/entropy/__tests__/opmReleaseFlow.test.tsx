@@ -168,4 +168,31 @@ describe('OPM Standard Editor Release Flow', () => {
     expect(artifactState.lifecycle).toBe('draft');
     expect(canDownload(artifactState)).toBe(false);
   });
+
+  it('verifies production EntropyWorkspace imports all OPM standard helpers (REQ-P2-02)', async () => {
+    // Read EntropyWorkspace source file to guarantee production-path integration
+    const fs = await import('fs');
+    const path = await import('path');
+    const wsPath = path.resolve(__dirname, '../EntropyWorkspace.tsx');
+    const wsSource = fs.readFileSync(wsPath, 'utf-8');
+
+    // 1. OpmMigrations integration
+    expect(wsSource).toContain("from './OpmMigrations'");
+    expect(wsSource).toContain('convertOpmNodeType');
+    expect(wsSource).toContain('convertOpmEdgeType');
+
+    // 2. OpmPortContracts integration
+    expect(wsSource).toContain("from './OpmPortContracts'");
+    expect(wsSource).toContain('validateOpmPortConnection');
+    expect(wsSource).toContain('isValidConnection={isValidConnection}');
+
+    // 3. OpmSimulationConfig integration
+    expect(wsSource).toContain("from './OpmSimulationConfig'");
+    expect(wsSource).toContain('normalizeOpmSimulationConfig');
+
+    // 4. OpmDiagnosticsBadge integration
+    expect(wsSource).toContain("from './OpmDiagnosticsBadge'");
+    expect(wsSource).toContain('handleNavigateToDiagnostic');
+  });
 });
+
