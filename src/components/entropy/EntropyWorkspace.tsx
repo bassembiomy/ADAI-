@@ -2268,6 +2268,24 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               edges={edges as never}
               state={opmArtifactState}
               onStateChange={setOpmArtifactState}
+              opmSimulationConfig={activeOpmConfig}
+              onNavigateToDiagnostic={(src) => {
+                if (src.elementId) {
+                  const node = nodes.find(n => n.id === src.elementId);
+                  if (node) {
+                    setSelectedNode(node);
+                    setSelectedEdge(null);
+                    return;
+                  }
+                  const edge = edges.find(e => e.id === src.elementId);
+                  if (edge) {
+                    setSelectedEdge(edge);
+                    setSelectedNode(null);
+                    return;
+                  }
+                }
+                onAddError?.('info', `Diagnostic reference: ${src.elementId || src.propertyPath || 'unknown source'}`, 'OPM');
+              }}
               onDownload={(files) => {
                 onAddError?.('info', `Verified OPM bundle ready: ${files.length} files.`, 'OPM');
               }}

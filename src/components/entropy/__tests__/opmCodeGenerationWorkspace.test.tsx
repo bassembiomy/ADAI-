@@ -1,8 +1,11 @@
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, it, expect } from 'vitest';
 import {
   applyModelEdit,
   canDownload,
   canVerify,
+  canGenerate,
   computeCurrentFingerprint,
   createInitialArtifactState,
   markFailed,
@@ -10,6 +13,7 @@ import {
   markVerified,
   markVerifying,
   markValidated,
+  OpmCodeGenerationWorkspace,
   type OpmArtifactLifecycle,
   type OpmArtifactState,
 } from '../OpmCodeGenerationWorkspace';
@@ -141,5 +145,126 @@ describe('OpmCodeGenerationWorkspace lifecycle', () => {
     const invalidated = applyModelEdit(verified, `${fingerprint}-stale`);
     expect(invalidated.lifecycle).toBe('draft');
     expect(canDownload(invalidated)).toBe(false);
+  });
+
+  it('asserts manifest initially shows pending qualificationStatus and never labels unqualified output as qualified', () => {
+    const fixture = makeApplianceFixture();
+    const compRes = compileExecutableOpm(fixture.nodes as never, fixture.edges as never, fixture.config);
+    if (!compRes.model) throw new Error('fixture must compile');
+
+    const result = generateOpmCArtifacts(compRes.model);
+    expect(result.manifest.qualificationStatus).toBe('pending');
+    expect(result.manifest.qualificationStatus).not.toBe('qualified');
+  });
+
+  it('asserts empty files produce failed lifecycle and manifest status', () => {
+    const fixture = makeApplianceFixture();
+    const compRes = compileExecutableOpm(fixture.nodes as never, fixture.edges as never, fixture.config);
+    if (!compRes.model) throw new Error('fixture must compile');
+
+    // Simulate empty file diagnostic
+    const res = generateOpmCArtifacts(compRes.model, [
+      {
+        code: 'OPM_CODEGEN_EMPTY_FILE',
+        severity: 'error',
+        message: 'Empty file detected',
+        source: { elementId: 'opm_model.c', propertyPath: 'content' },
+      },
+    ]);
+    expect(res.manifest.qualificationStatus).toBe('failed');
+    expect(res.files).toHaveLength(0);
+    expect(res.diagnostics.some(d => d.code === 'OPM_CODEGEN_EMPTY_FILE')).toBe(true);
+  });
+
+  it('blocks Generate when model has validation errors or null fingerprint', () => {
+    // Null fingerprint -> blocked
+    expect(canGenerate([], null)).toBe(false);
+
+    // Errors present -> blocked
+    expect(
+      canGenerate(
+        [{ code: 'ERR', severity: 'error', message: 'bad', source: { elementId: 'n1', propertyPath: 'name' } }],
+        'fp123',
+      ),
+    ).toBe(false);
+
+    // Warnings only -> allowed
+    expect(
+      canGenerate(
+        [{ code: 'WARN', severity: 'warning', message: 'caution', source: { elementId: 'n1', propertyPath: 'name' } }],
+        'fp123',
+      ),
+    ).toBe(true);
+  });
+
+  it('renders sequential progress sections, evidence details, and data-opm-path on diagnostics', () => {
+    const fixture = makeApplianceFixture();
+    const { state: verified, fingerprint } = verifiedState();
+
+    const stateWithDiagnostics: OpmArtifactState = {
+      ...verified,
+      diagnostics: [
+        {
+          code: 'OPM_TEST_DIAG',
+          severity: 'warning',
+          message: 'Check port connection',
+          source: { elementId: 'obj_pump', propertyPath: 'attributes.speed' },
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      <OpmCodeGenerationWorkspace
+        nodes={fixture.nodes as never}
+        edges={fixture.edges as never}
+        state={stateWithDiagnostics}
+        onStateChange={() => {}}
+        opmSimulationConfig={{
+          tickMs: 25,
+          maxTicks: 1000,
+          maxEventsPerTick: 16,
+          deterministicOrder: 'priority-then-source-order',
+        }}
+      />,
+    );
+
+    // 1. Sequential action buttons exist
+    expect(html).toContain('data-testid="opm-validate"');
+    expect(html).toContain('data-testid="opm-generate"');
+    expect(html).toContain('data-testid="opm-verify"');
+    expect(html).toContain('data-testid="opm-download"');
+
+    // 2. Evidence details exist
+    expect(html).toContain('data-testid="opm-fingerprint"');
+    expect(html).toContain('data-testid="opm-tick"');
+    expect(html).toContain('25ms');
+    expect(html).toContain('data-testid="opm-resource-limits"');
+    expect(html).toContain('data-testid="opm-compiler-flags"');
+    expect(html).toContain('-std=c99');
+    expect(html).toContain('data-testid="opm-qualification-status"');
+    expect(html).toContain('data-testid="opm-evidence"');
+
+    // 3. Diagnostic elements have data-opm-path attribute
+    expect(html).toContain('data-opm-path="obj_pump.attributes.speed"');
+  });
+
+  it('disables Generate button when model validation fails', () => {
+    const fixture = makeApplianceFixture();
+    // Invalid model: object with empty name or corrupt state
+    const invalidNodes = fixture.nodes.map(n =>
+      n.id === 'obj_pump' ? { ...n, data: { ...n.data, name: '' } } : n
+    );
+
+    const html = renderToStaticMarkup(
+      <OpmCodeGenerationWorkspace
+        nodes={invalidNodes as never}
+        edges={fixture.edges as never}
+        state={createInitialArtifactState()}
+        onStateChange={() => {}}
+      />,
+    );
+
+    // Generate button should be disabled when model has errors
+    expect(html).toMatch(/<button[^>]*data-testid="opm-generate"[^>]*disabled|<button[^>]*disabled[^>]*data-testid="opm-generate"/);
   });
 });

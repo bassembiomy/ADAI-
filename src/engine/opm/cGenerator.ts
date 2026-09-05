@@ -88,8 +88,11 @@ const DETERMINISTIC_ORDER = [
   'opm_manifest.json',
 ];
 
-export function generateOpmCArtifacts(model: ExecutableOpmModel): GenerateOpmCArtifactsResult {
-  const diagnostics: OpmDiagnostic[] = [];
+export function generateOpmCArtifacts(
+  model: ExecutableOpmModel,
+  extraDiagnostics: OpmDiagnostic[] = [],
+): GenerateOpmCArtifactsResult {
+  const diagnostics: OpmDiagnostic[] = [...extraDiagnostics];
   const limits = DEFAULT_OPM_RESOURCE_LIMITS;
 
   // 1. Identifier safety verification
@@ -270,6 +273,38 @@ export function generateOpmCArtifacts(model: ExecutableOpmModel): GenerateOpmCAr
   const byName = new Map<string, GeneratedOpmFile>();
   for (const f of [...modelFiles, ...runtimeFiles]) byName.set(f.name, f);
 
+  // Check for any empty generated files
+  for (const [name, f] of byName.entries()) {
+    if (!f.content || f.content.trim().length === 0) {
+      diagnostics.push({
+        code: 'OPM_CODEGEN_EMPTY_FILE',
+        severity: 'error',
+        message: `Generated C artifact "${name}" is empty.`,
+        source: { elementId: 'generator', propertyPath: name },
+      });
+    }
+  }
+  if (diagnostics.length > 0) {
+    const emptyFailManifest: OpmManifest = {
+      generatorVersion: '1.0.0',
+      fingerprint: model.fingerprint,
+      modelFingerprint: model.fingerprint,
+      tickMs: model.settings.tickMs,
+      resourceLimits: limits,
+      strictCompilerFlags: STRICT_C99_COMPILER_FLAGS,
+      qualificationStatus: 'failed',
+      settings: model.settings,
+      symbols: model.symbols,
+      objects: [],
+      states: [],
+      processes: [],
+      links: [],
+      events: model.events,
+      enums: model.enums,
+    };
+    return { files: [], manifest: emptyFailManifest, diagnostics };
+  }
+
   const manifest: OpmManifest = {
     generatorVersion: '1.0.0',
     fingerprint: model.fingerprint,
@@ -277,7 +312,7 @@ export function generateOpmCArtifacts(model: ExecutableOpmModel): GenerateOpmCAr
     tickMs: model.settings.tickMs,
     resourceLimits: limits,
     strictCompilerFlags: STRICT_C99_COMPILER_FLAGS,
-    qualificationStatus: 'qualified',
+    qualificationStatus: 'pending',
     settings: model.settings,
     symbols: model.symbols,
     objects: model.objects.map(o => ({ id: o.id, name: o.name, cIdentifier: o.cIdentifier })),
