@@ -8,7 +8,7 @@ import {
   markVerified,
   markFailed,
 } from '../OpmCodeGenerationWorkspace';
-import { convertOpmNodeType, type OpmMigrationWarning } from '../OpmMigrations';
+import { convertOpmEdgeType, convertOpmNodeType, type OpmMigrationWarning } from '../OpmMigrations';
 import { validateOpmPortConnection } from '../OpmPortContracts';
 import { normalizeOpmSimulationConfig } from '../OpmSimulationConfig';
 import { createOpmRuntime, stepOpmRuntime } from '../../../engine/opm/runtime';
@@ -104,6 +104,14 @@ describe('OPM Standard Editor Release Flow', () => {
     expect(conversion.node.data.name).toBe('Pump');
     expect(conversion.warnings.some((w: OpmMigrationWarning) => w.code === 'OPM_STATE_DATA_DISABLED')).toBe(true);
 
+    const convertedEdge = convertOpmEdgeType({
+      id: 'e1', source: 'obj_pump', target: 'proc_run', type: 'opmEdge',
+      data: { type: 'instrument', label: 'kept' },
+    }, 'consumption');
+    expect(convertedEdge.edge.type).toBe('opmEdge');
+    expect(convertedEdge.edge.data?.type).toBe('consumption');
+    expect(convertedEdge.edge.data?.label).toBe('kept');
+
     // 2. Port connection contract: valid vs invalid direction
     const validConn = validateOpmPortConnection(
       sampleNodes,
@@ -122,9 +130,29 @@ describe('OPM Standard Editor Release Flow', () => {
     expect(invalidConn.valid).toBe(false);
     expect(invalidConn.code).toBe('OPM_PORT_DIRECTION_INVALID');
 
+    const portNodes = sampleNodes.map((node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        outputs: node.id === 'obj_pump' ? [{ id: 'out', name: 'out', type: 'instrument', direction: 'output', position: 'right' as const }] : undefined,
+        inputs: node.id === 'proc_run' ? [{ id: 'in', name: 'in', type: 'instrument', direction: 'input', position: 'left' as const }] : undefined,
+      },
+    }));
+    const portVerdict = validateOpmPortConnection(portNodes, [], {
+      source: 'obj_pump', target: 'proc_run', sourceHandle: 'out', targetHandle: 'in',
+    }, 'instrument');
+    expect(portVerdict.valid).toBe(true);
+    expect(portVerdict.sourcePort).toMatchObject({ id: 'out', direction: 'output' });
+    expect(portVerdict.targetPort).toMatchObject({ id: 'in', direction: 'input' });
+    expect(validateOpmPortConnection(portNodes, [], {
+      source: 'obj_pump', target: 'proc_run', sourceHandle: 'missing', targetHandle: 'in',
+    }, 'instrument').valid).toBe(false);
+
     // 3. Independent OPM tick configuration
     const opmConfig = normalizeOpmSimulationConfig({ tickMs: 20 });
     expect(opmConfig.tickMs).toBe(20);
+    expect(() => normalizeOpmSimulationConfig({ tickMs: 0 })).toThrow(/tickMs/i);
+    expect(() => normalizeOpmSimulationConfig({ maxTicks: 1.5 })).toThrow(/maxTicks/i);
 
     // 4. Canonical simulation execution
     const comp = compileExecutableOpm(sampleNodes, [], config);
@@ -142,6 +170,7 @@ describe('OPM Standard Editor Release Flow', () => {
     // 6. Generate artifacts and verify transition to 'generated'
     const generated = generateOpmCArtifacts(comp.model!);
     expect(generated.files.length).toBeGreaterThan(0);
+    expect(generated.manifest.qualificationStatus).toBe('pending');
     artifactState = markGenerated(
       artifactState,
       comp.model!.fingerprint,

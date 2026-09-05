@@ -17,6 +17,12 @@ export const DEFAULT_OPM_SIMULATION_CONFIG: Readonly<OpmSimulationConfig> = Obje
   deterministicOrder: 'priority-then-source-order',
 });
 
+const LIMITS = {
+  tickMs: { min: 1, max: 60_000 },
+  maxTicks: { min: 1, max: 1_000_000 },
+  maxEventsPerTick: { min: 1, max: 1_024 },
+} as const;
+
 export function normalizeOpmSimulationConfig(
   input?: Partial<OpmSimulationConfig> | null,
 ): OpmSimulationConfig {
@@ -24,20 +30,19 @@ export function normalizeOpmSimulationConfig(
     return { ...DEFAULT_OPM_SIMULATION_CONFIG };
   }
 
-  let tickMs = DEFAULT_OPM_SIMULATION_CONFIG.tickMs;
-  if (typeof input.tickMs === 'number' && Number.isFinite(input.tickMs) && input.tickMs > 0) {
-    tickMs = Math.round(input.tickMs);
-  }
+  const readPositiveInteger = (key: 'tickMs' | 'maxTicks' | 'maxEventsPerTick') => {
+    const value = input[key];
+    if (value === undefined) return DEFAULT_OPM_SIMULATION_CONFIG[key];
+    const limits = LIMITS[key];
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < limits.min || value > limits.max) {
+      throw new Error(`Invalid OPM simulation ${key}: expected an integer from ${limits.min} to ${limits.max}.`);
+    }
+    return value;
+  };
 
-  let maxTicks = DEFAULT_OPM_SIMULATION_CONFIG.maxTicks;
-  if (typeof input.maxTicks === 'number' && Number.isFinite(input.maxTicks) && input.maxTicks > 0) {
-    maxTicks = Math.round(input.maxTicks);
-  }
-
-  let maxEventsPerTick = DEFAULT_OPM_SIMULATION_CONFIG.maxEventsPerTick;
-  if (typeof input.maxEventsPerTick === 'number' && Number.isFinite(input.maxEventsPerTick) && input.maxEventsPerTick > 0) {
-    maxEventsPerTick = Math.round(input.maxEventsPerTick);
-  }
+  const tickMs = readPositiveInteger('tickMs');
+  const maxTicks = readPositiveInteger('maxTicks');
+  const maxEventsPerTick = readPositiveInteger('maxEventsPerTick');
 
   return {
     tickMs,

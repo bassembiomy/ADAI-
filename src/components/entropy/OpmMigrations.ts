@@ -44,6 +44,14 @@ export function convertOpmNodeType(
         elementId: node.id,
       });
     }
+    // Keep the candidate safe if the user confirms the migration: execution
+    // metadata that has no meaning on a process is disabled explicitly.
+    clonedNode.data = {
+      ...clonedNode.data,
+      objectExecution: undefined,
+      stateExecution: undefined,
+      states: undefined,
+    };
   }
 
   // If converting to state
@@ -65,10 +73,11 @@ export function convertOpmEdgeType(
   const warnings: OpmMigrationWarning[] = [];
   const clonedEdge: AppEdge = JSON.parse(JSON.stringify(edge));
 
-  if (clonedEdge.data) {
-    clonedEdge.data.linkType = nextType;
-  }
-  (clonedEdge as any).type = nextType;
+  // React Flow's renderer type is always `opmEdge`; the semantic OPM role is
+  // carried by edge.data.type.  Mixing these two fields silently breaks the
+  // canvas when a link is migrated.
+  clonedEdge.type = 'opmEdge';
+  clonedEdge.data = { ...(clonedEdge.data ?? {}), type: nextType };
 
   return { edge: clonedEdge, warnings };
 }

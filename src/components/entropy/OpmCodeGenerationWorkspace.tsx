@@ -321,9 +321,18 @@ export const OpmCodeGenerationWorkspace: React.FC<OpmCodeGenerationWorkspaceProp
         onStateChange(markFailed(withCurrent, compRes.diagnostics.filter((d) => d.severity === 'error').map((d) => `[${d.code}] ${d.message}`)));
         return;
       }
-      const { files, manifest } = generateOpmCArtifacts(compRes.model);
+      const generated = generateOpmCArtifacts(compRes.model);
+      const diagnostics = [...compRes.diagnostics, ...generated.diagnostics];
+      const generationErrors = diagnostics
+        .filter((d) => d.severity === 'error')
+        .map((d) => `[${d.code}] ${d.message}`);
+      if (generationErrors.length > 0 || generated.files.length === 0) {
+        onStateChange(markFailed(withCurrent, generationErrors.length > 0 ? generationErrors : ['OPM generator produced no artifacts.']));
+        return;
+      }
+      const { files, manifest } = generated;
       setActiveFile(files[0]?.name ?? null);
-      onStateChange(markGenerated(withCurrent, compRes.model.fingerprint, files, manifest, compRes.diagnostics));
+      onStateChange(markGenerated(withCurrent, compRes.model.fingerprint, files, manifest, diagnostics));
     } catch (err) {
       onStateChange(markFailed(withCurrent, [err instanceof Error ? err.message : String(err)]));
     }

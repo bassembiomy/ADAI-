@@ -277,7 +277,9 @@ export function generateOpmCArtifacts(model: ExecutableOpmModel): GenerateOpmCAr
     tickMs: model.settings.tickMs,
     resourceLimits: limits,
     strictCompilerFlags: STRICT_C99_COMPILER_FLAGS,
-    qualificationStatus: 'qualified',
+    // Generation creates artifacts only.  Qualification is granted by the
+    // host compile/runtime verification step, never by text generation.
+    qualificationStatus: 'pending',
     settings: model.settings,
     symbols: model.symbols,
     objects: model.objects.map(o => ({ id: o.id, name: o.name, cIdentifier: o.cIdentifier })),

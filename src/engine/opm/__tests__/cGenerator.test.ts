@@ -316,7 +316,7 @@ describe('OPM C99 code generator', () => {
       expect(result.manifest.strictCompilerFlags).toEqual(
         expect.arrayContaining(['-std=c99', '-pedantic-errors', '-Wall', '-Wextra', '-Werror']),
       );
-      expect(result.manifest.qualificationStatus).toBeDefined();
+    expect(result.manifest.qualificationStatus).toBe('pending');
     });
 
     it('rejects invalid C identifiers fail-closed without emitting partial artifacts', () => {
