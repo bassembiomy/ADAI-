@@ -26,7 +26,7 @@ import {
   initializeRuntime,
   stepRuntime,
 } from './smInterpreter';
-import type { StateMachineModelV4 } from './smModel';
+import type { AnyStateMachineModel } from './smModel';
 import { XB_EXECUTABLE_C_CASES } from './xbCConformanceCases';
 import { setXBConformanceStatus } from './xbConformanceStatus';
 
@@ -182,7 +182,7 @@ const xbPort = (
   dataType: string,
 ) => ({ id, direction, shape, dimensions, dataType });
 
-const stepSourceFixture = (): StateMachineModelV4 => {
+const stepSourceFixture = (): AnyStateMachineModel => {
   const model = hybridXBridgesFixture();
   model.states[0].autostart = false;
   const controller = model.states.find((state) => state.id === 'controller')!;
@@ -211,7 +211,7 @@ const stepSourceFixture = (): StateMachineModelV4 => {
 const numericFaultFixture = (
   faultCase: NumericFaultCase,
   numericFault: 'signal-only' | 'escalate',
-): StateMachineModelV4 => {
+): AnyStateMachineModel => {
   const model = hybridXBridgesFixture();
   const ordinary = model.states.find((state) => state.id === 'ordinary')!;
   const controller = model.states.find((state) => state.id === 'controller')!;
@@ -237,7 +237,7 @@ const numericFaultFixture = (
   const scalar64 = (id: string, direction: 'input' | 'output') =>
     xbPort(id, direction, 'scalar', [], 'float32');
   const vector64 = (id: string, direction: 'input' | 'output') =>
-    xbPort(id, direction, 'vector', [1], 'float32');
+    xbPort(id, direction, 'vector', [2], 'float32');
   const matrix64 = (id: string, direction: 'input' | 'output', rows: number, columns: number) =>
     xbPort(id, direction, 'matrix', [rows, columns], 'float32');
   const constant = (id: string, value: number | number[], output: ReturnType<typeof scalar64>) => ({
@@ -253,8 +253,8 @@ const numericFaultFixture = (
     case 'division-by-zero':
       operationId = 'divide';
       nodes = [
-        constant('numerator', [1], vector64('out', 'output')),
-        constant('denominator', [0], vector64('out', 'output')),
+        constant('numerator', [1, 1], vector64('out', 'output')),
+        constant('denominator', [0, 0], vector64('out', 'output')),
         {
           id: operationId, type: 'VectorDiv', parameters: {
             inputs: [vector64('a', 'input'), vector64('b', 'input')],
@@ -365,7 +365,7 @@ const runNumericFault = (
 
 const statefulOverflowFixture = (
   numericFault: 'signal-only' | 'escalate',
-): StateMachineModelV4 => {
+): AnyStateMachineModel => {
   const model = hybridXBridgesFixture();
   const ordinary = model.states.find((state) => state.id === 'ordinary')!;
   const controller = model.states.find((state) => state.id === 'controller')!;
@@ -413,7 +413,7 @@ const traceConstant = (
   },
 });
 
-const shapedTraceFixture = (): StateMachineModelV4 => {
+const shapedTraceFixture = (): AnyStateMachineModel => {
   const model = hybridXBridgesFixture();
   model.states[0].autostart = false;
   const controller = model.states.find((state) => state.id === 'controller')!;
@@ -444,7 +444,7 @@ const shapedTraceFixture = (): StateMachineModelV4 => {
   return model;
 };
 
-const collisionAndOrderingFixture = (): StateMachineModelV4 => {
+const collisionAndOrderingFixture = (): AnyStateMachineModel => {
   const model = hybridXBridgesFixture();
   const template = model.states.find((state) => state.id === 'controller')!;
   const makeState = (id: string, nodes: any[], edges: any[]) => ({
@@ -505,7 +505,7 @@ const collisionAndOrderingFixture = (): StateMachineModelV4 => {
   return model;
 };
 
-const multiSampleDelayFixture = (): StateMachineModelV4 => {
+const multiSampleDelayFixture = (): AnyStateMachineModel => {
   const model = hybridXBridgesFixture();
   const template = model.states.find((state) => state.id === 'controller')!;
   const scalar = (id: string, direction: 'input' | 'output') =>

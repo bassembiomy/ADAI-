@@ -7,9 +7,12 @@ import {
   type OpmRuntime,
 } from '../runtime';
 import type { ExecutableOpmModel } from '../pipeline';
-import type { OpmDiagnostic } from '../executableTypes';
+import type { OpmDiagnostic, OpmStepSnapshot } from '../executableTypes';
 import { createDefaultOpmExecutionConfig } from '../executableTypes';
 import type { TypedExpressionIr } from '../expressionCompiler';
+import { compareOpmSnapshots, runTypescriptScenario } from '../conformanceHarness';
+import { parseOpmSnapshotsStrict, resolveRequiredOpmCompiler, OPM_QUALIFICATION_COMPILER_ERROR } from '../cHostHarness';
+import type { OpmConformanceScenario } from '../conformanceTypes';
 
 function boolLit(value: boolean): TypedExpressionIr {
   return { kind: 'literal', type: { kind: 'bool' }, value } as TypedExpressionIr;
@@ -904,4 +907,100 @@ describe('OPM runtime conformance (canonical step semantics)', () => {
     expect(runtime.ioInputs).toEqual({});
     expect(runtime.ioOutputs).toEqual({});
   });
+
+  describe('Task 7: TypeScript/C qualification and conformance gates', () => {
+    const config = createDefaultOpmExecutionConfig();
+    const testModel: ExecutableOpmModel = {
+      executionEnabled: true,
+      fingerprint: 'qual-gate-fingerprint',
+      settings: config.settings,
+      objects: [
+        {
+          id: 'obj_gate',
+          name: 'GateObj',
+          cIdentifier: 'gate_obj',
+          physical: false,
+          order: 0,
+          source: src('obj_gate', 'name'),
+          attributes: [intAttr('val', 10)],
+          stateIds: [],
+        },
+      ],
+      states: [],
+      processes: [],
+      links: [],
+      events: [],
+      enums: [],
+      symbols: {},
+      sourceByNormalizedId: {},
+    } as unknown as ExecutableOpmModel;
+
+    const testScenario: OpmConformanceScenario = {
+      name: 'qual-test-scenario',
+      model: testModel,
+      steps: [{ deltaMs: 10 }],
+    };
+
+    it('rejects compiler absence when resolving required compiler without valid binary', () => {
+      const prev = process.env.ADIA_OPM_CC;
+      try {
+        delete process.env.ADIA_OPM_CC;
+        expect(() => resolveRequiredOpmCompiler('/non/existent/toolchain/path')).toThrow(
+          OPM_QUALIFICATION_COMPILER_ERROR,
+        );
+      } finally {
+        if (prev !== undefined) process.env.ADIA_OPM_CC = prev;
+      }
+    });
+
+    it('detects C/TypeScript snapshot divergence and model fingerprint mismatch in conformance comparator', () => {
+      const tsRes = runTypescriptScenario(testScenario);
+      expect(tsRes.snapshots).toHaveLength(1);
+
+      // Snapshot divergence
+      const divergedSnapshot: OpmStepSnapshot = {
+        ...tsRes.snapshots[0],
+        values: { val: 999 },
+      };
+      const diffs = compareOpmSnapshots(tsRes.snapshots, [divergedSnapshot], testModel);
+      expect(diffs.length).toBeGreaterThan(0);
+      expect(diffs.some(d => d.field === 'values.val')).toBe(true);
+
+      // Model fingerprint mismatch
+      const fpDiffs = compareOpmSnapshots(
+        tsRes.snapshots,
+        tsRes.snapshots,
+        testModel,
+        'different-model-fingerprint',
+      );
+      expect(fpDiffs.some(d => d.field === 'modelFingerprint')).toBe(true);
+    });
+
+    it('strictly parses stdout and rejects extra stdout lines, duplicate step index, and non-finite values', () => {
+      const tsRes = runTypescriptScenario(testScenario);
+      const validLine = JSON.stringify(tsRes.snapshots[0]);
+
+      // 1. Extra non-empty stdout
+      const extraStdout = `${validLine}\n[INFO] extraneous compiler banner or logger stdout\n`;
+      expect(() => parseOpmSnapshotsStrict(extraStdout, testModel, testScenario)).toThrow();
+
+      // 2. Duplicate step index without reset
+      const dupScenario: OpmConformanceScenario = {
+        name: 'dup-step',
+        model: testModel,
+        steps: [{ deltaMs: 10 }, { deltaMs: 10 }],
+      };
+      const dupStdout = `${validLine}\n${validLine}\n`;
+      expect(() => parseOpmSnapshotsStrict(dupStdout, testModel, dupScenario)).toThrow(/duplicate step index/);
+
+      // 3. Non-finite values
+      const nonFiniteObj = {
+        ...tsRes.snapshots[0],
+        values: { val: NaN },
+      };
+      const nonFiniteStdout = `${JSON.stringify(nonFiniteObj)}\n`;
+      expect(() => parseOpmSnapshotsStrict(nonFiniteStdout, testModel, testScenario)).toThrow(/finite/);
+    });
+  });
 });
+

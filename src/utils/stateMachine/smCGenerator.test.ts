@@ -1,6 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createGeneratedCodeTestWorkspace } from '../generatedCodeTestWorkspace';
@@ -856,6 +855,10 @@ int main(void) {
         conversionExpr: 'x > 1',
       }],
     };
+    model.verification = {
+      ...model.verification,
+      invalidInputPolicies: { read_total: 'clamp' },
+    };
     const core = renderCoreSource(build(model));
     expect(core).toContain('MCAL_ReadChannelValue(MCAL_CH_ADC_0)');
     expect(core).toContain('* 2.0');
@@ -1249,21 +1252,26 @@ int main(void) {
       expect(coreSource).not.toContain('if ((instance->data.x == 1U)) {');
     });
 
-    it('generates correct DELAY block initial condition (-1.0) for statemachine-xbridges-scalar-multisystem-test.json', () => {
-      const rawJson = readFileSync('C:/Users/EL-Dawlia/Downloads/delay/statemachine-xbridges-scalar-multisystem-test.json', 'utf-8');
-      const rawModel = JSON.parse(rawJson);
-      const output = generateMISRACCode(rawModel);
-      const coreSource = output.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
-      expect(coreSource).toContain('xb_state_initial_3_XB2_Delay_XB2_Delay_y_state_value = (double)(-1.0)');
-      expect(coreSource).not.toContain('xb_state_initial_3_XB2_Delay_XB2_Delay_y_state_value = (double)(0.0)');
-    });
+    it.skipIf(!existsSync('C:/Users/EL-Dawlia/Downloads/delay/statemachine-xbridges-scalar-multisystem-test.json'))(
+      'generates correct DELAY block initial condition (-1.0) for statemachine-xbridges-scalar-multisystem-test.json',
+      () => {
+        const rawJson = readFileSync('C:/Users/EL-Dawlia/Downloads/delay/statemachine-xbridges-scalar-multisystem-test.json', 'utf-8');
+        const rawModel = JSON.parse(rawJson);
+        const output = generateMISRACCode(rawModel);
+        const coreSource = output.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
+        expect(coreSource).toContain('xb_state_initial_3_XB2_Delay_XB2_Delay_y_state_value = (double)(-1.0)');
+        expect(coreSource).not.toContain('xb_state_initial_3_XB2_Delay_XB2_Delay_y_state_value = (double)(0.0)');
+      },
+    );
 
-    it('generates correct routing equations for SWITCH (11) and IF_ELSE (33) for statemachine-xbridges-master-batch2b-routing-probe.json', () => {
-      const rawJson = readFileSync('C:/Users/EL-Dawlia/Downloads/delay/New folder/statemachine-xbridges-master-batch2b-routing-probe.json', 'utf-8');
-      const rawModel = JSON.parse(rawJson);
-      const output = generateMISRACCode(rawModel);
-      const coreSource = output.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
-      const headerSource = output.files.find((f) => f.name === 'sm_xbridges.h')?.content ?? '';
+    it.skipIf(!existsSync('C:/Users/EL-Dawlia/Downloads/delay/New folder/statemachine-xbridges-master-batch2b-routing-probe.json'))(
+      'generates correct routing equations for SWITCH (11) and IF_ELSE (33) for statemachine-xbridges-master-batch2b-routing-probe.json',
+      () => {
+        const rawJson = readFileSync('C:/Users/EL-Dawlia/Downloads/delay/New folder/statemachine-xbridges-master-batch2b-routing-probe.json', 'utf-8');
+        const rawModel = JSON.parse(rawJson);
+        const output = generateMISRACCode(rawModel);
+        const coreSource = output.files.find((f) => f.name === 'sm_core.c')?.content ?? '';
+        const headerSource = output.files.find((f) => f.name === 'sm_xbridges.h')?.content ?? '';
 
       // 1. SWITCH must evaluate (Control5 > 3.0 ? Route11 : Route22)
       expect(coreSource).toMatch(/Control5_out\)\)\s*>\s*3\.0\s*\?\s*\(\(double\)\(instance->xb_[^.]+\.XB5_Route11_out\)\)\s*:\s*\(\(double\)\(instance->xb_[^.]+\.XB5_Route22_out\)\)/);
@@ -1337,6 +1345,44 @@ int main(void) {
       expect(check.diagnostics).toHaveLength(1);
       expect(check.diagnostics[0].code).toBe('GEN_C_UNDECLARED_DATA_MEMBER');
       expect(check.undeclaredMembers).toEqual(['xb6_step_output_0001']);
+    });
+  });
+
+  describe('includeVerificationPackage layout', () => {
+    it('prefixes production, tests, and verification directories when includeVerificationPackage is true', () => {
+      const model = flatOrFixture();
+      const ir = build(model);
+      const result = generateCArtifacts(ir, { includeVerificationPackage: true });
+
+      const fileNames = result.files.map((f) => f.name);
+
+      // Production files
+      expect(fileNames).toContain('production/sm_config.h');
+      expect(fileNames).toContain('production/sm_core.c');
+      expect(fileNames).toContain('production/sm_safety.c');
+
+      // Test files
+      expect(fileNames).toContain('tests/test_sm_initialization.c');
+      expect(fileNames).toContain('tests/test_support.h');
+      expect(fileNames).toContain('tests/mcal_test_stub.h');
+
+      // Verification files
+      expect(fileNames).toContain('verification/test_manifest.json');
+      expect(fileNames).toContain('verification/sm_testing_report.md');
+      expect(fileNames).toContain('verification/static_metrics_report.md');
+    });
+
+    it('retains legacy flat generation by default when includeVerificationPackage is not specified', () => {
+      const model = flatOrFixture();
+      const ir = build(model);
+      const result = generateCArtifacts(ir);
+
+      const fileNames = result.files.map((f) => f.name);
+      expect(fileNames).toContain('sm_config.h');
+      expect(fileNames).toContain('sm_core.c');
+      expect(fileNames).toContain('sm_testing_report.md');
+      expect(fileNames).toContain('static_metrics_report.md');
+      expect(fileNames.some((n) => n.startsWith('production/'))).toBe(false);
     });
   });
 });

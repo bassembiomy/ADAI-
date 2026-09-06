@@ -415,4 +415,36 @@ describe('OPM typed executable modeling editors', () => {
     expect(html).toContain('data-opm-path="settings.tickMs"');
     expect(html).toContain('disabled');
   });
+
+  it('rejects invalid execution tick and event limits', () => {
+    const bad = { ...createDefaultOpmTargetSettings(), maxTicks: 0, maxEventsPerTick: -1 };
+    const result = validateTargetSettings(bad);
+    expect(result.diagnostics.map((d) => d.source.propertyPath)).toEqual(
+      expect.arrayContaining(['settings.maxTicks', 'settings.maxEventsPerTick']),
+    );
+  });
+
+  it('verifies Studio Ribbon clusters and OpmSimulationScope integration in EntropyWorkspace', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const wsPath = path.resolve(__dirname, '../EntropyWorkspace.tsx');
+    const wsSource = fs.readFileSync(wsPath, 'utf-8');
+
+    expect(wsSource).toContain("from './OpmSimulationScope'");
+    expect(wsSource).toContain('data-testid="opm-studio-ribbon"');
+    expect(wsSource).toContain("rightTab === 'scope'");
+    expect(wsSource).toContain('data-testid="opm-sim-scope-launcher"');
+  });
+
+  it('verifies keyboard shortcuts for Delete, Undo, Redo, and Escape in EntropyWorkspace', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const wsPath = path.resolve(__dirname, '../EntropyWorkspace.tsx');
+    const wsSource = fs.readFileSync(wsPath, 'utf-8');
+
+    expect(wsSource).toContain("e.key === 'Delete' || e.key === 'Backspace'");
+    expect(wsSource).toContain('handleDeleteSelectedNode');
+    expect(wsSource).toContain('triggerUndo');
+    expect(wsSource).toContain('triggerRedo');
+  });
 });

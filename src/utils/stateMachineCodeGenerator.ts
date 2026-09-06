@@ -2915,6 +2915,8 @@ export const generateMISRACCode = (
     includeTestShims?: boolean;
     includeHostHarness?: boolean;
     verificationEvidence?: VerificationEvidence;
+    includeVerificationPackage?: boolean;
+    legacyFlatLayout?: boolean;
   } = {},
 ): { files: { name: string; content: string }[]; errors: ErrorItem[]; warnings: string[] } => {
   if (
@@ -2960,15 +2962,19 @@ export const generateMISRACCode = (
     }, options).files.filter((file) =>
       HIL_TEST_SHIM_NAMES.has(file.name))
     : [];
+  const includeVerificationPackage = options.legacyFlatLayout === true
+    ? false
+    : (options.includeVerificationPackage ?? (chart.hilConfig?.enabled !== true));
   const rendered = generateCArtifacts(built.ir, {
     includeTestShims: options.includeTestShims === true
       && chart.hilConfig?.enabled !== true,
     includeHostHarness: options.includeHostHarness,
     reportSourceFiles: [...hilFiles, ...testShimFiles],
     verificationEvidence: options.verificationEvidence,
+    includeVerificationPackage,
   });
   const files = rendered.files.map((file) => {
-    if (file.name !== 'sm_testing_report.md' || chart.hilConfig?.enabled !== true) {
+    if (!file.name.endsWith('sm_testing_report.md') || chart.hilConfig?.enabled !== true) {
       return file;
     }
     return {

@@ -143,6 +143,8 @@ export interface OpmTargetSettings {
   integerOverflow: 'diagnostic' | 'wrap' | 'saturate';
   floatPolicy: 'ieee754-single';
   tracing: boolean;
+  maxTicks?: number;
+  maxEventsPerTick?: number;
   cStandard?: 'c99' | 'c11';
   misraProfile?: 'MISRA_C_2012_STRICT' | 'MISRA_C_2012_ADVISORY' | 'NONE';
 }
@@ -165,6 +167,8 @@ export const DEFAULT_OPM_TARGET_SETTINGS: Readonly<OpmTargetSettings> = Object.f
   integerOverflow: 'diagnostic',
   floatPolicy: 'ieee754-single',
   tracing: true,
+  maxTicks: 1000,
+  maxEventsPerTick: 16,
   cStandard: 'c99',
   misraProfile: 'MISRA_C_2012_STRICT',
 });
@@ -180,6 +184,8 @@ export function createDefaultOpmTargetSettings(): OpmTargetSettings {
     integerOverflow: 'diagnostic',
     floatPolicy: 'ieee754-single',
     tracing: true,
+    maxTicks: 1000,
+    maxEventsPerTick: 16,
     cStandard: 'c99',
     misraProfile: 'MISRA_C_2012_STRICT',
   };

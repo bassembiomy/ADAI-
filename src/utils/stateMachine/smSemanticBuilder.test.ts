@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { StateMachineModelV4 } from './smModel';
+import type { AnyStateMachineModel, StateMachineModelV4 } from './smModel';
 import { buildSemanticModel } from './smSemanticBuilder';
 import {
   flatOrFixture,
@@ -8,7 +8,7 @@ import {
   nestedAndFixture,
 } from './smFixtures';
 
-const diagnosticCodes = (model: StateMachineModelV4): string[] =>
+const diagnosticCodes = (model: AnyStateMachineModel): string[] =>
   buildSemanticModel(model).diagnostics.map((item) => item.code);
 
 describe('buildSemanticModel', () => {
@@ -438,6 +438,9 @@ describe('buildSemanticModel', () => {
       mappings: [
         { id: 'm1', adiaVarId: 'go', channelId: 'input', direction: 'read' },
       ],
+    };
+    (fixture as any).verification = {
+      invalidInputPolicies: { m1: 'default' },
     };
 
     const result = buildSemanticModel(fixture);
@@ -1000,4 +1003,148 @@ describe('buildSemanticModel', () => {
     );
   });
 
+  describe('verification configuration validation', () => {
+    it('emits SM_VERIFY_TOLERANCE_INVALID for negative or non-integer tick tolerance', () => {
+      const model = flatOrFixture();
+      (model as any).verification = {
+        ...((model as any).verification ?? {}),
+        tickToleranceMs: -1,
+      };
+      expect(diagnosticCodes(model)).toContain('SM_VERIFY_TOLERANCE_INVALID');
+
+      (model as any).verification.tickToleranceMs = 2.5;
+      expect(diagnosticCodes(model)).toContain('SM_VERIFY_TOLERANCE_INVALID');
+    });
+
+    it('emits SM_VERIFY_COVERAGE_INVALID for out-of-range coverage thresholds', () => {
+      const model = flatOrFixture();
+      (model as any).verification = {
+        statementCoverageTarget: 101,
+        branchCoverageTarget: 100,
+      };
+      expect(diagnosticCodes(model)).toContain('SM_VERIFY_COVERAGE_INVALID');
+
+      (model as any).verification = {
+        statementCoverageTarget: 100,
+        branchCoverageTarget: -5,
+      };
+      expect(diagnosticCodes(model)).toContain('SM_VERIFY_COVERAGE_INVALID');
+    });
+
+    it('emits SM_VERIFY_CYCLES_INVALID for cycles outside 1 to 10,000,000 or non-integer', () => {
+      const model = flatOrFixture();
+      (model as any).verification = {
+        repeatedExecutionCycles: 0,
+      };
+      expect(diagnosticCodes(model)).toContain('SM_VERIFY_CYCLES_INVALID');
+
+      (model as any).verification.repeatedExecutionCycles = 10_000_001;
+      expect(diagnosticCodes(model)).toContain('SM_VERIFY_CYCLES_INVALID');
+
+      (model as any).verification.repeatedExecutionCycles = 1000.5;
+      expect(diagnosticCodes(model)).toContain('SM_VERIFY_CYCLES_INVALID');
+    });
+
+    it('emits SM_VERIFY_INPUT_POLICY_MISSING when a read mapping lacks an invalid-input policy', () => {
+      const model = flatOrFixture();
+      model.hilConfig = {
+        enabled: true,
+        target: 'Generic',
+        clockSpeed: 16,
+        channels: [{
+          id: 'ch_in',
+          name: 'CH_IN',
+          peripheral: 'GPIO',
+          pin: 'PA0',
+          direction: 'In',
+          dataType: 'bool',
+          rangeMin: 0,
+          rangeMax: 1,
+          scalingFactor: 1,
+          unit: '',
+        }],
+        mappings: [{
+          id: 'map_in',
+          adiaVarId: 'go',
+          channelId: 'ch_in',
+          direction: 'read',
+        }],
+        commPort: 'COM1',
+        baudRate: 115200,
+      };
+      (model as any).verification = {
+        invalidInputPolicies: {},
+      };
+
+      const codes = diagnosticCodes(model);
+      expect(codes).toContain('SM_VERIFY_INPUT_POLICY_MISSING');
+    });
+
+    it('emits SM_VERIFY_MCDC_REQUIRES_SAFETY when MC/DC is requested on a non-safety model', () => {
+      const model = flatOrFixture();
+      model.safetyMode = false;
+      (model as any).verification = {
+        requireMcdc: true,
+      };
+
+      expect(diagnosticCodes(model)).toContain('SM_VERIFY_MCDC_REQUIRES_SAFETY');
+    });
+
+    it('emits SM_VERIFY_TARGET_MISMATCH when verification target does not match HIL target', () => {
+      const model = flatOrFixture();
+      model.hilConfig = {
+        enabled: true,
+        target: 'Arduino_Uno', // resolves to atmega328p
+        clockSpeed: 16,
+        channels: [],
+        mappings: [],
+        commPort: 'COM1',
+        baudRate: 115200,
+      };
+      (model as any).verification = {
+        targetId: 'stm32f407vgt6',
+      };
+
+      expect(diagnosticCodes(model)).toContain('SM_VERIFY_TARGET_MISMATCH');
+    });
+
+    it('resolves verification configuration onto SemanticModel.verification', () => {
+      const model = flatOrFixture();
+      model.safetyMode = true;
+      (model as any).verification = {
+        cStandard: 'c99',
+        tickToleranceMs: 20,
+        timerPolicy: 'actual-delta',
+        resetPolicy: 'condition-required',
+        watchdogAfterCriticalFault: 'service',
+        statementCoverageTarget: 100,
+        branchCoverageTarget: 100,
+        requireMcdc: true,
+        repeatedExecutionCycles: 50_000,
+        staticAnalysisToolId: null,
+        misraToolId: null,
+        targetId: null,
+      };
+
+      const result = buildSemanticModel(model);
+      expect(result.diagnostics).toEqual([]);
+      expect(result.ir).toBeDefined();
+      expect(result.ir!.verification).toEqual({
+        cStandard: 'c99',
+        tickToleranceMs: 20,
+        timerPolicy: 'actual-delta',
+        resetPolicy: 'condition-required',
+        watchdogAfterCriticalFault: 'service',
+        statementCoverageTarget: 100,
+        branchCoverageTarget: 100,
+        requireMcdc: true,
+        repeatedExecutionCycles: 50_000,
+        staticAnalysisToolId: null,
+        misraToolId: null,
+        targetId: null,
+        invalidInputPolicies: {},
+      });
+      expect(Object.isFrozen(result.ir!.verification)).toBe(true);
+    });
+  });
 });

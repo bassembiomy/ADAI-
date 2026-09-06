@@ -17,6 +17,7 @@ import { OPMObjectNode, OPMProcessNode, OPMStateNode } from './OPMNodeComponents
 import { OPMEdge } from './OPMEdgeComponents';
 import { OPMNodeData, OPMEdgeData, OPMLinkType, SimulationLog, OPMState, OPMPort, type AppNode, type AppEdge } from './EntropyTypes';
 import { OpmCodeGenerationWorkspace, createInitialArtifactState, type OpmArtifactState } from './OpmCodeGenerationWorkspace';
+import { OpmSimulationScope } from './OpmSimulationScope';
 import { generateOpl, parseOpl, OplSyntaxError } from './OplParser';
 import {
   OpmSimulationState,
@@ -27,6 +28,19 @@ import {
 } from './OpmSimulationEngine';
 import { SmartShowPanel } from './SmartShowPanel';
 import { OpmLegend } from './OpmLegend';
+import { OpmDockShell } from './OpmDockShell';
+import { loadDocks, saveDocks, PAGE_PRESETS, type OpmDocks } from './OpmDockState';
+import { OpmDiagnosticsBadge } from './OpmDiagnosticsBadge';
+import { createDefaultOpmExecutionConfig, type OpmExecutionConfig, type OpmSourceRef } from '../../engine/opm/executableTypes';
+import { convertOpmNodeType, convertOpmEdgeType, type OpmNodeKind } from './OpmMigrations';
+import { validateOpmPortConnection } from './OpmPortContracts';
+import { getValidTargetNodeIds } from './OpmLinkComposer';
+import {
+  normalizeOpmSimulationConfig,
+  parseOpmSimulationConfig,
+  DEFAULT_OPM_SIMULATION_CONFIG,
+  type OpmSimulationConfig,
+} from './OpmSimulationConfig';
 import { importSysmlToOpm } from './SysmlToOpmImporter';
 import { validateOpmConnection } from './OpmLinkRules';
 import { layoutOpmGraph } from './OpmAutoLayout';
@@ -152,8 +166,10 @@ interface EntropyWorkspaceProps {
   initialEdges?: AppEdge[];
   availableVariables: any[];
   onVariablesChange: (vars: any[]) => void;
-  tickMs: number;
+  tickMs?: number;
   onTickMsChange?: (tickMs: number) => void;
+  opmSimulationConfig?: OpmSimulationConfig;
+  onOpmSimulationConfigChange?: (config: OpmSimulationConfig) => void;
   onBack: () => void;
   onSave?: (nodes: AppNode[], edges: AppEdge[]) => void;
   onAddError?: (type: 'error' | 'warning' | 'info', message: string, source?: string) => void;
@@ -165,8 +181,10 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   initialEdges = [],
   availableVariables,
   onVariablesChange,
-  tickMs,
+  tickMs = 10,
   onTickMsChange,
+  opmSimulationConfig,
+  onOpmSimulationConfigChange,
   onBack,
   onSave,
   onAddError,
@@ -202,6 +220,67 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const [simLogs, setSimLogs] = useState<SimulationLog[]>([]);
   const [firingProcesses, setFiringProcesses] = useState<Set<string>>(new Set());
   const simStateRef = useRef<OpmSimulationState>(createSimulationState());
+
+  // Isolated OPM Simulation Configuration
+  const activeOpmConfig: OpmSimulationConfig = useMemo(() => {
+    return normalizeOpmSimulationConfig(opmSimulationConfig);
+  }, [opmSimulationConfig]);
+
+  const opmExecutionConfig: OpmExecutionConfig = useMemo(() => {
+    const config = createDefaultOpmExecutionConfig();
+    config.settings = {
+      ...config.settings,
+      tickMs: activeOpmConfig.tickMs,
+      maxTicks: activeOpmConfig.maxTicks,
+      maxEventsPerTick: activeOpmConfig.maxEventsPerTick,
+    };
+    return config;
+  }, [activeOpmConfig]);
+
+  const [configDraft, setConfigDraft] = useState<{
+    tickMs: number;
+    maxTicks: number;
+    maxEventsPerTick: number;
+  }>({
+    tickMs: activeOpmConfig.tickMs,
+    maxTicks: activeOpmConfig.maxTicks,
+    maxEventsPerTick: activeOpmConfig.maxEventsPerTick,
+  });
+  const configDraftRef = useRef(configDraft);
+  const [configErrors, setConfigErrors] = useState<string[]>([]);
+
+  useEffect(() => {
+    const nextDraft = {
+      tickMs: activeOpmConfig.tickMs,
+      maxTicks: activeOpmConfig.maxTicks,
+      maxEventsPerTick: activeOpmConfig.maxEventsPerTick,
+    };
+    configDraftRef.current = nextDraft;
+    setConfigDraft(nextDraft);
+    setConfigErrors([]);
+  }, [activeOpmConfig]);
+
+  const handleConfigFieldChange = useCallback((field: keyof OpmSimulationConfig, rawValue: string | number) => {
+    const num = typeof rawValue === 'number' ? rawValue : Number(rawValue);
+    const nextDraft = { ...configDraftRef.current, [field]: num };
+    configDraftRef.current = nextDraft;
+    setConfigDraft(nextDraft);
+
+    const parsed = parseOpmSimulationConfig({
+      ...activeOpmConfig,
+      ...nextDraft,
+    });
+
+    if (parsed.ok) {
+      setConfigErrors([]);
+      if (onOpmSimulationConfigChange) {
+        onOpmSimulationConfigChange(parsed.config);
+      }
+    } else {
+      setConfigErrors(parsed.diagnostics);
+      // Keep previous valid config active; do NOT update active config
+    }
+  }, [activeOpmConfig, onOpmSimulationConfigChange]);
   
   // Selected Node Details
   const [selectedNode, setSelectedNode] = useState<AppNode | null>(null);
@@ -213,8 +292,63 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const [newPortType, setNewPortType] = useState<OPMPort['type']>('standard');
 
   // Right Sidebar active tab
-  const [rightTab, setRightTab] = useState<'simControl' | 'opl' | 'smartShow' | 'opmCodegen'>('simControl');
+  const [rightTab, setRightTab] = useState<'simControl' | 'scope' | 'opl' | 'smartShow' | 'opmCodegen'>('simControl');
+  const [bottomView, setBottomView] = useState<'console' | 'scope'>('console');
   const [opmArtifactState, setOpmArtifactState] = useState<OpmArtifactState>(createInitialArtifactState);
+  const [selectedEdge, setSelectedEdge] = useState<AppEdge | null>(null);
+  const [diagnosticNavMessage, setDiagnosticNavMessage] = useState<string | null>(null);
+  const [connectSourceId, setConnectSourceId] = useState<string | null>(null);
+  const [docks, setDocks] = useState<OpmDocks>(loadDocks);
+
+  // --- Dock page presets: page switch applies the preset + its right tab ---
+  const handleDocksChange = (d: OpmDocks) => {
+    if (d.page !== docks.page) {
+      const preset = PAGE_PRESETS[d.page];
+      setDocks(preset);
+      saveDocks(preset);
+      setRightTab(preset.rightTab as typeof rightTab);
+    } else {
+      setDocks(d);
+      saveDocks(d);
+    }
+  };
+
+  const normalizedOpmConfig = useMemo(() => {
+    return normalizeOpmSimulationConfig({ tickMs });
+  }, [tickMs]);
+
+  const handleNavigateToDiagnostic = useCallback((source: OpmSourceRef) => {
+    setDiagnosticNavMessage(null);
+    const node = nodes.find(n => n.id === source.elementId);
+    const edge = edges.find(e => e.id === source.elementId);
+
+    if (node) {
+      setSelectedNode(node);
+      setSelectedEdge(null);
+    } else if (edge) {
+      setSelectedEdge(edge);
+      setSelectedNode(null);
+    }
+
+    setTimeout(() => {
+      let el = document.querySelector(`[data-opm-path="${source.propertyPath}"]`);
+      if (!el && source.propertyPath) {
+        const base = source.propertyPath.replace(/\[\d+\]\..*$/, '');
+        el = document.querySelector(`[data-opm-path="${base}"]`) ||
+             document.querySelector(`[data-opm-path*="${source.propertyPath}"]`);
+      }
+
+      if (el instanceof HTMLElement) {
+        el.focus();
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        const targetDesc = node ? `Node "${node.data.name || node.id}"` : edge ? `Link "${edge.id}"` : `Element "${source.elementId}"`;
+        const msg = `Navigated to ${targetDesc}. (Property control for "${source.propertyPath}" is not visible in current view)`;
+        setDiagnosticNavMessage(msg);
+        logSim('warning', msg);
+      }
+    }, 60);
+  }, [nodes, edges]);
 
   // --- Initialize canvas ---
   useEffect(() => {
@@ -310,6 +444,9 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     if (onSave) onSave(nextState.nodes, nextState.edges);
   };
 
+  // --- Smart link composer: valid targets for the in-progress connection ---
+  const validTargets = useMemo(() => connectSourceId ? getValidTargetNodeIds(nodes, edges, connectSourceId, activeLinkType) : [], [connectSourceId, nodes, edges, activeLinkType]);
+
   // --- Node Filtering based on Zoom ---
   const filteredNodes = useMemo(() => {
     return nodes.filter(n => {
@@ -321,8 +458,16 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         return parent.data.parentId === activeParentId;
       }
       return n.data.parentId === activeParentId;
+    }).map(n => {
+      // --- Link composer glow: valid drop targets glow green during connect drag ---
+      const composerValid = connectSourceId !== null && validTargets.includes(n.id);
+      return {
+        ...n,
+        ...(composerValid ? { style: { ...(n.style ?? {}), boxShadow: '0 0 0 2px rgba(34,197,94,0.9), 0 0 22px rgba(34,197,94,0.5)' } } : {}),
+        data: { ...n.data, composerValid } as typeof n.data,
+      };
     });
-  }, [nodes, activeParentId]);
+  }, [nodes, activeParentId, validTargets]);
 
   const filteredEdges = useMemo(() => {
     return edges.filter(e => {
@@ -546,23 +691,32 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     logSim('success', `Created ${isReq ? 'Requirement' : activeTool.toUpperCase()} [${nodeName}] at (${Math.round(flowPos.x)}, ${Math.round(flowPos.y)}).`);
   }, [activeTool, activeParentId, nodes, edges, saveHistory]);
 
+  // --- Shared Port Connection Validator (Canvas preview and onConnect gate) ---
+  const isValidConnection = useCallback((connection: Connection | { source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }) => {
+    if (!connection.source || !connection.target) return false;
+    const verdict = validateOpmPortConnection(nodes, edges, connection as any, activeLinkType);
+    return verdict.valid;
+  }, [nodes, edges, activeLinkType]);
+
   // --- Connect nodes (draw OPM links) ---
   const onConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return;
 
-    const src = nodes.find(n => n.id === connection.source);
-    const tgt = nodes.find(n => n.id === connection.target);
-    if (!src || !tgt) return;
-
-    // ISO 19450 link-role validation (OpmLinkRules.ts)
-    const verdict = validateOpmConnection(activeLinkType, src.data.type, tgt.data.type);
-    if (!verdict.allowed) {
-      if (onAddError) onAddError('error', `OPM link rejected: ${verdict.reason}`, 'ENTROPY');
-      logSim('error', `Link rejected [${activeLinkType}]: ${verdict.reason}`);
+    // Strict validation via shared contract
+    const verdict = validateOpmPortConnection(nodes, edges, connection as any, activeLinkType);
+    if (!verdict.valid) {
+      const msg = verdict.reason || `Link rejected [${activeLinkType}]: invalid connection`;
+      if (onAddError) onAddError('error', `OPM link rejected: ${msg}`, 'ENTROPY');
+      logSim('error', `Link rejected [${activeLinkType}]: ${msg}`);
+      setDiagnosticNavMessage(msg);
+      window.setTimeout(() => setDiagnosticNavMessage(null), 1200);
       return;
     }
 
     saveHistory(nodes, edges);
+
+    const src = nodes.find(n => n.id === connection.source);
+    const tgt = nodes.find(n => n.id === connection.target);
 
     const newEdge: AppEdge = {
       id: `e-${connection.source}-${connection.sourceHandle || 'std-out'}-${connection.target}-${connection.targetHandle || 'res-in'}`,
@@ -573,11 +727,12 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       type: 'opmEdge',
       data: {
         type: activeLinkType,
+        linkType: activeLinkType,
       },
     };
 
     setEdges(prev => addEdge(newEdge, prev));
-    logSim('info', `Link [${activeLinkType}] connected: ${src.data.name} → ${tgt.data.name}`);
+    logSim('info', `Link [${activeLinkType}] connected: ${src?.data?.name || connection.source} → ${tgt?.data?.name || connection.target}`);
   }, [activeLinkType, nodes, edges, saveHistory, onAddError]);
 
   // --- Dynamic Port Handlers ---
@@ -825,22 +980,27 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
 
   // --- Simulation Runner Engine ---
   const runSimTick = useCallback(() => {
-    const result = stepSimulation(nodes, edges, simStateRef.current);
+    if (simStateRef.current.tick >= activeOpmConfig.maxTicks) {
+      setSimRunning(false);
+      logSim('warning', `Simulation stopped at maxTicks (${activeOpmConfig.maxTicks}).`);
+      return;
+    }
+    const result = stepSimulation(nodes, edges, simStateRef.current, activeOpmConfig.maxEventsPerTick);
     simStateRef.current = result.state;
     setNodes(prev => applySimResultToNodes(prev, result.state, result.firingProcessIds));
     result.logs.forEach(l => logSim(l.type, l.message));
-  }, [nodes, edges]);
+  }, [nodes, edges, activeOpmConfig]);
 
-  // Handle simulation timer
+  // Handle simulation timer (uses isolated OPM tickMs)
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
     if (simRunning) {
-      interval = setInterval(runSimTick, tickMs);
+      interval = setInterval(runSimTick, activeOpmConfig.tickMs);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [simRunning, tickMs, runSimTick]);
+  }, [simRunning, activeOpmConfig.tickMs, runSimTick]);
 
   const toggleSimulation = () => {
     if (!simRunning && simStateRef.current.tick === 0) {
@@ -922,6 +1082,39 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     setSelectedNode(null);
     logSim('warning', `Element ${selectedNode.data.name} deleted.`);
   };
+
+  const handleConvertNodeType = useCallback((targetType: OpmNodeKind) => {
+    if (!selectedNode) return;
+    const conversion = convertOpmNodeType(selectedNode, targetType);
+    if (conversion.warnings.length > 0) {
+      conversion.warnings.forEach(w => {
+        onAddError?.('warning', `[${w.code}] ${w.message}`, 'OPM');
+        logSim('warning', `[${w.code}] ${w.message}`);
+      });
+    }
+    saveHistory(nodes, edges);
+    setNodes(prev => prev.map(n => n.id === selectedNode.id ? conversion.node : n));
+    setSelectedNode(conversion.node);
+    logSim('info', `Converted "${selectedNode.data.name || selectedNode.id}" to ${targetType}.`);
+  }, [selectedNode, nodes, edges, saveHistory, onAddError]);
+
+  const handleConvertEdgeType = useCallback((edgeId: string, nextType: OPMLinkType) => {
+    const edge = edges.find(e => e.id === edgeId);
+    if (!edge) return;
+    const conversion = convertOpmEdgeType(edge, nextType);
+    if (conversion.warnings.length > 0) {
+      conversion.warnings.forEach(w => {
+        onAddError?.('warning', `[${w.code}] ${w.message}`, 'OPM');
+        logSim('warning', `[${w.code}] ${w.message}`);
+      });
+    }
+    saveHistory(nodes, edges);
+    setEdges(prev => prev.map(e => e.id === edgeId ? conversion.edge : e));
+    if (selectedEdge && selectedEdge.id === edgeId) {
+      setSelectedEdge(conversion.edge);
+    }
+    logSim('info', `Converted link "${edgeId}" to ${nextType}.`);
+  }, [edges, selectedEdge, saveHistory, onAddError]);
 
   const handleAddAttribute = (key: string, val: string) => {
     if (!selectedNode || selectedNode.data.type !== 'object') return;
@@ -1030,26 +1223,223 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     });
   }, [filteredEdges, nodes, simRunning, handleEdgeTypeChange, handleEdgeDelete]);
 
+  // --- Comprehensive Keyboard Shortcuts (Delete, Backspace, Undo, Redo, Escape, Save, Space) ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // If user is actively typing in an input, textarea, or contentEditable element, do not intercept
+      const target = e.target as HTMLElement | null;
+      const isInput = target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      );
+
+      // Escape: Deselect elements / close inspectors
+      if (e.key === 'Escape') {
+        if (selectedNode || selectedEdge) {
+          setSelectedNode(null);
+          setSelectedEdge(null);
+        }
+        return;
+      }
+
+      // If typing in an input field, let normal typing / delete / undo happen inside the field
+      if (isInput) return;
+
+      // Delete or Backspace: Delete selected node or selected edge
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedNode) {
+          e.preventDefault();
+          handleDeleteSelectedNode();
+        } else if (selectedEdge) {
+          e.preventDefault();
+          handleEdgeDelete(selectedEdge.id);
+          setSelectedEdge(null);
+        }
+        return;
+      }
+
+      // Ctrl+Z / Cmd+Z (without shift): Undo
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
+        e.preventDefault();
+        triggerUndo();
+        return;
+      }
+
+      // Ctrl+Y / Cmd+Y OR Ctrl+Shift+Z / Cmd+Shift+Z: Redo
+      if (
+        ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) ||
+        ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && e.shiftKey)
+      ) {
+        e.preventDefault();
+        triggerRedo();
+        return;
+      }
+
+      // Ctrl+S / Cmd+S: Save diagram
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        if (onSave) {
+          onSave(nodes, edges);
+          logSim('success', 'Diagram saved.');
+        }
+        return;
+      }
+
+      // Space: Toggle simulation play/pause
+      if (e.key === ' ') {
+        e.preventDefault();
+        toggleSimulation();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNode, selectedEdge, handleDeleteSelectedNode, handleEdgeDelete, triggerUndo, triggerRedo, onSave, nodes, edges, toggleSimulation, logSim]);
+
   const numIn = selectedNode?.data?.inputs?.length || 0;
   const numOut = selectedNode?.data?.outputs?.length || 0;
   const selectedNodePortsCount = numIn + numOut;
 
   return (
-    <div className="flex h-full w-full bg-[#0d0d0d] text-[#e0e0e0] font-sans">
-      {/* 1. Left canvas and sidebar */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden border-r border-[#222]">
-        {/* Navigation / Control bar */}
-        <div className="h-12 bg-[#141414] border-b border-[#222] px-4 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
+    <div className="h-full w-full bg-[#0d0d0d] text-[#e0e0e0] font-sans">
+      <OpmDockShell
+        docks={docks}
+        onDocksChange={handleDocksChange}
+        left={
+          <div className="flex flex-col gap-2 p-2">
+            {/* Tool Dock (moved verbatim into left dock slot; wrapper adapted from floating to docked) */}
+            <div className="bg-[#161616]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-2 flex flex-col gap-2 shadow-xl" role="toolbar" aria-label="OPM Canvas Tools">
+              <span className="text-[8px] uppercase tracking-wider font-extrabold text-orange-400/80 mb-0.5 text-center">Tools</span>
+              <button
+                onClick={() => setActiveTool('select')}
+                aria-label="Select tool"
+                data-testid="opm-tool-select"
+                className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
+                  activeTool === 'select' ? 'bg-[#f97316]/20 border border-[#f97316] text-[#f97316] font-bold shadow' : 'hover:bg-[#222] text-[#999]'
+                }`}
+                title="Select / Move elements"
+              >
+                <span aria-hidden="true">🖱️</span> <span className="text-[8px]">Select</span>
+              </button>
+              <button
+                onClick={() => setActiveTool('object')}
+                aria-label="Add Object"
+                data-testid="opm-tool-object"
+                className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                  activeTool === 'object' ? 'bg-emerald-950/60 border border-emerald-400 text-emerald-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
+                }`}
+                title="Click canvas to place an Object"
+              >
+                <span aria-hidden="true">🟢</span> <span className="text-[8px]">Object</span>
+              </button>
+              <button
+                onClick={() => setActiveTool('process')}
+                aria-label="Add Process"
+                data-testid="opm-tool-process"
+                className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
+                  activeTool === 'process' ? 'bg-sky-950/60 border border-sky-400 text-sky-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
+                }`}
+                title="Click canvas to place a Process"
+              >
+                <span aria-hidden="true">🔵</span> <span className="text-[8px]">Process</span>
+              </button>
+              <button
+                onClick={() => setActiveTool('state')}
+                aria-label="Add State"
+                data-testid="opm-tool-state"
+                className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
+                  activeTool === 'state' ? 'bg-orange-950/60 border border-orange-400 text-orange-300 font-bold shadow animate-pulse' : 'hover:bg-[#222] text-[#999]'
+                }`}
+                title="Click an Object to add a State inside it"
+              >
+                <span aria-hidden="true">🔶</span> <span className="text-[8px]">State</span>
+              </button>
+              <button
+                onClick={() => setActiveTool('requirement')}
+                aria-label="Add Requirement"
+                data-testid="opm-tool-requirement"
+                className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 ${
+                  activeTool === 'requirement' ? 'bg-purple-950/60 border border-purple-400 text-purple-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
+                }`}
+                title="Click canvas to place a Requirement"
+              >
+                <span aria-hidden="true">📜</span> <span className="text-[8px]">Req</span>
+              </button>
+
+              <div className="h-px bg-[#333] my-1"></div>
+              <span className="text-[8px] uppercase tracking-wider font-extrabold text-sky-400/80 text-center mb-0.5">Link Mode</span>
+
+              <select
+                value={activeLinkType}
+                onChange={(e) => setActiveLinkType(e.target.value as OPMLinkType)}
+                aria-label="Select link type"
+                data-testid="opm-link-mode-select"
+                className="bg-[#0f0f0f] border border-[#333] rounded text-[10px] py-1 px-1.5 outline-none text-[#ccc] w-20 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+              >
+                <optgroup label="Procedural" className="bg-[#141414]">
+                  <option value="consumption">Consumption</option>
+                  <option value="result">Result</option>
+                  <option value="effect">Effect</option>
+                  <option value="agent">Agent</option>
+                  <option value="instrument">Instrument</option>
+                  <option value="trigger">Trigger</option>
+                  <option value="condition">Condition</option>
+                </optgroup>
+                <optgroup label="Structural" className="bg-[#141414]">
+                  <option value="aggregation">Aggregation</option>
+                  <option value="generalization">Generalization</option>
+                  <option value="exhibition">Exhibition</option>
+                </optgroup>
+                <optgroup label="Traceability" className="bg-[#141414]">
+                  <option value="satisfies">Satisfies</option>
+                  <option value="verifies">Verifies</option>
+                </optgroup>
+              </select>
+            </div>
+            {/* Model outline: zoom path navigator + in-scope counts */}
+            <div className="rounded-lg border border-[#2d2d2d] bg-[#161616]/95 p-2 shadow-xl">
+              <span className="mb-1 block text-center text-[8px] font-extrabold uppercase tracking-wider text-orange-400/80">Outline</span>
+              <div className="flex flex-col gap-1">
+                {zoomPath.map((zp, i) => {
+                  const label = zp === 'root' ? 'System Context' : nodes.find(n => n.id === zp)?.data.name || zp;
+                  return (
+                    <button
+                      key={zp}
+                      onClick={() => setZoomPath(zoomPath.slice(0, i + 1))}
+                      className={`truncate rounded px-1.5 py-1 text-left text-[10px] transition-colors ${i === zoomPath.length - 1 ? 'bg-orange-950/40 font-bold text-orange-300' : 'text-[#888] hover:bg-[#222]'}`}
+                    >
+                      {i > 0 ? '› ' : ''}{label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-1.5 border-t border-[#2d2d2d] pt-1.5 font-mono text-[9px] text-[#666]">
+                {nodes.filter(n => n.data.parentId === activeParentId).length} elements · {filteredEdges.length} links
+              </div>
+            </div>
+          </div>
+        }
+        center={
+          <div className="flex h-full min-h-0 flex-col">
+        {/* Navigation / Control bar -> Studio Ribbon */}
+        <div
+          data-testid="opm-studio-ribbon"
+          className="h-11 bg-[#121215]/95 backdrop-blur-md border-b border-[#25252a] px-3 flex items-center justify-between gap-3 shrink-0 select-none overflow-x-auto custom-scrollbar"
+        >
+          {/* Zone 1: Context & Model Sources (Left) */}
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={onBack}
-              className="px-2.5 py-1 text-xs border border-[#333] rounded hover:bg-[#222] transition-colors"
+              className="px-2 py-1 text-xs font-semibold border border-[#333] rounded hover:bg-[#252528] text-gray-300 hover:text-white transition-colors flex items-center gap-1"
             >
-              ← Back
+              ← <span className="hidden sm:inline">Back</span>
             </button>
-            <span className="text-xs text-[#888]">/</span>
+            <span className="text-xs text-[#444]">/</span>
             {/* Breadcrumbs */}
-            <div className="flex items-center gap-1.5 text-sm font-semibold">
+            <div className="flex items-center gap-1 text-xs font-medium max-w-[180px] truncate">
               {zoomPath.map((zp, i) => {
                 const label = zp === 'root' ? 'System Context' : nodes.find(n => n.id === zp)?.data.name || zp;
                 return (
@@ -1057,7 +1447,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                     {i > 0 && <span className="text-[#555]">›</span>}
                     <button
                       onClick={() => setZoomPath(zoomPath.slice(0, i + 1))}
-                      className={`hover:text-orange-400 transition-colors ${i === zoomPath.length - 1 ? 'text-orange-500 font-bold' : 'text-[#888]'}`}
+                      className={`hover:text-orange-400 transition-colors truncate ${i === zoomPath.length - 1 ? 'text-orange-400 font-bold' : 'text-[#888]'}`}
                     >
                       {label}
                     </button>
@@ -1065,11 +1455,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 );
               })}
             </div>
-          </div>
-
-          {/* Example Template Loader */}
-          <div className="flex items-center gap-1.5 bg-[#1a1a1a] px-2.5 py-1 rounded border border-[#2d2d2d]">
-            <span className="text-[10px] text-[#888] font-bold uppercase tracking-wider">Example:</span>
+            {/* Example Template Loader */}
             <select
               onChange={(e) => {
                 const val = e.target.value;
@@ -1088,9 +1474,9 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                 }
               }}
               defaultValue=""
-              className="bg-[#0f0f0f] border border-[#333] rounded text-[11px] py-0.5 px-1.5 outline-none text-[#ccc] w-40 font-semibold"
+              className="bg-[#18181c] border border-[#333] rounded text-[10px] py-1 px-1.5 outline-none text-[#ccc] w-28 font-medium focus:border-orange-500/50"
             >
-              <option value="" disabled>-- Load Template --</option>
+              <option value="" disabled>-- Template --</option>
               {Object.entries(OPM_EXAMPLES).map(([key, ex]) => (
                 <option key={key} value={key}>{ex.name}</option>
               ))}
@@ -1107,176 +1493,130 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   logSim('success', `Imported ${impNodes.length} OPM elements from the SysML model.`);
                   if (onSave) onSave(impNodes, impEdges);
                 }}
-                className="px-2.5 py-1 text-[10px] border border-purple-700 text-purple-300 rounded hover:bg-purple-950/40 ml-1 font-semibold"
+                className="px-2 py-0.5 text-[10px] border border-purple-600/80 bg-purple-950/30 text-purple-300 rounded hover:bg-purple-900/50 transition-colors font-semibold"
                 title="Migrate the SysML BDD/IBD/Requirements model into this OPM workspace"
               >
-                Import SysML → OPM
+                SysML → OPM
               </button>
             )}
           </div>
 
-          {/* Simulation Tools */}
-          <div className="flex items-center gap-2 bg-[#1a1a1a] px-3 py-1 rounded border border-[#2d2d2d]">
-            <button
-              onClick={toggleSimulation}
-              className={`p-1 rounded transition-colors ${simRunning ? 'text-red-400 hover:bg-red-950/40' : 'text-green-400 hover:bg-green-950/40'}`}
-              title={simRunning ? 'Pause Simulation' : 'Start Simulation'}
+          {/* Zone 2: Simulation Transport & Logic Scope (Center) */}
+          <div className="flex items-center gap-2 shrink-0 bg-[#18181c] px-2.5 py-1 rounded-lg border border-white/5 shadow-sm">
+            <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded border border-white/5">
+              <button
+                data-testid="opm-sim-toggle"
+                onClick={toggleSimulation}
+                className={`p-1 rounded transition-colors ${simRunning ? 'text-red-400 hover:bg-red-950/40' : 'text-green-400 hover:bg-green-950/40'}`}
+                title={simRunning ? 'Pause Simulation (Space)' : 'Start Simulation (Space)'}
+              >
+                {simRunning ? <Pause size={13} /> : <Play size={13} />}
+              </button>
+              <button
+                data-testid="opm-sim-step"
+                onClick={runSimTick}
+                className="p-1 text-sky-400 hover:bg-sky-950/40 rounded transition-colors"
+                title="Step Simulation"
+              >
+                <ArrowRight size={13} />
+              </button>
+              <button
+                data-testid="opm-sim-reset"
+                onClick={resetSimulation}
+                className="p-1 text-amber-400 hover:bg-amber-950/40 rounded transition-colors"
+                title="Reset Simulation"
+              >
+                <RotateCcw size={13} />
+              </button>
+            </div>
+
+            <span className="w-px h-3.5 bg-[#333]"></span>
+            <span
+              data-testid="opm-sim-status"
+              className={`text-[9px] uppercase font-extrabold flex items-center gap-1 ${simRunning ? 'text-green-400' : 'text-[#888]'}`}
             >
-              {simRunning ? <Pause size={14} /> : <Play size={14} />}
-            </button>
-            <button
-              onClick={runSimTick}
-              className="p-1 text-sky-400 hover:bg-sky-950/40 rounded transition-colors"
-              title="Step Simulation"
-            >
-              <ArrowRight size={14} />
-            </button>
-            <button
-              onClick={resetSimulation}
-              className="p-1 text-amber-400 hover:bg-amber-950/40 rounded transition-colors"
-              title="Reset Simulation"
-            >
-              <RotateCcw size={14} />
-            </button>
-            <span className="w-px h-4 bg-[#333]"></span>
-            <span className="text-[10px] uppercase font-bold text-[#666]">
+              <span className={`w-1.5 h-1.5 rounded-full ${simRunning ? 'bg-green-400 animate-ping' : 'bg-gray-500'}`} />
               {simRunning ? 'Running' : 'Paused'}
             </span>
-            <span className="w-px h-4 bg-[#333]"></span>
+            <span className="w-px h-3.5 bg-[#333]"></span>
+
             <div className="flex items-center gap-1.5">
-              <span className="text-[8px] uppercase tracking-wider font-extrabold text-[#777]">Interval:</span>
+              <span className="text-[8px] uppercase tracking-wider font-extrabold text-[#777]">Tick:</span>
               <input
+                data-testid="opm-toolbar-tick-slider"
                 type="range"
-                min="100"
+                min="10"
                 max="2000"
-                step="100"
-                value={tickMs}
-                onChange={(e) => onTickMsChange && onTickMsChange(Number(e.target.value))}
+                step="10"
+                value={activeOpmConfig.tickMs}
+                onChange={(e) => handleConfigFieldChange('tickMs', Number(e.target.value))}
                 className="w-16 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                title="Simulation speed interval (ms)"
+                title="OPM Simulation speed interval (ms)"
               />
-              <span className="text-[9px] text-[#888] font-mono w-9 text-right">{tickMs}ms</span>
+              <span className="text-[9px] text-[#888] font-mono w-9 text-right">{activeOpmConfig.tickMs}ms</span>
             </div>
+
+            <span className="w-px h-3.5 bg-[#333]"></span>
+
+            {/* Scope Quick Launcher */}
+            <button
+              data-testid="opm-sim-scope-launcher"
+              onClick={() => setRightTab('scope')}
+              className={`px-2 py-0.5 text-[10px] rounded transition-all flex items-center gap-1 font-bold ${
+                rightTab === 'scope'
+                  ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40 shadow-sm'
+                  : 'text-gray-400 hover:text-orange-300 hover:bg-white/5 border border-transparent'
+              }`}
+              title="Open Simulation Scope (Logic Analyzer)"
+            >
+              📈 <span>Scope</span>
+            </button>
           </div>
 
-          {/* Graphical Operations */}
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={triggerUndo}
-              disabled={undoStack.length === 0}
-              className="p-1.5 border border-[#222] rounded hover:bg-[#222] text-[#888] disabled:opacity-30 disabled:hover:bg-transparent"
-              title="Undo"
-            >
-              ↶
-            </button>
-            <button
-              onClick={triggerRedo}
-              disabled={redoStack.length === 0}
-              className="p-1.5 border border-[#222] rounded hover:bg-[#222] text-[#888] disabled:opacity-30 disabled:hover:bg-transparent"
-              title="Redo"
-            >
-              ↷
-            </button>
-            <span className="w-px h-4 bg-[#222] mx-1"></span>
-            <button
-              onClick={() => triggerAutoLayout('force')}
-              className="px-2.5 py-1 text-xs border border-[#222] rounded hover:bg-[#222] flex items-center gap-1 text-[#aaa] hover:text-white"
-              title="Force-Directed Auto Layout"
-            >
-              <Layout size={12} /> Force Layout
-            </button>
-            <button
-              onClick={() => triggerAutoLayout('hierarchy')}
-              className="px-2.5 py-1 text-xs border border-[#222] rounded hover:bg-[#222] flex items-center gap-1 text-[#aaa] hover:text-white"
-              title="Grid/Hierarchy Auto Layout"
-            >
-              <Layout size={12} /> Hierarchy Layout
-            </button>
+          {/* Zone 3: History & Canvas Layout (Right) */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center bg-[#18181c] rounded-md border border-white/5 p-0.5">
+              <button
+                onClick={triggerUndo}
+                disabled={undoStack.length === 0}
+                className="p-1 rounded hover:bg-[#252529] text-[#aaa] hover:text-white disabled:opacity-25 disabled:hover:bg-transparent transition-colors text-xs"
+                title="Undo (Ctrl+Z)"
+              >
+                ↶
+              </button>
+              <button
+                onClick={triggerRedo}
+                disabled={redoStack.length === 0}
+                className="p-1 rounded hover:bg-[#252529] text-[#aaa] hover:text-white disabled:opacity-25 disabled:hover:bg-transparent transition-colors text-xs"
+                title="Redo (Ctrl+Y)"
+              >
+                ↷
+              </button>
+            </div>
+            <div className="flex items-center bg-[#18181c] rounded-md border border-white/5 p-0.5">
+              <button
+                onClick={() => triggerAutoLayout('force')}
+                className="px-2 py-0.5 text-[10px] rounded hover:bg-[#252529] flex items-center gap-1 text-[#bbb] hover:text-white transition-colors"
+                title="Force-Directed Auto Layout"
+              >
+                <Layout size={11} /> Force
+              </button>
+              <button
+                onClick={() => triggerAutoLayout('hierarchy')}
+                className="px-2 py-0.5 text-[10px] rounded hover:bg-[#252529] flex items-center gap-1 text-[#bbb] hover:text-white transition-colors"
+                title="Grid/Hierarchy Auto Layout"
+              >
+                <Layout size={11} /> Tree
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Workspace core body */}
-        <div className="flex-1 flex overflow-hidden relative">
-          {/* Tool Dock (Left floating bar) */}
-          <div className="absolute left-3 top-3 z-10 bg-[#161616]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-2 flex flex-col gap-2 shadow-xl">
-            <span className="text-[8px] uppercase tracking-wider font-extrabold text-orange-400/80 mb-0.5 text-center">Tools</span>
-            <button
-              onClick={() => setActiveTool('select')}
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
-                activeTool === 'select' ? 'bg-[#f97316]/20 border border-[#f97316] text-[#f97316] font-bold shadow' : 'hover:bg-[#222] text-[#999]'
-              }`}
-              title="Select / Move elements"
-            >
-              🖱️ <span className="text-[8px]">Select</span>
-            </button>
-            <button
-              onClick={() => setActiveTool('object')}
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
-                activeTool === 'object' ? 'bg-emerald-950/60 border border-emerald-400 text-emerald-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
-              }`}
-              title="Click canvas to place an Object"
-            >
-              🟢 <span className="text-[8px]">Object</span>
-            </button>
-            <button
-              onClick={() => setActiveTool('process')}
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
-                activeTool === 'process' ? 'bg-sky-950/60 border border-sky-400 text-sky-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
-              }`}
-              title="Click canvas to place a Process"
-            >
-              🔵 <span className="text-[8px]">Process</span>
-            </button>
-            <button
-              onClick={() => setActiveTool('state')}
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
-                activeTool === 'state' ? 'bg-orange-950/60 border border-orange-400 text-orange-300 font-bold shadow animate-pulse' : 'hover:bg-[#222] text-[#999]'
-              }`}
-              title="Click an Object to add a State inside it"
-            >
-              🔶 <span className="text-[8px]">State</span>
-            </button>
-            <button
-              onClick={() => setActiveTool('requirement')}
-              className={`p-2 rounded text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
-                activeTool === 'requirement' ? 'bg-purple-950/60 border border-purple-400 text-purple-300 font-bold shadow' : 'hover:bg-[#222] text-[#999]'
-              }`}
-              title="Click canvas to place a Requirement"
-            >
-              📜 <span className="text-[8px]">Req</span>
-            </button>
-
-            <div className="h-px bg-[#333] my-1"></div>
-            <span className="text-[8px] uppercase tracking-wider font-extrabold text-sky-400/80 text-center mb-0.5">Link Mode</span>
-            
-            <select
-              value={activeLinkType}
-              onChange={(e) => setActiveLinkType(e.target.value as OPMLinkType)}
-              className="bg-[#0f0f0f] border border-[#333] rounded text-[10px] py-1 px-1.5 outline-none text-[#ccc] w-20"
-            >
-              <optgroup label="Procedural" className="bg-[#141414]">
-                <option value="consumption">Consumption</option>
-                <option value="result">Result</option>
-                <option value="effect">Effect</option>
-                <option value="agent">Agent</option>
-                <option value="instrument">Instrument</option>
-                <option value="trigger">Trigger</option>
-                <option value="condition">Condition</option>
-              </optgroup>
-              <optgroup label="Structural" className="bg-[#141414]">
-                <option value="aggregation">Aggregation</option>
-                <option value="generalization">Generalization</option>
-                <option value="exhibition">Exhibition</option>
-              </optgroup>
-              <optgroup label="Traceability" className="bg-[#141414]">
-                <option value="satisfies">Satisfies</option>
-                <option value="verifies">Verifies</option>
-              </optgroup>
-            </select>
-          </div>
+          {/* Center canvas */}
+          <div className="relative min-h-0 flex-1">
 
           {/* React Flow Canvas */}
-          <div className="flex-1 h-full">
+          <div className="absolute inset-0">
             <ReactFlow
               proOptions={{ hideAttribution: true }}
               nodes={filteredNodes}
@@ -1284,12 +1624,32 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
+              isValidConnection={isValidConnection}
+              onConnectStart={(_, p) => setConnectSourceId(p.nodeId ?? null)}
+              onConnectEnd={() => setConnectSourceId(null)}
+              onEdgeClick={(_, edge) => { setSelectedEdge(edge); setSelectedNode(null); }}
               onNodeDragStop={handleNodeDragStop}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
               onInit={(inst) => { reactFlowInstanceRef.current = inst; }}
               onPaneClick={handlePaneClick}
               onNodeClick={handleNodeClick}
+              onNodesDelete={(deleted) => {
+                saveHistory(nodes, edges);
+                const deletedIds = new Set(deleted.map(n => n.id));
+                setNodes(prev => prev.filter(n => !deletedIds.has(n.id) && !deletedIds.has(n.parentId || '')));
+                setEdges(prev => prev.filter(e => !deletedIds.has(e.source) && !deletedIds.has(e.target)));
+                if (selectedNode && deletedIds.has(selectedNode.id)) setSelectedNode(null);
+                logSim('warning', `Deleted ${deleted.length} element(s).`);
+              }}
+              onEdgesDelete={(deleted) => {
+                saveHistory(nodes, edges);
+                const deletedIds = new Set(deleted.map(e => e.id));
+                setEdges(prev => prev.filter(e => !deletedIds.has(e.id)));
+                if (selectedEdge && deletedIds.has(selectedEdge.id)) setSelectedEdge(null);
+                logSim('warning', `Deleted ${deleted.length} link(s).`);
+              }}
+              deleteKeyCode={['Backspace', 'Delete']}
               connectionLineComponent={OPMConnectionLine}
               colorMode="dark"
               minZoom={0.01}
@@ -1310,18 +1670,40 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               />
             </ReactFlow>
             <OpmLegend />
-          </div>
+            <OpmDiagnosticsBadge
+              diagnostics={opmArtifactState.diagnostics}
+              onNavigateToDiagnostic={handleNavigateToDiagnostic}
+            />
 
-          {/* Selected Node Properties Panel (Floating bottom-left) */}
+            {/* Diagnostic Navigation Fallback Toast */}
+            {diagnosticNavMessage && (
+              <div
+                data-testid="diagnostic-nav-fallback"
+                className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-[#241305] border border-amber-500/70 text-amber-300 px-3 py-1.5 rounded shadow-2xl text-xs flex items-center gap-2 select-none"
+              >
+                <span>{diagnosticNavMessage}</span>
+                <button onClick={() => setDiagnosticNavMessage(null)} className="text-gray-400 hover:text-white text-xs font-bold">✕</button>
+              </div>
+            )}
+          </div>
+          </div>
+          </div>
+        }
+        right={
+          <div className="flex h-full flex-col gap-2 overflow-y-auto p-2">
+          {/* Selected Node Properties Panel (moved verbatim into right dock slot; wrapper adapted from floating to docked) */}
           {selectedNode && (
-            <div className="absolute right-4 top-4 z-10 w-72 bg-[#141414]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-3.5 shadow-xl flex flex-col gap-2.5 max-h-[85%] overflow-y-auto custom-scrollbar">
+            <div className="w-full shrink-0 bg-[#141414]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-3.5 shadow-xl flex flex-col gap-2.5 custom-scrollbar">
               <div className="flex items-center justify-between border-b border-[#333] pb-1.5 shrink-0">
                 <span className="text-xs uppercase font-extrabold tracking-wider text-orange-400">
                   Element Inspector
                 </span>
                 <button
                   onClick={() => setSelectedNode(null)}
-                  className="text-gray-500 hover:text-white"
+                  aria-label="Close Element Inspector"
+                  data-testid="opm-close-node-inspector"
+                  className="text-gray-500 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded p-0.5"
+                  title="Close Element Inspector"
                 >
                   <X size={14} />
                 </button>
@@ -1330,14 +1712,32 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               {/* Basic Fields */}
               <div className="space-y-1.5 text-xs shrink-0">
                 <div className="flex flex-col gap-0.5">
-                  <label className="text-[10px] text-[#777] uppercase font-semibold">Name</label>
+                  <label htmlFor="opm-node-name-input" className="text-[10px] text-[#777] uppercase font-semibold">Name</label>
                   <input
+                    id="opm-node-name-input"
+                    data-testid="opm-node-name-input"
+                    aria-label="Element Name"
                     type="text"
                     value={selectedNode.data.name}
                     onChange={(e) => handleUpdateNodeProp('name', e.target.value)}
-                    className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-orange-500/50 text-white"
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-orange-500/50 text-white focus-visible:ring-2 focus-visible:ring-orange-500"
                   />
                 </div>
+
+                {selectedNode.data.type !== 'state' && (
+                  <div className="flex flex-col gap-0.5 pt-1">
+                    <label className="text-[10px] text-[#777] uppercase font-semibold">Element Type</label>
+                    <select
+                      value={selectedNode.type}
+                      onChange={(e) => handleConvertNodeType(e.target.value as OpmNodeKind)}
+                      className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-orange-500/50 text-white text-xs"
+                      data-testid="opm-convert-node-type"
+                    >
+                      <option value="opmObject">Object</option>
+                      <option value="opmProcess">Process</option>
+                    </select>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between pt-1">
                   <label className="text-[10px] text-[#777] uppercase font-semibold">Physical Entity</label>
@@ -1597,44 +1997,60 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               </button>
             </div>
           )}
-        </div>
 
-        {/* Bottom Simulation Logs console */}
-        <div className="h-40 bg-[#111] border-t border-[#222] flex flex-col shrink-0 overflow-hidden">
-          <div className="h-8 bg-[#181818] border-b border-[#222] px-4 flex items-center justify-between text-xs font-bold text-[#888]">
-            <span>SIMULATION CONSOLE</span>
-            <button
-              onClick={() => setSimLogs([])}
-              className="text-[#555] hover:text-[#bbb]"
-            >
-              Clear Logs
-            </button>
-          </div>
-          <div className="flex-1 p-2 font-mono text-[11px] overflow-y-auto space-y-0.5">
-            {simLogs.map((log, idx) => (
-              <div key={idx} className="flex gap-2">
-                <span className="text-[#555]">{log.timestamp}</span>
-                <span className={
-                  log.type === 'success' ? 'text-green-400' :
-                  log.type === 'error' ? 'text-red-400' :
-                  log.type === 'warning' ? 'text-amber-400' :
-                  'text-[#888]'
-                }>
-                  [{log.type.toUpperCase()}] {log.message}
+          {/* Selected Edge Inspector (moved verbatim into right dock slot; wrapper adapted from floating to docked) */}
+          {selectedEdge && !selectedNode && (
+            <div className="w-full shrink-0 bg-[#141414]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-3.5 shadow-xl flex flex-col gap-2.5 custom-scrollbar">
+              <div className="flex items-center justify-between border-b border-[#333] pb-1.5 shrink-0">
+                <span className="text-xs uppercase font-extrabold tracking-wider text-sky-400">
+                  Link Inspector
                 </span>
+                <button
+                  onClick={() => setSelectedEdge(null)}
+                  aria-label="Close Link Inspector"
+                  data-testid="opm-close-edge-inspector"
+                  className="text-gray-500 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 rounded p-0.5"
+                  title="Close Link Inspector"
+                >
+                  <X size={14} />
+                </button>
               </div>
-            ))}
-            {simLogs.length === 0 && (
-              <div className="h-full flex items-center justify-center text-[#555] italic">
-                Console idle. Start the simulation or trigger a process to see live execution traces.
+              <div className="space-y-1.5 text-xs shrink-0">
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[10px] text-[#777] uppercase font-semibold">Link ID</label>
+                  <span className="font-mono text-[11px] text-gray-300">{selectedEdge.id}</span>
+                </div>
+                <div className="flex flex-col gap-0.5 pt-1">
+                  <label htmlFor="opm-convert-edge-type" className="text-[10px] text-[#777] uppercase font-semibold">Link Role</label>
+                  <select
+                    id="opm-convert-edge-type"
+                    aria-label="Link Role"
+                    value={(selectedEdge.data?.linkType ?? (selectedEdge.data?.type || 'effect')) as string}
+                    onChange={(e) => handleConvertEdgeType(selectedEdge.id, e.target.value as OPMLinkType)}
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-sky-500/50 text-white text-xs focus-visible:ring-2 focus-visible:ring-sky-500"
+                    data-testid="opm-convert-edge-type"
+                  >
+                    <option value="consumption">Consumption</option>
+                    <option value="result">Result</option>
+                    <option value="effect">Effect</option>
+                    <option value="agent">Agent</option>
+                    <option value="instrument">Instrument</option>
+                    <option value="trigger">Trigger</option>
+                    <option value="condition">Condition</option>
+                    <option value="aggregation">Aggregation</option>
+                    <option value="generalization">Generalization</option>
+                    <option value="exhibition">Exhibition</option>
+                    <option value="satisfies">Satisfies</option>
+                    <option value="verifies">Verifies</option>
+                  </select>
+                </div>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
+            </div>
+          )}
+        {/* Task 6: simulation console moved into the bottom dock slot (see below) */}
 
       {/* 2. Right Tabbed Panel (Simulation Monitor & OPL Editor & Smart Show) */}
-      <div className="w-96 flex flex-col h-full bg-[#141414] overflow-hidden border-l border-[#222]">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[#222] bg-[#141414]">
         {/* Tab Header */}
         <div className="h-12 border-b border-[#222] flex shrink-0 bg-[#181818]">
           <button
@@ -1646,6 +2062,17 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             }`}
           >
             ⚡ Sim
+          </button>
+          <button
+            data-testid="opm-scope-tab-btn"
+            onClick={() => setRightTab('scope')}
+            className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors border-b-2 ${
+              rightTab === 'scope'
+                ? 'border-orange-500 text-orange-400 bg-orange-950/10'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            📈 Scope
           </button>
           <button
             onClick={() => setRightTab('opl')}
@@ -1686,13 +2113,17 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             <div className="bg-[#1a1a1a] rounded-lg border border-[#2d2d2d] p-3 flex items-center justify-between shadow-md shrink-0">
               <div className="flex flex-col">
                 <span className="text-[10px] text-gray-500 uppercase font-black">Simulation Status</span>
-                <span className={`text-xs font-extrabold flex items-center gap-1.5 ${simRunning ? 'text-green-400' : 'text-amber-400'}`}>
+                <span data-testid="opm-sim-status" className={`text-xs font-extrabold flex items-center gap-1.5 ${simRunning ? 'text-green-400' : 'text-amber-400'}`}>
                   <span className={`w-2 h-2 rounded-full ${simRunning ? 'bg-green-400 animate-ping' : 'bg-amber-400'}`} />
                   {simRunning ? 'ACTIVE RUNNING' : 'PAUSED'}
+                </span>
+                <span data-testid="opm-sim-time" className="text-[10px] text-gray-400 font-mono mt-0.5">
+                  Simulated Time: {simStateRef.current.tick * activeOpmConfig.tickMs}ms (Tick {simStateRef.current.tick})
                 </span>
               </div>
               <div className="flex gap-1 bg-black/40 p-1 rounded border border-white/5">
                 <button
+                  data-testid="opm-sim-toggle"
                   onClick={toggleSimulation}
                   className={`p-1.5 rounded transition-all ${simRunning ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-green-500/20 text-green-400 border border-green-500/30'}`}
                   title={simRunning ? 'Pause' : 'Start'}
@@ -1700,6 +2131,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   {simRunning ? <Pause size={12} /> : <Play size={12} />}
                 </button>
                 <button
+                  data-testid="opm-sim-step"
                   onClick={runSimTick}
                   className="p-1.5 text-sky-400 hover:bg-sky-950/40 rounded transition-all"
                   title="Step Simulation"
@@ -1707,6 +2139,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   <ArrowRight size={12} />
                 </button>
                 <button
+                  data-testid="opm-sim-reset"
                   onClick={resetSimulation}
                   className="p-1.5 text-amber-400 hover:bg-amber-950/40 rounded transition-all"
                   title="Reset"
@@ -1714,6 +2147,78 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   <RotateCcw size={12} />
                 </button>
               </div>
+            </div>
+
+            {/* OPM Isolated Simulation Configuration */}
+            <div className="bg-[#181818] rounded-lg border border-[#2d2d2d] p-3 flex flex-col gap-2.5 shadow-md shrink-0">
+              <div className="flex items-center justify-between border-b border-[#2d2d2d] pb-1">
+                <span className="text-[10px] text-orange-400 uppercase font-extrabold tracking-wider">
+                  OPM Simulation Settings (Isolated)
+                </span>
+                <span className="text-[9px] text-gray-500 font-mono">
+                  {activeOpmConfig.tickMs}ms / tick
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[9px] text-gray-400 uppercase font-semibold">Tick (ms)</label>
+                  <input
+                    data-testid="opm-sim-config-tick"
+                    type="number"
+                    min="1"
+                    max="60000"
+                    step="1"
+                    value={configDraft.tickMs ?? ''}
+                    onChange={(e) => handleConfigFieldChange('tickMs', e.target.value)}
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-1.5 py-1 text-xs font-mono text-white outline-none focus:border-orange-500/60"
+                  />
+                  <span className="text-[8px] text-gray-500">1–60,000</span>
+                </div>
+
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[9px] text-gray-400 uppercase font-semibold">Max Ticks</label>
+                  <input
+                    data-testid="opm-sim-config-maxticks"
+                    type="number"
+                    min="1"
+                    max="1000000"
+                    step="1"
+                    value={configDraft.maxTicks ?? ''}
+                    onChange={(e) => handleConfigFieldChange('maxTicks', e.target.value)}
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-1.5 py-1 text-xs font-mono text-white outline-none focus:border-orange-500/60"
+                  />
+                  <span className="text-[8px] text-gray-500">1–1,000,000</span>
+                </div>
+
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[9px] text-gray-400 uppercase font-semibold">Max Events</label>
+                  <input
+                    data-testid="opm-sim-config-maxevents"
+                    type="number"
+                    min="1"
+                    max="1024"
+                    step="1"
+                    value={configDraft.maxEventsPerTick ?? ''}
+                    onChange={(e) => handleConfigFieldChange('maxEventsPerTick', e.target.value)}
+                    className="bg-[#0b0b0b] border border-[#333] rounded px-1.5 py-1 text-xs font-mono text-white outline-none focus:border-orange-500/60"
+                  />
+                  <span className="text-[8px] text-gray-500">1–1,024</span>
+                </div>
+              </div>
+
+              {/* Inline Validation Diagnostics */}
+              {configErrors.length > 0 && (
+                <div
+                  data-testid="opm-sim-config-errors"
+                  className="bg-red-950/40 border border-red-900/60 rounded p-1.5 text-[10px] text-red-300 space-y-0.5"
+                >
+                  <div className="font-bold text-red-400 uppercase text-[9px]">Invalid Configuration (Previous Active):</div>
+                  {configErrors.map((err, i) => (
+                    <div key={i}>• {err}</div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Quick Initialize Button */}
@@ -1871,80 +2376,31 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           </div>
         )}
 
-        {/* Tab Content 2: OPL Editor */}
+        {/* Tab Content: Simulation Scope */}
+        {rightTab === 'scope' && (
+          <div className="flex-1 flex flex-col overflow-hidden p-2 min-h-0">
+            <OpmSimulationScope
+              simRunning={simRunning}
+              currentTick={simStateRef.current.tick}
+              tickMs={activeOpmConfig.tickMs}
+              nodes={nodes}
+              edges={edges}
+              recentLogs={simLogs}
+              onReset={resetSimulation}
+            />
+          </div>
+        )}
+
+        {/* Tab Content 2: OPL Editor (moved verbatim into the bottom dock slot; stub keeps the tab) */}
         {rightTab === 'opl' && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="h-8 border-b border-[#222] px-4 flex items-center justify-between shrink-0 bg-[#181818]/60 text-xs text-[#888]">
-              <span>OPL Editor Mode</span>
-              {isEditingText ? (
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={applyOplChanges}
-                    className="px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded text-[10px] font-bold flex items-center gap-0.5 transition-colors"
-                    title="Apply Changes"
-                  >
-                    <Check size={10} /> Sync
-                  </button>
-                  <button
-                    onClick={() => {
-                      setIsEditingText(false);
-                      const generated = generateOpl(nodes, edges);
-                      setOplText(generated);
-                    }}
-                    className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded text-[10px] font-bold flex items-center gap-0.5 transition-colors"
-                    title="Discard Changes"
-                  >
-                    <X size={10} /> Cancel
-                  </button>
-                </div>
-              ) : (
-                <span className="text-[9px] px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded uppercase font-semibold tracking-wide">
-                  Auto-Sync
-                </span>
-              )}
-            </div>
-
-            {/* Text Area */}
-            <div className="flex-1 relative p-3">
-              <textarea
-                value={oplText}
-                onChange={(e) => {
-                  setOplText(e.target.value);
-                  setIsEditingText(true);
-                }}
-                placeholder="// Add OPL Sentences to represent system architecture..."
-                className="w-full h-full bg-[#0a0a0a] border border-[#2d2d2d] rounded-md p-3 outline-none text-[#cfd8dc] font-mono text-xs leading-relaxed resize-none focus:border-sky-500/50"
-              />
-
-              {isEditingText && (
-                <div className="absolute top-5 right-5 bg-orange-950/80 border border-orange-500 text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded shadow animate-pulse">
-                  Edit Mode Active
-                </div>
-              )}
-            </div>
-
-            {/* OPL Errors / Warnings Drawer */}
-            <div className="h-32 bg-[#0c0c0c] border-t border-[#222] flex flex-col shrink-0">
-              <div className="h-7 bg-[#111] px-3 flex items-center justify-between text-[10px] font-bold text-[#666]">
-                <span>SYNTAX CHECKER</span>
-                <span className={oplErrors.length > 0 ? 'text-red-400 font-extrabold' : 'text-green-500'}>
-                  {oplErrors.length > 0 ? `${oplErrors.length} Errors` : 'Grammar Valid ✓'}
-                </span>
-              </div>
-              <div className="flex-1 p-2 overflow-y-auto space-y-1">
-                {oplErrors.map((err, idx) => (
-                  <div key={idx} className="flex gap-2 text-xs font-mono">
-                    <span className="text-red-500 font-bold">[Line {err.line}]</span>
-                    <span className="text-[#ccc]">{err.message}</span>
-                  </div>
-                ))}
-                {oplErrors.length === 0 && (
-                  <div className="h-full flex items-center justify-center text-[10px] text-[#555] italic">
-                    No syntax warnings found. All OPL structures are correct.
-                  </div>
-                )}
-              </div>
-            </div>
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+            <span className="text-xs text-[#888]">The OPL editor now lives in the bottom dock, next to the simulation console.</span>
+            <button
+              onClick={() => handleDocksChange({ ...docks, bottom: true })}
+              className="px-2.5 py-1 text-[11px] border border-[#333] rounded hover:bg-[#222] text-[#ccc]"
+            >
+              Show bottom dock
+            </button>
           </div>
         )}
 
@@ -1970,8 +2426,27 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             <OpmCodeGenerationWorkspace
               nodes={nodes as never}
               edges={edges as never}
+              executionConfig={opmExecutionConfig}
               state={opmArtifactState}
               onStateChange={setOpmArtifactState}
+              opmSimulationConfig={activeOpmConfig}
+              onNavigateToDiagnostic={(src) => {
+                if (src.elementId) {
+                  const node = nodes.find(n => n.id === src.elementId);
+                  if (node) {
+                    setSelectedNode(node);
+                    setSelectedEdge(null);
+                    return;
+                  }
+                  const edge = edges.find(e => e.id === src.elementId);
+                  if (edge) {
+                    setSelectedEdge(edge);
+                    setSelectedNode(null);
+                    return;
+                  }
+                }
+                onAddError?.('info', `Diagnostic reference: ${src.elementId || src.propertyPath || 'unknown source'}`, 'OPM');
+              }}
               onDownload={(files) => {
                 onAddError?.('info', `Verified OPM bundle ready: ${files.length} files.`, 'OPM');
               }}
@@ -1982,6 +2457,152 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           </div>
         )}
       </div>
+          </div>
+        }
+        bottom={
+          <div className="flex h-full">
+            {/* Bottom Simulation Logs console / Scope */}
+            <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#111]">
+              <div className="h-8 bg-[#181818] border-b border-[#222] px-3 flex items-center justify-between text-xs font-bold text-[#888]">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setBottomView('console')}
+                    className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-colors ${
+                      bottomView === 'console' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Console
+                  </button>
+                  <button
+                    onClick={() => setBottomView('scope')}
+                    className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-colors ${
+                      bottomView === 'scope' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    📈 Scope
+                  </button>
+                </div>
+                {bottomView === 'console' && (
+                  <button
+                    onClick={() => setSimLogs([])}
+                    className="text-[#555] hover:text-[#bbb] text-[10px]"
+                  >
+                    Clear Logs
+                  </button>
+                )}
+              </div>
+              {bottomView === 'console' ? (
+                <div className="flex-1 p-2 font-mono text-[11px] overflow-y-auto space-y-0.5">
+                  {simLogs.map((log, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <span className="text-[#555]">{log.timestamp}</span>
+                      <span className={
+                        log.type === 'success' ? 'text-green-400' :
+                        log.type === 'error' ? 'text-red-400' :
+                        log.type === 'warning' ? 'text-amber-400' :
+                        'text-[#888]'
+                      }>
+                        [{log.type.toUpperCase()}] {log.message}
+                      </span>
+                    </div>
+                  ))}
+                  {simLogs.length === 0 && (
+                    <div className="h-full flex items-center justify-center text-[#555] italic">
+                      Console idle. Start the simulation or trigger a process to see live execution traces.
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex-1 min-h-0 overflow-hidden p-1">
+                  <OpmSimulationScope
+                    simRunning={simRunning}
+                    currentTick={simStateRef.current.tick}
+                    tickMs={activeOpmConfig.tickMs}
+                    nodes={nodes}
+                    edges={edges}
+                    recentLogs={simLogs}
+                    onReset={resetSimulation}
+                  />
+                </div>
+              )}
+            </div>
+            {/* OPL Editor (moved verbatim into bottom dock slot; wrapper adapted to dock pane) */}
+            <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden border-l border-[#222]">
+              <div className="h-8 border-b border-[#222] px-4 flex items-center justify-between shrink-0 bg-[#181818]/60 text-xs text-[#888]">
+                <span>OPL Editor Mode</span>
+                {isEditingText ? (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={applyOplChanges}
+                      className="px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded text-[10px] font-bold flex items-center gap-0.5 transition-colors"
+                      title="Apply Changes"
+                    >
+                      <Check size={10} /> Sync
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsEditingText(false);
+                        const generated = generateOpl(nodes, edges);
+                        setOplText(generated);
+                      }}
+                      className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded text-[10px] font-bold flex items-center gap-0.5 transition-colors"
+                      title="Discard Changes"
+                    >
+                      <X size={10} /> Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-[9px] px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded uppercase font-semibold tracking-wide">
+                    Auto-Sync
+                  </span>
+                )}
+              </div>
+
+              {/* Text Area */}
+              <div className="flex-1 relative p-3 min-h-0">
+                <textarea
+                  value={oplText}
+                  onChange={(e) => {
+                    setOplText(e.target.value);
+                    setIsEditingText(true);
+                  }}
+                  placeholder="// Add OPL Sentences to represent system architecture..."
+                  className="w-full h-full bg-[#0a0a0a] border border-[#2d2d2d] rounded-md p-3 outline-none text-[#cfd8dc] font-mono text-xs leading-relaxed resize-none focus:border-sky-500/50"
+                />
+
+                {isEditingText && (
+                  <div className="absolute top-5 right-5 bg-orange-950/80 border border-orange-500 text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded shadow animate-pulse">
+                    Edit Mode Active
+                  </div>
+                )}
+              </div>
+
+              {/* OPL Errors / Warnings Drawer */}
+              <div className="h-32 bg-[#0c0c0c] border-t border-[#222] flex flex-col shrink-0">
+                <div className="h-7 bg-[#111] px-3 flex items-center justify-between text-[10px] font-bold text-[#666]">
+                  <span>SYNTAX CHECKER</span>
+                  <span className={oplErrors.length > 0 ? 'text-red-400 font-extrabold' : 'text-green-500'}>
+                    {oplErrors.length > 0 ? `${oplErrors.length} Errors` : 'Grammar Valid ✓'}
+                  </span>
+                </div>
+                <div className="flex-1 p-2 overflow-y-auto space-y-1">
+                  {oplErrors.map((err, idx) => (
+                    <div key={idx} className="flex gap-2 text-xs font-mono">
+                      <span className="text-red-500 font-bold">[Line {err.line}]</span>
+                      <span className="text-[#ccc]">{err.message}</span>
+                    </div>
+                  ))}
+                  {oplErrors.length === 0 && (
+                    <div className="h-full flex items-center justify-center text-[10px] text-[#555] italic">
+                      No syntax warnings found. All OPL structures are correct.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        }
+      />
     </div>
   );
 };

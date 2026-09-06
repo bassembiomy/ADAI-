@@ -5,8 +5,17 @@ import {
   parseInternalTransitions,
   toCIdentifier,
 } from './smExpressions';
-import type { StateMachineLayerV4, StateMachineModelV4 } from './smModel';
+import {
+  defaultSMVerificationConfig,
+  type ModelDiagnostic,
+  type SMInvalidInputPolicy,
+  type SMVerificationConfig,
+  type StateMachineLayerV4,
+  type StateMachineModelV4,
+  type StateMachineModelV5,
+} from './smModel';
 import type {
+  ResolvedSMVerificationConfig,
   SemanticBuildResult,
   SemanticIOMapping,
   SemanticJunction,
@@ -26,6 +35,7 @@ import {
   STATE_MACHINE_XB_TARGET_CAPABILITIES,
   validateModelStructure,
 } from './smSemanticValidator';
+import { resolveTargetSelection } from '../../engine/hil/hilTypes';
 
 interface HierarchyIndex {
   rootLayerId: string;
@@ -44,7 +54,7 @@ const byPriorityThenId = (
 ): number => left.priority - right.priority || left.id.localeCompare(right.id);
 
 const buildHierarchyIndex = (
-  model: StateMachineModelV4,
+  model: StateMachineModelV4 | StateMachineModelV5,
 ): HierarchyIndex => {
   const stateById = new Map(model.states.map((state) => [state.id, state]));
   const layerById = new Map(model.layers.map((layer) => [layer.id, layer]));
@@ -238,15 +248,130 @@ export const freezeSemanticModel = (
   model: SemanticModel,
 ): SemanticModel => deepFreeze(model);
 
+export const resolveVerificationConfig = (
+  config: Partial<SMVerificationConfig> = {},
+): ResolvedSMVerificationConfig => {
+  const defaults = defaultSMVerificationConfig();
+  return {
+    cStandard: config.cStandard ?? defaults.cStandard,
+    tickToleranceMs: config.tickToleranceMs ?? defaults.tickToleranceMs,
+    timerPolicy: config.timerPolicy ?? defaults.timerPolicy,
+    resetPolicy: config.resetPolicy ?? defaults.resetPolicy,
+    watchdogAfterCriticalFault: config.watchdogAfterCriticalFault ?? defaults.watchdogAfterCriticalFault,
+    statementCoverageTarget: config.statementCoverageTarget ?? defaults.statementCoverageTarget,
+    branchCoverageTarget: config.branchCoverageTarget ?? defaults.branchCoverageTarget,
+    requireMcdc: config.requireMcdc ?? defaults.requireMcdc,
+    repeatedExecutionCycles: config.repeatedExecutionCycles ?? defaults.repeatedExecutionCycles,
+    staticAnalysisToolId: config.staticAnalysisToolId ?? defaults.staticAnalysisToolId,
+    misraToolId: config.misraToolId ?? defaults.misraToolId,
+    targetId: config.targetId ?? defaults.targetId,
+    invalidInputPolicies: Object.freeze({ ...(config.invalidInputPolicies ?? {}) }),
+  };
+};
+
+export const validateVerificationConfig = (
+  model: StateMachineModelV5 | StateMachineModelV4,
+): ModelDiagnostic[] => {
+  const diagnostics: ModelDiagnostic[] = [];
+  const rawVerification = (model as Partial<StateMachineModelV5>).verification;
+  const verification: SMVerificationConfig = {
+    ...defaultSMVerificationConfig(),
+    ...(rawVerification ?? {}),
+  };
+
+  if (
+    typeof verification.tickToleranceMs !== 'number'
+    || !Number.isInteger(verification.tickToleranceMs)
+    || verification.tickToleranceMs < 0
+  ) {
+    diagnostics.push({
+      code: 'SM_VERIFY_TOLERANCE_INVALID',
+      message: `Verification tick tolerance '${verification.tickToleranceMs}' must be an integer >= 0.`,
+      severity: 'error',
+    });
+  }
+
+  if (
+    typeof verification.statementCoverageTarget !== 'number'
+    || !Number.isFinite(verification.statementCoverageTarget)
+    || verification.statementCoverageTarget < 0
+    || verification.statementCoverageTarget > 100
+    || typeof verification.branchCoverageTarget !== 'number'
+    || !Number.isFinite(verification.branchCoverageTarget)
+    || verification.branchCoverageTarget < 0
+    || verification.branchCoverageTarget > 100
+  ) {
+    diagnostics.push({
+      code: 'SM_VERIFY_COVERAGE_INVALID',
+      message: `Verification coverage targets must be between 0 and 100 (statement: ${verification.statementCoverageTarget}, branch: ${verification.branchCoverageTarget}).`,
+      severity: 'error',
+    });
+  }
+
+  if (
+    typeof verification.repeatedExecutionCycles !== 'number'
+    || !Number.isInteger(verification.repeatedExecutionCycles)
+    || verification.repeatedExecutionCycles < 1
+    || verification.repeatedExecutionCycles > 10_000_000
+  ) {
+    diagnostics.push({
+      code: 'SM_VERIFY_CYCLES_INVALID',
+      message: `Verification repeated execution cycles '${verification.repeatedExecutionCycles}' must be an integer between 1 and 10,000,000.`,
+      severity: 'error',
+    });
+  }
+
+  if (model.hilConfig?.mappings) {
+    const validPolicies = new Set<SMInvalidInputPolicy>(['clamp', 'reject', 'default', 'diagnostic-fault']);
+    for (const mapping of model.hilConfig.mappings) {
+      if (mapping.direction === 'read') {
+        const policy = verification.invalidInputPolicies?.[mapping.id]
+          ?? verification.invalidInputPolicies?.[mapping.channelId]
+          ?? verification.invalidInputPolicies?.[mapping.adiaVarId];
+        if (!policy || !validPolicies.has(policy)) {
+          diagnostics.push({
+            code: 'SM_VERIFY_INPUT_POLICY_MISSING',
+            message: `Input mapping '${mapping.id}' is missing a valid invalid-input policy.`,
+            elementId: mapping.id,
+            severity: 'error',
+          });
+        }
+      }
+    }
+  }
+
+  if (verification.requireMcdc && !model.safetyMode) {
+    diagnostics.push({
+      code: 'SM_VERIFY_MCDC_REQUIRES_SAFETY',
+      message: 'MC/DC coverage requirement is only valid when safety mode is enabled.',
+      severity: 'error',
+    });
+  }
+
+  if (verification.targetId !== null && model.hilConfig) {
+    const hilTargetId = resolveTargetSelection(model.hilConfig)?.targetId ?? null;
+    if (hilTargetId !== null && verification.targetId !== hilTargetId) {
+      diagnostics.push({
+        code: 'SM_VERIFY_TARGET_MISMATCH',
+        message: `Verification target '${verification.targetId}' does not match HIL target '${hilTargetId}'.`,
+        severity: 'error',
+      });
+    }
+  }
+
+  return diagnostics;
+};
+
 export const buildSemanticModel = (
-  model: StateMachineModelV4,
+  model: StateMachineModelV4 | StateMachineModelV5,
 ): SemanticBuildResult => {
-  const diagnostics = validateModelStructure(model);
+  const diagnostics = validateModelStructure(model as StateMachineModelV4);
+  diagnostics.push(...validateVerificationConfig(model));
   if (diagnostics.some((item) => item.severity === 'error')) {
     return { diagnostics };
   }
 
-  const codegenModel: StateMachineModelV4 = {
+  const codegenModel: StateMachineModelV4 | StateMachineModelV5 = {
     ...model,
     layers: model.layers.filter((layer) =>
       layer.parentStateId === null
@@ -698,6 +823,7 @@ export const buildSemanticModel = (
       ).length,
       traceableElements,
       modelHash: "0000000000000000",
+      verification: resolveVerificationConfig((model as Partial<StateMachineModelV5>).verification),
     }),
   };
 };

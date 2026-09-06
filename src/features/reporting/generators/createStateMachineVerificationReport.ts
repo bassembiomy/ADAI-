@@ -1,4 +1,5 @@
 import type { ReportDocument } from '../reportDocumentModel';
+import type { VerificationBundle } from '../../../utils/stateMachine/smVerificationEvidence';
 
 export interface SMReportOptions {
   modelName: string;
@@ -8,16 +9,23 @@ export interface SMReportOptions {
   reachableStates: string[];
   unreachableStates: string[];
   hasDeadlocks: boolean;
+  bundle?: VerificationBundle;
 }
 
 export function createStateMachineVerificationReport(options: SMReportOptions): ReportDocument {
+  const reportStatus = options.bundle
+    ? (options.bundle.acceptance
+      ? 'Formal Verification Passed'
+      : (options.bundle.overallStatus === 'FAIL' ? 'Verification Failed' : 'Verification Incomplete'))
+    : (options.hasDeadlocks ? 'Verification Blocked' : 'Formal Verification Passed');
+
   return {
     header: {
       systemTitle: `ADIA State Machine Suite — ${options.modelName}`,
       documentTitle: 'C-Code Generation & Model Verification Report',
       subtitle: 'Deterministic AST Analysis, Dynamic Traceability & Safety Verification',
       primaryObjective: 'Formally verify finite state machine reachability, absence of deadlock, and equivalence between semantic model and emitted C code.',
-      status: options.hasDeadlocks ? 'Verification Blocked' : 'Formal Verification Passed',
+      status: reportStatus,
       safetyClassification: 'ISO 26262 / IEC 61508 Verification Suite',
       runningHeader: `ADIA Verification Suite — ${options.modelName}`,
     },

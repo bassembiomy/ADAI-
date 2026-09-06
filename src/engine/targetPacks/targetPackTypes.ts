@@ -95,6 +95,15 @@ export interface TargetCapabilityManifest {
   certifiedStatuses: string[];
 }
 
+export interface TargetVerificationRecipe {
+  executable: string;
+  args: string[];
+  sourceGlobs: string[];
+  includeDirectories: string[];
+  outputPath: string;
+  versionArgs?: string[];
+}
+
 export interface TargetPackManifest {
   schemaVersion: string;
   packVersion: string;
@@ -115,4 +124,5 @@ export interface TargetPackManifest {
   programmers: TargetProgrammer[];
   capabilityManifest: TargetCapabilityManifest;
   contentHash: string;
+  verificationRecipe?: TargetVerificationRecipe;
 }

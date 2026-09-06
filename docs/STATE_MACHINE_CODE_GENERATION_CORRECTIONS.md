@@ -461,6 +461,35 @@ The correction is complete only when:
 9. Simulator and generated-C traces match.
 10. Strict C99, HIL, TypeScript, and full state-machine tests pass.
 
+## Generated-Code Testing System (2026-09-06 Update)
+
+### Operational Context & Philosophy
+
+Following initial generator corrections, ADIA established a comprehensive, fail-closed Generated-Code Testing System that eliminates structural-only false positives and proves functional correctness against real embedded toolchains:
+
+1. **Self-Contained Verification Packages**:
+   Generated code is accompanied by 9 independent C test suites (`test_init.c`, `test_transitions.c`, `test_actions.c`, `test_timing.c`, `test_safety.c`, `test_io.c`, `test_reset.c`, `test_robustness.c`, `test_hierarchy.c`) and a full in-memory MCAL test runtime (`test_runtime.c`).
+2. **Deterministic Test Manifest**:
+   All test cases and execution obligations are declared in `evidence/test_manifest.json` with requirement IDs and test vectors.
+3. **Multi-Channel Timing & Boundary Matrices**:
+   Boundary conditions (including 449/450/500/550/551 ms timing vectors, integer saturation, and fault injection) are automatically synthesized and executed.
+4. **Instrumented Coverage Analysis**:
+   Statement and branch coverage are measured using compiler instrumentation (`gcov`). Uncovered lines and branches are captured directly in `evidence/coverage.json`.
+5. **Differential Equivalence Engine**:
+   Bit-level cycle observation traces (active states, variables, outputs, timers, MCAL calls) are verified between generated C and the reference interpreter.
+6. **Fail-Closed Verification Pipeline**:
+   Any missing toolchain, unconfigured static analyzer, or failed target cross-compilation immediately marks the activity `NOT_RUN` and results in `overallStatus = REJECTED`. Structural analysis alone can never yield an `ACCEPTED` certificate.
+
+### CLI Command & Verification Invocation
+
+```bash
+npm run verify:sm:codegen -- --model <model.json> --output <output-dir>
+```
+
+Output directory contains `production/`, `test/`, and `evidence/` directories alongside `sm_testing_report.md` and `verification_bundle.json`.
+
+---
+
 ## Implementation Rule
 
 Do not patch delivered `sm_core.c`, `sm_safety.c`, or

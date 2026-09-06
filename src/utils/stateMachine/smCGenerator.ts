@@ -30,10 +30,13 @@ import {
   type VerificationEvidence,
 } from './smReports';
 import { renderHostSmokeHarness } from './smHostHarness';
+import { buildSMTestManifest } from './smTestPlanBuilder';
+import { renderSMCTestPackage } from './smCTestSuiteRenderer';
 
 export interface CGeneratorOptions {
   includeTestShims?: boolean;
   includeHostHarness?: boolean;
+  includeVerificationPackage?: boolean;
   vectorCount?: number;
   reportSourceFiles?: readonly GeneratedCFile[];
   verificationEvidence?: VerificationEvidence;
@@ -847,8 +850,29 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '#ifndef SM_CONFIG_H',
     '#define SM_CONFIG_H',
     '',
-    '#include <stdbool.h>',
-    '#include <stdint.h>',
+    ir.verification.cStandard === 'c90'
+      ? lines(
+          '#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)',
+          '#include <stdbool.h>',
+          '#include <stdint.h>',
+          '#else',
+          '#ifndef __cplusplus',
+          'typedef unsigned char bool;',
+          '#define true 1',
+          '#define false 0',
+          '#endif',
+          'typedef unsigned char uint8_t;',
+          'typedef signed char int8_t;',
+          'typedef unsigned short uint16_t;',
+          'typedef signed short int16_t;',
+          'typedef unsigned long uint32_t;',
+          'typedef signed long int32_t;',
+          '#endif',
+        )
+      : lines(
+          '#include <stdbool.h>',
+          '#include <stdint.h>',
+        ),
     '#ifndef SM_ADIA_INSTANCE_FWD',
     '#define SM_ADIA_INSTANCE_FWD',
     'typedef struct ADIA_Instance ADIA_Instance_t;',
@@ -858,7 +882,9 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
       : false,
     '',
     `#define SM_TICK_MS ${ir.tickMs}U`,
-    '#define SM_TICK_TOLERANCE_MS ((SM_TICK_MS / 10U) > 0U ? (SM_TICK_MS / 10U) : 1U)',
+    `#define SM_TICK_TOLERANCE_MS ${ir.verification.tickToleranceMs > 0 ? ir.verification.tickToleranceMs : Math.max(1, Math.floor(ir.tickMs / 10))}U`,
+    `#define SM_TICK_MIN_MS ${Math.max(0, ir.tickMs - (ir.verification.tickToleranceMs > 0 ? ir.verification.tickToleranceMs : Math.max(1, Math.floor(ir.tickMs / 10))))}U`,
+    `#define SM_TICK_MAX_MS ${ir.tickMs + (ir.verification.tickToleranceMs > 0 ? ir.verification.tickToleranceMs : Math.max(1, Math.floor(ir.tickMs / 10)))}U`,
     `#define SM_NUM_STATES ${states.length}U`,
     `#define SM_NUM_LAYERS ${layers.length}U`,
     `#define SM_NUM_ACTIVE_SLOTS ${ir.activeSlotCount}U`,
@@ -881,7 +907,8 @@ export const renderConfigHeader = (ir: SemanticModel): string => {
     '    SM_ERR_TIMING,',
     '    SM_ERR_CONFIGURATION,',
     '    SM_ERR_SAFETY_VIOLATION,',
-    '    SM_ERR_XBRIDGES_NUMERIC',
+    '    SM_ERR_XBRIDGES_NUMERIC,',
+    '    SM_ERR_INVALID_ARGUMENT',
     '} SM_Error_t;',
     '',
     'typedef uint32_t SM_Group_t;',
@@ -942,6 +969,14 @@ export const renderCoreHeader = (): string => lines(
   'void SM_TraceAction(ADIA_Instance_t *instance, const char *action);',
   '#else',
   '#define SM_TraceAction(instance, action) ((void)0)',
+  '#endif',
+  '',
+  '#ifdef ADIA_TESTING',
+  'SM_Error_t SM_Test_SetActiveState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state);',
+  'SM_Error_t SM_Test_SetStateActive(ADIA_Instance_t *instance, SM_Node_t state, bool active);',
+  'SM_Error_t SM_Test_SetStateTimer(ADIA_Instance_t *instance, SM_Node_t state, uint32_t timer_ms);',
+  'SM_Error_t SM_Test_SetHistoryState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state);',
+  'SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_Node_t state, bool active);',
   '#endif',
   '',
   '#endif /* SM_CORE_H */',
@@ -1045,25 +1080,27 @@ export const renderMappingSource = (ir: SemanticModel): string => {
     ' * Layer IDs, active-slot IDs, and state IDs are distinct.',
     ' */',
     'const uint32_t SM_State_Parent_Layer_Map[SM_NUM_STATES + 1U] = {',
-    '    [0] = 0U,',
-    ...states.map((state) =>
-      `    [${stateIndex(ir, state.id)}] = ${layerMacro(ir.layers[state.layerId])},`),
+    ...(ir.verification.cStandard === 'c90'
+      ? ['    0U,', ...states.map((state) => `    ${layerMacro(ir.layers[state.layerId])},`)]
+      : ['    [0] = 0U,', ...states.map((state) => `    [${stateIndex(ir, state.id)}] = ${layerMacro(ir.layers[state.layerId])},`)]),
     '};',
     '',
     'const int32_t SM_State_Active_Slot_Map[SM_NUM_STATES + 1U] = {',
-    '    [0] = -1,',
-    ...states.map((state) =>
-      `    [${stateIndex(ir, state.id)}] = ${state.activeSlot},`),
+    ...(ir.verification.cStandard === 'c90'
+      ? ['    -1,', ...states.map((state) => `    ${state.activeSlot},`)]
+      : ['    [0] = -1,', ...states.map((state) => `    [${stateIndex(ir, state.id)}] = ${state.activeSlot},`)]),
     '};',
     '',
     'const SM_Node_t SM_Layer_Parent_State_Map[SM_NUM_LAYERS] = {',
-    ...layers.map((layer) =>
-      `    [${layerMacro(layer)}] = ${layer.parentStateId === null ? 'SM_NODE_INVALID' : stateNode(ir, layer.parentStateId)},`),
+    ...(ir.verification.cStandard === 'c90'
+      ? layers.map((layer) => `    ${layer.parentStateId === null ? 'SM_NODE_INVALID' : stateNode(ir, layer.parentStateId)},`)
+      : layers.map((layer) => `    [${layerMacro(layer)}] = ${layer.parentStateId === null ? 'SM_NODE_INVALID' : stateNode(ir, layer.parentStateId)},`)),
     '};',
     '',
     'const int32_t SM_Layer_Active_Slot_Map[SM_NUM_LAYERS] = {',
-    ...layers.map((layer) =>
-      `    [${layerMacro(layer)}] = ${layer.activeSlot ?? -1},`),
+    ...(ir.verification.cStandard === 'c90'
+      ? layers.map((layer) => `    ${layer.activeSlot ?? -1},`)
+      : layers.map((layer) => `    [${layerMacro(layer)}] = ${layer.activeSlot ?? -1},`)),
     '};',
     '',
     'SM_Error_t SM_Validate_Mapping_Configuration(void)',
@@ -1144,14 +1181,15 @@ export const renderSafetySource = (ir: SemanticModel): string => {
       : null,
     '',
     'static const SM_Node_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {',
-    '    [0] = SM_NODE_INVALID,',
-    ...states.map((state) =>
-      `    [${stateIndex(ir, state.id)}] = ${state.parentStateId === null ? 'SM_NODE_INVALID' : stateNode(ir, state.parentStateId)},`),
+    ...(ir.verification.cStandard === 'c90'
+      ? ['    SM_NODE_INVALID,', ...states.map((state) => `    ${state.parentStateId === null ? 'SM_NODE_INVALID' : stateNode(ir, state.parentStateId)},`)]
+      : ['    [0] = SM_NODE_INVALID,', ...states.map((state) => `    [${stateIndex(ir, state.id)}] = ${state.parentStateId === null ? 'SM_NODE_INVALID' : stateNode(ir, state.parentStateId)},`)]),
     '};',
     '',
     'static const bool SM_Layer_Has_Children_Map[SM_NUM_LAYERS] = {',
-    ...layers.map((layer) =>
-      `    [${layerMacro(layer)}] = ${layer.children.length > 0 ? 'true' : 'false'},`),
+    ...(ir.verification.cStandard === 'c90'
+      ? layers.map((layer) => `    ${layer.children.length > 0 ? 'true' : 'false'},`)
+      : layers.map((layer) => `    [${layerMacro(layer)}] = ${layer.children.length > 0 ? 'true' : 'false'},`)),
     '};',
     '',
     'static bool SM_Is_Direct_Layer_Child(uint32_t layer_index, SM_Node_t state)',
@@ -1286,8 +1324,7 @@ export const renderMcalHeader = (
     '#ifndef MCAL_DIO_H',
     '#define MCAL_DIO_H',
     '',
-    '#include <stdbool.h>',
-    '#include <stdint.h>',
+    '#include "sm_config.h"',
     '',
     ...channels.map((channel, index) =>
       `#define ${channelMacro(channel)} ${index}U`),
@@ -1580,17 +1617,11 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '    if (instance == NULL) {',
     '        return SM_ERR_NULL_INSTANCE;',
     '    }',
-    '    if (instance->error_status != SM_ERR_NONE) {',
+    '    if (instance->fault_latched || (instance->error_status != SM_ERR_NONE)) {',
     '        SM_Enter_Fault(instance);',
-    '        return instance->error_status;',
+    '        return instance->error_status != SM_ERR_NONE ? instance->error_status : SM_ERR_SAFETY_VIOLATION;',
     '    }',
-    '    uint32_t tick_delta;',
-    '    if (delta_ms >= SM_TICK_MS) {',
-    '        tick_delta = delta_ms - SM_TICK_MS;',
-    '    } else {',
-    '        tick_delta = SM_TICK_MS - delta_ms;',
-    '    }',
-    '    if (tick_delta > SM_TICK_TOLERANCE_MS) {',
+    '    if ((delta_ms < SM_TICK_MIN_MS) || (delta_ms > SM_TICK_MAX_MS)) {',
     '        instance->error_status = SM_ERR_TIMING;',
     '        SM_Enter_Fault(instance);',
     '        return instance->error_status;',
@@ -1622,9 +1653,9 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '    if (instance == NULL) {',
     '        return SM_ERR_NULL_INSTANCE;',
     '    }',
-    '    if (instance->error_status != SM_ERR_NONE) {',
+    '    if (instance->fault_latched || (instance->error_status != SM_ERR_NONE)) {',
     '        SM_Enter_Fault(instance);',
-    '        return instance->error_status;',
+    '        return instance->error_status != SM_ERR_NONE ? instance->error_status : SM_ERR_SAFETY_VIOLATION;',
     '    }',
     '    instance->error_status = SM_Validate_State_Consistency(instance);',
     '    if (instance->error_status != SM_ERR_NONE) {',
@@ -1692,6 +1723,68 @@ export const renderCoreSource = (ir: SemanticModel): string => {
     '{',
     '    return instance == NULL ? SM_ERR_NULL_INSTANCE : instance->error_status;',
     '}',
+    '',
+    '#ifdef ADIA_TESTING',
+    'SM_Error_t SM_Test_SetActiveState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state)',
+    '{',
+    '    if (instance == NULL) {',
+    '        return SM_ERR_NULL_INSTANCE;',
+    '    }',
+    '    if ((slot >= SM_NUM_ACTIVE_SLOTS) || ((uint32_t)state > SM_NUM_STATES)) {',
+    '        return SM_ERR_INVALID_ARGUMENT;',
+    '    }',
+    '    instance->active_states[slot] = state;',
+    '    return SM_ERR_NONE;',
+    '}',
+    '',
+    'SM_Error_t SM_Test_SetStateActive(ADIA_Instance_t *instance, SM_Node_t state, bool active)',
+    '{',
+    '    if (instance == NULL) {',
+    '        return SM_ERR_NULL_INSTANCE;',
+    '    }',
+    '    if ((state <= SM_NODE_INVALID) || ((uint32_t)state > SM_NUM_STATES)) {',
+    '        return SM_ERR_INVALID_ARGUMENT;',
+    '    }',
+    '    instance->state_active[(uint32_t)state] = active;',
+    '    return SM_ERR_NONE;',
+    '}',
+    '',
+    'SM_Error_t SM_Test_SetStateTimer(ADIA_Instance_t *instance, SM_Node_t state, uint32_t timer_ms)',
+    '{',
+    '    if (instance == NULL) {',
+    '        return SM_ERR_NULL_INSTANCE;',
+    '    }',
+    '    if ((state <= SM_NODE_INVALID) || ((uint32_t)state > SM_NUM_STATES)) {',
+    '        return SM_ERR_INVALID_ARGUMENT;',
+    '    }',
+    '    instance->state_timers[(uint32_t)state] = timer_ms;',
+    '    return SM_ERR_NONE;',
+    '}',
+    '',
+    'SM_Error_t SM_Test_SetHistoryState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state)',
+    '{',
+    '    if (instance == NULL) {',
+    '        return SM_ERR_NULL_INSTANCE;',
+    '    }',
+    '    if ((slot >= SM_NUM_ACTIVE_SLOTS) || ((uint32_t)state > SM_NUM_STATES)) {',
+    '        return SM_ERR_INVALID_ARGUMENT;',
+    '    }',
+    '    instance->history_states[slot] = state;',
+    '    return SM_ERR_NONE;',
+    '}',
+    '',
+    'SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_Node_t state, bool active)',
+    '{',
+    '    if (instance == NULL) {',
+    '        return SM_ERR_NULL_INSTANCE;',
+    '    }',
+    '    if ((layer >= SM_NUM_LAYERS) || ((uint32_t)state > SM_NUM_STATES)) {',
+    '        return SM_ERR_INVALID_ARGUMENT;',
+    '    }',
+    '    instance->deep_history[layer][(uint32_t)state] = active;',
+    '    return SM_ERR_NONE;',
+    '}',
+    '#endif',
   );
 };
 
@@ -1735,6 +1828,46 @@ export const generateCArtifacts = (
     ...implementationFiles,
     ...(options.reportSourceFiles ?? []),
   ].filter((file) => /\.(?:c|h|cpp|ino)$/i.test(file.name));
+
+  if (options.includeVerificationPackage) {
+    const manifest = buildSMTestManifest(ir);
+    const testPackage = renderSMCTestPackage(ir, manifest, {
+      standard: ir.verification.cStandard,
+    });
+
+    const productionFiles: GeneratedCFile[] = implementationFiles.map((file) => ({
+      name: `production/${file.name}`,
+      content: file.content,
+    }));
+
+    const reportFiles: GeneratedCFile[] = [
+      {
+        name: 'verification/sm_testing_report.md',
+        content: renderSemanticTestingReport(
+          analysis,
+          options.verificationEvidence ?? DEFAULT_VERIFICATION_EVIDENCE,
+          ir,
+        ),
+      },
+      {
+        name: 'verification/static_metrics_report.md',
+        content: renderStaticMetricsReport(analysis, measuredSourceFiles, ir),
+      },
+    ];
+
+    const packageFiles: GeneratedCFile[] = [
+      ...productionFiles,
+      ...testPackage,
+      ...reportFiles,
+    ];
+
+    return {
+      files: packageFiles,
+      errors: [],
+      warnings: [],
+    };
+  }
+
   const allFiles = [
     ...implementationFiles,
     {

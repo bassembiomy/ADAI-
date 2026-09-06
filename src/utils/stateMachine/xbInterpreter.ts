@@ -88,7 +88,7 @@ const convertScalar = (
     supportsFloat16: true,
     supportsFloat64: true,
   });
-  if (result.fault !== null && !(result.fault === 'non-finite' && (type.kind === 'float32' || type.kind === 'float64' || type.kind === 'float16'))) {
+  if (result.fault !== null) {
     faults.push(result.fault);
   }
   return result;

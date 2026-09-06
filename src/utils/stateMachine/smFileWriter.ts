@@ -7,8 +7,12 @@ export function writeGeneratedArtifacts(targetDir: string, files: readonly Gener
   const root = resolve(targetDir);
 
   for (const file of files) {
-    if (isAbsolute(file.name)) {
-      throw new Error(`Path traversal forbidden: absolute path '${file.name}'`);
+    if (isAbsolute(file.name) || /^[a-zA-Z]:/.test(file.name)) {
+      throw new Error(`Path traversal forbidden: absolute or drive-qualified path '${file.name}'`);
+    }
+
+    if (/(?:^|[/\\])\.\.(?:[/\\]|$)/.test(file.name)) {
+      throw new Error(`Path traversal forbidden: '${file.name}' contains relative escape`);
     }
 
     const fullPath = resolve(root, file.name);

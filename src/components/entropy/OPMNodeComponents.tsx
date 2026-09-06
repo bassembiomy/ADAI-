@@ -54,11 +54,14 @@ const renderOPMPort = (port: OPMPort, idx: number, totalCount: number, isEllipse
 
   const labelStyle: React.CSSProperties = {
     position: 'absolute',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
     fontSize: '7.5px',
     fontFamily: 'monospace',
     padding: '1.5px 3px',
     borderRadius: '3px',
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     border: '1px solid rgba(255, 255, 255, 0.1)',
     color: '#d1d5db',
     textTransform: 'uppercase',
@@ -77,59 +80,83 @@ const renderOPMPort = (port: OPMPort, idx: number, totalCount: number, isEllipse
     if (port.position === 'left') {
       wrapperStyle.left = `${50 * (1 - factor)}%`;
       wrapperStyle.top = percentage;
-      labelStyle.left = '12px';
+      labelStyle.right = '14px';
       labelStyle.transform = 'translateY(-50%)';
     } else if (port.position === 'right') {
       wrapperStyle.left = `${50 + 50 * factor}%`;
       wrapperStyle.top = percentage;
-      labelStyle.right = '12px';
+      labelStyle.left = '14px';
       labelStyle.transform = 'translateY(-50%)';
     } else if (port.position === 'top') {
       wrapperStyle.left = percentage;
       wrapperStyle.top = `${50 * (1 - factor)}%`;
-      labelStyle.top = '12px';
+      labelStyle.bottom = '14px';
       labelStyle.transform = 'translateX(-50%)';
     } else if (port.position === 'bottom') {
       wrapperStyle.left = percentage;
       wrapperStyle.top = `${50 + 50 * factor}%`;
-      labelStyle.bottom = '12px';
+      labelStyle.top = '14px';
       labelStyle.transform = 'translateX(-50%)';
     }
   } else {
-    // Normal rectangular boundaries
+    // Normal rectangular boundaries: place labels OUTSIDE the block perimeter
     if (port.position === 'left') {
       wrapperStyle.left = '0%';
       wrapperStyle.top = percentage;
-      labelStyle.left = '12px';
+      labelStyle.right = '14px';
       labelStyle.transform = 'translateY(-50%)';
     } else if (port.position === 'right') {
       wrapperStyle.left = '100%';
       wrapperStyle.top = percentage;
-      labelStyle.right = '12px';
+      labelStyle.left = '14px';
       labelStyle.transform = 'translateY(-50%)';
     } else if (port.position === 'top') {
       wrapperStyle.left = percentage;
       wrapperStyle.top = '0%';
-      labelStyle.top = '12px';
+      labelStyle.bottom = '14px';
       labelStyle.transform = 'translateX(-50%)';
     } else if (port.position === 'bottom') {
       wrapperStyle.left = percentage;
       wrapperStyle.top = '100%';
-      labelStyle.bottom = '12px';
+      labelStyle.top = '14px';
       labelStyle.transform = 'translateX(-50%)';
     }
   }
 
+  const haloStyle: React.CSSProperties = {
+    padding: '4px',
+    margin: '-4px',
+    background: 'transparent',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+
+  const dotStyle: React.CSSProperties = {
+    width: 8,
+    height: 8,
+    borderRadius: '50%',
+    background: color,
+    flexShrink: 0,
+  };
+
   return (
-    <div key={port.id} className="group hover:z-30" style={wrapperStyle}>
-      <Handle
-        type={isInput ? 'target' : 'source'}
-        position={position}
-        id={port.id}
-        style={handleStyle}
-        className="hover:scale-125 hover:!border-amber-400 hover:!shadow-[0_0_12px_#fbbf24]"
-      />
-      <span className="opacity-0 group-hover:opacity-100 group-hover:text-amber-100 group-hover:bg-black/95 group-hover:border-amber-400/50 group-hover:scale-105 transition-all duration-150 shadow-lg pointer-events-none z-30" style={labelStyle}>
+    <div key={port.id} className="group hover:z-30" style={wrapperStyle} data-port-direction={port.direction}>
+      <span style={haloStyle}>
+        <Handle
+          type={isInput ? 'target' : 'source'}
+          position={position}
+          id={port.id}
+          style={handleStyle}
+          className="hover:scale-125 hover:!border-amber-400 hover:!shadow-[0_0_14px_#fbbf24] flex items-center justify-center transition-transform"
+        >
+          <span data-testid="port-chevron" className="text-[6px] text-black font-black leading-none pointer-events-none select-none flex items-center justify-center">
+            {isInput ? '▶' : '◀'}
+          </span>
+        </Handle>
+      </span>
+      <span className="opacity-100 bg-[#09090b]/95 border border-white/15 transition-all duration-150 shadow-xl pointer-events-none z-30" style={labelStyle}>
+        <span style={dotStyle} />
         {port.name}
       </span>
     </div>
@@ -165,12 +192,12 @@ export const OPMObjectNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected
     : isRequirement
       ? 'border border-purple-500/70 bg-[#160b22]/90 shadow-lg'
       : isPhysical
-        ? 'border-[3px] border-emerald-400/90 bg-[#0a1810]/90 shadow-lg'
-        : 'border border-emerald-600/70 bg-[#0a1810]/90 shadow-lg';
+        ? 'border-[3px] border-emerald-400 bg-[#0a1810]/90 shadow-lg'
+        : 'border-2 border-emerald-500 bg-[#0a1810]/90 shadow-lg';
 
   const stateCount = (data.states || []).length;
-  const dynamicMinHeight = stateCount > 0 ? 105 : 80;
-  const dynamicMinWidth = stateCount > 0 ? 36 + stateCount * 95 + (stateCount - 1) * 12 : 220;
+  const dynamicMinHeight = stateCount > 0 ? 110 : 80;
+  const dynamicMinWidth = stateCount > 0 ? 240 : 220;
 
   return (
     <div
@@ -185,10 +212,15 @@ export const OPMObjectNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected
       <NodeResizer minWidth={160} minHeight={60} isVisible={selected} lineStyle={{ borderColor: '#fbbf24' }} handleStyle={{ background: '#fbbf24', border: '1px solid #78350f', borderRadius: '4px' }} />
 
       {/* Header tag */}
-      <div className={`flex items-center justify-between border-b pb-1 select-none ${isRequirement ? 'border-purple-800/40' : 'border-emerald-800/40'}`}>
+      <div className={`flex items-center justify-between gap-2 border-b px-2 pb-1 select-none ${isRequirement ? 'border-purple-800/40' : 'border-emerald-800/40 bg-emerald-950/80'}`}>
         <span className={`text-[8px] uppercase tracking-wider font-extrabold ${isRequirement ? 'text-purple-400/90' : 'text-emerald-400/80'}`}>
           {isRequirement ? '«Requirement»' : '«Object»'}
         </span>
+        {!isRequirement && (
+          <span className="text-[13px] font-bold text-white truncate">
+            {data.name}
+          </span>
+        )}
         {isPhysical && !isRequirement && (
           <span className="text-[7.5px] px-1.5 py-0.5 rounded bg-emerald-900/60 border border-emerald-700/60 text-emerald-300 font-bold uppercase tracking-wider">Physical</span>
         )}
@@ -201,15 +233,11 @@ export const OPMObjectNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected
         </div>
       ) : (
         <>
-          <div className="h-6 flex items-center justify-center pt-0.5">
-            <div className="text-xs font-bold text-emerald-100 text-center tracking-wide px-2 select-none truncate">
-              {data.name}
-            </div>
-          </div>
-
           {/* Reserved clean slot area for child state nodes */}
-          {stateCount > 0 && (
+          {stateCount > 0 ? (
             <div className="mt-1 h-9 w-full rounded-lg border border-emerald-900/30 bg-black/35" />
+          ) : (
+            <div className="mt-1 h-9 w-full rounded-lg border border-dashed border-emerald-700/60 bg-black/25 flex items-center justify-center px-2 text-[10px] text-emerald-300/70 select-none truncate">+ State — click State tool then this object</div>
           )}
 
           {/* Attributes Listing */}
@@ -264,12 +292,13 @@ export const OPMProcessNode: React.FC<NodeProps<AppNode>> = ({ id, data, selecte
 
   return (
     <div
+      data-process-firing={isFiring ? 'true' : undefined}
       className={`relative px-4 py-2 min-w-[200px] min-h-[68px] flex flex-col items-center justify-center transition-all duration-200 ${
         selected
           ? 'border-2 border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.65),0_0_50px_rgba(245,158,11,0.35),inset_0_0_12px_rgba(251,191,36,0.15)] ring-1 ring-amber-300/40 bg-gradient-to-b from-[#1a1608]/95 to-[#081522]/95'
           : isFiring
-          ? 'border-2 border-orange-400 bg-sky-900/60 shadow-[0_0_25px_rgba(251,146,60,0.8)] scale-105 animate-pulse'
-          : 'border border-sky-600/70 bg-[#0c1a24]/85 backdrop-blur-md shadow-md'
+          ? 'border-2 border-orange-400 bg-sky-900/60 shadow-[0_0_30px_rgba(251,146,60,0.85),0_0_60px_rgba(249,115,22,0.4)] ring-2 ring-orange-400/50 scale-105 animate-pulse'
+          : 'border border-sky-600/70 bg-[#0c1a24]/85 backdrop-blur-md shadow-md hover:border-sky-400/80'
       } ${
         isPhysical && !selected
           ? 'border-[3px] border-sky-400/90'

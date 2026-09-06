@@ -295,6 +295,61 @@ export function validateTargetPackManifest(
     );
   }
 
+  if (value.verificationRecipe !== undefined) {
+    if (!isObject(value.verificationRecipe)) {
+      errors.push({ path: 'verificationRecipe', message: 'verificationRecipe must be an object' });
+    } else {
+      const recipe = value.verificationRecipe;
+      const SHELL_CONTROL = /[;&|`$<>\0\r\n]/;
+      const TRAVERSAL = /(?:^|[\\/])\.\.(?:[\\/]|$)/;
+      const IS_ABSOLUTE = /^(?:\/|\\|[a-zA-Z]:)/;
+
+      if (!isString(recipe.executable) || recipe.executable.length === 0 || SHELL_CONTROL.test(recipe.executable)) {
+        errors.push({
+          path: 'verificationRecipe.executable',
+          message: 'executable must be a non-empty string without shell-control characters',
+        });
+      }
+
+      validateStringArray(
+        recipe.args,
+        'verificationRecipe.args',
+        errors,
+        (item) => item.length <= 255 && !SHELL_CONTROL.test(item),
+      );
+
+      validateStringArray(
+        recipe.sourceGlobs,
+        'verificationRecipe.sourceGlobs',
+        errors,
+        (item) => !TRAVERSAL.test(item) && !IS_ABSOLUTE.test(item) && !SHELL_CONTROL.test(item),
+      );
+
+      validateStringArray(
+        recipe.includeDirectories,
+        'verificationRecipe.includeDirectories',
+        errors,
+        (item) => !TRAVERSAL.test(item) && !IS_ABSOLUTE.test(item) && !SHELL_CONTROL.test(item),
+      );
+
+      if (!isString(recipe.outputPath) || recipe.outputPath.length === 0 || TRAVERSAL.test(recipe.outputPath) || IS_ABSOLUTE.test(recipe.outputPath) || SHELL_CONTROL.test(recipe.outputPath)) {
+        errors.push({
+          path: 'verificationRecipe.outputPath',
+          message: 'outputPath must be a contained pack-relative path without shell-control characters',
+        });
+      }
+
+      if (recipe.versionArgs !== undefined) {
+        validateStringArray(
+          recipe.versionArgs,
+          'verificationRecipe.versionArgs',
+          errors,
+          (item) => !SHELL_CONTROL.test(item),
+        );
+      }
+    }
+  }
+
   if (errors.length > 0) {
     return { success: false, errors };
   }

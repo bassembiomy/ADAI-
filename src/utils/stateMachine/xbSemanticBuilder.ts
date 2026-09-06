@@ -1685,9 +1685,9 @@ export const buildXBSemanticModel = (
     }
 
     if (node.type === 'Step') {
-      const stepTime = node.parameters.step_time ?? node.parameters.time ?? node.parameters.stepTime ?? 0;
-      const initialVal = node.parameters.initial_value ?? node.parameters.initial ?? node.parameters.initialValue ?? 0;
-      const finalVal = node.parameters.final_value ?? node.parameters.final ?? node.parameters.finalValue ?? 1;
+      const stepTime = node.parameters.step_time ?? node.parameters.time ?? node.parameters.stepTime;
+      const initialVal = node.parameters.initial_value ?? node.parameters.initial ?? node.parameters.initialValue;
+      const finalVal = node.parameters.final_value ?? node.parameters.final ?? node.parameters.finalValue;
 
       if (stepTime === undefined || initialVal === undefined || finalVal === undefined) {
         diagnostics.push(diagnostic(

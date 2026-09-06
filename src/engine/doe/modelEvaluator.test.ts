@@ -144,6 +144,7 @@ describe('DOE Model Evaluator and Runtime Parity', () => {
       factorOrder: ['X1', 'X2'],
       responseName: 'Y',
       trainingRowCount: 10,
+      metrics: { rSquared: 1, rmse: 0, aic: 0, bic: 0, fStatistic: 0, pValue: 0 } as any,
       rsm: {
         intercept: 10,
         terms: [

@@ -14,6 +14,7 @@ import { VLabWorkspace } from './components/vlab/VLabWorkspace';
 import { HILWorkspace } from './components/hil/HILWorkspace';
 import { EntropyWorkspace } from './components/entropy/EntropyWorkspace';
 import type { AppNode, AppEdge } from './components/entropy/EntropyTypes';
+import { DEFAULT_OPM_SIMULATION_CONFIG, type OpmSimulationConfig } from './components/entropy/OpmSimulationConfig';
 import { HILConfig, HILSessionState } from './engine/hil/hilTypes';
 import { GMDHEngine, solveLeastSquares } from './engine/gmdh/gmdh_core/combi';
 import { ChevronLeft } from 'lucide-react';
@@ -6141,6 +6142,7 @@ const ADIA = () => {
   // ENTROPY OPM STATE
   const [entropyNodes, setEntropyNodes] = useState<AppNode[]>([]);
   const [entropyEdges, setEntropyEdges] = useState<AppEdge[]>([]);
+  const [opmSimulationConfig, setOpmSimulationConfig] = useState<OpmSimulationConfig>(DEFAULT_OPM_SIMULATION_CONFIG);
 
   // FACTORY I/O GATEWAY STATE
   const [showFactoryIOGateway, setShowFactoryIOGateway] = useState(false);
@@ -6192,7 +6194,7 @@ const ADIA = () => {
       case 'hil':
         return hilConfig;
       case 'entropy':
-        return { entropyNodes, entropyEdges };
+        return { entropyNodes, entropyEdges, opmSimulationConfig };
       case 'hmi':
         return { hmiComponents };
       case 'doe':
@@ -6204,7 +6206,7 @@ const ADIA = () => {
     states, junctions, transitions, layers, variables, view, tickMs, safetyMode,
     blocks, relationships, customStereotypes, parts, connectors, interfaceRealizations,
     globalXBridgesNodes, globalXBridgesEdges, vlabNodes, vlabEdges, hilConfig,
-    entropyNodes, entropyEdges, hmiComponents, headers, data, activeModel, taguchiConfig, results
+    entropyNodes, entropyEdges, opmSimulationConfig, hmiComponents, headers, data, activeModel, taguchiConfig, results
   ]);
 
   // Helper to save current active file state into workspaceFiles list
@@ -6275,7 +6277,7 @@ const ADIA = () => {
           });
           break;
         case 'entropy':
-          setEntropyNodes([]); setEntropyEdges([]);
+          setEntropyNodes([]); setEntropyEdges([]); setOpmSimulationConfig(DEFAULT_OPM_SIMULATION_CONFIG);
           break;
         case 'hmi':
           setHmiComponents([]);
@@ -6338,6 +6340,7 @@ const ADIA = () => {
       case 'entropy':
         setEntropyNodes(d.entropyNodes || []);
         setEntropyEdges(d.entropyEdges || []);
+        setOpmSimulationConfig(d.opmSimulationConfig || DEFAULT_OPM_SIMULATION_CONFIG);
         break;
       case 'hmi':
         setHmiComponents(d.hmiComponents || []);
@@ -6354,7 +6357,7 @@ const ADIA = () => {
     setStates, setJunctions, setTransitions, setLayers, setVariables, setView, setTickMs,
     setBlocks, setRelationships, setCustomStereotypes, setParts, setConnectors, setInterfaceRealizations,
     setGlobalXBridgesNodes, setGlobalXBridgesEdges, setVlabNodes, setVlabEdges, setHilConfig,
-    setEntropyNodes, setEntropyEdges, setHmiComponents, setHeaders, setData, setActiveModel, setTaguchiConfig, setResults,
+    setEntropyNodes, setEntropyEdges, setOpmSimulationConfig, setHmiComponents, setHeaders, setData, setActiveModel, setTaguchiConfig, setResults,
     applyStateMachineSnapshot
   ]);
 
@@ -7086,7 +7089,7 @@ const ADIA = () => {
       projectFiles['doe.json'] = { schemaVersion: 1, headers, data, activeModel, taguchiConfig, results };
     }
     if (selectedKeys.includes('entropy')) {
-      projectFiles['entropy.json'] = { entropyNodes, entropyEdges };
+      projectFiles['entropy.json'] = { entropyNodes, entropyEdges, opmSimulationConfig };
     }
     if (selectedKeys.includes('unified')) {
       projectFiles['adia_project_unified.json'] = {
@@ -7102,6 +7105,7 @@ const ADIA = () => {
         managedWindows,
         entropyNodes,
         entropyEdges,
+        opmSimulationConfig,
         workspaceFiles: saveCurrentFileState(workspaceFiles, activeFileId),
         openTabIds,
         activeFileId
@@ -7163,7 +7167,7 @@ const ADIA = () => {
     hmiComponents, vlabNodes, vlabEdges, globalXBridgesNodes, globalXBridgesEdges,
     hilConfig,
     headers, data, activeModel, taguchiConfig, results, managedWindows, addError,
-    entropyNodes, entropyEdges, currentProjectName, openTabs,
+    entropyNodes, entropyEdges, opmSimulationConfig, currentProjectName, openTabs,
     workspaceFiles, openTabIds, activeFileId, saveCurrentFileState
   ]);
 
@@ -7224,6 +7228,7 @@ const ADIA = () => {
       // ENTROPY OPM
       if (importedData.entropyNodes) setEntropyNodes(importedData.entropyNodes);
       if (importedData.entropyEdges) setEntropyEdges(importedData.entropyEdges);
+      if (importedData.opmSimulationConfig) setOpmSimulationConfig(importedData.opmSimulationConfig);
 
       // HIL Configuration
       if (importedData.hilConfig) setHilConfig(importedData.hilConfig);
@@ -7338,7 +7343,8 @@ const ADIA = () => {
             type: 'entropy',
             data: {
               entropyNodes: importedData.entropyNodes || [],
-              entropyEdges: importedData.entropyEdges || []
+              entropyEdges: importedData.entropyEdges || [],
+              opmSimulationConfig: importedData.opmSimulationConfig || DEFAULT_OPM_SIMULATION_CONFIG
             }
           },
           {
@@ -7474,6 +7480,7 @@ const ADIA = () => {
       globalXBridgesEdges,
       entropyNodes,
       entropyEdges,
+      opmSimulationConfig,
       doe: {
         headers,
         data,
@@ -7509,6 +7516,7 @@ const ADIA = () => {
     globalXBridgesEdges,
     entropyNodes,
     entropyEdges,
+    opmSimulationConfig,
     headers,
     data,
     activeModel,
@@ -15290,6 +15298,8 @@ const ADIA = () => {
                   onVariablesChange={setVariables}
                   tickMs={tickMs}
                   onTickMsChange={setTickMs}
+                  opmSimulationConfig={opmSimulationConfig}
+                  onOpmSimulationConfigChange={setOpmSimulationConfig}
                   onBack={() => setDiagramMode('statemachine')}
                   onSave={(nodes, edges) => {
                     setEntropyNodes(nodes);

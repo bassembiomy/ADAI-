@@ -27,6 +27,14 @@ void SM_TraceAction(ADIA_Instance_t *instance, const char *action);
 #define SM_TraceAction(instance, action) ((void)0)
 #endif
 
+#ifdef ADIA_TESTING
+SM_Error_t SM_Test_SetActiveState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state);
+SM_Error_t SM_Test_SetStateActive(ADIA_Instance_t *instance, SM_Node_t state, bool active);
+SM_Error_t SM_Test_SetStateTimer(ADIA_Instance_t *instance, SM_Node_t state, uint32_t timer_ms);
+SM_Error_t SM_Test_SetHistoryState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state);
+SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_Node_t state, bool active);
+#endif
+
 #endif /* SM_CORE_H */
 ",
     "name": "sm_core.h",
@@ -354,17 +362,11 @@ SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
     }
-    if (instance->error_status != SM_ERR_NONE) {
+    if (instance->fault_latched || (instance->error_status != SM_ERR_NONE)) {
         SM_Enter_Fault(instance);
-        return instance->error_status;
+        return instance->error_status != SM_ERR_NONE ? instance->error_status : SM_ERR_SAFETY_VIOLATION;
     }
-    uint32_t tick_delta;
-    if (delta_ms >= SM_TICK_MS) {
-        tick_delta = delta_ms - SM_TICK_MS;
-    } else {
-        tick_delta = SM_TICK_MS - delta_ms;
-    }
-    if (tick_delta > SM_TICK_TOLERANCE_MS) {
+    if ((delta_ms < SM_TICK_MIN_MS) || (delta_ms > SM_TICK_MAX_MS)) {
         instance->error_status = SM_ERR_TIMING;
         SM_Enter_Fault(instance);
         return instance->error_status;
@@ -396,9 +398,9 @@ SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance)
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
     }
-    if (instance->error_status != SM_ERR_NONE) {
+    if (instance->fault_latched || (instance->error_status != SM_ERR_NONE)) {
         SM_Enter_Fault(instance);
-        return instance->error_status;
+        return instance->error_status != SM_ERR_NONE ? instance->error_status : SM_ERR_SAFETY_VIOLATION;
     }
     instance->error_status = SM_Validate_State_Consistency(instance);
     if (instance->error_status != SM_ERR_NONE) {
@@ -458,6 +460,68 @@ SM_Error_t SM_GetError(const ADIA_Instance_t *instance)
 {
     return instance == NULL ? SM_ERR_NULL_INSTANCE : instance->error_status;
 }
+
+#ifdef ADIA_TESTING
+SM_Error_t SM_Test_SetActiveState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state)
+{
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if ((slot >= SM_NUM_ACTIVE_SLOTS) || ((uint32_t)state > SM_NUM_STATES)) {
+        return SM_ERR_INVALID_ARGUMENT;
+    }
+    instance->active_states[slot] = state;
+    return SM_ERR_NONE;
+}
+
+SM_Error_t SM_Test_SetStateActive(ADIA_Instance_t *instance, SM_Node_t state, bool active)
+{
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if ((state <= SM_NODE_INVALID) || ((uint32_t)state > SM_NUM_STATES)) {
+        return SM_ERR_INVALID_ARGUMENT;
+    }
+    instance->state_active[(uint32_t)state] = active;
+    return SM_ERR_NONE;
+}
+
+SM_Error_t SM_Test_SetStateTimer(ADIA_Instance_t *instance, SM_Node_t state, uint32_t timer_ms)
+{
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if ((state <= SM_NODE_INVALID) || ((uint32_t)state > SM_NUM_STATES)) {
+        return SM_ERR_INVALID_ARGUMENT;
+    }
+    instance->state_timers[(uint32_t)state] = timer_ms;
+    return SM_ERR_NONE;
+}
+
+SM_Error_t SM_Test_SetHistoryState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state)
+{
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if ((slot >= SM_NUM_ACTIVE_SLOTS) || ((uint32_t)state > SM_NUM_STATES)) {
+        return SM_ERR_INVALID_ARGUMENT;
+    }
+    instance->history_states[slot] = state;
+    return SM_ERR_NONE;
+}
+
+SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_Node_t state, bool active)
+{
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if ((layer >= SM_NUM_LAYERS) || ((uint32_t)state > SM_NUM_STATES)) {
+        return SM_ERR_INVALID_ARGUMENT;
+    }
+    instance->deep_history[layer][(uint32_t)state] = active;
+    return SM_ERR_NONE;
+}
+#endif
 ",
     "name": "sm_core.c",
   },
@@ -763,13 +827,16 @@ exports[`Golden-file & behavior trace regression tests > should match golden tem
 
 #include <stdbool.h>
 #include <stdint.h>
+
 #ifndef SM_ADIA_INSTANCE_FWD
 #define SM_ADIA_INSTANCE_FWD
 typedef struct ADIA_Instance ADIA_Instance_t;
 #endif
 
 #define SM_TICK_MS 10U
-#define SM_TICK_TOLERANCE_MS ((SM_TICK_MS / 10U) > 0U ? (SM_TICK_MS / 10U) : 1U)
+#define SM_TICK_TOLERANCE_MS 1U
+#define SM_TICK_MIN_MS 9U
+#define SM_TICK_MAX_MS 11U
 #define SM_NUM_STATES 2U
 #define SM_NUM_LAYERS 1U
 #define SM_NUM_ACTIVE_SLOTS 1U
@@ -791,7 +858,8 @@ typedef enum {
     SM_ERR_TIMING,
     SM_ERR_CONFIGURATION,
     SM_ERR_SAFETY_VIOLATION,
-    SM_ERR_XBRIDGES_NUMERIC
+    SM_ERR_XBRIDGES_NUMERIC,
+    SM_ERR_INVALID_ARGUMENT
 } SM_Error_t;
 
 typedef uint32_t SM_Group_t;
@@ -935,6 +1003,14 @@ void SM_SetTraceSink(ADIA_Instance_t *instance, SM_TraceSink_t sink);
 void SM_TraceAction(ADIA_Instance_t *instance, const char *action);
 #else
 #define SM_TraceAction(instance, action) ((void)0)
+#endif
+
+#ifdef ADIA_TESTING
+SM_Error_t SM_Test_SetActiveState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state);
+SM_Error_t SM_Test_SetStateActive(ADIA_Instance_t *instance, SM_Node_t state, bool active);
+SM_Error_t SM_Test_SetStateTimer(ADIA_Instance_t *instance, SM_Node_t state, uint32_t timer_ms);
+SM_Error_t SM_Test_SetHistoryState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state);
+SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_Node_t state, bool active);
 #endif
 
 #endif /* SM_CORE_H */
@@ -1239,17 +1315,11 @@ SM_Error_t SM_Step(ADIA_Instance_t *instance, uint32_t delta_ms)
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
     }
-    if (instance->error_status != SM_ERR_NONE) {
+    if (instance->fault_latched || (instance->error_status != SM_ERR_NONE)) {
         SM_Enter_Fault(instance);
-        return instance->error_status;
+        return instance->error_status != SM_ERR_NONE ? instance->error_status : SM_ERR_SAFETY_VIOLATION;
     }
-    uint32_t tick_delta;
-    if (delta_ms >= SM_TICK_MS) {
-        tick_delta = delta_ms - SM_TICK_MS;
-    } else {
-        tick_delta = SM_TICK_MS - delta_ms;
-    }
-    if (tick_delta > SM_TICK_TOLERANCE_MS) {
+    if ((delta_ms < SM_TICK_MIN_MS) || (delta_ms > SM_TICK_MAX_MS)) {
         instance->error_status = SM_ERR_TIMING;
         SM_Enter_Fault(instance);
         return instance->error_status;
@@ -1281,9 +1351,9 @@ SM_Error_t SM_WriteOutputs(ADIA_Instance_t *instance)
     if (instance == NULL) {
         return SM_ERR_NULL_INSTANCE;
     }
-    if (instance->error_status != SM_ERR_NONE) {
+    if (instance->fault_latched || (instance->error_status != SM_ERR_NONE)) {
         SM_Enter_Fault(instance);
-        return instance->error_status;
+        return instance->error_status != SM_ERR_NONE ? instance->error_status : SM_ERR_SAFETY_VIOLATION;
     }
     instance->error_status = SM_Validate_State_Consistency(instance);
     if (instance->error_status != SM_ERR_NONE) {
@@ -1343,6 +1413,68 @@ SM_Error_t SM_GetError(const ADIA_Instance_t *instance)
 {
     return instance == NULL ? SM_ERR_NULL_INSTANCE : instance->error_status;
 }
+
+#ifdef ADIA_TESTING
+SM_Error_t SM_Test_SetActiveState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state)
+{
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if ((slot >= SM_NUM_ACTIVE_SLOTS) || ((uint32_t)state > SM_NUM_STATES)) {
+        return SM_ERR_INVALID_ARGUMENT;
+    }
+    instance->active_states[slot] = state;
+    return SM_ERR_NONE;
+}
+
+SM_Error_t SM_Test_SetStateActive(ADIA_Instance_t *instance, SM_Node_t state, bool active)
+{
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if ((state <= SM_NODE_INVALID) || ((uint32_t)state > SM_NUM_STATES)) {
+        return SM_ERR_INVALID_ARGUMENT;
+    }
+    instance->state_active[(uint32_t)state] = active;
+    return SM_ERR_NONE;
+}
+
+SM_Error_t SM_Test_SetStateTimer(ADIA_Instance_t *instance, SM_Node_t state, uint32_t timer_ms)
+{
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if ((state <= SM_NODE_INVALID) || ((uint32_t)state > SM_NUM_STATES)) {
+        return SM_ERR_INVALID_ARGUMENT;
+    }
+    instance->state_timers[(uint32_t)state] = timer_ms;
+    return SM_ERR_NONE;
+}
+
+SM_Error_t SM_Test_SetHistoryState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state)
+{
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if ((slot >= SM_NUM_ACTIVE_SLOTS) || ((uint32_t)state > SM_NUM_STATES)) {
+        return SM_ERR_INVALID_ARGUMENT;
+    }
+    instance->history_states[slot] = state;
+    return SM_ERR_NONE;
+}
+
+SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_Node_t state, bool active)
+{
+    if (instance == NULL) {
+        return SM_ERR_NULL_INSTANCE;
+    }
+    if ((layer >= SM_NUM_LAYERS) || ((uint32_t)state > SM_NUM_STATES)) {
+        return SM_ERR_INVALID_ARGUMENT;
+    }
+    instance->deep_history[layer][(uint32_t)state] = active;
+    return SM_ERR_NONE;
+}
+#endif
 ",
     "name": "sm_core.c",
   },
@@ -1557,8 +1689,7 @@ void SM_ST_S2_Exit(ADIA_Instance_t *instance)
     "content": "#ifndef MCAL_DIO_H
 #define MCAL_DIO_H
 
-#include <stdbool.h>
-#include <stdint.h>
+#include "sm_config.h"
 
 
 bool MCAL_Dio_ReadChannel(uint32_t channel);
@@ -1669,9 +1800,9 @@ Evidence labels describe only the checks actually recorded for this generated pa
 | Metric | Value |
 |---|---:|
 | Files measured | 10 |
-| Total lines | 785 |
-| Functional lines | 678 |
-| Comment/blank density | 13.6% |
+| Total lines | 852 |
+| Functional lines | 738 |
+| Comment/blank density | 13.4% |
 
 ## X-Bridges static code-generation metrics
 
