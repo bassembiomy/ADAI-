@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Play, Square, Settings, RefreshCcw, Wifi, WifiOff, FileDown, ShieldAlert } from 'lucide-react';
 import Plot from 'react-plotly.js';
+import { ResizableSplitPaneGroup, PanelMaximizeButton } from '../common/ResizableSplitPane';
 import { DriverChannel, HILSessionState, FaultInjectionConfig, HILMapping } from '../../engine/hil/hilTypes';
 import { decodeTextFrame, encodeTextFrame } from '../../engine/hil/hilProtocol';
 
@@ -33,6 +34,7 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
   const [historyLength, setHistoryLength] = useState(50); // limit graph points
   const [plotData, setPlotData] = useState<Record<string, number[]>>({});
   const [timestamps, setTimestamps] = useState<number[]>([]);
+  const [dashboardMaximized, setDashboardMaximized] = useState<number | null>(null);
   
   const simTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [dataFrequency, setDataFrequency] = useState(0);
@@ -393,264 +395,285 @@ export const HILDashboard: React.FC<HILDashboardProps> = ({
   return (
     <div className="bg-[#0e0e0e] border border-[#222] rounded-xl p-4 flex flex-col h-full overflow-hidden">
       
-      {/* Session toolbar controls */}
-      <div className="grid grid-cols-4 gap-4 mb-4 shrink-0 bg-[#161616] p-3 border border-[#222] rounded-lg items-center">
-        {/* Connection status */}
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-lg ${sessionState.status === 'connected' ? 'bg-green-950/30 text-green-400' : 'bg-red-950/30 text-red-500'}`}>
-            {sessionState.status === 'connected' ? <Wifi size={20} /> : <WifiOff size={20} />}
+      {/* Session toolbar controls (hidden when panel is maximized) */}
+      {dashboardMaximized === null && (
+        <div className="grid grid-cols-4 gap-4 mb-4 shrink-0 bg-[#161616] p-3 border border-[#222] rounded-lg items-center">
+          {/* Connection status */}
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${sessionState.status === 'connected' ? 'bg-green-950/30 text-green-400' : 'bg-red-950/30 text-red-500'}`}>
+              {sessionState.status === 'connected' ? <Wifi size={20} /> : <WifiOff size={20} />}
+            </div>
+            <div>
+              <div className="text-[10px] text-[#888] uppercase tracking-wider font-bold">HIL Status</div>
+              <div className="text-xs font-semibold capitalize text-[#e0e0e0]">{sessionState.status}</div>
+            </div>
           </div>
-          <div>
-            <div className="text-[10px] text-[#888] uppercase tracking-wider font-bold">HIL Status</div>
-            <div className="text-xs font-semibold capitalize text-[#e0e0e0]">{sessionState.status}</div>
-          </div>
-        </div>
 
-        {/* COM port selector */}
-        <div>
-          <label className="block text-[9px] text-[#888] uppercase font-bold mb-1">COM Port</label>
-          <select
-            value={commPort}
-            disabled={sessionState.status === 'connected' || sessionState.status === 'connecting'}
-            onChange={async (e) => {
-              const val = e.target.value;
-              if (val === 'ADD_NEW_PORT') {
-                if ((navigator as any).serial) {
-                  try {
-                    const port = await (navigator as any).serial.requestPort();
-                    const paired = await (navigator as any).serial.getPorts();
-                    const pairedPaths = paired.map((p: any, idx: number) => `Web Serial Port ${idx + 1}`);
-                    const allPorts = [...pairedPaths];
-                    setPorts(allPorts);
-                    const newPortIndex = paired.indexOf(port);
-                    if (newPortIndex !== -1) {
-                      onChangeCommPort(`Web Serial Port ${newPortIndex + 1}`);
+          {/* COM port selector */}
+          <div>
+            <label className="block text-[9px] text-[#888] uppercase font-bold mb-1">COM Port</label>
+            <select
+              value={commPort}
+              disabled={sessionState.status === 'connected' || sessionState.status === 'connecting'}
+              onChange={async (e) => {
+                const val = e.target.value;
+                if (val === 'ADD_NEW_PORT') {
+                  if ((navigator as any).serial) {
+                    try {
+                      const port = await (navigator as any).serial.requestPort();
+                      const paired = await (navigator as any).serial.getPorts();
+                      const pairedPaths = paired.map((p: any, idx: number) => `Web Serial Port ${idx + 1}`);
+                      const allPorts = [...pairedPaths];
+                      setPorts(allPorts);
+                      const newPortIndex = paired.indexOf(port);
+                      if (newPortIndex !== -1) {
+                        onChangeCommPort(`Web Serial Port ${newPortIndex + 1}`);
+                      }
+                    } catch (err) {
+                      console.error('Failed to pair Web Serial port:', err);
                     }
-                  } catch (err) {
-                    console.error('Failed to pair Web Serial port:', err);
+                  } else {
+                    alert('Web Serial API is not supported in this browser. Please use Chrome, Edge or run inside Electron.');
                   }
                 } else {
-                  alert('Web Serial API is not supported in this browser. Please use Chrome, Edge or run inside Electron.');
+                  onChangeCommPort(val);
                 }
-              } else {
-                onChangeCommPort(val);
-              }
-            }}
-            className="w-full bg-[#0a0a0a] border border-[#252525] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
-          >
-            {ports.map(p => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-            {!((window as any).require) && (navigator as any).serial && (
-              <option value="ADD_NEW_PORT">+ Pair Real COM Port...</option>
-            )}
-          </select>
-        </div>
-
-        {/* Baud rate selector */}
-        <div>
-          <label className="block text-[9px] text-[#888] uppercase font-bold mb-1">Baud Rate</label>
-          <select
-            value={baudRate}
-            disabled={sessionState.status === 'connected' || sessionState.status === 'connecting'}
-            onChange={(e) => onChangeBaudRate(parseInt(e.target.value))}
-            className="w-full bg-[#0a0a0a] border border-[#252525] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
-          >
-            {[9600, 19200, 38400, 57600, 115200, 230400, 921600].map(rate => (
-              <option key={rate} value={rate}>{rate} bps</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Start/Stop Session Buttons */}
-        <div className="flex gap-2">
-          {sessionState.status !== 'connected' ? (
-            <button
-              onClick={handleConnect}
-              disabled={!commPort || sessionState.status === 'connecting'}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-black font-semibold text-xs rounded transition-colors disabled:opacity-50"
+              }}
+              className="w-full bg-[#0a0a0a] border border-[#252525] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
             >
-              <Play size={14} /> Connect
-            </button>
-          ) : (
-            <button
-              onClick={handleDisconnect}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded transition-colors"
-            >
-              <Square size={14} /> Disconnect
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Session Diagnostics Sub-bar */}
-      <div className="grid grid-cols-4 gap-4 mb-4 shrink-0 bg-[#111111] p-2 px-3 border border-[#222] rounded-lg text-[10px] font-mono text-gray-400">
-        <div className="flex justify-between items-center border-r border-[#222] pr-4">
-          <span>SIGNAL RATE:</span>
-          <span className="text-emerald-500 font-bold">{sessionState.status === 'connected' ? `${dataFrequency} Hz` : '0 Hz'}</span>
-        </div>
-        <div className="flex justify-between items-center border-r border-[#222] pr-4">
-          <span>DATA BANDWIDTH:</span>
-          <span className="text-[#f97316] font-bold">{sessionState.status === 'connected' ? `${(dataThroughput / 1024).toFixed(2)} KB/s` : '0.00 KB/s'}</span>
-        </div>
-        <div className="flex justify-between items-center border-r border-[#222] pr-4">
-          <span>MCU CPU LOAD:</span>
-          <span className={`font-bold ${targetCpuLoad > 75 ? 'text-yellow-500' : 'text-emerald-500'}`}>{sessionState.status === 'connected' ? `${targetCpuLoad}%` : '0%'}</span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span>STREAM STATUS:</span>
-          <span className={`font-bold ${sessionState.status === 'connected' ? 'text-emerald-500 font-semibold' : 'text-red-500'}`}>{sessionState.status === 'connected' ? 'ACTIVE' : 'OFFLINE'}</span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-12 gap-4 flex-1 overflow-hidden">
-        {/* Left Side: Plotly real-time signals */}
-        <div className="col-span-8 bg-[#121212] border border-[#222] rounded-lg p-3 flex flex-col h-full overflow-hidden">
-          <div className="flex justify-between items-center mb-2 shrink-0">
-            <div>
-              <h3 className="text-xs font-bold text-[#e0e0e0]">Real-Time Signal Scope</h3>
-              <p className="text-[10px] text-[#666]">Live telemetry feed from MCU</p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  setIsRecording(!isRecording);
-                  if (!isRecording) {
-                    setRecordedData([]);
-                    addLog('info', 'Started recording trace data...');
-                  } else {
-                    addLog('success', `Trace complete. Recorded ${recordedData.length} samples.`);
-                  }
-                }}
-                className={`px-2 py-1 text-[10px] font-semibold rounded transition-colors ${
-                  isRecording 
-                    ? 'bg-red-950/30 text-red-500 border border-red-900/40' 
-                    : 'bg-[#222] hover:bg-[#333] text-gray-400 border border-[#333]'
-                }`}
-              >
-                {isRecording ? 'Stop Rec' : 'Start Rec'}
-              </button>
-              <button
-                disabled={recordedData.length === 0}
-                onClick={handleExportTrace}
-                className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold bg-[#222] hover:bg-[#333] border border-[#333] text-gray-300 rounded transition-colors disabled:opacity-40"
-              >
-                <FileDown size={12} /> Export CSV
-              </button>
-            </div>
+              {ports.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+              {!((window as any).require) && (navigator as any).serial && (
+                <option value="ADD_NEW_PORT">+ Pair Real COM Port...</option>
+              )}
+            </select>
           </div>
-          
-          <div className="flex-1 bg-[#0a0a0a] rounded border border-[#222]/60 overflow-hidden flex items-center justify-center">
+
+          {/* Baud rate selector */}
+          <div>
+            <label className="block text-[9px] text-[#888] uppercase font-bold mb-1">Baud Rate</label>
+            <select
+              value={baudRate}
+              disabled={sessionState.status === 'connected' || sessionState.status === 'connecting'}
+              onChange={(e) => onChangeBaudRate(parseInt(e.target.value))}
+              className="w-full bg-[#0a0a0a] border border-[#252525] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f97316]"
+            >
+              {[9600, 19200, 38400, 57600, 115200, 230400, 921600].map(rate => (
+                <option key={rate} value={rate}>{rate} bps</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Start/Stop Session Buttons */}
+          <div className="flex gap-2">
             {sessionState.status !== 'connected' ? (
-              <div className="text-center p-6 text-[#444]">
-                <p className="text-sm">Signal scope offline</p>
-                <p className="text-xs mt-1">Connect serial port to initiate live data graphing</p>
-              </div>
+              <button
+                onClick={handleConnect}
+                disabled={!commPort || sessionState.status === 'connecting'}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-black font-semibold text-xs rounded transition-colors disabled:opacity-50"
+              >
+                <Play size={14} /> Connect
+              </button>
             ) : (
-              <Plot
-                data={traceData}
-                layout={{
-                  autosize: true,
-                  margin: { l: 40, r: 15, t: 15, b: 35 },
-                  paper_bgcolor: 'rgba(0,0,0,0)',
-                  plot_bgcolor: 'rgba(0,0,0,0)',
-                  font: { color: '#888', size: 10 },
-                  xaxis: { gridcolor: '#1a1a1a', zeroline: false },
-                  yaxis: { gridcolor: '#1a1a1a', zeroline: false },
-                  showlegend: true,
-                  legend: { orientation: 'h', x: 0, y: 1.15 }
-                }}
-                config={{ responsive: true, displayModeBar: false }}
-                style={{ width: '100%', height: '100%' }}
-              />
+              <button
+                onClick={handleDisconnect}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded transition-colors"
+              >
+                <Square size={14} /> Disconnect
+              </button>
             )}
           </div>
         </div>
+      )}
 
-        {/* Right Side: Fault injection & Override console */}
-        <div className="col-span-4 flex flex-col gap-4 h-full overflow-hidden">
-          
-          {/* Fault injection */}
-          <div className="flex-1 bg-[#121212] border border-[#222] rounded-lg p-3 flex flex-col overflow-hidden">
-            <h3 className="text-xs font-bold text-[#e0e0e0] flex items-center gap-1.5 mb-2 shrink-0">
-              <ShieldAlert size={14} className="text-yellow-600" />
-              Fault Injection / Overrides
-            </h3>
-            
-            <div className="flex-1 overflow-y-auto pr-1 no-scrollbar space-y-2">
-              {channels.filter(c => c.direction === 'In').map(ch => {
-                const fault = sessionState.faultInjections[ch.id] || { active: false, value: 0, type: 'override' };
-                return (
-                  <div key={ch.id} className="bg-[#181818] p-2 rounded border border-[#222] text-xs">
-                    <div className="flex justify-between items-center mb-1.5">
-                      <span className="font-semibold text-white">{ch.name} <span className="text-[10px] text-[#666]">({ch.pin})</span></span>
-                      <button
-                        onClick={() => toggleFault(ch.id, 'override', fault.value)}
-                        className={`px-2 py-0.5 text-[9px] rounded font-bold transition-all ${
-                          fault.active 
-                            ? 'bg-yellow-600 text-black' 
-                            : 'bg-[#222] hover:bg-[#333] text-gray-500'
-                        }`}
-                      >
-                        {fault.active ? 'ACTIVE' : 'INJECT'}
-                      </button>
-                    </div>
-                    
-                    {fault.active && (
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] text-[#888]">Ovr Val:</span>
-                        <input
-                          type="number"
-                          value={fault.value}
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0;
-                            onChangeSessionState(prev => ({
-                              ...prev,
-                              faultInjections: {
-                                ...prev.faultInjections,
-                                [ch.id]: { ...prev.faultInjections[ch.id], value: val }
-                              }
-                            }));
-                          }}
-                          className="bg-[#0a0a0a] border border-[#333] rounded px-1.5 py-0.5 text-[11px] text-white w-20 focus:outline-none"
-                        />
-                        <span className="text-[10px] text-[#666] font-mono">{ch.unit || 'n/a'}</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {channels.filter(c => c.direction === 'In').length === 0 && (
-                <div className="text-[#444] text-center py-6 text-[11px]">
-                  No input channels found for overrides.
-                </div>
-              )}
-            </div>
+      {/* Session Diagnostics Sub-bar (hidden when panel is maximized) */}
+      {dashboardMaximized === null && (
+        <div className="grid grid-cols-4 gap-4 mb-4 shrink-0 bg-[#111111] p-2 px-3 border border-[#222] rounded-lg text-[10px] font-mono text-gray-400">
+          <div className="flex justify-between items-center border-r border-[#222] pr-4">
+            <span>SIGNAL RATE:</span>
+            <span className="text-emerald-500 font-bold">{sessionState.status === 'connected' ? `${dataFrequency} Hz` : '0 Hz'}</span>
           </div>
-
-          {/* Session Logs */}
-          <div className="h-44 bg-[#121212] border border-[#222] rounded-lg p-3 flex flex-col overflow-hidden">
-            <h3 className="text-xs font-bold text-[#e0e0e0] mb-2 shrink-0">Session Logs</h3>
-            <div className="flex-1 overflow-y-auto no-scrollbar font-mono text-[9px] text-[#888] space-y-1">
-              {sessionState.log.map((lg, i) => {
-                let color = 'text-[#aaa]';
-                if (lg.type === 'success') color = 'text-green-400';
-                if (lg.type === 'warn') color = 'text-yellow-600';
-                if (lg.type === 'error') color = 'text-red-500';
-                return (
-                  <div key={i} className="flex gap-1.5">
-                    <span className="text-[#555]">{new Date(lg.timestamp).toLocaleTimeString()}</span>
-                    <span className={color}>{lg.message}</span>
-                  </div>
-                );
-              })}
-              {sessionState.log.length === 0 && (
-                <div className="text-[#444] text-center py-4">No events logged yet.</div>
-              )}
-            </div>
+          <div className="flex justify-between items-center border-r border-[#222] pr-4">
+            <span>DATA BANDWIDTH:</span>
+            <span className="text-[#f97316] font-bold">{sessionState.status === 'connected' ? `${(dataThroughput / 1024).toFixed(2)} KB/s` : '0.00 KB/s'}</span>
           </div>
-
+          <div className="flex justify-between items-center border-r border-[#222] pr-4">
+            <span>MCU CPU LOAD:</span>
+            <span className={`font-bold ${targetCpuLoad > 75 ? 'text-yellow-500' : 'text-emerald-500'}`}>{sessionState.status === 'connected' ? `${targetCpuLoad}%` : '0%'}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span>STREAM STATUS:</span>
+            <span className={`font-bold ${sessionState.status === 'connected' ? 'text-emerald-500 font-semibold' : 'text-red-500'}`}>{sessionState.status === 'connected' ? 'ACTIVE' : 'OFFLINE'}</span>
+          </div>
         </div>
+      )}
+
+      {/* Scalable Split Layout: Signal Scope & Faults */}
+      <div className="flex-1 overflow-hidden">
+        <ResizableSplitPaneGroup
+          storageKey="adia_hil_tab3_sizes"
+          initialSizes={[65, 35]}
+          minSizes={[30, 20]}
+          maximizedIndex={dashboardMaximized}
+          onRestore={() => setDashboardMaximized(null)}
+        >
+          {/* Left Side: Plotly real-time signals */}
+          <div className="bg-[#121212] border border-[#222] rounded-lg p-3 flex flex-col h-full overflow-hidden">
+            <div className="flex justify-between items-center mb-2 shrink-0">
+              <div>
+                <h3 className="text-xs font-bold text-[#e0e0e0]">Real-Time Signal Scope</h3>
+                <p className="text-[10px] text-[#666]">Live telemetry feed from MCU</p>
+              </div>
+              <div className="flex gap-2 items-center">
+                <button
+                  onClick={() => {
+                    setIsRecording(!isRecording);
+                    if (!isRecording) {
+                      setRecordedData([]);
+                      addLog('info', 'Started recording trace data...');
+                    } else {
+                      addLog('success', `Trace complete. Recorded ${recordedData.length} samples.`);
+                    }
+                  }}
+                  className={`px-2 py-1 text-[10px] font-semibold rounded transition-colors ${
+                    isRecording 
+                      ? 'bg-red-950/30 text-red-500 border border-red-900/40' 
+                      : 'bg-[#222] hover:bg-[#333] text-gray-400 border border-[#333]'
+                  }`}
+                >
+                  {isRecording ? 'Stop Rec' : 'Start Rec'}
+                </button>
+                <button
+                  disabled={recordedData.length === 0}
+                  onClick={handleExportTrace}
+                  className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold bg-[#222] hover:bg-[#333] border border-[#333] text-gray-300 rounded transition-colors disabled:opacity-40"
+                >
+                  <FileDown size={12} /> Export CSV
+                </button>
+                <PanelMaximizeButton
+                  isMaximized={dashboardMaximized === 0}
+                  onToggle={() => setDashboardMaximized(dashboardMaximized === 0 ? null : 0)}
+                />
+              </div>
+            </div>
+            
+            <div className="flex-1 bg-[#0a0a0a] rounded border border-[#222]/60 overflow-hidden flex items-center justify-center">
+              {sessionState.status !== 'connected' ? (
+                <div className="text-center p-6 text-[#444]">
+                  <p className="text-sm">Signal scope offline</p>
+                  <p className="text-xs mt-1">Connect serial port to initiate live data graphing</p>
+                </div>
+              ) : (
+                <Plot
+                  data={traceData}
+                  layout={{
+                    autosize: true,
+                    margin: { l: 40, r: 15, t: 15, b: 35 },
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    font: { color: '#888', size: 10 },
+                    xaxis: { gridcolor: '#1a1a1a', zeroline: false },
+                    yaxis: { gridcolor: '#1a1a1a', zeroline: false },
+                    showlegend: true,
+                    legend: { orientation: 'h', x: 0, y: 1.15 }
+                  }}
+                  config={{ responsive: true, displayModeBar: false }}
+                  style={{ width: '100%', height: '100%' }}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Right Side: Fault injection & Override console */}
+          <div className="flex flex-col gap-4 h-full overflow-hidden">
+            
+            {/* Fault injection */}
+            <div className="flex-1 bg-[#121212] border border-[#222] rounded-lg p-3 flex flex-col overflow-hidden">
+              <div className="flex justify-between items-center mb-2 shrink-0">
+                <h3 className="text-xs font-bold text-[#e0e0e0] flex items-center gap-1.5">
+                  <ShieldAlert size={14} className="text-yellow-600" />
+                  Fault Injection / Overrides
+                </h3>
+                <PanelMaximizeButton
+                  isMaximized={dashboardMaximized === 1}
+                  onToggle={() => setDashboardMaximized(dashboardMaximized === 1 ? null : 1)}
+                />
+              </div>
+              
+              <div className="flex-1 overflow-y-auto pr-1 no-scrollbar space-y-2">
+                {channels.filter(c => c.direction === 'In').map(ch => {
+                  const fault = sessionState.faultInjections[ch.id] || { active: false, value: 0, type: 'override' };
+                  return (
+                    <div key={ch.id} className="bg-[#181818] p-2 rounded border border-[#222] text-xs">
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="font-semibold text-white">{ch.name} <span className="text-[10px] text-[#666]">({ch.pin})</span></span>
+                        <button
+                          onClick={() => toggleFault(ch.id, 'override', fault.value)}
+                          className={`px-2 py-0.5 text-[9px] rounded font-bold transition-all ${
+                            fault.active 
+                              ? 'bg-yellow-600 text-black' 
+                              : 'bg-[#222] hover:bg-[#333] text-gray-500'
+                          }`}
+                        >
+                          {fault.active ? 'ACTIVE' : 'INJECT'}
+                        </button>
+                      </div>
+                      
+                      {fault.active && (
+                        <div className="flex items-center gap-2 mt-1">
+                          <input
+                            type="range"
+                            min={ch.rangeMin}
+                            max={ch.rangeMax}
+                            step={ch.dataType === 'bool' ? 1 : (ch.rangeMax - ch.rangeMin) / 100}
+                            value={fault.value}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              toggleFault(ch.id, 'override', val);
+                            }}
+                            className="flex-1 h-1 bg-[#333] rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                          />
+                          <span className="text-[10px] font-mono text-white w-8 text-right">
+                            {fault.value}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {channels.filter(c => c.direction === 'In').length === 0 && (
+                  <div className="text-[#444] text-center py-6 text-[11px]">
+                    No input channels found for overrides.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Session Logs */}
+            <div className="h-44 bg-[#121212] border border-[#222] rounded-lg p-3 flex flex-col overflow-hidden shrink-0">
+              <h3 className="text-xs font-bold text-[#e0e0e0] mb-2 shrink-0">Session Logs</h3>
+              <div className="flex-1 overflow-y-auto no-scrollbar font-mono text-[9px] text-[#888] space-y-1">
+                {sessionState.log.map((lg, i) => {
+                  let color = 'text-[#aaa]';
+                  if (lg.type === 'success') color = 'text-green-400';
+                  if (lg.type === 'warn') color = 'text-yellow-600';
+                  if (lg.type === 'error') color = 'text-red-500';
+                  return (
+                    <div key={i} className="flex gap-1.5">
+                      <span className="text-[#555]">{new Date(lg.timestamp).toLocaleTimeString()}</span>
+                      <span className={color}>{lg.message}</span>
+                    </div>
+                  );
+                })}
+                {sessionState.log.length === 0 && (
+                  <div className="text-[#444] text-center py-4">No events logged yet.</div>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </ResizableSplitPaneGroup>
       </div>
       
     </div>
