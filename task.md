@@ -97,10 +97,10 @@
 - [x] Step 4: Run and commit
 
 ## Task 14: Wire Public Generation, CLI, and CI Scripts
-- [ ] Step 1: Write failing public/CLI tests
-- [ ] Step 2: Wire public generation
-- [ ] Step 3: Upgrade CLI and scripts
-- [ ] Step 4: Run and commit
+- [x] Step 1: Write failing public/CLI tests
+- [x] Step 2: Wire public generation
+- [x] Step 3: Upgrade CLI and scripts
+- [x] Step 4: Run and commit
 
 ## Task 15: Prove the Reviewed Model End to End and Document Operations
 - [ ] Step 1: Write the real end-to-end test

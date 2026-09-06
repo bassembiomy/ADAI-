@@ -237,7 +237,7 @@ const numericFaultFixture = (
   const scalar64 = (id: string, direction: 'input' | 'output') =>
     xbPort(id, direction, 'scalar', [], 'float32');
   const vector64 = (id: string, direction: 'input' | 'output') =>
-    xbPort(id, direction, 'vector', [1], 'float32');
+    xbPort(id, direction, 'vector', [2], 'float32');
   const matrix64 = (id: string, direction: 'input' | 'output', rows: number, columns: number) =>
     xbPort(id, direction, 'matrix', [rows, columns], 'float32');
   const constant = (id: string, value: number | number[], output: ReturnType<typeof scalar64>) => ({
@@ -253,8 +253,8 @@ const numericFaultFixture = (
     case 'division-by-zero':
       operationId = 'divide';
       nodes = [
-        constant('numerator', [1], vector64('out', 'output')),
-        constant('denominator', [0], vector64('out', 'output')),
+        constant('numerator', [1, 1], vector64('out', 'output')),
+        constant('denominator', [0, 0], vector64('out', 'output')),
         {
           id: operationId, type: 'VectorDiv', parameters: {
             inputs: [vector64('a', 'input'), vector64('b', 'input')],

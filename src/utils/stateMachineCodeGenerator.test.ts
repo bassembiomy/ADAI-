@@ -7,10 +7,27 @@ import {
   flatOrFixture,
   parallelHistoryFixture,
 } from './stateMachine/smFixtures';
+import { runVerifySmCodegen } from '../../scripts/verify_sm_codegen';
 
 describe('StateMachineCodeGenerator compatibility facade', () => {
-  it('preserves the embedded integration file set', () => {
+  it('normal export includes the complete verification package', () => {
     const result = generateMISRACCode(flatOrFixture());
+    expect(result.errors).toEqual([]);
+    const names = result.files.map((file) => file.name);
+    expect(names).toContain('production/sm_config.h');
+    expect(names).toContain('production/sm_core.h');
+    expect(names).toContain('production/sm_core.c');
+    expect(names).toContain('tests/test_support.h');
+    expect(names).toContain('tests/test_support.c');
+    expect(names).toContain('tests/mcal_test_stub.h');
+    expect(names).toContain('tests/mcal_test_stub.c');
+    expect(names).toContain('verification/test_manifest.json');
+    expect(names).toContain('verification/sm_testing_report.md');
+    expect(names).toContain('verification/static_metrics_report.md');
+  });
+
+  it('explicit legacy mode stays flat', () => {
+    const result = generateMISRACCode(flatOrFixture(), { legacyFlatLayout: true });
     expect(result.errors).toEqual([]);
     expect(result.files.map((file) => file.name)).toEqual([
       'sm_config.h',
@@ -28,9 +45,21 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
     ]);
   });
 
+  it('invalid configuration blocks export', () => {
+    const chart = flatOrFixture();
+    (chart as any).verification = {
+      ...chart.verification,
+      statementCoverageTarget: 150,
+    };
+    const result = generateMISRACCode(chart);
+    expect(result.files).toEqual([]);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors.some((e) => e.message.includes('coverage targets'))).toBe(true);
+  });
+
   it('keeps the public lifecycle and query API', () => {
     const result = generateMISRACCode(flatOrFixture());
-    const header = result.files.find((file) => file.name === 'sm_core.h')!.content;
+    const header = result.files.find((file) => file.name.endsWith('sm_core.h'))!.content;
     expect(header).toContain('SM_Error_t SM_Init(ADIA_Instance_t *instance);');
     expect(header).toContain('SM_Error_t SM_Reset(ADIA_Instance_t *instance);');
     expect(header).toContain('SM_Error_t SM_ReadInputs(ADIA_Instance_t *instance);');
@@ -88,7 +117,7 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
       includeTestShims: true,
     });
     const stubs = result.files.find(
-      (file) => file.name === 'mcal_dio_test_stubs.c',
+      (file) => file.name.endsWith('mcal_dio_test_stubs.c'),
     )!.content;
     expect(stubs).toContain('bool MCAL_Dio_ReadChannel');
     expect(stubs).toContain('void MCAL_Dio_WriteChannel');
@@ -96,8 +125,8 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
 
   it('generates typed data fields and AST-rendered actions', () => {
     const result = generateMISRACCode(flatOrFixture());
-    const config = result.files.find((file) => file.name === 'sm_config.h')!.content;
-    const core = result.files.find((file) => file.name === 'sm_core.c')!.content;
+    const config = result.files.find((file) => file.name.endsWith('sm_config.h'))!.content;
+    const core = result.files.find((file) => file.name.endsWith('sm_core.c'))!.content;
     expect(config).toContain('bool go;');
     expect(config).toContain('double total;');
     expect(core).toContain(
@@ -109,7 +138,7 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
     const result = generateMISRACCode(
       parallelHistoryFixture('parallel-terminal'),
     );
-    const core = result.files.find((file) => file.name === 'sm_core.c')!.content;
+    const core = result.files.find((file) => file.name.endsWith('sm_core.c'))!.content;
     expect(core).not.toContain('Terminal / End State: auto-reset');
     expect(core).not.toMatch(/SM_Is_Terminal_State[\s\S]*SM_Reset/);
     expect(core).toContain('static bool SM_Execute_State_2');
@@ -118,7 +147,7 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
   it('labels report claims by evidence level without claiming certification', () => {
     const result = generateMISRACCode(flatOrFixture());
     const report = result.files.find(
-      (file) => file.name === 'sm_testing_report.md',
+      (file) => file.name.endsWith('sm_testing_report.md'),
     )!.content;
     expect(report).toContain('## Structural validation');
     expect(report).toContain('## Semantic validation');
@@ -140,10 +169,10 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
 
     const result = generateMISRACCode(chart);
     const testing = result.files.find(
-      (file) => file.name === 'sm_testing_report.md',
+      (file) => file.name.endsWith('sm_testing_report.md'),
     )!.content;
     const metrics = result.files.find(
-      (file) => file.name === 'static_metrics_report.md',
+      (file) => file.name.endsWith('static_metrics_report.md'),
     )!.content;
 
     expect(testing).toContain('Static AST reachability: 66.7%');
@@ -167,11 +196,29 @@ describe('StateMachineCodeGenerator compatibility facade', () => {
       },
     });
 
-    const harness = result.files.find((file) => file.name === 'sm_host_test.c');
+    const harness = result.files.find((file) => file.name.endsWith('sm_host_test.c'));
     expect(harness).toBeDefined();
     expect(harness!.content).toContain('int main(void)');
 
-    const testing = result.files.find((file) => file.name === 'sm_testing_report.md')!.content;
+    const testing = result.files.find((file) => file.name.endsWith('sm_testing_report.md'))!.content;
     expect(testing).toContain('Dynamic executable reachability: PASS');
+  });
+
+  it('CLI exits 1 when model file does not exist', async () => {
+    const code = await runVerifySmCodegen(['--model', 'nonexistent_file_path.json'], {
+      log: () => {},
+      error: () => {},
+    });
+    expect(code).toBe(1);
+  });
+
+  it('CLI exits 1 when verification gates reject or mandatory tools are NOT_RUN', async () => {
+    const logs: string[] = [];
+    const code = await runVerifySmCodegen([], {
+      log: (msg) => logs.push(msg),
+      error: (msg) => logs.push(msg),
+    });
+    expect(code).toBe(1);
+    expect(logs.some((l) => l.includes('REJECTED'))).toBe(true);
   });
 });
