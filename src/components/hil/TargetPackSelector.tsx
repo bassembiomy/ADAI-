@@ -7,12 +7,14 @@ interface TargetPackSelectorProps {
   selectedTargetId: string;
   selectedDriverMode?: DriverMode;
   onSelectTarget: (targetId: string, driverMode: DriverMode, manifest: TargetPackManifest) => void;
+  headerAction?: React.ReactNode;
 }
 
 export const TargetPackSelector: React.FC<TargetPackSelectorProps> = ({
   selectedTargetId,
   selectedDriverMode = 'vendor',
   onSelectTarget,
+  headerAction,
 }) => {
   const registry = useMemo(() => getDefaultTargetRegistry(), []);
   const targetIds = useMemo(() => registry.getAllTargetIds(), [registry]);
@@ -85,6 +87,7 @@ export const TargetPackSelector: React.FC<TargetPackSelectorProps> = ({
               );
             })}
           </select>
+          {headerAction}
         </div>
       </div>
 

@@ -1,8 +1,10 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { 
   ChevronLeft, Cpu, Settings2, FileText, Code2, Play, Terminal, 
-  Database, ShieldCheck, Zap, HardDrive, RefreshCcw, Radio, Sparkles, CheckCircle2, Trash2
+  Database, ShieldCheck, Zap, HardDrive, RefreshCcw, Radio, Sparkles, CheckCircle2, Trash2,
+  ChevronDown, ChevronUp
 } from 'lucide-react';
+import { ResizableSplitPaneGroup, PanelMaximizeButton } from '../common/ResizableSplitPane';
 import { HILDriverPanel } from './HILDriverPanel';
 import { HILSignalMapper } from './HILSignalMapper';
 import { HILDashboard } from './HILDashboard';
@@ -50,6 +52,27 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
 }) => {
   const [activeMainTab, setActiveMainTab] = useState<MainTab>('configure');
   const [activeFileTab, setActiveFileTab] = useState('hal_config.h');
+
+  // Scalable layout & focus mode states
+  const [tab1Maximized, setTab1Maximized] = useState<number | null>(null);
+  const [tab2Maximized, setTab2Maximized] = useState<number | null>(null);
+  const [isTargetPackCollapsed, setIsTargetPackCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('adia_hil_target_pack_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleTargetPackCollapsed = () => {
+    setIsTargetPackCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('adia_hil_target_pack_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
   
   // Toolchain Configurations
   const [optimization, setOptimization] = useState<'-O0' | '-O1' | '-O2' | '-O3' | '-Os'>('-Os');
@@ -603,383 +626,469 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
         {/* Tab 1: Configure */}
         {activeMainTab === 'configure' && (
           <div className="flex flex-col gap-4 h-full overflow-hidden">
-            {/* Target Pack Registry Header & Selector */}
-            <div className="shrink-0">
-              <TargetPackSelector
-                selectedTargetId={resolveTargetSelection(config)?.targetId ?? ''}
-                selectedDriverMode={resolveTargetSelection(config)?.driverMode ?? 'vendor'}
-                onSelectTarget={(targetId, mode, manifest) => {
-                  onChangeConfig(applyTargetSelection(config, {
-                    targetId,
-                    packVersion: manifest.packVersion,
-                    driverMode: mode,
-                    boardRevision: manifest.deviceRevision,
-                  }));
-                }}
-              />
-            </div>
-
-            {/* Grid Panels */}
-            <div className="grid grid-cols-12 gap-4 flex-1 overflow-hidden">
-              {/* Driver Setup */}
-              <div className="col-span-4 h-full overflow-hidden">
-                <HILDriverPanel
-                  channels={config.channels}
-                  target={config.target}
-                  onChange={(channels) => onChangeConfig({ ...config, channels })}
-                />
-              </div>
-
-              {/* Variable Mapper */}
-              <div className="col-span-4 h-full overflow-hidden">
-                <HILSignalMapper
-                  channels={config.channels}
-                  mappings={config.mappings}
-                  availableVariables={variables}
-                  onChange={(mappings) => onChangeConfig({ ...config, mappings })}
-                />
-              </div>
-
-              {/* Live Generated HAL Code Preview */}
-            <div className="col-span-4 bg-[#111111] border border-[#222] rounded-xl p-4 flex flex-col h-full overflow-hidden">
-              <div className="flex justify-between items-center mb-3 shrink-0">
-                <div>
-                  <h2 className="text-sm font-bold text-[#e0e0e0] flex items-center gap-1.5">
-                    <Code2 size={16} className="text-[#f97316]" />
-                    HAL Live Preview
-                  </h2>
-                  <p className="text-[10px] text-[#888]">Direct C-code sync preview</p>
-                </div>
-              </div>
-
-              {/* Tab switchers */}
-              <div className="flex border-b border-[#222] gap-1 overflow-x-auto shrink-0 mb-3 no-scrollbar">
-                {generatedFiles.length > 0 ? (
-                  generatedFiles.map(f => (
+            {/* Target Pack Registry Header & Selector (Collapsible) */}
+            {tab1Maximized === null && (
+              <div className="shrink-0 transition-all">
+                {isTargetPackCollapsed ? (
+                  <div className="bg-[#121212] border border-[#262626] rounded-xl px-4 py-2 flex items-center justify-between shadow-md">
+                    <div className="flex items-center gap-3">
+                      <div className="p-1.5 bg-[#f97316]/10 border border-[#f97316]/30 rounded-lg text-[#f97316]">
+                        <Cpu size={16} />
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="font-bold text-[#e0e0e0]">Target Pack:</span>
+                        <span className="text-[#f97316] font-mono font-semibold">
+                          {resolveTargetSelection(config)?.targetId || 'Arduino Mega'}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-800/40">
+                          Pack {resolveTargetSelection(config)?.packVersion || 'v1.0.0'}
+                        </span>
+                        <span className="text-[10px] text-gray-400 font-mono">
+                          Mode: {resolveTargetSelection(config)?.driverMode || 'vendor'}
+                        </span>
+                      </div>
+                    </div>
                     <button
-                      key={f.name}
-                      onClick={() => setActiveFileTab(f.name)}
-                      className={`px-3 py-1.5 text-[10px] font-mono border-t-2 border-transparent transition-all rounded-t select-none ${
-                        activeFileTab === f.name
-                          ? 'border-[#f97316] bg-[#1a1a1a] text-[#f97316] font-semibold'
-                          : 'text-gray-500 hover:text-gray-300'
-                      }`}
+                      type="button"
+                      onClick={toggleTargetPackCollapsed}
+                      className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2.5 py-1 rounded bg-[#1a1a1a] hover:bg-[#252525] border border-[#2e2e2e] transition-colors"
+                      title="Expand Target Pack Details"
                     >
-                      {f.name}
+                      <span>Expand Details</span>
+                      <ChevronDown size={14} />
                     </button>
-                  ))
+                  </div>
                 ) : (
-                  <div className="text-[10px] text-[#555] py-1">No driver files available.</div>
+                  <TargetPackSelector
+                    selectedTargetId={resolveTargetSelection(config)?.targetId ?? ''}
+                    selectedDriverMode={resolveTargetSelection(config)?.driverMode ?? 'vendor'}
+                    onSelectTarget={(targetId, mode, manifest) => {
+                      onChangeConfig(applyTargetSelection(config, {
+                        targetId,
+                        packVersion: manifest.packVersion,
+                        driverMode: mode,
+                        boardRevision: manifest.deviceRevision,
+                      }));
+                    }}
+                    headerAction={
+                      <button
+                        type="button"
+                        onClick={toggleTargetPackCollapsed}
+                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-white px-2 py-1 rounded bg-[#1a1a1a] hover:bg-[#252525] border border-[#333] transition-colors"
+                        title="Collapse Target Pack Details"
+                      >
+                        <span>Collapse</span>
+                        <ChevronUp size={13} />
+                      </button>
+                    }
+                  />
                 )}
               </div>
+            )}
 
-              {/* C-Code Content display */}
-              <div className="flex-1 overflow-auto bg-[#050505] border border-[#222] rounded-lg p-3 text-xs font-mono text-emerald-500/95 no-scrollbar select-text leading-relaxed">
-                <pre className="whitespace-pre">
-                  <code>{activeFileContent}</code>
-                </pre>
-              </div>
+            {/* Scalable Resizable Panels */}
+            <div className="flex-1 overflow-hidden">
+              <ResizableSplitPaneGroup
+                storageKey="adia_hil_tab1_sizes"
+                initialSizes={[30, 35, 35]}
+                minSizes={[15, 15, 15]}
+                maximizedIndex={tab1Maximized}
+                onRestore={() => setTab1Maximized(null)}
+              >
+                {/* Driver Setup */}
+                <div className="h-full overflow-hidden">
+                  <HILDriverPanel
+                    channels={config.channels}
+                    target={config.target}
+                    onChange={(channels) => onChangeConfig({ ...config, channels })}
+                    headerAction={
+                      <PanelMaximizeButton
+                        isMaximized={tab1Maximized === 0}
+                        onToggle={() => setTab1Maximized(tab1Maximized === 0 ? null : 0)}
+                      />
+                    }
+                  />
+                </div>
+
+                {/* Variable Mapper */}
+                <div className="h-full overflow-hidden">
+                  <HILSignalMapper
+                    channels={config.channels}
+                    mappings={config.mappings}
+                    availableVariables={variables}
+                    onChange={(mappings) => onChangeConfig({ ...config, mappings })}
+                    headerAction={
+                      <PanelMaximizeButton
+                        isMaximized={tab1Maximized === 1}
+                        onToggle={() => setTab1Maximized(tab1Maximized === 1 ? null : 1)}
+                      />
+                    }
+                  />
+                </div>
+
+                {/* Live Generated HAL Code Preview */}
+                <div className="bg-[#111111] border border-[#222] rounded-xl p-4 flex flex-col h-full overflow-hidden">
+                  <div className="flex justify-between items-center mb-3 shrink-0">
+                    <div>
+                      <h2 className="text-sm font-bold text-[#e0e0e0] flex items-center gap-1.5">
+                        <Code2 size={16} className="text-[#f97316]" />
+                        HAL Live Preview
+                      </h2>
+                      <p className="text-[10px] text-[#888]">Direct C-code sync preview</p>
+                    </div>
+                    <PanelMaximizeButton
+                      isMaximized={tab1Maximized === 2}
+                      onToggle={() => setTab1Maximized(tab1Maximized === 2 ? null : 2)}
+                    />
+                  </div>
+
+                  {/* Tab switchers */}
+                  <div className="flex border-b border-[#222] gap-1 overflow-x-auto shrink-0 mb-3 no-scrollbar">
+                    {generatedFiles.length > 0 ? (
+                      generatedFiles.map(f => (
+                        <button
+                          key={f.name}
+                          onClick={() => setActiveFileTab(f.name)}
+                          className={`px-3 py-1.5 text-[10px] font-mono border-t-2 border-transparent transition-all rounded-t select-none ${
+                            activeFileTab === f.name
+                              ? 'border-[#f97316] bg-[#1a1a1a] text-[#f97316] font-semibold'
+                              : 'text-gray-500 hover:text-gray-300'
+                          }`}
+                        >
+                          {f.name}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="text-[10px] text-[#555] py-1">No driver files available.</div>
+                    )}
+                  </div>
+
+                  {/* C-Code Content display */}
+                  <div className="flex-1 overflow-auto bg-[#050505] border border-[#222] rounded-lg p-3 text-xs font-mono text-emerald-500/95 no-scrollbar select-text leading-relaxed">
+                    <pre className="whitespace-pre">
+                      <code>{activeFileContent}</code>
+                    </pre>
+                  </div>
+                </div>
+              </ResizableSplitPaneGroup>
             </div>
           </div>
-        </div>
         )}
 
         {/* Tab 2: Build & Flash Toolchain */}
         {activeMainTab === 'build' && (
           <div className="flex flex-col gap-4 h-full overflow-hidden">
             
-            {/* Top Config Row */}
-            <div className="grid grid-cols-12 gap-4 shrink-0">
-              
-              {/* Compiler Settings */}
-              <div className="col-span-3 bg-[#111] border border-[#222] rounded-xl p-3 flex flex-col gap-2">
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1">
-                  <Settings2 size={14} className="text-[#f97316]" />
-                  Compiler Flags
-                </h3>
-                <div className="grid grid-cols-1 gap-2 mt-1">
-                  <div>
-                    <label className="block text-[9px] text-gray-500 mb-0.5">Optimization Level</label>
-                    <select
-                      value={optimization}
-                      onChange={(e) => setOptimization(e.target.value as any)}
-                      className="w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-1 focus:outline-none focus:border-[#f97316]"
-                    >
-                      <option value="-O0">-O0 (None / Debug)</option>
-                      <option value="-O1">-O1 (Low Optimization)</option>
-                      <option value="-O2">-O2 (Standard Speed)</option>
-                      <option value="-O3">-O3 (Aggressive Speed)</option>
-                      <option value="-Os">-Os (Size Optimized)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[9px] text-gray-500 mb-0.5">Warning Level</label>
-                    <select
-                      value={warningLevel}
-                      onChange={(e) => setWarningLevel(e.target.value as any)}
-                      className="w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-1 focus:outline-none focus:border-[#f97316]"
-                    >
-                      <option value="-Wall">-Wall (All Warnings)</option>
-                      <option value="-Wall -Wextra">-Wall -Wextra (Extra Details)</option>
-                      <option value="-Wall -Wextra -Werror">-Werror (Warnings as Errors)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* MemoryFootprint Analyzer */}
-              <div className="col-span-3 bg-[#111] border border-[#222] rounded-xl p-3 flex flex-col gap-2">
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1">
-                  <Database size={14} className="text-[#f97316]" />
-                  Device Memory Utilization
-                </h3>
-                <div className="flex-1 flex flex-col justify-center gap-1.5 text-[10px] font-mono">
-                  {/* Flash Gauges */}
-                  <div>
-                    <div className="flex justify-between text-gray-400 mb-0.5">
-                      <span>FLASH (ROM):</span>
-                      <span className="text-white">{(memoryUsage.flashUsed / 1024).toFixed(2)} / {(memoryLimits.flash / 1024).toFixed(0)} KB</span>
-                    </div>
-                    <div className="w-full bg-[#070707] h-2 rounded border border-[#222] overflow-hidden">
-                      <div 
-                        className={`h-full rounded transition-all duration-500 ${
-                          memoryUsage.flashPct > 85 ? 'bg-red-500' : memoryUsage.flashPct > 60 ? 'bg-yellow-500' : 'bg-emerald-500'
-                        }`}
-                        style={{ width: `${memoryUsage.flashPct}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* SRAM Gauges */}
-                  <div>
-                    <div className="flex justify-between text-gray-400 mb-0.5">
-                      <span>SRAM (RAM):</span>
-                      <span className="text-white">{(memoryUsage.ramUsed / 1024).toFixed(2)} / {(memoryLimits.ram / 1024).toFixed(0)} KB</span>
-                    </div>
-                    <div className="w-full bg-[#070707] h-2 rounded border border-[#222] overflow-hidden">
-                      <div 
-                        className={`h-full rounded transition-all duration-500 ${
-                          memoryUsage.ramPct > 85 ? 'bg-red-500' : memoryUsage.ramPct > 60 ? 'bg-yellow-500' : 'bg-emerald-500'
-                        }`}
-                        style={{ width: `${memoryUsage.ramPct}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Programmer Settings */}
-              <div className="col-span-3 bg-[#111] border border-[#222] rounded-xl p-3 flex flex-col gap-2">
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1">
-                  <HardDrive size={14} className="text-[#f97316]" />
-                  Flash Utility & Serial Port
-                </h3>
-                <div className="grid grid-cols-2 gap-2 mt-1">
-                  <div>
-                    <label className="block text-[9px] text-gray-500 mb-0.5">Interface Tool</label>
-                    <select
-                      value={programmer}
-                      onChange={(e) => setProgrammer(e.target.value)}
-                      className="w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-0.5 focus:outline-none focus:border-[#f97316]"
-                    >
-                      <option value="ST-LINK V2/V3 (OpenOCD)">ST-Link (OpenOCD)</option>
-                      <option value="J-Link (SEGGER)">J-Link (SEGGER)</option>
-                      <option value="avrdude (Arduino Bootloader)">avrdude (Serial)</option>
-                      <option value="esptool.py (ESP Web/Serial)">esptool.py (UART)</option>
-                      <option value="Host PC GDB Simulator">Host PC GDB</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[9px] text-gray-500 mb-0.5">Serial COM Port</label>
-                    {availablePorts.length > 0 ? (
+            {/* Top Config Row (collapsible/hidden when a panel is maximized) */}
+            {tab2Maximized === null && (
+              <div className="grid grid-cols-12 gap-4 shrink-0">
+                
+                {/* Compiler Settings */}
+                <div className="col-span-3 bg-[#111] border border-[#222] rounded-xl p-3 flex flex-col gap-2">
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1">
+                    <Settings2 size={14} className="text-[#f97316]" />
+                    Compiler Flags
+                  </h3>
+                  <div className="grid grid-cols-1 gap-2 mt-1">
+                    <div>
+                      <label className="block text-[9px] text-gray-500 mb-0.5">Optimization Level</label>
                       <select
-                        value={config.commPort || availablePorts[0]}
-                        onChange={(e) => onChangeConfig({ ...config, commPort: e.target.value })}
+                        value={optimization}
+                        onChange={(e) => setOptimization(e.target.value as any)}
+                        className="w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-1 focus:outline-none focus:border-[#f97316]"
+                      >
+                        <option value="-O0">-O0 (None / Debug)</option>
+                        <option value="-O1">-O1 (Low Optimization)</option>
+                        <option value="-O2">-O2 (Standard Speed)</option>
+                        <option value="-O3">-O3 (Aggressive Speed)</option>
+                        <option value="-Os">-Os (Size Optimized)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] text-gray-500 mb-0.5">Warning Level</label>
+                      <select
+                        value={warningLevel}
+                        onChange={(e) => setWarningLevel(e.target.value as any)}
+                        className="w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-1 focus:outline-none focus:border-[#f97316]"
+                      >
+                        <option value="-Wall">-Wall (All Warnings)</option>
+                        <option value="-Wall -Wextra">-Wall -Wextra (Extra Details)</option>
+                        <option value="-Wall -Wextra -Werror">-Werror (Warnings as Errors)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* MemoryFootprint Analyzer */}
+                <div className="col-span-3 bg-[#111] border border-[#222] rounded-xl p-3 flex flex-col gap-2">
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1">
+                    <Database size={14} className="text-[#f97316]" />
+                    Device Memory Utilization
+                  </h3>
+                  <div className="flex-1 flex flex-col justify-center gap-1.5 text-[10px] font-mono">
+                    {/* Flash Gauges */}
+                    <div>
+                      <div className="flex justify-between text-gray-400 mb-0.5">
+                        <span>FLASH (ROM):</span>
+                        <span className="text-white">{(memoryUsage.flashUsed / 1024).toFixed(2)} / {(memoryLimits.flash / 1024).toFixed(0)} KB</span>
+                      </div>
+                      <div className="w-full bg-[#070707] h-2 rounded border border-[#222] overflow-hidden">
+                        <div 
+                          className={`h-full rounded transition-all duration-500 ${
+                            memoryUsage.flashPct > 85 ? 'bg-red-500' : memoryUsage.flashPct > 60 ? 'bg-yellow-500' : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${memoryUsage.flashPct}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* SRAM Gauges */}
+                    <div>
+                      <div className="flex justify-between text-gray-400 mb-0.5">
+                        <span>SRAM (RAM):</span>
+                        <span className="text-white">{(memoryUsage.ramUsed / 1024).toFixed(2)} / {(memoryLimits.ram / 1024).toFixed(0)} KB</span>
+                      </div>
+                      <div className="w-full bg-[#070707] h-2 rounded border border-[#222] overflow-hidden">
+                        <div 
+                          className={`h-full rounded transition-all duration-500 ${
+                            memoryUsage.ramPct > 85 ? 'bg-red-500' : memoryUsage.ramPct > 60 ? 'bg-yellow-500' : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${memoryUsage.ramPct}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Programmer Settings */}
+                <div className="col-span-3 bg-[#111] border border-[#222] rounded-xl p-3 flex flex-col gap-2">
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1">
+                    <HardDrive size={14} className="text-[#f97316]" />
+                    Flash Utility & Serial Port
+                  </h3>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <div>
+                      <label className="block text-[9px] text-gray-500 mb-0.5">Interface Tool</label>
+                      <select
+                        value={programmer}
+                        onChange={(e) => setProgrammer(e.target.value)}
                         className="w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-0.5 focus:outline-none focus:border-[#f97316]"
                       >
-                        {availablePorts.map((p) => (
-                          <option key={p} value={p}>{p}</option>
-                        ))}
+                        <option value="ST-LINK V2/V3 (OpenOCD)">ST-Link (OpenOCD)</option>
+                        <option value="J-Link (SEGGER)">J-Link (SEGGER)</option>
+                        <option value="avrdude (Arduino Bootloader)">avrdude (Serial)</option>
+                        <option value="esptool.py (ESP Web/Serial)">esptool.py (UART)</option>
+                        <option value="Host PC GDB Simulator">Host PC GDB</option>
                       </select>
-                    ) : (
+                    </div>
+                    <div>
+                      <label className="block text-[9px] text-gray-500 mb-0.5">Serial COM Port</label>
+                      {availablePorts.length > 0 ? (
+                        <select
+                          value={config.commPort || availablePorts[0]}
+                          onChange={(e) => onChangeConfig({ ...config, commPort: e.target.value })}
+                          className="w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-0.5 focus:outline-none focus:border-[#f97316]"
+                        >
+                          {availablePorts.map((p) => (
+                            <option key={p} value={p}>{p}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          placeholder="e.g. COM3"
+                          value={config.commPort || 'COM3'}
+                          onChange={(e) => onChangeConfig({ ...config, commPort: e.target.value })}
+                          className="w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-0.5 focus:outline-none focus:border-[#f97316]"
+                        />
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-[9px] text-gray-500 mb-0.5">Baud Rate</label>
+                      <select
+                        value={config.baudRate || 115200}
+                        onChange={(e) => onChangeConfig({ ...config, baudRate: parseInt(e.target.value) || 115200 })}
+                        className="w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-0.5 focus:outline-none focus:border-[#f97316]"
+                      >
+                        <option value={9600}>9600 baud</option>
+                        <option value={57600}>57600 baud</option>
+                        <option value={115200}>115200 baud (Default)</option>
+                        <option value={921600}>921600 baud (High Speed)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] text-gray-500 mb-0.5">Flash Start Address</label>
                       <input
                         type="text"
-                        placeholder="e.g. COM3"
-                        value={config.commPort || 'COM3'}
-                        onChange={(e) => onChangeConfig({ ...config, commPort: e.target.value })}
+                        value={flashAddress}
+                        onChange={(e) => setFlashAddress(e.target.value)}
                         className="w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-0.5 focus:outline-none focus:border-[#f97316]"
                       />
-                    )}
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-[9px] text-gray-500 mb-0.5">Baud Rate</label>
-                    <select
-                      value={config.baudRate || 115200}
-                      onChange={(e) => onChangeConfig({ ...config, baudRate: parseInt(e.target.value) || 115200 })}
-                      className="w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-0.5 focus:outline-none focus:border-[#f97316]"
-                    >
-                      <option value={9600}>9600 baud</option>
-                      <option value={57600}>57600 baud</option>
-                      <option value={115200}>115200 baud (Default)</option>
-                      <option value={921600}>921600 baud (High Speed)</option>
-                    </select>
+                </div>
+
+                {/* Safety & Compliance Audits */}
+                <div className="col-span-3 bg-[#111] border border-[#222] rounded-xl p-3 flex flex-col justify-between">
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1">
+                    <ShieldCheck size={14} className="text-emerald-500" />
+                    Standards Audit Compliance
+                  </h3>
+                  <div className="grid grid-cols-2 gap-1.5 text-[9px] font-mono text-[#aaa] mt-1">
+                    <div className="flex items-center gap-1">
+                      <CheckCircle2 size={10} className="text-emerald-500" />
+                      <span>MISRA-C:2012</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <CheckCircle2 size={10} className="text-emerald-500" />
+                      <span>IEC 61508 SIL2</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <CheckCircle2 size={10} className="text-emerald-500" />
+                      <span>ISO 26262 ASIL-B</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <CheckCircle2 size={10} className="text-emerald-500" />
+                      <span>EN 50128 SW-SIL4</span>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-[9px] text-gray-500 mb-0.5">Flash Start Address</label>
-                    <input
-                      type="text"
-                      value={flashAddress}
-                      onChange={(e) => setFlashAddress(e.target.value)}
-                      className="w-full bg-[#070707] border border-[#222] text-xs text-white rounded px-2 py-0.5 focus:outline-none focus:border-[#f97316]"
+                  <div className="text-[9px] text-emerald-400 font-semibold text-right flex items-center justify-end gap-1 shrink-0 mt-1">
+                    <Sparkles size={11} className="animate-pulse" /> Safety Audits Checked (100% Passed)
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* Scalable Split Code and Terminal Layout */}
+            <div className="flex-1 overflow-hidden">
+              <ResizableSplitPaneGroup
+                storageKey="adia_hil_tab2_sizes"
+                initialSizes={[40, 60]}
+                minSizes={[20, 25]}
+                maximizedIndex={tab2Maximized}
+                onRestore={() => setTab2Maximized(null)}
+              >
+                {/* File Explorer & Code Preview */}
+                <div className="bg-[#111] border border-[#222] rounded-xl p-3 flex flex-col h-full overflow-hidden">
+                  <div className="flex justify-between items-center mb-2 shrink-0">
+                    <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1">
+                      <FileText size={14} className="text-[#f97316]" />
+                      Linker Workspace Source Code
+                    </span>
+                    <PanelMaximizeButton
+                      isMaximized={tab2Maximized === 0}
+                      onToggle={() => setTab2Maximized(tab2Maximized === 0 ? null : 0)}
                     />
                   </div>
-                </div>
-              </div>
+                  
+                  {/* File list */}
+                  <div className="flex gap-1 overflow-x-auto shrink-0 mb-2 no-scrollbar border-b border-[#222]">
+                    {generatedFiles.map(f => (
+                      <button
+                        key={f.name}
+                        onClick={() => setActiveFileTab(f.name)}
+                        className={`px-2.5 py-1 text-[9px] font-mono border-b-2 transition-all ${
+                          activeFileTab === f.name
+                            ? 'border-[#f97316] text-[#f97316] bg-[#1a1a1a]'
+                            : 'border-transparent text-gray-500 hover:text-gray-300'
+                        }`}
+                      >
+                        {f.name}
+                      </button>
+                    ))}
+                  </div>
 
-              {/* Safety & Compliance Audits */}
-              <div className="col-span-3 bg-[#111] border border-[#222] rounded-xl p-3 flex flex-col justify-between">
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1">
-                  <ShieldCheck size={14} className="text-emerald-500" />
-                  Standards Audit Compliance
-                </h3>
-                <div className="grid grid-cols-2 gap-1.5 text-[9px] font-mono text-[#aaa] mt-1">
-                  <div className="flex items-center gap-1">
-                    <CheckCircle2 size={10} className="text-emerald-500" />
-                    <span>MISRA-C:2012</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <CheckCircle2 size={10} className="text-emerald-500" />
-                    <span>IEC 61508 SIL2</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <CheckCircle2 size={10} className="text-emerald-500" />
-                    <span>ISO 26262 ASIL-B</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <CheckCircle2 size={10} className="text-emerald-500" />
-                    <span>EN 50128 SW-SIL4</span>
+                  <div className="flex-1 overflow-auto bg-[#050505] border border-[#222] rounded p-2.5 text-[10px] font-mono text-emerald-500/90 no-scrollbar select-text leading-relaxed">
+                    <pre className="whitespace-pre"><code>{activeFileContent}</code></pre>
                   </div>
                 </div>
-                <div className="text-[9px] text-emerald-400 font-semibold text-right flex items-center justify-end gap-1 shrink-0 mt-1">
-                  <Sparkles size={11} className="animate-pulse" /> Safety Audits Checked (100% Passed)
-                </div>
-              </div>
 
-            </div>
+                {/* Interactive Compiler Console Terminal */}
+                <div className="bg-[#111] border border-[#222] rounded-xl p-3 flex flex-col h-full overflow-hidden">
+                  <div className="flex justify-between items-center mb-2 shrink-0">
+                    <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1">
+                      <Terminal size={14} className="text-[#f97316]" />
+                      Embedded Toolchain Compiler Logs
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {buildStatus === 'success' && (
+                        <span className="text-[10px] text-emerald-500 font-mono font-semibold">
+                          [ELF BINARY READY]
+                        </span>
+                      )}
+                      {burnStatus === 'success' && (
+                        <span className="text-[10px] text-emerald-500 font-mono font-semibold animate-pulse">
+                          [TARGET DEPLOYED]
+                        </span>
+                      )}
+                      <PanelMaximizeButton
+                        isMaximized={tab2Maximized === 1}
+                        onToggle={() => setTab2Maximized(tab2Maximized === 1 ? null : 1)}
+                      />
+                    </div>
+                  </div>
 
-            {/* Split Code and Terminal Layout */}
-            <div className="flex-1 grid grid-cols-12 gap-4 overflow-hidden">
-              
-              {/* File Explorer & Code Preview */}
-              <div className="col-span-5 bg-[#111] border border-[#222] rounded-xl p-3 flex flex-col overflow-hidden">
-                <div className="flex justify-between items-center mb-2 shrink-0">
-                  <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1">
-                    <FileText size={14} className="text-[#f97316]" />
-                    Linker Workspace Source Code
-                  </span>
-                </div>
-                
-                {/* File list */}
-                <div className="flex gap-1 overflow-x-auto shrink-0 mb-2 no-scrollbar border-b border-[#222]">
-                  {generatedFiles.map(f => (
+                  {/* Console Output Screen */}
+                  <div className="flex-1 overflow-y-auto bg-[#050505] border border-[#222] rounded p-3 text-[10px] font-mono text-gray-300 space-y-1 select-text scrollbar-thin">
+                    {consoleLogs.map((log, index) => {
+                      let colorClass = 'text-gray-300';
+                      if (log.includes('[ERROR]')) colorClass = 'text-red-500 font-bold';
+                      else if (log.includes('[COMPILER]') || log.includes('[LINKER]')) colorClass = 'text-[#f97316]';
+                      else if (log.includes('[SIZE]') || log.includes('FLASH:') || log.includes('SRAM:')) colorClass = 'text-blue-400';
+                      else if (log.includes('[AUDIT]')) colorClass = 'text-yellow-500';
+                      else if (log.includes('SUCCESSFUL') || log.includes('SUCCESSFULLY') || log.includes('Passed.')) colorClass = 'text-green-400 font-semibold';
+                      
+                      return (
+                        <div key={index} className={`${colorClass} whitespace-pre-wrap leading-tight`}>
+                          {log}
+                        </div>
+                      );
+                    })}
+                    {consoleLogs.length === 0 && (
+                      <div className="text-gray-600 italic">Console idle. Select compiler flags and click "Build C-Code" to run compilation.</div>
+                    )}
+                    <div ref={consoleEndRef} />
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3 mt-3 shrink-0">
                     <button
-                      key={f.name}
-                      onClick={() => setActiveFileTab(f.name)}
-                      className={`px-2.5 py-1 text-[9px] font-mono border-b-2 transition-all ${
-                        activeFileTab === f.name
-                          ? 'border-[#f97316] text-[#f97316] bg-[#1a1a1a]'
-                          : 'border-transparent text-gray-500 hover:text-gray-300'
-                      }`}
+                      onClick={handleBuild}
+                      disabled={buildStatus === 'building' || config.channels.length === 0}
+                      className="flex-1 bg-[#f97316] hover:bg-[#ea580c] disabled:opacity-40 text-black text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors"
                     >
-                      {f.name}
+                      <RefreshCcw size={14} className={buildStatus === 'building' ? 'animate-spin' : ''} />
+                      Build C-Code
                     </button>
-                  ))}
+                    <button
+                      onClick={handleBurn}
+                      disabled={buildStatus !== 'success' || burnStatus === 'burning'}
+                      className="flex-1 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 disabled:opacity-40 text-black text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <Zap size={14} className={burnStatus === 'burning' ? 'animate-pulse' : ''} />
+                      Flash Target Firmware
+                    </button>
+                    <button
+                      onClick={handleErase}
+                      disabled={burnStatus === 'burning'}
+                      className="flex-1 bg-red-700 hover:bg-red-800 disabled:opacity-40 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <Trash2 size={14} className={burnStatus === 'burning' ? 'animate-pulse' : ''} />
+                      Erase Flash
+                    </button>
+                    <button
+                      onClick={handleDeploy}
+                      disabled={burnStatus !== 'success'}
+                      className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-black text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors animate-shimmer"
+                    >
+                      <Play size={14} />
+                      Deploy & Connect
+                    </button>
+                  </div>
+
                 </div>
-
-                <div className="flex-1 overflow-auto bg-[#050505] border border-[#222] rounded p-2.5 text-[10px] font-mono text-emerald-500/90 no-scrollbar select-text leading-relaxed">
-                  <pre className="whitespace-pre"><code>{activeFileContent}</code></pre>
-                </div>
-              </div>
-
-              {/* Interactive Compiler Console Terminal */}
-              <div className="col-span-7 bg-[#111] border border-[#222] rounded-xl p-3 flex flex-col overflow-hidden">
-                <div className="flex justify-between items-center mb-2 shrink-0">
-                  <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1">
-                    <Terminal size={14} className="text-[#f97316]" />
-                    Embedded Toolchain Compiler Logs
-                  </span>
-                  {buildStatus === 'success' && (
-                    <span className="text-[10px] text-emerald-500 font-mono font-semibold">
-                      [ELF BINARY READY]
-                    </span>
-                  )}
-                  {burnStatus === 'success' && (
-                    <span className="text-[10px] text-emerald-500 font-mono font-semibold animate-pulse">
-                      [TARGET DEPLOYED]
-                    </span>
-                  )}
-                </div>
-
-                {/* Console Output Screen */}
-                <div className="flex-1 overflow-y-auto bg-[#050505] border border-[#222] rounded p-3 text-[10px] font-mono text-gray-300 space-y-1 select-text scrollbar-thin">
-                  {consoleLogs.map((log, index) => {
-                    let colorClass = 'text-gray-300';
-                    if (log.includes('[ERROR]')) colorClass = 'text-red-500 font-bold';
-                    else if (log.includes('[COMPILER]') || log.includes('[LINKER]')) colorClass = 'text-[#f97316]';
-                    else if (log.includes('[SIZE]') || log.includes('FLASH:') || log.includes('SRAM:')) colorClass = 'text-blue-400';
-                    else if (log.includes('[AUDIT]')) colorClass = 'text-yellow-500';
-                    else if (log.includes('SUCCESSFUL') || log.includes('SUCCESSFULLY') || log.includes('Passed.')) colorClass = 'text-green-400 font-semibold';
-                    
-                    return (
-                      <div key={index} className={`${colorClass} whitespace-pre-wrap leading-tight`}>
-                        {log}
-                      </div>
-                    );
-                  })}
-                  {consoleLogs.length === 0 && (
-                    <div className="text-gray-600 italic">Console idle. Select compiler flags and click "Build C-Code" to run compilation.</div>
-                  )}
-                  <div ref={consoleEndRef} />
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-3 mt-3 shrink-0">
-                  <button
-                    onClick={handleBuild}
-                    disabled={buildStatus === 'building' || config.channels.length === 0}
-                    className="flex-1 bg-[#f97316] hover:bg-[#ea580c] disabled:opacity-40 text-black text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    <RefreshCcw size={14} className={buildStatus === 'building' ? 'animate-spin' : ''} />
-                    Build C-Code
-                  </button>
-                  <button
-                    onClick={handleBurn}
-                    disabled={buildStatus !== 'success' || burnStatus === 'burning'}
-                    className="flex-1 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 disabled:opacity-40 text-black text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    <Zap size={14} className={burnStatus === 'burning' ? 'animate-pulse' : ''} />
-                    Flash Target Firmware
-                  </button>
-                  <button
-                    onClick={handleErase}
-                    disabled={burnStatus === 'burning'}
-                    className="flex-1 bg-red-700 hover:bg-red-800 disabled:opacity-40 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    <Trash2 size={14} className={burnStatus === 'burning' ? 'animate-pulse' : ''} />
-                    Erase Flash
-                  </button>
-                  <button
-                    onClick={handleDeploy}
-                    disabled={burnStatus !== 'success'}
-                    className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-black text-xs font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors animate-shimmer"
-                  >
-                    <Play size={14} />
-                    Deploy & Connect
-                  </button>
-                </div>
-
-              </div>
-
+              </ResizableSplitPaneGroup>
             </div>
 
           </div>
