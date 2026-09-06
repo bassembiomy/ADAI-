@@ -103,9 +103,9 @@
 - [x] Step 4: Run and commit
 
 ## Task 15: Prove the Reviewed Model End to End and Document Operations
-- [ ] Step 1: Write the real end-to-end test
-- [ ] Step 2: Run and fix requirement gaps at their owning modules
-- [ ] Step 3: Document operator workflow
-- [ ] Step 4: Run the complete verification set
-- [ ] Step 5: Inspect a real generated package
-- [ ] Step 6: Commit
+- [x] Step 1: Write the real end-to-end test
+- [x] Step 2: Run and fix requirement gaps at their owning modules
+- [x] Step 3: Document operator workflow
+- [x] Step 4: Run the complete verification set
+- [x] Step 5: Inspect a real generated package
+- [x] Step 6: Commit

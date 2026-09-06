@@ -104,7 +104,7 @@ describe('Golden-file & behavior trace regression tests', () => {
   };
 
   it('should match golden templates (snapshot comparison)', () => {
-    const result = generateMISRACCode(regressionChart as any);
+    const result = generateMISRACCode(regressionChart as any, { legacyFlatLayout: true });
     expect(result.errors).toHaveLength(0);
 
     // Assert file output structures match saved golden snapshots
@@ -119,7 +119,7 @@ describe('Golden-file & behavior trace regression tests', () => {
   });
 
   it('locks the integrated X-Bridges C package to a golden snapshot', () => {
-    const result = generateMISRACCode(hybridXBridgesFixture() as any);
+    const result = generateMISRACCode(hybridXBridgesFixture() as any, { legacyFlatLayout: true });
     expect(result.errors).toHaveLength(0);
 
     const filesSnapshot = result.files
@@ -135,7 +135,7 @@ describe('Golden-file & behavior trace regression tests', () => {
   });
 
   it('should verify trace harness runtime behavior via host compiler execution', () => {
-    const result = generateMISRACCode(regressionChart as any);
+    const result = generateMISRACCode(regressionChart as any, { legacyFlatLayout: true });
     expect(result.errors).toHaveLength(0);
 
     const dir = generatedCodeTestDirectory('regression-trace');

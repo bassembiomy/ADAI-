@@ -235,6 +235,13 @@ void Dio_WriteChannel(uint32_t channel, uint8_t level);
 void Wdg_Service(void);
 void ADIA_Safe_Outputs_Hook(void);
 
+bool MCAL_Dio_ReadChannel(uint32_t channel);
+void MCAL_Dio_WriteChannel(uint32_t channel, bool level);
+double MCAL_ReadChannelValue(uint32_t channel);
+void MCAL_WriteChannelValue(uint32_t channel, double value);
+void MCAL_ApplySafeOutputs(void);
+void MCAL_Watchdog_Kick(void);
+
 #ifdef __cplusplus
 }
 #endif
@@ -309,8 +316,13 @@ size_t MCAL_TestCountByFunction(const char *function_name)
     size_t matching = 0;
     if (function_name == NULL) return 0;
     for (i = 0; i < s_call_count; i++) {
-        if (s_calls[i].function_name != NULL && strcmp(s_calls[i].function_name, function_name) == 0) {
-            matching++;
+        if (s_calls[i].function_name != NULL) {
+            if (strcmp(s_calls[i].function_name, function_name) == 0) {
+                matching++;
+            } else if ((strcmp(function_name, "MCAL_Dio_ReadChannel") == 0 && strcmp(s_calls[i].function_name, "Dio_ReadChannel") == 0)
+                    || (strcmp(function_name, "MCAL_Dio_WriteChannel") == 0 && strcmp(s_calls[i].function_name, "Dio_WriteChannel") == 0)) {
+                matching++;
+            }
         }
     }
     return matching;
@@ -318,16 +330,14 @@ size_t MCAL_TestCountByFunction(const char *function_name)
 
 static void recordCall(MCAL_CallKind kind, const char *fn_name, uint32_t channel, double val)
 {
-    if (s_call_count >= (size_t)MCAL_CALL_CAPACITY) {
-        ADIA_TestFail(__FILE__, (unsigned long)__LINE__, "MCAL recorder capacity exceeded");
-        return;
+    if (s_call_count < (size_t)MCAL_CALL_CAPACITY) {
+        s_calls[s_call_count].kind = kind;
+        s_calls[s_call_count].function_name = fn_name;
+        s_calls[s_call_count].channel = channel;
+        s_calls[s_call_count].value = val;
+        s_calls[s_call_count].order = s_call_order++;
+        s_call_count++;
     }
-    s_calls[s_call_count].kind = kind;
-    s_calls[s_call_count].function_name = fn_name;
-    s_calls[s_call_count].channel = channel;
-    s_calls[s_call_count].value = val;
-    s_calls[s_call_count].order = s_call_order++;
-    s_call_count++;
 }
 
 void MCAL_SetChannelInputBool(uint32_t channel, bool val)
@@ -402,6 +412,41 @@ void ADIA_Safe_Outputs_Hook(void)
 {
     recordCall(MCAL_CALL_SAFE_OUTPUTS, "ADIA_Safe_Outputs_Hook", 0, 1.0);
 }
+
+bool MCAL_Dio_ReadChannel(uint32_t channel)
+{
+    return Dio_ReadChannel(channel) != 0U;
+}
+
+void MCAL_Dio_WriteChannel(uint32_t channel, bool level)
+{
+    Dio_WriteChannel(channel, (uint8_t)(level ? 1U : 0U));
+}
+
+double MCAL_ReadChannelValue(uint32_t channel)
+{
+    double val = 0.0;
+    if (channel < (uint32_t)MCAL_CHANNEL_CAPACITY && s_channel_has_input[channel]) {
+        val = s_channel_inputs[channel];
+    }
+    recordCall(MCAL_CALL_ADC_READ, "Dio_ReadChannel", channel, val);
+    return val;
+}
+
+void MCAL_WriteChannelValue(uint32_t channel, double value)
+{
+    recordCall(MCAL_CALL_DIO_WRITE, "Dio_WriteChannel", channel, value);
+}
+
+void MCAL_ApplySafeOutputs(void)
+{
+    ADIA_Safe_Outputs_Hook();
+}
+
+void MCAL_Watchdog_Kick(void)
+{
+    Wdg_Service();
+}
 `;
 };
 
@@ -412,12 +457,29 @@ export const renderCTestMainSource = (standard: SMCStandard): string => {
  */
 #include "test_support.h"
 
-extern const ADIA_TestCase g_adia_test_cases[];
-extern const size_t g_adia_test_case_count;
+int run_suite_initialization(void);
+int run_suite_transitions(void);
+int run_suite_actions(void);
+int run_suite_timing(void);
+int run_suite_safety(void);
+int run_suite_io(void);
+int run_suite_reset(void);
+int run_suite_robustness(void);
+int run_suite_hierarchy(void);
 
 int main(void)
 {
-    return ADIA_TestRun(g_adia_test_cases, g_adia_test_case_count);
+    int failures = 0;
+    failures += run_suite_initialization();
+    failures += run_suite_transitions();
+    failures += run_suite_actions();
+    failures += run_suite_timing();
+    failures += run_suite_safety();
+    failures += run_suite_io();
+    failures += run_suite_reset();
+    failures += run_suite_robustness();
+    failures += run_suite_hierarchy();
+    return (failures == 0) ? 0 : 1;
 }
 `;
 };

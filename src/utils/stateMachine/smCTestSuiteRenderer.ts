@@ -31,9 +31,9 @@ const resolveStateEnum = (ir: SemanticModel, stateId: string): string => {
 };
 
 const resolveStateIndex = (ir: SemanticModel, stateId: string): string => {
-  const st = ir.states[stateId];
-  if (st) return String(st.activityIndex);
-  return '0';
+  const states = Object.values(ir.states).sort((a, b) => a.activityIndex - b.activityIndex);
+  const idx = states.findIndex((s) => s.id === stateId);
+  return idx >= 0 ? String(idx + 1) : '1';
 };
 
 const renderOperation = (
@@ -45,8 +45,10 @@ const renderOperation = (
       return '    (void)SM_Init(&instance);';
     case 'reset':
       return '    (void)SM_Reset(&instance);';
-    case 'step':
-      return `    (void)SM_Step(&instance, ${op.deltaMs !== undefined ? String(op.deltaMs) : 'SM_TICK_MS'});`;
+    case 'step': {
+      const delta = op.deltaMs !== undefined ? String(op.deltaMs) : 'SM_TICK_MS';
+      return `    (void)SM_Step(&instance, ${delta});\n    (void)SM_Sync_IO(&instance);`;
+    }
     case 'set-variable': {
       const varId = toCIdentifier(op.variableId);
       const valStr =
@@ -55,11 +57,19 @@ const renderOperation = (
           : typeof op.value === 'number'
             ? String(op.value)
             : String(op.value);
+      const mapping = ir.ioMappings.find((m) => m.variableId === op.variableId && m.direction === 'read');
+      if (mapping) {
+        const ch = `MCAL_CH_${toCIdentifier(mapping.channelId).toUpperCase()}`;
+        if (typeof op.value === 'boolean') {
+          return `    instance.data.${varId} = ${valStr};\n    MCAL_SetChannelInputBool(${ch}, ${valStr});`;
+        }
+        return `    instance.data.${varId} = ${valStr};\n    MCAL_SetChannelInputDouble(${ch}, (double)(${valStr}));`;
+      }
       return `    instance.data.${varId} = ${valStr};`;
     }
     case 'set-input': {
-      const mapping = ir.ioMappings.find((m) => m.id === op.mappingId);
-      const ch = mapping ? `(uint32_t)${toCIdentifier(mapping.channelId).toUpperCase()}` : '0U';
+      const mapping = ir.ioMappings.find((m) => m.id === op.mappingId || m.variableId === op.mappingId || m.channelId === op.mappingId);
+      const ch = mapping ? `MCAL_CH_${toCIdentifier(mapping.channelId).toUpperCase()}` : '0U';
       if (typeof op.rawValue === 'boolean') {
         return `    MCAL_SetChannelInputBool(${ch}, ${op.rawValue ? 'true' : 'false'});`;
       }
@@ -67,10 +77,10 @@ const renderOperation = (
     }
     case 'corrupt-field': {
       if (op.field === 'activeState') {
-        return `    instance.active_states[0] = (SM_State_t)${Number(op.invalidValue)};`;
+        return `    instance.active_states[0] = (SM_Node_t)${Number(op.invalidValue)};`;
       }
       if (op.field === 'executionSlot') {
-        return `    instance.active_states[0] = (SM_State_t)${Number(op.invalidValue)};`;
+        return `    instance.active_states[0] = (SM_Node_t)${Number(op.invalidValue)};`;
       }
       if (op.field === 'stateTimers') {
         return `    instance.state_timers[0] = (uint32_t)${Number(op.invalidValue)};`;
@@ -83,7 +93,7 @@ const renderOperation = (
     }
     case 'repeat-step': {
       const delta = op.deltaMs !== undefined ? String(op.deltaMs) : 'SM_TICK_MS';
-      return `    {\n        size_t cycle;\n        for (cycle = 0; cycle < ${op.cycles}; cycle++) {\n            (void)SM_Step(&instance, ${delta});\n        }\n    }`;
+      return `    {\n        size_t cycle;\n        for (cycle = 0; cycle < ${op.cycles}; cycle++) {\n            (void)SM_Step(&instance, ${delta});\n        }\n        (void)SM_Sync_IO(&instance);\n    }`;
     }
     default:
       return assertNever(op);
@@ -97,11 +107,11 @@ const renderExpectation = (
   switch (exp.kind) {
     case 'active-state': {
       const enumVal = resolveStateEnum(ir, exp.stateId);
-      return `    ADIA_AssertBool(true, SM_Is_State_Active(&instance, ${enumVal}), "${exp.stateId} should be active", __FILE__, (unsigned long)__LINE__);`;
+      return `    ADIA_AssertBool(true, SM_IsStateActive(&instance, ${enumVal}), "${exp.stateId} should be active", __FILE__, (unsigned long)__LINE__);`;
     }
     case 'inactive-state': {
       const enumVal = resolveStateEnum(ir, exp.stateId);
-      return `    ADIA_AssertBool(false, SM_Is_State_Active(&instance, ${enumVal}), "${exp.stateId} should be inactive", __FILE__, (unsigned long)__LINE__);`;
+      return `    ADIA_AssertBool(false, SM_IsStateActive(&instance, ${enumVal}), "${exp.stateId} should be inactive", __FILE__, (unsigned long)__LINE__);`;
     }
     case 'active-slot': {
       const enumVal = resolveStateEnum(ir, exp.stateId);
@@ -159,6 +169,57 @@ const renderTestCaseFunction = (
   const fnName = `test_${toCIdentifier(testCase.id).toLowerCase()}`;
   const trace = testCase.traceability;
 
+  if (testCase.id === 'SM-TC-INIT-NULL-INSTANCE') {
+    return `/*
+ * Case ID: ${testCase.id}
+ * Name: ${testCase.name}
+ */
+static void ${fnName}(void)
+{
+    ADIA_Instance_t instance;
+    SM_Error_t err;
+    (void)instance;
+    MCAL_TestReset();
+    err = SM_Init(NULL);
+    ADIA_AssertU32((uint32_t)SM_ERR_NULL_INSTANCE, (uint32_t)err, "error code SM_ERR_NULL_INSTANCE", __FILE__, (unsigned long)__LINE__);
+}
+`;
+  }
+
+  if (testCase.id === 'SM-TC-RESET-NULL-INSTANCE') {
+    return `/*
+ * Case ID: ${testCase.id}
+ * Name: ${testCase.name}
+ */
+static void ${fnName}(void)
+{
+    ADIA_Instance_t instance;
+    SM_Error_t err;
+    (void)instance;
+    MCAL_TestReset();
+    err = SM_Reset(NULL);
+    ADIA_AssertU32((uint32_t)SM_ERR_NULL_INSTANCE, (uint32_t)err, "error code SM_ERR_NULL_INSTANCE", __FILE__, (unsigned long)__LINE__);
+}
+`;
+  }
+
+  if (testCase.id === 'SM-TC-ROB-NULL-STEP') {
+    return `/*
+ * Case ID: ${testCase.id}
+ * Name: ${testCase.name}
+ */
+static void ${fnName}(void)
+{
+    ADIA_Instance_t instance;
+    SM_Error_t err;
+    (void)instance;
+    MCAL_TestReset();
+    err = SM_Step(NULL, SM_TICK_MS);
+    ADIA_AssertU32((uint32_t)SM_ERR_NULL_INSTANCE, (uint32_t)err, "error code SM_ERR_NULL_INSTANCE", __FILE__, (unsigned long)__LINE__);
+}
+`;
+  }
+
   const opsCode = testCase.operations
     .map((op) => renderOperation(ir, op))
     .join('\n');
@@ -215,17 +276,20 @@ export const renderCTestSuite = (
 #include "sm_config.h"
 #include "sm_mapping.h"
 #include "sm_safety.h"
+#include "mcal_dio.h"
 
 ${testFunctions}
-
-static const ADIA_TestCase s_${suite}_cases[] = {
+${applicableCases.length > 0 ? `static const ADIA_TestCase s_${suite}_cases[] = {
 ${caseEntries}
 };
 
 int run_suite_${suite}(void)
 {
     return ADIA_TestRun(s_${suite}_cases, sizeof(s_${suite}_cases) / sizeof(s_${suite}_cases[0]));
-}
+}` : `int run_suite_${suite}(void)
+{
+    return 0;
+}`}
 `;
 };
 
@@ -244,7 +308,7 @@ export const renderSMCTestPackage = (
   });
   files.push(...runtimeFiles);
 
-  // 2. Render 8 primary suite files
+  // 2. Render all 9 suite files (including hierarchy)
   const suites: readonly SMTestSuite[] = [
     'initialization',
     'transitions',
@@ -254,6 +318,7 @@ export const renderSMCTestPackage = (
     'io',
     'reset',
     'robustness',
+    'hierarchy',
   ];
 
   for (const suite of suites) {
@@ -263,16 +328,7 @@ export const renderSMCTestPackage = (
     });
   }
 
-  // 3. Hierarchy suite if present in manifest
-  const hasHierarchyCases = manifest.cases.some((c) => c.suite === 'hierarchy');
-  if (hasHierarchyCases) {
-    files.push({
-      name: 'tests/test_sm_hierarchy.c',
-      content: renderCTestSuite('hierarchy', ir, manifest),
-    });
-  }
-
-  // 4. Manifest json
+  // 3. Manifest json
   files.push({
     name: 'verification/test_manifest.json',
     content: serializeSMTestManifest(manifest),

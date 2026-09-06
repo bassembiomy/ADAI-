@@ -1,5 +1,4 @@
-import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { contentHash } from '../../engine/embedded/contentHash';
 
 export type VerificationStatus =
   | 'PASS'
@@ -58,15 +57,35 @@ export interface VerificationBundle {
 }
 
 export const computeFileSha256 = (filePath: string): string => {
-  if (!existsSync(filePath)) {
-    return '';
+  if (typeof process !== 'undefined' && process.versions?.node) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
+      const nodeFs = eval("require('node:fs')");
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
+      const nodeCrypto = eval("require('node:crypto')");
+      if (nodeFs.existsSync(filePath)) {
+        const content = nodeFs.readFileSync(filePath);
+        return nodeCrypto.createHash('sha256').update(content).digest('hex');
+      }
+    } catch {
+      // Fallback
+    }
   }
-  const content = readFileSync(filePath);
-  return createHash('sha256').update(content).digest('hex');
+  return '';
 };
 
 export const computeContentSha256 = (content: string | Buffer): string => {
-  return createHash('sha256').update(content).digest('hex');
+  if (typeof process !== 'undefined' && process.versions?.node) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
+      const nodeCrypto = eval("require('node:crypto')");
+      return nodeCrypto.createHash('sha256').update(content).digest('hex');
+    } catch {
+      // Fallback
+    }
+  }
+  const str = typeof content === 'string' ? content : content.toString('utf-8');
+  return contentHash(str).replace(/^sha256:/, '');
 };
 
 export const createNotRunActivity = (

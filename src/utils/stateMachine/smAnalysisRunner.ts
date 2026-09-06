@@ -1,4 +1,3 @@
-import * as path from 'node:path';
 import type { SMCStandard } from './smModel';
 import {
   type ActivityEvidence,
@@ -228,7 +227,7 @@ export function createGenericAnalysisAdapter(
 
     async run(request: AnalysisRunnerRequest) {
       const outputFile = request.outputFile
-        ?? path.join(request.sourceDir, 'analysis_output.json');
+        ?? (request.sourceDir ? `${request.sourceDir.replace(/[/\\]+$/, '')}/analysis_output.json` : 'analysis_output.json');
 
       const args = substituteTokens(config.args ?? [], {
         sourceDir: request.sourceDir,

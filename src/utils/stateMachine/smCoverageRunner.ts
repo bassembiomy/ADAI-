@@ -342,9 +342,16 @@ export const measureCoverage = async (
     timeoutMs: request.timeoutMs ?? 30_000,
   });
 
+  const prodDir = join(request.packageDirectory, 'production');
+  const prodFiles = existsSync(prodDir)
+    ? readdirSync(prodDir).filter((f) => f.endsWith('.c')).map((f) => `production/${f}`)
+    : [];
+
+  const gcovArgs = prodFiles.length > 0 ? ['--json-format', ...prodFiles] : ['--json-format'];
+
   const gcovResult = await runTool({
     executable: 'gcov',
-    args: ['--json-format', 'production/*.c'],
+    args: gcovArgs,
     cwd: request.packageDirectory,
   });
 
@@ -360,14 +367,14 @@ export const measureCoverage = async (
         statement: {
           activity: 'statement-coverage',
           status: 'NOT_RUN',
-          summary: 'gcov tool execution failed or was unavailable',
+          summary: `gcov tool execution failed or was unavailable: ${gcovResult.command.stderr || (gcovResult.error ? gcovResult.error.message : 'gcov execution failed')}`,
           command: gcovResult.command,
           details: { measuredPercent: 0, covered: 0, total: 0, threshold: request.verification.statementCoverageTarget, uncovered: [] },
         },
         branch: {
           activity: 'branch-coverage',
           status: 'NOT_RUN',
-          summary: 'gcov tool execution failed or was unavailable',
+          summary: `gcov tool execution failed or was unavailable: ${gcovResult.command.stderr || (gcovResult.error ? gcovResult.error.message : 'gcov execution failed')}`,
           command: gcovResult.command,
           details: { measuredPercent: 0, covered: 0, total: 0, threshold: request.verification.branchCoverageTarget, uncovered: [] },
         },
@@ -382,7 +389,25 @@ export const measureCoverage = async (
     }
   }
 
-  return parseGcovJson({}, {
+  let gcovData: any = { files: [] };
+  try {
+    const gzFiles = readdirSync(request.packageDirectory).filter((f) => f.endsWith('.gcov.json.gz'));
+    if (gzFiles.length > 0) {
+      const zlib = await import('node:zlib');
+      const allFiles: any[] = [];
+      for (const gz of gzFiles) {
+        const buf = readFileSync(join(request.packageDirectory, gz));
+        const uncompressed = zlib.gunzipSync(buf).toString('utf-8');
+        const parsed = JSON.parse(uncompressed);
+        if (parsed.files) allFiles.push(...parsed.files);
+      }
+      gcovData = { files: allFiles };
+    }
+  } catch {
+    // If extraction fails, fall back to empty file list
+  }
+
+  return parseGcovJson(gcovData, {
     verification: request.verification,
     safetyMode: request.safetyMode,
   });

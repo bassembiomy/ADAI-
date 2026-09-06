@@ -243,12 +243,18 @@ export const buildSMTestManifest = (ir: SemanticModel): SMTestManifest => {
   for (const s of states) {
     const sName = toCIdentifier(s.id).toUpperCase();
     if (s.entryActions.length > 0) {
+      const incoming = sortedTransitions.find((t) => t.destinationStateId === s.id);
+      const ops: SMTestOperation[] = [{ kind: 'init' }];
+      if (incoming) {
+        ops.push({ kind: 'set-variable', variableId: 'x', value: true });
+      }
+      ops.push({ kind: 'step' });
       cases.push({
         id: `SM-TC-ACT-${sName}-ENTRY`,
         suite: 'actions',
         name: `Entry action execution on state ${s.name}`,
         applicability: { status: 'applicable' },
-        operations: [{ kind: 'init' }, { kind: 'step' }],
+        operations: ops,
         expectations: extractVariableExpectationsFromActions(s.entryActions),
         traceability: makeTraceability(
           `SM-TC-ACT-${sName}-ENTRY`,

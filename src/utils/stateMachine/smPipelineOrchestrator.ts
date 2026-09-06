@@ -319,17 +319,25 @@ export async function runVerificationPipeline(
 
   // Gate 9: Static Analysis (Independent)
   if (adapters.staticAnalysis && ir.verification?.staticAnalysisToolId) {
-    activities['static-analysis'] = await adapters.staticAnalysis.run({
-      activity: 'static-analysis',
-      sourceDir: path.join(outputDirectory, 'production'),
-      standard: ir.verification?.cStandard ?? 'c11',
-      tool: {
-        toolId: ir.verification.staticAnalysisToolId,
-        executable: ir.verification.staticAnalysisToolId,
-      },
-    });
+    const fn = (adapters.staticAnalysis as any).analyze ?? adapters.staticAnalysis.run;
+    if (fn) {
+      activities['static-analysis'] = await fn.call(adapters.staticAnalysis, {
+        activity: 'static-analysis',
+        sourceDir: path.join(outputDirectory, 'production'),
+        standard: ir.verification?.cStandard ?? 'c11',
+        tool: {
+          toolId: ir.verification.staticAnalysisToolId,
+          executable: ir.verification.staticAnalysisToolId,
+        },
+      });
+    } else {
+      activities['static-analysis'] = createNotRunActivity(
+        'static-analysis',
+        'Static analysis adapter missing runner function',
+      );
+    }
   } else {
-    activities['static-analysis'] = createNotApplicableActivity(
+    activities['static-analysis'] = createNotRunActivity(
       'static-analysis',
       'Static analysis not configured in verification settings',
     );
@@ -338,17 +346,25 @@ export async function runVerificationPipeline(
 
   // Gate 10: MISRA Analysis (Independent)
   if (adapters.misra && ir.verification?.misraToolId) {
-    activities['misra-analysis'] = await adapters.misra.run({
-      activity: 'misra-analysis',
-      sourceDir: path.join(outputDirectory, 'production'),
-      standard: ir.verification?.cStandard ?? 'c90',
-      tool: {
-        toolId: ir.verification.misraToolId,
-        executable: ir.verification.misraToolId,
-      },
-    });
+    const fn = (adapters.misra as any).analyze ?? adapters.misra.run;
+    if (fn) {
+      activities['misra-analysis'] = await fn.call(adapters.misra, {
+        activity: 'misra-analysis',
+        sourceDir: path.join(outputDirectory, 'production'),
+        standard: ir.verification?.cStandard ?? 'c90',
+        tool: {
+          toolId: ir.verification.misraToolId,
+          executable: ir.verification.misraToolId,
+        },
+      });
+    } else {
+      activities['misra-analysis'] = createNotRunActivity(
+        'misra-analysis',
+        'MISRA analysis adapter missing runner function',
+      );
+    }
   } else {
-    activities['misra-analysis'] = createNotApplicableActivity(
+    activities['misra-analysis'] = createNotRunActivity(
       'misra-analysis',
       'MISRA analysis not configured in verification settings',
     );
@@ -356,7 +372,7 @@ export async function runVerificationPipeline(
   writeBundle();
 
   // Gate 11: Target Compilation (Independent)
-  if (ir.verification?.targetId) {
+  if (adapters.target && ir.verification?.targetId) {
     activities['target-compilation'] = await adapters.target.compile({
       targetId: ir.verification.targetId,
       sourceDir: path.join(outputDirectory, 'production'),

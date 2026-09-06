@@ -1,9 +1,31 @@
-import { spawn } from 'node:child_process';
-import { resolve } from 'node:path';
 import {
   type CommandEvidence,
   computeFileSha256,
 } from './smVerificationEvidence';
+
+const getSpawn = (): any => {
+  if (typeof process !== 'undefined' && process.versions?.node) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
+      return eval("require('child_process')").spawn;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
+const getResolve = (): any => {
+  if (typeof process !== 'undefined' && process.versions?.node) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-implied-eval
+      return eval("require('path')").resolve;
+    } catch {
+      // fallback
+    }
+  }
+  return (...parts: string[]) => parts.filter(Boolean).join('/');
+};
 
 export interface ToolRunRequest {
   executable: string;
@@ -35,7 +57,12 @@ const probeToolVersion = async (
 ): Promise<string | null> => {
   return new Promise<string | null>((resolvePromise) => {
     try {
-      const proc = spawn(executable, [...versionArgs], {
+      const spawnFn = getSpawn();
+      if (!spawnFn) {
+        resolvePromise(null);
+        return;
+      }
+      const proc = spawnFn(executable, [...versionArgs], {
         cwd,
         shell: false,
         env: env ? { ...process.env, ...env } : process.env,
@@ -56,7 +83,7 @@ const probeToolVersion = async (
         resolvePromise(null);
       }, 5_000);
 
-      proc.on('close', (code) => {
+      proc.on('close', (code: number | null) => {
         clearTimeout(timer);
         if (code === 0 && stdout.trim().length > 0) {
           const firstLine = stdout.trim().split(/\r?\n/)[0];
@@ -81,12 +108,13 @@ export const runTool = async (request: ToolRunRequest): Promise<ToolRunResult> =
   const startTime = Date.now();
   const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxBuffer = request.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES;
-  const cwd = resolve(request.cwd);
+  const resolveFn = getResolve();
+  const cwd = resolveFn(request.cwd);
 
   const inputHashes: Record<string, string> = {};
   if (request.inputFiles) {
     for (const filePath of request.inputFiles) {
-      inputHashes[filePath] = computeFileSha256(resolve(cwd, filePath));
+      inputHashes[filePath] = computeFileSha256(resolveFn(cwd, filePath));
     }
   }
 
@@ -110,7 +138,31 @@ export const runTool = async (request: ToolRunRequest): Promise<ToolRunResult> =
 
     let child;
     try {
-      child = spawn(request.executable, [...request.args], {
+      const spawnFn = getSpawn();
+      if (!spawnFn) {
+        resolvePromise({
+          available: false,
+          timedOut: false,
+          error: new Error('child_process spawn is not available in current environment'),
+          command: {
+            executable: request.executable,
+            args: request.args,
+            cwd,
+            toolVersion,
+            exitCode: null,
+            signal: null,
+            timedOut: false,
+            stdout: '',
+            stderr: 'child_process spawn is not available in current environment',
+            startedAt,
+            durationMs: 0,
+            inputHashes,
+            outputHashes: {},
+          },
+        });
+        return;
+      }
+      child = spawnFn(request.executable, [...request.args], {
         cwd,
         shell: false,
         env: request.env ? { ...process.env, ...request.env } : process.env,
@@ -174,11 +226,11 @@ export const runTool = async (request: ToolRunRequest): Promise<ToolRunResult> =
       }
     });
 
-    child.on('error', (err) => {
+    child.on('error', (err: Error) => {
       childError = err;
     });
 
-    child.on('close', (code, signal) => {
+    child.on('close', (code: number | null, signal: string | null) => {
       clearTimeout(timer);
       const durationMs = Date.now() - startTime;
       const isEnoent = (childError as NodeJS.ErrnoException)?.code === 'ENOENT';
@@ -186,7 +238,7 @@ export const runTool = async (request: ToolRunRequest): Promise<ToolRunResult> =
       const outputHashes: Record<string, string> = {};
       if (request.outputFiles) {
         for (const filePath of request.outputFiles) {
-          outputHashes[filePath] = computeFileSha256(resolve(cwd, filePath));
+          outputHashes[filePath] = computeFileSha256(resolveFn(cwd, filePath));
         }
       }
 
