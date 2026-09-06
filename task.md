@@ -84,11 +84,11 @@
 - [x] Step 4: Run and commit
 
 ## Task 12: Orchestrate Gates and Enforce Fail-Closed Acceptance
-- [ ] Step 1: Write failing gate-order/status truth-table tests
-- [ ] Step 2: Add dependency-injected request types
-- [ ] Step 3: Implement ordered, resumable evidence writing
-- [ ] Step 4: Implement acceptance policy and requirement matrix
-- [ ] Step 5: Run and commit
+- [x] Step 1: Write failing gate-order/status truth-table tests
+- [x] Step 2: Add dependency-injected request types
+- [x] Step 3: Implement ordered, resumable evidence writing
+- [x] Step 4: Implement acceptance policy and requirement matrix
+- [x] Step 5: Run and commit
 
 ## Task 13: Render Honest Reports From Canonical Evidence
 - [ ] Step 1: Write failing truthfulness/detail tests
