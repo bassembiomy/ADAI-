@@ -1,6 +1,10 @@
 import { execFileSync } from 'child_process';
-import { existsSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readdirSync, statSync, writeFileSync } from 'fs';
+import { join, relative, resolve } from 'path';
+import type { SMCStandard } from './smModel';
+import type { SMTestManifest } from './smTestManifest';
+import type { ActivityEvidence } from './smVerificationEvidence';
+import { runTool } from './smToolRunner';
 import { createGeneratedCodeTestWorkspace } from '../generatedCodeTestWorkspace';
 import {
   coerceSemanticValue,
@@ -1056,4 +1060,346 @@ export const compileAndRunCTrace = (
   } finally {
     workspace.cleanup();
   }
+};
+
+export interface HostCompileRequest {
+  packageDirectory: string;
+  cStandard?: SMCStandard;
+  compiler?: string;
+  compilerArgs?: readonly string[];
+  defines?: readonly string[];
+  extraFlags?: readonly string[];
+  executableName?: string;
+}
+
+export interface HostTestRunRequest {
+  packageDirectory: string;
+  executablePath?: string;
+  args?: readonly string[];
+  manifest?: SMTestManifest;
+  timeoutMs?: number;
+}
+
+export interface SanitizerRunRequest {
+  packageDirectory: string;
+  cStandard?: SMCStandard;
+  compiler?: string;
+  compilerArgs?: readonly string[];
+  defines?: readonly string[];
+  manifest?: SMTestManifest;
+  timeoutMs?: number;
+  executablePath?: string;
+  args?: readonly string[];
+  extraFlags?: readonly string[];
+}
+
+const findPackageSourceFiles = (dir: string, baseDir: string = dir): string[] => {
+  if (!existsSync(dir)) return [];
+  const entries = readdirSync(dir);
+  const results: string[] = [];
+  for (const entry of entries) {
+    const fullPath = join(dir, entry);
+    const stat = statSync(fullPath);
+    if (stat.isDirectory()) {
+      results.push(...findPackageSourceFiles(fullPath, baseDir));
+    } else if (entry.endsWith('.c') && !entry.endsWith('.test.c') && !entry.includes('sm_trace_harness')) {
+      results.push(relative(baseDir, fullPath).replace(/\\/g, '/'));
+    }
+  }
+  return results;
+};
+
+export const compileHostPackage = async (
+  request: HostCompileRequest,
+): Promise<ActivityEvidence> => {
+  const standard = request.cStandard ?? 'c11';
+  const targetExe = join(
+    request.packageDirectory,
+    request.executableName ?? 'host_test_runner.exe',
+  );
+  const sources = findPackageSourceFiles(request.packageDirectory);
+
+  const compileArgs: string[] = [
+    ...(request.compilerArgs ?? []),
+    `-std=${standard}`,
+    '-pedantic-errors',
+    '-Wall',
+    '-Wextra',
+    '-Werror',
+    '-Wpedantic',
+    '-Wconversion',
+    '-Wsign-conversion',
+    '-Wshadow',
+    '-Wvla',
+    '-DADIA_TESTING',
+    '-I.',
+    '-Iproduction',
+    '-Itests',
+    ...(request.defines ? request.defines.map((d) => `-D${d}`) : []),
+    ...(request.extraFlags ?? []),
+    ...sources,
+    '-o',
+    targetExe,
+  ];
+
+  const toolResult = await runTool({
+    executable: request.compiler ?? 'gcc',
+    args: compileArgs,
+    cwd: request.packageDirectory,
+    versionArgs: ['--version'],
+    inputFiles: sources,
+  });
+
+  if (!toolResult.available) {
+    return {
+      activity: 'host-compilation',
+      status: 'NOT_RUN',
+      summary: `Host compiler '${request.compiler ?? 'gcc'}' was not found or unavailable`,
+      command: toolResult.command,
+      details: { compiled: false, error: toolResult.error?.message },
+    };
+  }
+
+  if (toolResult.command.exitCode !== 0) {
+    return {
+      activity: 'host-compilation',
+      status: 'FAIL',
+      summary: `Host compilation failed with exit code ${toolResult.command.exitCode}`,
+      command: toolResult.command,
+      details: { compiled: false, exitCode: toolResult.command.exitCode },
+    };
+  }
+
+  return {
+    activity: 'host-compilation',
+    status: 'PASS',
+    summary: 'Host compilation succeeded cleanly with strict flags',
+    command: toolResult.command,
+    details: { compiled: true, executablePath: targetExe },
+  };
+};
+
+export const runHostTests = async (
+  request: HostTestRunRequest,
+): Promise<ActivityEvidence> => {
+  const executable = request.executablePath ?? join(
+    request.packageDirectory,
+    'host_test_runner.exe',
+  );
+
+  if (!existsSync(executable)) {
+    return {
+      activity: 'host-runtime',
+      status: 'NOT_RUN',
+      summary: `Test runner executable not found: ${executable}`,
+      command: null,
+      details: { executed: false },
+    };
+  }
+
+  const isJs = executable.endsWith('.js');
+  const spawnExe = isJs ? process.execPath : executable;
+  const spawnArgs = isJs ? [executable, ...(request.args ?? [])] : [...(request.args ?? [])];
+
+  const toolResult = await runTool({
+    executable: spawnExe,
+    args: spawnArgs,
+    cwd: request.packageDirectory,
+    timeoutMs: request.timeoutMs ?? 30_000,
+  });
+
+  if (toolResult.timedOut) {
+    return {
+      activity: 'host-runtime',
+      status: 'FAIL',
+      summary: 'Host test execution timed out',
+      command: toolResult.command,
+      details: { timedOut: true },
+    };
+  }
+
+  const caseResults = new Map<string, { status: string; count: number }>();
+  const stdoutLines = toolResult.command.stdout.split(/\r?\n/);
+
+  for (const line of stdoutLines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmed) as { case_id?: string; caseId?: string; status?: string };
+        const id = parsed.case_id ?? parsed.caseId;
+        const status = parsed.status ?? 'UNKNOWN';
+        if (id) {
+          const existing = caseResults.get(id);
+          if (existing) {
+            existing.count += 1;
+          } else {
+            caseResults.set(id, { status, count: 1 });
+          }
+        }
+      } catch {
+        // ignore malformed JSON line
+      }
+    } else {
+      const match = trimmed.match(/\[ADIA_TEST\] RESULT:\s+(\S+)\s+(PASS|FAIL)/);
+      if (match) {
+        const id = match[1];
+        const status = match[2];
+        const existing = caseResults.get(id);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          caseResults.set(id, { status, count: 1 });
+        }
+      }
+    }
+  }
+
+  if (request.manifest) {
+    const applicableCases = request.manifest.cases
+      .filter((c) => c.applicability.status === 'applicable')
+      .map((c) => c.id);
+
+    const missing = applicableCases.filter((id) => !caseResults.has(id));
+    const duplicates = [...caseResults.entries()]
+      .filter(([_, v]) => v.count > 1)
+      .map(([id]) => id);
+
+    if (missing.length > 0 || duplicates.length > 0) {
+      const issues: string[] = [];
+      if (missing.length > 0) issues.push(`Missing test cases: ${missing.join(', ')}`);
+      if (duplicates.length > 0) issues.push(`Duplicate test cases: ${duplicates.join(', ')}`);
+
+      return {
+        activity: 'host-runtime',
+        status: 'FAIL',
+        summary: `Manifest test case inventory mismatch. ${issues.join('; ')}`,
+        command: toolResult.command,
+        details: { missing, duplicates, results: Object.fromEntries(caseResults) },
+      };
+    }
+  }
+
+  const failedTests = [...caseResults.entries()]
+    .filter(([_, v]) => v.status === 'FAIL')
+    .map(([id]) => id);
+
+  if (toolResult.command.exitCode !== 0 || failedTests.length > 0) {
+    return {
+      activity: 'host-runtime',
+      status: 'FAIL',
+      summary: `Host test execution failed (exit code: ${toolResult.command.exitCode}, failed tests: ${failedTests.length})`,
+      command: toolResult.command,
+      details: {
+        failedCount: failedTests.length,
+        failedTests,
+        results: Object.fromEntries(caseResults),
+      },
+    };
+  }
+
+  return {
+    activity: 'host-runtime',
+    status: 'PASS',
+    summary: `All ${caseResults.size} test cases passed cleanly with zero exit code`,
+    command: toolResult.command,
+    details: {
+      passedCount: caseResults.size,
+      results: Object.fromEntries(caseResults),
+    },
+  };
+};
+
+export const runSanitizers = async (
+  request: SanitizerRunRequest,
+): Promise<ActivityEvidence> => {
+  let executable = request.executablePath;
+
+  if (!executable) {
+    const compileResult = await compileHostPackage({
+      packageDirectory: request.packageDirectory,
+      cStandard: request.cStandard,
+      compiler: request.compiler,
+      compilerArgs: request.compilerArgs,
+      defines: request.defines,
+      extraFlags: [
+        '-fsanitize=address,undefined',
+        '-fno-omit-frame-pointer',
+        ...(request.extraFlags ?? []),
+      ],
+      executableName: 'sanitizer_test_runner.exe',
+    });
+
+    if (compileResult.status === 'NOT_RUN') {
+      return {
+        activity: 'sanitizers',
+        status: 'NOT_RUN',
+        summary: compileResult.summary,
+        command: compileResult.command,
+        details: compileResult.details,
+      };
+    }
+
+    if (compileResult.status === 'FAIL') {
+      const errText = (compileResult.command?.stderr ?? '') + (compileResult.command?.stdout ?? '');
+      const isUnsupported = /unrecognized|not supported|unrecognized command-line option|cannot find -l(asan|ubsan)/i.test(errText);
+
+      if (isUnsupported) {
+        return {
+          activity: 'sanitizers',
+          status: 'NOT_RUN',
+          summary: 'Sanitizer flags (-fsanitize=address,undefined) not supported by the host compiler',
+          command: compileResult.command,
+          details: { supported: false, error: errText },
+        };
+      }
+
+      return {
+        activity: 'sanitizers',
+        status: 'FAIL',
+        summary: 'Sanitizer compilation failed',
+        command: compileResult.command,
+        details: compileResult.details,
+      };
+    }
+
+    executable = (compileResult.details as { executablePath: string }).executablePath;
+  }
+
+  const isJs = executable.endsWith('.js');
+  const spawnExe = isJs ? process.execPath : executable;
+  const spawnArgs = isJs ? [executable, ...(request.args ?? [])] : [...(request.args ?? [])];
+
+  const runResult = await runTool({
+    executable: spawnExe,
+    args: spawnArgs,
+    cwd: request.packageDirectory,
+    timeoutMs: request.timeoutMs ?? 30_000,
+  });
+
+  const combinedOutput = runResult.command.stdout + '\n' + runResult.command.stderr;
+  const hasViolation = /AddressSanitizer:|runtime error:|UndefinedBehaviorSanitizer/i.test(combinedOutput);
+
+  if (runResult.command.exitCode !== 0 || hasViolation || runResult.timedOut) {
+    return {
+      activity: 'sanitizers',
+      status: 'FAIL',
+      summary: hasViolation
+        ? 'Sanitizer violation detected during execution'
+        : `Sanitizer execution failed with exit code ${runResult.command.exitCode}`,
+      command: runResult.command,
+      details: {
+        violation: hasViolation,
+        exitCode: runResult.command.exitCode,
+        timedOut: runResult.timedOut,
+      },
+    };
+  }
+
+  return {
+    activity: 'sanitizers',
+    status: 'PASS',
+    summary: 'Execution under AddressSanitizer and UndefinedBehaviorSanitizer passed without violations',
+    command: runResult.command,
+    details: { clean: true },
+  };
 };
