@@ -1,8 +1,10 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { 
   ChevronLeft, Cpu, Settings2, FileText, Code2, Play, Terminal, 
-  Database, ShieldCheck, Zap, HardDrive, RefreshCcw, Radio, Sparkles, CheckCircle2, Trash2
+  Database, ShieldCheck, Zap, HardDrive, RefreshCcw, Radio, Sparkles, CheckCircle2, Trash2,
+  ChevronDown, ChevronUp
 } from 'lucide-react';
+import { ResizableSplitPaneGroup, PanelMaximizeButton } from '../common/ResizableSplitPane';
 import { HILDriverPanel } from './HILDriverPanel';
 import { HILSignalMapper } from './HILSignalMapper';
 import { HILDashboard } from './HILDashboard';
@@ -50,6 +52,27 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
 }) => {
   const [activeMainTab, setActiveMainTab] = useState<MainTab>('configure');
   const [activeFileTab, setActiveFileTab] = useState('hal_config.h');
+
+  // Scalable layout & focus mode states
+  const [tab1Maximized, setTab1Maximized] = useState<number | null>(null);
+  const [tab2Maximized, setTab2Maximized] = useState<number | null>(null);
+  const [isTargetPackCollapsed, setIsTargetPackCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('adia_hil_target_pack_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleTargetPackCollapsed = () => {
+    setIsTargetPackCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('adia_hil_target_pack_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
   
   // Toolchain Configurations
   const [optimization, setOptimization] = useState<'-O0' | '-O1' | '-O2' | '-O3' | '-Os'>('-Os');
@@ -603,85 +626,153 @@ export const HILWorkspace: React.FC<HILWorkspaceProps> = ({
         {/* Tab 1: Configure */}
         {activeMainTab === 'configure' && (
           <div className="flex flex-col gap-4 h-full overflow-hidden">
-            {/* Target Pack Registry Header & Selector */}
-            <div className="shrink-0">
-              <TargetPackSelector
-                selectedTargetId={resolveTargetSelection(config)?.targetId ?? ''}
-                selectedDriverMode={resolveTargetSelection(config)?.driverMode ?? 'vendor'}
-                onSelectTarget={(targetId, mode, manifest) => {
-                  onChangeConfig(applyTargetSelection(config, {
-                    targetId,
-                    packVersion: manifest.packVersion,
-                    driverMode: mode,
-                    boardRevision: manifest.deviceRevision,
-                  }));
-                }}
-              />
-            </div>
-
-            {/* Grid Panels */}
-            <div className="grid grid-cols-12 gap-4 flex-1 overflow-hidden">
-              {/* Driver Setup */}
-              <div className="col-span-4 h-full overflow-hidden">
-                <HILDriverPanel
-                  channels={config.channels}
-                  target={config.target}
-                  onChange={(channels) => onChangeConfig({ ...config, channels })}
-                />
-              </div>
-
-              {/* Variable Mapper */}
-              <div className="col-span-4 h-full overflow-hidden">
-                <HILSignalMapper
-                  channels={config.channels}
-                  mappings={config.mappings}
-                  availableVariables={variables}
-                  onChange={(mappings) => onChangeConfig({ ...config, mappings })}
-                />
-              </div>
-
-              {/* Live Generated HAL Code Preview */}
-            <div className="col-span-4 bg-[#111111] border border-[#222] rounded-xl p-4 flex flex-col h-full overflow-hidden">
-              <div className="flex justify-between items-center mb-3 shrink-0">
-                <div>
-                  <h2 className="text-sm font-bold text-[#e0e0e0] flex items-center gap-1.5">
-                    <Code2 size={16} className="text-[#f97316]" />
-                    HAL Live Preview
-                  </h2>
-                  <p className="text-[10px] text-[#888]">Direct C-code sync preview</p>
-                </div>
-              </div>
-
-              {/* Tab switchers */}
-              <div className="flex border-b border-[#222] gap-1 overflow-x-auto shrink-0 mb-3 no-scrollbar">
-                {generatedFiles.length > 0 ? (
-                  generatedFiles.map(f => (
+            {/* Target Pack Registry Header & Selector (Collapsible) */}
+            {tab1Maximized === null && (
+              <div className="shrink-0 transition-all">
+                {isTargetPackCollapsed ? (
+                  <div className="bg-[#121212] border border-[#262626] rounded-xl px-4 py-2 flex items-center justify-between shadow-md">
+                    <div className="flex items-center gap-3">
+                      <div className="p-1.5 bg-[#f97316]/10 border border-[#f97316]/30 rounded-lg text-[#f97316]">
+                        <Cpu size={16} />
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="font-bold text-[#e0e0e0]">Target Pack:</span>
+                        <span className="text-[#f97316] font-mono font-semibold">
+                          {resolveTargetSelection(config)?.targetId || 'Arduino Mega'}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-800/40">
+                          Pack {resolveTargetSelection(config)?.packVersion || 'v1.0.0'}
+                        </span>
+                        <span className="text-[10px] text-gray-400 font-mono">
+                          Mode: {resolveTargetSelection(config)?.driverMode || 'vendor'}
+                        </span>
+                      </div>
+                    </div>
                     <button
-                      key={f.name}
-                      onClick={() => setActiveFileTab(f.name)}
-                      className={`px-3 py-1.5 text-[10px] font-mono border-t-2 border-transparent transition-all rounded-t select-none ${
-                        activeFileTab === f.name
-                          ? 'border-[#f97316] bg-[#1a1a1a] text-[#f97316] font-semibold'
-                          : 'text-gray-500 hover:text-gray-300'
-                      }`}
+                      type="button"
+                      onClick={toggleTargetPackCollapsed}
+                      className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2.5 py-1 rounded bg-[#1a1a1a] hover:bg-[#252525] border border-[#2e2e2e] transition-colors"
+                      title="Expand Target Pack Details"
                     >
-                      {f.name}
+                      <span>Expand Details</span>
+                      <ChevronDown size={14} />
                     </button>
-                  ))
+                  </div>
                 ) : (
-                  <div className="text-[10px] text-[#555] py-1">No driver files available.</div>
+                  <TargetPackSelector
+                    selectedTargetId={resolveTargetSelection(config)?.targetId ?? ''}
+                    selectedDriverMode={resolveTargetSelection(config)?.driverMode ?? 'vendor'}
+                    onSelectTarget={(targetId, mode, manifest) => {
+                      onChangeConfig(applyTargetSelection(config, {
+                        targetId,
+                        packVersion: manifest.packVersion,
+                        driverMode: mode,
+                        boardRevision: manifest.deviceRevision,
+                      }));
+                    }}
+                    headerAction={
+                      <button
+                        type="button"
+                        onClick={toggleTargetPackCollapsed}
+                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-white px-2 py-1 rounded bg-[#1a1a1a] hover:bg-[#252525] border border-[#333] transition-colors"
+                        title="Collapse Target Pack Details"
+                      >
+                        <span>Collapse</span>
+                        <ChevronUp size={13} />
+                      </button>
+                    }
+                  />
                 )}
               </div>
+            )}
 
-              {/* C-Code Content display */}
-              <div className="flex-1 overflow-auto bg-[#050505] border border-[#222] rounded-lg p-3 text-xs font-mono text-emerald-500/95 no-scrollbar select-text leading-relaxed">
-                <pre className="whitespace-pre">
-                  <code>{activeFileContent}</code>
-                </pre>
-              </div>
+            {/* Scalable Resizable Panels */}
+            <div className="flex-1 overflow-hidden">
+              <ResizableSplitPaneGroup
+                storageKey="adia_hil_tab1_sizes"
+                initialSizes={[30, 35, 35]}
+                minSizes={[15, 15, 15]}
+                maximizedIndex={tab1Maximized}
+                onRestore={() => setTab1Maximized(null)}
+              >
+                {/* Driver Setup */}
+                <div className="h-full overflow-hidden">
+                  <HILDriverPanel
+                    channels={config.channels}
+                    target={config.target}
+                    onChange={(channels) => onChangeConfig({ ...config, channels })}
+                    headerAction={
+                      <PanelMaximizeButton
+                        isMaximized={tab1Maximized === 0}
+                        onToggle={() => setTab1Maximized(tab1Maximized === 0 ? null : 0)}
+                      />
+                    }
+                  />
+                </div>
+
+                {/* Variable Mapper */}
+                <div className="h-full overflow-hidden">
+                  <HILSignalMapper
+                    channels={config.channels}
+                    mappings={config.mappings}
+                    availableVariables={variables}
+                    onChange={(mappings) => onChangeConfig({ ...config, mappings })}
+                    headerAction={
+                      <PanelMaximizeButton
+                        isMaximized={tab1Maximized === 1}
+                        onToggle={() => setTab1Maximized(tab1Maximized === 1 ? null : 1)}
+                      />
+                    }
+                  />
+                </div>
+
+                {/* Live Generated HAL Code Preview */}
+                <div className="bg-[#111111] border border-[#222] rounded-xl p-4 flex flex-col h-full overflow-hidden">
+                  <div className="flex justify-between items-center mb-3 shrink-0">
+                    <div>
+                      <h2 className="text-sm font-bold text-[#e0e0e0] flex items-center gap-1.5">
+                        <Code2 size={16} className="text-[#f97316]" />
+                        HAL Live Preview
+                      </h2>
+                      <p className="text-[10px] text-[#888]">Direct C-code sync preview</p>
+                    </div>
+                    <PanelMaximizeButton
+                      isMaximized={tab1Maximized === 2}
+                      onToggle={() => setTab1Maximized(tab1Maximized === 2 ? null : 2)}
+                    />
+                  </div>
+
+                  {/* Tab switchers */}
+                  <div className="flex border-b border-[#222] gap-1 overflow-x-auto shrink-0 mb-3 no-scrollbar">
+                    {generatedFiles.length > 0 ? (
+                      generatedFiles.map(f => (
+                        <button
+                          key={f.name}
+                          onClick={() => setActiveFileTab(f.name)}
+                          className={`px-3 py-1.5 text-[10px] font-mono border-t-2 border-transparent transition-all rounded-t select-none ${
+                            activeFileTab === f.name
+                              ? 'border-[#f97316] bg-[#1a1a1a] text-[#f97316] font-semibold'
+                              : 'text-gray-500 hover:text-gray-300'
+                          }`}
+                        >
+                          {f.name}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="text-[10px] text-[#555] py-1">No driver files available.</div>
+                    )}
+                  </div>
+
+                  {/* C-Code Content display */}
+                  <div className="flex-1 overflow-auto bg-[#050505] border border-[#222] rounded-lg p-3 text-xs font-mono text-emerald-500/95 no-scrollbar select-text leading-relaxed">
+                    <pre className="whitespace-pre">
+                      <code>{activeFileContent}</code>
+                    </pre>
+                  </div>
+                </div>
+              </ResizableSplitPaneGroup>
             </div>
           </div>
-        </div>
         )}
 
         {/* Tab 2: Build & Flash Toolchain */}

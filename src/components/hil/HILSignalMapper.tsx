@@ -8,6 +8,7 @@ interface HILSignalMapperProps {
   mappings: HILMapping[];
   availableVariables: Array<{ id: string; name: string; type: string }>;
   onChange: (mappings: HILMapping[]) => void;
+  headerAction?: React.ReactNode;
 }
 
 export const parseSafeValueForChannel = (
@@ -50,7 +51,8 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
   channels,
   mappings,
   availableVariables,
-  onChange
+  onChange,
+  headerAction
 }) => {
   const [selectedVar, setSelectedVar] = useState('');
   const [selectedChannel, setSelectedChannel] = useState('');
@@ -102,12 +104,15 @@ export const HILSignalMapper: React.FC<HILSignalMapperProps> = ({
 
   return (
     <div className="bg-[#121212] border border-[#222] rounded-xl p-4 flex flex-col h-full overflow-hidden">
-      <div className="mb-4 shrink-0">
-        <h2 className="text-md font-bold text-[#e0e0e0] flex items-center gap-2">
-          <ArrowLeftRight size={18} className="text-[#f97316]" />
-          Signal Mapping
-        </h2>
-        <p className="text-xs text-[#888]">Bind State Machine variables to hardware drivers</p>
+      <div className="flex justify-between items-center mb-4 shrink-0">
+        <div>
+          <h2 className="text-md font-bold text-[#e0e0e0] flex items-center gap-2">
+            <ArrowLeftRight size={18} className="text-[#f97316]" />
+            Signal Mapping
+          </h2>
+          <p className="text-xs text-[#888]">Bind State Machine variables to hardware drivers</p>
+        </div>
+        {headerAction && <div className="flex items-center">{headerAction}</div>}
       </div>
 
       {/* Add Mapping Form */}
