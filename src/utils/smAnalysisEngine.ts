@@ -25,6 +25,31 @@ import type {
   ModelDiagnostic,
 } from './stateMachine/smModel';
 import type { SemanticModel } from './stateMachine/smSemanticModel';
+import {
+  calculateCFunctionMetrics,
+  type CFunctionMetrics,
+  normalizeAnalysisEvidence,
+  type AnalysisFinding,
+  type AnalysisEvidenceDetails,
+  type AnalysisToolConfig,
+  type SMAnalysisAdapter,
+} from './stateMachine/smAnalysisRunner';
+import {
+  allocateExternalIdentifiers,
+  type ExternalIdentifierInput,
+} from './stateMachine/smCIdentifierPolicy';
+
+export {
+  calculateCFunctionMetrics,
+  type CFunctionMetrics,
+  normalizeAnalysisEvidence,
+  type AnalysisFinding,
+  type AnalysisEvidenceDetails,
+  type AnalysisToolConfig,
+  type SMAnalysisAdapter,
+  allocateExternalIdentifiers,
+  type ExternalIdentifierInput,
+};
 
 // ─── Exported types ──────────────────────────────────────────────────────────
 
@@ -91,6 +116,7 @@ export interface SMAnalysisResult {
     maxPathLength: number;
     stateReachability: number;
     branchCoverage: number;
+    functionMetrics?: CFunctionMetrics[];
   };
   diagnostics: ModelDiagnostic[];
   semantic: {

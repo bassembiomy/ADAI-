@@ -616,4 +616,25 @@ describe('smAnalysisEngine', () => {
     );
     expect(scenariosWithUnreachable.length).toBe(0);
   });
+
+  it('provides C function metrics and deterministic identifier qualification', async () => {
+    const { calculateCFunctionMetrics, allocateExternalIdentifiers } = await import('./smAnalysisEngine');
+
+    const code = `
+void SimpleTask(void) {
+    int x = 1;
+}
+`;
+    const metrics = calculateCFunctionMetrics(code, 'task.c');
+    expect(metrics).toHaveLength(1);
+    expect(metrics[0].name).toBe('SimpleTask');
+    expect(metrics[0].parameterCount).toBe(0);
+    expect(metrics[0].cyclomaticComplexity).toBe(1);
+    expect(metrics[0].stackEstimateBytes).toBe('NOT_RUN');
+
+    const ids = allocateExternalIdentifiers(['long_uuid_identifier_12345678901234567890'], 31);
+    const allocated = ids.get('long_uuid_identifier_12345678901234567890');
+    expect(allocated).toBeDefined();
+    expect(allocated!.length).toBeLessThanOrEqual(31);
+  });
 });

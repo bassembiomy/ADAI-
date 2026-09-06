@@ -71,11 +71,11 @@
 - [x] Step 5: Run and commit
 
 ## Task 10: Add Static/MISRA Analysis, Metrics, and Identifier Qualification
-- [ ] Step 1: Write failing analysis and collision tests
-- [ ] Step 2: Implement deterministic short identifiers
-- [ ] Step 3: Implement analyzer adapters
-- [ ] Step 4: Add metrics
-- [ ] Step 5: Run and commit
+- [x] Step 1: Write failing analysis and collision tests
+- [x] Step 2: Implement deterministic short identifiers
+- [x] Step 3: Implement analyzer adapters
+- [x] Step 4: Add metrics
+- [x] Step 5: Run and commit
 
 ## Task 11: Reuse Target Packs for Target Compilation
 - [ ] Step 1: Write failing target-status tests
