@@ -6340,7 +6340,7 @@ const ADIA = () => {
       case 'entropy':
         setEntropyNodes(d.entropyNodes || []);
         setEntropyEdges(d.entropyEdges || []);
-        if (d.opmSimulationConfig) setOpmSimulationConfig(d.opmSimulationConfig);
+        setOpmSimulationConfig(d.opmSimulationConfig || DEFAULT_OPM_SIMULATION_CONFIG);
         break;
       case 'hmi':
         setHmiComponents(d.hmiComponents || []);

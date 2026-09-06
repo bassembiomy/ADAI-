@@ -245,8 +245,8 @@ export function generateOpmCArtifacts(
     });
   }
 
-  // Fail-closed on any validation or resource error
-  if (diagnostics.length > 0) {
+  // Warnings are included in the manifest, but only errors block generation.
+  if (diagnostics.some((diagnostic) => diagnostic.severity === 'error')) {
     const errorManifest: OpmManifest = {
       generatorVersion: '1.0.0',
       fingerprint: model.fingerprint,
@@ -284,7 +284,7 @@ export function generateOpmCArtifacts(
       });
     }
   }
-  if (diagnostics.length > 0) {
+  if (diagnostics.some((diagnostic) => diagnostic.severity === 'error')) {
     const emptyFailManifest: OpmManifest = {
       generatorVersion: '1.0.0',
       fingerprint: model.fingerprint,

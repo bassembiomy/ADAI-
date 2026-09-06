@@ -3,6 +3,7 @@ import { generateOpmCArtifacts } from '../cGenerator';
 import { compileExecutableOpm } from '../pipeline';
 import { makeApplianceFixture } from '../fixtures';
 import { createDefaultOpmExecutionConfig } from '../executableTypes';
+import type { OpmDiagnostic } from '../executableTypes';
 import type { AppNode, AppEdge } from '../../../components/entropy/EntropyTypes';
 
 function hostileModel() {
@@ -297,6 +298,19 @@ describe('OPM C99 code generator', () => {
   });
 
   describe('Task 6: Strengthen embedded-oriented OPM C artifacts', () => {
+    it('emits artifacts when compilation only has warnings', () => {
+      const warning: OpmDiagnostic = {
+        code: 'OPM_TEST_WARNING',
+        severity: 'warning',
+        message: 'non-fatal test warning',
+        source: { elementId: 'test', propertyPath: 'test' },
+      };
+      const result = generateOpmCArtifacts(applianceModel, [warning]);
+      expect(result.files.length).toBeGreaterThan(0);
+      expect(result.diagnostics).toContainEqual(warning);
+      expect(result.manifest.qualificationStatus).toBe('pending');
+    });
+
     it('emits standard public API names, fixed-width types, bounded arrays, and comprehensive manifest fields', () => {
       const result = generateOpmCArtifacts(applianceModel);
       const runtimeH = result.files.find(f => f.name === 'opm_runtime.h')?.content ?? '';

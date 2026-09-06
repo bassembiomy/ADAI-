@@ -31,7 +31,7 @@ import { OpmLegend } from './OpmLegend';
 import { OpmDockShell } from './OpmDockShell';
 import { loadDocks, saveDocks, PAGE_PRESETS, type OpmDocks } from './OpmDockState';
 import { OpmDiagnosticsBadge } from './OpmDiagnosticsBadge';
-import type { OpmSourceRef } from '../../engine/opm/executableTypes';
+import { createDefaultOpmExecutionConfig, type OpmExecutionConfig, type OpmSourceRef } from '../../engine/opm/executableTypes';
 import { convertOpmNodeType, convertOpmEdgeType, type OpmNodeKind } from './OpmMigrations';
 import { validateOpmPortConnection } from './OpmPortContracts';
 import { getValidTargetNodeIds } from './OpmLinkComposer';
@@ -226,6 +226,17 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     return normalizeOpmSimulationConfig(opmSimulationConfig);
   }, [opmSimulationConfig]);
 
+  const opmExecutionConfig: OpmExecutionConfig = useMemo(() => {
+    const config = createDefaultOpmExecutionConfig();
+    config.settings = {
+      ...config.settings,
+      tickMs: activeOpmConfig.tickMs,
+      maxTicks: activeOpmConfig.maxTicks,
+      maxEventsPerTick: activeOpmConfig.maxEventsPerTick,
+    };
+    return config;
+  }, [activeOpmConfig]);
+
   const [configDraft, setConfigDraft] = useState<{
     tickMs: number;
     maxTicks: number;
@@ -235,20 +246,24 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     maxTicks: activeOpmConfig.maxTicks,
     maxEventsPerTick: activeOpmConfig.maxEventsPerTick,
   });
+  const configDraftRef = useRef(configDraft);
   const [configErrors, setConfigErrors] = useState<string[]>([]);
 
   useEffect(() => {
-    setConfigDraft({
+    const nextDraft = {
       tickMs: activeOpmConfig.tickMs,
       maxTicks: activeOpmConfig.maxTicks,
       maxEventsPerTick: activeOpmConfig.maxEventsPerTick,
-    });
+    };
+    configDraftRef.current = nextDraft;
+    setConfigDraft(nextDraft);
     setConfigErrors([]);
   }, [activeOpmConfig]);
 
   const handleConfigFieldChange = useCallback((field: keyof OpmSimulationConfig, rawValue: string | number) => {
     const num = typeof rawValue === 'number' ? rawValue : Number(rawValue);
-    const nextDraft = { ...configDraft, [field]: num };
+    const nextDraft = { ...configDraftRef.current, [field]: num };
+    configDraftRef.current = nextDraft;
     setConfigDraft(nextDraft);
 
     const parsed = parseOpmSimulationConfig({
@@ -265,7 +280,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       setConfigErrors(parsed.diagnostics);
       // Keep previous valid config active; do NOT update active config
     }
-  }, [configDraft, activeOpmConfig, onOpmSimulationConfigChange]);
+  }, [activeOpmConfig, onOpmSimulationConfigChange]);
   
   // Selected Node Details
   const [selectedNode, setSelectedNode] = useState<AppNode | null>(null);
@@ -965,11 +980,16 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
 
   // --- Simulation Runner Engine ---
   const runSimTick = useCallback(() => {
-    const result = stepSimulation(nodes, edges, simStateRef.current);
+    if (simStateRef.current.tick >= activeOpmConfig.maxTicks) {
+      setSimRunning(false);
+      logSim('warning', `Simulation stopped at maxTicks (${activeOpmConfig.maxTicks}).`);
+      return;
+    }
+    const result = stepSimulation(nodes, edges, simStateRef.current, activeOpmConfig.maxEventsPerTick);
     simStateRef.current = result.state;
     setNodes(prev => applySimResultToNodes(prev, result.state, result.firingProcessIds));
     result.logs.forEach(l => logSim(l.type, l.message));
-  }, [nodes, edges]);
+  }, [nodes, edges, activeOpmConfig]);
 
   // Handle simulation timer (uses isolated OPM tickMs)
   useEffect(() => {
@@ -2406,6 +2426,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             <OpmCodeGenerationWorkspace
               nodes={nodes as never}
               edges={edges as never}
+              executionConfig={opmExecutionConfig}
               state={opmArtifactState}
               onStateChange={setOpmArtifactState}
               opmSimulationConfig={activeOpmConfig}

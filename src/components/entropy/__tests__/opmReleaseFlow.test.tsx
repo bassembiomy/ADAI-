@@ -8,7 +8,7 @@ import {
   markVerified,
   markFailed,
 } from '../OpmCodeGenerationWorkspace';
-import { convertOpmNodeType, type OpmMigrationWarning } from '../OpmMigrations';
+import { convertOpmNodeType, convertOpmEdgeType, type OpmMigrationWarning } from '../OpmMigrations';
 import { validateOpmPortConnection } from '../OpmPortContracts';
 import { normalizeOpmSimulationConfig } from '../OpmSimulationConfig';
 import { createOpmRuntime, stepOpmRuntime } from '../../../engine/opm/runtime';
@@ -96,6 +96,19 @@ describe('OPM Standard Editor Release Flow', () => {
       },
     },
   ];
+
+  it('keeps the React Flow edge renderer when changing an OPM link kind', () => {
+    const edge: AppEdge = {
+      id: 'link-1',
+      type: 'opmEdge',
+      source: 'obj_pump',
+      target: 'proc_heat',
+      data: { type: 'agent' },
+    };
+    const converted = convertOpmEdgeType(edge, 'result').edge;
+    expect(converted.type).toBe('opmEdge');
+    expect(converted.data.type).toBe('result');
+  });
 
   it('completes the full lifecycle: selection, migration warning, connections, tick edit, simulation, codegen, and verification gating', () => {
     // 1. Block conversion warning

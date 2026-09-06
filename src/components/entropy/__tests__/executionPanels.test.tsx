@@ -416,6 +416,14 @@ describe('OPM typed executable modeling editors', () => {
     expect(html).toContain('disabled');
   });
 
+  it('rejects invalid execution tick and event limits', () => {
+    const bad = { ...createDefaultOpmTargetSettings(), maxTicks: 0, maxEventsPerTick: -1 };
+    const result = validateTargetSettings(bad);
+    expect(result.diagnostics.map((d) => d.source.propertyPath)).toEqual(
+      expect.arrayContaining(['settings.maxTicks', 'settings.maxEventsPerTick']),
+    );
+  });
+
   it('verifies Studio Ribbon clusters and OpmSimulationScope integration in EntropyWorkspace', async () => {
     const fs = await import('fs');
     const path = await import('path');
