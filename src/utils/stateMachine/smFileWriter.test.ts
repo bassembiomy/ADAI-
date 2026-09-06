@@ -29,10 +29,17 @@ describe('smFileWriter', () => {
     const workspace = createGeneratedCodeTestWorkspace('traversal-test');
     expect(() => writeGeneratedArtifacts(workspace.directory, [{ name: '../outside.c', content: 'hack', overwritePolicy: 'ALWAYS' }])).toThrow('Path traversal forbidden');
     expect(() => writeGeneratedArtifacts(workspace.directory, [{ name: '/absolute/path.c', content: 'hack', overwritePolicy: 'ALWAYS' }])).toThrow('Path traversal forbidden');
+    expect(() => writeGeneratedArtifacts(workspace.directory, [{ name: 'C:escape.c', content: 'hack', overwritePolicy: 'ALWAYS' }])).toThrow('Path traversal forbidden');
+    expect(() => writeGeneratedArtifacts(workspace.directory, [{ name: 'sub/../../outside.c', content: 'hack', overwritePolicy: 'ALWAYS' }])).toThrow('Path traversal forbidden');
   });
 
-  it('allows valid nested paths with dots in filenames', () => {
+  it('allows valid nested paths with dots in filenames and creates directories recursively', () => {
     const workspace = createGeneratedCodeTestWorkspace('valid-dots-test');
-    expect(() => writeGeneratedArtifacts(workspace.directory, [{ name: 'generated/foo..bar.c', content: '// ok', overwritePolicy: 'ALWAYS' }])).not.toThrow();
+    expect(() => writeGeneratedArtifacts(workspace.directory, [
+      { name: 'production/sm_core.c', content: '// production', overwritePolicy: 'ALWAYS' },
+      { name: 'tests/test_sm_init.c', content: '// test', overwritePolicy: 'ALWAYS' },
+      { name: 'verification/test_manifest.json', content: '{}', overwritePolicy: 'ALWAYS' },
+      { name: 'generated/foo..bar.c', content: '// ok', overwritePolicy: 'ALWAYS' },
+    ])).not.toThrow();
   });
 });

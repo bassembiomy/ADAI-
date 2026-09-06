@@ -30,10 +30,13 @@ import {
   type VerificationEvidence,
 } from './smReports';
 import { renderHostSmokeHarness } from './smHostHarness';
+import { buildSMTestManifest } from './smTestPlanBuilder';
+import { renderSMCTestPackage } from './smCTestSuiteRenderer';
 
 export interface CGeneratorOptions {
   includeTestShims?: boolean;
   includeHostHarness?: boolean;
+  includeVerificationPackage?: boolean;
   vectorCount?: number;
   reportSourceFiles?: readonly GeneratedCFile[];
   verificationEvidence?: VerificationEvidence;
@@ -1735,6 +1738,46 @@ export const generateCArtifacts = (
     ...implementationFiles,
     ...(options.reportSourceFiles ?? []),
   ].filter((file) => /\.(?:c|h|cpp|ino)$/i.test(file.name));
+
+  if (options.includeVerificationPackage) {
+    const manifest = buildSMTestManifest(ir);
+    const testPackage = renderSMCTestPackage(ir, manifest, {
+      standard: ir.verification.cStandard,
+    });
+
+    const productionFiles: GeneratedCFile[] = implementationFiles.map((file) => ({
+      name: `production/${file.name}`,
+      content: file.content,
+    }));
+
+    const reportFiles: GeneratedCFile[] = [
+      {
+        name: 'verification/sm_testing_report.md',
+        content: renderSemanticTestingReport(
+          analysis,
+          options.verificationEvidence ?? DEFAULT_VERIFICATION_EVIDENCE,
+          ir,
+        ),
+      },
+      {
+        name: 'verification/static_metrics_report.md',
+        content: renderStaticMetricsReport(analysis, measuredSourceFiles, ir),
+      },
+    ];
+
+    const packageFiles: GeneratedCFile[] = [
+      ...productionFiles,
+      ...testPackage,
+      ...reportFiles,
+    ];
+
+    return {
+      files: packageFiles,
+      errors: [],
+      warnings: [],
+    };
+  }
+
   const allFiles = [
     ...implementationFiles,
     {
