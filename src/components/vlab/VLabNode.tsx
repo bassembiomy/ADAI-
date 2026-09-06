@@ -177,6 +177,14 @@ export const VLabNode = ({ id, data, selected }: { id: string; data: any; select
                   className={isConnected ? 'vlab-handle vlab-handle-connected' : 'vlab-handle'}
                   style={{ ['--pc' as any]: pc }}
                 />
+                <Handle
+                  type="target"
+                  position={rotatedPos}
+                  id={handleId}
+                  title={port.domain === 'isothermal_liquid' ? 'Isothermal Liquid conserving port' : `${port.domain || data.domain || 'Physical'} conserving port`}
+                  className={isConnected ? 'vlab-handle vlab-handle-connected' : 'vlab-handle'}
+                  style={{ ['--pc' as any]: pc }}
+                />
                 {/* Port label */}
                 <div className="absolute text-[8px] font-bold select-none pointer-events-none uppercase whitespace-nowrap"
                   style={{
