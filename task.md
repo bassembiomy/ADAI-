@@ -78,10 +78,10 @@
 - [x] Step 5: Run and commit
 
 ## Task 11: Reuse Target Packs for Target Compilation
-- [ ] Step 1: Write failing target-status tests
-- [ ] Step 2: Add a declarative target verification recipe
-- [ ] Step 3: Implement target compilation
-- [ ] Step 4: Run and commit
+- [x] Step 1: Write failing target-status tests
+- [x] Step 2: Add a declarative target verification recipe
+- [x] Step 3: Implement target compilation
+- [x] Step 4: Run and commit
 
 ## Task 12: Orchestrate Gates and Enforce Fail-Closed Acceptance
 - [ ] Step 1: Write failing gate-order/status truth-table tests
