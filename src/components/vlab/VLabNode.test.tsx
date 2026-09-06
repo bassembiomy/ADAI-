@@ -50,4 +50,23 @@ describe('VLabNode Schematic Presentation', () => {
 
     expect(html).toContain('symbol-bright');
   });
+
+  it('renders hydraulic conserving ports as connectable targets as well as sources', () => {
+    const data = {
+      type: 'hydraulic_reference_il',
+      label: 'Hydraulic Reference',
+      color: '#2563eb',
+      rotation: 0,
+      ports: [{ id: 'a', pos: 'top', label: 'A', domain: 'isothermal_liquid' }]
+    };
+
+    const html = renderToStaticMarkup(
+      <ReactFlowProvider>
+        <VLabNode id="hydraulic_ref_1" data={data} selected={false} />
+      </ReactFlowProvider>
+    );
+
+    expect(html).toContain('data-id="1-null-hydraulic_ref_1-a-source"');
+    expect(html).toContain('data-id="1-null-hydraulic_ref_1-a-target"');
+  });
 });
