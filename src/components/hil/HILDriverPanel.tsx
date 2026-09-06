@@ -7,6 +7,7 @@ interface HILDriverPanelProps {
   channels: DriverChannel[];
   onChange: (channels: DriverChannel[]) => void;
   target?: TargetMCU;
+  headerAction?: React.ReactNode;
 }
 
 const PERIPHERALS: PeripheralType[] = ['GPIO', 'ADC', 'DAC', 'PWM', 'UART', 'SPI', 'I2C', 'CAN', 'Timer'];
@@ -93,7 +94,7 @@ export const TARGET_PIN_MAPS: Record<TargetMCU, Record<PeripheralType, string[]>
 
 import { validatePinAssignments, PinValidationIssue } from '../../engine/hil/pinValidator';
 
-export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChange, target = 'Generic' }) => {
+export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChange, target = 'Generic', headerAction }) => {
   const mcuTarget = target || 'Generic';
 
   const issues: PinValidationIssue[] = React.useMemo(
@@ -147,12 +148,15 @@ export const HILDriverPanel: React.FC<HILDriverPanelProps> = ({ channels, onChan
           </h2>
           <p className="text-xs text-[#888]">Define pin assignments per peripheral for {mcuTarget}</p>
         </div>
-        <button
-          onClick={addChannel}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f97316] text-[#0a0a0a] text-xs font-semibold rounded hover:bg-[#ea580c] transition-colors"
-        >
-          <Plus size={14} /> Add Channel
-        </button>
+        <div className="flex items-center gap-2">
+          {headerAction}
+          <button
+            onClick={addChannel}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f97316] text-[#0a0a0a] text-xs font-semibold rounded hover:bg-[#ea580c] transition-colors"
+          >
+            <Plus size={14} /> Add Channel
+          </button>
+        </div>
       </div>
 
       {errors.length > 0 && (
