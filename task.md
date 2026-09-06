@@ -91,10 +91,10 @@
 - [x] Step 5: Run and commit
 
 ## Task 13: Render Honest Reports From Canonical Evidence
-- [ ] Step 1: Write failing truthfulness/detail tests
-- [ ] Step 2: Remove legacy evidence defaults
-- [ ] Step 3: Render complete evidence sections
-- [ ] Step 4: Run and commit
+- [x] Step 1: Write failing truthfulness/detail tests
+- [x] Step 2: Remove legacy evidence defaults
+- [x] Step 3: Render complete evidence sections
+- [x] Step 4: Run and commit
 
 ## Task 14: Wire Public Generation, CLI, and CI Scripts
 - [ ] Step 1: Write failing public/CLI tests

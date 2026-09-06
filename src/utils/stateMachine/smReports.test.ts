@@ -260,4 +260,136 @@ describe('semantic state-machine reports', () => {
     expect(rendered).toContain('Differential trace: PASS');
     expect(rendered).toContain('Compiled X-Bridges execution: NOT RUN');
   });
+
+  it('renders complete honest evidence sections from canonical VerificationBundle', () => {
+    const model = flatOrFixture();
+    const built = buildSemanticModel(model);
+    const analysis = analyzeSemanticModel(built.ir!);
+
+    const bundle: any = {
+      schemaVersion: 1,
+      modelHash: 'model_hash_9876',
+      generatedAt: '2026-09-06T12:00:00.000Z',
+      overallStatus: 'PASS',
+      acceptance: true,
+      activities: {
+        'structural': { activity: 'structural', status: 'PASS', summary: 'Structural validation passed', command: null, details: null },
+        'semantic': { activity: 'semantic', status: 'PASS', summary: 'Semantic validation passed', command: null, details: null },
+        'test-generation': { activity: 'test-generation', status: 'PASS', summary: 'Generated 14 test cases', command: null, details: { testCaseCount: 14 } },
+        'host-compilation': {
+          activity: 'host-compilation',
+          status: 'PASS',
+          summary: 'Host gcc compile passed',
+          command: {
+            executable: 'gcc',
+            args: ['-std=c11', '-Wall'],
+            cwd: '.',
+            toolVersion: '13.2.0',
+            exitCode: 0,
+            signal: null,
+            timedOut: false,
+            stdout: '',
+            stderr: '',
+            startedAt: '',
+            durationMs: 100,
+            inputHashes: {},
+            outputHashes: {},
+          },
+          details: null,
+        },
+        'host-runtime': { activity: 'host-runtime', status: 'PASS', summary: '14/14 tests passed', command: null, details: { totalTests: 14, passed: 14, failed: 0 } },
+        'sanitizers': { activity: 'sanitizers', status: 'PASS', summary: 'ASan and UBSan clean', command: null, details: { asan: 'PASS', ubsan: 'PASS' } },
+        'statement-coverage': { activity: 'statement-coverage', status: 'PASS', summary: '100% statement coverage', command: null, details: { measuredPercent: 100, covered: 50, total: 50, threshold: 100, uncovered: [] } },
+        'branch-coverage': { activity: 'branch-coverage', status: 'PASS', summary: '100% branch coverage', command: null, details: { measuredPercent: 100, covered: 20, total: 20, threshold: 100, uncovered: [] } },
+        'mcdc-coverage': { activity: 'mcdc-coverage', status: 'NOT_APPLICABLE', summary: 'Non-safety model', command: null, details: null },
+        'differential': { activity: 'differential', status: 'PASS', summary: 'Trace match across 10 cycles', command: null, details: { totalCycles: 10, divergence: null, modelHash: 'model_hash_9876' } },
+        'static-analysis': { activity: 'static-analysis', status: 'PASS', summary: '0 violations', command: null, details: { tool: 'Clang-Tidy', version: '18.1.0', rules: ['bugprone-*'], mandatoryCount: 0, requiredCount: 0, advisoryCount: 0, deviations: [], suppressions: [], locations: [] } },
+        'misra-analysis': { activity: 'misra-analysis', status: 'PASS', summary: '0 violations', command: null, details: { tool: 'PC-Lint', version: '2.0', rules: ['MISRA C:2012'], mandatoryCount: 0, requiredCount: 0, advisoryCount: 0, deviations: [], suppressions: [], locations: [] } },
+        'target-compilation': { activity: 'target-compilation', status: 'PASS', summary: 'Compiled for stm32f407', command: null, details: { targetId: 'stm32f407', packVersion: '1.0.0', packHash: 'pack_123', compiler: 'arm-none-eabi-gcc', compilerVersion: '13.2.1', outputFile: 'firmware.elf', outputHash: 'elf_hash_999', diagnostics: [] } },
+        'hardware': { activity: 'hardware', status: 'PENDING', summary: 'Pending physical bench access', command: null, details: null },
+      },
+    };
+
+    const rendered = renderTestingReport(analysis, bundle, built.ir);
+
+    expect(rendered).toContain('Structural validation: PASS');
+    expect(rendered).toContain('Host compilation: PASS');
+    expect(rendered).toContain('gcc');
+    expect(rendered).toContain('-std=c11');
+    expect(rendered).toContain('Statement coverage: 100.0% (PASS)');
+    expect(rendered).toContain('Branch coverage: 100.0% (PASS)');
+    expect(rendered).toContain('MC/DC coverage: NOT_APPLICABLE');
+    expect(rendered).toContain('Target compilation: PASS');
+    expect(rendered).toContain('stm32f407');
+    expect(rendered).toContain('elf_hash_999');
+    expect(rendered).toContain('Target hardware: PENDING');
+    expect(rendered).toContain('Overall acceptance: ACCEPTED');
+  });
+
+  it('renders divergence and uncovered details when verification fails', () => {
+    const model = flatOrFixture();
+    const built = buildSemanticModel(model);
+    const analysis = analyzeSemanticModel(built.ir!);
+
+    const failingBundle: any = {
+      schemaVersion: 1,
+      modelHash: 'model_hash_fail',
+      generatedAt: '2026-09-06T12:00:00.000Z',
+      overallStatus: 'FAIL',
+      acceptance: false,
+      activities: {
+        'structural': { activity: 'structural', status: 'PASS', summary: 'Passed', command: null, details: null },
+        'semantic': { activity: 'semantic', status: 'PASS', summary: 'Passed', command: null, details: null },
+        'test-generation': { activity: 'test-generation', status: 'PASS', summary: 'Passed', command: null, details: null },
+        'host-compilation': { activity: 'host-compilation', status: 'PASS', summary: 'Passed', command: null, details: null },
+        'host-runtime': { activity: 'host-runtime', status: 'FAIL', summary: 'Assertion failure', command: null, details: { failed: 1 } },
+        'sanitizers': { activity: 'sanitizers', status: 'PASS', summary: 'Clean', command: null, details: null },
+        'statement-coverage': {
+          activity: 'statement-coverage',
+          status: 'FAIL',
+          summary: '85% below 100% threshold',
+          command: null,
+          details: {
+            measuredPercent: 85,
+            covered: 85,
+            total: 100,
+            threshold: 100,
+            uncovered: [{ file: 'sm_core.c', functionName: 'SM_Step', line: 42, kind: 'statement', reason: 'Unexecuted branch', requiredAction: 'Add stimulus vector' }],
+          },
+        },
+        'branch-coverage': { activity: 'branch-coverage', status: 'PASS', summary: 'Passed', command: null, details: null },
+        'mcdc-coverage': { activity: 'mcdc-coverage', status: 'NOT_APPLICABLE', summary: 'N/A', command: null, details: null },
+        'differential': {
+          activity: 'differential',
+          status: 'FAIL',
+          summary: 'Mismatch at cycle 3',
+          command: null,
+          details: {
+            totalCycles: 5,
+            divergence: {
+              cycle: 3,
+              field: 'variables.count',
+              expected: 4,
+              actual: 3,
+              modelHash: 'model_hash_fail',
+              replayCommand: 'npm run test:differential --replay',
+            },
+            modelHash: 'model_hash_fail',
+          },
+        },
+        'static-analysis': { activity: 'static-analysis', status: 'NOT_RUN', summary: 'Not run', command: null, details: null },
+        'misra-analysis': { activity: 'misra-analysis', status: 'NOT_RUN', summary: 'Not run', command: null, details: null },
+        'target-compilation': { activity: 'target-compilation', status: 'NOT_RUN', summary: 'Not run', command: null, details: null },
+        'hardware': { activity: 'hardware', status: 'PENDING', summary: 'Pending', command: null, details: null },
+      },
+    };
+
+    const rendered = renderTestingReport(analysis, failingBundle, built.ir);
+
+    expect(rendered).toContain('Overall acceptance: REJECTED');
+    expect(rendered).toContain('Uncovered code locations:');
+    expect(rendered).toContain('sm_core.c:42');
+    expect(rendered).toContain('Divergence at cycle 3: variables.count (expected 4, got 3)');
+    expect(rendered).toContain('npm run test:differential --replay');
+  });
 });

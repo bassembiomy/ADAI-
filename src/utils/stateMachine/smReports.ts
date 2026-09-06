@@ -2,6 +2,7 @@ import type { SMAnalysisResult } from '../smAnalysisEngine';
 import { XB_CAPABILITIES } from './xbCapabilities';
 import type { SemanticModel } from './smSemanticModel';
 import type { XBNumericType } from './xbNumeric';
+import type { VerificationBundle } from './smVerificationEvidence';
 
 export type VerificationEvidenceStatus =
   | 'pass'
@@ -243,10 +244,108 @@ const renderStateTraceabilityTable = (ir?: SemanticModel): string => {
 
 export const renderTestingReport = (
   analysis: SMAnalysisResult,
-  evidence: VerificationEvidence = DEFAULT_VERIFICATION_EVIDENCE,
+  evidence: VerificationEvidence | VerificationBundle = DEFAULT_VERIFICATION_EVIDENCE,
   ir?: SemanticModel,
 ): string => {
-  const report = generateSemanticReport(analysis, evidence, ir);
+  if ('activities' in (evidence as any)) {
+    const bundle = evidence as unknown as VerificationBundle;
+    const acts = bundle.activities;
+
+    const fmtStatus = (status?: string) => status ?? 'NOT_RUN';
+    const compileCmd = acts['host-compilation']?.command;
+    const compileFlags = compileCmd?.args ? compileCmd.args.join(' ') : 'None recorded';
+    const compileTool = compileCmd?.executable ?? 'compiler';
+
+    const stmtAct = acts['statement-coverage'];
+    const stmtDetails = stmtAct?.details as any;
+    const stmtPct = stmtDetails?.measuredPercent !== undefined ? `${stmtDetails.measuredPercent.toFixed(1)}%` : 'NOT RUN';
+
+    const branchAct = acts['branch-coverage'];
+    const branchDetails = branchAct?.details as any;
+    const branchPct = branchDetails?.measuredPercent !== undefined ? `${branchDetails.measuredPercent.toFixed(1)}%` : 'NOT RUN';
+
+    const mcdcAct = acts['mcdc-coverage'];
+
+    const diffAct = acts['differential'];
+    const diffDetails = diffAct?.details as any;
+    const divergence = diffDetails?.divergence;
+
+    const staticAct = acts['static-analysis'];
+    const misraAct = acts['misra-analysis'];
+
+    const targetAct = acts['target-compilation'];
+    const targetDetails = targetAct?.details as any;
+
+    const hwAct = acts['hardware'];
+
+    let uncoveredSection = '';
+    if (stmtDetails?.uncovered && stmtDetails.uncovered.length > 0) {
+      const list = stmtDetails.uncovered.map((u: any) => `- ${u.file}:${u.line} (${u.functionName}) [${u.kind}]: ${u.reason} -> ${u.requiredAction}`).join('\n');
+      uncoveredSection = `\n### Uncovered code locations:\n${list}\n`;
+    }
+
+    let divergenceSection = '';
+    if (divergence) {
+      divergenceSection = `\n### Differential trace divergence:\n- Divergence at cycle ${divergence.cycle}: ${divergence.field} (expected ${JSON.stringify(divergence.expected)}, got ${JSON.stringify(divergence.actual)})\n` +
+        (divergence.replayCommand ? `- Replay command: \`${divergence.replayCommand}\`\n` : '');
+    }
+
+    const acceptanceLabel = bundle.acceptance ? 'ACCEPTED' : 'REJECTED';
+
+    const report = generateSemanticReport(analysis, DEFAULT_VERIFICATION_EVIDENCE, ir);
+    const section = report.testing;
+    const xb = report.xBridges;
+
+    return `# ADIA State Machine Generated-C Verification Report
+
+## Summary
+
+- Execution mode: ${bundle.overallStatus}
+- Overall acceptance: ${acceptanceLabel} (${bundle.overallStatus})
+- Static AST reachability: ${section.reachabilityPercent.toFixed(1)}%
+
+## Structural and semantic validation
+
+- Structural validation: ${fmtStatus(acts['structural']?.status)}
+- Semantic validation: ${fmtStatus(acts['semantic']?.status)}
+- Test generation: ${fmtStatus(acts['test-generation']?.status)}
+
+## Host verification evidence
+
+- Host compilation: ${fmtStatus(acts['host-compilation']?.status)} (${compileTool} ${compileFlags})
+- Host runtime: ${fmtStatus(acts['host-runtime']?.status)}
+- Sanitizers: ${fmtStatus(acts['sanitizers']?.status)}
+- Statement coverage: ${stmtPct} (${fmtStatus(stmtAct?.status)})
+- Branch coverage: ${branchPct} (${fmtStatus(branchAct?.status)})
+- MC/DC coverage: ${fmtStatus(mcdcAct?.status)}
+${uncoveredSection}
+- Differential trace: ${fmtStatus(diffAct?.status)} (${diffDetails?.totalCycles ?? 0} cycles)
+${divergenceSection}
+## Static and MISRA analysis
+
+- Static analysis: ${fmtStatus(staticAct?.status)}
+- MISRA analysis: ${fmtStatus(misraAct?.status)}
+
+## Target and hardware verification
+
+- Target compilation: ${fmtStatus(targetAct?.status)} (Target: ${targetDetails?.targetId ?? 'None'}, Output: ${targetDetails?.outputHash ?? 'None'})
+- Target hardware: ${fmtStatus(hwAct?.status)}
+
+## X-Bridges code generation
+
+- X-Bridges states: ${xb.stateCount}
+- X-Bridges blocks: ${xb.blockCount}
+- Operation evaluations per tick: ${xb.operationEvaluationsPerTick}
+- Estimated X-Bridges static memory lower bound: ${xb.estimatedStaticMemoryLowerBoundBytes} bytes (${xb.memoryEstimateAccuracy}; excludes target ABI padding and linker allocation)
+- Solver: ${xb.solvers.length === 0 ? 'None' : xb.solvers.map((solver) => `${solver.stateId}: ${solver.kind}, ${solver.stepSeconds} s, ${solver.substepsPerTick} substeps/tick`).join('; ')}
+- Numeric types: ${idsOrNone(xb.numericTypes)}
+- Required target capabilities: ${idsOrNone(xb.capabilityDependencies)}
+- Unsupported embedded capabilities: ${idsOrNone(xb.unsupportedCapabilities)}
+
+${renderStateTraceabilityTable(ir)}`;
+  }
+
+  const report = generateSemanticReport(analysis, evidence as VerificationEvidence, ir);
   const section = report.testing;
   const xb = report.xBridges;
 
