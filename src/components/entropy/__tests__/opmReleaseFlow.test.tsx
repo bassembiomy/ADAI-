@@ -107,7 +107,7 @@ describe('OPM Standard Editor Release Flow', () => {
     };
     const converted = convertOpmEdgeType(edge, 'result').edge;
     expect(converted.type).toBe('opmEdge');
-    expect(converted.data.type).toBe('result');
+    expect(converted.data?.type).toBe('result');
   });
 
   it('completes the full lifecycle: selection, migration warning, connections, tick edit, simulation, codegen, and verification gating', () => {
