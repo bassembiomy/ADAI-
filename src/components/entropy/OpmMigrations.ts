@@ -66,9 +66,12 @@ export function convertOpmEdgeType(
   const clonedEdge: AppEdge = JSON.parse(JSON.stringify(edge));
 
   if (clonedEdge.data) {
+    // `data.type` is the semantic OPM link kind; the top-level type is the
+    // React Flow renderer and must remain registered as `opmEdge`.
+    clonedEdge.data.type = nextType;
     clonedEdge.data.linkType = nextType;
   }
-  (clonedEdge as any).type = nextType;
+  clonedEdge.type = 'opmEdge';
 
   return { edge: clonedEdge, warnings };
 }

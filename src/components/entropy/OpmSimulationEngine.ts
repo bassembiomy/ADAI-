@@ -195,7 +195,8 @@ function stateNodeName(nodes: AppNode[], stateId: string): string {
 export function stepSimulation(
   nodes: AppNode[],
   edges: AppEdge[],
-  prev: OpmSimulationState
+  prev: OpmSimulationState,
+  maxEventsPerTick?: number,
 ): OpmSimTickResult {
   const tick = prev.tick + 1;
   const logs: OpmSimLog[] = [];
@@ -218,7 +219,7 @@ export function stepSimulation(
     return na.localeCompare(nb) || a.localeCompare(b);
   });
 
-  for (const procId of sortedEligible) {
+  for (const procId of sortedEligible.slice(0, maxEventsPerTick ?? sortedEligible.length)) {
     const conflict = edges.find(
       e => e.target === procId && e.data?.type === 'consumption' && consumerOfState.has(e.source)
     );

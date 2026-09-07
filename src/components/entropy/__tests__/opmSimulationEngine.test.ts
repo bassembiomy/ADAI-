@@ -145,6 +145,20 @@ describe('OpmSimulationEngine — step', () => {
     expect(r.state.trace.some((t: any) => t.processId === 'proc-b' && t.kind === 'blocked')).toBe(true);
   });
 
+  test('limits the number of process events handled in one tick', () => {
+    const nodes: AppNode[] = [
+      ...makeFixtureNodes(),
+      { id: 'proc-b', type: 'opmProcess', position: { x: 300, y: 150 },
+        data: { name: 'Second', type: 'process', physical: false, parentId: null } },
+    ];
+    const edges = [
+      edge('e1', 'sys', 'proc', 'agent'),
+      edge('e2', 'sys', 'proc-b', 'agent'),
+    ];
+    const result = stepSimulation(nodes, edges, initializeSimulation(nodes), 1);
+    expect(result.firingProcessIds).toHaveLength(1);
+  });
+
   test('triggered process fires only on the tick after its state event', () => {
     const nodes = makeFixtureNodes();
     // 'On' entry triggers proc; proc has no other enabler requirements

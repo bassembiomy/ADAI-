@@ -1788,7 +1788,9 @@ export const blockEquations: Record<string, BlockEquationFactory> = {
   },
 
   pressure_sensor: ({ across, branch }) => {
-    return [branch[0] - across[0]];
+    // An ideal pressure sensor has zero hydraulic flow and exposes the
+    // measured pressure through its physical signal output branch.
+    return [branch[0], branch[1] - across[0]];
   },
 
   flow_sensor: ({ across, branch }) => {

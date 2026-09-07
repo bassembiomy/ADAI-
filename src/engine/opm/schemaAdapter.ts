@@ -54,6 +54,7 @@ export function validateTargetSettings(settings: OpmTargetSettings): {
   const diagnostics: OpmDiagnostic[] = [];
   const positiveFields: Array<keyof OpmTargetSettings> = [
     'tickMs', 'eventQueueCapacity', 'maxStagedWrites', 'maxTransitions', 'traceCapacity',
+    'maxTicks', 'maxEventsPerTick',
   ];
   for (const field of positiveFields) {
     const value = settings[field];
