@@ -128,5 +128,12 @@ export function createStateMachineVerificationReport(options: SMReportOptions): 
       ],
       releaseCondition: 'Do not flash generated C firmware to target MCU hardware until all T01–T02 tests have recorded PASS evidence in this verification log.',
     },
+    consistency: {
+      revision: options.bundle?.modelHash || 'rev_sm_verified',
+      removedRelationshipIds: [],
+      removedConnectorIds: [],
+      errors: [],
+    },
   };
 }
+

@@ -95,7 +95,17 @@ import { HELP_DATA } from './HelpData';
 import { VLAB_LIBRARY } from './utils/vlabLibrary';
 import { BLOCK_LIBRARY as XBRIDGES_LIBRARY } from './engine/xbridges/BlockDefinitions';
 import JSZip from 'jszip';
-import { buildReportHierarchy, generateDiagramScript } from './features/reporting';
+import {
+  buildReportHierarchy,
+  generateDiagramScript,
+  createReportSnapshot,
+  toHierarchySource,
+  renderRequirementsDiagram,
+  renderBddDiagram,
+  renderInteractiveDiagramHierarchy,
+  renderStateMachineDiagrams,
+} from './features/reporting';
+import { cascadeDeleteReportElement } from './services/reportModelConsistency';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -9248,11 +9258,19 @@ const ADIA = () => {
   const deleteBlock = useCallback((id: string) => {
     const block = blocks.find(b => b.id === id);
     if (!block) return;
-    setRelationships(prev => prev.filter(r => r.sourceId !== id && r.targetId !== id));
-    setBlocks(prev => prev.filter(b => b.id !== id));
+    addToHistory();
+    const kind = block.stereotype === 'requirement' ? 'requirement' : 'block';
+    const nextModel = cascadeDeleteReportElement(
+      { blocks, relationships, parts, connectors },
+      { kind, id }
+    );
+    setBlocks(nextModel.blocks as BlockData[]);
+    setRelationships(nextModel.relationships as RelationshipData[]);
+    setParts(nextModel.parts as PartData[]);
+    setConnectors(nextModel.connectors as ConnectorData[]);
     setSelectedIds(prev => prev.filter(sid => sid !== id));
-    addError('info', `Deleted block: ${block.name}`);
-  }, [blocks, addError]);
+    addError('info', `Deleted ${kind}: ${block.name}`);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory]);
 
   const createRequirement = useCallback((x: number, y: number) => {
     createBlock(x, y, 'requirement');
@@ -9280,10 +9298,11 @@ const ADIA = () => {
   }, []);
 
   const deleteRelationship = useCallback((id: string) => {
+    addToHistory();
     setRelationships(prev => prev.filter(r => r.id !== id));
     setSelectedIds(prev => prev.filter(sid => sid !== id));
     addError('info', 'Deleted relationship');
-  }, [addError]);
+  }, [addError, addToHistory]);
 
   // IBD OPERATIONS
   const createPart = useCallback((x: number, y: number) => {
@@ -9309,11 +9328,19 @@ const ADIA = () => {
   }, []);
 
   const deletePart = useCallback((id: string) => {
-    setConnectors(prev => prev.filter(c => c.sourcePartId !== id && c.targetPartId !== id));
-    setParts(prev => prev.filter(p => p.id !== id));
+    const part = parts.find(p => p.id === id);
+    if (!part) return;
+    addToHistory();
+    const nextModel = cascadeDeleteReportElement(
+      { blocks, relationships, parts, connectors },
+      { kind: 'part', id }
+    );
+    setParts(nextModel.parts as PartData[]);
+    setConnectors(nextModel.connectors as ConnectorData[]);
+    setRelationships(nextModel.relationships as RelationshipData[]);
     setSelectedIds(prev => prev.filter(sid => sid !== id));
-    addError('info', 'Deleted part');
-  }, [addError]);
+    addError('info', `Deleted part: ${part.name}`);
+  }, [blocks, relationships, parts, connectors, addError, addToHistory]);
 
   const handleDoubleClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
     if (e.target === canvasRef.current) {
@@ -9523,10 +9550,11 @@ const ADIA = () => {
   }, [isCreatingConnector, connectorSource, parts, blocks, addError, addToHistory, isCreatingTransition, transitionSourceId, createInterfaceRealization, currentLayerId]);
 
   const deleteConnector = useCallback((id: string) => {
+    addToHistory();
     setConnectors(prev => prev.filter(c => c.id !== id));
     setSelectedIds(prev => prev.filter(sid => sid !== id));
     addError('info', 'Deleted connector');
-  }, [addError]);
+  }, [addError, addToHistory]);
 
   const updateConnector = useCallback((id: string, updates: Partial<ConnectorData>) => {
     setConnectors(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
@@ -10356,6 +10384,18 @@ const ADIA = () => {
   }, [handleOpenProjectDialog]);
 
   const handleGenerateReport = useCallback((projectName: string = 'My Project', author: string = 'Engineer') => {
+    const snapshot = createReportSnapshot({
+      blocks,
+      relationships,
+      parts,
+      connectors,
+      states,
+      layers,
+      transitions,
+      junctions,
+    });
+    const hierarchySource = toHierarchySource(snapshot);
+
     const style = `
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fff; color: #333; padding: 40px; line-height: 1.6; max-width: 900px; margin: 0 auto; }
         h1 { color: #f97316; border-bottom: 2px solid #f97316; padding-bottom: 10px; margin-bottom: 20px; }
@@ -10402,6 +10442,17 @@ const ADIA = () => {
     let html = `<html><head><title>${escapeHtml(projectName)} Report</title><style>${style}</style></head><body>`;
     html += `<h1>${escapeHtml(projectName)}</h1>`;
     html += `<div class="meta"><strong>Author:</strong> ${escapeHtml(author)} &bull; <strong>Date:</strong> ${escapeHtml(new Date().toLocaleString())} &bull; <strong>Engine:</strong> ${escapeHtml(VERSION)}</div>`;
+
+    if (snapshot.diagnostics) {
+      const removedRelCount = snapshot.diagnostics.removedRelationshipIds?.length || 0;
+      const removedConnCount = snapshot.diagnostics.removedConnectorIds?.length || 0;
+      const totalRemoved = removedRelCount + removedConnCount;
+      const errorCount = snapshot.diagnostics.errors?.length || 0;
+
+      html += `<div class="consistency-summary" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; padding: 12px 16px; border-radius: 6px; margin-bottom: 24px; font-size: 0.9em;">
+        <strong>Model Consistency Summary:</strong> revision: ${escapeHtml(snapshot.revision)} &bull; removed connections: ${totalRemoved} (relationships: ${removedRelCount}, connectors: ${removedConnCount}) &bull; errors: ${errorCount}
+      </div>`;
+    }
 
     // ═══════════════════════════════════════════════════════════════════
     // AUTO-LAYOUT ENGINE FOR REPORT DIAGRAMS
@@ -10618,17 +10669,7 @@ const ADIA = () => {
       return nodes;
     };
 
-    // Helper to generate SVG for report
-    const reportHierarchy = buildReportHierarchy({
-      blocks,
-      parts,
-      connectors,
-      relationships,
-      states,
-      layers,
-      transitions,
-      junctions
-    });
+    const reportHierarchy = buildReportHierarchy(hierarchySource);
 
     // Helper to generate SVG for report
     const renderDiagramSVG = (nodes: any[], edges: any[], type: 'req' | 'bdd' | 'ibd' | 'statemachine' | 'xbridges', contextId?: string) => {
@@ -11367,19 +11408,11 @@ const ADIA = () => {
     };
 
     // 1. Requirements
-    const reqs = blocks.filter(b => b.stereotype === 'requirement');
-    console.log('[REPORT DEBUG] Total blocks:', blocks.length, 'Total relationships:', relationships.length);
-    console.log('[REPORT DEBUG] Requirement blocks:', reqs.length);
+    const reqs = hierarchySource.blocks.filter(b => b.stereotype === 'requirement');
     if (reqs.length > 0) {
-      const reqRels = relationships.filter(r => {
-        const s = blocks.find(b => b.id === r.sourceId);
-        const t = blocks.find(b => b.id === r.targetId);
-        return s?.stereotype === 'requirement' && t?.stereotype === 'requirement';
-      });
-      console.log('[REPORT DEBUG] Requirement relationships:', reqRels.length, reqRels.map(r => `${r.sourceId}->${r.targetId} (${r.type})`));
-      html += renderDiagramSVG(reqs, reqRels, 'req');
-
       html += `<h2>1. Requirements</h2>`;
+      html += renderRequirementsDiagram({ blocks: hierarchySource.blocks, relationships: hierarchySource.relationships });
+
       html += `<table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.9em;">`;
       html += `<tr style="background-color: #f5f5f5; text-align: left; color: #333;">
                 <th style="padding: 10px; border: 1px solid #ddd;">ID</th>
@@ -11394,9 +11427,9 @@ const ADIA = () => {
       const childrenMap = new Map<string, string[]>();
       const parentSet = new Set<string>();
 
-      relationships.forEach(rel => {
-        const source = blocks.find(b => b.id === rel.sourceId);
-        const target = blocks.find(b => b.id === rel.targetId);
+      hierarchySource.relationships.forEach(rel => {
+        const source = hierarchySource.blocks.find(b => b.id === rel.sourceId);
+        const target = hierarchySource.blocks.find(b => b.id === rel.targetId);
         if (source?.stereotype === 'requirement' && target?.stereotype === 'requirement') {
           // Only use specific SysML relationships for parent-child nesting, matching the Traceability Matrix
           if (rel.type === 'composition' || rel.type === 'derive' || rel.type === 'deriveReqt') {
@@ -11414,12 +11447,12 @@ const ADIA = () => {
       const renderReqRow = (r: BlockData, level: number) => {
         const prefix = '&nbsp;&nbsp;&nbsp;&nbsp;'.repeat(level) + (level > 0 ? '└ ' : '');
         let rowHtml = `<tr>
-          <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; color: #888;">${r.reqId}</td>
-          <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${prefix}${r.name}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${r.status || 'Draft'}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${r.priority || 'Medium'}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${r.assignedTo || 'Unassigned'}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${r.description || ''}</td>
+          <td style="padding: 10px; border: 1px solid #ddd; font-family: monospace; color: #888;">${escapeHtml(r.reqId || '')}</td>
+          <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${prefix}${escapeHtml(r.name)}</td>
+          <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(r.status || 'Draft')}</td>
+          <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(r.priority || 'Medium')}</td>
+          <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(r.assignedTo || 'Unassigned')}</td>
+          <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(r.description || '')}</td>
         </tr>`;
 
         const children = childrenMap.get(r.id) || [];
@@ -11447,35 +11480,30 @@ const ADIA = () => {
     }
 
     // 2. BDD
-    const bddBlocks = blocks.filter(b => {
+    const bddBlocks = hierarchySource.blocks.filter(b => {
       if (b.stereotype === 'requirement') return false;
       return true;
     });
 
     if (bddBlocks.length > 0) {
-      const bddRels = relationships.filter(r => {
-        const s = blocks.find(b => b.id === r.sourceId);
-        const t = blocks.find(b => b.id === r.targetId);
-        if (!s || !t) return false;
-        return s.stereotype !== 'requirement' && t.stereotype !== 'requirement';
-      });
-      console.log('[REPORT DEBUG] BDD blocks:', bddBlocks.length, bddBlocks.map(b => `${b.id}:${b.name}`));
-      console.log('[REPORT DEBUG] BDD relationships:', bddRels.length, bddRels.map(r => `${r.sourceId}->${r.targetId} (${r.type})`));
-
       html += `<h2>2. System Architecture (BDD)</h2>`;
-      html += `<div class="diagram-container"><div class="diagram-cell">` + renderDiagramSVG(bddBlocks, bddRels, 'bdd') + `</div></div>`;
+      html += renderBddDiagram({
+        blocks: hierarchySource.blocks,
+        relationships: hierarchySource.relationships,
+        parts: hierarchySource.parts,
+      });
       html += `<div class="tree">`;
       bddBlocks.forEach(b => {
         html += `<div class="item">
                 <div class="item-header">«${escapeHtml(b.stereotype)}» ${escapeHtml(b.name)}</div>`;
-        if (b.properties.length > 0) {
+        if (b.properties && b.properties.length > 0) {
           html += `<div class="props"><strong>Properties:</strong><ul>`;
           b.properties.forEach(p => html += `<li>${escapeHtml(p.name)}: ${escapeHtml(p.type)} ${p.defaultValue ? '= ' + escapeHtml(p.defaultValue) : ''}</li>`);
           html += `</ul></div>`;
         }
-        if (b.ports.length > 0) {
+        if (b.ports && b.ports.length > 0) {
           html += `<div class="props"><strong>Ports:</strong><ul>`;
-          b.ports.forEach(p => html += `<li>${escapeHtml(p.name)} : ${escapeHtml(p.type)} (${escapeHtml(p.kind)})</li>`);
+          b.ports.forEach(p => html += `<li>${escapeHtml(p.name)} : ${escapeHtml(p.type)} (${escapeHtml(p.kind || 'standard')})</li>`);
           html += `</ul></div>`;
         }
         html += `</div>`;
@@ -11484,18 +11512,20 @@ const ADIA = () => {
     }
 
     // 3. IBD
-    if (parts.length > 0) {
+    // 3. IBD
+    if (hierarchySource.parts.length > 0) {
       html += `<h2>3. Internal Structure (IBD)</h2>`;
+      html += renderInteractiveDiagramHierarchy(hierarchySource, { title: projectName });
 
-      // Generate diagrams for each context
-      const contextIds = Array.from(new Set(parts.map(p => p.blockId).filter(id => id !== null))) as string[];
+      // Generate context listings
+      const contextIds = Array.from(new Set(hierarchySource.parts.map(p => p.blockId).filter(id => id !== null))) as string[];
       contextIds.forEach(ctxId => {
-        const ctxBlock = blocks.find(b => b.id === ctxId);
+        const ctxBlock = hierarchySource.blocks.find(b => b.id === ctxId);
         const ctxName = ctxBlock ? ctxBlock.name : (ctxId === 'root' ? 'Root' : 'Unknown');
-        const ctxParts = parts.filter(p => p.blockId === ctxId);
-        const ctxConns = connectors.filter(c => {
-          const s = parts.find(p => p.id === c.sourcePartId);
-          const t = parts.find(p => p.id === c.targetPartId);
+        const ctxParts = hierarchySource.parts.filter(p => p.blockId === ctxId);
+        const ctxConns = hierarchySource.connectors.filter(c => {
+          const s = hierarchySource.parts.find(p => p.id === c.sourcePartId);
+          const t = hierarchySource.parts.find(p => p.id === c.targetPartId);
 
           // Connectors in this context block
           const sInCtx = s && s.blockId === ctxId;
@@ -11511,12 +11541,11 @@ const ADIA = () => {
         if (ctxParts.length > 0) {
           html += `<div class="tree" style="margin-bottom: 30px;">`;
           html += `<h3>Context: ${escapeHtml(ctxName)}</h3>`;
-          html += `<div class="diagram-container"><div class="diagram-cell">` + renderDiagramSVG(ctxParts, ctxConns, 'ibd', ctxId) + `</div></div>`;
 
           // Parts list for this context
           html += `<div class="props"><strong>Parts:</strong><ul>`;
           ctxParts.forEach(p => {
-            const typeName = blocks.find(b => b.id === p.typeId)?.name || 'Unknown';
+            const typeName = hierarchySource.blocks.find(b => b.id === p.typeId)?.name || 'Unknown';
             html += `<li>${escapeHtml(p.name)} : ${escapeHtml(typeName)}</li>`;
           });
           html += `</ul></div>`;
@@ -11525,14 +11554,14 @@ const ADIA = () => {
           if (ctxConns.length > 0) {
             html += `<div class="props"><strong>Connections:</strong><ul>`;
             ctxConns.forEach(c => {
-              const sPart = parts.find(p => p.id === c.sourcePartId)?.name || 'Env';
-              const tPart = parts.find(p => p.id === c.targetPartId)?.name || 'Env';
+              const sPart = hierarchySource.parts.find(p => p.id === c.sourcePartId)?.name || 'Env';
+              const tPart = hierarchySource.parts.find(p => p.id === c.targetPartId)?.name || 'Env';
 
-              const sBlock = parts.find(p => p.id === c.sourcePartId)
-                ? blocks.find(b => b.id === (parts.find(p => p.id === c.sourcePartId)?.typeId))
+              const sBlock = hierarchySource.parts.find(p => p.id === c.sourcePartId)
+                ? hierarchySource.blocks.find(b => b.id === (hierarchySource.parts.find(p => p.id === c.sourcePartId)?.typeId))
                 : ctxBlock;
-              const tBlock = parts.find(p => p.id === c.targetPartId)
-                ? blocks.find(b => b.id === (parts.find(p => p.id === c.targetPartId)?.typeId))
+              const tBlock = hierarchySource.parts.find(p => p.id === c.targetPartId)
+                ? hierarchySource.blocks.find(b => b.id === (hierarchySource.parts.find(p => p.id === c.targetPartId)?.typeId))
                 : ctxBlock;
 
               const sPortName = sBlock?.ports?.find((p: any) => p.id === c.sourcePortId)?.name || c.sourcePortId || '';
@@ -11551,47 +11580,27 @@ const ADIA = () => {
     }
 
     // 4. State Machine
-    if (states.length > 0) {
+    if (hierarchySource.states.length > 0) {
       html += `<h2>4. State Machine</h2><div class="tree">`;
 
-      // Generate diagrams for all layers
-      html += `<div class="diagram-container">`;
-      layers.forEach(layer => {
-        const layerStates = states.filter(s => layer.stateIds.includes(s.id));
-        const layerJunctions = junctions.filter(j => layer.junctionIds.includes(j.id));
-        const layerTransitions = transitions.filter(t => layer.transitionIds.includes(t.id));
-
-        if (layerStates.length > 0 || layerJunctions.length > 0) {
-          const layerName = layer.name || (layer.id === 'root' ? 'Root' : 'Unknown');
-
-          // Mix states and junctions into nodes list, adding type
-          const nodes: any[] = [];
-          if (layer.parentStateId) {
-            const parentState = states.find(s => s.id === layer.parentStateId);
-            if (parentState) {
-              nodes.push({ ...parentState, nodeType: 'parentState' });
-            }
-          }
-          nodes.push(
-            ...layerStates.map(s => ({ ...s, nodeType: 'state' })),
-            ...layerJunctions.map(j => ({ ...j, nodeType: 'junction', width: 20, height: 20, x: j.x - 10, y: j.y - 10 }))
-          );
-
-          html += `<div class="diagram-cell"><h3>Layer: ${escapeHtml(layerName)}</h3>`;
-          html += renderDiagramSVG(nodes, layerTransitions, 'statemachine');
-          html += `</div>`;
-        }
+      const smFigures = renderStateMachineDiagrams({
+        layers: hierarchySource.layers,
+        states: hierarchySource.states,
+        junctions: hierarchySource.junctions,
+        transitions: hierarchySource.transitions,
       });
-      html += `</div>`;
+      smFigures.forEach(fig => {
+        html += fig;
+      });
 
-      states.forEach(s => {
+      hierarchySource.states.forEach(s => {
         html += `<div class="item"><div class="item-header">${escapeHtml(s.name)} <span class="tag">State</span></div>`;
-        const outgoing = transitions.filter(t => t.sourceId === s.id);
+        const outgoing = hierarchySource.transitions.filter(t => t.sourceId === s.id);
         const internal = (s.internalTransitions || '').split('\n').filter(l => l.trim());
         if (outgoing.length > 0 || internal.length > 0) {
           html += `<div class="props"><strong>Transitions:</strong><ul>`;
           outgoing.forEach(t => {
-            const target = states.find(st => st.id === t.targetId)?.name || junctions.find(j => j.id === t.targetId)?.name || 'Unknown';
+            const target = hierarchySource.states.find(st => st.id === t.targetId)?.name || hierarchySource.junctions.find(j => j.id === t.targetId)?.name || 'Unknown';
             html += `<li>To <strong>${escapeHtml(target)}</strong>: [${escapeHtml(t.condition || 'true')}]${t.action ? ' / ' + escapeHtml(t.action) : ''}</li>`;
           });
           internal.forEach(i => {
@@ -11605,7 +11614,15 @@ const ADIA = () => {
       html += `</div>`;
 
       // 4.1 Critical Path Analysis (Critical Batches)
-      const analysis = analyzeStateMachine({ tickMs, states, junctions, transitions, variables, layers, safetyMode });
+      const analysis = analyzeStateMachine({
+        tickMs,
+        states: hierarchySource.states as StateData[],
+        junctions: hierarchySource.junctions as JunctionData[],
+        transitions: hierarchySource.transitions as TransitionData[],
+        variables,
+        layers: hierarchySource.layers as Layer[],
+        safetyMode,
+      });
       const analysisErrors = analysis.diagnostics.filter(
         diagnostic => diagnostic.severity === 'error',
       );

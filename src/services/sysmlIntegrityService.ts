@@ -245,7 +245,7 @@ export function cascadeDeletePort(portId: string, state: SysMLDiagramState): Sys
 
 export function cascadeDeletePart(partId: string, state: SysMLDiagramState): SysMLDiagramState {
   const impact = previewDeletionImpact(partId, state);
-  const affectedParts = new Set([partId, ...impact.affectedParts]);
+  const affectedParts = new Set([partId, ...(impact.affectedParts ?? [])]);
   const affectedConnectors = new Set(impact.affectedConnectors);
   const affectedRelations = new Set(impact.affectedRelations);
 

@@ -1,3 +1,5 @@
+import type { ReportModelDiagnostics } from '../../services/reportModelConsistency';
+
 export interface ReportHeader {
   systemTitle: string;
   documentTitle: string;
@@ -61,6 +63,13 @@ export interface ReportFinalDecision {
   releaseCondition: string;
 }
 
+export interface ReportConsistencySummary {
+  revision: string;
+  removedRelationshipIds: string[];
+  removedConnectorIds: string[];
+  errors: ReportModelDiagnostics['errors'];
+}
+
 export interface ReportDocument {
   header: ReportHeader;
   safetyGate: ReportSafetyGate;
@@ -68,6 +77,7 @@ export interface ReportDocument {
   testProcedures: ReportTestProcedure[];
   decisionMatrix: ReportDecisionMatrix;
   finalDecisionCriteria: ReportFinalDecision;
+  consistency: ReportConsistencySummary;
 }
 
 export function validateReportDocument(doc: any): doc is ReportDocument {
@@ -77,5 +87,11 @@ export function validateReportDocument(doc: any): doc is ReportDocument {
   if (!Array.isArray(doc.testProcedures) || doc.testProcedures.length === 0) return false;
   if (!Array.isArray(doc.decisionMatrix?.rows)) return false;
   if (!doc.finalDecisionCriteria?.releaseCondition) return false;
+  if (!doc.consistency || typeof doc.consistency !== 'object') return false;
+  if (typeof doc.consistency.revision !== 'string') return false;
+  if (!Array.isArray(doc.consistency.removedRelationshipIds)) return false;
+  if (!Array.isArray(doc.consistency.removedConnectorIds)) return false;
+  if (!Array.isArray(doc.consistency.errors)) return false;
   return true;
 }
+

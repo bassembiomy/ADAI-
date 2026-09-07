@@ -51,6 +51,12 @@ const mockDoc: ReportDocument = {
     classifications: [{ title: 'Classification 1', criteria: ['Crit A'] }],
     releaseCondition: 'Release condition A',
   },
+  consistency: {
+    revision: 'rev-0',
+    removedRelationshipIds: [],
+    removedConnectorIds: [],
+    errors: [],
+  },
 };
 
 describe('exportReportToPdf', () => {

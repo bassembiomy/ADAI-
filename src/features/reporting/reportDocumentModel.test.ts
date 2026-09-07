@@ -60,6 +60,12 @@ describe('ReportDocumentModel', () => {
         ],
         releaseCondition: 'Do not authorize higher current until verified.',
       },
+      consistency: {
+        revision: 'rev_test_123',
+        removedRelationshipIds: [],
+        removedConnectorIds: [],
+        errors: [],
+      },
     };
 
     expect(validateReportDocument(validDoc)).toBe(true);
@@ -69,4 +75,16 @@ describe('ReportDocumentModel', () => {
     const invalidDoc = {} as ReportDocument;
     expect(validateReportDocument(invalidDoc)).toBe(false);
   });
+
+  it('rejects a document missing consistency metadata', () => {
+    const docWithoutConsistency = {
+      header: { documentTitle: 'Title', primaryObjective: 'Objective' },
+      safetyGate: { stopTestRule: 'Rule' },
+      testProcedures: [{ id: '1' }],
+      decisionMatrix: { rows: [] },
+      finalDecisionCriteria: { releaseCondition: 'Condition' },
+    };
+    expect(validateReportDocument(docWithoutConsistency)).toBe(false);
+  });
 });
+
