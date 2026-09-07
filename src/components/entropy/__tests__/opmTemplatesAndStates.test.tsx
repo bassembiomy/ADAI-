@@ -81,6 +81,54 @@ describe('ISO 19450 OPM Templates and State Area Standards', () => {
     }
   });
 
+  test('switchLed template adheres to ISO 19450 standard: Switch and LED own Off and On states with triggers', () => {
+    const { nodes, edges, errors } = parseOpl((OPM_EXAMPLES as any).switchLed.oplText);
+    expect(errors).toHaveLength(0);
+
+    const switchObj = nodes.find(n => n.data.name === 'Switch');
+    const ledObj = nodes.find(n => n.data.name === 'LED');
+    const userObj = nodes.find(n => n.data.name === 'User');
+    const toggleProc = nodes.find(n => n.data.name === 'Toggle_Switch');
+    const lightProc = nodes.find(n => n.data.name === 'Light_LED');
+    const extProc = nodes.find(n => n.data.name === 'Extinguish_LED');
+
+    expect(switchObj).toBeDefined();
+    expect(switchObj!.data.physical).toBe(true);
+    expect(ledObj).toBeDefined();
+    expect(ledObj!.data.physical).toBe(true);
+    expect(userObj).toBeDefined();
+    expect(userObj!.data.physical).toBe(true);
+    expect(toggleProc).toBeDefined();
+    expect(lightProc).toBeDefined();
+    expect(extProc).toBeDefined();
+
+    // States
+    const switchStates = nodes.filter(n => n.data.type === 'state' && n.parentId === switchObj!.id);
+    expect(switchStates).toHaveLength(2);
+    const ledStates = nodes.filter(n => n.data.type === 'state' && n.parentId === ledObj!.id);
+    expect(ledStates).toHaveLength(2);
+
+    // Agent link: User -> Toggle_Switch
+    const agentEdge = edges.find(e => e.source === userObj!.id && e.target === toggleProc!.id);
+    expect(agentEdge).toBeDefined();
+    expect(agentEdge!.data?.type).toBe('agent');
+
+    // Trigger link: Switch in state On -> Light_LED
+    const switchOnState = switchStates.find(s => s.data.name === 'On');
+    const switchOffState = switchStates.find(s => s.data.name === 'Off');
+    expect(switchOnState).toBeDefined();
+    expect(switchOffState).toBeDefined();
+
+    const onTrigger = edges.find(e => e.source === switchOnState!.id && e.target === lightProc!.id);
+    expect(onTrigger).toBeDefined();
+    expect(onTrigger!.data?.type).toBe('trigger');
+
+    // Trigger link: Switch in state Off -> Extinguish_LED
+    const offTrigger = edges.find(e => e.source === switchOffState!.id && e.target === extProc!.id);
+    expect(offTrigger).toBeDefined();
+    expect(offTrigger!.data?.type).toBe('trigger');
+  });
+
   test('OPMObjectNode renders reserved state tray with dynamic expansion', () => {
     const objectNodeWithStates: any = {
       id: 'obj_chamber',

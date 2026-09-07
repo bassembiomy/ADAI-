@@ -160,14 +160,18 @@ export function parseOpl(text: string, existingNodes: AppNode[] = []): {
   // Helper to find or create a node
   const getOrCreateNode = (name: string, type: OPMNodeType, parentNodeId?: string | null): AppNode => {
     const cleaned = name.replace(/^(object|process|state)\s+/i, '').trim();
-    const key = cleaned.toLowerCase();
+    const key = (type === 'state' && parentNodeId) ? `${parentNodeId}:${cleaned.toLowerCase()}` : cleaned.toLowerCase();
     
     // Check if we already created it in this parse session
     let node = nodeMap.get(key);
     if (node) return node;
 
     // Check if it exists in existingNodes to preserve positions
-    const existing = existingNodes.find(n => n.data.name.toLowerCase() === key && n.data.type === type);
+    const existing = existingNodes.find(n =>
+      n.data.name.toLowerCase() === cleaned.toLowerCase() &&
+      n.data.type === type &&
+      (type !== 'state' || (parentNodeId ? (n.parentId === parentNodeId || n.data.parentId === parentNodeId) : true))
+    );
     
     const id = existing ? existing.id : uuidv4();
     const x = existing ? existing.position.x : Math.random() * 500 + 50;
