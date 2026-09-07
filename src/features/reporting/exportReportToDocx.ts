@@ -135,6 +135,23 @@ export async function generateReportDocxBuffer(doc: ReportDocument): Promise<Uin
             ],
             spacing: { after: 400 },
           }),
+          ...(doc.consistency ? [
+            new Paragraph({
+              children: [
+                new TextRun({ text: `Model revision: ${doc.consistency.revision}`, size: 18, color: '64748B' }),
+              ],
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `Removed connections: ${(doc.consistency.removedRelationshipIds?.length || 0) + (doc.consistency.removedConnectorIds?.length || 0)} (relationships: ${doc.consistency.removedRelationshipIds?.join(', ') || 'none'}, connectors: ${doc.consistency.removedConnectorIds?.join(', ') || 'none'})`,
+                  size: 18,
+                  color: '64748B',
+                }),
+              ],
+              spacing: { after: 400 },
+            }),
+          ] : []),
 
           // Section 1: Safety Gate
           new Paragraph({

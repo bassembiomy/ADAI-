@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import JSZip from 'jszip';
 import { generateReportDocxBuffer } from './exportReportToDocx';
 import type { ReportDocument } from './reportDocumentModel';
 
@@ -64,5 +65,21 @@ describe('exportReportToDocx', () => {
     const buffer = await generateReportDocxBuffer(sampleDoc);
     expect(buffer).toBeDefined();
     expect(buffer.byteLength).toBeGreaterThan(2000);
+  });
+
+  it('includes report consistency metadata in the DOCX output', async () => {
+    const buffer = await generateReportDocxBuffer({
+      ...sampleDoc,
+      consistency: {
+        revision: 'rev-1',
+        removedRelationshipIds: ['rel-1'],
+        removedConnectorIds: [],
+        errors: [],
+      },
+    });
+    const zip = await JSZip.loadAsync(buffer);
+    const xml = await zip.file('word/document.xml')!.async('string');
+    expect(xml).toContain('rev-1');
+    expect(xml.toLowerCase()).toContain('removed connections');
   });
 });

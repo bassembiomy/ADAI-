@@ -67,4 +67,19 @@ describe('exportReportToPdf', () => {
     const pdfOutput = pdf.output('arraybuffer');
     expect(pdfOutput.byteLength).toBeGreaterThan(1000);
   });
+
+  it('includes report consistency metadata in the PDF output', () => {
+    const pdf = exportReportToPdf({
+      ...mockDoc,
+      consistency: {
+        revision: 'rev-1',
+        removedRelationshipIds: ['rel-1'],
+        removedConnectorIds: [],
+        errors: [],
+      },
+    });
+    const text = pdf.internal.pages.flat().join(' ');
+    expect(text).toContain('rev-1');
+    expect(text).toContain('rel-1');
+  });
 });
