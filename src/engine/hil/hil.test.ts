@@ -612,4 +612,27 @@ describe('HIL Code Generator', () => {
     expect(manifest.flashBlocked).toBe(true);
     expect(manifest.blockReasons).toContain('TARGET_DRIVER_PROVIDER_NOT_GENERATED');
   });
+
+  it('should suppress unused parameter warnings in mcal_dio_hil.c when only input channels are mapped', () => {
+    const inputOnlyConfig: HILConfig = {
+      enabled: true,
+      target: 'Arduino_Mega',
+      clockSpeed: 16,
+      commPort: 'COM3',
+      baudRate: 115200,
+      channels: [
+        { id: 'ch_in', name: 'sensor_in', peripheral: 'GPIO', pin: '22', direction: 'In', dataType: 'bool', rangeMin: 0, rangeMax: 1, scalingFactor: 1, unit: '' }
+      ],
+      mappings: [
+        { id: 'm_in', adiaVarId: 'sensor_val', channelId: 'ch_in', direction: 'read' }
+      ]
+    };
+    const files = generateHALCode(inputOnlyConfig, smVariables);
+    const mcalHilC = files.find(file => file.name === 'mcal_dio_hil.c')?.content ?? '';
+
+    expect(mcalHilC).toContain('(void)channel;');
+    expect(mcalHilC).toContain('(void)level;');
+    expect(mcalHilC).toContain('(void)value;');
+  });
 });
+

@@ -3,26 +3,29 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+
 #ifndef SM_ADIA_INSTANCE_FWD
 #define SM_ADIA_INSTANCE_FWD
 typedef struct ADIA_Instance ADIA_Instance_t;
 #endif
 
-#define SM_TICK_MS 10U
-#define SM_TICK_TOLERANCE_MS ((SM_TICK_MS / 10U) > 0U ? (SM_TICK_MS / 10U) : 1U)
+#define SM_TICK_MS 500U
+#define SM_TICK_TOLERANCE_MS 50U
+#define SM_TICK_MIN_MS 450U
+#define SM_TICK_MAX_MS 550U
 #define SM_NUM_STATES 2U
 #define SM_NUM_LAYERS 1U
 #define SM_NUM_ACTIVE_SLOTS 1U
 #define SM_LYR_ROOT_IDX 0U
-/* State: State_1 | Model ID: 265d4f7c-6336-4720-a143-e009c1002387 | C enum: SM_ST__265D4F7C_6336_4720_A143_E009C1002387 */
-#define SM_ST__265D4F7C_6336_4720_A143_E009C1002387_IDX 1U
-/* State: State_2 | Model ID: 480c2bb1-273c-4c96-a72c-29b0644f4691 | C enum: SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691 */
-#define SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_IDX 2U
+/* State: State_1 | Model ID: 535ddd5a-c012-46ce-b23c-9a6ce8d81df6 | C enum: SM_ST__535DDD5A_C012_46CE_B23C_9A6CE8D81DF6 */
+#define SM_ST__535DDD5A_C012_46CE_B23C_9A6CE8D81DF6_IDX 1U
+/* State: State_2 | Model ID: 979256a5-9d43-41f5-929f-5b27ad7deb22 | C enum: SM_ST__979256A5_9D43_41F5_929F_5B27AD7DEB22 */
+#define SM_ST__979256A5_9D43_41F5_929F_5B27AD7DEB22_IDX 2U
 
 typedef enum {
     SM_NODE_INVALID = 0,
-    SM_ST__265D4F7C_6336_4720_A143_E009C1002387 = 1,
-    SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691 = 2
+    SM_ST__535DDD5A_C012_46CE_B23C_9A6CE8D81DF6 = 1,
+    SM_ST__979256A5_9D43_41F5_929F_5B27AD7DEB22 = 2
 } SM_Node_t;
 
 typedef enum {
@@ -31,7 +34,8 @@ typedef enum {
     SM_ERR_TIMING,
     SM_ERR_CONFIGURATION,
     SM_ERR_SAFETY_VIOLATION,
-    SM_ERR_XBRIDGES_NUMERIC
+    SM_ERR_XBRIDGES_NUMERIC,
+    SM_ERR_INVALID_ARGUMENT
 } SM_Error_t;
 
 typedef uint32_t SM_Group_t;
@@ -45,6 +49,7 @@ typedef void (*SM_TraceSink_t)(const SM_TraceEvent_t *event);
 
 typedef struct {
     bool x;
+    bool y;
 } SM_Data_t;
 
 struct ADIA_Instance {

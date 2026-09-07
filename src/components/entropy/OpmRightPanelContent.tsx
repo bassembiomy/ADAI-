@@ -355,54 +355,60 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                 <div className="p-2.5 space-y-2 border-t border-white/5">
                   <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
                     {/* Inputs */}
-                    {(selectedNode.data.inputs || []).map((port: OPMPort) => (
-                      <div key={port.id} className="flex items-center justify-between bg-black/40 border border-blue-500/20 px-2 py-1 rounded text-[10px]">
-                        <div className="flex items-center gap-1.5 overflow-hidden">
-                          <span className="text-[8px] px-1 py-0.2 bg-blue-500/20 text-blue-300 border border-blue-500/40 rounded font-black font-mono">
-                            IN
-                          </span>
-                          <span className="font-mono text-gray-400 font-bold">{port.position.toUpperCase()[0]}:</span>
-                          <span className="truncate text-white font-medium">{port.name}</span>
+                    {(selectedNode.data.inputs || []).map((port: OPMPort) => {
+                      const isObj = selectedNode.data.type === 'object';
+                      return (
+                        <div key={port.id} className={`flex items-center justify-between bg-black/40 border ${isObj ? 'border-green-500/20' : 'border-blue-500/20'} px-2 py-1 rounded text-[10px]`}>
+                          <div className="flex items-center gap-1.5 overflow-hidden">
+                            <span className={`text-[8px] px-1 py-0.2 ${isObj ? 'bg-green-500/20 text-green-300 border-green-500/40' : 'bg-blue-500/20 text-blue-300 border-blue-500/40'} border rounded font-black font-mono`}>
+                              IN
+                            </span>
+                            <span className="font-mono text-gray-400 font-bold">{port.position.toUpperCase()[0]}:</span>
+                            <span className="truncate text-white font-medium">{port.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[7.5px] px-1 bg-white/5 text-gray-400 rounded font-mono">
+                              {port.type}
+                            </span>
+                            <button
+                              onClick={() => onRemovePort(port.id, 'input')}
+                              className="text-gray-500 hover:text-red-400 transition-colors"
+                              title="Remove Port"
+                            >
+                              <Trash2 size={10} />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[7.5px] px-1 bg-white/5 text-gray-400 rounded font-mono">
-                            {port.type}
-                          </span>
-                          <button
-                            onClick={() => onRemovePort(port.id, 'input')}
-                            className="text-gray-500 hover:text-red-400 transition-colors"
-                            title="Remove Port"
-                          >
-                            <Trash2 size={10} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
 
                     {/* Outputs */}
-                    {(selectedNode.data.outputs || []).map((port: OPMPort) => (
-                      <div key={port.id} className="flex items-center justify-between bg-black/40 border border-emerald-500/20 px-2 py-1 rounded text-[10px]">
-                        <div className="flex items-center gap-1.5 overflow-hidden">
-                          <span className="text-[8px] px-1 py-0.2 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded font-black font-mono">
-                            OUT
-                          </span>
-                          <span className="font-mono text-gray-400 font-bold">{port.position.toUpperCase()[0]}:</span>
-                          <span className="truncate text-white font-medium">{port.name}</span>
+                    {(selectedNode.data.outputs || []).map((port: OPMPort) => {
+                      const isObj = selectedNode.data.type === 'object';
+                      return (
+                        <div key={port.id} className={`flex items-center justify-between bg-black/40 border ${isObj ? 'border-red-500/20' : 'border-emerald-500/20'} px-2 py-1 rounded text-[10px]`}>
+                          <div className="flex items-center gap-1.5 overflow-hidden">
+                            <span className={`text-[8px] px-1 py-0.2 ${isObj ? 'bg-red-500/20 text-red-300 border-red-500/40' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'} border rounded font-black font-mono`}>
+                              OUT
+                            </span>
+                            <span className="font-mono text-gray-400 font-bold">{port.position.toUpperCase()[0]}:</span>
+                            <span className="truncate text-white font-medium">{port.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[7.5px] px-1 bg-white/5 text-gray-400 rounded font-mono">
+                              {port.type}
+                            </span>
+                            <button
+                              onClick={() => onRemovePort(port.id, 'output')}
+                              className="text-gray-500 hover:text-red-400 transition-colors"
+                              title="Remove Port"
+                            >
+                              <Trash2 size={10} />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[7.5px] px-1 bg-white/5 text-gray-400 rounded font-mono">
-                            {port.type}
-                          </span>
-                          <button
-                            onClick={() => onRemovePort(port.id, 'output')}
-                            className="text-gray-500 hover:text-red-400 transition-colors"
-                            title="Remove Port"
-                          >
-                            <Trash2 size={10} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Add Custom Port Form */}

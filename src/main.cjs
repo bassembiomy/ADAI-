@@ -297,7 +297,10 @@ if (hasSingleInstanceLock) {
   app.whenReady().then(async () => {
     // Auto-register .adia file association on Windows
     if (process.platform === 'win32') {
-      registerAdiaAssociation(process.execPath).catch(err => {
+      const startupIconPath = fs.existsSync(path.join(__dirname, '../icon.ico'))
+        ? path.join(__dirname, '../icon.ico')
+        : (fs.existsSync(path.join(process.resourcesPath || '', 'icon.ico')) ? path.join(process.resourcesPath, 'icon.ico') : undefined);
+      registerAdiaAssociation(process.execPath, { iconPath: startupIconPath }).catch(err => {
         console.warn('[STARTUP] Could not auto-register .adia file association:', err.message);
       });
     }

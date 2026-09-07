@@ -23,5 +23,8 @@ describe('opm dock shell', () => {
     expect(html).toContain('data-testid="opm-dock-left"');
     expect(html).toContain('data-testid="opm-dock-right"');
     expect(html).toContain('data-testid="opm-dock-bottom"');
+    expect(html).toContain('data-testid="opm-resizer-left"');
+    expect(html).toContain('data-testid="opm-resizer-right"');
+    expect(html).toContain('data-testid="opm-resizer-bottom"');
   });
 });
