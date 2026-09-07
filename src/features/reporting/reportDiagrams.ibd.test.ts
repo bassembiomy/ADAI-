@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BlockData, ConnectorData, PartData } from '../../types/sysml_types';
 import { renderIbdDiagram } from './reportDiagrams';
+import { createReportSnapshot, toHierarchySource } from './reportSnapshot';
 
 const blocks: BlockData[] = [
   {
@@ -101,6 +102,37 @@ describe('renderIbdDiagram', () => {
     });
     expect(html).toContain('has-child-layer');
     expect(html).toContain('ondblclick="window.ADIA_DIAGRAM_NAV.drillDown(\'diag-main\', \'ibd-ctrlBlock\', \'Internal Sub-Structure · ctrl (Controller)\')"');
+  });
+
+  it('renders a connector only in the IBD context containing both parts', () => {
+    const model = {
+      blocks: [
+        { id: 'context-a', name: 'ContextA', stereotype: 'block', x: 0, y: 0, width: 200, height: 100, properties: [], operations: [], constraints: [], classes: [], ports: [] } as BlockData,
+        { id: 'context-b', name: 'ContextB', stereotype: 'block', x: 0, y: 0, width: 200, height: 100, properties: [], operations: [], constraints: [], classes: [], ports: [] } as BlockData,
+      ],
+      parts: [
+        { id: 'p-a1', name: 'PartA1', blockId: 'context-a', x: 0, y: 0, width: 100, height: 50 } as PartData,
+        { id: 'p-a2', name: 'PartA2', blockId: 'context-a', x: 150, y: 0, width: 100, height: 50 } as PartData,
+        { id: 'p-b1', name: 'PartB1', blockId: 'context-b', x: 0, y: 0, width: 100, height: 50 } as PartData,
+      ],
+      relationships: [],
+      connectors: [
+        { id: 'context-a-conn', sourcePartId: 'p-a1', targetPartId: 'p-a2', sourcePortId: 'p1', targetPortId: 'p2' } as ConnectorData,
+        { id: 'cross-context-conn', sourcePartId: 'p-a1', targetPartId: 'p-b1', sourcePortId: 'p1', targetPortId: 'p2' } as ConnectorData,
+      ],
+    };
+    const source = toHierarchySource(createReportSnapshot(model));
+    const contextA = source.blocks.find(b => b.id === 'context-a')!;
+    const partsA = source.parts.filter(p => p.blockId === contextA.id);
+    const connectorsA = source.connectors.filter(c => {
+      const sourcePart = source.parts.find(p => p.id === c.sourcePartId);
+      const targetPart = source.parts.find(p => p.id === c.targetPartId);
+      return sourcePart?.blockId === contextA.id && targetPart?.blockId === contextA.id;
+    });
+
+    expect(renderIbdDiagram({ contextBlock: contextA, parts: partsA, connectors: connectorsA, blocks: source.blocks })).toContain('edge-context-a-conn');
+    // If external connectors are passed in, renderIbdDiagram filters invalid endpoints
+    expect(renderIbdDiagram({ contextBlock: contextA, parts: partsA, connectors: source.connectors, blocks: source.blocks })).not.toContain('edge-cross-context-conn');
   });
 });
 

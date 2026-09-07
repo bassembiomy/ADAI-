@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { renderTraceabilityDiagram } from './reportDiagrams';
+import { renderBddDiagram, renderRequirementsDiagram, renderTraceabilityDiagram } from './reportDiagrams';
+import { cascadeDeleteReportElement } from '../../services/reportModelConsistency';
+import { createReportSnapshot, toHierarchySource } from './reportSnapshot';
 
 const traceBlocks = [
   { id: 'b1', name: 'Engine', stereotype: 'block' },
@@ -59,5 +61,56 @@ describe('renderTraceabilityDiagram', () => {
       transitions: [],
     });
     expect(html).toContain('No traceability');
+  });
+});
+
+describe('renderTraceabilityDiagram — deletion closure', () => {
+  const model = {
+    blocks: [
+      { id: 'b1', name: 'Engine', stereotype: 'block', x: 0, y: 0, width: 100, height: 80, properties: [], operations: [], constraints: [], classes: [], ports: [] },
+      { id: 'r1', name: 'Temp Limit', stereotype: 'requirement', reqId: 'REQ-001', x: 0, y: 0, width: 100, height: 80, properties: [], operations: [], constraints: [], classes: [], ports: [] },
+    ],
+    parts: [],
+    connectors: [],
+    relationships: [
+      { id: 'rel-trace-1', sourceId: 'b1', targetId: 'r1', type: 'satisfy' as const, label: '' },
+    ],
+  };
+
+  it('omits relationship from traceability, BDD, and requirements when requirement is deleted', () => {
+    const afterDelete = cascadeDeleteReportElement(model, { kind: 'requirement', id: 'r1' });
+    const source = toHierarchySource(createReportSnapshot(afterDelete));
+
+    const traceHtml = renderTraceabilityDiagram({
+      blocks: source.blocks,
+      requirements: source.blocks.filter(b => b.stereotype === 'requirement'),
+      states: [],
+      relationships: source.relationships,
+      transitions: [],
+    });
+    expect(traceHtml).not.toContain('edge-rel-trace-1');
+
+    const bddHtml = renderBddDiagram({ blocks: source.blocks, relationships: source.relationships });
+    expect(bddHtml).not.toContain('edge-rel-trace-1');
+
+    const reqHtml = renderRequirementsDiagram({ blocks: source.blocks, relationships: source.relationships });
+    expect(reqHtml).not.toContain('edge-rel-trace-1');
+  });
+
+  it('omits relationship from traceability, BDD, and requirements when source block is deleted', () => {
+    const afterDelete = cascadeDeleteReportElement(model, { kind: 'block', id: 'b1' });
+    const source = toHierarchySource(createReportSnapshot(afterDelete));
+
+    const traceHtml = renderTraceabilityDiagram({
+      blocks: source.blocks,
+      requirements: source.blocks.filter(b => b.stereotype === 'requirement'),
+      states: [],
+      relationships: source.relationships,
+      transitions: [],
+    });
+    expect(traceHtml).not.toContain('edge-rel-trace-1');
+
+    const bddHtml = renderBddDiagram({ blocks: source.blocks, relationships: source.relationships });
+    expect(bddHtml).not.toContain('edge-rel-trace-1');
   });
 });

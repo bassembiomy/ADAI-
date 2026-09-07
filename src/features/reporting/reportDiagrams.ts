@@ -248,7 +248,26 @@ export function renderIbdDiagram(source: ReportIbdSource): string {
     );
   });
 
-  const connectorEls = source.connectors.map((conn, index) => {
+  const contextPartIds = new Set(source.parts.map(p => p.id));
+  const envPortIds = new Set((source.contextBlock.ports ?? []).map(p => p.id));
+
+  const validConnectors = source.connectors.filter(conn => {
+    const isSourcePart = contextPartIds.has(conn.sourcePartId);
+    const isSourceEnv =
+      (!conn.sourcePartId || conn.sourcePartId === source.contextBlock.id) &&
+      Boolean(conn.sourcePortId && envPortIds.has(conn.sourcePortId));
+    if (!isSourcePart && !isSourceEnv) return false;
+
+    const isTargetPart = contextPartIds.has(conn.targetPartId);
+    const isTargetEnv =
+      (!conn.targetPartId || conn.targetPartId === source.contextBlock.id) &&
+      Boolean(conn.targetPortId && envPortIds.has(conn.targetPortId));
+    if (!isTargetPart && !isTargetEnv) return false;
+
+    return true;
+  });
+
+  const connectorEls = validConnectors.map((conn, index) => {
     const from = portPositions.get(`${conn.sourcePartId}:${conn.sourcePortId}`)
       ?? portPositions.get(`:${conn.sourcePortId}`)
       ?? (source.contextBlock.id ? portPositions.get(`${source.contextBlock.id}:${conn.sourcePortId}`) : undefined)
@@ -281,7 +300,7 @@ export function renderIbdDiagram(source: ReportIbdSource): string {
   const shifted = (els: string[]) => els.join('');
   const inner = frame + `<g transform="translate(0 ${IBD_TITLE_HEIGHT})">`
     + shifted(connectorEls) + shifted(partEls) + shifted(portEls) + '</g>';
-  const caption = `Internal block diagram · ${source.contextBlock.name} (${source.parts.length} parts, ${source.connectors.length} connectors)`;
+  const caption = `Internal block diagram · ${source.contextBlock.name} (${source.parts.length} parts, ${validConnectors.length} connectors)`;
   return wrapFigure(inner, caption, { ...contentBounds, height: contentBounds.height + IBD_TITLE_HEIGHT });
 }
 

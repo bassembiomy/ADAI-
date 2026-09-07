@@ -55,10 +55,12 @@ export function buildReportHierarchy(model: HierarchySourceModel): ReportHierarc
   for (const block of model.blocks) {
     if (block.stereotype === 'requirement') continue;
     const blockParts = model.parts.filter(p => p.blockId === block.id);
+    const blockPartIds = new Set(blockParts.map(p => p.id));
+    const blockEnvPortIds = new Set((block.ports ?? []).map(p => p.id));
     const blockConnectors = model.connectors.filter(c => {
-      const s = model.parts.find(p => p.id === c.sourcePartId);
-      const t = model.parts.find(p => p.id === c.targetPartId);
-      return (s && s.blockId === block.id) || (t && t.blockId === block.id);
+      const sValid = blockPartIds.has(c.sourcePartId) || ((!c.sourcePartId || c.sourcePartId === block.id) && blockEnvPortIds.has(c.sourcePortId));
+      const tValid = blockPartIds.has(c.targetPartId) || ((!c.targetPartId || c.targetPartId === block.id) && blockEnvPortIds.has(c.targetPortId));
+      return sValid && tValid;
     });
 
     if (blockParts.length > 0) {
@@ -76,14 +78,17 @@ export function buildReportHierarchy(model: HierarchySourceModel): ReportHierarc
   for (const part of model.parts) {
     if (!part.typeId) continue;
     const typeBlock = model.blocks.find(b => b.id === part.typeId);
+    if (!typeBlock) continue;
     const subParts = model.parts.filter(p => p.blockId === part.typeId);
+    const subPartIds = new Set(subParts.map(p => p.id));
+    const subEnvPortIds = new Set((typeBlock.ports ?? []).map(p => p.id));
     const subConnectors = model.connectors.filter(c => {
-      const s = model.parts.find(p => p.id === c.sourcePartId);
-      const t = model.parts.find(p => p.id === c.targetPartId);
-      return (s && s.blockId === part.typeId) || (t && t.blockId === part.typeId);
+      const sValid = subPartIds.has(c.sourcePartId) || ((!c.sourcePartId || c.sourcePartId === typeBlock.id) && subEnvPortIds.has(c.sourcePortId));
+      const tValid = subPartIds.has(c.targetPartId) || ((!c.targetPartId || c.targetPartId === typeBlock.id) && subEnvPortIds.has(c.targetPortId));
+      return sValid && tValid;
     });
 
-    if (subParts.length > 0 && typeBlock) {
+    if (subParts.length > 0) {
       registry.registerChildLayer(part.id, {
         layerId: `ibd-${typeBlock.id}`,
         type: 'ibd',
@@ -289,15 +294,19 @@ export function renderInteractiveDiagramHierarchy(
   const layerViews: string[] = [];
 
   // 2. Render each IBD layer for blocks with parts
+  const renderedIbdLayers = new Set<string>();
+
   for (const block of model.blocks) {
     if (block.stereotype === 'requirement') continue;
     const blockParts = model.parts.filter(p => p.blockId === block.id);
     if (blockParts.length === 0) continue;
 
+    const blockPartIds = new Set(blockParts.map(p => p.id));
+    const blockEnvPortIds = new Set((block.ports ?? []).map(p => p.id));
     const blockConnectors = model.connectors.filter(c => {
-      const s = model.parts.find(p => p.id === c.sourcePartId);
-      const t = model.parts.find(p => p.id === c.targetPartId);
-      return (s && s.blockId === block.id) || (t && t.blockId === block.id);
+      const sValid = blockPartIds.has(c.sourcePartId) || ((!c.sourcePartId || c.sourcePartId === block.id) && blockEnvPortIds.has(c.sourcePortId));
+      const tValid = blockPartIds.has(c.targetPartId) || ((!c.targetPartId || c.targetPartId === block.id) && blockEnvPortIds.has(c.targetPortId));
+      return sValid && tValid;
     });
 
     const ibdSvg = renderIbdDiagram({
@@ -309,7 +318,37 @@ export function renderInteractiveDiagramHierarchy(
       containerId,
     });
 
+    renderedIbdLayers.add(block.id);
     layerViews.push(`<div id="layer-ibd-${escapeHtml(block.id)}" class="diagram-layer-view" style="display:none">\n${ibdSvg}\n</div>`);
+  }
+
+  // Also ensure nested sub-part layers are rendered if not already rendered
+  for (const part of model.parts) {
+    if (!part.typeId || renderedIbdLayers.has(part.typeId)) continue;
+    const typeBlock = model.blocks.find(b => b.id === part.typeId);
+    if (!typeBlock) continue;
+    const subParts = model.parts.filter(p => p.blockId === part.typeId);
+    if (subParts.length === 0) continue;
+
+    const subPartIds = new Set(subParts.map(p => p.id));
+    const subEnvPortIds = new Set((typeBlock.ports ?? []).map(p => p.id));
+    const subConnectors = model.connectors.filter(c => {
+      const sValid = subPartIds.has(c.sourcePartId) || ((!c.sourcePartId || c.sourcePartId === typeBlock.id) && subEnvPortIds.has(c.sourcePortId));
+      const tValid = subPartIds.has(c.targetPartId) || ((!c.targetPartId || c.targetPartId === typeBlock.id) && subEnvPortIds.has(c.targetPortId));
+      return sValid && tValid;
+    });
+
+    const ibdSvg = renderIbdDiagram({
+      contextBlock: typeBlock,
+      parts: subParts,
+      connectors: subConnectors,
+      blocks: model.blocks,
+      allParts: model.parts,
+      containerId,
+    });
+
+    renderedIbdLayers.add(typeBlock.id);
+    layerViews.push(`<div id="layer-ibd-${escapeHtml(typeBlock.id)}" class="diagram-layer-view" style="display:none">\n${ibdSvg}\n</div>`);
   }
 
   // 3. Render State Machine layers if available
