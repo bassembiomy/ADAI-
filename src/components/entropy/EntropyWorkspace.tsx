@@ -299,7 +299,6 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
 
   // Right Sidebar active tab
   const [rightTab, setRightTab] = useState<'simControl' | 'scope' | 'opl' | 'smartShow' | 'opmCodegen'>('simControl');
-  const [bottomView, setBottomView] = useState<'console' | 'scope'>('scope');
   const [opmArtifactState, setOpmArtifactState] = useState<OpmArtifactState>(createInitialArtifactState);
   const [selectedEdge, setSelectedEdge] = useState<AppEdge | null>(null);
   const [diagnosticNavMessage, setDiagnosticNavMessage] = useState<string | null>(null);
@@ -1845,14 +1844,78 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         </div>
       }
       oplTabContent={
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-          <span className="text-xs text-[#888]">The OPL editor now lives in the bottom dock, next to the simulation console.</span>
-          <button
-            onClick={() => handleDocksChange({ ...docks, bottom: true })}
-            className="px-2.5 py-1 text-[11px] border border-[#333] rounded hover:bg-[#222] text-[#ccc]"
-          >
-            Show bottom dock
-          </button>
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="h-8 border-b border-[#222] px-3 flex items-center justify-between shrink-0 bg-[#181818]/60 text-xs text-[#888]">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">OPL Editor Mode</span>
+            {isEditingText ? (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={applyOplChanges}
+                  className="px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded text-[10px] font-bold flex items-center gap-0.5 transition-colors"
+                  title="Apply Changes"
+                >
+                  <Check size={10} /> Sync
+                </button>
+                <button
+                  onClick={() => {
+                    setIsEditingText(false);
+                    const generated = generateOpl(nodes, edges);
+                    setOplText(generated);
+                  }}
+                  className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded text-[10px] font-bold flex items-center gap-0.5 transition-colors"
+                  title="Discard Changes"
+                >
+                  <X size={10} /> Cancel
+                </button>
+              </div>
+            ) : (
+              <span className="text-[9px] px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded uppercase font-semibold tracking-wide">
+                Auto-Sync
+              </span>
+            )}
+          </div>
+
+          {/* Text Area */}
+          <div className="flex-1 relative p-3 min-h-0">
+            <textarea
+              value={oplText}
+              onChange={(e) => {
+                setOplText(e.target.value);
+                setIsEditingText(true);
+              }}
+              placeholder="// Add OPL Sentences to represent system architecture..."
+              className="w-full h-full bg-[#0a0a0a] border border-[#2d2d2d] rounded-md p-3 outline-none text-[#cfd8dc] font-mono text-xs leading-relaxed resize-none focus:border-sky-500/50"
+            />
+
+            {isEditingText && (
+              <div className="absolute top-5 right-5 bg-orange-950/80 border border-orange-500 text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded shadow animate-pulse">
+                Edit Mode Active
+              </div>
+            )}
+          </div>
+
+          {/* OPL Errors / Warnings Drawer */}
+          <div className="h-32 bg-[#0c0c0c] border-t border-[#222] flex flex-col shrink-0">
+            <div className="h-7 bg-[#111] px-3 flex items-center justify-between text-[10px] font-bold text-[#666]">
+              <span>SYNTAX CHECKER</span>
+              <span className={oplErrors.length > 0 ? 'text-red-400 font-extrabold' : 'text-green-500'}>
+                {oplErrors.length > 0 ? `${oplErrors.length} Errors` : 'Grammar Valid ✓'}
+              </span>
+            </div>
+            <div className="flex-1 p-2 overflow-y-auto space-y-1">
+              {oplErrors.map((err, idx) => (
+                <div key={idx} className="flex gap-2 text-xs font-mono">
+                  <span className="text-red-500 font-bold">[Line {err.line}]</span>
+                  <span className="text-[#ccc]">{err.message}</span>
+                </div>
+              ))}
+              {oplErrors.length === 0 && (
+                <div className="h-full flex items-center justify-center text-[10px] text-[#555] italic">
+                  No syntax warnings found. All OPL structures are correct.
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       }
       smartShowTabContent={
@@ -2344,145 +2407,35 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       ) : null
     }
         bottom={
-          <div className="flex h-full">
-            {/* Bottom Simulation Logs console / Scope */}
-            <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#111]">
-              <div className="h-8 bg-[#181818] border-b border-[#222] px-3 flex items-center justify-between text-xs font-bold text-[#888]">
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setBottomView('console')}
-                    className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-colors ${
-                      bottomView === 'console' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    Console
-                  </button>
-                  <button
-                    onClick={() => setBottomView('scope')}
-                    className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-colors ${
-                      bottomView === 'scope' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    📈 Scope
-                  </button>
+          <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#111]">
+            <div className="h-8 bg-[#181818] border-b border-[#222] px-4 flex items-center justify-between text-xs font-bold text-[#888]">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400">Simulation Console</span>
+              <button
+                onClick={() => setSimLogs([])}
+                className="text-[#555] hover:text-[#bbb] text-[10px]"
+              >
+                Clear Logs
+              </button>
+            </div>
+            <div className="flex-1 p-2 font-mono text-[11px] overflow-y-auto space-y-0.5">
+              {simLogs.map((log, idx) => (
+                <div key={idx} className="flex gap-2">
+                  <span className="text-[#555]">{log.timestamp}</span>
+                  <span className={
+                    log.type === 'success' ? 'text-green-400' :
+                    log.type === 'error' ? 'text-red-400' :
+                    log.type === 'warning' ? 'text-amber-400' :
+                    'text-[#888]'
+                  }>
+                    [{log.type.toUpperCase()}] {log.message}
+                  </span>
                 </div>
-                {bottomView === 'console' && (
-                  <button
-                    onClick={() => setSimLogs([])}
-                    className="text-[#555] hover:text-[#bbb] text-[10px]"
-                  >
-                    Clear Logs
-                  </button>
-                )}
-              </div>
-              {bottomView === 'console' ? (
-                <div className="flex-1 p-2 font-mono text-[11px] overflow-y-auto space-y-0.5">
-                  {simLogs.map((log, idx) => (
-                    <div key={idx} className="flex gap-2">
-                      <span className="text-[#555]">{log.timestamp}</span>
-                      <span className={
-                        log.type === 'success' ? 'text-green-400' :
-                        log.type === 'error' ? 'text-red-400' :
-                        log.type === 'warning' ? 'text-amber-400' :
-                        'text-[#888]'
-                      }>
-                        [{log.type.toUpperCase()}] {log.message}
-                      </span>
-                    </div>
-                  ))}
-                  {simLogs.length === 0 && (
-                    <div className="h-full flex items-center justify-center text-[#555] italic">
-                      Console idle. Start the simulation or trigger a process to see live execution traces.
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="flex-1 min-h-0 overflow-hidden p-1">
-                  <OpmSimulationScope
-                    simRunning={simRunning}
-                    currentTick={simStateRef.current.tick}
-                    tickMs={activeOpmConfig.tickMs}
-                    nodes={nodes}
-                    edges={edges}
-                    recentLogs={simLogs}
-                    onReset={resetSimulation}
-                  />
+              ))}
+              {simLogs.length === 0 && (
+                <div className="h-full flex items-center justify-center text-[#555] italic">
+                  Console idle. Start the simulation or trigger a process to see live execution traces.
                 </div>
               )}
-            </div>
-            {/* OPL Editor (moved verbatim into bottom dock slot; wrapper adapted to dock pane) */}
-            <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden border-l border-[#222]">
-              <div className="h-8 border-b border-[#222] px-4 flex items-center justify-between shrink-0 bg-[#181818]/60 text-xs text-[#888]">
-                <span>OPL Editor Mode</span>
-                {isEditingText ? (
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={applyOplChanges}
-                      className="px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded text-[10px] font-bold flex items-center gap-0.5 transition-colors"
-                      title="Apply Changes"
-                    >
-                      <Check size={10} /> Sync
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsEditingText(false);
-                        const generated = generateOpl(nodes, edges);
-                        setOplText(generated);
-                      }}
-                      className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded text-[10px] font-bold flex items-center gap-0.5 transition-colors"
-                      title="Discard Changes"
-                    >
-                      <X size={10} /> Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <span className="text-[9px] px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded uppercase font-semibold tracking-wide">
-                    Auto-Sync
-                  </span>
-                )}
-              </div>
-
-              {/* Text Area */}
-              <div className="flex-1 relative p-3 min-h-0">
-                <textarea
-                  value={oplText}
-                  onChange={(e) => {
-                    setOplText(e.target.value);
-                    setIsEditingText(true);
-                  }}
-                  placeholder="// Add OPL Sentences to represent system architecture..."
-                  className="w-full h-full bg-[#0a0a0a] border border-[#2d2d2d] rounded-md p-3 outline-none text-[#cfd8dc] font-mono text-xs leading-relaxed resize-none focus:border-sky-500/50"
-                />
-
-                {isEditingText && (
-                  <div className="absolute top-5 right-5 bg-orange-950/80 border border-orange-500 text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded shadow animate-pulse">
-                    Edit Mode Active
-                  </div>
-                )}
-              </div>
-
-              {/* OPL Errors / Warnings Drawer */}
-              <div className="h-32 bg-[#0c0c0c] border-t border-[#222] flex flex-col shrink-0">
-                <div className="h-7 bg-[#111] px-3 flex items-center justify-between text-[10px] font-bold text-[#666]">
-                  <span>SYNTAX CHECKER</span>
-                  <span className={oplErrors.length > 0 ? 'text-red-400 font-extrabold' : 'text-green-500'}>
-                    {oplErrors.length > 0 ? `${oplErrors.length} Errors` : 'Grammar Valid ✓'}
-                  </span>
-                </div>
-                <div className="flex-1 p-2 overflow-y-auto space-y-1">
-                  {oplErrors.map((err, idx) => (
-                    <div key={idx} className="flex gap-2 text-xs font-mono">
-                      <span className="text-red-500 font-bold">[Line {err.line}]</span>
-                      <span className="text-[#ccc]">{err.message}</span>
-                    </div>
-                  ))}
-                  {oplErrors.length === 0 && (
-                    <div className="h-full flex items-center justify-center text-[10px] text-[#555] italic">
-                      No syntax warnings found. All OPL structures are correct.
-                    </div>
-                  )}
-                </div>
-              </div>
             </div>
           </div>
         }

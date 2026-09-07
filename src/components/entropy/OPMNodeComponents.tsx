@@ -16,29 +16,37 @@ const getHandleColor = (type: string) => {
   }
 };
 
-const renderOPMPort = (port: OPMPort, idx: number, totalCount: number, isEllipse: boolean = false) => {
+const renderOPMPort = (
+  port: OPMPort,
+  idx: number,
+  totalCount: number,
+  isEllipse: boolean = false
+) => {
   const isInput = port.direction === 'input';
   const position = 
     port.position === 'left' ? Position.Left :
     port.position === 'right' ? Position.Right :
     port.position === 'top' ? Position.Top : Position.Bottom;
 
-  const color = getHandleColor(port.type);
+  // Ports on blocks and states: Input = Green (#22c55e), Output = Red (#ef4444)
+  const color = isInput ? '#22c55e' : '#ef4444';
   const percentage = `${((idx + 1) * 100) / (totalCount + 1)}%`;
   
   const handleStyle: React.CSSProperties = {
     background: color,
+    backgroundColor: color,
+    ['--port-color' as any]: color,
     width: 10,
     height: 10,
     border: '2px solid #18181b',
-    borderRadius: '50%',
+    borderRadius: '3px',
     position: 'absolute',
     left: '50%',
     top: '50%',
     transform: 'translate(-50%, -50%)',
     zIndex: 20,
     cursor: 'crosshair',
-    boxShadow: `0 0 6px ${color}99`,
+    boxShadow: `0 0 8px ${color}cc`,
     transition: 'transform 0.15s ease, box-shadow 0.15s ease',
   };
 
@@ -59,16 +67,18 @@ const renderOPMPort = (port: OPMPort, idx: number, totalCount: number, isEllipse
     gap: '4px',
     fontSize: '7.5px',
     fontFamily: 'monospace',
-    padding: '1.5px 3px',
+    padding: '1.5px 4px',
     borderRadius: '3px',
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-    color: '#d1d5db',
+    backgroundColor: 'rgba(9, 9, 11, 0.95)',
+    border: `1px solid ${color}60`,
+    color: color,
+    fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
     userSelect: 'none',
     pointerEvents: 'none',
     whiteSpace: 'nowrap',
+    boxShadow: `0 0 8px ${color}30`,
     transition: 'all 0.2s',
   };
 
@@ -148,14 +158,14 @@ const renderOPMPort = (port: OPMPort, idx: number, totalCount: number, isEllipse
           position={position}
           id={port.id}
           style={handleStyle}
-          className="hover:scale-125 hover:!border-amber-400 hover:!shadow-[0_0_14px_#fbbf24] flex items-center justify-center transition-transform"
+          className="opm-port-handle hover:scale-125 hover:!border-amber-400 hover:!shadow-[0_0_14px_#fbbf24] flex items-center justify-center transition-transform"
         >
           <span data-testid="port-chevron" className="text-[6px] text-black font-black leading-none pointer-events-none select-none flex items-center justify-center">
             {isInput ? '▶' : '◀'}
           </span>
         </Handle>
       </span>
-      <span className="opacity-100 bg-[#09090b]/95 border border-white/15 transition-all duration-150 shadow-xl pointer-events-none z-30" style={labelStyle}>
+      <span className="opacity-100 transition-all duration-150 shadow-xl pointer-events-none z-30" style={labelStyle}>
         <span style={dotStyle} />
         {port.name}
       </span>
@@ -164,7 +174,8 @@ const renderOPMPort = (port: OPMPort, idx: number, totalCount: number, isEllipse
 };
 
 // Custom Object Node Component (also renders Requirement nodes per the extension)
-export const OPMObjectNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected }) => {
+export const OPMObjectNode: React.FC<NodeProps<AppNode>> = (props) => {
+  const { id, data, selected } = props;
   const isRequirement = data.type === 'requirement';
   const isPhysical = data.physical;
   const isZoomedIn = data.zoomedIn;
@@ -196,8 +207,11 @@ export const OPMObjectNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected
         : 'border-2 border-emerald-500 bg-[#0a1810]/90 shadow-lg';
 
   const stateCount = (data.states || []).length;
+  const statesNeededWidth = stateCount > 0
+    ? 18 * 2 + stateCount * 95 + (stateCount - 1) * 12
+    : 220;
+  const dynamicMinWidth = Math.max(220, statesNeededWidth);
   const dynamicMinHeight = stateCount > 0 ? 110 : 80;
-  const dynamicMinWidth = stateCount > 0 ? 240 : 220;
 
   return (
     <div
@@ -212,13 +226,13 @@ export const OPMObjectNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected
       <NodeResizer minWidth={160} minHeight={60} isVisible={selected} lineStyle={{ borderColor: '#fbbf24' }} handleStyle={{ background: '#fbbf24', border: '1px solid #78350f', borderRadius: '4px' }} />
 
       {/* Header tag */}
-      <div className={`flex items-center justify-between gap-2 border-b px-2 pb-1 select-none ${isRequirement ? 'border-purple-800/40' : 'border-emerald-800/40 bg-emerald-950/80'}`}>
+      <div className={`h-7 flex items-center justify-between gap-2 border-b px-2 pb-0.5 select-none ${isRequirement ? 'border-purple-800/40' : 'border-emerald-800/40 bg-emerald-950/80 rounded-t-lg'}`}>
         <span className={`text-[8px] uppercase tracking-wider font-extrabold ${isRequirement ? 'text-purple-400/90' : 'text-emerald-400/80'}`}>
           {isRequirement ? '«Requirement»' : '«Object»'}
         </span>
         {!isRequirement && (
           <span className="text-[13px] font-bold text-white truncate">
-            {data.name}
+            {data.name} [{Math.round((props as any).positionAbsoluteX ?? -999)},{Math.round((props as any).positionAbsoluteY ?? -999)}]
           </span>
         )}
         {isPhysical && !isRequirement && (
@@ -235,14 +249,23 @@ export const OPMObjectNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected
         <>
           {/* Reserved clean slot area for child state nodes */}
           {stateCount > 0 ? (
-            <div className="mt-1 h-9 w-full rounded-lg border border-emerald-900/30 bg-black/35" />
+            <div
+              data-testid="object-state-tray"
+              className="mt-2 h-[42px] w-full rounded-lg border border-emerald-900/50 bg-black/45 shadow-[inset_0_2px_6px_rgba(0,0,0,0.6)] relative flex items-center px-1.5 pointer-events-none"
+            >
+              <span className="absolute right-2 top-0.5 text-[7px] font-mono uppercase tracking-widest text-emerald-500/40 select-none">
+                states ({stateCount})
+              </span>
+            </div>
           ) : (
-            <div className="mt-1 h-9 w-full rounded-lg border border-dashed border-emerald-700/60 bg-black/25 flex items-center justify-center px-2 text-[10px] text-emerald-300/70 select-none truncate">+ State — click State tool then this object</div>
+            <div className="mt-2 h-[42px] w-full rounded-lg border border-dashed border-emerald-700/60 bg-black/25 flex items-center justify-center px-2 text-[10px] text-emerald-300/70 select-none truncate">
+              + State — click State tool then this object
+            </div>
           )}
 
           {/* Attributes Listing */}
           {data.attributes && data.attributes.length > 0 && (
-            <div className="mt-1 border-t border-emerald-900/40 pt-1 space-y-0.5 text-[8.5px] font-mono text-emerald-400/90 z-10">
+            <div className="mt-1.5 border-t border-emerald-900/40 pt-1 space-y-0.5 text-[8.5px] font-mono text-emerald-400/90 z-10">
               {data.attributes.map((attr, idx) => (
                 <div key={idx} className="flex justify-between hover:bg-emerald-950/20 px-1 rounded transition-colors">
                   <span>{attr.key}:</span>
@@ -341,7 +364,8 @@ export const OPMProcessNode: React.FC<NodeProps<AppNode>> = ({ id, data, selecte
 };
 
 // Custom State Node Component
-export const OPMStateNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected }) => {
+export const OPMStateNode: React.FC<NodeProps<AppNode>> = (props) => {
+  const { id, data, selected } = props;
   const isActive = (data as any).isActive;
   const isInitial = Boolean((data as any).isInitial);
   const updateNodeInternals = useUpdateNodeInternals();
@@ -362,7 +386,7 @@ export const OPMStateNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected 
 
   return (
     <div
-      className={`relative rounded-lg px-2 py-1 w-[95px] h-[32px] flex items-center justify-center border transition-all duration-200 box-border ${
+      className={`relative rounded-lg px-2 py-1 w-[95px] h-[32px] flex items-center justify-center border transition-all duration-200 box-border z-20 ${
         selected
           ? 'border-2 border-amber-400 bg-gradient-to-b from-[#2a1b08] to-[#140b02] shadow-[0_0_22px_rgba(251,191,36,0.7),inset_0_0_8px_rgba(251,191,36,0.2)] ring-1 ring-amber-300/50 scale-105'
           : isActive
@@ -374,7 +398,7 @@ export const OPMStateNode: React.FC<NodeProps<AppNode>> = ({ id, data, selected 
         {/* ISO initial-state marker: small filled dot */}
         {isInitial && <span title="Initial state" className="w-1.5 h-1.5 rounded-full bg-current opacity-70 shrink-0" />}
         {isActive && <span className="w-1.5 h-1.5 rounded-full bg-black/60 animate-ping border border-black/40 shrink-0" />}
-        <span className="truncate">{data.name}</span>
+        <span className="truncate">{data.name} [{Math.round((props as any).positionAbsoluteX ?? -999)},{Math.round((props as any).positionAbsoluteY ?? -999)}]</span>
       </div>
 
       {/* Ports placed absolutely on boundaries */}

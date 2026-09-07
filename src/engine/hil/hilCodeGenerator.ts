@@ -612,6 +612,7 @@ void loop(void) {
 #include "hal_drivers.h"
 
 bool MCAL_Dio_ReadChannel(uint32_t channel) {
+    (void)channel;
     switch (channel) {
 ${mappedInputs.map(({ mapping, channel }) => `    case ${mcalChannelIndex(mapping.channelId)}U: return (bool)(${halRead(channel)});`).join('\n')}
     default: return false;
@@ -619,6 +620,7 @@ ${mappedInputs.map(({ mapping, channel }) => `    case ${mcalChannelIndex(mappin
 }
 
 double MCAL_ReadChannelValue(uint32_t channel) {
+    (void)channel;
     switch (channel) {
 ${mappedInputs.map(({ mapping, channel }) => `    case ${mcalChannelIndex(mapping.channelId)}U: return (double)(${halRead(channel)});`).join('\n')}
     default: return 0.0;
@@ -626,6 +628,8 @@ ${mappedInputs.map(({ mapping, channel }) => `    case ${mcalChannelIndex(mappin
 }
 
 void MCAL_Dio_WriteChannel(uint32_t channel, bool level) {
+    (void)channel;
+    (void)level;
     switch (channel) {
 ${mappedOutputs.map(({ mapping, channel }) => `    case ${mcalChannelIndex(mapping.channelId)}U: ${halWrite(channel, 'level')} break;`).join('\n')}
     default: break;
@@ -633,6 +637,8 @@ ${mappedOutputs.map(({ mapping, channel }) => `    case ${mcalChannelIndex(mappi
 }
 
 void MCAL_WriteChannelValue(uint32_t channel, double value) {
+    (void)channel;
+    (void)value;
     switch (channel) {
 ${mappedOutputs.map(({ mapping, channel }) => `    case ${mcalChannelIndex(mapping.channelId)}U: ${halWrite(channel, 'value')} break;`).join('\n')}
     default: break;

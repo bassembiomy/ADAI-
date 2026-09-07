@@ -263,20 +263,25 @@ export function parseOpl(text: string, existingNodes: AppNode[] = []): {
       const opmStates: OPMState[] = [];
       stateList.forEach((stateName, sIdx) => {
         const stateKey = `${objName.toLowerCase()}:${stateName.toLowerCase()}`;
-        // Create state node
+        // Create state node with explicit parentId
         const stateNode = getOrCreateNode(stateName, 'state', objNode.id);
         
-        // Position state inside the object node
-        stateNode.position = { x: 15 + sIdx * 90, y: 45 };
+        // Position state cleanly inside the parent object's designated state area
+        stateNode.position = { x: 18 + sIdx * 107, y: 49 };
+        stateNode.parentId = objNode.id;
+        stateNode.extent = 'parent';
         
+        const isInitial = sIdx === 0;
         opmStates.push({
           id: stateNode.id,
           name: stateName,
-          isActive: false
+          isActive: isInitial,
+          isInitial: isInitial,
         });
         
-        if (sIdx === 0) {
+        if (isInitial) {
           (stateNode.data as any).isInitial = true;
+          (stateNode.data as any).isActive = true;
         }
 
         stateMap.set(stateKey, stateNode);
@@ -312,21 +317,24 @@ export function parseOpl(text: string, existingNodes: AppNode[] = []): {
     const lineNum = idx + 1;
     let matched = false;
 
-    // 1. Aggregation: [Whole] consists of [Part].
+    // 1. Aggregation: [Whole] consists of [Part1], [Part2] and [Part3].
     let match = line.match(/^(.+?)\s+consists\s+of\s+(.+?)\.$/i);
     if (match) {
       matched = true;
       const whole = getOrCreateNode(match[1], 'object');
-      const part = getOrCreateNode(match[2], 'object');
+      const partsRaw = match[2];
+      const partsList = partsRaw.split(/,|\band\b/i).map(p => p.trim()).filter(Boolean);
       
-      // Make part a child node visually or link it
-      edges.push({
-        id: `e-${whole.id}-${part.id}`,
-        source: whole.id,
-        target: part.id,
-        sourceHandle: 'std-out',
-        targetHandle: 'res-in',
-        data: { type: 'aggregation' }
+      partsList.forEach(partName => {
+        const part = getOrCreateNode(partName, 'object');
+        edges.push({
+          id: `e-${whole.id}-${part.id}`,
+          source: whole.id,
+          target: part.id,
+          sourceHandle: 'std-out',
+          targetHandle: 'res-in',
+          data: { type: 'aggregation' }
+        });
       });
       return;
     }

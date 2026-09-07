@@ -61,3 +61,4 @@ const icoBuffer = Buffer.concat([
 
 fs.writeFileSync(outputIcoPath, icoBuffer);
 console.log(`Generated multi-resolution Windows icon at: ${outputIcoPath} (${icoBuffer.length} bytes)`);
+process.exit(0);

@@ -48,6 +48,9 @@ describe('opm bold blocks', () => {
     expect(html).toMatch(/right:\s*14px/);
     // Right port label must be placed outside the block on the right (left: 14px), not inside (right: 12px)
     expect(html).toMatch(/left:\s*14px/);
+    // Object input ports are green (#22c55e) and output ports are red (#ef4444)
+    expect(html).toContain('#22c55e');
+    expect(html).toContain('#ef4444');
   });
 
   it('firing process renders energy pulse aura and firing data attribute', () => {

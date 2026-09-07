@@ -5,8 +5,8 @@
 
 static const SM_Node_t SM_State_Parent_Map[SM_NUM_STATES + 1U] = {
     [0] = SM_NODE_INVALID,
-    [SM_ST__265D4F7C_6336_4720_A143_E009C1002387_IDX] = SM_NODE_INVALID,
-    [SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_IDX] = SM_NODE_INVALID,
+    [SM_ST__535DDD5A_C012_46CE_B23C_9A6CE8D81DF6_IDX] = SM_NODE_INVALID,
+    [SM_ST__979256A5_9D43_41F5_929F_5B27AD7DEB22_IDX] = SM_NODE_INVALID,
 };
 
 static const bool SM_Layer_Has_Children_Map[SM_NUM_LAYERS] = {
@@ -18,8 +18,8 @@ static bool SM_Is_Direct_Layer_Child(uint32_t layer_index, SM_Node_t state)
     switch (layer_index) {
         case SM_LYR_ROOT_IDX:
             switch (state) {
-                case SM_ST__265D4F7C_6336_4720_A143_E009C1002387: return true;
-                case SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691: return true;
+                case SM_ST__535DDD5A_C012_46CE_B23C_9A6CE8D81DF6: return true;
+                case SM_ST__979256A5_9D43_41F5_929F_5B27AD7DEB22: return true;
                 default: return false;
             }
         default: return false;
@@ -31,8 +31,8 @@ static bool SM_Is_Layer_Descendant(uint32_t layer_index, SM_Node_t state)
     switch (layer_index) {
         case SM_LYR_ROOT_IDX:
             switch (state) {
-                case SM_ST__265D4F7C_6336_4720_A143_E009C1002387: return true;
-                case SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691: return true;
+                case SM_ST__535DDD5A_C012_46CE_B23C_9A6CE8D81DF6: return true;
+                case SM_ST__979256A5_9D43_41F5_929F_5B27AD7DEB22: return true;
                 default: return false;
             }
         default: return false;
@@ -125,6 +125,6 @@ SM_Error_t SM_Validate_State_Consistency(const ADIA_Instance_t *instance)
 void SM_ApplySafeOutputs(ADIA_Instance_t *instance)
 {
     (void)instance;
-    MCAL_Dio_WriteChannel(MCAL_CH__6B8AF776_C9CA_4C37_B295_88950BE006D5, false);
+    MCAL_Dio_WriteChannel(MCAL_CH__1087003D_EC33_460C_8E0F_C1A9CAC26411, false);
     MCAL_ApplySafeOutputs();
 }

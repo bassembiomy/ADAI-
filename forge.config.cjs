@@ -17,6 +17,16 @@ module.exports = {
     icon: path.resolve(__dirname, 'icon.ico'),
     extraResource: [
       path.resolve(__dirname, 'toolchains'),
+      path.resolve(__dirname, 'icon.ico'),
+    ],
+    fileAssociations: [
+      {
+        ext: 'adia',
+        name: 'ADIA Project',
+        description: 'ADIA Project File',
+        icon: path.resolve(__dirname, 'icon.ico'),
+        role: 'Editor',
+      },
     ],
     win32metadata: {
       CompanyName: 'ADIA Team',

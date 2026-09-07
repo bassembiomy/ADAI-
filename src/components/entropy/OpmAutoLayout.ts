@@ -25,7 +25,7 @@ const STATE_WIDTH = 95;
 const STATE_HEIGHT = 32;
 const STATE_GAP_X = 12;
 const STATE_START_X = 18;
-const STATE_START_Y = 56;
+const STATE_START_Y = 49;
 
 function getObjectDimensions(node: AppNode, stateCount: number): { width: number; height: number } {
   const attrCount = (node.data.attributes || []).length;
@@ -34,7 +34,7 @@ function getObjectDimensions(node: AppNode, stateCount: number): { width: number
   }
   const statesWidth = STATE_START_X * 2 + stateCount * STATE_WIDTH + (stateCount - 1) * STATE_GAP_X;
   const width = Math.max(220, statesWidth);
-  const height = Math.max(105, 95 + attrCount * 18);
+  const height = Math.max(110, 98 + attrCount * 18);
   return { width, height };
 }
 

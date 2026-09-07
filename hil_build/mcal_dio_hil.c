@@ -9,6 +9,7 @@
 #include "hal_drivers.h"
 
 bool MCAL_Dio_ReadChannel(uint32_t channel) {
+    (void)channel;
     switch (channel) {
 
     default: return false;
@@ -16,6 +17,7 @@ bool MCAL_Dio_ReadChannel(uint32_t channel) {
 }
 
 double MCAL_ReadChannelValue(uint32_t channel) {
+    (void)channel;
     switch (channel) {
 
     default: return 0.0;
@@ -23,6 +25,8 @@ double MCAL_ReadChannelValue(uint32_t channel) {
 }
 
 void MCAL_Dio_WriteChannel(uint32_t channel, bool level) {
+    (void)channel;
+    (void)level;
     switch (channel) {
     case 0U: HAL_GPIO_Write(PIN_CH_1, "ch_1", (bool)(level)); break;
     default: break;
@@ -30,6 +34,8 @@ void MCAL_Dio_WriteChannel(uint32_t channel, bool level) {
 }
 
 void MCAL_WriteChannelValue(uint32_t channel, double value) {
+    (void)channel;
+    (void)value;
     switch (channel) {
     case 0U: HAL_GPIO_Write(PIN_CH_1, "ch_1", (bool)(value)); break;
     default: break;

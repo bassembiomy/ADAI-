@@ -7,37 +7,54 @@ export interface OpmExample {
 export const OPM_EXAMPLES: Record<string, OpmExample> = {
   smartHome: {
     name: "Smart Home System",
-    description: "Models an automated home environment where temperature sensors trigger heating unit state transitions.",
+    description: "ISO 19450 standard smart home model: an occupant triggers heating when temperature monitoring detects cold conditions, altering the physical heating unit state from Off to Heating.",
     oplText: `Object Home_System consists of Temperature_Sensor and Heating_Unit.
+Object Home_System is physical.
 Object Temperature_Sensor is physical.
 Object Heating_Unit is physical.
-Object Heater_Power_State has states Off, On.
+Object Occupant is physical.
+Object Heating_Unit has states Off, Heating.
 Process Monitor_Temperature.
 Process Toggle_Heating.
-User executes Toggle_Heating.
+Occupant executes Toggle_Heating.
 Temperature_Sensor executes Monitor_Temperature.
 Monitor_Temperature triggers Toggle_Heating.
-Toggle_Heating changes Heater_Power_State from Off to On.`
+Toggle_Heating changes Heating_Unit from Off to Heating.`
   },
   cruiseControl: {
     name: "Automotive Cruise Control",
-    description: "Models an automobile cruise control loop measuring vehicle speed and regulating engine controller state.",
+    description: "ISO 19450 standard automotive cruise control: driver regulates throttle according to vehicle speed measurements, altering the engine controller state from Inactive to Active.",
     oplText: `Object Cruise_Control_System consists of Speed_Sensor and Engine_Controller.
+Object Cruise_Control_System is physical.
 Object Speed_Sensor is physical.
 Object Engine_Controller is physical.
-Object Cruise_Active_State has states Inactive, Active.
+Object Driver is physical.
+Object Engine_Controller has states Inactive, Active.
 Process Measure_Speed.
 Process Regulate_Throttle.
 Driver executes Regulate_Throttle.
 Speed_Sensor executes Measure_Speed.
 Measure_Speed triggers Regulate_Throttle.
-Regulate_Throttle changes Cruise_Active_State from Inactive to Active.`
+Regulate_Throttle changes Engine_Controller from Inactive to Active.`
   },
   smartAirFryer: {
     name: "Professional Steam Air Fryer",
-    description: "Models a dual-heating steam air fryer with manual/automatic menus, NTC temperature regulation, convection fan, water pump, steam generator, display logic, and safety shutdown.",
-    oplText: `Object Steam_Air_Fryer consists of User_Interface.
-Object User_Interface consists of Power_Button.
+    description: "ISO 19450 dual-heating steam air fryer: user interface, thermal chamber, steam subsystem, NTC sensors, and actuator state management with automatic safety shutdown.",
+    oplText: `Object Steam_Air_Fryer consists of User_Interface, Thermal_Chamber, and Steam_Subsystem.
+Object User_Interface consists of Power_Button and Chamber_Display.
+Object Thermal_Chamber consists of Convection_Fan, Air_Heater, and NTC_Sensor.
+Object Steam_Subsystem consists of Water_Reservoir, Water_Pump, and Steam_Generator.
+Object Steam_Air_Fryer is physical.
+Object User_Interface is physical.
+Object Thermal_Chamber is physical.
+Object Steam_Subsystem is physical.
+Object Power_Button is physical.
+Object Convection_Fan is physical.
+Object Air_Heater is physical.
+Object Steam_Generator is physical.
+Object Water_Pump is physical.
+Object NTC_Sensor is physical.
+Object Water_Reservoir is physical.
 Object Power_Button has states Off, On.
 Object Menu_Mode has states Manual_Mode, Auto_Menu.
 Object Auto_Program has states Fries_Prog, Chicken_Prog, Bake_Prog.
@@ -73,3 +90,4 @@ Safety_Shutdown changes Operation_Status from Cooking to Idle.
 Safety_Shutdown changes Power_Button from On to Off.`
   }
 };
+

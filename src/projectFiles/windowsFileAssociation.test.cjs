@@ -112,6 +112,35 @@ console.log('Running windowsFileAssociation tests...');
   assert.deepStrictEqual(execFileArgs.args, ['QUERY', 'HKCU\\Test']);
   assert.strictEqual(execFileArgs.opts.windowsHide, true);
 
+  // Test 6: resolveDefaultIcon respects options.iconPath and existsSync
+  const { resolveDefaultIcon } = require('./windowsFileAssociation.cjs');
+  const fakeFs = {
+    existsSync: (p) => p === 'C:\\Custom\\icon.ico' || p.endsWith('icon.ico'),
+  };
+  const resolvedExplicit = resolveDefaultIcon('C:\\Apps\\ADIA\\adia.exe', {
+    iconPath: 'C:\\Custom\\icon.ico',
+    fsImpl: fakeFs,
+  });
+  assert.strictEqual(resolvedExplicit, 'C:\\Custom\\icon.ico');
+
+  // Test 7: registerAdiaAssociation writes custom or resolved icon and triggers shell notification
+  let shellNotified = false;
+  const fakeNotify = async () => { shellNotified = true; };
+  const regCallsWithIcon = [];
+  const fakeRunRegWithIcon = async (args) => {
+    regCallsWithIcon.push(args);
+    return { stdout: '' };
+  };
+
+  await registerAdiaAssociation(execPath, {
+    iconPath: 'C:\\Custom\\icon.ico',
+    runReg: fakeRunRegWithIcon,
+    notifyShellAssocChanged: fakeNotify,
+  });
+
+  assert.ok(regCallsWithIcon.some(args => args.includes('HKCU\\Software\\Classes\\ADIA.Project\\DefaultIcon') && args.includes('"C:\\Custom\\icon.ico"')));
+  assert.strictEqual(shellNotified, true);
+
   console.log('All windowsFileAssociation tests PASSED successfully.');
 })().catch((err) => {
   console.error(err);

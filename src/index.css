@@ -103,12 +103,19 @@ body {
 .react-flow__handle {
   width: 10px !important;
   height: 10px !important;
-  border-radius: 2px !important;
-  background: var(--accent-emerald) !important;
-  border: 2px solid var(--bg-main) !important;
+  border-radius: 2px;
+  background: var(--accent-emerald);
+  border: 2px solid var(--bg-main);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
   cursor: crosshair !important;
+}
+
+.opm-port-handle {
+  background: var(--port-color) !important;
+  background-color: var(--port-color) !important;
+  border-color: #18181b !important;
+  box-shadow: 0 0 8px var(--port-color) !important;
 }
 
 .react-flow__edge-path {

@@ -22,4 +22,12 @@ void SM_TraceAction(ADIA_Instance_t *instance, const char *action);
 #define SM_TraceAction(instance, action) ((void)0)
 #endif
 
+#ifdef ADIA_TESTING
+SM_Error_t SM_Test_SetActiveState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state);
+SM_Error_t SM_Test_SetStateActive(ADIA_Instance_t *instance, SM_Node_t state, bool active);
+SM_Error_t SM_Test_SetStateTimer(ADIA_Instance_t *instance, SM_Node_t state, uint32_t timer_ms);
+SM_Error_t SM_Test_SetHistoryState(ADIA_Instance_t *instance, uint32_t slot, SM_Node_t state);
+SM_Error_t SM_Test_SetDeepHistory(ADIA_Instance_t *instance, uint32_t layer, SM_Node_t state, bool active);
+#endif
+
 #endif /* SM_CORE_H */

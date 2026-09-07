@@ -3,13 +3,13 @@
 
 #include "sm_config.h"
 
-/* State: State_1 | Model ID: 265d4f7c-6336-4720-a143-e009c1002387 | C enum: SM_ST__265D4F7C_6336_4720_A143_E009C1002387 */
-void SM_ST__265D4F7C_6336_4720_A143_E009C1002387_Entry(ADIA_Instance_t *instance);
-void SM_ST__265D4F7C_6336_4720_A143_E009C1002387_During(ADIA_Instance_t *instance);
-void SM_ST__265D4F7C_6336_4720_A143_E009C1002387_Exit(ADIA_Instance_t *instance);
-/* State: State_2 | Model ID: 480c2bb1-273c-4c96-a72c-29b0644f4691 | C enum: SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691 */
-void SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_Entry(ADIA_Instance_t *instance);
-void SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_During(ADIA_Instance_t *instance);
-void SM_ST__480C2BB1_273C_4C96_A72C_29B0644F4691_Exit(ADIA_Instance_t *instance);
+/* State: State_1 | Model ID: 535ddd5a-c012-46ce-b23c-9a6ce8d81df6 | C enum: SM_ST__535DDD5A_C012_46CE_B23C_9A6CE8D81DF6 */
+void SM_ST__535DDD5A_C012_46CE_B23C_9A6CE8D81DF6_Entry(ADIA_Instance_t *instance);
+void SM_ST__535DDD5A_C012_46CE_B23C_9A6CE8D81DF6_During(ADIA_Instance_t *instance);
+void SM_ST__535DDD5A_C012_46CE_B23C_9A6CE8D81DF6_Exit(ADIA_Instance_t *instance);
+/* State: State_2 | Model ID: 979256a5-9d43-41f5-929f-5b27ad7deb22 | C enum: SM_ST__979256A5_9D43_41F5_929F_5B27AD7DEB22 */
+void SM_ST__979256A5_9D43_41F5_929F_5B27AD7DEB22_Entry(ADIA_Instance_t *instance);
+void SM_ST__979256A5_9D43_41F5_929F_5B27AD7DEB22_During(ADIA_Instance_t *instance);
+void SM_ST__979256A5_9D43_41F5_929F_5B27AD7DEB22_Exit(ADIA_Instance_t *instance);
 
 #endif /* SM_USER_LOGIC_H */

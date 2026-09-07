@@ -12990,6 +12990,11 @@ const ADIA = () => {
   // KEYBOARD SHORTCUTS
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (diagramMode === 'entropy') {
+        // Let EntropyWorkspace handle all shortcuts in OPM mode
+        return;
+      }
+
       // Prevent shortcuts when typing in inputs
 
       const target = e.target as HTMLElement;
