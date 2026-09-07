@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import type { AppNode, AppEdge, OpmNodeKind, OPMLinkType, OPMPort } from './EntropyTypes';
+import type { AppNode, AppEdge, OPMLinkType, OPMPort } from './EntropyTypes';
+import type { OpmNodeKind } from './OpmMigrations';
 import {
   X, Trash2, Plus, Play, Pause, ArrowRight, RotateCcw,
   ChevronDown, ChevronRight, ZoomIn, Layers, Zap, Activity
@@ -30,6 +31,7 @@ export interface OpmRightPanelContentProps {
   onResetSimulation: () => void;
   activeOpmConfig: any;
   onOpmConfigChange: (updater: (prev: any) => any) => void;
+  simControlExtraContent?: React.ReactNode;
   scopeTabContent: React.ReactNode;
   oplTabContent: React.ReactNode;
   smartShowTabContent: React.ReactNode;
@@ -62,6 +64,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
   onResetSimulation,
   activeOpmConfig,
   onOpmConfigChange,
+  simControlExtraContent,
   scopeTabContent,
   oplTabContent,
   smartShowTabContent,
@@ -722,6 +725,8 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                   </div>
                 </div>
               </div>
+
+              {simControlExtraContent}
             </div>
           )}
 

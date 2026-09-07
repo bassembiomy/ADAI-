@@ -46,9 +46,11 @@ import { validateOpmConnection } from './OpmLinkRules';
 import { layoutOpmGraph } from './OpmAutoLayout';
 import { resolveBlockOverlap, type RectBounds } from './OpmCollisionAvoidance';
 import type { SysMLDiagramState } from '../../types/sysml_types';
-import { Play, Pause, RotateCcw, ArrowRight, Layout, Download, Upload, ZoomIn, ZoomOut, Check, X, Plus, Trash2 } from 'lucide-react';
+import { Play, Pause, RotateCcw, ArrowRight, Layout, Download, Upload, ZoomIn, ZoomOut, Check, X, Plus, Trash2, ExternalLink } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { OPM_EXAMPLES } from './EntropyExamples';
+import { OpmFloatingWindow } from './OpmFloatingWindow';
+import { OpmRightPanelContent } from './OpmRightPanelContent';
 
 const nodeTypes = {
   opmObject: OPMObjectNode,
@@ -204,6 +206,10 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const [activeTool, setActiveTool] = useState<'select' | 'object' | 'process' | 'state' | 'requirement'>('select');
   const [activeLinkType, setActiveLinkType] = useState<OPMLinkType>('consumption');
   const reactFlowInstanceRef = useRef<any>(null);
+  const opmClipboardRef = useRef<{ nodes: AppNode[]; edges: AppEdge[] } | null>(null);
+  const isSpacePressed = useRef<boolean>(false);
+  const spaceComboUsed = useRef<boolean>(false);
+  const [showShortcutsModal, setShowShortcutsModal] = useState<boolean>(false);
 
   // Text editor integration (bimodal)
   const [oplText, setOplText] = useState<string>('');
@@ -278,12 +284,16 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
 
   // Right Sidebar active tab
   const [rightTab, setRightTab] = useState<'simControl' | 'scope' | 'opl' | 'smartShow' | 'opmCodegen'>('simControl');
-  const [bottomView, setBottomView] = useState<'console' | 'scope'>('console');
+  const [bottomView, setBottomView] = useState<'console' | 'scope'>('scope');
   const [opmArtifactState, setOpmArtifactState] = useState<OpmArtifactState>(createInitialArtifactState);
   const [selectedEdge, setSelectedEdge] = useState<AppEdge | null>(null);
   const [diagnosticNavMessage, setDiagnosticNavMessage] = useState<string | null>(null);
   const [connectSourceId, setConnectSourceId] = useState<string | null>(null);
-  const [docks, setDocks] = useState<OpmDocks>(loadDocks);
+  const [docks, setDocks] = useState<OpmDocks>(() => {
+    const loaded = loadDocks();
+    return { ...loaded, bottom: true };
+  });
+  const [isRightFloating, setIsRightFloating] = useState(false);
 
   // --- Dock page presets: page switch applies the preset + its right tab ---
   const handleDocksChange = (d: OpmDocks) => {
@@ -345,7 +355,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
       const { nodes: parsedNodes, edges: parsedEdges, errors } = parseOpl(smartHomeEx.oplText);
       simStateRef.current = initializeSimulation(parsedNodes);
       const initializedNodes = applySimResultToNodes(parsedNodes, simStateRef.current, []);
-      setNodes(initializedNodes);
+      const layoutedNodes = layoutOpmGraph(initializedNodes, parsedEdges);
+      setNodes(layoutedNodes);
       setEdges(parsedEdges);
       setOplText(smartHomeEx.oplText);
       setOplErrors(errors);
@@ -373,7 +384,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     const STATE_WIDTH = 95;
     const STATE_GAP_X = 12;
     const STATE_START_X = 18;
-    const STATE_START_Y = 56;
+    const STATE_START_Y = 49;
 
     const updatedNodes = nodes.map(node => {
       if (node.type === 'opmState' && node.parentId) {
@@ -481,7 +492,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     const STATE_WIDTH = 95;
     const STATE_GAP_X = 12;
     const STATE_START_X = 18;
-    const STATE_START_Y = 56;
+    const STATE_START_Y = 49;
     const newIdx = existingStates.length;
     const isInitial = existingStates.length === 0;
 
@@ -991,6 +1002,24 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     logSim('info', simRunning ? 'Simulation paused.' : 'Simulation running...');
   };
 
+  const runSimulation = () => {
+    if (!simRunning) {
+      if (simStateRef.current.tick === 0) {
+        simStateRef.current = initializeSimulation(nodes);
+        setNodes(prev => applySimResultToNodes(prev, simStateRef.current, []));
+      }
+      setSimRunning(true);
+      logSim('info', 'Simulation running...');
+    }
+  };
+
+  const pauseSimulation = () => {
+    if (simRunning) {
+      setSimRunning(false);
+      logSim('info', 'Simulation paused.');
+    }
+  };
+
   const resetSimulation = () => {
     setSimRunning(false);
     simStateRef.current = initializeSimulation(nodes);
@@ -1203,7 +1232,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     });
   }, [filteredEdges, nodes, simRunning, handleEdgeTypeChange, handleEdgeDelete]);
 
-  // --- Comprehensive Keyboard Shortcuts (Delete, Backspace, Undo, Redo, Escape, Save, Space) ---
+  // --- Comprehensive Keyboard Shortcuts (Ctrl+S, Ctrl+Z, Ctrl+Y, Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+D, Ctrl+R, Ctrl+P, Ctrl+O, Ctrl+L, Zoom, Delete, Escape, Space) ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // If user is actively typing in an input, textarea, or contentEditable element, do not intercept
@@ -1215,79 +1244,658 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         target.isContentEditable
       );
 
-      // Escape: Deselect elements / close inspectors
+      // Escape: Deselect elements / close inspectors / modals
       if (e.key === 'Escape') {
-        if (selectedNode || selectedEdge) {
-          setSelectedNode(null);
-          setSelectedEdge(null);
-        }
+        setSelectedNode(null);
+        setSelectedEdge(null);
+        setNodes(prev => prev.map(n => n.selected ? { ...n, selected: false } : n));
+        setEdges(prev => prev.map(ed => ed.selected ? { ...ed, selected: false } : ed));
+        setShowShortcutsModal(false);
         return;
       }
 
       // If typing in an input field, let normal typing / delete / undo happen inside the field
       if (isInput) return;
 
-      // Delete or Backspace: Delete selected node or selected edge
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedNode) {
-          e.preventDefault();
-          handleDeleteSelectedNode();
-        } else if (selectedEdge) {
-          e.preventDefault();
-          handleEdgeDelete(selectedEdge.id);
-          setSelectedEdge(null);
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+
+      // 1. Save: Ctrl+S / Cmd+S
+      if (isCtrlOrCmd && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onSave) {
+          onSave(nodes, edges);
+          logSim('success', 'Diagram saved (Ctrl+S).');
         }
         return;
       }
 
-      // Ctrl+Z / Cmd+Z (without shift): Undo
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
+      // 2. Undo: Ctrl+Z / Cmd+Z (without Shift)
+      if (isCtrlOrCmd && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
         e.preventDefault();
+        e.stopPropagation();
         triggerUndo();
         return;
       }
 
-      // Ctrl+Y / Cmd+Y OR Ctrl+Shift+Z / Cmd+Shift+Z: Redo
+      // 3. Redo: Ctrl+Y / Cmd+Y OR Ctrl+Shift+Z / Cmd+Shift+Z
       if (
-        ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) ||
-        ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && e.shiftKey)
+        (isCtrlOrCmd && (e.key === 'y' || e.key === 'Y')) ||
+        (isCtrlOrCmd && (e.key === 'z' || e.key === 'Z') && e.shiftKey)
       ) {
         e.preventDefault();
+        e.stopPropagation();
         triggerRedo();
         return;
       }
 
-      // Ctrl+S / Cmd+S: Save diagram
-      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+      // 4. Select All: Ctrl+A / Cmd+A
+      if (isCtrlOrCmd && (e.key === 'a' || e.key === 'A')) {
         e.preventDefault();
-        if (onSave) {
-          onSave(nodes, edges);
-          logSim('success', 'Diagram saved.');
+        e.stopPropagation();
+        setNodes(prev => prev.map(n => ({ ...n, selected: true })));
+        setEdges(prev => prev.map(ed => ({ ...ed, selected: true })));
+        logSim('info', 'Selected all elements (Ctrl+A).');
+        return;
+      }
+
+      // 5. Copy: Ctrl+C / Cmd+C
+      if (isCtrlOrCmd && (e.key === 'c' || e.key === 'C')) {
+        const activeSelectedNodes = nodes.filter(n => n.selected || (selectedNode && n.id === selectedNode.id));
+        if (activeSelectedNodes.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          const selectedObjIds = new Set(activeSelectedNodes.map(n => n.id));
+          const childStates = nodes.filter(n => n.parentId && selectedObjIds.has(n.parentId));
+          const toCopyNodes = [...new Set([...activeSelectedNodes, ...childStates])];
+          const toCopyIds = new Set(toCopyNodes.map(n => n.id));
+          const toCopyEdges = edges.filter(ed => toCopyIds.has(ed.source) && toCopyIds.has(ed.target));
+          opmClipboardRef.current = {
+            nodes: JSON.parse(JSON.stringify(toCopyNodes)),
+            edges: JSON.parse(JSON.stringify(toCopyEdges)),
+          };
+          logSim('info', `Copied ${activeSelectedNodes.length} element(s) (Ctrl+C).`);
         }
         return;
       }
 
-      // Space: Toggle simulation play/pause
-      if (e.key === ' ') {
+      // 6. Paste: Ctrl+V / Cmd+V
+      if (isCtrlOrCmd && (e.key === 'v' || e.key === 'V')) {
+        if (opmClipboardRef.current && opmClipboardRef.current.nodes.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          saveHistory(nodes, edges);
+          const idMap = new Map<string, string>();
+          opmClipboardRef.current.nodes.forEach(n => idMap.set(n.id, uuidv4()));
+
+          const newPastedNodes: AppNode[] = opmClipboardRef.current.nodes.map(n => {
+            const newId = idMap.get(n.id)!;
+            const isChild = Boolean(n.parentId);
+            const parentId = n.parentId ? idMap.get(n.parentId) || n.parentId : undefined;
+            return {
+              ...n,
+              id: newId,
+              selected: true,
+              parentId,
+              position: isChild
+                ? { ...n.position }
+                : { x: n.position.x + 35, y: n.position.y + 35 },
+              data: {
+                ...n.data,
+                parentId: parentId || null,
+              }
+            };
+          });
+
+          const newPastedEdges: AppEdge[] = opmClipboardRef.current.edges.map(edge => {
+            const newSource = idMap.get(edge.source) || edge.source;
+            const newTarget = idMap.get(edge.target) || edge.target;
+            return {
+              ...edge,
+              id: `e-${newSource}-${newTarget}-${uuidv4().slice(0, 6)}`,
+              source: newSource,
+              target: newTarget,
+              selected: false,
+            };
+          });
+
+          setNodes(prev => [...prev.map(n => ({ ...n, selected: false })), ...newPastedNodes]);
+          setEdges(prev => [...prev.map(ed => ({ ...ed, selected: false })), ...newPastedEdges]);
+          if (newPastedNodes.length > 0) {
+            setSelectedNode(newPastedNodes[0]);
+          }
+          logSim('info', `Pasted ${newPastedNodes.filter(n => !n.parentId).length} element(s) (Ctrl+V).`);
+        }
+        return;
+      }
+
+      // 7. Cut: Ctrl+X / Cmd+X
+      if (isCtrlOrCmd && (e.key === 'x' || e.key === 'X')) {
+        const activeSelectedNodes = nodes.filter(n => n.selected || (selectedNode && n.id === selectedNode.id));
+        if (activeSelectedNodes.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          saveHistory(nodes, edges);
+          const selectedObjIds = new Set(activeSelectedNodes.map(n => n.id));
+          const childStates = nodes.filter(n => n.parentId && selectedObjIds.has(n.parentId));
+          const toCopyNodes = [...new Set([...activeSelectedNodes, ...childStates])];
+          const toCopyIds = new Set(toCopyNodes.map(n => n.id));
+          const toCopyEdges = edges.filter(ed => toCopyIds.has(ed.source) && toCopyIds.has(ed.target));
+          opmClipboardRef.current = {
+            nodes: JSON.parse(JSON.stringify(toCopyNodes)),
+            edges: JSON.parse(JSON.stringify(toCopyEdges)),
+          };
+          setNodes(prev => prev.filter(n => !toCopyIds.has(n.id)));
+          setEdges(prev => prev.filter(ed => !toCopyIds.has(ed.source) && !toCopyIds.has(ed.target)));
+          setSelectedNode(null);
+          setSelectedEdge(null);
+          logSim('info', `Cut ${activeSelectedNodes.length} element(s) (Ctrl+X).`);
+        }
+        return;
+      }
+
+      // 8. Duplicate: Ctrl+D / Cmd+D
+      if (isCtrlOrCmd && (e.key === 'd' || e.key === 'D')) {
+        const activeSelectedNodes = nodes.filter(n => n.selected || (selectedNode && n.id === selectedNode.id));
+        if (activeSelectedNodes.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          saveHistory(nodes, edges);
+          const idMap = new Map<string, string>();
+          const selectedObjIds = new Set(activeSelectedNodes.map(n => n.id));
+          const childStates = nodes.filter(n => n.parentId && selectedObjIds.has(n.parentId));
+          const toDupNodes = [...new Set([...activeSelectedNodes, ...childStates])];
+          toDupNodes.forEach(n => idMap.set(n.id, uuidv4()));
+
+          const dupNodes: AppNode[] = toDupNodes.map(n => {
+            const newId = idMap.get(n.id)!;
+            const isChild = Boolean(n.parentId);
+            const parentId = n.parentId ? idMap.get(n.parentId) || n.parentId : undefined;
+            return {
+              ...n,
+              id: newId,
+              selected: true,
+              parentId,
+              position: isChild
+                ? { ...n.position }
+                : { x: n.position.x + 35, y: n.position.y + 35 },
+              data: {
+                ...n.data,
+                parentId: parentId || null,
+              }
+            };
+          });
+
+          const toDupIds = new Set(toDupNodes.map(n => n.id));
+          const toDupEdges = edges.filter(ed => toDupIds.has(ed.source) && toDupIds.has(ed.target));
+          const dupEdges: AppEdge[] = toDupEdges.map(edge => {
+            const newSource = idMap.get(edge.source) || edge.source;
+            const newTarget = idMap.get(edge.target) || edge.target;
+            return {
+              ...edge,
+              id: `e-${newSource}-${newTarget}-${uuidv4().slice(0, 6)}`,
+              source: newSource,
+              target: newTarget,
+              selected: false,
+            };
+          });
+
+          setNodes(prev => [...prev.map(n => ({ ...n, selected: false })), ...dupNodes]);
+          setEdges(prev => [...prev.map(ed => ({ ...ed, selected: false })), ...dupEdges]);
+          if (dupNodes.length > 0) {
+            setSelectedNode(dupNodes[0]);
+          }
+          logSim('info', `Duplicated ${activeSelectedNodes.length} element(s) (Ctrl+D).`);
+        }
+        return;
+      }
+
+      // 9. Run Simulation: Ctrl+R / Cmd+R
+      if (isCtrlOrCmd && (e.code === 'KeyR' || e.key === 'r' || e.key === 'R')) {
         e.preventDefault();
-        toggleSimulation();
+        e.stopPropagation();
+        runSimulation();
+        return;
+      }
+
+      // 10. Pause Simulation: Ctrl+P / Cmd+P
+      if (isCtrlOrCmd && (e.code === 'KeyP' || e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        e.stopPropagation();
+        pauseSimulation();
+        return;
+      }
+
+      // 11. Reset Simulation: Ctrl+O / Cmd+O
+      if (isCtrlOrCmd && (e.code === 'KeyO' || e.key === 'o' || e.key === 'O')) {
+        e.preventDefault();
+        e.stopPropagation();
+        resetSimulation();
+        return;
+      }
+
+      // 12. Auto Layout: Ctrl+L / Cmd+L
+      if (isCtrlOrCmd && (e.key === 'l' || e.key === 'L')) {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerAutoLayout('hierarchy');
+        logSim('info', 'Auto-layout applied (Ctrl+L).');
+        return;
+      }
+
+      // 13. Zoom In: Ctrl+= / Ctrl++
+      if (isCtrlOrCmd && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        e.stopPropagation();
+        reactFlowInstanceRef.current?.zoomIn({ duration: 200 });
+        return;
+      }
+
+      // 14. Zoom Out: Ctrl+-
+      if (isCtrlOrCmd && e.key === '-') {
+        e.preventDefault();
+        e.stopPropagation();
+        reactFlowInstanceRef.current?.zoomOut({ duration: 200 });
+        return;
+      }
+
+      // 15. Fit View: Ctrl+0
+      if (isCtrlOrCmd && e.key === '0') {
+        e.preventDefault();
+        e.stopPropagation();
+        reactFlowInstanceRef.current?.fitView({ duration: 250, padding: 0.15 });
+        return;
+      }
+
+      // 16. Delete or Backspace: Delete selected node(s) or edge(s)
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const activeSelectedNodes = nodes.filter(n => n.selected || (selectedNode && n.id === selectedNode.id));
+        const activeSelectedEdges = edges.filter(ed => ed.selected || (selectedEdge && ed.id === selectedEdge.id));
+
+        if (selectedNode && activeSelectedNodes.length <= 1 && activeSelectedEdges.length === 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleDeleteSelectedNode();
+          return;
+        }
+
+        if (activeSelectedNodes.length > 0 || activeSelectedEdges.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          saveHistory(nodes, edges);
+          const selectedObjIds = new Set(activeSelectedNodes.map(n => n.id));
+          const allNodeIdsToDelete = new Set<string>();
+          nodes.forEach(n => {
+            if (selectedObjIds.has(n.id) || (n.parentId && selectedObjIds.has(n.parentId))) {
+              allNodeIdsToDelete.add(n.id);
+            }
+          });
+          const edgeIdsToDelete = new Set(activeSelectedEdges.map(ed => ed.id));
+
+          setNodes(prev => prev.filter(n => !allNodeIdsToDelete.has(n.id)));
+          setEdges(prev => prev.filter(ed => !edgeIdsToDelete.has(ed.id) && !allNodeIdsToDelete.has(ed.source) && !allNodeIdsToDelete.has(ed.target)));
+
+          setSelectedNode(null);
+          setSelectedEdge(null);
+          logSim('warning', `Deleted ${allNodeIdsToDelete.size} element(s).`);
+          return;
+        }
+      }
+
+      // 17. Space: Record keydown without repeat so Space + C can be detected
+      if (e.code === 'Space') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!e.repeat) {
+          isSpacePressed.current = true;
+        }
+        return;
+      }
+
+      // 18. Space + C: Toggle Collapse / Expand all dock panels (Left, Right, Bottom)
+      if ((e.key === 'c' || e.key === 'C') && isSpacePressed.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        spaceComboUsed.current = true;
+        const allCollapsed = !docks.left && !docks.right && !docks.bottom;
+        if (allCollapsed) {
+          handleDocksChange({ ...docks, left: true, right: true, bottom: true });
+          logSim('info', 'Expanded all panels (Space + C).');
+        } else {
+          handleDocksChange({ ...docks, left: false, right: false, bottom: false });
+          logSim('info', 'Collapsed all panels (Space + C).');
+        }
         return;
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedNode, selectedEdge, handleDeleteSelectedNode, handleEdgeDelete, triggerUndo, triggerRedo, onSave, nodes, edges, toggleSimulation, logSim]);
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        const wasCombo = spaceComboUsed.current;
+        isSpacePressed.current = false;
+        spaceComboUsed.current = false;
+        if (!wasCombo) {
+          const target = e.target as HTMLElement | null;
+          const isInput = target && (
+            target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.tagName === 'SELECT' ||
+            target.isContentEditable
+          );
+          if (!isInput) {
+            toggleSimulation();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    window.addEventListener('keyup', handleKeyUp, { capture: true });
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+      window.removeEventListener('keyup', handleKeyUp, { capture: true });
+    };
+  }, [
+    selectedNode,
+    selectedEdge,
+    nodes,
+    edges,
+    docks,
+    handleDocksChange,
+    handleDeleteSelectedNode,
+    triggerUndo,
+    triggerRedo,
+    onSave,
+    toggleSimulation,
+    runSimulation,
+    pauseSimulation,
+    resetSimulation,
+    triggerAutoLayout,
+    saveHistory,
+    logSim
+  ]);
 
   const numIn = selectedNode?.data?.inputs?.length || 0;
   const numOut = selectedNode?.data?.outputs?.length || 0;
   const selectedNodePortsCount = numIn + numOut;
 
+  const rightPanelContent = (
+    <OpmRightPanelContent
+      selectedNode={selectedNode}
+      selectedEdge={selectedEdge}
+      onCloseInspector={() => {
+        setSelectedNode(null);
+        setSelectedEdge(null);
+      }}
+      onUpdateNodeProp={handleUpdateNodeProp}
+      onConvertNodeType={handleConvertNodeType}
+      onAddStateToObject={handleAddStateToObject}
+      onManualActivateState={handleManualActivateState}
+      onDeleteState={handleDeleteState}
+      onAddAttribute={handleAddAttribute}
+      onAddPort={handleAddPort}
+      onRemovePort={handleRemovePort}
+      onZoomInNode={handleZoomInNode}
+      onDeleteSelectedNode={handleDeleteSelectedNode}
+      onConvertEdgeType={handleConvertEdgeType}
+      rightTab={rightTab}
+      onRightTabChange={(t) => setRightTab(t as any)}
+      simRunning={simRunning}
+      simTick={simStateRef.current?.tick || 0}
+      tickMs={activeOpmConfig.tickMs}
+      onToggleSimulation={toggleSimulation}
+      onRunSimTick={runSimTick}
+      onResetSimulation={resetSimulation}
+      activeOpmConfig={activeOpmConfig}
+      onOpmConfigChange={(updater: any) => {
+        if (typeof updater === 'function') {
+          const next = updater(activeOpmConfig);
+          if (next && next.tickMs !== undefined) handleConfigFieldChange('tickMs', next.tickMs);
+        } else if (updater && updater.tickMs !== undefined) {
+          handleConfigFieldChange('tickMs', updater.tickMs);
+        }
+      }}
+      simControlExtraContent={
+        <div className="flex flex-col gap-3.5 pt-1">
+          {/* Quick Initialize Button */}
+          <button
+            onClick={handleAutoInitializeStates}
+            className="py-2 px-3 bg-[#10b981] hover:bg-emerald-600 text-black font-extrabold rounded-md text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-lg shrink-0"
+            title="Activate the first state of all objects to initialize the model"
+          >
+            🔄 Auto-Initialize States
+          </button>
+
+          {/* Section 1: Objects & States (Outports) */}
+          <div className="flex-1 min-h-0 flex flex-col gap-2">
+            <div className="flex items-center justify-between border-b border-[#2d2d2d] pb-1 shrink-0">
+              <span className="text-xs uppercase font-extrabold tracking-wider text-emerald-400 flex items-center gap-1">
+                🟢 Objects & States (Outports)
+              </span>
+              <span className="text-[10px] text-gray-500 font-mono">
+                {nodes.filter(n => n.data.type === 'object' && n.data.parentId === activeParentId).length} Objects
+              </span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
+              {nodes.filter(n => n.data.type === 'object' && n.data.parentId === activeParentId).map(obj => {
+                const childStates = nodes.filter(sn => sn.parentId === obj.id && sn.data.type === 'state');
+
+                return (
+                  <div key={obj.id} className="bg-[#161616]/75 border border-emerald-900/20 rounded-lg p-2.5 space-y-2 hover:border-emerald-600/30 transition-all">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-emerald-300">
+                        {obj.data.name}
+                      </span>
+                      {obj.data.physical && (
+                        <span className="text-[8px] px-1 bg-emerald-950 border border-emerald-800 text-emerald-400 rounded font-semibold scale-90">
+                          Physical
+                        </span>
+                      )}
+                    </div>
+
+                    {childStates.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {childStates.map(stateNode => {
+                          const isActive = (stateNode.data as any).isActive;
+                          return (
+                            <button
+                              key={stateNode.id}
+                              onClick={() => handleManualActivateState(stateNode.id, obj.id)}
+                              className={`text-[9.5px] px-2.5 py-1 rounded transition-all duration-300 border flex items-center gap-1 ${
+                                isActive
+                                  ? 'bg-orange-500 text-black border-orange-400 font-black shadow-[0_0_10px_rgba(249,115,22,0.4)]'
+                                  : 'bg-[#1c1c1c] text-orange-200/70 border-orange-900/30 hover:border-orange-500/50'
+                              }`}
+                              title={`Click to set ${obj.data.name} state to ${stateNode.data.name}`}
+                            >
+                              {isActive && <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping" />}
+                              {stateNode.data.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-[9px] text-gray-500 italic">
+                        No states defined. Double-click canvas under State tool to add.
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {nodes.filter(n => n.data.type === 'object' && n.data.parentId === activeParentId).length === 0 && (
+                <div className="text-xs text-gray-500 italic text-center py-6">
+                  No objects in this scope.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Section 2: Processes & Triggers */}
+          <div className="flex-1 min-h-0 flex flex-col gap-2">
+            <div className="flex items-center justify-between border-b border-[#2d2d2d] pb-1 shrink-0">
+              <span className="text-xs uppercase font-extrabold tracking-wider text-sky-400 flex items-center gap-1">
+                🔵 Processes & Triggers
+              </span>
+              <span className="text-[10px] text-gray-500 font-mono">
+                {nodes.filter(n => n.data.type === 'process' && n.data.parentId === activeParentId).length} Processes
+              </span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
+              {nodes.filter(n => n.data.type === 'process' && n.data.parentId === activeParentId).map(proc => {
+                const isFiring = (proc.data as any).isFiring;
+                const incomingEdges = edges.filter(e => e.target === proc.id && (e.data?.type === 'trigger' || e.data?.type === 'condition'));
+
+                return (
+                  <div key={proc.id} className="bg-[#161616]/75 border border-sky-900/20 rounded-lg p-2.5 space-y-2 hover:border-sky-600/30 transition-all">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isFiring ? 'bg-orange-400 animate-pulse shadow-[0_0_8px_#f97316]' : 'bg-sky-500'}`} />
+                        <span className="text-xs font-bold text-sky-300 truncate">
+                          {proc.data.name}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleManualTriggerProcess(proc.id)}
+                        className={`text-[9px] px-2 py-0.5 font-extrabold uppercase rounded transition-all border flex items-center gap-0.5 shrink-0 ${
+                          isFiring
+                            ? 'bg-orange-600 text-black border-orange-400'
+                            : 'bg-sky-950/40 text-sky-400 border-sky-900 hover:bg-sky-900 hover:text-white'
+                        }`}
+                        title="Force execute process manually"
+                      >
+                        ⚡ {isFiring ? 'Firing' : 'Fire'}
+                      </button>
+                    </div>
+
+                    {/* Conditions & Triggers List */}
+                    {incomingEdges.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="text-[8px] uppercase tracking-wider font-extrabold text-gray-500">Incoming Conditions:</div>
+                        <div className="flex flex-col gap-1">
+                          {incomingEdges.map(edge => {
+                            const srcNode = nodes.find(n => n.id === edge.source);
+                            if (!srcNode) return null;
+
+                            const isSourceActive = srcNode.data.type === 'state' ? (srcNode.data as any).isActive : false;
+                            const linkType = edge.data?.type || 'standard';
+
+                            return (
+                              <div key={edge.id} className="flex items-center justify-between bg-black/25 px-1.5 py-0.5 rounded text-[9px] font-mono border border-white/5">
+                                <span className="text-gray-400 truncate max-w-[140px]">
+                                  {srcNode.data.name}
+                                </span>
+                                <span className={`px-1 rounded text-[7.5px] uppercase font-bold shrink-0 ${
+                                  isSourceActive
+                                    ? 'bg-green-950 text-green-400 border border-green-900/60'
+                                    : 'bg-red-950 text-red-400 border border-red-900/60'
+                                }`}>
+                                  {linkType === 'trigger' ? 'trg' : 'cnd'} {isSourceActive ? '✓' : '✗'}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {nodes.filter(n => n.data.type === 'process' && n.data.parentId === activeParentId).length === 0 && (
+                <div className="text-xs text-gray-500 italic text-center py-6">
+                  No processes in this scope.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      }
+      scopeTabContent={
+        <div className="flex-1 flex flex-col overflow-hidden p-2 min-h-0">
+          <OpmSimulationScope
+            simRunning={simRunning}
+            currentTick={simStateRef.current.tick}
+            tickMs={activeOpmConfig.tickMs}
+            nodes={nodes}
+            edges={edges}
+            recentLogs={simLogs}
+            onReset={resetSimulation}
+          />
+        </div>
+      }
+      oplTabContent={
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+          <span className="text-xs text-[#888]">The OPL editor now lives in the bottom dock, next to the simulation console.</span>
+          <button
+            onClick={() => handleDocksChange({ ...docks, bottom: true })}
+            className="px-2.5 py-1 text-[11px] border border-[#333] rounded hover:bg-[#222] text-[#ccc]"
+          >
+            Show bottom dock
+          </button>
+        </div>
+      }
+      smartShowTabContent={
+        <div className="flex-1 flex flex-col overflow-hidden p-3 min-h-0">
+          <SmartShowPanel
+            nodes={nodes}
+            edges={edges}
+            simState={simStateRef.current}
+            simRunning={simRunning}
+            onSelectProcess={(pid) => {
+              const p = nodes.find(n => n.id === pid);
+              if (p) setSelectedNode(p);
+            }}
+          />
+        </div>
+      }
+      codegenTabContent={
+        <div className="flex-1 overflow-y-auto">
+          <OpmCodeGenerationWorkspace
+            nodes={nodes as never}
+            edges={edges as never}
+            state={opmArtifactState}
+            onStateChange={setOpmArtifactState}
+            opmSimulationConfig={activeOpmConfig}
+            onNavigateToDiagnostic={(src) => {
+              if (src.elementId) {
+                const node = nodes.find(n => n.id === src.elementId);
+                if (node) {
+                  setSelectedNode(node);
+                  setSelectedEdge(null);
+                  return;
+                }
+                const edge = edges.find(e => e.id === src.elementId);
+                if (edge) {
+                  setSelectedEdge(edge);
+                  setSelectedNode(null);
+                  return;
+                }
+              }
+              onAddError?.('info', `Diagnostic reference: ${src.elementId || src.propertyPath || 'unknown source'}`, 'OPM');
+            }}
+            onDownload={(files) => {
+              onAddError?.('info', `Verified OPM bundle ready: ${files.length} files.`, 'OPM');
+            }}
+            onRunHil={(files) => {
+              onAddError?.('info', `Verified OPM bundle sent to HIL: ${files.length} files.`, 'OPM');
+            }}
+          />
+        </div>
+      }
+    />
+  );
+
   return (
     <div className="h-full w-full bg-[#0d0d0d] text-[#e0e0e0] font-sans">
       <OpmDockShell
-        docks={docks}
-        onDocksChange={handleDocksChange}
+        docks={isRightFloating ? { ...docks, right: false } : docks}
+        onDocksChange={(nextDocks) => {
+          if (isRightFloating && nextDocks.right) {
+            setIsRightFloating(false);
+          }
+          handleDocksChange(nextDocks);
+        }}
         left={
           <div className="flex flex-col gap-2 p-2">
             {/* Tool Dock (moved verbatim into left dock slot; wrapper adapted from floating to docked) */}
@@ -1444,13 +2052,14 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
                   const { nodes: parsedNodes, edges: parsedEdges, errors } = parseOpl(selectedExample.oplText);
                   simStateRef.current = initializeSimulation(parsedNodes);
                   const initializedNodes = applySimResultToNodes(parsedNodes, simStateRef.current, []);
+                  const layoutedNodes = layoutOpmGraph(initializedNodes, parsedEdges);
                   saveHistory(nodes, edges);
-                  setNodes(initializedNodes);
+                  setNodes(layoutedNodes);
                   setEdges(parsedEdges);
                   setOplText(selectedExample.oplText);
                   setOplErrors(errors);
                   logSim('success', `Loaded example model: ${selectedExample.name}`);
-                  if (onSave) onSave(initializedNodes, parsedEdges);
+                  if (onSave) onSave(layoutedNodes, parsedEdges);
                 }
               }}
               defaultValue=""
@@ -1584,11 +2193,23 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               <button
                 onClick={() => triggerAutoLayout('hierarchy')}
                 className="px-2 py-0.5 text-[10px] rounded hover:bg-[#252529] flex items-center gap-1 text-[#bbb] hover:text-white transition-colors"
-                title="Grid/Hierarchy Auto Layout"
+                title="Grid/Hierarchy Auto Layout (Ctrl+L)"
               >
                 <Layout size={11} /> Tree
               </button>
             </div>
+            <button
+              onClick={() => setShowShortcutsModal(prev => !prev)}
+              data-testid="opm-shortcuts-help-btn"
+              className={`px-2 py-0.5 text-[10px] rounded transition-all flex items-center gap-1 font-semibold ${
+                showShortcutsModal
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                  : 'text-gray-400 hover:text-white hover:bg-[#252529] border border-transparent'
+              }`}
+              title="Keyboard Shortcuts Cheat Sheet"
+            >
+              ⌨ <span className="hidden md:inline">Shortcuts</span>
+            </button>
           </div>
         </div>
 
@@ -1666,778 +2287,41 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
               </div>
             )}
           </div>
-          </div>
-          </div>
-        }
-        right={
-          <div className="flex h-full flex-col gap-2 overflow-y-auto p-2">
-          {/* Selected Node Properties Panel (moved verbatim into right dock slot; wrapper adapted from floating to docked) */}
-          {selectedNode && (
-            <div className="w-full shrink-0 bg-[#141414]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-3.5 shadow-xl flex flex-col gap-2.5 custom-scrollbar">
-              <div className="flex items-center justify-between border-b border-[#333] pb-1.5 shrink-0">
-                <span className="text-xs uppercase font-extrabold tracking-wider text-orange-400">
-                  Element Inspector
-                </span>
-                <button
-                  onClick={() => setSelectedNode(null)}
-                  aria-label="Close Element Inspector"
-                  data-testid="opm-close-node-inspector"
-                  className="text-gray-500 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded p-0.5"
-                  title="Close Element Inspector"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-
-              {/* Basic Fields */}
-              <div className="space-y-1.5 text-xs shrink-0">
-                <div className="flex flex-col gap-0.5">
-                  <label htmlFor="opm-node-name-input" className="text-[10px] text-[#777] uppercase font-semibold">Name</label>
-                  <input
-                    id="opm-node-name-input"
-                    data-testid="opm-node-name-input"
-                    aria-label="Element Name"
-                    type="text"
-                    value={selectedNode.data.name}
-                    onChange={(e) => handleUpdateNodeProp('name', e.target.value)}
-                    className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-orange-500/50 text-white focus-visible:ring-2 focus-visible:ring-orange-500"
-                  />
-                </div>
-
-                {selectedNode.data.type !== 'state' && (
-                  <div className="flex flex-col gap-0.5 pt-1">
-                    <label className="text-[10px] text-[#777] uppercase font-semibold">Element Type</label>
-                    <select
-                      value={selectedNode.type}
-                      onChange={(e) => handleConvertNodeType(e.target.value as OpmNodeKind)}
-                      className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-orange-500/50 text-white text-xs"
-                      data-testid="opm-convert-node-type"
-                    >
-                      <option value="opmObject">Object</option>
-                      <option value="opmProcess">Process</option>
-                    </select>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between pt-1">
-                  <label className="text-[10px] text-[#777] uppercase font-semibold">Physical Entity</label>
-                  <input
-                    type="checkbox"
-                    checked={selectedNode.data.physical}
-                    onChange={(e) => handleUpdateNodeProp('physical', e.target.checked)}
-                    className="rounded border-[#333] bg-[#0d0d0d] text-orange-500 w-3.5 h-3.5"
-                  />
-                </div>
-              </div>
-
-              {/* States Manager (For Objects) */}
-              {selectedNode.data.type === 'object' && (
-                <div className="border-t border-[#2d2d2d] pt-2 space-y-2 shrink-0">
-                  <div className="text-[10px] text-[#777] uppercase font-bold tracking-wider mb-1 flex items-center justify-between">
-                    <span>States</span>
-                    <span className="text-[8px] text-orange-400 font-mono">
-                      {(selectedNode.data.states || []).length} States
-                    </span>
-                  </div>
-
-                  {/* List of States */}
-                  <div className="space-y-1.5 text-xs">
-                    {(selectedNode.data.states || []).map((st) => (
-                      <div key={st.id} className="flex items-center justify-between bg-[#191008] border border-orange-950/60 px-2 py-1 rounded">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.isActive ? 'bg-orange-500 shadow-[0_0_6px_#f97316]' : 'bg-orange-900/60'}`} />
-                          <span className="font-semibold text-orange-200 text-[10px] truncate">{st.name}</span>
-                          {st.isInitial && <span className="text-[7px] px-1 bg-amber-950 text-amber-300 rounded border border-amber-800/60 font-bold shrink-0">Init</span>}
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            onClick={() => handleManualActivateState(st.id, selectedNode.id)}
-                            className={`text-[8px] px-1.5 py-0.5 rounded font-bold uppercase ${st.isActive ? 'bg-orange-600 text-black' : 'bg-[#222] text-orange-300 hover:bg-[#333]'}`}
-                          >
-                            {st.isActive ? 'Active' : 'Set'}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteState(st.id, selectedNode.id)}
-                            className="text-gray-500 hover:text-red-400 p-0.5 transition-colors"
-                            title="Delete State"
-                          >
-                            <Trash2 size={10} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-
-                    {/* Add State form */}
-                    <div className="flex gap-1.5 mt-2">
-                      <input
-                        placeholder="State name (e.g. Active)"
-                        id="new-state-name-input"
-                        className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none flex-1 text-xs text-white focus:border-orange-500/50"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                            handleAddStateToObject(selectedNode.id, e.currentTarget.value.trim());
-                            e.currentTarget.value = '';
-                          }
-                        }}
-                      />
-                      <button
-                        onClick={() => {
-                          const inputEl = document.getElementById('new-state-name-input') as HTMLInputElement;
-                          if (inputEl && inputEl.value.trim()) {
-                            handleAddStateToObject(selectedNode.id, inputEl.value.trim());
-                            inputEl.value = '';
-                          }
-                        }}
-                        className="px-2 py-1 bg-orange-600 hover:bg-orange-500 text-black font-extrabold rounded text-[10px] flex items-center gap-0.5 shrink-0 transition-colors"
-                      >
-                        <Plus size={10} /> Add
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Attributes Section (For Objects) */}
-              {selectedNode.data.type === 'object' && (
-                <div className="border-t border-[#2d2d2d] pt-2 shrink-0">
-                  <div className="text-[10px] text-[#777] uppercase font-semibold mb-1">
-                    Attributes
-                  </div>
-                  {/* List */}
-                  <div className="space-y-1 text-xs">
-                    {(selectedNode.data.attributes || []).map((attr, idx) => (
-                      <div key={idx} className="flex justify-between bg-[#1f1f1f] px-2 py-0.5 rounded font-mono">
-                        <span>{attr.key}:</span>
-                        <span className="text-[#bbb]">{attr.value}</span>
-                      </div>
-                    ))}
-                    {/* Add form */}
-                    <div className="flex gap-1.5 mt-2">
-                      <input
-                        placeholder="Key"
-                        id="new-attr-key"
-                        className="bg-[#0b0b0b] border border-[#333] rounded px-1.5 py-0.5 outline-none w-1/2 text-xs text-white"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const valEl = document.getElementById('new-attr-val') as HTMLInputElement;
-                            if (e.currentTarget.value && valEl.value) {
-                              handleAddAttribute(e.currentTarget.value, valEl.value);
-                              e.currentTarget.value = '';
-                              valEl.value = '';
-                            }
-                          }
-                        }}
-                      />
-                      <input
-                        placeholder="Val"
-                        id="new-attr-val"
-                        className="bg-[#0b0b0b] border border-[#333] rounded px-1.5 py-0.5 outline-none w-1/2 text-xs text-white"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Port Manager (For Objects and Processes) */}
-              {(selectedNode.data.type === 'object' || selectedNode.data.type === 'process') && (
-                <div className="border-t border-[#2d2d2d] pt-2 space-y-2 shrink-0">
-                  <div className="text-[10px] text-[#777] uppercase font-bold tracking-wider mb-1 flex items-center justify-between">
-                    <span>Ports Manager</span>
-                    <span className="text-[8px] text-gray-500 font-mono">
-                      {selectedNodePortsCount} Ports
-                    </span>
-                  </div>
-
-                  {/* List of Ports */}
-                  <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
-                    {/* Inputs */}
-                    {(selectedNode.data.inputs || []).map((port: OPMPort) => (
-                      <div key={port.id} className="flex items-center justify-between bg-black/40 border border-white/5 px-2 py-1 rounded text-[10px]">
-                        <div className="flex items-center gap-1.5 overflow-hidden">
-                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-                          <span className="font-mono text-gray-400 font-bold shrink-0">{port.position.toUpperCase()[0]}:</span>
-                          <span className="truncate text-white font-medium">{port.name}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[8px] px-1 bg-blue-950 text-blue-400 border border-blue-900 rounded font-bold tracking-tighter uppercase scale-90">
-                            {port.type}
-                          </span>
-                          <button
-                            onClick={() => handleRemovePort(port.id, 'input')}
-                            className="text-gray-500 hover:text-red-400 transition-colors"
-                          >
-                            <Trash2 size={10} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-
-                    {/* Outputs */}
-                    {(selectedNode.data.outputs || []).map((port: OPMPort) => (
-                      <div key={port.id} className="flex items-center justify-between bg-black/40 border border-white/5 px-2 py-1 rounded text-[10px]">
-                        <div className="flex items-center gap-1.5 overflow-hidden">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                          <span className="font-mono text-gray-400 font-bold shrink-0">{port.position.toUpperCase()[0]}:</span>
-                          <span className="truncate text-white font-medium">{port.name}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[8px] px-1 bg-emerald-950 text-emerald-400 border border-emerald-900 rounded font-bold tracking-tighter uppercase scale-90">
-                            {port.type}
-                          </span>
-                          <button
-                            onClick={() => handleRemovePort(port.id, 'output')}
-                            className="text-gray-500 hover:text-red-400 transition-colors"
-                          >
-                            <Trash2 size={10} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Add Port Form */}
-                  <div className="bg-[#1c1c1c]/55 p-2.5 rounded border border-white/5 space-y-1.5">
-                    <span className="text-[8px] uppercase tracking-wider text-orange-400/80 font-black">Add Custom Port</span>
-                    <div className="flex gap-1">
-                      <input
-                        placeholder="Port Label"
-                        value={newPortName}
-                        onChange={(e) => setNewPortName(e.target.value)}
-                        className="bg-[#0b0b0b] border border-[#333] rounded px-1.5 py-0.5 outline-none text-[10px] flex-1 text-white"
-                      />
-                      <select
-                        value={newPortDir}
-                        onChange={(e: any) => setNewPortDir(e.target.value)}
-                        className="bg-[#0b0b0b] border border-[#333] rounded px-1 text-[10px] text-gray-300 outline-none"
-                      >
-                        <option value="input">In</option>
-                        <option value="output">Out</option>
-                      </select>
-                    </div>
-
-                    <div className="flex gap-1 justify-between">
-                      <select
-                        value={newPortPos}
-                        onChange={(e: any) => setNewPortPos(e.target.value)}
-                        className="bg-[#0b0b0b] border border-[#333] rounded px-1 py-0.5 text-[9px] text-gray-300 outline-none w-[48%]"
-                      >
-                        <option value="left">Left</option>
-                        <option value="right">Right</option>
-                        <option value="top">Top</option>
-                        <option value="bottom">Bottom</option>
-                      </select>
-
-                      <select
-                        value={newPortType}
-                        onChange={(e: any) => setNewPortType(e.target.value)}
-                        className="bg-[#0b0b0b] border border-[#333] rounded px-1 py-0.5 text-[9px] text-gray-300 outline-none w-[48%]"
-                      >
-                        <option value="standard">Standard</option>
-                        <option value="agent">Agent</option>
-                        <option value="instrument">Instrument</option>
-                        <option value="trigger">Trigger</option>
-                        <option value="condition">Condition</option>
-                        <option value="consumption">Consume</option>
-                        <option value="result">Result</option>
-                        <option value="effect">Effect</option>
-                      </select>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        if (newPortName.trim()) {
-                          handleAddPort(newPortName.trim(), newPortDir, newPortPos, newPortType);
-                          setNewPortName('');
-                        }
-                      }}
-                      className="w-full mt-1.5 py-1 bg-orange-600 hover:bg-orange-700 text-black font-extrabold rounded text-[9.5px] uppercase tracking-wider flex items-center justify-center gap-1 transition-colors"
-                    >
-                      <Plus size={10} /> Add Port
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Zoom Action */}
-              {selectedNode.data.type !== 'state' && (
-                <button
-                  onClick={() => handleZoomInNode(selectedNode.id)}
-                  className="mt-2 py-1 bg-sky-950 text-sky-400 border border-sky-800 hover:bg-sky-900 rounded text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0"
-                >
-                  <ZoomIn size={12} /> Zoom In (Decompose)
-                </button>
-              )}
-
-              {/* Delete Node */}
-              <button
-                onClick={handleDeleteSelectedNode}
-                className="mt-1.5 py-1 bg-red-950/40 text-red-400 border border-red-900/60 hover:bg-red-900 rounded text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0"
-              >
-                <Trash2 size={12} /> Delete Element
-              </button>
-            </div>
-          )}
-
-          {/* Selected Edge Inspector (moved verbatim into right dock slot; wrapper adapted from floating to docked) */}
-          {selectedEdge && !selectedNode && (
-            <div className="w-full shrink-0 bg-[#141414]/95 backdrop-blur-md border border-[#2d2d2d] rounded-lg p-3.5 shadow-xl flex flex-col gap-2.5 custom-scrollbar">
-              <div className="flex items-center justify-between border-b border-[#333] pb-1.5 shrink-0">
-                <span className="text-xs uppercase font-extrabold tracking-wider text-sky-400">
-                  Link Inspector
-                </span>
-                <button
-                  onClick={() => setSelectedEdge(null)}
-                  aria-label="Close Link Inspector"
-                  data-testid="opm-close-edge-inspector"
-                  className="text-gray-500 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 rounded p-0.5"
-                  title="Close Link Inspector"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-              <div className="space-y-1.5 text-xs shrink-0">
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[10px] text-[#777] uppercase font-semibold">Link ID</label>
-                  <span className="font-mono text-[11px] text-gray-300">{selectedEdge.id}</span>
-                </div>
-                <div className="flex flex-col gap-0.5 pt-1">
-                  <label htmlFor="opm-convert-edge-type" className="text-[10px] text-[#777] uppercase font-semibold">Link Role</label>
-                  <select
-                    id="opm-convert-edge-type"
-                    aria-label="Link Role"
-                    value={(selectedEdge.data?.linkType ?? (selectedEdge.data?.type || 'effect')) as string}
-                    onChange={(e) => handleConvertEdgeType(selectedEdge.id, e.target.value as OPMLinkType)}
-                    className="bg-[#0b0b0b] border border-[#333] rounded px-2 py-1 outline-none focus:border-sky-500/50 text-white text-xs focus-visible:ring-2 focus-visible:ring-sky-500"
-                    data-testid="opm-convert-edge-type"
-                  >
-                    <option value="consumption">Consumption</option>
-                    <option value="result">Result</option>
-                    <option value="effect">Effect</option>
-                    <option value="agent">Agent</option>
-                    <option value="instrument">Instrument</option>
-                    <option value="trigger">Trigger</option>
-                    <option value="condition">Condition</option>
-                    <option value="aggregation">Aggregation</option>
-                    <option value="generalization">Generalization</option>
-                    <option value="exhibition">Exhibition</option>
-                    <option value="satisfies">Satisfies</option>
-                    <option value="verifies">Verifies</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-        {/* Task 6: simulation console moved into the bottom dock slot (see below) */}
-
-      {/* 2. Right Tabbed Panel (Simulation Monitor & OPL Editor & Smart Show) */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[#222] bg-[#141414]">
-        {/* Tab Header */}
-        <div className="h-12 border-b border-[#222] flex shrink-0 bg-[#181818]">
-          <button
-            onClick={() => setRightTab('simControl')}
-            className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors border-b-2 ${
-              rightTab === 'simControl'
-                ? 'border-orange-500 text-orange-400 bg-orange-950/10'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            ⚡ Sim
-          </button>
-          <button
-            data-testid="opm-scope-tab-btn"
-            onClick={() => setRightTab('scope')}
-            className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors border-b-2 ${
-              rightTab === 'scope'
-                ? 'border-orange-500 text-orange-400 bg-orange-950/10'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            📈 Scope
-          </button>
-          <button
-            onClick={() => setRightTab('opl')}
-            className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors border-b-2 ${
-              rightTab === 'opl'
-                ? 'border-sky-500 text-sky-400 bg-sky-950/10'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            📝 OPL
-          </button>
-          <button
-            onClick={() => setRightTab('smartShow')}
-            className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider transition-colors border-b-2 ${
-              rightTab === 'smartShow'
-                ? 'border-sky-500 text-sky-300 bg-sky-950/20'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            🌐 Smart Show
-          </button>
-          <button
-            onClick={() => setRightTab('opmCodegen')}
-            className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 ${
-              rightTab === 'opmCodegen'
-                ? 'border-emerald-500 text-emerald-400 bg-emerald-950/10'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            🛠 OPM Build
-          </button>
         </div>
-
-        {/* Tab Content 1: Simulation Control Dashboard */}
-        {rightTab === 'simControl' && (
-          <div className="flex-1 flex flex-col overflow-hidden p-4 gap-4">
-            {/* Live Status and controls */}
-            <div className="bg-[#1a1a1a] rounded-lg border border-[#2d2d2d] p-3 flex items-center justify-between shadow-md shrink-0">
-              <div className="flex flex-col">
-                <span className="text-[10px] text-gray-500 uppercase font-black">Simulation Status</span>
-                <span data-testid="opm-sim-status" className={`text-xs font-extrabold flex items-center gap-1.5 ${simRunning ? 'text-green-400' : 'text-amber-400'}`}>
-                  <span className={`w-2 h-2 rounded-full ${simRunning ? 'bg-green-400 animate-ping' : 'bg-amber-400'}`} />
-                  {simRunning ? 'ACTIVE RUNNING' : 'PAUSED'}
-                </span>
-                <span data-testid="opm-sim-time" className="text-[10px] text-gray-400 font-mono mt-0.5">
-                  Simulated Time: {simStateRef.current.tick * activeOpmConfig.tickMs}ms (Tick {simStateRef.current.tick})
-                </span>
-              </div>
-              <div className="flex gap-1 bg-black/40 p-1 rounded border border-white/5">
-                <button
-                  data-testid="opm-sim-toggle"
-                  onClick={toggleSimulation}
-                  className={`p-1.5 rounded transition-all ${simRunning ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-green-500/20 text-green-400 border border-green-500/30'}`}
-                  title={simRunning ? 'Pause' : 'Start'}
-                >
-                  {simRunning ? <Pause size={12} /> : <Play size={12} />}
-                </button>
-                <button
-                  data-testid="opm-sim-step"
-                  onClick={runSimTick}
-                  className="p-1.5 text-sky-400 hover:bg-sky-950/40 rounded transition-all"
-                  title="Step Simulation"
-                >
-                  <ArrowRight size={12} />
-                </button>
-                <button
-                  data-testid="opm-sim-reset"
-                  onClick={resetSimulation}
-                  className="p-1.5 text-amber-400 hover:bg-amber-950/40 rounded transition-all"
-                  title="Reset"
-                >
-                  <RotateCcw size={12} />
-                </button>
-              </div>
-            </div>
-
-            {/* OPM Isolated Simulation Configuration */}
-            <div className="bg-[#181818] rounded-lg border border-[#2d2d2d] p-3 flex flex-col gap-2.5 shadow-md shrink-0">
-              <div className="flex items-center justify-between border-b border-[#2d2d2d] pb-1">
-                <span className="text-[10px] text-orange-400 uppercase font-extrabold tracking-wider">
-                  OPM Simulation Settings (Isolated)
-                </span>
-                <span className="text-[9px] text-gray-500 font-mono">
-                  {activeOpmConfig.tickMs}ms / tick
-                </span>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[9px] text-gray-400 uppercase font-semibold">Tick (ms)</label>
-                  <input
-                    data-testid="opm-sim-config-tick"
-                    type="number"
-                    min="1"
-                    max="60000"
-                    step="1"
-                    value={configDraft.tickMs ?? ''}
-                    onChange={(e) => handleConfigFieldChange('tickMs', e.target.value)}
-                    className="bg-[#0b0b0b] border border-[#333] rounded px-1.5 py-1 text-xs font-mono text-white outline-none focus:border-orange-500/60"
-                  />
-                  <span className="text-[8px] text-gray-500">1–60,000</span>
-                </div>
-
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[9px] text-gray-400 uppercase font-semibold">Max Ticks</label>
-                  <input
-                    data-testid="opm-sim-config-maxticks"
-                    type="number"
-                    min="1"
-                    max="1000000"
-                    step="1"
-                    value={configDraft.maxTicks ?? ''}
-                    onChange={(e) => handleConfigFieldChange('maxTicks', e.target.value)}
-                    className="bg-[#0b0b0b] border border-[#333] rounded px-1.5 py-1 text-xs font-mono text-white outline-none focus:border-orange-500/60"
-                  />
-                  <span className="text-[8px] text-gray-500">1–1,000,000</span>
-                </div>
-
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[9px] text-gray-400 uppercase font-semibold">Max Events</label>
-                  <input
-                    data-testid="opm-sim-config-maxevents"
-                    type="number"
-                    min="1"
-                    max="1024"
-                    step="1"
-                    value={configDraft.maxEventsPerTick ?? ''}
-                    onChange={(e) => handleConfigFieldChange('maxEventsPerTick', e.target.value)}
-                    className="bg-[#0b0b0b] border border-[#333] rounded px-1.5 py-1 text-xs font-mono text-white outline-none focus:border-orange-500/60"
-                  />
-                  <span className="text-[8px] text-gray-500">1–1,024</span>
-                </div>
-              </div>
-
-              {/* Inline Validation Diagnostics */}
-              {configErrors.length > 0 && (
-                <div
-                  data-testid="opm-sim-config-errors"
-                  className="bg-red-950/40 border border-red-900/60 rounded p-1.5 text-[10px] text-red-300 space-y-0.5"
-                >
-                  <div className="font-bold text-red-400 uppercase text-[9px]">Invalid Configuration (Previous Active):</div>
-                  {configErrors.map((err, i) => (
-                    <div key={i}>• {err}</div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Quick Initialize Button */}
-            <button
-              onClick={handleAutoInitializeStates}
-              className="py-2 px-3 bg-[#10b981] hover:bg-emerald-600 text-black font-extrabold rounded-md text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-lg shrink-0"
-              title="Activate the first state of all objects to initialize the model"
-            >
-              🔄 Auto-Initialize States
-            </button>
-
-            {/* Section 1: Objects & States (Outports) */}
-            <div className="flex-1 min-h-0 flex flex-col gap-2">
-              <div className="flex items-center justify-between border-b border-[#2d2d2d] pb-1 shrink-0">
-                <span className="text-xs uppercase font-extrabold tracking-wider text-emerald-400 flex items-center gap-1">
-                  🟢 Objects & States (Outports)
-                </span>
-                <span className="text-[10px] text-gray-500 font-mono">
-                  {nodes.filter(n => n.data.type === 'object' && n.data.parentId === activeParentId).length} Objects
-                </span>
-              </div>
-              
-              <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
-                {nodes.filter(n => n.data.type === 'object' && n.data.parentId === activeParentId).map(obj => {
-                  const childStates = nodes.filter(sn => sn.parentId === obj.id && sn.data.type === 'state');
-                  
-                  return (
-                    <div key={obj.id} className="bg-[#161616]/75 border border-emerald-900/20 rounded-lg p-2.5 space-y-2 hover:border-emerald-600/30 transition-all">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-emerald-300">
-                          {obj.data.name}
-                        </span>
-                        {obj.data.physical && (
-                          <span className="text-[8px] px-1 bg-emerald-950 border border-emerald-800 text-emerald-400 rounded font-semibold scale-90">
-                            Physical
-                          </span>
-                        )}
-                      </div>
-
-                      {childStates.length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5">
-                          {childStates.map(stateNode => {
-                            const isActive = (stateNode.data as any).isActive;
-                            return (
-                              <button
-                                key={stateNode.id}
-                                onClick={() => handleManualActivateState(stateNode.id, obj.id)}
-                                className={`text-[9.5px] px-2.5 py-1 rounded transition-all duration-300 border flex items-center gap-1 ${
-                                  isActive
-                                    ? 'bg-orange-500 text-black border-orange-400 font-black shadow-[0_0_10px_rgba(249,115,22,0.4)]'
-                                    : 'bg-[#1c1c1c] text-orange-200/70 border-orange-900/30 hover:border-orange-500/50'
-                                }`}
-                                title={`Click to set ${obj.data.name} state to ${stateNode.data.name}`}
-                              >
-                                {isActive && <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping" />}
-                                {stateNode.data.name}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="text-[9px] text-gray-500 italic">
-                          No states defined. Double-click canvas under State tool to add.
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {nodes.filter(n => n.data.type === 'object' && n.data.parentId === activeParentId).length === 0 && (
-                  <div className="text-xs text-gray-500 italic text-center py-6">
-                    No objects in this scope.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Section 2: Processes & Triggers */}
-            <div className="flex-1 min-h-0 flex flex-col gap-2">
-              <div className="flex items-center justify-between border-b border-[#2d2d2d] pb-1 shrink-0">
-                <span className="text-xs uppercase font-extrabold tracking-wider text-sky-400 flex items-center gap-1">
-                  🔵 Processes & Triggers
-                </span>
-                <span className="text-[10px] text-gray-500 font-mono">
-                  {nodes.filter(n => n.data.type === 'process' && n.data.parentId === activeParentId).length} Processes
-                </span>
-              </div>
-
-              <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
-                {nodes.filter(n => n.data.type === 'process' && n.data.parentId === activeParentId).map(proc => {
-                  const isFiring = (proc.data as any).isFiring;
-                  const incomingEdges = edges.filter(e => e.target === proc.id && (e.data?.type === 'trigger' || e.data?.type === 'condition'));
-                  
-                  return (
-                    <div key={proc.id} className="bg-[#161616]/75 border border-sky-900/20 rounded-lg p-2.5 space-y-2 hover:border-sky-600/30 transition-all">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isFiring ? 'bg-orange-400 animate-pulse shadow-[0_0_8px_#f97316]' : 'bg-sky-500'}`} />
-                          <span className="text-xs font-bold text-sky-300 truncate">
-                            {proc.data.name}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => handleManualTriggerProcess(proc.id)}
-                          className={`text-[9px] px-2 py-0.5 font-extrabold uppercase rounded transition-all border flex items-center gap-0.5 shrink-0 ${
-                            isFiring
-                              ? 'bg-orange-600 text-black border-orange-400'
-                              : 'bg-sky-950/40 text-sky-400 border-sky-900 hover:bg-sky-900 hover:text-white'
-                          }`}
-                          title="Force execute process manually"
-                        >
-                          ⚡ {isFiring ? 'Firing' : 'Fire'}
-                        </button>
-                      </div>
-
-                      {/* Conditions & Triggers List */}
-                      {incomingEdges.length > 0 && (
-                        <div className="space-y-1">
-                          <div className="text-[8px] uppercase tracking-wider font-extrabold text-gray-500">Incoming Conditions:</div>
-                          <div className="flex flex-col gap-1">
-                            {incomingEdges.map(edge => {
-                              const srcNode = nodes.find(n => n.id === edge.source);
-                              if (!srcNode) return null;
-                              
-                              const isSourceActive = srcNode.data.type === 'state' ? (srcNode.data as any).isActive : false;
-                              const linkType = edge.data?.type || 'standard';
-
-                              return (
-                                <div key={edge.id} className="flex items-center justify-between bg-black/25 px-1.5 py-0.5 rounded text-[9px] font-mono border border-white/5">
-                                  <span className="text-gray-400 truncate max-w-[140px]">
-                                    {srcNode.data.name}
-                                  </span>
-                                  <span className={`px-1 rounded text-[7.5px] uppercase font-bold shrink-0 ${
-                                    isSourceActive
-                                      ? 'bg-green-950 text-green-400 border border-green-900/60'
-                                      : 'bg-red-950 text-red-400 border border-red-900/60'
-                                  }`}>
-                                    {linkType === 'trigger' ? 'trg' : 'cnd'} {isSourceActive ? '✓' : '✗'}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {nodes.filter(n => n.data.type === 'process' && n.data.parentId === activeParentId).length === 0 && (
-                  <div className="text-xs text-gray-500 italic text-center py-6">
-                    No processes in this scope.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab Content: Simulation Scope */}
-        {rightTab === 'scope' && (
-          <div className="flex-1 flex flex-col overflow-hidden p-2 min-h-0">
-            <OpmSimulationScope
-              simRunning={simRunning}
-              currentTick={simStateRef.current.tick}
-              tickMs={activeOpmConfig.tickMs}
-              nodes={nodes}
-              edges={edges}
-              recentLogs={simLogs}
-              onReset={resetSimulation}
-            />
-          </div>
-        )}
-
-        {/* Tab Content 2: OPL Editor (moved verbatim into the bottom dock slot; stub keeps the tab) */}
-        {rightTab === 'opl' && (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-            <span className="text-xs text-[#888]">The OPL editor now lives in the bottom dock, next to the simulation console.</span>
-            <button
-              onClick={() => handleDocksChange({ ...docks, bottom: true })}
-              className="px-2.5 py-1 text-[11px] border border-[#333] rounded hover:bg-[#222] text-[#ccc]"
-            >
-              Show bottom dock
-            </button>
-          </div>
-        )}
-
-        {/* Tab Content 3: Smart Show Panel */}
-        {rightTab === 'smartShow' && (
-          <div className="flex-1 flex flex-col overflow-hidden p-3 min-h-0">
-            <SmartShowPanel
-              nodes={nodes}
-              edges={edges}
-              simState={simStateRef.current}
-              simRunning={simRunning}
-              onSelectProcess={(pid) => {
-                const p = nodes.find(n => n.id === pid);
-                if (p) setSelectedNode(p);
-              }}
-            />
-          </div>
-        )}
-
-        {/* Tab Content 4: OPM Code Generation */}
-        {rightTab === 'opmCodegen' && (
-          <div className="flex-1 overflow-y-auto">
-            <OpmCodeGenerationWorkspace
-              nodes={nodes as never}
-              edges={edges as never}
-              state={opmArtifactState}
-              onStateChange={setOpmArtifactState}
-              opmSimulationConfig={activeOpmConfig}
-              onNavigateToDiagnostic={(src) => {
-                if (src.elementId) {
-                  const node = nodes.find(n => n.id === src.elementId);
-                  if (node) {
-                    setSelectedNode(node);
-                    setSelectedEdge(null);
-                    return;
-                  }
-                  const edge = edges.find(e => e.id === src.elementId);
-                  if (edge) {
-                    setSelectedEdge(edge);
-                    setSelectedNode(null);
-                    return;
-                  }
-                }
-                onAddError?.('info', `Diagnostic reference: ${src.elementId || src.propertyPath || 'unknown source'}`, 'OPM');
-              }}
-              onDownload={(files) => {
-                onAddError?.('info', `Verified OPM bundle ready: ${files.length} files.`, 'OPM');
-              }}
-              onRunHil={(files) => {
-                onAddError?.('info', `Verified OPM bundle sent to HIL: ${files.length} files.`, 'OPM');
-              }}
-            />
-          </div>
-        )}
       </div>
+    }
+    right={
+      !isRightFloating ? (
+        <div className="flex h-full flex-col min-h-0">
+          {/* Dock Header with Double-Click & Popout */}
+          <div
+            data-testid="opm-right-dock-header"
+            onDoubleClick={() => setIsRightFloating(true)}
+            className="h-8 bg-[#18181c] border-b border-white/10 px-3 flex items-center justify-between shrink-0 select-none cursor-pointer group hover:bg-[#202026] transition-colors"
+            title="Double-click to float on workspace"
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-300 group-hover:text-orange-300 transition-colors">
+                Inspector & Tools
+              </span>
+            </div>
+            <button
+              type="button"
+              data-testid="opm-float-right-panel-btn"
+              onClick={() => setIsRightFloating(true)}
+              className="p-1 text-gray-400 hover:text-orange-400 rounded transition-colors"
+              title="Pop out into floating window (or double-click header)"
+            >
+              <ExternalLink size={12} />
+            </button>
           </div>
-        }
+
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {rightPanelContent}
+          </div>
+        </div>
+      ) : null
+    }
         bottom={
           <div className="flex h-full">
             {/* Bottom Simulation Logs console / Scope */}
@@ -2582,6 +2466,137 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
           </div>
         }
       />
+
+      {/* OPM Floating Right Panel Window */}
+      {isRightFloating && (
+        <OpmFloatingWindow
+          isOpen={isRightFloating}
+          title={selectedNode ? selectedNode.data.name || 'Element Inspector' : 'OPM Studio & Tools'}
+          badge={selectedNode ? (selectedNode.data.type || 'Object').toUpperCase() : 'OPM Studio'}
+          onClose={() => setIsRightFloating(false)}
+          onDock={() => setIsRightFloating(false)}
+        >
+          {rightPanelContent}
+        </OpmFloatingWindow>
+      )}
+
+      {/* OPM Studio Keyboard Shortcuts Modal */}
+      {showShortcutsModal && (
+        <div
+          data-testid="opm-shortcuts-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+          onClick={() => setShowShortcutsModal(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-[#141416] border border-[#333] rounded-xl shadow-2xl p-4 text-white space-y-3"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[#292929] pb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">⌨</span>
+                <h3 className="text-sm font-bold text-amber-400">OPM Studio Keyboard Shortcuts</h3>
+              </div>
+              <button
+                onClick={() => setShowShortcutsModal(false)}
+                className="text-gray-400 hover:text-white text-sm px-1.5 py-0.5 rounded hover:bg-white/10"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+              <div className="space-y-1.5">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 border-b border-white/5 pb-0.5">Editing & Clipboard</div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Select All</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-amber-300">Ctrl + A</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Copy Selected</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-amber-300">Ctrl + C</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Paste</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-amber-300">Ctrl + V</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Cut</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-amber-300">Ctrl + X</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Duplicate</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-amber-300">Ctrl + D</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Delete Selected</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-amber-300">Del / Backspace</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Undo</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-amber-300">Ctrl + Z</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Redo</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-amber-300">Ctrl + Y</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Save Diagram</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-amber-300">Ctrl + S</kbd>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 border-b border-white/5 pb-0.5">Simulation & Canvas</div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Run Simulation</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-orange-400">Ctrl + R</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Pause Simulation</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-orange-400">Ctrl + P</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Reset Simulation</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-orange-400">Ctrl + O</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Toggle Play/Pause</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-orange-400">Space</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Auto Layout</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-sky-400">Ctrl + L</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Zoom In / Out</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-sky-400">Ctrl + / -</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Fit View</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-sky-400">Ctrl + 0</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Toggle Panels</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-amber-300">Space + C</kbd>
+                </div>
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-gray-300">Deselect / Cancel</span>
+                  <kbd className="px-1.5 py-0.5 bg-[#202024] border border-white/10 rounded font-mono text-[10px] text-gray-400">Escape</kbd>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-[#292929] flex justify-end">
+              <button
+                onClick={() => setShowShortcutsModal(false)}
+                className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded text-xs transition-colors"
+              >
+                Got It
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
