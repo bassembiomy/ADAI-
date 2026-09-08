@@ -1,9 +1,27 @@
 import React, { useState } from 'react';
 import type { AppNode, AppEdge, OPMLinkType, OPMPort } from './EntropyTypes';
 import type { OpmNodeKind } from './OpmMigrations';
+import type {
+  OpmExecutionConfig,
+  OpmDiagnostic,
+  OpmAttribute,
+  OpmAssignment,
+  OpmProcessExecution,
+  OpmStateExecution,
+  OpmObjectExecution,
+  OpmLinkExecution,
+  OpmEventDefinition,
+  OpmEnumDefinition,
+} from '../../engine/opm/executableTypes';
+import {
+  toCIdentifier,
+  nextStableId,
+  TypedValueEditor,
+  AssignmentRows,
+} from './OpmExecutionPropertiesPanel';
 import {
   X, Trash2, Plus, Play, Pause, ArrowRight, RotateCcw,
-  ChevronDown, ChevronRight, ZoomIn, Layers, Zap, Activity
+  ChevronDown, ChevronRight, ZoomIn, Layers, Zap, Activity, AlertTriangle
 } from 'lucide-react';
 
 export interface OpmRightPanelContentProps {
@@ -37,6 +55,10 @@ export interface OpmRightPanelContentProps {
   smartShowTabContent: React.ReactNode;
   codegenTabContent: React.ReactNode;
   isWideLayout?: boolean;
+  executionConfig?: OpmExecutionConfig;
+  onUpdateSelectionExecution?: (updatedExecution: any) => void;
+  writableAttributes?: readonly Pick<OpmAttribute, 'id' | 'displayName'>[];
+  diagnostics?: OpmDiagnostic[];
 }
 
 export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
@@ -70,7 +92,18 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
   smartShowTabContent,
   codegenTabContent,
   isWideLayout = false,
+  executionConfig,
+  onUpdateSelectionExecution,
+  writableAttributes = [],
+  diagnostics = [],
 }) => {
+  const events = executionConfig?.events ?? [];
+  const enums = executionConfig?.enums ?? [];
+  const enumById = React.useMemo(() => {
+    const map = new Map<string, OpmEnumDefinition>();
+    for (const def of enums) map.set(def.id, def);
+    return map;
+  }, [enums]);
   // Collapsible section state for Inspector
   const [statesExpanded, setStatesExpanded] = useState(true);
   const [attributesExpanded, setAttributesExpanded] = useState(true);

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import React from 'react';
 import { OpmRightPanelContent } from '../OpmRightPanelContent';
@@ -113,4 +113,51 @@ describe('OpmRightPanelContent', () => {
     expect(html).toContain('data-testid="opm-sim-reset"');
     expect(html).toContain('PAUSED');
   });
+
+  it('accepts executionConfig, onUpdateSelectionExecution, and diagnostics props', () => {
+    const onUpdateExec = vi.fn();
+    const html = renderToStaticMarkup(
+      <OpmRightPanelContent
+        selectedNode={mockNode}
+        selectedEdge={null}
+        onCloseInspector={() => {}}
+        onUpdateNodeProp={() => {}}
+        onConvertNodeType={() => {}}
+        onAddStateToObject={() => {}}
+        onManualActivateState={() => {}}
+        onDeleteState={() => {}}
+        onAddAttribute={() => {}}
+        onAddPort={() => {}}
+        onRemovePort={() => {}}
+        onZoomInNode={() => {}}
+        onDeleteSelectedNode={() => {}}
+        onConvertEdgeType={() => {}}
+        rightTab="simControl"
+        onRightTabChange={() => {}}
+        simRunning={false}
+        simTick={0}
+        tickMs={50}
+        onToggleSimulation={() => {}}
+        onRunSimTick={() => {}}
+        onResetSimulation={() => {}}
+        activeOpmConfig={{ tickMs: 50, executionMode: 'discrete', traceLevel: 'full' }}
+        onOpmConfigChange={() => {}}
+        scopeTabContent={<div>Scope Tab</div>}
+        oplTabContent={<div>OPL Tab</div>}
+        smartShowTabContent={<div>Smart Show Tab</div>}
+        codegenTabContent={<div>Codegen Tab</div>}
+        executionConfig={{
+          version: 1,
+          events: [{ id: 'ev-1', displayName: 'tick_event', cIdentifier: 'tick_event' }],
+          enums: [],
+          settings: {} as any,
+        }}
+        onUpdateSelectionExecution={onUpdateExec}
+        writableAttributes={[{ id: 'attr-1', displayName: 'temperature' }]}
+        diagnostics={[]}
+      />
+    );
+    expect(html).toContain('Power Unit');
+  });
 });
+
