@@ -71,3 +71,34 @@ export type AppNode = Node<
 >;
 
 export type AppEdge = Edge<OPMEdgeData, OPMLinkType | 'opmEdge'>;
+
+export type OpmDiagnosticSeverity = 'info' | 'warning' | 'error';
+
+export interface OpmLifecycleDiagnostic {
+  code: string;
+  severity: OpmDiagnosticSeverity;
+  message: string;
+  elementId?: string;
+  propertyPath?: string;
+}
+
+export interface OpmModelSnapshot {
+  nodes: AppNode[];
+  edges: AppEdge[];
+}
+
+export interface OpmLifecycleReport {
+  valid: boolean;
+  diagnostics: OpmLifecycleDiagnostic[];
+  orphanNodeIds: string[];
+  orphanEdgeIds: string[];
+  structuralCycleIds: string[][];
+  conflictingContainmentIds: string[];
+}
+
+export interface OpmModelMutationResult {
+  snapshot: OpmModelSnapshot;
+  diagnostics: OpmLifecycleDiagnostic[];
+  invalidatesSimulation: boolean;
+  invalidatesEvidence: boolean;
+}
