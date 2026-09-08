@@ -21,6 +21,7 @@ export interface RequirementDefinition extends NamedElement { kind: 'requirement
 export interface VerificationCase extends NamedElement { kind: 'verificationCase'; method: string; verifiesRequirementIds: string[]; }
 export interface VerificationEvidence { id: string; verificationCaseId: string; requirementId: string; revision: number; result: 'passed' | 'failed'; executedAt: string; artifactUri?: string; }
 export interface ModelBaseline { id: string; name: string; revision: number; createdAt: string; protected: boolean; }
+export interface TraceArtifact { id: string; name: string; kind: 'behavior' | 'simulation' | 'generatedArtifact' | 'source'; ownerId?: string; revision: number; uri?: string; }
 export interface SysmlRelationship { id: string; kind: 'association' | 'sharedAggregation' | 'composition' | 'generalization' | 'dependency' | 'allocation' | 'binding' | 'itemFlow' | 'deriveReqt' | 'satisfy' | 'verify' | 'refine' | 'trace' | 'copy'; sourceId: string; targetId: string; sourceMultiplicity?: Multiplicity; targetMultiplicity?: Multiplicity; suspect?: boolean; lastValidatedRevision?: number; }
 
 export interface SysmlRepository {
@@ -35,10 +36,11 @@ export interface SysmlRepository {
   verificationCases: Record<string, VerificationCase>;
   evidence: Record<string, VerificationEvidence>;
   baselines: Record<string, ModelBaseline>;
+  artifacts: Record<string, TraceArtifact>;
 }
 
 export function createEmptyRepository(): SysmlRepository {
-  return { schemaVersion: 2, profileId: 'OMG-SysML-1.6-ADIA', revision: 0, definitions: {}, usages: {}, connectors: {}, relationships: {}, requirements: {}, verificationCases: {}, evidence: {}, baselines: {} };
+  return { schemaVersion: 2, profileId: 'OMG-SysML-1.6-ADIA', revision: 0, definitions: {}, usages: {}, connectors: {}, relationships: {}, requirements: {}, verificationCases: {}, evidence: {}, baselines: {}, artifacts: {} };
 }
 
 export function qualifiedName(namespace: readonly string[], name: string): string {

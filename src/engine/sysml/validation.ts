@@ -24,7 +24,7 @@ export function validateSysmlRepository(repo: SysmlRepository): SysmlValidationR
   };
   const collections = [
     repo.definitions, repo.usages, repo.connectors, repo.relationships, repo.requirements,
-    repo.verificationCases, repo.evidence, repo.baselines,
+    repo.verificationCases, repo.evidence, repo.baselines, repo.artifacts,
   ] as const;
   const all = collections.flatMap(collection => Object.values(collection)) as Array<{ id: string }>;
   const ids = new Set<string>();
