@@ -1846,6 +1846,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
 
   const rightPanelContent = (
     <OpmRightPanelContent
+      nodes={nodes}
+      edges={edges}
       selectedNode={selectedNode}
       selectedEdge={selectedEdge}
       onCloseInspector={() => {
@@ -2137,7 +2139,32 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
             simRunning={simRunning}
             onSelectProcess={(pid) => {
               const p = nodes.find(n => n.id === pid);
-              if (p) setSelectedNode(p);
+              if (p) {
+                setSelectedNode(p);
+                setSelectedEdge(null);
+              }
+            }}
+            onSelectElement={(elemId) => {
+              const node = nodes.find(n => n.id === elemId);
+              if (node) {
+                setSelectedNode(node);
+                setSelectedEdge(null);
+                return;
+              }
+              const edge = edges.find(e => e.id === elemId);
+              if (edge) {
+                setSelectedEdge(edge);
+                setSelectedNode(null);
+                return;
+              }
+              for (const n of nodes) {
+                const hasPort = (n.data?.inputs || []).some(p => p.id === elemId) || (n.data?.outputs || []).some(p => p.id === elemId);
+                if (hasPort) {
+                  setSelectedNode(n);
+                  setSelectedEdge(null);
+                  return;
+                }
+              }
             }}
           />
         </div>

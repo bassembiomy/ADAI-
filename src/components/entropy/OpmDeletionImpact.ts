@@ -42,6 +42,7 @@ export interface OpmDeletionImpactReport {
   affectedRequirementIds: string[];
   affectedSimulationIds: string[];
   invalidationReasons: string[];
+  isHighImpact: boolean;
   summary: OpmDeletionImpactSummary;
   diagnostics: OpmLifecycleDiagnostic[];
 }
@@ -195,6 +196,7 @@ export function analyzeOpmDeletion(
     affectedRequirementIds: Array.from(affectedRequirementIds),
     affectedSimulationIds: Array.from(affectedSimulationIds),
     invalidationReasons,
+    isHighImpact,
     summary,
     diagnostics,
   };
