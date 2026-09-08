@@ -6,6 +6,25 @@ export interface CreationValidationResult {
   reason?: string;
 }
 
+export function validateLegacyRequirementStatusTransition(
+  blocks: readonly BlockData[], relationships: readonly RelationshipData[], requirementId: string, targetStatus: string,
+): CreationValidationResult {
+  const requirement = blocks.find(block => block.id === requirementId && block.stereotype === 'requirement');
+  if (!requirement) return result(['REQUIREMENT_NOT_FOUND']);
+  const current = requirement.status || 'Draft';
+  if (current === targetStatus) return result([]);
+  const exceptional = ['Failed', 'Stale', 'Retired'].includes(targetStatus);
+  const next: Record<string, string[]> = { Draft: ['Approved'], Approved: ['Implemented'], Implemented: ['Verified'], Verified: [], Failed: ['Draft', 'Approved', 'Implemented'], Stale: ['Draft', 'Approved', 'Implemented'], Retired: [] };
+  const codes: string[] = [];
+  if (!exceptional && !(next[current] ?? []).includes(targetStatus)) codes.push('INVALID_REQUIREMENT_STATUS_TRANSITION');
+  if (targetStatus === 'Verified') {
+    const passed = relationships.some(relationship => relationship.type === 'verify' && relationship.targetId === requirementId
+      && blocks.some(block => block.id === relationship.sourceId && block.stereotype === 'verificationCase' && block.verificationResult === 'passed'));
+    if (!passed) codes.push('CURRENT_PASSING_EVIDENCE_REQUIRED');
+  }
+  return result(codes);
+}
+
 export function validateLegacyRelationshipCandidate(
   model: { blocks: readonly BlockData[]; parts: readonly PartData[]; relationships: readonly RelationshipData[] },
   candidate: RelationshipData,

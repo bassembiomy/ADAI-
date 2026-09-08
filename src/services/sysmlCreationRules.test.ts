@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BlockData, ConnectorData, PartData, RelationshipData } from '../types/sysml_types';
-import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate } from './sysmlCreationRules';
+import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './sysmlCreationRules';
 
 const block = (id: string, stereotype = 'block', ports: BlockData['ports'] = []): BlockData => ({ id, name: id, stereotype, x: 0, y: 0, width: 100, height: 80, properties: [], operations: [], constraints: [], classes: [], ports });
 const relationship = (id: string, sourceId: string, targetId: string, type: RelationshipData['type']): RelationshipData => ({ id, sourceId, targetId, type, label: '' });
@@ -38,5 +38,13 @@ describe('native SysML creation rules', () => {
     expect(validateLegacyConnectorCandidate({ blocks, parts, connectors: [good] }, { ...good, id: 'duplicate' }, 'system').codes).toContain('DUPLICATE_CONNECTOR');
     expect(validateLegacyConnectorCandidate({ blocks, parts, connectors: [] }, { ...good, id: 'bad', targetPortId: 'wrong' }, 'system').codes).toEqual(expect.arrayContaining(['INCOMPATIBLE_PORT_DIRECTION', 'INCOMPATIBLE_PORT_TYPE', 'INCOMPATIBLE_PORT_UNIT']));
     expect(validateLegacyConnectorCandidate({ blocks, parts, connectors: [] }, { ...good, id: 'cross', targetPartId: 'foreign' }, 'system').codes).toContain('INVALID_CONNECTOR_CONTEXT');
+  });
+
+  it('enforces requirement lifecycle and requires passed verification-case evidence', () => {
+    const req = { ...block('r', 'requirement'), status: 'Implemented' };
+    const testCase = { ...block('v', 'verificationCase'), verificationResult: 'passed' as const };
+    expect(validateLegacyRequirementStatusTransition([req], [], 'r', 'Verified').codes).toContain('CURRENT_PASSING_EVIDENCE_REQUIRED');
+    expect(validateLegacyRequirementStatusTransition([req, testCase], [relationship('verify', 'v', 'r', 'verify')], 'r', 'Verified').valid).toBe(true);
+    expect(validateLegacyRequirementStatusTransition([{ ...req, status: 'Draft' }], [], 'r', 'Implemented').codes).toContain('INVALID_REQUIREMENT_STATUS_TRANSITION');
   });
 });

@@ -131,8 +131,16 @@ function migrateLegacy(raw: unknown): SysmlRepository {
         id, kind: 'requirement', name: text(legacy.name) || id, namespace: [],
         requirementId: text(legacy.reqId) || id, text: text(legacy.description),
         status: requirementStatus(legacy.status), version: text(legacy.version) || '1.0',
-        source: optionalText(legacy.source), owner: optionalText(legacy.assignedTo),
+        source: optionalText(legacy.source), rationale: optionalText(legacy.rationale), owner: optionalText(legacy.assignedTo),
+        baselineId: optionalText(legacy.baselineId),
         priority: level(legacy.priority), risk: level(legacy.risk),
+      };
+      continue;
+    }
+    if (legacy.stereotype === 'verificationCase') {
+      repo.verificationCases[id] = {
+        id, name: text(legacy.name) || id, namespace: Array.isArray(legacy.namespace) ? legacy.namespace.map(text) : [],
+        kind: 'verificationCase', method: text(legacy.verificationMethod) || 'Test', verifiesRequirementIds: [],
       };
       continue;
     }
@@ -142,8 +150,12 @@ function migrateLegacy(raw: unknown): SysmlRepository {
       multiplicity: safeMultiplicity(port.multiplicity),
     })).filter(port => port.id);
     repo.definitions[id] = {
-      id, name: text(legacy.name) || id, namespace: [], kind: 'block', isAbstract: Boolean(legacy.isAbstract), isLeaf: Boolean(legacy.isLeaf),
-      properties: [], ports, operations: stringArray(legacy.operations), constraints: stringArray(legacy.constraints),
+      id, name: text(legacy.name) || id, namespace: Array.isArray(legacy.namespace) ? legacy.namespace.map(text) : [], kind: 'block', isAbstract: Boolean(legacy.isAbstract), isLeaf: Boolean(legacy.isLeaf),
+      properties: arrayOfRecords(legacy.properties).map(property => ({
+        id: text(property.id), name: text(property.name), kind: propertyKind(property.kind), typeId: text(property.typeId) || text(property.type),
+        multiplicity: safeMultiplicity(property.multiplicity), unit: optionalText(property.unit), dimension: optionalText(property.dimension),
+        isDerived: Boolean(property.isDerived), redefinesId: optionalText(property.redefinesId), subsetsId: optionalText(property.subsetsId),
+      })), ports, operations: stringArray(legacy.operations), constraints: stringArray(legacy.constraints),
     } satisfies BlockDefinition;
   }
   for (const legacy of arrayOfRecords(source.parts)) {
@@ -161,6 +173,9 @@ function migrateLegacy(raw: unknown): SysmlRepository {
     repo.relationships[id] = {
       id, sourceId: text(legacy.sourceId), targetId: text(legacy.targetId), kind: relationshipKind(legacy.type),
     };
+    if (relationshipKind(legacy.type) === 'verify' && repo.verificationCases[text(legacy.sourceId)] && repo.requirements[text(legacy.targetId)]) {
+      repo.verificationCases[text(legacy.sourceId)].verifiesRequirementIds.push(text(legacy.targetId));
+    }
   }
   repo.auditTrail.push({ id: 'change-0-legacy-import', revision: 0, timestamp: new Date(0).toISOString(), command: 'migrateLegacy', elementIds: [] });
   return repo;
@@ -218,5 +233,8 @@ function relationshipKind(value: unknown): SysmlRelationship['kind'] {
   if (kind === 'derive') return 'deriveReqt';
   const supported: SysmlRelationship['kind'][] = ['association', 'sharedAggregation', 'composition', 'generalization', 'dependency', 'allocation', 'binding', 'itemFlow', 'deriveReqt', 'satisfy', 'verify', 'refine', 'trace', 'copy'];
   return supported.includes(kind as SysmlRelationship['kind']) ? kind as SysmlRelationship['kind'] : 'trace';
+}
+function propertyKind(value: unknown): 'value' | 'part' | 'reference' | 'flow' {
+  return value === 'part' || value === 'reference' || value === 'flow' ? value : 'value';
 }
 function diag(code: string, message: string): SysmlDiagnostic { return { code, severity: 'error', message }; }

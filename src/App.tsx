@@ -108,7 +108,7 @@ import {
 import { TraceabilityMatrix as CanonicalTraceabilityMatrix } from './components/sysml/TraceabilityMatrix';
 import { loadRepository } from './engine/sysml/persistence';
 import { applyLegacySysmlDeletion } from './services/sysmlTransactionAdapter';
-import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate } from './services/sysmlCreationRules';
+import { validateLegacyConnectorCandidate, validateLegacyRelationshipCandidate, validateLegacyRequirementStatusTransition } from './services/sysmlCreationRules';
 
 // Security Helper: Escapes HTML special characters to prevent XSS / HTML injection attacks
 const escapeHtml = (str: unknown): string => {
@@ -9306,6 +9306,11 @@ const ADIA = () => {
       risk: stereotype === 'requirement' ? 'Medium' : undefined,
       verificationMethod: stereotype === 'requirement' ? 'Test' : undefined,
       source: stereotype === 'requirement' ? '' : undefined,
+      version: stereotype === 'requirement' ? '1.0' : undefined,
+      rationale: stereotype === 'requirement' ? '' : undefined,
+      namespace: [],
+      isAbstract: false,
+      isLeaf: false,
       layerId: blockLayerId,
     };
     setBlocks(prev => [...prev, newBlock]);
@@ -16528,6 +16533,7 @@ const ADIA = () => {
                       <option value="interfaceBlock">Interface Block</option>
                       <option value="valueType">ValueType</option>
                       <option value="enumeration">Enumeration</option>
+                      <option value="verificationCase">Verification Case</option>
                       {customStereotypes
                         ?.filter(s => s !== 'requirement' && !['block', 'interface', 'interfaceBlock', 'valueType', 'enumeration'].includes(s))
                         .map(s => (
@@ -16565,11 +16571,18 @@ const ADIA = () => {
                         <>
                           <div><Label>Req ID</Label><Input value={selectedBlock.reqId || ''} onChange={(e) => updateBlock(selectedBlock.id, { reqId: e.target.value })} className="mt-1" /></div>
                           <div><Label>Status</Label>
-                            <select value={selectedBlock.status || ''} onChange={(e) => updateBlock(selectedBlock.id, { status: e.target.value })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                            <select value={selectedBlock.status || ''} onChange={(e) => {
+                              const validation = validateLegacyRequirementStatusTransition(blocks, relationships, selectedBlock.id, e.target.value);
+                              if (!validation.valid) addError('error', `Invalid requirement status: ${validation.reason}`);
+                              else updateBlock(selectedBlock.id, { status: e.target.value });
+                            }} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
                               <option value="Draft">Draft</option>
                               <option value="Approved">Approved</option>
                               <option value="Verified">Verified</option>
                               <option value="Implemented">Implemented</option>
+                              <option value="Failed">Failed</option>
+                              <option value="Stale">Stale</option>
+                              <option value="Retired">Retired</option>
                             </select>
                           </div>
                           <div><Label>Priority</Label>
@@ -16577,6 +16590,7 @@ const ADIA = () => {
                               <option value="High">High</option>
                               <option value="Medium">Medium</option>
                               <option value="Low">Low</option>
+                              <option value="Critical">Critical</option>
                             </select>
                           </div>
                           <div><Label>Description</Label><textarea value={selectedBlock.description || ''} onChange={(e) => updateBlock(selectedBlock.id, { description: e.target.value })} className="w-full h-20 min-h-[4rem] bg-[#1a1a1a] border border-[#333] rounded text-sm font-mono text-[#e0e0e0] p-2 mt-1 resize-y focus:outline-none focus:ring-1 focus:ring-[#f97316]" /></div>
@@ -16586,6 +16600,7 @@ const ADIA = () => {
                               <option value="High">High</option>
                               <option value="Medium">Medium</option>
                               <option value="Low">Low</option>
+                              <option value="Critical">Critical</option>
                             </select>
                           </div>
                           <div>
@@ -16598,6 +16613,9 @@ const ADIA = () => {
                             </select>
                           </div>
                           <div><Label>Source</Label><Input value={selectedBlock.source || ''} onChange={(e) => updateBlock(selectedBlock.id, { source: e.target.value })} className="mt-1" /></div>
+                          <div><Label>Version</Label><Input value={selectedBlock.version || '1.0'} onChange={(e) => updateBlock(selectedBlock.id, { version: e.target.value })} className="mt-1" /></div>
+                          <div><Label>Rationale</Label><textarea value={selectedBlock.rationale || ''} onChange={(e) => updateBlock(selectedBlock.id, { rationale: e.target.value })} className="w-full h-16 bg-[#1a1a1a] border border-[#333] rounded text-sm text-[#e0e0e0] p-2 mt-1" /></div>
+                          <div><Label>Baseline ID</Label><Input value={selectedBlock.baselineId || ''} onChange={(e) => updateBlock(selectedBlock.id, { baselineId: e.target.value || undefined })} className="mt-1" /></div>
 
                           <div className="mt-4 pt-3 border-t border-[#333]">
                             <Label className="flex items-center justify-between text-xs font-semibold text-[#aaa] mb-2">
@@ -16763,6 +16781,25 @@ const ADIA = () => {
                         </div>
                       )}
                     </>
+                  )}
+                  {selectedBlock.stereotype === 'verificationCase' && (
+                    <div className="space-y-3 border-t border-[#333] pt-3">
+                      <div><Label>Verification Method</Label><Input value={selectedBlock.verificationMethod || 'Test'} onChange={(e) => updateBlock(selectedBlock.id, { verificationMethod: e.target.value })} className="mt-1" /></div>
+                      <div><Label>Result</Label>
+                        <select value={selectedBlock.verificationResult || ''} onChange={(e) => updateBlock(selectedBlock.id, { verificationResult: e.target.value ? e.target.value as 'passed' | 'failed' : undefined, executedAt: e.target.value ? new Date().toISOString() : undefined })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                          <option value="">Not Executed</option><option value="passed">Passed</option><option value="failed">Failed</option>
+                        </select>
+                      </div>
+                      <div><Label>Evidence Artifact URI</Label><Input value={selectedBlock.artifactUri || ''} onChange={(e) => updateBlock(selectedBlock.id, { artifactUri: e.target.value })} className="mt-1" /></div>
+                      {selectedBlock.executedAt && <div className="text-[10px] text-[#777]">Executed: {selectedBlock.executedAt}</div>}
+                    </div>
+                  )}
+                  {selectedBlock.stereotype === 'block' && (
+                    <div className="space-y-2 border-t border-[#333] pt-3">
+                      <div><Label>Namespace</Label><Input value={(selectedBlock.namespace || []).join('::')} onChange={(e) => updateBlock(selectedBlock.id, { namespace: e.target.value.split('::').map(value => value.trim()).filter(Boolean) })} className="mt-1" /></div>
+                      <label className="flex items-center gap-2 text-xs text-[#aaa]"><input type="checkbox" checked={Boolean(selectedBlock.isAbstract)} onChange={(e) => updateBlock(selectedBlock.id, { isAbstract: e.target.checked })} /> Abstract</label>
+                      <label className="flex items-center gap-2 text-xs text-[#aaa]"><input type="checkbox" checked={Boolean(selectedBlock.isLeaf)} onChange={(e) => updateBlock(selectedBlock.id, { isLeaf: e.target.checked })} /> Leaf</label>
+                    </div>
                   )}
                   <div>
                     <Label>Ports</Label>
@@ -16933,6 +16970,9 @@ const ADIA = () => {
                       <option value="satisfy">Satisfy</option>
                       <option value="verify">Verify</option>
                       <option value="trace">Trace</option>
+                      <option value="copy">Copy</option>
+                      <option value="binding">Binding</option>
+                      <option value="dependency">Dependency</option>
                     </select>
                   </div>
                   <div>

@@ -37,6 +37,7 @@ describe('versioned SysML persistence and baselines', () => {
       blocks: [
         { id: 'b', name: 'Controller', stereotype: 'block', properties: [], ports: [] },
         { id: 'r', name: 'Safety', stereotype: 'requirement', reqId: 'REQ-1', description: 'Safe', status: 'Approved', source: 'Customer', priority: 'High', risk: 'Critical' },
+        { id: 'v', name: 'Safety test', stereotype: 'verificationCase', verificationMethod: 'Test' },
       ],
       parts: [{ id: 'p', name: 'controller', blockId: 'b', typeId: 'b', multiplicity: '1' }],
       relationships: [{ id: 's', sourceId: 'b', targetId: 'r', type: 'satisfy', label: '' }],
@@ -49,6 +50,7 @@ describe('versioned SysML persistence and baselines', () => {
     expect(loaded.repository.requirements.r).toMatchObject({ requirementId: 'REQ-1', text: 'Safe', source: 'Customer', priority: 'high', risk: 'critical' });
     expect(loaded.repository.usages.p.id).toBe('p');
     expect(loaded.repository.relationships.s.kind).toBe('satisfy');
+    expect(loaded.repository.verificationCases.v.method).toBe('Test');
   });
 
   it('creates protected immutable baselines, records audit, and compares revisions', () => {
