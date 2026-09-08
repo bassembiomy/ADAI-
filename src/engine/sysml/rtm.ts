@@ -1,4 +1,5 @@
 import type { RequirementDefinition, SysmlRelationship, SysmlRepository } from './model';
+import { deriveEvidenceStatus } from './evidence';
 
 export type RtmStatus = 'covered' | 'verified' | 'failed' | 'uncovered' | 'stale' | 'suspect' | 'orphan' | 'unsupported' | 'unresolved';
 
@@ -143,8 +144,8 @@ function deriveStatus(
   if (relationships.some(relationship => relationship.suspect)) return 'suspect';
   const evidence = row.evidence.map(id => repo.evidence[id]).filter(Boolean);
   if (evidence.some(item => item.result === 'failed')) return 'failed';
-  if (requirement.status === 'stale' || evidence.some(item => item.result === 'passed' && item.revision < repo.revision)) return 'stale';
-  if (evidence.some(item => item.result === 'passed' && item.revision === repo.revision)) return 'verified';
+  if (requirement.status === 'stale' || evidence.some(item => item.result === 'passed' && deriveEvidenceStatus(repo, item.id) === 'stale')) return 'stale';
+  if (evidence.some(item => item.result === 'passed' && deriveEvidenceStatus(repo, item.id) === 'current')) return 'verified';
   if (relationships.some(relationship => relationship.kind === 'satisfy')) return 'covered';
   if (relationships.length || row.verificationCases.length || row.evidence.length) return 'uncovered';
   return 'orphan';

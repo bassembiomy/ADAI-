@@ -1,5 +1,6 @@
 import type { RequirementDefinition, SysmlRelationship, SysmlRepository } from './model';
 import type { SysmlDiagnostic } from './validation';
+import { deriveEvidenceStatus } from './evidence';
 
 export type VerificationStatus = 'verified' | 'failed' | 'stale' | 'unverified';
 
@@ -108,7 +109,7 @@ export function deriveRequirementView(repo: SysmlRepository): RequirementView {
 
 function hasCurrentPassingEvidence(repo: SysmlRepository, requirementId: string): boolean {
   const cases = new Set(Object.values(repo.verificationCases).filter(test => test.verifiesRequirementIds.includes(requirementId)).map(test => test.id));
-  return Object.values(repo.evidence).some(evidence => evidence.requirementId === requirementId && cases.has(evidence.verificationCaseId) && evidence.result === 'passed' && evidence.revision === repo.revision);
+  return Object.values(repo.evidence).some(evidence => evidence.requirementId === requirementId && cases.has(evidence.verificationCaseId) && evidence.result === 'passed' && deriveEvidenceStatus(repo, evidence.id) === 'current');
 }
 
 function verificationStatus(repo: SysmlRepository, requirementId: string, relationships: SysmlRelationship[]): VerificationStatus {
