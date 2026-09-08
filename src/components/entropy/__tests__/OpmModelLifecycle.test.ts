@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import type { AppNode, AppEdge, OpmModelSnapshot } from '../EntropyTypes';
+import type { AppNode, AppEdge, OpmModelSnapshot, OPMPort } from '../EntropyTypes';
 import {
   getCanonicalParentId,
   hasContainmentConflict,
   normalizeContainment,
   validateOpmModelLifecycle,
 } from '../OpmModelLifecycle';
+import { validateOpmPortConnection } from '../OpmPortContracts';
 
 function createNode(id: string, type: 'object' | 'process' | 'state' | 'requirement', overrides: Partial<AppNode> = {}): AppNode {
   return {
@@ -320,6 +321,230 @@ describe('OpmModelLifecycle', () => {
       expect(report.valid).toBe(false);
       expect(report.structuralCycleIds.length).toBeGreaterThan(0);
       expect(report.diagnostics.some(d => d.code === 'OPM_STRUCTURAL_CYCLE')).toBe(true);
+    });
+  });
+
+  describe('validateOpmPortConnection', () => {
+    const outPort: OPMPort = {
+      id: 'out1',
+      name: 'Out',
+      type: 'float32',
+      direction: 'output',
+      position: 'right',
+      multiplicity: 1,
+    };
+    const inPort: OPMPort = {
+      id: 'in1',
+      name: 'In',
+      type: 'float32',
+      direction: 'input',
+      position: 'left',
+    };
+    const boolInPort: OPMPort = {
+      id: 'in_bool',
+      name: 'InBool',
+      type: 'bool',
+      direction: 'input',
+      position: 'left',
+    };
+
+    it('resolves sourcePort and targetPort on valid connection', () => {
+      const proc = createNode('proc1', 'process', {
+        data: { name: 'P1', type: 'process', physical: false, outputs: [outPort] },
+      });
+      const obj = createNode('obj1', 'object', {
+        data: { name: 'O1', type: 'object', physical: false, inputs: [inPort] },
+      });
+
+      const verdict = validateOpmPortConnection([proc, obj], [], {
+        source: 'proc1',
+        target: 'obj1',
+        sourceHandle: 'out1',
+        targetHandle: 'in1',
+      }, 'result');
+
+      expect(verdict.valid).toBe(true);
+      expect(verdict.sourcePort).toMatchObject({ id: 'out1' });
+      expect(verdict.targetPort).toMatchObject({ id: 'in1' });
+    });
+
+    it('rejects missing source handle', () => {
+      const proc = createNode('proc1', 'process');
+      const obj = createNode('obj1', 'object', {
+        data: { name: 'O1', type: 'object', physical: false, inputs: [inPort] },
+      });
+
+      const verdict = validateOpmPortConnection([proc, obj], [], {
+        source: 'proc1',
+        target: 'obj1',
+        sourceHandle: 'missing_h',
+        targetHandle: 'in1',
+      }, 'result');
+
+      expect(verdict.valid).toBe(false);
+      expect(verdict.code).toBe('OPM_PORT_HANDLE_MISSING');
+    });
+
+    it('rejects handle defined on the wrong node', () => {
+      const proc1 = createNode('proc1', 'process', {
+        data: { name: 'P1', type: 'process', physical: false, outputs: [outPort] },
+      });
+      const proc2 = createNode('proc2', 'process');
+      const obj = createNode('obj1', 'object', {
+        data: { name: 'O1', type: 'object', physical: false, inputs: [inPort] },
+      });
+
+      // Passing proc2 as source, but outPort exists on proc1
+      const verdict = validateOpmPortConnection([proc1, proc2, obj], [], {
+        source: 'proc2',
+        target: 'obj1',
+        sourceHandle: 'out1',
+        targetHandle: 'in1',
+      }, 'result');
+
+      expect(verdict.valid).toBe(false);
+      expect(verdict.code).toBe('OPM_PORT_HANDLE_WRONG_NODE');
+    });
+
+    it('rejects input port used as source', () => {
+      const proc = createNode('proc1', 'process', {
+        data: { name: 'P1', type: 'process', physical: false, inputs: [inPort] },
+      });
+      const obj = createNode('obj1', 'object', {
+        data: { name: 'O1', type: 'object', physical: false, inputs: [inPort] },
+      });
+
+      const verdict = validateOpmPortConnection([proc, obj], [], {
+        source: 'proc1',
+        target: 'obj1',
+        sourceHandle: 'in1',
+        targetHandle: 'in1',
+      }, 'result');
+
+      expect(verdict.valid).toBe(false);
+      expect(verdict.code).toBe('OPM_PORT_INPUT_AS_SOURCE');
+    });
+
+    it('rejects output port used as target', () => {
+      const proc = createNode('proc1', 'process', {
+        data: { name: 'P1', type: 'process', physical: false, outputs: [outPort] },
+      });
+      const obj = createNode('obj1', 'object', {
+        data: { name: 'O1', type: 'object', physical: false, outputs: [outPort] },
+      });
+
+      const verdict = validateOpmPortConnection([proc, obj], [], {
+        source: 'proc1',
+        target: 'obj1',
+        sourceHandle: 'out1',
+        targetHandle: 'out1',
+      }, 'result');
+
+      expect(verdict.valid).toBe(false);
+      expect(verdict.code).toBe('OPM_PORT_OUTPUT_AS_TARGET');
+    });
+
+    it('rejects incompatible scalar types between source and target ports', () => {
+      const proc = createNode('proc1', 'process', {
+        data: { name: 'P1', type: 'process', physical: false, outputs: [outPort] }, // float32
+      });
+      const obj = createNode('obj1', 'object', {
+        data: { name: 'O1', type: 'object', physical: false, inputs: [boolInPort] }, // bool
+      });
+
+      const verdict = validateOpmPortConnection([proc, obj], [], {
+        source: 'proc1',
+        target: 'obj1',
+        sourceHandle: 'out1',
+        targetHandle: 'in_bool',
+      }, 'result');
+
+      expect(verdict.valid).toBe(false);
+      expect(verdict.code).toBe('OPM_PORT_TYPE_INCOMPATIBLE');
+    });
+
+    it('rejects duplicate same-port links', () => {
+      const proc = createNode('proc1', 'process', {
+        data: { name: 'P1', type: 'process', physical: false, outputs: [outPort] },
+      });
+      const obj = createNode('obj1', 'object', {
+        data: { name: 'O1', type: 'object', physical: false, inputs: [inPort] },
+      });
+      const existingEdge = createEdge('e1', 'proc1', 'obj1', 'result', {
+        sourceHandle: 'out1',
+        targetHandle: 'in1',
+      });
+
+      const verdict = validateOpmPortConnection([proc, obj], [existingEdge], {
+        source: 'proc1',
+        target: 'obj1',
+        sourceHandle: 'out1',
+        targetHandle: 'in1',
+      }, 'result');
+
+      expect(verdict.valid).toBe(false);
+      expect(verdict.code).toBe('OPM_DUPLICATE_PORT_CONNECTION');
+    });
+
+    it('rejects multiplicity overflow', () => {
+      const proc = createNode('proc1', 'process', {
+        data: { name: 'P1', type: 'process', physical: false, outputs: [{ ...outPort, multiplicity: 1 }] },
+      });
+      const obj1 = createNode('obj1', 'object', {
+        data: { name: 'O1', type: 'object', physical: false, inputs: [inPort] },
+      });
+      const obj2 = createNode('obj2', 'object', {
+        data: { name: 'O2', type: 'object', physical: false, inputs: [inPort] },
+      });
+      // Existing edge from out1 on proc1 to obj1
+      const existingEdge = createEdge('e1', 'proc1', 'obj1', 'result', {
+        sourceHandle: 'out1',
+        targetHandle: 'in1',
+      });
+
+      const verdict = validateOpmPortConnection([proc, obj1, obj2], [existingEdge], {
+        source: 'proc1',
+        target: 'obj2',
+        sourceHandle: 'out1',
+        targetHandle: 'in1',
+      }, 'result');
+
+      expect(verdict.valid).toBe(false);
+      expect(verdict.code).toBe('OPM_PORT_MULTIPLICITY_OVERFLOW');
+    });
+
+    it('rejects conceptual-only / executable incompatibility when executable connection is requested', () => {
+      const proc = createNode('proc1', 'process', {
+        data: {
+          name: 'P1',
+          type: 'process',
+          physical: false,
+          processExecution: { maxDurationTicks: 10, assignments: [] },
+        },
+      });
+      const obj = createNode('obj1', 'object'); // conceptual-only!
+
+      const verdict = validateOpmPortConnection([proc, obj], [], {
+        source: 'proc1',
+        target: 'obj1',
+        isExecutable: true,
+      }, 'result');
+
+      expect(verdict.valid).toBe(false);
+      expect(verdict.code).toBe('OPM_CONCEPTUAL_EXECUTABLE_INCOMPATIBLE');
+    });
+
+    it('rejects requirement aggregation with stable code OPM_REQUIREMENT_STRUCTURAL_LINK_INVALID', () => {
+      const req = createNode('r1', 'requirement');
+      const obj = createNode('o1', 'object');
+
+      const verdict = validateOpmPortConnection([req, obj], [], {
+        source: 'r1',
+        target: 'o1',
+      }, 'aggregation');
+
+      expect(verdict.valid).toBe(false);
+      expect(verdict.code).toBe('OPM_REQUIREMENT_STRUCTURAL_LINK_INVALID');
     });
   });
 });
