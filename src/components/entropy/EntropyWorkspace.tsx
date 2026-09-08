@@ -18,7 +18,8 @@ import { OPMEdge } from './OPMEdgeComponents';
 import { OPMNodeData, OPMEdgeData, OPMLinkType, SimulationLog, OPMState, OPMPort, type AppNode, type AppEdge, type OpmModelSnapshot, type OpmLifecycleDiagnostic } from './EntropyTypes';
 import { normalizeContainment, validateOpmModelLifecycle, getCanonicalParentId } from './OpmModelLifecycle';
 import { analyzeOpmDeletion, applyOpmDeletion, type OpmDeletionTarget } from './OpmDeletionImpact';
-import { OpmCodeGenerationWorkspace, createInitialArtifactState, type OpmArtifactState } from './OpmCodeGenerationWorkspace';
+import { OpmCodeGenerationWorkspace, createInitialArtifactState, resetToDraft, type OpmArtifactState } from './OpmCodeGenerationWorkspace';
+import { reconcileSimulationState } from './OpmTraceabilityModel';
 import { OpmSimulationScope } from './OpmSimulationScope';
 import { generateOpl, parseOpl, OplSyntaxError } from './OplParser';
 import {
@@ -237,30 +238,24 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const [modelRevision, setModelRevision] = useState<number>(1);
   const bumpModelRevision = useCallback(() => {
     setModelRevision(r => r + 1);
+    setOpmArtifactState(prev => resetToDraft(prev));
   }, []);
 
   const invalidateSimState = useCallback((snapshot: OpmModelSnapshot) => {
     const survivingNodeIds = new Set(snapshot.nodes.map(n => n.id));
     const survivingEdgeIds = new Set(snapshot.edges.map(e => e.id));
-    const activeStates = { ...(simStateRef.current?.objectActiveState || {}) };
-    for (const [objId, stId] of Object.entries(activeStates)) {
-      if (!survivingNodeIds.has(objId) || (stId && !survivingNodeIds.has(stId))) {
-        delete activeStates[objId];
-      }
-    }
-    simStateRef.current = {
-      ...(simStateRef.current || createSimulationState()),
-      objectActiveState: activeStates,
-      pendingEvents: (simStateRef.current?.pendingEvents || []).filter(
-        ev => survivingNodeIds.has(ev.objectId) && survivingNodeIds.has(ev.stateId),
-      ),
-      activeProcessIds: (simStateRef.current?.activeProcessIds || []).filter(
-        id => survivingNodeIds.has(id),
-      ),
-      traversedLinkIds: (simStateRef.current?.traversedLinkIds || []).filter(
-        id => survivingEdgeIds.has(id),
-      ),
-    };
+    simStateRef.current = reconcileSimulationState(
+      simStateRef.current || createSimulationState(),
+      survivingNodeIds,
+      survivingEdgeIds
+    );
+    setFiringProcesses(prev => {
+      const next = new Set<string>();
+      prev.forEach(id => {
+        if (survivingNodeIds.has(id)) next.add(id);
+      });
+      return next;
+    });
     setNodes(prev => applySimResultToNodes(prev, simStateRef.current, []));
   }, [setNodes]);
 
@@ -467,33 +462,45 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
 
   // --- Record History for Undo ---
   const saveHistory = useCallback((currentNodes: AppNode[], currentEdges: AppEdge[]) => {
-    setUndoStack(prev => [...prev.slice(-49), { nodes: JSON.parse(JSON.stringify(currentNodes)), edges: JSON.parse(JSON.stringify(currentEdges)) }]);
+    setUndoStack(prev => [...prev.slice(-49), {
+      nodes: JSON.parse(JSON.stringify(currentNodes)),
+      edges: JSON.parse(JSON.stringify(currentEdges)),
+      modelRevision,
+    }]);
     setRedoStack([]); // Clear redo
-  }, []);
+  }, [modelRevision]);
 
   const triggerUndo = useCallback(() => {
     if (undoStack.length === 0) return;
     const previous = undoStack[undoStack.length - 1];
     setUndoStack(prev => prev.slice(0, -1));
-    setRedoStack(prev => [...prev, { nodes: JSON.parse(JSON.stringify(nodes)), edges: JSON.parse(JSON.stringify(edges)) }]);
+    setRedoStack(prev => [...prev, {
+      nodes: JSON.parse(JSON.stringify(nodes)),
+      edges: JSON.parse(JSON.stringify(edges)),
+      modelRevision,
+    }]);
     setNodes(previous.nodes);
     setEdges(previous.edges);
     invalidateSimState({ nodes: previous.nodes, edges: previous.edges });
     bumpModelRevision();
     if (onSave) onSave(previous.nodes, previous.edges);
-  }, [undoStack, nodes, edges, invalidateSimState, bumpModelRevision, onSave, setNodes, setEdges]);
+  }, [undoStack, nodes, edges, modelRevision, invalidateSimState, bumpModelRevision, onSave, setNodes, setEdges]);
 
   const triggerRedo = useCallback(() => {
     if (redoStack.length === 0) return;
     const nextState = redoStack[redoStack.length - 1];
     setRedoStack(prev => prev.slice(0, -1));
-    setUndoStack(prev => [...prev, { nodes: JSON.parse(JSON.stringify(nodes)), edges: JSON.parse(JSON.stringify(edges)) }]);
+    setUndoStack(prev => [...prev, {
+      nodes: JSON.parse(JSON.stringify(nodes)),
+      edges: JSON.parse(JSON.stringify(edges)),
+      modelRevision,
+    }]);
     setNodes(nextState.nodes);
     setEdges(nextState.edges);
     invalidateSimState({ nodes: nextState.nodes, edges: nextState.edges });
     bumpModelRevision();
     if (onSave) onSave(nextState.nodes, nextState.edges);
-  }, [redoStack, nodes, edges, invalidateSimState, bumpModelRevision, onSave, setNodes, setEdges]);
+  }, [redoStack, nodes, edges, modelRevision, invalidateSimState, bumpModelRevision, onSave, setNodes, setEdges]);
 
   // --- Central Canonical Lifecycle Mutation & Transaction Gateway ---
   const commitModelMutation = useCallback((

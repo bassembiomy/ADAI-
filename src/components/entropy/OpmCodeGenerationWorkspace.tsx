@@ -202,6 +202,20 @@ export function markFailed(prev: OpmArtifactState, errors: string[]): OpmArtifac
   return { ...prev, lifecycle: 'failed', errors: [...errors] };
 }
 
+/**
+ * Reset artifact state to draft on model revisions, clearing verified evidence
+ * so that downloads and HIL exports fail closed until re-verification.
+ */
+export function resetToDraft(prev: OpmArtifactState): OpmArtifactState {
+  return {
+    ...prev,
+    lifecycle: 'draft',
+    currentFingerprint: null,
+    verifiedFingerprint: null,
+    evidence: null,
+  };
+}
+
 /** Verify is enabled only when a generated bundle matches the live model. */
 export function canVerify(state: OpmArtifactState): boolean {
   if (state.lifecycle === 'verifying') return false;
