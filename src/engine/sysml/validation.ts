@@ -26,7 +26,8 @@ export function validateSysmlRepository(repo: SysmlRepository): SysmlValidationR
     repo.definitions, repo.usages, repo.connectors, repo.relationships, repo.requirements,
     repo.verificationCases, repo.evidence, repo.baselines, repo.artifacts,
   ] as const;
-  const all = collections.flatMap(collection => Object.values(collection)) as Array<{ id: string }>;
+  const nestedFeatures = Object.values(repo.definitions).flatMap(definition => definition.kind === 'block' ? [...definition.properties, ...definition.ports] : []);
+  const all = [...collections.flatMap(collection => Object.values(collection)), ...nestedFeatures] as Array<{ id: string }>;
   const ids = new Set<string>();
   const duplicateIds = new Set<string>();
   for (const element of all) {

@@ -15,9 +15,20 @@ export function semanticFingerprint(repo: SysmlRepository, requirementId: string
   const elements: unknown[] = [];
   for (const id of [...closure].sort()) {
     const element = repo.requirements[id] ?? repo.definitions[id] ?? repo.usages[id] ?? repo.connectors[id] ?? repo.relationships[id] ?? repo.verificationCases[id] ?? repo.artifacts[id];
-    if (element) elements.push(element);
+    if (element) elements.push(semanticElement(element));
   }
   return hash(stableStringify(elements));
+}
+
+function semanticElement(element: unknown): unknown {
+  if (!element || typeof element !== 'object') return element;
+  const copy = { ...(element as Record<string, unknown>) };
+  // Governance workflow state and link review flags do not alter the modeled
+  // requirement or supplier semantics that verification evidence proves.
+  if (copy.kind === 'requirement') delete copy.status;
+  delete copy.suspect;
+  delete copy.lastValidatedRevision;
+  return copy;
 }
 
 export function recordVerificationEvidence(
