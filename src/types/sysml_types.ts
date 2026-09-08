@@ -104,6 +104,7 @@ export interface ConnectorData {
   targetPortId: string;
   itemFlow?: string;
   label?: string;
+  kind?: 'assembly' | 'delegation' | 'binding';
 }
 
 export interface InterfaceRealizationData {

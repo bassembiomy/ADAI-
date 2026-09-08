@@ -41,7 +41,7 @@ describe('versioned SysML persistence and baselines', () => {
       ],
       parts: [{ id: 'p', name: 'controller', blockId: 'b', typeId: 'b', multiplicity: '1' }],
       relationships: [{ id: 's', sourceId: 'b', targetId: 'r', type: 'satisfy', label: '' }],
-      connectors: [],
+      connectors: [{ id: 'c', kind: 'delegation', sourcePartId: 'b', sourcePortId: 'boundary', targetPartId: 'p', targetPortId: 'inner', itemFlow: 'Power' }],
     };
 
     const loaded = loadRepository(legacy);
@@ -51,6 +51,8 @@ describe('versioned SysML persistence and baselines', () => {
     expect(loaded.repository.usages.p.id).toBe('p');
     expect(loaded.repository.relationships.s.kind).toBe('satisfy');
     expect(loaded.repository.verificationCases.v.method).toBe('Test');
+    expect(loaded.repository.connectors.c).toMatchObject({ kind: 'delegation', itemFlowId: 'Power' });
+    expect(loaded.repository.connectors.c.sourcePortId).toBe('b::boundary');
   });
 
   it('creates protected immutable baselines, records audit, and compares revisions', () => {

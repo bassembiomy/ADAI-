@@ -31,13 +31,16 @@ describe('native SysML creation rules', () => {
     const out = { id: 'out', name: 'out', type: 'Power', direction: 'out' as const, unit: 'V' };
     const input = { id: 'in', name: 'in', type: 'Power', direction: 'in' as const, unit: 'V' };
     const wrong = { id: 'wrong', name: 'wrong', type: 'Data', direction: 'out' as const, unit: 'A' };
-    const blocks = [block('system'), block('sourceType', 'block', [out]), block('targetType', 'block', [input, wrong])];
+    const blocks = [block('system', 'block', [out]), block('sourceType', 'block', [out]), block('targetType', 'block', [input, wrong])];
     const parts = [part('source', 'system', 'sourceType'), part('target', 'system', 'targetType'), part('foreign', 'other', 'targetType')];
     const good: ConnectorData = { id: 'good', sourcePartId: 'source', sourcePortId: 'out', targetPartId: 'target', targetPortId: 'in' };
     expect(validateLegacyConnectorCandidate({ blocks, parts, connectors: [] }, good, 'system').valid).toBe(true);
     expect(validateLegacyConnectorCandidate({ blocks, parts, connectors: [good] }, { ...good, id: 'duplicate' }, 'system').codes).toContain('DUPLICATE_CONNECTOR');
     expect(validateLegacyConnectorCandidate({ blocks, parts, connectors: [] }, { ...good, id: 'bad', targetPortId: 'wrong' }, 'system').codes).toEqual(expect.arrayContaining(['INCOMPATIBLE_PORT_DIRECTION', 'INCOMPATIBLE_PORT_TYPE', 'INCOMPATIBLE_PORT_UNIT']));
     expect(validateLegacyConnectorCandidate({ blocks, parts, connectors: [] }, { ...good, id: 'cross', targetPartId: 'foreign' }, 'system').codes).toContain('INVALID_CONNECTOR_CONTEXT');
+    expect(validateLegacyConnectorCandidate({ blocks, parts, connectors: [] }, { ...good, id: 'delegation', kind: 'delegation', sourcePartId: 'system' }, 'system').valid).toBe(true);
+    expect(validateLegacyConnectorCandidate({ blocks, parts, connectors: [] }, { ...good, id: 'bad-delegation', kind: 'delegation' }, 'system').codes).toContain('INVALID_DELEGATION_ENDPOINTS');
+    expect(validateLegacyConnectorCandidate({ blocks, parts, connectors: [] }, { ...good, id: 'bad-flow', itemFlow: 'MissingSignal' }, 'system').codes).toContain('MISSING_ITEM_FLOW_TYPE');
   });
 
   it('enforces requirement lifecycle and requires passed verification-case evidence', () => {

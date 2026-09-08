@@ -9613,7 +9613,8 @@ const ADIA = () => {
             sourcePartId: connectorSource.partId,
             sourcePortId: connectorSource.portId,
             targetPartId: partId,
-            targetPortId: portId
+            targetPortId: portId,
+            kind: connectorSource.partId === currentLayerId || partId === currentLayerId ? 'delegation' : 'assembly'
           };
           const validation = validateLegacyConnectorCandidate({ blocks, parts, connectors }, newConnector, currentLayerId);
           if (!validation.valid) {
@@ -17089,8 +17090,19 @@ const ADIA = () => {
               ) : selectedConnector ? (
                 <>
                   <div>
+                    <Label>Connector Kind</Label>
+                    <select value={selectedConnector.kind || 'assembly'} onChange={(e) => updateConnector(selectedConnector.id, { kind: e.target.value as ConnectorData['kind'] })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                      <option value="assembly">Assembly</option>
+                      <option value="delegation">Delegation</option>
+                      <option value="binding">Binding</option>
+                    </select>
+                  </div>
+                  <div>
                     <Label>Item Flow</Label>
-                    <Input value={selectedConnector.itemFlow || ''} onChange={(e) => updateConnector(selectedConnector.id, { itemFlow: e.target.value })} className="mt-1" placeholder="e.g., PowerSignal" />
+                    <select value={selectedConnector.itemFlow || ''} onChange={(e) => updateConnector(selectedConnector.id, { itemFlow: e.target.value || undefined })} className="w-full h-8 bg-[#0a0a0a] border border-[#333] rounded px-2 text-sm text-[#e0e0e0] mt-1">
+                      <option value="">No conveyed item</option>
+                      {blocks.filter(block => ['valueType', 'interface', 'interfaceBlock'].includes(block.stereotype)).map(block => <option key={block.id} value={block.id}>{block.name}</option>)}
+                    </select>
                   </div>
                   <div>
                     <Label>Label (Text)</Label>

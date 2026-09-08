@@ -167,6 +167,27 @@ function migrateLegacy(raw: unknown): SysmlRepository {
       multiplicity: safeMultiplicity(legacy.multiplicity),
     };
   }
+  for (const legacy of arrayOfRecords(source.connectors)) {
+    const id = text(legacy.id);
+    if (!id) continue;
+    const sourceOwner = text(legacy.sourcePartId);
+    const targetOwner = text(legacy.targetPartId);
+    const sourceDefinition = text(legacy.sourcePortId);
+    const targetDefinition = text(legacy.targetPortId);
+    const sourcePortId = `${sourceOwner}::${sourceDefinition}`;
+    const targetPortId = `${targetOwner}::${targetDefinition}`;
+    if (!repo.usages[sourcePortId]) repo.usages[sourcePortId] = { id: sourcePortId, name: sourceDefinition, kind: 'port', ownerId: sourceOwner, definitionId: sourceDefinition };
+    if (!repo.usages[targetPortId]) repo.usages[targetPortId] = { id: targetPortId, name: targetDefinition, kind: 'port', ownerId: targetOwner, definitionId: targetDefinition };
+    const inferredOwner = connectorOwner(repo, sourceOwner, targetOwner);
+    repo.connectors[id] = {
+      id,
+      kind: legacy.kind === 'binding' || legacy.kind === 'delegation' ? legacy.kind : sourceOwner === inferredOwner || targetOwner === inferredOwner ? 'delegation' : 'assembly',
+      ownerId: inferredOwner,
+      sourcePortId,
+      targetPortId,
+      itemFlowId: optionalText(legacy.itemFlow),
+    };
+  }
   for (const legacy of arrayOfRecords(source.relationships)) {
     const id = text(legacy.id);
     if (!id) continue;
@@ -236,5 +257,13 @@ function relationshipKind(value: unknown): SysmlRelationship['kind'] {
 }
 function propertyKind(value: unknown): 'value' | 'part' | 'reference' | 'flow' {
   return value === 'part' || value === 'reference' || value === 'flow' ? value : 'value';
+}
+function connectorOwner(repo: SysmlRepository, sourceOwner: string, targetOwner: string): string {
+  const source = repo.usages[sourceOwner];
+  const target = repo.usages[targetOwner];
+  if (source?.kind === 'part' && target?.kind === 'part' && source.ownerId === target.ownerId) return source.ownerId;
+  if (source?.kind === 'part' && source.ownerId === targetOwner) return targetOwner;
+  if (target?.kind === 'part' && target.ownerId === sourceOwner) return sourceOwner;
+  return source?.kind === 'part' ? source.ownerId : target?.kind === 'part' ? target.ownerId : sourceOwner;
 }
 function diag(code: string, message: string): SysmlDiagnostic { return { code, severity: 'error', message }; }

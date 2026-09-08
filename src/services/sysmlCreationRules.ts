@@ -63,10 +63,16 @@ export function validateLegacyConnectorCandidate(
   if (candidate.sourcePartId === candidate.targetPartId && candidate.sourcePortId === candidate.targetPortId) codes.push('SELF_CONNECTOR');
   if (model.connectors.some(existing => existing.id !== candidate.id && sameConnector(existing, candidate))) codes.push('DUPLICATE_CONNECTOR');
   if (!endpointInContext(model.parts, candidate.sourcePartId, contextBlockId) || !endpointInContext(model.parts, candidate.targetPartId, contextBlockId)) codes.push('INVALID_CONNECTOR_CONTEXT');
+  const sourceBoundary = candidate.sourcePartId === contextBlockId;
+  const targetBoundary = candidate.targetPartId === contextBlockId;
+  const connectorKind = candidate.kind ?? (sourceBoundary !== targetBoundary ? 'delegation' : 'assembly');
+  if (connectorKind === 'delegation' && sourceBoundary === targetBoundary) codes.push('INVALID_DELEGATION_ENDPOINTS');
+  if (connectorKind === 'assembly' && (sourceBoundary || targetBoundary)) codes.push('INVALID_ASSEMBLY_ENDPOINTS');
+  if (candidate.itemFlow && !model.blocks.some(block => (block.id === candidate.itemFlow || block.name === candidate.itemFlow) && ['valueType', 'interface', 'interfaceBlock'].includes(block.stereotype))) codes.push('MISSING_ITEM_FLOW_TYPE');
   if (source && target) {
     const sourceDirection = source.direction ?? 'inout';
     const targetDirection = target.direction ?? 'inout';
-    if (sourceDirection !== 'inout' && targetDirection !== 'inout' && sourceDirection === targetDirection) codes.push('INCOMPATIBLE_PORT_DIRECTION');
+    if (connectorKind !== 'binding' && sourceDirection !== 'inout' && targetDirection !== 'inout' && sourceDirection === targetDirection) codes.push('INCOMPATIBLE_PORT_DIRECTION');
     if (source.type !== target.type && source.type !== 'any' && target.type !== 'any') codes.push('INCOMPATIBLE_PORT_TYPE');
     if (source.unit && target.unit && source.unit !== target.unit) codes.push('INCOMPATIBLE_PORT_UNIT');
   }
