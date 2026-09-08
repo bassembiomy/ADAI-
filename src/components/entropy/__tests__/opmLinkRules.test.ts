@@ -39,6 +39,8 @@ describe('OpmLinkRules — ISO 19450 connection rules', () => {
     expect(validateOpmConnection('generalization', 'object', 'object').allowed).toBe(true);
     expect(validateOpmConnection('exhibition', 'object', 'object').allowed).toBe(true);
     expect(validateOpmConnection('aggregation', 'object', 'process').allowed).toBe(false);
+    expect(validateOpmConnection('aggregation', 'requirement', 'object').allowed).toBe(false);
+    expect(validateOpmConnection('generalization', 'object', 'requirement').allowed).toBe(false);
   });
 
   test('satisfies/verifies connect requirement → object/process', () => {

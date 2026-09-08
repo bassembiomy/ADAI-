@@ -51,4 +51,20 @@ describe('SysmlToOpmImporter', () => {
     expect(edges).toHaveLength(0);
     expect(warnings.some((w: any) => w.includes('allocation'))).toBe(true);
   });
+
+  test('preserves explicit SysML mapping status for connectors and unsupported relations', () => {
+    const withConnectors: SysMLDiagramState = {
+      ...sample,
+      connectors: [
+        { id: 'c1', label: 'pipe', sourcePortId: 'p1', targetPortId: 'p2', sourcePartId: 'b1', targetPartId: 'b2' },
+      ],
+      relations: [
+        { id: 'rel_alloc', sourceId: 'b1', targetId: 'b2', type: 'allocation', label: '' },
+      ],
+    };
+    const result = importSysmlToOpm(withConnectors);
+    expect(result.connectorMappings).toBeDefined();
+    expect(result.connectorMappings.some((m: any) => m.sourceConnectorId === 'c1' && m.status === 'unresolved')).toBe(true);
+    expect(result.connectorMappings.some((m: any) => m.sourceConnectorId === 'rel_alloc' && m.status === 'unsupported')).toBe(true);
+  });
 });

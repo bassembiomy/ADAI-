@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { AppNode, AppEdge, OPMLinkType, OPMPort } from './EntropyTypes';
+import { analyzeOpmDeletion } from './OpmDeletionImpact';
 import type { OpmNodeKind } from './OpmMigrations';
 import type {
   OpmExecutionConfig,
@@ -25,6 +26,8 @@ import {
 } from 'lucide-react';
 
 export interface OpmRightPanelContentProps {
+  nodes?: AppNode[];
+  edges?: AppEdge[];
   selectedNode: AppNode | null;
   selectedEdge: AppEdge | null;
   onCloseInspector: () => void;
@@ -62,6 +65,8 @@ export interface OpmRightPanelContentProps {
 }
 
 export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
+  nodes,
+  edges,
   selectedNode,
   selectedEdge,
   onCloseInspector,
@@ -108,6 +113,17 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
   const [statesExpanded, setStatesExpanded] = useState(true);
   const [attributesExpanded, setAttributesExpanded] = useState(true);
   const [portsExpanded, setPortsExpanded] = useState(true);
+
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    setConfirmDelete(false);
+  }, [selectedNode?.id]);
+
+  const deleteImpact = useMemo(() => {
+    if (!selectedNode || !nodes || !edges) return null;
+    return analyzeOpmDeletion({ nodes, edges }, { nodeIds: [selectedNode.id] });
+  }, [selectedNode, nodes, edges]);
 
   // Local state for adding custom ports
   const [newPortName, setNewPortName] = useState('');
@@ -965,12 +981,62 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
               </button>
             )}
 
-            <button
-              onClick={onDeleteSelectedNode}
-              className="py-1.5 bg-red-950/40 text-red-400 border border-red-900/60 hover:bg-red-900/40 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
-            >
-              <Trash2 size={12} /> Delete Element
-            </button>
+            {confirmDelete && deleteImpact?.isHighImpact ? (
+              <div className="bg-red-950/50 border border-red-800/80 rounded-lg p-2.5 space-y-2 text-xs" data-testid="deletion-impact-preview">
+                <div className="font-bold text-red-300 flex items-center gap-1.5">
+                  <AlertTriangle size={14} className="text-red-400" /> High-Impact Deletion Warning
+                </div>
+                <div className="text-red-200/90 text-[11px] leading-relaxed">
+                  Deleting <span className="font-semibold text-white">[{selectedNode.data.name}]</span> will cascade:
+                </div>
+                <ul className="list-disc list-inside text-[10px] text-red-300/80 font-mono space-y-0.5">
+                  {deleteImpact.summary.descendantsCascadedCount > 0 && (
+                    <li>{deleteImpact.summary.descendantsCascadedCount} child state/element(s)</li>
+                  )}
+                  {deleteImpact.summary.deletedEdgeCount > 0 && (
+                    <li>{deleteImpact.summary.deletedEdgeCount} connected link(s)</li>
+                  )}
+                  {deleteImpact.summary.affectedRequirementCount > 0 && (
+                    <li>{deleteImpact.summary.affectedRequirementCount} requirement relation(s)</li>
+                  )}
+                  {deleteImpact.affectedSimulationIds.length > 0 && (
+                    <li>{deleteImpact.affectedSimulationIds.length} simulation entity reference(s)</li>
+                  )}
+                </ul>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    data-testid="cancel-delete-btn"
+                    onClick={() => setConfirmDelete(false)}
+                    className="flex-1 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-xs font-semibold transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    data-testid="confirm-delete-btn"
+                    onClick={() => {
+                      setConfirmDelete(false);
+                      onDeleteSelectedNode();
+                    }}
+                    className="flex-1 py-1 bg-red-700 hover:bg-red-600 text-white rounded text-xs font-semibold transition-colors"
+                  >
+                    Confirm Delete
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  if (deleteImpact?.isHighImpact) {
+                    setConfirmDelete(true);
+                  } else {
+                    onDeleteSelectedNode();
+                  }
+                }}
+                className="py-1.5 bg-red-950/40 text-red-400 border border-red-900/60 hover:bg-red-900/40 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Trash2 size={12} /> Delete Element
+              </button>
+            )}
           </div>
         </div>
       )}
