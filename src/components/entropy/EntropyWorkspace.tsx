@@ -1181,11 +1181,20 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
   const handleUpdateSelectionExecution = useCallback((updatedExecution: any) => {
     if (selectedNode) {
       saveHistory(nodes, edges);
+      const executionKey =
+        selectedNode.data?.type === 'object'
+          ? 'objectExecution'
+          : selectedNode.data?.type === 'state'
+          ? 'stateExecution'
+          : selectedNode.data?.type === 'process'
+          ? 'processExecution'
+          : 'execution';
       const nextNode = {
         ...selectedNode,
         data: {
           ...selectedNode.data,
           execution: updatedExecution,
+          [executionKey]: updatedExecution,
         },
       };
       setNodes(prev => prev.map(n => n.id === selectedNode.id ? nextNode : n));
@@ -1197,6 +1206,7 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
         data: {
           ...selectedEdge.data,
           execution: updatedExecution,
+          linkExecution: updatedExecution,
         },
       };
       setEdges(prev => prev.map(e => e.id === selectedEdge.id ? nextEdge : e));
@@ -1208,7 +1218,8 @@ export const EntropyWorkspace: React.FC<EntropyWorkspaceProps> = ({
     const list: { id: string; displayName: string }[] = [];
     nodes.filter(n => n.data?.type === 'object').forEach(obj => {
       const objName = obj.data?.name || obj.id;
-      const attrs = obj.data?.execution?.attributes || [];
+      const data = obj.data as any;
+      const attrs = (data?.objectExecution?.attributes || data?.execution?.attributes || []) as any[];
       attrs.forEach((attr: any) => {
         list.push({
           id: attr.id,

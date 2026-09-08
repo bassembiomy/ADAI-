@@ -213,7 +213,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
 
             {/* State Execution & Behaviors (for State nodes) */}
             {selectedNode.data.type === 'state' && (() => {
-              const exec: OpmStateExecution = selectedNode.data?.execution || {
+              const exec: OpmStateExecution = (selectedNode.data as any)?.stateExecution || selectedNode.data?.execution || {
                 enabled: true,
                 initial: false,
                 terminal: false,
@@ -374,7 +374,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
 
             {/* Process Execution Inspector (for Process nodes) */}
             {selectedNode.data.type === 'process' && (() => {
-              const procExec: OpmProcessExecution = selectedNode.data?.execution || {
+              const procExec: OpmProcessExecution = (selectedNode.data as any)?.processExecution || selectedNode.data?.execution || {
                 enabled: true,
                 activation: 'cyclic',
                 guard: '',
@@ -606,7 +606,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
 
           {/* Collapsible Variables & Attributes Section */}
           {selectedNode.data.type === 'object' && (() => {
-            const objExec: OpmObjectExecution = selectedNode.data?.execution || {
+            const objExec: OpmObjectExecution = (selectedNode.data as any)?.objectExecution || selectedNode.data?.execution || {
               enabled: true,
               attributes: [],
             };
@@ -977,7 +977,7 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
 
       {/* ─── SECTION B: SELECTED EDGE INSPECTOR ─── */}
       {selectedEdge && !selectedNode && (() => {
-        const linkExec: OpmLinkExecution = selectedEdge.data?.execution || {
+        const linkExec: OpmLinkExecution = (selectedEdge.data as any)?.linkExecution || selectedEdge.data?.execution || {
           enabled: true,
           guard: '',
           assignments: [],
