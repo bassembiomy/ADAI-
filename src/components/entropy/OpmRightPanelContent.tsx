@@ -371,6 +371,137 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
                 </div>
               );
             })()}
+
+            {/* Process Execution Inspector (for Process nodes) */}
+            {selectedNode.data.type === 'process' && (() => {
+              const procExec: OpmProcessExecution = selectedNode.data?.execution || {
+                enabled: true,
+                activation: 'cyclic',
+                guard: '',
+                assignments: [],
+                priority: 1,
+                periodMs: 100,
+                debounceMs: 0,
+                reentrancy: 'reject',
+                inputAttributeIds: [],
+                outputAttributeIds: [],
+              };
+
+              const handleUpdateProcExec = (patch: Partial<OpmProcessExecution>) => {
+                const updated = { ...procExec, ...patch };
+                if (onUpdateSelectionExecution) {
+                  onUpdateSelectionExecution(updated);
+                }
+              };
+
+              const handleAddAssignment = () => {
+                const newAsgn: OpmAssignment = {
+                  id: nextStableId('asgn'),
+                  targetAttributeId: '',
+                  operator: '=',
+                  expression: '0',
+                  enabled: true,
+                };
+                handleUpdateProcExec({
+                  assignments: [...(procExec.assignments || []), newAsgn],
+                });
+              };
+
+              return (
+                <div className="space-y-3 pt-2 border-t border-white/10">
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="proc-activation" className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                      Activation Mode
+                    </label>
+                    <select
+                      id="proc-activation"
+                      data-testid="process-activation-select"
+                      data-opm-path="processExecution.activation"
+                      value={procExec.activation}
+                      onChange={(e) => handleUpdateProcExec({ activation: e.target.value as any })}
+                      className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none"
+                    >
+                      <option value="cyclic">cyclic</option>
+                      <option value="triggered">triggered</option>
+                      <option value="both">both</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="proc-period">
+                        Period (ms)
+                      </label>
+                      <input
+                        id="proc-period"
+                        data-testid="process-period-input"
+                        data-opm-path="processExecution.periodMs"
+                        type="number"
+                        value={procExec.periodMs ?? ''}
+                        onChange={(e) =>
+                          handleUpdateProcExec({
+                            periodMs: e.target.value ? Number(e.target.value) : undefined,
+                          })
+                        }
+                        placeholder="e.g. 100"
+                        className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="proc-priority">
+                        Priority
+                      </label>
+                      <input
+                        id="proc-priority"
+                        data-testid="process-priority-input"
+                        data-opm-path="processExecution.priority"
+                        type="number"
+                        value={procExec.priority ?? 1}
+                        onChange={(e) => handleUpdateProcExec({ priority: Number(e.target.value) })}
+                        className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-sky-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-gray-400 font-bold block mb-0.5" htmlFor="proc-guard">
+                      Guard Expression
+                    </label>
+                    <input
+                      id="proc-guard"
+                      data-testid="guard-expr-input"
+                      data-opm-path="processExecution.guard"
+                      value={procExec.guard || ''}
+                      onChange={(e) => handleUpdateProcExec({ guard: e.target.value })}
+                      placeholder="e.g. temperature.value < 100.0"
+                      className="w-full bg-[#0e0e11] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-sky-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="pt-2 border-t border-white/10">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-bold uppercase text-sky-400">
+                        Action Assignments
+                      </span>
+                      <button
+                        data-testid="add-assignment-btn"
+                        aria-label="Add assignment"
+                        onClick={handleAddAssignment}
+                        className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-sky-950 text-sky-400 border border-sky-800 rounded hover:bg-sky-900 font-bold"
+                      >
+                        <Plus size={10} /> Add Assignment
+                      </button>
+                    </div>
+                    <AssignmentRows
+                      value={procExec.assignments || []}
+                      writableAttributes={writableAttributes}
+                      basePath="processExecution.assignments"
+                      onChange={(next) => handleUpdateProcExec({ assignments: next })}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Collapsible States Section (for Objects) */}
@@ -473,60 +604,211 @@ export const OpmRightPanelContent: React.FC<OpmRightPanelContentProps> = ({
             </div>
           )}
 
-          {/* Collapsible Attributes Section */}
-          {selectedNode.data.type === 'object' && (
-            <div className="border border-white/5 rounded-lg bg-[#111115] overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setAttributesExpanded(!attributesExpanded)}
-                className="w-full flex items-center justify-between px-2.5 py-2 bg-white/[0.02] hover:bg-white/[0.05] transition-colors"
-              >
-                <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-wider text-gray-300">
-                  {attributesExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                  <span>Attributes ({attrsCount})</span>
-                </div>
-                <span className="text-[8px] px-1.5 py-0.2 rounded font-mono font-bold bg-white/5 text-gray-400">
-                  {attrsCount}
-                </span>
-              </button>
+          {/* Collapsible Variables & Attributes Section */}
+          {selectedNode.data.type === 'object' && (() => {
+            const objExec: OpmObjectExecution = selectedNode.data?.execution || {
+              enabled: true,
+              attributes: [],
+            };
+            const typedAttributes = objExec.attributes || [];
 
-              {attributesExpanded && (
-                <div className="p-2.5 space-y-2 border-t border-white/5">
-                  <div className="space-y-1">
-                    {(selectedNode.data.attributes || []).map((attr, idx) => (
-                      <div key={idx} className="flex justify-between bg-black/30 border border-white/5 px-2.5 py-1 rounded font-mono text-[11px]">
-                        <span className="text-gray-400">{attr.key}:</span>
-                        <span className="text-amber-300 font-bold">{attr.value}</span>
-                      </div>
-                    ))}
+            const handleUpdateObjExec = (patch: Partial<OpmObjectExecution>) => {
+              const updated = { ...objExec, ...patch };
+              if (onUpdateSelectionExecution) {
+                onUpdateSelectionExecution(updated);
+              }
+            };
+
+            const handleAddTypedAttribute = () => {
+              const n = typedAttributes.length + 1;
+              const displayName = `var_${n}`;
+              const newAttr: OpmAttribute = {
+                id: nextStableId('attr'),
+                displayName,
+                cIdentifier: toCIdentifier(displayName, `var_${n}`),
+                type: { kind: 'float32' },
+                initialValue: 0,
+                overflow: 'wrap',
+                access: 'readWrite',
+                persistent: false,
+              };
+              handleUpdateObjExec({ attributes: [...typedAttributes, newAttr] });
+            };
+
+            const handleUpdateTypedAttr = (index: number, patch: Partial<OpmAttribute>) => {
+              const next = [...typedAttributes];
+              next[index] = { ...next[index], ...patch };
+              handleUpdateObjExec({ attributes: next });
+            };
+
+            const handleDeleteTypedAttr = (index: number) => {
+              const next = typedAttributes.filter((_, i) => i !== index);
+              handleUpdateObjExec({ attributes: next });
+            };
+
+            const totalCount = typedAttributes.length + attrsCount;
+
+            return (
+              <div className="border border-white/5 rounded-lg bg-[#111115] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setAttributesExpanded(!attributesExpanded)}
+                  className="w-full flex items-center justify-between px-2.5 py-2 bg-white/[0.02] hover:bg-white/[0.05] transition-colors"
+                >
+                  <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-wider text-emerald-400">
+                    {attributesExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                    <span>Variables & Attributes ({totalCount})</span>
                   </div>
-
-                  <div className="flex gap-1.5 pt-1">
-                    <input
-                      placeholder="Key"
-                      id="new-attr-key"
-                      className="bg-[#0a0a0d] border border-white/10 rounded px-2 py-1 outline-none w-1/2 text-xs text-white"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          const valEl = document.getElementById('new-attr-val') as HTMLInputElement;
-                          if (e.currentTarget.value && valEl.value) {
-                            onAddAttribute(e.currentTarget.value, valEl.value);
-                            e.currentTarget.value = '';
-                            valEl.value = '';
-                          }
-                        }
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      data-testid="add-attr-btn"
+                      aria-label="Add attribute"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddTypedAttribute();
                       }}
-                    />
-                    <input
-                      placeholder="Val"
-                      id="new-attr-val"
-                      className="bg-[#0a0a0d] border border-white/10 rounded px-2 py-1 outline-none w-1/2 text-xs text-white"
-                    />
+                      className="flex items-center gap-1 text-[9px] px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded hover:bg-emerald-900 font-bold"
+                    >
+                      <Plus size={10} /> Add Variable
+                    </button>
+                    <span className="text-[8px] px-1.5 py-0.2 rounded font-mono font-bold bg-white/5 text-gray-400">
+                      {totalCount}
+                    </span>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                </button>
+
+                {attributesExpanded && (
+                  <div className="p-2.5 space-y-3 border-t border-white/5">
+                    {/* Typed Executable Variables */}
+                    <div className="space-y-2">
+                      {typedAttributes.length === 0 && (
+                        <div className="text-[10px] text-gray-500 italic text-center py-0.5">
+                          No typed variables. Click &quot;+ Add Variable&quot; to declare one.
+                        </div>
+                      )}
+                      {typedAttributes.map((attr, idx) => {
+                        const enumDef =
+                          attr.type.kind === 'enum' ? enumById.get(attr.type.enumId) : undefined;
+                        return (
+                          <div
+                            key={attr.id}
+                            className="p-2 bg-black/40 border border-white/10 rounded-lg flex flex-col gap-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <input
+                                data-testid="attr-name-input"
+                                aria-label={`Attribute ${idx + 1} display name`}
+                                data-opm-path={`objectExecution.attributes[${idx}].displayName`}
+                                value={attr.displayName}
+                                onChange={(e) =>
+                                  handleUpdateTypedAttr(idx, {
+                                    displayName: e.target.value,
+                                    cIdentifier: toCIdentifier(e.target.value, attr.id),
+                                  })
+                                }
+                                placeholder="Attribute name"
+                                className="bg-[#0e0e11] border border-white/10 rounded px-1.5 py-0.5 text-xs text-white font-mono flex-1 focus:border-emerald-500 focus:outline-none"
+                              />
+                              <select
+                                data-testid="attr-type-select"
+                                aria-label={`Attribute ${idx + 1} type`}
+                                data-opm-path={`objectExecution.attributes[${idx}].type`}
+                                value={
+                                  attr.type.kind === 'enum' ? `enum:${attr.type.enumId}` : attr.type.kind
+                                }
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val.startsWith('enum:')) {
+                                    const enumId = val.replace('enum:', '');
+                                    handleUpdateTypedAttr(idx, { type: { kind: 'enum', enumId }, initialValue: null });
+                                  } else {
+                                    const kind = val as 'bool' | 'int32' | 'uint32' | 'float32';
+                                    handleUpdateTypedAttr(idx, {
+                                      type: { kind },
+                                      initialValue: kind === 'bool' ? false : 0,
+                                    });
+                                  }
+                                }}
+                                className="bg-[#0e0e11] border border-white/10 rounded px-1.5 py-0.5 text-[10px] text-white font-mono focus:border-emerald-500 focus:outline-none"
+                              >
+                                <option value="float32">float32</option>
+                                <option value="int32">int32</option>
+                                <option value="uint32">uint32</option>
+                                <option value="bool">bool</option>
+                                {enums.map((en) => (
+                                  <option key={en.id} value={`enum:${en.id}`}>
+                                    enum {en.displayName}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                data-testid="attr-delete-btn"
+                                aria-label={`Delete attribute ${idx + 1}`}
+                                onClick={() => handleDeleteTypedAttr(idx)}
+                                className="text-red-500 hover:text-red-400 p-0.5"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+
+                            <div className="flex items-center justify-between text-[10px] pt-1">
+                              <span className="text-gray-400">Initial Value:</span>
+                              <TypedValueEditor
+                                type={attr.type}
+                                value={attr.initialValue}
+                                enumOptions={enumDef?.members}
+                                onChange={(val) => handleUpdateTypedAttr(idx, { initialValue: val })}
+                                testId="attr-initial-value-input"
+                                opmPath={`objectExecution.attributes[${idx}].initialValue`}
+                                label={`Attribute ${idx + 1} initial value`}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Metadata / String Key-Value Attributes */}
+                    <div className="pt-2 border-t border-white/5 space-y-1.5">
+                      <span className="text-[9px] uppercase font-bold text-gray-400">Metadata Properties</span>
+                      <div className="space-y-1">
+                        {(selectedNode.data.attributes || []).map((attr, idx) => (
+                          <div key={idx} className="flex justify-between bg-black/30 border border-white/5 px-2.5 py-1 rounded font-mono text-[11px]">
+                            <span className="text-gray-400">{attr.key}:</span>
+                            <span className="text-amber-300 font-bold">{attr.value}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex gap-1.5 pt-1">
+                        <input
+                          placeholder="Key"
+                          id="new-attr-key"
+                          className="bg-[#0a0a0d] border border-white/10 rounded px-2 py-1 outline-none w-1/2 text-xs text-white"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const valEl = document.getElementById('new-attr-val') as HTMLInputElement;
+                              if (e.currentTarget.value && valEl.value) {
+                                onAddAttribute(e.currentTarget.value, valEl.value);
+                                e.currentTarget.value = '';
+                                valEl.value = '';
+                              }
+                            }
+                          }}
+                        />
+                        <input
+                          placeholder="Val"
+                          id="new-attr-val"
+                          className="bg-[#0a0a0d] border border-white/10 rounded px-2 py-1 outline-none w-1/2 text-xs text-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Collapsible Ports Manager Section */}
           {(selectedNode.data.type === 'object' || selectedNode.data.type === 'process') && (
